@@ -10,7 +10,10 @@ const spaceMono = Space_Mono({
 
 export const metadata: Metadata = {
   title: 'Factor Dynamics',
-  description: 'Retro-futurist intelligence for factor-driven markets.'
+  description: 'Retro-futurist intelligence for factor-driven markets.',
+  icons: {
+    icon: '/favicon.ico'
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
