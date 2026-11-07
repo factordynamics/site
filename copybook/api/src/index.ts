@@ -1,4 +1,5 @@
-import { fetchHistory, historyCsv, runAlerts, SLUG } from './data';
+import { fetchHistory, historyCsv, runAlerts, shard, SHARD_KEY, SLUG } from './data';
+import { verifyGithubOidc } from './oidc';
 import { loginMail, sendMail } from './email';
 import { isActive, type Env, type Member } from './env';
 import { getMember, LOGIN_TTL, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
@@ -82,6 +83,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   if (req.method === 'GET' && path === '/health') return json({ ok: true }, 200, h);
 
+  // The data workflow uploads per-quarter history here, authenticated by its GitHub OIDC token.
+  if (req.method === 'PUT' && path.startsWith('/ingest/')) {
+    const key = path.slice('/ingest/'.length);
+    if (!SHARD_KEY.test(key)) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|csv' }, 400, {});
+    const why = await verifyGithubOidc(req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '', env.INGEST_WORKFLOW);
+    if (why) return json({ ok: false, error: why }, 401, {});
+    await env.HIST.put(key, req.body, { httpMetadata: { contentType: key.endsWith('.csv') ? 'text/csv; charset=utf-8' : 'application/json' } });
+    return json({ ok: true, key }, 200, {});
+  }
+
   // Email a sign-in link to an active member. Always answers ok so it can't be used to probe emails.
   if (req.method === 'POST' && path === '/login') {
     const email = String((await body(req)).email ?? '').trim().toLowerCase();
@@ -137,6 +148,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const updated: Member = { ...m, alerts: a as Member['alerts'] };
     await putMember(env, updated);
     return json({ ok: true, member: publicView(updated) }, 200, h);
+  }
+
+  // One full quarter for the history page: the same object as data/h/{slug}/{quarter}.json used to be.
+  const quarter = path.match(/^\/holdings\/([a-z0-9-]+)\/(\d{4}Q[1-4])$/);
+  if (req.method === 'GET' && quarter) {
+    const body = await shard(env, `h/${quarter[1]}/${quarter[2]}.json`);
+    if (!body) return json({ ok: false, error: 'unknown manager or quarter' }, 404, h);
+    return new Response(body, { status: 200, headers: { ...h, 'content-type': 'application/json', 'cache-control': 'private, max-age=3600' } });
   }
 
   const hist = path.match(/^\/history\/([a-z0-9-]+)$/);

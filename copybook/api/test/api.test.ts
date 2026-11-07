@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker, { handleRequest } from '../src/index';
-import type { Env, KV } from '../src/env';
+import type { Env, KV, R2 } from '../src/env';
 import { hmacHex } from '../src/tokens';
 
 class MemKV implements KV {
@@ -19,6 +19,19 @@ class MemKV implements KV {
   }
 }
 
+class MemR2 implements R2 {
+  m = new Map<string, Uint8Array>();
+  async get(k: string) {
+    const v = this.m.get(k);
+    if (!v) return null;
+    // Deliver in two chunks with the header line split, as R2 may.
+    return { body: new ReadableStream<Uint8Array>({ start(c) { c.enqueue(v.subarray(0, 20)); c.enqueue(v.subarray(20)); c.close(); } }) };
+  }
+  async put(k: string, v: ReadableStream | ArrayBuffer | string | null) {
+    this.m.set(k, new Uint8Array(await new Response(v).arrayBuffer()));
+  }
+}
+
 const SITE = 'https://refcell.github.io/gust/copybook/';
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -27,12 +40,18 @@ function sub(id: string, customer: string, status: string, interval = 'month') {
 }
 
 let env: Env;
+let hist: MemR2;
+const WORKFLOW = 'refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main';
 let sent: { to: string[]; subject: string; text: string }[];
 let stripeObjects: Record<string, unknown>;
 let index: unknown;
+let jwks: unknown = { keys: [] };
 
 beforeEach(() => {
-  env = { DB: new MemKV(), SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x' };
+  hist = new MemR2();
+  env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x' };
+  // 2026Q1 lives only in the private bucket; 2026Q2 still falls back to the public copy.
+  hist.m.set('h/warren-buffett/2026Q1.csv', new TextEncoder().encode('manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1\r\n'));
   sent = [];
   stripeObjects = {};
   index = { managers: [] };
@@ -48,6 +67,7 @@ beforeEach(() => {
       const obj = stripeObjects[path];
       return obj ? Response.json(obj) : Response.json({ error: { message: 'No such object' } }, { status: 404 });
     }
+    if (url === 'https://token.actions.githubusercontent.com/.well-known/jwks') return Response.json(jwks);
     if (url === `${SITE}data/index.json`) return Response.json(index);
     if (url === `${SITE}data/warren-buffett-history.json`) {
       return Response.json({
@@ -60,12 +80,6 @@ beforeEach(() => {
     }
     if (url === `${SITE}data/h/warren-buffett/2026Q2.json`) {
       return Response.json({ quarter: '2026Q2', holdings: [{ issuer: 'APPLE INC', ticker: 'AAPL', cusip: '037833100', title: 'COM', shares: 10, value: 2000, weight: 0.5, put_call: null }] });
-    }
-    if (url === `${SITE}data/h/warren-buffett/2026Q1.csv`) {
-      // The header line is split across chunks, as a network body may deliver it.
-      const parts = ['manager,slug,cik,quarter,report_date,', 'filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,', '2026-03-31,2026-05-15,A1,BAC,\"BANK, \"\"OF\"\" AMERICA\",060505104,COM,,5,100,0.1\r\n'];
-      const enc = new TextEncoder();
-      return new Response(new ReadableStream({ start(c) { for (const p of parts) c.enqueue(enc.encode(p)); c.close(); } }));
     }
     return new Response('not found', { status: 404 });
   });
@@ -185,5 +199,42 @@ describe('copybook api', () => {
     await worker.scheduled({}, env, { waitUntil: (p) => (pending = p) });
     await pending;
     expect(sent).toHaveLength(0);
+  });
+
+  it('accepts history uploads only from the data workflow, and serves quarters only to members', async () => {
+    const pair = (await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify'])) as CryptoKeyPair;
+    jwks = { keys: [{ ...(await crypto.subtle.exportKey('jwk', pair.publicKey)), kid: 'test-kid', alg: 'RS256' }] };
+    const b64bytes = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const b64 = (v: unknown) => b64bytes(new TextEncoder().encode(JSON.stringify(v)));
+    const jwt = async (claims: Record<string, unknown>, key = pair.privateKey) => {
+      const head = `${b64({ alg: 'RS256', kid: 'test-kid' })}.${b64({ iss: 'https://token.actions.githubusercontent.com', aud: 'copybook-api', exp: now() + 300, workflow_ref: WORKFLOW, ...claims })}`;
+      return `${head}.${b64bytes(new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(head))))}`;
+    };
+    const put = async (key: string, token: string) =>
+      (await handleRequest(new Request(`https://api.test/ingest/${key}`, { method: 'PUT', body: '{"holdings":[]}', headers: { authorization: `Bearer ${token}` } }), env)).status;
+
+    const other = (await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign'])) as CryptoKeyPair;
+    expect(await put('h/bill-ackman/2026Q2.json', '')).toBe(401);
+    expect(await put('h/bill-ackman/2026Q2.json', await jwt({}, other.privateKey))).toBe(401); // forged signature
+    expect(await put('h/bill-ackman/2026Q2.json', await jwt({ workflow_ref: 'someone/fork/.github/workflows/copybook-data.yml@refs/heads/main' }))).toBe(401);
+    expect(await put('h/bill-ackman/2026Q2.json', await jwt({ aud: 'https://github.com/refcell' }))).toBe(401);
+    expect(await put('h/bill-ackman/2026Q2.json', await jwt({ exp: now() - 10 }))).toBe(401);
+    expect(await put('index.json', await jwt({}))).toBe(400);
+    expect(hist.m.has('h/bill-ackman/2026Q2.json')).toBe(false);
+    expect(await put('h/bill-ackman/2026Q2.json', await jwt({}))).toBe(200);
+    expect(new TextDecoder().decode(hist.m.get('h/bill-ackman/2026Q2.json'))).toBe('{"holdings":[]}');
+
+    const token = (await (await call('/session', { body: { checkout_session: 'cs_test_q' } })).json()).token;
+    expect(token).toBeUndefined(); // no session yet: /holdings must refuse
+    expect((await call('/holdings/bill-ackman/2026Q2')).status).toBe(401);
+    stripeObjects['checkout/sessions/cs_test_q'] = { id: 'cs_test_q', status: 'complete', created: now(), subscription: 'sub_q', customer_details: { email: 'q@example.com' } };
+    stripeObjects['subscriptions/sub_q'] = sub('sub_q', 'cus_q', 'active');
+    const s = await (await call('/session', { body: { checkout_session: 'cs_test_q' } })).json();
+    const res = await call('/holdings/bill-ackman/2026Q2', { token: s.token });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('{"holdings":[]}');
+    expect((await call('/holdings/nobody/2026Q2', { token: s.token })).status).toBe(404);
+    await webhook({ type: 'customer.subscription.deleted', data: { object: sub('sub_q', 'cus_q', 'canceled') } });
+    expect((await call('/holdings/bill-ackman/2026Q2', { token: s.token })).status).toBe(402);
   });
 });

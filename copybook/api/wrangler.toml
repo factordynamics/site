@@ -8,6 +8,11 @@ account_id = "967e13dd88bb23b24662e62cbb6fd84f"
 binding = "DB"
 id = "830e2b3035554fa2865bc523dfcbf2fb"
 
+# Private paid history (h/{slug}/{quarter}.json|csv), uploaded by the data workflow via PUT /ingest/.
+[[r2_buckets]]
+binding = "HIST"
+bucket_name = "copybook-history"
+
 [triggers]
 crons = ["17 * * * *"]
 
@@ -17,6 +22,8 @@ DATA_URL = "https://refcell.github.io/gust/copybook/data/"
 ALLOWED_ORIGINS = "https://copybook.factordynamics.com,https://refcell.github.io"
 EMAIL_FROM = "Copybook <copybook@factordynamics.com>"
 # bpc_... printed by scripts/stripe-setup.mjs (portal_configuration).
+# GitHub Actions OIDC workflow_ref allowed to PUT /ingest/.
+INGEST_WORKFLOW = "refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main"
 PORTAL_CONFIGURATION = "bpc_1UZHZgDSKGGzRqYZbvRwUas4"
 
 # Secrets (npx wrangler secret put NAME): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SESSION_SECRET, RESEND_API_KEY

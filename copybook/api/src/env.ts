@@ -9,8 +9,21 @@ export interface KV {
   }>;
 }
 
+export interface R2Object {
+  body: ReadableStream<Uint8Array>;
+}
+
+export interface R2 {
+  get(key: string): Promise<R2Object | null>;
+  put(key: string, value: ReadableStream | ArrayBuffer | string | null, opts?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+}
+
 export interface Env {
   DB: KV;
+  /** Private bucket for paid history: h/{slug}/{quarter}.json and .csv. */
+  HIST: R2;
+  /** GitHub Actions OIDC identity allowed to upload history, e.g. refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main */
+  INGEST_WORKFLOW: string;
   /** Site root, e.g. https://refcell.github.io/gust/copybook/ (trailing slash). */
   SITE_URL: string;
   /** Where {slug}-history.json and alerts.json live. */

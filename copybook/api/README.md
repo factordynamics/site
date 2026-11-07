@@ -8,6 +8,8 @@ Paid "Copy" plan backend for the static Copybook site: a Cloudflare Worker (free
 - An hourly cron diffs each manager's latest 13F accession in `data/index.json` and emails active members who track that manager.
 - Billing (cancel, switch plan, card, invoices) is the Stripe customer portal.
 
+Paid history lives in the private R2 bucket `copybook-history` (`h/{slug}/{quarter}.json|csv`); the latest quarter and the 50-row previews stay public on Pages. A missing object falls back to the public `DATA_URL` copy.
+
 Source data is SEC EDGAR 13F-HR only.
 
 ## API
@@ -22,8 +24,10 @@ All responses are JSON. Authenticated routes take `Authorization: Bearer <sessio
 | POST | `/portal` | → `{url}` of a Stripe customer portal session |
 | POST | `/alerts` | `{alerts: "all" \| "off" \| ["warren-buffett", ...]}` → `{member}` |
 | GET | `/history/{slug}` | → same shape as `data/{slug}-history.json` |
+| GET | `/holdings/{slug}/{YYYYQn}` | → one full quarter (`{..., holdings: [...]}`) from the private bucket |
 | GET | `/csv/{slug}.csv` | → CSV of every quarter, full book. `csv_url` shards are piped natively (Citadel, 19.7 MB / 106k rows: 8 ms CPU); `holdings_url` or inline `holdings` are converted in JS |
 | POST | `/webhook` | Stripe only (signature checked) |
+| PUT | `/ingest/h/{slug}/{YYYYQn}.json\|csv` | Data workflow only: body is the file. Auth is the workflow's GitHub OIDC token (`aud=copybook-api`, `workflow_ref` must equal `INGEST_WORKFLOW`) |
 | GET | `/health` | `{ok: true}` |
 
 401 means sign in again; 402 means the plan is not active (cancelled or unpaid).

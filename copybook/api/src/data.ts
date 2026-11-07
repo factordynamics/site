@@ -11,10 +11,24 @@ function cell(v: unknown): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-async function shard(env: Env, path: string): Promise<Response> {
-  const res = await fetch(new URL(path, env.DATA_URL).toString(), { cf: { cacheTtl: 86400 } } as RequestInit);
-  if (!res.ok || !res.body) throw new Error(`${path}: ${res.status}`);
-  return res;
+export const SHARD_KEY = /^h\/[a-z0-9][a-z0-9-]{0,120}\/\d{4}Q[1-4]\.(json|csv)$/;
+
+/**
+ * A per-quarter history file from the private R2 bucket. Until the bucket holds
+ * every file, a missing object falls back to the public copy under DATA_URL.
+ */
+export async function shard(env: Env, key: string): Promise<ReadableStream<Uint8Array> | null> {
+  if (!SHARD_KEY.test(key)) return null;
+  const obj = await env.HIST.get(key);
+  if (obj) return obj.body;
+  const res = await fetch(new URL(key, env.DATA_URL).toString(), { cf: { cacheTtl: 86400 } } as RequestInit);
+  return res.ok && res.body ? res.body : null;
+}
+
+async function mustShard(env: Env, key: string): Promise<ReadableStream<Uint8Array>> {
+  const body = await shard(env, key);
+  if (!body) throw new Error(`${key}: missing`);
+  return body;
 }
 
 /**
@@ -36,7 +50,7 @@ export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
       if (q.csv_url) {
         // Drop the shard's header line in JS, then let the runtime pipe the rest
         // natively: per-chunk JS would cost ~0.5 s CPU on the largest books.
-        const body = (await shard(env, q.csv_url)).body!;
+        const body = await mustShard(env, q.csv_url);
         const reader = body.getReader();
         for (let r = await reader.read(); !r.done; r = await reader.read()) {
           const nl = r.value.indexOf(10);
@@ -50,7 +64,7 @@ export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
         w = writable.getWriter();
         continue;
       }
-      const holdings = q.holdings ?? (q.holdings_url ? ((await (await shard(env, q.holdings_url)).json()) as { holdings?: unknown[] }).holdings : []);
+      const holdings = q.holdings ?? (q.holdings_url ? ((await new Response(await mustShard(env, q.holdings_url)).json()) as { holdings?: unknown[] }).holdings : []);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows = ((holdings ?? []) as any[]).map(
         (p) => [h.manager, h.slug, h.cik, q.quarter, q.report_date, q.filing_date, q.accession, p.ticker ?? '', p.issuer ?? '', p.cusip ?? '', p.title ?? '', p.put_call ?? '', p.shares ?? 0, p.value ?? 0, p.weight ?? 0].map(cell).join(',') + '\r\n',
