@@ -47,7 +47,7 @@ Live: `https://copybook-api.factordynamics.workers.dev` (Cloudflare account of a
 
 `stripe-setup.mjs` is idempotent (it finds its objects by metadata and price lookup keys) and works for test and live keys. It recreates the webhook endpoint each run so it can print a fresh signing secret.
 
-Email goes through Resend. Until a sending domain is verified in Resend, set `EMAIL_FROM` to `onboarding@resend.dev`, which only delivers to the Resend account owner.
+Email goes through Resend from `copybook@factordynamics.com` (domain verified in Resend; DNS in Squarespace).
 
 ```sh
 pnpm test && pnpm typecheck
