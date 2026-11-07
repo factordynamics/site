@@ -7,6 +7,8 @@ Also writes the copycat sector mix to copycat_lite.json, every dollar labelled.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 import sys
@@ -66,6 +68,55 @@ def walk(obj, secs: dict, figi: dict) -> bool:
     return changed
 
 
+CSV_FIELDS = (
+    "manager", "slug", "cik", "quarter", "report_date", "filing_date", "accession", "ticker",
+    "issuer", "cusip", "title", "put_call", "shares", "value_usd", "weight",
+)
+
+
+def num(v):
+    return int(v) if isinstance(v, float) and v.is_integer() else v
+
+
+def quarter_csv(q: dict) -> str:
+    """One quarter's full book as RFC 4180 CSV (CRLF) for the Copy API to pass through."""
+    buf = io.StringIO()
+    w = csv.writer(buf, lineterminator="\r\n")
+    w.writerow(CSV_FIELDS)
+    meta = [q.get(k) or "" for k in ("manager", "slug", "cik", "quarter", "report_date", "filing_date", "accession")]
+    for h in q.get("holdings") or []:
+        w.writerow(meta + [
+            h.get("ticker") or "", h.get("issuer") or "", h.get("cusip") or "", h.get("title") or "",
+            h.get("put_call") or "", num(h.get("shares") or 0), num(h.get("value") or 0), h.get("weight") or 0,
+        ])
+    return buf.getvalue()
+
+
+def write_csvs() -> int:
+    """h/{slug}/{quarter}.csv next to each quarter file, and csv_url in {slug}-history.json."""
+    n = 0
+    for path in sorted((DATA / "h").glob("*/*.json")):
+        text = quarter_csv(json.loads(path.read_text()))
+        out = path.with_suffix(".csv")
+        if not out.exists() or out.read_text(newline="") != text:
+            out.write_text(text, newline="")
+            n += 1
+    for path in (DATA / "h").glob("*/*.csv"):
+        if not path.with_suffix(".json").exists():
+            path.unlink()
+    for path in sorted(DATA.glob("*-history.json")):
+        idx = json.loads(path.read_text())
+        changed = False
+        for q in idx.get("history") or []:
+            url = q.get("holdings_url")
+            if url and url.endswith(".json") and q.get("csv_url") != url[:-5] + ".csv":
+                q["csv_url"] = url[:-5] + ".csv"
+                changed = True
+        if changed:
+            path.write_text(json.dumps(idx, separators=(",", ":")) + "\n")
+    return n
+
+
 def sector_mix(copycat: dict) -> list[dict]:
     total = copycat.get("total_value") or 0
     by: dict[str, float] = {}
@@ -97,7 +148,7 @@ def main() -> int:
         lite = json.loads(lite_path.read_text())
         lite["sectors"] = sector_mix(json.loads(cc.read_text()))
         lite_path.write_text(json.dumps(lite, separators=(",", ":")) + "\n")
-    print(f"enrich: updated {n} files from {len(secs)} securities")
+    print(f"enrich: updated {n} files from {len(secs)} securities; wrote {write_csvs()} quarter CSVs")
     return 0
 
 

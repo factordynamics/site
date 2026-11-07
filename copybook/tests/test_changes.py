@@ -1,6 +1,7 @@
 import unittest
 
 from ingest.build import with_changes
+from ingest.enrich import quarter_csv
 
 
 def row(cusip, shares, value, put_call=None):
@@ -28,6 +29,20 @@ class ChangesTest(unittest.TestCase):
 
     def test_no_prior_filing_is_unknown_not_new(self):
         self.assertEqual({r["change"] for r in with_changes({"holdings": [row("A", 1, 1)]}, None)}, {None})
+
+
+class QuarterCsvTest(unittest.TestCase):
+    def test_csv_contract_for_copy_api(self):
+        q = {"manager": "M", "slug": "m", "cik": "1", "quarter": "2026Q2", "report_date": "2026-06-30",
+             "filing_date": "2026-08-14", "accession": "a",
+             "holdings": [{"ticker": None, "issuer": 'A, "B"', "cusip": "c", "title": "COM",
+                           "put_call": None, "shares": 10.0, "value": 2500.0, "weight": 0.5}]}
+        self.assertEqual(
+            quarter_csv(q),
+            "manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,"
+            "put_call,shares,value_usd,weight\r\n"
+            'M,m,1,2026Q2,2026-06-30,2026-08-14,a,,"A, ""B""",c,COM,,10,2500,0.5\r\n',
+        )
 
 
 if __name__ == "__main__":

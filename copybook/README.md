@@ -49,7 +49,9 @@ SEC User-Agent: `Copybook factordynamics.com copybook@factordynamics.com`, under
   (`ticker, issuer, title, cusip, put_call, shares, value`); top 500 by value, `truncated` if more,
   `position_count` is the full count.
 - `h/{slug}/{quarter}.json`: one quarter's full book for a curated fund (every position), up to 8 quarters.
-- `{slug}-history.json`: index of those quarters: metadata, `holdings_url` (relative to `data/`) and a
+- `h/{slug}/{quarter}.csv`: the same book as RFC 4180 CSV (CRLF), columns
+  `manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight`.
+- `{slug}-history.json`: index of those quarters: metadata, `holdings_url` and `csv_url` (relative to `data/`) and a
   50-row `top_holdings` preview. It has no `holdings` key, so nothing reads a partial book by mistake.
 - `alerts.json`: `new_filings` from the last run and `recent` (rolling, by accession) for the alert mailer.
 - Every holding row (and every shard row) carries `ticker`, `display_name` (clean name; raw SEC name stays
