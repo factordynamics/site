@@ -125,5 +125,954 @@
       "put_call": null,
       "weight": 0.004284894832871541
     }
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001420506-26-000298",
+      "filing_date": "2026-02-11",
+      "report_date": "2025-12-31",
+      "quarter": "2025Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1540866/000142050626000298/0001420506-26-000298-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 127897188.0,
+      "holdings": [
+        {
+          "issuer": "CHARTER COMMUNICATIONS INC N",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 34235000.0,
+          "shares": 164000.0,
+          "put_call": null,
+          "weight": 0.2676759398337984
+        },
+        {
+          "issuer": "DOMINOS PIZZA INC",
+          "title": "COM",
+          "cusip": "25754A201",
+          "ticker": null,
+          "value": 15422340.0,
+          "shares": 37000.0,
+          "put_call": null,
+          "weight": 0.1205838864885755
+        },
+        {
+          "issuer": "LAMAR ADVERTISING CO NEW",
+          "title": "CL A",
+          "cusip": "512816109",
+          "ticker": null,
+          "value": 15189600.0,
+          "shares": 120000.0,
+          "put_call": null,
+          "weight": 0.11876414358695674
+        },
+        {
+          "issuer": "BATH & BODY WORKS INC",
+          "title": "COM",
+          "cusip": "070830104",
+          "ticker": null,
+          "value": 14745848.0,
+          "shares": 734355.0,
+          "put_call": null,
+          "weight": 0.11529454423970603
+        },
+        {
+          "issuer": "CDW CORP",
+          "title": "COM",
+          "cusip": "12514G108",
+          "ticker": null,
+          "value": 13620000.0,
+          "shares": 100000.0,
+          "put_call": null,
+          "weight": 0.10649178619939635
+        },
+        {
+          "issuer": "BEL FUSE INC",
+          "title": "CL B",
+          "cusip": "077347300",
+          "ticker": null,
+          "value": 9329650.0,
+          "shares": 55000.0,
+          "put_call": null,
+          "weight": 0.07294648260757695
+        },
+        {
+          "issuer": "FLUTTER ENTMT PLC",
+          "title": "SHS",
+          "cusip": "G3643J108",
+          "ticker": null,
+          "value": 8907387.0,
+          "shares": 41422.0,
+          "put_call": null,
+          "weight": 0.06964490102784746
+        },
+        {
+          "issuer": "LIMBACH HLDGS INC",
+          "title": "COM",
+          "cusip": "53263P105",
+          "ticker": null,
+          "value": 7959306.0,
+          "shares": 102239.0,
+          "put_call": null,
+          "weight": 0.062232064085724854
+        },
+        {
+          "issuer": "CACTUS INC",
+          "title": "CL A",
+          "cusip": "127203107",
+          "ticker": null,
+          "value": 6453944.0,
+          "shares": 141286.0,
+          "put_call": null,
+          "weight": 0.05046196950006438
+        },
+        {
+          "issuer": "SAVERS VALUE VLG INC",
+          "title": "COM",
+          "cusip": "80517M109",
+          "ticker": null,
+          "value": 1486087.0,
+          "shares": 159110.0,
+          "put_call": null,
+          "weight": 0.011619387597481814
+        },
+        {
+          "issuer": "HEICO CORP NEW",
+          "title": "CL A",
+          "cusip": "422806208",
+          "ticker": null,
+          "value": 548026.0,
+          "shares": 2171.0,
+          "put_call": null,
+          "weight": 0.004284894832871541
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001540866-25-000008",
+      "filing_date": "2025-11-17",
+      "report_date": "2025-09-30",
+      "quarter": "2025Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1540866/000154086625000008/0001540866-25-000008-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": false,
+      "total_value": 194726628.0,
+      "holdings": [
+        {
+          "issuer": "CHARTER COMMUNICATIONS CL A ORD",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 45117220.0,
+          "shares": 164000.0,
+          "put_call": null,
+          "weight": 0.23169517422137048
+        },
+        {
+          "issuer": "BATH AND BODY WORKS ORD",
+          "title": "COM",
+          "cusip": "070830104",
+          "ticker": null,
+          "value": 35291200.0,
+          "shares": 1370000.0,
+          "put_call": null,
+          "weight": 0.18123458698211525
+        },
+        {
+          "issuer": "LAMAR ADVERTISING CL A REIT",
+          "title": "CL A",
+          "cusip": "512816109",
+          "ticker": null,
+          "value": 20811400.0,
+          "shares": 170000.0,
+          "put_call": null,
+          "weight": 0.10687495702950292
+        },
+        {
+          "issuer": "FLUTTER ENTERTAINMENT ORD",
+          "title": "COM",
+          "cusip": "G3643J108",
+          "ticker": null,
+          "value": 20681188.0,
+          "shares": 81422.0,
+          "put_call": null,
+          "weight": 0.10620626573988638
+        },
+        {
+          "issuer": "DOMINOS PIZZA ORD",
+          "title": "COM",
+          "cusip": "25754A201",
+          "ticker": null,
+          "value": 15973270.0,
+          "shares": 37000.0,
+          "put_call": null,
+          "weight": 0.0820292024981812
+        },
+        {
+          "issuer": "CDW ORD",
+          "title": "COM",
+          "cusip": "12514G108",
+          "ticker": null,
+          "value": 15928000.0,
+          "shares": 100000.0,
+          "put_call": null,
+          "weight": 0.08179672273686164
+        },
+        {
+          "issuer": "BEL FUSE CL B ORD",
+          "title": "CL B",
+          "cusip": "077347300",
+          "ticker": null,
+          "value": 14102000.0,
+          "shares": 100000.0,
+          "put_call": null,
+          "weight": 0.0724194741358126
+        },
+        {
+          "issuer": "CACTUS CL A ORD",
+          "title": "CL A",
+          "cusip": "127203107",
+          "ticker": null,
+          "value": 10396753.0,
+          "shares": 263409.0,
+          "put_call": null,
+          "weight": 0.05339153205076812
+        },
+        {
+          "issuer": "SAVERS VALUE VILLAGE ORD",
+          "title": "COM",
+          "cusip": "80517M109",
+          "ticker": null,
+          "value": 10335000.0,
+          "shares": 780000.0,
+          "put_call": null,
+          "weight": 0.053074405417219056
+        },
+        {
+          "issuer": "LIMBACH HOLDINGS ORD",
+          "title": "COM",
+          "cusip": "53263P105",
+          "ticker": null,
+          "value": 5073452.0,
+          "shares": 52239.0,
+          "put_call": null,
+          "weight": 0.02605422818701508
+        },
+        {
+          "issuer": "HEICO CL A ORD",
+          "title": "CL A",
+          "cusip": "422806208",
+          "ticker": null,
+          "value": 551629.0,
+          "shares": 2171.0,
+          "put_call": null,
+          "weight": 0.0028328380441117688
+        },
+        {
+          "issuer": "BEL FUSE CL A ORD",
+          "title": "CL A",
+          "cusip": "077347201",
+          "ticker": null,
+          "value": 465516.0,
+          "shares": 4001.0,
+          "put_call": null,
+          "weight": 0.0023906129571555053
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001540866-25-000007",
+      "filing_date": "2025-08-14",
+      "report_date": "2025-06-30",
+      "quarter": "2025Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1540866/000154086625000007/0001540866-25-000007-index.html",
+      "line_count": 13,
+      "position_count": 13,
+      "values_in_thousands": false,
+      "total_value": 328737613.0,
+      "holdings": [
+        {
+          "issuer": "CHARTER COMMUNICATIONS CL A ORD",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 81828227.0,
+          "shares": 200162.0,
+          "put_call": null,
+          "weight": 0.2489165333204509
+        },
+        {
+          "issuer": "BATH AND BODY WORKS ORD",
+          "title": "COM",
+          "cusip": "070830104",
+          "ticker": null,
+          "value": 55097608.0,
+          "shares": 1839039.0,
+          "put_call": null,
+          "weight": 0.1676036018427864
+        },
+        {
+          "issuer": "FLUTTER ENTERTAINMENT ORD",
+          "title": "COM",
+          "cusip": "G3643J108",
+          "ticker": null,
+          "value": 30411151.0,
+          "shares": 106422.0,
+          "put_call": null,
+          "weight": 0.09250888793184733
+        },
+        {
+          "issuer": "DOMINOS PIZZA ORD",
+          "title": "COM",
+          "cusip": "25754A201",
+          "ticker": null,
+          "value": 29272778.0,
+          "shares": 64964.0,
+          "put_call": null,
+          "weight": 0.08904602589543047
+        },
+        {
+          "issuer": "CDW ORD",
+          "title": "COM",
+          "cusip": "12514G108",
+          "ticker": null,
+          "value": 27735920.0,
+          "shares": 155305.0,
+          "put_call": null,
+          "weight": 0.08437099651265034
+        },
+        {
+          "issuer": "LAMAR ADVERTISING CL A REIT",
+          "title": "CL A",
+          "cusip": "512816109",
+          "ticker": null,
+          "value": 27216194.0,
+          "shares": 224260.0,
+          "put_call": null,
+          "weight": 0.08279002135359546
+        },
+        {
+          "issuer": "BEL FUSE CL B ORD",
+          "title": "CL B",
+          "cusip": "077347300",
+          "ticker": null,
+          "value": 24031642.0,
+          "shares": 245999.0,
+          "put_call": null,
+          "weight": 0.07310280615805287
+        },
+        {
+          "issuer": "CARMAX ORD",
+          "title": "COM",
+          "cusip": "143130102",
+          "ticker": null,
+          "value": 18294764.0,
+          "shares": 272203.0,
+          "put_call": null,
+          "weight": 0.05565156914368664
+        },
+        {
+          "issuer": "CACTUS CL A ORD",
+          "title": "CL A",
+          "cusip": "127203107",
+          "ticker": null,
+          "value": 15609352.0,
+          "shares": 357030.0,
+          "put_call": null,
+          "weight": 0.047482707736275984
+        },
+        {
+          "issuer": "SAVERS VALUE VILLAGE ORD",
+          "title": "COM",
+          "cusip": "80517M109",
+          "ticker": null,
+          "value": 11000057.0,
+          "shares": 1078437.0,
+          "put_call": null,
+          "weight": 0.033461510228828
+        },
+        {
+          "issuer": "LIMBACH HOLDINGS ORD",
+          "title": "COM",
+          "cusip": "53263P105",
+          "ticker": null,
+          "value": 7318684.0,
+          "shares": 52239.0,
+          "put_call": null,
+          "weight": 0.02226299550334692
+        },
+        {
+          "issuer": "HEICO CL A ORD",
+          "title": "CL A",
+          "cusip": "422806208",
+          "ticker": null,
+          "value": 561746.0,
+          "shares": 2171.0,
+          "put_call": null,
+          "weight": 0.0017087974657770603
+        },
+        {
+          "issuer": "BEL FUSE CL A ORD",
+          "title": "CL A",
+          "cusip": "077347201",
+          "ticker": null,
+          "value": 359490.0,
+          "shares": 4001.0,
+          "put_call": null,
+          "weight": 0.0010935469072716056
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001540866-25-000005",
+      "filing_date": "2025-05-14",
+      "report_date": "2025-03-31",
+      "quarter": "2025Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1540866/000154086625000005/0001540866-25-000005-index.html",
+      "line_count": 13,
+      "position_count": 13,
+      "values_in_thousands": false,
+      "total_value": 298229363.0,
+      "holdings": [
+        {
+          "issuer": "CHARTER COMMUNICATIONS CL A ORD",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 73765702.0,
+          "shares": 200162.0,
+          "put_call": null,
+          "weight": 0.24734553719983635
+        },
+        {
+          "issuer": "BATH AND BODY WORKS ORD",
+          "title": "COM",
+          "cusip": "070830104",
+          "ticker": null,
+          "value": 49695662.0,
+          "shares": 1639039.0,
+          "put_call": null,
+          "weight": 0.1666357111858231
+        },
+        {
+          "issuer": "DOMINOS PIZZA ORD",
+          "title": "COM",
+          "cusip": "25754A201",
+          "ticker": null,
+          "value": 29847710.0,
+          "shares": 64964.0,
+          "put_call": null,
+          "weight": 0.10008306928516626
+        },
+        {
+          "issuer": "LAMAR ADVERTISING CL A REIT",
+          "title": "CL A",
+          "cusip": "512816109",
+          "ticker": null,
+          "value": 25516303.0,
+          "shares": 224260.0,
+          "put_call": null,
+          "weight": 0.08555932502192952
+        },
+        {
+          "issuer": "CDW ORD",
+          "title": "COM",
+          "cusip": "12514G108",
+          "ticker": null,
+          "value": 24889179.0,
+          "shares": 155305.0,
+          "put_call": null,
+          "weight": 0.0834565005592692
+        },
+        {
+          "issuer": "FLUTTER ENTERTAINMENT ORD",
+          "title": "COM",
+          "cusip": "G3643J108",
+          "ticker": null,
+          "value": 23577794.0,
+          "shares": 106422.0,
+          "put_call": null,
+          "weight": 0.0790592641945857
+        },
+        {
+          "issuer": "CARMAX ORD",
+          "title": "COM",
+          "cusip": "143130102",
+          "ticker": null,
+          "value": 21210058.0,
+          "shares": 272203.0,
+          "put_call": null,
+          "weight": 0.07111995206186321
+        },
+        {
+          "issuer": "BEL FUSE CL B ORD",
+          "title": "CL B",
+          "cusip": "077347300",
+          "ticker": null,
+          "value": 18415485.0,
+          "shares": 245999.0,
+          "put_call": null,
+          "weight": 0.06174940258984492
+        },
+        {
+          "issuer": "PROGRESSIVE ORD",
+          "title": "COM",
+          "cusip": "743315103",
+          "ticker": null,
+          "value": 12260842.0,
+          "shares": 43323.0,
+          "put_call": null,
+          "weight": 0.041112122148750326
+        },
+        {
+          "issuer": "CACTUS CL A ORD",
+          "title": "CL A",
+          "cusip": "127203107",
+          "ticker": null,
+          "value": 10863085.0,
+          "shares": 237030.0,
+          "put_call": null,
+          "weight": 0.03642526976795373
+        },
+        {
+          "issuer": "SAVERS VALUE VILLAGE ORD",
+          "title": "COM",
+          "cusip": "80517M109",
+          "ticker": null,
+          "value": 7441215.0,
+          "shares": 1078437.0,
+          "put_call": null,
+          "weight": 0.024951315742843202
+        },
+        {
+          "issuer": "HEICO CL A ORD",
+          "title": "CL A",
+          "cusip": "422806208",
+          "ticker": null,
+          "value": 458016.0,
+          "shares": 2171.0,
+          "put_call": null,
+          "weight": 0.0015357843888765574
+        },
+        {
+          "issuer": "BEL FUSE CL A ORD",
+          "title": "CL A",
+          "cusip": "077347201",
+          "ticker": null,
+          "value": 288312.0,
+          "shares": 4001.0,
+          "put_call": null,
+          "weight": 0.0009667458532579168
+        }
+      ]
+    },
+    {
+      "form": "13F-HR/A",
+      "accession": "0001540866-25-000003",
+      "filing_date": "2025-02-26",
+      "report_date": "2024-12-31",
+      "quarter": "2024Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1540866/000154086625000003/0001540866-25-000003-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": false,
+      "total_value": 641075747.0,
+      "holdings": [
+        {
+          "issuer": "CHARTER COMMUNICATIONS CL A ORD",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 127918679.0,
+          "shares": 373191.0,
+          "put_call": null,
+          "weight": 0.19953754232415222
+        },
+        {
+          "issuer": "BATH AND BODY WORKS ORD",
+          "title": "COM",
+          "cusip": "070830104",
+          "ticker": null,
+          "value": 87717358.0,
+          "shares": 2262506.0,
+          "put_call": null,
+          "weight": 0.13682838324563854
+        },
+        {
+          "issuer": "PROGRESSIVE ORD",
+          "title": "COM",
+          "cusip": "743315103",
+          "ticker": null,
+          "value": 78889915.0,
+          "shares": 329243.0,
+          "put_call": null,
+          "weight": 0.12305864848136269
+        },
+        {
+          "issuer": "CDW ORD",
+          "title": "COM",
+          "cusip": "12514G108",
+          "ticker": null,
+          "value": 66622164.0,
+          "shares": 382798.0,
+          "put_call": null,
+          "weight": 0.10392245270822888
+        },
+        {
+          "issuer": "LAMAR ADVERTISING CL A REIT",
+          "title": "CL A",
+          "cusip": "512816109",
+          "ticker": null,
+          "value": 64581000.0,
+          "shares": 530483.0,
+          "put_call": null,
+          "weight": 0.1007384857440255
+        },
+        {
+          "issuer": "DOMINOS PIZZA ORD",
+          "title": "COM",
+          "cusip": "25754A201",
+          "ticker": null,
+          "value": 58111155.0,
+          "shares": 138439.0,
+          "put_call": null,
+          "weight": 0.09064631640167164
+        },
+        {
+          "issuer": "FLUTTER ENTERTAINMENT ORD",
+          "title": "COM",
+          "cusip": "G3643J108",
+          "ticker": null,
+          "value": 51285526.0,
+          "shares": 198435.0,
+          "put_call": null,
+          "weight": 0.07999916739948049
+        },
+        {
+          "issuer": "CARMAX ORD",
+          "title": "COM",
+          "cusip": "143130102",
+          "ticker": null,
+          "value": 45735236.0,
+          "shares": 559384.0,
+          "put_call": null,
+          "weight": 0.07134139173728561
+        },
+        {
+          "issuer": "CACTUS CL A ORD",
+          "title": "CL A",
+          "cusip": "127203107",
+          "ticker": null,
+          "value": 25793019.0,
+          "shares": 441964.0,
+          "put_call": null,
+          "weight": 0.04023396473927129
+        },
+        {
+          "issuer": "SAVERS VALUE VILLAGE ORD",
+          "title": "COM",
+          "cusip": "80517M109",
+          "ticker": null,
+          "value": 21052783.0,
+          "shares": 2053930.0,
+          "put_call": null,
+          "weight": 0.03283977454851369
+        },
+        {
+          "issuer": "LIBERTY BROADBAND SRS C ORD",
+          "title": "COM SER C",
+          "cusip": "530307305",
+          "ticker": null,
+          "value": 12535832.0,
+          "shares": 167681.0,
+          "put_call": null,
+          "weight": 0.01955436944645482
+        },
+        {
+          "issuer": "HEICO CL A ORD",
+          "title": "CL A",
+          "cusip": "422806208",
+          "ticker": null,
+          "value": 833080.0,
+          "shares": 4477.0,
+          "put_call": null,
+          "weight": 0.0012995032239146616
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001540866-24-000006",
+      "filing_date": "2024-11-14",
+      "report_date": "2024-09-30",
+      "quarter": "2024Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1540866/000154086624000006/0001540866-24-000006-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": false,
+      "total_value": 777683850.0,
+      "holdings": [
+        {
+          "issuer": "PROGRESSIVE ORD",
+          "title": "COM",
+          "cusip": "743315103",
+          "ticker": null,
+          "value": 153170297.0,
+          "shares": 603603.0,
+          "put_call": null,
+          "weight": 0.196957024374365
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS CL A ORD",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 116241338.0,
+          "shares": 358681.0,
+          "put_call": null,
+          "weight": 0.1494711996398022
+        },
+        {
+          "issuer": "LAMAR ADVERTISING CL A REIT",
+          "title": "CL A",
+          "cusip": "512816109",
+          "ticker": null,
+          "value": 96044773.0,
+          "shares": 718898.0,
+          "put_call": null,
+          "weight": 0.12350105123052253
+        },
+        {
+          "issuer": "CDW ORD",
+          "title": "COM",
+          "cusip": "12514G108",
+          "ticker": null,
+          "value": 87025928.0,
+          "shares": 384560.0,
+          "put_call": null,
+          "weight": 0.11190399286290953
+        },
+        {
+          "issuer": "BATH AND BODY WORKS ORD",
+          "title": "COM",
+          "cusip": "070830104",
+          "ticker": null,
+          "value": 73502376.0,
+          "shares": 2302706.0,
+          "put_call": null,
+          "weight": 0.09451446882946071
+        },
+        {
+          "issuer": "DOMINOS PIZZA ORD",
+          "title": "COM",
+          "cusip": "25754A201",
+          "ticker": null,
+          "value": 68447748.0,
+          "shares": 159129.0,
+          "put_call": null,
+          "weight": 0.08801487648226204
+        },
+        {
+          "issuer": "CARMAX ORD",
+          "title": "COM",
+          "cusip": "143130102",
+          "ticker": null,
+          "value": 52164489.0,
+          "shares": 674134.0,
+          "put_call": null,
+          "weight": 0.0670767291875741
+        },
+        {
+          "issuer": "FLUTTER ENTERTAINMENT ORD",
+          "title": "COM",
+          "cusip": "G3643J108",
+          "ticker": null,
+          "value": 47294650.0,
+          "shares": 199320.0,
+          "put_call": null,
+          "weight": 0.060814751392869994
+        },
+        {
+          "issuer": "LIBERTY BROADBAND SRS C ORD",
+          "title": "COM SER C",
+          "cusip": "530307305",
+          "ticker": null,
+          "value": 30090234.0,
+          "shares": 389316.0,
+          "put_call": null,
+          "weight": 0.0386921163400783
+        },
+        {
+          "issuer": "CACTUS CL A ORD",
+          "title": "CL A",
+          "cusip": "127203107",
+          "ticker": null,
+          "value": 28699719.0,
+          "shares": 480974.0,
+          "put_call": null,
+          "weight": 0.036904095411007955
+        },
+        {
+          "issuer": "SAVERS VALUE VILLAGE ORD",
+          "title": "COM",
+          "cusip": "80517M109",
+          "ticker": null,
+          "value": 24090064.0,
+          "shares": 2289930.0,
+          "put_call": null,
+          "weight": 0.03097668030524229
+        },
+        {
+          "issuer": "HEICO CL A ORD",
+          "title": "CL A",
+          "cusip": "422806208",
+          "ticker": null,
+          "value": 912234.0,
+          "shares": 4477.0,
+          "put_call": null,
+          "weight": 0.0011730139439053544
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001540866-24-000004",
+      "filing_date": "2024-08-15",
+      "report_date": "2024-06-30",
+      "quarter": "2024Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1540866/000154086624000004/0001540866-24-000004-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 770970997.0,
+      "holdings": [
+        {
+          "issuer": "PROGRESSIVE ORD",
+          "title": "COM",
+          "cusip": "743315103",
+          "ticker": null,
+          "value": 151094693.0,
+          "shares": 727431.0,
+          "put_call": null,
+          "weight": 0.19597973670597105
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS CL A ORD",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 111443020.0,
+          "shares": 372769.0,
+          "put_call": null,
+          "weight": 0.14454891355660165
+        },
+        {
+          "issuer": "LAMAR ADVERTISING CL A REIT",
+          "title": "CL A",
+          "cusip": "512816109",
+          "ticker": null,
+          "value": 107740876.0,
+          "shares": 901371.0,
+          "put_call": null,
+          "weight": 0.13974698973014674
+        },
+        {
+          "issuer": "BATH AND BODY WORKS ORD",
+          "title": "COM",
+          "cusip": "070830104",
+          "ticker": null,
+          "value": 94553835.0,
+          "shares": 2421353.0,
+          "put_call": null,
+          "weight": 0.12264253177866301
+        },
+        {
+          "issuer": "CDW ORD",
+          "title": "COM",
+          "cusip": "12514G108",
+          "ticker": null,
+          "value": 90520448.0,
+          "shares": 404398.0,
+          "put_call": null,
+          "weight": 0.11741096403396871
+        },
+        {
+          "issuer": "DOMINOS PIZZA ORD",
+          "title": "COM",
+          "cusip": "25754A201",
+          "ticker": null,
+          "value": 86396983.0,
+          "shares": 167329.0,
+          "put_call": null,
+          "weight": 0.11206255920934469
+        },
+        {
+          "issuer": "CARMAX ORD",
+          "title": "COM",
+          "cusip": "143130102",
+          "ticker": null,
+          "value": 51720395.0,
+          "shares": 705214.0,
+          "put_call": null,
+          "weight": 0.06708474793637406
+        },
+        {
+          "issuer": "SAVERS VALUE VILLAGE ORD",
+          "title": "COM",
+          "cusip": "80517M109",
+          "ticker": null,
+          "value": 27417600.0,
+          "shares": 2240000.0,
+          "put_call": null,
+          "weight": 0.03556242725950429
+        },
+        {
+          "issuer": "CACTUS CL A ORD",
+          "title": "CL A",
+          "cusip": "127203107",
+          "ticker": null,
+          "value": 26347902.0,
+          "shares": 499581.0,
+          "put_call": null,
+          "weight": 0.03417495872416067
+        },
+        {
+          "issuer": "LIBERTY BROADBAND SRS C ORD",
+          "title": "COM SER C",
+          "cusip": "530307305",
+          "ticker": null,
+          "value": 22911197.0,
+          "shares": 417935.0,
+          "put_call": null,
+          "weight": 0.029717326707686776
+        },
+        {
+          "issuer": "HEICO CL A ORD",
+          "title": "CL A",
+          "cusip": "422806208",
+          "ticker": null,
+          "value": 824048.0,
+          "shares": 4642.0,
+          "put_call": null,
+          "weight": 0.0010688443575783435
+        }
+      ]
+    }
+  ],
+  "history_quarters": [
+    "2025Q4",
+    "2025Q3",
+    "2025Q2",
+    "2025Q1",
+    "2024Q4",
+    "2024Q3",
+    "2024Q2"
   ]
 }
