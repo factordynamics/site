@@ -8,7 +8,7 @@ const dist = new URL('../dist/', import.meta.url).pathname
 const src = process.argv[2] || 'https://refcell.github.io/gust/copybook/data/index.json'
 const index = src.startsWith('http') ? await (await fetch(src)).json() : JSON.parse(readFileSync(src, 'utf8'))
 const shell = readFileSync(join(dist, 'index.html'), 'utf8')
-const SITE = 'https://refcell.github.io/gust/copybook/'
+const SITE = process.env.VITE_SITE || 'https://refcell.github.io/gust/copybook/'
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
 function page(path, title, desc) {

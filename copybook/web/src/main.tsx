@@ -15,6 +15,17 @@ import { NotFound } from './pages/NotFound'
 import { captureAttribution } from './lib/attribution'
 import { analytics } from './config'
 
+// The old refcell.github.io/gust/copybook/ pages redirect here and pass their stored sign-in and
+// campaign touch in the hash, since localStorage doesn't cross origins.
+if (location.hash.startsWith('#handoff=') && document.referrer.startsWith('https://refcell.github.io/')) {
+  try {
+    const h = JSON.parse(decodeURIComponent(location.hash.slice(9))) as Record<string, string | null>
+    for (const k of ['copybook-session', 'copybook-utm']) if (h[k] && !localStorage.getItem(k)) localStorage.setItem(k, h[k]!)
+  } catch {
+    // Malformed handoff: ignore it.
+  }
+  history.replaceState(null, '', location.pathname + location.search)
+}
 captureAttribution()
 if (analytics.cloudflare) {
   // Cloudflare Web Analytics: cookieless, SPA mode counts client-side navigations.

@@ -34,7 +34,7 @@ function Hero({ managers }: { managers?: Manager[] }) {
         <div className="rise max-w-3xl">
           <Link to="/investors/warren-buffett/" className="inline-flex items-center gap-2 rounded-full bg-card py-1 pl-1 pr-3 text-[13px] text-ink-2 shadow-[var(--shadow-card)] hover:text-ink">
             <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent-2">New</span>
-            Q3 2026 filings land Nov 14. See Berkshire’s latest book
+            Q3 2026 13Fs are due Nov 16. See Berkshire’s latest book
             <Arrow />
           </Link>
           <h1 className="mt-6 text-[42px] font-semibold leading-[1.02] tracking-[-0.045em] sm:text-[54px] lg:text-[64px]">

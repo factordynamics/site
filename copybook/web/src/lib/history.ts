@@ -1,5 +1,5 @@
 import { call } from './account'
-import { BASE, cleanHolding, getJSON, type Holding } from './data'
+import { cleanHolding, DATA, getJSON, type Holding } from './data'
 
 // Shape of GET {api}/history/{slug}. Ingest is moving from inline `holdings` per quarter to an index
 // with `holdings_url` (relative to data/) plus a `top_holdings` preview; both are read here.
@@ -19,7 +19,7 @@ type HistoryIndex = { slug: string; manager: string; cik: string; history: Histo
 
 export type Quarter = Omit<HistoryQuarter, 'holdings'> & { holdings: Holding[]; partial: boolean }
 
-const url = (u: string) => (/^https?:/.test(u) ? u : `${BASE}data/${u.replace(/^\.?\//, '')}`)
+const url = (u: string) => (/^https?:/.test(u) ? u : `${DATA}${u.replace(/^\.?\//, '')}`)
 
 /** Every quarter, newest first, each with its full book. */
 export async function loadHistory(slug: string) {

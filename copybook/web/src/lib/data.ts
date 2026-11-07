@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 
 export const BASE = import.meta.env.BASE_URL
-const DATA = `${BASE}data/`
+// Data can live on another origin (VITE_DATA_BASE); GitHub Pages serves it with CORS *.
+export const DATA: string = import.meta.env.VITE_DATA_BASE || `${BASE}data/`
 
 export type Change = 'new' | 'added' | 'trimmed' | 'exited' | 'unchanged'
 

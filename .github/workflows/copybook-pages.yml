@@ -1,0 +1,75 @@
+name: Copybook Pages
+
+# Builds copybook/web for https://copybook.factordynamics.com/ and deploys it with GitHub Pages.
+# Data stays in refcell/gust (refreshed by its copybook-data.yml) and is read cross-origin.
+# The schedule rebuilds the sitemap and per-investor pages after each data refresh.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "copybook/web/**"
+      - ".github/workflows/copybook-pages.yml"
+  schedule:
+    - cron: "40 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: copybook-pages
+  cancel-in-progress: false
+
+env:
+  COPYBOOK_BASE: /
+  VITE_SITE: https://copybook.factordynamics.com/
+  VITE_DATA_BASE: https://refcell.github.io/gust/copybook/data/
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      pages: ${{ steps.pages.outputs.enabled }}
+    defaults:
+      run:
+        working-directory: copybook/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: copybook/web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/postbuild.mjs "${VITE_DATA_BASE}index.json"
+      - run: node scripts/sitemap.mjs dist "${VITE_DATA_BASE}index.json"
+      # The gust-only root 404 isn't needed here; dist/404.html renders the app's not-found page.
+      - run: rm dist/404-root.html
+      # Skip the deploy (without failing) until Pages is enabled in the repo settings.
+      - id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::GitHub Pages is not enabled for this repo yet; build checked, deploy skipped."
+          fi
+      - if: steps.pages.outputs.enabled == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: copybook/web/dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.pages == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
