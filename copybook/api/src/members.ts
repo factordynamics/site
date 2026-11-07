@@ -54,8 +54,8 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
   if (isActive(m) && !m.welcomed && m.email) {
     const token = await signToken(env.SESSION_SECRET, 'login', customer, LOGIN_TTL);
-    await sendMail(env, [loginMail(env, m.email, token, true)]);
-    m.welcomed = true;
+    // Only a delivered welcome counts; otherwise the next subscription event retries it.
+    m.welcomed = (await sendMail(env, [loginMail(env, m.email, token, true)])) === '200';
   }
   await putMember(env, m);
   return m;

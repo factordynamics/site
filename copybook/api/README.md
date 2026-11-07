@@ -43,6 +43,8 @@ jq -r .webhook_secret /tmp/stripe.json | npx wrangler secret put STRIPE_WEBHOOK_
 # set PORTAL_CONFIGURATION in wrangler.toml to portal_configuration, then pnpm run deploy again
 ```
 
+Live: `https://copybook-api.factordynamics.workers.dev` (Cloudflare account of abigger87@gmail.com, KV `copybook-api-DB`). Payment Links, portal configuration and webhook were created by `stripe-setup.mjs` in live mode.
+
 `stripe-setup.mjs` is idempotent (it finds its objects by metadata and price lookup keys) and works for test and live keys. It recreates the webhook endpoint each run so it can print a fresh signing secret.
 
 Email goes through Resend. Until a sending domain is verified in Resend, set `EMAIL_FROM` to `onboarding@resend.dev`, which only delivers to the Resend account owner.
