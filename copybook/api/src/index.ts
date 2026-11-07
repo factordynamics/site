@@ -146,7 +146,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const data = await fetchHistory(env, slug);
     if (!data) return json({ ok: false, error: 'unknown manager' }, 404, h);
     if (hist) return json(data, 200, { ...h, 'cache-control': 'private, max-age=300' });
-    return new Response(historyCsv(data), {
+    return new Response(historyCsv(env, data), {
       status: 200,
       headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="copybook-${slug}-13f-history.csv"`, 'cache-control': 'private, max-age=300' },
     });

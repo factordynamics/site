@@ -53,10 +53,19 @@ beforeEach(() => {
       return Response.json({
         slug: 'warren-buffett', manager: 'Warren Buffett', cik: '0001067983', history_quarters: ['2026Q2', '2026Q1'],
         history: [
-          { quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', accession: 'A2', holdings: [{ issuer: 'APPLE INC', ticker: 'AAPL', cusip: '037833100', title: 'COM', shares: 10, value: 2000, weight: 0.5, put_call: null }] },
-          { quarter: '2026Q1', report_date: '2026-03-31', filing_date: '2026-05-15', accession: 'A1', holdings: [{ issuer: 'BANK, "OF" AMERICA', ticker: 'BAC', cusip: '060505104', title: 'COM', shares: 5, value: 100, weight: 0.1, put_call: null }] },
+          { quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', accession: 'A2', holdings_url: 'h/warren-buffett/2026Q2.json', top_holdings: [] },
+          { quarter: '2026Q1', report_date: '2026-03-31', filing_date: '2026-05-15', accession: 'A1', csv_url: 'h/warren-buffett/2026Q1.csv', top_holdings: [] },
         ],
       });
+    }
+    if (url === `${SITE}data/h/warren-buffett/2026Q2.json`) {
+      return Response.json({ quarter: '2026Q2', holdings: [{ issuer: 'APPLE INC', ticker: 'AAPL', cusip: '037833100', title: 'COM', shares: 10, value: 2000, weight: 0.5, put_call: null }] });
+    }
+    if (url === `${SITE}data/h/warren-buffett/2026Q1.csv`) {
+      // The header line is split across chunks, as a network body may deliver it.
+      const parts = ['manager,slug,cik,quarter,report_date,', 'filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,', '2026-03-31,2026-05-15,A1,BAC,\"BANK, \"\"OF\"\" AMERICA\",060505104,COM,,5,100,0.1\r\n'];
+      const enc = new TextEncoder();
+      return new Response(new ReadableStream({ start(c) { for (const p of parts) c.enqueue(enc.encode(p)); c.close(); } }));
     }
     return new Response('not found', { status: 404 });
   });
@@ -114,7 +123,8 @@ describe('copybook api', () => {
     const lines = csv.trim().split('\r\n');
     expect(lines).toHaveLength(3);
     expect(lines[1]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q2,2026-06-30,2026-08-14,A2,AAPL,APPLE INC,037833100,COM,,10,2000,0.5');
-    expect(lines[2]).toContain('"BANK, ""OF"" AMERICA"');
+    expect(lines[2]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1');
+    expect(csv.match(/^manager,/gm)).toHaveLength(1);
 
     const portal = await (await call('/portal', { method: 'POST', token: session.token })).json();
     expect(portal.url).toMatch(/^https:\/\/billing\.stripe\.com\//);

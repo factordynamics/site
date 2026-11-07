@@ -11,19 +11,55 @@ function cell(v: unknown): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+async function shard(env: Env, path: string): Promise<Response> {
+  const res = await fetch(new URL(path, env.DATA_URL).toString(), { cf: { cacheTtl: 86400 } } as RequestInit);
+  if (!res.ok || !res.body) throw new Error(`${path}: ${res.status}`);
+  return res;
+}
+
+/**
+ * Streams every quarter's holdings as one CSV, one quarter at a time so a big fund
+ * stays within the Workers CPU and memory limits. Per quarter it uses, in order:
+ * `csv_url` (a ready CSV with the CSV_FIELDS header, piped through unparsed),
+ * `holdings_url` (a JSON shard with `holdings`), or inline `holdings`.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function historyCsv(h: any): string {
-  const rows = [CSV_FIELDS.join(',')];
-  for (const q of h.history ?? []) {
-    for (const p of q.holdings ?? []) {
-      rows.push(
-        [h.manager, h.slug, h.cik, q.quarter, q.report_date, q.filing_date, q.accession, p.ticker ?? '', p.issuer ?? '', p.cusip ?? '', p.title ?? '', p.put_call ?? '', p.shares ?? 0, p.value ?? 0, p.weight ?? 0]
-          .map(cell)
-          .join(','),
+export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder();
+  const quarters = [...(h.history ?? [])];
+  let started = false;
+  return new ReadableStream<Uint8Array>({
+    async pull(out) {
+      if (!started) {
+        started = true;
+        out.enqueue(enc.encode(CSV_FIELDS.join(',') + '\r\n'));
+        return;
+      }
+      const q = quarters.shift();
+      if (!q) return out.close();
+      if (q.csv_url) {
+        const reader = (await shard(env, q.csv_url)).body!.getReader();
+        let header = true;
+        for (let r = await reader.read(); !r.done; r = await reader.read()) {
+          let chunk = r.value;
+          if (header) {
+            const nl = chunk.indexOf(10);
+            if (nl < 0) continue;
+            header = false;
+            chunk = chunk.subarray(nl + 1);
+          }
+          if (chunk.length) out.enqueue(chunk);
+        }
+        return;
+      }
+      const holdings = q.holdings ?? (q.holdings_url ? ((await (await shard(env, q.holdings_url)).json()) as { holdings?: unknown[] }).holdings : []);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = ((holdings ?? []) as any[]).map(
+        (p) => [h.manager, h.slug, h.cik, q.quarter, q.report_date, q.filing_date, q.accession, p.ticker ?? '', p.issuer ?? '', p.cusip ?? '', p.title ?? '', p.put_call ?? '', p.shares ?? 0, p.value ?? 0, p.weight ?? 0].map(cell).join(',') + '\r\n',
       );
-    }
-  }
-  return rows.join('\r\n') + '\r\n';
+      if (rows.length) out.enqueue(enc.encode(rows.join('')));
+    },
+  });
 }
 
 export async function fetchHistory(env: Env, slug: string): Promise<unknown | null> {
