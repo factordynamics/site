@@ -1,8 +1,8 @@
-import { call } from './account'
+import { ApiError, call } from './account'
 import { cleanHolding, DATA, getJSON, type Holding } from './data'
 
-// Shape of GET {api}/history/{slug}. Ingest is moving from inline `holdings` per quarter to an index
-// with `holdings_url` (relative to data/) plus a `top_holdings` preview; both are read here.
+// Public quarter index: data/{slug}-history.json (newest first, 50-row top_holdings preview).
+// Full quarters come from the Copy API, GET {api}/holdings/{slug}/{quarter} (Bearer; 401/402 = paywall).
 export type HistoryQuarter = {
   quarter: string
   report_date?: string
@@ -10,30 +10,26 @@ export type HistoryQuarter = {
   sec_url?: string
   position_count?: number
   total_value: number
-  holdings?: Holding[]
-  holdings_url?: string
   top_holdings?: Holding[]
-  truncated?: boolean
 }
 type HistoryIndex = { slug: string; manager: string; cik: string; history: HistoryQuarter[] }
 
-export type Quarter = Omit<HistoryQuarter, 'holdings'> & { holdings: Holding[]; partial: boolean }
-
-const url = (u: string) => (/^https?:/.test(u) ? u : `${DATA}${u.replace(/^\.?\//, '')}`)
+export type Quarter = HistoryQuarter & { holdings: Holding[]; partial: boolean }
 
 /** Every quarter, newest first, each with its full book. */
 export async function loadHistory(slug: string) {
-  const idx = await call<HistoryIndex>(`/history/${slug}`, { auth: true })
+  const idx = await getJSON<HistoryIndex>(`${DATA}${slug}-history.json`)
   const quarters = await Promise.all(
     idx.history.map(async (q): Promise<Quarter> => {
-      let rows = q.holdings
-      let partial = Boolean(q.truncated)
-      if (!rows && q.holdings_url) rows = await getJSON<{ holdings: Holding[] }>(url(q.holdings_url)).then((d) => d.holdings, () => undefined)
-      if (!rows) {
-        rows = q.top_holdings ?? []
-        partial = rows.length < (q.position_count ?? 0)
+      let rows: Holding[] | undefined
+      try {
+        rows = (await call<{ holdings: Holding[] }>(`/holdings/${slug}/${q.quarter}`, { auth: true })).holdings
+      } catch (e) {
+        // A missing quarter falls back to the public preview; sign-in and plan errors reach the paywall.
+        if (!(e instanceof ApiError) || e.status !== 404) throw e
       }
-      return { ...q, holdings: rows.filter((h) => h.value > 0).map(cleanHolding), partial }
+      const partial = !rows && (q.top_holdings?.length ?? 0) < (q.position_count ?? 0)
+      return { ...q, holdings: (rows ?? q.top_holdings ?? []).filter((h) => h.value > 0).map(cleanHolding), partial }
     }),
   )
   quarters.sort((a, b) => b.quarter.localeCompare(a.quarter))

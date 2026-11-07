@@ -7,7 +7,7 @@ import { attributed } from '../lib/attribution'
 import { checkout, checkoutEnabled, DATA_TERMS, prices, RENEWAL_TERMS } from '../config'
 
 const FREE = ['Latest 13F portfolio for every investor', 'Portfolio map, sector mix and top holdings', 'Consensus book with search', 'Every 13F filer in search']
-const COPY = ['Everything in Free', 'Quarter-over-quarter buys, sells and exits', '8 quarters of 13F history and CSV export (top 500 positions per quarter)', 'Email the day a fund you follow files']
+const COPY = ['Everything in Free', 'Quarter-over-quarter buys, sells and exits', '8 quarters of 13F history and CSV export', 'Email the day a fund you follow files']
 
 export function Pricing() {
   const [cycle, setCycle] = useState<'yearly' | 'monthly'>('yearly')
