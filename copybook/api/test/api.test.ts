@@ -149,7 +149,7 @@ describe('copybook api', () => {
   });
 
   it('cron seeds silently, then emails each active member only the managers they track', async () => {
-    const mk = (slug: string, acc: string) => ({ ok: true, slug, accession: acc, manager: slug, name: `${slug} LP`, quarter: '2026Q3', filing_date: '2026-11-14', sec_url: `https://www.sec.gov/${acc}` });
+    const mk = (slug: string, acc: string) => ({ ok: true, slug, accession: acc, manager: slug, name: `${slug} LP`, quarter: '2026Q3', filing_date: new Date().toISOString().slice(0, 10), sec_url: `https://www.sec.gov/${acc}` });
     index = { managers: [mk('warren-buffett', 'A2'), mk('bill-ackman', 'B2')] };
     const put = (c: string, email: string, status: string, alerts: unknown) => env.DB.put(`cus:${c}`, JSON.stringify({ customer: c, email, status, plan: 'monthly', period_end: 0, subscription: `sub_${c}`, alerts, welcomed: true }));
     await put('c1', 'all@example.com', 'active', 'all');
@@ -163,11 +163,13 @@ describe('copybook api', () => {
     await pending;
     expect(sent).toHaveLength(0);
 
-    index = { managers: [mk('warren-buffett', 'A3'), mk('bill-ackman', 'B2')] };
+    // A fund added to the roster with an old filing must not alert; Buffett's new accession must.
+    index = { managers: [mk('warren-buffett', 'A3'), mk('bill-ackman', 'B2'), { ...mk('seth-klarman', 'K1'), filing_date: '2026-02-14' }] };
     await worker.scheduled({}, env, { waitUntil: (p) => (pending = p) });
     await pending;
     expect(sent.map((m) => m.to[0])).toEqual(['all@example.com']);
     expect(sent[0].text).toContain('warren-buffett LP');
+    expect(sent[0].text).not.toContain('seth-klarman');
 
     sent = [];
     await worker.scheduled({}, env, { waitUntil: (p) => (pending = p) });

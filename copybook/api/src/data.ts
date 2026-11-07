@@ -60,7 +60,9 @@ export async function runAlerts(env: Env): Promise<{ new: number; emails: number
     await env.DB.put('alerts:seen', JSON.stringify(next));
     return { new: 0, emails: 0, status: 'seeded' };
   }
-  const fresh = Object.values(current).filter((f) => seen[f.slug] !== f.accession);
+  // A fund newly added to the roster is not news unless its filing is recent.
+  const recent = (d: string) => Date.now() - Date.parse(d) < 10 * 86400_000;
+  const fresh = Object.values(current).filter((f) => seen[f.slug] !== f.accession && (seen[f.slug] || recent(f.filing_date)));
   if (!fresh.length) return { new: 0, emails: 0, status: 'none' };
 
   const mails = [];
