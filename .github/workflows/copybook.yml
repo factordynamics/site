@@ -2,7 +2,7 @@ name: Refresh Copybook 13F
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "0 */4 * * *"
   workflow_dispatch:
   push:
     paths:
@@ -23,6 +23,7 @@ jobs:
         env:
           COPYBOOK_WEB_DIR: public/copybook
           PYTHONPATH: copybook
+          COPYBOOK_HISTORY_QUARTERS: "8"
         run: python copybook/ingest/build.py
       - name: Commit updated site
         run: |

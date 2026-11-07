@@ -134,7 +134,7 @@ def render_index(payload: dict) -> str:
     <p class="meta">Updated {escape(updated)} · {payload['filed_count']} of {payload['manager_count']} managers · source SEC EDGAR</p>
     <p class="cta-row">
       <a class="btn" href="copycat.html">Open copycat</a>
-      <a class="btn ghost" href="pricing.html">Join the waitlist</a>
+      <a class="btn ghost" href="pricing.html">Get Copy</a>
     </p>
   </div>
   <div class="stats">
@@ -373,4 +373,4 @@ def write_site(payload: dict) -> None:
     for m in payload["managers"]:
         (MANAGERS_DIR / f"{m['slug']}.html").write_text(render_manager(m, ok_sorted))
     (WEB / ".nojekyll").write_text("")
-    (WEB / "robots.txt").write_text("User-agent: *\nAllow: /\n")
+    (WEB / "robots.txt").write_text("User-agent: *\nAllow: /\nDisallow: /csv/\n")

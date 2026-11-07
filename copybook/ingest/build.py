@@ -253,13 +253,97 @@ def write_json(payload: dict) -> None:
         + "\n"
     )
     for m in payload["managers"]:
-        (DATA / f"{m['slug']}.json").write_text(json.dumps(m, indent=2) + "\n")
+        slim = {k: v for k, v in m.items() if k != "history"}
+        (DATA / f"{m['slug']}.json").write_text(json.dumps(slim, indent=2) + "\n")
+        if m.get("ok") and m.get("history"):
+            (DATA / f"{m['slug']}-history.json").write_text(
+                json.dumps(
+                    {
+                        "slug": m["slug"],
+                        "manager": m["manager"],
+                        "cik": m["cik"],
+                        "history_quarters": m.get("history_quarters") or [],
+                        "history": m["history"],
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
     (DATA / "copycat.json").write_text(json.dumps(payload["copycat"], indent=2) + "\n")
+
+
+def write_csv(payload: dict) -> None:
+    CSV_DIR.mkdir(parents=True, exist_ok=True)
+    latest_rows = []
+    history_rows = []
+    for m in payload["managers"]:
+        if not m.get("ok"):
+            continue
+        for h in m.get("holdings") or []:
+            latest_rows.append(holding_row(m, h))
+        for q in m.get("history") or [{"holdings": m.get("holdings") or [], **m}]:
+            for h in q.get("holdings") or []:
+                history_rows.append(holding_row(m, h, q))
+    write_rows(CSV_DIR / "latest.csv", latest_rows)
+    write_rows(CSV_DIR / "history.csv", history_rows)
+    copycat_rows = [
+        {
+            "manager": "copycat",
+            "slug": "copycat",
+            "cik": "",
+            "quarter": "",
+            "report_date": "",
+            "filing_date": payload.get("generated_at"),
+            "accession": "",
+            "ticker": h.get("ticker") or "",
+            "issuer": h.get("issuer") or "",
+            "cusip": h.get("cusip") or "",
+            "title": h.get("title") or "",
+            "put_call": h.get("put_call") or "",
+            "shares": h.get("total_shares", 0),
+            "value_usd": h.get("total_value", 0),
+            "weight": h.get("weight", 0),
+        }
+        for h in payload["copycat"].get("holdings") or []
+    ]
+    write_rows(CSV_DIR / "copycat.csv", copycat_rows)
+    (CSV_DIR / "README.txt").write_text(
+        "Copybook CSV exports. Ready for Copy ($9/mo). Not linked on the free site.\n"
+        "Source: SEC EDGAR 13F-HR, as filed. Not investment advice.\n"
+    )
+
+
+def write_alerts(payload: dict) -> None:
+    prev = previous_accessions(DATA)
+    filings = new_filings(payload["managers"], prev)
+    DATA.mkdir(parents=True, exist_ok=True)
+    (DATA / "alerts.json").write_text(
+        json.dumps(
+            {
+                "generated_at": payload["generated_at"],
+                "new_filings": filings,
+                "email_status": None,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    if not filings:
+        print("alerts: no new filings")
+        return
+    subject, body = email_body(filings, payload["generated_at"])
+    status = send_email(subject, body)
+    alert = json.loads((DATA / "alerts.json").read_text())
+    alert["email_status"] = status
+    (DATA / "alerts.json").write_text(json.dumps(alert, indent=2) + "\n")
+    print(f"alerts: {len(filings)} new filings, email={status}")
 
 
 def main() -> int:
     payload = ingest()
+    write_alerts(payload)
     write_json(payload)
+    write_csv(payload)
     write_site(payload)
     print(
         f"wrote {payload['filed_count']}/{payload['manager_count']} managers, "
