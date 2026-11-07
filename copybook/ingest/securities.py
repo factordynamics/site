@@ -101,14 +101,14 @@ def sic_sector(sic: int) -> str | None:
 
 
 SUFFIX = re.compile(
-    r"(,?\s+(INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|LLC|L\.?P|N\.?V|S\.?A|SA|AG|SE|ASA|AB|NV|"
+    r"(,?\s+(INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMITED|PLC|PL|LLC|L\.?\s?P|N\.?\s?V|S\.?\s?A|SA|AG|SE|ASA|AB|NV|"
     r"S\.?P\.?A|SPA|OYJ|A/S|AS|TR|TRUST CO)\.?)+$",
     re.I,
 )
 STATE = re.compile(r"\s*/[A-Z.]{1,4}/?\s*$")
 SMALL = {"of", "and", "the", "for", "in", "on", "at", "a", "an", "&"}
 UPPER = {
-    "AT&T", "IBM", "AMD", "UBS", "HSBC", "BP", "ASML", "SAP", "TSMC", "KLA", "NXP", "UPS", "CVS", "HCA", "AES",
+    "AT&T", "IBM", "KKR", "LHX", "RBC", "TD", "BMO", "CIBC", "MSC", "IAC", "AMC", "CVR", "AMD", "UBS", "HSBC", "BP", "ASML", "SAP", "TSMC", "KLA", "NXP", "UPS", "CVS", "HCA", "AES",
     "CSX", "CME", "EOG", "NRG", "PPG", "PPL", "RTX", "TJX", "WEC", "XPO", "NVR", "EPAM", "ICON", "ADT", "AGCO",
     "CBRE", "CF", "CH", "CRH", "DR", "DTE", "ESAB", "FMC", "GE", "GXO", "HP", "II", "III", "IV", "LKQ", "MSCI",
     "NCR", "NI", "NOV", "ON", "PG&E", "PNC", "PTC", "QXO", "SBA", "SEI", "STAG", "TE", "TPG", "UDR", "UGI",
@@ -116,7 +116,7 @@ UPPER = {
     "MGM", "NVIDIA", "ETF", "REIT", "SPDR", "ADR", "ASA", "CNA", "EQT", "FTAI", "HEICO", "IDEXX", "IQVIA",
 }
 ABBREV = {
-    "PETE": "Petroleum", "NATL": "National", "INTL": "International", "HLDGS": "Holdings",
+    "PETE": "Petroleum", "NATL": "National", "INTL": "International", "HLDGS": "Holdings", "HLDNGS": "Holdings", "HLDS": "Holdings",
     "HLDG": "Holding", "MGMT": "Management", "FINL": "Financial", "SVCS": "Services", "SYS": "Systems",
     "TECHNOLOGIE": "Technologies", "TECH": "Technologies", "PHARMACEUTICALS": "Pharmaceuticals",
     "RY": "Railway", "BK": "Bank", "COMMUNICATIONS": "Communications", "INDS": "Industries",
@@ -137,7 +137,8 @@ def clean_name(raw: str, expand: bool = False) -> str:
     while prev != s:
         prev = s
         s = SUFFIX.sub("", s).strip(" ,.")
-    s = re.sub(r"\s*&\s*CO\.?$", "", s, flags=re.I).strip(" ,.")
+        s = re.sub(r"\s*&\s*CO\.?$", "", s, flags=re.I).strip(" ,.")
+    s = re.sub(r"\s*&$", "", s)
     words = s.split(" ")
     if expand:
         words = [

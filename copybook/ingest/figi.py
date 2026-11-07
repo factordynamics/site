@@ -21,6 +21,7 @@ CACHE = Path(os.environ.get("COPYBOOK_CUSIP_MAP") or (HERE / "cusip_map.json"))
 URL = "https://api.openfigi.com/v3/mapping"
 BATCH = 10  # unauthenticated limit per request
 INTERVAL = 2.6  # 25 requests per 60 s unauthenticated
+RETRY_MAX = int(os.environ.get("COPYBOOK_FIGI_RETRY", "1000"))
 
 
 def load_cache() -> dict[str, str]:
@@ -33,7 +34,12 @@ def save_cache(cache: dict[str, str]) -> None:
     CACHE.write_text(json.dumps(dict(sorted(cache.items())), indent=0) + "\n")
 
 
-def pick(data: list[dict]) -> str:
+RETRIED = "_retried"  # CUSIPs already re-asked without the exchange filter
+
+
+def pick(data: list[dict], composite_only: bool = False) -> str:
+    if composite_only:
+        data = [d for d in data if d.get("exchCode") == "US"]
     tickers = {d.get("ticker") for d in data if d.get("ticker")}
     if len(tickers) != 1:
         return ""
@@ -80,6 +86,26 @@ def resolve(cusips: list[str], budget_s: float | None = None) -> dict[str, str]:
         if (i // BATCH) % 20 == 0:
             save_cache(cache)
             print(f"figi: {i + len(chunk)}/{len(todo)}", flush=True)
+        wait = INTERVAL - (time.monotonic() - t0)
+        if wait > 0:
+            time.sleep(wait)
+    # Some listings (e.g. Exxon) only resolve without exchCode; keep the US composite listing.
+    retried = set(cache.get(RETRIED) or [])
+    redo = [c for c in dict.fromkeys(cusips) if cache.get(c) == "" and c not in retried][:RETRY_MAX]
+    for i in range(0, len(redo), BATCH):
+        if budget_s is not None and time.monotonic() - start > budget_s:
+            break
+        chunk = redo[i : i + BATCH]
+        t0 = time.monotonic()
+        try:
+            out = _post([{"idType": "ID_CUSIP", "idValue": c} for c in chunk])
+        except Exception as exc:
+            print(f"figi: retry stopped early: {exc}", flush=True)
+            break
+        for c, res in zip(chunk, out):
+            cache[c] = pick(res.get("data") or [], composite_only=True)
+            retried.add(c)
+        cache[RETRIED] = sorted(retried)
         wait = INTERVAL - (time.monotonic() - t0)
         if wait > 0:
             time.sleep(wait)

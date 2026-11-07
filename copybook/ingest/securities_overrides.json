@@ -5,6 +5,16 @@
    "ticker": "SPCX",
    "name": "SpaceX",
    "sector": "Industrials"
+  },
+  "30231G102": {
+   "ticker": "XOM",
+   "name": "Exxon Mobil",
+   "sector": "Energy"
+  },
+  "N07059210": {
+   "ticker": "ASML",
+   "name": "ASML",
+   "sector": "Information Technology"
   }
  },
  "by_ticker": {
@@ -28,6 +38,9 @@
   "ADBE": {
    "name": "Adobe"
   },
+  "ADI": {
+   "name": "Analog Devices"
+  },
   "AFRM": {
    "sector": "Financials"
   },
@@ -38,7 +51,8 @@
    "name": "Ally Financial"
   },
   "AMAT": {
-   "name": "Applied Materials"
+   "name": "Applied Materials",
+   "sector": "Information Technology"
   },
   "AMD": {
    "name": "AMD"
@@ -52,6 +66,9 @@
   },
   "AON": {
    "name": "Aon"
+  },
+  "AOS": {
+   "sector": "Industrials"
   },
   "APO": {
    "name": "Apollo Global"
@@ -90,6 +107,10 @@
    "name": "Booking Holdings",
    "sector": "Consumer Discretionary"
   },
+  "BLDR": {
+   "name": "Builders FirstSource",
+   "sector": "Industrials"
+  },
   "BLK": {
    "name": "BlackRock"
   },
@@ -111,12 +132,21 @@
   "C": {
    "name": "Citigroup"
   },
+  "CARR": {
+   "sector": "Industrials"
+  },
   "CAT": {
    "name": "Caterpillar",
    "sector": "Industrials"
   },
   "CB": {
    "name": "Chubb"
+  },
+  "CBRE": {
+   "name": "CBRE Group"
+  },
+  "CDNS": {
+   "sector": "Information Technology"
   },
   "CHTR": {
    "name": "Charter Communications",
@@ -227,9 +257,16 @@
   "EXPE": {
    "sector": "Consumer Discretionary"
   },
+  "FBIN": {
+   "name": "Fortune Brands Innovations",
+   "sector": "Industrials"
+  },
   "FDX": {
    "name": "FedEx",
    "sector": "Industrials"
+  },
+  "FERG": {
+   "name": "Ferguson"
   },
   "FI": {
    "sector": "Financials"
@@ -244,6 +281,9 @@
   "GE": {
    "name": "GE Aerospace",
    "sector": "Industrials"
+  },
+  "GEHC": {
+   "name": "GE HealthCare"
   },
   "GEV": {
    "name": "GE Vernova",
@@ -327,6 +367,9 @@
    "name": "iShares Russell 2000 ETF",
    "sector": "Funds & ETFs"
   },
+  "JCI": {
+   "sector": "Industrials"
+  },
   "JEF": {
    "name": "Jefferies"
   },
@@ -346,10 +389,14 @@
    "name": "KKR"
   },
   "KLAC": {
-   "name": "KLA"
+   "name": "KLA",
+   "sector": "Information Technology"
   },
   "KO": {
    "name": "Coca-Cola"
+  },
+  "LAD": {
+   "name": "Lithia Motors"
   },
   "LBRDK": {
    "name": "Liberty Broadband Class C",
@@ -358,6 +405,12 @@
   "LEN": {
    "name": "Lennar",
    "sector": "Consumer Discretionary"
+  },
+  "LHX": {
+   "name": "L3Harris Technologies"
+  },
+  "LII": {
+   "sector": "Industrials"
   },
   "LLY": {
    "name": "Eli Lilly"
@@ -373,7 +426,8 @@
    "name": "Louisiana-Pacific"
   },
   "LRCX": {
-   "name": "Lam Research"
+   "name": "Lam Research",
+   "sector": "Information Technology"
   },
   "LYV": {
    "sector": "Communication Services"
@@ -384,6 +438,9 @@
   "MA": {
    "name": "Mastercard",
    "sector": "Financials"
+  },
+  "MAS": {
+   "sector": "Industrials"
   },
   "MCD": {
    "name": "McDonald's"
@@ -455,9 +512,15 @@
    "name": "NVR",
    "sector": "Consumer Discretionary"
   },
+  "NVST": {
+   "name": "Envista"
+  },
   "NYT": {
    "name": "New York Times",
    "sector": "Communication Services"
+  },
+  "OC": {
+   "sector": "Industrials"
   },
   "ORCL": {
    "name": "Oracle"
@@ -552,6 +615,9 @@
    "name": "Snowflake",
    "sector": "Information Technology"
   },
+  "SNPS": {
+   "sector": "Information Technology"
+  },
   "SOFI": {
    "sector": "Financials"
   },
@@ -571,6 +637,9 @@
    "name": "SPDR S&P 500 ETF Trust",
    "sector": "Funds & ETFs"
   },
+  "TER": {
+   "sector": "Information Technology"
+  },
   "TKO": {
    "sector": "Communication Services"
   },
@@ -587,6 +656,9 @@
   "TOST": {
    "sector": "Financials"
   },
+  "TREX": {
+   "sector": "Industrials"
+  },
   "TSLA": {
    "name": "Tesla",
    "sector": "Consumer Discretionary"
@@ -594,6 +666,9 @@
   "TSM": {
    "name": "TSMC",
    "sector": "Information Technology"
+  },
+  "TT": {
+   "sector": "Industrials"
   },
   "TTWO": {
    "sector": "Communication Services"
