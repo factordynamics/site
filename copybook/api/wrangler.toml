@@ -1,0 +1,21 @@
+name = "copybook-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# npx wrangler kv namespace create DB  -> paste the id below.
+[[kv_namespaces]]
+binding = "DB"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[triggers]
+crons = ["17 * * * *"]
+
+[vars]
+SITE_URL = "https://refcell.github.io/gust/copybook/"
+DATA_URL = "https://refcell.github.io/gust/copybook/data/"
+ALLOWED_ORIGINS = ""
+EMAIL_FROM = "Copybook <onboarding@resend.dev>"
+# bpc_... printed by scripts/stripe-setup.mjs (portal_configuration).
+PORTAL_CONFIGURATION = ""
+
+# Secrets (npx wrangler secret put NAME): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SESSION_SECRET, RESEND_API_KEY
