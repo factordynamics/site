@@ -12,7 +12,7 @@ id = "830e2b3035554fa2865bc523dfcbf2fb"
 crons = ["17 * * * *"]
 
 [vars]
-SITE_URL = "https://refcell.github.io/gust/copybook/"
+SITE_URL = "https://copybook.factordynamics.com/"
 DATA_URL = "https://refcell.github.io/gust/copybook/data/"
 ALLOWED_ORIGINS = "https://copybook.factordynamics.com,https://refcell.github.io"
 EMAIL_FROM = "Copybook <copybook@factordynamics.com>"

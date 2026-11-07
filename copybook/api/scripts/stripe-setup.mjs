@@ -7,7 +7,7 @@
 // The output file holds the webhook signing secret: keep it out of git.
 import { writeFileSync } from 'node:fs';
 
-const SITE = 'https://refcell.github.io/gust/copybook/';
+const SITE = 'https://copybook.factordynamics.com/';
 const key = process.env.STRIPE_SECRET_KEY;
 if (!key) throw new Error('STRIPE_SECRET_KEY is required');
 const arg = (name) => {
@@ -55,16 +55,17 @@ const success = `${SITE}account/?checkout=success&session_id={CHECKOUT_SESSION_I
 const links = {};
 const activeLinks = (await stripe('GET', 'payment_links', { active: true, limit: 100 })).data;
 for (const plan of ['monthly', 'yearly']) {
-  links[plan] =
-    activeLinks.find((l) => l.metadata?.copybook === plan) ??
-    (await stripe('POST', 'payment_links', {
-      'line_items[0][price]': prices[plan].id,
-      'line_items[0][quantity]': 1,
-      'after_completion[type]': 'redirect',
-      'after_completion[redirect][url]': success,
-      allow_promotion_codes: true,
-      'metadata[copybook]': plan,
-    }));
+  const redirect = { 'after_completion[type]': 'redirect', 'after_completion[redirect][url]': success };
+  const found = activeLinks.find((l) => l.metadata?.copybook === plan);
+  links[plan] = found
+    ? await stripe('POST', `payment_links/${found.id}`, redirect)
+    : await stripe('POST', 'payment_links', {
+        'line_items[0][price]': prices[plan].id,
+        'line_items[0][quantity]': 1,
+        ...redirect,
+        allow_promotion_codes: true,
+        'metadata[copybook]': plan,
+      });
 }
 
 const portalParams = {
