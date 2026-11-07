@@ -22,7 +22,7 @@ All responses are JSON. Authenticated routes take `Authorization: Bearer <sessio
 | POST | `/portal` | → `{url}` of a Stripe customer portal session |
 | POST | `/alerts` | `{alerts: "all" \| "off" \| ["warren-buffett", ...]}` → `{member}` |
 | GET | `/history/{slug}` | → same shape as `data/{slug}-history.json` |
-| GET | `/csv/{slug}.csv` | → CSV of every quarter's holdings |
+| GET | `/csv/{slug}.csv` | → CSV of up to 8 quarters, top 500 positions per quarter (`truncated` in the history JSON marks cut quarters) |
 | POST | `/webhook` | Stripe only (signature checked) |
 | GET | `/health` | `{ok: true}` |
 
