@@ -19,7 +19,7 @@ Sectors come from each issuer's SEC SIC code mapped to GICS-style sectors (plus 
 
 ```bash
 python ingest/universe.py      # curated + all-filer directory from EDGAR full-index form.idx
-python ingest/build.py         # curated funds: 8 quarters, QoQ changes, copycat, alerts
+python ingest/build.py         # curated funds: 8 full quarters, QoQ changes, copycat, alerts
 python ingest/bulk.py          # every 13F filer: latest quarter, one shard per CIK, incremental
 python ingest/figi.py web/data # CUSIP -> ticker cache (OpenFIGI, 25 req/min unauthenticated)
 python ingest/securities.py web/data  # ticker, display name, sector per CUSIP (SEC SIC codes)
@@ -48,7 +48,9 @@ SEC User-Agent: `Copybook factordynamics.com copybook@factordynamics.com`, under
 - `f/{cik}.json`: latest quarter for any filer. `columns` names the fields of each `rows[]` array
   (`ticker, issuer, title, cusip, put_call, shares, value`); top 500 by value, `truncated` if more,
   `position_count` is the full count.
-- `{slug}-history.json`: up to 8 quarters per curated fund, top 500 rows per quarter (`truncated` flags more). Read by the Copy API.
+- `h/{slug}/{quarter}.json`: one quarter's full book for a curated fund (every position), up to 8 quarters.
+- `{slug}-history.json`: index of those quarters: metadata, `holdings_url` (relative to `data/`) and a
+  50-row `top_holdings` preview. It has no `holdings` key, so nothing reads a partial book by mistake.
 - `alerts.json`: `new_filings` from the last run and `recent` (rolling, by accession) for the alert mailer.
 - Every holding row (and every shard row) carries `ticker`, `display_name` (clean name; raw SEC name stays
   in `issuer`) and `sector`. `copycat_lite.json` has `sectors: [{sector, value, weight}]` summing to 100%.

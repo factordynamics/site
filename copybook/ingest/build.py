@@ -39,7 +39,8 @@ HISTORY_QUARTERS = int(os.environ.get("COPYBOOK_HISTORY_QUARTERS", "8"))
 if os.environ.get("COPYBOOK_LATEST_ONLY") == "1":
     HISTORY_QUARTERS = 2  # latest plus prior quarter for changes
 LITE_COUNT = 2000
-HISTORY_ROWS = 500  # per quarter in the published history file
+TOP_ROWS = 50  # preview rows per quarter in {slug}-history.json; full books are in h/
+HIST = DATA / "h"
 LITE_HOLDERS = 8
 _CUSIP_MAP: dict[str, str] | None = None
 
@@ -67,13 +68,13 @@ def attach_tickers(holdings: list[AggregatedHolding]) -> None:
 def cached_quarters() -> dict[str, dict]:
     """Previously loaded filings by accession, so unchanged quarters are not refetched."""
     out: dict[str, dict] = {}
-    for p in DATA.glob("*-history.json"):
+    for p in HIST.glob("*/*.json"):
         try:
-            for q in json.loads(p.read_text()).get("history") or []:
-                if q.get("accession"):
-                    out[q["accession"]] = q
+            q = json.loads(p.read_text())
         except ValueError:
             continue
+        if q.get("accession") and not q.get("truncated"):
+            out[q["accession"]] = q
     return out
 
 
@@ -191,13 +192,9 @@ def ingest() -> dict:
                 continue
             last_error = "No usable 13F information table"
             history = []
-            for idx, meta in enumerate(unique_quarters(metas, HISTORY_QUARTERS)):
+            for meta in unique_quarters(metas, HISTORY_QUARTERS):
                 try:
-                    hit = cache.get(meta.accession)
-                    # The two newest quarters drive QoQ changes, so a trimmed cache copy is refetched.
-                    if hit and hit.get("truncated") and idx < 2:
-                        hit = None
-                    loaded = hit or load_filing(cik, meta)
+                    loaded = cache.get(meta.accession) or load_filing(cik, meta)
                     if loaded is None:
                         last_error = f"Empty 13F information table for {meta.accession}"
                         continue
@@ -334,6 +331,40 @@ def manager_json(m: dict) -> dict:
     return out
 
 
+def write_history(m: dict) -> None:
+    """Full holdings per quarter in h/{slug}/{quarter}.json; {slug}-history.json is the index."""
+    folder = HIST / m["slug"]
+    folder.mkdir(parents=True, exist_ok=True)
+    keep = set()
+    index = []
+    for q in m["history"]:
+        name = f"{q['quarter']}.json"
+        keep.add(name)
+        meta = {k: v for k, v in q.items() if k not in {"holdings", "truncated"}}
+        body = {"slug": m["slug"], "manager": m["manager"], "cik": m["cik"], **meta, "holdings": q["holdings"]}
+        text = json.dumps(body, separators=(",", ":")) + "\n"
+        path = folder / name
+        if not path.exists() or path.read_text() != text:
+            path.write_text(text)
+        index.append(meta | {"holdings_url": f"h/{m['slug']}/{name}", "top_holdings": q["holdings"][:TOP_ROWS]})
+    for old in folder.glob("*.json"):
+        if old.name not in keep:
+            old.unlink()
+    (DATA / f"{m['slug']}-history.json").write_text(
+        json.dumps(
+            {
+                "slug": m["slug"],
+                "manager": m["manager"],
+                "cik": m["cik"],
+                "history_quarters": m.get("history_quarters") or [],
+                "history": index,
+            },
+            separators=(",", ":"),
+        )
+        + "\n"
+    )
+
+
 def write_json(payload: dict) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     slim_managers = []
@@ -369,26 +400,7 @@ def write_json(payload: dict) -> None:
             continue
         (DATA / f"{m['slug']}.json").write_text(json.dumps(manager_json(m), separators=(",", ":")) + "\n")
         if m.get("history"):
-            (DATA / f"{m['slug']}-history.json").write_text(
-                json.dumps(
-                    {
-                        "slug": m["slug"],
-                        "manager": m["manager"],
-                        "cik": m["cik"],
-                        "history_quarters": m.get("history_quarters") or [],
-                        "history": [
-                            q
-                            | {
-                                "truncated": len(q["holdings"]) > HISTORY_ROWS or bool(q.get("truncated")),
-                                "holdings": q["holdings"][:HISTORY_ROWS],
-                            }
-                            for q in m["history"]
-                        ],
-                    },
-                    separators=(",", ":"),
-                )
-                + "\n"
-            )
+            write_history(m)
     names = {m["slug"]: m["manager"] for m in payload["managers"]}
     (DATA / "copycat.json").write_text(json.dumps(payload["copycat"], separators=(",", ":")) + "\n")
     lite = [

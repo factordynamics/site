@@ -83,7 +83,7 @@ def main() -> int:
     secs = json.loads(secs_path.read_text()) if secs_path.exists() else {}
     figi = load_cache()
     n = 0
-    for path in sorted(DATA.glob("*.json")) + sorted((DATA / "f").glob("*.json")):
+    for path in sorted(DATA.glob("*.json")) + sorted((DATA / "f").glob("*.json")) + sorted((DATA / "h").glob("*/*.json")):
         if path.name in SKIP:
             continue
         text = path.read_text()

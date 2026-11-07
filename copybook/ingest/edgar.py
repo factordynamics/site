@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
@@ -11,7 +12,7 @@ from urllib.request import Request, urlopen
 USER_AGENT = "Copybook factordynamics.com copybook@factordynamics.com"
 DATA_BASE = "https://data.sec.gov"
 ARCHIVE_BASE = "https://www.sec.gov"
-MIN_INTERVAL = 0.12  # stay under 10 req/s
+MIN_INTERVAL = float(os.environ.get("COPYBOOK_SEC_INTERVAL", "0.12"))  # stay under 10 req/s
 
 _last_request = 0.0
 

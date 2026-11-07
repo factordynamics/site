@@ -59,7 +59,9 @@ def slim(rec: dict) -> dict:
 
 
 def write_shard(dest: Path, rec: dict) -> None:
-    dest.write_text(json.dumps(slim(rec), separators=(",", ":")) + "\n")
+    tmp = dest.with_suffix(".tmp")
+    tmp.write_text(json.dumps(slim(rec), separators=(",", ":")) + "\n")
+    tmp.replace(dest)
 
 
 def ingest_one(cik: str) -> dict:
@@ -130,7 +132,10 @@ def main() -> int:
     todo = []
     for f in order:
         dest = OUT / f"{f['cik']}.json"
-        rec = json.loads(dest.read_text()) if dest.exists() else None
+        try:
+            rec = json.loads(dest.read_text()) if dest.exists() else None
+        except ValueError:  # partial write; refetch
+            rec = None
         if rec is not None:
             f["ok"] = bool(rec.get("ok"))
             f["position_count"] = rec.get("position_count")
@@ -157,6 +162,15 @@ def main() -> int:
             print("bulk: time budget reached; next run continues", flush=True)
             break
         cik = f["cik"]
+        dest = OUT / f"{cik}.json"
+        if dest.exists():  # another worker may have fetched it since this run started
+            try:
+                rec = json.loads(dest.read_text())
+                if (f.get("filing_date") or "") <= (rec.get("indexed_date") or rec.get("filing_date") or ""):
+                    f["ok"], f["position_count"], f["quarter"] = bool(rec.get("ok")), rec.get("position_count"), rec.get("quarter")
+                    continue
+            except ValueError:
+                pass
         print(f"{done + 1}/{len(todo)} {cik} {f.get('name', '')[:40]}", flush=True)
         try:
             rec = ingest_one(cik)
