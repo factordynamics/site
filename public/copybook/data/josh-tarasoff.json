@@ -115,5 +115,809 @@
       "put_call": null,
       "weight": 0.049630361062601824
     }
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001420506-26-001649",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1766504/000142050626001649/0001420506-26-001649-index.html",
+      "line_count": 10,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 364211495.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 66818619.0,
+          "shares": 280350.0,
+          "put_call": null,
+          "weight": 0.1834610382080335
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 59316882.0,
+          "shares": 1392742.0,
+          "put_call": null,
+          "weight": 0.16286383822125108
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 47177550.0,
+          "shares": 63.0,
+          "put_call": null,
+          "weight": 0.12953339103149394
+        },
+        {
+          "issuer": "MARKEL GROUP INC",
+          "title": "COM",
+          "cusip": "570535104",
+          "ticker": null,
+          "value": 39655868.0,
+          "shares": 20305.0,
+          "put_call": null,
+          "weight": 0.10888142890712442
+        },
+        {
+          "issuer": "ISHARES TR",
+          "title": "0-3 MTH TREASURY",
+          "cusip": "46436E718",
+          "ticker": null,
+          "value": 38556610.0,
+          "shares": 383000.0,
+          "put_call": null,
+          "weight": 0.10586324300390354
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 35749508.0,
+          "shares": 100035.0,
+          "put_call": null,
+          "weight": 0.09815590252031996
+        },
+        {
+          "issuer": "TESLA INC",
+          "title": "COM",
+          "cusip": "88160R101",
+          "ticker": "TSLA",
+          "value": 19932234.0,
+          "shares": 47390.0,
+          "put_call": null,
+          "weight": 0.05472708652427349
+        },
+        {
+          "issuer": "NETFLIX INC.",
+          "title": "COM",
+          "cusip": "64110L106",
+          "ticker": "NFLX",
+          "value": 19694619.0,
+          "shares": 275835.0,
+          "put_call": null,
+          "weight": 0.054074677132307424
+        },
+        {
+          "issuer": "TRUPANION INC",
+          "title": "COM",
+          "cusip": "898202106",
+          "ticker": null,
+          "value": 19233657.0,
+          "shares": 776490.0,
+          "put_call": null,
+          "weight": 0.05280903338869082
+        },
+        {
+          "issuer": "SPOTIFY TECHNOLOGY S A",
+          "title": "SHS",
+          "cusip": "L8681T102",
+          "ticker": null,
+          "value": 18075948.0,
+          "shares": 39370.0,
+          "put_call": null,
+          "weight": 0.049630361062601824
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001420506-26-000887",
+      "filing_date": "2026-05-11",
+      "report_date": "2026-03-31",
+      "quarter": "2026Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1766504/000142050626000887/0001420506-26-000887-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 344294052.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 65090623.0,
+          "shares": 312530.0,
+          "put_call": null,
+          "weight": 0.18905532239633346
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 56364269.0,
+          "shares": 1392742.0,
+          "put_call": null,
+          "weight": 0.16370967977105802
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 45242820.0,
+          "shares": 63.0,
+          "put_call": null,
+          "weight": 0.131407498146381
+        },
+        {
+          "issuer": "MARKEL GROUP INC",
+          "title": "COM",
+          "cusip": "570535104",
+          "ticker": null,
+          "value": 43171849.0,
+          "shares": 22555.0,
+          "put_call": null,
+          "weight": 0.12539237535245018
+        },
+        {
+          "issuer": "ISHARES TR",
+          "title": "0-3 MNTH TREASRY",
+          "cusip": "46436E718",
+          "ticker": null,
+          "value": 38552780.0,
+          "shares": 383000.0,
+          "put_call": null,
+          "weight": 0.11197631726731079
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 28766064.0,
+          "shares": 100035.0,
+          "put_call": null,
+          "weight": 0.08355085960067646
+        },
+        {
+          "issuer": "NETFLIX INC.",
+          "title": "COM",
+          "cusip": "64110L106",
+          "ticker": "NFLX",
+          "value": 26872002.0,
+          "shares": 279480.0,
+          "put_call": null,
+          "weight": 0.07804956793154243
+        },
+        {
+          "issuer": "TESLA INC",
+          "title": "COM",
+          "cusip": "88160R101",
+          "ticker": "TSLA",
+          "value": 20347736.0,
+          "shares": 54735.0,
+          "put_call": null,
+          "weight": 0.05909987663684646
+        },
+        {
+          "issuer": "TRUPANION INC",
+          "title": "COM",
+          "cusip": "898202106",
+          "ticker": null,
+          "value": 19885909.0,
+          "shares": 776490.0,
+          "put_call": null,
+          "weight": 0.0577585028974012
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001420506-26-000460",
+      "filing_date": "2026-02-17",
+      "report_date": "2025-12-31",
+      "quarter": "2025Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1766504/000142050626000460/0001420506-26-000460-index.html",
+      "line_count": 8,
+      "position_count": 8,
+      "values_in_thousands": false,
+      "total_value": 342653497.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 73004904.0,
+          "shares": 316285.0,
+          "put_call": null,
+          "weight": 0.21305751915323368
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 64863771.0,
+          "shares": 1413462.0,
+          "put_call": null,
+          "weight": 0.1892984357897856
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 50571600.0,
+          "shares": 67.0,
+          "put_call": null,
+          "weight": 0.14758816251042084
+        },
+        {
+          "issuer": "MARKEL GROUP INC",
+          "title": "COM",
+          "cusip": "570535104",
+          "ticker": null,
+          "value": 49237733.0,
+          "shares": 22905.0,
+          "put_call": null,
+          "weight": 0.14369540492388438
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 31661515.0,
+          "shares": 101155.0,
+          "put_call": null,
+          "weight": 0.09240096855045375
+        },
+        {
+          "issuer": "TRUPANION INC",
+          "title": "COM",
+          "cusip": "898202106",
+          "ticker": null,
+          "value": 29017431.0,
+          "shares": 776490.0,
+          "put_call": null,
+          "weight": 0.08468447353975203
+        },
+        {
+          "issuer": "TESLA INC",
+          "title": "COM",
+          "cusip": "88160R101",
+          "ticker": "TSLA",
+          "value": 27927701.0,
+          "shares": 62100.0,
+          "put_call": null,
+          "weight": 0.08150420539849328
+        },
+        {
+          "issuer": "BURFORD CAP LTD",
+          "title": "ORD SHS",
+          "cusip": "G17977110",
+          "ticker": null,
+          "value": 16368842.0,
+          "shares": 1835072.0,
+          "put_call": null,
+          "weight": 0.04777083013397642
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001420506-25-003244",
+      "filing_date": "2025-11-14",
+      "report_date": "2025-09-30",
+      "quarter": "2025Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1766504/000142050625003244/0001420506-25-003244-index.html",
+      "line_count": 8,
+      "position_count": 8,
+      "values_in_thousands": false,
+      "total_value": 342962807.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 70678485.0,
+          "shares": 321895.0,
+          "put_call": null,
+          "weight": 0.20608206941809873
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 65302905.0,
+          "shares": 952215.0,
+          "put_call": null,
+          "weight": 0.1904081249253363
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 50531400.0,
+          "shares": 67.0,
+          "put_call": null,
+          "weight": 0.14733784238009226
+        },
+        {
+          "issuer": "MARKEL GROUP INC",
+          "title": "COM",
+          "cusip": "570535104",
+          "ticker": null,
+          "value": 42919589.0,
+          "shares": 22455.0,
+          "put_call": null,
+          "weight": 0.12514356695243634
+        },
+        {
+          "issuer": "TESLA INC",
+          "title": "COM",
+          "cusip": "88160R101",
+          "ticker": "TSLA",
+          "value": 35281861.0,
+          "shares": 79335.0,
+          "put_call": null,
+          "weight": 0.10287372356384988
+        },
+        {
+          "issuer": "TRUPANION INC",
+          "title": "COM",
+          "cusip": "898202106",
+          "ticker": null,
+          "value": 33070032.0,
+          "shares": 764095.0,
+          "put_call": null,
+          "weight": 0.09642454320126906
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 25469587.0,
+          "shares": 104770.0,
+          "put_call": null,
+          "weight": 0.0742634083934355
+        },
+        {
+          "issuer": "BURFORD CAP LTD",
+          "title": "ORD SHS",
+          "cusip": "G17977110",
+          "ticker": null,
+          "value": 19708948.0,
+          "shares": 1835072.0,
+          "put_call": null,
+          "weight": 0.057466721165481946
+        }
+      ]
+    },
+    {
+      "form": "13F-HR/A",
+      "accession": "0001420506-25-002187",
+      "filing_date": "2025-08-14",
+      "report_date": "2025-06-30",
+      "quarter": "2025Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1766504/000142050625002187/0001420506-25-002187-index.html",
+      "line_count": 8,
+      "position_count": 8,
+      "values_in_thousands": false,
+      "total_value": 355479048.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 71222770.0,
+          "shares": 324640.0,
+          "put_call": null,
+          "weight": 0.20035715297628456
+        },
+        {
+          "issuer": "BROOKFIELD CORP CL A LTD VT SH",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 58894498.0,
+          "shares": 952215.0,
+          "put_call": null,
+          "weight": 0.1656764254640403
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 48829600.0,
+          "shares": 67.0,
+          "put_call": null,
+          "weight": 0.1373628073854862
+        },
+        {
+          "issuer": "BURFORD CAPITAL LTD",
+          "title": "ORD SHS",
+          "cusip": "G17977110",
+          "ticker": null,
+          "value": 45723630.0,
+          "shares": 3362322.0,
+          "put_call": null,
+          "weight": 0.12862538666413892
+        },
+        {
+          "issuer": "MARKEL CORP COM",
+          "title": "COM",
+          "cusip": "570535104",
+          "ticker": null,
+          "value": 44850719.0,
+          "shares": 22455.0,
+          "put_call": null,
+          "weight": 0.1261697960887979
+        },
+        {
+          "issuer": "TRUPANION INC",
+          "title": "COM",
+          "cusip": "898202106",
+          "ticker": null,
+          "value": 42292658.0,
+          "shares": 764095.0,
+          "put_call": null,
+          "weight": 0.11897370108856599
+        },
+        {
+          "issuer": "TESLA INC COM",
+          "title": "COM",
+          "cusip": "88160R101",
+          "ticker": "TSLA",
+          "value": 25201556.0,
+          "shares": 79335.0,
+          "put_call": null,
+          "weight": 0.07089463117950062
+        },
+        {
+          "issuer": "ALPHABET INC CAP STK",
+          "title": "CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 18463617.0,
+          "shares": 104770.0,
+          "put_call": null,
+          "weight": 0.05194009915318554
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001420506-25-001012",
+      "filing_date": "2025-05-13",
+      "report_date": "2025-03-31",
+      "quarter": "2025Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1766504/000142050625001012/0001420506-25-001012-index.html",
+      "line_count": 8,
+      "position_count": 8,
+      "values_in_thousands": false,
+      "total_value": 289431833.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 61766006.0,
+          "shares": 324640.0,
+          "put_call": null,
+          "weight": 0.21340432861094447
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 53495587.0,
+          "shares": 67.0,
+          "put_call": null,
+          "weight": 0.1848296590098989
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 50702744.0,
+          "shares": 967425.0,
+          "put_call": null,
+          "weight": 0.17518026083882762
+        },
+        {
+          "issuer": "MARKEL GROUP INC",
+          "title": "COM",
+          "cusip": "570535104",
+          "ticker": null,
+          "value": 41982093.0,
+          "shares": 22455.0,
+          "put_call": null,
+          "weight": 0.14505001942892715
+        },
+        {
+          "issuer": "TRUPANION INC",
+          "title": "COM",
+          "cusip": "898202106",
+          "ticker": null,
+          "value": 33835010.0,
+          "shares": 907835.0,
+          "put_call": null,
+          "weight": 0.11690148125482797
+        },
+        {
+          "issuer": "TESLA INC",
+          "title": "COM",
+          "cusip": "88160R101",
+          "ticker": "TSLA",
+          "value": 21007510.0,
+          "shares": 81060.0,
+          "put_call": null,
+          "weight": 0.07258189184739745
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 16201633.0,
+          "shares": 104770.0,
+          "put_call": null,
+          "weight": 0.05597737067159437
+        },
+        {
+          "issuer": "BURFORD CAP LTD",
+          "title": "ORD SHS",
+          "cusip": "G17977110",
+          "ticker": null,
+          "value": 10441250.0,
+          "shares": 790405.0,
+          "put_call": null,
+          "weight": 0.03607498833758207
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001420506-25-000474",
+      "filing_date": "2025-02-14",
+      "report_date": "2024-12-31",
+      "quarter": "2024Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1766504/000142050625000474/0001420506-25-000474-index.html",
+      "line_count": 8,
+      "position_count": 8,
+      "values_in_thousands": false,
+      "total_value": 331656831.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 78994660.0,
+          "shares": 360065.0,
+          "put_call": null,
+          "weight": 0.23818191762195304
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 57156718.0,
+          "shares": 994895.0,
+          "put_call": null,
+          "weight": 0.1723369237644317
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 47664400.0,
+          "shares": 70.0,
+          "put_call": null,
+          "weight": 0.14371602073228518
+        },
+        {
+          "issuer": "TRUPANION INC",
+          "title": "COM",
+          "cusip": "898202106",
+          "ticker": null,
+          "value": 45002171.0,
+          "shares": 933655.0,
+          "put_call": null,
+          "weight": 0.1356889615820999
+        },
+        {
+          "issuer": "MARKEL GROUP INC",
+          "title": "COM",
+          "cusip": "570535104",
+          "ticker": null,
+          "value": 37493716.0,
+          "shares": 21720.0,
+          "put_call": null,
+          "weight": 0.11304973242055733
+        },
+        {
+          "issuer": "TESLA INC",
+          "title": "COM",
+          "cusip": "88160R101",
+          "ticker": "TSLA",
+          "value": 33668141.0,
+          "shares": 83370.0,
+          "put_call": null,
+          "weight": 0.10151499336975815
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 20400861.0,
+          "shares": 107770.0,
+          "put_call": null,
+          "weight": 0.061511957822451724
+        },
+        {
+          "issuer": "BURFORD CAP LTD",
+          "title": "ORD SHS",
+          "cusip": "G17977110",
+          "ticker": null,
+          "value": 11276164.0,
+          "shares": 884405.0,
+          "put_call": null,
+          "weight": 0.03399949268646302
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001420506-24-002439",
+      "filing_date": "2024-11-14",
+      "report_date": "2024-09-30",
+      "quarter": "2024Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1766504/000142050624002439/0001420506-24-002439-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 329506644.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 69743319.0,
+          "shares": 374300.0,
+          "put_call": null,
+          "weight": 0.21165982619761683
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 55069512.0,
+          "shares": 1036115.0,
+          "put_call": null,
+          "weight": 0.16712716724461557
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 49073780.0,
+          "shares": 71.0,
+          "put_call": null,
+          "weight": 0.14893107891323734
+        },
+        {
+          "issuer": "TRUPANION INC",
+          "title": "COM",
+          "cusip": "898202106",
+          "ticker": null,
+          "value": 45670462.0,
+          "shares": 1087910.0,
+          "put_call": null,
+          "weight": 0.13860255273031763
+        },
+        {
+          "issuer": "MARKEL GROUP INC",
+          "title": "COM",
+          "cusip": "570535104",
+          "ticker": null,
+          "value": 35245993.0,
+          "shares": 22470.0,
+          "put_call": null,
+          "weight": 0.10696595544216098
+        },
+        {
+          "issuer": "TESLA INC",
+          "title": "COM",
+          "cusip": "88160R101",
+          "ticker": "TSLA",
+          "value": 25448750.0,
+          "shares": 97270.0,
+          "put_call": null,
+          "weight": 0.07723288881543766
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 18495592.0,
+          "shares": 111520.0,
+          "put_call": null,
+          "weight": 0.05613116559798412
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 16932305.0,
+          "shares": 39350.0,
+          "put_call": null,
+          "weight": 0.05138683941074038
+        },
+        {
+          "issuer": "BURFORD CAP LTD",
+          "title": "ORD SHS",
+          "cusip": "G17977110",
+          "ticker": null,
+          "value": 13826931.0,
+          "shares": 1042755.0,
+          "put_call": null,
+          "weight": 0.04196252564788951
+        }
+      ]
+    }
+  ],
+  "history_quarters": [
+    "2026Q2",
+    "2026Q1",
+    "2025Q4",
+    "2025Q3",
+    "2025Q2",
+    "2025Q1",
+    "2024Q4",
+    "2024Q3"
   ]
 }

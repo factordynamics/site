@@ -145,5 +145,989 @@
       "put_call": null,
       "weight": 0.019510562531794694
     }
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001454502-26-000007",
+      "filing_date": "2026-08-13",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1454502/000145450226000007/0001454502-26-000007-index.html",
+      "line_count": 13,
+      "position_count": 13,
+      "values_in_thousands": true,
+      "total_value": 1120470000.0,
+      "holdings": [
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "NY REG SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 236578000.0,
+          "shares": 118917.0,
+          "put_call": null,
+          "weight": 0.21114175301436006
+        },
+        {
+          "issuer": "TRANSDIGM GROUP INC",
+          "title": "COM",
+          "cusip": "893641100",
+          "ticker": "TDG",
+          "value": 141921000.0,
+          "shares": 106544.0,
+          "put_call": null,
+          "weight": 0.12666202575704838
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 131491000.0,
+          "shares": 352504.0,
+          "put_call": null,
+          "weight": 0.11735343204191098
+        },
+        {
+          "issuer": "AMAZON.COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 103063000.0,
+          "shares": 432420.0,
+          "put_call": null,
+          "weight": 0.09198193615179344
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 103011000.0,
+          "shares": 291544.0,
+          "put_call": null,
+          "weight": 0.09193552705561059
+        },
+        {
+          "issuer": "MASTERCARD INC",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 90122000.0,
+          "shares": 175472.0,
+          "put_call": null,
+          "weight": 0.08043231858059564
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 66259000.0,
+          "shares": 117628.0,
+          "put_call": null,
+          "weight": 0.05913500584576115
+        },
+        {
+          "issuer": "TRANSUNION COM",
+          "title": "COM",
+          "cusip": "89400J107",
+          "ticker": null,
+          "value": 58998000.0,
+          "shares": 817828.0,
+          "put_call": null,
+          "weight": 0.052654689549921016
+        },
+        {
+          "issuer": "DOORDASH INC",
+          "title": "CL A",
+          "cusip": "25809K105",
+          "ticker": null,
+          "value": 55404000.0,
+          "shares": 300246.0,
+          "put_call": null,
+          "weight": 0.049447107017590836
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 47527000.0,
+          "shares": 116700.0,
+          "put_call": null,
+          "weight": 0.04241702142850768
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT IN",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 36304000.0,
+          "shares": 198262.0,
+          "put_call": null,
+          "weight": 0.03240068899658179
+        },
+        {
+          "issuer": "CCC INTELLIGENT SOLUTION HOLDINGS INC",
+          "title": "COM",
+          "cusip": "12510Q100",
+          "ticker": null,
+          "value": 27931000.0,
+          "shares": 5413036.0,
+          "put_call": null,
+          "weight": 0.024927932028523746
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS INC N",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 21861000.0,
+          "shares": 153725.0,
+          "put_call": null,
+          "weight": 0.019510562531794694
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001454502-26-000005",
+      "filing_date": "2026-05-15",
+      "report_date": "2026-03-31",
+      "quarter": "2026Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1454502/000145450226000005/0001454502-26-000005-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": true,
+      "total_value": 962895000.0,
+      "holdings": [
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "NY REG SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 157069000.0,
+          "shares": 118917.0,
+          "put_call": null,
+          "weight": 0.16312162800720742
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 130486000.0,
+          "shares": 352504.0,
+          "put_call": null,
+          "weight": 0.1355142564869482
+        },
+        {
+          "issuer": "TRANSDIGM GROUP INC",
+          "title": "COM",
+          "cusip": "893641100",
+          "ticker": "TDG",
+          "value": 123480000.0,
+          "shares": 106544.0,
+          "put_call": null,
+          "weight": 0.12823828143255495
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 101393000.0,
+          "shares": 353459.0,
+          "put_call": null,
+          "weight": 0.10530016253070168
+        },
+        {
+          "issuer": "AMAZON.COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 99664000.0,
+          "shares": 478534.0,
+          "put_call": null,
+          "weight": 0.1035045358008921
+        },
+        {
+          "issuer": "MASTERCARD INC",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 87676000.0,
+          "shares": 175472.0,
+          "put_call": null,
+          "weight": 0.0910545801982563
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 67299000.0,
+          "shares": 117628.0,
+          "put_call": null,
+          "weight": 0.06989235586434658
+        },
+        {
+          "issuer": "TRANSUNION COM",
+          "title": "COM",
+          "cusip": "89400J107",
+          "ticker": null,
+          "value": 56586000.0,
+          "shares": 817828.0,
+          "put_call": null,
+          "weight": 0.058766532176405525
+        },
+        {
+          "issuer": "ILLUMINA INC COM",
+          "title": "COM",
+          "cusip": "452327109",
+          "ticker": null,
+          "value": 37774000.0,
+          "shares": 306460.0,
+          "put_call": null,
+          "weight": 0.03922961485935642
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT IN",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 35804000.0,
+          "shares": 234765.0,
+          "put_call": null,
+          "weight": 0.03718370123429865
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS INC N",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 33186000.0,
+          "shares": 153725.0,
+          "put_call": null,
+          "weight": 0.03446481703612543
+        },
+        {
+          "issuer": "CCC INTELLIGENT SOLUTION HOLDINGS INC",
+          "title": "COM",
+          "cusip": "12510Q100",
+          "ticker": null,
+          "value": 32478000.0,
+          "shares": 5413036.0,
+          "put_call": null,
+          "weight": 0.033729534372906704
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001454502-26-000003",
+      "filing_date": "2026-02-13",
+      "report_date": "2025-12-31",
+      "quarter": "2025Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1454502/000145450226000003/0001454502-26-000003-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": true,
+      "total_value": 962175000.0,
+      "holdings": [
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 170478000.0,
+          "shares": 352504.0,
+          "put_call": null,
+          "weight": 0.17717982695455609
+        },
+        {
+          "issuer": "TRANSDIGM GROUP INC",
+          "title": "COM",
+          "cusip": "893641100",
+          "ticker": "TDG",
+          "value": 138163000.0,
+          "shares": 103894.0,
+          "put_call": null,
+          "weight": 0.14359446046717073
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "NY REG SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 114238000.0,
+          "shares": 106778.0,
+          "put_call": null,
+          "weight": 0.11872892145399745
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 110915000.0,
+          "shares": 353459.0,
+          "put_call": null,
+          "weight": 0.11527528775950321
+        },
+        {
+          "issuer": "AMAZON.COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 110455000.0,
+          "shares": 478534.0,
+          "put_call": null,
+          "weight": 0.11479720425078598
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 64277000.0,
+          "shares": 97376.0,
+          "put_call": null,
+          "weight": 0.066803855847429
+        },
+        {
+          "issuer": "LAM RESEARCH CORP",
+          "title": "COM NEW",
+          "cusip": "512807306",
+          "ticker": "LRCX",
+          "value": 50563000.0,
+          "shares": 295377.0,
+          "put_call": null,
+          "weight": 0.052550731415802736
+        },
+        {
+          "issuer": "ILLUMINA INC COM",
+          "title": "COM",
+          "cusip": "452327109",
+          "ticker": null,
+          "value": 49075000.0,
+          "shares": 374160.0,
+          "put_call": null,
+          "weight": 0.05100423519630005
+        },
+        {
+          "issuer": "TRANSUNION COM",
+          "title": "COM",
+          "cusip": "89400J107",
+          "ticker": null,
+          "value": 47261000.0,
+          "shares": 551153.0,
+          "put_call": null,
+          "weight": 0.04911892327279341
+        },
+        {
+          "issuer": "CCC INTELLIGENT SOLUTION HOLDINGS INC",
+          "title": "COM",
+          "cusip": "12510Q100",
+          "ticker": null,
+          "value": 38200000.0,
+          "shares": 4805036.0,
+          "put_call": null,
+          "weight": 0.039701717463039465
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT IN",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 36460000.0,
+          "shares": 255858.0,
+          "put_call": null,
+          "weight": 0.037893314625717774
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS INC N",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 32090000.0,
+          "shares": 153725.0,
+          "put_call": null,
+          "weight": 0.0333515212929041
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001454502-25-000011",
+      "filing_date": "2025-11-14",
+      "report_date": "2025-09-30",
+      "quarter": "2025Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1454502/000145450225000011/0001454502-25-000011-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": true,
+      "total_value": 917968000.0,
+      "holdings": [
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 199503000.0,
+          "shares": 385178.0,
+          "put_call": null,
+          "weight": 0.2173311052237115
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 134165000.0,
+          "shares": 550874.0,
+          "put_call": null,
+          "weight": 0.1461543321771565
+        },
+        {
+          "issuer": "AMAZON.COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 118667000.0,
+          "shares": 540451.0,
+          "put_call": null,
+          "weight": 0.12927139072385965
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "NY REG SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 107913000.0,
+          "shares": 111470.0,
+          "put_call": null,
+          "weight": 0.1175563854077702
+        },
+        {
+          "issuer": "TRANSDIGM GROUP INC",
+          "title": "COM",
+          "cusip": "893641100",
+          "ticker": "TDG",
+          "value": 75080000.0,
+          "shares": 56964.0,
+          "put_call": null,
+          "weight": 0.08178934341937845
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 74653000.0,
+          "shares": 101655.0,
+          "put_call": null,
+          "weight": 0.0813241855925261
+        },
+        {
+          "issuer": "LAM RESEARCH CORP",
+          "title": "COM NEW",
+          "cusip": "512807306",
+          "ticker": "LRCX",
+          "value": 57294000.0,
+          "shares": 427890.0,
+          "put_call": null,
+          "weight": 0.062413940355219355
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS INC N",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 44149000.0,
+          "shares": 160480.0,
+          "put_call": null,
+          "weight": 0.04809426908127516
+        },
+        {
+          "issuer": "ILLUMINA INC COM",
+          "title": "COM",
+          "cusip": "452327109",
+          "ticker": null,
+          "value": 37095000.0,
+          "shares": 390600.0,
+          "put_call": null,
+          "weight": 0.04040990535617799
+        },
+        {
+          "issuer": "TRANSUNION COM",
+          "title": "COM",
+          "cusip": "89400J107",
+          "ticker": null,
+          "value": 36065000.0,
+          "shares": 430470.0,
+          "put_call": null,
+          "weight": 0.03928786188625311
+        },
+        {
+          "issuer": "CCC INTELLIGENT SOLUTION HOLDINGS INC",
+          "title": "COM",
+          "cusip": "12510Q100",
+          "ticker": null,
+          "value": 33384000.0,
+          "shares": 3664500.0,
+          "put_call": null,
+          "weight": 0.03636728077667195
+        }
+      ]
+    },
+    {
+      "form": "13F-HR/A",
+      "accession": "0001454502-25-000009",
+      "filing_date": "2025-08-15",
+      "report_date": "2025-06-30",
+      "quarter": "2025Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1454502/000145450225000009/0001454502-25-000009-index.html",
+      "line_count": 10,
+      "position_count": 10,
+      "values_in_thousands": true,
+      "total_value": 884602000.0,
+      "holdings": [
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 200478000.0,
+          "shares": 403043.0,
+          "put_call": null,
+          "weight": 0.22663073336935707
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 115109000.0,
+          "shares": 648905.0,
+          "put_call": null,
+          "weight": 0.13012518624194835
+        },
+        {
+          "issuer": "TRANSDIGM GROUP INC",
+          "title": "COM",
+          "cusip": "893641100",
+          "ticker": "TDG",
+          "value": 112214000.0,
+          "shares": 73794.0,
+          "put_call": null,
+          "weight": 0.12685252802955455
+        },
+        {
+          "issuer": "AMAZON.COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 106885000.0,
+          "shares": 487191.0,
+          "put_call": null,
+          "weight": 0.12082834992459886
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 81337000.0,
+          "shares": 110200.0,
+          "put_call": null,
+          "weight": 0.09194756511968094
+        },
+        {
+          "issuer": "LAM RESEARCH CORP",
+          "title": "COM NEW",
+          "cusip": "512807306",
+          "ticker": "LRCX",
+          "value": 68782000.0,
+          "shares": 706615.0,
+          "put_call": null,
+          "weight": 0.07775474168043933
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS INC N",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 65606000.0,
+          "shares": 160480.0,
+          "put_call": null,
+          "weight": 0.07416442648784426
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "NY REG SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 63550000.0,
+          "shares": 79300.0,
+          "put_call": null,
+          "weight": 0.07184021740850688
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 40943000.0,
+          "shares": 81627.0,
+          "put_call": null,
+          "weight": 0.04628409160277729
+        },
+        {
+          "issuer": "CCC INTELLIGENT SOLUTION HOLDINGS INC",
+          "title": "COM",
+          "cusip": "12510Q100",
+          "ticker": null,
+          "value": 29698000.0,
+          "shares": 3156000.0,
+          "put_call": null,
+          "weight": 0.03357216013529248
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001387292-25-000011",
+      "filing_date": "2025-05-14",
+      "report_date": "2025-03-31",
+      "quarter": "2025Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1454502/000138729225000011/0001387292-25-000011-index.html",
+      "line_count": 10,
+      "position_count": 10,
+      "values_in_thousands": true,
+      "total_value": 739947000.0,
+      "holdings": [
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 151298000.0,
+          "shares": 403043.0,
+          "put_call": null,
+          "weight": 0.20447140133009525
+        },
+        {
+          "issuer": "TRANSDIGM GROUP INC",
+          "title": "COM",
+          "cusip": "893641100",
+          "ticker": "TDG",
+          "value": 127462000.0,
+          "shares": 92144.0,
+          "put_call": null,
+          "weight": 0.1722582833635382
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 101378000.0,
+          "shares": 648905.0,
+          "put_call": null,
+          "weight": 0.13700710996868695
+        },
+        {
+          "issuer": "AMAZON.COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 92693000.0,
+          "shares": 487191.0,
+          "put_call": null,
+          "weight": 0.1252697828357977
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS INC N",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 59142000.0,
+          "shares": 160480.0,
+          "put_call": null,
+          "weight": 0.07992734614776464
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "NY REG SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 52547000.0,
+          "shares": 79300.0,
+          "put_call": null,
+          "weight": 0.07101454563637666
+        },
+        {
+          "issuer": "LAM RESEARCH CORP",
+          "title": "COM NEW",
+          "cusip": "512807306",
+          "ticker": "LRCX",
+          "value": 51371000.0,
+          "shares": 706615.0,
+          "put_call": null,
+          "weight": 0.0694252426187281
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 44236000.0,
+          "shares": 76750.0,
+          "put_call": null,
+          "weight": 0.05978266010944027
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 38013000.0,
+          "shares": 81627.0,
+          "put_call": null,
+          "weight": 0.051372598307716635
+        },
+        {
+          "issuer": "CCC INTELLIGENT SOLUTION HOLDINGS INC",
+          "title": "COM",
+          "cusip": "12510Q100",
+          "ticker": null,
+          "value": 21807000.0,
+          "shares": 2415000.0,
+          "put_call": null,
+          "weight": 0.029471029681855592
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001387292-25-000004",
+      "filing_date": "2025-02-11",
+      "report_date": "2024-12-31",
+      "quarter": "2024Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1454502/000138729225000004/0001387292-25-000004-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": true,
+      "total_value": 772472000.0,
+      "holdings": [
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 153745000.0,
+          "shares": 807314.0,
+          "put_call": null,
+          "weight": 0.19902986774925174
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 117370000.0,
+          "shares": 278458.0,
+          "put_call": null,
+          "weight": 0.15194078231961805
+        },
+        {
+          "issuer": "AMAZON.COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 116275000.0,
+          "shares": 529991.0,
+          "put_call": null,
+          "weight": 0.1505232552118394
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 113266000.0,
+          "shares": 358393.0,
+          "put_call": null,
+          "weight": 0.14662796839238185
+        },
+        {
+          "issuer": "TRANSDIGM GROUP INC",
+          "title": "COM",
+          "cusip": "893641100",
+          "ticker": "TDG",
+          "value": 101071000.0,
+          "shares": 79754.0,
+          "put_call": null,
+          "weight": 0.13084098841123043
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS INC N",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 55008000.0,
+          "shares": 160480.0,
+          "put_call": null,
+          "weight": 0.07121034807734132
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 49508000.0,
+          "shares": 104587.0,
+          "put_call": null,
+          "weight": 0.0640903489058503
+        },
+        {
+          "issuer": "LAM RESEARCH CORP",
+          "title": "COM NEW",
+          "cusip": "512807306",
+          "ticker": "LRCX",
+          "value": 36965000.0,
+          "shares": 511765.0,
+          "put_call": null,
+          "weight": 0.04785286715893909
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 29264000.0,
+          "shares": 404369.0,
+          "put_call": null,
+          "weight": 0.03788357377354778
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001387292-24-000020",
+      "filing_date": "2024-11-13",
+      "report_date": "2024-09-30",
+      "quarter": "2024Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1454502/000138729224000020/0001387292-24-000020-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": true,
+      "total_value": 772854000.0,
+      "holdings": [
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 139913000.0,
+          "shares": 836850.0,
+          "put_call": null,
+          "weight": 0.18103419274533095
+        },
+        {
+          "issuer": "TRANSDIGM GROUP INC",
+          "title": "COM",
+          "cusip": "893641100",
+          "ticker": "TDG",
+          "value": 117985000.0,
+          "shares": 82673.0,
+          "put_call": null,
+          "weight": 0.15266143411304076
+        },
+        {
+          "issuer": "AMAZON.COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 111196000.0,
+          "shares": 596771.0,
+          "put_call": null,
+          "weight": 0.143877110036307
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 110796000.0,
+          "shares": 402969.0,
+          "put_call": null,
+          "weight": 0.14335954785768076
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 108498000.0,
+          "shares": 252144.0,
+          "put_call": null,
+          "weight": 0.14038615314147304
+        },
+        {
+          "issuer": "CHARTER COMMUNICATIONS INC N",
+          "title": "CL A",
+          "cusip": "16119P108",
+          "ticker": null,
+          "value": 87741000.0,
+          "shares": 270740.0,
+          "put_call": null,
+          "weight": 0.11352855778711114
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 51440000.0,
+          "shares": 108387.0,
+          "put_call": null,
+          "weight": 0.06655849617133379
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 26922000.0,
+          "shares": 314734.0,
+          "put_call": null,
+          "weight": 0.03483452243243873
+        },
+        {
+          "issuer": "UNION PAC CORP",
+          "title": "COM",
+          "cusip": "907818108",
+          "ticker": "UNP",
+          "value": 18363000.0,
+          "shares": 74500.0,
+          "put_call": null,
+          "weight": 0.02375998571528387
+        }
+      ]
+    }
+  ],
+  "history_quarters": [
+    "2026Q2",
+    "2026Q1",
+    "2025Q4",
+    "2025Q3",
+    "2025Q2",
+    "2025Q1",
+    "2024Q4",
+    "2024Q3"
   ]
 }

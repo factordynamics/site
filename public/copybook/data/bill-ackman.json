@@ -125,5 +125,889 @@
       "put_call": null,
       "weight": 0.0006788566018215343
     }
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001172661-26-002336",
+      "filing_date": "2026-05-15",
+      "report_date": "2026-03-31",
+      "quarter": "2026Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1336528/000117266126002336/0001172661-26-002336-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 13714299861.0,
+      "holdings": [
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 2415946008.0,
+          "shares": 59697208.0,
+          "put_call": null,
+          "weight": 0.17616254803282663
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 2385104083.0,
+          "shares": 11451981.0,
+          "put_call": null,
+          "weight": 0.1739136599880416
+        },
+        {
+          "issuer": "UBER TECHNOLOGIES INC",
+          "title": "COM",
+          "cusip": "90353T100",
+          "ticker": "UBER",
+          "value": 2154934398.0,
+          "shares": 29958771.0,
+          "put_call": null,
+          "weight": 0.15713047110250872
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 2092970053.0,
+          "shares": 5654078.0,
+          "put_call": null,
+          "weight": 0.15261224227361964
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 1673501194.0,
+          "shares": 22645483.0,
+          "put_call": null,
+          "weight": 0.1220260028555314
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 1522358404.0,
+          "shares": 2660861.0,
+          "put_call": null,
+          "weight": 0.11100518578634862
+        },
+        {
+          "issuer": "HOWARD HUGHES HOLDINGS INC",
+          "title": "COM",
+          "cusip": "44267T102",
+          "ticker": null,
+          "value": 1192581569.0,
+          "shares": 18852064.0,
+          "put_call": null,
+          "weight": 0.08695898303867486
+        },
+        {
+          "issuer": "SEAPORT ENTMT GROUP INC",
+          "title": "COMMON STOCK",
+          "cusip": "812215200",
+          "ticker": null,
+          "value": 107910794.0,
+          "shares": 5023780.0,
+          "put_call": null,
+          "weight": 0.007868487279242815
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 89421720.0,
+          "shares": 311726.0,
+          "put_call": null,
+          "weight": 0.0065203270240789145
+        },
+        {
+          "issuer": "HERTZ GLOBAL HLDGS INC",
+          "title": "COM NEW",
+          "cusip": "42806J700",
+          "ticker": null,
+          "value": 70261595.0,
+          "shares": 15241127.0,
+          "put_call": null,
+          "weight": 0.00512323601730528
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 9310043.0,
+          "shares": 32376.0,
+          "put_call": null,
+          "weight": 0.0006788566018215343
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001172661-26-001091",
+      "filing_date": "2026-02-17",
+      "report_date": "2025-12-31",
+      "quarter": "2025Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1336528/000117266126001091/0001172661-26-001091-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 15526737802.0,
+      "holdings": [
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 2817787754.0,
+          "shares": 61403089.0,
+          "put_call": null,
+          "weight": 0.18147970230018573
+        },
+        {
+          "issuer": "UBER TECHNOLOGIES INC",
+          "title": "COM",
+          "cusip": "90353T100",
+          "ticker": "UBER",
+          "value": 2468273945.0,
+          "shares": 30207734.0,
+          "put_call": null,
+          "weight": 0.1589692552599208
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 2217677936.0,
+          "shares": 9607824.0,
+          "put_call": null,
+          "weight": 0.14282961200738128
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 1934222720.0,
+          "shares": 6163871.0,
+          "put_call": null,
+          "weight": 0.1245736705717316
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 1764796161.0,
+          "shares": 2673569.0,
+          "put_call": null,
+          "weight": 0.11366174810865141
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 1560199922.0,
+          "shares": 22866773.0,
+          "put_call": null,
+          "weight": 0.10048472138165626
+        },
+        {
+          "issuer": "HOWARD HUGHES HOLDINGS INC",
+          "title": "COM",
+          "cusip": "44267T102",
+          "ticker": null,
+          "value": 1503829145.0,
+          "shares": 18852064.0,
+          "put_call": null,
+          "weight": 0.09685415984845779
+        },
+        {
+          "issuer": "HILTON WORLDWIDE HLDGS INC",
+          "title": "COM",
+          "cusip": "43300A203",
+          "ticker": null,
+          "value": 869983734.0,
+          "shares": 3028664.0,
+          "put_call": null,
+          "weight": 0.05603132770670845
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 212306961.0,
+          "shares": 678297.0,
+          "put_call": null,
+          "weight": 0.013673636001804108
+        },
+        {
+          "issuer": "SEAPORT ENTMT GROUP INC",
+          "title": "COMMON STOCK",
+          "cusip": "812215200",
+          "ticker": null,
+          "value": 99320131.0,
+          "shares": 5023780.0,
+          "put_call": null,
+          "weight": 0.006396715927489068
+        },
+        {
+          "issuer": "HERTZ GLOBAL HLDGS INC",
+          "title": "COM NEW",
+          "cusip": "42806J700",
+          "ticker": null,
+          "value": 78339393.0,
+          "shares": 15241127.0,
+          "put_call": null,
+          "weight": 0.0050454508860134865
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001172661-25-005039",
+      "filing_date": "2025-11-14",
+      "report_date": "2025-09-30",
+      "quarter": "2025Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1336528/000117266125005039/0001172661-25-005039-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 14643293767.0,
+      "holdings": [
+        {
+          "issuer": "UBER TECHNOLOGIES INC",
+          "title": "COM",
+          "cusip": "90353T100",
+          "ticker": "UBER",
+          "value": 2965602648.0,
+          "shares": 30270518.0,
+          "put_call": null,
+          "weight": 0.20252292245090764
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 2813167442.0,
+          "shares": 41020231.0,
+          "put_call": null,
+          "weight": 0.19211302366546315
+        },
+        {
+          "issuer": "HOWARD HUGHES HOLDINGS INC",
+          "title": "COM",
+          "cusip": "44267T102",
+          "ticker": null,
+          "value": 1549074099.0,
+          "shares": 18852064.0,
+          "put_call": null,
+          "weight": 0.105787271883528
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 1540217750.0,
+          "shares": 6324031.0,
+          "put_call": null,
+          "weight": 0.10518246608362262
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 1469799913.0,
+          "shares": 22915496.0,
+          "put_call": null,
+          "weight": 0.10037358646128704
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 1278625494.0,
+          "shares": 5823316.0,
+          "put_call": null,
+          "weight": 0.08731816177050954
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 1177569836.0,
+          "shares": 4843973.0,
+          "put_call": null,
+          "weight": 0.08041700554104578
+        },
+        {
+          "issuer": "CHIPOTLE MEXICAN GRILL INC",
+          "title": "COM",
+          "cusip": "169656105",
+          "ticker": null,
+          "value": 844198727.0,
+          "shares": 21541177.0,
+          "put_call": null,
+          "weight": 0.05765087694289648
+        },
+        {
+          "issuer": "HILTON WORLDWIDE HLDGS INC",
+          "title": "COM",
+          "cusip": "43300A203",
+          "ticker": null,
+          "value": 786253156.0,
+          "shares": 3030578.0,
+          "put_call": null,
+          "weight": 0.05369373643052175
+        },
+        {
+          "issuer": "SEAPORT ENTMT GROUP INC",
+          "title": "COMMON STOCK",
+          "cusip": "812215200",
+          "ticker": null,
+          "value": 115145038.0,
+          "shares": 5023780.0,
+          "put_call": null,
+          "weight": 0.007863329100143429
+        },
+        {
+          "issuer": "HERTZ GLOBAL HLDGS INC",
+          "title": "COM NEW",
+          "cusip": "42806J700",
+          "ticker": null,
+          "value": 103639664.0,
+          "shares": 15241127.0,
+          "put_call": null,
+          "weight": 0.007077619670074601
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001172661-25-003509",
+      "filing_date": "2025-08-14",
+      "report_date": "2025-06-30",
+      "quarter": "2025Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1336528/000117266125003509/0001172661-25-003509-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 13729120533.0,
+      "holdings": [
+        {
+          "issuer": "UBER TECHNOLOGIES INC",
+          "title": "COM",
+          "cusip": "90353T100",
+          "ticker": "UBER",
+          "value": 2827098321.0,
+          "shares": 30301161.0,
+          "put_call": null,
+          "weight": 0.20591984127494878
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 2545770554.0,
+          "shares": 41160397.0,
+          "put_call": null,
+          "weight": 0.18542852383594846
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 1524730589.0,
+          "shares": 23000914.0,
+          "put_call": null,
+          "weight": 0.11105813991035197
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 1277577297.0,
+          "shares": 5823316.0,
+          "put_call": null,
+          "weight": 0.09305601869611031
+        },
+        {
+          "issuer": "HOWARD HUGHES HOLDINGS INC",
+          "title": "COM",
+          "cusip": "44267T102",
+          "ticker": null,
+          "value": 1272514320.0,
+          "shares": 18852064.0,
+          "put_call": null,
+          "weight": 0.09268724219743872
+        },
+        {
+          "issuer": "CHIPOTLE MEXICAN GRILL INC",
+          "title": "COM",
+          "cusip": "169656105",
+          "ticker": null,
+          "value": 1209537089.0,
+          "shares": 21541177.0,
+          "put_call": null,
+          "weight": 0.0881001143585779
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 1121819859.0,
+          "shares": 6324031.0,
+          "put_call": null,
+          "weight": 0.08171097750242179
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 945117965.0,
+          "shares": 5362980.0,
+          "put_call": null,
+          "weight": 0.0688403865876381
+        },
+        {
+          "issuer": "HILTON WORLDWIDE HLDGS INC",
+          "title": "COM",
+          "cusip": "43300A203",
+          "ticker": null,
+          "value": 807164145.0,
+          "shares": 3030578.0,
+          "put_call": null,
+          "weight": 0.05879212314145396
+        },
+        {
+          "issuer": "HERTZ GLOBAL HLDGS INC",
+          "title": "COM NEW",
+          "cusip": "42806J700",
+          "ticker": null,
+          "value": 104096897.0,
+          "shares": 15241127.0,
+          "put_call": null,
+          "weight": 0.007582197035111426
+        },
+        {
+          "issuer": "SEAPORT ENTMT GROUP INC",
+          "title": "COMMON STOCK",
+          "cusip": "812215200",
+          "ticker": null,
+          "value": 93693497.0,
+          "shares": 5023780.0,
+          "put_call": null,
+          "weight": 0.006824435459998594
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001172661-25-002315",
+      "filing_date": "2025-05-15",
+      "report_date": "2025-03-31",
+      "quarter": "2025Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1336528/000117266125002315/0001172661-25-002315-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 11930893008.0,
+      "holdings": [
+        {
+          "issuer": "UBER TECHNOLOGIES INC",
+          "title": "COM",
+          "cusip": "90353T100",
+          "ticker": "UBER",
+          "value": 2207742590.0,
+          "shares": 30301161.0,
+          "put_call": null,
+          "weight": 0.18504420318911974
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 2149054073.0,
+          "shares": 41004657.0,
+          "put_call": null,
+          "weight": 0.180125165112033
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 1532780909.0,
+          "shares": 23000914.0,
+          "put_call": null,
+          "weight": 0.12847159956695842
+        },
+        {
+          "issuer": "HOWARD HUGHES HOLDINGS INC",
+          "title": "COM",
+          "cusip": "44267T102",
+          "ticker": null,
+          "value": 1396560901.0,
+          "shares": 18852064.0,
+          "put_call": null,
+          "weight": 0.11705418027498583
+        },
+        {
+          "issuer": "CHIPOTLE MEXICAN GRILL INC",
+          "title": "COM",
+          "cusip": "169656105",
+          "ticker": null,
+          "value": 1081582497.0,
+          "shares": 21541177.0,
+          "put_call": null,
+          "weight": 0.09065394319392257
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 1039093677.0,
+          "shares": 14799796.0,
+          "put_call": null,
+          "weight": 0.08709269928942104
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 988003363.0,
+          "shares": 6324031.0,
+          "put_call": null,
+          "weight": 0.08281051236797747
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 686289227.0,
+          "shares": 4437980.0,
+          "put_call": null,
+          "weight": 0.05752203347560184
+        },
+        {
+          "issuer": "HILTON WORLDWIDE HLDGS INC",
+          "title": "COM",
+          "cusip": "43300A203",
+          "ticker": null,
+          "value": 682825214.0,
+          "shares": 3000770.0,
+          "put_call": null,
+          "weight": 0.057231693683125515
+        },
+        {
+          "issuer": "SEAPORT ENTMT GROUP INC",
+          "title": "COMMON STOCK",
+          "cusip": "812215200",
+          "ticker": null,
+          "value": 107860557.0,
+          "shares": 5023780.0,
+          "put_call": null,
+          "weight": 0.009040442901271217
+        },
+        {
+          "issuer": "HERTZ GLOBAL HLDGS INC",
+          "title": "COM NEW",
+          "cusip": "42806J700",
+          "ticker": null,
+          "value": 59100000.0,
+          "shares": 15000000.0,
+          "put_call": null,
+          "weight": 0.004953526945583351
+        }
+      ]
+    },
+    {
+      "form": "13F-HR/A",
+      "accession": "0001172661-25-001497",
+      "filing_date": "2025-04-16",
+      "report_date": "2024-12-31",
+      "quarter": "2024Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1336528/000117266125001497/0001172661-25-001497-index.html",
+      "line_count": 1,
+      "position_count": 1,
+      "values_in_thousands": true,
+      "total_value": 46533105000.0,
+      "holdings": [
+        {
+          "issuer": "HERTZ GLOBAL HLDGS INC",
+          "title": "COM NEW",
+          "cusip": "42806J700",
+          "ticker": null,
+          "value": 46533105000.0,
+          "shares": 12713963.0,
+          "put_call": null,
+          "weight": 1.0
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001172661-24-005218",
+      "filing_date": "2024-11-14",
+      "report_date": "2024-09-30",
+      "quarter": "2024Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1336528/000117266124005218/0001172661-24-005218-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 12916077581.0,
+      "holdings": [
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 1739912181.0,
+          "shares": 32735883.0,
+          "put_call": null,
+          "weight": 0.13470902215386749
+        },
+        {
+          "issuer": "HILTON WORLDWIDE HLDGS INC",
+          "title": "COM",
+          "cusip": "43300A203",
+          "ticker": null,
+          "value": 1698823724.0,
+          "shares": 7370168.0,
+          "put_call": null,
+          "weight": 0.1315278352383876
+        },
+        {
+          "issuer": "CHIPOTLE MEXICAN GRILL INC",
+          "title": "COM",
+          "cusip": "169656105",
+          "ticker": null,
+          "value": 1660329807.0,
+          "shares": 28815165.0,
+          "put_call": null,
+          "weight": 0.12854752509712414
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 1658825918.0,
+          "shares": 23000914.0,
+          "put_call": null,
+          "weight": 0.12843108967076744
+        },
+        {
+          "issuer": "HOWARD HUGHES HOLDINGS INC",
+          "title": "COM",
+          "cusip": "44267T102",
+          "ticker": null,
+          "value": 1459715316.0,
+          "shares": 18852064.0,
+          "put_call": null,
+          "weight": 0.11301537226342555
+        },
+        {
+          "issuer": "NIKE INC",
+          "title": "CL B",
+          "cusip": "654106103",
+          "ticker": "NKE",
+          "value": 1439181879.0,
+          "shares": 16280338.0,
+          "put_call": null,
+          "weight": 0.11142561431475811
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 1272634267.0,
+          "shares": 14877651.0,
+          "put_call": null,
+          "weight": 0.09853101756465828
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 1261880235.0,
+          "shares": 7547582.0,
+          "put_call": null,
+          "weight": 0.09769840937284782
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 661159035.0,
+          "shares": 3986488.0,
+          "put_call": null,
+          "weight": 0.05118884048610764
+        },
+        {
+          "issuer": "SEAPORT ENTMT GROUP INC",
+          "title": "COMMON STOCK",
+          "cusip": "812215200",
+          "ticker": null,
+          "value": 57435934.0,
+          "shares": 2094673.0,
+          "put_call": null,
+          "weight": 0.004446855760954104
+        },
+        {
+          "issuer": "SEAPORT ENTMT GROUP INC",
+          "title": "RIGHT 10/10/2024",
+          "cusip": "812215101",
+          "ticker": null,
+          "value": 6179285.0,
+          "shares": 2094673.0,
+          "put_call": null,
+          "weight": 0.0004784180771018241
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001172661-24-003511",
+      "filing_date": "2024-08-14",
+      "report_date": "2024-06-30",
+      "quarter": "2024Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1336528/000117266124003511/0001172661-24-003511-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 10411823523.0,
+      "holdings": [
+        {
+          "issuer": "HILTON WORLDWIDE HLDGS INC",
+          "title": "COM",
+          "cusip": "43300A203",
+          "ticker": null,
+          "value": 1953389678.0,
+          "shares": 8952290.0,
+          "put_call": null,
+          "weight": 0.18761263804413408
+        },
+        {
+          "issuer": "CHIPOTLE MEXICAN GRILL INC",
+          "title": "COM",
+          "cusip": "169656105",
+          "ticker": null,
+          "value": 1805270087.0,
+          "shares": 28815165.0,
+          "put_call": null,
+          "weight": 0.17338654300201203
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 1628540681.0,
+          "shares": 23142542.0,
+          "put_call": null,
+          "weight": 0.15641262814362053
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 1384377490.0,
+          "shares": 7547582.0,
+          "put_call": null,
+          "weight": 0.13296205865782038
+        },
+        {
+          "issuer": "HOWARD HUGHES HOLDINGS INC",
+          "title": "COM",
+          "cusip": "44267T102",
+          "ticker": null,
+          "value": 1221990788.0,
+          "shares": 18852064.0,
+          "put_call": null,
+          "weight": 0.11736568385937288
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 1178244916.0,
+          "shares": 14965641.0,
+          "put_call": null,
+          "weight": 0.11316412666784306
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 726138789.0,
+          "shares": 3986488.0,
+          "put_call": null,
+          "weight": 0.06974174959803532
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 284736345.0,
+          "shares": 6854510.0,
+          "put_call": null,
+          "weight": 0.027347404071055344
+        },
+        {
+          "issuer": "NIKE INC",
+          "title": "CL B",
+          "cusip": "654106103",
+          "ticker": "NKE",
+          "value": 229134749.0,
+          "shares": 3040132.0,
+          "put_call": null,
+          "weight": 0.02200716795610636
+        }
+      ]
+    }
+  ],
+  "history_quarters": [
+    "2026Q1",
+    "2025Q4",
+    "2025Q3",
+    "2025Q2",
+    "2025Q1",
+    "2024Q4",
+    "2024Q3",
+    "2024Q2"
   ]
 }
