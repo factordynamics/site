@@ -101,7 +101,10 @@ def load_managers():
     import json
     from pathlib import Path
 
-    web = Path(__file__).resolve().parents[1] / "web" / "data" / "universe.json"
+    import os
+
+    base = os.environ.get("COPYBOOK_WEB_DIR") or Path(__file__).resolve().parents[1] / "web"
+    web = Path(base) / "data" / "universe.json"
     if not web.exists():
         return list(MANAGERS)
     curated = json.loads(web.read_text()).get("curated") or []

@@ -1,2 +1,4 @@
+paid/
 __pycache__/
 *.pyc
+ingest/cusip_map.json

@@ -42,7 +42,7 @@ def get(url: str, retries: int = 5) -> bytes:
                 backoff = min(backoff * 2, 60)
                 continue
             if e.code == 404:
-                raise
+                raise FileNotFoundError(f"404 {url}") from e
             time.sleep(backoff)
             backoff = min(backoff * 2, 60)
         except URLError as e:

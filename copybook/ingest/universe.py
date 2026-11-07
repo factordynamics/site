@@ -72,8 +72,21 @@ def parse_index(path: Path) -> dict[str, dict]:
         rest = line[74:].split()
         if len(rest) < 3:
             continue
-        cik = rest[0].zfill(10)
-        date = rest[1]
+        file_name = rest[-1]
+        cik = ""
+        if "/data/" in file_name:
+            part = file_name.split("/data/")[1].split("/")[0]
+            if part.isdigit():
+                cik = part.zfill(10)
+        if not cik:
+            maybe = rest[0]
+            if maybe.isdigit():
+                cik = maybe.zfill(10)
+            else:
+                continue
+        date = rest[-2] if len(rest) >= 2 else rest[1]
+        if len(date) != 10 or date[4] != "-":
+            continue
         rec = {"cik": cik, "name": name, "filing_date": date, "form": form}
         prev = out.get(cik)
         if prev is None or date > prev["filing_date"] or (

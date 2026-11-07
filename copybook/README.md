@@ -1,25 +1,56 @@
-# Copybook
+# Copybook ingest
 
-Consumer 13F site: latest holdings as filed for 41 superinvestors, plus a value-weighted copycat book.
+SEC 13F-HR holdings, as filed, for the Copybook site (https://refcell.github.io/gust/copybook/).
+No prices, no Form 4 / 13D, no third-party holdings data. Tickers come from OpenFIGI's
+CUSIP mapping (identifiers only); a CUSIP without a single US listing shows no ticker.
 
-Pitch: Dataroma with a copycat book. Free latest quarter. Copy ($9/mo or $79/yr) is waitlisted until Stripe keys exist.
+## Where things run
 
-## What it shows
+- Code: `factordynamics/site` → `copybook/ingest` (this directory).
+- Schedule: `refcell/gust` → `.github/workflows/copybook-data.yml`, every 3 hours. It checks out this
+  code, writes `public/copybook/data/**` only, commits, and dispatches gust's Pages deploy (`ci.yml`).
+  The front end owns every other file under `public/copybook/`.
+- Paid outputs (full history, CSV) go to `COPYBOOK_PAID_DIR` (default `copybook/paid/`), never into
+  the public Pages tree.
 
-- SEC 13F-HR information tables only: issuer, CUSIP, shares, filer-reported value.
-- No Yahoo prices, no live P&amp;L, no Form 4 / 13D, no Dataroma scrape.
-
-## Refresh
-
-GitHub Actions pulls EDGAR daily at 12:00 UTC and on every push to `main`, then deploys GitHub Pages from `web/`. Q3 2026 13Fs due ~14 Nov 2026 will show up on the next successful run.
+## Steps
 
 ```bash
+python ingest/universe.py      # curated + all-filer directory from EDGAR full-index form.idx
+python ingest/build.py         # curated funds: latest + prior quarter, copycat, alerts, paid history/CSV
+python ingest/bulk.py          # every 13F filer: latest quarter, one shard per CIK, incremental
+python ingest/figi.py web/data # CUSIP -> ticker cache (OpenFIGI, 25 req/min unauthenticated)
+python ingest/reticker.py      # re-apply the ticker cache to published JSON
 python -m unittest discover -s tests -v
-python ingest/build.py
 ```
 
-User-Agent: `Copybook factordynamics.com copybook@factordynamics.com`. Stay under 10 req/s.
+Env: `COPYBOOK_WEB_DIR` (public tree, data in `$COPYBOOK_WEB_DIR/data`), `COPYBOOK_PAID_DIR`,
+`COPYBOOK_CUSIP_MAP`, `COPYBOOK_HISTORY_QUARTERS` (default 8; 2 is enough for QoQ changes),
+`COPYBOOK_BULK_BUDGET_S`, `COPYBOOK_BULK_REVERSE`, `COPYBOOK_FIGI_BUDGET_S`.
 
-## License
+SEC User-Agent: `Copybook factordynamics.com copybook@factordynamics.com`, under 10 req/s.
 
-Holdings are a public record. Site code is private to Factor Dynamics unless otherwise marked.
+## Public data (`data/`)
+
+- `index.json`: curated funds that filed. `managers[]` has `slug, cik, name, manager, featured, quarter,
+  report_date, filing_date, accession, sec_url, position_count, total_value, history_quarters, top[]`.
+- `{slug}.json`: latest quarter for one curated fund, plus `prev_quarter, prev_report_date,
+  prev_accession, prev_total_value, changes{new,added,trimmed,exited,unchanged}`. Each `holdings[]` row has
+  `issuer, title, cusip, ticker, value, shares, put_call, weight, prev_shares, prev_value, change`.
+  Exited positions are rows with `value: 0` and `change: "exited"`. `change` is null when there is no prior filing.
+- `copycat.json`: every name across curated funds. `copycat_lite.json`: top 2,000 with up to 8
+  `held_by: [{slug, name}]`, featured funds first.
+- `universe.json`: curated directory with `featured`. `filers.json`: every 13F filer with `cik, name, slug,
+  filing_date, ok, position_count, quarter`.
+- `f/{cik}.json`: latest quarter for any filer. `columns` names the fields of each `rows[]` array
+  (`ticker, issuer, title, cusip, put_call, shares, value`); top 500 by value, `truncated` if more,
+  `position_count` is the full count.
+- `alerts.json`: `new_filings` from the last run and `recent` (rolling, by accession) for the alert mailer.
+- `cusip_map.json`: CUSIP → ticker cache (`""` = no single US ticker).
+
+## Paid data (`$COPYBOOK_PAID_DIR`)
+
+- `history/{slug}.json`: up to 8 quarters of holdings per curated fund.
+- `csv/latest.csv`, `csv/history.csv`, `csv/copycat.csv`.
+
+Values are USD as filed; filings still reported in thousands are scaled.

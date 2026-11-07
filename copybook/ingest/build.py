@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ingest.cusips import KNOWN_CUSIPS
+from ingest.figi import load_cache as load_cusip_map
 from ingest.alerts import email_body, new_filings, previous_accessions, send_email
 from ingest.csvutil import holding_row, write_rows
 from ingest.edgar import (
@@ -26,7 +26,6 @@ from ingest.edgar import (
     unique_quarters,
 )
 from ingest.managers import MANAGERS, load_managers
-from ingest.pages import write_site
 from ingest.parse import (
     AggregatedHolding,
     aggregate_holdings,
@@ -37,10 +36,16 @@ from ingest.parse import (
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
-CSV_DIR = WEB / "csv"
+# Paid outputs (full history, CSV) stay out of the public Pages tree.
+PAID = Path(os.environ.get("COPYBOOK_PAID_DIR") or (ROOT / "paid"))
+CSV_DIR = PAID / "csv"
+HISTORY_DIR = PAID / "history"
 HISTORY_QUARTERS = int(os.environ.get("COPYBOOK_HISTORY_QUARTERS", "8"))
 if os.environ.get("COPYBOOK_LATEST_ONLY") == "1":
-    HISTORY_QUARTERS = 1
+    HISTORY_QUARTERS = 2  # latest plus prior quarter for changes
+LITE_COUNT = 2000
+LITE_HOLDERS = 8
+_CUSIP_MAP: dict[str, str] | None = None
 
 
 def quarter_label(report_date: str) -> str:
@@ -51,11 +56,74 @@ def quarter_label(report_date: str) -> str:
     return f"{year}Q{q}"
 
 
+def ticker_for(cusip: str) -> str | None:
+    global _CUSIP_MAP
+    if _CUSIP_MAP is None:
+        _CUSIP_MAP = load_cusip_map()
+    return _CUSIP_MAP.get(cusip) or None
+
+
 def attach_tickers(holdings: list[AggregatedHolding]) -> None:
     for h in holdings:
-        known = KNOWN_CUSIPS.get(h.cusip)
-        if known and known[0]:
-            h.ticker = known[0]
+        h.ticker = ticker_for(h.cusip)
+
+
+def cached_quarters() -> dict[str, dict]:
+    """Previously loaded filings by accession, so unchanged quarters are not refetched."""
+    out: dict[str, dict] = {}
+    if not HISTORY_DIR.exists():
+        return out
+    for p in HISTORY_DIR.glob("*.json"):
+        try:
+            for q in json.loads(p.read_text()).get("history") or []:
+                if q.get("accession"):
+                    out[q["accession"]] = q
+        except ValueError:
+            continue
+    return out
+
+
+def with_changes(latest: dict, prev: dict | None) -> list[dict]:
+    """Latest holdings with prior-quarter fields, plus exited positions as value-0 rows."""
+    if prev is None:
+        return [h | {"prev_shares": None, "prev_value": None, "change": None} for h in latest["holdings"]]
+    before = {(h["cusip"], h["put_call"] or ""): h for h in prev["holdings"]}
+    rows = []
+    for h in latest["holdings"]:
+        p = before.pop((h["cusip"], h["put_call"] or ""), None)
+        if p is None:
+            change = "new"
+        elif h["shares"] > p["shares"]:
+            change = "added"
+        elif h["shares"] < p["shares"]:
+            change = "trimmed"
+        else:
+            change = "unchanged"
+        rows.append(
+            h
+            | {
+                "prev_shares": p["shares"] if p else 0,
+                "prev_value": p["value"] if p else 0,
+                "change": change,
+            }
+        )
+    for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):
+        rows.append(
+            {
+                "issuer": p["issuer"],
+                "title": p["title"],
+                "cusip": p["cusip"],
+                "ticker": ticker_for(p["cusip"]),
+                "value": 0,
+                "shares": 0,
+                "put_call": p["put_call"],
+                "weight": 0.0,
+                "prev_shares": p["shares"],
+                "prev_value": p["value"],
+                "change": "exited",
+            }
+        )
+    return rows
 
 
 def filing_url(cik: str, accession: str) -> str:
@@ -108,6 +176,7 @@ def ingest() -> dict:
     managers_out = []
     errors = []
     roster = load_managers()
+    cache = cached_quarters()
     for cik, name, manager, slug in roster:
         print(f"fetch {slug} ({cik})", flush=True)
         try:
@@ -130,7 +199,7 @@ def ingest() -> dict:
             history = []
             for meta in unique_quarters(metas, HISTORY_QUARTERS):
                 try:
-                    loaded = load_filing(cik, meta)
+                    loaded = cache.get(meta.accession) or load_filing(cik, meta)
                     if loaded is None:
                         last_error = f"Empty 13F information table for {meta.accession}"
                         continue
@@ -141,6 +210,9 @@ def ingest() -> dict:
             if not history:
                 raise FileNotFoundError(last_error)
             latest = history[0]
+            for q in history:
+                for h in q["holdings"]:
+                    h["ticker"] = ticker_for(h["cusip"])
             managers_out.append(
                 {
                     "cik": cik,
@@ -172,6 +244,9 @@ def ingest() -> dict:
             )
 
     ok = [m for m in managers_out if m.get("ok")]
+    featured = featured_ciks()
+    for m in managers_out:
+        m["featured"] = m["cik"] in featured
     buckets: dict[str, dict] = {}
     for m in ok:
         for h in m["holdings"]:
@@ -189,6 +264,7 @@ def ingest() -> dict:
                     "num_investors": 1,
                     "held_by": [m["slug"]],
                     "held_by_names": [m["manager"]],
+                    "_holders": [(m["featured"], h["value"], m["slug"], m["manager"])],
                 }
             else:
                 b["total_value"] += h["value"]
@@ -196,6 +272,7 @@ def ingest() -> dict:
                 b["num_investors"] += 1
                 b["held_by"].append(m["slug"])
                 b["held_by_names"].append(m["manager"])
+                b["_holders"].append((m["featured"], h["value"], m["slug"], m["manager"]))
                 if not b["ticker"] and h["ticker"]:
                     b["ticker"] = h["ticker"]
 
@@ -206,6 +283,10 @@ def ingest() -> dict:
         weight = (b["total_value"] / grand_total) if grand_total else 0.0
         b["weight"] = weight
         b["conviction"] = n * weight
+        holders = sorted(b.pop("_holders"), key=lambda x: (not x[0], -x[1]))
+        b["held_by"] = [x[2] for x in holders]
+        b["held_by_names"] = [x[3] for x in holders]
+        b["held_by_featured"] = sum(1 for x in holders if x[0])
         copycat.append(b)
     copycat.sort(key=lambda x: x["total_value"], reverse=True)
 
@@ -218,7 +299,7 @@ def ingest() -> dict:
             "not live prices. 13F omits shorts, many options, and filers under $100M AUM. "
             "Not investment advice."
         ),
-        "manager_count": len(roster),
+        "manager_count": len(ok),
         "filed_count": len(ok),
         "errors": errors,
         "managers": managers_out,
@@ -231,10 +312,36 @@ def ingest() -> dict:
     }
 
 
+def featured_ciks() -> set[str]:
+    path = DATA / "universe.json"
+    cur = json.loads(path.read_text()).get("curated") or [] if path.exists() else []
+    found = {r["cik"] for r in cur if r.get("featured")}
+    return found or {cik for cik, _, _, _ in MANAGERS}
+
+
+def manager_json(m: dict) -> dict:
+    out = {k: v for k, v in m.items() if k not in {"history", "holdings"}}
+    hist = m.get("history") or []
+    prev = hist[1] if len(hist) > 1 else None
+    out["prev_quarter"] = prev["quarter"] if prev else None
+    out["prev_report_date"] = prev["report_date"] if prev else None
+    out["prev_accession"] = prev["accession"] if prev else None
+    out["prev_total_value"] = prev["total_value"] if prev else None
+    rows = with_changes({"holdings": m["holdings"]}, prev)
+    out["changes"] = {
+        c: sum(1 for r in rows if r["change"] == c)
+        for c in ("new", "added", "trimmed", "exited", "unchanged")
+    }
+    out["holdings"] = rows
+    return out
+
+
 def write_json(payload: dict) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     slim_managers = []
     for m in payload["managers"]:
+        if not m.get("ok"):
+            continue
         entry = {
             k: v
             for k, v in m.items()
@@ -259,11 +366,16 @@ def write_json(payload: dict) -> None:
         )
         + "\n"
     )
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     for m in payload["managers"]:
-        slim = {k: v for k, v in m.items() if k != "history"}
-        (DATA / f"{m['slug']}.json").write_text(json.dumps(slim, indent=2) + "\n")
-        if m.get("ok") and m.get("history"):
-            (DATA / f"{m['slug']}-history.json").write_text(
+        if not m.get("ok"):
+            continue
+        (DATA / f"{m['slug']}.json").write_text(json.dumps(manager_json(m), indent=1) + "\n")
+        stale = DATA / f"{m['slug']}-history.json"
+        if stale.exists():
+            stale.unlink()
+        if m.get("history"):
+            (HISTORY_DIR / f"{m['slug']}.json").write_text(
                 json.dumps(
                     {
                         "slug": m["slug"],
@@ -276,7 +388,34 @@ def write_json(payload: dict) -> None:
                 )
                 + "\n"
             )
-    (DATA / "copycat.json").write_text(json.dumps(payload["copycat"], indent=2) + "\n")
+    names = {m["slug"]: m["manager"] for m in payload["managers"]}
+    (DATA / "copycat.json").write_text(json.dumps(payload["copycat"], separators=(",", ":")) + "\n")
+    lite = [
+        {
+            "ticker": h["ticker"],
+            "issuer": h["issuer"],
+            "cusip": h["cusip"],
+            "title": h["title"],
+            "put_call": h["put_call"],
+            "total_value": h["total_value"],
+            "weight": h["weight"],
+            "num_investors": h["num_investors"],
+            "held_by": [{"slug": s, "name": names[s]} for s in h["held_by"][:LITE_HOLDERS]],
+        }
+        for h in payload["copycat"]["holdings"][:LITE_COUNT]
+    ]
+    (DATA / "copycat_lite.json").write_text(
+        json.dumps(
+            {
+                "total_value": payload["copycat"]["total_value"],
+                "num_positions": payload["copycat"]["num_positions"],
+                "num_investors": payload["copycat"]["num_investors"],
+                "holdings": lite,
+            },
+            separators=(",", ":"),
+        )
+        + "\n"
+    )
 
 
 def write_csv(payload: dict) -> None:
@@ -321,28 +460,38 @@ def write_csv(payload: dict) -> None:
 
 
 def write_alerts(payload: dict) -> None:
+    """alerts.json: this run's new filings plus a rolling feed keyed by accession.
+
+    A mailer (Copy subscribers) diffs `recent` by accession, so a missed run
+    never drops an alert.
+    """
     prev = previous_accessions(DATA)
-    filings = new_filings(payload["managers"], prev)
+    filings = new_filings(payload["managers"], prev) if prev else []
+    path = DATA / "alerts.json"
+    old = json.loads(path.read_text()) if path.exists() else {}
+    seen = {f["accession"] for f in old.get("recent") or []}
+    recent = [
+        f | {"detected_at": payload["generated_at"]}
+        for f in filings
+        if f["accession"] not in seen and not f["is_first_seen"]
+    ] + (old.get("recent") or [])
+    status = None
+    if filings:
+        subject, body = email_body(filings, payload["generated_at"])
+        status = send_email(subject, body)
     DATA.mkdir(parents=True, exist_ok=True)
-    (DATA / "alerts.json").write_text(
+    path.write_text(
         json.dumps(
             {
                 "generated_at": payload["generated_at"],
                 "new_filings": filings,
-                "email_status": None,
+                "recent": recent[:500],
+                "email_status": status,
             },
-            indent=2,
+            indent=1,
         )
         + "\n"
     )
-    if not filings:
-        print("alerts: no new filings")
-        return
-    subject, body = email_body(filings, payload["generated_at"])
-    status = send_email(subject, body)
-    alert = json.loads((DATA / "alerts.json").read_text())
-    alert["email_status"] = status
-    (DATA / "alerts.json").write_text(json.dumps(alert, indent=2) + "\n")
     print(f"alerts: {len(filings)} new filings, email={status}")
 
 
@@ -351,8 +500,6 @@ def main() -> int:
     write_alerts(payload)
     write_json(payload)
     write_csv(payload)
-    if os.environ.get("COPYBOOK_JSON_ONLY") != "1":
-        write_site(payload)
     print(
         f"wrote {payload['filed_count']}/{payload['manager_count']} managers, "
         f"{payload['copycat']['num_positions']} copycat names"
