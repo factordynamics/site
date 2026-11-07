@@ -96,6 +96,24 @@ def looks_like_thousands(total_value: float, table_value_total: float | None) ->
     return 0 < total_value < 50_000_000
 
 
+def unit_fix(pairs: list[tuple[float, float]]) -> float:
+    """Factor that puts values in dollars, judged by median implied price per share.
+
+    Some filers report in $000s with a cover total that hides it, others report
+    dollars x1000. A median price under $0.50 means thousands; over $25,000 means
+    an extra x1000. Needs 5 priced stock rows; otherwise 1 (trust the filing).
+    """
+    prices = sorted(v / s for v, s in pairs if v > 0 and s > 0)
+    if len(prices) < 5:
+        return 1.0
+    mid = prices[len(prices) // 2]
+    if mid < 0.5:
+        return 1000.0
+    if mid > 25_000:
+        return 0.001
+    return 1.0
+
+
 def scale_if_thousands(holdings: list[AggregatedHolding], thousands: bool) -> None:
     if not thousands:
         return

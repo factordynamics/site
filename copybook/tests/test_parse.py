@@ -111,6 +111,18 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(found[0]["previous_accession"], "old")
         self.assertEqual(new_filings(managers, {"warren-buffett": "new"}), [])
 
+    def test_unit_fix_by_implied_price(self):
+        from ingest.parse import unit_fix
+
+        # Acadian-style: values in $000s but the total sits above the old $50M cutoff.
+        self.assertEqual(unit_fix([(3_289_929, 17_633_622)] + [(1_000, 5_000)] * 4), 1000.0)
+        # Davidson Kempner-style: dollars x1000 (Amedisys at ~$98k/share).
+        self.assertEqual(unit_fix([(48_505_483_000, 492_992)] * 5), 0.001)
+        # Normal book with one BRK.A line stays put.
+        self.assertEqual(unit_fix([(700_000 * 10, 10)] + [(150 * 1_000, 1_000)] * 4), 1.0)
+        # Too few priced rows: trust the filing.
+        self.assertEqual(unit_fix([(1, 100)]), 1.0)
+
     def test_thousands_scale_baupost_not_berkshire(self):
         # Baupost-style: tableValueTotal matches summed lines and is small.
         self.assertTrue(looks_like_thousands(5_415_853.0, 5_415_853.0))

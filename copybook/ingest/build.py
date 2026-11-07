@@ -32,6 +32,7 @@ from ingest.parse import (
     looks_like_thousands,
     parse_info_table,
     scale_if_thousands,
+    unit_fix,
 )
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
@@ -121,6 +122,19 @@ def pick_filings(group: list, types: dict[str, str]):
     return base, additions
 
 
+def fix_cached(q: dict) -> dict:
+    """Apply the implied-price unit check to a quarter stored before it existed."""
+    if "unit_fix" in q:
+        return q
+    factor = unit_fix([(h["value"], h["shares"]) for h in q["holdings"] if not h["put_call"]])
+    if factor != 1.0:
+        for h in q["holdings"]:
+            h["value"] *= factor
+        q["total_value"] = sum(h["value"] for h in q["holdings"])
+        q["values_in_thousands"] = factor > 1
+    return q | {"unit_fix": factor}
+
+
 def merge_quarter(base: dict, extras: list[dict]) -> dict:
     rows: dict[tuple, dict] = {}
     for q in [base, *extras]:
@@ -152,7 +166,7 @@ def load_period(cik: str, group: list, cache: dict) -> dict | None:
         return None
     key = "|".join([base.accession] + [m.accession for m in additions])
     if key in cache:
-        return cache[key]
+        return fix_cached(cache[key])
     loaded = load_filing(cik, base)
     if loaded is None:
         return None
@@ -225,6 +239,11 @@ def load_filing(cik: str, meta) -> dict | None:
     raw_total = sum(h.value for h in holdings)
     thousands = looks_like_thousands(raw_total, cover_total)
     scale_if_thousands(holdings, thousands)
+    factor = unit_fix([(h.value, h.shares) for h in holdings if not h.put_call])
+    for h in holdings:
+        h.value *= factor
+    if factor > 1:
+        thousands = True
     attach_tickers(holdings)
     holdings = [h for h in holdings if h.value > 0 and h.cusip != "000000000"]
     total = sum(h.value for h in holdings)
@@ -240,6 +259,7 @@ def load_filing(cik: str, meta) -> dict | None:
         "line_count": len(rows),
         "position_count": len(holdings),
         "values_in_thousands": thousands,
+        "unit_fix": factor,
         "total_value": total,
         "holdings": [
             {

@@ -34,7 +34,7 @@ MAX_ROWS = 500  # shard cap by value; position_count keeps the full count
 SHARD_KEYS = (
     "ok", "cik", "name", "form", "accession", "filing_date", "report_date", "quarter",
     "sec_url", "position_count", "total_value", "values_in_thousands", "indexed_date", "error",
-    "filing_key", "amendments",
+    "filing_key", "amendments", "unit_fix",
 )
 # Rows are arrays in this column order to keep 9k shards small.
 COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value")
