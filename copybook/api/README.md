@@ -22,7 +22,7 @@ All responses are JSON. Authenticated routes take `Authorization: Bearer <sessio
 | POST | `/portal` | → `{url}` of a Stripe customer portal session |
 | POST | `/alerts` | `{alerts: "all" \| "off" \| ["warren-buffett", ...]}` → `{member}` |
 | GET | `/history/{slug}` | → same shape as `data/{slug}-history.json` |
-| GET | `/csv/{slug}.csv` | → CSV of every quarter, streamed one quarter at a time from `csv_url` (piped unparsed), `holdings_url`, or inline `holdings` |
+| GET | `/csv/{slug}.csv` | → CSV of every quarter, full book. `csv_url` shards are piped natively (Citadel, 19.7 MB / 106k rows: 8 ms CPU); `holdings_url` or inline `holdings` are converted in JS |
 | POST | `/webhook` | Stripe only (signature checked) |
 | GET | `/health` | `{ok: true}` |
 

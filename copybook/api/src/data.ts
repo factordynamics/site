@@ -26,40 +26,43 @@ async function shard(env: Env, path: string): Promise<Response> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();
-  const quarters = [...(h.history ?? [])];
-  let started = false;
-  return new ReadableStream<Uint8Array>({
-    async pull(out) {
-      if (!started) {
-        started = true;
-        out.enqueue(enc.encode(CSV_FIELDS.join(',') + '\r\n'));
-        return;
-      }
-      const q = quarters.shift();
-      if (!q) return out.close();
+  // Workers' IdentityTransformStream pipes bytes natively; the standard one runs JS per chunk.
+  const Identity = (globalThis as { IdentityTransformStream?: typeof TransformStream }).IdentityTransformStream ?? TransformStream;
+  const { readable, writable } = new Identity<Uint8Array, Uint8Array>();
+  (async () => {
+    let w = writable.getWriter();
+    await w.write(enc.encode(CSV_FIELDS.join(',') + '\r\n'));
+    for (const q of h.history ?? []) {
       if (q.csv_url) {
-        const reader = (await shard(env, q.csv_url)).body!.getReader();
-        let header = true;
+        // Drop the shard's header line in JS, then let the runtime pipe the rest
+        // natively: per-chunk JS would cost ~0.5 s CPU on the largest books.
+        const body = (await shard(env, q.csv_url)).body!;
+        const reader = body.getReader();
         for (let r = await reader.read(); !r.done; r = await reader.read()) {
-          let chunk = r.value;
-          if (header) {
-            const nl = chunk.indexOf(10);
-            if (nl < 0) continue;
-            header = false;
-            chunk = chunk.subarray(nl + 1);
-          }
-          if (chunk.length) out.enqueue(chunk);
+          const nl = r.value.indexOf(10);
+          if (nl < 0) continue;
+          if (nl + 1 < r.value.length) await w.write(r.value.subarray(nl + 1));
+          break;
         }
-        return;
+        reader.releaseLock();
+        w.releaseLock();
+        await body.pipeTo(writable, { preventClose: true });
+        w = writable.getWriter();
+        continue;
       }
       const holdings = q.holdings ?? (q.holdings_url ? ((await (await shard(env, q.holdings_url)).json()) as { holdings?: unknown[] }).holdings : []);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const rows = ((holdings ?? []) as any[]).map(
         (p) => [h.manager, h.slug, h.cik, q.quarter, q.report_date, q.filing_date, q.accession, p.ticker ?? '', p.issuer ?? '', p.cusip ?? '', p.title ?? '', p.put_call ?? '', p.shares ?? 0, p.value ?? 0, p.weight ?? 0].map(cell).join(',') + '\r\n',
       );
-      if (rows.length) out.enqueue(enc.encode(rows.join('')));
-    },
+      if (rows.length) await w.write(enc.encode(rows.join('')));
+    }
+    await w.close();
+  })().catch((err) => {
+    console.log(`csv ${h.slug}: ${err}`);
+    writable.abort(err).catch(() => {});
   });
+  return readable;
 }
 
 export async function fetchHistory(env: Env, slug: string): Promise<unknown | null> {
