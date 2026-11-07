@@ -16,7 +16,6 @@ from ingest.figi import load_cache
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
-PAID = Path(os.environ.get("COPYBOOK_PAID_DIR") or (ROOT / "paid"))
 
 
 def walk(obj, cmap: dict[str, str]) -> bool:
@@ -49,7 +48,6 @@ def walk(obj, cmap: dict[str, str]) -> bool:
 def main() -> int:
     cmap = load_cache()
     files = list(DATA.glob("*.json")) + list((DATA / "f").glob("*.json"))
-    files += list((PAID / "history").glob("*.json"))
     skip = {"universe.json", "filers.json", "alerts.json", "cusip_map.json"}
     n = 0
     for path in files:

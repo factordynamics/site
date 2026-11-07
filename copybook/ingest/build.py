@@ -16,7 +16,6 @@ if str(ROOT) not in sys.path:
 
 from ingest.figi import load_cache as load_cusip_map
 from ingest.alerts import email_body, new_filings, previous_accessions, send_email
-from ingest.csvutil import holding_row, write_rows
 from ingest.edgar import (
     fetch_info_table,
     fetch_primary_doc,
@@ -36,10 +35,6 @@ from ingest.parse import (
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
-# Paid outputs (full history, CSV) stay out of the public Pages tree.
-PAID = Path(os.environ.get("COPYBOOK_PAID_DIR") or (ROOT / "paid"))
-CSV_DIR = PAID / "csv"
-HISTORY_DIR = PAID / "history"
 HISTORY_QUARTERS = int(os.environ.get("COPYBOOK_HISTORY_QUARTERS", "8"))
 if os.environ.get("COPYBOOK_LATEST_ONLY") == "1":
     HISTORY_QUARTERS = 2  # latest plus prior quarter for changes
@@ -71,9 +66,7 @@ def attach_tickers(holdings: list[AggregatedHolding]) -> None:
 def cached_quarters() -> dict[str, dict]:
     """Previously loaded filings by accession, so unchanged quarters are not refetched."""
     out: dict[str, dict] = {}
-    if not HISTORY_DIR.exists():
-        return out
-    for p in HISTORY_DIR.glob("*.json"):
+    for p in DATA.glob("*-history.json"):
         try:
             for q in json.loads(p.read_text()).get("history") or []:
                 if q.get("accession"):
@@ -366,16 +359,12 @@ def write_json(payload: dict) -> None:
         )
         + "\n"
     )
-    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     for m in payload["managers"]:
         if not m.get("ok"):
             continue
         (DATA / f"{m['slug']}.json").write_text(json.dumps(manager_json(m), indent=1) + "\n")
-        stale = DATA / f"{m['slug']}-history.json"
-        if stale.exists():
-            stale.unlink()
         if m.get("history"):
-            (HISTORY_DIR / f"{m['slug']}.json").write_text(
+            (DATA / f"{m['slug']}-history.json").write_text(
                 json.dumps(
                     {
                         "slug": m["slug"],
@@ -384,7 +373,7 @@ def write_json(payload: dict) -> None:
                         "history_quarters": m.get("history_quarters") or [],
                         "history": m["history"],
                     },
-                    indent=2,
+                    separators=(",", ":"),
                 )
                 + "\n"
             )
@@ -415,47 +404,6 @@ def write_json(payload: dict) -> None:
             separators=(",", ":"),
         )
         + "\n"
-    )
-
-
-def write_csv(payload: dict) -> None:
-    CSV_DIR.mkdir(parents=True, exist_ok=True)
-    latest_rows = []
-    history_rows = []
-    for m in payload["managers"]:
-        if not m.get("ok"):
-            continue
-        for h in m.get("holdings") or []:
-            latest_rows.append(holding_row(m, h))
-        for q in m.get("history") or [{"holdings": m.get("holdings") or [], **m}]:
-            for h in q.get("holdings") or []:
-                history_rows.append(holding_row(m, h, q))
-    write_rows(CSV_DIR / "latest.csv", latest_rows)
-    write_rows(CSV_DIR / "history.csv", history_rows)
-    copycat_rows = [
-        {
-            "manager": "copycat",
-            "slug": "copycat",
-            "cik": "",
-            "quarter": "",
-            "report_date": "",
-            "filing_date": payload.get("generated_at"),
-            "accession": "",
-            "ticker": h.get("ticker") or "",
-            "issuer": h.get("issuer") or "",
-            "cusip": h.get("cusip") or "",
-            "title": h.get("title") or "",
-            "put_call": h.get("put_call") or "",
-            "shares": h.get("total_shares", 0),
-            "value_usd": h.get("total_value", 0),
-            "weight": h.get("weight", 0),
-        }
-        for h in payload["copycat"].get("holdings") or []
-    ]
-    write_rows(CSV_DIR / "copycat.csv", copycat_rows)
-    (CSV_DIR / "README.txt").write_text(
-        "Copybook CSV exports. Ready for Copy ($9/mo). Not linked on the free site.\n"
-        "Source: SEC EDGAR 13F-HR, as filed. Not investment advice.\n"
     )
 
 
@@ -499,7 +447,6 @@ def main() -> int:
     payload = ingest()
     write_alerts(payload)
     write_json(payload)
-    write_csv(payload)
     print(
         f"wrote {payload['filed_count']}/{payload['manager_count']} managers, "
         f"{payload['copycat']['num_positions']} copycat names"
