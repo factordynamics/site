@@ -28,7 +28,7 @@ export function Account() {
         else return setState({ kind: 'out' })
         setState({ kind: 'in', member, welcome })
       } catch {
-        setState({ kind: 'out', error: sid || login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
+        setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
       }
       if (sid || login) nav('/account/', { replace: true })
     }
@@ -100,7 +100,8 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
           >
             {busy ? 'Opening…' : 'Manage billing'} <Arrow />
           </Button>
-          <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">{RENEWAL_TERMS}</p>
+          <p className="mt-4 text-[13px] leading-relaxed text-ink-2">Includes quarter-over-quarter changes, 8 quarters of 13F history and CSV export (top 500 positions per quarter), and filing alerts.</p>
+          <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">{RENEWAL_TERMS}</p>
         </section>
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[15px] font-semibold">Filing alerts</h2>
@@ -176,6 +177,13 @@ function SignedOut({ error }: { error?: string }) {
         )}
       </section>
       <p className="mt-6 text-[14px] text-ink-2">
+        Need your billing details now?{' '}
+        <a href={checkout.portal} className="font-medium text-accent hover:text-accent-2">
+          Sign in to Stripe billing
+        </a>
+        .
+      </p>
+      <p className="mt-2 text-[14px] text-ink-2">
         Don’t have Copy yet?{' '}
         <Button to="/pricing/" variant="ghost" size="sm">
           See plans <Arrow />
@@ -191,7 +199,7 @@ function NotOpen() {
       <header>
         <p className="text-[13px] font-medium text-accent">Account</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Copy opens with the Q3 filings.</h1>
-        <p className="mt-3 text-[17px] text-ink-2">Quarter-over-quarter changes, full history, filing-day alerts and CSV export. Join and we’ll email you the moment it opens.</p>
+        <p className="mt-3 text-[17px] text-ink-2">Quarter-over-quarter changes, 8 quarters of 13F history and CSV export (top 500 positions per quarter), and filing-day alerts. Join and we’ll email you the moment it opens.</p>
       </header>
       <div className="mt-8 max-w-lg">
         <WaitlistForm id="wl-account" />

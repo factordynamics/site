@@ -3,11 +3,11 @@
 // api: Copybook API base URL, e.g. https://copybook-api.<sub>.workers.dev.
 // While the checkout links are empty, every paid button falls back to the encrypted waitlist.
 export const checkout = {
-  monthly: '',
-  yearly: '',
-  portal: '',
+  monthly: 'https://buy.stripe.com/aFa7sL1dk2Do5tE2MSgjC00',
+  yearly: 'https://buy.stripe.com/7sYeVd1dkguecW6gDIgjC01',
+  portal: 'https://billing.stripe.com/p/login/aFa7sL1dk2Do5tE2MSgjC00',
 }
-export const api = ''
+export const api = 'https://copybook-api.factordynamics.workers.dev'
 
 export const prices = { monthly: 9, yearly: 79 }
 

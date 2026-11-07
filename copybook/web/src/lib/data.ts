@@ -40,6 +40,7 @@ export type Manager = {
   history_quarters?: string[]
   prev_quarter?: string | null
   prev_total_value?: number | null
+  changes?: { new: number; added: number; trimmed: number; exited: number; unchanged: number } | null
   featured?: boolean
   top?: Holding[]
 }
@@ -65,8 +66,6 @@ export function getJSON<T>(url: string): Promise<T> {
   return p
 }
 
-// A wrong ticker is worse than none. CUSIP-keyed corrections until ingest fixes them.
-const TICKER_FIX: Record<string, string> = { '931142103': 'WMT', '580135101': 'MCD', '81141R100': 'SE', '46266C105': 'IQV' }
 
 let sectorsData: Sectors | null = null
 export const loadSectors = () =>
@@ -76,7 +75,7 @@ export const loadSectors = () =>
   })
 
 function cleanHolding(h: Holding): Holding {
-  return { ...h, filed: h.issuer, issuer: h.display_name || displayName(h.issuer), ticker: TICKER_FIX[h.cusip] ?? h.ticker ?? null }
+  return { ...h, filed: h.issuer, issuer: h.display_name || displayName(h.issuer), ticker: h.ticker || null }
 }
 
 export type IndexData = {

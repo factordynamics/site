@@ -19,14 +19,19 @@ export function ManagerPage() {
   const plan = mapPlan(book.rows, 20)
   const slices = foldSlices(book.sectors, 10)
 
+  // Trades, not price moves: the change in shares, valued at the filing's own per-share value.
   const changes = useMemo(() => {
-    const hs = (f?.holdings || []).filter((h) => h.change && h.prev_value != null)
-    return hs
-      .map((h) => ({ key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: h.change ?? '', delta: (h.value || 0) - (h.prev_value || 0) }))
+    return (f?.holdings || [])
+      .filter((h) => h.change && h.change !== 'unchanged')
+      .map((h) => {
+        const per = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value || 0) / h.prev_shares : 0
+        const delta = h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
+        return { key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: h.change ?? '', delta }
+      })
       .filter((x) => x.delta !== 0)
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-      .slice(0, 10)
   }, [f])
+  const paid = Boolean(member?.active)
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
@@ -130,15 +135,41 @@ export function ManagerPage() {
             <WeightBars
               valueLabel="both"
               accentFirst={3}
-              items={book.rows.slice(0, 10).map((h) => ({ key: h.key, label: h.ticker || shortName(h.issuer), isTicker: Boolean(h.ticker), sub: h.ticker ? h.issuer : undefined, value: h.value, weight: h.weight, tag: h.put_call || shareClass(h.title) || undefined }))}
+              items={book.rows.slice(0, 10).map((h) => ({ key: h.key, label: h.ticker || shortName(h.issuer), isTicker: Boolean(h.ticker), sub: h.ticker ? h.issuer : undefined, value: h.value, weight: h.weight, tag: h.put_call || (h.issuer.includes('Class') ? '' : shareClass(h.title)) || undefined }))}
             />
           ) : (
             <Skeleton className="h-[360px] w-full" />
           )}
         </Panel>
-        <Panel title="Quarter-over-quarter changes" sub={f?.prev_quarter ? `${quarterLabel(f.prev_quarter)} to ${quarterLabel(f.quarter)}, change in reported value` : 'Biggest buys and sells since the prior filing'}>
+        <Panel
+          title="Quarter-over-quarter changes"
+          sub={f?.prev_quarter ? `${quarterLabel(f.prev_quarter)} to ${quarterLabel(f.quarter)}: shares bought or sold, at quarter-end value` : 'Biggest buys and sells since the prior filing'}
+        >
+          {f?.changes && (
+            <p className="-mt-2 mb-4 flex flex-wrap gap-1.5">
+              {(['new', 'added', 'trimmed', 'exited'] as const).map((k) => (
+                <Badge key={k} tone={k === 'new' || k === 'added' ? 'up' : 'down'}>
+                  {f.changes![k]} {k === 'new' ? 'new' : k}
+                </Badge>
+              ))}
+            </p>
+          )}
           {changes.length ? (
-            <ChangeBars items={changes} />
+            <>
+              <ChangeBars items={paid ? changes.slice(0, 12) : changes.slice(0, 4)} />
+              {!paid && changes.length > 4 && (
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent-soft px-4 py-3">
+                  <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
+                    <Lock /> {changes.length - 4} more buys and sells, plus 8 quarters of history, with Copy
+                  </p>
+                  <Button to="/pricing/" size="sm">
+                    Get Copy
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : f?.prev_quarter ? (
+            <p className="text-[14px] text-ink-2">No shares bought or sold since {quarterLabel(f.prev_quarter)}.</p>
           ) : (
             <LockedChanges top={book.rows.slice(0, 6).map((h) => h.ticker || shortName(h.issuer))} />
           )}
@@ -187,7 +218,7 @@ export function ManagerPage() {
                     <div className="flex items-center gap-2">
                       <Ticker t={h.ticker} className="w-14 shrink-0" />
                       <span className="min-w-0 truncate text-ink-2">{h.issuer}</span>
-                      {(h.put_call || shareClass(h.title)) && <Badge className="shrink-0">{h.put_call || shareClass(h.title)}</Badge>}
+                      {(h.put_call || (!h.issuer.includes('Class') && shareClass(h.title))) && <Badge className="shrink-0">{h.put_call || shareClass(h.title)}</Badge>}
                     </div>
                   </td>
                   <td className="hidden px-3 py-2.5 text-ink-2 md:table-cell">{h.sector}</td>
