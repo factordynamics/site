@@ -1,0 +1,164 @@
+{
+  "slug": "mizuho-financial-group-inc",
+  "manager": "MIZUHO FINANCIAL GROUP INC",
+  "cik": "0001335730",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001104659-26-096278",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1335730/000110465926096278/0001104659-26-096278-index.html",
+      "line_count": 14,
+      "position_count": 14,
+      "values_in_thousands": true,
+      "total_value": 11775638000.0,
+      "holdings": [
+        {
+          "issuer": "CME GROUP INC",
+          "title": "COM",
+          "cusip": "12572Q105",
+          "ticker": null,
+          "value": 6631083000.0,
+          "shares": 30028.0,
+          "put_call": null,
+          "weight": 0.5631187881285074
+        },
+        {
+          "issuer": "NVIDIA CORPORATION",
+          "title": "COM",
+          "cusip": "67066G104",
+          "ticker": "NVDA",
+          "value": 1857836000.0,
+          "shares": 9285.0,
+          "put_call": null,
+          "weight": 0.15776945588850472
+        },
+        {
+          "issuer": "BILIBILI INC",
+          "title": "SPONS ADS REP Z",
+          "cusip": "090040106",
+          "ticker": null,
+          "value": 1263728000.0,
+          "shares": 74206.0,
+          "put_call": null,
+          "weight": 0.10731715767757127
+        },
+        {
+          "issuer": "ASE TECHNOLOGY HLDG CO LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "00215W100",
+          "ticker": null,
+          "value": 833276000.0,
+          "shares": 18468.0,
+          "put_call": null,
+          "weight": 0.07076270517147351
+        },
+        {
+          "issuer": "UNITED MICROELECTRONICS CORP",
+          "title": "SPON ADR NEW",
+          "cusip": "910873405",
+          "ticker": null,
+          "value": 306140000.0,
+          "shares": 11251.0,
+          "put_call": null,
+          "weight": 0.025997742118091607
+        },
+        {
+          "issuer": "ALIBABA GROUP HLDG LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "01609W102",
+          "ticker": null,
+          "value": 263945000.0,
+          "shares": 2750.0,
+          "put_call": null,
+          "weight": 0.02241449677715976
+        },
+        {
+          "issuer": "JD.COM INC",
+          "title": "SPON ADS CL A",
+          "cusip": "47215P106",
+          "ticker": null,
+          "value": 231868000.0,
+          "shares": 9100.0,
+          "put_call": null,
+          "weight": 0.01969048301247032
+        },
+        {
+          "issuer": "CHUNGHWA TELECOM CO LTD",
+          "title": "SPON ADR NEW11",
+          "cusip": "17133Q502",
+          "ticker": null,
+          "value": 204260000.0,
+          "shares": 4615.0,
+          "put_call": null,
+          "weight": 0.01734598159352385
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 50051000.0,
+          "shares": 210.0,
+          "put_call": null,
+          "weight": 0.004250385414361413
+        },
+        {
+          "issuer": "LI AUTO INC",
+          "title": "SPONSORED ADS",
+          "cusip": "50202M102",
+          "ticker": null,
+          "value": 46373000.0,
+          "shares": 3950.0,
+          "put_call": null,
+          "weight": 0.003938045649840799
+        },
+        {
+          "issuer": "BLOCK INC",
+          "title": "CL A",
+          "cusip": "852234103",
+          "ticker": null,
+          "value": 38760000.0,
+          "shares": 510.0,
+          "put_call": null,
+          "weight": 0.0032915414009839637
+        },
+        {
+          "issuer": "ELI LILLY & CO",
+          "title": "COM",
+          "cusip": "532457108",
+          "ticker": "LLY",
+          "value": 35983000.0,
+          "shares": 30.0,
+          "put_call": null,
+          "weight": 0.0030557155374511345
+        },
+        {
+          "issuer": "ADVANCED MICRO DEVICES INC",
+          "title": "COM",
+          "cusip": "007903107",
+          "ticker": "AMD",
+          "value": 11618000.0,
+          "shares": 20.0,
+          "put_call": null,
+          "weight": 0.0009866132094074223
+        },
+        {
+          "issuer": "SOFI TECHNOLOGIES INC",
+          "title": "COM",
+          "cusip": "83406F102",
+          "ticker": null,
+          "value": 717000.0,
+          "shares": 40.0,
+          "put_call": null,
+          "weight": 6.0888420652876725e-05
+        }
+      ]
+    }
+  ]
+}

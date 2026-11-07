@@ -1,0 +1,214 @@
+{
+  "slug": "mizuho-securities-co-ltd",
+  "manager": "Mizuho Securities Co. Ltd.",
+  "cik": "0001520309",
+  "history_quarters": [
+    "2026Q3"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001520309-26-000006",
+      "filing_date": "2026-11-04",
+      "report_date": "2026-09-30",
+      "quarter": "2026Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1520309/000152030926000006/0001520309-26-000006-index.html",
+      "line_count": 19,
+      "position_count": 19,
+      "values_in_thousands": true,
+      "total_value": 3979204000.0,
+      "holdings": [
+        {
+          "issuer": "BILIBILI INC",
+          "title": "SPONS ADS REP Z",
+          "cusip": "090040106",
+          "ticker": null,
+          "value": 1114574000.0,
+          "shares": 74206.0,
+          "put_call": null,
+          "weight": 0.28009973854067294
+        },
+        {
+          "issuer": "ASE TECHNOLOGY HLDG CO LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "00215W100",
+          "ticker": null,
+          "value": 456115000.0,
+          "shares": 10259.0,
+          "put_call": null,
+          "weight": 0.11462468373071599
+        },
+        {
+          "issuer": "ARM HOLDINGS PLC",
+          "title": "SPONSORED ADS",
+          "cusip": "042068205",
+          "ticker": null,
+          "value": 422904000.0,
+          "shares": 1460.0,
+          "put_call": null,
+          "weight": 0.10627854214058892
+        },
+        {
+          "issuer": "INTUITIVE SURGICAL INC",
+          "title": "COM NEW",
+          "cusip": "46120E602",
+          "ticker": null,
+          "value": 325304000.0,
+          "shares": 800.0,
+          "put_call": null,
+          "weight": 0.08175102357154848
+        },
+        {
+          "issuer": "ALIBABA GROUP HLDG LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "01609W102",
+          "ticker": null,
+          "value": 295735000.0,
+          "shares": 2750.0,
+          "put_call": null,
+          "weight": 0.07432014040999155
+        },
+        {
+          "issuer": "JD.COM INC",
+          "title": "SPON ADS CL A",
+          "cusip": "47215P106",
+          "ticker": null,
+          "value": 242060000.0,
+          "shares": 9100.0,
+          "put_call": null,
+          "weight": 0.06083126172973288
+        },
+        {
+          "issuer": "CHUNGHWA TELECOM CO LTD",
+          "title": "SPON ADR NEW1",
+          "cusip": "17133Q502",
+          "ticker": null,
+          "value": 209890000.0,
+          "shares": 4615.0,
+          "put_call": null,
+          "weight": 0.05274673025057273
+        },
+        {
+          "issuer": "SPACE EXPLORATION TECHN CORP",
+          "title": "CLASS A COM S",
+          "cusip": "84615Q103",
+          "ticker": null,
+          "value": 126722000.0,
+          "shares": 840.0,
+          "put_call": null,
+          "weight": 0.03184606770600351
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 119592000.0,
+          "shares": 480.0,
+          "put_call": null,
+          "weight": 0.03005425205644144
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 115390000.0,
+          "shares": 1100.0,
+          "put_call": null,
+          "weight": 0.02899826196395058
+        },
+        {
+          "issuer": "ILLUMINA INC",
+          "title": "COM",
+          "cusip": "452327109",
+          "ticker": null,
+          "value": 106735000.0,
+          "shares": 390.0,
+          "put_call": null,
+          "weight": 0.026823203836747248
+        },
+        {
+          "issuer": "APPLE INC",
+          "title": "COM",
+          "cusip": "037833100",
+          "ticker": "AAPL",
+          "value": 106566000.0,
+          "shares": 320.0,
+          "put_call": null,
+          "weight": 0.026780733031028316
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 101525000.0,
+          "shares": 140.0,
+          "put_call": null,
+          "weight": 0.025513896749199086
+        },
+        {
+          "issuer": "JOHNSON & JOHNSON",
+          "title": "COM",
+          "cusip": "478160104",
+          "ticker": "JNJ",
+          "value": 79422000.0,
+          "shares": 300.0,
+          "put_call": null,
+          "weight": 0.01995926823555666
+        },
+        {
+          "issuer": "ARISTA NETWORKS INC",
+          "title": "COM SHS",
+          "cusip": "040413205",
+          "ticker": null,
+          "value": 61077000.0,
+          "shares": 300.0,
+          "put_call": null,
+          "weight": 0.015349049709439375
+        },
+        {
+          "issuer": "LI AUTO INC",
+          "title": "SPONSORED ADS",
+          "cusip": "50202M102",
+          "ticker": null,
+          "value": 44872000.0,
+          "shares": 3950.0,
+          "put_call": null,
+          "weight": 0.011276627184733429
+        },
+        {
+          "issuer": "QUALCOMM INC",
+          "title": "COM",
+          "cusip": "747525103",
+          "ticker": "QCOM",
+          "value": 34968000.0,
+          "shares": 190.0,
+          "put_call": null,
+          "weight": 0.008787687185678341
+        },
+        {
+          "issuer": "PAYPAL HLDGS INC",
+          "title": "COM",
+          "cusip": "70450Y103",
+          "ticker": "PYPL",
+          "value": 12082000.0,
+          "shares": 230.0,
+          "put_call": null,
+          "weight": 0.003036285649089617
+        },
+        {
+          "issuer": "DOORDASH INC",
+          "title": "CL A",
+          "cusip": "25809K105",
+          "ticker": null,
+          "value": 3671000.0,
+          "shares": 20.0,
+          "put_call": null,
+          "weight": 0.0009225463183088879
+        }
+      ]
+    }
+  ]
+}

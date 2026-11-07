@@ -1,0 +1,1604 @@
+{
+  "source": "SEC EDGAR 13F-HR master index",
+  "quarters": [
+    "2026Q2",
+    "2026Q3"
+  ],
+  "curated_count": 199,
+  "filer_count": 9023,
+  "featured_count": 41,
+  "curated": [
+    {
+      "cik": "0001358706",
+      "name": "Abrams Capital Management LP",
+      "manager": "David Abrams",
+      "slug": "david-abrams",
+      "featured": true,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0000916542",
+      "name": "ACADIAN ASSET MANAGEMENT LLC",
+      "manager": "ACADIAN ASSET MANAGEMENT LLC",
+      "slug": "acadian-asset-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001508822",
+      "name": "ACR Alpine Capital Research, LLC",
+      "manager": "ACR Alpine Capital Research, LLC",
+      "slug": "acr-alpine-capital-research-llc",
+      "featured": false,
+      "filing_date": "2026-07-29"
+    },
+    {
+      "cik": "0001165408",
+      "name": "ADAGE CAPITAL PARTNERS GP, L.L.C.",
+      "manager": "ADAGE CAPITAL PARTNERS GP, L.L.C.",
+      "slug": "adage-capital-partners-gp-l-l-c",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0002056566",
+      "name": "AGP FRANKLIN, LLC",
+      "manager": "AGP FRANKLIN, LLC",
+      "slug": "agp-franklin-llc",
+      "featured": false,
+      "filing_date": "2026-07-30"
+    },
+    {
+      "cik": "0001376879",
+      "name": "AKO Capital LLP",
+      "manager": "Nicolai Tangen",
+      "slug": "nicolai-tangen",
+      "featured": true,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001426771",
+      "name": "Alaska Permanent Capital Management, LLC",
+      "manager": "Alaska Permanent Capital Management, LLC",
+      "slug": "alaska-permanent-capital-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-11"
+    },
+    {
+      "cik": "0001582681",
+      "name": "Alaska Permanent Fund Corp",
+      "manager": "Alaska Permanent Fund Corp",
+      "slug": "alaska-permanent-fund-corp",
+      "featured": false,
+      "filing_date": "2026-08-24"
+    },
+    {
+      "cik": "0001616882",
+      "name": "Alden Global Capital LLC",
+      "manager": "Alden Global Capital LLC",
+      "slug": "alden-global-capital-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001535323",
+      "name": "Allianz Asset Management GmbH",
+      "manager": "Allianz Asset Management GmbH",
+      "slug": "allianz-asset-management-gmbh",
+      "featured": false,
+      "filing_date": "2026-09-02"
+    },
+    {
+      "cik": "0001127508",
+      "name": "ALLIANZ SE",
+      "manager": "ALLIANZ SE",
+      "slug": "allianz-se",
+      "featured": false,
+      "filing_date": "2026-08-10"
+    },
+    {
+      "cik": "0001330387",
+      "name": "Amundi",
+      "manager": "Amundi",
+      "slug": "amundi",
+      "featured": false,
+      "filing_date": "2026-08-26"
+    },
+    {
+      "cik": "0001449434",
+      "name": "Apollo Management Holdings, L.P.",
+      "manager": "Apollo Management Holdings, L.P.",
+      "slug": "apollo-management-holdings-l-p",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001656456",
+      "name": "Appaloosa LP",
+      "manager": "David Tepper",
+      "slug": "david-tepper",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001167557",
+      "name": "AQR CAPITAL MANAGEMENT LLC",
+      "manager": "AQR CAPITAL MANAGEMENT LLC",
+      "slug": "aqr-capital-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001404599",
+      "name": "Aquamarine Capital Management LLC",
+      "manager": "Guy Spier",
+      "slug": "guy-spier",
+      "featured": true,
+      "filing_date": ""
+    },
+    {
+      "cik": "0002104187",
+      "name": "Aquamarine Financial (Cayman) Ltd",
+      "manager": "Aquamarine Financial (Cayman) Ltd",
+      "slug": "aquamarine-financial-cayman-ltd",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001953324",
+      "name": "Aquamarine Zurich AG",
+      "manager": "Aquamarine Zurich AG",
+      "slug": "aquamarine-zurich-ag",
+      "featured": false,
+      "filing_date": "2026-07-10"
+    },
+    {
+      "cik": "0000936753",
+      "name": "Ariel Investments LLC",
+      "manager": "John Rogers",
+      "slug": "john-rogers",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001164508",
+      "name": "ARROWSTREET CAPITAL, LIMITED PARTNERSHIP",
+      "manager": "ARROWSTREET CAPITAL, LIMITED PARTNERSHIP",
+      "slug": "arrowstreet-capital-limited-partnership",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001088875",
+      "name": "BAILLIE GIFFORD & CO",
+      "manager": "BAILLIE GIFFORD & CO",
+      "slug": "baillie-gifford-co",
+      "featured": false,
+      "filing_date": "2026-08-06"
+    },
+    {
+      "cik": "0000312069",
+      "name": "BARCLAYS PLC",
+      "manager": "BARCLAYS PLC",
+      "slug": "barclays-plc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001061768",
+      "name": "Baupost Group LLC",
+      "manager": "Seth Klarman",
+      "slug": "seth-klarman",
+      "featured": true,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001067983",
+      "name": "Berkshire Hathaway Inc",
+      "manager": "Warren Buffett",
+      "slug": "warren-buffett",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0002012383",
+      "name": "BlackRock, Inc.",
+      "manager": "BlackRock, Inc.",
+      "slug": "blackrock-inc",
+      "featured": false,
+      "filing_date": "2026-08-07"
+    },
+    {
+      "cik": "0001393818",
+      "name": "Blackstone Inc.",
+      "manager": "Blackstone Inc.",
+      "slug": "blackstone-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000872786",
+      "name": "BNP PARIBAS",
+      "manager": "BNP PARIBAS",
+      "slug": "bnp-paribas",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001520354",
+      "name": "BNP Paribas Asset Management Holding S.A.",
+      "manager": "BNP Paribas Asset Management Holding S.A.",
+      "slug": "bnp-paribas-asset-management-holding-s-a",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001166588",
+      "name": "BNP PARIBAS FINANCIAL MARKETS",
+      "manager": "BNP PARIBAS FINANCIAL MARKETS",
+      "slug": "bnp-paribas-financial-markets",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "000000000y",
+      "name": "Board of Trustees of The Leland Stanford Junior Universit",
+      "manager": "Board of Trustees of The Leland Stanford Junior Universit",
+      "slug": "board-of-trustees-of-the-leland-stanford-junior-universit",
+      "featured": false,
+      "filing_date": "1315828"
+    },
+    {
+      "cik": "0001386060",
+      "name": "Boston Partners",
+      "manager": "Boston Partners",
+      "slug": "boston-partners",
+      "featured": false,
+      "filing_date": "2026-08-04"
+    },
+    {
+      "cik": "0001512857",
+      "name": "Brevan Howard Capital Management LP",
+      "manager": "Brevan Howard Capital Management LP",
+      "slug": "brevan-howard-capital-management-lp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001600319",
+      "name": "Bridgewater Advisors Inc.",
+      "manager": "Bridgewater Advisors Inc.",
+      "slug": "bridgewater-advisors-inc",
+      "featured": false,
+      "filing_date": "2026-08-05"
+    },
+    {
+      "cik": "0001350694",
+      "name": "Bridgewater Associates LP",
+      "manager": "Ray Dalio",
+      "slug": "ray-dalio",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001001085",
+      "name": "BROOKFIELD Corp /ON/",
+      "manager": "BROOKFIELD Corp /ON/",
+      "slug": "brookfield-corp-on",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001283718",
+      "name": "CANADA PENSION PLAN INVESTMENT BOARD",
+      "manager": "CANADA PENSION PLAN INVESTMENT BOARD",
+      "slug": "canada-pension-plan-investment-board",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001279936",
+      "name": "Cantillon Capital Management LLC",
+      "manager": "William von Mueffling",
+      "slug": "william-von-mueffling",
+      "featured": true,
+      "filing_date": "2026-07-29"
+    },
+    {
+      "cik": "0001422848",
+      "name": "Capital Research Global Investors",
+      "manager": "Capital Research Global Investors",
+      "slug": "capital-research-global-investors",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001557017",
+      "name": "Capula Management Ltd",
+      "manager": "Capula Management Ltd",
+      "slug": "capula-management-ltd",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001527166",
+      "name": "Carlyle Group Inc.",
+      "manager": "Carlyle Group Inc.",
+      "slug": "carlyle-group-inc",
+      "featured": false,
+      "filing_date": "2026-08-07"
+    },
+    {
+      "cik": "0002051323",
+      "name": "CAXTON ASSOCIATES LLP",
+      "manager": "CAXTON ASSOCIATES LLP",
+      "slug": "caxton-associates-llp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001388551",
+      "name": "CAXTON CORP",
+      "manager": "CAXTON CORP",
+      "slug": "caxton-corp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001423053",
+      "name": "CITADEL ADVISORS LLC",
+      "manager": "CITADEL ADVISORS LLC",
+      "slug": "citadel-advisors-llc",
+      "featured": false,
+      "filing_date": "2026-09-02"
+    },
+    {
+      "cik": "0001348883",
+      "name": "Clearbridge Investments, LLC",
+      "manager": "Clearbridge Investments, LLC",
+      "slug": "clearbridge-investments-llc",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001135730",
+      "name": "Coatue Management LLC",
+      "manager": "Philippe Laffont",
+      "slug": "philippe-laffont",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001284812",
+      "name": "COHEN & STEERS, INC.",
+      "manager": "COHEN & STEERS, INC.",
+      "slug": "cohen-steers-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001535472",
+      "name": "Corvex Management LP",
+      "manager": "Corvex Management LP",
+      "slug": "corvex-management-lp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001747057",
+      "name": "D1 Capital Partners LP",
+      "manager": "Dan Sundheim",
+      "slug": "dan-sundheim",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001595082",
+      "name": "DAVIDSON KEMPNER CAPITAL MANAGEMENT LP",
+      "manager": "DAVIDSON KEMPNER CAPITAL MANAGEMENT LP",
+      "slug": "davidson-kempner-capital-management-lp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001036325",
+      "name": "DAVIS SELECTED ADVISERS",
+      "manager": "DAVIS SELECTED ADVISERS",
+      "slug": "davis-selected-advisers",
+      "featured": false,
+      "filing_date": "2026-08-11"
+    },
+    {
+      "cik": "0001456228",
+      "name": "DekaBank Deutsche Girozentrale",
+      "manager": "DekaBank Deutsche Girozentrale",
+      "slug": "dekabank-deutsche-girozentrale",
+      "featured": false,
+      "filing_date": "2026-08-05"
+    },
+    {
+      "cik": "0000948046",
+      "name": "DEUTSCHE BANK AG\\",
+      "manager": "DEUTSCHE BANK AG\\",
+      "slug": "deutsche-bank-ag",
+      "featured": false,
+      "filing_date": "2026-08-07"
+    },
+    {
+      "cik": "0000354204",
+      "name": "DIMENSIONAL FUND ADVISORS LP",
+      "manager": "DIMENSIONAL FUND ADVISORS LP",
+      "slug": "dimensional-fund-advisors-lp",
+      "featured": false,
+      "filing_date": "2026-08-11"
+    },
+    {
+      "cik": "0001389507",
+      "name": "DISCOVERY CAPITAL MANAGEMENT, LLC / CT",
+      "manager": "DISCOVERY CAPITAL MANAGEMENT, LLC / CT",
+      "slug": "discovery-capital-management-llc-ct",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001489933",
+      "name": "DME Capital Management LP",
+      "manager": "David Einhorn",
+      "slug": "david-einhorn",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000200217",
+      "name": "DODGE & COX",
+      "manager": "DODGE & COX",
+      "slug": "dodge-cox",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001536411",
+      "name": "Duquesne Family Office LLC",
+      "manager": "Stanley Druckenmiller",
+      "slug": "stanley-druckenmiller",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "00000000rt",
+      "name": "DZ BANK AG Deutsche Zentral Genossenschafts Bank, Frankfu",
+      "manager": "DZ BANK AG Deutsche Zentral Genossenschafts Bank, Frankfu",
+      "slug": "dz-bank-ag-deutsche-zentral-genossenschafts-bank-frankfu",
+      "featured": false,
+      "filing_date": "1694217"
+    },
+    {
+      "cik": "0001581811",
+      "name": "Egerton Capital (UK) LLP",
+      "manager": "Egerton Capital (UK) LLP",
+      "slug": "egerton-capital-uk-llp",
+      "featured": false,
+      "filing_date": "2026-07-21"
+    },
+    {
+      "cik": "0001791786",
+      "name": "Elliott Investment Management L.P.",
+      "manager": "Elliott Investment Management L.P.",
+      "slug": "elliott-investment-management-l-p",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0002016719",
+      "name": "Fairman Group, LLC",
+      "manager": "Fairman Group, LLC",
+      "slug": "fairman-group-llc",
+      "featured": false,
+      "filing_date": "2026-08-04"
+    },
+    {
+      "cik": "0000909661",
+      "name": "FARALLON CAPITAL MANAGEMENT, L.L.C.",
+      "manager": "FARALLON CAPITAL MANAGEMENT, L.L.C.",
+      "slug": "farallon-capital-management-l-l-c",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001098151",
+      "name": "FIDELITY D & D BANCORP INC",
+      "manager": "FIDELITY D & D BANCORP INC",
+      "slug": "fidelity-d-d-bancorp-inc",
+      "featured": false,
+      "filing_date": "2026-08-06"
+    },
+    {
+      "cik": "0001331875",
+      "name": "Fidelity National Financial, Inc.",
+      "manager": "Fidelity National Financial, Inc.",
+      "slug": "fidelity-national-financial-inc",
+      "featured": false,
+      "filing_date": "2026-08-07"
+    },
+    {
+      "cik": "0001325447",
+      "name": "First Eagle Investment Management LLC",
+      "manager": "Matthew McLennan",
+      "slug": "matthew-mclennan",
+      "featured": true,
+      "filing_date": "2026-08-24"
+    },
+    {
+      "cik": "0001377581",
+      "name": "First Pacific Advisors LP",
+      "manager": "Steven Romick",
+      "slug": "steven-romick",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001810089",
+      "name": "First Pacific Financial",
+      "manager": "First Pacific Financial",
+      "slug": "first-pacific-financial",
+      "featured": false,
+      "filing_date": "2026-07-20"
+    },
+    {
+      "cik": "0000850529",
+      "name": "Fisher Asset Management, LLC",
+      "manager": "Fisher Asset Management, LLC",
+      "slug": "fisher-asset-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-04"
+    },
+    {
+      "cik": "0000315066",
+      "name": "FMR LLC",
+      "manager": "FMR LLC",
+      "slug": "fmr-llc",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0000038777",
+      "name": "FRANKLIN RESOURCES INC",
+      "manager": "FRANKLIN RESOURCES INC",
+      "slug": "franklin-resources-inc",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001010873",
+      "name": "FRANKLIN STREET ADVISORS INC /NC",
+      "manager": "FRANKLIN STREET ADVISORS INC /NC",
+      "slug": "franklin-street-advisors-inc-nc",
+      "featured": false,
+      "filing_date": "2026-07-09"
+    },
+    {
+      "cik": "0001707856",
+      "name": "Franklin, Parlapiano, Turner & Welch, LLC",
+      "manager": "Franklin, Parlapiano, Turner & Welch, LLC",
+      "slug": "franklin-parlapiano-turner-welch-llc",
+      "featured": false,
+      "filing_date": "2026-07-09"
+    },
+    {
+      "cik": "0001868537",
+      "name": "FUNDSMITH INVESTMENT SERVICES LTD.",
+      "manager": "FUNDSMITH INVESTMENT SERVICES LTD.",
+      "slug": "fundsmith-investment-services-ltd",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001569205",
+      "name": "Fundsmith LLP",
+      "manager": "Terry Smith",
+      "slug": "terry-smith",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001911970",
+      "name": "Future Fund LLC",
+      "manager": "Future Fund LLC",
+      "slug": "future-fund-llc",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0000932724",
+      "name": "GABELLI & Co INVESTMENT ADVISERS, INC.",
+      "manager": "GABELLI & Co INVESTMENT ADVISERS, INC.",
+      "slug": "gabelli-co-investment-advisers-inc",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001081407",
+      "name": "GABELLI FUNDS LLC",
+      "manager": "GABELLI FUNDS LLC",
+      "slug": "gabelli-funds-llc",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0000807249",
+      "name": "GAMCO INVESTORS, INC. ET AL",
+      "manager": "GAMCO INVESTORS, INC. ET AL",
+      "slug": "gamco-investors-inc-et-al",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001166559",
+      "name": "Gates Foundation Trust",
+      "manager": "Bill Gates",
+      "slug": "bill-gates",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001214717",
+      "name": "GEODE CAPITAL MANAGEMENT, LLC",
+      "manager": "GEODE CAPITAL MANAGEMENT, LLC",
+      "slug": "geode-capital-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001641864",
+      "name": "Giverny Capital Inc",
+      "manager": "Francois Rochon",
+      "slug": "francois-rochon",
+      "featured": true,
+      "filing_date": "2026-08-26"
+    },
+    {
+      "cik": "0000886982",
+      "name": "GOLDMAN SACHS GROUP INC",
+      "manager": "GOLDMAN SACHS GROUP INC",
+      "slug": "goldman-sachs-group-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001697233",
+      "name": "GQG Partners LLC",
+      "manager": "GQG Partners LLC",
+      "slug": "gqg-partners-llc",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001766504",
+      "name": "Greenlea Lane Capital Management LLC",
+      "manager": "Josh Tarasoff",
+      "slug": "josh-tarasoff",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001162170",
+      "name": "GREENLEAF TRUST",
+      "manager": "GREENLEAF TRUST",
+      "slug": "greenleaf-trust",
+      "featured": false,
+      "filing_date": "2026-07-21"
+    },
+    {
+      "cik": "0000813917",
+      "name": "Harris Associates LP",
+      "manager": "Bill Nygren",
+      "slug": "bill-nygren",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001082621",
+      "name": "HARVARD MANAGEMENT CO INC",
+      "manager": "HARVARD MANAGEMENT CO INC",
+      "slug": "harvard-management-co-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001709323",
+      "name": "Himalaya Capital Management LLC",
+      "manager": "Li Lu",
+      "slug": "li-lu",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001164833",
+      "name": "HOTCHKIS & WILEY CAPITAL MANAGEMENT LLC",
+      "manager": "HOTCHKIS & WILEY CAPITAL MANAGEMENT LLC",
+      "slug": "hotchkis-wiley-capital-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000873630",
+      "name": "HSBC HOLDINGS PLC",
+      "manager": "HSBC HOLDINGS PLC",
+      "slug": "hsbc-holdings-plc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000921669",
+      "name": "Icahn Carl C",
+      "manager": "Carl Icahn",
+      "slug": "carl-icahn",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001697850",
+      "name": "ICICI Prudential Asset Management Co Ltd",
+      "manager": "ICICI Prudential Asset Management Co Ltd",
+      "slug": "icici-prudential-asset-management-co-ltd",
+      "featured": false,
+      "filing_date": "2026-08-06"
+    },
+    {
+      "cik": "0000914208",
+      "name": "Invesco Ltd.",
+      "manager": "Invesco Ltd.",
+      "slug": "invesco-ltd",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001998597",
+      "name": "JANA Partners Management, LP",
+      "manager": "JANA Partners Management, LP",
+      "slug": "jana-partners-management-lp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000019617",
+      "name": "JPMORGAN CHASE & CO",
+      "manager": "JPMORGAN CHASE & CO",
+      "slug": "jpmorgan-chase-co",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001039565",
+      "name": "Kahn Brothers Group Inc",
+      "manager": "Irving Kahn",
+      "slug": "irving-kahn",
+      "featured": true,
+      "filing_date": "2026-08-17"
+    },
+    {
+      "cik": "0001218199",
+      "name": "KING STREET CAPITAL MANAGEMENT, L.P.",
+      "manager": "KING STREET CAPITAL MANAGEMENT, L.P.",
+      "slug": "king-street-capital-management-l-p",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001608485",
+      "name": "LANSDOWNE PARTNERS (UK) LLP",
+      "manager": "LANSDOWNE PARTNERS (UK) LLP",
+      "slug": "lansdowne-partners-uk-llp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000764068",
+      "name": "Legal & General Group Plc",
+      "manager": "Legal & General Group Plc",
+      "slug": "legal-general-group-plc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001569049",
+      "name": "LIGHT STREET CAPITAL MANAGEMENT, LLC",
+      "manager": "LIGHT STREET CAPITAL MANAGEMENT, LLC",
+      "slug": "light-street-capital-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001484150",
+      "name": "Lindsell Train Ltd",
+      "manager": "Lindsell Train Ltd",
+      "slug": "lindsell-train-ltd",
+      "featured": false,
+      "filing_date": "2026-07-15"
+    },
+    {
+      "cik": "0001061165",
+      "name": "Lone Pine Capital LLC",
+      "manager": "Stephen Mandel",
+      "slug": "stephen-mandel",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001540866",
+      "name": "Makaira Partners LLC",
+      "manager": "Thomas Bancroft",
+      "slug": "thomas-bancroft",
+      "featured": true,
+      "filing_date": "2026-05-15"
+    },
+    {
+      "cik": "0001637460",
+      "name": "Man Group plc",
+      "manager": "Man Group plc",
+      "slug": "man-group-plc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001318757",
+      "name": "MARSHALL WACE, LLP",
+      "manager": "MARSHALL WACE, LLP",
+      "slug": "marshall-wace-llp",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001410830",
+      "name": "Matrix Capital Management Company, LP",
+      "manager": "Matrix Capital Management Company, LP",
+      "slug": "matrix-capital-management-company-lp",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0000934639",
+      "name": "MAVERICK CAPITAL LTD",
+      "manager": "MAVERICK CAPITAL LTD",
+      "slug": "maverick-capital-ltd",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001099219",
+      "name": "METLIFE INC",
+      "manager": "METLIFE INC",
+      "slug": "metlife-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001529735",
+      "name": "MetLife Investment Management, LLC",
+      "manager": "MetLife Investment Management, LLC",
+      "slug": "metlife-investment-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0002115416",
+      "name": "Midway Capital Research & Management",
+      "manager": "Midway Capital Research & Management",
+      "slug": "midway-capital-research-management",
+      "featured": false,
+      "filing_date": "2026-07-14"
+    },
+    {
+      "cik": "0001273087",
+      "name": "MILLENNIUM MANAGEMENT LLC",
+      "manager": "MILLENNIUM MANAGEMENT LLC",
+      "slug": "millennium-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001135778",
+      "name": "Miller Value Partners LLC",
+      "manager": "Bill Miller",
+      "slug": "bill-miller",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001545545",
+      "name": "Mitsubishi UFJ Morgan Stanley Securities Co., Ltd.",
+      "manager": "Mitsubishi UFJ Morgan Stanley Securities Co., Ltd.",
+      "slug": "mitsubishi-ufj-morgan-stanley-securities-co-ltd",
+      "featured": false,
+      "filing_date": "2026-07-15"
+    },
+    {
+      "cik": "0001142206",
+      "name": "MITSUI SUMITOMO INSURANCE CO LTD",
+      "manager": "MITSUI SUMITOMO INSURANCE CO LTD",
+      "slug": "mitsui-sumitomo-insurance-co-ltd",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001512734",
+      "name": "Mizuho Bank, Ltd.",
+      "manager": "Mizuho Bank, Ltd.",
+      "slug": "mizuho-bank-ltd",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001335730",
+      "name": "MIZUHO FINANCIAL GROUP INC",
+      "manager": "MIZUHO FINANCIAL GROUP INC",
+      "slug": "mizuho-financial-group-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001825516",
+      "name": "MIZUHO MARKETS AMERICAS LLC",
+      "manager": "MIZUHO MARKETS AMERICAS LLC",
+      "slug": "mizuho-markets-americas-llc",
+      "featured": false,
+      "filing_date": "2026-07-24"
+    },
+    {
+      "cik": "0001803149",
+      "name": "Mizuho Markets Cayman LP",
+      "manager": "Mizuho Markets Cayman LP",
+      "slug": "mizuho-markets-cayman-lp",
+      "featured": false,
+      "filing_date": "2026-07-24"
+    },
+    {
+      "cik": "0001520309",
+      "name": "Mizuho Securities Co. Ltd.",
+      "manager": "Mizuho Securities Co. Ltd.",
+      "slug": "mizuho-securities-co-ltd",
+      "featured": false,
+      "filing_date": "2026-05-07"
+    },
+    {
+      "cik": "0000812291",
+      "name": "MIZUHO SECURITIES USA LLC",
+      "manager": "MIZUHO SECURITIES USA LLC",
+      "slug": "mizuho-securities-usa-llc",
+      "featured": false,
+      "filing_date": "2026-07-28"
+    },
+    {
+      "cik": "0001448574",
+      "name": "MOORE CAPITAL MANAGEMENT, LP",
+      "manager": "MOORE CAPITAL MANAGEMENT, LP",
+      "slug": "moore-capital-management-lp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000895421",
+      "name": "MORGAN STANLEY",
+      "manager": "MORGAN STANLEY",
+      "slug": "morgan-stanley",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0002026079",
+      "name": "Morgan Stanley Institutional Investment Advisors LLC",
+      "manager": "Morgan Stanley Institutional Investment Advisors LLC",
+      "slug": "morgan-stanley-institutional-investment-advisors-llc",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001465109",
+      "name": "Neuberger Berman Group LLC",
+      "manager": "Neuberger Berman Group LLC",
+      "slug": "neuberger-berman-group-llc",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0000810265",
+      "name": "NEW YORK STATE COMMON RETIREMENT FUND",
+      "manager": "NEW YORK STATE COMMON RETIREMENT FUND",
+      "slug": "new-york-state-common-retirement-fund",
+      "featured": false,
+      "filing_date": "2026-07-29"
+    },
+    {
+      "cik": "0001055964",
+      "name": "NOMURA ASSET MANAGEMENT CO LTD",
+      "manager": "NOMURA ASSET MANAGEMENT CO LTD",
+      "slug": "nomura-asset-management-co-ltd",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0000921739",
+      "name": "NOMURA ASSET MANAGEMENT INTERNATIONAL INC.",
+      "manager": "NOMURA ASSET MANAGEMENT INTERNATIONAL INC.",
+      "slug": "nomura-asset-management-international-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001163653",
+      "name": "NOMURA HOLDINGS INC",
+      "manager": "NOMURA HOLDINGS INC",
+      "slug": "nomura-holdings-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001374170",
+      "name": "NORGES BANK",
+      "manager": "NORGES BANK",
+      "slug": "norges-bank",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0000073124",
+      "name": "NORTHERN TRUST CORP",
+      "manager": "NORTHERN TRUST CORP",
+      "slug": "northern-trust-corp",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0000949509",
+      "name": "Oaktree Capital Management LP",
+      "manager": "Howard Marks",
+      "slug": "howard-marks",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001822973",
+      "name": "Oaktree Fund Advisors, LLC",
+      "manager": "Oaktree Fund Advisors, LLC",
+      "slug": "oaktree-fund-advisors-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "00000000AM",
+      "name": "OCONNOR, A Distinct Business Unit of UBS ASSET MANAGEMENT",
+      "manager": "OCONNOR, A Distinct Business Unit of UBS ASSET MANAGEMENT",
+      "slug": "oconnor-a-distinct-business-unit-of-ubs-asset-management",
+      "featured": false,
+      "filing_date": "1132716"
+    },
+    {
+      "cik": "0000947996",
+      "name": "Olstein Capital Management LP",
+      "manager": "Robert Olstein",
+      "slug": "robert-olstein",
+      "featured": true,
+      "filing_date": "2026-07-07"
+    },
+    {
+      "cik": "0000937567",
+      "name": "ONTARIO TEACHERS PENSION PLAN BOARD",
+      "manager": "ONTARIO TEACHERS PENSION PLAN BOARD",
+      "slug": "ontario-teachers-pension-plan-board",
+      "featured": false,
+      "filing_date": "2026-08-07"
+    },
+    {
+      "cik": "0001313756",
+      "name": "Owl Creek Asset Management, L.P.",
+      "manager": "Owl Creek Asset Management, L.P.",
+      "slug": "owl-creek-asset-management-l-p",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0002133805",
+      "name": "Owl Creek Wealth Partners LLC",
+      "manager": "Owl Creek Wealth Partners LLC",
+      "slug": "owl-creek-wealth-partners-llc",
+      "featured": false,
+      "filing_date": "2026-07-20"
+    },
+    {
+      "cik": "0001035674",
+      "name": "PAULSON & CO. INC.",
+      "manager": "PAULSON & CO. INC.",
+      "slug": "paulson-co-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001731878",
+      "name": "Paulson Wealth Management Inc.",
+      "manager": "Paulson Wealth Management Inc.",
+      "slug": "paulson-wealth-management-inc",
+      "featured": false,
+      "filing_date": "2026-08-04"
+    },
+    {
+      "cik": "0001564702",
+      "name": "PDT Partners, LLC",
+      "manager": "PDT Partners, LLC",
+      "slug": "pdt-partners-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001336528",
+      "name": "Pershing Square Capital Management LP",
+      "manager": "Bill Ackman",
+      "slug": "bill-ackman",
+      "featured": true,
+      "filing_date": "2026-05-15"
+    },
+    {
+      "cik": "0002026053",
+      "name": "PERSHING SQUARE INC.",
+      "manager": "PERSHING SQUARE INC.",
+      "slug": "pershing-square-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001603466",
+      "name": "Point72 Asset Management, L.P.",
+      "manager": "Point72 Asset Management, L.P.",
+      "slug": "point72-asset-management-l-p",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001954961",
+      "name": "Point72 Private Investments, LLC",
+      "manager": "Point72 Private Investments, LLC",
+      "slug": "point72-private-investments-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001536630",
+      "name": "Potrero Capital Research LLC",
+      "manager": "Potrero Capital Research LLC",
+      "slug": "potrero-capital-research-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0002053628",
+      "name": "Powszechne Towarzystwo Emerytalne Allianz Polska S.A.",
+      "manager": "Powszechne Towarzystwo Emerytalne Allianz Polska S.A.",
+      "slug": "powszechne-towarzystwo-emerytalne-allianz-polska-s-a",
+      "featured": false,
+      "filing_date": "2026-07-16"
+    },
+    {
+      "cik": "0000080255",
+      "name": "PRICE T ROWE ASSOCIATES INC /MD/",
+      "manager": "PRICE T ROWE ASSOCIATES INC /MD/",
+      "slug": "price-t-rowe-associates-inc-md",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000763212",
+      "name": "PRIMECAP MANAGEMENT CO/CA/",
+      "manager": "PRIMECAP MANAGEMENT CO/CA/",
+      "slug": "primecap-management-co-ca",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001167026",
+      "name": "PRINCETON CAPITAL MANAGEMENT LLC",
+      "manager": "PRINCETON CAPITAL MANAGEMENT LLC",
+      "slug": "princeton-capital-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-11"
+    },
+    {
+      "cik": "0001767349",
+      "name": "Princeton Global Asset Management LLC",
+      "manager": "Princeton Global Asset Management LLC",
+      "slug": "princeton-global-asset-management-llc",
+      "featured": false,
+      "filing_date": "2026-07-16"
+    },
+    {
+      "cik": "0001137774",
+      "name": "PRUDENTIAL FINANCIAL INC",
+      "manager": "PRUDENTIAL FINANCIAL INC",
+      "slug": "prudential-financial-inc",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0000898419",
+      "name": "PRUDENTIAL PLC",
+      "manager": "PRUDENTIAL PLC",
+      "slug": "prudential-plc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001027796",
+      "name": "Pzena Investment Management LLC",
+      "manager": "Richard Pzena",
+      "slug": "richard-pzena",
+      "featured": true,
+      "filing_date": "2026-08-07"
+    },
+    {
+      "cik": "0000315054",
+      "name": "REGENTS OF THE UNIVERSITY OF CALIFORNIA",
+      "manager": "REGENTS OF THE UNIVERSITY OF CALIFORNIA",
+      "slug": "regents-of-the-university-of-california",
+      "featured": false,
+      "filing_date": "2026-08-11"
+    },
+    {
+      "cik": "0001037389",
+      "name": "RENAISSANCE TECHNOLOGIES LLC",
+      "manager": "RENAISSANCE TECHNOLOGIES LLC",
+      "slug": "renaissance-technologies-llc",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001720792",
+      "name": "Ruane Cunniff & Goldfarb LP",
+      "manager": "Ruane Cunniff",
+      "slug": "ruane-cunniff",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001582090",
+      "name": "Sachem Head Capital Management LP",
+      "manager": "Sachem Head Capital Management LP",
+      "slug": "sachem-head-capital-management-lp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001596055",
+      "name": "Silver Lake Advisory, LLC",
+      "manager": "Silver Lake Advisory, LLC",
+      "slug": "silver-lake-advisory-llc",
+      "featured": false,
+      "filing_date": "2026-07-27"
+    },
+    {
+      "cik": "0001418226",
+      "name": "Silver Lake Group, L.L.C.",
+      "manager": "Silver Lake Group, L.L.C.",
+      "slug": "silver-lake-group-l-l-c",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001730769",
+      "name": "Solstein Capital, LLC",
+      "manager": "Solstein Capital, LLC",
+      "slug": "solstein-capital-llc",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001029160",
+      "name": "SOROS FUND MANAGEMENT LLC",
+      "manager": "SOROS FUND MANAGEMENT LLC",
+      "slug": "soros-fund-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000807985",
+      "name": "Southeastern Asset Management Inc",
+      "manager": "Mason Hawkins",
+      "slug": "mason-hawkins",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001601489",
+      "name": "Stanley-Laman Group, Ltd.",
+      "manager": "Stanley-Laman Group, Ltd.",
+      "slug": "stanley-laman-group-ltd",
+      "featured": false,
+      "filing_date": "2026-08-05"
+    },
+    {
+      "cik": "0001517137",
+      "name": "Starboard Value LP",
+      "manager": "Starboard Value LP",
+      "slug": "starboard-value-lp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000854157",
+      "name": "STATE OF WISCONSIN INVESTMENT BOARD",
+      "manager": "STATE OF WISCONSIN INVESTMENT BOARD",
+      "slug": "state-of-wisconsin-investment-board",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000093751",
+      "name": "STATE STREET CORP",
+      "manager": "STATE STREET CORP",
+      "slug": "state-street-corp",
+      "featured": false,
+      "filing_date": "2026-09-22"
+    },
+    {
+      "cik": "0000937760",
+      "name": "SUMITOMO LIFE INSURANCE CO",
+      "manager": "SUMITOMO LIFE INSURANCE CO",
+      "slug": "sumitomo-life-insurance-co",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001411530",
+      "name": "Sumitomo Mitsui DS Asset Management Company, Ltd",
+      "manager": "Sumitomo Mitsui DS Asset Management Company, Ltd",
+      "slug": "sumitomo-mitsui-ds-asset-management-company-ltd",
+      "featured": false,
+      "filing_date": "2026-07-22"
+    },
+    {
+      "cik": "0001022837",
+      "name": "SUMITOMO MITSUI FINANCIAL GROUP, INC.",
+      "manager": "SUMITOMO MITSUI FINANCIAL GROUP, INC.",
+      "slug": "sumitomo-mitsui-financial-group-inc",
+      "featured": false,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0001475365",
+      "name": "Sumitomo Mitsui Trust Group, Inc.",
+      "manager": "Sumitomo Mitsui Trust Group, Inc.",
+      "slug": "sumitomo-mitsui-trust-group-inc",
+      "featured": false,
+      "filing_date": "2026-07-30"
+    },
+    {
+      "cik": "0001914395",
+      "name": "Summit Investment Advisory Services, LLC",
+      "manager": "Summit Investment Advisory Services, LLC",
+      "slug": "summit-investment-advisory-services-llc",
+      "featured": false,
+      "filing_date": "2026-07-24"
+    },
+    {
+      "cik": "0001897612",
+      "name": "T. Rowe Price Investment Management, Inc.",
+      "manager": "T. Rowe Price Investment Management, Inc.",
+      "slug": "t-rowe-price-investment-management-inc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001647251",
+      "name": "TCI Fund Management Ltd",
+      "manager": "Chris Hohn",
+      "slug": "chris-hohn",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001021944",
+      "name": "Temasek Holdings (Private) Ltd",
+      "manager": "Temasek Holdings (Private) Ltd",
+      "slug": "temasek-holdings-private-ltd",
+      "featured": false,
+      "filing_date": "2026-08-07"
+    },
+    {
+      "cik": "0001099281",
+      "name": "THIRD AVENUE MANAGEMENT LLC",
+      "manager": "THIRD AVENUE MANAGEMENT LLC",
+      "slug": "third-avenue-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001040273",
+      "name": "Third Point LLC",
+      "manager": "Dan Loeb",
+      "slug": "dan-loeb",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001450701",
+      "name": "THOMA BRAVO, L.P.",
+      "manager": "THOMA BRAVO, L.P.",
+      "slug": "thoma-bravo-l-p",
+      "featured": false,
+      "filing_date": "2026-08-04"
+    },
+    {
+      "cik": "0001167483",
+      "name": "Tiger Global Management LLC",
+      "manager": "Chase Coleman",
+      "slug": "chase-coleman",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0002054965",
+      "name": "Towarzystwo Funduszy Inwestycyjnych Allianz Polska S.A.",
+      "manager": "Towarzystwo Funduszy Inwestycyjnych Allianz Polska S.A.",
+      "slug": "towarzystwo-funduszy-inwestycyjnych-allianz-polska-s-a",
+      "featured": false,
+      "filing_date": "2026-07-10"
+    },
+    {
+      "cik": "0001345471",
+      "name": "Trian Fund Management LP",
+      "manager": "Nelson Peltz",
+      "slug": "nelson-peltz",
+      "featured": true,
+      "filing_date": "2026-08-12"
+    },
+    {
+      "cik": "0001454502",
+      "name": "Triple Frond Partners LLC",
+      "manager": "Stuart McLaughlin",
+      "slug": "stuart-mclaughlin",
+      "featured": true,
+      "filing_date": "2026-08-13"
+    },
+    {
+      "cik": "0000923093",
+      "name": "TUDOR INVESTMENT CORP ET AL",
+      "manager": "TUDOR INVESTMENT CORP ET AL",
+      "slug": "tudor-investment-corp-et-al",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000732905",
+      "name": "Tweedy Browne Company LLC",
+      "manager": "Tweedy Browne",
+      "slug": "tweedy-browne",
+      "featured": true,
+      "filing_date": ""
+    },
+    {
+      "cik": "0001478735",
+      "name": "TWO SIGMA ADVISERS, LP",
+      "manager": "TWO SIGMA ADVISERS, LP",
+      "slug": "two-sigma-advisers-lp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001179392",
+      "name": "TWO SIGMA INVESTMENTS, LP",
+      "manager": "TWO SIGMA INVESTMENTS, LP",
+      "slug": "two-sigma-investments-lp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001450144",
+      "name": "TWO SIGMA SECURITIES, LLC",
+      "manager": "TWO SIGMA SECURITIES, LLC",
+      "slug": "two-sigma-securities-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000000AME",
+      "name": "UBS AM, a distinct business unit of UBS ASSET MANAGEMENT",
+      "manager": "UBS AM, a distinct business unit of UBS ASSET MANAGEMENT",
+      "slug": "ubs-am-a-distinct-business-unit-of-ubs-asset-management",
+      "featured": false,
+      "filing_date": "861177"
+    },
+    {
+      "cik": "0001019231",
+      "name": "UNIVERSITY OF TEXAS/TEXAS AM INVESTMENT MANAGEMENT CO",
+      "manager": "UNIVERSITY OF TEXAS/TEXAS AM INVESTMENT MANAGEMENT CO",
+      "slug": "university-of-texas-texas-am-investment-management-co",
+      "featured": false,
+      "filing_date": "2026-08-03"
+    },
+    {
+      "cik": "0001697868",
+      "name": "Valley Forge Capital Management LP",
+      "manager": "Dev Kantesaria",
+      "slug": "dev-kantesaria",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000920655",
+      "name": "VALLEY FORGE INVESTMENT CONSULTANTS INC ADV",
+      "manager": "VALLEY FORGE INVESTMENT CONSULTANTS INC ADV",
+      "slug": "valley-forge-investment-consultants-inc-adv",
+      "featured": false,
+      "filing_date": "2026-08-07"
+    },
+    {
+      "cik": "0001418814",
+      "name": "ValueAct Holdings LP",
+      "manager": "Mason Morfit",
+      "slug": "mason-morfit",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0000869178",
+      "name": "VAN ECK ASSOCIATES CORP",
+      "manager": "VAN ECK ASSOCIATES CORP",
+      "slug": "van-eck-associates-corp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001103804",
+      "name": "Viking Global Investors LP",
+      "manager": "Andreas Halvorsen",
+      "slug": "andreas-halvorsen",
+      "featured": true,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001569532",
+      "name": "VISTA EQUITY PARTNERS MANAGEMENT, LLC",
+      "manager": "VISTA EQUITY PARTNERS MANAGEMENT, LLC",
+      "slug": "vista-equity-partners-management-llc",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001748726",
+      "name": "Watchman Group, Inc.",
+      "manager": "Watchman Group, Inc.",
+      "slug": "watchman-group-inc",
+      "featured": false,
+      "filing_date": "2026-07-27"
+    },
+    {
+      "cik": "0001026720",
+      "name": "WELLCOME TRUST LTD (THE) as trustee of the WELLCOME TRUST",
+      "manager": "WELLCOME TRUST LTD (THE) as trustee of the WELLCOME TRUST",
+      "slug": "wellcome-trust-ltd-the-as-trustee-of-the-wellcome-trust",
+      "featured": false,
+      "filing_date": "2026-07-09"
+    },
+    {
+      "cik": "0000902219",
+      "name": "WELLINGTON MANAGEMENT GROUP LLP",
+      "manager": "WELLINGTON MANAGEMENT GROUP LLP",
+      "slug": "wellington-management-group-llp",
+      "featured": false,
+      "filing_date": "2026-08-14"
+    },
+    {
+      "cik": "0001612063",
+      "name": "WINTON GROUP Ltd",
+      "manager": "WINTON GROUP Ltd",
+      "slug": "winton-group-ltd",
+      "featured": false,
+      "filing_date": "2026-08-07"
+    },
+    {
+      "cik": "0000905567",
+      "name": "YACKTMAN ASSET MANAGEMENT LP",
+      "manager": "YACKTMAN ASSET MANAGEMENT LP",
+      "slug": "yacktman-asset-management-lp",
+      "featured": false,
+      "filing_date": "2026-08-11"
+    }
+  ]
+}

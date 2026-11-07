@@ -1,0 +1,144 @@
+{
+  "slug": "silver-lake-group-l-l-c",
+  "manager": "Silver Lake Group, L.L.C.",
+  "cik": "0001418226",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001193125-26-350592",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1418226/000119312526350592/0001193125-26-350592-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": false,
+      "total_value": 4579551414.0,
+      "holdings": [
+        {
+          "issuer": "FIRST ADVANTAGE CORP NEW",
+          "title": "COM",
+          "cusip": "31846B108",
+          "ticker": null,
+          "value": 1616519012.0,
+          "shares": 89557840.0,
+          "put_call": null,
+          "weight": 0.3529863224284788
+        },
+        {
+          "issuer": "UNITY SOFTWARE INC",
+          "title": "COM",
+          "cusip": "91332U101",
+          "ticker": null,
+          "value": 992737846.0,
+          "shares": 34735404.0,
+          "put_call": null,
+          "weight": 0.21677622025710486
+        },
+        {
+          "issuer": "MADISON SQUARE GRDN SPRT COR",
+          "title": "CL A",
+          "cusip": "55825T103",
+          "ticker": null,
+          "value": 763480730.0,
+          "shares": 1899962.0,
+          "put_call": null,
+          "weight": 0.1667151781866642
+        },
+        {
+          "issuer": "EVERCOMMERCE INC",
+          "title": "COM",
+          "cusip": "29977X105",
+          "ticker": null,
+          "value": 674876468.0,
+          "shares": 67085136.0,
+          "put_call": null,
+          "weight": 0.14736737444127318
+        },
+        {
+          "issuer": "KLARNA GROUP PLC",
+          "title": "SHS",
+          "cusip": "G5279N105",
+          "ticker": null,
+          "value": 292879742.0,
+          "shares": 14470343.0,
+          "put_call": null,
+          "weight": 0.06395380584758732
+        },
+        {
+          "issuer": "N-ABLE INC",
+          "title": "COMMON STOCK",
+          "cusip": "62878D100",
+          "ticker": null,
+          "value": 225609099.0,
+          "shares": 61473869.0,
+          "put_call": null,
+          "weight": 0.04926445378695775
+        },
+        {
+          "issuer": "GOODRX HLDGS INC",
+          "title": "COM CL A",
+          "cusip": "38246G108",
+          "ticker": null,
+          "value": 10172955.0,
+          "shares": 3532276.0,
+          "put_call": null,
+          "weight": 0.0022213867866840813
+        },
+        {
+          "issuer": "SNOWFLAKE INC",
+          "title": "CL A",
+          "cusip": "833445109",
+          "ticker": null,
+          "value": 2410370.0,
+          "shares": 9471.0,
+          "put_call": null,
+          "weight": 0.0005263332108536515
+        },
+        {
+          "issuer": "SIMON PROPERTY GROUP",
+          "title": "NEW COM",
+          "cusip": "828806109",
+          "ticker": null,
+          "value": 301928.0,
+          "shares": 1350.0,
+          "put_call": null,
+          "weight": 6.592960154939752e-05
+        },
+        {
+          "issuer": "HEALTHPEAK PROPERTIES",
+          "title": "COM",
+          "cusip": "42250P103",
+          "ticker": null,
+          "value": 230040.0,
+          "shares": 10800.0,
+          "put_call": null,
+          "weight": 5.0231994185446215e-05
+        },
+        {
+          "issuer": "REALTY INCOME CORP",
+          "title": "COM",
+          "cusip": "756109104",
+          "ticker": null,
+          "value": 213762.0,
+          "shares": 3450.0,
+          "put_call": null,
+          "weight": 4.667749757028931e-05
+        },
+        {
+          "issuer": "AMPLITUDE INC.",
+          "title": "CL A",
+          "cusip": "03213A104",
+          "ticker": null,
+          "value": 119462.0,
+          "shares": 15616.0,
+          "put_call": null,
+          "weight": 2.6085961091035368e-05
+        }
+      ]
+    }
+  ]
+}

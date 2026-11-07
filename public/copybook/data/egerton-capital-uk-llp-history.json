@@ -1,0 +1,254 @@
+{
+  "slug": "egerton-capital-uk-llp",
+  "manager": "Egerton Capital (UK) LLP",
+  "cik": "0001581811",
+  "history_quarters": [
+    "2026Q3"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001581811-26-000009",
+      "filing_date": "2026-10-20",
+      "report_date": "2026-09-30",
+      "quarter": "2026Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1581811/000158181126000009/0001581811-26-000009-index.html",
+      "line_count": 23,
+      "position_count": 23,
+      "values_in_thousands": false,
+      "total_value": 9819775522.0,
+      "holdings": [
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 1465788279.0,
+          "shares": 4079226.0,
+          "put_call": null,
+          "weight": 0.14926902103984777
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 1174524742.0,
+          "shares": 4714127.0,
+          "put_call": null,
+          "weight": 0.11960810502934835
+        },
+        {
+          "issuer": "AMPHENOL CORP",
+          "title": "CL A",
+          "cusip": "032095101",
+          "ticker": null,
+          "value": 902744506.0,
+          "shares": 10708713.0,
+          "put_call": null,
+          "weight": 0.09193127724534149
+        },
+        {
+          "issuer": "NVIDIA CORPORATION",
+          "title": "COM",
+          "cusip": "67066G104",
+          "ticker": "NVDA",
+          "value": 854591337.0,
+          "shares": 3741971.0,
+          "put_call": null,
+          "weight": 0.08702758378594228
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 743522526.0,
+          "shares": 1637246.0,
+          "put_call": null,
+          "weight": 0.07571685567905592
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 715261645.0,
+          "shares": 2099142.0,
+          "put_call": null,
+          "weight": 0.07283889976889434
+        },
+        {
+          "issuer": "DEVON ENERGY CORP NEW",
+          "title": "COM",
+          "cusip": "25179M103",
+          "ticker": null,
+          "value": 498585208.0,
+          "shares": 10829392.0,
+          "put_call": null,
+          "weight": 0.050773585086846554
+        },
+        {
+          "issuer": "MEDLINE INC",
+          "title": "COM CL A",
+          "cusip": "58507V107",
+          "ticker": null,
+          "value": 460920690.0,
+          "shares": 13283017.0,
+          "put_call": null,
+          "weight": 0.04693800677697406
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 311774887.0,
+          "shares": 790364.0,
+          "put_call": null,
+          "weight": 0.031749695937703125
+        },
+        {
+          "issuer": "CRH PLC",
+          "title": "ORD",
+          "cusip": "G25508105",
+          "ticker": null,
+          "value": 300666010.0,
+          "shares": 3631232.0,
+          "put_call": null,
+          "weight": 0.03061841987389577
+        },
+        {
+          "issuer": "INTERACTIVE BROKERS GROUP IN",
+          "title": "COM CL A",
+          "cusip": "45841N107",
+          "ticker": null,
+          "value": 269987336.0,
+          "shares": 3160704.0,
+          "put_call": null,
+          "weight": 0.027494247235603966
+        },
+        {
+          "issuer": "VULCAN MATLS CO",
+          "title": "COM",
+          "cusip": "929160109",
+          "ticker": null,
+          "value": 246565513.0,
+          "shares": 1007912.0,
+          "put_call": null,
+          "weight": 0.025109078353939992
+        },
+        {
+          "issuer": "EMBRAER S.A.",
+          "title": "SPONSORED ADS",
+          "cusip": "29082A107",
+          "ticker": null,
+          "value": 244197834.0,
+          "shares": 3242138.0,
+          "put_call": null,
+          "weight": 0.024867965001125
+        },
+        {
+          "issuer": "FERGUSON ENTERPRISES INC",
+          "title": "COMMON STOCK NEW",
+          "cusip": "31488V107",
+          "ticker": null,
+          "value": 236022392.0,
+          "shares": 1060203.0,
+          "put_call": null,
+          "weight": 0.0240354162344364
+        },
+        {
+          "issuer": "INTERCONTINENTAL EXCHANGE IN",
+          "title": "COM",
+          "cusip": "45866F104",
+          "ticker": "ICE",
+          "value": 223100072.0,
+          "shares": 1467474.0,
+          "put_call": null,
+          "weight": 0.02271946761921102
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 191741707.0,
+          "shares": 347692.0,
+          "put_call": null,
+          "weight": 0.019526078429229494
+        },
+        {
+          "issuer": "LINDE PLC",
+          "title": "SHS",
+          "cusip": "G54950103",
+          "ticker": null,
+          "value": 190777024.0,
+          "shares": 401932.0,
+          "put_call": null,
+          "weight": 0.019427839625517664
+        },
+        {
+          "issuer": "ARMSTRONG WORLD INDS INC NEW",
+          "title": "COM",
+          "cusip": "04247X102",
+          "ticker": null,
+          "value": 160852194.0,
+          "shares": 993344.0,
+          "put_call": null,
+          "weight": 0.016380434933530856
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 139858215.0,
+          "shares": 192860.0,
+          "put_call": null,
+          "weight": 0.014242506326816215
+        },
+        {
+          "issuer": "THERMO FISHER SCIENTIFIC INC",
+          "title": "COM",
+          "cusip": "883556102",
+          "ticker": "TMO",
+          "value": 133813136.0,
+          "shares": 198227.0,
+          "put_call": null,
+          "weight": 0.013626903761721244
+        },
+        {
+          "issuer": "VISTRA CORP",
+          "title": "COM",
+          "cusip": "92840M102",
+          "ticker": null,
+          "value": 131572372.0,
+          "shares": 951011.0,
+          "put_call": null,
+          "weight": 0.013398714838768797
+        },
+        {
+          "issuer": "LAMAR ADVERTISING CO",
+          "title": "CL A",
+          "cusip": "512816109",
+          "ticker": null,
+          "value": 125028539.0,
+          "shares": 867591.0,
+          "put_call": null,
+          "weight": 0.012732321499599348
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 97879358.0,
+          "shares": 933073.0,
+          "put_call": null,
+          "weight": 0.009967575916650368
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "cik": "0001512734",
+  "name": "Mizuho Bank, Ltd.",
+  "manager": "Mizuho Bank, Ltd.",
+  "slug": "mizuho-bank-ltd",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001104659-26-095248",
+  "filing_date": "2026-08-13",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1512734/000110465926095248/0001104659-26-095248-index.html",
+  "line_count": 6,
+  "position_count": 6,
+  "values_in_thousands": false,
+  "total_value": 467371740.0,
+  "holdings": [
+    {
+      "issuer": "SPDR GOLD TR",
+      "title": "GOLD SHS",
+      "cusip": "78463V107",
+      "ticker": null,
+      "value": 298387800.0,
+      "shares": 810000.0,
+      "put_call": null,
+      "weight": 0.6384378310935103
+    },
+    {
+      "issuer": "INVESCO DB COMMDY INDX TRCK",
+      "title": "UNIT",
+      "cusip": "46138B103",
+      "ticker": null,
+      "value": 55986000.0,
+      "shares": 2100000.0,
+      "put_call": null,
+      "weight": 0.11978901420098699
+    },
+    {
+      "issuer": "INVESCO DB MULTI-SECTOR COMM",
+      "title": "AGRICULTURE FD",
+      "cusip": "46140H106",
+      "ticker": null,
+      "value": 34671000.0,
+      "shares": 1300000.0,
+      "put_call": null,
+      "weight": 0.07418291914697281
+    },
+    {
+      "issuer": "ISHARES S&P GSCI COMMODITY-",
+      "title": "UNIT BEN INT",
+      "cusip": "46428R107",
+      "ticker": null,
+      "value": 31460000.0,
+      "shares": 1100000.0,
+      "put_call": null,
+      "weight": 0.06731258505274623
+    },
+    {
+      "issuer": "ISHARES INC",
+      "title": "MSCI STH KOR ETF",
+      "cusip": "464286772",
+      "ticker": null,
+      "value": 24228000.0,
+      "shares": 120000.0,
+      "put_call": null,
+      "weight": 0.05183882106350718
+    },
+    {
+      "issuer": "CME GROUP INC",
+      "title": "COM",
+      "cusip": "12572Q105",
+      "ticker": null,
+      "value": 22638940.0,
+      "shares": 102518.0,
+      "put_call": null,
+      "weight": 0.0484388294422765
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

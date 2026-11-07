@@ -1,0 +1,1142 @@
+{
+  "cik": "0001098151",
+  "name": "FIDELITY D & D BANCORP INC",
+  "manager": "FIDELITY D & D BANCORP INC",
+  "slug": "fidelity-d-d-bancorp-inc",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001437749-26-035124",
+  "filing_date": "2026-11-05",
+  "report_date": "2026-09-30",
+  "quarter": "2026Q3",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1098151/000143774926035124/0001437749-26-035124-index.html",
+  "line_count": 171,
+  "position_count": 112,
+  "values_in_thousands": false,
+  "total_value": 296602351.0,
+  "holdings": [
+    {
+      "issuer": "SPDR PORTFOLIO DEVELOPED WORLD EX-US ETF",
+      "title": "International Equity ETF",
+      "cusip": "78463X889",
+      "ticker": null,
+      "value": 27044864.0,
+      "shares": 538635.0,
+      "put_call": null,
+      "weight": 0.09118223071670797
+    },
+    {
+      "issuer": "INVESCO S&P 500 PURE VALUE",
+      "title": "Exchange Traded Fund",
+      "cusip": "46137V258",
+      "ticker": null,
+      "value": 24317483.0,
+      "shares": 211954.0,
+      "put_call": null,
+      "weight": 0.08198681810178908
+    },
+    {
+      "issuer": "Avantis US Large Cap Value ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "025072349",
+      "ticker": null,
+      "value": 23258726.0,
+      "shares": 257173.0,
+      "put_call": null,
+      "weight": 0.07841720040850249
+    },
+    {
+      "issuer": "GMO INTERNATIONAL VALUE ETF",
+      "title": "International Equity ETF",
+      "cusip": "90139K407",
+      "ticker": null,
+      "value": 18171754.0,
+      "shares": 458304.0,
+      "put_call": null,
+      "weight": 0.061266385578986865
+    },
+    {
+      "issuer": "AVANTIS EMERGING MARKETS VALUE ETF",
+      "title": "International Equity ETF",
+      "cusip": "025072372",
+      "ticker": null,
+      "value": 14622923.0,
+      "shares": 224519.0,
+      "put_call": null,
+      "weight": 0.049301439960602336
+    },
+    {
+      "issuer": "ISHARES RUSSELL 1000 GROWTH ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "464287614",
+      "ticker": null,
+      "value": 13541984.0,
+      "shares": 108111.0,
+      "put_call": null,
+      "weight": 0.04565703526739746
+    },
+    {
+      "issuer": "VANGUARD DIVIDEND APPRECIATION ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "921908844",
+      "ticker": null,
+      "value": 12265807.0,
+      "shares": 52573.0,
+      "put_call": null,
+      "weight": 0.04135438225167676
+    },
+    {
+      "issuer": "AVANTIS INTERNATIONAL SMALL CAP VALUE ETF",
+      "title": "International Equity ETF",
+      "cusip": "025072802",
+      "ticker": null,
+      "value": 11678065.0,
+      "shares": 106766.0,
+      "put_call": null,
+      "weight": 0.03937279984675509
+    },
+    {
+      "issuer": "PIMCO COMMODITIES ACTIVE STRATEGY ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "72201R593",
+      "ticker": null,
+      "value": 11453779.0,
+      "shares": 330461.0,
+      "put_call": null,
+      "weight": 0.03861661568555807
+    },
+    {
+      "issuer": "JOHN HANCOCK MORTGAGE-BACKED ETF",
+      "title": "Fixed Income ETF",
+      "cusip": "47804J792",
+      "ticker": null,
+      "value": 9789346.0,
+      "shares": 470868.0,
+      "put_call": null,
+      "weight": 0.03300495079352894
+    },
+    {
+      "issuer": "INTERNATIONAL BUSINESS MACHINES CORP",
+      "title": "Common Stock",
+      "cusip": "459200101",
+      "ticker": null,
+      "value": 8780046.0,
+      "shares": 39922.0,
+      "put_call": null,
+      "weight": 0.029602078238415583
+    },
+    {
+      "issuer": "INVESCO S&P 500 QUALITY ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "46137V241",
+      "ticker": null,
+      "value": 8727168.0,
+      "shares": 103796.0,
+      "put_call": null,
+      "weight": 0.02942379913907021
+    },
+    {
+      "issuer": "AVANTIS US SMALL CAP VALUE ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "025072877",
+      "ticker": null,
+      "value": 8533261.0,
+      "shares": 72457.0,
+      "put_call": null,
+      "weight": 0.028770038306270878
+    },
+    {
+      "issuer": "JP MORGAN INTERNATIONAL GROWTH ETF",
+      "title": "International Equity ETF",
+      "cusip": "46641Q324",
+      "ticker": null,
+      "value": 7719822.0,
+      "shares": 92100.0,
+      "put_call": null,
+      "weight": 0.026027514529040265
+    },
+    {
+      "issuer": "SPDR INTERMEDIATE TERM CORPORATE BOND",
+      "title": "Fixed Income ETF",
+      "cusip": "78464A375",
+      "ticker": null,
+      "value": 7589673.0,
+      "shares": 235120.0,
+      "put_call": null,
+      "weight": 0.025588714905364993
+    },
+    {
+      "issuer": "VANGUARD S&P SMALL-CAP 600 ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "921932828",
+      "ticker": null,
+      "value": 6257300.0,
+      "shares": 49457.0,
+      "put_call": null,
+      "weight": 0.021096596095423397
+    },
+    {
+      "issuer": "ISHARES 1-3 YEAR TREASURY BOND ETF",
+      "title": "Fixed Income ETF",
+      "cusip": "464287457",
+      "ticker": null,
+      "value": 6212287.0,
+      "shares": 76506.0,
+      "put_call": null,
+      "weight": 0.02094483398076639
+    },
+    {
+      "issuer": "FIDELITY D & D BANCORP INC.",
+      "title": "Common Stock",
+      "cusip": "31609R100",
+      "ticker": null,
+      "value": 5157169.0,
+      "shares": 94958.0,
+      "put_call": null,
+      "weight": 0.017387485239454492
+    },
+    {
+      "issuer": "ISHARES 10-20 TREASURY ETF",
+      "title": "Fixed Income ETF",
+      "cusip": "464288653",
+      "ticker": null,
+      "value": 5028334.0,
+      "shares": 54555.0,
+      "put_call": null,
+      "weight": 0.016953115789699186
+    },
+    {
+      "issuer": "Janus Henderson Small Cap Growth Alpha ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "47103U100",
+      "ticker": null,
+      "value": 4910625.0,
+      "shares": 57148.0,
+      "put_call": null,
+      "weight": 0.016556257843013525
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "Common Stock",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 4145258.0,
+      "shares": 8082.0,
+      "put_call": null,
+      "weight": 0.013975809652297732
+    },
+    {
+      "issuer": "VANECK ETF TRUST",
+      "title": "Fixed Income ETF",
+      "cusip": "92189H300",
+      "ticker": null,
+      "value": 3420804.0,
+      "shares": 137769.0,
+      "put_call": null,
+      "weight": 0.011533300354723082
+    },
+    {
+      "issuer": "APPLE INC.",
+      "title": "Common Stock",
+      "cusip": "037833100",
+      "ticker": "AAPL",
+      "value": 2661829.0,
+      "shares": 7993.0,
+      "put_call": null,
+      "weight": 0.008974402903502272
+    },
+    {
+      "issuer": "HONAT BANCORP INC",
+      "title": "Common Stock",
+      "cusip": "438115107",
+      "ticker": null,
+      "value": 2305296.0,
+      "shares": 15709.0,
+      "put_call": null,
+      "weight": 0.0077723456750347876
+    },
+    {
+      "issuer": "EXXONMOBIL HOLDINGS CORP",
+      "title": "Common Stock",
+      "cusip": "30233Q108",
+      "ticker": null,
+      "value": 2227396.0,
+      "shares": 13686.0,
+      "put_call": null,
+      "weight": 0.0075097044662333105
+    },
+    {
+      "issuer": "VANECK CEF MUNI INCOME ETF",
+      "title": "Fixed Income ETF",
+      "cusip": "92189F460",
+      "ticker": null,
+      "value": 1924498.0,
+      "shares": 100130.0,
+      "put_call": null,
+      "weight": 0.00648847857581547
+    },
+    {
+      "issuer": "SPDR S&P 500 GROWTH ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "78464A409",
+      "ticker": null,
+      "value": 1878570.0,
+      "shares": 15263.0,
+      "put_call": null,
+      "weight": 0.006333631522698214
+    },
+    {
+      "issuer": "Alpha Architect US Equity 2 ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "02072Q358",
+      "ticker": null,
+      "value": 1800620.0,
+      "shares": 32817.0,
+      "put_call": null,
+      "weight": 0.006070821738024592
+    },
+    {
+      "issuer": "JP MORGAN CHASE & CO",
+      "title": "Common Stock",
+      "cusip": "46625H100",
+      "ticker": "JPM",
+      "value": 1774903.0,
+      "shares": 5365.0,
+      "put_call": null,
+      "weight": 0.005984116423945676
+    },
+    {
+      "issuer": "PNC FINANCIAL SERVICES GROUP INC.",
+      "title": "Common Stock",
+      "cusip": "693475105",
+      "ticker": null,
+      "value": 1728516.0,
+      "shares": 7777.0,
+      "put_call": null,
+      "weight": 0.0058277218443221306
+    },
+    {
+      "issuer": "VANGUARD FTSE DEVELOPED ETF",
+      "title": "International Equity ETF",
+      "cusip": "921943858",
+      "ticker": null,
+      "value": 1626431.0,
+      "shares": 23034.0,
+      "put_call": null,
+      "weight": 0.0054835404861642515
+    },
+    {
+      "issuer": "ENERGY TRANSFER EQUITY LP",
+      "title": "Common Stock",
+      "cusip": "29273V100",
+      "ticker": null,
+      "value": 1477748.0,
+      "shares": 74747.0,
+      "put_call": null,
+      "weight": 0.004982253158202377
+    },
+    {
+      "issuer": "SPDR S&P 500 ETF TRUST",
+      "title": "Exchange Traded Fund",
+      "cusip": "78462F103",
+      "ticker": "SPY",
+      "value": 1374259.0,
+      "shares": 1802.0,
+      "put_call": null,
+      "weight": 0.004633338189554674
+    },
+    {
+      "issuer": "AMAZON COM INC.",
+      "title": "Common Stock",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 1199408.0,
+      "shares": 4814.0,
+      "put_call": null,
+      "weight": 0.004043824993147138
+    },
+    {
+      "issuer": "VANGUARD TOTAL STOCK MARKET INDEX FUND",
+      "title": "Exchange Traded Fund",
+      "cusip": "922908769",
+      "ticker": null,
+      "value": 1088290.0,
+      "shares": 2908.0,
+      "put_call": null,
+      "weight": 0.003669188717927593
+    },
+    {
+      "issuer": "ISHARES NATIONAL MUNI BOND ETF",
+      "title": "Fixed Income ETF",
+      "cusip": "464288414",
+      "ticker": null,
+      "value": 808800.0,
+      "shares": 8000.0,
+      "put_call": null,
+      "weight": 0.0027268833078130253
+    },
+    {
+      "issuer": "PPL CORP. COM",
+      "title": "Common Stock",
+      "cusip": "69351T106",
+      "ticker": null,
+      "value": 797113.0,
+      "shares": 24236.0,
+      "put_call": null,
+      "weight": 0.002687480383457918
+    },
+    {
+      "issuer": "ALPHABET INC. CLASS C",
+      "title": "Common Stock",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 778591.0,
+      "shares": 2285.0,
+      "put_call": null,
+      "weight": 0.002625033137380627
+    },
+    {
+      "issuer": "CHEVRON CORPORATION",
+      "title": "Common Stock",
+      "cusip": "166764100",
+      "ticker": "CVX",
+      "value": 729234.0,
+      "shares": 3571.0,
+      "put_call": null,
+      "weight": 0.0024586251509516864
+    },
+    {
+      "issuer": "JOHNSON & JOHNSON",
+      "title": "Common Stock",
+      "cusip": "478160104",
+      "ticker": "JNJ",
+      "value": 721946.0,
+      "shares": 2727.0,
+      "put_call": null,
+      "weight": 0.0024340535318278715
+    },
+    {
+      "issuer": "WISDOMTREE US QUALITY DIV GROWTH FD",
+      "title": "Exchange Traded Fund",
+      "cusip": "97717X669",
+      "ticker": null,
+      "value": 715881.0,
+      "shares": 7362.0,
+      "put_call": null,
+      "weight": 0.002413605278536717
+    },
+    {
+      "issuer": "PROCTER & GAMBLE CO.",
+      "title": "Common Stock",
+      "cusip": "742718109",
+      "ticker": "PG",
+      "value": 713470.0,
+      "shares": 4911.0,
+      "put_call": null,
+      "weight": 0.0024054765499818983
+    },
+    {
+      "issuer": "PROSHARES S&P 500 DV ARISTOCRATS ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "74348A467",
+      "ticker": null,
+      "value": 702326.0,
+      "shares": 12982.0,
+      "put_call": null,
+      "weight": 0.0023679043595982827
+    },
+    {
+      "issuer": "ISHARES MSCI EAFE ETF",
+      "title": "International Equity ETF",
+      "cusip": "464287465",
+      "ticker": null,
+      "value": 699180.0,
+      "shares": 6730.0,
+      "put_call": null,
+      "weight": 0.0023572975657229368
+    },
+    {
+      "issuer": "AUTOMATIC DATA PROCESSING INC",
+      "title": "Common Stock",
+      "cusip": "053015103",
+      "ticker": null,
+      "value": 688762.0,
+      "shares": 2669.0,
+      "put_call": null,
+      "weight": 0.002322173097002862
+    },
+    {
+      "issuer": "ISHARES RUSSELL 1000 VALUE ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "464287598",
+      "ticker": null,
+      "value": 646601.0,
+      "shares": 2608.0,
+      "put_call": null,
+      "weight": 0.0021800265500929897
+    },
+    {
+      "issuer": "VANGUARD GROWTH ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "922908736",
+      "ticker": null,
+      "value": 601304.0,
+      "shares": 6673.0,
+      "put_call": null,
+      "weight": 0.0020273069244822
+    },
+    {
+      "issuer": "ABBVIE INC",
+      "title": "Common Stock",
+      "cusip": "00287Y109",
+      "ticker": "ABBV",
+      "value": 595903.0,
+      "shares": 2278.0,
+      "put_call": null,
+      "weight": 0.002009097358773127
+    },
+    {
+      "issuer": "MCDONALDS CORP",
+      "title": "Common Stock",
+      "cusip": "580135101",
+      "ticker": "MCK",
+      "value": 580121.0,
+      "shares": 2512.0,
+      "put_call": null,
+      "weight": 0.001955888070489367
+    },
+    {
+      "issuer": "PHILIP MORRIS INTL INC",
+      "title": "Common Stock",
+      "cusip": "718172109",
+      "ticker": null,
+      "value": 579139.0,
+      "shares": 3035.0,
+      "put_call": null,
+      "weight": 0.0019525772403604447
+    },
+    {
+      "issuer": "MARATHON PETROLEUM CORP",
+      "title": "Common Stock",
+      "cusip": "56585A102",
+      "ticker": null,
+      "value": 548448.0,
+      "shares": 1387.0,
+      "put_call": null,
+      "weight": 0.0018491019985205715
+    },
+    {
+      "issuer": "MERCK & CO. INC",
+      "title": "Common Stock",
+      "cusip": "58933Y105",
+      "ticker": "MRK",
+      "value": 533142.0,
+      "shares": 3669.0,
+      "put_call": null,
+      "weight": 0.001797497552539629
+    },
+    {
+      "issuer": "GOLDMAN SACHS GROUP INC",
+      "title": "Common Stock",
+      "cusip": "38141G104",
+      "ticker": "GS",
+      "value": 523109.0,
+      "shares": 581.0,
+      "put_call": null,
+      "weight": 0.0017636711180350692
+    },
+    {
+      "issuer": "WAL MART STORES, INC.",
+      "title": "Common Stock",
+      "cusip": "931142103",
+      "ticker": "WFC",
+      "value": 518769.0,
+      "shares": 4992.0,
+      "put_call": null,
+      "weight": 0.0017490387323329073
+    },
+    {
+      "issuer": "BROADCOM INC",
+      "title": "Common Stock",
+      "cusip": "11135F101",
+      "ticker": "AVGO",
+      "value": 515898.0,
+      "shares": 1469.0,
+      "put_call": null,
+      "weight": 0.0017393591057543573
+    },
+    {
+      "issuer": "VANGUARD SMALL-CAP VALUE INDEX FUND",
+      "title": "Exchange Traded Fund",
+      "cusip": "922908611",
+      "ticker": null,
+      "value": 513580.0,
+      "shares": 2223.0,
+      "put_call": null,
+      "weight": 0.001731543928321728
+    },
+    {
+      "issuer": "VANGUARD VALUE ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "922908744",
+      "ticker": null,
+      "value": 500441.0,
+      "shares": 2316.0,
+      "put_call": null,
+      "weight": 0.0016872455606395378
+    },
+    {
+      "issuer": "ELI LILLY & CO",
+      "title": "Common Stock",
+      "cusip": "532457108",
+      "ticker": "LLY",
+      "value": 491759.0,
+      "shares": 425.0,
+      "put_call": null,
+      "weight": 0.0016579740462003283
+    },
+    {
+      "issuer": "NVIDIA CORP",
+      "title": "Common Stock",
+      "cusip": "67066G104",
+      "ticker": "NVDA",
+      "value": 485764.0,
+      "shares": 2127.0,
+      "put_call": null,
+      "weight": 0.001637761799130176
+    },
+    {
+      "issuer": "GARMIN LTD",
+      "title": "Common Stock",
+      "cusip": "H2906T109",
+      "ticker": null,
+      "value": 480744.0,
+      "shares": 1676.0,
+      "put_call": null,
+      "weight": 0.001620836781566846
+    },
+    {
+      "issuer": "SPDR DOW JONES INDUSTRIAL AVERAGE ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "78467X109",
+      "ticker": null,
+      "value": 465832.0,
+      "shares": 916.0,
+      "put_call": null,
+      "weight": 0.001570560713458404
+    },
+    {
+      "issuer": "PROGRESSIVE CORPORATION",
+      "title": "Common Stock",
+      "cusip": "743315103",
+      "ticker": null,
+      "value": 445302.0,
+      "shares": 2148.0,
+      "put_call": null,
+      "weight": 0.001501343460355781
+    },
+    {
+      "issuer": "NEXTERA ENERGY INC",
+      "title": "Common Stock",
+      "cusip": "65339F101",
+      "ticker": null,
+      "value": 407103.0,
+      "shares": 5375.0,
+      "put_call": null,
+      "weight": 0.0013725548655546564
+    },
+    {
+      "issuer": "VANGUARD FTSE EMERGING MARKETS ETF",
+      "title": "International Equity ETF",
+      "cusip": "922042858",
+      "ticker": null,
+      "value": 404198.0,
+      "shares": 6815.0,
+      "put_call": null,
+      "weight": 0.0013627606073830481
+    },
+    {
+      "issuer": "RTX CORPORATION",
+      "title": "Common Stock",
+      "cusip": "75513E101",
+      "ticker": null,
+      "value": 403789.0,
+      "shares": 2175.0,
+      "put_call": null,
+      "weight": 0.0013613816567489042
+    },
+    {
+      "issuer": "AMERICAN EXPRESS COMPANY",
+      "title": "Common Stock",
+      "cusip": "025816109",
+      "ticker": "AXP",
+      "value": 394722.0,
+      "shares": 1298.0,
+      "put_call": null,
+      "weight": 0.0013308121080941803
+    },
+    {
+      "issuer": "LOCKHEED MARTIN CORPORATION",
+      "title": "Common Stock",
+      "cusip": "539830109",
+      "ticker": null,
+      "value": 385502.0,
+      "shares": 757.0,
+      "put_call": null,
+      "weight": 0.0012997267172706935
+    },
+    {
+      "issuer": "THE COCA COLA COMPANY",
+      "title": "Common Stock",
+      "cusip": "191216100",
+      "ticker": "KO",
+      "value": 383228.0,
+      "shares": 4452.0,
+      "put_call": null,
+      "weight": 0.0012920598866055515
+    },
+    {
+      "issuer": "EATON CORPORATION PLC",
+      "title": "Int'l Common Stock",
+      "cusip": "G29183103",
+      "ticker": "ETN",
+      "value": 372129.0,
+      "shares": 866.0,
+      "put_call": null,
+      "weight": 0.0012546394145068662
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "Common Stock",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 368391.0,
+      "shares": 508.0,
+      "put_call": null,
+      "weight": 0.0012420366823053268
+    },
+    {
+      "issuer": "ALTRIA GROUP INC.",
+      "title": "Common Stock",
+      "cusip": "02209S103",
+      "ticker": null,
+      "value": 365185.0,
+      "shares": 5423.0,
+      "put_call": null,
+      "weight": 0.0012312275973834072
+    },
+    {
+      "issuer": "SPDR S&P 600 Small Cap ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "78468R853",
+      "ticker": null,
+      "value": 361985.0,
+      "shares": 6848.0,
+      "put_call": null,
+      "weight": 0.001220438741566145
+    },
+    {
+      "issuer": "GENERAL ELECTRIC CO.",
+      "title": "Common Stock",
+      "cusip": "369604301",
+      "ticker": "GE",
+      "value": 360694.0,
+      "shares": 1155.0,
+      "put_call": null,
+      "weight": 0.0012160861125473682
+    },
+    {
+      "issuer": "SEAGATE TECHNOLOGY HOLDING",
+      "title": "Int'l Common Stock",
+      "cusip": "G7997R103",
+      "ticker": null,
+      "value": 349567.0,
+      "shares": 379.0,
+      "put_call": null,
+      "weight": 0.0011785712379602817
+    },
+    {
+      "issuer": "MONARCH CASINO & RESORT INC",
+      "title": "Common Stock",
+      "cusip": "609027107",
+      "ticker": null,
+      "value": 345000.0,
+      "shares": 3000.0,
+      "put_call": null,
+      "weight": 0.0011631735177985829
+    },
+    {
+      "issuer": "ISHARES CORE S&P 500 ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "464287200",
+      "ticker": null,
+      "value": 327784.0,
+      "shares": 428.0,
+      "put_call": null,
+      "weight": 0.001105129473501712
+    },
+    {
+      "issuer": "AIR PRODUCTS & CHEMS INC",
+      "title": "Common Stock",
+      "cusip": "009158106",
+      "ticker": null,
+      "value": 326086.0,
+      "shares": 1172.0,
+      "put_call": null,
+      "weight": 0.0010994046368836773
+    },
+    {
+      "issuer": "BLACKROCK INC",
+      "title": "Common Stock",
+      "cusip": "09290D101",
+      "ticker": null,
+      "value": 320662.0,
+      "shares": 303.0,
+      "put_call": null,
+      "weight": 0.0010811175262734178
+    },
+    {
+      "issuer": "AMGEN INC. COMMON",
+      "title": "Common Stock",
+      "cusip": "031162100",
+      "ticker": null,
+      "value": 314868.0,
+      "shares": 747.0,
+      "put_call": null,
+      "weight": 0.0010615829542092875
+    },
+    {
+      "issuer": "ALPHABET INC. CLASS A",
+      "title": "Common Stock",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 308640.0,
+      "shares": 897.0,
+      "put_call": null,
+      "weight": 0.001040585143574941
+    },
+    {
+      "issuer": "CATERPILLAR INC.",
+      "title": "Common Stock",
+      "cusip": "149123101",
+      "ticker": "CAT",
+      "value": 307289.0,
+      "shares": 379.0,
+      "put_call": null,
+      "weight": 0.0010360302235095905
+    },
+    {
+      "issuer": "BURKE HERBERT FINL SVCS CORP",
+      "title": "Common Stock",
+      "cusip": "12135Y108",
+      "ticker": null,
+      "value": 305544.0,
+      "shares": 4454.0,
+      "put_call": null,
+      "weight": 0.0010301469255717397
+    },
+    {
+      "issuer": "MASTERCARD INC CLASS A",
+      "title": "Common Stock",
+      "cusip": "57636Q104",
+      "ticker": "MA",
+      "value": 301103.0,
+      "shares": 546.0,
+      "put_call": null,
+      "weight": 0.0010151740166078455
+    },
+    {
+      "issuer": "JOHNSON CONTROLS INTL PLC",
+      "title": "Int'l Common Stock",
+      "cusip": "G51502105",
+      "ticker": null,
+      "value": 294773.0,
+      "shares": 1983.0,
+      "put_call": null,
+      "weight": 0.0009938323111943236
+    },
+    {
+      "issuer": "CISCO SYSTEMS INC.",
+      "title": "Common Stock",
+      "cusip": "17275R102",
+      "ticker": "CSCO",
+      "value": 289417.0,
+      "shares": 2689.0,
+      "put_call": null,
+      "weight": 0.000975774463770181
+    },
+    {
+      "issuer": "HOME DEPOT INC.",
+      "title": "Common Stock",
+      "cusip": "437076102",
+      "ticker": "HD",
+      "value": 285059.0,
+      "shares": 1002.0,
+      "put_call": null,
+      "weight": 0.000961081390754047
+    },
+    {
+      "issuer": "PEOPLES FINANCIAL SVCS CORP",
+      "title": "Common Stock",
+      "cusip": "711040105",
+      "ticker": null,
+      "value": 284192.0,
+      "shares": 4219.0,
+      "put_call": null,
+      "weight": 0.0009581582851310575
+    },
+    {
+      "issuer": "HARBOR LONG TERM GROWER ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "41151J406",
+      "ticker": null,
+      "value": 280484.0,
+      "shares": 8175.0,
+      "put_call": null,
+      "weight": 0.0009456566984528049
+    },
+    {
+      "issuer": "APPLIED MATERIALS INC.",
+      "title": "Common Stock",
+      "cusip": "038222105",
+      "ticker": "AMAT",
+      "value": 279725.0,
+      "shares": 547.0,
+      "put_call": null,
+      "weight": 0.000943097716713648
+    },
+    {
+      "issuer": "VISA INC CLASS A SHARES",
+      "title": "Common Stock",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 264466.0,
+      "shares": 736.0,
+      "put_call": null,
+      "weight": 0.0008916517320525217
+    },
+    {
+      "issuer": "ISHARES RUSSELL MID-CAP ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "464287499",
+      "ticker": null,
+      "value": 264214.0,
+      "shares": 2476.0,
+      "put_call": null,
+      "weight": 0.0008908021096569123
+    },
+    {
+      "issuer": "GE VERNOVA INC",
+      "title": "Common Stock",
+      "cusip": "36828A101",
+      "ticker": "GEV",
+      "value": 263286.0,
+      "shares": 277.0,
+      "put_call": null,
+      "weight": 0.0008876733414699062
+    },
+    {
+      "issuer": "CONOCOPHILLIPS",
+      "title": "Common Stock",
+      "cusip": "20825C104",
+      "ticker": "COP",
+      "value": 262689.0,
+      "shares": 2099.0,
+      "put_call": null,
+      "weight": 0.0008856605455564983
+    },
+    {
+      "issuer": "COLGATE-PALMOLIVE CO.",
+      "title": "Common Stock",
+      "cusip": "194162103",
+      "ticker": null,
+      "value": 262530.0,
+      "shares": 3077.0,
+      "put_call": null,
+      "weight": 0.0008851244742830781
+    },
+    {
+      "issuer": "TEXAS INSTRUMENTS INC",
+      "title": "Common Stock",
+      "cusip": "882508104",
+      "ticker": null,
+      "value": 260764.0,
+      "shares": 931.0,
+      "put_call": null,
+      "weight": 0.0008791703744789265
+    },
+    {
+      "issuer": "INTEL CORP COM",
+      "title": "Common Stock",
+      "cusip": "458140100",
+      "ticker": "INTC",
+      "value": 258374.0,
+      "shares": 2149.0,
+      "put_call": null,
+      "weight": 0.0008711124477904088
+    },
+    {
+      "issuer": "ISHARES MSCI EAFE VALUE ETF",
+      "title": "International Equity ETF",
+      "cusip": "464288877",
+      "ticker": null,
+      "value": 251349.0,
+      "shares": 3176.0,
+      "put_call": null,
+      "weight": 0.0008474275377540753
+    },
+    {
+      "issuer": "VANGUARD S&P SMALL-CAP 600 VALUE ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "921932778",
+      "ticker": null,
+      "value": 250470.0,
+      "shares": 2277.0,
+      "put_call": null,
+      "weight": 0.0008444639739217711
+    },
+    {
+      "issuer": "EMERSON ELECTRIC CO.",
+      "title": "Common Stock",
+      "cusip": "291011104",
+      "ticker": null,
+      "value": 246919.0,
+      "shares": 1592.0,
+      "put_call": null,
+      "weight": 0.0008324917154820529
+    },
+    {
+      "issuer": "BANK OF AMERICA CORPORATION",
+      "title": "Common Stock",
+      "cusip": "060505104",
+      "ticker": "BAC",
+      "value": 242105.0,
+      "shares": 4448.0,
+      "put_call": null,
+      "weight": 0.0008162612305119591
+    },
+    {
+      "issuer": "ISHARES SELECT DIVIDEND ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "464287168",
+      "ticker": null,
+      "value": 241639.0,
+      "shares": 1589.0,
+      "put_call": null,
+      "weight": 0.0008146901033835702
+    },
+    {
+      "issuer": "ISHARES CORE S&P TOTAL US STOCK MRKT ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "464287150",
+      "ticker": null,
+      "value": 240607.0,
+      "shares": 1447.0,
+      "put_call": null,
+      "weight": 0.0008112106973825032
+    },
+    {
+      "issuer": "CORNING INC.",
+      "title": "Common Stock",
+      "cusip": "219350105",
+      "ticker": null,
+      "value": 238328.0,
+      "shares": 1550.0,
+      "put_call": null,
+      "weight": 0.0008035270091301468
+    },
+    {
+      "issuer": "MONDELEZ INTERNATIONAL INC",
+      "title": "Common Stock",
+      "cusip": "609207105",
+      "ticker": null,
+      "value": 230991.0,
+      "shares": 3995.0,
+      "put_call": null,
+      "weight": 0.0007787901856516303
+    },
+    {
+      "issuer": "COSTCO WHOLESALE CORP",
+      "title": "Common Stock",
+      "cusip": "22160K105",
+      "ticker": "COST",
+      "value": 229406.0,
+      "shares": 252.0,
+      "put_call": null,
+      "weight": 0.0007734463305046425
+    },
+    {
+      "issuer": "VALERO ENERGY CORPORATION",
+      "title": "Common Stock",
+      "cusip": "91913Y100",
+      "ticker": null,
+      "value": 225201.0,
+      "shares": 581.0,
+      "put_call": null,
+      "weight": 0.0007592690996572714
+    },
+    {
+      "issuer": "QUANTA SERVICES INC",
+      "title": "Common Stock",
+      "cusip": "74762E102",
+      "ticker": null,
+      "value": 222308.0,
+      "shares": 346.0,
+      "put_call": null,
+      "weight": 0.0007495152996949778
+    },
+    {
+      "issuer": "VERIZON COMMUNICATIONS, INC.",
+      "title": "Common Stock",
+      "cusip": "92343V104",
+      "ticker": "VZ",
+      "value": 220405.0,
+      "shares": 4805.0,
+      "put_call": null,
+      "weight": 0.0007430993020011497
+    },
+    {
+      "issuer": "JPMORGAN US QUALITY FACTOR ETF",
+      "title": "Exchange Traded Fund",
+      "cusip": "46641Q761",
+      "ticker": null,
+      "value": 218079.0,
+      "shares": 2955.0,
+      "put_call": null,
+      "weight": 0.0007352571524289772
+    },
+    {
+      "issuer": "LOWES COMPANIES INC",
+      "title": "Common Stock",
+      "cusip": "548661107",
+      "ticker": null,
+      "value": 208985.0,
+      "shares": 1134.0,
+      "put_call": null,
+      "weight": 0.0007045965728032952
+    },
+    {
+      "issuer": "GOODYEAR TIRE & RUBBER CO",
+      "title": "Common Stock",
+      "cusip": "382550101",
+      "ticker": null,
+      "value": 156555.0,
+      "shares": 31500.0,
+      "put_call": null,
+      "weight": 0.0005278279132723395
+    },
+    {
+      "issuer": "FORD MOTOR COMPANY",
+      "title": "Common Stock",
+      "cusip": "345370860",
+      "ticker": "F",
+      "value": 140161.0,
+      "shares": 11622.0,
+      "put_call": null,
+      "weight": 0.000472555256313528
+    }
+  ],
+  "history_quarters": [
+    "2026Q3"
+  ]
+}

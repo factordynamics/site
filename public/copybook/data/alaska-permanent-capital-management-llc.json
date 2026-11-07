@@ -1,0 +1,432 @@
+{
+  "cik": "0001426771",
+  "name": "Alaska Permanent Capital Management, LLC",
+  "manager": "Alaska Permanent Capital Management, LLC",
+  "slug": "alaska-permanent-capital-management-llc",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001398344-26-014080",
+  "filing_date": "2026-08-11",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1426771/000139834426014080/0001398344-26-014080-index.html",
+  "line_count": 41,
+  "position_count": 41,
+  "values_in_thousands": false,
+  "total_value": 1530439080.0,
+  "holdings": [
+    {
+      "issuer": "STATE STR SPDR S&P 500 ETF T",
+      "title": "TR UNIT",
+      "cusip": "78462F103",
+      "ticker": "SPY",
+      "value": 308814177.0,
+      "shares": 413332.0,
+      "put_call": null,
+      "weight": 0.20178142406034222
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "CORE S&P MCP ETF",
+      "cusip": "464287507",
+      "ticker": null,
+      "value": 181967646.0,
+      "shares": 2361487.0,
+      "put_call": null,
+      "weight": 0.11889898028479513
+    },
+    {
+      "issuer": "VANGUARD BD INDEX FDS",
+      "title": "TOTAL BND MRKT",
+      "cusip": "921937835",
+      "ticker": null,
+      "value": 163807803.0,
+      "shares": 2232018.0,
+      "put_call": null,
+      "weight": 0.10703320709766508
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "CORE MSCI EAFE",
+      "cusip": "46432F842",
+      "ticker": null,
+      "value": 118485615.0,
+      "shares": 1226501.0,
+      "put_call": null,
+      "weight": 0.07741936059290906
+    },
+    {
+      "issuer": "ISHARES INC",
+      "title": "CORE MSCI EMKT",
+      "cusip": "46434G103",
+      "ticker": null,
+      "value": 104473139.0,
+      "shares": 1258604.0,
+      "put_call": null,
+      "weight": 0.06826350709758405
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "CORE S&P500 ETF",
+      "cusip": "464287200",
+      "ticker": null,
+      "value": 101848092.0,
+      "shares": 135686.0,
+      "put_call": null,
+      "weight": 0.06654828233999356
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "CORE S&P SCP ETF",
+      "cusip": "464287804",
+      "ticker": null,
+      "value": 86169958.0,
+      "shares": 581190.0,
+      "put_call": null,
+      "weight": 0.05630407582116891
+    },
+    {
+      "issuer": "FLEXSHARES TR",
+      "title": "STOXX GLOBR INF",
+      "cusip": "33939L795",
+      "ticker": null,
+      "value": 82847961.0,
+      "shares": 1293348.0,
+      "put_call": null,
+      "weight": 0.05413345887638991
+    },
+    {
+      "issuer": "NEW YORK LIFE INVESTMENTS ET",
+      "title": "HEDGE MULTI STRA",
+      "cusip": "45409B107",
+      "ticker": null,
+      "value": 59789601.0,
+      "shares": 1632407.0,
+      "put_call": null,
+      "weight": 0.039066959136981785
+    },
+    {
+      "issuer": "J P MORGAN EXCHANGE TRADED F",
+      "title": "BETBULD MSCI",
+      "cusip": "46641Q738",
+      "ticker": null,
+      "value": 52564436.0,
+      "shares": 489700.0,
+      "put_call": null,
+      "weight": 0.03434598389894748
+    },
+    {
+      "issuer": "VANGUARD CHARLOTTE FDS",
+      "title": "TOTAL INT BD ETF",
+      "cusip": "92203J407",
+      "ticker": null,
+      "value": 49870783.0,
+      "shares": 1030814.0,
+      "put_call": null,
+      "weight": 0.03258593148314012
+    },
+    {
+      "issuer": "ABRDN ETFS",
+      "title": "BBRG ALL COMMDY",
+      "cusip": "003261203",
+      "ticker": null,
+      "value": 44037188.0,
+      "shares": 1290448.0,
+      "put_call": null,
+      "weight": 0.028774218180575996
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "CORE S&P TTL STK",
+      "cusip": "464287150",
+      "ticker": null,
+      "value": 36667289.0,
+      "shares": 223048.0,
+      "put_call": null,
+      "weight": 0.023958672696727006
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "INTRM GOV CR ETF",
+      "cusip": "464288612",
+      "ticker": null,
+      "value": 29023616.0,
+      "shares": 273625.0,
+      "put_call": null,
+      "weight": 0.018964241294727
+    },
+    {
+      "issuer": "VANGUARD MALVERN FDS",
+      "title": "STRM INFPROIDX",
+      "cusip": "922020805",
+      "ticker": null,
+      "value": 26194504.0,
+      "shares": 521491.0,
+      "put_call": null,
+      "weight": 0.01711567898540594
+    },
+    {
+      "issuer": "SPDR SERIES TRUST",
+      "title": "ST PORT HIGH ETF",
+      "cusip": "78468R606",
+      "ticker": null,
+      "value": 20728401.0,
+      "shares": 885285.0,
+      "put_call": null,
+      "weight": 0.013544087622226688
+    },
+    {
+      "issuer": "VANGUARD BD INDEX FDS",
+      "title": "SHORT TRM BOND",
+      "cusip": "921937827",
+      "ticker": null,
+      "value": 15000913.0,
+      "shares": 192591.0,
+      "put_call": null,
+      "weight": 0.009801705403393124
+    },
+    {
+      "issuer": "FIRST TR EXCHANGE-TRADED FD",
+      "title": "NASDQ CLN EDGE",
+      "cusip": "33737A108",
+      "ticker": null,
+      "value": 8898087.0,
+      "shares": 46566.0,
+      "put_call": null,
+      "weight": 0.005814074611842766
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "ISHARES SEMICDTR",
+      "cusip": "464287523",
+      "ticker": null,
+      "value": 8802588.0,
+      "shares": 13740.0,
+      "put_call": null,
+      "weight": 0.005751674872285671
+    },
+    {
+      "issuer": "J P MORGAN EXCHANGE TRADED F",
+      "title": "HEDG EQU LAD ETF",
+      "cusip": "46654Q724",
+      "ticker": null,
+      "value": 8684647.0,
+      "shares": 128528.0,
+      "put_call": null,
+      "weight": 0.005674611367085582
+    },
+    {
+      "issuer": "FIRST TR EXCHANGE TRADED FD",
+      "title": "NASDQ SEMCNDTR",
+      "cusip": "33738R811",
+      "ticker": null,
+      "value": 8510588.0,
+      "shares": 29839.0,
+      "put_call": null,
+      "weight": 0.005560879953483676
+    },
+    {
+      "issuer": "GLOBAL X FDS",
+      "title": "US INFR DEV ETF",
+      "cusip": "37954Y673",
+      "ticker": null,
+      "value": 4354294.0,
+      "shares": 73952.0,
+      "put_call": null,
+      "weight": 0.0028451272951027884
+    },
+    {
+      "issuer": "SPDR SERIES TRUST",
+      "title": "ST NUVE TERM ETF",
+      "cusip": "78468R739",
+      "ticker": null,
+      "value": 2310242.0,
+      "shares": 48194.0,
+      "put_call": null,
+      "weight": 0.0015095288863115023
+    },
+    {
+      "issuer": "J P MORGAN EXCHANGE TRADED F",
+      "title": "BETA CDA ETF NEW",
+      "cusip": "46641Q225",
+      "ticker": null,
+      "value": 1803174.0,
+      "shares": 18126.0,
+      "put_call": null,
+      "weight": 0.001178206975739276
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "3 7 YR TREAS BD",
+      "cusip": "464288661",
+      "ticker": null,
+      "value": 860555.0,
+      "shares": 7328.0,
+      "put_call": null,
+      "weight": 0.0005622928813344207
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "TRUST ISHARE 0-1",
+      "cusip": "464288679",
+      "ticker": null,
+      "value": 835715.0,
+      "shares": 7574.0,
+      "put_call": null,
+      "weight": 0.0005460622450911277
+    },
+    {
+      "issuer": "NVIDIA CORPORATION",
+      "title": "COM",
+      "cusip": "67066G104",
+      "ticker": "NVDA",
+      "value": 400180.0,
+      "shares": 2000.0,
+      "put_call": null,
+      "weight": 0.0002614805157745972
+    },
+    {
+      "issuer": "INVESCO EXCH TRD SLF IDX FD",
+      "title": "BULL 2032 HI ETF",
+      "cusip": "46139W775",
+      "ticker": null,
+      "value": 258177.0,
+      "shares": 10237.0,
+      "put_call": null,
+      "weight": 0.000168694725176516
+    },
+    {
+      "issuer": "J P MORGAN EXCHANGE TRADED F",
+      "title": "INTL HDGD EQT LA",
+      "cusip": "46654Q591",
+      "ticker": null,
+      "value": 253791.0,
+      "shares": 4584.0,
+      "put_call": null,
+      "weight": 0.00016582888095094907
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "IBON 2026 TE ETF",
+      "cusip": "46436E528",
+      "ticker": null,
+      "value": 243679.0,
+      "shares": 10756.0,
+      "put_call": null,
+      "weight": 0.00015922162677654573
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "0-3 MTH TREASURY",
+      "cusip": "46436E718",
+      "ticker": null,
+      "value": 216651.0,
+      "shares": 2152.0,
+      "put_call": null,
+      "weight": 0.0001415613354567501
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "0-5 YR TIPS ETF",
+      "cusip": "46429B747",
+      "ticker": null,
+      "value": 213144.0,
+      "shares": 2088.0,
+      "put_call": null,
+      "weight": 0.00013926983620935764
+    },
+    {
+      "issuer": "INVESCO EXCH TRD SLF IDX FD",
+      "title": "BULLETSHS 2030",
+      "cusip": "46139W841",
+      "ticker": null,
+      "value": 212061.0,
+      "shares": 8229.0,
+      "put_call": null,
+      "weight": 0.0001385621961509242
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "ISHS 1-5YR INVS",
+      "cusip": "464288646",
+      "ticker": null,
+      "value": 196452.0,
+      "shares": 3750.0,
+      "put_call": null,
+      "weight": 0.0001283631622893477
+    },
+    {
+      "issuer": "INVESCO EXCH TRD SLF IDX FD",
+      "title": "BULL 2031 HI ETF",
+      "cusip": "46139W817",
+      "ticker": null,
+      "value": 196230.0,
+      "shares": 7504.0,
+      "put_call": null,
+      "weight": 0.0001282181058784777
+    },
+    {
+      "issuer": "INNOVATOR ETFS TRUST",
+      "title": "INTL DE PWR DECE",
+      "cusip": "45783Y426",
+      "ticker": null,
+      "value": 185949.0,
+      "shares": 5418.0,
+      "put_call": null,
+      "weight": 0.00012150042587778143
+    },
+    {
+      "issuer": "INNOVATOR ETFS TRUST",
+      "title": "DEFINED WLT SHLD",
+      "cusip": "45783Y855",
+      "ticker": null,
+      "value": 177999.0,
+      "shares": 5198.0,
+      "put_call": null,
+      "weight": 0.00011630583819122027
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "IBONDS 29 TR HI",
+      "cusip": "46436E379",
+      "ticker": null,
+      "value": 162241.0,
+      "shares": 6956.0,
+      "put_call": null,
+      "weight": 0.00010600944664847424
+    },
+    {
+      "issuer": "INVESCO EXCH TRD SLF IDX FD",
+      "title": "INVSCO 28 HYCORP",
+      "cusip": "46138J452",
+      "ticker": null,
+      "value": 160368.0,
+      "shares": 7373.0,
+      "put_call": null,
+      "weight": 0.00010478561485766555
+    },
+    {
+      "issuer": "INVESCO EXCH TRD SLF IDX FD",
+      "title": "BULETSHS 2027",
+      "cusip": "46138J585",
+      "ticker": null,
+      "value": 122703.0,
+      "shares": 5490.0,
+      "put_call": null,
+      "weight": 8.01750305539767e-05
+    },
+    {
+      "issuer": "INNOVATOR ETFS TRUST",
+      "title": "EMERGING MRKT 10",
+      "cusip": "45783Y210",
+      "ticker": null,
+      "value": 88443.0,
+      "shares": 2781.0,
+      "put_call": null,
+      "weight": 5.778929795755085e-05
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

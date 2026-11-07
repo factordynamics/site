@@ -25,7 +25,7 @@ from ingest.edgar import (
     table_value_total,
     unique_quarters,
 )
-from ingest.managers import MANAGERS
+from ingest.managers import MANAGERS, load_managers
 from ingest.pages import write_site
 from ingest.parse import (
     AggregatedHolding,
@@ -39,6 +39,8 @@ WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
 CSV_DIR = WEB / "csv"
 HISTORY_QUARTERS = int(os.environ.get("COPYBOOK_HISTORY_QUARTERS", "8"))
+if os.environ.get("COPYBOOK_LATEST_ONLY") == "1":
+    HISTORY_QUARTERS = 1
 
 
 def quarter_label(report_date: str) -> str:
@@ -105,7 +107,8 @@ def load_filing(cik: str, meta) -> dict | None:
 def ingest() -> dict:
     managers_out = []
     errors = []
-    for cik, name, manager, slug in MANAGERS:
+    roster = load_managers()
+    for cik, name, manager, slug in roster:
         print(f"fetch {slug} ({cik})", flush=True)
         try:
             submissions = fetch_submissions(cik)
@@ -215,7 +218,7 @@ def ingest() -> dict:
             "not live prices. 13F omits shorts, many options, and filers under $100M AUM. "
             "Not investment advice."
         ),
-        "manager_count": len(MANAGERS),
+        "manager_count": len(roster),
         "filed_count": len(ok),
         "errors": errors,
         "managers": managers_out,
@@ -232,7 +235,11 @@ def write_json(payload: dict) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     slim_managers = []
     for m in payload["managers"]:
-        entry = {k: v for k, v in m.items() if k != "holdings"}
+        entry = {
+            k: v
+            for k, v in m.items()
+            if k not in {"holdings", "history"}
+        }
         if m.get("ok"):
             entry["top"] = m["holdings"][:8]
         slim_managers.append(entry)
@@ -344,7 +351,8 @@ def main() -> int:
     write_alerts(payload)
     write_json(payload)
     write_csv(payload)
-    write_site(payload)
+    if os.environ.get("COPYBOOK_JSON_ONLY") != "1":
+        write_site(payload)
     print(
         f"wrote {payload['filed_count']}/{payload['manager_count']} managers, "
         f"{payload['copycat']['num_positions']} copycat names"

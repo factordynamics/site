@@ -1,0 +1,4282 @@
+{
+  "cik": "0001422848",
+  "name": "Capital Research Global Investors",
+  "manager": "Capital Research Global Investors",
+  "slug": "capital-research-global-investors",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001422848-26-000094",
+  "filing_date": "2026-08-12",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1422848/000142284826000094/0001422848-26-000094-index.html",
+  "line_count": 426,
+  "position_count": 426,
+  "values_in_thousands": false,
+  "total_value": 716871733902.0,
+  "holdings": [
+    {
+      "issuer": "BROADCOM INC",
+      "title": "COM",
+      "cusip": "11135F101",
+      "ticker": "AVGO",
+      "value": 42731528140.0,
+      "shares": 113126312.0,
+      "put_call": null,
+      "weight": 0.05960833175470358
+    },
+    {
+      "issuer": "NVIDIA CORPORATION",
+      "title": "COM",
+      "cusip": "67066G104",
+      "ticker": "NVDA",
+      "value": 40564718793.0,
+      "shares": 202740420.0,
+      "put_call": null,
+      "weight": 0.05658574173681313
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 35342477923.0,
+      "shares": 94750369.0,
+      "put_call": null,
+      "weight": 0.04930097847578336
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 28745397548.0,
+      "shares": 120603873.0,
+      "put_call": null,
+      "weight": 0.04009838327916224
+    },
+    {
+      "issuer": "ELI LILLY & CO",
+      "title": "COM",
+      "cusip": "532457108",
+      "ticker": "LLY",
+      "value": 25037481632.0,
+      "shares": 20873140.0,
+      "put_call": null,
+      "weight": 0.034926027136986754
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 22345263432.0,
+      "shares": 62527250.0,
+      "put_call": null,
+      "weight": 0.031170518204662132
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 22317365701.0,
+      "shares": 39619778.0,
+      "put_call": null,
+      "weight": 0.03113160227356781
+    },
+    {
+      "issuer": "APPLE INC",
+      "title": "COM",
+      "cusip": "037833100",
+      "ticker": "AAPL",
+      "value": 17184944157.0,
+      "shares": 59393712.0,
+      "put_call": null,
+      "weight": 0.023972132453124826
+    },
+    {
+      "issuer": "APPLIED MATLS INC",
+      "title": "COM",
+      "cusip": "038222105",
+      "ticker": "AMAT",
+      "value": 16020269437.0,
+      "shares": 22159097.0,
+      "put_call": null,
+      "weight": 0.022347469818345567
+    },
+    {
+      "issuer": "PHILIP MORRIS INTL INC",
+      "title": "COM",
+      "cusip": "718172109",
+      "ticker": null,
+      "value": 15242589518.0,
+      "shares": 84253663.0,
+      "put_call": null,
+      "weight": 0.021262645459646116
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL C",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 15154256971.0,
+      "shares": 42891466.0,
+      "put_call": null,
+      "weight": 0.021139426000958302
+    },
+    {
+      "issuer": "GE AEROSPACE",
+      "title": "COM NEW",
+      "cusip": "369604301",
+      "ticker": "GE",
+      "value": 11564216260.0,
+      "shares": 30942708.0,
+      "put_call": null,
+      "weight": 0.01613149983896685
+    },
+    {
+      "issuer": "STARBUCKS CORP",
+      "title": "COM",
+      "cusip": "855244109",
+      "ticker": "SBUX",
+      "value": 11205315257.0,
+      "shares": 109649535.0,
+      "put_call": null,
+      "weight": 0.015630850997581422
+    },
+    {
+      "issuer": "ROYAL CARIBBEAN GROUP",
+      "title": "COM",
+      "cusip": "V7780T103",
+      "ticker": null,
+      "value": 10877491447.0,
+      "shares": 34256274.0,
+      "put_call": null,
+      "weight": 0.015173553276808385
+    },
+    {
+      "issuer": "INTEL CORP",
+      "title": "COM",
+      "cusip": "458140100",
+      "ticker": "INTC",
+      "value": 10297284321.0,
+      "shares": 73749883.0,
+      "put_call": null,
+      "weight": 0.014364193528667838
+    },
+    {
+      "issuer": "RTX CORPORATION",
+      "title": "COM",
+      "cusip": "75513E101",
+      "ticker": null,
+      "value": 9931589851.0,
+      "shares": 52346255.0,
+      "put_call": null,
+      "weight": 0.013854068142624939
+    },
+    {
+      "issuer": "VERTEX PHARMACEUTICALS INC",
+      "title": "COM",
+      "cusip": "92532F100",
+      "ticker": null,
+      "value": 9681703171.0,
+      "shares": 19490637.0,
+      "put_call": null,
+      "weight": 0.013505488796861306
+    },
+    {
+      "issuer": "UBER TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "90353T100",
+      "ticker": "UBER",
+      "value": 9429141346.0,
+      "shares": 130662156.0,
+      "put_call": null,
+      "weight": 0.013153177758420325
+    },
+    {
+      "issuer": "JPMORGAN CHASE & CO",
+      "title": "COM",
+      "cusip": "46625H100",
+      "ticker": "JPM",
+      "value": 9082316516.0,
+      "shares": 27746323.0,
+      "put_call": null,
+      "weight": 0.012669374570767493
+    },
+    {
+      "issuer": "LINDE PLC",
+      "title": "SHS",
+      "cusip": "G54950103",
+      "ticker": null,
+      "value": 9045038560.0,
+      "shares": 17430716.0,
+      "put_call": null,
+      "weight": 0.012617373697756232
+    },
+    {
+      "issuer": "CISCO SYS INC",
+      "title": "COM",
+      "cusip": "17275R102",
+      "ticker": "CSCO",
+      "value": 7890299515.0,
+      "shares": 67174294.0,
+      "put_call": null,
+      "weight": 0.011006570829696912
+    },
+    {
+      "issuer": "CARRIER GLOBAL CORPORATION",
+      "title": "COM",
+      "cusip": "14448C104",
+      "ticker": null,
+      "value": 7779908643.0,
+      "shares": 106065347.0,
+      "put_call": null,
+      "weight": 0.01085258111748001
+    },
+    {
+      "issuer": "ABBVIE INC",
+      "title": "COM",
+      "cusip": "00287Y109",
+      "ticker": "ABBV",
+      "value": 7574798407.0,
+      "shares": 30101551.0,
+      "put_call": null,
+      "weight": 0.010566462658207574
+    },
+    {
+      "issuer": "WELLS FARGO & CO",
+      "title": "COM",
+      "cusip": "949746101",
+      "ticker": null,
+      "value": 6313388526.0,
+      "shares": 76395745.0,
+      "put_call": null,
+      "weight": 0.008806859340980897
+    },
+    {
+      "issuer": "CORNING INC",
+      "title": "COM",
+      "cusip": "219350105",
+      "ticker": null,
+      "value": 6308791146.0,
+      "shares": 24698700.0,
+      "put_call": null,
+      "weight": 0.008800446227194171
+    },
+    {
+      "issuer": "MASTERCARD INCORPORATED",
+      "title": "CL A",
+      "cusip": "57636Q104",
+      "ticker": "MA",
+      "value": 5971175786.0,
+      "shares": 11626317.0,
+      "put_call": null,
+      "weight": 0.008329489786824669
+    },
+    {
+      "issuer": "HOME DEPOT INC",
+      "title": "COM",
+      "cusip": "437076102",
+      "ticker": "HD",
+      "value": 5925852861.0,
+      "shares": 16802396.0,
+      "put_call": null,
+      "weight": 0.008266266586834199
+    },
+    {
+      "issuer": "ORACLE CORP",
+      "title": "COM",
+      "cusip": "68389X105",
+      "ticker": "ORCL",
+      "value": 5824847174.0,
+      "shares": 39746237.0,
+      "put_call": null,
+      "weight": 0.008125368735484674
+    },
+    {
+      "issuer": "PROGRESSIVE CORP",
+      "title": "COM",
+      "cusip": "743315103",
+      "ticker": null,
+      "value": 5799694510.0,
+      "shares": 26549107.0,
+      "put_call": null,
+      "weight": 0.008090282034739632
+    },
+    {
+      "issuer": "MERCADOLIBRE  INC",
+      "title": "COM",
+      "cusip": "58733R102",
+      "ticker": null,
+      "value": 5326408105.0,
+      "shares": 3138040.0,
+      "put_call": null,
+      "weight": 0.00743007131276869
+    },
+    {
+      "issuer": "AMPHENOL CORP",
+      "title": "CL A",
+      "cusip": "032095101",
+      "ticker": null,
+      "value": 5198251779.0,
+      "shares": 29487845.0,
+      "put_call": null,
+      "weight": 0.007251299686075539
+    },
+    {
+      "issuer": "DOMINION ENERGY INC",
+      "title": "COM",
+      "cusip": "25746U109",
+      "ticker": null,
+      "value": 5043640462.0,
+      "shares": 73855890.0,
+      "put_call": null,
+      "weight": 0.0070356246779978236
+    },
+    {
+      "issuer": "TAIWAN SEMICONDUCTOR MANUFAC",
+      "title": "SPONSORED ADS",
+      "cusip": "874039100",
+      "ticker": "TSM",
+      "value": 4999288007.0,
+      "shares": 10474198.0,
+      "put_call": null,
+      "weight": 0.00697375523482898
+    },
+    {
+      "issuer": "NETFLIX INC.",
+      "title": "COM",
+      "cusip": "64110L106",
+      "ticker": "NFLX",
+      "value": 4905520791.0,
+      "shares": 68701246.0,
+      "put_call": null,
+      "weight": 0.006842954686326926
+    },
+    {
+      "issuer": "UNION PAC CORP",
+      "title": "COM",
+      "cusip": "907818108",
+      "ticker": "UNP",
+      "value": 4654580722.0,
+      "shares": 17112417.0,
+      "put_call": null,
+      "weight": 0.006492905915908668
+    },
+    {
+      "issuer": "CANADIAN NAT RES LTD MED TER",
+      "title": "COM",
+      "cusip": "136385101",
+      "ticker": null,
+      "value": 4592003680.0,
+      "shares": 116067730.0,
+      "put_call": null,
+      "weight": 0.0064056140908294625
+    },
+    {
+      "issuer": "EXXON MOBIL CORP",
+      "title": "COM",
+      "cusip": "30231G102",
+      "ticker": "XOM",
+      "value": 4558514327.0,
+      "shares": 33342063.0,
+      "put_call": null,
+      "weight": 0.0063588981283828555
+    },
+    {
+      "issuer": "MICRON TECHNOLOGY INC",
+      "title": "COM",
+      "cusip": "595112103",
+      "ticker": "MU",
+      "value": 4417941985.0,
+      "shares": 3827473.0,
+      "put_call": null,
+      "weight": 0.006162806784071019
+    },
+    {
+      "issuer": "UNITEDHEALTH GROUP INC",
+      "title": "COM",
+      "cusip": "91324P102",
+      "ticker": "UNH",
+      "value": 4378631657.0,
+      "shares": 10534177.0,
+      "put_call": null,
+      "weight": 0.006107970854376832
+    },
+    {
+      "issuer": "BLACKROCK INC",
+      "title": "COM",
+      "cusip": "09290D101",
+      "ticker": null,
+      "value": 4286838331.0,
+      "shares": 4458212.0,
+      "put_call": null,
+      "weight": 0.005979923783110177
+    },
+    {
+      "issuer": "ALTRIA GROUP INC",
+      "title": "COM",
+      "cusip": "02209S103",
+      "ticker": null,
+      "value": 4220174233.0,
+      "shares": 58653624.0,
+      "put_call": null,
+      "weight": 0.005886930720547728
+    },
+    {
+      "issuer": "SEAGATE TECHNOLOGY HLDNGS PL",
+      "title": "ORD SHS",
+      "cusip": "G7997R103",
+      "ticker": null,
+      "value": 4175343665.0,
+      "shares": 4326781.0,
+      "put_call": null,
+      "weight": 0.0058243943337997345
+    },
+    {
+      "issuer": "CARVANA CO",
+      "title": "CL A",
+      "cusip": "146869102",
+      "ticker": "CVNA",
+      "value": 4174272760.0,
+      "shares": 63423386.0,
+      "put_call": null,
+      "weight": 0.005822900475206411
+    },
+    {
+      "issuer": "TRANSDIGM GROUP INC",
+      "title": "COM",
+      "cusip": "893641100",
+      "ticker": "TDG",
+      "value": 4155104974.0,
+      "shares": 3119490.0,
+      "put_call": null,
+      "weight": 0.005796162378147307
+    },
+    {
+      "issuer": "MONDELEZ INTL INC",
+      "title": "CL A",
+      "cusip": "609207105",
+      "ticker": null,
+      "value": 4030100719.0,
+      "shares": 69663227.0,
+      "put_call": null,
+      "weight": 0.005621787731905378
+    },
+    {
+      "issuer": "MORGAN STANLEY",
+      "title": "COM NEW",
+      "cusip": "617446448",
+      "ticker": null,
+      "value": 3777544254.0,
+      "shares": 18070606.0,
+      "put_call": null,
+      "weight": 0.005269484170394713
+    },
+    {
+      "issuer": "TESLA INC",
+      "title": "COM",
+      "cusip": "88160R101",
+      "ticker": "TSLA",
+      "value": 3574708522.0,
+      "shares": 8499204.0,
+      "put_call": null,
+      "weight": 0.004986538529762537
+    },
+    {
+      "issuer": "ABBOTT LABORATORIES",
+      "title": "COM",
+      "cusip": "002824100",
+      "ticker": null,
+      "value": 3349205208.0,
+      "shares": 36908990.0,
+      "put_call": null,
+      "weight": 0.004671972752740525
+    },
+    {
+      "issuer": "CENTERPOINT ENERGY INC",
+      "title": "COM",
+      "cusip": "15189T107",
+      "ticker": null,
+      "value": 3143883513.0,
+      "shares": 71382073.0,
+      "put_call": null,
+      "weight": 0.0043855593188024695
+    },
+    {
+      "issuer": "AIR PRODUCTS AND CHEMICALS I",
+      "title": "COM",
+      "cusip": "009158106",
+      "ticker": null,
+      "value": 3108228298.0,
+      "shares": 10602157.0,
+      "put_call": null,
+      "weight": 0.004335822087839372
+    },
+    {
+      "issuer": "INTERNATIONAL PAPER CO",
+      "title": "COM",
+      "cusip": "460146103",
+      "ticker": null,
+      "value": 2989682674.0,
+      "shares": 78469265.0,
+      "put_call": null,
+      "weight": 0.004170456906881901
+    },
+    {
+      "issuer": "KLA CORP",
+      "title": "COM NEW",
+      "cusip": "482480100",
+      "ticker": null,
+      "value": 2936782949.0,
+      "shares": 9747977.0,
+      "put_call": null,
+      "weight": 0.004096664452111699
+    },
+    {
+      "issuer": "ALNYLAM PHARMACEUTICALS INC",
+      "title": "COM",
+      "cusip": "02043Q107",
+      "ticker": null,
+      "value": 2935115324.0,
+      "shares": 9750699.0,
+      "put_call": null,
+      "weight": 0.004094338199141836
+    },
+    {
+      "issuer": "TC ENERGY CORP",
+      "title": "COM",
+      "cusip": "87807B107",
+      "ticker": null,
+      "value": 2883026432.0,
+      "shares": 43524159.0,
+      "put_call": null,
+      "weight": 0.004021676815610258
+    },
+    {
+      "issuer": "COMCAST CORP NEW",
+      "title": "CL A",
+      "cusip": "20030N101",
+      "ticker": "CMCSA",
+      "value": 2850576194.0,
+      "shares": 116113743.0,
+      "put_call": null,
+      "weight": 0.003976410366306461
+    },
+    {
+      "issuer": "APOLLO GLOBAL MGMT INC",
+      "title": "COM",
+      "cusip": "03769M106",
+      "ticker": null,
+      "value": 2836137108.0,
+      "shares": 23972610.0,
+      "put_call": null,
+      "weight": 0.003956268567826827
+    },
+    {
+      "issuer": "EOG RES INC",
+      "title": "COM",
+      "cusip": "26875P101",
+      "ticker": null,
+      "value": 2791343715.0,
+      "shares": 21516340.0,
+      "put_call": null,
+      "weight": 0.0038937840383334054
+    },
+    {
+      "issuer": "VIKING HOLDINGS LTD",
+      "title": "ORD SHS",
+      "cusip": "G93A5A101",
+      "ticker": null,
+      "value": 2671531211.0,
+      "shares": 25523184.0,
+      "put_call": null,
+      "weight": 0.0037266516235179275
+    },
+    {
+      "issuer": "FREEPORT MCMORAN INC",
+      "title": "CL B",
+      "cusip": "35671D857",
+      "ticker": null,
+      "value": 2610093764.0,
+      "shares": 41503051.0,
+      "put_call": null,
+      "weight": 0.0036409494761259664
+    },
+    {
+      "issuer": "CVS HEALTH CORP",
+      "title": "COM",
+      "cusip": "126650100",
+      "ticker": null,
+      "value": 2516851376.0,
+      "shares": 24329151.0,
+      "put_call": null,
+      "weight": 0.0035108810362776367
+    },
+    {
+      "issuer": "GILEAD SCIENCES INC",
+      "title": "COM",
+      "cusip": "375558103",
+      "ticker": null,
+      "value": 2450148913.0,
+      "shares": 19393296.0,
+      "put_call": null,
+      "weight": 0.00341783445647049
+    },
+    {
+      "issuer": "MCDONALDS CORP",
+      "title": "COM",
+      "cusip": "580135101",
+      "ticker": "MCK",
+      "value": 2422354866.0,
+      "shares": 8961454.0,
+      "put_call": null,
+      "weight": 0.003379063159339392
+    },
+    {
+      "issuer": "XCEL ENERGY INC",
+      "title": "COM",
+      "cusip": "98389B100",
+      "ticker": null,
+      "value": 2352947790.0,
+      "shares": 29301965.0,
+      "put_call": null,
+      "weight": 0.0032822437804775548
+    },
+    {
+      "issuer": "CATERPILLAR INC",
+      "title": "COM",
+      "cusip": "149123101",
+      "ticker": "CAT",
+      "value": 2341412147.0,
+      "shares": 2198729.0,
+      "put_call": null,
+      "weight": 0.0032661521388986483
+    },
+    {
+      "issuer": "WASTE MGMT INC DEL",
+      "title": "COM",
+      "cusip": "94106L109",
+      "ticker": "WM",
+      "value": 2326456418.0,
+      "shares": 10438136.0,
+      "put_call": null,
+      "weight": 0.0032452896494284686
+    },
+    {
+      "issuer": "AMGEN INC",
+      "title": "COM",
+      "cusip": "031162100",
+      "ticker": null,
+      "value": 2271437158.0,
+      "shares": 6272625.0,
+      "put_call": null,
+      "weight": 0.0031685405499758718
+    },
+    {
+      "issuer": "ARISTA NETWORKS INC",
+      "title": "COM SHS",
+      "cusip": "040413205",
+      "ticker": null,
+      "value": 2236166516.0,
+      "shares": 13164137.0,
+      "put_call": null,
+      "weight": 0.00311933977899831
+    },
+    {
+      "issuer": "UNITED RENTALS INC",
+      "title": "COM",
+      "cusip": "911363109",
+      "ticker": null,
+      "value": 2178339311.0,
+      "shares": 1922865.0,
+      "put_call": null,
+      "weight": 0.0030386737375500844
+    },
+    {
+      "issuer": "PROLOGIS INC.",
+      "title": "COM",
+      "cusip": "74340W103",
+      "ticker": null,
+      "value": 2156110902.0,
+      "shares": 15915752.0,
+      "put_call": null,
+      "weight": 0.0030076662253986307
+    },
+    {
+      "issuer": "AFFIRM HLDGS INC",
+      "title": "COM CL A",
+      "cusip": "00827B106",
+      "ticker": null,
+      "value": 2120360482.0,
+      "shares": 26000572.0,
+      "put_call": null,
+      "weight": 0.002957796188250692
+    },
+    {
+      "issuer": "THERMO FISHER SCIENTIFIC INC",
+      "title": "COM",
+      "cusip": "883556102",
+      "ticker": "TMO",
+      "value": 2079461815.0,
+      "shares": 4147545.0,
+      "put_call": null,
+      "weight": 0.0029007446055674345
+    },
+    {
+      "issuer": "JOHNSON & JOHNSON",
+      "title": "COM",
+      "cusip": "478160104",
+      "ticker": "JNJ",
+      "value": 2073562156.0,
+      "shares": 8164545.0,
+      "put_call": null,
+      "weight": 0.0028925148780987735
+    },
+    {
+      "issuer": "INGERSOLL RAND INC",
+      "title": "COM",
+      "cusip": "45687V106",
+      "ticker": null,
+      "value": 2067341711.0,
+      "shares": 25215025.0,
+      "put_call": null,
+      "weight": 0.002883837670300188
+    },
+    {
+      "issuer": "DANAHER CORP DEL",
+      "title": "COM",
+      "cusip": "235851102",
+      "ticker": "DHR",
+      "value": 2060650455.0,
+      "shares": 10818030.0,
+      "put_call": null,
+      "weight": 0.0028745037048450587
+    },
+    {
+      "issuer": "DOORDASH INC",
+      "title": "CL A",
+      "cusip": "25809K105",
+      "ticker": null,
+      "value": 2019671813.0,
+      "shares": 10944937.0,
+      "put_call": null,
+      "weight": 0.0028173405610606756
+    },
+    {
+      "issuer": "ENTEGRIS INC",
+      "title": "COM",
+      "cusip": "29362U104",
+      "ticker": null,
+      "value": 2015623367.0,
+      "shares": 11207917.0,
+      "put_call": null,
+      "weight": 0.0028116931825848024
+    },
+    {
+      "issuer": "SMURFIT WESTROCK PLC",
+      "title": "SHS",
+      "cusip": "G8267P108",
+      "ticker": null,
+      "value": 1972263342.0,
+      "shares": 42634328.0,
+      "put_call": null,
+      "weight": 0.0027512081293326854
+    },
+    {
+      "issuer": "BOEING CO",
+      "title": "COM",
+      "cusip": "097023105",
+      "ticker": "BA",
+      "value": 1953234904.0,
+      "shares": 9023177.0,
+      "put_call": null,
+      "weight": 0.0027246644157224048
+    },
+    {
+      "issuer": "NU HLDGS LTD",
+      "title": "ORD SHS CL A",
+      "cusip": "G6683N103",
+      "ticker": null,
+      "value": 1907223232.0,
+      "shares": 142761832.0,
+      "put_call": null,
+      "weight": 0.0026604804483206573
+    },
+    {
+      "issuer": "DTE ENERGY CO",
+      "title": "COM",
+      "cusip": "233331107",
+      "ticker": null,
+      "value": 1904073304.0,
+      "shares": 12496338.0,
+      "put_call": null,
+      "weight": 0.002656086457246613
+    },
+    {
+      "issuer": "PNC FINL SVCS GROUP INC",
+      "title": "COM",
+      "cusip": "693475105",
+      "ticker": null,
+      "value": 1894589147.0,
+      "shares": 7694464.0,
+      "put_call": null,
+      "weight": 0.0026428565354189287
+    },
+    {
+      "issuer": "BRITISH AMERN TOB PLC",
+      "title": "SPONSORED ADR",
+      "cusip": "110448107",
+      "ticker": null,
+      "value": 1873324986.0,
+      "shares": 30330845.0,
+      "put_call": null,
+      "weight": 0.002613194100712155
+    },
+    {
+      "issuer": "AUTOMATIC DATA PROCESSING IN",
+      "title": "COM",
+      "cusip": "053015103",
+      "ticker": null,
+      "value": 1853838725.0,
+      "shares": 8277905.0,
+      "put_call": null,
+      "weight": 0.00258601174705185
+    },
+    {
+      "issuer": "SALESFORCE INC",
+      "title": "COM",
+      "cusip": "79466L302",
+      "ticker": "CRM",
+      "value": 1839666446.0,
+      "shares": 11742835.0,
+      "put_call": null,
+      "weight": 0.002566242130913048
+    },
+    {
+      "issuer": "MARSH & MCLENNAN COS INC",
+      "title": "COM",
+      "cusip": "571748102",
+      "ticker": null,
+      "value": 1828982920.0,
+      "shares": 10973649.0,
+      "put_call": null,
+      "weight": 0.0025513391496755976
+    },
+    {
+      "issuer": "COCA COLA CO",
+      "title": "COM",
+      "cusip": "191216100",
+      "ticker": "KO",
+      "value": 1813253266.0,
+      "shares": 22311289.0,
+      "put_call": null,
+      "weight": 0.002529397073769798
+    },
+    {
+      "issuer": "WESTERN DIGITAL CORP",
+      "title": "COM",
+      "cusip": "958102105",
+      "ticker": null,
+      "value": 1799092582.0,
+      "shares": 2816570.0,
+      "put_call": null,
+      "weight": 0.0025096436320726032
+    },
+    {
+      "issuer": "SPACE EXPLORATION TECHN CORP",
+      "title": "CLASS A COM STK",
+      "cusip": "84615Q103",
+      "ticker": null,
+      "value": 1783463529.0,
+      "shares": 10438223.0,
+      "put_call": null,
+      "weight": 0.0024878418895001495
+    },
+    {
+      "issuer": "PINNACLE WEST CAP CORP",
+      "title": "COM",
+      "cusip": "723484101",
+      "ticker": null,
+      "value": 1764873729.0,
+      "shares": 16494147.0,
+      "put_call": null,
+      "weight": 0.00246191005383017
+    },
+    {
+      "issuer": "NEXTERA ENERGY INC",
+      "title": "COM",
+      "cusip": "65339F101",
+      "ticker": null,
+      "value": 1764227733.0,
+      "shares": 20100508.0,
+      "put_call": null,
+      "weight": 0.002461008921912911
+    },
+    {
+      "issuer": "XPO INC",
+      "title": "COM",
+      "cusip": "983793100",
+      "ticker": null,
+      "value": 1698138659.0,
+      "shares": 8271824.0,
+      "put_call": null,
+      "weight": 0.0023688179888986167
+    },
+    {
+      "issuer": "TEXAS INSTRS INC",
+      "title": "COM",
+      "cusip": "882508104",
+      "ticker": null,
+      "value": 1684827017.0,
+      "shares": 5652557.0,
+      "put_call": null,
+      "weight": 0.002350248918072594
+    },
+    {
+      "issuer": "BOOKING HOLDINGS INC",
+      "title": "COM",
+      "cusip": "09857L108",
+      "ticker": null,
+      "value": 1597691314.0,
+      "shares": 8963708.0,
+      "put_call": null,
+      "weight": 0.0022286989965465877
+    },
+    {
+      "issuer": "MEDLINE INC",
+      "title": "COM CL A",
+      "cusip": "58507V107",
+      "ticker": null,
+      "value": 1576182798.0,
+      "shares": 39963790.0,
+      "put_call": null,
+      "weight": 0.0021986956989093285
+    },
+    {
+      "issuer": "WELLTOWER INC",
+      "title": "COM",
+      "cusip": "95040Q104",
+      "ticker": null,
+      "value": 1563681433.0,
+      "shares": 6889084.0,
+      "put_call": null,
+      "weight": 0.0021812569237299054
+    },
+    {
+      "issuer": "BLACKSTONE INC",
+      "title": "COM",
+      "cusip": "09260D107",
+      "ticker": null,
+      "value": 1552603271.0,
+      "shares": 13195066.0,
+      "put_call": null,
+      "weight": 0.0021658034451282307
+    },
+    {
+      "issuer": "FAIR ISAAC CORP",
+      "title": "COM",
+      "cusip": "303250104",
+      "ticker": null,
+      "value": 1549415497.0,
+      "shares": 1296893.0,
+      "put_call": null,
+      "weight": 0.002161356660788376
+    },
+    {
+      "issuer": "CENOVUS ENERGY INC",
+      "title": "COM",
+      "cusip": "15135U109",
+      "ticker": null,
+      "value": 1483103808.0,
+      "shares": 59770371.0,
+      "put_call": null,
+      "weight": 0.0020688551910497672
+    },
+    {
+      "issuer": "CONSTELLATION ENERGY CORP",
+      "title": "COM",
+      "cusip": "21037T109",
+      "ticker": null,
+      "value": 1429529897.0,
+      "shares": 5750152.0,
+      "put_call": null,
+      "weight": 0.0019941222807306615
+    },
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 1398729974.0,
+      "shares": 4077194.0,
+      "put_call": null,
+      "weight": 0.0019511579378176647
+    },
+    {
+      "issuer": "KKR & CO INC",
+      "title": "COM",
+      "cusip": "48251W104",
+      "ticker": null,
+      "value": 1349916410.0,
+      "shares": 14708910.0,
+      "put_call": null,
+      "weight": 0.001883065472050737
+    },
+    {
+      "issuer": "ILLINOIS TOOL WKS INC",
+      "title": "COM",
+      "cusip": "452308109",
+      "ticker": null,
+      "value": 1319685960.0,
+      "shares": 4879245.0,
+      "put_call": null,
+      "weight": 0.0018408955153201895
+    },
+    {
+      "issuer": "GENERAL DYNAMICS CORP",
+      "title": "COM",
+      "cusip": "369550108",
+      "ticker": null,
+      "value": 1313641122.0,
+      "shares": 3708400.0,
+      "put_call": null,
+      "weight": 0.0018324632704510865
+    },
+    {
+      "issuer": "STANLEY BLACK & DECKER INC",
+      "title": "COM",
+      "cusip": "854502101",
+      "ticker": null,
+      "value": 1234649276.0,
+      "shares": 13117876.0,
+      "put_call": null,
+      "weight": 0.0017222736196888227
+    },
+    {
+      "issuer": "BAKER HUGHES COMPANY",
+      "title": "CL A",
+      "cusip": "05722G100",
+      "ticker": null,
+      "value": 1222804135.0,
+      "shares": 22032387.0,
+      "put_call": null,
+      "weight": 0.0017057502439720457
+    },
+    {
+      "issuer": "CHUBB LIMITED",
+      "title": "COM",
+      "cusip": "H1467J104",
+      "ticker": "CB",
+      "value": 1200209572.0,
+      "shares": 3522326.0,
+      "put_call": null,
+      "weight": 0.00167423196541332
+    },
+    {
+      "issuer": "NVR INC",
+      "title": "COM",
+      "cusip": "62944T105",
+      "ticker": "NVR",
+      "value": 1116334710.0,
+      "shares": 163844.0,
+      "put_call": null,
+      "weight": 0.0015572307530158647
+    },
+    {
+      "issuer": "MEDTRONIC PLC",
+      "title": "SHS",
+      "cusip": "G5960L103",
+      "ticker": null,
+      "value": 1037443303.0,
+      "shares": 13261310.0,
+      "put_call": null,
+      "weight": 0.0014471812096050977
+    },
+    {
+      "issuer": "OVINTIV INC",
+      "title": "COM",
+      "cusip": "69047Q102",
+      "ticker": null,
+      "value": 1023815526.0,
+      "shares": 19445689.0,
+      "put_call": null,
+      "weight": 0.0014281711463601393
+    },
+    {
+      "issuer": "UDR INC",
+      "title": "COM",
+      "cusip": "902653104",
+      "ticker": null,
+      "value": 1020660229.0,
+      "shares": 25567641.0,
+      "put_call": null,
+      "weight": 0.0014237696658012317
+    },
+    {
+      "issuer": "SYNOPSYS INC",
+      "title": "COM",
+      "cusip": "871607107",
+      "ticker": null,
+      "value": 1016990376.0,
+      "shares": 2279877.0,
+      "put_call": null,
+      "weight": 0.0014186504055117728
+    },
+    {
+      "issuer": "PROCTER & GAMBLE CO",
+      "title": "COM",
+      "cusip": "742718109",
+      "ticker": "PG",
+      "value": 1005236383.0,
+      "shares": 6855096.0,
+      "put_call": null,
+      "weight": 0.0014022541766689617
+    },
+    {
+      "issuer": "ATI INC",
+      "title": "COM",
+      "cusip": "01741R102",
+      "ticker": null,
+      "value": 1003985098.0,
+      "shares": 5093768.0,
+      "put_call": null,
+      "weight": 0.0014005086970513053
+    },
+    {
+      "issuer": "SHERWIN WILLIAMS CO",
+      "title": "COM",
+      "cusip": "824348106",
+      "ticker": null,
+      "value": 995868282.0,
+      "shares": 2892276.0,
+      "put_call": null,
+      "weight": 0.001389186147122018
+    },
+    {
+      "issuer": "APPLOVIN CORP",
+      "title": "COM CL A",
+      "cusip": "03831W108",
+      "ticker": null,
+      "value": 981607414.0,
+      "shares": 1905302.0,
+      "put_call": null,
+      "weight": 0.0013692929537854964
+    },
+    {
+      "issuer": "CSX CORP",
+      "title": "COM",
+      "cusip": "126408103",
+      "ticker": null,
+      "value": 961114490.0,
+      "shares": 20221215.0,
+      "put_call": null,
+      "weight": 0.0013407063558895868
+    },
+    {
+      "issuer": "TRACTOR SUPPLY CO",
+      "title": "COM",
+      "cusip": "892356106",
+      "ticker": null,
+      "value": 948972395.0,
+      "shares": 30021332.0,
+      "put_call": null,
+      "weight": 0.0013237687442837986
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "DEP SHS RP1/20 A",
+      "cusip": "02079K404",
+      "ticker": null,
+      "value": 932848153.0,
+      "shares": 18330677.0,
+      "put_call": null,
+      "weight": 0.0013012762379713595
+    },
+    {
+      "issuer": "AT&T INC",
+      "title": "COM",
+      "cusip": "00206R102",
+      "ticker": "T",
+      "value": 928063697.0,
+      "shares": 44833995.0,
+      "put_call": null,
+      "weight": 0.0012946021625772051
+    },
+    {
+      "issuer": "D R HORTON INC",
+      "title": "COM",
+      "cusip": "23331A109",
+      "ticker": "DHI",
+      "value": 926250539.0,
+      "shares": 5686635.0,
+      "put_call": null,
+      "weight": 0.0012920728983947122
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "DEP SHS RP1/20 B",
+      "cusip": "02079K602",
+      "ticker": null,
+      "value": 922028023.0,
+      "shares": 18330577.0,
+      "put_call": null,
+      "weight": 0.0012861827010270234
+    },
+    {
+      "issuer": "MARVELL TECHNOLOGY INC",
+      "title": "COM",
+      "cusip": "573874104",
+      "ticker": null,
+      "value": 919159084.0,
+      "shares": 3085747.0,
+      "put_call": null,
+      "weight": 0.001282180675470256
+    },
+    {
+      "issuer": "EXTRA SPACE STORAGE INC",
+      "title": "COM",
+      "cusip": "30225T102",
+      "ticker": null,
+      "value": 915406128.0,
+      "shares": 6300111.0,
+      "put_call": null,
+      "weight": 0.0012769454906770541
+    },
+    {
+      "issuer": "PUBLIC SVC ENTERPRISE GROUP",
+      "title": "COM",
+      "cusip": "744573106",
+      "ticker": null,
+      "value": 869957980.0,
+      "shares": 10718961.0,
+      "put_call": null,
+      "weight": 0.0012135476109020747
+    },
+    {
+      "issuer": "SHOPIFY INC",
+      "title": "CL A SUB VTG SHS",
+      "cusip": "82509L107",
+      "ticker": null,
+      "value": 855402889.0,
+      "shares": 7491701.0,
+      "put_call": null,
+      "weight": 0.0011932439912841339
+    },
+    {
+      "issuer": "ARM HOLDINGS PLC",
+      "title": "SPONSORED ADS",
+      "cusip": "042068205",
+      "ticker": null,
+      "value": 851368783.0,
+      "shares": 2401422.0,
+      "put_call": null,
+      "weight": 0.0011876166163867557
+    },
+    {
+      "issuer": "ORACLE CORP",
+      "title": "6.5 DEP CUM SR D",
+      "cusip": "68389X204",
+      "ticker": null,
+      "value": 843594315.0,
+      "shares": 18767393.0,
+      "put_call": null,
+      "weight": 0.0011767716246925194
+    },
+    {
+      "issuer": "ALLEGRO MICROSYSTEMS INC",
+      "title": "COM",
+      "cusip": "01749D105",
+      "ticker": null,
+      "value": 835885290.0,
+      "shares": 12006396.0,
+      "put_call": null,
+      "weight": 0.001166017922690574
+    },
+    {
+      "issuer": "STEEL DYNAMICS INC",
+      "title": "COM",
+      "cusip": "858119100",
+      "ticker": null,
+      "value": 835206406.0,
+      "shares": 3639878.0,
+      "put_call": null,
+      "weight": 0.0011650709136680466
+    },
+    {
+      "issuer": "CROWDSTRIKE HLDGS INC",
+      "title": "CL A",
+      "cusip": "22788C105",
+      "ticker": null,
+      "value": 825508109.0,
+      "shares": 1081875.0,
+      "put_call": null,
+      "weight": 0.0011515422773146348
+    },
+    {
+      "issuer": "TJX COS INC NEW",
+      "title": "COM",
+      "cusip": "872540109",
+      "ticker": null,
+      "value": 814459168.0,
+      "shares": 5375987.0,
+      "put_call": null,
+      "weight": 0.0011361295605377302
+    },
+    {
+      "issuer": "GFL ENVIRONMENTAL INC",
+      "title": "SUB VTG SHS",
+      "cusip": "36168Q104",
+      "ticker": null,
+      "value": 806415315.0,
+      "shares": 21919416.0,
+      "put_call": null,
+      "weight": 0.0011249087903223718
+    },
+    {
+      "issuer": "ECOLAB INC",
+      "title": "COM",
+      "cusip": "278865100",
+      "ticker": null,
+      "value": 797753203.0,
+      "shares": 2863333.0,
+      "put_call": null,
+      "weight": 0.0011128255799091903
+    },
+    {
+      "issuer": "WATSCO INC",
+      "title": "COM",
+      "cusip": "942622200",
+      "ticker": null,
+      "value": 792709378.0,
+      "shares": 1902230.0,
+      "put_call": null,
+      "weight": 0.0011057896978099674
+    },
+    {
+      "issuer": "ASTRAZENECA PLC",
+      "title": "ORD",
+      "cusip": "G0593M107",
+      "ticker": null,
+      "value": 787343259.0,
+      "shares": 4197587.0,
+      "put_call": null,
+      "weight": 0.0010983042317966939
+    },
+    {
+      "issuer": "BERKSHIRE HATHAWAY INC DEL",
+      "title": "CL B NEW",
+      "cusip": "084670702",
+      "ticker": "BRK.B",
+      "value": 784840053.0,
+      "shares": 1568457.0,
+      "put_call": null,
+      "weight": 0.0010948123853733807
+    },
+    {
+      "issuer": "FTAI AVIATION LTD",
+      "title": "SHS",
+      "cusip": "G3730V105",
+      "ticker": null,
+      "value": 782097262.0,
+      "shares": 2891051.0,
+      "put_call": null,
+      "weight": 0.0010909863299295836
+    },
+    {
+      "issuer": "ITAU UNIBANCO HLDG S A",
+      "title": "SPON ADR REP PFD",
+      "cusip": "465562106",
+      "ticker": null,
+      "value": 775835276.0,
+      "shares": 94959700.0,
+      "put_call": null,
+      "weight": 0.0010822511745260982
+    },
+    {
+      "issuer": "LATTICE SEMICONDUCTOR CORP",
+      "title": "COM",
+      "cusip": "518415104",
+      "ticker": null,
+      "value": 756967533.0,
+      "shares": 4948995.0,
+      "put_call": null,
+      "weight": 0.0010559316223555848
+    },
+    {
+      "issuer": "HONEYWELL INTL INC",
+      "title": "COM",
+      "cusip": "438516205",
+      "ticker": null,
+      "value": 738855506.0,
+      "shares": 3299891.0,
+      "put_call": null,
+      "weight": 0.001030666255981862
+    },
+    {
+      "issuer": "LAM RESEARCH CORP",
+      "title": "COM NEW",
+      "cusip": "512807306",
+      "ticker": "LRCX",
+      "value": 737790088.0,
+      "shares": 1702812.0,
+      "put_call": null,
+      "weight": 0.001029180051477465
+    },
+    {
+      "issuer": "HONEYWELL AEROSPACE INC",
+      "title": "COM",
+      "cusip": "43849R105",
+      "ticker": null,
+      "value": 729532779.0,
+      "shares": 3299870.0,
+      "put_call": null,
+      "weight": 0.001017661520881964
+    },
+    {
+      "issuer": "FIDELITY NATL INFORMATION SV",
+      "title": "COM",
+      "cusip": "31620M106",
+      "ticker": null,
+      "value": 704374966.0,
+      "shares": 18116664.0,
+      "put_call": null,
+      "weight": 0.000982567637540988
+    },
+    {
+      "issuer": "TRANE TECHNOLOGIES PLC",
+      "title": "SHS",
+      "cusip": "G8994E103",
+      "ticker": null,
+      "value": 691911176.0,
+      "shares": 1408884.0,
+      "put_call": null,
+      "weight": 0.000965181277596011
+    },
+    {
+      "issuer": "ACCENTURE PLC IRELAND",
+      "title": "SHS CLASS A",
+      "cusip": "G1151C101",
+      "ticker": "ACN",
+      "value": 680710034.0,
+      "shares": 5470184.0,
+      "put_call": null,
+      "weight": 0.0009495562480819707
+    },
+    {
+      "issuer": "PEPSICO INC",
+      "title": "COM",
+      "cusip": "713448108",
+      "ticker": "PEP",
+      "value": 672910744.0,
+      "shares": 4969690.0,
+      "put_call": null,
+      "weight": 0.0009386766309466322
+    },
+    {
+      "issuer": "HOWMET AEROSPACE INC",
+      "title": "COM",
+      "cusip": "443201108",
+      "ticker": null,
+      "value": 656188005.0,
+      "shares": 2440644.0,
+      "put_call": null,
+      "weight": 0.0009153492514320619
+    },
+    {
+      "issuer": "LOCKHEED MARTIN CORP",
+      "title": "COM",
+      "cusip": "539830109",
+      "ticker": null,
+      "value": 630985060.0,
+      "shares": 1238537.0,
+      "put_call": null,
+      "weight": 0.0008801924112218642
+    },
+    {
+      "issuer": "ADVANCED MICRO DEVICES INC",
+      "title": "COM",
+      "cusip": "007903107",
+      "ticker": "AMD",
+      "value": 629961079.0,
+      "shares": 1084575.0,
+      "put_call": null,
+      "weight": 0.0008787640092475997
+    },
+    {
+      "issuer": "INTUITIVE SURGICAL INC",
+      "title": "COM NEW",
+      "cusip": "46120E602",
+      "ticker": null,
+      "value": 617065740.0,
+      "shares": 1551664.0,
+      "put_call": null,
+      "weight": 0.0008607756601606446
+    },
+    {
+      "issuer": "EXPAND ENERGY CORPORATION",
+      "title": "COM",
+      "cusip": "165167735",
+      "ticker": null,
+      "value": 605815160.0,
+      "shares": 6643659.0,
+      "put_call": null,
+      "weight": 0.0008450816671240353
+    },
+    {
+      "issuer": "BOSTON SCIENTIFIC CORP",
+      "title": "COM",
+      "cusip": "101137107",
+      "ticker": null,
+      "value": 605255716.0,
+      "shares": 14180571.0,
+      "put_call": null,
+      "weight": 0.0008443012708919857
+    },
+    {
+      "issuer": "ENTERGY CORP NEW",
+      "title": "COM",
+      "cusip": "29364G103",
+      "ticker": null,
+      "value": 601532617.0,
+      "shares": 5237094.0,
+      "put_call": null,
+      "weight": 0.0008391077351115543
+    },
+    {
+      "issuer": "GALLAGHER ARTHUR J & CO",
+      "title": "COM",
+      "cusip": "363576109",
+      "ticker": null,
+      "value": 593625531.0,
+      "shares": 2585853.0,
+      "put_call": null,
+      "weight": 0.00082807774797988
+    },
+    {
+      "issuer": "MONSTER BEVERAGE CORP NEW",
+      "title": "COM",
+      "cusip": "61174X109",
+      "ticker": null,
+      "value": 575011444.0,
+      "shares": 5981701.0,
+      "put_call": null,
+      "weight": 0.0008021120331668803
+    },
+    {
+      "issuer": "DUKE ENERGY CORP NEW",
+      "title": "COM NEW",
+      "cusip": "26441C204",
+      "ticker": null,
+      "value": 569537090.0,
+      "shares": 4499424.0,
+      "put_call": null,
+      "weight": 0.0007944755847743588
+    },
+    {
+      "issuer": "AURORA INNOVATION INC",
+      "title": "CLASS A COM",
+      "cusip": "051774107",
+      "ticker": null,
+      "value": 566394760.0,
+      "shares": 83051619.0,
+      "put_call": null,
+      "weight": 0.0007900921925280276
+    },
+    {
+      "issuer": "ELDORADO GOLD CORP NEW",
+      "title": "COM",
+      "cusip": "284902509",
+      "ticker": null,
+      "value": 562168905.0,
+      "shares": 18068118.0,
+      "put_call": null,
+      "weight": 0.0007841973374233379
+    },
+    {
+      "issuer": "CENCORA INC",
+      "title": "COM",
+      "cusip": "03073E105",
+      "ticker": null,
+      "value": 560283987.0,
+      "shares": 1979942.0,
+      "put_call": null,
+      "weight": 0.0007815679716513884
+    },
+    {
+      "issuer": "TOPBUILD COR",
+      "title": "COM",
+      "cusip": "89055F103",
+      "ticker": null,
+      "value": 553824761.0,
+      "shares": 1562011.0,
+      "put_call": null,
+      "weight": 0.0007725576763718664
+    },
+    {
+      "issuer": "US BANCORP",
+      "title": "COM NEW",
+      "cusip": "902973304",
+      "ticker": null,
+      "value": 551501407.0,
+      "shares": 9130818.0,
+      "put_call": null,
+      "weight": 0.0007693167144394523
+    },
+    {
+      "issuer": "ONEOK INC NEW",
+      "title": "COM",
+      "cusip": "682680103",
+      "ticker": null,
+      "value": 549594109.0,
+      "shares": 6319376.0,
+      "put_call": null,
+      "weight": 0.0007666561296935336
+    },
+    {
+      "issuer": "MOTOROLA SOLUTIONS INC",
+      "title": "COM NEW",
+      "cusip": "620076307",
+      "ticker": null,
+      "value": 543219669.0,
+      "shares": 1308049.0,
+      "put_call": null,
+      "weight": 0.0007577641066180758
+    },
+    {
+      "issuer": "STRYKER CORPORATION",
+      "title": "COM",
+      "cusip": "863667101",
+      "ticker": null,
+      "value": 509151692.0,
+      "shares": 1617176.0,
+      "put_call": null,
+      "weight": 0.0007102409928044445
+    },
+    {
+      "issuer": "TRUIST FINL CORP",
+      "title": "COM",
+      "cusip": "89832Q109",
+      "ticker": null,
+      "value": 507052828.0,
+      "shares": 10177539.0,
+      "put_call": null,
+      "weight": 0.0007073131831270065
+    },
+    {
+      "issuer": "FERGUSON ENTERPRISES INC",
+      "title": "COMMON STOCK NEW",
+      "cusip": "31488V107",
+      "ticker": null,
+      "value": 502268754.0,
+      "shares": 2116289.0,
+      "put_call": null,
+      "weight": 0.0007006396406036323
+    },
+    {
+      "issuer": "GALAXY DIGITAL INC.",
+      "title": "CL A",
+      "cusip": "36317J209",
+      "ticker": null,
+      "value": 501198766.0,
+      "shares": 18332069.0,
+      "put_call": null,
+      "weight": 0.000699147061179171
+    },
+    {
+      "issuer": "OMNICOM GROUP INC",
+      "title": "COM",
+      "cusip": "681919106",
+      "ticker": null,
+      "value": 489619630.0,
+      "shares": 6722774.0,
+      "put_call": null,
+      "weight": 0.0006829947490535782
+    },
+    {
+      "issuer": "VERIZON COMMUNICATIONS INC",
+      "title": "COM",
+      "cusip": "92343V104",
+      "ticker": "VZ",
+      "value": 483806478.0,
+      "shares": 11426700.0,
+      "put_call": null,
+      "weight": 0.0006748856944973908
+    },
+    {
+      "issuer": "SEMTECH CORP",
+      "title": "COM",
+      "cusip": "816850101",
+      "ticker": null,
+      "value": 478174819.0,
+      "shares": 2954432.0,
+      "put_call": null,
+      "weight": 0.000667029813544537
+    },
+    {
+      "issuer": "AMERICAN TOWER CORP",
+      "title": "COM",
+      "cusip": "03027X100",
+      "ticker": null,
+      "value": 478039704.0,
+      "shares": 2922539.0,
+      "put_call": null,
+      "weight": 0.0006668413349177337
+    },
+    {
+      "issuer": "HERSHEY CO",
+      "title": "COM",
+      "cusip": "427866108",
+      "ticker": null,
+      "value": 473589727.0,
+      "shares": 2699237.0,
+      "put_call": null,
+      "weight": 0.0006606338408995522
+    },
+    {
+      "issuer": "CONOCOPHILLIPS",
+      "title": "COM",
+      "cusip": "20825C104",
+      "ticker": "COP",
+      "value": 462458573.0,
+      "shares": 4448428.0,
+      "put_call": null,
+      "weight": 0.0006451064411241251
+    },
+    {
+      "issuer": "HUMANA INC",
+      "title": "COM",
+      "cusip": "444859102",
+      "ticker": null,
+      "value": 443462035.0,
+      "shares": 1116990.0,
+      "put_call": null,
+      "weight": 0.000618607226408823
+    },
+    {
+      "issuer": "SYSCO CORP",
+      "title": "COM",
+      "cusip": "871829107",
+      "ticker": null,
+      "value": 436930665.0,
+      "shares": 5227694.0,
+      "put_call": null,
+      "weight": 0.0006094962938791651
+    },
+    {
+      "issuer": "COSTCO WHOLESALE CORPORATION",
+      "title": "COM",
+      "cusip": "22160K105",
+      "ticker": "COST",
+      "value": 426737638.0,
+      "shares": 456174.0,
+      "put_call": null,
+      "weight": 0.0005952775340676735
+    },
+    {
+      "issuer": "SEA LTD",
+      "title": "SPONSORD ADS",
+      "cusip": "81141R100",
+      "ticker": "XYZ",
+      "value": 426245841.0,
+      "shares": 4448477.0,
+      "put_call": null,
+      "weight": 0.0005945915019970225
+    },
+    {
+      "issuer": "EQUINIX INC",
+      "title": "COM",
+      "cusip": "29444U700",
+      "ticker": null,
+      "value": 425975886.0,
+      "shares": 408653.0,
+      "put_call": null,
+      "weight": 0.0005942149283545793
+    },
+    {
+      "issuer": "PUBLIC STORAGE",
+      "title": "COM",
+      "cusip": "74460D109",
+      "ticker": null,
+      "value": 424242189.0,
+      "shares": 1332781.0,
+      "put_call": null,
+      "weight": 0.0005917965082690735
+    },
+    {
+      "issuer": "IDEXX LABS INC",
+      "title": "COM",
+      "cusip": "45168D104",
+      "ticker": null,
+      "value": 415467340.0,
+      "shares": 789111.0,
+      "put_call": null,
+      "weight": 0.0005795560354131587
+    },
+    {
+      "issuer": "MACOM TECH SOLUTIONS HLDGS I",
+      "title": "COM",
+      "cusip": "55405Y100",
+      "ticker": null,
+      "value": 413138495.0,
+      "shares": 1086149.0,
+      "put_call": null,
+      "weight": 0.0005763074138120197
+    },
+    {
+      "issuer": "FLUTTER ENTMT PLC",
+      "title": "SHS",
+      "cusip": "G3643J108",
+      "ticker": null,
+      "value": 398008992.0,
+      "shares": 3895389.0,
+      "put_call": null,
+      "weight": 0.0005552025183551314
+    },
+    {
+      "issuer": "MODINE MFG CO",
+      "title": "COM",
+      "cusip": "607828100",
+      "ticker": null,
+      "value": 396250737.0,
+      "shares": 1483974.0,
+      "put_call": null,
+      "weight": 0.0005527498410952405
+    },
+    {
+      "issuer": "UNITED AIRLS HLDGS INC",
+      "title": "COM",
+      "cusip": "910047109",
+      "ticker": null,
+      "value": 388841924.0,
+      "shares": 2859344.0,
+      "put_call": null,
+      "weight": 0.0005424149197283829
+    },
+    {
+      "issuer": "CHEVRON CORPORATION",
+      "title": "COM",
+      "cusip": "166764100",
+      "ticker": "CVX",
+      "value": 386380188.0,
+      "shares": 2330961.0,
+      "put_call": null,
+      "weight": 0.0005389809218685419
+    },
+    {
+      "issuer": "BLUE OWL CAPITAL INC",
+      "title": "COM CL A",
+      "cusip": "09581B103",
+      "ticker": null,
+      "value": 377971020.0,
+      "shares": 43196688.0,
+      "put_call": null,
+      "weight": 0.0005272505556086977
+    },
+    {
+      "issuer": "VALE S A",
+      "title": "SPONSORED ADS",
+      "cusip": "91912E105",
+      "ticker": null,
+      "value": 368253513.0,
+      "shares": 24484941.0,
+      "put_call": null,
+      "weight": 0.0005136951222718207
+    },
+    {
+      "issuer": "TORONTO DOMINION BK ONT",
+      "title": "COM NEW",
+      "cusip": "891160509",
+      "ticker": null,
+      "value": 359647672.0,
+      "shares": 2957960.0,
+      "put_call": null,
+      "weight": 0.0005016904070724118
+    },
+    {
+      "issuer": "COGNIZANT TECHNOLOGY SOLUTIO",
+      "title": "CL A",
+      "cusip": "192446102",
+      "ticker": null,
+      "value": 358247852.0,
+      "shares": 9249880.0,
+      "put_call": null,
+      "weight": 0.0004997377286031678
+    },
+    {
+      "issuer": "PALO ALTO NETWORKS INC",
+      "title": "COM",
+      "cusip": "697435105",
+      "ticker": null,
+      "value": 353666374.0,
+      "shares": 1037093.0,
+      "put_call": null,
+      "weight": 0.0004933467973063477
+    },
+    {
+      "issuer": "UL SOLUTIONS INC",
+      "title": "CLASS A COM SHS",
+      "cusip": "903731107",
+      "ticker": null,
+      "value": 343000869.0,
+      "shares": 3367530.0,
+      "put_call": null,
+      "weight": 0.000478468954457186
+    },
+    {
+      "issuer": "THE CIGNA GROUP",
+      "title": "COM",
+      "cusip": "125523100",
+      "ticker": null,
+      "value": 340312625.0,
+      "shares": 1234448.0,
+      "put_call": null,
+      "weight": 0.0004747189893339029
+    },
+    {
+      "issuer": "INNIO NV",
+      "title": "ORDINARY SHARES",
+      "cusip": "N52A8C105",
+      "ticker": null,
+      "value": 339562932.0,
+      "shares": 8585662.0,
+      "put_call": null,
+      "weight": 0.0004736732053190703
+    },
+    {
+      "issuer": "AMERICAN INTL GROUP INC",
+      "title": "COM NEW",
+      "cusip": "026874784",
+      "ticker": null,
+      "value": 337361014.0,
+      "shares": 4526513.0,
+      "put_call": null,
+      "weight": 0.000470601640496707
+    },
+    {
+      "issuer": "FRANCO NEV CORP",
+      "title": "COM",
+      "cusip": "351858105",
+      "ticker": null,
+      "value": 332750686.0,
+      "shares": 1596170.0,
+      "put_call": null,
+      "weight": 0.00046417046490145015
+    },
+    {
+      "issuer": "ENSIGN GROUP INC",
+      "title": "COM",
+      "cusip": "29358P101",
+      "ticker": null,
+      "value": 323758872.0,
+      "shares": 2019706.0,
+      "put_call": null,
+      "weight": 0.0004516273367869453
+    },
+    {
+      "issuer": "CIENA CORP",
+      "title": "COM NEW",
+      "cusip": "171779309",
+      "ticker": null,
+      "value": 322078753.0,
+      "shares": 656554.0,
+      "put_call": null,
+      "weight": 0.00044928365531570787
+    },
+    {
+      "issuer": "CREDO TECHNOLOGY GROUP HOLDI",
+      "title": "ORDINARY SHARES",
+      "cusip": "G25457105",
+      "ticker": null,
+      "value": 314385894.0,
+      "shares": 1156043.0,
+      "put_call": null,
+      "weight": 0.0004385525040703839
+    },
+    {
+      "issuer": "ASML HLDG NV",
+      "title": "N Y REGISTRY SHS",
+      "cusip": "N07059210",
+      "ticker": "ASML",
+      "value": 310628624.0,
+      "shares": 156338.0,
+      "put_call": null,
+      "weight": 0.0004333113014642373
+    },
+    {
+      "issuer": "TAKEDA PHARMACEUTICAL CO LTD",
+      "title": "SPONSORED ADS",
+      "cusip": "874060205",
+      "ticker": null,
+      "value": 309341810.0,
+      "shares": 19297680.0,
+      "put_call": null,
+      "weight": 0.00043151626067919227
+    },
+    {
+      "issuer": "MATERION CORP",
+      "title": "COM",
+      "cusip": "576690101",
+      "ticker": null,
+      "value": 297525610.0,
+      "shares": 1000456.0,
+      "put_call": null,
+      "weight": 0.0004150332562012736
+    },
+    {
+      "issuer": "SKYWORKS SOLUTIONS INC",
+      "title": "COM",
+      "cusip": "83088M102",
+      "ticker": null,
+      "value": 297341578.0,
+      "shares": 4385569.0,
+      "put_call": null,
+      "weight": 0.0004147765408206876
+    },
+    {
+      "issuer": "VISTA ENERGY S.A.B. DE C.V.",
+      "title": "SPONSORED ADS",
+      "cusip": "92837L109",
+      "ticker": null,
+      "value": 295711022.0,
+      "shares": 4634969.0,
+      "put_call": null,
+      "weight": 0.0004125019972407298
+    },
+    {
+      "issuer": "API GROUP CORP",
+      "title": "COM STK",
+      "cusip": "00187Y100",
+      "ticker": null,
+      "value": 294808006.0,
+      "shares": 6961228.0,
+      "put_call": null,
+      "weight": 0.00041124233535521395
+    },
+    {
+      "issuer": "HALLIBURTON CO",
+      "title": "COM",
+      "cusip": "406216101",
+      "ticker": null,
+      "value": 293735367.0,
+      "shares": 8651999.0,
+      "put_call": null,
+      "weight": 0.00040974605791913553
+    },
+    {
+      "issuer": "ROYAL GOLD INC",
+      "title": "COM",
+      "cusip": "780287108",
+      "ticker": null,
+      "value": 289878233.0,
+      "shares": 1452223.0,
+      "put_call": null,
+      "weight": 0.00040436555005756136
+    },
+    {
+      "issuer": "HILTON WORLDWIDE HLDGS INC",
+      "title": "COM",
+      "cusip": "43300A203",
+      "ticker": null,
+      "value": 283677242.0,
+      "shares": 858380.0,
+      "put_call": null,
+      "weight": 0.0003957154796101643
+    },
+    {
+      "issuer": "GOLDMAN SACHS GROUP INC",
+      "title": "COM",
+      "cusip": "38141G104",
+      "ticker": "GS",
+      "value": 277749509.0,
+      "shares": 274627.0,
+      "put_call": null,
+      "weight": 0.0003874465903240227
+    },
+    {
+      "issuer": "OSHKOSH CORP",
+      "title": "COM",
+      "cusip": "688239201",
+      "ticker": null,
+      "value": 266571738.0,
+      "shares": 1736850.0,
+      "put_call": null,
+      "weight": 0.00037185416217909033
+    },
+    {
+      "issuer": "CME GROUP INC",
+      "title": "COM",
+      "cusip": "12572Q105",
+      "ticker": null,
+      "value": 263642640.0,
+      "shares": 1193880.0,
+      "put_call": null,
+      "weight": 0.00036776821784417193
+    },
+    {
+      "issuer": "STRATEGY INC",
+      "title": "CL A NEW",
+      "cusip": "594972408",
+      "ticker": null,
+      "value": 260251581.0,
+      "shares": 2993437.0,
+      "put_call": null,
+      "weight": 0.00036303786115742946
+    },
+    {
+      "issuer": "ATMOS ENERGY CORP",
+      "title": "COM",
+      "cusip": "049560105",
+      "ticker": null,
+      "value": 259885813.0,
+      "shares": 1508563.0,
+      "put_call": null,
+      "weight": 0.00036252763320073617
+    },
+    {
+      "issuer": "DIAMONDBACK ENERGY INC",
+      "title": "COM",
+      "cusip": "25278X109",
+      "ticker": null,
+      "value": 258938354.0,
+      "shares": 1473082.0,
+      "put_call": null,
+      "weight": 0.00036120597556633217
+    },
+    {
+      "issuer": "BANK OF AMER CORP",
+      "title": "COM",
+      "cusip": "060505104",
+      "ticker": "BAC",
+      "value": 255468747.0,
+      "shares": 4483481.0,
+      "put_call": null,
+      "weight": 0.0003563660483716657
+    },
+    {
+      "issuer": "BROWN & BROWN INC",
+      "title": "COM",
+      "cusip": "115236101",
+      "ticker": null,
+      "value": 251020361.0,
+      "shares": 3913022.0,
+      "put_call": null,
+      "weight": 0.0003501607737184345
+    },
+    {
+      "issuer": "AMERICAN EXPRESS CO",
+      "title": "COM",
+      "cusip": "025816109",
+      "ticker": "AXP",
+      "value": 250861083.0,
+      "shares": 741644.0,
+      "put_call": null,
+      "weight": 0.00034993858892237197
+    },
+    {
+      "issuer": "MOLINA HEALTHCARE INC",
+      "title": "COM",
+      "cusip": "60855R100",
+      "ticker": null,
+      "value": 249797804.0,
+      "shares": 1092251.0,
+      "put_call": null,
+      "weight": 0.0003484553682153531
+    },
+    {
+      "issuer": "MERCK & CO INC",
+      "title": "COM",
+      "cusip": "58933Y105",
+      "ticker": "MRK",
+      "value": 247364171.0,
+      "shares": 1925013.0,
+      "put_call": null,
+      "weight": 0.0003450605726265334
+    },
+    {
+      "issuer": "EAST WEST BANCORP INC",
+      "title": "COM",
+      "cusip": "27579R104",
+      "ticker": null,
+      "value": 241816939.0,
+      "shares": 1873243.0,
+      "put_call": null,
+      "weight": 0.00033732246309080673
+    },
+    {
+      "issuer": "NORTHROP GRUMMAN CORP",
+      "title": "COM",
+      "cusip": "666807102",
+      "ticker": null,
+      "value": 240699650.0,
+      "shares": 473287.0,
+      "put_call": null,
+      "weight": 0.0003357639011512551
+    },
+    {
+      "issuer": "VICI PPTYS INC",
+      "title": "COM",
+      "cusip": "925652109",
+      "ticker": null,
+      "value": 237012354.0,
+      "shares": 8927019.0,
+      "put_call": null,
+      "weight": 0.00033062030875442605
+    },
+    {
+      "issuer": "LUMENTUM HLDGS INC",
+      "title": "COM",
+      "cusip": "55024U109",
+      "ticker": null,
+      "value": 230903088.0,
+      "shares": 269099.0,
+      "put_call": null,
+      "weight": 0.0003220981900669634
+    },
+    {
+      "issuer": "T-MOBILE US INC",
+      "title": "COM",
+      "cusip": "872590104",
+      "ticker": "TMUS",
+      "value": 227560861.0,
+      "shares": 1356674.0,
+      "put_call": null,
+      "weight": 0.00031743595156328024
+    },
+    {
+      "issuer": "BBB FOODS INC",
+      "title": "CL A COM",
+      "cusip": "G0896C103",
+      "ticker": null,
+      "value": 225972201.0,
+      "shares": 5422899.0,
+      "put_call": null,
+      "weight": 0.00031521985079536075
+    },
+    {
+      "issuer": "SIMON PPTY GROUP INC NEW",
+      "title": "COM",
+      "cusip": "828806109",
+      "ticker": null,
+      "value": 221307266.0,
+      "shares": 989525.0,
+      "put_call": null,
+      "weight": 0.0003087125011826088
+    },
+    {
+      "issuer": "WEST PHARMACEUTICAL SVSC INC",
+      "title": "COM",
+      "cusip": "955306105",
+      "ticker": null,
+      "value": 218710339.0,
+      "shares": 609221.0,
+      "put_call": null,
+      "weight": 0.00030508991867978825
+    },
+    {
+      "issuer": "QUALCOMM INC",
+      "title": "COM",
+      "cusip": "747525103",
+      "ticker": "QCOM",
+      "value": 216543759.0,
+      "shares": 1171837.0,
+      "put_call": null,
+      "weight": 0.0003020676485894234
+    },
+    {
+      "issuer": "NEXTERA ENERGY INC",
+      "title": "UNIT 11/01/2027",
+      "cusip": "65339F119",
+      "ticker": null,
+      "value": 212297128.0,
+      "shares": 4271572.0,
+      "put_call": null,
+      "weight": 0.0002961438120100605
+    },
+    {
+      "issuer": "OTIS WORLDWIDE CORP",
+      "title": "COM",
+      "cusip": "68902V107",
+      "ticker": null,
+      "value": 207412885.0,
+      "shares": 2896828.0,
+      "put_call": null,
+      "weight": 0.00028933053877160456
+    },
+    {
+      "issuer": "BOEING CO",
+      "title": "DEP CONV PFD A",
+      "cusip": "097023204",
+      "ticker": null,
+      "value": 206917215.0,
+      "shares": 3074550.0,
+      "put_call": null,
+      "weight": 0.0002886391040608202
+    },
+    {
+      "issuer": "SAIA INC",
+      "title": "COM",
+      "cusip": "78709Y105",
+      "ticker": null,
+      "value": 206750392.0,
+      "shares": 490907.0,
+      "put_call": null,
+      "weight": 0.000288406394369378
+    },
+    {
+      "issuer": "AMERICAN ELEC PWR CO INC",
+      "title": "COM",
+      "cusip": "025537101",
+      "ticker": null,
+      "value": 206123555.0,
+      "shares": 1506641.0,
+      "put_call": null,
+      "weight": 0.00028753198829315
+    },
+    {
+      "issuer": "PG&E CORP",
+      "title": "COM",
+      "cusip": "69331C108",
+      "ticker": null,
+      "value": 201615999.0,
+      "shares": 11985839.0,
+      "put_call": null,
+      "weight": 0.00028124417446700713
+    },
+    {
+      "issuer": "BIOMARIN PHARMACEUTICAL INC",
+      "title": "COM",
+      "cusip": "09061G101",
+      "ticker": null,
+      "value": 200521024.0,
+      "shares": 3504387.0,
+      "put_call": null,
+      "weight": 0.0002797167394347456
+    },
+    {
+      "issuer": "IDEAYA BIOSCIENCES INC",
+      "title": "COM",
+      "cusip": "45166A102",
+      "ticker": null,
+      "value": 199197006.0,
+      "shares": 5344701.0,
+      "put_call": null,
+      "weight": 0.0002778698009415883
+    },
+    {
+      "issuer": "YUM BRANDS INC",
+      "title": "COM",
+      "cusip": "988498101",
+      "ticker": null,
+      "value": 197134077.0,
+      "shares": 1233167.0,
+      "put_call": null,
+      "weight": 0.0002749921187811113
+    },
+    {
+      "issuer": "CASELLA WASTE SYS INC",
+      "title": "CL A",
+      "cusip": "147448104",
+      "ticker": null,
+      "value": 196717803.0,
+      "shares": 2028646.0,
+      "put_call": null,
+      "weight": 0.0002744114374955846
+    },
+    {
+      "issuer": "CEREBRAS SYSTEMS INC",
+      "title": "COM CL A",
+      "cusip": "15675D103",
+      "ticker": null,
+      "value": 195143000.0,
+      "shares": 883000.0,
+      "put_call": null,
+      "weight": 0.00027221466654546184
+    },
+    {
+      "issuer": "NEWMONT CORP",
+      "title": "COM",
+      "cusip": "651639106",
+      "ticker": null,
+      "value": 193500236.0,
+      "shares": 2071737.0,
+      "put_call": null,
+      "weight": 0.00026992309341973927
+    },
+    {
+      "issuer": "COMFORT SYS USA INC",
+      "title": "COM",
+      "cusip": "199908104",
+      "ticker": null,
+      "value": 190219633.0,
+      "shares": 95976.0,
+      "put_call": null,
+      "weight": 0.0002653468172954968
+    },
+    {
+      "issuer": "VSE CORP",
+      "title": "COM",
+      "cusip": "918284100",
+      "ticker": null,
+      "value": 189472429.0,
+      "shares": 829201.0,
+      "put_call": null,
+      "weight": 0.00026430450531043237
+    },
+    {
+      "issuer": "GLACIER BANCORP INC NEW",
+      "title": "COM",
+      "cusip": "37637Q105",
+      "ticker": null,
+      "value": 188808693.0,
+      "shares": 3660502.0,
+      "put_call": null,
+      "weight": 0.00026337862698574624
+    },
+    {
+      "issuer": "STIFEL FINL CORP",
+      "title": "COM",
+      "cusip": "860630102",
+      "ticker": null,
+      "value": 187247610.0,
+      "shares": 2683784.0,
+      "put_call": null,
+      "weight": 0.00026120099474531336
+    },
+    {
+      "issuer": "OLLIES BARGAIN OUTLET HLDGS",
+      "title": "COM",
+      "cusip": "681116109",
+      "ticker": null,
+      "value": 186262865.0,
+      "shares": 2422774.0,
+      "put_call": null,
+      "weight": 0.00025982732501692284
+    },
+    {
+      "issuer": "WYNDHAM HOTELS & RESORTS INC",
+      "title": "COM",
+      "cusip": "98311A105",
+      "ticker": null,
+      "value": 185537788.0,
+      "shares": 2203275.0,
+      "put_call": null,
+      "weight": 0.00025881587908355716
+    },
+    {
+      "issuer": "BIO-TECHNE CORP",
+      "title": "COM",
+      "cusip": "09073M104",
+      "ticker": null,
+      "value": 185236529.0,
+      "shares": 2621890.0,
+      "put_call": null,
+      "weight": 0.00025839563793614826
+    },
+    {
+      "issuer": "ESAB CORPORATION",
+      "title": "COM",
+      "cusip": "29605J106",
+      "ticker": null,
+      "value": 183725005.0,
+      "shares": 1862770.0,
+      "put_call": null,
+      "weight": 0.00025628713800719634
+    },
+    {
+      "issuer": "GPGI INC",
+      "title": "COM CL A",
+      "cusip": "20459V105",
+      "ticker": null,
+      "value": 183076693.0,
+      "shares": 11550580.0,
+      "put_call": null,
+      "weight": 0.00025538277538646474
+    },
+    {
+      "issuer": "ROGERS CORP",
+      "title": "COM",
+      "cusip": "775133101",
+      "ticker": null,
+      "value": 182364602.0,
+      "shares": 1113813.0,
+      "put_call": null,
+      "weight": 0.0002543894442697195
+    },
+    {
+      "issuer": "RESTAURANT BRANDS INTL INC",
+      "title": "COM",
+      "cusip": "76131D103",
+      "ticker": "QSR",
+      "value": 182311820.0,
+      "shares": 2514299.0,
+      "put_call": null,
+      "weight": 0.00025431581603540106
+    },
+    {
+      "issuer": "KIMBERLY-CLARK CORP",
+      "title": "COM",
+      "cusip": "494368103",
+      "ticker": null,
+      "value": 175673748.0,
+      "shares": 1600380.0,
+      "put_call": null,
+      "weight": 0.0002450560395843638
+    },
+    {
+      "issuer": "FERVO ENERGY CO",
+      "title": "CL A COM",
+      "cusip": "31556C106",
+      "ticker": null,
+      "value": 175517439.0,
+      "shares": 6004702.0,
+      "put_call": null,
+      "weight": 0.0002448379963939185
+    },
+    {
+      "issuer": "CELANESE CORP DEL",
+      "title": "COM",
+      "cusip": "150870103",
+      "ticker": null,
+      "value": 172608376.0,
+      "shares": 3752356.0,
+      "put_call": null,
+      "weight": 0.0002407799998759561
+    },
+    {
+      "issuer": "AGNICO EAGLE MINES LTD",
+      "title": "COM",
+      "cusip": "008474108",
+      "ticker": null,
+      "value": 172018773.0,
+      "shares": 1107123.0,
+      "put_call": null,
+      "weight": 0.000239957533356331
+    },
+    {
+      "issuer": "RHYTHM PHARMACEUTICALS INC",
+      "title": "COM",
+      "cusip": "76243J105",
+      "ticker": null,
+      "value": 170131602.0,
+      "shares": 1532303.0,
+      "put_call": null,
+      "weight": 0.00023732502476273929
+    },
+    {
+      "issuer": "ROCKET COS INC",
+      "title": "COM CL A",
+      "cusip": "77311W101",
+      "ticker": "RKT",
+      "value": 168578786.0,
+      "shares": 10703415.0,
+      "put_call": null,
+      "weight": 0.00023515892457135935
+    },
+    {
+      "issuer": "DT MIDSTREAM INC",
+      "title": "COMMON STOCK",
+      "cusip": "23345M107",
+      "ticker": null,
+      "value": 168488922.0,
+      "shares": 1148214.0,
+      "put_call": null,
+      "weight": 0.00023503356881279027
+    },
+    {
+      "issuer": "TALEN ENERGY CORP",
+      "title": "COM",
+      "cusip": "87422Q109",
+      "ticker": null,
+      "value": 167380582.0,
+      "shares": 435592.0,
+      "put_call": null,
+      "weight": 0.00023348749027797736
+    },
+    {
+      "issuer": "ARXIS INC",
+      "title": "CL A COM",
+      "cusip": "04339D105",
+      "ticker": null,
+      "value": 165877130.0,
+      "shares": 3595083.0,
+      "put_call": null,
+      "weight": 0.00023139025038288963
+    },
+    {
+      "issuer": "AAR CORP",
+      "title": "COM",
+      "cusip": "000361105",
+      "ticker": null,
+      "value": 165808662.0,
+      "shares": 1160069.0,
+      "put_call": null,
+      "weight": 0.00023129474096779897
+    },
+    {
+      "issuer": "STERLING INFRASTRUCTURE INC",
+      "title": "COM",
+      "cusip": "859241101",
+      "ticker": null,
+      "value": 163126259.0,
+      "shares": 194346.0,
+      "put_call": null,
+      "weight": 0.00022755292374563088
+    },
+    {
+      "issuer": "COPA HOLDINGS SA",
+      "title": "CL A",
+      "cusip": "P31076105",
+      "ticker": null,
+      "value": 162233219.0,
+      "shares": 1042831.0,
+      "put_call": null,
+      "weight": 0.00022630717787818107
+    },
+    {
+      "issuer": "CREDICORP LTD",
+      "title": "COM",
+      "cusip": "G2519Y108",
+      "ticker": null,
+      "value": 162084759.0,
+      "shares": 416050.0,
+      "put_call": null,
+      "weight": 0.00022610008364782006
+    },
+    {
+      "issuer": "BROOKFIELD CORP",
+      "title": "CL A LTD VT SH",
+      "cusip": "11271J107",
+      "ticker": "BN",
+      "value": 159345603.0,
+      "shares": 3734786.0,
+      "put_call": null,
+      "weight": 0.00022227909884613102
+    },
+    {
+      "issuer": "KYMERA THERAPEUTICS INC",
+      "title": "COM",
+      "cusip": "501575104",
+      "ticker": null,
+      "value": 159262984.0,
+      "shares": 1388881.0,
+      "put_call": null,
+      "weight": 0.00022216384949803596
+    },
+    {
+      "issuer": "FIRSTCASH HOLDINGS INC",
+      "title": "COM",
+      "cusip": "33768G107",
+      "ticker": null,
+      "value": 158286536.0,
+      "shares": 731724.0,
+      "put_call": null,
+      "weight": 0.00022080175366718892
+    },
+    {
+      "issuer": "APPLIED INDL TECHNOLOGIES IN",
+      "title": "COM",
+      "cusip": "03820C105",
+      "ticker": null,
+      "value": 156277713.0,
+      "shares": 462155.0,
+      "put_call": null,
+      "weight": 0.00021799954665441441
+    },
+    {
+      "issuer": "EXELON CORP",
+      "title": "COM",
+      "cusip": "30161N101",
+      "ticker": null,
+      "value": 155792432.0,
+      "shares": 3341751.0,
+      "put_call": null,
+      "weight": 0.00021732260407591634
+    },
+    {
+      "issuer": "EASTMAN CHEM CO",
+      "title": "COM",
+      "cusip": "277432100",
+      "ticker": null,
+      "value": 146710849.0,
+      "shares": 2190368.0,
+      "put_call": null,
+      "weight": 0.0002046542527230626
+    },
+    {
+      "issuer": "HOME BANCSHARES INC",
+      "title": "COM",
+      "cusip": "436893200",
+      "ticker": null,
+      "value": 146650101.0,
+      "shares": 5136606.0,
+      "put_call": null,
+      "weight": 0.00020456951231954672
+    },
+    {
+      "issuer": "WHEATON PRECIOUS METALS CORP",
+      "title": "COM",
+      "cusip": "962879102",
+      "ticker": null,
+      "value": 144348473.0,
+      "shares": 1284432.0,
+      "put_call": null,
+      "weight": 0.00020135885706400744
+    },
+    {
+      "issuer": "CYTOKINETICS INC",
+      "title": "COM NEW",
+      "cusip": "23282W605",
+      "ticker": null,
+      "value": 143683584.0,
+      "shares": 1686625.0,
+      "put_call": null,
+      "weight": 0.00020043137036233357
+    },
+    {
+      "issuer": "QUANTINUUM INC",
+      "title": "CL A COM",
+      "cusip": "74768A104",
+      "ticker": null,
+      "value": 143398526.0,
+      "shares": 1754325.0,
+      "put_call": null,
+      "weight": 0.00020003372879478506
+    },
+    {
+      "issuer": "KKR & CO INC",
+      "title": "6.25 CON SER D",
+      "cusip": "48251W500",
+      "ticker": null,
+      "value": 142193208.0,
+      "shares": 3568211.0,
+      "put_call": null,
+      "weight": 0.00019835237082933797
+    },
+    {
+      "issuer": "WALMART INC",
+      "title": "COM",
+      "cusip": "931142103",
+      "ticker": "WFC",
+      "value": 140792260.0,
+      "shares": 1243089.0,
+      "put_call": null,
+      "weight": 0.0001963981188568484
+    },
+    {
+      "issuer": "ADDUS HOMECARE CORP",
+      "title": "COM",
+      "cusip": "006739106",
+      "ticker": null,
+      "value": 139643956.0,
+      "shares": 1389907.0,
+      "put_call": null,
+      "weight": 0.00019479629255279024
+    },
+    {
+      "issuer": "DIGITAL RLTY TR INC",
+      "title": "COM",
+      "cusip": "253868103",
+      "ticker": null,
+      "value": 138091472.0,
+      "shares": 768875.0,
+      "put_call": null,
+      "weight": 0.00019263065548470601
+    },
+    {
+      "issuer": "CRANE COMPANY",
+      "title": "COMMON STOCK",
+      "cusip": "224408104",
+      "ticker": null,
+      "value": 136467311.0,
+      "shares": 611769.0,
+      "put_call": null,
+      "weight": 0.0001903650326079892
+    },
+    {
+      "issuer": "BLACK HILLS CORP",
+      "title": "COM",
+      "cusip": "092113109",
+      "ticker": null,
+      "value": 135851498.0,
+      "shares": 1825961.0,
+      "put_call": null,
+      "weight": 0.00018950600445709803
+    },
+    {
+      "issuer": "WATERS CORP",
+      "title": "COM",
+      "cusip": "941848103",
+      "ticker": "WAT",
+      "value": 134338578.0,
+      "shares": 358198.0,
+      "put_call": null,
+      "weight": 0.00018739555717838468
+    },
+    {
+      "issuer": "MATSON INC",
+      "title": "COM",
+      "cusip": "57686G105",
+      "ticker": null,
+      "value": 130657001.0,
+      "shares": 679691.0,
+      "put_call": null,
+      "weight": 0.00018225994249880897
+    },
+    {
+      "issuer": "BIO RAD LABS INC",
+      "title": "CL A",
+      "cusip": "090572207",
+      "ticker": null,
+      "value": 130211044.0,
+      "shares": 443483.0,
+      "put_call": null,
+      "weight": 0.00018163785492175718
+    },
+    {
+      "issuer": "WEATHERFORD INTL PLC",
+      "title": "ORD SHS",
+      "cusip": "G48833118",
+      "ticker": null,
+      "value": 128963726.0,
+      "shares": 1582377.0,
+      "put_call": null,
+      "weight": 0.00017989790906950448
+    },
+    {
+      "issuer": "KT CORP",
+      "title": "SPONSORED ADR",
+      "cusip": "48268K101",
+      "ticker": null,
+      "value": 127742089.0,
+      "shares": 7392482.0,
+      "put_call": null,
+      "weight": 0.00017819378692013403
+    },
+    {
+      "issuer": "UNITY SOFTWARE INC",
+      "title": "COM",
+      "cusip": "91332U101",
+      "ticker": null,
+      "value": 126210158.0,
+      "shares": 4416031.0,
+      "put_call": null,
+      "weight": 0.000176056820252943
+    },
+    {
+      "issuer": "PATRICK INDS INC",
+      "title": "COM",
+      "cusip": "703343103",
+      "ticker": null,
+      "value": 125850641.0,
+      "shares": 1401767.0,
+      "put_call": null,
+      "weight": 0.00017555531212673595
+    },
+    {
+      "issuer": "SOUTHERN COPPER CORP",
+      "title": "COM",
+      "cusip": "84265V105",
+      "ticker": null,
+      "value": 125667250.0,
+      "shares": 721148.0,
+      "put_call": null,
+      "weight": 0.00017529949090889856
+    },
+    {
+      "issuer": "EZCORP INC",
+      "title": "CL A NON VTG",
+      "cusip": "302301106",
+      "ticker": null,
+      "value": 121929116.0,
+      "shares": 3527021.0,
+      "put_call": null,
+      "weight": 0.00017008498205994035
+    },
+    {
+      "issuer": "COPART INC",
+      "title": "COM",
+      "cusip": "217204106",
+      "ticker": null,
+      "value": 121667612.0,
+      "shares": 4316135.0,
+      "put_call": null,
+      "weight": 0.00016972019713729232
+    },
+    {
+      "issuer": "SLM CORP",
+      "title": "COM",
+      "cusip": "78442P106",
+      "ticker": null,
+      "value": 121315518.0,
+      "shares": 4676774.0,
+      "put_call": null,
+      "weight": 0.0001692290437226033
+    },
+    {
+      "issuer": "COSTAR GROUP INC",
+      "title": "COM",
+      "cusip": "22160N109",
+      "ticker": null,
+      "value": 118785369.0,
+      "shares": 4193733.0,
+      "put_call": null,
+      "weight": 0.00016569961316990434
+    },
+    {
+      "issuer": "OLD DOMINION FREIGHT LINE IN",
+      "title": "COM",
+      "cusip": "679580100",
+      "ticker": null,
+      "value": 118275767.0,
+      "shares": 546056.0,
+      "put_call": null,
+      "weight": 0.00016498874402009675
+    },
+    {
+      "issuer": "PULTE GROUP INC",
+      "title": "COM",
+      "cusip": "745867101",
+      "ticker": null,
+      "value": 117377255.0,
+      "shares": 855457.0,
+      "put_call": null,
+      "weight": 0.000163735364987966
+    },
+    {
+      "issuer": "CHIME FINL INC",
+      "title": "COM SHS CL A",
+      "cusip": "16935C109",
+      "ticker": null,
+      "value": 115873260.0,
+      "shares": 5657874.0,
+      "put_call": null,
+      "weight": 0.00016163736763519882
+    },
+    {
+      "issuer": "FERRARI N V",
+      "title": "COM",
+      "cusip": "N3167Y103",
+      "ticker": "RACE",
+      "value": 115560446.0,
+      "shares": 311817.0,
+      "put_call": null,
+      "weight": 0.00016120100784416992
+    },
+    {
+      "issuer": "CAVA GROUP INC",
+      "title": "COM",
+      "cusip": "148929102",
+      "ticker": null,
+      "value": 113366527.0,
+      "shares": 1444258.0,
+      "put_call": null,
+      "weight": 0.0001581406012243437
+    },
+    {
+      "issuer": "WESTERN UN CO",
+      "title": "COM",
+      "cusip": "959802109",
+      "ticker": null,
+      "value": 112982832.0,
+      "shares": 14673095.0,
+      "put_call": null,
+      "weight": 0.00015760536600463218
+    },
+    {
+      "issuer": "STANDEX INTL CORP",
+      "title": "COM",
+      "cusip": "854231107",
+      "ticker": null,
+      "value": 112550523.0,
+      "shares": 314677.0,
+      "put_call": null,
+      "weight": 0.00015700231670089286
+    },
+    {
+      "issuer": "KNIFE RIVER CORP",
+      "title": "COMMON STOCK",
+      "cusip": "498894104",
+      "ticker": null,
+      "value": 107848439.0,
+      "shares": 1289282.0,
+      "put_call": null,
+      "weight": 0.00015044314610226133
+    },
+    {
+      "issuer": "THOR INDS INC",
+      "title": "COM",
+      "cusip": "885160101",
+      "ticker": null,
+      "value": 106499240.0,
+      "shares": 1416967.0,
+      "put_call": null,
+      "weight": 0.00014856108138106472
+    },
+    {
+      "issuer": "CIPHER DIGITAL INC",
+      "title": "COM",
+      "cusip": "17253J106",
+      "ticker": null,
+      "value": 106453015.0,
+      "shares": 4345021.0,
+      "put_call": null,
+      "weight": 0.0001484965998318364
+    },
+    {
+      "issuer": "MAXLINEAR INC",
+      "title": "COM",
+      "cusip": "57776J100",
+      "ticker": null,
+      "value": 106277191.0,
+      "shares": 830096.0,
+      "put_call": null,
+      "weight": 0.00014825133419827183
+    },
+    {
+      "issuer": "CONSTELLATION BRANDS INC",
+      "title": "CL A",
+      "cusip": "21036P108",
+      "ticker": null,
+      "value": 106097435.0,
+      "shares": 762797.0,
+      "put_call": null,
+      "weight": 0.0001480005836225425
+    },
+    {
+      "issuer": "ALIGNMENT HEALTHCARE INC",
+      "title": "COM",
+      "cusip": "01625V104",
+      "ticker": null,
+      "value": 104748023.0,
+      "shares": 4399329.0,
+      "put_call": null,
+      "weight": 0.00014611822177706282
+    },
+    {
+      "issuer": "SILICON LABORATORIES INC",
+      "title": "COM",
+      "cusip": "826919102",
+      "ticker": null,
+      "value": 103061094.0,
+      "shares": 471546.0,
+      "put_call": null,
+      "weight": 0.00014376504069846472
+    },
+    {
+      "issuer": "PALANTIR TECHNOLOGIES INC",
+      "title": "CL A",
+      "cusip": "69608A108",
+      "ticker": null,
+      "value": 102237921.0,
+      "shares": 876300.0,
+      "put_call": null,
+      "weight": 0.00014261675578071606
+    },
+    {
+      "issuer": "JAMES HARDIE INDS PLC",
+      "title": "ORD SHS",
+      "cusip": "G4253H101",
+      "ticker": null,
+      "value": 94495349.0,
+      "shares": 3609448.0,
+      "put_call": null,
+      "weight": 0.00013181625740165952
+    },
+    {
+      "issuer": "LAZARD INC",
+      "title": "COM",
+      "cusip": "52110M109",
+      "ticker": null,
+      "value": 94039588.0,
+      "shares": 2242241.0,
+      "put_call": null,
+      "weight": 0.00013118049373788768
+    },
+    {
+      "issuer": "ADOBE INC",
+      "title": "COM",
+      "cusip": "00724F101",
+      "ticker": "ADBE",
+      "value": 91737026.0,
+      "shares": 447454.0,
+      "put_call": null,
+      "weight": 0.00012796853559934185
+    },
+    {
+      "issuer": "WESCO INTL INC",
+      "title": "COM",
+      "cusip": "95082P105",
+      "ticker": null,
+      "value": 89985551.0,
+      "shares": 260503.0,
+      "put_call": null,
+      "weight": 0.000125525316098321
+    },
+    {
+      "issuer": "ENCOMPASS HEALTH CORP",
+      "title": "COM",
+      "cusip": "29261A100",
+      "ticker": null,
+      "value": 88196343.0,
+      "shares": 872540.0,
+      "put_call": null,
+      "weight": 0.00012302946096080404
+    },
+    {
+      "issuer": "KARDIGAN INC",
+      "title": "COM",
+      "cusip": "485925101",
+      "ticker": null,
+      "value": 85834767.0,
+      "shares": 3598942.0,
+      "put_call": null,
+      "weight": 0.00011973518126149754
+    },
+    {
+      "issuer": "PATRIA INVESTMENTS LIMITED",
+      "title": "COM CL A",
+      "cusip": "G69451105",
+      "ticker": null,
+      "value": 85551856.0,
+      "shares": 7791608.0,
+      "put_call": null,
+      "weight": 0.00011934053465092456
+    },
+    {
+      "issuer": "LYONDELLBASELL INDUSTRIES NV",
+      "title": "SHS - A -",
+      "cusip": "N53745100",
+      "ticker": "LYB",
+      "value": 84854583.0,
+      "shares": 1611673.0,
+      "put_call": null,
+      "weight": 0.00011836787389862417
+    },
+    {
+      "issuer": "INTUIT",
+      "title": "COM",
+      "cusip": "461202103",
+      "ticker": null,
+      "value": 84547296.0,
+      "shares": 323936.0,
+      "put_call": null,
+      "weight": 0.00011793922399450896
+    },
+    {
+      "issuer": "APOLLO GLOBAL MGMT INC",
+      "title": "SER A MAND CNV",
+      "cusip": "03769M304",
+      "ticker": null,
+      "value": 82931371.0,
+      "shares": 1361316.0,
+      "put_call": null,
+      "weight": 0.00011568508992340482
+    },
+    {
+      "issuer": "ARGENX SE",
+      "title": "SPONSORED ADR",
+      "cusip": "04016X101",
+      "ticker": null,
+      "value": 82117850.0,
+      "shares": 88511.0,
+      "put_call": null,
+      "weight": 0.00011455026906002395
+    },
+    {
+      "issuer": "XP INC",
+      "title": "CL A",
+      "cusip": "G98239109",
+      "ticker": null,
+      "value": 81918758.0,
+      "shares": 5038054.0,
+      "put_call": null,
+      "weight": 0.00011427254573716908
+    },
+    {
+      "issuer": "UBER TECHNOLOGIES INC",
+      "title": "NOTE         5/1",
+      "cusip": "90353TAS9",
+      "ticker": null,
+      "value": 80969000.0,
+      "shares": 70000000.0,
+      "put_call": null,
+      "weight": 0.00011294768111343734
+    },
+    {
+      "issuer": "IDACORP INC",
+      "title": "COM",
+      "cusip": "451107106",
+      "ticker": null,
+      "value": 77726290.0,
+      "shares": 513723.0,
+      "put_call": null,
+      "weight": 0.00010842426381764074
+    },
+    {
+      "issuer": "FABRINET",
+      "title": "SHS",
+      "cusip": "G3323L100",
+      "ticker": null,
+      "value": 76209617.0,
+      "shares": 135585.0,
+      "put_call": null,
+      "weight": 0.0001063085812927564
+    },
+    {
+      "issuer": "MAGNITE INC",
+      "title": "COM",
+      "cusip": "55955D100",
+      "ticker": null,
+      "value": 73436638.0,
+      "shares": 3869159.0,
+      "put_call": null,
+      "weight": 0.00010244041510784293
+    },
+    {
+      "issuer": "ADMA BIOLOGICS INC",
+      "title": "COM",
+      "cusip": "000899104",
+      "ticker": null,
+      "value": 73290850.0,
+      "shares": 8756374.0,
+      "put_call": null,
+      "weight": 0.00010223704818304251
+    },
+    {
+      "issuer": "L3HARRIS TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "502431109",
+      "ticker": null,
+      "value": 72868058.0,
+      "shares": 250759.0,
+      "put_call": null,
+      "weight": 0.0001016472746154634
+    },
+    {
+      "issuer": "SANOFI SA",
+      "title": "SPONSORED ADR",
+      "cusip": "80105N105",
+      "ticker": null,
+      "value": 71557841.0,
+      "shares": 1677399.0,
+      "put_call": null,
+      "weight": 9.981958782292052e-05
+    },
+    {
+      "issuer": "Q2 HLDGS INC",
+      "title": "COM",
+      "cusip": "74736L109",
+      "ticker": null,
+      "value": 71189684.0,
+      "shares": 1480035.0,
+      "put_call": null,
+      "weight": 9.930602733142773e-05
+    },
+    {
+      "issuer": "HEICO CORP NEW",
+      "title": "COM",
+      "cusip": "422806109",
+      "ticker": null,
+      "value": 71012409.0,
+      "shares": 199829.0,
+      "put_call": null,
+      "weight": 9.905873762586901e-05
+    },
+    {
+      "issuer": "CACTUS INC",
+      "title": "CL A",
+      "cusip": "127203107",
+      "ticker": null,
+      "value": 70725781.0,
+      "shares": 1380554.0,
+      "put_call": null,
+      "weight": 9.865890598731372e-05
+    },
+    {
+      "issuer": "HOULIHAN LOKEY INC",
+      "title": "CL A",
+      "cusip": "441593100",
+      "ticker": null,
+      "value": 70668805.0,
+      "shares": 526868.0,
+      "put_call": null,
+      "weight": 9.857942733401284e-05
+    },
+    {
+      "issuer": "H WORLD GROUP LTD",
+      "title": "SPONSORED ADS",
+      "cusip": "44332N106",
+      "ticker": null,
+      "value": 70655115.0,
+      "shares": 1693555.0,
+      "put_call": null,
+      "weight": 9.856033047281358e-05
+    },
+    {
+      "issuer": "ZOETIS INC",
+      "title": "CL A",
+      "cusip": "98978V103",
+      "ticker": null,
+      "value": 70481078.0,
+      "shares": 980811.0,
+      "put_call": null,
+      "weight": 9.831755761433763e-05
+    },
+    {
+      "issuer": "BRIGHTSPRING HEALTH SVCS INC",
+      "title": "COM",
+      "cusip": "10950A106",
+      "ticker": null,
+      "value": 69786307.0,
+      "shares": 1000664.0,
+      "put_call": null,
+      "weight": 9.734838702615124e-05
+    },
+    {
+      "issuer": "DENALI THERAPEUTICS INC",
+      "title": "COM",
+      "cusip": "24823R105",
+      "ticker": null,
+      "value": 65992813.0,
+      "shares": 2565817.0,
+      "put_call": null,
+      "weight": 9.205665376258447e-05
+    },
+    {
+      "issuer": "SHELL PLC",
+      "title": "SPON ADS",
+      "cusip": "780259305",
+      "ticker": null,
+      "value": 57396581.0,
+      "shares": 740219.0,
+      "put_call": null,
+      "weight": 8.006534263470682e-05
+    },
+    {
+      "issuer": "TEREX CORP NEW",
+      "title": "COM",
+      "cusip": "880779103",
+      "ticker": null,
+      "value": 55982734.0,
+      "shares": 773349.0,
+      "put_call": null,
+      "weight": 7.809309720621949e-05
+    },
+    {
+      "issuer": "GAP INC",
+      "title": "COM",
+      "cusip": "364760108",
+      "ticker": null,
+      "value": 54310792.0,
+      "shares": 2907430.0,
+      "put_call": null,
+      "weight": 7.57608222385632e-05
+    },
+    {
+      "issuer": "VIPER ENERGY INC",
+      "title": "CL A",
+      "cusip": "64361Q101",
+      "ticker": null,
+      "value": 54068522.0,
+      "shares": 1275201.0,
+      "put_call": null,
+      "weight": 7.542286777817278e-05
+    },
+    {
+      "issuer": "NIKE INC",
+      "title": "CL B",
+      "cusip": "654106103",
+      "ticker": "NKE",
+      "value": 53612834.0,
+      "shares": 1306037.0,
+      "put_call": null,
+      "weight": 7.4787205945728e-05
+    },
+    {
+      "issuer": "MSA SAFETY INC",
+      "title": "COM",
+      "cusip": "553498106",
+      "ticker": null,
+      "value": 53474901.0,
+      "shares": 306306.0,
+      "put_call": null,
+      "weight": 7.459479635070991e-05
+    },
+    {
+      "issuer": "BUILDERS FIRSTSOURCE INC",
+      "title": "COM",
+      "cusip": "12008R107",
+      "ticker": null,
+      "value": 53191131.0,
+      "shares": 593700.0,
+      "put_call": null,
+      "weight": 7.41989514783568e-05
+    },
+    {
+      "issuer": "E L F BEAUTY INC",
+      "title": "COM",
+      "cusip": "26856L103",
+      "ticker": null,
+      "value": 53087082.0,
+      "shares": 717393.0,
+      "put_call": null,
+      "weight": 7.405380835849398e-05
+    },
+    {
+      "issuer": "BRIDGEBIO PHARMA INC",
+      "title": "COM",
+      "cusip": "10806X102",
+      "ticker": null,
+      "value": 52143969.0,
+      "shares": 700107.0,
+      "put_call": null,
+      "weight": 7.27382131754247e-05
+    },
+    {
+      "issuer": "WATERBRIDGE INFRASTRUCTURE L",
+      "title": "CL A SHS REPSTG",
+      "cusip": "940923105",
+      "ticker": null,
+      "value": 51321347.0,
+      "shares": 1497559.0,
+      "put_call": null,
+      "weight": 7.159069687495294e-05
+    },
+    {
+      "issuer": "STEPSTONE GROUP INC",
+      "title": "COM CL A",
+      "cusip": "85914M107",
+      "ticker": null,
+      "value": 50952335.0,
+      "shares": 1231923.0,
+      "put_call": null,
+      "weight": 7.107594370147874e-05
+    },
+    {
+      "issuer": "BWX TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "05605H100",
+      "ticker": null,
+      "value": 50166561.0,
+      "shares": 257727.0,
+      "put_call": null,
+      "weight": 6.99798285070311e-05
+    },
+    {
+      "issuer": "HEICO CORP NEW",
+      "title": "CL A",
+      "cusip": "422806208",
+      "ticker": null,
+      "value": 48900768.0,
+      "shares": 189604.0,
+      "put_call": null,
+      "weight": 6.821411095933235e-05
+    },
+    {
+      "issuer": "VAXCYTE INC",
+      "title": "COM",
+      "cusip": "92243G108",
+      "ticker": null,
+      "value": 48640917.0,
+      "shares": 836761.0,
+      "put_call": null,
+      "weight": 6.785163188851502e-05
+    },
+    {
+      "issuer": "ENERSYS",
+      "title": "COM",
+      "cusip": "29275Y102",
+      "ticker": null,
+      "value": 48057258.0,
+      "shares": 205531.0,
+      "put_call": null,
+      "weight": 6.703745694982259e-05
+    },
+    {
+      "issuer": "INSTALLED BLDG PRODS INC",
+      "title": "COM",
+      "cusip": "45780R101",
+      "ticker": null,
+      "value": 48017713.0,
+      "shares": 208918.0,
+      "put_call": null,
+      "weight": 6.698229366449572e-05
+    },
+    {
+      "issuer": "UMH PPTYS INC",
+      "title": "COM",
+      "cusip": "903002103",
+      "ticker": null,
+      "value": 45945101.0,
+      "shares": 3034683.0,
+      "put_call": null,
+      "weight": 6.409110420621066e-05
+    },
+    {
+      "issuer": "AGILYSYS INC",
+      "title": "COM",
+      "cusip": "00847J105",
+      "ticker": null,
+      "value": 43261328.0,
+      "shares": 413984.0,
+      "put_call": null,
+      "weight": 6.0347375902972964e-05
+    },
+    {
+      "issuer": "VERSANT MEDIA GROUP INC",
+      "title": "COM CL A",
+      "cusip": "925283103",
+      "ticker": null,
+      "value": 42601991.0,
+      "shares": 1183060.0,
+      "put_call": null,
+      "weight": 5.942763396195491e-05
+    },
+    {
+      "issuer": "CAMECO CORP",
+      "title": "COM",
+      "cusip": "13321L108",
+      "ticker": null,
+      "value": 40592285.0,
+      "shares": 398243.0,
+      "put_call": null,
+      "weight": 5.662419520860781e-05
+    },
+    {
+      "issuer": "DPC HOLDINGS PLC",
+      "title": "ORDINARY SHARES",
+      "cusip": "G2R11M108",
+      "ticker": null,
+      "value": 39983900.0,
+      "shares": 815000.0,
+      "put_call": null,
+      "weight": 5.577552874398309e-05
+    },
+    {
+      "issuer": "IRHYTHM HOLDINGS INC",
+      "title": "COM",
+      "cusip": "450056106",
+      "ticker": null,
+      "value": 39873111.0,
+      "shares": 335209.0,
+      "put_call": null,
+      "weight": 5.562098366323766e-05
+    },
+    {
+      "issuer": "TRIP COM GROUP LTD",
+      "title": "ADS",
+      "cusip": "89677Q107",
+      "ticker": null,
+      "value": 38790654.0,
+      "shares": 973661.0,
+      "put_call": null,
+      "weight": 5.411101061114355e-05
+    },
+    {
+      "issuer": "SPROUTS FMRS MKT INC",
+      "title": "COM",
+      "cusip": "85208M102",
+      "ticker": null,
+      "value": 38750158.0,
+      "shares": 458148.0,
+      "put_call": null,
+      "weight": 5.405452072866545e-05
+    },
+    {
+      "issuer": "CABOT CORP",
+      "title": "COM",
+      "cusip": "127055101",
+      "ticker": null,
+      "value": 38673790.0,
+      "shares": 425829.0,
+      "put_call": null,
+      "weight": 5.39479912110566e-05
+    },
+    {
+      "issuer": "MCGRATH RENTCORP",
+      "title": "COM",
+      "cusip": "580589109",
+      "ticker": null,
+      "value": 37447408.0,
+      "shares": 309406.0,
+      "put_call": null,
+      "weight": 5.2237250025426796e-05
+    },
+    {
+      "issuer": "ROBERT HALF INC.",
+      "title": "COM",
+      "cusip": "770323103",
+      "ticker": null,
+      "value": 37242477.0,
+      "shares": 1213110.0,
+      "put_call": null,
+      "weight": 5.195138159135625e-05
+    },
+    {
+      "issuer": "PACCAR INC",
+      "title": "COM",
+      "cusip": "693718108",
+      "ticker": null,
+      "value": 36402366.0,
+      "shares": 303050.0,
+      "put_call": null,
+      "weight": 5.0779469015828694e-05
+    },
+    {
+      "issuer": "SAVERS VALUE VLG INC",
+      "title": "COM",
+      "cusip": "80517M109",
+      "ticker": null,
+      "value": 35497579.0,
+      "shares": 3518095.0,
+      "put_call": null,
+      "weight": 4.951733667441922e-05
+    },
+    {
+      "issuer": "HYCROFT MINING HOLDING CORP",
+      "title": "CL A NEW",
+      "cusip": "44862P208",
+      "ticker": null,
+      "value": 34793530.0,
+      "shares": 1486903.0,
+      "put_call": null,
+      "weight": 4.853522374304753e-05
+    },
+    {
+      "issuer": "THE BALDWIN INSURANCE GRP IN",
+      "title": "COM CL A",
+      "cusip": "05589G102",
+      "ticker": null,
+      "value": 34772036.0,
+      "shares": 1308203.0,
+      "put_call": null,
+      "weight": 4.8505240694499905e-05
+    },
+    {
+      "issuer": "INHIBRX BIOSCIENCES INC",
+      "title": "COM",
+      "cusip": "45720N103",
+      "ticker": null,
+      "value": 34398988.0,
+      "shares": 363050.0,
+      "put_call": null,
+      "weight": 4.798485750409364e-05
+    },
+    {
+      "issuer": "SPROTT INC",
+      "title": "COM NEW",
+      "cusip": "852066208",
+      "ticker": null,
+      "value": 34380239.0,
+      "shares": 305130.0,
+      "put_call": null,
+      "weight": 4.795870359243367e-05
+    },
+    {
+      "issuer": "TERADYNE INC",
+      "title": "COM",
+      "cusip": "880770102",
+      "ticker": null,
+      "value": 33773000.0,
+      "shares": 69802.0,
+      "put_call": null,
+      "weight": 4.7111635740148937e-05
+    },
+    {
+      "issuer": "STELLANTIS N.V",
+      "title": "SHS",
+      "cusip": "N82405106",
+      "ticker": null,
+      "value": 33623816.0,
+      "shares": 5915055.0,
+      "put_call": null,
+      "weight": 4.690353156621537e-05
+    },
+    {
+      "issuer": "CHEFS WHSE INC",
+      "title": "COM",
+      "cusip": "163086101",
+      "ticker": null,
+      "value": 33356694.0,
+      "shares": 347104.0,
+      "put_call": null,
+      "weight": 4.6530909816232244e-05
+    },
+    {
+      "issuer": "ENPRO INC",
+      "title": "COM",
+      "cusip": "29355X107",
+      "ticker": null,
+      "value": 33179263.0,
+      "shares": 88025.0,
+      "put_call": null,
+      "weight": 4.6283402498522525e-05
+    },
+    {
+      "issuer": "SIRIUSPOINT LTD",
+      "title": "COM",
+      "cusip": "G8192H106",
+      "ticker": null,
+      "value": 32663400.0,
+      "shares": 1360975.0,
+      "put_call": null,
+      "weight": 4.5563799568731846e-05
+    },
+    {
+      "issuer": "FEDEX CORP",
+      "title": "COM",
+      "cusip": "31428X106",
+      "ticker": null,
+      "value": 32169498.0,
+      "shares": 102724.0,
+      "put_call": null,
+      "weight": 4.4874831128992084e-05
+    },
+    {
+      "issuer": "HDFC BANK LTD",
+      "title": "SPONSORED ADS",
+      "cusip": "40415F101",
+      "ticker": null,
+      "value": 30821635.0,
+      "shares": 1193249.0,
+      "put_call": null,
+      "weight": 4.299463006057576e-05
+    },
+    {
+      "issuer": "ADEIA INC",
+      "title": "COM",
+      "cusip": "00676P107",
+      "ticker": null,
+      "value": 30165362.0,
+      "shares": 916045.0,
+      "put_call": null,
+      "weight": 4.207916224539515e-05
+    },
+    {
+      "issuer": "WAYSTAR HLDG CORP",
+      "title": "COM",
+      "cusip": "946784105",
+      "ticker": null,
+      "value": 30082588.0,
+      "shares": 1465299.0,
+      "put_call": null,
+      "weight": 4.196369668009876e-05
+    },
+    {
+      "issuer": "MOOG INC",
+      "title": "CL A",
+      "cusip": "615394202",
+      "ticker": null,
+      "value": 30008296.0,
+      "shares": 70801.0,
+      "put_call": null,
+      "weight": 4.186006307803773e-05
+    },
+    {
+      "issuer": "CAVCO INDS INC DEL",
+      "title": "COM",
+      "cusip": "149568107",
+      "ticker": null,
+      "value": 29670253.0,
+      "shares": 48293.0,
+      "put_call": null,
+      "weight": 4.138851010138457e-05
+    },
+    {
+      "issuer": "GRAND CANYON ED INC",
+      "title": "COM",
+      "cusip": "38526M106",
+      "ticker": null,
+      "value": 29635791.0,
+      "shares": 207084.0,
+      "put_call": null,
+      "weight": 4.134043734531087e-05
+    },
+    {
+      "issuer": "TETRA TECH INC NEW",
+      "title": "COM",
+      "cusip": "88162G103",
+      "ticker": null,
+      "value": 29486665.0,
+      "shares": 1020653.0,
+      "put_call": null,
+      "weight": 4.113241407845909e-05
+    },
+    {
+      "issuer": "JBT MAREL CORPORATION",
+      "title": "COM",
+      "cusip": "477839104",
+      "ticker": null,
+      "value": 27629170.0,
+      "shares": 190546.0,
+      "put_call": null,
+      "weight": 3.854130201174461e-05
+    },
+    {
+      "issuer": "ALASKA AIR GROUP INC",
+      "title": "COM",
+      "cusip": "011659109",
+      "ticker": null,
+      "value": 27577260.0,
+      "shares": 528300.0,
+      "put_call": null,
+      "weight": 3.846889017355223e-05
+    },
+    {
+      "issuer": "SOUTHSTATE BK CORP",
+      "title": "COM",
+      "cusip": "84472E102",
+      "ticker": null,
+      "value": 27246127.0,
+      "shares": 272734.0,
+      "put_call": null,
+      "weight": 3.8006976299228285e-05
+    },
+    {
+      "issuer": "CONMED CORP",
+      "title": "COM",
+      "cusip": "207410101",
+      "ticker": null,
+      "value": 26957606.0,
+      "shares": 823636.0,
+      "put_call": null,
+      "weight": 3.7604504020917695e-05
+    },
+    {
+      "issuer": "IONIS PHARMACEUTICALS INC",
+      "title": "COM",
+      "cusip": "462222100",
+      "ticker": null,
+      "value": 26319205.0,
+      "shares": 331936.0,
+      "put_call": null,
+      "weight": 3.671396674652256e-05
+    },
+    {
+      "issuer": "LOUISIANA PAC CORP",
+      "title": "COM",
+      "cusip": "546347105",
+      "ticker": "LPX",
+      "value": 25313103.0,
+      "shares": 321804.0,
+      "put_call": null,
+      "weight": 3.531050507769139e-05
+    },
+    {
+      "issuer": "GE HEALTHCARE TECHNOLOGIES I",
+      "title": "COMMON STOCK",
+      "cusip": "36266G107",
+      "ticker": null,
+      "value": 25229418.0,
+      "shares": 394148.0,
+      "put_call": null,
+      "weight": 3.5193768713231185e-05
+    },
+    {
+      "issuer": "CSW INDUSTRIALS INC",
+      "title": "COM",
+      "cusip": "126402106",
+      "ticker": null,
+      "value": 24848294.0,
+      "shares": 89286.0,
+      "put_call": null,
+      "weight": 3.4662119909162e-05
+    },
+    {
+      "issuer": "WOLFSPEED INC",
+      "title": "NOTE  2.500% 6/1",
+      "cusip": "977852AP7",
+      "ticker": null,
+      "value": 24259356.0,
+      "shares": 6166000.0,
+      "put_call": null,
+      "weight": 3.3840581031077975e-05
+    },
+    {
+      "issuer": "SLB LIMITED",
+      "title": "COM STK",
+      "cusip": "806857108",
+      "ticker": null,
+      "value": 24076241.0,
+      "shares": 517880.0,
+      "put_call": null,
+      "weight": 3.3585144819353894e-05
+    },
+    {
+      "issuer": "IREN LIMITED",
+      "title": "ORDINARY SHARES",
+      "cusip": "Q4982L109",
+      "ticker": null,
+      "value": 23728748.0,
+      "shares": 518888.0,
+      "put_call": null,
+      "weight": 3.310040956816947e-05
+    },
+    {
+      "issuer": "INSULET CORP",
+      "title": "COM",
+      "cusip": "45784P101",
+      "ticker": null,
+      "value": 23646404.0,
+      "shares": 155313.0,
+      "put_call": null,
+      "weight": 3.2985543831237994e-05
+    },
+    {
+      "issuer": "FEDERAL SIGNAL CORP",
+      "title": "COM",
+      "cusip": "313855108",
+      "ticker": null,
+      "value": 23353700.0,
+      "shares": 181755.0,
+      "put_call": null,
+      "weight": 3.25772364783915e-05
+    },
+    {
+      "issuer": "CNX RES CORP",
+      "title": "COM",
+      "cusip": "12653C108",
+      "ticker": null,
+      "value": 21760530.0,
+      "shares": 641336.0,
+      "put_call": null,
+      "weight": 3.0354844487388833e-05
+    },
+    {
+      "issuer": "WASTE CONNECTIONS INC",
+      "title": "COM",
+      "cusip": "94106B101",
+      "ticker": null,
+      "value": 20640582.0,
+      "shares": 123530.0,
+      "put_call": null,
+      "weight": 2.879257337662259e-05
+    },
+    {
+      "issuer": "CADRE HLDGS INC",
+      "title": "COM",
+      "cusip": "12763L105",
+      "ticker": null,
+      "value": 19558715.0,
+      "shares": 686030.0,
+      "put_call": null,
+      "weight": 2.7283423344843132e-05
+    },
+    {
+      "issuer": "PAR TECHNOLOGY CORP",
+      "title": "COM",
+      "cusip": "698884103",
+      "ticker": null,
+      "value": 17904067.0,
+      "shares": 1027788.0,
+      "put_call": null,
+      "weight": 2.4975272637053894e-05
+    },
+    {
+      "issuer": "BIOHAVEN LTD",
+      "title": "COM",
+      "cusip": "G1110E107",
+      "ticker": null,
+      "value": 17849230.0,
+      "shares": 1199545.0,
+      "put_call": null,
+      "weight": 2.489877778113104e-05
+    },
+    {
+      "issuer": "ICF INTL INC",
+      "title": "COM",
+      "cusip": "44925C103",
+      "ticker": null,
+      "value": 17719698.0,
+      "shares": 243202.0,
+      "put_call": null,
+      "weight": 2.4718087158423758e-05
+    },
+    {
+      "issuer": "GE VERNOVA INC",
+      "title": "COM",
+      "cusip": "36828A101",
+      "ticker": "GEV",
+      "value": 16971457.0,
+      "shares": 15289.0,
+      "put_call": null,
+      "weight": 2.3674328610535068e-05
+    },
+    {
+      "issuer": "ESTABLISHMENT LABS HLDGS INC",
+      "title": "COM",
+      "cusip": "G31249108",
+      "ticker": null,
+      "value": 16220578.0,
+      "shares": 189029.0,
+      "put_call": null,
+      "weight": 2.262689018537511e-05
+    },
+    {
+      "issuer": "HAWKEYE 360 INC",
+      "title": "COM SHS",
+      "cusip": "420201105",
+      "ticker": null,
+      "value": 14154000.0,
+      "shares": 700000.0,
+      "put_call": null,
+      "weight": 1.974411785349445e-05
+    },
+    {
+      "issuer": "SPDR SERIES TRUST",
+      "title": "ST STR BLO 1 ETF",
+      "cusip": "78468R663",
+      "ticker": null,
+      "value": 13686456.0,
+      "shares": 149350.0,
+      "put_call": null,
+      "weight": 1.909191749757427e-05
+    },
+    {
+      "issuer": "STATE STR SPDR S&P 500 ETF T",
+      "title": "TR UNIT",
+      "cusip": "78462F103",
+      "ticker": "SPY",
+      "value": 13480982.0,
+      "shares": 18193.0,
+      "put_call": null,
+      "weight": 1.880529160582431e-05
+    },
+    {
+      "issuer": "HENRY JACK & ASSOC INC",
+      "title": "COM",
+      "cusip": "426281101",
+      "ticker": null,
+      "value": 8054848.0,
+      "shares": 58854.0,
+      "put_call": null,
+      "weight": 1.1236107687154448e-05
+    },
+    {
+      "issuer": "FEDEX FGHT HLDG CO INC",
+      "title": "COMMON STOCK",
+      "cusip": "314352105",
+      "ticker": null,
+      "value": 7755024.0,
+      "shares": 51359.0,
+      "put_call": null,
+      "weight": 1.0817868292544718e-05
+    },
+    {
+      "issuer": "KIMCO REALTY CORP",
+      "title": "COM",
+      "cusip": "49446R109",
+      "ticker": null,
+      "value": 7706349.0,
+      "shares": 303998.0,
+      "put_call": null,
+      "weight": 1.074996911658606e-05
+    },
+    {
+      "issuer": "KB FINL GROUP INC",
+      "title": "SPONSORED ADR",
+      "cusip": "48241A105",
+      "ticker": null,
+      "value": 5404815.0,
+      "shares": 53354.0,
+      "put_call": null,
+      "weight": 7.539444986317267e-06
+    },
+    {
+      "issuer": "BANCO BILBAO VIZCAYA ARGENTA",
+      "title": "SPONSORED ADR",
+      "cusip": "05946K101",
+      "ticker": null,
+      "value": 5229372.0,
+      "shares": 211629.0,
+      "put_call": null,
+      "weight": 7.294710828583013e-06
+    },
+    {
+      "issuer": "NOVO-NORDISK A S",
+      "title": "ADR",
+      "cusip": "670100205",
+      "ticker": null,
+      "value": 4981861.0,
+      "shares": 103059.0,
+      "put_call": null,
+      "weight": 6.949445436889057e-06
+    },
+    {
+      "issuer": "ROOT INC",
+      "title": "CL A NEW",
+      "cusip": "77664L207",
+      "ticker": null,
+      "value": 4335645.0,
+      "shares": 77533.0,
+      "put_call": null,
+      "weight": 6.048006630699021e-06
+    },
+    {
+      "issuer": "MIZUHO FINANCIAL GROUP INC",
+      "title": "SPONSORED ADR",
+      "cusip": "60687Y109",
+      "ticker": null,
+      "value": 2784753.0,
+      "shares": 291292.0,
+      "put_call": null,
+      "weight": 3.884590322514641e-06
+    },
+    {
+      "issuer": "BANCO SANTANDER SA",
+      "title": "ADR",
+      "cusip": "05964H105",
+      "ticker": null,
+      "value": 2647985.0,
+      "shares": 193991.0,
+      "put_call": null,
+      "weight": 3.693805843880564e-06
+    },
+    {
+      "issuer": "ASSURANT INC",
+      "title": "COM",
+      "cusip": "04621X108",
+      "ticker": null,
+      "value": 2561508.0,
+      "shares": 9539.0,
+      "put_call": null,
+      "weight": 3.5731747798974746e-06
+    },
+    {
+      "issuer": "S&P GLOBAL INC",
+      "title": "COM",
+      "cusip": "78409V104",
+      "ticker": "SPGI",
+      "value": 2265025.0,
+      "shares": 5555.0,
+      "put_call": null,
+      "weight": 3.1595959121881635e-06
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "MSCI ACWI ETF",
+      "cusip": "464288257",
+      "ticker": null,
+      "value": 1944166.0,
+      "shares": 12477.0,
+      "put_call": null,
+      "weight": 2.712013750936618e-06
+    },
+    {
+      "issuer": "JBS N.V.",
+      "title": "CL A SHS",
+      "cusip": "N4732M103",
+      "ticker": null,
+      "value": 1706622.0,
+      "shares": 139659.0,
+      "put_call": null,
+      "weight": 2.380651822761509e-06
+    },
+    {
+      "issuer": "SHINHAN FINANCIAL GROUP CO L",
+      "title": "SPN ADR RESTRD",
+      "cusip": "824596100",
+      "ticker": null,
+      "value": 1562382.0,
+      "shares": 24847.0,
+      "put_call": null,
+      "weight": 2.1794442800747747e-06
+    },
+    {
+      "issuer": "REVVITY INC",
+      "title": "COM",
+      "cusip": "714046109",
+      "ticker": null,
+      "value": 1367830.0,
+      "shares": 12294.0,
+      "put_call": null,
+      "weight": 1.9080540287936492e-06
+    },
+    {
+      "issuer": "MOHAWK INDS INC",
+      "title": "COM",
+      "cusip": "608190104",
+      "ticker": null,
+      "value": 1188185.0,
+      "shares": 9793.0,
+      "put_call": null,
+      "weight": 1.6574582924794619e-06
+    },
+    {
+      "issuer": "ARROW ELECTRS INC",
+      "title": "COM",
+      "cusip": "042735100",
+      "ticker": null,
+      "value": 1075586.0,
+      "shares": 5040.0,
+      "put_call": null,
+      "weight": 1.500388352802648e-06
+    },
+    {
+      "issuer": "TOTALENERGIES SE",
+      "title": "ACT",
+      "cusip": "F92124100",
+      "ticker": null,
+      "value": 970766.0,
+      "shares": 12496.0,
+      "put_call": null,
+      "weight": 1.354169726732047e-06
+    },
+    {
+      "issuer": "SAP SE",
+      "title": "SPON ADR",
+      "cusip": "803054204",
+      "ticker": null,
+      "value": 726875.0,
+      "shares": 4693.0,
+      "put_call": null,
+      "weight": 1.0139540529008603e-06
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "RUS 1000 GRW ETF",
+      "cusip": "464287614",
+      "ticker": null,
+      "value": 461935.0,
+      "shares": 3787.0,
+      "put_call": null,
+      "weight": 6.443760831322564e-07
+    },
+    {
+      "issuer": "ICICI BANK LIMITED",
+      "title": "ADR",
+      "cusip": "45104G104",
+      "ticker": null,
+      "value": 332853.0,
+      "shares": 11337.0,
+      "put_call": null,
+      "weight": 4.64313187783608e-07
+    },
+    {
+      "issuer": "MOODYS CORP",
+      "title": "COM",
+      "cusip": "615369105",
+      "ticker": "MCO",
+      "value": 293039.0,
+      "shares": 647.0,
+      "put_call": null,
+      "weight": 4.087746609912505e-07
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "RUS 1000 ETF",
+      "cusip": "464287622",
+      "ticker": null,
+      "value": 248255.0,
+      "shares": 611.0,
+      "put_call": null,
+      "weight": 3.463032342602278e-07
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

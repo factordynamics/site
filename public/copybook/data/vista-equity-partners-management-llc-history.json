@@ -1,0 +1,34 @@
+{
+  "slug": "vista-equity-partners-management-llc",
+  "manager": "VISTA EQUITY PARTNERS MANAGEMENT, LLC",
+  "cik": "0001569532",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001172661-26-003729",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1569532/000117266126003729/0001172661-26-003729-index.html",
+      "line_count": 1,
+      "position_count": 1,
+      "values_in_thousands": true,
+      "total_value": 23247502000.0,
+      "holdings": [
+        {
+          "issuer": "KLARNA GROUP PLC",
+          "title": "SHS",
+          "cusip": "G5279N105",
+          "ticker": null,
+          "value": 23247502000.0,
+          "shares": 1148592.0,
+          "put_call": null,
+          "weight": 1.0
+        }
+      ]
+    }
+  ]
+}

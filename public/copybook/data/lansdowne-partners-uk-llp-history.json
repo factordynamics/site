@@ -1,0 +1,284 @@
+{
+  "slug": "lansdowne-partners-uk-llp",
+  "manager": "LANSDOWNE PARTNERS (UK) LLP",
+  "cik": "0001608485",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0000919574-26-005378",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1608485/000091957426005378/0000919574-26-005378-index.html",
+      "line_count": 67,
+      "position_count": 26,
+      "values_in_thousands": false,
+      "total_value": 2430717155.0,
+      "holdings": [
+        {
+          "issuer": "TAIWAN SEMICONDUCTOR MANUFAC",
+          "title": "SPONSORED ADS",
+          "cusip": "874039100",
+          "ticker": "TSM",
+          "value": 704799239.0,
+          "shares": 1475803.0,
+          "put_call": null,
+          "weight": 0.2899552658976482
+        },
+        {
+          "issuer": "ARM HOLDINGS PLC",
+          "title": "SPONSORED ADS",
+          "cusip": "042068205",
+          "ticker": null,
+          "value": 380273844.0,
+          "shares": 1072493.0,
+          "put_call": null,
+          "weight": 0.1564451228797947
+        },
+        {
+          "issuer": "DELTA AIR LINES INC",
+          "title": "COM NEW",
+          "cusip": "247361702",
+          "ticker": "DAL",
+          "value": 231458306.0,
+          "shares": 2471261.0,
+          "put_call": null,
+          "weight": 0.09522222917787405
+        },
+        {
+          "issuer": "ANALOG DEVICES INC",
+          "title": "COM",
+          "cusip": "032654105",
+          "ticker": null,
+          "value": 228188860.0,
+          "shares": 574537.0,
+          "put_call": null,
+          "weight": 0.09387717510884148
+        },
+        {
+          "issuer": "UNITED AIRLS HLDGS INC",
+          "title": "COM",
+          "cusip": "910047109",
+          "ticker": null,
+          "value": 210672852.0,
+          "shares": 1549179.0,
+          "put_call": null,
+          "weight": 0.08667106807003219
+        },
+        {
+          "issuer": "BAKER HUGHES COMPANY",
+          "title": "CL A",
+          "cusip": "05722G100",
+          "ticker": null,
+          "value": 138423218.0,
+          "shares": 2494112.0,
+          "put_call": null,
+          "weight": 0.05694748058829576
+        },
+        {
+          "issuer": "LINDE PLC",
+          "title": "SHS",
+          "cusip": "G54950103",
+          "ticker": null,
+          "value": 123828944.0,
+          "shares": 238619.0,
+          "put_call": null,
+          "weight": 0.050943378477945535
+        },
+        {
+          "issuer": "SLB LIMITED",
+          "title": "COM STK",
+          "cusip": "806857108",
+          "ticker": null,
+          "value": 119017795.0,
+          "shares": 2560073.0,
+          "put_call": null,
+          "weight": 0.04896406591576468
+        },
+        {
+          "issuer": "ACUSHNET HLDGS CORP",
+          "title": "COM",
+          "cusip": "005098108",
+          "ticker": null,
+          "value": 60873689.0,
+          "shares": 513572.0,
+          "put_call": null,
+          "weight": 0.025043509844319998
+        },
+        {
+          "issuer": "IONQ INC",
+          "title": "COM",
+          "cusip": "46222L108",
+          "ticker": null,
+          "value": 51472222.0,
+          "shares": 966433.0,
+          "put_call": null,
+          "weight": 0.021175734862495757
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 31691832.0,
+          "shares": 132969.0,
+          "put_call": null,
+          "weight": 0.013038058309174191
+        },
+        {
+          "issuer": "TEXAS INSTRS INC",
+          "title": "COM",
+          "cusip": "882508104",
+          "ticker": null,
+          "value": 27594725.0,
+          "shares": 92578.0,
+          "put_call": null,
+          "weight": 0.011352503496030989
+        },
+        {
+          "issuer": "TECK RESOURCES LTD",
+          "title": "CL B",
+          "cusip": "878742204",
+          "ticker": null,
+          "value": 18466136.0,
+          "shares": 310564.0,
+          "put_call": null,
+          "weight": 0.007596990855976413
+        },
+        {
+          "issuer": "SMURFIT WESTROCK PLC",
+          "title": "SHS",
+          "cusip": "G8267P108",
+          "ticker": null,
+          "value": 16088997.0,
+          "shares": 347795.0,
+          "put_call": null,
+          "weight": 0.006619032974241711
+        },
+        {
+          "issuer": "BARRICK MNG CORP",
+          "title": "COM SHS",
+          "cusip": "06849F108",
+          "ticker": null,
+          "value": 15108335.0,
+          "shares": 411335.0,
+          "put_call": null,
+          "weight": 0.006215587432261324
+        },
+        {
+          "issuer": "RALLIANT CORP",
+          "title": "COM",
+          "cusip": "750940108",
+          "ticker": null,
+          "value": 14567622.0,
+          "shares": 197849.0,
+          "put_call": null,
+          "weight": 0.005993137445068141
+        },
+        {
+          "issuer": "EATON CORP PLC",
+          "title": "SHS",
+          "cusip": "G29183103",
+          "ticker": "ETN",
+          "value": 14430554.0,
+          "shares": 33865.0,
+          "put_call": null,
+          "weight": 0.005936747502816715
+        },
+        {
+          "issuer": "NVENT ELEC PLC",
+          "title": "SHS",
+          "cusip": "G6700G107",
+          "ticker": null,
+          "value": 12063002.0,
+          "shares": 71122.0,
+          "put_call": null,
+          "weight": 0.004962733724566156
+        },
+        {
+          "issuer": "AGILENT TECHNOLOGIES INC",
+          "title": "COM",
+          "cusip": "00846U101",
+          "ticker": null,
+          "value": 11764620.0,
+          "shares": 88569.0,
+          "put_call": null,
+          "weight": 0.004839979006113527
+        },
+        {
+          "issuer": "MEDTRONIC PLC",
+          "title": "SHS",
+          "cusip": "G5960L103",
+          "ticker": null,
+          "value": 6949875.0,
+          "shares": 88839.0,
+          "put_call": null,
+          "weight": 0.0028591870451500556
+        },
+        {
+          "issuer": "SENSATA TECHNOLOGIES HLDG PL",
+          "title": "SHS",
+          "cusip": "G8060N102",
+          "ticker": null,
+          "value": 6697445.0,
+          "shares": 140290.0,
+          "put_call": null,
+          "weight": 0.00275533703550136
+        },
+        {
+          "issuer": "ROCKWELL AUTOMATION INC",
+          "title": "COM",
+          "cusip": "773903109",
+          "ticker": null,
+          "value": 4528001.0,
+          "shares": 9146.0,
+          "put_call": null,
+          "weight": 0.001862825129894638
+        },
+        {
+          "issuer": "AGNICO EAGLE MINES LTD",
+          "title": "COM",
+          "cusip": "008474108",
+          "ticker": null,
+          "value": 720889.0,
+          "shares": 4647.0,
+          "put_call": null,
+          "weight": 0.00029657461318242104
+        },
+        {
+          "issuer": "MARRIOTT INTL INC NEW",
+          "title": "CL A",
+          "cusip": "571903202",
+          "ticker": null,
+          "value": 469908.0,
+          "shares": 1268.0,
+          "put_call": null,
+          "weight": 0.00019332072389969206
+        },
+        {
+          "issuer": "LAMAR ADVERTISING CO",
+          "title": "CL A",
+          "cusip": "512816109",
+          "ticker": null,
+          "value": 285131.0,
+          "shares": 1828.0,
+          "put_call": null,
+          "weight": 0.00011730324090299186
+        },
+        {
+          "issuer": "OUTFRONT MEDIA INC",
+          "title": "COM NEW",
+          "cusip": "69007J304",
+          "ticker": null,
+          "value": 281114.0,
+          "shares": 8581.0,
+          "put_call": null,
+          "weight": 0.00011565064220727895
+        }
+      ]
+    }
+  ]
+}

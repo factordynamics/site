@@ -1,0 +1,362 @@
+{
+  "cik": "0001313756",
+  "name": "Owl Creek Asset Management, L.P.",
+  "manager": "Owl Creek Asset Management, L.P.",
+  "slug": "owl-creek-asset-management-l-p",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001172661-26-003787",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1313756/000117266126003787/0001172661-26-003787-index.html",
+  "line_count": 34,
+  "position_count": 34,
+  "values_in_thousands": false,
+  "total_value": 1208987586.0,
+  "holdings": [
+    {
+      "issuer": "ANTERIX INC",
+      "title": "COM",
+      "cusip": "03676C100",
+      "ticker": null,
+      "value": 557088221.0,
+      "shares": 5411776.0,
+      "put_call": null,
+      "weight": 0.4607890332796188
+    },
+    {
+      "issuer": "REPUBLIC AWYS HLDGS INC",
+      "title": "COM SHS",
+      "cusip": "590479408",
+      "ticker": null,
+      "value": 89895256.0,
+      "shares": 4278689.0,
+      "put_call": null,
+      "weight": 0.07435581393968094
+    },
+    {
+      "issuer": "PG&E CORP",
+      "title": "COM",
+      "cusip": "69331C108",
+      "ticker": null,
+      "value": 79497846.0,
+      "shares": 4726388.0,
+      "put_call": null,
+      "weight": 0.06575571736267605
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 47075124.0,
+      "shares": 126200.0,
+      "put_call": "CALL",
+      "weight": 0.03893764050609532
+    },
+    {
+      "issuer": "FTAI AVIATION LTD",
+      "title": "SHS",
+      "cusip": "G3730V105",
+      "ticker": null,
+      "value": 34479860.0,
+      "shares": 127453.0,
+      "put_call": null,
+      "weight": 0.028519614592634867
+    },
+    {
+      "issuer": "APPLOVIN CORP",
+      "title": "COM CL A",
+      "cusip": "03831W108",
+      "ticker": null,
+      "value": 27979050.0,
+      "shares": 54304.0,
+      "put_call": null,
+      "weight": 0.023142545319733334
+    },
+    {
+      "issuer": "ALASKA AIR GROUP INC",
+      "title": "COM",
+      "cusip": "011659109",
+      "ticker": null,
+      "value": 25166246.0,
+      "shares": 482112.0,
+      "put_call": null,
+      "weight": 0.02081596725344705
+    },
+    {
+      "issuer": "ARES MANAGEMENT CORPORATION",
+      "title": "CL A COM STK",
+      "cusip": "03990B101",
+      "ticker": null,
+      "value": 24501335.0,
+      "shares": 220118.0,
+      "put_call": null,
+      "weight": 0.020265993864390267
+    },
+    {
+      "issuer": "DOORDASH INC",
+      "title": "CL A",
+      "cusip": "25809K105",
+      "ticker": null,
+      "value": 24021377.0,
+      "shares": 130176.0,
+      "put_call": null,
+      "weight": 0.019869002195031637
+    },
+    {
+      "issuer": "KRANESHARES TRUST",
+      "title": "CSI CHI INTERNET",
+      "cusip": "500767306",
+      "ticker": null,
+      "value": 23762817.0,
+      "shares": 971100.0,
+      "put_call": "CALL",
+      "weight": 0.019655137302625702
+    },
+    {
+      "issuer": "VISTRA CORP",
+      "title": "COM",
+      "cusip": "92840M102",
+      "ticker": null,
+      "value": 23762615.0,
+      "shares": 149799.0,
+      "put_call": null,
+      "weight": 0.01965497022067851
+    },
+    {
+      "issuer": "ROYAL CARIBBEAN GROUP",
+      "title": "COM",
+      "cusip": "V7780T103",
+      "ticker": null,
+      "value": 22181376.0,
+      "shares": 69856.0,
+      "put_call": null,
+      "weight": 0.01834706679941046
+    },
+    {
+      "issuer": "TALEN ENERGY CORP",
+      "title": "COM",
+      "cusip": "87422Q109",
+      "ticker": null,
+      "value": 21191939.0,
+      "shares": 55150.0,
+      "put_call": null,
+      "weight": 0.01752866550939093
+    },
+    {
+      "issuer": "UBER TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "90353T100",
+      "ticker": "UBER",
+      "value": 19662734.0,
+      "shares": 272488.0,
+      "put_call": null,
+      "weight": 0.01626380140515355
+    },
+    {
+      "issuer": "UNITED AIRLS HLDGS INC",
+      "title": "COM",
+      "cusip": "910047109",
+      "ticker": null,
+      "value": 18725143.0,
+      "shares": 137695.0,
+      "put_call": null,
+      "weight": 0.015488283930154433
+    },
+    {
+      "issuer": "SKYWEST INC",
+      "title": "COM",
+      "cusip": "830879102",
+      "ticker": null,
+      "value": 18256159.0,
+      "shares": 183793.0,
+      "put_call": null,
+      "weight": 0.01510036927707544
+    },
+    {
+      "issuer": "APARTMENT INVT & MGMT CO",
+      "title": "CL A",
+      "cusip": "03748R747",
+      "ticker": null,
+      "value": 17605103.0,
+      "shares": 5927644.0,
+      "put_call": null,
+      "weight": 0.01456185588989166
+    },
+    {
+      "issuer": "CARNIVAL CORP LTD",
+      "title": "COMMON SHARES",
+      "cusip": "G2004J103",
+      "ticker": null,
+      "value": 16260873.0,
+      "shares": 569159.0,
+      "put_call": null,
+      "weight": 0.01344999170239619
+    },
+    {
+      "issuer": "ROCKET COS INC",
+      "title": "COM CL A",
+      "cusip": "77311W101",
+      "ticker": "RKT",
+      "value": 16129717.0,
+      "shares": 1024109.0,
+      "put_call": null,
+      "weight": 0.013341507544644053
+    },
+    {
+      "issuer": "FLEX LTD",
+      "title": "ORD",
+      "cusip": "Y2573F102",
+      "ticker": null,
+      "value": 14735080.0,
+      "shares": 90918.0,
+      "put_call": null,
+      "weight": 0.012187949794217324
+    },
+    {
+      "issuer": "UWM HOLDINGS CORPORATION",
+      "title": "COM CL A",
+      "cusip": "91823B109",
+      "ticker": null,
+      "value": 11247250.0,
+      "shares": 4911463.0,
+      "put_call": null,
+      "weight": 0.009303031834439365
+    },
+    {
+      "issuer": "ISHARES INC",
+      "title": "MSCI STH KOR ETF",
+      "cusip": "464286772",
+      "ticker": null,
+      "value": 10216140.0,
+      "shares": 50600.0,
+      "put_call": "PUT",
+      "weight": 0.008450161207858754
+    },
+    {
+      "issuer": "MELCO RESORTS AND ENTMNT LTD",
+      "title": "ADR",
+      "cusip": "585464100",
+      "ticker": null,
+      "value": 9076321.0,
+      "shares": 1722262.0,
+      "put_call": null,
+      "weight": 0.007507373198123144
+    },
+    {
+      "issuer": "SEA LTD",
+      "title": "SPONSORD ADS",
+      "cusip": "81141R100",
+      "ticker": "XYZ",
+      "value": 8926756.0,
+      "shares": 93152.0,
+      "put_call": null,
+      "weight": 0.0073836622504410065
+    },
+    {
+      "issuer": "COMMUNITY HEALTH SYS INC NEW",
+      "title": "COM",
+      "cusip": "203668108",
+      "ticker": null,
+      "value": 8452277.0,
+      "shares": 2530622.0,
+      "put_call": null,
+      "weight": 0.006991202472115376
+    },
+    {
+      "issuer": "BWX TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "05605H100",
+      "ticker": null,
+      "value": 7472808.0,
+      "shares": 38391.0,
+      "put_call": null,
+      "weight": 0.006181046097192928
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 6955704.0,
+      "shares": 18647.0,
+      "put_call": null,
+      "weight": 0.005753329546594699
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 6899176.0,
+      "shares": 12248.0,
+      "put_call": null,
+      "weight": 0.00570657306980818
+    },
+    {
+      "issuer": "NEXTNAV INC",
+      "title": "COMMON STOCK",
+      "cusip": "65345N106",
+      "ticker": null,
+      "value": 6094347.0,
+      "shares": 341803.0,
+      "put_call": null,
+      "weight": 0.005040868136755211
+    },
+    {
+      "issuer": "ZILLOW GROUP INC",
+      "title": "CL C CAP STK",
+      "cusip": "98954M200",
+      "ticker": null,
+      "value": 3980755.0,
+      "shares": 126293.0,
+      "put_call": null,
+      "weight": 0.0032926351321526308
+    },
+    {
+      "issuer": "GE VERNOVA INC",
+      "title": "COM",
+      "cusip": "36828A101",
+      "ticker": "GEV",
+      "value": 3013516.0,
+      "shares": 2565.0,
+      "put_call": null,
+      "weight": 0.00249259465928048
+    },
+    {
+      "issuer": "BORGWARNER INC",
+      "title": "COM",
+      "cusip": "099724106",
+      "ticker": null,
+      "value": 2234227.0,
+      "shares": 33648.0,
+      "put_call": null,
+      "weight": 0.001848014839748735
+    },
+    {
+      "issuer": "DANAHER CORP DEL",
+      "title": "COM",
+      "cusip": "235851102",
+      "ticker": "DHR",
+      "value": 1359646.0,
+      "shares": 7138.0,
+      "put_call": null,
+      "weight": 0.0011246153523366284
+    },
+    {
+      "issuer": "SPOTIFY TECHNOLOGY S A",
+      "title": "SHS",
+      "cusip": "L8681T102",
+      "ticker": null,
+      "value": 1080792.0,
+      "shares": 2354.0,
+      "put_call": null,
+      "weight": 0.0008939645142063518
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

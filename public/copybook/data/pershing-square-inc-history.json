@@ -1,0 +1,164 @@
+{
+  "slug": "pershing-square-inc",
+  "manager": "PERSHING SQUARE INC.",
+  "cik": "0002026053",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001172661-26-003790",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/2026053/000117266126003790/0001172661-26-003790-index.html",
+      "line_count": 15,
+      "position_count": 14,
+      "values_in_thousands": false,
+      "total_value": 19465692772.0,
+      "holdings": [
+        {
+          "issuer": "UBER TECHNOLOGIES INC",
+          "title": "COM",
+          "cusip": "90353T100",
+          "ticker": "UBER",
+          "value": 2476978592.0,
+          "shares": 34326200.0,
+          "put_call": null,
+          "weight": 0.1272484170490431
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "CL A LTD VT SH",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 2448117792.0,
+          "shares": 57481047.0,
+          "put_call": null,
+          "weight": 0.12576576753134835
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 2315234425.0,
+          "shares": 6206730.0,
+          "put_call": null,
+          "weight": 0.1189392256478176
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 2041109677.0,
+          "shares": 8563857.0,
+          "put_call": null,
+          "weight": 0.10485677036555255
+        },
+        {
+          "issuer": "HOWARD HUGHES HOLDINGS INC",
+          "title": "COM",
+          "cusip": "44267T102",
+          "ticker": null,
+          "value": 1991144055.0,
+          "shares": 27852064.0,
+          "put_call": null,
+          "weight": 0.10228991479122272
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 1872301303.0,
+          "shares": 25821284.0,
+          "put_call": null,
+          "weight": 0.09618467346269693
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 1800309764.0,
+          "shares": 3196062.0,
+          "put_call": null,
+          "weight": 0.0924862929404504
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 1122065552.0,
+          "shares": 3270470.0,
+          "put_call": null,
+          "weight": 0.057643237522684555
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 1091218186.0,
+          "shares": 2124646.0,
+          "put_call": null,
+          "weight": 0.05605853327602288
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 1056088305.0,
+          "shares": 2593155.0,
+          "put_call": null,
+          "weight": 0.05425382581395239
+        },
+        {
+          "issuer": "NETFLIX INC.",
+          "title": "COM",
+          "cusip": "64110L106",
+          "ticker": "NFLX",
+          "value": 934016601.0,
+          "shares": 13081465.0,
+          "put_call": null,
+          "weight": 0.047982705364769535
+        },
+        {
+          "issuer": "PERSHING SQUARE USA LTD",
+          "title": "COM SHS",
+          "cusip": "71531T105",
+          "ticker": null,
+          "value": 149520000.0,
+          "shares": 4000000.0,
+          "put_call": null,
+          "weight": 0.007681206199610515
+        },
+        {
+          "issuer": "SEAPORT ENTMT GROUP INC",
+          "title": "COMMON STOCK",
+          "cusip": "812215200",
+          "ticker": null,
+          "value": 133632548.0,
+          "shares": 5023780.0,
+          "put_call": null,
+          "weight": 0.006865029134345571
+        },
+        {
+          "issuer": "HERTZ GLOBAL HLDGS INC",
+          "title": "COM NEW",
+          "cusip": "42806J700",
+          "ticker": null,
+          "value": 33955972.0,
+          "shares": 14991599.0,
+          "put_call": null,
+          "weight": 0.0017444009004828856
+        }
+      ]
+    }
+  ]
+}

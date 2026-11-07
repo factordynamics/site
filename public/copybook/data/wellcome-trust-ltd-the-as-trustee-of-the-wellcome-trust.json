@@ -1,0 +1,222 @@
+{
+  "cik": "0001026720",
+  "name": "WELLCOME TRUST LTD (THE) as trustee of the WELLCOME TRUST",
+  "manager": "WELLCOME TRUST LTD (THE) as trustee of the WELLCOME TRUST",
+  "slug": "wellcome-trust-ltd-the-as-trustee-of-the-wellcome-trust",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001012975-26-000630",
+  "filing_date": "2026-07-09",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1026720/000101297526000630/0001012975-26-000630-index.html",
+  "line_count": 20,
+  "position_count": 20,
+  "values_in_thousands": false,
+  "total_value": 9011871154.0,
+  "holdings": [
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 823416000.0,
+      "shares": 2400000.0,
+      "put_call": null,
+      "weight": 0.0913701478781706
+    },
+    {
+      "issuer": "APPLE INC",
+      "title": "COM",
+      "cusip": "037833100",
+      "ticker": "AAPL",
+      "value": 810208000.0,
+      "shares": 2800000.0,
+      "put_call": null,
+      "weight": 0.08990452550360553
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 786522000.0,
+      "shares": 3300000.0,
+      "put_call": null,
+      "weight": 0.08727621451299769
+    },
+    {
+      "issuer": "CISCO SYS INC",
+      "title": "COM",
+      "cusip": "17275R102",
+      "ticker": "CSCO",
+      "value": 704760000.0,
+      "shares": 6000000.0,
+      "put_call": null,
+      "weight": 0.07820351489237459
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 643266000.0,
+      "shares": 1800000.0,
+      "put_call": null,
+      "weight": 0.07137984875809954
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL C",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 635994000.0,
+      "shares": 1800000.0,
+      "put_call": null,
+      "weight": 0.07057291312001375
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 632312543.0,
+      "shares": 1695117.0,
+      "put_call": null,
+      "weight": 0.07016440117647958
+    },
+    {
+      "issuer": "LINDE PLC",
+      "title": "SHS",
+      "cusip": "G54950103",
+      "ticker": null,
+      "value": 581212800.0,
+      "shares": 1120000.0,
+      "put_call": null,
+      "weight": 0.06449413113746344
+    },
+    {
+      "issuer": "DOORDASH INC",
+      "title": "CL A",
+      "cusip": "25809K105",
+      "ticker": null,
+      "value": 553590000.0,
+      "shares": 3000000.0,
+      "put_call": null,
+      "weight": 0.061428974132001886
+    },
+    {
+      "issuer": "BERKSHIRE HATHAWAY INC DEL",
+      "title": "CL A",
+      "cusip": "084670108",
+      "ticker": "BRK.A",
+      "value": 524195000.0,
+      "shares": 700.0,
+      "put_call": null,
+      "weight": 0.05816716540241827
+    },
+    {
+      "issuer": "EDWARDS LIFESCIENCES CORP",
+      "title": "COM",
+      "cusip": "28176E108",
+      "ticker": null,
+      "value": 434208000.0,
+      "shares": 4800000.0,
+      "put_call": null,
+      "weight": 0.04818178074009335
+    },
+    {
+      "issuer": "JOHNSON & JOHNSON",
+      "title": "COM",
+      "cusip": "478160104",
+      "ticker": "JNJ",
+      "value": 406352000.0,
+      "shares": 1600000.0,
+      "put_call": null,
+      "weight": 0.04509074675569868
+    },
+    {
+      "issuer": "MASTERCARD INCORPORATED",
+      "title": "CL A",
+      "cusip": "57636Q104",
+      "ticker": "MA",
+      "value": 368508000.0,
+      "shares": 717500.0,
+      "put_call": null,
+      "weight": 0.04089139688114986
+    },
+    {
+      "issuer": "ABBOTT LABORATORIES",
+      "title": "COM",
+      "cusip": "002824100",
+      "ticker": null,
+      "value": 283562500.0,
+      "shares": 3125000.0,
+      "put_call": null,
+      "weight": 0.031465440989370805
+    },
+    {
+      "issuer": "PEPSICO INC",
+      "title": "COM",
+      "cusip": "713448108",
+      "ticker": "PEP",
+      "value": 270800000.0,
+      "shares": 2000000.0,
+      "put_call": null,
+      "weight": 0.03004925340946569
+    },
+    {
+      "issuer": "SERVICENOW INC",
+      "title": "COM",
+      "cusip": "81762P102",
+      "ticker": null,
+      "value": 223380000.0,
+      "shares": 2250000.0,
+      "put_call": null,
+      "weight": 0.02478730512040785
+    },
+    {
+      "issuer": "ACCENTURE PLC IRELAND",
+      "title": "SHS CLASS A",
+      "cusip": "G1151C101",
+      "ticker": "ACN",
+      "value": 136884000.0,
+      "shares": 1100000.0,
+      "put_call": null,
+      "weight": 0.015189298388852664
+    },
+    {
+      "issuer": "NIKE INC",
+      "title": "CL B",
+      "cusip": "654106103",
+      "ticker": "NKE",
+      "value": 123150000.0,
+      "shares": 3000000.0,
+      "put_call": null,
+      "weight": 0.013665308557517354
+    },
+    {
+      "issuer": "KLARNA GROUP PLC",
+      "title": "SHS",
+      "cusip": "G5279N105",
+      "ticker": null,
+      "value": 63924802.0,
+      "shares": 3158340.0,
+      "put_call": null,
+      "weight": 0.00709339946251078
+    },
+    {
+      "issuer": "NEUMORA THERAPEUTICS INC.",
+      "title": "COM",
+      "cusip": "640979100",
+      "ticker": null,
+      "value": 5625509.0,
+      "shares": 3309123.0,
+      "put_call": null,
+      "weight": 0.0006242331813080869
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

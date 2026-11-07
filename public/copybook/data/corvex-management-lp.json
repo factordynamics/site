@@ -1,0 +1,272 @@
+{
+  "cik": "0001535472",
+  "name": "Corvex Management LP",
+  "manager": "Corvex Management LP",
+  "slug": "corvex-management-lp",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001011438-26-000545",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1535472/000101143826000545/0001011438-26-000545-index.html",
+  "line_count": 25,
+  "position_count": 25,
+  "values_in_thousands": false,
+  "total_value": 3274441524.0,
+  "holdings": [
+    {
+      "issuer": "ILLUMINA INC",
+      "title": "COM",
+      "cusip": "452327109",
+      "ticker": null,
+      "value": 497695958.0,
+      "shares": 2830552.0,
+      "put_call": null,
+      "weight": 0.15199415056037507
+    },
+    {
+      "issuer": "GENEDX HOLDINGS CORP",
+      "title": "COM CL A",
+      "cusip": "81663L200",
+      "ticker": null,
+      "value": 328460731.0,
+      "shares": 4784570.0,
+      "put_call": null,
+      "weight": 0.10031045862097368
+    },
+    {
+      "issuer": "VESTIS CORPORATION",
+      "title": "COM SHS",
+      "cusip": "29430C102",
+      "ticker": null,
+      "value": 287698743.0,
+      "shares": 19813963.0,
+      "put_call": null,
+      "weight": 0.08786192726036295
+    },
+    {
+      "issuer": "SOUTHWEST GAS HLDGS INC",
+      "title": "COM",
+      "cusip": "844895102",
+      "ticker": null,
+      "value": 284533150.0,
+      "shares": 3208538.0,
+      "put_call": null,
+      "weight": 0.08689516911953259
+    },
+    {
+      "issuer": "MGM RESORTS INTERNATIONAL",
+      "title": "COM",
+      "cusip": "552953101",
+      "ticker": null,
+      "value": 255686828.0,
+      "shares": 5347978.0,
+      "put_call": null,
+      "weight": 0.07808562960307731
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 215872165.0,
+      "shares": 905732.0,
+      "put_call": null,
+      "weight": 0.0659264071194328
+    },
+    {
+      "issuer": "DISNEY WALT CO",
+      "title": "COM",
+      "cusip": "254687106",
+      "ticker": "DIS",
+      "value": 207955921.0,
+      "shares": 2160581.0,
+      "put_call": null,
+      "weight": 0.06350882111523089
+    },
+    {
+      "issuer": "VISTRA CORP",
+      "title": "COM",
+      "cusip": "92840M102",
+      "ticker": null,
+      "value": 161838768.0,
+      "shares": 1020228.0,
+      "put_call": null,
+      "weight": 0.04942484598176626
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 157721200.0,
+      "shares": 280000.0,
+      "put_call": null,
+      "weight": 0.048167358874477796
+    },
+    {
+      "issuer": "PEOPLE INC",
+      "title": "COM NEW",
+      "cusip": "44891N208",
+      "ticker": null,
+      "value": 128957884.0,
+      "shares": 2793715.0,
+      "put_call": null,
+      "weight": 0.03938316902433711
+    },
+    {
+      "issuer": "LIBERTY LIVE HOLDINGS INC",
+      "title": "COM SER A",
+      "cusip": "530909100",
+      "ticker": "LLYVA",
+      "value": 101810247.0,
+      "shares": 1005434.0,
+      "put_call": null,
+      "weight": 0.03109240041508831
+    },
+    {
+      "issuer": "CEMEX SA EURO MTN BE 144A",
+      "title": "SPON ADR NEW",
+      "cusip": "151290889",
+      "ticker": null,
+      "value": 99783300.0,
+      "shares": 8315275.0,
+      "put_call": null,
+      "weight": 0.030473379740831797
+    },
+    {
+      "issuer": "PLANET FITNESS MASTER ISSUER",
+      "title": "CL A",
+      "cusip": "72703H101",
+      "ticker": null,
+      "value": 98796311.0,
+      "shares": 1893738.0,
+      "put_call": null,
+      "weight": 0.03017195765319766
+    },
+    {
+      "issuer": "RESTAURANT BRANDS INTL INC",
+      "title": "COM",
+      "cusip": "76131D103",
+      "ticker": "QSR",
+      "value": 91738057.0,
+      "shares": 1265178.0,
+      "put_call": null,
+      "weight": 0.02801639801096048
+    },
+    {
+      "issuer": "UNION PAC CORP",
+      "title": "COM",
+      "cusip": "907818108",
+      "ticker": "UNP",
+      "value": 88761760.0,
+      "shares": 326330.0,
+      "put_call": null,
+      "weight": 0.027107450033668705
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 56329000.0,
+      "shares": 100000.0,
+      "put_call": "CALL",
+      "weight": 0.017202628169456356
+    },
+    {
+      "issuer": "FORTREA HLDGS INC",
+      "title": "COMMON STOCK",
+      "cusip": "34965K107",
+      "ticker": null,
+      "value": 52000787.0,
+      "shares": 2988551.0,
+      "put_call": null,
+      "weight": 0.015880811008185836
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 49112186.0,
+      "shares": 131661.0,
+      "put_call": null,
+      "weight": 0.0149986450025241
+    },
+    {
+      "issuer": "LIBERTY MEDIA CORP DEL",
+      "title": "COM LBTY ONE S C",
+      "cusip": "531229755",
+      "ticker": null,
+      "value": 38141626.0,
+      "shares": 400900.0,
+      "put_call": null,
+      "weight": 0.011648284362521417
+    },
+    {
+      "issuer": "ONTERRIS INC",
+      "title": "COM",
+      "cusip": "615111101",
+      "ticker": null,
+      "value": 35771700.0,
+      "shares": 1770000.0,
+      "put_call": null,
+      "weight": 0.010924519414321964
+    },
+    {
+      "issuer": "LIBERTY MEDIA CORP DEL",
+      "title": "COM LBTY ONE S A",
+      "cusip": "531229771",
+      "ticker": null,
+      "value": 27868359.0,
+      "shares": 318350.0,
+      "put_call": null,
+      "weight": 0.008510873929413314
+    },
+    {
+      "issuer": "LIBERTY LIVE HOLDINGS INC",
+      "title": "COM SHS SER C",
+      "cusip": "530909308",
+      "ticker": "LLYVK",
+      "value": 3414496.0,
+      "shares": 32322.0,
+      "put_call": null,
+      "weight": 0.0010427720192812946
+    },
+    {
+      "issuer": "NVIDIA CORPORATION",
+      "title": "COM",
+      "cusip": "67066G104",
+      "ticker": "NVDA",
+      "value": 3251463.0,
+      "shares": 16250.0,
+      "put_call": null,
+      "weight": 0.0009929824601137083
+    },
+    {
+      "issuer": "TESLA INC",
+      "title": "COM",
+      "cusip": "88160R101",
+      "ticker": "TSLA",
+      "value": 1198710.0,
+      "shares": 2850.0,
+      "put_call": null,
+      "weight": 0.00036608074727066035
+    },
+    {
+      "issuer": "FLYEXCLUSIVE INC",
+      "title": "*W EXP 99/99/999",
+      "cusip": "343928115",
+      "ticker": null,
+      "value": 42174.0,
+      "shares": 200827.0,
+      "put_call": null,
+      "weight": 1.287975359794515e-05
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

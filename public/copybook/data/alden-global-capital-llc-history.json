@@ -1,0 +1,214 @@
+{
+  "slug": "alden-global-capital-llc",
+  "manager": "Alden Global Capital LLC",
+  "cik": "0001616882",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0000905148-26-003754",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1616882/000090514826003754/0000905148-26-003754-index.html",
+      "line_count": 19,
+      "position_count": 19,
+      "values_in_thousands": false,
+      "total_value": 272528863.0,
+      "holdings": [
+        {
+          "issuer": "NVIDIA CORPORATION",
+          "title": "COM",
+          "cusip": "67066G104",
+          "ticker": "NVDA",
+          "value": 53741373.0,
+          "shares": 268586.0,
+          "put_call": null,
+          "weight": 0.19719516093970568
+        },
+        {
+          "issuer": "ENERGY TRANSFER L P",
+          "title": "COM UT LTD PTN",
+          "cusip": "29273V100",
+          "ticker": null,
+          "value": 26204170.0,
+          "shares": 1370511.0,
+          "put_call": null,
+          "weight": 0.09615190740365728
+        },
+        {
+          "issuer": "ORACLE CORP",
+          "title": "COM",
+          "cusip": "68389X105",
+          "ticker": "ORCL",
+          "value": 25993574.0,
+          "shares": 177370.0,
+          "put_call": null,
+          "weight": 0.0953791598947081
+        },
+        {
+          "issuer": "CITIGROUP INC",
+          "title": "COM NEW",
+          "cusip": "172967424",
+          "ticker": "C",
+          "value": 23871578.0,
+          "shares": 170560.0,
+          "put_call": null,
+          "weight": 0.08759284333124011
+        },
+        {
+          "issuer": "VISTRA CORP",
+          "title": "COM",
+          "cusip": "92840M102",
+          "ticker": null,
+          "value": 22148555.0,
+          "shares": 139624.0,
+          "put_call": null,
+          "weight": 0.0812704928064812
+        },
+        {
+          "issuer": "DELL TECHNOLOGIES INC",
+          "title": "CL C",
+          "cusip": "24703L202",
+          "ticker": null,
+          "value": 17278247.0,
+          "shares": 40046.0,
+          "put_call": null,
+          "weight": 0.0633996957599313
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 15066186.0,
+          "shares": 63213.0,
+          "put_call": null,
+          "weight": 0.05528290043906285
+        },
+        {
+          "issuer": "VNET GROUP INC",
+          "title": "SPONSORED ADS A",
+          "cusip": "90138A103",
+          "ticker": null,
+          "value": 11566344.0,
+          "shares": 1438600.0,
+          "put_call": null,
+          "weight": 0.04244080378378124
+        },
+        {
+          "issuer": "NEBIUS GROUP N.V.",
+          "title": "SHS CLASS A",
+          "cusip": "N97284108",
+          "ticker": null,
+          "value": 11133794.0,
+          "shares": 40315.0,
+          "put_call": null,
+          "weight": 0.04085363244626313
+        },
+        {
+          "issuer": "UBER TECHNOLOGIES INC",
+          "title": "COM",
+          "cusip": "90353T100",
+          "ticker": "UBER",
+          "value": 10035436.0,
+          "shares": 139072.0,
+          "put_call": null,
+          "weight": 0.036823387767188534
+        },
+        {
+          "issuer": "SPDR SERIES TRUST",
+          "title": "ST STR SP HOME",
+          "cusip": "78464A888",
+          "ticker": null,
+          "value": 9279468.0,
+          "shares": 80300.0,
+          "put_call": null,
+          "weight": 0.03404948708130045
+        },
+        {
+          "issuer": "ALIBABA GROUP HLDG LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "01609W102",
+          "ticker": null,
+          "value": 9127698.0,
+          "shares": 95100.0,
+          "put_call": null,
+          "weight": 0.03349259193878485
+        },
+        {
+          "issuer": "PALANTIR TECHNOLOGIES INC",
+          "title": "CL A",
+          "cusip": "69608A108",
+          "ticker": null,
+          "value": 9050675.0,
+          "shares": 77575.0,
+          "put_call": null,
+          "weight": 0.03320996866302561
+        },
+        {
+          "issuer": "AMPHENOL CORP",
+          "title": "CL A",
+          "cusip": "032095101",
+          "ticker": null,
+          "value": 7097762.0,
+          "shares": 40255.0,
+          "put_call": null,
+          "weight": 0.026044074458271234
+        },
+        {
+          "issuer": "BRIGHTSTAR LOTTERY PLC",
+          "title": "SHS USD",
+          "cusip": "G4863A108",
+          "ticker": null,
+          "value": 5942096.0,
+          "shares": 554300.0,
+          "put_call": null,
+          "weight": 0.021803547464989057
+        },
+        {
+          "issuer": "GDS HLDGS LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "36165L108",
+          "ticker": null,
+          "value": 5158403.0,
+          "shares": 171775.0,
+          "put_call": null,
+          "weight": 0.01892791443525011
+        },
+        {
+          "issuer": "COREWEAVE INC",
+          "title": "COM CL A",
+          "cusip": "21873S108",
+          "ticker": null,
+          "value": 5066586.0,
+          "shares": 50900.0,
+          "put_call": null,
+          "weight": 0.018591007000972222
+        },
+        {
+          "issuer": "RITHM CAPITAL CORP",
+          "title": "COM NEW",
+          "cusip": "64828T201",
+          "ticker": null,
+          "value": 3113574.0,
+          "shares": 331584.0,
+          "put_call": null,
+          "weight": 0.011424749531942236
+        },
+        {
+          "issuer": "EXZEO GROUP INC",
+          "title": "COM SHS",
+          "cusip": "30234F101",
+          "ticker": null,
+          "value": 1653344.0,
+          "shares": 98005.0,
+          "put_call": null,
+          "weight": 0.006066674853444789
+        }
+      ]
+    }
+  ]
+}

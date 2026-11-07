@@ -1,0 +1,302 @@
+{
+  "cik": "0001484150",
+  "name": "Lindsell Train Ltd",
+  "manager": "Lindsell Train Ltd",
+  "slug": "lindsell-train-ltd",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001172661-26-004793",
+  "filing_date": "2026-11-02",
+  "report_date": "2026-09-30",
+  "quarter": "2026Q3",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1484150/000117266126004793/0001172661-26-004793-index.html",
+  "line_count": 28,
+  "position_count": 28,
+  "values_in_thousands": false,
+  "total_value": 2356455296.0,
+  "holdings": [
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 387449564.0,
+      "shares": 1126045.0,
+      "put_call": null,
+      "weight": 0.1644205025479083
+    },
+    {
+      "issuer": "TKO GROUP HOLDINGS INC",
+      "title": "CL A",
+      "cusip": "87256C101",
+      "ticker": null,
+      "value": 348506195.0,
+      "shares": 1939162.0,
+      "put_call": null,
+      "weight": 0.14789425269029166
+    },
+    {
+      "issuer": "THERMO FISHER SCIENTIFIC INC",
+      "title": "COM",
+      "cusip": "883556102",
+      "ticker": "TMO",
+      "value": 293070932.0,
+      "shares": 391841.0,
+      "put_call": null,
+      "weight": 0.1243694003011547
+    },
+    {
+      "issuer": "DISNEY WALT CO",
+      "title": "COM",
+      "cusip": "254687106",
+      "ticker": "DIS",
+      "value": 241200871.0,
+      "shares": 2299341.0,
+      "put_call": null,
+      "weight": 0.10235749916810644
+    },
+    {
+      "issuer": "INTUIT",
+      "title": "COM",
+      "cusip": "461202103",
+      "ticker": null,
+      "value": 173030909.0,
+      "shares": 627583.0,
+      "put_call": null,
+      "weight": 0.07342847084505014
+    },
+    {
+      "issuer": "PAYPAL HLDGS INC",
+      "title": "COM",
+      "cusip": "70450Y103",
+      "ticker": "PYPL",
+      "value": 154420970.0,
+      "shares": 2939672.0,
+      "put_call": null,
+      "weight": 0.06553104158696503
+    },
+    {
+      "issuer": "MONDELEZ INTL INC",
+      "title": "CL A",
+      "cusip": "609207105",
+      "ticker": null,
+      "value": 145890904.0,
+      "shares": 2281067.0,
+      "put_call": null,
+      "weight": 0.061911169818347364
+    },
+    {
+      "issuer": "FAIR ISAAC CORP",
+      "title": "COM",
+      "cusip": "303250104",
+      "ticker": null,
+      "value": 126068729.0,
+      "shares": 212785.0,
+      "put_call": null,
+      "weight": 0.05349930856485894
+    },
+    {
+      "issuer": "PEPSICO INC",
+      "title": "COM",
+      "cusip": "713448108",
+      "ticker": "PEP",
+      "value": 120509199.0,
+      "shares": 950988.0,
+      "put_call": null,
+      "weight": 0.051140031896450625
+    },
+    {
+      "issuer": "EBAY INC.",
+      "title": "COM",
+      "cusip": "278642103",
+      "ticker": null,
+      "value": 111607126.0,
+      "shares": 1052401.0,
+      "put_call": null,
+      "weight": 0.047362292927622764
+    },
+    {
+      "issuer": "KKR & CO INC",
+      "title": "COM",
+      "cusip": "48251W104",
+      "ticker": null,
+      "value": 90407999.0,
+      "shares": 990230.0,
+      "put_call": null,
+      "weight": 0.03836609977429421
+    },
+    {
+      "issuer": "MANCHESTER UTD PLC NEW",
+      "title": "ORD CL A",
+      "cusip": "G5784H106",
+      "ticker": null,
+      "value": 52532125.0,
+      "shares": 2507500.0,
+      "put_call": null,
+      "weight": 0.022292858722663414
+    },
+    {
+      "issuer": "BROWN FORMAN CORP",
+      "title": "CL A",
+      "cusip": "115637100",
+      "ticker": null,
+      "value": 52098950.0,
+      "shares": 1941817.0,
+      "put_call": null,
+      "weight": 0.022109033890197763
+    },
+    {
+      "issuer": "BROWN FORMAN CORP",
+      "title": "CL B",
+      "cusip": "115637209",
+      "ticker": null,
+      "value": 34783749.0,
+      "shares": 1327624.0,
+      "put_call": null,
+      "weight": 0.014761047688468434
+    },
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 3772965.0,
+      "shares": 10500.0,
+      "put_call": null,
+      "weight": 0.0016011188527125786
+    },
+    {
+      "issuer": "S&P GLOBAL INC",
+      "title": "COM",
+      "cusip": "78409V104",
+      "ticker": "SPGI",
+      "value": 2919078.0,
+      "shares": 7400.0,
+      "put_call": null,
+      "weight": 0.0012387580638406476
+    },
+    {
+      "issuer": "CANADIAN PACIFIC KANSAS CITY",
+      "title": "COM",
+      "cusip": "13646K108",
+      "ticker": "CP",
+      "value": 2553000.0,
+      "shares": 30000.0,
+      "put_call": null,
+      "weight": 0.0010834069308820022
+    },
+    {
+      "issuer": "AMERICAN EXPRESS CO",
+      "title": "COM",
+      "cusip": "025816109",
+      "ticker": "AXP",
+      "value": 2189520.0,
+      "shares": 7200.0,
+      "put_call": null,
+      "weight": 0.0009291583013336316
+    },
+    {
+      "issuer": "CME GROUP INC",
+      "title": "COM",
+      "cusip": "12572Q105",
+      "ticker": null,
+      "value": 1807662.0,
+      "shares": 6900.0,
+      "put_call": null,
+      "weight": 0.000767110669601262
+    },
+    {
+      "issuer": "ADOBE INC",
+      "title": "COM",
+      "cusip": "00724F101",
+      "ticker": "ADBE",
+      "value": 1679580.0,
+      "shares": 7000.0,
+      "put_call": null,
+      "weight": 0.0007127569968549915
+    },
+    {
+      "issuer": "EQUIFAX INC",
+      "title": "COM",
+      "cusip": "294429105",
+      "ticker": null,
+      "value": 1619432.0,
+      "shares": 11800.0,
+      "put_call": null,
+      "weight": 0.0006872322181324334
+    },
+    {
+      "issuer": "VERISK ANALYTICS INC",
+      "title": "COM",
+      "cusip": "92345Y106",
+      "ticker": null,
+      "value": 1594575.0,
+      "shares": 9500.0,
+      "put_call": null,
+      "weight": 0.0006766837472820872
+    },
+    {
+      "issuer": "WARNER MUSIC GROUP CORP",
+      "title": "COM CL A",
+      "cusip": "934550203",
+      "ticker": null,
+      "value": 1518550.0,
+      "shares": 55000.0,
+      "put_call": null,
+      "weight": 0.0006444213062635583
+    },
+    {
+      "issuer": "ORACLE CORP",
+      "title": "COM",
+      "cusip": "68389X105",
+      "ticker": "ORCL",
+      "value": 1235700.0,
+      "shares": 9000.0,
+      "put_call": null,
+      "weight": 0.000524389324124908
+    },
+    {
+      "issuer": "LAUDER ESTEE COS INC",
+      "title": "CL A",
+      "cusip": "518439104",
+      "ticker": null,
+      "value": 1159625.0,
+      "shares": 12500.0,
+      "put_call": null,
+      "weight": 0.0004921056647959427
+    },
+    {
+      "issuer": "MADISON SQUARE GRDN SPRT COR",
+      "title": "CL A",
+      "cusip": "55825T103",
+      "ticker": null,
+      "value": 1094067.0,
+      "shares": 2700.0,
+      "put_call": null,
+      "weight": 0.0004642850648841674
+    },
+    {
+      "issuer": "COCA COLA CO",
+      "title": "COM",
+      "cusip": "191216100",
+      "ticker": "KO",
+      "value": 989920.0,
+      "shares": 11500.0,
+      "put_call": null,
+      "weight": 0.00042008859734379617
+    },
+    {
+      "issuer": "NIKE INC",
+      "title": "CL B",
+      "cusip": "654106103",
+      "ticker": "NKE",
+      "value": 743400.0,
+      "shares": 21000.0,
+      "put_call": null,
+      "weight": 0.0003154738395682258
+    }
+  ],
+  "history_quarters": [
+    "2026Q3"
+  ]
+}

@@ -1,0 +1,212 @@
+{
+  "cik": "0001582090",
+  "name": "Sachem Head Capital Management LP",
+  "manager": "Sachem Head Capital Management LP",
+  "slug": "sachem-head-capital-management-lp",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0000902664-26-003505",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1582090/000090266426003505/0000902664-26-003505-index.html",
+  "line_count": 19,
+  "position_count": 19,
+  "values_in_thousands": false,
+  "total_value": 4819684910.0,
+  "holdings": [
+    {
+      "issuer": "Talen Energy Corp",
+      "title": "COM",
+      "cusip": "87422Q109",
+      "ticker": null,
+      "value": 526436200.0,
+      "shares": 1370000.0,
+      "put_call": null,
+      "weight": 0.10922626890146643
+    },
+    {
+      "issuer": "Seagate Technology Hldngs PL",
+      "title": "ORD SHS",
+      "cusip": "G7997R103",
+      "ticker": null,
+      "value": 455480000.0,
+      "shares": 472000.0,
+      "put_call": null,
+      "weight": 0.09450410317383175
+    },
+    {
+      "issuer": "Primo Brands Corporation",
+      "title": "CLASS A COM SHS",
+      "cusip": "741623102",
+      "ticker": null,
+      "value": 434909800.0,
+      "shares": 17795000.0,
+      "put_call": null,
+      "weight": 0.09023614782319868
+    },
+    {
+      "issuer": "Performance Food Group Co",
+      "title": "COM",
+      "cusip": "71377A103",
+      "ticker": null,
+      "value": 374496500.0,
+      "shares": 3350000.0,
+      "put_call": null,
+      "weight": 0.07770144874470643
+    },
+    {
+      "issuer": "MKS INC.",
+      "title": "COM",
+      "cusip": "55306N104",
+      "ticker": null,
+      "value": 361488960.0,
+      "shares": 812700.0,
+      "put_call": null,
+      "weight": 0.07500261256705265
+    },
+    {
+      "issuer": "Dicks Sporting Goods Inc",
+      "title": "COM",
+      "cusip": "253393102",
+      "ticker": null,
+      "value": 337946900.0,
+      "shares": 1490000.0,
+      "put_call": null,
+      "weight": 0.07011804844312945
+    },
+    {
+      "issuer": "Carvana Co",
+      "title": "CL A",
+      "cusip": "146869102",
+      "ticker": "CVNA",
+      "value": 294544500.0,
+      "shares": 4475000.0,
+      "put_call": null,
+      "weight": 0.06111281245561756
+    },
+    {
+      "issuer": "Sotera Health Co",
+      "title": "COM",
+      "cusip": "83601L102",
+      "ticker": null,
+      "value": 276190000.0,
+      "shares": 15560000.0,
+      "put_call": null,
+      "weight": 0.05730457595411564
+    },
+    {
+      "issuer": "Celsius Hldgs Inc",
+      "title": "COM NEW",
+      "cusip": "15118V207",
+      "ticker": null,
+      "value": 266155200.0,
+      "shares": 9090000.0,
+      "put_call": null,
+      "weight": 0.05522253113430189
+    },
+    {
+      "issuer": "GDS Hldgs Ltd",
+      "title": "Sponsored ADS",
+      "cusip": "36165L108",
+      "ticker": null,
+      "value": 260810550.0,
+      "shares": 8685000.0,
+      "put_call": null,
+      "weight": 0.05411361009489726
+    },
+    {
+      "issuer": "Gildan Activewear Inc",
+      "title": "COM",
+      "cusip": "375916103",
+      "ticker": null,
+      "value": 187824000.0,
+      "shares": 3640000.0,
+      "put_call": null,
+      "weight": 0.038970182388956214
+    },
+    {
+      "issuer": "GOLAR LNG LTD",
+      "title": "SHS",
+      "cusip": "G9456A100",
+      "ticker": null,
+      "value": 180420800.0,
+      "shares": 3620000.0,
+      "put_call": null,
+      "weight": 0.03743414836635037
+    },
+    {
+      "issuer": "Bruker Corp",
+      "title": "COM",
+      "cusip": "116794108",
+      "ticker": null,
+      "value": 175424700.0,
+      "shares": 2915000.0,
+      "put_call": null,
+      "weight": 0.03639754533248108
+    },
+    {
+      "issuer": "STMicroelectronics N V",
+      "title": "NY REGISTRY",
+      "cusip": "861012102",
+      "ticker": null,
+      "value": 164758000.0,
+      "shares": 2200000.0,
+      "put_call": null,
+      "weight": 0.03418439235688542
+    },
+    {
+      "issuer": "Bitdeer Technologies Group",
+      "title": "CL A ORD SHS",
+      "cusip": "G11448100",
+      "ticker": null,
+      "value": 152907450.0,
+      "shares": 9635000.0,
+      "put_call": null,
+      "weight": 0.03172561129105014
+    },
+    {
+      "issuer": "Twilio Inc",
+      "title": "CL A",
+      "cusip": "90138F102",
+      "ticker": null,
+      "value": 127924600.0,
+      "shares": 620000.0,
+      "put_call": null,
+      "weight": 0.026542108537962496
+    },
+    {
+      "issuer": "Six Flags Entertainment Corp",
+      "title": "COM",
+      "cusip": "83001C108",
+      "ticker": null,
+      "value": 107139000.0,
+      "shares": 5030000.0,
+      "put_call": null,
+      "weight": 0.022229461469090103
+    },
+    {
+      "issuer": "Riot Platforms Inc",
+      "title": "COM",
+      "cusip": "767292105",
+      "ticker": null,
+      "value": 78443700.0,
+      "shares": 2865000.0,
+      "put_call": null,
+      "weight": 0.016275690520192117
+    },
+    {
+      "issuer": "Invesco Exchange Traded FD T",
+      "title": "S&P500 EQL WGT",
+      "cusip": "46137V357",
+      "ticker": null,
+      "value": 56384050.0,
+      "shares": 265000.0,
+      "put_call": null,
+      "weight": 0.011698700444714341
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

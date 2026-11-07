@@ -1,0 +1,134 @@
+{
+  "slug": "regents-of-the-university-of-california",
+  "manager": "REGENTS OF THE UNIVERSITY OF CALIFORNIA",
+  "cik": "0000315054",
+  "history_quarters": [
+    "2026Q3"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001140361-26-040761",
+      "filing_date": "2026-10-26",
+      "report_date": "2026-09-30",
+      "quarter": "2026Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/315054/000114036126040761/0001140361-26-040761-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 6639573155.0,
+      "holdings": [
+        {
+          "issuer": "STATE STREET SPDR UC INVESTMEN",
+          "title": "MUTUAL FUNDS",
+          "cusip": "78468R374",
+          "ticker": null,
+          "value": 2498426486.0,
+          "shares": 49795937.0,
+          "put_call": null,
+          "weight": 0.3762932386878716
+        },
+        {
+          "issuer": "STATE STREET CORP",
+          "title": "COMMON STOCK",
+          "cusip": "857477103",
+          "ticker": null,
+          "value": 1723909167.0,
+          "shares": 9874043.0,
+          "put_call": null,
+          "weight": 0.2596415653168596
+        },
+        {
+          "issuer": "SPACE EXPLORATION TECHN CL A",
+          "title": "COMMON STOCK",
+          "cusip": "84615Q103",
+          "ticker": null,
+          "value": 933704718.0,
+          "shares": 6189218.0,
+          "put_call": null,
+          "weight": 0.14062722048583257
+        },
+        {
+          "issuer": "ASML HOLDING NV NY REG SHS",
+          "title": "DEPOSITORY RECEIPTS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 636407061.0,
+          "shares": 351282.0,
+          "put_call": null,
+          "weight": 0.09585059854649647
+        },
+        {
+          "issuer": "BLUE OWL TECHNOLOGY FINANCE",
+          "title": "COMMON STOCK",
+          "cusip": "095924106",
+          "ticker": null,
+          "value": 381228519.0,
+          "shares": 38861215.0,
+          "put_call": null,
+          "weight": 0.057417624612346035
+        },
+        {
+          "issuer": "BROOKFIELD CORP",
+          "title": "COMMON STOCK",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 327381778.0,
+          "shares": 8979204.0,
+          "put_call": null,
+          "weight": 0.04930765432616127
+        },
+        {
+          "issuer": "SPDR GOLD MINISHARES TRUST",
+          "title": "MUTUAL FUNDS",
+          "cusip": "98149E303",
+          "ticker": null,
+          "value": 118230558.0,
+          "shares": 1438678.0,
+          "put_call": null,
+          "weight": 0.017806951627751137
+        },
+        {
+          "issuer": "BRIDGEBIO ONCOLOGY THERAPEUT",
+          "title": "COMMON STOCK",
+          "cusip": "107924102",
+          "ticker": null,
+          "value": 10288729.0,
+          "shares": 2509446.0,
+          "put_call": null,
+          "weight": 0.0015496069942767278
+        },
+        {
+          "issuer": "EIKON THERAPEUTICS INC",
+          "title": "COMMON STOCK",
+          "cusip": "282564103",
+          "ticker": null,
+          "value": 5106453.0,
+          "shares": 635131.0,
+          "put_call": null,
+          "weight": 0.0007690935668288454
+        },
+        {
+          "issuer": "SURROZEN INC",
+          "title": "COMMON STOCK",
+          "cusip": "86889P208",
+          "ticker": null,
+          "value": 4286601.0,
+          "shares": 133207.0,
+          "put_call": null,
+          "weight": 0.0006456139423318094
+        },
+        {
+          "issuer": "BLUE OWL CAPITAL INC",
+          "title": "COMMON STOCK",
+          "cusip": "09581B103",
+          "ticker": null,
+          "value": 603085.0,
+          "shares": 66346.0,
+          "put_call": null,
+          "weight": 9.083189324389634e-05
+        }
+      ]
+    }
+  ]
+}

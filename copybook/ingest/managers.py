@@ -1,4 +1,4 @@
-"""Bootstrapped 13F managers. CIKs from superinvestors, verified against EDGAR."""
+"""Bootstrapped 13F managers. Featured CIKs plus curated universe when present."""
 
 # cik, filing name, manager, slug
 MANAGERS: list[tuple[str, str, str, str]] = [
@@ -94,3 +94,26 @@ MANAGERS: list[tuple[str, str, str, str]] = [
         "stanley-druckenmiller",
     ),
 ]
+
+
+def load_managers():
+    """Featured 41 plus curated names from universe.json when built."""
+    import json
+    from pathlib import Path
+
+    web = Path(__file__).resolve().parents[1] / "web" / "data" / "universe.json"
+    if not web.exists():
+        return list(MANAGERS)
+    curated = json.loads(web.read_text()).get("curated") or []
+    rows = []
+    seen = set()
+    for row in curated:
+        cik = row["cik"]
+        if cik in seen:
+            continue
+        seen.add(cik)
+        rows.append((cik, row["name"], row["manager"], row["slug"]))
+    for item in MANAGERS:
+        if item[0] not in seen:
+            rows.append(item)
+    return rows

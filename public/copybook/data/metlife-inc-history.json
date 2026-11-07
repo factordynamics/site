@@ -1,0 +1,84 @@
+{
+  "slug": "metlife-inc",
+  "manager": "METLIFE INC",
+  "cik": "0001099219",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001628280-26-056848",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1099219/000162828026056848/0001628280-26-056848-index.html",
+      "line_count": 6,
+      "position_count": 6,
+      "values_in_thousands": true,
+      "total_value": 13089220000.0,
+      "holdings": [
+        {
+          "issuer": "STATE STREET SPDR S&P  ETF TRUST",
+          "title": "TR UNIT",
+          "cusip": "78462F103",
+          "ticker": "SPY",
+          "value": 5136925000.0,
+          "shares": 6878.0,
+          "put_call": null,
+          "weight": 0.39245463060442104
+        },
+        {
+          "issuer": "ISHARES MSCI CHILE ETF INC",
+          "title": "MSCI CHILE",
+          "cusip": "464286640",
+          "ticker": null,
+          "value": 3432771000.0,
+          "shares": 86457.0,
+          "put_call": null,
+          "weight": 0.26225940124774433
+        },
+        {
+          "issuer": "ISHARES LATIN AMERICA  ETF TRUST",
+          "title": "LATN AMER",
+          "cusip": "464287390",
+          "ticker": null,
+          "value": 2421898000.0,
+          "shares": 71751.0,
+          "put_call": null,
+          "weight": 0.1850299712282321
+        },
+        {
+          "issuer": "ISHARES MSCI JAPAN ETF INC",
+          "title": "MSCI JAPAN",
+          "cusip": "46434G822",
+          "ticker": null,
+          "value": 950447000.0,
+          "shares": 10189.0,
+          "put_call": null,
+          "weight": 0.07261295936656272
+        },
+        {
+          "issuer": "ISHARES EUROPE ETF",
+          "title": "EUROPE ETF",
+          "cusip": "464287861",
+          "ticker": null,
+          "value": 692016000.0,
+          "shares": 9498.0,
+          "put_call": null,
+          "weight": 0.052869154922906024
+        },
+        {
+          "issuer": "ISHARES MSCI PACIFIC EX JAPAN ETF",
+          "title": "MSCI PAC J",
+          "cusip": "464286665",
+          "ticker": null,
+          "value": 455163000.0,
+          "shares": 8545.0,
+          "put_call": null,
+          "weight": 0.034773882630133805
+        }
+      ]
+    }
+  ]
+}

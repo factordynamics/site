@@ -1,0 +1,332 @@
+{
+  "cik": "0001331875",
+  "name": "Fidelity National Financial, Inc.",
+  "manager": "Fidelity National Financial, Inc.",
+  "slug": "fidelity-national-financial-inc",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001331875-26-000100",
+  "filing_date": "2026-11-06",
+  "report_date": "2026-09-30",
+  "quarter": "2026Q3",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1331875/000133187526000100/0001331875-26-000100-index.html",
+  "line_count": 32,
+  "position_count": 31,
+  "values_in_thousands": false,
+  "total_value": 2638278872.0,
+  "holdings": [
+    {
+      "issuer": "F&G Annuities and Life Inc",
+      "title": "COMMON STOCK",
+      "cusip": "30190A104",
+      "ticker": null,
+      "value": 2052279683.0,
+      "shares": 94662347.0,
+      "put_call": null,
+      "weight": 0.777885804560239
+    },
+    {
+      "issuer": "Aevex Corp",
+      "title": "COM CL A",
+      "cusip": "00835T107",
+      "ticker": null,
+      "value": 89893750.0,
+      "shares": 5937500.0,
+      "put_call": null,
+      "weight": 0.03407287643245016
+    },
+    {
+      "issuer": "Crescent Cap BDC Inc",
+      "title": "COM",
+      "cusip": "225655109",
+      "ticker": null,
+      "value": 33785219.0,
+      "shares": 3680307.0,
+      "put_call": null,
+      "weight": 0.012805780070697546
+    },
+    {
+      "issuer": "Meta Platforms Inc",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 26469070.0,
+      "shares": 36500.0,
+      "put_call": null,
+      "weight": 0.010032703623910157
+    },
+    {
+      "issuer": "Microsoft Corp",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 26209190.0,
+      "shares": 51100.0,
+      "put_call": null,
+      "weight": 0.009934200011286752
+    },
+    {
+      "issuer": "Genuine Parts Co",
+      "title": "COM",
+      "cusip": "372460105",
+      "ticker": null,
+      "value": 23802582.0,
+      "shares": 189300.0,
+      "put_call": null,
+      "weight": 0.009022011377423486
+    },
+    {
+      "issuer": "Abbvie Inc",
+      "title": "COM",
+      "cusip": "00287Y109",
+      "ticker": "ABBV",
+      "value": 23647736.0,
+      "shares": 90400.0,
+      "put_call": null,
+      "weight": 0.008963319325706218
+    },
+    {
+      "issuer": "Vici Pptys Inc",
+      "title": "COM",
+      "cusip": "925652109",
+      "ticker": null,
+      "value": 22970000.0,
+      "shares": 1000000.0,
+      "put_call": null,
+      "weight": 0.0087064336692304
+    },
+    {
+      "issuer": "Textron Inc",
+      "title": "COM",
+      "cusip": "883203101",
+      "ticker": null,
+      "value": 22860000.0,
+      "shares": 300000.0,
+      "put_call": null,
+      "weight": 0.008664739820574965
+    },
+    {
+      "issuer": "Visa Inc",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 22637790.0,
+      "shares": 63000.0,
+      "put_call": null,
+      "weight": 0.008580514455941109
+    },
+    {
+      "issuer": "Abbott Laboratories",
+      "title": "COM",
+      "cusip": "002824100",
+      "ticker": null,
+      "value": 22039090.0,
+      "shares": 223000.0,
+      "put_call": null,
+      "weight": 0.008353586208759207
+    },
+    {
+      "issuer": "Emerson Elec Co",
+      "title": "COM",
+      "cusip": "291011104",
+      "ticker": null,
+      "value": 20954010.0,
+      "shares": 135100.0,
+      "put_call": null,
+      "weight": 0.007942302924222485
+    },
+    {
+      "issuer": "Illinois Tool Wks Inc",
+      "title": "COM",
+      "cusip": "452308109",
+      "ticker": null,
+      "value": 19579008.0,
+      "shares": 76100.0,
+      "put_call": null,
+      "weight": 0.0074211290579595714
+    },
+    {
+      "issuer": "Pepsico Inc",
+      "title": "COM",
+      "cusip": "713448108",
+      "ticker": "PEP",
+      "value": 19008000.0,
+      "shares": 150000.0,
+      "put_call": null,
+      "weight": 0.007204697047659183
+    },
+    {
+      "issuer": "Amgen Inc",
+      "title": "COM",
+      "cusip": "031162100",
+      "ticker": null,
+      "value": 18967950.0,
+      "shares": 45000.0,
+      "put_call": null,
+      "weight": 0.007189516696398727
+    },
+    {
+      "issuer": "Kimberly-Clark Corp",
+      "title": "COM",
+      "cusip": "494368103",
+      "ticker": null,
+      "value": 18765018.0,
+      "shares": 192600.0,
+      "put_call": null,
+      "weight": 0.007112598368259229
+    },
+    {
+      "issuer": "General Dynamics Corp",
+      "title": "COM",
+      "cusip": "369550108",
+      "ticker": null,
+      "value": 18615663.0,
+      "shares": 56100.0,
+      "put_call": null,
+      "weight": 0.007055987597659843
+    },
+    {
+      "issuer": "Getty Rlty Corp New",
+      "title": "COM",
+      "cusip": "374297109",
+      "ticker": null,
+      "value": 17006128.0,
+      "shares": 602200.0,
+      "put_call": null,
+      "weight": 0.0064459175186087
+    },
+    {
+      "issuer": "Keurig Dr Pepper Inc",
+      "title": "COM",
+      "cusip": "49271V100",
+      "ticker": "KDP",
+      "value": 16626320.0,
+      "shares": 548000.0,
+      "put_call": null,
+      "weight": 0.0063019569979712135
+    },
+    {
+      "issuer": "Price T Rowe Group Inc",
+      "title": "COM",
+      "cusip": "74144T108",
+      "ticker": null,
+      "value": 15399400.0,
+      "shares": 148000.0,
+      "put_call": null,
+      "weight": 0.005836911390768246
+    },
+    {
+      "issuer": "Procter and Gamble Co",
+      "title": "COM",
+      "cusip": "742718109",
+      "ticker": "PG",
+      "value": 15254400.0,
+      "shares": 105000.0,
+      "put_call": null,
+      "weight": 0.005781951317540627
+    },
+    {
+      "issuer": "Amcor PLC",
+      "title": "COM NEW",
+      "cusip": "G0250X149",
+      "ticker": null,
+      "value": 14872858.0,
+      "shares": 355300.0,
+      "put_call": null,
+      "weight": 0.005637333550234336
+    },
+    {
+      "issuer": "Oracle Corp",
+      "title": "COM",
+      "cusip": "68389X105",
+      "ticker": "ORCL",
+      "value": 14279200.0,
+      "shares": 104000.0,
+      "put_call": null,
+      "weight": 0.005412316397460807
+    },
+    {
+      "issuer": "Hormel Foods Corp",
+      "title": "COM",
+      "cusip": "440452100",
+      "ticker": null,
+      "value": 13160400.0,
+      "shares": 660000.0,
+      "put_call": null,
+      "weight": 0.0049882520531362535
+    },
+    {
+      "issuer": "Paysafe Limited",
+      "title": "SHS",
+      "cusip": "G6964L206",
+      "ticker": null,
+      "value": 12667511.0,
+      "shares": 2250002.0,
+      "put_call": null,
+      "weight": 0.0048014298770459925
+    },
+    {
+      "issuer": "Blackstone Inc",
+      "title": "COM",
+      "cusip": "09260D107",
+      "ticker": null,
+      "value": 11769450.0,
+      "shares": 105000.0,
+      "put_call": null,
+      "weight": 0.004461033336888277
+    },
+    {
+      "issuer": "Albertsons Cos Inc",
+      "title": "COMMON STOCK",
+      "cusip": "013091103",
+      "ticker": null,
+      "value": 10216800.0,
+      "shares": 880000.0,
+      "put_call": null,
+      "weight": 0.003872524663116811
+    },
+    {
+      "issuer": "Alight Inc",
+      "title": "COM SHS CL A",
+      "cusip": "01626W200",
+      "ticker": null,
+      "value": 9945782.0,
+      "shares": 1114998.0,
+      "put_call": null,
+      "weight": 0.00376979935879955
+    },
+    {
+      "issuer": "Diebold Nixdorf Inc",
+      "title": "COM SHS",
+      "cusip": "253651202",
+      "ticker": null,
+      "value": 3046246.0,
+      "shares": 49759.0,
+      "put_call": null,
+      "weight": 0.0011546338153747683
+    },
+    {
+      "issuer": "KLX Energy Services Holdings",
+      "title": "COM NEW",
+      "cusip": "48253L205",
+      "ticker": null,
+      "value": 1353743.0,
+      "shares": 933616.0,
+      "put_call": null,
+      "weight": 0.0005131159614577697
+    },
+    {
+      "issuer": "Century Casinos Inc",
+      "title": "COM",
+      "cusip": "156492100",
+      "ticker": null,
+      "value": 196875.0,
+      "shares": 187500.0,
+      "put_call": null,
+      "weight": 7.46225132185344e-05
+    }
+  ],
+  "history_quarters": [
+    "2026Q3"
+  ]
+}

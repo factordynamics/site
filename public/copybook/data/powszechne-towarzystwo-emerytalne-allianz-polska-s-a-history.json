@@ -1,0 +1,154 @@
+{
+  "slug": "powszechne-towarzystwo-emerytalne-allianz-polska-s-a",
+  "manager": "Powszechne Towarzystwo Emerytalne Allianz Polska S.A.",
+  "cik": "0002053628",
+  "history_quarters": [
+    "2026Q3"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0002053628-26-000005",
+      "filing_date": "2026-10-22",
+      "report_date": "2026-09-30",
+      "quarter": "2026Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/2053628/000205362826000005/0002053628-26-000005-index.html",
+      "line_count": 13,
+      "position_count": 13,
+      "values_in_thousands": false,
+      "total_value": 373289293.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 76299447.0,
+          "shares": 306239.0,
+          "put_call": null,
+          "weight": 0.20439763055298776
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 59924973.0,
+          "shares": 174160.0,
+          "put_call": null,
+          "weight": 0.1605322577521665
+        },
+        {
+          "issuer": "Micron Technology Inc",
+          "title": "COM",
+          "cusip": "595112103",
+          "ticker": "MU",
+          "value": 46909575.0,
+          "shares": 44042.0,
+          "put_call": null,
+          "weight": 0.12566547147121093
+        },
+        {
+          "issuer": "FREEPORT-MCMORAN INC",
+          "title": "CL B",
+          "cusip": "35671D857",
+          "ticker": null,
+          "value": 38500000.0,
+          "shares": 550000.0,
+          "put_call": null,
+          "weight": 0.10313716659427465
+        },
+        {
+          "issuer": "ADVANCED MICRO DEVICES INC.",
+          "title": "COM",
+          "cusip": "007903107",
+          "ticker": "AMD",
+          "value": 24514447.0,
+          "shares": 40072.0,
+          "put_call": null,
+          "weight": 0.06567144426507834
+        },
+        {
+          "issuer": "NVIDIA CORP",
+          "title": "COM",
+          "cusip": "67066G104",
+          "ticker": "NVDA",
+          "value": 24025576.0,
+          "shares": 105200.0,
+          "put_call": null,
+          "weight": 0.06436181388143913
+        },
+        {
+          "issuer": "CF INDS HLDGS INC",
+          "title": "COM",
+          "cusip": "125269100",
+          "ticker": null,
+          "value": 22496256.0,
+          "shares": 195280.0,
+          "put_call": null,
+          "weight": 0.060264937735570144
+        },
+        {
+          "issuer": "UMB FINL CORP",
+          "title": "COM",
+          "cusip": "902788108",
+          "ticker": null,
+          "value": 22158904.0,
+          "shares": 170440.0,
+          "put_call": null,
+          "weight": 0.05936120969855945
+        },
+        {
+          "issuer": "WELLS FARGO CO NEW",
+          "title": "COM",
+          "cusip": "949746101",
+          "ticker": null,
+          "value": 21613500.0,
+          "shares": 270000.0,
+          "put_call": null,
+          "weight": 0.05790013377104818
+        },
+        {
+          "issuer": "EMERSON ELEC CO",
+          "title": "COM",
+          "cusip": "291011104",
+          "ticker": null,
+          "value": 15510000.0,
+          "shares": 100000.0,
+          "put_call": null,
+          "weight": 0.04154954425655064
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 11539000.0,
+          "shares": 110000.0,
+          "put_call": null,
+          "weight": 0.030911682216398315
+        },
+        {
+          "issuer": "UNITED PARCEL SERVICE INC",
+          "title": "CL B",
+          "cusip": "911312106",
+          "ticker": null,
+          "value": 7902595.0,
+          "shares": 84574.0,
+          "put_call": null,
+          "weight": 0.021170162520573556
+        },
+        {
+          "issuer": "PAYPAL HLDGS INC",
+          "title": "COM",
+          "cusip": "70450Y103",
+          "ticker": "PYPL",
+          "value": 1895020.0,
+          "shares": 36075.0,
+          "put_call": null,
+          "weight": 0.005076545284142398
+        }
+      ]
+    }
+  ]
+}

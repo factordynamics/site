@@ -1,0 +1,184 @@
+{
+  "slug": "carlyle-group-inc",
+  "manager": "Carlyle Group Inc.",
+  "cik": "0001527166",
+  "history_quarters": [
+    "2026Q3"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0000898432-26-000769",
+      "filing_date": "2026-11-06",
+      "report_date": "2026-09-30",
+      "quarter": "2026Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1527166/000089843226000769/0000898432-26-000769-index.html",
+      "line_count": 16,
+      "position_count": 16,
+      "values_in_thousands": false,
+      "total_value": 8361410022.0,
+      "holdings": [
+        {
+          "issuer": "Medline Inc",
+          "title": "Com Cl A",
+          "cusip": "58507V107",
+          "ticker": null,
+          "value": 6491804841.0,
+          "shares": 187083713.0,
+          "put_call": null,
+          "weight": 0.7764007295323616
+        },
+        {
+          "issuer": "Standardaero Inc",
+          "title": "Com",
+          "cusip": "85423L103",
+          "ticker": null,
+          "value": 1805933197.0,
+          "shares": 84587035.0,
+          "put_call": null,
+          "weight": 0.21598428880396317
+        },
+        {
+          "issuer": "Phathom Pharmaceuticals Inc",
+          "title": "Com",
+          "cusip": "71722W107",
+          "ticker": null,
+          "value": 25526698.0,
+          "shares": 3496808.0,
+          "put_call": null,
+          "weight": 0.003052917861082737
+        },
+        {
+          "issuer": "Pony Ai Inc",
+          "title": "Sponsored Ads",
+          "cusip": "732908108",
+          "ticker": null,
+          "value": 15450403.0,
+          "shares": 2362447.0,
+          "put_call": null,
+          "weight": 0.0018478226709786867
+        },
+        {
+          "issuer": "Invitation Homes Inc",
+          "title": "Com",
+          "cusip": "46187W107",
+          "ticker": null,
+          "value": 12572575.0,
+          "shares": 477500.0,
+          "put_call": null,
+          "weight": 0.001503642922296581
+        },
+        {
+          "issuer": "Spruce Biosciences Inc",
+          "title": "Com New",
+          "cusip": "85209E208",
+          "ticker": null,
+          "value": 1876171.0,
+          "shares": 38620.0,
+          "put_call": null,
+          "weight": 0.00022438452307248902
+        },
+        {
+          "issuer": "Forward Air Corp",
+          "title": "Com",
+          "cusip": "34986A104",
+          "ticker": null,
+          "value": 1635013.0,
+          "shares": 107214.0,
+          "put_call": null,
+          "weight": 0.0001955427368946218
+        },
+        {
+          "issuer": "Adicet Bio Inc",
+          "title": "Com New",
+          "cusip": "007002207",
+          "ticker": null,
+          "value": 1315865.0,
+          "shares": 184295.0,
+          "put_call": null,
+          "weight": 0.00015737357653048724
+        },
+        {
+          "issuer": "Robinhood Mkts Inc",
+          "title": "Com Cl A",
+          "cusip": "770700102",
+          "ticker": null,
+          "value": 986288.0,
+          "shares": 8767.0,
+          "put_call": null,
+          "weight": 0.00011795713849756716
+        },
+        {
+          "issuer": "Krispy Kreme Inc",
+          "title": "Com",
+          "cusip": "50101L106",
+          "ticker": null,
+          "value": 977947.0,
+          "shares": 340748.0,
+          "put_call": null,
+          "weight": 0.00011695957947605598
+        },
+        {
+          "issuer": "Onkure Therapeutics Inc",
+          "title": "Com Cl A",
+          "cusip": "68277Q105",
+          "ticker": null,
+          "value": 735464.0,
+          "shares": 269895.0,
+          "put_call": null,
+          "weight": 8.795932720257645e-05
+        },
+        {
+          "issuer": "SunPower Inc",
+          "title": "Com",
+          "cusip": "20460L104",
+          "ticker": null,
+          "value": 719766.0,
+          "shares": 2343750.0,
+          "put_call": null,
+          "weight": 8.608189265999375e-05
+        },
+        {
+          "issuer": "Jasper Therapeutics Inc",
+          "title": "Com New",
+          "cusip": "471871202",
+          "ticker": null,
+          "value": 618390.0,
+          "shares": 1066189.0,
+          "put_call": null,
+          "weight": 7.39576217854324e-05
+        },
+        {
+          "issuer": "Ramaco Res Inc",
+          "title": "Com Cl A",
+          "cusip": "75134P600",
+          "ticker": null,
+          "value": 437669.0,
+          "shares": 52922.0,
+          "put_call": null,
+          "weight": 5.23439227173926e-05
+        },
+        {
+          "issuer": "Nebius Group N.V.",
+          "title": "Shs Class A",
+          "cusip": "N97284108",
+          "ticker": null,
+          "value": 435434.0,
+          "shares": 1846.0,
+          "put_call": null,
+          "weight": 5.207662330328429e-05
+        },
+        {
+          "issuer": "N-able Inc",
+          "title": "Common Stock",
+          "cusip": "62878D100",
+          "ticker": null,
+          "value": 384301.0,
+          "shares": 93732.0,
+          "put_call": null,
+          "weight": 4.5961267177288536e-05
+        }
+      ]
+    }
+  ]
+}

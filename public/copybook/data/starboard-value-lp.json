@@ -1,0 +1,242 @@
+{
+  "cik": "0001517137",
+  "name": "Starboard Value LP",
+  "manager": "Starboard Value LP",
+  "slug": "starboard-value-lp",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0000921895-26-002172",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1517137/000092189526002172/0000921895-26-002172-index.html",
+  "line_count": 22,
+  "position_count": 22,
+  "values_in_thousands": false,
+  "total_value": 4523797468.0,
+  "holdings": [
+    {
+      "issuer": "ISHARES TR",
+      "title": "CORE S&P MCP ETF",
+      "cusip": "464287507",
+      "ticker": null,
+      "value": 684565693.0,
+      "shares": 8877781.0,
+      "put_call": null,
+      "weight": 0.15132545120386454
+    },
+    {
+      "issuer": "QORVO INC",
+      "title": "COM",
+      "cusip": "74736K101",
+      "ticker": null,
+      "value": 523387030.0,
+      "shares": 5611526.0,
+      "put_call": null,
+      "weight": 0.11569638864301164
+    },
+    {
+      "issuer": "KENVUE INC",
+      "title": "COM",
+      "cusip": "49177J102",
+      "ticker": null,
+      "value": 521848848.0,
+      "shares": 27307632.0,
+      "put_call": null,
+      "weight": 0.11535636855792147
+    },
+    {
+      "issuer": "DYNATRACE INC",
+      "title": "COM NEW",
+      "cusip": "268150109",
+      "ticker": null,
+      "value": 389336446.0,
+      "shares": 8866692.0,
+      "put_call": null,
+      "weight": 0.08606407531593764
+    },
+    {
+      "issuer": "ALGONQUIN POWER & UTILITIES",
+      "title": "COM",
+      "cusip": "015857105",
+      "ticker": null,
+      "value": 335130001.0,
+      "shares": 57189420.0,
+      "put_call": null,
+      "weight": 0.07408156606713942
+    },
+    {
+      "issuer": "MATCH GROUP INC NEW",
+      "title": "COM",
+      "cusip": "57667L107",
+      "ticker": null,
+      "value": 295843506.0,
+      "shares": 7775125.0,
+      "put_call": null,
+      "weight": 0.06539715981820785
+    },
+    {
+      "issuer": "ACACIA RESH CORP",
+      "title": "ACACIA TCH COM",
+      "cusip": "003881307",
+      "ticker": null,
+      "value": 284835953.0,
+      "shares": 61123595.0,
+      "put_call": null,
+      "weight": 0.06296390477576526
+    },
+    {
+      "issuer": "RIOT PLATFORMS INC",
+      "title": "COM",
+      "cusip": "767292105",
+      "ticker": null,
+      "value": 276937091.0,
+      "shares": 10114576.0,
+      "put_call": null,
+      "weight": 0.061217835890967874
+    },
+    {
+      "issuer": "BILL HOLDINGS INC",
+      "title": "COM",
+      "cusip": "090043100",
+      "ticker": null,
+      "value": 254051048.0,
+      "shares": 7025748.0,
+      "put_call": null,
+      "weight": 0.05615880237722437
+    },
+    {
+      "issuer": "LAMB WESTON HLDGS INC",
+      "title": "COM",
+      "cusip": "513272104",
+      "ticker": null,
+      "value": 247593343.0,
+      "shares": 5733982.0,
+      "put_call": null,
+      "weight": 0.054731305888780786
+    },
+    {
+      "issuer": "CARMAX INC",
+      "title": "COM",
+      "cusip": "143130102",
+      "ticker": null,
+      "value": 169588506.0,
+      "shares": 3206438.0,
+      "put_call": null,
+      "weight": 0.03748808544140597
+    },
+    {
+      "issuer": "FLOWSERVE CORP",
+      "title": "COM",
+      "cusip": "34354P105",
+      "ticker": null,
+      "value": 106909056.0,
+      "shares": 1441600.0,
+      "put_call": null,
+      "weight": 0.023632591148530172
+    },
+    {
+      "issuer": "FLUOR CORP",
+      "title": "COM",
+      "cusip": "343412102",
+      "ticker": "FLR",
+      "value": 83107672.0,
+      "shares": 1586327.0,
+      "put_call": null,
+      "weight": 0.018371218558717314
+    },
+    {
+      "issuer": "GPGI INC",
+      "title": "COM CL A",
+      "cusip": "20459V105",
+      "ticker": null,
+      "value": 79678394.0,
+      "shares": 5027028.0,
+      "put_call": null,
+      "weight": 0.017613165612214363
+    },
+    {
+      "issuer": "TRIPADVISOR INC",
+      "title": "COM",
+      "cusip": "896945201",
+      "ticker": null,
+      "value": 69879815.0,
+      "shares": 5096996.0,
+      "put_call": null,
+      "weight": 0.015447158166188708
+    },
+    {
+      "issuer": "NEWS CORP NEW",
+      "title": "CL B",
+      "cusip": "65249B208",
+      "ticker": null,
+      "value": 68216133.0,
+      "shares": 2431081.0,
+      "put_call": null,
+      "weight": 0.015079395901903362
+    },
+    {
+      "issuer": "NEWS CORP NEW",
+      "title": "CL A",
+      "cusip": "65249B109",
+      "ticker": null,
+      "value": 50655683.0,
+      "shares": 2040100.0,
+      "put_call": null,
+      "weight": 0.01119760187283433
+    },
+    {
+      "issuer": "HEALTHCARE RLTY TR",
+      "title": "CL A COM",
+      "cusip": "42226K105",
+      "ticker": null,
+      "value": 39054505.0,
+      "shares": 1936267.0,
+      "put_call": null,
+      "weight": 0.008633124112266292
+    },
+    {
+      "issuer": "BLOOMIN BRANDS INC",
+      "title": "COM",
+      "cusip": "094235108",
+      "ticker": null,
+      "value": 38214267.0,
+      "shares": 4180992.0,
+      "put_call": null,
+      "weight": 0.008447386796229578
+    },
+    {
+      "issuer": "BITCOIN INFRASTRUCTURE ACQUI",
+      "title": "USD CL A ORD SHS",
+      "cusip": "G1143H101",
+      "ticker": null,
+      "value": 2998500.0,
+      "shares": 300000.0,
+      "put_call": null,
+      "weight": 0.0006628280822053814
+    },
+    {
+      "issuer": "RIOT PLATFORMS INC",
+      "title": "COM",
+      "cusip": "767292105",
+      "ticker": null,
+      "value": 1918518.0,
+      "shares": 2423400.0,
+      "put_call": "PUT",
+      "weight": 0.00042409458283024974
+    },
+    {
+      "issuer": "BITCOIN INFRASTRUCTURE ACQUI",
+      "title": "*W EXP 11/06/203",
+      "cusip": "G1143H119",
+      "ticker": null,
+      "value": 47460.0,
+      "shares": 149999.0,
+      "put_call": null,
+      "weight": 1.0491185853415841e-05
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

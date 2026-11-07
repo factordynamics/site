@@ -1,0 +1,44 @@
+{
+  "slug": "blackstone-inc",
+  "manager": "Blackstone Inc.",
+  "cik": "0001393818",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR/A",
+      "accession": "0001193125-26-419121",
+      "filing_date": "2026-10-09",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1393818/000119312526419121/0001193125-26-419121-index.html",
+      "line_count": 2,
+      "position_count": 2,
+      "values_in_thousands": false,
+      "total_value": 6028260594.0,
+      "holdings": [
+        {
+          "issuer": "MEDLINE INC",
+          "title": "COM CL A",
+          "cusip": "58507V107",
+          "ticker": null,
+          "value": 4014637356.0,
+          "shares": 101791008.0,
+          "put_call": null,
+          "weight": 0.6659694439878423
+        },
+        {
+          "issuer": "LIFTOFF MOBILE INC",
+          "title": "COM",
+          "cusip": "53229X101",
+          "ticker": null,
+          "value": 2013623238.0,
+          "shares": 83831109.0,
+          "put_call": null,
+          "weight": 0.3340305560121577
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "slug": "point72-private-investments-llc",
+  "manager": "Point72 Private Investments, LLC",
+  "cik": "0001954961",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0000919574-26-005546",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1954961/000091957426005546/0000919574-26-005546-index.html",
+      "line_count": 1,
+      "position_count": 1,
+      "values_in_thousands": true,
+      "total_value": 368114000.0,
+      "holdings": [
+        {
+          "issuer": "DRAFTKINGS INC NEW",
+          "title": "COM CL A",
+          "cusip": "26142V105",
+          "ticker": null,
+          "value": 368114000.0,
+          "shares": 14573.0,
+          "put_call": null,
+          "weight": 1.0
+        }
+      ]
+    }
+  ]
+}

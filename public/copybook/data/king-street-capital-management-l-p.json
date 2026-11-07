@@ -1,0 +1,82 @@
+{
+  "cik": "0001218199",
+  "name": "KING STREET CAPITAL MANAGEMENT, L.P.",
+  "manager": "KING STREET CAPITAL MANAGEMENT, L.P.",
+  "slug": "king-street-capital-management-l-p",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001172661-26-003543",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1218199/000117266126003543/0001172661-26-003543-index.html",
+  "line_count": 6,
+  "position_count": 6,
+  "values_in_thousands": false,
+  "total_value": 189671275.0,
+  "holdings": [
+    {
+      "issuer": "SURGERY PARTNERS INC",
+      "title": "COM",
+      "cusip": "86881A100",
+      "ticker": null,
+      "value": 101776768.0,
+      "shares": 6058141.0,
+      "put_call": null,
+      "weight": 0.536595580959742
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "BROAD USD HIGH",
+      "cusip": "46435U853",
+      "ticker": null,
+      "value": 36982980.0,
+      "shares": 999000.0,
+      "put_call": null,
+      "weight": 0.1949846121928584
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "IBOXX HI YD ETF",
+      "cusip": "464288513",
+      "ticker": null,
+      "value": 18960887.0,
+      "shares": 237100.0,
+      "put_call": null,
+      "weight": 0.09996709833895512
+    },
+    {
+      "issuer": "TALEN ENERGY CORP",
+      "title": "COM",
+      "cusip": "87422Q109",
+      "ticker": null,
+      "value": 18060220.0,
+      "shares": 47000.0,
+      "put_call": null,
+      "weight": 0.095218530059441
+    },
+    {
+      "issuer": "VISTRA CORP",
+      "title": "COM",
+      "cusip": "92840M102",
+      "ticker": null,
+      "value": 9359170.0,
+      "shares": 59000.0,
+      "put_call": null,
+      "weight": 0.04934416136549934
+    },
+    {
+      "issuer": "OPTIMUM COMMUNICATIONS INC",
+      "title": "CL A",
+      "cusip": "02156K103",
+      "ticker": null,
+      "value": 4531250.0,
+      "shares": 3125000.0,
+      "put_call": null,
+      "weight": 0.023890017083504078
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

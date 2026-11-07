@@ -1,0 +1,122 @@
+{
+  "cik": "0001998597",
+  "name": "JANA Partners Management, LP",
+  "manager": "JANA Partners Management, LP",
+  "slug": "jana-partners-management-lp",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0000902664-26-003486",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1998597/000090266426003486/0000902664-26-003486-index.html",
+  "line_count": 10,
+  "position_count": 10,
+  "values_in_thousands": false,
+  "total_value": 1902301416.0,
+  "holdings": [
+    {
+      "issuer": "MERCURY SYS INC",
+      "title": "COM",
+      "cusip": "589378108",
+      "ticker": null,
+      "value": 484285998.0,
+      "shares": 3958849.0,
+      "put_call": null,
+      "weight": 0.2545790030574208
+    },
+    {
+      "issuer": "COOPER COS INC",
+      "title": "COM",
+      "cusip": "216648501",
+      "ticker": null,
+      "value": 256899641.0,
+      "shares": 3582480.0,
+      "put_call": null,
+      "weight": 0.13504675906733385
+    },
+    {
+      "issuer": "STATE STR SPDR S&P 500 ETF T",
+      "title": "TR UNIT",
+      "cusip": "78462F103",
+      "ticker": "SPY",
+      "value": 256115973.0,
+      "shares": 342965.0,
+      "put_call": null,
+      "weight": 0.13463480121806312
+    },
+    {
+      "issuer": "LAMB WESTON HLDGS INC",
+      "title": "COM",
+      "cusip": "513272104",
+      "ticker": null,
+      "value": 232940339.0,
+      "shares": 5394635.0,
+      "put_call": null,
+      "weight": 0.12245185596812908
+    },
+    {
+      "issuer": "FISERV INC",
+      "title": "COM",
+      "cusip": "337738108",
+      "ticker": null,
+      "value": 179625024.0,
+      "shares": 3662080.0,
+      "put_call": null,
+      "weight": 0.09442511186145278
+    },
+    {
+      "issuer": "MARKEL GROUP INC",
+      "title": "COM",
+      "cusip": "570535104",
+      "ticker": null,
+      "value": 149879846.0,
+      "shares": 76743.0,
+      "put_call": null,
+      "weight": 0.07878869496672866
+    },
+    {
+      "issuer": "ALKAMI TECHNOLOGY INC",
+      "title": "COM",
+      "cusip": "01644J108",
+      "ticker": null,
+      "value": 122268451.0,
+      "shares": 6747707.0,
+      "put_call": null,
+      "weight": 0.06427396309103099
+    },
+    {
+      "issuer": "SIX FLAGS ENTERTAINMENT CORP",
+      "title": "COM",
+      "cusip": "83001C108",
+      "ticker": null,
+      "value": 87672909.0,
+      "shares": 4116099.0,
+      "put_call": null,
+      "weight": 0.04608781145963253
+    },
+    {
+      "issuer": "EVERPURE INC",
+      "title": "CL A",
+      "cusip": "74624M102",
+      "ticker": null,
+      "value": 77938753.0,
+      "shares": 989196.0,
+      "put_call": null,
+      "weight": 0.040970769587021116
+    },
+    {
+      "issuer": "RAPID7 INC",
+      "title": "COM",
+      "cusip": "753422104",
+      "ticker": null,
+      "value": 54674482.0,
+      "shares": 6749936.0,
+      "put_call": null,
+      "weight": 0.02874122972318704
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

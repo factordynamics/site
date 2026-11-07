@@ -1,0 +1,164 @@
+{
+  "slug": "oaktree-fund-advisors-llc",
+  "manager": "Oaktree Fund Advisors, LLC",
+  "cik": "0001822973",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001822973-26-000004",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1822973/000182297326000004/0001822973-26-000004-index.html",
+      "line_count": 14,
+      "position_count": 14,
+      "values_in_thousands": false,
+      "total_value": 57805473.0,
+      "holdings": [
+        {
+          "issuer": "ANGLOGOLD ASHANTI PLC",
+          "title": "COMMON STOCK",
+          "cusip": "G0378L100",
+          "ticker": null,
+          "value": 13636031.0,
+          "shares": 168575.0,
+          "put_call": null,
+          "weight": 0.23589515477193657
+        },
+        {
+          "issuer": "BARRICK MINING CORP",
+          "title": "COMMON STOCK",
+          "cusip": "06849F108",
+          "ticker": null,
+          "value": 8910697.0,
+          "shares": 242600.0,
+          "put_call": null,
+          "weight": 0.15414971174096265
+        },
+        {
+          "issuer": "ITAU UNIBANCO HOLDING SA",
+          "title": "COMMON STOCK",
+          "cusip": "465562106",
+          "ticker": null,
+          "value": 6841174.0,
+          "shares": 837352.0,
+          "put_call": null,
+          "weight": 0.11834820554102204
+        },
+        {
+          "issuer": "YPF SA",
+          "title": "COMMON STOCK",
+          "cusip": "984245100",
+          "ticker": "YPF",
+          "value": 5768415.0,
+          "shares": 126862.0,
+          "put_call": null,
+          "weight": 0.09979011848929945
+        },
+        {
+          "issuer": "FREEPORT-MCMORAN INC",
+          "title": "COMMON STOCK",
+          "cusip": "35671D857",
+          "ticker": null,
+          "value": 5181821.0,
+          "shares": 82395.0,
+          "put_call": null,
+          "weight": 0.08964239424180476
+        },
+        {
+          "issuer": "SEA LTD",
+          "title": "COMMON STOCK",
+          "cusip": "81141R100",
+          "ticker": "XYZ",
+          "value": 4046900.0,
+          "shares": 42230.0,
+          "put_call": null,
+          "weight": 0.07000894188686943
+        },
+        {
+          "issuer": "MAKEMYTRIP LTD",
+          "title": "COMMON STOCK",
+          "cusip": "V5633W109",
+          "ticker": null,
+          "value": 3599579.0,
+          "shares": 67547.0,
+          "put_call": null,
+          "weight": 0.06227055697649944
+        },
+        {
+          "issuer": "XP INC",
+          "title": "COMMON STOCK",
+          "cusip": "G98239109",
+          "ticker": null,
+          "value": 3566126.0,
+          "shares": 219319.0,
+          "put_call": null,
+          "weight": 0.061691840148077326
+        },
+        {
+          "issuer": "EMBRAER SA",
+          "title": "COMMON STOCK",
+          "cusip": "29082A107",
+          "ticker": null,
+          "value": 1968612.0,
+          "shares": 30856.0,
+          "put_call": null,
+          "weight": 0.03405580644587062
+        },
+        {
+          "issuer": "NN INC",
+          "title": "COMMON STOCK",
+          "cusip": "629337106",
+          "ticker": null,
+          "value": 1809216.0,
+          "shares": 503960.0,
+          "put_call": null,
+          "weight": 0.031298351282412304
+        },
+        {
+          "issuer": "TERNIUM SA",
+          "title": "COMMON STOCK",
+          "cusip": "880890108",
+          "ticker": null,
+          "value": 1788532.0,
+          "shares": 41886.0,
+          "put_call": null,
+          "weight": 0.030940530492674975
+        },
+        {
+          "issuer": "BIOXCEL THERAPEUTICS INC",
+          "title": "COMMON STOCK",
+          "cusip": "09075P204",
+          "ticker": null,
+          "value": 346274.0,
+          "shares": 245585.0,
+          "put_call": null,
+          "weight": 0.0059903324378990895
+        },
+        {
+          "issuer": "ALVOTECH SA",
+          "title": "COMMON STOCK",
+          "cusip": "L01800108",
+          "ticker": null,
+          "value": 280524.0,
+          "shares": 76023.0,
+          "put_call": null,
+          "weight": 0.004852896887462542
+        },
+        {
+          "issuer": "PEBBLEBROOK HOTEL TRUST",
+          "title": "CONVERTIBLE BOND",
+          "cusip": "70509VAA8",
+          "ticker": null,
+          "value": 61572.0,
+          "shares": 62000.0,
+          "put_call": null,
+          "weight": 0.0010651586572088079
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,912 @@
+{
+  "cik": "0000909661",
+  "name": "FARALLON CAPITAL MANAGEMENT, L.L.C.",
+  "manager": "FARALLON CAPITAL MANAGEMENT, L.L.C.",
+  "slug": "farallon-capital-management-l-l-c",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0000908834-26-000432",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/909661/000090883426000432/0000908834-26-000432-index.html",
+  "line_count": 89,
+  "position_count": 89,
+  "values_in_thousands": false,
+  "total_value": 21675731270.0,
+  "holdings": [
+    {
+      "issuer": "STATE STR SPDR S&P 500 ETF T",
+      "title": "TR UNIT",
+      "cusip": "78462F103",
+      "ticker": "SPY",
+      "value": 4480620000.0,
+      "shares": 6000000.0,
+      "put_call": "PUT",
+      "weight": 0.20671136508327823
+    },
+    {
+      "issuer": "REVOLUTION MEDICINES INC",
+      "title": "COM",
+      "cusip": "76155X100",
+      "ticker": null,
+      "value": 2537793075.0,
+      "shares": 13550796.0,
+      "put_call": null,
+      "weight": 0.11707992885630567
+    },
+    {
+      "issuer": "ELECTRONIC ARTS INC",
+      "title": "COM",
+      "cusip": "285512109",
+      "ticker": null,
+      "value": 1623814280.0,
+      "shares": 7919500.0,
+      "put_call": null,
+      "weight": 0.07491393299599622
+    },
+    {
+      "issuer": "BRIDGEBIO PHARMA INC",
+      "title": "COM",
+      "cusip": "10806X102",
+      "ticker": null,
+      "value": 800143332.0,
+      "shares": 10743063.0,
+      "put_call": null,
+      "weight": 0.0369142485682791
+    },
+    {
+      "issuer": "PROTAGONIST THERAPEUTICS INC",
+      "title": "COM",
+      "cusip": "74366E102",
+      "ticker": null,
+      "value": 778248897.0,
+      "shares": 6348906.0,
+      "put_call": null,
+      "weight": 0.03590415877120255
+    },
+    {
+      "issuer": "EXELIXIS INC",
+      "title": "COM",
+      "cusip": "30161Q104",
+      "ticker": null,
+      "value": 732794424.0,
+      "shares": 13468010.0,
+      "put_call": null,
+      "weight": 0.03380713734046953
+    },
+    {
+      "issuer": "LIQUIDIA CORPORATION",
+      "title": "COM NEW",
+      "cusip": "53635D202",
+      "ticker": null,
+      "value": 666944480.0,
+      "shares": 8365038.0,
+      "put_call": null,
+      "weight": 0.03076918013479321
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 627547790.0,
+      "shares": 2632994.0,
+      "put_call": null,
+      "weight": 0.02895163176656231
+    },
+    {
+      "issuer": "LANTHEUS HLDGS INC",
+      "title": "COM",
+      "cusip": "516544103",
+      "ticker": null,
+      "value": 619431160.0,
+      "shares": 5583479.0,
+      "put_call": null,
+      "weight": 0.028577174734460527
+    },
+    {
+      "issuer": "NATERA INC",
+      "title": "COM",
+      "cusip": "632307104",
+      "ticker": "NTRA",
+      "value": 602175451.0,
+      "shares": 2218366.0,
+      "put_call": null,
+      "weight": 0.027781090450841338
+    },
+    {
+      "issuer": "UNITEDHEALTH GROUP INC",
+      "title": "COM",
+      "cusip": "91324P102",
+      "ticker": "UNH",
+      "value": 528071215.0,
+      "shares": 1270532.0,
+      "put_call": null,
+      "weight": 0.02436232523932744
+    },
+    {
+      "issuer": "THERMO FISHER SCIENTIFIC INC",
+      "title": "COM",
+      "cusip": "883556102",
+      "ticker": "TMO",
+      "value": 526019392.0,
+      "shares": 1049185.0,
+      "put_call": null,
+      "weight": 0.024267665318771964
+    },
+    {
+      "issuer": "ROIVANT SCIENCES LTD",
+      "title": "SHS",
+      "cusip": "G76279101",
+      "ticker": null,
+      "value": 506395510.0,
+      "shares": 14309000.0,
+      "put_call": null,
+      "weight": 0.023362326451281935
+    },
+    {
+      "issuer": "AON PLC",
+      "title": "SHS CL A",
+      "cusip": "G0403H108",
+      "ticker": null,
+      "value": 458581990.0,
+      "shares": 1382562.0,
+      "put_call": null,
+      "weight": 0.021156471460535873
+    },
+    {
+      "issuer": "BOSTON SCIENTIFIC CORP",
+      "title": "COM",
+      "cusip": "101137107",
+      "ticker": null,
+      "value": 449044133.0,
+      "shares": 10521184.0,
+      "put_call": null,
+      "weight": 0.02071644676742664
+    },
+    {
+      "issuer": "BROADCOM INC",
+      "title": "COM",
+      "cusip": "11135F101",
+      "ticker": "AVGO",
+      "value": 435092450.0,
+      "shares": 1151800.0,
+      "put_call": null,
+      "weight": 0.02007279222003383
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 415120156.0,
+      "shares": 1112863.0,
+      "put_call": null,
+      "weight": 0.01915137952344618
+    },
+    {
+      "issuer": "TANGO THERAPEUTICS INC",
+      "title": "COM",
+      "cusip": "87583X109",
+      "ticker": null,
+      "value": 383779020.0,
+      "shares": 12277000.0,
+      "put_call": null,
+      "weight": 0.01770547047384575
+    },
+    {
+      "issuer": "KKR & CO INC",
+      "title": "COM",
+      "cusip": "48251W104",
+      "ticker": null,
+      "value": 377977574.0,
+      "shares": 4118300.0,
+      "put_call": null,
+      "weight": 0.017437823402209028
+    },
+    {
+      "issuer": "SYNOPSYS INC",
+      "title": "COM",
+      "cusip": "871607107",
+      "ticker": null,
+      "value": 370059672.0,
+      "shares": 829600.0,
+      "put_call": null,
+      "weight": 0.017072534595968903
+    },
+    {
+      "issuer": "BEAM THERAPEUTICS INC",
+      "title": "COM",
+      "cusip": "07373V105",
+      "ticker": null,
+      "value": 351313111.0,
+      "shares": 10236396.0,
+      "put_call": null,
+      "weight": 0.01620767053364562
+    },
+    {
+      "issuer": "CRINETICS PHARMACEUTICALS IN",
+      "title": "COM",
+      "cusip": "22663K107",
+      "ticker": null,
+      "value": 336372047.0,
+      "shares": 8989098.0,
+      "put_call": null,
+      "weight": 0.015518371343971733
+    },
+    {
+      "issuer": "GRAIL INC",
+      "title": "COM",
+      "cusip": "384747101",
+      "ticker": null,
+      "value": 284111340.0,
+      "shares": 4161584.0,
+      "put_call": null,
+      "weight": 0.013107347404385863
+    },
+    {
+      "issuer": "WABTEC",
+      "title": "COM",
+      "cusip": "929740108",
+      "ticker": null,
+      "value": 241158009.0,
+      "shares": 894503.0,
+      "put_call": null,
+      "weight": 0.011125715021839722
+    },
+    {
+      "issuer": "IMMUNOVANT INC",
+      "title": "COM",
+      "cusip": "45258J102",
+      "ticker": null,
+      "value": 223666650.0,
+      "shares": 5805000.0,
+      "put_call": null,
+      "weight": 0.010318759132687845
+    },
+    {
+      "issuer": "TWIST BIOSCIENCE CORP",
+      "title": "COM",
+      "cusip": "90184D100",
+      "ticker": null,
+      "value": 219792832.0,
+      "shares": 2136400.0,
+      "put_call": null,
+      "weight": 0.010140042301788511
+    },
+    {
+      "issuer": "AGIOS PHARMACEUTICALS INC",
+      "title": "COM",
+      "cusip": "00847X104",
+      "ticker": null,
+      "value": 219594714.0,
+      "shares": 5917400.0,
+      "put_call": null,
+      "weight": 0.01013090221799931
+    },
+    {
+      "issuer": "ARAMARK",
+      "title": "COM",
+      "cusip": "03852U106",
+      "ticker": null,
+      "value": 206304094.0,
+      "shares": 3625731.0,
+      "put_call": null,
+      "weight": 0.009517745511337482
+    },
+    {
+      "issuer": "BAIDU INC",
+      "title": "SPON ADR REP A",
+      "cusip": "056752108",
+      "ticker": null,
+      "value": 137580588.0,
+      "shares": 1203785.0,
+      "put_call": null,
+      "weight": 0.0063472178302199445
+    },
+    {
+      "issuer": "NOVO-NORDISK A S",
+      "title": "ADR",
+      "cusip": "670100205",
+      "ticker": null,
+      "value": 125554860.0,
+      "shares": 2619000.0,
+      "put_call": null,
+      "weight": 0.005792416340470713
+    },
+    {
+      "issuer": "ACADIA HEALTHCARE COMPANY IN",
+      "title": "COM",
+      "cusip": "00404A109",
+      "ticker": null,
+      "value": 124640224.0,
+      "shares": 4220800.0,
+      "put_call": null,
+      "weight": 0.005750220024756747
+    },
+    {
+      "issuer": "BRIGHTSPRING HEALTH SVCS INC",
+      "title": "COM",
+      "cusip": "10950A106",
+      "ticker": null,
+      "value": 120845472.0,
+      "shares": 1732800.0,
+      "put_call": null,
+      "weight": 0.005575150867793537
+    },
+    {
+      "issuer": "ASTRAZENECA PLC",
+      "title": "ORD",
+      "cusip": "G0593M107",
+      "ticker": null,
+      "value": 108841880.0,
+      "shares": 574000.0,
+      "put_call": null,
+      "weight": 0.005021370612332749
+    },
+    {
+      "issuer": "JOHNSON & JOHNSON",
+      "title": "COM",
+      "cusip": "478160104",
+      "ticker": "JNJ",
+      "value": 103619760.0,
+      "shares": 408000.0,
+      "put_call": null,
+      "weight": 0.004780450482121151
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "ISHARES SEMICDTR",
+      "cusip": "464287523",
+      "ticker": null,
+      "value": 83298800.0,
+      "shares": 130000.0,
+      "put_call": "PUT",
+      "weight": 0.0038429522382614407
+    },
+    {
+      "issuer": "STRATEGY INC",
+      "title": "NOTE 12/0",
+      "cusip": "594972AS0",
+      "ticker": null,
+      "value": 75366666.0,
+      "shares": 87858000.0,
+      "put_call": null,
+      "weight": 0.0034770068451766703
+    },
+    {
+      "issuer": "PARABILIS MEDICINES INC",
+      "title": "COM",
+      "cusip": "698955101",
+      "ticker": null,
+      "value": 64817634.0,
+      "shares": 2368200.0,
+      "put_call": null,
+      "weight": 0.0029903320535123058
+    },
+    {
+      "issuer": "NOVARTIS AG",
+      "title": "SPONSORED ADR",
+      "cusip": "66987V109",
+      "ticker": null,
+      "value": 56889360.0,
+      "shares": 363000.0,
+      "put_call": null,
+      "weight": 0.0026245647397712918
+    },
+    {
+      "issuer": "GUARDANT HEALTH INC",
+      "title": "COM",
+      "cusip": "40131M109",
+      "ticker": null,
+      "value": 48339666.0,
+      "shares": 322200.0,
+      "put_call": null,
+      "weight": 0.00223012849706731
+    },
+    {
+      "issuer": "VNET GROUP INC",
+      "title": "NOTE 2.000%10/0",
+      "cusip": "90138AAE3",
+      "ticker": null,
+      "value": 46808834.0,
+      "shares": 45000000.0,
+      "put_call": null,
+      "weight": 0.002159504259253533
+    },
+    {
+      "issuer": "AVALO THERAPEUTICS INC",
+      "title": "COM NEW",
+      "cusip": "05338F306",
+      "ticker": null,
+      "value": 46163040.0,
+      "shares": 2498000.0,
+      "put_call": null,
+      "weight": 0.0021297108468903802
+    },
+    {
+      "issuer": "JOYY INC",
+      "title": "ADS REPSTG COM A",
+      "cusip": "46591M109",
+      "ticker": null,
+      "value": 46140208.0,
+      "shares": 699200.0,
+      "put_call": null,
+      "weight": 0.0021286575029586074
+    },
+    {
+      "issuer": "ASSEMBLY BIOSCIENCES INC",
+      "title": "COM NEW",
+      "cusip": "045396207",
+      "ticker": null,
+      "value": 44094133.0,
+      "shares": 1604590.0,
+      "put_call": null,
+      "weight": 0.0020342627637678773
+    },
+    {
+      "issuer": "ENANTA PHARMACEUTICALS INC",
+      "title": "COM",
+      "cusip": "29251M106",
+      "ticker": null,
+      "value": 35257385.0,
+      "shares": 2418202.0,
+      "put_call": null,
+      "weight": 0.0016265834153792772
+    },
+    {
+      "issuer": "MAZE THERAPEUTICS INC",
+      "title": "COM",
+      "cusip": "578784100",
+      "ticker": null,
+      "value": 33057170.0,
+      "shares": 1107814.0,
+      "put_call": null,
+      "weight": 0.0015250774974199983
+    },
+    {
+      "issuer": "CG ONCOLOGY INC",
+      "title": "COM",
+      "cusip": "156944100",
+      "ticker": null,
+      "value": 28420000.0,
+      "shares": 400000.0,
+      "put_call": "CALL",
+      "weight": 0.0013111437693146858
+    },
+    {
+      "issuer": "MERCK & CO INC",
+      "title": "COM",
+      "cusip": "58933Y105",
+      "ticker": "MRK",
+      "value": 25571500.0,
+      "shares": 199000.0,
+      "put_call": null,
+      "weight": 0.0011797295178406224
+    },
+    {
+      "issuer": "WARBY PARKER INC",
+      "title": "CL A COM",
+      "cusip": "93403J106",
+      "ticker": null,
+      "value": 25121520.0,
+      "shares": 828000.0,
+      "put_call": null,
+      "weight": 0.0011589698952749565
+    },
+    {
+      "issuer": "PERCEPTIVE CAP SOLUTIONS COR",
+      "title": "CL A ORD SHS",
+      "cusip": "G70077105",
+      "ticker": null,
+      "value": 24480000.0,
+      "shares": 2250000.0,
+      "put_call": null,
+      "weight": 0.0011293736619571958
+    },
+    {
+      "issuer": "KAILERA THERAPEUTICS INC",
+      "title": "COMMON STOCK",
+      "cusip": "482931102",
+      "ticker": null,
+      "value": 24233000.0,
+      "shares": 1100000.0,
+      "put_call": null,
+      "weight": 0.0011179784293385917
+    },
+    {
+      "issuer": "RIO TINTO PLC",
+      "title": "SPONSORED ADR",
+      "cusip": "767204100",
+      "ticker": null,
+      "value": 17417282.0,
+      "shares": 183475.0,
+      "put_call": null,
+      "weight": 0.0008035383804608314
+    },
+    {
+      "issuer": "AXALTA COATING SYS LTD",
+      "title": "COM",
+      "cusip": "G0750C108",
+      "ticker": null,
+      "value": 16357160.0,
+      "shares": 478000.0,
+      "put_call": null,
+      "weight": 0.0007546301343308728
+    },
+    {
+      "issuer": "ABIVAX SA",
+      "title": "SPONSORED ADS",
+      "cusip": "00370M103",
+      "ticker": null,
+      "value": 16257720.0,
+      "shares": 122000.0,
+      "put_call": null,
+      "weight": 0.0007500425151746218
+    },
+    {
+      "issuer": "VNET GROUP INC",
+      "title": "SPONSORED ADS A",
+      "cusip": "90138A103",
+      "ticker": null,
+      "value": 16015680.0,
+      "shares": 1992000.0,
+      "put_call": null,
+      "weight": 0.0007388761098992902
+    },
+    {
+      "issuer": "NETEASE COM INC",
+      "title": "SPONSORED ADS",
+      "cusip": "64110W102",
+      "ticker": "NTES",
+      "value": 15825290.0,
+      "shares": 123500.0,
+      "put_call": null,
+      "weight": 0.0007300925538739621
+    },
+    {
+      "issuer": "BIOGEN INC",
+      "title": "COM",
+      "cusip": "09062X103",
+      "ticker": null,
+      "value": 15340260.0,
+      "shares": 71000.0,
+      "put_call": null,
+      "weight": 0.0007077159155055349
+    },
+    {
+      "issuer": "TAYSHA GENE THERAPIES INC",
+      "title": "COM SHS",
+      "cusip": "877619106",
+      "ticker": null,
+      "value": 15322500.0,
+      "shares": 2250000.0,
+      "put_call": null,
+      "weight": 0.0007068965659860758
+    },
+    {
+      "issuer": "MOBIA MED INC",
+      "title": "COMMON STOCK",
+      "cusip": "60705V103",
+      "ticker": null,
+      "value": 15122664.0,
+      "shares": 1128557.0,
+      "put_call": null,
+      "weight": 0.0006976772230485399
+    },
+    {
+      "issuer": "STRATEGY INC",
+      "title": "NOTE 2.250% 6/1",
+      "cusip": "594972AN1",
+      "ticker": null,
+      "value": 14189967.0,
+      "shares": 15000000.0,
+      "put_call": null,
+      "weight": 0.0006546476713170656
+    },
+    {
+      "issuer": "MINERVA NEUROSCIENCES INC",
+      "title": "COM NEW",
+      "cusip": "603380205",
+      "ticker": null,
+      "value": 13125750.0,
+      "shares": 2365000.0,
+      "put_call": null,
+      "weight": 0.0006055505042252722
+    },
+    {
+      "issuer": "ALAMAR BIOSCIENCES INC",
+      "title": "COMMON STOCK",
+      "cusip": "010911105",
+      "ticker": null,
+      "value": 12539961.0,
+      "shares": 462900.0,
+      "put_call": null,
+      "weight": 0.0005785253952357198
+    },
+    {
+      "issuer": "ALVOTECH",
+      "title": "ORDINARY SHARES",
+      "cusip": "L01800108",
+      "ticker": null,
+      "value": 10552201.0,
+      "shares": 2859675.0,
+      "put_call": null,
+      "weight": 0.00048682099203751567
+    },
+    {
+      "issuer": "BETA BIONICS INC",
+      "title": "COM",
+      "cusip": "08659B102",
+      "ticker": null,
+      "value": 9323650.0,
+      "shares": 595000.0,
+      "put_call": null,
+      "weight": 0.0004301423506252945
+    },
+    {
+      "issuer": "INFLARX NV",
+      "title": "COM",
+      "cusip": "N44821101",
+      "ticker": null,
+      "value": 7448000.0,
+      "shares": 3325000.0,
+      "put_call": null,
+      "weight": 0.00034361009126867626
+    },
+    {
+      "issuer": "SCOTTS MIRACLE-GRO CO",
+      "title": "CL A",
+      "cusip": "810186106",
+      "ticker": null,
+      "value": 5993680.0,
+      "shares": 88000.0,
+      "put_call": null,
+      "weight": 0.0002765156997630558
+    },
+    {
+      "issuer": "WAYSTAR HLDG CORP",
+      "title": "COM",
+      "cusip": "946784105",
+      "ticker": null,
+      "value": 5438397.0,
+      "shares": 264900.0,
+      "put_call": null,
+      "weight": 0.00025089797120371845
+    },
+    {
+      "issuer": "BRUNSWICK CORP",
+      "title": "COM",
+      "cusip": "117043109",
+      "ticker": null,
+      "value": 5138640.0,
+      "shares": 61000.0,
+      "put_call": null,
+      "weight": 0.0002370688183937796
+    },
+    {
+      "issuer": "GENTEX CORP",
+      "title": "COM",
+      "cusip": "371901109",
+      "ticker": null,
+      "value": 5028730.0,
+      "shares": 199000.0,
+      "put_call": null,
+      "weight": 0.0002319981705512259
+    },
+    {
+      "issuer": "IDEXX LABS INC",
+      "title": "COM",
+      "cusip": "45168D104",
+      "ticker": null,
+      "value": 4737960.0,
+      "shares": 9000.0,
+      "put_call": null,
+      "weight": 0.00021858362889733317
+    },
+    {
+      "issuer": "PRIME MEDICINE INC",
+      "title": "COM",
+      "cusip": "74168J101",
+      "ticker": null,
+      "value": 4578711.0,
+      "shares": 1240843.0,
+      "put_call": null,
+      "weight": 0.0002112367487383045
+    },
+    {
+      "issuer": "COMMERCIAL METALS CO",
+      "title": "COM",
+      "cusip": "201723103",
+      "ticker": null,
+      "value": 4204250.0,
+      "shares": 67000.0,
+      "put_call": null,
+      "weight": 0.00019396116087759562
+    },
+    {
+      "issuer": "JATT II ACQUISITION CORP",
+      "title": "ORD SHS",
+      "cusip": "G50765109",
+      "ticker": null,
+      "value": 3408000.0,
+      "shares": 300000.0,
+      "put_call": null,
+      "weight": 0.00015722652940972727
+    },
+    {
+      "issuer": "SAGIMET BIOSCIENCES INC",
+      "title": "COM SER A",
+      "cusip": "786700104",
+      "ticker": null,
+      "value": 3207950.0,
+      "shares": 415000.0,
+      "put_call": null,
+      "weight": 0.00014799731367955827
+    },
+    {
+      "issuer": "STRATEGY INC",
+      "title": "NOTE 3/0",
+      "cusip": "594972AU5",
+      "ticker": null,
+      "value": 2318158.0,
+      "shares": 2632000.0,
+      "put_call": null,
+      "weight": 0.00010694716460193502
+    },
+    {
+      "issuer": "SUMMIT MIDSTREAM CORPORATION",
+      "title": "COM",
+      "cusip": "86614G101",
+      "ticker": null,
+      "value": 1657935.0,
+      "shares": 58214.0,
+      "put_call": null,
+      "weight": 7.648807688876649e-05
+    },
+    {
+      "issuer": "TEVA PHARMACEUTICAL INDS LTD",
+      "title": "SPONSORED ADS",
+      "cusip": "881624209",
+      "ticker": null,
+      "value": 1355200.0,
+      "shares": 40000.0,
+      "put_call": null,
+      "weight": 6.252153540377418e-05
+    },
+    {
+      "issuer": "REVOLUTION MEDICINES INC",
+      "title": "*W EXP 12/17/202",
+      "cusip": "76155X118",
+      "ticker": null,
+      "value": 1128799.0,
+      "shares": 120085.0,
+      "put_call": null,
+      "weight": 5.2076628277925685e-05
+    },
+    {
+      "issuer": "COGENT BIOSCIENCES INC",
+      "title": "COM",
+      "cusip": "19240Q201",
+      "ticker": null,
+      "value": 657900.0,
+      "shares": 17000.0,
+      "put_call": null,
+      "weight": 3.035191716509964e-05
+    },
+    {
+      "issuer": "ALEANNA INC",
+      "title": "*W EXP 12/13/202",
+      "cusip": "01444V111",
+      "ticker": null,
+      "value": 297000.0,
+      "shares": 990000.0,
+      "put_call": null,
+      "weight": 1.3701959869333627e-05
+    },
+    {
+      "issuer": "ALEANNA INC",
+      "title": "COM CL A",
+      "cusip": "01444V103",
+      "ticker": null,
+      "value": 227360.0,
+      "shares": 78400.0,
+      "put_call": null,
+      "weight": 1.0489150154517486e-05
+    },
+    {
+      "issuer": "WELLTOWER INC",
+      "title": "COM",
+      "cusip": "95040Q104",
+      "ticker": null,
+      "value": 226970.0,
+      "shares": 1000.0,
+      "put_call": null,
+      "weight": 1.0471157681961796e-05
+    },
+    {
+      "issuer": "SOLID POWER INC",
+      "title": "*W EXP 12/08/202",
+      "cusip": "83422N113",
+      "ticker": null,
+      "value": 41423.0,
+      "shares": 405316.0,
+      "put_call": null,
+      "weight": 1.911031258139417e-06
+    },
+    {
+      "issuer": "BLUE GOLD LTD",
+      "title": "*W EXP 04/01/203",
+      "cusip": "G1331C112",
+      "ticker": null,
+      "value": 30696.0,
+      "shares": 255800.0,
+      "put_call": null,
+      "weight": 1.4161459937678957e-06
+    },
+    {
+      "issuer": "PACIFIC BIOSCIENCES CALIF IN",
+      "title": "COM",
+      "cusip": "69404D108",
+      "ticker": null,
+      "value": 23856.0,
+      "shares": 14200.0,
+      "put_call": null,
+      "weight": 1.1005857058680908e-06
+    },
+    {
+      "issuer": "GERON CORP",
+      "title": "COM",
+      "cusip": "374163103",
+      "ticker": null,
+      "value": 18432.0,
+      "shares": 14400.0,
+      "put_call": null,
+      "weight": 8.503519337089475e-07
+    },
+    {
+      "issuer": "NVNI GROUP LIMITED",
+      "title": "*W EXP 11/01/202",
+      "cusip": "G50716110",
+      "ticker": null,
+      "value": 17550.0,
+      "shares": 375000.0,
+      "put_call": null,
+      "weight": 8.096612650060779e-07
+    },
+    {
+      "issuer": "CANOPY GROWTH CORPORATION",
+      "title": "COM NEW",
+      "cusip": "138035704",
+      "ticker": null,
+      "value": 17100.0,
+      "shares": 18000.0,
+      "put_call": null,
+      "weight": 7.889007197495119e-07
+    },
+    {
+      "issuer": "RANI THERAPEUTICS HLDGS INC",
+      "title": "COM CL A",
+      "cusip": "753018100",
+      "ticker": null,
+      "value": 15740.0,
+      "shares": 20700.0,
+      "put_call": null,
+      "weight": 7.261577385296676e-07
+    },
+    {
+      "issuer": "BEYOND MEAT INC",
+      "title": "COM",
+      "cusip": "08862E109",
+      "ticker": null,
+      "value": 14250.0,
+      "shares": 19000.0,
+      "put_call": null,
+      "weight": 6.574172664579266e-07
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

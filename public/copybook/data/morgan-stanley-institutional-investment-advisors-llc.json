@@ -1,0 +1,72 @@
+{
+  "cik": "0002026079",
+  "name": "Morgan Stanley Institutional Investment Advisors LLC",
+  "manager": "Morgan Stanley Institutional Investment Advisors LLC",
+  "slug": "morgan-stanley-institutional-investment-advisors-llc",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0002026079-26-000005",
+  "filing_date": "2026-08-13",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/2026079/000202607926000005/0002026079-26-000005-index.html",
+  "line_count": 5,
+  "position_count": 5,
+  "values_in_thousands": false,
+  "total_value": 1070599282.0,
+  "holdings": [
+    {
+      "issuer": "Enbridge Inc",
+      "title": "COM",
+      "cusip": "29250N105",
+      "ticker": null,
+      "value": 400550904.0,
+      "shares": 7388875.0,
+      "put_call": null,
+      "weight": 0.3741370938076157
+    },
+    {
+      "issuer": "Waste Management, Inc",
+      "title": "COM",
+      "cusip": "94106L109",
+      "ticker": "WM",
+      "value": 322479277.0,
+      "shares": 1446874.0,
+      "put_call": null,
+      "weight": 0.30121379905801204
+    },
+    {
+      "issuer": "National Health Care",
+      "title": "COM",
+      "cusip": "635906100",
+      "ticker": null,
+      "value": 217390946.0,
+      "shares": 1028534.0,
+      "put_call": null,
+      "weight": 0.20305538183613317
+    },
+    {
+      "issuer": "Oceaneering",
+      "title": "COM",
+      "cusip": "675232102",
+      "ticker": null,
+      "value": 124234908.0,
+      "shares": 3066015.0,
+      "put_call": null,
+      "weight": 0.11604239801834651
+    },
+    {
+      "issuer": "National Health Investors",
+      "title": "COM",
+      "cusip": "63633D104",
+      "ticker": null,
+      "value": 5943247.0,
+      "shares": 77934.0,
+      "put_call": null,
+      "weight": 0.005551327279892572
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "slug": "caxton-corp",
+  "manager": "CAXTON CORP",
+  "cik": "0001388551",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0000919574-26-005174",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1388551/000091957426005174/0000919574-26-005174-index.html",
+      "line_count": 10,
+      "position_count": 10,
+      "values_in_thousands": true,
+      "total_value": 1853427000.0,
+      "holdings": [
+        {
+          "issuer": "SPACE EXPLORATION TECHN CORP",
+          "title": "PUT",
+          "cusip": "84615Q103",
+          "ticker": null,
+          "value": 445346000.0,
+          "shares": 2606.0,
+          "put_call": null,
+          "weight": 0.2402824605447099
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL B NEW",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 377128000.0,
+          "shares": 754.0,
+          "put_call": null,
+          "weight": 0.20347604734365043
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 246906000.0,
+          "shares": 691.0,
+          "put_call": null,
+          "weight": 0.13321592919494538
+        },
+        {
+          "issuer": "VANGUARD INDEX FDS",
+          "title": "S&P 500 ETF SHS",
+          "cusip": "922908363",
+          "ticker": null,
+          "value": 233094000.0,
+          "shares": 339.0,
+          "put_call": null,
+          "weight": 0.12576378783734132
+        },
+        {
+          "issuer": "BLACKSTONE INC",
+          "title": "COM",
+          "cusip": "09260D107",
+          "ticker": null,
+          "value": 188218000.0,
+          "shares": 1597.0,
+          "put_call": null,
+          "weight": 0.10155134245913111
+        },
+        {
+          "issuer": "KYVERNA THERAPEUTICS INC",
+          "title": "COM",
+          "cusip": "501976104",
+          "ticker": null,
+          "value": 110009000.0,
+          "shares": 12347.0,
+          "put_call": null,
+          "weight": 0.05935437435626005
+        },
+        {
+          "issuer": "LEXEO THERAPEUTICS INC",
+          "title": "COM",
+          "cusip": "52886X107",
+          "ticker": null,
+          "value": 78959000.0,
+          "shares": 16962.0,
+          "put_call": null,
+          "weight": 0.04260162391073401
+        },
+        {
+          "issuer": "X4 PHARMACEUTICALS INC",
+          "title": "COM NEW",
+          "cusip": "98420X202",
+          "ticker": null,
+          "value": 72650000.0,
+          "shares": 15557.0,
+          "put_call": null,
+          "weight": 0.03919765925499089
+        },
+        {
+          "issuer": "INHIBIKASE THERAPEUTICS INC",
+          "title": "COM NEW",
+          "cusip": "45719W205",
+          "ticker": null,
+          "value": 57759000.0,
+          "shares": 28453.0,
+          "put_call": null,
+          "weight": 0.031163353075141346
+        },
+        {
+          "issuer": "ALX ONCOLOGY HLDGS INC",
+          "title": "COM",
+          "cusip": "00166B105",
+          "ticker": null,
+          "value": 43358000.0,
+          "shares": 20946.0,
+          "put_call": null,
+          "weight": 0.023393422023095595
+        }
+      ]
+    }
+  ]
+}

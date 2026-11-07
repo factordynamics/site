@@ -1,0 +1,312 @@
+{
+  "cik": "0001791786",
+  "name": "Elliott Investment Management L.P.",
+  "manager": "Elliott Investment Management L.P.",
+  "slug": "elliott-investment-management-l-p",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001013594-26-000915",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1791786/000101359426000915/0001013594-26-000915-index.html",
+  "line_count": 29,
+  "position_count": 29,
+  "values_in_thousands": false,
+  "total_value": 22669814953.0,
+  "holdings": [
+    {
+      "issuer": "TRIPLE FLAG PRECIOUS METAL",
+      "title": "COM",
+      "cusip": "89679M104",
+      "ticker": null,
+      "value": 3993248804.0,
+      "shares": 133241535.0,
+      "put_call": null,
+      "weight": 0.176148275240842
+    },
+    {
+      "issuer": "PHILLIPS 66",
+      "title": "COM",
+      "cusip": "718546104",
+      "ticker": null,
+      "value": 3254381550.0,
+      "shares": 19251000.0,
+      "put_call": null,
+      "weight": 0.1435557174483832
+    },
+    {
+      "issuer": "INVESCO QQQ TR",
+      "title": "UNIT SER 1",
+      "cusip": "46090E103",
+      "ticker": null,
+      "value": 2562672000.0,
+      "shares": 3480000.0,
+      "put_call": "PUT",
+      "weight": 0.11304335766802852
+    },
+    {
+      "issuer": "SUNCOR ENERGY INC NEW",
+      "title": "COM",
+      "cusip": "867224107",
+      "ticker": null,
+      "value": 1581090720.0,
+      "shares": 29454000.0,
+      "put_call": null,
+      "weight": 0.06974431521730472
+    },
+    {
+      "issuer": "HEWLETT PACKARD ENTERPRISE C",
+      "title": "COM",
+      "cusip": "42824C109",
+      "ticker": null,
+      "value": 1455789243.0,
+      "shares": 32271985.0,
+      "put_call": null,
+      "weight": 0.064217076584798
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "EXPANDED TECH",
+      "cusip": "464287515",
+      "ticker": null,
+      "value": 1426950000.0,
+      "shares": 15750000.0,
+      "put_call": "PUT",
+      "weight": 0.06294493373494278
+    },
+    {
+      "issuer": "SOUTHWEST AIRLS CO",
+      "title": "COM",
+      "cusip": "844741108",
+      "ticker": null,
+      "value": 1249917360.0,
+      "shares": 24308000.0,
+      "put_call": null,
+      "weight": 0.055135754861315826
+    },
+    {
+      "issuer": "SELECT SECTOR SPDR TR",
+      "title": "ST STR INDL ETF",
+      "cusip": "81369Y704",
+      "ticker": null,
+      "value": 958565250.0,
+      "shares": 5175000.0,
+      "put_call": "PUT",
+      "weight": 0.04228377037868802
+    },
+    {
+      "issuer": "SELECT SECTOR SPDR TR",
+      "title": "ST STR DISCR ETF",
+      "cusip": "81369Y407",
+      "ticker": null,
+      "value": 832688000.0,
+      "shares": 7100000.0,
+      "put_call": "PUT",
+      "weight": 0.03673113352386701
+    },
+    {
+      "issuer": "SELECT SECTOR SPDR TR",
+      "title": "ST STR STAPL ETF",
+      "cusip": "81369Y308",
+      "ticker": null,
+      "value": 799548750.0,
+      "shares": 9625000.0,
+      "put_call": "PUT",
+      "weight": 0.03526931082841468
+    },
+    {
+      "issuer": "VANECK ETF TRUST",
+      "title": "GOLD MINERS ETF",
+      "cusip": "92189F106",
+      "ticker": null,
+      "value": 690367500.0,
+      "shares": 9150000.0,
+      "put_call": "PUT",
+      "weight": 0.030453159914683843
+    },
+    {
+      "issuer": "UNITI GROUP LLC",
+      "title": "COM SHS",
+      "cusip": "912932100",
+      "ticker": null,
+      "value": 676870152.0,
+      "shares": 59012219.0,
+      "put_call": null,
+      "weight": 0.029857771375872068
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "U.S. MED DVC ETF",
+      "cusip": "464288810",
+      "ticker": null,
+      "value": 617625000.0,
+      "shares": 12500000.0,
+      "put_call": "PUT",
+      "weight": 0.027244377657271827
+    },
+    {
+      "issuer": "PINTEREST INC",
+      "title": "CL A",
+      "cusip": "72352L106",
+      "ticker": null,
+      "value": 588840000.0,
+      "shares": 28000000.0,
+      "put_call": null,
+      "weight": 0.025974627548606265
+    },
+    {
+      "issuer": "ETSY INC",
+      "title": "COM",
+      "cusip": "29786A106",
+      "ticker": null,
+      "value": 376650000.0,
+      "shares": 5000000.0,
+      "put_call": null,
+      "weight": 0.01661460407951659
+    },
+    {
+      "issuer": "NORWEGIAN CRUISE LINE HLDGS",
+      "title": "SHS",
+      "cusip": "G66721104",
+      "ticker": null,
+      "value": 310021460.0,
+      "shares": 14686000.0,
+      "put_call": null,
+      "weight": 0.013675517892084666
+    },
+    {
+      "issuer": "PEPSICO INC",
+      "title": "COM",
+      "cusip": "713448108",
+      "ticker": "PEP",
+      "value": 172635000.0,
+      "shares": 1275000.0,
+      "put_call": null,
+      "weight": 0.007615192287979149
+    },
+    {
+      "issuer": "SEADRILL LTD",
+      "title": "COM",
+      "cusip": "G7997W102",
+      "ticker": null,
+      "value": 167908735.0,
+      "shares": 4439681.0,
+      "put_call": null,
+      "weight": 0.007406709554008947
+    },
+    {
+      "issuer": "VANECK ETF TRUST",
+      "title": "SEMICONDUCTR ETF",
+      "cusip": "92189F676",
+      "ticker": null,
+      "value": 163972500.0,
+      "shares": 250000.0,
+      "put_call": "PUT",
+      "weight": 0.007233076244334353
+    },
+    {
+      "issuer": "EQUINIX INC",
+      "title": "COM",
+      "cusip": "29444U700",
+      "ticker": null,
+      "value": 156358500.0,
+      "shares": 150000.0,
+      "put_call": null,
+      "weight": 0.006897211129608641
+    },
+    {
+      "issuer": "SYNOPSYS INC",
+      "title": "COM",
+      "cusip": "871607107",
+      "ticker": null,
+      "value": 101480925.0,
+      "shares": 227500.0,
+      "put_call": null,
+      "weight": 0.004476477872024737
+    },
+    {
+      "issuer": "OR ROYALTIES INC.",
+      "title": "COM SHS",
+      "cusip": "68390D106",
+      "ticker": null,
+      "value": 98400930.0,
+      "shares": 3111000.0,
+      "put_call": null,
+      "weight": 0.004340614610397521
+    },
+    {
+      "issuer": "SPDR SERIES TRUST",
+      "title": "ST STR SP METAL",
+      "cusip": "78464A755",
+      "ticker": null,
+      "value": 96237000.0,
+      "shares": 900000.0,
+      "put_call": "PUT",
+      "weight": 0.004245160368513044
+    },
+    {
+      "issuer": "INVESCO EXCHANGE TRADED FD T",
+      "title": "S&P500 EQL WGT",
+      "cusip": "46137V357",
+      "ticker": null,
+      "value": 84044150.0,
+      "shares": 395000.0,
+      "put_call": "PUT",
+      "weight": 0.003707315219565921
+    },
+    {
+      "issuer": "TRANSOCEAN LTD",
+      "title": "REGISTERED SHS",
+      "cusip": "H8817H100",
+      "ticker": null,
+      "value": 76415218.0,
+      "shares": 15626834.0,
+      "put_call": null,
+      "weight": 0.0033707914316207345
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "RUSSELL 2000 ETF",
+      "cusip": "464287655",
+      "ticker": null,
+      "value": 75112500.0,
+      "shares": 250000.0,
+      "put_call": "PUT",
+      "weight": 0.00331332656026202
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "U.S. MED DVC ETF",
+      "cusip": "464288810",
+      "ticker": null,
+      "value": 69174000.0,
+      "shares": 1400000.0,
+      "put_call": "CALL",
+      "weight": 0.0030513702976144447
+    },
+    {
+      "issuer": "HDFC BANK LTD",
+      "title": "SPONSORED ADS",
+      "cusip": "40415F101",
+      "ticker": null,
+      "value": 20588706.0,
+      "shares": 797085.0,
+      "put_call": null,
+      "weight": 0.0009081991204024099
+    },
+    {
+      "issuer": "QUANTINUUM INC",
+      "title": "CL A COM",
+      "cusip": "74768A104",
+      "ticker": null,
+      "value": 12261000.0,
+      "shares": 150000.0,
+      "put_call": null,
+      "weight": 0.000540851349048063
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

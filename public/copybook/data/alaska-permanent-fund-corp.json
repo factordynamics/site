@@ -1,0 +1,102 @@
+{
+  "cik": "0001582681",
+  "name": "Alaska Permanent Fund Corp",
+  "manager": "Alaska Permanent Fund Corp",
+  "slug": "alaska-permanent-fund-corp",
+  "ok": true,
+  "form": "13F-HR/A",
+  "accession": "0001582681-26-000012",
+  "filing_date": "2026-10-21",
+  "report_date": "2026-09-30",
+  "quarter": "2026Q3",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1582681/000158268126000012/0001582681-26-000012-index.html",
+  "line_count": 9,
+  "position_count": 8,
+  "values_in_thousands": false,
+  "total_value": 1268628007.0,
+  "holdings": [
+    {
+      "issuer": "ISHARES TR",
+      "title": "CORE S&P500 ETF",
+      "cusip": "464287200",
+      "ticker": null,
+      "value": 767343408.0,
+      "shares": 1001950.0,
+      "put_call": null,
+      "weight": 0.6048608447598304
+    },
+    {
+      "issuer": "INVESCO QQQ TR",
+      "title": "UNIT SER 1",
+      "cusip": "46090E103",
+      "ticker": null,
+      "value": 286089033.0,
+      "shares": 386727.0,
+      "put_call": null,
+      "weight": 0.2255105763245222
+    },
+    {
+      "issuer": "ISHARES GOLD TRUST MICRO",
+      "title": "SHS REPSTG UN TR",
+      "cusip": "46436F103",
+      "ticker": null,
+      "value": 175508966.0,
+      "shares": 4237300.0,
+      "put_call": null,
+      "weight": 0.13834549216285746
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "BROAD USD HIGH",
+      "cusip": "46435U853",
+      "ticker": null,
+      "value": 20596831.0,
+      "shares": 576619.0,
+      "put_call": null,
+      "weight": 0.016235516547286822
+    },
+    {
+      "issuer": "SPDR SERIES TRUST",
+      "title": "ST STR R1K LOWV",
+      "cusip": "78468R754",
+      "ticker": null,
+      "value": 8963247.0,
+      "shares": 64520.0,
+      "put_call": null,
+      "weight": 0.007065307521624028
+    },
+    {
+      "issuer": "SPDR SERIES TRUST",
+      "title": "ST STR R1K MOM",
+      "cusip": "78468R762",
+      "ticker": null,
+      "value": 5183988.0,
+      "shares": 35053.0,
+      "put_call": null,
+      "weight": 0.004086294777819768
+    },
+    {
+      "issuer": "SPDR SERIES TRUST",
+      "title": "ST STR R1K YLD",
+      "cusip": "78468R770",
+      "ticker": null,
+      "value": 4613311.0,
+      "shares": 37531.0,
+      "put_call": null,
+      "weight": 0.003636456845146727
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "IBOXX HI YD ETF",
+      "cusip": "464288513",
+      "ticker": null,
+      "value": 329223.0,
+      "shares": 4264.0,
+      "put_call": null,
+      "weight": 0.0002595110609125942
+    }
+  ],
+  "history_quarters": [
+    "2026Q3"
+  ]
+}

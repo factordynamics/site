@@ -1,0 +1,412 @@
+{
+  "cik": "0002054965",
+  "name": "Towarzystwo Funduszy Inwestycyjnych Allianz Polska S.A.",
+  "manager": "Towarzystwo Funduszy Inwestycyjnych Allianz Polska S.A.",
+  "slug": "towarzystwo-funduszy-inwestycyjnych-allianz-polska-s-a",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0002054965-26-000005",
+  "filing_date": "2026-10-23",
+  "report_date": "2026-09-30",
+  "quarter": "2026Q3",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/2054965/000205496526000005/0002054965-26-000005-index.html",
+  "line_count": 39,
+  "position_count": 39,
+  "values_in_thousands": false,
+  "total_value": 54452223.0,
+  "holdings": [
+    {
+      "issuer": "Agnico Eagle Mines Ltd",
+      "title": "Common Stock",
+      "cusip": "008474108",
+      "ticker": null,
+      "value": 5629078.0,
+      "shares": 30626.0,
+      "put_call": null,
+      "weight": 0.10337645902904644
+    },
+    {
+      "issuer": "Barrick Gold Corp",
+      "title": "Common Stock",
+      "cusip": "06849F108",
+      "ticker": null,
+      "value": 5142764.0,
+      "shares": 126000.0,
+      "put_call": null,
+      "weight": 0.09444543705773041
+    },
+    {
+      "issuer": "Newmont Mining Corp",
+      "title": "Common Stock",
+      "cusip": "651639106",
+      "ticker": null,
+      "value": 5014983.0,
+      "shares": 43480.0,
+      "put_call": null,
+      "weight": 0.09209877436959736
+    },
+    {
+      "issuer": "Wheaton Precious Metals Corp",
+      "title": "Common Stock",
+      "cusip": "962879102",
+      "ticker": null,
+      "value": 4773231.0,
+      "shares": 35610.0,
+      "put_call": null,
+      "weight": 0.08765906581995743
+    },
+    {
+      "issuer": "Kinross Gold Corp",
+      "title": "Common Stock",
+      "cusip": "496902404",
+      "ticker": null,
+      "value": 3413452.0,
+      "shares": 141100.0,
+      "put_call": null,
+      "weight": 0.06268710094719182
+    },
+    {
+      "issuer": "Pan American Silver Corp",
+      "title": "Common Stock",
+      "cusip": "697900108",
+      "ticker": null,
+      "value": 2860661.0,
+      "shares": 62650.0,
+      "put_call": null,
+      "weight": 0.0525352472753959
+    },
+    {
+      "issuer": "Anglogold Ashanti",
+      "title": "Common Stock",
+      "cusip": "G0378L100",
+      "ticker": null,
+      "value": 2798725.0,
+      "shares": 29800.0,
+      "put_call": null,
+      "weight": 0.05139780978271539
+    },
+    {
+      "issuer": "Gold Fields Ltd.",
+      "title": "ADR",
+      "cusip": "38059T106",
+      "ticker": null,
+      "value": 2682230.0,
+      "shares": 74300.0,
+      "put_call": null,
+      "weight": 0.04925841135999168
+    },
+    {
+      "issuer": "Alamos Gold Inc-Class A",
+      "title": "Common Stock",
+      "cusip": "011532108",
+      "ticker": null,
+      "value": 2371995.0,
+      "shares": 73000.0,
+      "put_call": null,
+      "weight": 0.0435610314752439
+    },
+    {
+      "issuer": "Equinox Gold Corp",
+      "title": "Common Stock",
+      "cusip": "29446Y502",
+      "ticker": null,
+      "value": 2155193.0,
+      "shares": 193400.0,
+      "put_call": null,
+      "weight": 0.03957952276806036
+    },
+    {
+      "issuer": "Harmony Gold Mng - Spon ADR",
+      "title": "ADR",
+      "cusip": "413216300",
+      "ticker": null,
+      "value": 2023624.0,
+      "shares": 114200.0,
+      "put_call": null,
+      "weight": 0.037163294508655784
+    },
+    {
+      "issuer": "B2Gold Corp",
+      "title": "Common Stock",
+      "cusip": "11777Q209",
+      "ticker": null,
+      "value": 1738753.0,
+      "shares": 331800.0,
+      "put_call": null,
+      "weight": 0.03193171746174624
+    },
+    {
+      "issuer": "Franco - Nevada Corp",
+      "title": "Common Stock",
+      "cusip": "351858105",
+      "ticker": null,
+      "value": 1672685.0,
+      "shares": 7000.0,
+      "put_call": null,
+      "weight": 0.03071839693303247
+    },
+    {
+      "issuer": "Ssr Mining Inc",
+      "title": "Common Stock",
+      "cusip": "784730103",
+      "ticker": null,
+      "value": 1666000.0,
+      "shares": 50000.0,
+      "put_call": null,
+      "weight": 0.030595628758811187
+    },
+    {
+      "issuer": "Oceanagold Corp",
+      "title": "Common Stock",
+      "cusip": "675222400",
+      "ticker": null,
+      "value": 1621565.0,
+      "shares": 58666.0,
+      "put_call": null,
+      "weight": 0.029779592285883352
+    },
+    {
+      "issuer": "Centerra Gold Inc",
+      "title": "Common Stock",
+      "cusip": "152006102",
+      "ticker": null,
+      "value": 1523223.0,
+      "shares": 69600.0,
+      "put_call": null,
+      "weight": 0.027973568682402552
+    },
+    {
+      "issuer": "Fortuna Silver Mines Inc",
+      "title": "Common Stock",
+      "cusip": "349942102",
+      "ticker": null,
+      "value": 1415116.0,
+      "shares": 125900.0,
+      "put_call": null,
+      "weight": 0.025988213557415277
+    },
+    {
+      "issuer": "Eldorado Gold Corp",
+      "title": "Common Stock",
+      "cusip": "284902509",
+      "ticker": null,
+      "value": 1294786.0,
+      "shares": 33500.0,
+      "put_call": null,
+      "weight": 0.023778386421432235
+    },
+    {
+      "issuer": "Royal Gold Inc",
+      "title": "Common Stock",
+      "cusip": "780287108",
+      "ticker": null,
+      "value": 1137520.0,
+      "shares": 4820.0,
+      "put_call": null,
+      "weight": 0.020890239871382294
+    },
+    {
+      "issuer": "Silvercorp Metals Inc",
+      "title": "Common Stock",
+      "cusip": "82835P103",
+      "ticker": null,
+      "value": 982426.0,
+      "shares": 91700.0,
+      "put_call": null,
+      "weight": 0.018041981500002306
+    },
+    {
+      "issuer": "First Majestic Silver Corp",
+      "title": "Common Stock",
+      "cusip": "32076V103",
+      "ticker": null,
+      "value": 948352.0,
+      "shares": 53400.0,
+      "put_call": null,
+      "weight": 0.017416221923575094
+    },
+    {
+      "issuer": "Hecla Mining Co",
+      "title": "Common Stock",
+      "cusip": "422704106",
+      "ticker": null,
+      "value": 887263.0,
+      "shares": 52100.0,
+      "put_call": null,
+      "weight": 0.016294339351398013
+    },
+    {
+      "issuer": "Drdgold Ltd - Sponsored ADR",
+      "title": "ADR",
+      "cusip": "26152H301",
+      "ticker": null,
+      "value": 482575.0,
+      "shares": 19900.0,
+      "put_call": null,
+      "weight": 0.008862356271478578
+    },
+    {
+      "issuer": "Phillips 66",
+      "title": "Common Stock",
+      "cusip": "718546104",
+      "ticker": null,
+      "value": 20425.0,
+      "shares": 80.0,
+      "put_call": null,
+      "weight": 0.000375099470227322
+    },
+    {
+      "issuer": "Marathon Petroleum Corporation",
+      "title": "Common Stock",
+      "cusip": "56585A102",
+      "ticker": null,
+      "value": 19771.0,
+      "shares": 50.0,
+      "put_call": null,
+      "weight": 0.0003630889412907899
+    },
+    {
+      "issuer": "VALERO ENERGY CORP",
+      "title": "Common Stock",
+      "cusip": "91913Y100",
+      "ticker": null,
+      "value": 19381.0,
+      "shares": 50.0,
+      "put_call": null,
+      "weight": 0.00035592669926441754
+    },
+    {
+      "issuer": "Chevron Corporation",
+      "title": "Common Stock",
+      "cusip": "166764100",
+      "ticker": "CVX",
+      "value": 16337.0,
+      "shares": 80.0,
+      "put_call": null,
+      "weight": 0.000300024482012424
+    },
+    {
+      "issuer": "Exxon Mobil Corporation",
+      "title": "Common Stock",
+      "cusip": "30233Q108",
+      "ticker": null,
+      "value": 16275.0,
+      "shares": 100.0,
+      "put_call": null,
+      "weight": 0.00029888586917746224
+    },
+    {
+      "issuer": "Occidental Petroleum Corp",
+      "title": "Common Stock",
+      "cusip": "674599105",
+      "ticker": "OXY",
+      "value": 13277.0,
+      "shares": 240.0,
+      "put_call": null,
+      "weight": 0.00024382842919011774
+    },
+    {
+      "issuer": "Schlumberger Ltd",
+      "title": "Common Stock",
+      "cusip": "806857108",
+      "ticker": null,
+      "value": 12667.0,
+      "shares": 260.0,
+      "put_call": null,
+      "weight": 0.00023262594807194558
+    },
+    {
+      "issuer": "EOG Resources INC",
+      "title": "Common Stock",
+      "cusip": "26875P101",
+      "ticker": null,
+      "value": 12398.0,
+      "shares": 90.0,
+      "put_call": null,
+      "weight": 0.0002276858375460631
+    },
+    {
+      "issuer": "Williams COS INC",
+      "title": "Common Stock",
+      "cusip": "969457100",
+      "ticker": null,
+      "value": 11555.0,
+      "shares": 170.0,
+      "put_call": null,
+      "weight": 0.00021220437593521204
+    },
+    {
+      "issuer": "EQT CORP",
+      "title": "Common Stock",
+      "cusip": "26884L109",
+      "ticker": null,
+      "value": 11169.0,
+      "shares": 230.0,
+      "put_call": null,
+      "weight": 0.00020511559280141786
+    },
+    {
+      "issuer": "Oneok Inc.",
+      "title": "Common Stock",
+      "cusip": "30609A109",
+      "ticker": null,
+      "value": 11085.0,
+      "shares": 130.0,
+      "put_call": null,
+      "weight": 0.0002035729560572761
+    },
+    {
+      "issuer": "Conocophillips",
+      "title": "Common Stock",
+      "cusip": "20825C104",
+      "ticker": "COP",
+      "value": 10962.0,
+      "shares": 120.0,
+      "put_call": null,
+      "weight": 0.00020131409511049713
+    },
+    {
+      "issuer": "KINDER MORGAN INC",
+      "title": "Common Stock",
+      "cusip": "49456B101",
+      "ticker": null,
+      "value": 10854.0,
+      "shares": 360.0,
+      "put_call": null,
+      "weight": 0.00019933070501088634
+    },
+    {
+      "issuer": "Devon Energy Corp.",
+      "title": "Common Stock",
+      "cusip": "25179M103",
+      "ticker": null,
+      "value": 10589.0,
+      "shares": 230.0,
+      "put_call": null,
+      "weight": 0.00019446405337758204
+    },
+    {
+      "issuer": "Halliburton Co.",
+      "title": "Common Stock",
+      "cusip": "406216101",
+      "ticker": null,
+      "value": 10494.0,
+      "shares": 330.0,
+      "put_call": null,
+      "weight": 0.0001927194046788503
+    },
+    {
+      "issuer": "Baker Hughes Inc",
+      "title": "Common Stock",
+      "cusip": "05722G100",
+      "ticker": null,
+      "value": 8784.0,
+      "shares": 160.0,
+      "put_call": null,
+      "weight": 0.00016131572810167916
+    }
+  ],
+  "history_quarters": [
+    "2026Q3"
+  ]
+}

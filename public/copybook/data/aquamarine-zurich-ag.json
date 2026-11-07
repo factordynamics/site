@@ -1,0 +1,92 @@
+{
+  "cik": "0001953324",
+  "name": "Aquamarine Zurich AG",
+  "manager": "Aquamarine Zurich AG",
+  "slug": "aquamarine-zurich-ag",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001953324-26-000003",
+  "filing_date": "2026-07-10",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1953324/000195332426000003/0001953324-26-000003-index.html",
+  "line_count": 7,
+  "position_count": 7,
+  "values_in_thousands": true,
+  "total_value": 144091000.0,
+  "holdings": [
+    {
+      "issuer": "BERKSHIRE HATHAWAY INC DEL",
+      "title": "CL B NEW",
+      "cusip": "084670702",
+      "ticker": "BRK.B",
+      "value": 48838000.0,
+      "shares": 97600.0,
+      "put_call": null,
+      "weight": 0.3389385874204496
+    },
+    {
+      "issuer": "BERKSHIRE HATHAWAY INC DEL",
+      "title": "CL A",
+      "cusip": "084670108",
+      "ticker": "BRK.A",
+      "value": 22466000.0,
+      "shares": 30.0,
+      "put_call": null,
+      "weight": 0.15591535904393752
+    },
+    {
+      "issuer": "AMERICAN EXPRESS CO",
+      "title": "COM",
+      "cusip": "025816109",
+      "ticker": "AXP",
+      "value": 21986000.0,
+      "shares": 65000.0,
+      "put_call": null,
+      "weight": 0.1525841308617471
+    },
+    {
+      "issuer": "MASTERCARD INCORPORATED",
+      "title": "CL A",
+      "cusip": "57636Q104",
+      "ticker": "MA",
+      "value": 20544000.0,
+      "shares": 40000.0,
+      "put_call": null,
+      "weight": 0.14257656619775003
+    },
+    {
+      "issuer": "MOODYS CORP",
+      "title": "COM",
+      "cusip": "615369105",
+      "ticker": "MCO",
+      "value": 12229000.0,
+      "shares": 27000.0,
+      "put_call": null,
+      "weight": 0.08486997800001388
+    },
+    {
+      "issuer": "FERRARI N V",
+      "title": "COM",
+      "cusip": "N3167Y103",
+      "ticker": "RACE",
+      "value": 11114000.0,
+      "shares": 30000.0,
+      "put_call": null,
+      "weight": 0.07713181253513404
+    },
+    {
+      "issuer": "DAILY JOURNAL CORP",
+      "title": "COM",
+      "cusip": "233912104",
+      "ticker": null,
+      "value": 6914000.0,
+      "shares": 11500.0,
+      "put_call": null,
+      "weight": 0.04798356594096786
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

@@ -1,0 +1,192 @@
+{
+  "cik": "0002104187",
+  "name": "Aquamarine Financial (Cayman) Ltd",
+  "manager": "Aquamarine Financial (Cayman) Ltd",
+  "slug": "aquamarine-financial-cayman-ltd",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001493152-26-037413",
+  "filing_date": "2026-08-12",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/2104187/000149315226037413/0001493152-26-037413-index.html",
+  "line_count": 17,
+  "position_count": 17,
+  "values_in_thousands": false,
+  "total_value": 1811322571.0,
+  "holdings": [
+    {
+      "issuer": "BANCO BRADESCO S A",
+      "title": "SP ADR PFD NEW",
+      "cusip": "059460303",
+      "ticker": "BBD",
+      "value": 649020291.0,
+      "shares": 186948134.0,
+      "put_call": null,
+      "weight": 0.35831292636169554
+    },
+    {
+      "issuer": "YPF SOCIEDAD ANONIMA",
+      "title": "SPON ADR CL D",
+      "cusip": "984245100",
+      "ticker": "YPF",
+      "value": 565871786.0,
+      "shares": 12444948.0,
+      "put_call": null,
+      "weight": 0.3124080685902301
+    },
+    {
+      "issuer": "GRUPO FINANCIERO GALICIA S.A",
+      "title": "SPONSORED ADR",
+      "cusip": "399909100",
+      "ticker": "GGAL",
+      "value": 175883667.0,
+      "shares": 3515564.0,
+      "put_call": null,
+      "weight": 0.09710234378788625
+    },
+    {
+      "issuer": "NU HLDGS LTD",
+      "title": "ORD SHS CL A",
+      "cusip": "G6683N103",
+      "ticker": null,
+      "value": 119941217.0,
+      "shares": 8977636.0,
+      "put_call": null,
+      "weight": 0.06621748048652787
+    },
+    {
+      "issuer": "BANCO MACRO S A",
+      "title": "SPON ADR B",
+      "cusip": "05961W105",
+      "ticker": null,
+      "value": 78006149.0,
+      "shares": 842490.0,
+      "put_call": null,
+      "weight": 0.0430658515765826
+    },
+    {
+      "issuer": "GERDAU SA",
+      "title": "SPON ADR REP PFD",
+      "cusip": "373737105",
+      "ticker": null,
+      "value": 67573731.0,
+      "shares": 16726171.0,
+      "put_call": null,
+      "weight": 0.03730629324775305
+    },
+    {
+      "issuer": "BANCO SANTANDER BRASIL S A",
+      "title": "ADS REP 1 UNIT",
+      "cusip": "05967A107",
+      "ticker": null,
+      "value": 54569466.0,
+      "shares": 10394184.0,
+      "put_call": null,
+      "weight": 0.03012686247810247
+    },
+    {
+      "issuer": "BANCO BBVA ARGENTINA S A",
+      "title": "SPONSORED ADS",
+      "cusip": "058934100",
+      "ticker": null,
+      "value": 33358140.0,
+      "shares": 1701078.0,
+      "put_call": null,
+      "weight": 0.01841645465809193
+    },
+    {
+      "issuer": "PAGAYA TECHNOLOGIES LTD",
+      "title": "CL A NEW",
+      "cusip": "M7S64L123",
+      "ticker": null,
+      "value": 32324564.0,
+      "shares": 1771209.0,
+      "put_call": null,
+      "weight": 0.017845835146941366
+    },
+    {
+      "issuer": "ORAMED PHARMACEUTICALS INC",
+      "title": "COM NEW",
+      "cusip": "68403P203",
+      "ticker": null,
+      "value": 12083562.0,
+      "shares": 2512175.0,
+      "put_call": null,
+      "weight": 0.006671126498097395
+    },
+    {
+      "issuer": "ALPHA TAU MEDICAL LTD",
+      "title": "ORDINARY SHARES",
+      "cusip": "M0740A108",
+      "ticker": null,
+      "value": 9076483.0,
+      "shares": 721501.0,
+      "put_call": null,
+      "weight": 0.005010969964885399
+    },
+    {
+      "issuer": "COSAN S A",
+      "title": "ADS",
+      "cusip": "22113B103",
+      "ticker": null,
+      "value": 6039084.0,
+      "shares": 2096904.0,
+      "put_call": null,
+      "weight": 0.003334074281791744
+    },
+    {
+      "issuer": "INNOVIZ TECHNOLOGIES LTD",
+      "title": "SHS",
+      "cusip": "M5R635108",
+      "ticker": null,
+      "value": 4436996.0,
+      "shares": 5828949.0,
+      "put_call": null,
+      "weight": 0.002449589085366728
+    },
+    {
+      "issuer": "PULSENMORE LTD",
+      "title": "ORD SHS",
+      "cusip": "M8S7C5117",
+      "ticker": null,
+      "value": 1951897.0,
+      "shares": 338541.0,
+      "put_call": null,
+      "weight": 0.0010776087215224129
+    },
+    {
+      "issuer": "TRANSPORTADORA DE GAS DEL SU",
+      "title": "SPONSORED ADS B",
+      "cusip": "893870204",
+      "ticker": null,
+      "value": 882862.0,
+      "shares": 29696.0,
+      "put_call": null,
+      "weight": 0.00048741290708511796
+    },
+    {
+      "issuer": "CENTRAL PUERTO S A",
+      "title": "SPONSORED ADR",
+      "cusip": "155038201",
+      "ticker": null,
+      "value": 287006.0,
+      "shares": 19314.0,
+      "put_call": null,
+      "weight": 0.00015845107028150646
+    },
+    {
+      "issuer": "VALENS SEMICONDUCTOR LTD",
+      "title": "*W EXP 09/30/202",
+      "cusip": "M9607U107",
+      "ticker": null,
+      "value": 15670.0,
+      "shares": 559653.0,
+      "put_call": null,
+      "weight": 8.651137158495664e-06
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

@@ -1,0 +1,302 @@
+{
+  "cik": "0001569049",
+  "name": "LIGHT STREET CAPITAL MANAGEMENT, LLC",
+  "manager": "LIGHT STREET CAPITAL MANAGEMENT, LLC",
+  "slug": "light-street-capital-management-llc",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0000935836-26-000422",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1569049/000093583626000422/0000935836-26-000422-index.html",
+  "line_count": 28,
+  "position_count": 28,
+  "values_in_thousands": false,
+  "total_value": 902839902.0,
+  "holdings": [
+    {
+      "issuer": "TAIWAN SEMICONDUCTOR MANUFAC",
+      "title": "SPONSORED ADS",
+      "cusip": "874039100",
+      "ticker": "TSM",
+      "value": 107906464.0,
+      "shares": 225949.0,
+      "put_call": null,
+      "weight": 0.11951893548453289
+    },
+    {
+      "issuer": "ADVANCED MICRO DEVICES INC",
+      "title": "COM",
+      "cusip": "007903107",
+      "ticker": "AMD",
+      "value": 63609645.0,
+      "shares": 109500.0,
+      "put_call": null,
+      "weight": 0.07045506612976439
+    },
+    {
+      "issuer": "ASTERA LABS INC",
+      "title": "COM",
+      "cusip": "04626A103",
+      "ticker": null,
+      "value": 60739765.0,
+      "shares": 125750.0,
+      "put_call": null,
+      "weight": 0.06727634087222698
+    },
+    {
+      "issuer": "GITLAB INC",
+      "title": "CLASS A COM",
+      "cusip": "37637K108",
+      "ticker": null,
+      "value": 59380850.0,
+      "shares": 1945000.0,
+      "put_call": null,
+      "weight": 0.06577118475651955
+    },
+    {
+      "issuer": "BROADCOM INC",
+      "title": "COM",
+      "cusip": "11135F101",
+      "ticker": "AVGO",
+      "value": 57890188.0,
+      "shares": 153250.0,
+      "put_call": null,
+      "weight": 0.06412010354411651
+    },
+    {
+      "issuer": "TAIWAN SEMICONDUCTOR MANUFAC",
+      "title": "SPONSORED ADS",
+      "cusip": "874039100",
+      "ticker": "TSM",
+      "value": 52150644.0,
+      "shares": 109200.0,
+      "put_call": "PUT",
+      "weight": 0.057762892274116615
+    },
+    {
+      "issuer": "AMKOR TECHNOLOGY INC",
+      "title": "COM",
+      "cusip": "031652100",
+      "ticker": null,
+      "value": 51460598.0,
+      "shares": 596783.0,
+      "put_call": null,
+      "weight": 0.05699858622331914
+    },
+    {
+      "issuer": "JFROG LTD",
+      "title": "ORD SHS",
+      "cusip": "M6191J100",
+      "ticker": null,
+      "value": 46757760.0,
+      "shares": 514500.0,
+      "put_call": null,
+      "weight": 0.05178964719705089
+    },
+    {
+      "issuer": "MKS INC.",
+      "title": "COM",
+      "cusip": "55306N104",
+      "ticker": null,
+      "value": 46170240.0,
+      "shares": 103800.0,
+      "put_call": null,
+      "weight": 0.05113890059325269
+    },
+    {
+      "issuer": "CHIME FINL INC",
+      "title": "COM SHS CL A",
+      "cusip": "16935C109",
+      "ticker": null,
+      "value": 45037343.0,
+      "shares": 2199089.0,
+      "put_call": null,
+      "weight": 0.04988408565043684
+    },
+    {
+      "issuer": "COUPANG INC",
+      "title": "CL A",
+      "cusip": "22266T109",
+      "ticker": null,
+      "value": 35174250.0,
+      "shares": 2025000.0,
+      "put_call": null,
+      "weight": 0.0389595651699497
+    },
+    {
+      "issuer": "TOAST INC",
+      "title": "CL A",
+      "cusip": "888787108",
+      "ticker": null,
+      "value": 32479850.0,
+      "shares": 1167500.0,
+      "put_call": null,
+      "weight": 0.035975204383467754
+    },
+    {
+      "issuer": "REDDIT INC",
+      "title": "CL A",
+      "cusip": "75734B100",
+      "ticker": null,
+      "value": 31678350.0,
+      "shares": 182500.0,
+      "put_call": null,
+      "weight": 0.03508745008924074
+    },
+    {
+      "issuer": "NVIDIA CORPORATION",
+      "title": "COM",
+      "cusip": "67066G104",
+      "ticker": "NVDA",
+      "value": 27356305.0,
+      "shares": 136720.0,
+      "put_call": null,
+      "weight": 0.03030028351582538
+    },
+    {
+      "issuer": "BLOOM ENERGY CORP",
+      "title": "COM CL A",
+      "cusip": "093712107",
+      "ticker": null,
+      "value": 25477351.0,
+      "shares": 84167.0,
+      "put_call": null,
+      "weight": 0.028219123837528396
+    },
+    {
+      "issuer": "ASML HLDG NV",
+      "title": "N Y REGISTRY SHS",
+      "cusip": "N07059210",
+      "ticker": "ASML",
+      "value": 21798294.0,
+      "shares": 10957.0,
+      "put_call": null,
+      "weight": 0.02414414111705931
+    },
+    {
+      "issuer": "MERCADOLIBRE INC",
+      "title": "COM",
+      "cusip": "58733R102",
+      "ticker": null,
+      "value": 21641723.0,
+      "shares": 12750.0,
+      "put_call": null,
+      "weight": 0.023970720558604643
+    },
+    {
+      "issuer": "CELLEBRITE DI LTD",
+      "title": "ORDINARY SHARES",
+      "cusip": "M2197Q107",
+      "ticker": null,
+      "value": 19166223.0,
+      "shares": 1312755.0,
+      "put_call": null,
+      "weight": 0.021228816933702606
+    },
+    {
+      "issuer": "SNOWFLAKE INC",
+      "title": "COM SHS",
+      "cusip": "833445109",
+      "ticker": null,
+      "value": 17815000.0,
+      "shares": 70000.0,
+      "put_call": null,
+      "weight": 0.01973218060094114
+    },
+    {
+      "issuer": "MONGODB INC",
+      "title": "CL A",
+      "cusip": "60937P106",
+      "ticker": null,
+      "value": 16795000.0,
+      "shares": 50000.0,
+      "put_call": null,
+      "weight": 0.018602412191569266
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 15241831.0,
+      "shares": 42650.0,
+      "put_call": null,
+      "weight": 0.016882097220377396
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 12155340.0,
+      "shares": 51000.0,
+      "put_call": null,
+      "weight": 0.01346345013448464
+    },
+    {
+      "issuer": "DATADOG INC",
+      "title": "CL A COM",
+      "cusip": "23804L103",
+      "ticker": null,
+      "value": 10414400.0,
+      "shares": 40000.0,
+      "put_call": null,
+      "weight": 0.011535156982904374
+    },
+    {
+      "issuer": "ROUNDHILL ETF TRUST",
+      "title": "MEMORY ETF",
+      "cusip": "77926X320",
+      "ticker": null,
+      "value": 8862000.0,
+      "shares": 120000.0,
+      "put_call": null,
+      "weight": 0.009815693768483883
+    },
+    {
+      "issuer": "NXP SEMICONDUCTORS N V",
+      "title": "COM",
+      "cusip": "N6596X109",
+      "ticker": null,
+      "value": 6464533.0,
+      "shares": 23003.0,
+      "put_call": null,
+      "weight": 0.007160220749747058
+    },
+    {
+      "issuer": "ANALOG DEVICES INC",
+      "title": "COM",
+      "cusip": "032654105",
+      "ticker": null,
+      "value": 4179420.0,
+      "shares": 10523.0,
+      "put_call": null,
+      "weight": 0.0046291928289186315
+    },
+    {
+      "issuer": "QUANTINUUM INC",
+      "title": "CL A COM",
+      "cusip": "74768A104",
+      "ticker": null,
+      "value": 2880681.0,
+      "shares": 35242.0,
+      "put_call": null,
+      "weight": 0.003190688618899788
+    },
+    {
+      "issuer": "GDS HLDGS LTD",
+      "title": "SPONSORED ADS",
+      "cusip": "36165L108",
+      "ticker": null,
+      "value": 2155854.0,
+      "shares": 71790.0,
+      "put_call": null,
+      "weight": 0.002387858572958819
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}

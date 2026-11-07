@@ -1,0 +1,1144 @@
+{
+  "slug": "davis-selected-advisers",
+  "manager": "DAVIS SELECTED ADVISERS",
+  "cik": "0001036325",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001036325-26-000020",
+      "filing_date": "2026-08-11",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1036325/000103632526000020/0001036325-26-000020-index.html",
+      "line_count": 112,
+      "position_count": 112,
+      "values_in_thousands": false,
+      "total_value": 23289545492.0,
+      "holdings": [
+        {
+          "issuer": "Capital One Financial Corp.",
+          "title": "Common Stock",
+          "cusip": "14040H105",
+          "ticker": "COF",
+          "value": 1659420488.0,
+          "shares": 8270946.0,
+          "put_call": null,
+          "weight": 0.07125173346856485
+        },
+        {
+          "issuer": "U.S. Bancorp",
+          "title": "Common Stock",
+          "cusip": "902973304",
+          "ticker": null,
+          "value": 1295909823.0,
+          "shares": 21453510.0,
+          "put_call": null,
+          "weight": 0.05564341405654084
+        },
+        {
+          "issuer": "CVS Health Corporation",
+          "title": "Common Stock",
+          "cusip": "126650100",
+          "ticker": null,
+          "value": 1227594458.0,
+          "shares": 11865916.0,
+          "put_call": null,
+          "weight": 0.05271010799337758
+        },
+        {
+          "issuer": "Viatris Inc.",
+          "title": "Common Stock",
+          "cusip": "92556V106",
+          "ticker": null,
+          "value": 1194789797.0,
+          "shares": 75232254.0,
+          "put_call": null,
+          "weight": 0.05130155062108929
+        },
+        {
+          "issuer": "MGM Resorts International",
+          "title": "Common Stock",
+          "cusip": "552953101",
+          "ticker": null,
+          "value": 1142790561.0,
+          "shares": 23903317.0,
+          "put_call": null,
+          "weight": 0.04906882194813766
+        },
+        {
+          "issuer": "Alphabet Inc., Class A",
+          "title": "Common Stock",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 1049690448.0,
+          "shares": 2937160.0,
+          "put_call": null,
+          "weight": 0.04507131529726806
+        },
+        {
+          "issuer": "Devon Energy Corp.",
+          "title": "Common Stock",
+          "cusip": "25179M103",
+          "ticker": null,
+          "value": 1045194009.0,
+          "shares": 25297991.0,
+          "put_call": null,
+          "weight": 0.04487824845525758
+        },
+        {
+          "issuer": "Amazon.com, Inc.",
+          "title": "Common Stock",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 1019230487.0,
+          "shares": 4276176.0,
+          "put_call": null,
+          "weight": 0.04376343399874882
+        },
+        {
+          "issuer": "Meta Platforms, Inc., Class A",
+          "title": "Common Stock",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 928729727.0,
+          "shares": 1648172.0,
+          "put_call": null,
+          "weight": 0.039877537641042425
+        },
+        {
+          "issuer": "Markel Group, Inc",
+          "title": "Common Stock",
+          "cusip": "570535104",
+          "ticker": null,
+          "value": 794400127.0,
+          "shares": 406759.0,
+          "put_call": null,
+          "weight": 0.034109730791993254
+        },
+        {
+          "issuer": "Texas Instruments, Inc.",
+          "title": "Common Stock",
+          "cusip": "882508104",
+          "ticker": null,
+          "value": 726548835.0,
+          "shares": 2437486.0,
+          "put_call": null,
+          "weight": 0.03119635096569707
+        },
+        {
+          "issuer": "Tyson Foods Inc",
+          "title": "Common Stock",
+          "cusip": "902494103",
+          "ticker": null,
+          "value": 724483355.0,
+          "shares": 12653717.0,
+          "put_call": null,
+          "weight": 0.031107663962307092
+        },
+        {
+          "issuer": "Wells Fargo & Co.",
+          "title": "Common Stock",
+          "cusip": "949746101",
+          "ticker": null,
+          "value": 661900943.0,
+          "shares": 8008728.0,
+          "put_call": null,
+          "weight": 0.02842051783395104
+        },
+        {
+          "issuer": "Berkshire Hathaway Inc., Class A",
+          "title": "Common Stock",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 650010400.0,
+          "shares": 868.0,
+          "put_call": null,
+          "weight": 0.027909965019423832
+        },
+        {
+          "issuer": "Cigna Group",
+          "title": "Common Stock",
+          "cusip": "125523100",
+          "ticker": null,
+          "value": 621243564.0,
+          "shares": 2253424.0,
+          "put_call": null,
+          "weight": 0.026674782649296368
+        },
+        {
+          "issuer": "JBS N.V., Class A",
+          "title": "Common Stock",
+          "cusip": "N4732M103",
+          "ticker": null,
+          "value": 592692397.0,
+          "shares": 50016236.0,
+          "put_call": null,
+          "weight": 0.02544886061445857
+        },
+        {
+          "issuer": "UnitedHealth Group Inc.",
+          "title": "Common Stock",
+          "cusip": "91324P102",
+          "ticker": "UNH",
+          "value": 529839298.0,
+          "shares": 1274650.0,
+          "put_call": null,
+          "weight": 0.022750091803294348
+        },
+        {
+          "issuer": "Teck Resources Ltd., Class B",
+          "title": "Common Stock",
+          "cusip": "878742204",
+          "ticker": null,
+          "value": 497288923.0,
+          "shares": 8363497.0,
+          "put_call": null,
+          "weight": 0.021352452892256728
+        },
+        {
+          "issuer": "Solventum Corp.",
+          "title": "Common Stock",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 486686122.0,
+          "shares": 6307729.0,
+          "put_call": null,
+          "weight": 0.020897192784083207
+        },
+        {
+          "issuer": "LyondellBasell Industries N.V.",
+          "title": "Common Stock",
+          "cusip": "N53745100",
+          "ticker": "LYB",
+          "value": 457993661.0,
+          "shares": 8698852.0,
+          "put_call": null,
+          "weight": 0.019665203906934194
+        },
+        {
+          "issuer": "Chubb Ltd.",
+          "title": "Common Stock",
+          "cusip": "H1467J104",
+          "ticker": "CB",
+          "value": 391231100.0,
+          "shares": 1148090.0,
+          "put_call": null,
+          "weight": 0.016798571708253756
+        },
+        {
+          "issuer": "Berkshire Hathaway Inc., Class B",
+          "title": "Common Stock",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 369514455.0,
+          "shares": 738433.0,
+          "put_call": null,
+          "weight": 0.015866108470297492
+        },
+        {
+          "issuer": "Trip.com Group Ltd., ADR",
+          "title": "ADR",
+          "cusip": "89677Q107",
+          "ticker": null,
+          "value": 349053040.0,
+          "shares": 8761371.0,
+          "put_call": null,
+          "weight": 0.014987541947518912
+        },
+        {
+          "issuer": "Owens Corning",
+          "title": "Common Stock",
+          "cusip": "690742101",
+          "ticker": null,
+          "value": 330714230.0,
+          "shares": 2081213.0,
+          "put_call": null,
+          "weight": 0.014200115245426363
+        },
+        {
+          "issuer": "Quest Diagnostics Inc.",
+          "title": "Common Stock",
+          "cusip": "74834L100",
+          "ticker": null,
+          "value": 329781509.0,
+          "shares": 1555612.0,
+          "put_call": null,
+          "weight": 0.014160066331619934
+        },
+        {
+          "issuer": "Pinterest, Inc., Class A",
+          "title": "Common Stock",
+          "cusip": "72352L106",
+          "ticker": null,
+          "value": 264483320.0,
+          "shares": 12574721.0,
+          "put_call": null,
+          "weight": 0.011356310928903721
+        },
+        {
+          "issuer": "AGCO Corporation",
+          "title": "Common Stock",
+          "cusip": "001084102",
+          "ticker": null,
+          "value": 246362363.0,
+          "shares": 2058488.0,
+          "put_call": null,
+          "weight": 0.010578238338082892
+        },
+        {
+          "issuer": "Full Truck Alliance Co. Ltd., ADR",
+          "title": "ADR",
+          "cusip": "35969L108",
+          "ticker": null,
+          "value": 224429344.0,
+          "shares": 27639082.0,
+          "put_call": null,
+          "weight": 0.00963648449374385
+        },
+        {
+          "issuer": "Restaurant Brands International, Inc.",
+          "title": "Common Stock",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 203046140.0,
+          "shares": 2800345.0,
+          "put_call": null,
+          "weight": 0.008718338452321738
+        },
+        {
+          "issuer": "Alphabet Inc., Class C",
+          "title": "Common Stock",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 199394651.0,
+          "shares": 564274.0,
+          "put_call": null,
+          "weight": 0.008561551837432483
+        },
+        {
+          "issuer": "ConocoPhillips",
+          "title": "Common Stock",
+          "cusip": "20825C104",
+          "ticker": "COP",
+          "value": 195190301.0,
+          "shares": 1877583.0,
+          "put_call": null,
+          "weight": 0.008381026631328989
+        },
+        {
+          "issuer": "Sea Ltd., Class A, ADR",
+          "title": "ADR",
+          "cusip": "81141R100",
+          "ticker": "XYZ",
+          "value": 192792171.0,
+          "shares": 2011812.0,
+          "put_call": null,
+          "weight": 0.008278056395141951
+        },
+        {
+          "issuer": "Davis Select U.S. Equity ETF",
+          "title": "ETF",
+          "cusip": "23908L207",
+          "ticker": null,
+          "value": 191053853.0,
+          "shares": 3400745.0,
+          "put_call": null,
+          "weight": 0.008203416982337734
+        },
+        {
+          "issuer": "AppLovin Corp., Class A",
+          "title": "Common Stock",
+          "cusip": "03831W108",
+          "ticker": null,
+          "value": 162719473.0,
+          "shares": 315539.0,
+          "put_call": null,
+          "weight": 0.006986803287161376
+        },
+        {
+          "issuer": "JPMorgan Chase & Co.",
+          "title": "Common Stock",
+          "cusip": "46625H100",
+          "ticker": "JPM",
+          "value": 155936320.0,
+          "shares": 476389.0,
+          "put_call": null,
+          "weight": 0.006695550158055442
+        },
+        {
+          "issuer": "Fifth Third Bancorp",
+          "title": "Common Stock",
+          "cusip": "316773100",
+          "ticker": null,
+          "value": 151307396.0,
+          "shares": 2684183.0,
+          "put_call": null,
+          "weight": 0.006496794712115544
+        },
+        {
+          "issuer": "Wesco International, Inc.",
+          "title": "Common Stock",
+          "cusip": "95082P105",
+          "ticker": null,
+          "value": 125503133.0,
+          "shares": 363915.0,
+          "put_call": null,
+          "weight": 0.005388818474070718
+        },
+        {
+          "issuer": "PNC Financial Services Group, Inc.",
+          "title": "Common Stock",
+          "cusip": "693475105",
+          "ticker": null,
+          "value": 122141371.0,
+          "shares": 496066.0,
+          "put_call": null,
+          "weight": 0.005244472076192117
+        },
+        {
+          "issuer": "Davis Select International ETF",
+          "title": "ETF",
+          "cusip": "23908L405",
+          "ticker": null,
+          "value": 111598809.0,
+          "shares": 3915748.0,
+          "put_call": null,
+          "weight": 0.00479179849337697
+        },
+        {
+          "issuer": "People Inc.",
+          "title": "Common Stock",
+          "cusip": "44891N208",
+          "ticker": null,
+          "value": 110507409.0,
+          "shares": 2394024.0,
+          "put_call": null,
+          "weight": 0.004744936264984625
+        },
+        {
+          "issuer": "Davis Select Financial ETF",
+          "title": "ETF",
+          "cusip": "23908L108",
+          "ticker": null,
+          "value": 105180322.0,
+          "shares": 2130666.0,
+          "put_call": null,
+          "weight": 0.004516203291134627
+        },
+        {
+          "issuer": "Davis Select Worldwide ETF",
+          "title": "ETF",
+          "cusip": "23908L306",
+          "ticker": null,
+          "value": 89501467.0,
+          "shares": 1935585.0,
+          "put_call": null,
+          "weight": 0.0038429889939562757
+        },
+        {
+          "issuer": "NetEase Inc. - ADR",
+          "title": "ADR",
+          "cusip": "64110W102",
+          "ticker": "NTES",
+          "value": 78544448.0,
+          "shares": 612955.0,
+          "put_call": null,
+          "weight": 0.0033725195722252355
+        },
+        {
+          "issuer": "RenaissanceRe Holdings Ltd",
+          "title": "Common Stock",
+          "cusip": "G7496G103",
+          "ticker": null,
+          "value": 74321923.0,
+          "shares": 234528.0,
+          "put_call": null,
+          "weight": 0.00319121397304768
+        },
+        {
+          "issuer": "Applied Materials, Inc.",
+          "title": "Common Stock",
+          "cusip": "038222105",
+          "ticker": "AMAT",
+          "value": 74073702.0,
+          "shares": 102521.0,
+          "put_call": null,
+          "weight": 0.0031805559290731737
+        },
+        {
+          "issuer": "American Express Co.",
+          "title": "Common Stock",
+          "cusip": "025816109",
+          "ticker": "AXP",
+          "value": 70971938.0,
+          "shares": 209821.0,
+          "put_call": null,
+          "weight": 0.003047373252705983
+        },
+        {
+          "issuer": "Rocket Companies, Inc., Class A",
+          "title": "Common Stock",
+          "cusip": "77311W101",
+          "ticker": "RKT",
+          "value": 70294581.0,
+          "shares": 4463148.0,
+          "put_call": null,
+          "weight": 0.003018289087013154
+        },
+        {
+          "issuer": "Loews Corp.",
+          "title": "Common Stock",
+          "cusip": "540424108",
+          "ticker": null,
+          "value": 61723337.0,
+          "shares": 545211.0,
+          "put_call": null,
+          "weight": 0.0026502594059296725
+        },
+        {
+          "issuer": "Bank of N.T. Butterfield & Son Limited",
+          "title": "Common Stock",
+          "cusip": "G0772R208",
+          "ticker": null,
+          "value": 60222331.0,
+          "shares": 1012140.0,
+          "put_call": null,
+          "weight": 0.002585809629504641
+        },
+        {
+          "issuer": "Bank of America Corp.",
+          "title": "Common Stock",
+          "cusip": "060505104",
+          "ticker": "BAC",
+          "value": 56568376.0,
+          "shares": 992776.0,
+          "put_call": null,
+          "weight": 0.002428917130196093
+        },
+        {
+          "issuer": "Bank of New York Mellon Corp.",
+          "title": "Common Stock",
+          "cusip": "064058100",
+          "ticker": null,
+          "value": 52992003.0,
+          "shares": 366448.0,
+          "put_call": null,
+          "weight": 0.0022753558251363405
+        },
+        {
+          "issuer": "Chime Financial, Inc.",
+          "title": "Common Stock",
+          "cusip": "16935C109",
+          "ticker": null,
+          "value": 47754772.0,
+          "shares": 2331776.0,
+          "put_call": null,
+          "weight": 0.002050481063119237
+        },
+        {
+          "issuer": "Everest Group, Ltd.",
+          "title": "Common Stock",
+          "cusip": "G3223R108",
+          "ticker": null,
+          "value": 45162088.0,
+          "shares": 126423.0,
+          "put_call": null,
+          "weight": 0.0019391571216155015
+        },
+        {
+          "issuer": "Vale S.A., ADR",
+          "title": "ADR",
+          "cusip": "91912E105",
+          "ticker": null,
+          "value": 44064944.0,
+          "shares": 2929850.0,
+          "put_call": null,
+          "weight": 0.001892048258955349
+        },
+        {
+          "issuer": "Microsoft Corp.",
+          "title": "Common Stock",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 34704890.0,
+          "shares": 92973.0,
+          "put_call": null,
+          "weight": 0.001490148874391782
+        },
+        {
+          "issuer": "NVIDIA Corp.",
+          "title": "Common Stock",
+          "cusip": "67066G104",
+          "ticker": "NVDA",
+          "value": 30950161.0,
+          "shares": 154727.0,
+          "put_call": null,
+          "weight": 0.0013289293692155322
+        },
+        {
+          "issuer": "KE Holdings Inc., Class A, ADR",
+          "title": "ADR",
+          "cusip": "482497104",
+          "ticker": null,
+          "value": 26891862.0,
+          "shares": 1850782.0,
+          "put_call": null,
+          "weight": 0.001154675260160719
+        },
+        {
+          "issuer": "Charles Schwab Corp.",
+          "title": "Common Stock",
+          "cusip": "808513105",
+          "ticker": "SCHW",
+          "value": 26746397.0,
+          "shares": 289871.0,
+          "put_call": null,
+          "weight": 0.0011484293246163792
+        },
+        {
+          "issuer": "Fiserv, Inc.",
+          "title": "Common Stock",
+          "cusip": "337738108",
+          "ticker": null,
+          "value": 26479103.0,
+          "shares": 539839.0,
+          "put_call": null,
+          "weight": 0.001136952329494606
+        },
+        {
+          "issuer": "State Street Corp.",
+          "title": "Common Stock",
+          "cusip": "857477103",
+          "ticker": null,
+          "value": 25095034.0,
+          "shares": 147966.0,
+          "put_call": null,
+          "weight": 0.0010775235613172524
+        },
+        {
+          "issuer": "Prologis, Inc.",
+          "title": "Common Stock",
+          "cusip": "74340W103",
+          "ticker": null,
+          "value": 24188981.0,
+          "shares": 178556.0,
+          "put_call": null,
+          "weight": 0.0010386197106469492
+        },
+        {
+          "issuer": "Johnson Controls International plc",
+          "title": "Common Stock",
+          "cusip": "G51502105",
+          "ticker": null,
+          "value": 20659045.0,
+          "shares": 141422.0,
+          "put_call": null,
+          "weight": 0.0008870523045242088
+        },
+        {
+          "issuer": "Equinix, Inc.",
+          "title": "Common Stock",
+          "cusip": "29444U700",
+          "ticker": null,
+          "value": 20131678.0,
+          "shares": 19313.0,
+          "put_call": null,
+          "weight": 0.0008644083675619718
+        },
+        {
+          "issuer": "Cousins Properties, Inc.",
+          "title": "Common Stock",
+          "cusip": "222795502",
+          "ticker": null,
+          "value": 17196678.0,
+          "shares": 573605.0,
+          "put_call": null,
+          "weight": 0.0007383861572527077
+        },
+        {
+          "issuer": "BXP, Inc.",
+          "title": "Common Stock",
+          "cusip": "101121101",
+          "ticker": null,
+          "value": 15387236.0,
+          "shares": 232050.0,
+          "put_call": null,
+          "weight": 0.0006606928420000958
+        },
+        {
+          "issuer": "Brixmor Property Group, Inc.",
+          "title": "Common Stock",
+          "cusip": "11120U105",
+          "ticker": null,
+          "value": 15044540.0,
+          "shares": 477150.0,
+          "put_call": null,
+          "weight": 0.0006459782568606942
+        },
+        {
+          "issuer": "Adobe Inc.",
+          "title": "Common Stock",
+          "cusip": "00724F101",
+          "ticker": "ADBE",
+          "value": 13929293.0,
+          "shares": 67894.0,
+          "put_call": null,
+          "weight": 0.0005980920926423719
+        },
+        {
+          "issuer": "M & T Bank Corp",
+          "title": "Common Stock",
+          "cusip": "55261F104",
+          "ticker": null,
+          "value": 13821717.0,
+          "shares": 58072.0,
+          "put_call": null,
+          "weight": 0.0005934730243983415
+        },
+        {
+          "issuer": "Healthpeak Properties, Inc.",
+          "title": "Common Stock",
+          "cusip": "42250P103",
+          "ticker": null,
+          "value": 13503956.0,
+          "shares": 631026.0,
+          "put_call": null,
+          "weight": 0.0005798290913250597
+        },
+        {
+          "issuer": "Digital Realty Trust, Inc.",
+          "title": "Common Stock",
+          "cusip": "253868103",
+          "ticker": null,
+          "value": 13159622.0,
+          "shares": 73280.0,
+          "put_call": null,
+          "weight": 0.000565044174199121
+        },
+        {
+          "issuer": "Public Storage, Inc.",
+          "title": "Common Stock",
+          "cusip": "74460D109",
+          "ticker": null,
+          "value": 12013019.0,
+          "shares": 37740.0,
+          "put_call": null,
+          "weight": 0.0005158116548099444
+        },
+        {
+          "issuer": "AvalonBay Communities, Inc.",
+          "title": "Common Stock",
+          "cusip": "053484101",
+          "ticker": null,
+          "value": 11300644.0,
+          "shares": 59890.0,
+          "put_call": null,
+          "weight": 0.0004852238960129897
+        },
+        {
+          "issuer": "Synopsys, Inc.",
+          "title": "Common Stock",
+          "cusip": "871607107",
+          "ticker": null,
+          "value": 11141731.0,
+          "shares": 24962.0,
+          "put_call": null,
+          "weight": 0.0004784005340004254
+        },
+        {
+          "issuer": "Simon Property Group, Inc.",
+          "title": "Common Stock",
+          "cusip": "828806109",
+          "ticker": null,
+          "value": 11029971.0,
+          "shares": 49318.0,
+          "put_call": null,
+          "weight": 0.00047360181433290805
+        },
+        {
+          "issuer": "Oracle Corporation",
+          "title": "Common Stock",
+          "cusip": "68389X105",
+          "ticker": "ORCL",
+          "value": 10974177.0,
+          "shares": 74923.0,
+          "put_call": null,
+          "weight": 0.0004712061471431312
+        },
+        {
+          "issuer": "American Homes 4 Rent - Class A",
+          "title": "Common Stock",
+          "cusip": "02665T306",
+          "ticker": null,
+          "value": 10913777.0,
+          "shares": 325590.0,
+          "put_call": null,
+          "weight": 0.0004686127088117242
+        },
+        {
+          "issuer": "COPT Defense Properties",
+          "title": "Common Stock",
+          "cusip": "22002T108",
+          "ticker": null,
+          "value": 10651353.0,
+          "shares": 292700.0,
+          "put_call": null,
+          "weight": 0.0004573448203898508
+        },
+        {
+          "issuer": "Truist Financial Corp.",
+          "title": "Common Stock",
+          "cusip": "89832Q109",
+          "ticker": null,
+          "value": 10382040.0,
+          "shares": 208391.0,
+          "put_call": null,
+          "weight": 0.0004457811340099466
+        },
+        {
+          "issuer": "Eastgroup Properties, Inc.",
+          "title": "Common Stock",
+          "cusip": "277276101",
+          "ticker": null,
+          "value": 10375612.0,
+          "shares": 51230.0,
+          "put_call": null,
+          "weight": 0.00044550513034116707
+        },
+        {
+          "issuer": "American Tower Corp",
+          "title": "Common Stock",
+          "cusip": "03027X100",
+          "ticker": null,
+          "value": 10345803.0,
+          "shares": 63250.0,
+          "put_call": null,
+          "weight": 0.0004442251998242646
+        },
+        {
+          "issuer": "Sunstone Hotel Investors, Inc.",
+          "title": "Common Stock",
+          "cusip": "867892101",
+          "ticker": null,
+          "value": 9962874.0,
+          "shares": 870120.0,
+          "put_call": null,
+          "weight": 0.0004277831013671892
+        },
+        {
+          "issuer": "Ventas, Inc.",
+          "title": "Common Stock",
+          "cusip": "92276F100",
+          "ticker": null,
+          "value": 9894096.0,
+          "shares": 111420.0,
+          "put_call": null,
+          "weight": 0.00042482993081160124
+        },
+        {
+          "issuer": "Camden Property Trust",
+          "title": "Common Stock",
+          "cusip": "133131102",
+          "ticker": null,
+          "value": 9859879.0,
+          "shares": 86120.0,
+          "put_call": null,
+          "weight": 0.0004233607308217709
+        },
+        {
+          "issuer": "Noah Holdings Ltd., Class A, ADS",
+          "title": "ADR",
+          "cusip": "65487X102",
+          "ticker": null,
+          "value": 9635215.0,
+          "shares": 964486.0,
+          "put_call": null,
+          "weight": 0.00041371417073423407
+        },
+        {
+          "issuer": "Darling Ingredients Inc.",
+          "title": "Common Stock",
+          "cusip": "237266101",
+          "ticker": null,
+          "value": 9339954.0,
+          "shares": 170846.0,
+          "put_call": null,
+          "weight": 0.00040103633637712213
+        },
+        {
+          "issuer": "SAP SE - ADR",
+          "title": "ADR",
+          "cusip": "803054204",
+          "ticker": null,
+          "value": 9334420.0,
+          "shares": 60529.0,
+          "put_call": null,
+          "weight": 0.00040079871903066504
+        },
+        {
+          "issuer": "Regency Centers Corporation",
+          "title": "Common Stock",
+          "cusip": "758849103",
+          "ticker": null,
+          "value": 9276952.0,
+          "shares": 116340.0,
+          "put_call": null,
+          "weight": 0.0003983311740964052
+        },
+        {
+          "issuer": "Essex Property Trust, Inc.",
+          "title": "Common Stock",
+          "cusip": "297178105",
+          "ticker": null,
+          "value": 8310607.0,
+          "shares": 28501.0,
+          "put_call": null,
+          "weight": 0.0003568385223685326
+        },
+        {
+          "issuer": "JD.com Inc., Class A, ADR",
+          "title": "ADR",
+          "cusip": "47215P106",
+          "ticker": null,
+          "value": 7217974.0,
+          "shares": 283280.0,
+          "put_call": null,
+          "weight": 0.0003099233517665421
+        },
+        {
+          "issuer": "Terreno Realty Corp.",
+          "title": "Common Stock",
+          "cusip": "88146M101",
+          "ticker": null,
+          "value": 7191866.0,
+          "shares": 111037.0,
+          "put_call": null,
+          "weight": 0.0003088023337540193
+        },
+        {
+          "issuer": "SBA Communications Corp-CL A",
+          "title": "Common Stock",
+          "cusip": "78410G104",
+          "ticker": null,
+          "value": 7181922.0,
+          "shares": 40700.0,
+          "put_call": null,
+          "weight": 0.00030837536105919296
+        },
+        {
+          "issuer": "Rexford Industrial Realty, Inc.",
+          "title": "Common Stock",
+          "cusip": "76169C100",
+          "ticker": null,
+          "value": 6430660.0,
+          "shares": 191960.0,
+          "put_call": null,
+          "weight": 0.0002761178831166518
+        },
+        {
+          "issuer": "Equity Residential",
+          "title": "Common Stock",
+          "cusip": "29476L107",
+          "ticker": null,
+          "value": 6239710.0,
+          "shares": 91855.0,
+          "put_call": null,
+          "weight": 0.00026791892534542384
+        },
+        {
+          "issuer": "Community Healthcare Trust, Inc.",
+          "title": "Common Stock",
+          "cusip": "20369C106",
+          "ticker": null,
+          "value": 5902429.0,
+          "shares": 322890.0,
+          "put_call": null,
+          "weight": 0.0002534368479637138
+        },
+        {
+          "issuer": "Realty Income Corp.",
+          "title": "Common Stock",
+          "cusip": "756109104",
+          "ticker": null,
+          "value": 5744931.0,
+          "shares": 92720.0,
+          "put_call": null,
+          "weight": 0.0002466742428259664
+        },
+        {
+          "issuer": "VICI Properties, Inc.",
+          "title": "Common Stock",
+          "cusip": "925652109",
+          "ticker": null,
+          "value": 5717808.0,
+          "shares": 215360.0,
+          "put_call": null,
+          "weight": 0.00024550964302691425
+        },
+        {
+          "issuer": "ANGI Inc., Class A",
+          "title": "Common Stock",
+          "cusip": "00183L201",
+          "ticker": null,
+          "value": 5549285.0,
+          "shares": 932653.0,
+          "put_call": null,
+          "weight": 0.0002382736495182437
+        },
+        {
+          "issuer": "Sun Communities, Inc.",
+          "title": "Common Stock",
+          "cusip": "866674104",
+          "ticker": null,
+          "value": 5093777.0,
+          "shares": 42480.0,
+          "put_call": null,
+          "weight": 0.00021871517422912876
+        },
+        {
+          "issuer": "Hudson Pacific Properties, Inc.",
+          "title": "Common Stock",
+          "cusip": "444097406",
+          "ticker": null,
+          "value": 4788435.0,
+          "shares": 315236.0,
+          "put_call": null,
+          "weight": 0.00020560448470945196
+        },
+        {
+          "issuer": "Alexandria Real Estate Equities, Inc.",
+          "title": "Common Stock",
+          "cusip": "015271109",
+          "ticker": null,
+          "value": 4252681.0,
+          "shares": 80467.0,
+          "put_call": null,
+          "weight": 0.00018260042908354752
+        },
+        {
+          "issuer": "Fermi Inc.",
+          "title": "Common Stock",
+          "cusip": "314911108",
+          "ticker": null,
+          "value": 4134824.0,
+          "shares": 451400.0,
+          "put_call": null,
+          "weight": 0.00017753991813280852
+        },
+        {
+          "issuer": "Extra Space Storage, Inc.",
+          "title": "Common Stock",
+          "cusip": "30225T102",
+          "ticker": null,
+          "value": 4000836.0,
+          "shares": 27535.0,
+          "put_call": null,
+          "weight": 0.00017178677880915684
+        },
+        {
+          "issuer": "Jones Lang LaSalle, Inc.",
+          "title": "Common Stock",
+          "cusip": "48020Q107",
+          "ticker": null,
+          "value": 3810835.0,
+          "shares": 12295.0,
+          "put_call": null,
+          "weight": 0.00016362856893489092
+        },
+        {
+          "issuer": "CubeSmart",
+          "title": "Common Stock",
+          "cusip": "229663109",
+          "ticker": null,
+          "value": 3590436.0,
+          "shares": 90280.0,
+          "put_call": null,
+          "weight": 0.00015416513822621918
+        },
+        {
+          "issuer": "Douglas Emmett, Inc",
+          "title": "Common Stock",
+          "cusip": "25960P109",
+          "ticker": null,
+          "value": 3558644.0,
+          "shares": 301580.0,
+          "put_call": null,
+          "weight": 0.0001528000622091316
+        },
+        {
+          "issuer": "CBRE Group, Inc.",
+          "title": "Common Stock",
+          "cusip": "12504L109",
+          "ticker": null,
+          "value": 3419779.0,
+          "shares": 25390.0,
+          "put_call": null,
+          "weight": 0.000146837515621535
+        },
+        {
+          "issuer": "Mid-America Apartment Communities, Inc.",
+          "title": "Common Stock",
+          "cusip": "59522J103",
+          "ticker": null,
+          "value": 3042786.0,
+          "shares": 21900.0,
+          "put_call": null,
+          "weight": 0.00013065029547464557
+        },
+        {
+          "issuer": "Taiwan Semiconductor Manufacturing, ADR",
+          "title": "ADR",
+          "cusip": "874039100",
+          "ticker": "TSM",
+          "value": 1900729.0,
+          "shares": 3980.0,
+          "put_call": null,
+          "weight": 8.161297096385602e-05
+        },
+        {
+          "issuer": "Lam Research Corp.",
+          "title": "Common Stock",
+          "cusip": "512807306",
+          "ticker": "LRCX",
+          "value": 1204657.0,
+          "shares": 2780.0,
+          "put_call": null,
+          "weight": 5.172522582777761e-05
+        },
+        {
+          "issuer": "Janus Living, Inc.",
+          "title": "Common Stock",
+          "cusip": "471024109",
+          "ticker": null,
+          "value": 1005900.0,
+          "shares": 35000.0,
+          "put_call": null,
+          "weight": 4.31910532708991e-05
+        },
+        {
+          "issuer": "iShares S&P 500 Value Index Fund",
+          "title": "ETF",
+          "cusip": "464287408",
+          "ticker": null,
+          "value": 746573.0,
+          "shares": 3288.0,
+          "put_call": null,
+          "weight": 3.205614297009141e-05
+        },
+        {
+          "issuer": "Crown Holdings, Inc.",
+          "title": "Common Stock",
+          "cusip": "228368106",
+          "ticker": null,
+          "value": 611655.0,
+          "shares": 5470.0,
+          "put_call": null,
+          "weight": 2.6263071566171377e-05
+        }
+      ]
+    }
+  ]
+}

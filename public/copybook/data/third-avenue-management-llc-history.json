@@ -1,0 +1,574 @@
+{
+  "slug": "third-avenue-management-llc",
+  "manager": "THIRD AVENUE MANAGEMENT LLC",
+  "cik": "0001099281",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001099281-26-000008",
+      "filing_date": "2026-08-12",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1099281/000109928126000008/0001099281-26-000008-index.html",
+      "line_count": 55,
+      "position_count": 55,
+      "values_in_thousands": false,
+      "total_value": 625342170.0,
+      "holdings": [
+        {
+          "issuer": "Tidewater Inc",
+          "title": "COM",
+          "cusip": "88642R109",
+          "ticker": null,
+          "value": 62240482.0,
+          "shares": 934121.0,
+          "put_call": null,
+          "weight": 0.09953028115791392
+        },
+        {
+          "issuer": "Boise Cascade Co",
+          "title": "COM",
+          "cusip": "09739D100",
+          "ticker": null,
+          "value": 46739936.0,
+          "shares": 602086.0,
+          "put_call": null,
+          "weight": 0.07474297791239634
+        },
+        {
+          "issuer": "Valaris Ltd",
+          "title": "COM",
+          "cusip": "G9460G101",
+          "ticker": null,
+          "value": 37484324.0,
+          "shares": 516313.0,
+          "put_call": null,
+          "weight": 0.05994210177765558
+        },
+        {
+          "issuer": "Robert Half Inc",
+          "title": "COM",
+          "cusip": "770323103",
+          "ticker": null,
+          "value": 37095915.0,
+          "shares": 1208336.0,
+          "put_call": null,
+          "weight": 0.05932098742037499
+        },
+        {
+          "issuer": "Harley-Davidson Inc",
+          "title": "COM",
+          "cusip": "412822108",
+          "ticker": null,
+          "value": 36222325.0,
+          "shares": 1480880.0,
+          "put_call": null,
+          "weight": 0.05792400822736775
+        },
+        {
+          "issuer": "Warrior Met Coal Inc",
+          "title": "COM",
+          "cusip": "93627C101",
+          "ticker": null,
+          "value": 23162902.0,
+          "shares": 285398.0,
+          "put_call": null,
+          "weight": 0.037040364637491184
+        },
+        {
+          "issuer": "Five Point Holdings LLC",
+          "title": "COM",
+          "cusip": "33833Q106",
+          "ticker": null,
+          "value": 19478737.0,
+          "shares": 3696155.0,
+          "put_call": null,
+          "weight": 0.031148926035165676
+        },
+        {
+          "issuer": "CBRE Group Inc",
+          "title": "COM",
+          "cusip": "12504L109",
+          "ticker": null,
+          "value": 18303832.0,
+          "shares": 135896.0,
+          "put_call": null,
+          "weight": 0.02927010663617968
+        },
+        {
+          "issuer": "Brookfield Corp",
+          "title": "COM",
+          "cusip": "11271J107",
+          "ticker": "BN",
+          "value": 16820026.0,
+          "shares": 394929.0,
+          "put_call": null,
+          "weight": 0.026897316072575114
+        },
+        {
+          "issuer": "U-Haul Holding Co",
+          "title": "COM",
+          "cusip": "023586506",
+          "ticker": null,
+          "value": 16379414.0,
+          "shares": 283872.0,
+          "put_call": null,
+          "weight": 0.02619272261776301
+        },
+        {
+          "issuer": "Prologis Inc",
+          "title": "COM",
+          "cusip": "74340W103",
+          "ticker": null,
+          "value": 14200372.0,
+          "shares": 104823.0,
+          "put_call": null,
+          "weight": 0.02270816311652227
+        },
+        {
+          "issuer": "Lennar Corp",
+          "title": "COM",
+          "cusip": "526057302",
+          "ticker": "LEN.B",
+          "value": 13276161.0,
+          "shares": 149658.0,
+          "put_call": null,
+          "weight": 0.021230234640980634
+        },
+        {
+          "issuer": "PulteGroup Inc",
+          "title": "COM",
+          "cusip": "745867101",
+          "ticker": null,
+          "value": 13050180.0,
+          "shares": 95111.0,
+          "put_call": null,
+          "weight": 0.02086886288190032
+        },
+        {
+          "issuer": "Encore Capital Group Inc",
+          "title": "COM",
+          "cusip": "292554102",
+          "ticker": null,
+          "value": 12101299.0,
+          "shares": 129717.0,
+          "put_call": null,
+          "weight": 0.019351484004349172
+        },
+        {
+          "issuer": "DR Horton Inc",
+          "title": "COM",
+          "cusip": "23331A109",
+          "ticker": "DHI",
+          "value": 11272110.0,
+          "shares": 69205.0,
+          "put_call": null,
+          "weight": 0.018025507539336426
+        },
+        {
+          "issuer": "UMB Financial Corp",
+          "title": "COM",
+          "cusip": "902788108",
+          "ticker": null,
+          "value": 11170256.0,
+          "shares": 78245.0,
+          "put_call": null,
+          "weight": 0.017862630310058893
+        },
+        {
+          "issuer": "Sun Communities Inc",
+          "title": "COM",
+          "cusip": "866674104",
+          "ticker": null,
+          "value": 10966249.0,
+          "shares": 91454.0,
+          "put_call": null,
+          "weight": 0.01753639771327112
+        },
+        {
+          "issuer": "Rogers Corp",
+          "title": "COM",
+          "cusip": "775133101",
+          "ticker": null,
+          "value": 10083148.0,
+          "shares": 61584.0,
+          "put_call": null,
+          "weight": 0.016124209246915173
+        },
+        {
+          "issuer": "Jones Lang LaSalle Inc",
+          "title": "COM",
+          "cusip": "48020Q107",
+          "ticker": null,
+          "value": 9934827.0,
+          "shares": 32053.0,
+          "put_call": null,
+          "weight": 0.015887025498376353
+        },
+        {
+          "issuer": "Fidelity National Financial In",
+          "title": "COM",
+          "cusip": "31620R303",
+          "ticker": null,
+          "value": 9107492.0,
+          "shares": 193119.0,
+          "put_call": null,
+          "weight": 0.014564013810231285
+        },
+        {
+          "issuer": "Champion Homes Inc",
+          "title": "COM",
+          "cusip": "830830105",
+          "ticker": null,
+          "value": 8862757.0,
+          "shares": 100576.0,
+          "put_call": null,
+          "weight": 0.014172652069826028
+        },
+        {
+          "issuer": "FirstService Corp",
+          "title": "COM",
+          "cusip": "33767E202",
+          "ticker": null,
+          "value": 8803857.0,
+          "shares": 61951.0,
+          "put_call": null,
+          "weight": 0.014078463635356624
+        },
+        {
+          "issuer": "American Homes 4 Rent",
+          "title": "COM",
+          "cusip": "02665T306",
+          "ticker": null,
+          "value": 8784184.0,
+          "shares": 262058.0,
+          "put_call": null,
+          "weight": 0.014047004058594034
+        },
+        {
+          "issuer": "Octave Specialty Group Inc",
+          "title": "COM",
+          "cusip": "023139884",
+          "ticker": null,
+          "value": 8373325.0,
+          "shares": 1341879.0,
+          "put_call": null,
+          "weight": 0.01338998935574743
+        },
+        {
+          "issuer": "Brookdale Senior Living Inc",
+          "title": "COM",
+          "cusip": "112463104",
+          "ticker": null,
+          "value": 7961750.0,
+          "shares": 494826.0,
+          "put_call": null,
+          "weight": 0.012731829679741572
+        },
+        {
+          "issuer": "Prosperity Bancshares Inc",
+          "title": "COM",
+          "cusip": "743606105",
+          "ticker": null,
+          "value": 7461329.0,
+          "shares": 102168.0,
+          "put_call": null,
+          "weight": 0.011931594186267656
+        },
+        {
+          "issuer": "ICF International Inc",
+          "title": "COM",
+          "cusip": "44925C103",
+          "ticker": null,
+          "value": 7205344.0,
+          "shares": 98893.0,
+          "put_call": null,
+          "weight": 0.01152224229496629
+        },
+        {
+          "issuer": "Supernus Pharmaceuticals Inc",
+          "title": "COM",
+          "cusip": "868459108",
+          "ticker": null,
+          "value": 7103193.0,
+          "shares": 152724.0,
+          "put_call": null,
+          "weight": 0.0113588901257051
+        },
+        {
+          "issuer": "Alamo Group Inc",
+          "title": "COM",
+          "cusip": "011311107",
+          "ticker": null,
+          "value": 6952170.0,
+          "shares": 42265.0,
+          "put_call": null,
+          "weight": 0.011117385542702165
+        },
+        {
+          "issuer": "Collegium Pharmaceutical Inc",
+          "title": "COM",
+          "cusip": "19459J104",
+          "ticker": null,
+          "value": 6611749.0,
+          "shares": 182645.0,
+          "put_call": null,
+          "weight": 0.010573009973084016
+        },
+        {
+          "issuer": "Catalyst Pharmaceuticals Inc",
+          "title": "COM",
+          "cusip": "14888U101",
+          "ticker": null,
+          "value": 6605360.0,
+          "shares": 210161.0,
+          "put_call": null,
+          "weight": 0.01056279316649955
+        },
+        {
+          "issuer": "MYR Group Inc",
+          "title": "COM",
+          "cusip": "55405W104",
+          "ticker": null,
+          "value": 6538226.0,
+          "shares": 13066.0,
+          "put_call": null,
+          "weight": 0.010455437540698718
+        },
+        {
+          "issuer": "Atlanta Braves Holdings Inc",
+          "title": "COM",
+          "cusip": "047726104",
+          "ticker": null,
+          "value": 6299963.0,
+          "shares": 111880.0,
+          "put_call": null,
+          "weight": 0.010074425334213427
+        },
+        {
+          "issuer": "Taylor Morrison Home Corp",
+          "title": "COM",
+          "cusip": "87724P106",
+          "ticker": null,
+          "value": 6165407.0,
+          "shares": 85941.0,
+          "put_call": null,
+          "weight": 0.009859253534748823
+        },
+        {
+          "issuer": "Investors Title Co",
+          "title": "COM",
+          "cusip": "461804106",
+          "ticker": null,
+          "value": 5991950.0,
+          "shares": 21894.0,
+          "put_call": null,
+          "weight": 0.009581874192172263
+        },
+        {
+          "issuer": "PBF Energy Inc",
+          "title": "COM",
+          "cusip": "69318G106",
+          "ticker": null,
+          "value": 5965396.0,
+          "shares": 131050.0,
+          "put_call": null,
+          "weight": 0.00953941103955935
+        },
+        {
+          "issuer": "WESCO International Inc",
+          "title": "COM",
+          "cusip": "95082P105",
+          "ticker": null,
+          "value": 5859529.0,
+          "shares": 16963.0,
+          "put_call": null,
+          "weight": 0.00937011652356661
+        },
+        {
+          "issuer": "Kaiser Aluminum Corp",
+          "title": "COM",
+          "cusip": "483007704",
+          "ticker": null,
+          "value": 5839164.0,
+          "shares": 29848.0,
+          "put_call": null,
+          "weight": 0.009337550352633343
+        },
+        {
+          "issuer": "UniFirst Corp/MA",
+          "title": "COM",
+          "cusip": "904708104",
+          "ticker": null,
+          "value": 5501297.0,
+          "shares": 20802.0,
+          "put_call": null,
+          "weight": 0.008797258947049741
+        },
+        {
+          "issuer": "Qualys Inc",
+          "title": "COM",
+          "cusip": "74758T303",
+          "ticker": null,
+          "value": 5378609.0,
+          "shares": 39120.0,
+          "put_call": null,
+          "weight": 0.00860106555743714
+        },
+        {
+          "issuer": "Central Securities Corp",
+          "title": "COM",
+          "cusip": "155123102",
+          "ticker": null,
+          "value": 5340039.0,
+          "shares": 101812.0,
+          "put_call": null,
+          "weight": 0.008539387324542657
+        },
+        {
+          "issuer": "Flagstar Bank NA",
+          "title": "COM",
+          "cusip": "649445400",
+          "ticker": null,
+          "value": 4948741.0,
+          "shares": 331241.0,
+          "put_call": null,
+          "weight": 0.007913653096511946
+        },
+        {
+          "issuer": "SandRidge Energy Inc",
+          "title": "COM",
+          "cusip": "80007P869",
+          "ticker": null,
+          "value": 4830045.0,
+          "shares": 352558.0,
+          "put_call": null,
+          "weight": 0.007723843411999546
+        },
+        {
+          "issuer": "OceanFirst Financial Corp",
+          "title": "COM",
+          "cusip": "675234108",
+          "ticker": null,
+          "value": 4817309.0,
+          "shares": 246662.0,
+          "put_call": null,
+          "weight": 0.007703476962060626
+        },
+        {
+          "issuer": "First Industrial Realty Trust",
+          "title": "COM",
+          "cusip": "32054K103",
+          "ticker": null,
+          "value": 4751402.0,
+          "shares": 77498.0,
+          "put_call": null,
+          "weight": 0.007598083462050864
+        },
+        {
+          "issuer": "LSB Industries Inc",
+          "title": "COM",
+          "cusip": "502160104",
+          "ticker": null,
+          "value": 4119648.0,
+          "shares": 381096.0,
+          "put_call": null,
+          "weight": 0.006587830147453513
+        },
+        {
+          "issuer": "Southside Bancshares Inc",
+          "title": "COM",
+          "cusip": "84470P109",
+          "ticker": null,
+          "value": 4112972.0,
+          "shares": 116879.0,
+          "put_call": null,
+          "weight": 0.006577154392130632
+        },
+        {
+          "issuer": "BlueLinx Holdings Inc",
+          "title": "COM",
+          "cusip": "09624H208",
+          "ticker": null,
+          "value": 3983154.0,
+          "shares": 64369.0,
+          "put_call": null,
+          "weight": 0.0063695592446612066
+        },
+        {
+          "issuer": "Maximus Inc",
+          "title": "COM",
+          "cusip": "577933104",
+          "ticker": null,
+          "value": 3982810.0,
+          "shares": 74085.0,
+          "put_call": null,
+          "weight": 0.006369009145824917
+        },
+        {
+          "issuer": "Hongkong Land Holdings Ltd",
+          "title": "COM",
+          "cusip": "G4587L109",
+          "ticker": null,
+          "value": 3918136.0,
+          "shares": 550300.0,
+          "put_call": null,
+          "weight": 0.006265587366353368
+        },
+        {
+          "issuer": "Weyerhaeuser Co",
+          "title": "COM",
+          "cusip": "962166104",
+          "ticker": null,
+          "value": 3880602.0,
+          "shares": 162097.0,
+          "put_call": null,
+          "weight": 0.006205565826465853
+        },
+        {
+          "issuer": "CRA International Inc",
+          "title": "COM",
+          "cusip": "12618T105",
+          "ticker": null,
+          "value": 2962544.0,
+          "shares": 20819.0,
+          "put_call": null,
+          "weight": 0.004737476764120993
+        },
+        {
+          "issuer": "FRP Holdings Inc",
+          "title": "COM",
+          "cusip": "30292L107",
+          "ticker": null,
+          "value": 2677928.0,
+          "shares": 107160.0,
+          "put_call": null,
+          "weight": 0.004282340338570162
+        },
+        {
+          "issuer": "Compass Inc",
+          "title": "COM",
+          "cusip": "20464U100",
+          "ticker": null,
+          "value": 2311493.0,
+          "shares": 187469.0,
+          "put_call": null,
+          "weight": 0.003696365143582113
+        },
+        {
+          "issuer": "Atlanta Braves Holdings Inc",
+          "title": "COM",
+          "cusip": "047726302",
+          "ticker": null,
+          "value": 1350801.0,
+          "shares": 26027.0,
+          "put_call": null,
+          "weight": 0.0021600990062768358
+        }
+      ]
+    }
+  ]
+}

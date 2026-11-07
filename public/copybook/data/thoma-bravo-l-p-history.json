@@ -1,0 +1,54 @@
+{
+  "slug": "thoma-bravo-l-p",
+  "manager": "THOMA BRAVO, L.P.",
+  "cik": "0001450701",
+  "history_quarters": [
+    "2026Q3"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001450701-26-000005",
+      "filing_date": "2026-10-26",
+      "report_date": "2026-09-30",
+      "quarter": "2026Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1450701/000145070126000005/0001450701-26-000005-index.html",
+      "line_count": 3,
+      "position_count": 3,
+      "values_in_thousands": false,
+      "total_value": 10021048682.0,
+      "holdings": [
+        {
+          "issuer": "SAILPOINT INC",
+          "title": "COM",
+          "cusip": "78781J109",
+          "ticker": null,
+          "value": 9769593585.0,
+          "shares": 479842514.0,
+          "put_call": null,
+          "weight": 0.9749073071113138
+        },
+        {
+          "issuer": "N-ABLE INC",
+          "title": "COMMON STOCK",
+          "cusip": "62878D100",
+          "ticker": null,
+          "value": 205371636.0,
+          "shares": 50090643.0,
+          "put_call": null,
+          "weight": 0.020494026375592056
+        },
+        {
+          "issuer": "SERVICETITAN INC",
+          "title": "SHS CL A",
+          "cusip": "81764X103",
+          "ticker": null,
+          "value": 46083461.0,
+          "shares": 700463.0,
+          "put_call": null,
+          "weight": 0.004598666513094183
+        }
+      ]
+    }
+  ]
+}

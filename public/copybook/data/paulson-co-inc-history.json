@@ -1,0 +1,104 @@
+{
+  "slug": "paulson-co-inc",
+  "manager": "PAULSON & CO. INC.",
+  "cik": "0001035674",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001013594-26-000913",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1035674/000101359426000913/0001013594-26-000913-index.html",
+      "line_count": 8,
+      "position_count": 8,
+      "values_in_thousands": false,
+      "total_value": 2575691752.0,
+      "holdings": [
+        {
+          "issuer": "MADRIGAL PHARMACEUTICALS INC",
+          "title": "COM",
+          "cusip": "558868105",
+          "ticker": null,
+          "value": 719523739.0,
+          "shares": 1340020.0,
+          "put_call": null,
+          "weight": 0.2793516492962703
+        },
+        {
+          "issuer": "PERPETUA RESOURCES CORP",
+          "title": "COM",
+          "cusip": "714266103",
+          "ticker": null,
+          "value": 671529927.0,
+          "shares": 32347299.0,
+          "put_call": null,
+          "weight": 0.2607182814009337
+        },
+        {
+          "issuer": "ACADIAN ASSET MANAGEMENT INC",
+          "title": "COM",
+          "cusip": "10948W103",
+          "ticker": null,
+          "value": 417911529.0,
+          "shares": 5843282.0,
+          "put_call": null,
+          "weight": 0.16225215174738813
+        },
+        {
+          "issuer": "BAUSCH HEALTH COS INC",
+          "title": "COM",
+          "cusip": "071734107",
+          "ticker": null,
+          "value": 361151434.0,
+          "shares": 73255869.0,
+          "put_call": null,
+          "weight": 0.14021531641725737
+        },
+        {
+          "issuer": "INTERNATIONAL TOWER HILL MIN",
+          "title": "COM",
+          "cusip": "46050R102",
+          "ticker": null,
+          "value": 207928539.0,
+          "shares": 104486703.0,
+          "put_call": null,
+          "weight": 0.08072726048780701
+        },
+        {
+          "issuer": "NOVAGOLD RESOURCES INC",
+          "title": "COM NEW",
+          "cusip": "66987E206",
+          "ticker": null,
+          "value": 162611224.0,
+          "shares": 27238061.0,
+          "put_call": null,
+          "weight": 0.06313302974773047
+        },
+        {
+          "issuer": "THRYV HLDGS INC",
+          "title": "COM NEW",
+          "cusip": "886029206",
+          "ticker": null,
+          "value": 33268710.0,
+          "shares": 8443835.0,
+          "put_call": null,
+          "weight": 0.012916417492181339
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 1766650.0,
+          "shares": 5000.0,
+          "put_call": null,
+          "weight": 0.0006858934104316687
+        }
+      ]
+    }
+  ]
+}

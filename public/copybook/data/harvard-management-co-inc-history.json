@@ -1,0 +1,214 @@
+{
+  "slug": "harvard-management-co-inc",
+  "manager": "HARVARD MANAGEMENT CO INC",
+  "cik": "0001082621",
+  "history_quarters": [
+    "2026Q2"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001193125-26-352412",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1082621/000119312526352412/0001193125-26-352412-index.html",
+      "line_count": 19,
+      "position_count": 19,
+      "values_in_thousands": false,
+      "total_value": 4263102872.0,
+      "holdings": [
+        {
+          "issuer": "SPACE EXPLORATION TECHN CORP",
+          "title": "CLASS A COM STK",
+          "cusip": "84615Q103",
+          "ticker": null,
+          "value": 2210091186.0,
+          "shares": 12935100.0,
+          "put_call": null,
+          "weight": 0.5184231421005221
+        },
+        {
+          "issuer": "TAIWAN SEMICONDUCTOR MANUFAC",
+          "title": "SPONSORED ADS",
+          "cusip": "874039100",
+          "ticker": "TSM",
+          "value": 349591747.0,
+          "shares": 732022.0,
+          "put_call": null,
+          "weight": 0.0820040607736946
+        },
+        {
+          "issuer": "CEREBRAS SYSTEMS INC",
+          "title": "COM CL A",
+          "cusip": "15675D103",
+          "ticker": null,
+          "value": 238963543.0,
+          "shares": 1081283.0,
+          "put_call": null,
+          "weight": 0.056053900216555694
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 234249847.0,
+          "shares": 982839.0,
+          "put_call": null,
+          "weight": 0.054948204168036786
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 165162119.0,
+          "shares": 462160.0,
+          "put_call": null,
+          "weight": 0.03874223164652734
+        },
+        {
+          "issuer": "NVIDIA CORPORATION",
+          "title": "COM",
+          "cusip": "67066G104",
+          "ticker": "NVDA",
+          "value": 157615095.0,
+          "shares": 787721.0,
+          "put_call": null,
+          "weight": 0.036971919217622856
+        },
+        {
+          "issuer": "ISHARES GOLD TR",
+          "title": "ISHARES NEW",
+          "cusip": "464285204",
+          "ticker": null,
+          "value": 149516218.0,
+          "shares": 1980085.0,
+          "put_call": null,
+          "weight": 0.03507215811798032
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 146322690.0,
+          "shares": 392265.0,
+          "put_call": null,
+          "weight": 0.034323049289062525
+        },
+        {
+          "issuer": "BROADCOM INC",
+          "title": "COM",
+          "cusip": "11135F101",
+          "ticker": "AVGO",
+          "value": 127810202.0,
+          "shares": 338346.0,
+          "put_call": null,
+          "weight": 0.02998055778561095
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 120827958.0,
+          "shares": 214504.0,
+          "put_call": null,
+          "weight": 0.02834272632584035
+        },
+        {
+          "issuer": "ISHARES BITCOIN TRUST ETF",
+          "title": "SHS BEN INT",
+          "cusip": "46438F101",
+          "ticker": null,
+          "value": 101355133.0,
+          "shares": 3044612.0,
+          "put_call": null,
+          "weight": 0.02377496768039521
+        },
+        {
+          "issuer": "NETFLIX INC.",
+          "title": "COM",
+          "cusip": "64110L106",
+          "ticker": "NFLX",
+          "value": 78825600.0,
+          "shares": 1104000.0,
+          "put_call": null,
+          "weight": 0.018490194200502512
+        },
+        {
+          "issuer": "BOOKING HOLDINGS INC",
+          "title": "COM",
+          "cusip": "09857L108",
+          "ticker": null,
+          "value": 73898304.0,
+          "shares": 414600.0,
+          "put_call": null,
+          "weight": 0.017334393801604703
+        },
+        {
+          "issuer": "FERVO ENERGY CO",
+          "title": "CL A COM",
+          "cusip": "31556C106",
+          "ticker": null,
+          "value": 36694319.0,
+          "shares": 1255365.0,
+          "put_call": null,
+          "weight": 0.008607420487318702
+        },
+        {
+          "issuer": "LUMENTUM HLDGS INC",
+          "title": "COM",
+          "cusip": "55024U109",
+          "ticker": null,
+          "value": 23376129.0,
+          "shares": 27243.0,
+          "put_call": null,
+          "weight": 0.005483360289880427
+        },
+        {
+          "issuer": "SPDR GOLD TR",
+          "title": "GOLD SHS",
+          "cusip": "78463V107",
+          "ticker": null,
+          "value": 21683584.0,
+          "shares": 58862.0,
+          "put_call": null,
+          "weight": 0.005086338437295866
+        },
+        {
+          "issuer": "GENERATE BIOMEDICINES INC",
+          "title": "COM SHS",
+          "cusip": "370920100",
+          "ticker": null,
+          "value": 18744257.0,
+          "shares": 1111100.0,
+          "put_call": null,
+          "weight": 0.004396857773034757
+        },
+        {
+          "issuer": "10X GENOMICS INC",
+          "title": "CL A COM",
+          "cusip": "88025U109",
+          "ticker": null,
+          "value": 6517800.0,
+          "shares": 170000.0,
+          "put_call": null,
+          "weight": 0.0015288863993427931
+        },
+        {
+          "issuer": "PURECYCLE TECHNOLOGIES INC",
+          "title": "*W EXP 03/17/202",
+          "cusip": "74623V111",
+          "ticker": null,
+          "value": 1857141.0,
+          "shares": 714285.0,
+          "put_call": null,
+          "weight": 0.00043563128917148024
+        }
+      ]
+    }
+  ]
+}

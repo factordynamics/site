@@ -1,0 +1,32 @@
+{
+  "cik": "0001142206",
+  "name": "MITSUI SUMITOMO INSURANCE CO LTD",
+  "manager": "MITSUI SUMITOMO INSURANCE CO LTD",
+  "slug": "mitsui-sumitomo-insurance-co-ltd",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001193125-26-347771",
+  "filing_date": "2026-08-13",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1142206/000119312526347771/0001193125-26-347771-index.html",
+  "line_count": 1,
+  "position_count": 1,
+  "values_in_thousands": false,
+  "total_value": 4145785139.0,
+  "holdings": [
+    {
+      "issuer": "W. R. Berkley Corporation",
+      "title": "Common Stock",
+      "cusip": "084423102",
+      "ticker": null,
+      "value": 4145785139.0,
+      "shares": 58780450.0,
+      "put_call": null,
+      "weight": 1.0
+    }
+  ],
+  "history_quarters": [
+    "2026Q2"
+  ]
+}
