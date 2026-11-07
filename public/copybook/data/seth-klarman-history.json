@@ -3,7 +3,14 @@
   "manager": "Seth Klarman",
   "cik": "0001061768",
   "history_quarters": [
-    "2026Q2"
+    "2026Q2",
+    "2026Q1",
+    "2025Q4",
+    "2025Q3",
+    "2025Q2",
+    "2025Q1",
+    "2024Q4",
+    "2024Q3"
   ],
   "history": [
     {
@@ -247,6 +254,1654 @@
           "shares": 392000.0,
           "put_call": null,
           "weight": 0.002378388039704918
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001061768-26-000007",
+      "filing_date": "2026-05-14",
+      "report_date": "2026-03-31",
+      "quarter": "2026Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1061768/000106176826000007/0001061768-26-000007-index.html",
+      "line_count": 22,
+      "position_count": 22,
+      "values_in_thousands": true,
+      "total_value": 5115380000.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 649543000.0,
+          "shares": 3118754.0,
+          "put_call": null,
+          "weight": 0.12697844539408606
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 597208000.0,
+          "shares": 8080112.0,
+          "put_call": null,
+          "weight": 0.11674753390754938
+        },
+        {
+          "issuer": "WESCO INTL INC",
+          "title": "COM",
+          "cusip": "95082P105",
+          "ticker": null,
+          "value": 393159000.0,
+          "shares": 1436881.0,
+          "put_call": null,
+          "weight": 0.07685821972170201
+        },
+        {
+          "issuer": "UNION PAC CORP",
+          "title": "COM",
+          "cusip": "907818108",
+          "ticker": "UNP",
+          "value": 373876000.0,
+          "shares": 1540995.0,
+          "put_call": null,
+          "weight": 0.07308860729799155
+        },
+        {
+          "issuer": "ELEVANCE HEALTH INC FORMERLY",
+          "title": "COM",
+          "cusip": "036752103",
+          "ticker": "ELV",
+          "value": 373301000.0,
+          "shares": 1275154.0,
+          "put_call": null,
+          "weight": 0.0729762011815349
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 338819000.0,
+          "shares": 1181131.0,
+          "put_call": null,
+          "weight": 0.06623535299430346
+        },
+        {
+          "issuer": "FERGUSON ENTERPRISES INC",
+          "title": "COMMON STOCK NEW",
+          "cusip": "31488V107",
+          "ticker": null,
+          "value": 336457000.0,
+          "shares": 1442411.0,
+          "put_call": null,
+          "weight": 0.06577360821678938
+        },
+        {
+          "issuer": "WILLIS TOWERS WATSON PLC LTD",
+          "title": "SHS",
+          "cusip": "G96629103",
+          "ticker": "WTW",
+          "value": 259632000.0,
+          "shares": 893126.0,
+          "put_call": null,
+          "weight": 0.05075517361369048
+        },
+        {
+          "issuer": "AON PLC",
+          "title": "SHS CL A",
+          "cusip": "G0403H108",
+          "ticker": null,
+          "value": 248218000.0,
+          "shares": 769000.0,
+          "put_call": null,
+          "weight": 0.0485238633298015
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 211978000.0,
+          "shares": 701355.0,
+          "put_call": null,
+          "weight": 0.04143934565955999
+        },
+        {
+          "issuer": "TELEFLEX INCORPORATED",
+          "title": "COM",
+          "cusip": "879369106",
+          "ticker": null,
+          "value": 190778000.0,
+          "shares": 1595000.0,
+          "put_call": null,
+          "weight": 0.03729498101802799
+        },
+        {
+          "issuer": "EAGLE MATLS INC",
+          "title": "COM",
+          "cusip": "26969P108",
+          "ticker": null,
+          "value": 169134000.0,
+          "shares": 892763.0,
+          "put_call": null,
+          "weight": 0.03306381930570163
+        },
+        {
+          "issuer": "GENUINE PARTS CO",
+          "title": "COM",
+          "cusip": "372460105",
+          "ticker": null,
+          "value": 157604000.0,
+          "shares": 1490348.0,
+          "put_call": null,
+          "weight": 0.030809832309623135
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL C",
+          "cusip": "G61188127",
+          "ticker": null,
+          "value": 157150000.0,
+          "shares": 13397247.0,
+          "put_call": null,
+          "weight": 0.03072108034984693
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "COM SHS",
+          "cusip": "G4412G101",
+          "ticker": null,
+          "value": 136305000.0,
+          "shares": 9259844.0,
+          "put_call": null,
+          "weight": 0.026646114267170767
+        },
+        {
+          "issuer": "GDS HLDGS LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "36165L108",
+          "ticker": null,
+          "value": 122676000.0,
+          "shares": 3044818.0,
+          "put_call": null,
+          "weight": 0.02398179607380097
+        },
+        {
+          "issuer": "AMERICOLD REALTY TRUST INC",
+          "title": "COM",
+          "cusip": "03064D108",
+          "ticker": null,
+          "value": 89168000.0,
+          "shares": 7780800.0,
+          "put_call": null,
+          "weight": 0.017431354073402173
+        },
+        {
+          "issuer": "MOLINA HEALTHCARE INC",
+          "title": "COM",
+          "cusip": "60855R100",
+          "ticker": null,
+          "value": 84460000.0,
+          "shares": 633609.0,
+          "put_call": null,
+          "weight": 0.01651099234074497
+        },
+        {
+          "issuer": "GRUPO AEROMEXICO SAB DE CV",
+          "title": "SPONSORED ADS",
+          "cusip": "40054J109",
+          "ticker": null,
+          "value": 68371000.0,
+          "shares": 4880188.0,
+          "put_call": null,
+          "weight": 0.01336577145783891
+        },
+        {
+          "issuer": "NORWEGIAN CRUISE LINE HLDGS",
+          "title": "SHS",
+          "cusip": "G66721104",
+          "ticker": null,
+          "value": 67881000.0,
+          "shares": 3630000.0,
+          "put_call": null,
+          "weight": 0.013269981897728027
+        },
+        {
+          "issuer": "VAXCYTE INC",
+          "title": "COM",
+          "cusip": "92243G108",
+          "ticker": null,
+          "value": 46488000.0,
+          "shares": 800000.0,
+          "put_call": null,
+          "weight": 0.009087887898846224
+        },
+        {
+          "issuer": "DNOW INC",
+          "title": "COM",
+          "cusip": "67011P100",
+          "ticker": null,
+          "value": 43174000.0,
+          "shares": 3625000.0,
+          "put_call": null,
+          "weight": 0.008440037690259571
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001061768-26-000005",
+      "filing_date": "2026-02-13",
+      "report_date": "2025-12-31",
+      "quarter": "2025Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1061768/000106176826000005/0001061768-26-000005-index.html",
+      "line_count": 22,
+      "position_count": 22,
+      "values_in_thousands": true,
+      "total_value": 5278590000.0,
+      "holdings": [
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 551325000.0,
+          "shares": 8080112.0,
+          "put_call": null,
+          "weight": 0.10444550533381074
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 489659000.0,
+          "shares": 2121391.0,
+          "put_call": null,
+          "weight": 0.09276321896567076
+        },
+        {
+          "issuer": "WILLIS TOWERS WATSON PLC LTD",
+          "title": "SHS",
+          "cusip": "G96629103",
+          "ticker": "WTW",
+          "value": 446108000.0,
+          "shares": 1357601.0,
+          "put_call": null,
+          "weight": 0.08451272025294633
+        },
+        {
+          "issuer": "ELEVANCE HEALTH INC FORMERLY",
+          "title": "COM",
+          "cusip": "036752103",
+          "ticker": "ELV",
+          "value": 444954000.0,
+          "shares": 1269302.0,
+          "put_call": null,
+          "weight": 0.0842941012656789
+        },
+        {
+          "issuer": "UNION PAC CORP",
+          "title": "COM",
+          "cusip": "907818108",
+          "ticker": "UNP",
+          "value": 376416000.0,
+          "shares": 1627254.0,
+          "put_call": null,
+          "weight": 0.07130995208947843
+        },
+        {
+          "issuer": "WESCO INTL INC",
+          "title": "COM",
+          "cusip": "95082P105",
+          "ticker": null,
+          "value": 347103000.0,
+          "shares": 1418831.0,
+          "put_call": null,
+          "weight": 0.06575676459054407
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 341157000.0,
+          "shares": 1087181.0,
+          "put_call": null,
+          "weight": 0.06463032741698067
+        },
+        {
+          "issuer": "FIDELITY NATL INFORMATION SV",
+          "title": "COM",
+          "cusip": "31620M106",
+          "ticker": null,
+          "value": 299323000.0,
+          "shares": 4503801.0,
+          "put_call": null,
+          "weight": 0.05670510496174168
+        },
+        {
+          "issuer": "DOLLAR GEN CORP NEW",
+          "title": "COM",
+          "cusip": "256677105",
+          "ticker": null,
+          "value": 273881000.0,
+          "shares": 2062821.0,
+          "put_call": null,
+          "weight": 0.051885257237254644
+        },
+        {
+          "issuer": "FERGUSON ENTERPRISES INC",
+          "title": "COMMON STOCK NEW",
+          "cusip": "31488V107",
+          "ticker": null,
+          "value": 253138000.0,
+          "shares": 1137035.0,
+          "put_call": null,
+          "weight": 0.047955609357801986
+        },
+        {
+          "issuer": "EAGLE MATLS INC",
+          "title": "COM",
+          "cusip": "26969P108",
+          "ticker": null,
+          "value": 244967000.0,
+          "shares": 1185248.0,
+          "put_call": null,
+          "weight": 0.04640765810566837
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL C",
+          "cusip": "G61188127",
+          "ticker": null,
+          "value": 230568000.0,
+          "shares": 20884781.0,
+          "put_call": null,
+          "weight": 0.04367984632259751
+        },
+        {
+          "issuer": "GENUINE PARTS CO",
+          "title": "COM",
+          "cusip": "372460105",
+          "ticker": null,
+          "value": 182729000.0,
+          "shares": 1486088.0,
+          "put_call": null,
+          "weight": 0.03461700946654315
+        },
+        {
+          "issuer": "FISERV INC",
+          "title": "COM",
+          "cusip": "337738108",
+          "ticker": null,
+          "value": 147774000.0,
+          "shares": 2200000.0,
+          "put_call": null,
+          "weight": 0.027994975931072502
+        },
+        {
+          "issuer": "CRH PLC",
+          "title": "ORD",
+          "cusip": "G25508105",
+          "ticker": null,
+          "value": 133905000.0,
+          "shares": 1072957.0,
+          "put_call": null,
+          "weight": 0.02536756974873972
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "COM SHS",
+          "cusip": "G4412G101",
+          "ticker": null,
+          "value": 119359000.0,
+          "shares": 9259844.0,
+          "put_call": null,
+          "weight": 0.022611909619803774
+        },
+        {
+          "issuer": "MOLINA HEALTHCARE INC",
+          "title": "COM",
+          "cusip": "60855R100",
+          "ticker": null,
+          "value": 108463000.0,
+          "shares": 625000.0,
+          "put_call": null,
+          "weight": 0.020547722024252688
+        },
+        {
+          "issuer": "GRUPO AEROMEXICO SAB DE CV",
+          "title": "SPONSORED ADS",
+          "cusip": "40054J109",
+          "ticker": null,
+          "value": 106620000.0,
+          "shares": 4855180.0,
+          "put_call": null,
+          "weight": 0.020198575756025756
+        },
+        {
+          "issuer": "GDS HLDGS LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "36165L108",
+          "ticker": null,
+          "value": 106264000.0,
+          "shares": 3044818.0,
+          "put_call": null,
+          "weight": 0.02013113350345452
+        },
+        {
+          "issuer": "AMERICOLD REALTY TRUST INC",
+          "title": "COM",
+          "cusip": "03064D108",
+          "ticker": null,
+          "value": 44697000.0,
+          "shares": 3475685.0,
+          "put_call": null,
+          "weight": 0.008467602143754298
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL A",
+          "cusip": "G61188101",
+          "ticker": null,
+          "value": 23176000.0,
+          "shares": 2080456.0,
+          "put_call": null,
+          "weight": 0.004390566420199334
+        },
+        {
+          "issuer": "TAMBORAN RES CORP",
+          "title": "COM",
+          "cusip": "87507T101",
+          "ticker": null,
+          "value": 7004000.0,
+          "shares": 257226.0,
+          "put_call": null,
+          "weight": 0.0013268694859801576
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001061768-25-000007",
+      "filing_date": "2025-11-13",
+      "report_date": "2025-09-30",
+      "quarter": "2025Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1061768/000106176825000007/0001061768-25-000007-index.html",
+      "line_count": 22,
+      "position_count": 22,
+      "values_in_thousands": true,
+      "total_value": 4790804000.0,
+      "holdings": [
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 529337000.0,
+          "shares": 8252862.0,
+          "put_call": null,
+          "weight": 0.11049022251797402
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 452550000.0,
+          "shares": 1858138.0,
+          "put_call": null,
+          "weight": 0.09446222387724482
+        },
+        {
+          "issuer": "ELEVANCE HEALTH INC FORMERLY",
+          "title": "COM",
+          "cusip": "036752103",
+          "ticker": "ELV",
+          "value": 426195000.0,
+          "shares": 1319000.0,
+          "put_call": null,
+          "weight": 0.08896105956327999
+        },
+        {
+          "issuer": "CRH PLC",
+          "title": "ORD",
+          "cusip": "G25508105",
+          "ticker": null,
+          "value": 405669000.0,
+          "shares": 3383395.0,
+          "put_call": null,
+          "weight": 0.08467660125523815
+        },
+        {
+          "issuer": "WILLIS TOWERS WATSON PLC LTD",
+          "title": "SHS",
+          "cusip": "G96629103",
+          "ticker": "WTW",
+          "value": 376218000.0,
+          "shares": 1089065.0,
+          "put_call": null,
+          "weight": 0.07852919885680984
+        },
+        {
+          "issuer": "UNION PAC CORP",
+          "title": "COM",
+          "cusip": "907818108",
+          "ticker": "UNP",
+          "value": 353658000.0,
+          "shares": 1496204.0,
+          "put_call": null,
+          "weight": 0.07382017715606817
+        },
+        {
+          "issuer": "WESCO INTL INC",
+          "title": "COM",
+          "cusip": "95082P105",
+          "ticker": null,
+          "value": 317923000.0,
+          "shares": 1503180.0,
+          "put_call": null,
+          "weight": 0.06636109513142262
+        },
+        {
+          "issuer": "DOLLAR GEN CORP NEW",
+          "title": "COM",
+          "cusip": "256677105",
+          "ticker": null,
+          "value": 275622000.0,
+          "shares": 2666876.0,
+          "put_call": null,
+          "weight": 0.05753147070930057
+        },
+        {
+          "issuer": "FERGUSON ENTERPRISES INC",
+          "title": "COMMON STOCK NEW",
+          "cusip": "31488V107",
+          "ticker": null,
+          "value": 259502000.0,
+          "shares": 1155500.0,
+          "put_call": null,
+          "weight": 0.054166691018877
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL C",
+          "cusip": "G61188127",
+          "ticker": null,
+          "value": 254479000.0,
+          "shares": 21657803.0,
+          "put_call": null,
+          "weight": 0.053118223997475164
+        },
+        {
+          "issuer": "FIDELITY NATL INFORMATION SV",
+          "title": "COM",
+          "cusip": "31620M106",
+          "ticker": null,
+          "value": 249894000.0,
+          "shares": 3789711.0,
+          "put_call": null,
+          "weight": 0.05216118213143347
+        },
+        {
+          "issuer": "EAGLE MATLS INC",
+          "title": "COM",
+          "cusip": "26969P108",
+          "ticker": null,
+          "value": 218978000.0,
+          "shares": 939660.0,
+          "put_call": null,
+          "weight": 0.04570798554898092
+        },
+        {
+          "issuer": "GENUINE PARTS CO",
+          "title": "COM",
+          "cusip": "372460105",
+          "ticker": null,
+          "value": 193347000.0,
+          "shares": 1395000.0,
+          "put_call": null,
+          "weight": 0.040357944094561164
+        },
+        {
+          "issuer": "GDS HLDGS LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "36165L108",
+          "ticker": null,
+          "value": 125773000.0,
+          "shares": 3249952.0,
+          "put_call": null,
+          "weight": 0.026253004714866232
+        },
+        {
+          "issuer": "FISERV INC",
+          "title": "COM",
+          "cusip": "337738108",
+          "ticker": null,
+          "value": 115392000.0,
+          "shares": 895000.0,
+          "put_call": null,
+          "weight": 0.024086145039538247
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "COM SHS",
+          "cusip": "G4412G101",
+          "ticker": null,
+          "value": 65493000.0,
+          "shares": 7759844.0,
+          "put_call": null,
+          "weight": 0.01367056552511854
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL A",
+          "cusip": "G61188101",
+          "ticker": null,
+          "value": 58180000.0,
+          "shares": 5076762.0,
+          "put_call": null,
+          "weight": 0.012144099403774398
+        },
+        {
+          "issuer": "AMERICOLD REALTY TRUST INC",
+          "title": "COM",
+          "cusip": "03064D108",
+          "ticker": null,
+          "value": 44064000.0,
+          "shares": 3600000.0,
+          "put_call": null,
+          "weight": 0.0091976211091082
+        },
+        {
+          "issuer": "PAGSEGURO DIGITAL LTD",
+          "title": "COM CL A",
+          "cusip": "G68707101",
+          "ticker": null,
+          "value": 25000000.0,
+          "shares": 2500000.0,
+          "put_call": null,
+          "weight": 0.005218330785396355
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "NOTE 4.250% 6/1",
+          "cusip": "42703MAF0",
+          "ticker": null,
+          "value": 15833000.0,
+          "shares": 17129000.0,
+          "put_call": null,
+          "weight": 0.0033048732530072196
+        },
+        {
+          "issuer": "TAMBORAN RES CORP",
+          "title": "COM",
+          "cusip": "87507T101",
+          "ticker": null,
+          "value": 15629000.0,
+          "shares": 570833.0,
+          "put_call": null,
+          "weight": 0.003262291673798385
+        },
+        {
+          "issuer": "CABLE ONE INC",
+          "title": "NOTE 1.125% 3/1",
+          "cusip": "12685JAG0",
+          "ticker": null,
+          "value": 12068000.0,
+          "shares": 14100000.0,
+          "put_call": null,
+          "weight": 0.0025189926367265286
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001061768-25-000005",
+      "filing_date": "2025-08-13",
+      "report_date": "2025-06-30",
+      "quarter": "2025Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1061768/000106176825000005/0001061768-25-000005-index.html",
+      "line_count": 23,
+      "position_count": 23,
+      "values_in_thousands": true,
+      "total_value": 4130042000.0,
+      "holdings": [
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 467243000.0,
+          "shares": 2633988.0,
+          "put_call": null,
+          "weight": 0.11313274780256471
+        },
+        {
+          "issuer": "WESCO INTL INC",
+          "title": "COM",
+          "cusip": "95082P105",
+          "ticker": null,
+          "value": 408848000.0,
+          "shares": 2207601.0,
+          "put_call": null,
+          "weight": 0.09899366640823508
+        },
+        {
+          "issuer": "WILLIS TOWERS WATSON PLC LTD",
+          "title": "SHS",
+          "cusip": "G96629103",
+          "ticker": "WTW",
+          "value": 402797000.0,
+          "shares": 1314184.0,
+          "put_call": null,
+          "weight": 0.09752854813583009
+        },
+        {
+          "issuer": "CRH PLC",
+          "title": "ORD",
+          "cusip": "G25508105",
+          "ticker": null,
+          "value": 351171000.0,
+          "shares": 3825395.0,
+          "put_call": null,
+          "weight": 0.08502843312489317
+        },
+        {
+          "issuer": "FIDELITY NATL INFORMATION SV",
+          "title": "COM",
+          "cusip": "31620M106",
+          "ticker": null,
+          "value": 308520000.0,
+          "shares": 3789711.0,
+          "put_call": null,
+          "weight": 0.0747014195013029
+        },
+        {
+          "issuer": "DOLLAR GEN CORP NEW",
+          "title": "COM",
+          "cusip": "256677105",
+          "ticker": null,
+          "value": 305037000.0,
+          "shares": 2666876.0,
+          "put_call": null,
+          "weight": 0.07385808667321059
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 268445000.0,
+          "shares": 4049562.0,
+          "put_call": null,
+          "weight": 0.06499812834833156
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL C",
+          "cusip": "G61188127",
+          "ticker": null,
+          "value": 254222000.0,
+          "shares": 24657803.0,
+          "put_call": null,
+          "weight": 0.061554337704071774
+        },
+        {
+          "issuer": "FERGUSON ENTERPRISES INC",
+          "title": "COMMON STOCK NEW",
+          "cusip": "31488V107",
+          "ticker": null,
+          "value": 246493000.0,
+          "shares": 1132000.0,
+          "put_call": null,
+          "weight": 0.05968292816392666
+        },
+        {
+          "issuer": "ELEVANCE HEALTH INC",
+          "title": "COM",
+          "cusip": "036752103",
+          "ticker": "ELV",
+          "value": 239599000.0,
+          "shares": 616000.0,
+          "put_call": null,
+          "weight": 0.05801369574449848
+        },
+        {
+          "issuer": "FISERV INC",
+          "title": "COM",
+          "cusip": "337738108",
+          "ticker": null,
+          "value": 154307000.0,
+          "shares": 895000.0,
+          "put_call": null,
+          "weight": 0.03736208978020078
+        },
+        {
+          "issuer": "EAGLE MATLS INC",
+          "title": "COM",
+          "cusip": "26969P108",
+          "ticker": null,
+          "value": 136678000.0,
+          "shares": 676257.0,
+          "put_call": null,
+          "weight": 0.033093610186046535
+        },
+        {
+          "issuer": "VIASAT INC",
+          "title": "COM",
+          "cusip": "92552V100",
+          "ticker": null,
+          "value": 134185000.0,
+          "shares": 9190728.0,
+          "put_call": null,
+          "weight": 0.032489984363355144
+        },
+        {
+          "issuer": "GDS HLDGS LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "36165L108",
+          "ticker": null,
+          "value": 99351000.0,
+          "shares": 3249952.0,
+          "put_call": null,
+          "weight": 0.024055687569278957
+        },
+        {
+          "issuer": "LIBERTY BROADBAND CORP",
+          "title": "COM SER C",
+          "cusip": "530307305",
+          "ticker": null,
+          "value": 73353000.0,
+          "shares": 745610.0,
+          "put_call": null,
+          "weight": 0.017760836330477994
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "COM SHS",
+          "cusip": "G4412G101",
+          "ticker": null,
+          "value": 66890000.0,
+          "shares": 7759844.0,
+          "put_call": null,
+          "weight": 0.01619596120330011
+        },
+        {
+          "issuer": "ICON PLC",
+          "title": "SHS",
+          "cusip": "G4705A100",
+          "ticker": null,
+          "value": 58907000.0,
+          "shares": 405000.0,
+          "put_call": null,
+          "weight": 0.014263051077930926
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL A",
+          "cusip": "G61188101",
+          "ticker": null,
+          "value": 50818000.0,
+          "shares": 5076762.0,
+          "put_call": null,
+          "weight": 0.012304475354003664
+        },
+        {
+          "issuer": "AMCOR PLC",
+          "title": "ORD",
+          "cusip": "G0250X107",
+          "ticker": null,
+          "value": 50545000.0,
+          "shares": 5500000.0,
+          "put_call": null,
+          "weight": 0.012238374331302199
+        },
+        {
+          "issuer": "PAGSEGURO DIGITAL LTD",
+          "title": "COM CL A",
+          "cusip": "G68707101",
+          "ticker": null,
+          "value": 24100000.0,
+          "shares": 2500000.0,
+          "put_call": null,
+          "weight": 0.005835291747638402
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "NOTE 4.250% 6/1",
+          "cusip": "42703MAF0",
+          "ticker": null,
+          "value": 15623000.0,
+          "shares": 17129000.0,
+          "put_call": null,
+          "weight": 0.0037827702478570435
+        },
+        {
+          "issuer": "TAMBORAN RES CORP",
+          "title": "COM",
+          "cusip": "87507T101",
+          "ticker": null,
+          "value": 12170000.0,
+          "shares": 570833.0,
+          "put_call": null,
+          "weight": 0.002946701268413251
+        },
+        {
+          "issuer": "LIBERTY BROADBAND CORP",
+          "title": "COM SER A",
+          "cusip": "530307107",
+          "ticker": null,
+          "value": 740000.0,
+          "shares": 7560.0,
+          "put_call": null,
+          "weight": 0.00017917493332997582
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001061768-25-000003",
+      "filing_date": "2025-05-14",
+      "report_date": "2025-03-31",
+      "quarter": "2025Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1061768/000106176825000003/0001061768-25-000003-index.html",
+      "line_count": 23,
+      "position_count": 23,
+      "values_in_thousands": true,
+      "total_value": 3496062000.0,
+      "holdings": [
+        {
+          "issuer": "WILLIS TOWERS WATSON PLC LTD",
+          "title": "SHS",
+          "cusip": "G96629103",
+          "ticker": "WTW",
+          "value": 515599000.0,
+          "shares": 1525667.0,
+          "put_call": null,
+          "weight": 0.14747993599655843
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 324644000.0,
+          "shares": 2077988.0,
+          "put_call": null,
+          "weight": 0.09285990923501929
+        },
+        {
+          "issuer": "WESCO INTL INC",
+          "title": "COM",
+          "cusip": "95082P105",
+          "ticker": null,
+          "value": 311470000.0,
+          "shares": 2005601.0,
+          "put_call": null,
+          "weight": 0.0890916694269152
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL C",
+          "cusip": "G61188127",
+          "ticker": null,
+          "value": 295154000.0,
+          "shares": 24657803.0,
+          "put_call": null,
+          "weight": 0.08442470413854217
+        },
+        {
+          "issuer": "FIDELITY NATL INFORMATION SV",
+          "title": "COM",
+          "cusip": "31620M106",
+          "ticker": null,
+          "value": 260853000.0,
+          "shares": 3492947.0,
+          "put_call": null,
+          "weight": 0.07461337928217521
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 259000000.0,
+          "shares": 3886562.0,
+          "put_call": null,
+          "weight": 0.07408335435698794
+        },
+        {
+          "issuer": "CRH PLC",
+          "title": "ORD",
+          "cusip": "G25508105",
+          "ticker": null,
+          "value": 237026000.0,
+          "shares": 2694395.0,
+          "put_call": null,
+          "weight": 0.06779799671744952
+        },
+        {
+          "issuer": "EAGLE MATLS INC",
+          "title": "COM",
+          "cusip": "26969P108",
+          "ticker": null,
+          "value": 201875000.0,
+          "shares": 909633.0,
+          "put_call": null,
+          "weight": 0.05774354116145537
+        },
+        {
+          "issuer": "DOLLAR GEN CORP NEW",
+          "title": "COM",
+          "cusip": "256677105",
+          "ticker": null,
+          "value": 185082000.0,
+          "shares": 2104876.0,
+          "put_call": null,
+          "weight": 0.05294013664517391
+        },
+        {
+          "issuer": "FERGUSON ENTERPRISES INC",
+          "title": "COMMON STOCK NEW",
+          "cusip": "31488V107",
+          "ticker": null,
+          "value": 181380000.0,
+          "shares": 1132000.0,
+          "put_call": null,
+          "weight": 0.05188123093926824
+        },
+        {
+          "issuer": "GDS HLDGS LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "36165L108",
+          "ticker": null,
+          "value": 107651000.0,
+          "shares": 4249952.0,
+          "put_call": null,
+          "weight": 0.0307920740536066
+        },
+        {
+          "issuer": "ELEVANCE HEALTH INC",
+          "title": "COM",
+          "cusip": "036752103",
+          "ticker": "ELV",
+          "value": 107000000.0,
+          "shares": 246000.0,
+          "put_call": null,
+          "weight": 0.0306058645413039
+        },
+        {
+          "issuer": "VIASAT INC",
+          "title": "COM",
+          "cusip": "92552V100",
+          "ticker": null,
+          "value": 106187000.0,
+          "shares": 10190728.0,
+          "put_call": null,
+          "weight": 0.030373317178013434
+        },
+        {
+          "issuer": "SOLVENTUM CORP",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 80088000.0,
+          "shares": 1053240.0,
+          "put_call": null,
+          "weight": 0.02290806055499016
+        },
+        {
+          "issuer": "ICON PLC",
+          "title": "SHS",
+          "cusip": "G4705A100",
+          "ticker": null,
+          "value": 70871000.0,
+          "shares": 405000.0,
+          "put_call": null,
+          "weight": 0.020271665662679895
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "COM SHS",
+          "cusip": "G4412G101",
+          "ticker": null,
+          "value": 65593000.0,
+          "shares": 7600526.0,
+          "put_call": null,
+          "weight": 0.01876196703605371
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL A",
+          "cusip": "G61188101",
+          "ticker": null,
+          "value": 58434000.0,
+          "shares": 5076762.0,
+          "put_call": null,
+          "weight": 0.01671423447295843
+        },
+        {
+          "issuer": "CLARIVATE PLC",
+          "title": "ORD SHS",
+          "cusip": "G21810109",
+          "ticker": null,
+          "value": 42357000.0,
+          "shares": 10777863.0,
+          "put_call": null,
+          "weight": 0.012115631816598218
+        },
+        {
+          "issuer": "SOMNIGROUP INTERNATIONAL INC",
+          "title": "COM",
+          "cusip": "88023U101",
+          "ticker": null,
+          "value": 42117000.0,
+          "shares": 703349.0,
+          "put_call": null,
+          "weight": 0.012046983148468192
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "NOTE 4.250% 6/1",
+          "cusip": "42703MAF0",
+          "ticker": null,
+          "value": 14834000.0,
+          "shares": 17129000.0,
+          "put_call": null,
+          "weight": 0.004243059762670113
+        },
+        {
+          "issuer": "LIBERTY BROADBAND CORP",
+          "title": "COM SER C",
+          "cusip": "530307305",
+          "ticker": null,
+          "value": 14510000.0,
+          "shares": 170610.0,
+          "put_call": null,
+          "weight": 0.004150384060694576
+        },
+        {
+          "issuer": "TAMBORAN RES CORP",
+          "title": "COM",
+          "cusip": "87507T101",
+          "ticker": null,
+          "value": 13694000.0,
+          "shares": 570833.0,
+          "put_call": null,
+          "weight": 0.003916978589052483
+        },
+        {
+          "issuer": "LIBERTY BROADBAND CORP",
+          "title": "COM SER A",
+          "cusip": "530307107",
+          "ticker": null,
+          "value": 643000.0,
+          "shares": 7560.0,
+          "put_call": null,
+          "weight": 0.00018392122336503185
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001061768-25-000002",
+      "filing_date": "2025-02-13",
+      "report_date": "2024-12-31",
+      "quarter": "2024Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1061768/000106176825000002/0001061768-25-000002-index.html",
+      "line_count": 22,
+      "position_count": 22,
+      "values_in_thousands": true,
+      "total_value": 3434526000.0,
+      "holdings": [
+        {
+          "issuer": "WILLIS TOWERS WATSON PLC LTD",
+          "title": "SHS",
+          "cusip": "G96629103",
+          "ticker": "WTW",
+          "value": 575343000.0,
+          "shares": 1836748.0,
+          "put_call": null,
+          "weight": 0.1675174390876645
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL C",
+          "cusip": "G61188127",
+          "ticker": null,
+          "value": 518423000.0,
+          "shares": 39453843.0,
+          "put_call": null,
+          "weight": 0.1509445553767827
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 271565000.0,
+          "shares": 1425988.0,
+          "put_call": null,
+          "weight": 0.07906913501309934
+        },
+        {
+          "issuer": "WESCO INTL INC",
+          "title": "COM",
+          "cusip": "95082P105",
+          "ticker": null,
+          "value": 259799000.0,
+          "shares": 1435671.0,
+          "put_call": null,
+          "weight": 0.07564333477166864
+        },
+        {
+          "issuer": "CRH PLC",
+          "title": "ORD",
+          "cusip": "G25508105",
+          "ticker": null,
+          "value": 244383000.0,
+          "shares": 2641402.0,
+          "put_call": null,
+          "weight": 0.07115479690647268
+        },
+        {
+          "issuer": "FERGUSON ENTERPRISES INC",
+          "title": "COMMON STOCK NEW",
+          "cusip": "31488V107",
+          "ticker": null,
+          "value": 196481000.0,
+          "shares": 1132000.0,
+          "put_call": null,
+          "weight": 0.05720760302877311
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 189133000.0,
+          "shares": 2901700.0,
+          "put_call": null,
+          "weight": 0.0550681520535876
+        },
+        {
+          "issuer": "CLARIVATE PLC",
+          "title": "ORD SHS",
+          "cusip": "G21810109",
+          "ticker": null,
+          "value": 184298000.0,
+          "shares": 36279205.0,
+          "put_call": null,
+          "weight": 0.05366038865333964
+        },
+        {
+          "issuer": "EAGLE MATLS INC",
+          "title": "COM",
+          "cusip": "26969P108",
+          "ticker": null,
+          "value": 157488000.0,
+          "shares": 638223.0,
+          "put_call": null,
+          "weight": 0.04585436243603921
+        },
+        {
+          "issuer": "DOLLAR GEN CORP NEW",
+          "title": "COM",
+          "cusip": "256677105",
+          "ticker": null,
+          "value": 156250000.0,
+          "shares": 2060800.0,
+          "put_call": null,
+          "weight": 0.045493905126937455
+        },
+        {
+          "issuer": "VIASAT INC",
+          "title": "COM",
+          "cusip": "92552V100",
+          "ticker": null,
+          "value": 104014000.0,
+          "shares": 12222590.0,
+          "put_call": null,
+          "weight": 0.030284819506388946
+        },
+        {
+          "issuer": "GDS HLDGS LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "36165L108",
+          "ticker": null,
+          "value": 100979000.0,
+          "shares": 4249952.0,
+          "put_call": null,
+          "weight": 0.029401145893203313
+        },
+        {
+          "issuer": "SUNRISE COMMUNICATIONS AG",
+          "title": "ADS CL A",
+          "cusip": "867975104",
+          "ticker": null,
+          "value": 100603000.0,
+          "shares": 2335263.0,
+          "put_call": null,
+          "weight": 0.02929166935990585
+        },
+        {
+          "issuer": "SOLVENTUM CORP",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 95543000.0,
+          "shares": 1446300.0,
+          "put_call": null,
+          "weight": 0.027818394736275107
+        },
+        {
+          "issuer": "HUMANA INC",
+          "title": "COM",
+          "cusip": "444859102",
+          "ticker": null,
+          "value": 87784000.0,
+          "shares": 346000.0,
+          "put_call": null,
+          "weight": 0.025559276593043696
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL A",
+          "cusip": "G61188101",
+          "ticker": null,
+          "value": 66370000.0,
+          "shares": 5201444.0,
+          "put_call": null,
+          "weight": 0.019324355092958972
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "COM SHS",
+          "cusip": "G4412G101",
+          "ticker": null,
+          "value": 50848000.0,
+          "shares": 7600526.0,
+          "put_call": null,
+          "weight": 0.014804954162524902
+        },
+        {
+          "issuer": "GENUINE PARTS CO",
+          "title": "COM",
+          "cusip": "372460105",
+          "ticker": null,
+          "value": 36819000.0,
+          "shares": 315337.0,
+          "put_call": null,
+          "weight": 0.010720256594359746
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "NOTE 4.250% 6/1",
+          "cusip": "42703MAF0",
+          "ticker": null,
+          "value": 13104000.0,
+          "shares": 17129000.0,
+          "put_call": null,
+          "weight": 0.003815373649813686
+        },
+        {
+          "issuer": "LIBERTY BROADBAND CORP",
+          "title": "COM SER C",
+          "cusip": "530307305",
+          "ticker": null,
+          "value": 12755000.0,
+          "shares": 170610.0,
+          "put_call": null,
+          "weight": 0.0037137584633221586
+        },
+        {
+          "issuer": "TAMBORAN RES CORP",
+          "title": "COM",
+          "cusip": "87507T101",
+          "ticker": null,
+          "value": 11982000.0,
+          "shares": 570833.0,
+          "put_call": null,
+          "weight": 0.0034886910158781737
+        },
+        {
+          "issuer": "LIBERTY BROADBAND CORP",
+          "title": "COM SER A",
+          "cusip": "530307107",
+          "ticker": null,
+          "value": 562000.0,
+          "shares": 7560.0,
+          "put_call": null,
+          "weight": 0.00016363247796056865
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001061768-24-000005",
+      "filing_date": "2024-11-13",
+      "report_date": "2024-09-30",
+      "quarter": "2024Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1061768/000106176824000005/0001061768-24-000005-index.html",
+      "line_count": 21,
+      "position_count": 21,
+      "values_in_thousands": true,
+      "total_value": 3516299000.0,
+      "holdings": [
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL C",
+          "cusip": "G61188127",
+          "ticker": null,
+          "value": 914341000.0,
+          "shares": 42311011.0,
+          "put_call": null,
+          "weight": 0.2600293661033945
+        },
+        {
+          "issuer": "WILLIS TOWERS WATSON PLC LTD",
+          "title": "SHS",
+          "cusip": "G96629103",
+          "ticker": "WTW",
+          "value": 524619000.0,
+          "shares": 1781206.0,
+          "put_call": null,
+          "weight": 0.1491963567375812
+        },
+        {
+          "issuer": "CLARIVATE PLC",
+          "title": "ORD SHS",
+          "cusip": "G21810109",
+          "ticker": null,
+          "value": 276400000.0,
+          "shares": 38929635.0,
+          "put_call": null,
+          "weight": 0.07860537457138884
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 245032000.0,
+          "shares": 1465588.0,
+          "put_call": null,
+          "weight": 0.06968463148327261
+        },
+        {
+          "issuer": "CRH PLC",
+          "title": "ORD",
+          "cusip": "G25508105",
+          "ticker": null,
+          "value": 244518000.0,
+          "shares": 2636602.0,
+          "put_call": null,
+          "weight": 0.06953845506312177
+        },
+        {
+          "issuer": "WESCO INTL INC",
+          "title": "COM",
+          "cusip": "95082P105",
+          "ticker": null,
+          "value": 211319000.0,
+          "shares": 1258000.0,
+          "put_call": null,
+          "weight": 0.06009699402695846
+        },
+        {
+          "issuer": "DOLLAR GEN CORP NEW",
+          "title": "COM",
+          "cusip": "256677105",
+          "ticker": null,
+          "value": 194832000.0,
+          "shares": 2303800.0,
+          "put_call": null,
+          "weight": 0.05540825737515496
+        },
+        {
+          "issuer": "LIBERTY GLOBAL LTD",
+          "title": "COM CL A",
+          "cusip": "G61188101",
+          "ticker": null,
+          "value": 151871000.0,
+          "shares": 7194276.0,
+          "put_call": null,
+          "weight": 0.043190581915815464
+        },
+        {
+          "issuer": "VIASAT INC",
+          "title": "COM",
+          "cusip": "92552V100",
+          "ticker": null,
+          "value": 145938000.0,
+          "shares": 12222590.0,
+          "put_call": null,
+          "weight": 0.04150329650578634
+        },
+        {
+          "issuer": "EAGLE MATLS INC",
+          "title": "COM",
+          "cusip": "26969P108",
+          "ticker": null,
+          "value": 143904000.0,
+          "shares": 500273.0,
+          "put_call": null,
+          "weight": 0.04092484740347735
+        },
+        {
+          "issuer": "SOLVENTUM CORP",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 126890000.0,
+          "shares": 1820000.0,
+          "put_call": null,
+          "weight": 0.03608623726253086
+        },
+        {
+          "issuer": "GDS HLDGS LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "36165L108",
+          "ticker": null,
+          "value": 86699000.0,
+          "shares": 4249952.0,
+          "put_call": null,
+          "weight": 0.02465632188844009
+        },
+        {
+          "issuer": "FIDELITY NATL INFORMATION SV",
+          "title": "COM",
+          "cusip": "31620M106",
+          "ticker": null,
+          "value": 81360000.0,
+          "shares": 971460.0,
+          "put_call": null,
+          "weight": 0.02313796409235961
+        },
+        {
+          "issuer": "JACOBS SOLUTIONS INC",
+          "title": "COM",
+          "cusip": "46982L108",
+          "ticker": null,
+          "value": 45904000.0,
+          "shares": 350681.0,
+          "put_call": null,
+          "weight": 0.013054635001175952
+        },
+        {
+          "issuer": "FORTREA HLDGS INC",
+          "title": "COMMON STOCK",
+          "cusip": "34965K107",
+          "ticker": null,
+          "value": 45863000.0,
+          "shares": 2293167.0,
+          "put_call": null,
+          "weight": 0.013042975014354582
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "COM SHS",
+          "cusip": "G4412G101",
+          "ticker": null,
+          "value": 36845000.0,
+          "shares": 5124526.0,
+          "put_call": null,
+          "weight": 0.010478346693497908
+        },
+        {
+          "issuer": "LIBERTY BROADBAND CORP",
+          "title": "COM SER C",
+          "cusip": "530307305",
+          "ticker": null,
+          "value": 13186000.0,
+          "shares": 170610.0,
+          "put_call": null,
+          "weight": 0.0037499655177219
+        },
+        {
+          "issuer": "HERBALIFE LTD",
+          "title": "NOTE 4.250% 6/1",
+          "cusip": "42703MAF0",
+          "ticker": null,
+          "value": 12557000.0,
+          "shares": 17129000.0,
+          "put_call": null,
+          "weight": 0.0035710842564867207
+        },
+        {
+          "issuer": "TAMBORAN RES CORP",
+          "title": "COM",
+          "cusip": "87507T101",
+          "ticker": null,
+          "value": 11599000.0,
+          "shares": 570833.0,
+          "put_call": null,
+          "weight": 0.0032986387107581013
+        },
+        {
+          "issuer": "RESTAURANT BRANDS INTL INC",
+          "title": "COM",
+          "cusip": "76131D103",
+          "ticker": "QSR",
+          "value": 2041000.0,
+          "shares": 28294.0,
+          "put_call": null,
+          "weight": 0.0005804398317662974
+        },
+        {
+          "issuer": "LIBERTY BROADBAND CORP",
+          "title": "COM SER A",
+          "cusip": "530307107",
+          "ticker": null,
+          "value": 581000.0,
+          "shares": 7560.0,
+          "put_call": null,
+          "weight": 0.00016523054495650114
         }
       ]
     }

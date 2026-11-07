@@ -3,7 +3,14 @@
   "manager": "Mason Morfit",
   "cik": "0001418814",
   "history_quarters": [
-    "2026Q2"
+    "2026Q2",
+    "2026Q1",
+    "2025Q4",
+    "2025Q3",
+    "2025Q2",
+    "2025Q1",
+    "2024Q4",
+    "2024Q3"
   ],
   "history": [
     {
@@ -197,6 +204,1154 @@
           "shares": 2154800.0,
           "put_call": null,
           "weight": 0.005479797704979041
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001418814-26-000002",
+      "filing_date": "2026-05-15",
+      "report_date": "2026-03-31",
+      "quarter": "2026Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1418814/000141881426000002/0001418814-26-000002-index.html",
+      "line_count": 18,
+      "position_count": 18,
+      "values_in_thousands": false,
+      "total_value": 5712466529.0,
+      "holdings": [
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 700063400.0,
+          "shares": 2316250.0,
+          "put_call": null,
+          "weight": 0.12255010973736946
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 600775642.0,
+          "shares": 2884600.0,
+          "put_call": null,
+          "weight": 0.10516921875167104
+        },
+        {
+          "issuer": "SALESFORCE INC",
+          "title": "COM",
+          "cusip": "79466L302",
+          "ticker": "CRM",
+          "value": 558984995.0,
+          "shares": 2994509.0,
+          "put_call": null,
+          "weight": 0.09785352652173063
+        },
+        {
+          "issuer": "BLACKROCK INC",
+          "title": "COM",
+          "cusip": "09290D101",
+          "ticker": null,
+          "value": 525189831.0,
+          "shares": 546100.0,
+          "put_call": null,
+          "weight": 0.0919374894073887
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 523884566.0,
+          "shares": 915674.0,
+          "put_call": null,
+          "weight": 0.09170899528958973
+        },
+        {
+          "issuer": "ROCKET COS INC",
+          "title": "COM CL A",
+          "cusip": "77311W101",
+          "ticker": "RKT",
+          "value": 402059817.0,
+          "shares": 28214724.0,
+          "put_call": null,
+          "weight": 0.07038287488581274
+        },
+        {
+          "issuer": "TOAST INC",
+          "title": "CL A",
+          "cusip": "888787108",
+          "ticker": null,
+          "value": 341858061.0,
+          "shares": 12895438.0,
+          "put_call": null,
+          "weight": 0.05984421252440042
+        },
+        {
+          "issuer": "LIBERTY LIVE HOLDINGS INC",
+          "title": "COM SHS SER C",
+          "cusip": "530909308",
+          "ticker": "LLYVK",
+          "value": 335145285.0,
+          "shares": 3561208.0,
+          "put_call": null,
+          "weight": 0.05866910261943698
+        },
+        {
+          "issuer": "ROBLOX CORP",
+          "title": "CL A",
+          "cusip": "771049103",
+          "ticker": null,
+          "value": 330798004.0,
+          "shares": 5848621.0,
+          "put_call": null,
+          "weight": 0.057908086169199506
+        },
+        {
+          "issuer": "KKR & CO INC",
+          "title": "COM",
+          "cusip": "48251W104",
+          "ticker": null,
+          "value": 303372250.0,
+          "shares": 3279700.0,
+          "put_call": null,
+          "weight": 0.05310705077393373
+        },
+        {
+          "issuer": "MONGODB INC",
+          "title": "CL A",
+          "cusip": "60937P106",
+          "ticker": null,
+          "value": 254022306.0,
+          "shares": 1037800.0,
+          "put_call": null,
+          "weight": 0.044468060287167765
+        },
+        {
+          "issuer": "SIMPSON MFG INC",
+          "title": "COM",
+          "cusip": "829073105",
+          "ticker": null,
+          "value": 239931968.0,
+          "shares": 1398042.0,
+          "put_call": null,
+          "weight": 0.04200146587852331
+        },
+        {
+          "issuer": "SPOTIFY TECHNOLOGY S A",
+          "title": "SHS",
+          "cusip": "L8681T102",
+          "ticker": null,
+          "value": 173840235.0,
+          "shares": 358500.0,
+          "put_call": null,
+          "weight": 0.03043172929197569
+        },
+        {
+          "issuer": "LIBERTY LIVE HOLDINGS INC",
+          "title": "COM SER A",
+          "cusip": "530909100",
+          "ticker": "LLYVA",
+          "value": 162851153.0,
+          "shares": 1777075.0,
+          "put_call": null,
+          "weight": 0.028508027517232214
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT IN",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 95267812.0,
+          "shares": 624666.0,
+          "put_call": null,
+          "weight": 0.01667717640293591
+        },
+        {
+          "issuer": "WIX COM LTD",
+          "title": "SHS",
+          "cusip": "M98068105",
+          "ticker": null,
+          "value": 94069243.0,
+          "shares": 1099370.0,
+          "put_call": null,
+          "weight": 0.016467360031336125
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 38574264.0,
+          "shares": 400231.0,
+          "put_call": null,
+          "weight": 0.006752645954978163
+        },
+        {
+          "issuer": "CBRE GROUP INC",
+          "title": "CL A",
+          "cusip": "12504L109",
+          "ticker": null,
+          "value": 31777697.0,
+          "shares": 234591.0,
+          "put_call": null,
+          "weight": 0.00556286795531787
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001418814-26-000001",
+      "filing_date": "2026-02-17",
+      "report_date": "2025-12-31",
+      "quarter": "2025Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1418814/000141881426000001/0001418814-26-000001-index.html",
+      "line_count": 16,
+      "position_count": 16,
+      "values_in_thousands": false,
+      "total_value": 7025028860.0,
+      "holdings": [
+        {
+          "issuer": "SALESFORCE INC",
+          "title": "COM",
+          "cusip": "79466L302",
+          "ticker": "CRM",
+          "value": 793275379.0,
+          "shares": 2994509.0,
+          "put_call": null,
+          "weight": 0.1129212982336417
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 783472326.0,
+          "shares": 3394300.0,
+          "put_call": null,
+          "weight": 0.11152585158205315
+        },
+        {
+          "issuer": "ROCKET COS INC",
+          "title": "COM CL A",
+          "cusip": "77311W101",
+          "ticker": "RKT",
+          "value": 762409423.0,
+          "shares": 39380652.0,
+          "put_call": null,
+          "weight": 0.108527585892366
+        },
+        {
+          "issuer": "BLACKROCK INC",
+          "title": "COM",
+          "cusip": "09290D101",
+          "ticker": null,
+          "value": 743886300.0,
+          "shares": 695000.0,
+          "put_call": null,
+          "weight": 0.1058908532370072
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 691757158.0,
+          "shares": 1047974.0,
+          "put_call": null,
+          "weight": 0.09847036528758119
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 602607458.0,
+          "shares": 1718250.0,
+          "put_call": null,
+          "weight": 0.08578006866721968
+        },
+        {
+          "issuer": "MONGODB INC",
+          "title": "CL A",
+          "cusip": "60937P106",
+          "ticker": null,
+          "value": 590419892.0,
+          "shares": 1406800.0,
+          "put_call": null,
+          "weight": 0.08404519095456071
+        },
+        {
+          "issuer": "ROBLOX CORP",
+          "title": "CL A",
+          "cusip": "771049103",
+          "ticker": null,
+          "value": 484220776.0,
+          "shares": 5975821.0,
+          "put_call": null,
+          "weight": 0.06892794117289933
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 350176210.0,
+          "shares": 3077931.0,
+          "put_call": null,
+          "weight": 0.049846942550496515
+        },
+        {
+          "issuer": "LIBERTY LIVE HOLDINGS INC",
+          "title": "COM SHS SER C",
+          "cusip": "530909308",
+          "ticker": "LLYVK",
+          "value": 299707642.0,
+          "shares": 3603988.0,
+          "put_call": null,
+          "weight": 0.04266283427054846
+        },
+        {
+          "issuer": "TOAST INC",
+          "title": "CL A",
+          "cusip": "888787108",
+          "ticker": null,
+          "value": 284622486.0,
+          "shares": 8015277.0,
+          "put_call": null,
+          "weight": 0.040515489924976625
+        },
+        {
+          "issuer": "SIMPSON MFG INC",
+          "title": "COM",
+          "cusip": "829073105",
+          "ticker": null,
+          "value": 237706769.0,
+          "shares": 1472142.0,
+          "put_call": null,
+          "weight": 0.033837123481938264
+        },
+        {
+          "issuer": "LIBERTY LIVE HOLDINGS INC",
+          "title": "COM SER A",
+          "cusip": "530909100",
+          "ticker": "LLYVA",
+          "value": 146644499.0,
+          "shares": 1799319.0,
+          "put_call": null,
+          "weight": 0.02087457602273822
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT IN",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 117286905.0,
+          "shares": 823066.0,
+          "put_call": null,
+          "weight": 0.016695576251340837
+        },
+        {
+          "issuer": "INSIGHT ENTERPRISES INC",
+          "title": "COM",
+          "cusip": "45765U103",
+          "ticker": null,
+          "value": 99115750.0,
+          "shares": 1216592.0,
+          "put_call": null,
+          "weight": 0.014108945596559442
+        },
+        {
+          "issuer": "CBRE GROUP INC",
+          "title": "CL A",
+          "cusip": "12504L109",
+          "ticker": null,
+          "value": 37719887.0,
+          "shares": 234591.0,
+          "put_call": null,
+          "weight": 0.005369356874072685
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001418814-25-000003",
+      "filing_date": "2025-11-14",
+      "report_date": "2025-09-30",
+      "quarter": "2025Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1418814/000141881425000003/0001418814-25-000003-index.html",
+      "line_count": 16,
+      "position_count": 16,
+      "values_in_thousands": false,
+      "total_value": 5929591152.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 768604785.0,
+          "shares": 3500500.0,
+          "put_call": null,
+          "weight": 0.12962188543821546
+        },
+        {
+          "issuer": "SALESFORCE INC",
+          "title": "COM",
+          "cusip": "79466L302",
+          "ticker": "CRM",
+          "value": 686946633.0,
+          "shares": 2898509.0,
+          "put_call": null,
+          "weight": 0.11585058992950953
+        },
+        {
+          "issuer": "ROBLOX CORP",
+          "title": "CL A",
+          "cusip": "771049103",
+          "ticker": null,
+          "value": 593311773.0,
+          "shares": 4283221.0,
+          "put_call": null,
+          "weight": 0.10005947421853546
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 564498812.0,
+          "shares": 768674.0,
+          "put_call": null,
+          "weight": 0.09520029248721464
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 534549873.0,
+          "shares": 1565850.0,
+          "put_call": null,
+          "weight": 0.0901495329605821
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 502876100.0,
+          "shares": 4391931.0,
+          "put_call": null,
+          "weight": 0.08480788761133796
+        },
+        {
+          "issuer": "ROCKET COS INC",
+          "title": "COM CL A",
+          "cusip": "77311W101",
+          "ticker": "RKT",
+          "value": 492167251.0,
+          "shares": 25395627.0,
+          "put_call": null,
+          "weight": 0.0830018863668191
+        },
+        {
+          "issuer": "MONGODB INC",
+          "title": "CL A",
+          "cusip": "60937P106",
+          "ticker": null,
+          "value": 367192777.0,
+          "shares": 2118200.0,
+          "put_call": null,
+          "weight": 0.061925479782218885
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S C",
+          "cusip": "531229722",
+          "ticker": null,
+          "value": 340935659.0,
+          "shares": 3515888.0,
+          "put_call": null,
+          "weight": 0.057497329960937586
+        },
+        {
+          "issuer": "INSIGHT ENTERPRISES INC",
+          "title": "COM",
+          "cusip": "45765U103",
+          "ticker": null,
+          "value": 257637920.0,
+          "shares": 2271739.0,
+          "put_call": null,
+          "weight": 0.04344952516888132
+        },
+        {
+          "issuer": "SIMPSON MFG INC",
+          "title": "COM",
+          "cusip": "829073105",
+          "ticker": null,
+          "value": 202281967.0,
+          "shares": 1207942.0,
+          "put_call": null,
+          "weight": 0.034113982197874135
+        },
+        {
+          "issuer": "MR COOPER GROUP INC",
+          "title": "COM",
+          "cusip": "62482R107",
+          "ticker": null,
+          "value": 190722792.0,
+          "shares": 904800.0,
+          "put_call": null,
+          "weight": 0.03216457713710512
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S A",
+          "cusip": "531229748",
+          "ticker": null,
+          "value": 162153376.0,
+          "shares": 1719548.0,
+          "put_call": null,
+          "weight": 0.02734646822071486
+        },
+        {
+          "issuer": "TOAST INC",
+          "title": "CL A",
+          "cusip": "888787108",
+          "ticker": null,
+          "value": 124031772.0,
+          "shares": 3397200.0,
+          "put_call": null,
+          "weight": 0.020917423953954253
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT IN",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 104717504.0,
+          "shares": 640866.0,
+          "put_call": null,
+          "weight": 0.017660155871738255
+        },
+        {
+          "issuer": "CBRE GROUP INC",
+          "title": "CL A",
+          "cusip": "12504L109",
+          "ticker": null,
+          "value": 36962158.0,
+          "shares": 234591.0,
+          "put_call": null,
+          "weight": 0.006233508694361328
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001418812-25-000025",
+      "filing_date": "2025-08-14",
+      "report_date": "2025-06-30",
+      "quarter": "2025Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1418814/000141881225000025/0001418812-25-000025-index.html",
+      "line_count": 18,
+      "position_count": 18,
+      "values_in_thousands": false,
+      "total_value": 5599318806.0,
+      "holdings": [
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 849587775.0,
+          "shares": 3872500.0,
+          "put_call": null,
+          "weight": 0.15173055945477093
+        },
+        {
+          "issuer": "SALESFORCE INC",
+          "title": "COM",
+          "cusip": "79466L302",
+          "ticker": "CRM",
+          "value": 790394419.0,
+          "shares": 2898509.0,
+          "put_call": null,
+          "weight": 0.1411590313723601
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 630917120.0,
+          "shares": 5087631.0,
+          "put_call": null,
+          "weight": 0.11267747771817085
+        },
+        {
+          "issuer": "ROBLOX CORP",
+          "title": "CL A",
+          "cusip": "771049103",
+          "ticker": null,
+          "value": 497808609.0,
+          "shares": 4732021.0,
+          "put_call": null,
+          "weight": 0.08890520905267418
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 460106116.0,
+          "shares": 623374.0,
+          "put_call": null,
+          "weight": 0.08217180195329639
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 442019498.0,
+          "shares": 1244950.0,
+          "put_call": null,
+          "weight": 0.07894165581826669
+        },
+        {
+          "issuer": "INSIGHT ENTERPRISES INC",
+          "title": "COM",
+          "cusip": "45765U103",
+          "ticker": null,
+          "value": 395163230.0,
+          "shares": 2861739.0,
+          "put_call": null,
+          "weight": 0.070573447180139
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S C",
+          "cusip": "531229722",
+          "ticker": null,
+          "value": 323981630.0,
+          "shares": 3991888.0,
+          "put_call": null,
+          "weight": 0.05786090080329675
+        },
+        {
+          "issuer": "SIMPSON MFG INC",
+          "title": "COM",
+          "cusip": "829073105",
+          "ticker": null,
+          "value": 218382168.0,
+          "shares": 1406105.0,
+          "put_call": null,
+          "weight": 0.03900155993368169
+        },
+        {
+          "issuer": "ROCKET COS INC",
+          "title": "COM CL A",
+          "cusip": "77311W101",
+          "ticker": "RKT",
+          "value": 214481136.0,
+          "shares": 15125609.0,
+          "put_call": null,
+          "weight": 0.038304862328998095
+        },
+        {
+          "issuer": "MONGODB INC",
+          "title": "CL A",
+          "cusip": "60937P106",
+          "ticker": null,
+          "value": 144998095.0,
+          "shares": 690500.0,
+          "put_call": null,
+          "weight": 0.025895666959456925
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S A",
+          "cusip": "531229748",
+          "ticker": null,
+          "value": 140929803.0,
+          "shares": 1773148.0,
+          "put_call": null,
+          "weight": 0.025169097864008994
+        },
+        {
+          "issuer": "MR COOPER GROUP INC",
+          "title": "COM",
+          "cusip": "62482R107",
+          "ticker": null,
+          "value": 135005208.0,
+          "shares": 904800.0,
+          "put_call": null,
+          "weight": 0.024111005762939227
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT IN",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 133923040.0,
+          "shares": 885266.0,
+          "put_call": null,
+          "weight": 0.023917737967785218
+        },
+        {
+          "issuer": "CBRE GROUP INC",
+          "title": "CL A",
+          "cusip": "12504L109",
+          "ticker": null,
+          "value": 82585467.0,
+          "shares": 589391.0,
+          "put_call": null,
+          "weight": 0.014749198940325527
+        },
+        {
+          "issuer": "REDFIN CORP",
+          "title": "COM",
+          "cusip": "75737F108",
+          "ticker": null,
+          "value": 64964664.0,
+          "shares": 5805600.0,
+          "put_call": null,
+          "weight": 0.011602244174842577
+        },
+        {
+          "issuer": "EXPEDIA GROUP INC",
+          "title": "COM NEW",
+          "cusip": "30212P303",
+          "ticker": null,
+          "value": 46953090.0,
+          "shares": 278356.0,
+          "put_call": null,
+          "weight": 0.008385500384383722
+        },
+        {
+          "issuer": "CCC INTELLIGENT SOLUTIONS HL",
+          "title": "COM",
+          "cusip": "12510Q100",
+          "ticker": null,
+          "value": 27117738.0,
+          "shares": 2881800.0,
+          "put_call": null,
+          "weight": 0.004843042330603098
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001418812-25-000015",
+      "filing_date": "2025-05-15",
+      "report_date": "2025-03-31",
+      "quarter": "2025Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1418814/000141881225000015/0001418812-25-000015-index.html",
+      "line_count": 14,
+      "position_count": 14,
+      "values_in_thousands": false,
+      "total_value": 4581517749.0,
+      "holdings": [
+        {
+          "issuer": "SALESFORCE INC",
+          "title": "COM",
+          "cusip": "79466L302",
+          "ticker": "CRM",
+          "value": 777843875.0,
+          "shares": 2898509.0,
+          "put_call": null,
+          "weight": 0.1697786448977042
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 648067260.0,
+          "shares": 6566031.0,
+          "put_call": null,
+          "weight": 0.14145252632524508
+        },
+        {
+          "issuer": "INSIGHT ENTERPRISES INC",
+          "title": "COM",
+          "cusip": "45765U103",
+          "ticker": null,
+          "value": 609220233.0,
+          "shares": 4061739.0,
+          "put_call": null,
+          "weight": 0.13297345254920676
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 584932779.0,
+          "shares": 1014874.0,
+          "put_call": null,
+          "weight": 0.1276722717330239
+        },
+        {
+          "issuer": "ROBLOX CORP",
+          "title": "CL A",
+          "cusip": "771049103",
+          "ticker": null,
+          "value": 510907245.0,
+          "shares": 8764921.0,
+          "put_call": null,
+          "weight": 0.11151484573240272
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 460136457.0,
+          "shares": 1312950.0,
+          "put_call": null,
+          "weight": 0.10043319314880603
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S C",
+          "cusip": "531229722",
+          "ticker": null,
+          "value": 266010928.0,
+          "shares": 3903888.0,
+          "put_call": null,
+          "weight": 0.0580617477817393
+        },
+        {
+          "issuer": "EXPEDIA GROUP INC",
+          "title": "COM NEW",
+          "cusip": "30212P303",
+          "ticker": null,
+          "value": 187793924.0,
+          "shares": 1117156.0,
+          "put_call": null,
+          "weight": 0.04098945683250697
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT IN",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 115598034.0,
+          "shares": 885266.0,
+          "put_call": null,
+          "weight": 0.0252313840812319
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S A",
+          "cusip": "531229748",
+          "ticker": null,
+          "value": 111527492.0,
+          "shares": 1658648.0,
+          "put_call": null,
+          "weight": 0.02434291387921457
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 107135406.0,
+          "shares": 563100.0,
+          "put_call": null,
+          "weight": 0.023384260821293176
+        },
+        {
+          "issuer": "TOAST INC",
+          "title": "CL A",
+          "cusip": "888787108",
+          "ticker": null,
+          "value": 86149124.0,
+          "shares": 2597200.0,
+          "put_call": null,
+          "weight": 0.018803621140353242
+        },
+        {
+          "issuer": "ROCKET COS INC",
+          "title": "COM CL A",
+          "cusip": "77311W101",
+          "ticker": "RKT",
+          "value": 81213104.0,
+          "shares": 6728509.0,
+          "put_call": null,
+          "weight": 0.01772624454368342
+        },
+        {
+          "issuer": "NU HLDGS LTD",
+          "title": "ORD SHS CL A",
+          "cusip": "G6683N103",
+          "ticker": null,
+          "value": 34981888.0,
+          "shares": 3416200.0,
+          "put_call": null,
+          "weight": 0.007635436533588774
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001418812-25-000004",
+      "filing_date": "2025-02-14",
+      "report_date": "2024-12-31",
+      "quarter": "2024Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1418814/000141881225000004/0001418812-25-000004-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": false,
+      "total_value": 4389194544.0,
+      "holdings": [
+        {
+          "issuer": "SALESFORCE INC",
+          "title": "COM",
+          "cusip": "79466L302",
+          "ticker": "CRM",
+          "value": 969058514.0,
+          "shares": 2898509.0,
+          "put_call": null,
+          "weight": 0.22078276647014805
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 731127552.0,
+          "shares": 6566031.0,
+          "put_call": null,
+          "weight": 0.1665744237742769
+        },
+        {
+          "issuer": "INSIGHT ENTERPRISES INC",
+          "title": "COM",
+          "cusip": "45765U103",
+          "ticker": null,
+          "value": 617790502.0,
+          "shares": 4061739.0,
+          "put_call": null,
+          "weight": 0.14075259043701208
+        },
+        {
+          "issuer": "ROBLOX CORP",
+          "title": "CL A",
+          "cusip": "771049103",
+          "ticker": null,
+          "value": 586464389.0,
+          "shares": 10135921.0,
+          "put_call": null,
+          "weight": 0.13361549211840995
+        },
+        {
+          "issuer": "EXPEDIA GROUP INC",
+          "title": "COM NEW",
+          "cusip": "30212P303",
+          "ticker": null,
+          "value": 375903260.0,
+          "shares": 2017406.0,
+          "put_call": null,
+          "weight": 0.08564287962898734
+        },
+        {
+          "issuer": "TOAST INC",
+          "title": "CL A",
+          "cusip": "888787108",
+          "ticker": null,
+          "value": 311596470.0,
+          "shares": 8548600.0,
+          "put_call": null,
+          "weight": 0.07099171997877157
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S C",
+          "cusip": "531229722",
+          "ticker": null,
+          "value": 215667711.0,
+          "shares": 3168788.0,
+          "put_call": null,
+          "weight": 0.04913605647642489
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT INC",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 137459847.0,
+          "shares": 1061466.0,
+          "put_call": null,
+          "weight": 0.03131778407678618
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 123835365.0,
+          "shares": 211500.0,
+          "put_call": null,
+          "weight": 0.028213687900729333
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 118072544.0,
+          "shares": 373600.0,
+          "put_call": null,
+          "weight": 0.02690073151608292
+        },
+        {
+          "issuer": "AMAZON COM INC",
+          "title": "COM",
+          "cusip": "023135106",
+          "ticker": "AMZN",
+          "value": 117790491.0,
+          "shares": 536900.0,
+          "put_call": null,
+          "weight": 0.026836470750884994
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S A",
+          "cusip": "531229748",
+          "ticker": null,
+          "value": 84427899.0,
+          "shares": 1268448.0,
+          "put_call": null,
+          "weight": 0.019235396871485767
+        }
+      ]
+    },
+    {
+      "form": "13F-HR/A",
+      "accession": "0001418812-24-000022",
+      "filing_date": "2024-11-15",
+      "report_date": "2024-09-30",
+      "quarter": "2024Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1418814/000141881224000022/0001418812-24-000022-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 4373981460.0,
+      "holdings": [
+        {
+          "issuer": "SALESFORCE INC",
+          "title": "COM",
+          "cusip": "79466L302",
+          "ticker": "CRM",
+          "value": 1071385516.0,
+          "shares": 3914309.0,
+          "put_call": null,
+          "weight": 0.24494514341174184
+        },
+        {
+          "issuer": "INSIGHT ENTERPRISES INC",
+          "title": "COM",
+          "cusip": "45765U103",
+          "ticker": null,
+          "value": 874857963.0,
+          "shares": 4061739.0,
+          "put_call": null,
+          "weight": 0.20001409951106652
+        },
+        {
+          "issuer": "DISNEY WALT CO",
+          "title": "COM",
+          "cusip": "254687106",
+          "ticker": "DIS",
+          "value": 718042094.0,
+          "shares": 7464831.0,
+          "put_call": null,
+          "weight": 0.16416212564376073
+        },
+        {
+          "issuer": "ROBLOX CORP",
+          "title": "CL A",
+          "cusip": "771049103",
+          "ticker": null,
+          "value": 448615863.0,
+          "shares": 10135921.0,
+          "put_call": null,
+          "weight": 0.10256464667319372
+        },
+        {
+          "issuer": "TOAST INC",
+          "title": "CL A",
+          "cusip": "888787108",
+          "ticker": null,
+          "value": 438301082.0,
+          "shares": 15482200.0,
+          "put_call": null,
+          "weight": 0.1002064334310187
+        },
+        {
+          "issuer": "EXPEDIA GROUP INC",
+          "title": "COM NEW",
+          "cusip": "30212P303",
+          "ticker": null,
+          "value": 385977840.0,
+          "shares": 2607606.0,
+          "put_call": null,
+          "weight": 0.0882440503074286
+        },
+        {
+          "issuer": "META PLATFORMS INC",
+          "title": "CL A",
+          "cusip": "30303M102",
+          "ticker": "META",
+          "value": 121071060.0,
+          "shares": 211500.0,
+          "put_call": null,
+          "weight": 0.027679829260181636
+        },
+        {
+          "issuer": "LIVE NATION ENTERTAINMENT IN",
+          "title": "COM",
+          "cusip": "538034109",
+          "ticker": null,
+          "value": 111094029.0,
+          "shares": 1014650.0,
+          "put_call": null,
+          "weight": 0.025398833995057674
+        },
+        {
+          "issuer": "VISA",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 102721320.0,
+          "shares": 373600.0,
+          "put_call": null,
+          "weight": 0.023484626292860418
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S C",
+          "cusip": "531229722",
+          "ticker": null,
+          "value": 68653875.0,
+          "shares": 1337500.0,
+          "put_call": null,
+          "weight": 0.0156959684506756
+        },
+        {
+          "issuer": "LIBERTY MEDIA CORP DEL",
+          "title": "COM LBTY LIV S A",
+          "cusip": "531229748",
+          "ticker": null,
+          "value": 33260818.0,
+          "shares": 671800.0,
+          "put_call": null,
+          "weight": 0.007604243023014551
         }
       ]
     }

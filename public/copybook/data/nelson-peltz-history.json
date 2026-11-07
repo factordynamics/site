@@ -3,7 +3,14 @@
   "manager": "Nelson Peltz",
   "cik": "0001345471",
   "history_quarters": [
-    "2026Q2"
+    "2026Q2",
+    "2026Q1",
+    "2025Q4",
+    "2025Q3",
+    "2025Q2",
+    "2025Q1",
+    "2024Q4",
+    "2024Q3"
   ],
   "history": [
     {
@@ -97,6 +104,724 @@
           "shares": 241042.0,
           "put_call": null,
           "weight": 0.0009918778132906982
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001345471-26-000026",
+      "filing_date": "2026-05-15",
+      "report_date": "2026-03-31",
+      "quarter": "2026Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1345471/000134547126000026/0001345471-26-000026-index.html",
+      "line_count": 9,
+      "position_count": 8,
+      "values_in_thousands": false,
+      "total_value": 3859778188.0,
+      "holdings": [
+        {
+          "issuer": "Janus Henderson Group plc",
+          "title": "ORD SHS",
+          "cusip": "G4474Y214",
+          "ticker": null,
+          "value": 1637048886.0,
+          "shares": 31867800.0,
+          "put_call": null,
+          "weight": 0.4241303013446637
+        },
+        {
+          "issuer": "GE Aerospace",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 1143810184.0,
+          "shares": 4030765.0,
+          "put_call": null,
+          "weight": 0.2963409108730887
+        },
+        {
+          "issuer": "Solventum Corporation",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 537859971.0,
+          "shares": 8236753.0,
+          "put_call": null,
+          "weight": 0.13934996904024163
+        },
+        {
+          "issuer": "Ferguson Plc New",
+          "title": "SHS",
+          "cusip": "G3421J106",
+          "ticker": null,
+          "value": 253403634.0,
+          "shares": 1086357.0,
+          "put_call": null,
+          "weight": 0.06565238250939616
+        },
+        {
+          "issuer": "Wendys Co.",
+          "title": "COM",
+          "cusip": "95058W100",
+          "ticker": null,
+          "value": 211599853.0,
+          "shares": 30446022.0,
+          "put_call": null,
+          "weight": 0.05482176505838112
+        },
+        {
+          "issuer": "Invesco Ltd.",
+          "title": "SHS",
+          "cusip": "G491BT108",
+          "ticker": null,
+          "value": 72164230.0,
+          "shares": 2970944.0,
+          "put_call": null,
+          "weight": 0.01869647075170217
+        },
+        {
+          "issuer": "Magnum Ice Cream Co NV",
+          "title": "ORD SHS",
+          "cusip": "N5505D105",
+          "ticker": null,
+          "value": 3603578.0,
+          "shares": 241042.0,
+          "put_call": null,
+          "weight": 0.000933623080000679
+        },
+        {
+          "issuer": "GE HealthCare Technologies Inc.",
+          "title": "COM",
+          "cusip": "36266G107",
+          "ticker": null,
+          "value": 287852.0,
+          "shares": 4044.0,
+          "put_call": null,
+          "weight": 7.457734252577729e-05
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001345471-26-000015",
+      "filing_date": "2026-02-17",
+      "report_date": "2025-12-31",
+      "quarter": "2025Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1345471/000134547126000015/0001345471-26-000015-index.html",
+      "line_count": 8,
+      "position_count": 7,
+      "values_in_thousands": false,
+      "total_value": 3984029993.0,
+      "holdings": [
+        {
+          "issuer": "Janus Henderson Group plc",
+          "title": "ORD SHS",
+          "cusip": "G4474Y214",
+          "ticker": null,
+          "value": 1515951246.0,
+          "shares": 31867800.0,
+          "put_call": null,
+          "weight": 0.3805069863087248
+        },
+        {
+          "issuer": "GE Aerospace",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 1241596543.0,
+          "shares": 4030765.0,
+          "put_call": null,
+          "weight": 0.31164337245992213
+        },
+        {
+          "issuer": "Solventum Corporation",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 652680308.0,
+          "shares": 8236753.0,
+          "put_call": null,
+          "weight": 0.16382414518634875
+        },
+        {
+          "issuer": "Wendys Co.",
+          "title": "COM",
+          "cusip": "95058W100",
+          "ticker": null,
+          "value": 253567849.0,
+          "shares": 30440318.0,
+          "put_call": null,
+          "weight": 0.06364606929303306
+        },
+        {
+          "issuer": "Ferguson Plc New",
+          "title": "SHS",
+          "cusip": "G3421J106",
+          "ticker": null,
+          "value": 241855659.0,
+          "shares": 1086357.0,
+          "put_call": null,
+          "weight": 0.06070628469789233
+        },
+        {
+          "issuer": "Invesco Ltd.",
+          "title": "SHS",
+          "cusip": "G491BT108",
+          "ticker": null,
+          "value": 78046699.0,
+          "shares": 2970944.0,
+          "put_call": null,
+          "weight": 0.019589887409765794
+        },
+        {
+          "issuer": "GE HealthCare Technologies Inc.",
+          "title": "COM",
+          "cusip": "36266G107",
+          "ticker": null,
+          "value": 331689.0,
+          "shares": 4044.0,
+          "put_call": null,
+          "weight": 8.325464431311575e-05
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001345471-25-000051",
+      "filing_date": "2025-11-14",
+      "report_date": "2025-09-30",
+      "quarter": "2025Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1345471/000134547125000051/0001345471-25-000051-index.html",
+      "line_count": 8,
+      "position_count": 7,
+      "values_in_thousands": false,
+      "total_value": 4107246762.0,
+      "holdings": [
+        {
+          "issuer": "Janus Henderson Group plc",
+          "title": "ORD SHS",
+          "cusip": "G4474Y214",
+          "ticker": null,
+          "value": 1418435778.0,
+          "shares": 31867800.0,
+          "put_call": null,
+          "weight": 0.345349539531757
+        },
+        {
+          "issuer": "GE Aerospace",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 1212368675.0,
+          "shares": 4030213.0,
+          "put_call": null,
+          "weight": 0.29517794894058036
+        },
+        {
+          "issuer": "Solventum Corporation",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 617785787.0,
+          "shares": 8462819.0,
+          "put_call": null,
+          "weight": 0.15041360375902343
+        },
+        {
+          "issuer": "Invesco Ltd.",
+          "title": "SHS",
+          "cusip": "G491BT108",
+          "ticker": null,
+          "value": 335576758.0,
+          "shares": 14628455.0,
+          "put_call": null,
+          "weight": 0.08170357844206878
+        },
+        {
+          "issuer": "Wendys Co.",
+          "title": "COM",
+          "cusip": "95058W100",
+          "ticker": null,
+          "value": 278803131.0,
+          "shares": 30437023.0,
+          "put_call": null,
+          "weight": 0.06788078417383386
+        },
+        {
+          "issuer": "Ferguson Plc New",
+          "title": "SHS",
+          "cusip": "G3421J106",
+          "ticker": null,
+          "value": 243974055.0,
+          "shares": 1086357.0,
+          "put_call": null,
+          "weight": 0.05940087585124743
+        },
+        {
+          "issuer": "GE HealthCare Technologies Inc.",
+          "title": "COM",
+          "cusip": "36266G107",
+          "ticker": null,
+          "value": 302578.0,
+          "shares": 4029.0,
+          "put_call": null,
+          "weight": 7.366930148912246e-05
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001345471-25-000028",
+      "filing_date": "2025-08-14",
+      "report_date": "2025-06-30",
+      "quarter": "2025Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1345471/000134547125000028/0001345471-25-000028-index.html",
+      "line_count": 11,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 3791909471.0,
+      "holdings": [
+        {
+          "issuer": "Janus Henderson Group plc",
+          "title": "ORD SHS",
+          "cusip": "G4474Y214",
+          "ticker": null,
+          "value": 1237745352.0,
+          "shares": 31867800.0,
+          "put_call": null,
+          "weight": 0.3264174320262932
+        },
+        {
+          "issuer": "GE Aerospace",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 1037336524.0,
+          "shares": 4030213.0,
+          "put_call": null,
+          "weight": 0.27356574093696234
+        },
+        {
+          "issuer": "Solventum Corporation",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 641820193.0,
+          "shares": 8462819.0,
+          "put_call": null,
+          "weight": 0.1692604208799161
+        },
+        {
+          "issuer": "Wendys Co.",
+          "title": "COM",
+          "cusip": "95058W100",
+          "ticker": null,
+          "value": 347565348.0,
+          "shares": 30434794.0,
+          "put_call": null,
+          "weight": 0.09165971673589039
+        },
+        {
+          "issuer": "Ferguson Plc New",
+          "title": "SHS",
+          "cusip": "G3421J106",
+          "ticker": null,
+          "value": 236554237.0,
+          "shares": 1086357.0,
+          "put_call": null,
+          "weight": 0.06238393580045466
+        },
+        {
+          "issuer": "Invesco Ltd.",
+          "title": "SHS",
+          "cusip": "G491BT108",
+          "ticker": null,
+          "value": 230690735.0,
+          "shares": 14628455.0,
+          "put_call": null,
+          "weight": 0.06083761671112955
+        },
+        {
+          "issuer": "U-Haul Holding Company",
+          "title": "COM",
+          "cusip": "023586100",
+          "ticker": null,
+          "value": 21397968.0,
+          "shares": 353335.0,
+          "put_call": null,
+          "weight": 0.005643058771220332
+        },
+        {
+          "issuer": "The Allstate Corporation",
+          "title": "COM",
+          "cusip": "200021014",
+          "ticker": null,
+          "value": 20121941.0,
+          "shares": 99955.0,
+          "put_call": null,
+          "weight": 0.00530654572686659
+        },
+        {
+          "issuer": "U-Haul Holding Company - B",
+          "title": "COM SER N",
+          "cusip": "023586506",
+          "ticker": null,
+          "value": 18378745.0,
+          "shares": 338031.0,
+          "put_call": null,
+          "weight": 0.004846831165289705
+        },
+        {
+          "issuer": "GE HealthCare Technologies Inc.",
+          "title": "COM",
+          "cusip": "36266G107",
+          "ticker": null,
+          "value": 298428.0,
+          "shares": 4029.0,
+          "put_call": null,
+          "weight": 7.870124597708255e-05
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001345471-25-000018",
+      "filing_date": "2025-05-15",
+      "report_date": "2025-03-31",
+      "quarter": "2025Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1345471/000134547125000018/0001345471-25-000018-index.html",
+      "line_count": 11,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 3735730306.0,
+      "holdings": [
+        {
+          "issuer": "Janus Henderson Group plc",
+          "title": "ORD SHS",
+          "cusip": "G4474Y214",
+          "ticker": null,
+          "value": 1152020970.0,
+          "shares": 31867800.0,
+          "put_call": null,
+          "weight": 0.30837905192184933
+        },
+        {
+          "issuer": "GE Aerospace",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 806647132.0,
+          "shares": 4030213.0,
+          "put_call": null,
+          "weight": 0.21592756059087956
+        },
+        {
+          "issuer": "Solventum Corporation",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 643512757.0,
+          "shares": 8462819.0,
+          "put_call": null,
+          "weight": 0.1722588903075917
+        },
+        {
+          "issuer": "Wendys Co.",
+          "title": "COM",
+          "cusip": "95058W100",
+          "ticker": null,
+          "value": 445098483.0,
+          "shares": 30423683.0,
+          "put_call": null,
+          "weight": 0.11914631050456778
+        },
+        {
+          "issuer": "Invesco Ltd.",
+          "title": "SHS",
+          "cusip": "G491BT108",
+          "ticker": null,
+          "value": 351541115.0,
+          "shares": 23173442.0,
+          "put_call": null,
+          "weight": 0.09410238058014674
+        },
+        {
+          "issuer": "Ferguson Plc New",
+          "title": "SHS",
+          "cusip": "G3421J106",
+          "ticker": null,
+          "value": 161634416.0,
+          "shares": 1008765.0,
+          "put_call": null,
+          "weight": 0.04326715334359043
+        },
+        {
+          "issuer": "U-Haul Holding Company - B",
+          "title": "COM SER N",
+          "cusip": "023586506",
+          "ticker": null,
+          "value": 66559746.0,
+          "shares": 1124700.0,
+          "put_call": null,
+          "weight": 0.017817064013721122
+        },
+        {
+          "issuer": "The Allstate Corporation",
+          "title": "COM",
+          "cusip": "200021014",
+          "ticker": null,
+          "value": 65775786.0,
+          "shares": 317650.0,
+          "put_call": null,
+          "weight": 0.017607209464333317
+        },
+        {
+          "issuer": "U-Haul Holding Company",
+          "title": "COM",
+          "cusip": "023586100",
+          "ticker": null,
+          "value": 42614720.0,
+          "shares": 652000.0,
+          "put_call": null,
+          "weight": 0.011407333107413027
+        },
+        {
+          "issuer": "GE HealthCare Technologies Inc.",
+          "title": "COM",
+          "cusip": "36266G107",
+          "ticker": null,
+          "value": 325181.0,
+          "shares": 4029.0,
+          "put_call": null,
+          "weight": 8.704616590703108e-05
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001345471-25-000009",
+      "filing_date": "2025-02-14",
+      "report_date": "2024-12-31",
+      "quarter": "2024Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1345471/000134547125000009/0001345471-25-000009-index.html",
+      "line_count": 11,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 3880505606.0,
+      "holdings": [
+        {
+          "issuer": "Janus Henderson Group plc",
+          "title": "ORD SHS",
+          "cusip": "G4474Y214",
+          "ticker": null,
+          "value": 1355337534.0,
+          "shares": 31867800.0,
+          "put_call": null,
+          "weight": 0.3492682839845381
+        },
+        {
+          "issuer": "General Electric Co.",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 672199226.0,
+          "shares": 4030213.0,
+          "put_call": null,
+          "weight": 0.1732246501488497
+        },
+        {
+          "issuer": "Solventum Corporation",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 559053823.0,
+          "shares": 8462819.0,
+          "put_call": null,
+          "weight": 0.14406726333176698
+        },
+        {
+          "issuer": "Wendys Co.",
+          "title": "COM",
+          "cusip": "95058W100",
+          "ticker": null,
+          "value": 497557973.0,
+          "shares": 30525029.0,
+          "put_call": null,
+          "weight": 0.1282198825407392
+        },
+        {
+          "issuer": "Invesco Ltd.",
+          "title": "SHS",
+          "cusip": "G491BT108",
+          "ticker": null,
+          "value": 405071766.0,
+          "shares": 23173442.0,
+          "put_call": null,
+          "weight": 0.10438633702105261
+        },
+        {
+          "issuer": "Ferguson Plc New",
+          "title": "SHS",
+          "cusip": "G3421J106",
+          "ticker": null,
+          "value": 214753648.0,
+          "shares": 1237274.0,
+          "put_call": null,
+          "weight": 0.05534166673228097
+        },
+        {
+          "issuer": "U-Haul Holding Company - B",
+          "title": "COM SER N",
+          "cusip": "023586506",
+          "ticker": null,
+          "value": 72037035.0,
+          "shares": 1124700.0,
+          "put_call": null,
+          "weight": 0.018563827066405223
+        },
+        {
+          "issuer": "The Allstate Corporation",
+          "title": "COM",
+          "cusip": "200021014",
+          "ticker": null,
+          "value": 59132934.0,
+          "shares": 306722.0,
+          "put_call": null,
+          "weight": 0.015238461170773529
+        },
+        {
+          "issuer": "U-Haul Holding Company",
+          "title": "COM",
+          "cusip": "023586100",
+          "ticker": null,
+          "value": 45046680.0,
+          "shares": 652000.0,
+          "put_call": null,
+          "weight": 0.011608456364642087
+        },
+        {
+          "issuer": "GE HealthCare Technologies Inc.",
+          "title": "COM",
+          "cusip": "36266G107",
+          "ticker": null,
+          "value": 314987.0,
+          "shares": 4029.0,
+          "put_call": null,
+          "weight": 8.11716389516279e-05
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001345471-24-000040",
+      "filing_date": "2024-11-13",
+      "report_date": "2024-09-30",
+      "quarter": "2024Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1345471/000134547124000040/0001345471-24-000040-index.html",
+      "line_count": 11,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 3891003188.0,
+      "holdings": [
+        {
+          "issuer": "Janus Henderson Group plc",
+          "title": "ORD SHS",
+          "cusip": "G4474Y214",
+          "ticker": null,
+          "value": 1213207146.0,
+          "shares": 31867800.0,
+          "put_call": null,
+          "weight": 0.3117980344353293
+        },
+        {
+          "issuer": "General Electric Co.",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 760017568.0,
+          "shares": 4030213.0,
+          "put_call": null,
+          "weight": 0.19532689419117485
+        },
+        {
+          "issuer": "Wendys Co.",
+          "title": "COM",
+          "cusip": "95058W100",
+          "ticker": null,
+          "value": 534580664.0,
+          "shares": 30512595.0,
+          "put_call": null,
+          "weight": 0.13738890413882643
+        },
+        {
+          "issuer": "Solventum Corporation",
+          "title": "COM SHS",
+          "cusip": "83444M101",
+          "ticker": null,
+          "value": 496842499.0,
+          "shares": 7126255.0,
+          "put_call": null,
+          "weight": 0.12769007759548512
+        },
+        {
+          "issuer": "Invesco Ltd.",
+          "title": "SHS",
+          "cusip": "G491BT108",
+          "ticker": null,
+          "value": 406925642.0,
+          "shares": 23173442.0,
+          "put_call": null,
+          "weight": 0.10458116386410939
+        },
+        {
+          "issuer": "Ferguson Plc New",
+          "title": "SHS",
+          "cusip": "G3421J106",
+          "ticker": null,
+          "value": 252344742.0,
+          "shares": 1270810.0,
+          "put_call": null,
+          "weight": 0.0648533886526335
+        },
+        {
+          "issuer": "The Allstate Corporation",
+          "title": "COM",
+          "cusip": "200021014",
+          "ticker": null,
+          "value": 116340224.0,
+          "shares": 613447.0,
+          "put_call": null,
+          "weight": 0.029899801768037
+        },
+        {
+          "issuer": "U-Haul Holding Company - B",
+          "title": "COM SER N",
+          "cusip": "023586506",
+          "ticker": null,
+          "value": 75531960.0,
+          "shares": 1049055.0,
+          "put_call": null,
+          "weight": 0.019411950170830854
+        },
+        {
+          "issuer": "U-Haul Holding Company",
+          "title": "COM",
+          "cusip": "023586100",
+          "ticker": null,
+          "value": 34834621.0,
+          "shares": 449595.0,
+          "put_call": null,
+          "weight": 0.00895260664587253
+        },
+        {
+          "issuer": "GE HealthCare Technologies Inc.",
+          "title": "COM",
+          "cusip": "36266G107",
+          "ticker": null,
+          "value": 378122.0,
+          "shares": 4029.0,
+          "put_call": null,
+          "weight": 9.717853770105932e-05
         }
       ]
     }
