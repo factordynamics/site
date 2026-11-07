@@ -8,7 +8,7 @@ const dist = new URL('../dist/', import.meta.url).pathname
 const src = process.argv[2] || 'https://refcell.github.io/gust/copybook/data/index.json'
 const index = src.startsWith('http') ? await (await fetch(src)).json() : JSON.parse(readFileSync(src, 'utf8'))
 const shell = readFileSync(join(dist, 'index.html'), 'utf8')
-const SITE = process.env.VITE_SITE || 'https://refcell.github.io/gust/copybook/'
+const SITE = process.env.VITE_SITE || 'https://copybook.factordynamics.com/'
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
 function page(path, title, desc) {
@@ -50,11 +50,5 @@ redirect('copycat.html', 'consensus/')
 redirect('pricing.html', 'pricing/')
 redirect('about.html', 'about/')
 writeFileSync(join(dist, '404.html'), shell)
-// GitHub Pages serves only the project root 404.html (gust/404.html), so ship one that renders the
-// Copybook not-found page for copybook paths and sends anything else to the gust home page.
-writeFileSync(
-  join(dist, '404-root.html'),
-  shell.replace('<title>', `<script>if(!location.pathname.startsWith('/gust/copybook'))location.replace('/gust/')</script>\n    <title>`).replace(/<title>.*?<\/title>/, '<title>Page not found · Copybook</title>'),
-)
 writeFileSync(join(dist, '.nojekyll'), '')
 console.log(`wrote ${n} investor pages`)
