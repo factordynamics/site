@@ -4,29 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chase Coleman — Copybook</title>
-<meta name="description" content="Copybook tracks 13F holdings as filed for 41 superinvestors. Latest quarter free. Copycat book, no live prices.">
+<meta name="description" content="Copybook — latest 13F holdings as filed for 41 superinvestors. Copycat book, no live prices.">
+<meta name="theme-color" content="#0b0d10">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css">
 </head>
-<body>
-<header class="site-header">
-  <a class="brand" href="../index.html">Copybook</a>
-  <nav><a href="../index.html#managers">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+<body data-base="../">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../index.html"><span class="mark">C</span> Copybook</a>
+    <nav class="nav" id="nav"><a href="../index.html" aria-current="page">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+      <label class="sr" for="global-search">Search managers</label>
+      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <div id="search-results" class="search-results"></div>
+    </div>
+    <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
+    <a class="top-cta" href="../pricing.html">Join Copy</a>
+  </div>
 </header>
-<main>
+<main id="main">
+<p class="crumb"><a href="../index.html">Holdings</a> / Chase Coleman</p>
 <section class="hero">
-  <p class="eyebrow">Tiger Global Management LLC</p>
-  <h1>Chase Coleman</h1>
-  <p class="lede">2026Q2 13F-HR filed 2026-08-14 for period 2026-06-30. 46 positions, $23.98B as filed. Largest line: TAIWAN SEMICONDUCTOR MANUFAC at 9.72% of as-filed value.</p>
-  <p class="meta">CIK 0001167483 · 13F-HR · <a href="https://www.sec.gov/Archives/edgar/data/1167483/000091957426005427/0000919574-26-005427-index.html">SEC filing</a></p>
+  <div>
+    <p class="faint">Tiger Global Management LLC </p>
+    <h1>Chase Coleman</h1>
+    <p class="lede">2026Q2 13F-HR filed 14 Aug 2026 for period 2026-06-30. 46 positions, $23.98B as filed. Largest line: TSM at 9.72% of as-filed value.</p>
+    <p class="meta">CIK 0001167483 · 13F-HR · <a href="https://www.sec.gov/Archives/edgar/data/1167483/000091957426005427/0000919574-26-005427-index.html">SEC filing</a></p>
+  </div>
 </section>
-<section>
-  <h2>Holdings as filed</h2>
-  <div class="table-wrap"><table><thead><tr><th>Ticker</th><th>Issuer</th><th>CUSIP</th><th>Shares</th><th>Value as filed</th><th>Weight</th></tr></thead><tbody><tr><td class='ticker'>—</td><td>TAIWAN SEMICONDUCTOR MANUFAC</td><td class='mono'>874039100</td><td class='num'>4.88M</td><td class='num'>$2.33B</td><td class='num'>9.72%</td></tr><tr><td class='ticker'>AMZN</td><td>AMAZON COM INC</td><td class='mono'>023135106</td><td class='num'>9.68M</td><td class='num'>$2.31B</td><td class='num'>9.62%</td></tr><tr><td class='ticker'>NVDA</td><td>NVIDIA CORPORATION</td><td class='mono'>67066G104</td><td class='num'>11.20M</td><td class='num'>$2.24B</td><td class='num'>9.34%</td></tr><tr><td class='ticker'>GOOGL</td><td>ALPHABET INC</td><td class='mono'>02079K305</td><td class='num'>5.81M</td><td class='num'>$2.07B</td><td class='num'>8.65%</td></tr><tr><td class='ticker'>META</td><td>META PLATFORMS INC</td><td class='mono'>30303M102</td><td class='num'>2.82M</td><td class='num'>$1.59B</td><td class='num'>6.63%</td></tr><tr><td class='ticker'>—</td><td>LAM RESEARCH CORP</td><td class='mono'>512807306</td><td class='num'>3.16M</td><td class='num'>$1.37B</td><td class='num'>5.72%</td></tr><tr><td class='ticker'>XYZ</td><td>SEA LTD</td><td class='mono'>81141R100</td><td class='num'>12.56M</td><td class='num'>$1.20B</td><td class='num'>5.02%</td></tr><tr><td class='ticker'>—</td><td>APPLIED MATLS INC</td><td class='mono'>038222105</td><td class='num'>1.63M</td><td class='num'>$1.18B</td><td class='num'>4.92%</td></tr><tr><td class='ticker'>—</td><td>GE VERNOVA INC</td><td class='mono'>36828A101</td><td class='num'>797,511</td><td class='num'>$937.0M</td><td class='num'>3.91%</td></tr><tr><td class='ticker'>MSFT</td><td>MICROSOFT CORP</td><td class='mono'>594918104</td><td class='num'>2.27M</td><td class='num'>$845.6M</td><td class='num'>3.53%</td></tr><tr><td class='ticker'>—</td><td>CORPAY INC</td><td class='mono'>219948106</td><td class='num'>2.15M</td><td class='num'>$716.5M</td><td class='num'>2.99%</td></tr><tr><td class='ticker'>—</td><td>CEREBRAS SYSTEMS INC</td><td class='mono'>15675D103</td><td class='num'>3.00M</td><td class='num'>$662.8M</td><td class='num'>2.76%</td></tr><tr><td class='ticker'>AVGO</td><td>BROADCOM INC</td><td class='mono'>11135F101</td><td class='num'>1.75M</td><td class='num'>$662.6M</td><td class='num'>2.76%</td></tr><tr><td class='ticker'>—</td><td>COUPANG INC</td><td class='mono'>22266T109</td><td class='num'>36.47M</td><td class='num'>$633.4M</td><td class='num'>2.64%</td></tr><tr><td class='ticker'>INTC</td><td>INTEL CORP</td><td class='mono'>458140100</td><td class='num'>4.25M</td><td class='num'>$593.8M</td><td class='num'>2.48%</td></tr><tr><td class='ticker'>—</td><td>SPOTIFY TECHNOLOGY S A</td><td class='mono'>L8681T102</td><td class='num'>1.17M</td><td class='num'>$537.8M</td><td class='num'>2.24%</td></tr><tr><td class='ticker'>—</td><td>TAKE-TWO INTERACTIVE SOFTWAR</td><td class='mono'>874054109</td><td class='num'>1.81M</td><td class='num'>$452.3M</td><td class='num'>1.89%</td></tr><tr><td class='ticker'>—</td><td>REDDIT INC</td><td class='mono'>75734B100</td><td class='num'>2.53M</td><td class='num'>$439.0M</td><td class='num'>1.83%</td></tr><tr><td class='ticker'>AMD</td><td>ADVANCED MICRO DEVICES INC</td><td class='mono'>007903107</td><td class='num'>674,727</td><td class='num'>$392.0M</td><td class='num'>1.63%</td></tr><tr><td class='ticker'>—</td><td>BLOCK INC</td><td class='mono'>852234103</td><td class='num'>4.58M</td><td class='num'>$347.8M</td><td class='num'>1.45%</td></tr><tr><td class='ticker'>—</td><td>APOLLO GLOBAL MGMT INC</td><td class='mono'>03769M106</td><td class='num'>2.72M</td><td class='num'>$322.2M</td><td class='num'>1.34%</td></tr><tr><td class='ticker'>—</td><td>SEAGATE TECHNOLOGY HLDNGS PL</td><td class='mono'>G7997R103</td><td class='num'>285,100</td><td class='num'>$275.1M</td><td class='num'>1.15%</td></tr><tr><td class='ticker'>V</td><td>VISA INC</td><td class='mono'>92826C839</td><td class='num'>798,697</td><td class='num'>$274.0M</td><td class='num'>1.14%</td></tr><tr><td class='ticker'>—</td><td>MERCADOLIBRE INC</td><td class='mono'>58733R102</td><td class='num'>153,126</td><td class='num'>$259.9M</td><td class='num'>1.08%</td></tr><tr><td class='ticker'>—</td><td>LIBERTY MEDIA CORP DEL</td><td class='mono'>531229755</td><td class='num'>2.28M</td><td class='num'>$216.8M</td><td class='num'>0.90%</td></tr><tr><td class='ticker'>—</td><td>NU HLDGS LTD</td><td class='mono'>G6683N103</td><td class='num'>11.03M</td><td class='num'>$147.4M</td><td class='num'>0.61%</td></tr><tr><td class='ticker'>—</td><td>WEALTHFRONT CORP</td><td class='mono'>947002101</td><td class='num'>15.16M</td><td class='num'>$135.5M</td><td class='num'>0.57%</td></tr><tr><td class='ticker'>UNH</td><td>UNITEDHEALTH GROUP INC</td><td class='mono'>91324P102</td><td class='num'>297,452</td><td class='num'>$123.6M</td><td class='num'>0.52%</td></tr><tr><td class='ticker'>—</td><td>CHIME FINL INC</td><td class='mono'>16935C109</td><td class='num'>5.28M</td><td class='num'>$108.2M</td><td class='num'>0.45%</td></tr><tr><td class='ticker'>—</td><td>EQUIPMENTSHARE COM INC</td><td class='mono'>29445S100</td><td class='num'>4.58M</td><td class='num'>$90.0M</td><td class='num'>0.38%</td></tr><tr><td class='ticker'>—</td><td>SHERWIN WILLIAMS CO</td><td class='mono'>824348106</td><td class='num'>257,083</td><td class='num'>$88.5M</td><td class='num'>0.37%</td></tr><tr><td class='ticker'>DHR</td><td>DANAHER CORP DEL</td><td class='mono'>235851102</td><td class='num'>456,000</td><td class='num'>$86.9M</td><td class='num'>0.36%</td></tr><tr><td class='ticker'>—</td><td>SERVICENOW INC</td><td class='mono'>81762P102</td><td class='num'>873,485</td><td class='num'>$86.7M</td><td class='num'>0.36%</td></tr><tr><td class='ticker'>—</td><td>SPACE EXPLORATION TECHN CORP</td><td class='mono'>84615Q103</td><td class='num'>375,000</td><td class='num'>$64.1M</td><td class='num'>0.27%</td></tr><tr><td class='ticker'>—</td><td>WEBULL CORP</td><td class='mono'>G9572D103</td><td class='num'>6.72M</td><td class='num'>$43.8M</td><td class='num'>0.18%</td></tr><tr><td class='ticker'>—</td><td>ATRENEW INC</td><td class='mono'>00138L108</td><td class='num'>9.83M</td><td class='num'>$38.0M</td><td class='num'>0.16%</td></tr><tr><td class='ticker'>—</td><td>APPLIED DIGITAL CORP</td><td class='mono'>038169207</td><td class='num'>885,000</td><td class='num'>$33.0M</td><td class='num'>0.14%</td></tr><tr><td class='ticker'>—</td><td>CIPHER DIGITAL INC</td><td class='mono'>17253J106</td><td class='num'>927,000</td><td class='num'>$22.7M</td><td class='num'>0.09%</td></tr><tr><td class='ticker'>—</td><td>CORE SCIENTIFIC INC NEW</td><td class='mono'>21874A106</td><td class='num'>817,000</td><td class='num'>$20.9M</td><td class='num'>0.09%</td></tr><tr><td class='ticker'>UBER</td><td>UBER TECHNOLOGIES INC</td><td class='mono'>90353T100</td><td class='num'>151,178</td><td class='num'>$10.9M</td><td class='num'>0.05%</td></tr><tr><td class='ticker'>—</td><td>JD.COM INC</td><td class='mono'>47215P106</td><td class='num'>201,500</td><td class='num'>$5.1M</td><td class='num'>0.02%</td></tr><tr><td class='ticker'>—</td><td>DOORDASH INC</td><td class='mono'>25809K105</td><td class='num'>25,337</td><td class='num'>$4.7M</td><td class='num'>0.02%</td></tr><tr><td class='ticker'>—</td><td>PONY AI INC</td><td class='mono'>732908108</td><td class='num'>310,287</td><td class='num'>$2.2M</td><td class='num'>0.01%</td></tr><tr><td class='ticker'>—</td><td>ACCELERANT HOLDINGS</td><td class='mono'>G00894108</td><td class='num'>75,000</td><td class='num'>$879K</td><td class='num'>0.00%</td></tr><tr><td class='ticker'>—</td><td>GEMINI SPACE STA INC</td><td class='mono'>36866J105</td><td class='num'>70,000</td><td class='num'>$298K</td><td class='num'>0.00%</td></tr><tr><td class='ticker'>—</td><td>MNTN INC</td><td class='mono'>55318A108</td><td class='num'>20,000</td><td class='num'>$184K</td><td class='num'>0.00%</td></tr></tbody></table></div>
+<section id="holdings-app" data-slug="chase-coleman">
+  <div class="toolbar">
+    <label class="sr" for="holdings-search">Search holdings</label>
+    <input id="holdings-search" type="search" placeholder="Search ticker or issuer">
+  </div>
+  <div id="holdings-table"></div>
 </section>
+<p class="cta-row" style="margin-top:24px"><span><a href="ray-dalio.html">← Ray Dalio</a></span><span><a href="stephen-mandel.html">Stephen Mandel →</a></span></p>
 </main>
 <footer class="site-footer">
-  <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and ~45 days late. Not investment advice.</p>
-  <p>A Factor Dynamics product. No Yahoo prices. No Dataroma scrape. Holdings only.</p>
+  <div class="inner">
+    <div>
+      <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and about 45 days late. Not investment advice.</p>
+      <p>Factor Dynamics · Holdings only · No Yahoo prices</p>
+    </div>
+    <div>
+      <a href="../about.html">About</a> ·
+      <a href="../pricing.html">Pricing</a> ·
+      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+    </div>
+  </div>
 </footer>
+<script src="../app.js" defer></script>
 </body>
 </html>

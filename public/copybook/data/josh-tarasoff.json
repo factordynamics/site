@@ -29,7 +29,7 @@
       "issuer": "BROOKFIELD CORP",
       "title": "CL A LTD VT SH",
       "cusip": "11271J107",
-      "ticker": null,
+      "ticker": "BN",
       "value": 59316882.0,
       "shares": 1392742.0,
       "put_call": null,

@@ -79,7 +79,7 @@
       "issuer": "WILLIS TOWERS WATSON PLC LTD",
       "title": "SHS",
       "cusip": "G96629103",
-      "ticker": null,
+      "ticker": "WTW",
       "value": 188390007.0,
       "shares": 720779.0,
       "put_call": null,

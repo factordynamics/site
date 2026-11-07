@@ -39,7 +39,7 @@
       "issuer": "ROCKET COS INC",
       "title": "COM CL A",
       "cusip": "77311W101",
-      "ticker": null,
+      "ticker": "RKT",
       "value": 656283191.0,
       "shares": 41668774.0,
       "put_call": null,

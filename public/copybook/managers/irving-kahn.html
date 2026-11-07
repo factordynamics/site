@@ -4,29 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Irving Kahn — Copybook</title>
-<meta name="description" content="Copybook tracks 13F holdings as filed for 41 superinvestors. Latest quarter free. Copycat book, no live prices.">
+<meta name="description" content="Copybook — latest 13F holdings as filed for 41 superinvestors. Copycat book, no live prices.">
+<meta name="theme-color" content="#0b0d10">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css">
 </head>
-<body>
-<header class="site-header">
-  <a class="brand" href="../index.html">Copybook</a>
-  <nav><a href="../index.html#managers">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+<body data-base="../">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../index.html"><span class="mark">C</span> Copybook</a>
+    <nav class="nav" id="nav"><a href="../index.html" aria-current="page">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+      <label class="sr" for="global-search">Search managers</label>
+      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <div id="search-results" class="search-results"></div>
+    </div>
+    <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
+    <a class="top-cta" href="../pricing.html">Join Copy</a>
+  </div>
 </header>
-<main>
+<main id="main">
+<p class="crumb"><a href="../index.html">Holdings</a> / Irving Kahn</p>
 <section class="hero">
-  <p class="eyebrow">Kahn Brothers Group Inc</p>
-  <h1>Irving Kahn</h1>
-  <p class="lede">2026Q2 13F-HR filed 2026-08-17 for period 2026-06-30. 47 positions, $632.7M as filed. Largest line: C at 18.50% of as-filed value.</p>
-  <p class="meta">CIK 0001039565 · 13F-HR/A · <a href="https://www.sec.gov/Archives/edgar/data/1039565/000103956526000006/0001039565-26-000006-index.html">SEC filing</a></p>
+  <div>
+    <p class="faint">Kahn Brothers Group Inc </p>
+    <h1>Irving Kahn</h1>
+    <p class="lede">2026Q2 13F-HR filed 17 Aug 2026 for period 2026-06-30. 47 positions, $632.7M as filed. Largest line: C at 18.50% of as-filed value.</p>
+    <p class="meta">CIK 0001039565 · 13F-HR/A · <a href="https://www.sec.gov/Archives/edgar/data/1039565/000103956526000006/0001039565-26-000006-index.html">SEC filing</a></p>
+  </div>
 </section>
-<section>
-  <h2>Holdings as filed</h2>
-  <div class="table-wrap"><table><thead><tr><th>Ticker</th><th>Issuer</th><th>CUSIP</th><th>Shares</th><th>Value as filed</th><th>Weight</th></tr></thead><tbody><tr><td class='ticker'>C</td><td>Citigroup Inc</td><td class='mono'>172967424</td><td class='num'>836,337</td><td class='num'>$117.1M</td><td class='num'>18.50%</td></tr><tr><td class='ticker'>—</td><td>Bayer AG Spons ADR</td><td class='mono'>072730302</td><td class='num'>6.52M</td><td class='num'>$89.3M</td><td class='num'>14.12%</td></tr><tr><td class='ticker'>—</td><td>Flagstar Financial, Inc.</td><td class='mono'>649445400</td><td class='num'>4.07M</td><td class='num'>$60.9M</td><td class='num'>9.62%</td></tr><tr><td class='ticker'>GOOG</td><td>Alphabet Inc Class C</td><td class='mono'>02079K107</td><td class='num'>120,906</td><td class='num'>$42.7M</td><td class='num'>6.75%</td></tr><tr><td class='ticker'>—</td><td>Zillow Group Inc</td><td class='mono'>98954M200</td><td class='num'>1.18M</td><td class='num'>$37.3M</td><td class='num'>5.89%</td></tr><tr><td class='ticker'>—</td><td>Organon &amp; Co</td><td class='mono'>68622V106</td><td class='num'>2.67M</td><td class='num'>$36.2M</td><td class='num'>5.72%</td></tr><tr><td class='ticker'>DIS</td><td>Walt Disney</td><td class='mono'>254687106</td><td class='num'>359,092</td><td class='num'>$34.6M</td><td class='num'>5.46%</td></tr><tr><td class='ticker'>MRK</td><td>Merck &amp; Co. Inc.</td><td class='mono'>58933Y105</td><td class='num'>218,182</td><td class='num'>$28.0M</td><td class='num'>4.43%</td></tr><tr><td class='ticker'>—</td><td>M B I A Inc</td><td class='mono'>55262C100</td><td class='num'>4.21M</td><td class='num'>$27.5M</td><td class='num'>4.34%</td></tr><tr><td class='ticker'>—</td><td>Seaport Entmt Group</td><td class='mono'>812215200</td><td class='num'>917,005</td><td class='num'>$24.4M</td><td class='num'>3.86%</td></tr><tr><td class='ticker'>—</td><td>Seaboard Corp</td><td class='mono'>811543107</td><td class='num'>5,389</td><td class='num'>$24.1M</td><td class='num'>3.80%</td></tr><tr><td class='ticker'>—</td><td>BP PLC</td><td class='mono'>055622104</td><td class='num'>624,999</td><td class='num'>$23.1M</td><td class='num'>3.65%</td></tr><tr><td class='ticker'>—</td><td>IDT Corp Class B</td><td class='mono'>448947507</td><td class='num'>351,660</td><td class='num'>$20.5M</td><td class='num'>3.23%</td></tr><tr><td class='ticker'>—</td><td>Patterson Uti Energy</td><td class='mono'>703481101</td><td class='num'>1.66M</td><td class='num'>$15.3M</td><td class='num'>2.41%</td></tr><tr><td class='ticker'>PFE</td><td>Pfizer</td><td class='mono'>717081103</td><td class='num'>464,001</td><td class='num'>$11.2M</td><td class='num'>1.77%</td></tr><tr><td class='ticker'>—</td><td>Bristol-Myers Squibb</td><td class='mono'>110122108</td><td class='num'>174,152</td><td class='num'>$10.0M</td><td class='num'>1.59%</td></tr><tr><td class='ticker'>—</td><td>GSK PLC ADR</td><td class='mono'>37733W204</td><td class='num'>158,438</td><td class='num'>$8.3M</td><td class='num'>1.31%</td></tr><tr><td class='ticker'>XOM</td><td>ExxonMobil</td><td class='mono'>30231G102</td><td class='num'>17,655</td><td class='num'>$2.4M</td><td class='num'>0.38%</td></tr><tr><td class='ticker'>—</td><td>Genie Energy LTD Class B</td><td class='mono'>372284208</td><td class='num'>151,941</td><td class='num'>$2.2M</td><td class='num'>0.35%</td></tr><tr><td class='ticker'>—</td><td>Novartis AG</td><td class='mono'>66987V109</td><td class='num'>13,186</td><td class='num'>$2.1M</td><td class='num'>0.33%</td></tr><tr><td class='ticker'>—</td><td>Fairfax Finl HLDGS LTD Sub VTG</td><td class='mono'>303901102</td><td class='num'>1,018</td><td class='num'>$1.7M</td><td class='num'>0.26%</td></tr><tr><td class='ticker'>—</td><td>CSX Corp Com</td><td class='mono'>126408103</td><td class='num'>34,781</td><td class='num'>$1.7M</td><td class='num'>0.26%</td></tr><tr><td class='ticker'>—</td><td>First Natl BK Alaska</td><td class='mono'>32112J106</td><td class='num'>4,920</td><td class='num'>$1.6M</td><td class='num'>0.25%</td></tr><tr><td class='ticker'>—</td><td>Tourmaline Oil Corp Com</td><td class='mono'>89156V106</td><td class='num'>26,959</td><td class='num'>$1.1M</td><td class='num'>0.18%</td></tr><tr><td class='ticker'>JPM</td><td>JPMorgan Chase</td><td class='mono'>46625H100</td><td class='num'>2,878</td><td class='num'>$942K</td><td class='num'>0.15%</td></tr><tr><td class='ticker'>AAPL</td><td>Apple Inc Com</td><td class='mono'>037833100</td><td class='num'>3,092</td><td class='num'>$895K</td><td class='num'>0.14%</td></tr><tr><td class='ticker'>MSFT</td><td>Microsoft</td><td class='mono'>594918104</td><td class='num'>2,168</td><td class='num'>$809K</td><td class='num'>0.13%</td></tr><tr><td class='ticker'>—</td><td>Sei Invt Co Pa PV $0.01</td><td class='mono'>784117103</td><td class='num'>6,596</td><td class='num'>$579K</td><td class='num'>0.09%</td></tr><tr><td class='ticker'>—</td><td>Haleon PLC</td><td class='mono'>405552100</td><td class='num'>58,341</td><td class='num'>$544K</td><td class='num'>0.09%</td></tr><tr><td class='ticker'>—</td><td>Bank Of America Corp</td><td class='mono'>060505104</td><td class='num'>9,459</td><td class='num'>$539K</td><td class='num'>0.09%</td></tr><tr><td class='ticker'>—</td><td>Peyto Expl &amp; Dev Corp</td><td class='mono'>717046106</td><td class='num'>31,307</td><td class='num'>$522K</td><td class='num'>0.08%</td></tr><tr><td class='ticker'>—</td><td>Rafael Holdings Inc Class B</td><td class='mono'>75062E106</td><td class='num'>150,493</td><td class='num'>$494K</td><td class='num'>0.08%</td></tr><tr><td class='ticker'>—</td><td>Windrock LTD Co</td><td class='mono'>97349V107</td><td class='num'>807</td><td class='num'>$444K</td><td class='num'>0.07%</td></tr><tr><td class='ticker'>—</td><td>Intl Business Machines</td><td class='mono'>459200101</td><td class='num'>1,228</td><td class='num'>$345K</td><td class='num'>0.05%</td></tr><tr><td class='ticker'>—</td><td>Deutsche Bank AG</td><td class='mono'>D18190898</td><td class='num'>10,000</td><td class='num'>$338K</td><td class='num'>0.05%</td></tr><tr><td class='ticker'>—</td><td>Webster Finl Co</td><td class='mono'>947890109</td><td class='num'>4,349</td><td class='num'>$332K</td><td class='num'>0.05%</td></tr><tr><td class='ticker'>—</td><td>PNC Finl SVCS Group Inc Com</td><td class='mono'>693475105</td><td class='num'>1,342</td><td class='num'>$330K</td><td class='num'>0.05%</td></tr><tr><td class='ticker'>CVX</td><td>Chevron Corp.</td><td class='mono'>166764100</td><td class='num'>1,953</td><td class='num'>$324K</td><td class='num'>0.05%</td></tr><tr><td class='ticker'>—</td><td>Orange CNTY Bancorp</td><td class='mono'>68417L107</td><td class='num'>8,000</td><td class='num'>$294K</td><td class='num'>0.05%</td></tr><tr><td class='ticker'>—</td><td>Public SVC Enterprise Group</td><td class='mono'>744573106</td><td class='num'>3,524</td><td class='num'>$286K</td><td class='num'>0.05%</td></tr><tr><td class='ticker'>—</td><td>Blackstone Inc Com</td><td class='mono'>09260D107</td><td class='num'>2,300</td><td class='num'>$271K</td><td class='num'>0.04%</td></tr><tr><td class='ticker'>—</td><td>Antero Midstream Corp</td><td class='mono'>03676B102</td><td class='num'>11,806</td><td class='num'>$269K</td><td class='num'>0.04%</td></tr><tr><td class='ticker'>PG</td><td>Procter &amp; Gamble</td><td class='mono'>742718109</td><td class='num'>1,752</td><td class='num'>$257K</td><td class='num'>0.04%</td></tr><tr><td class='ticker'>PEP</td><td>Pepsico Inc Com</td><td class='mono'>713448108</td><td class='num'>1,800</td><td class='num'>$244K</td><td class='num'>0.04%</td></tr><tr><td class='ticker'>—</td><td>Zedge Inc</td><td class='mono'>98923T104</td><td class='num'>78,126</td><td class='num'>$242K</td><td class='num'>0.04%</td></tr><tr><td class='ticker'>VZ</td><td>Verizon</td><td class='mono'>92343V104</td><td class='num'>5,682</td><td class='num'>$241K</td><td class='num'>0.04%</td></tr><tr><td class='ticker'>—</td><td>Pine Cliff Energy LTD Com</td><td class='mono'>722524105</td><td class='num'>520,000</td><td class='num'>$209K</td><td class='num'>0.03%</td></tr></tbody></table></div>
+<section id="holdings-app" data-slug="irving-kahn">
+  <div class="toolbar">
+    <label class="sr" for="holdings-search">Search holdings</label>
+    <input id="holdings-search" type="search" placeholder="Search ticker or issuer">
+  </div>
+  <div id="holdings-table"></div>
 </section>
+<p class="cta-row" style="margin-top:24px"><span><a href="william-von-mueffling.html">← William von Mueffling</a></span><span><a href="robert-olstein.html">Robert Olstein →</a></span></p>
 </main>
 <footer class="site-footer">
-  <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and ~45 days late. Not investment advice.</p>
-  <p>A Factor Dynamics product. No Yahoo prices. No Dataroma scrape. Holdings only.</p>
+  <div class="inner">
+    <div>
+      <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and about 45 days late. Not investment advice.</p>
+      <p>Factor Dynamics · Holdings only · No Yahoo prices</p>
+    </div>
+    <div>
+      <a href="../about.html">About</a> ·
+      <a href="../pricing.html">Pricing</a> ·
+      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+    </div>
+  </div>
 </footer>
+<script src="../app.js" defer></script>
 </body>
 </html>

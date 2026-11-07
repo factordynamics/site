@@ -4,27 +4,46 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>About — Copybook</title>
-<meta name="description" content="Copybook tracks 13F holdings as filed for 41 superinvestors. Latest quarter free. Copycat book, no live prices.">
+<meta name="description" content="Copybook — latest 13F holdings as filed for 41 superinvestors. Copycat book, no live prices.">
+<meta name="theme-color" content="#0b0d10">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-<header class="site-header">
-  <a class="brand" href="index.html">Copybook</a>
-  <nav><a href="index.html#managers">Holdings</a><a href="copycat.html">Copycat</a><a href="pricing.html">Pricing</a><a href="about.html">About</a></nav>
+<body data-base="">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="index.html"><span class="mark">C</span> Copybook</a>
+    <nav class="nav" id="nav"><a href="index.html">Holdings</a><a href="copycat.html">Copycat</a><a href="pricing.html">Pricing</a><a href="about.html" aria-current="page">About</a></nav>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+      <label class="sr" for="global-search">Search managers</label>
+      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <div id="search-results" class="search-results"></div>
+    </div>
+    <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
+    <a class="top-cta" href="pricing.html">Join Copy</a>
+  </div>
 </header>
-<main>
-<section class="hero">
-  <p class="eyebrow">About</p>
-  <h1>Holdings as filed. Nothing else.</h1>
+<main id="main">
+<section class="hero" style="grid-template-columns:1fr">
+  <div>
+    <p class="faint">About</p>
+    <h1>Holdings as filed. Nothing else.</h1>
+  </div>
 </section>
 <section class="prose">
-  <p>Copybook is a consumer 13F site from Factor Dynamics. It reads each manager's latest 13F-HR information table from SEC EDGAR and shows issuer, CUSIP, shares, and the filer-reported value.</p>
+  <p>Copybook is a consumer 13F site from <a href="https://www.factordynamics.com">Factor Dynamics</a>. It reads each manager’s latest 13F-HR information table from SEC EDGAR and shows issuer, CUSIP, shares, and the filer-reported value.</p>
   <h2>What you are looking at</h2>
   <ul>
     <li>Public 13F-HR filings, as filed. Fair-access User-Agent, under 10 requests/second.</li>
     <li>CUSIP to ticker from a static map when we have one. Missing tickers show as a dash, not a guessed price.</li>
     <li>Split 13F lines (same CUSIP, several other-manager rows) are summed.</li>
     <li>The copycat book is the value-weighted sum of those as-filed books. It is not a fund.</li>
+    <li>GOOGL and GOOG stay two rows because they are two 13F share classes.</li>
   </ul>
   <h2>What we do not show</h2>
   <ul>
@@ -34,13 +53,23 @@
     <li>Dataroma HTML. Managers are the 41 hard-coded CIKs.</li>
   </ul>
   <h2>Lag and holes</h2>
-  <p>13F is due 45 days after quarter-end. It omits shorts, many options, and advisers under $100M AUM. Values are the filer's quarter-end marks, not today's market.</p>
+  <p>13F is due 45 days after quarter-end. It omits shorts, many options, and advisers under $100M AUM. Values are the filer’s quarter-end marks, not today’s market.</p>
   <p>Not investment advice. Factor Dynamics is not a registered investment adviser. Past research results are not a live track record.</p>
 </section>
 </main>
 <footer class="site-footer">
-  <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and ~45 days late. Not investment advice.</p>
-  <p>A Factor Dynamics product. No Yahoo prices. No Dataroma scrape. Holdings only.</p>
+  <div class="inner">
+    <div>
+      <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and about 45 days late. Not investment advice.</p>
+      <p>Factor Dynamics · Holdings only · No Yahoo prices</p>
+    </div>
+    <div>
+      <a href="about.html">About</a> ·
+      <a href="pricing.html">Pricing</a> ·
+      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+    </div>
+  </div>
 </footer>
+<script src="app.js" defer></script>
 </body>
 </html>

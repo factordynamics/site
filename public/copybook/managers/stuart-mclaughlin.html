@@ -4,29 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stuart McLaughlin — Copybook</title>
-<meta name="description" content="Copybook tracks 13F holdings as filed for 41 superinvestors. Latest quarter free. Copycat book, no live prices.">
+<meta name="description" content="Copybook — latest 13F holdings as filed for 41 superinvestors. Copycat book, no live prices.">
+<meta name="theme-color" content="#0b0d10">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css">
 </head>
-<body>
-<header class="site-header">
-  <a class="brand" href="../index.html">Copybook</a>
-  <nav><a href="../index.html#managers">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+<body data-base="../">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../index.html"><span class="mark">C</span> Copybook</a>
+    <nav class="nav" id="nav"><a href="../index.html" aria-current="page">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+      <label class="sr" for="global-search">Search managers</label>
+      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <div id="search-results" class="search-results"></div>
+    </div>
+    <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
+    <a class="top-cta" href="../pricing.html">Join Copy</a>
+  </div>
 </header>
-<main>
+<main id="main">
+<p class="crumb"><a href="../index.html">Holdings</a> / Stuart McLaughlin</p>
 <section class="hero">
-  <p class="eyebrow">Triple Frond Partners LLC</p>
-  <h1>Stuart McLaughlin</h1>
-  <p class="lede">2026Q2 13F-HR filed 2026-08-13 for period 2026-06-30. 13 positions, $1.12B as filed. Largest line: ASML HOLDING N V at 21.11% of as-filed value.</p>
-  <p class="meta">CIK 0001454502 · 13F-HR · <a href="https://www.sec.gov/Archives/edgar/data/1454502/000145450226000007/0001454502-26-000007-index.html">SEC filing</a></p>
+  <div>
+    <p class="faint">Triple Frond Partners LLC </p>
+    <h1>Stuart McLaughlin</h1>
+    <p class="lede">2026Q2 13F-HR filed 13 Aug 2026 for period 2026-06-30. 13 positions, $1.12B as filed. Largest line: ASML at 21.11% of as-filed value.</p>
+    <p class="meta">CIK 0001454502 · 13F-HR · <a href="https://www.sec.gov/Archives/edgar/data/1454502/000145450226000007/0001454502-26-000007-index.html">SEC filing</a></p>
+  </div>
 </section>
-<section>
-  <h2>Holdings as filed</h2>
-  <div class="table-wrap"><table><thead><tr><th>Ticker</th><th>Issuer</th><th>CUSIP</th><th>Shares</th><th>Value as filed</th><th>Weight</th></tr></thead><tbody><tr><td class='ticker'>—</td><td>ASML HOLDING N V</td><td class='mono'>N07059210</td><td class='num'>118,917</td><td class='num'>$236.6M</td><td class='num'>21.11%</td></tr><tr><td class='ticker'>—</td><td>TRANSDIGM GROUP INC</td><td class='mono'>893641100</td><td class='num'>106,544</td><td class='num'>$141.9M</td><td class='num'>12.67%</td></tr><tr><td class='ticker'>MSFT</td><td>MICROSOFT CORP</td><td class='mono'>594918104</td><td class='num'>352,504</td><td class='num'>$131.5M</td><td class='num'>11.74%</td></tr><tr><td class='ticker'>AMZN</td><td>AMAZON.COM INC</td><td class='mono'>023135106</td><td class='num'>432,420</td><td class='num'>$103.1M</td><td class='num'>9.20%</td></tr><tr><td class='ticker'>GOOG</td><td>ALPHABET INC</td><td class='mono'>02079K107</td><td class='num'>291,544</td><td class='num'>$103.0M</td><td class='num'>9.19%</td></tr><tr><td class='ticker'>MCD</td><td>MASTERCARD INC</td><td class='mono'>57636Q104</td><td class='num'>175,472</td><td class='num'>$90.1M</td><td class='num'>8.04%</td></tr><tr><td class='ticker'>META</td><td>META PLATFORMS INC</td><td class='mono'>30303M102</td><td class='num'>117,628</td><td class='num'>$66.3M</td><td class='num'>5.91%</td></tr><tr><td class='ticker'>—</td><td>TRANSUNION COM</td><td class='mono'>89400J107</td><td class='num'>817,828</td><td class='num'>$59.0M</td><td class='num'>5.27%</td></tr><tr><td class='ticker'>—</td><td>DOORDASH INC</td><td class='mono'>25809K105</td><td class='num'>300,246</td><td class='num'>$55.4M</td><td class='num'>4.94%</td></tr><tr><td class='ticker'>—</td><td>S&amp;P GLOBAL INC</td><td class='mono'>78409V104</td><td class='num'>116,700</td><td class='num'>$47.5M</td><td class='num'>4.24%</td></tr><tr><td class='ticker'>—</td><td>LIVE NATION ENTERTAINMENT IN</td><td class='mono'>538034109</td><td class='num'>198,262</td><td class='num'>$36.3M</td><td class='num'>3.24%</td></tr><tr><td class='ticker'>—</td><td>CCC INTELLIGENT SOLUTION HOLDINGS INC</td><td class='mono'>12510Q100</td><td class='num'>5.41M</td><td class='num'>$27.9M</td><td class='num'>2.49%</td></tr><tr><td class='ticker'>—</td><td>CHARTER COMMUNICATIONS INC N</td><td class='mono'>16119P108</td><td class='num'>153,725</td><td class='num'>$21.9M</td><td class='num'>1.95%</td></tr></tbody></table></div>
+<section id="holdings-app" data-slug="stuart-mclaughlin">
+  <div class="toolbar">
+    <label class="sr" for="holdings-search">Search holdings</label>
+    <input id="holdings-search" type="search" placeholder="Search ticker or issuer">
+  </div>
+  <div id="holdings-table"></div>
 </section>
+<p class="cta-row" style="margin-top:24px"><span><a href="tweedy-browne.html">← Tweedy Browne</a></span><span><a href="william-von-mueffling.html">William von Mueffling →</a></span></p>
 </main>
 <footer class="site-footer">
-  <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and ~45 days late. Not investment advice.</p>
-  <p>A Factor Dynamics product. No Yahoo prices. No Dataroma scrape. Holdings only.</p>
+  <div class="inner">
+    <div>
+      <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and about 45 days late. Not investment advice.</p>
+      <p>Factor Dynamics · Holdings only · No Yahoo prices</p>
+    </div>
+    <div>
+      <a href="../about.html">About</a> ·
+      <a href="../pricing.html">Pricing</a> ·
+      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+    </div>
+  </div>
 </footer>
+<script src="../app.js" defer></script>
 </body>
 </html>

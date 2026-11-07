@@ -309,7 +309,7 @@
       "issuer": "Bank Of America Corp",
       "title": "COM",
       "cusip": "060505104",
-      "ticker": null,
+      "ticker": "BAC",
       "value": 538973.0,
       "shares": 9459.0,
       "put_call": null,

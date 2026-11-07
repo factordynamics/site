@@ -15,12 +15,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ingest.cusips import KNOWN_CUSIPS
+from ingest.alerts import email_body, new_filings, previous_accessions, send_email
+from ingest.csvutil import holding_row, write_rows
 from ingest.edgar import (
     fetch_info_table,
     fetch_primary_doc,
     fetch_submissions,
     list_13f,
     table_value_total,
+    unique_quarters,
 )
 from ingest.managers import MANAGERS
 from ingest.pages import write_site
@@ -34,6 +37,8 @@ from ingest.parse import (
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
+CSV_DIR = WEB / "csv"
+HISTORY_QUARTERS = int(os.environ.get("COPYBOOK_HISTORY_QUARTERS", "8"))
 
 
 def quarter_label(report_date: str) -> str:
@@ -47,7 +52,7 @@ def quarter_label(report_date: str) -> str:
 def attach_tickers(holdings: list[AggregatedHolding]) -> None:
     for h in holdings:
         known = KNOWN_CUSIPS.get(h.cusip)
-        if known:
+        if known and known[0]:
             h.ticker = known[0]
 
 
@@ -55,6 +60,46 @@ def filing_url(cik: str, accession: str) -> str:
     cik_stripped = str(int(cik))
     acc = accession.replace("-", "")
     return f"https://www.sec.gov/Archives/edgar/data/{cik_stripped}/{acc}/{accession}-index.html"
+
+
+def load_filing(cik: str, meta) -> dict | None:
+    xml = fetch_info_table(cik, meta.accession)
+    rows = parse_info_table(xml)
+    holdings = aggregate_holdings(rows)
+    cover_total = table_value_total(fetch_primary_doc(cik, meta.accession))
+    raw_total = sum(h.value for h in holdings)
+    thousands = looks_like_thousands(raw_total, cover_total)
+    scale_if_thousands(holdings, thousands)
+    attach_tickers(holdings)
+    holdings = [h for h in holdings if h.value > 0 and h.cusip != "000000000"]
+    total = sum(h.value for h in holdings)
+    if total <= 0 or not holdings:
+        return None
+    return {
+        "form": meta.form,
+        "accession": meta.accession,
+        "filing_date": meta.filing_date,
+        "report_date": meta.report_date,
+        "quarter": quarter_label(meta.report_date),
+        "sec_url": filing_url(cik, meta.accession),
+        "line_count": len(rows),
+        "position_count": len(holdings),
+        "values_in_thousands": thousands,
+        "total_value": total,
+        "holdings": [
+            {
+                "issuer": h.issuer,
+                "title": h.title,
+                "cusip": h.cusip,
+                "ticker": h.ticker,
+                "value": h.value,
+                "shares": h.shares,
+                "put_call": h.put_call,
+                "weight": (h.value / total) if total else 0.0,
+            }
+            for h in holdings
+        ],
+    }
 
 
 def ingest() -> dict:
@@ -79,30 +124,20 @@ def ingest() -> dict:
                 )
                 continue
             last_error = "No usable 13F information table"
-            loaded = None
-            for meta in metas[:8]:
+            history = []
+            for meta in unique_quarters(metas, HISTORY_QUARTERS):
                 try:
-                    xml = fetch_info_table(cik, meta.accession)
-                    rows = parse_info_table(xml)
-                    holdings = aggregate_holdings(rows)
-                    cover_total = table_value_total(fetch_primary_doc(cik, meta.accession))
-                    raw_total = sum(h.value for h in holdings)
-                    thousands = looks_like_thousands(raw_total, cover_total)
-                    scale_if_thousands(holdings, thousands)
-                    attach_tickers(holdings)
-                    holdings = [h for h in holdings if h.value > 0 and h.cusip != "000000000"]
-                    total = sum(h.value for h in holdings)
-                    if total <= 0 or not holdings:
+                    loaded = load_filing(cik, meta)
+                    if loaded is None:
                         last_error = f"Empty 13F information table for {meta.accession}"
                         continue
-                    loaded = (meta, rows, holdings, thousands, total)
-                    break
+                    history.append(loaded)
                 except Exception as inner:
                     last_error = str(inner)
                     continue
-            if loaded is None:
+            if not history:
                 raise FileNotFoundError(last_error)
-            meta, rows, holdings, thousands, total = loaded
+            latest = history[0]
             managers_out.append(
                 {
                     "cik": cik,
@@ -110,29 +145,13 @@ def ingest() -> dict:
                     "manager": manager,
                     "slug": slug,
                     "ok": True,
-                    "form": meta.form,
-                    "accession": meta.accession,
-                    "filing_date": meta.filing_date,
-                    "report_date": meta.report_date,
-                    "quarter": quarter_label(meta.report_date),
-                    "sec_url": filing_url(cik, meta.accession),
-                    "line_count": len(rows),
-                    "position_count": len(holdings),
-                    "values_in_thousands": thousands,
-                    "total_value": total,
-                    "holdings": [
-                        {
-                            "issuer": h.issuer,
-                            "title": h.title,
-                            "cusip": h.cusip,
-                            "ticker": h.ticker,
-                            "value": h.value,
-                            "shares": h.shares,
-                            "put_call": h.put_call,
-                            "weight": (h.value / total) if total else 0.0,
-                        }
-                        for h in holdings
+                    **{k: latest[k] for k in latest if k != "holdings"},
+                    "holdings": latest["holdings"],
+                    "history": [
+                        {k: q[k] for k in q if k != "holdings"} | {"holdings": q["holdings"]}
+                        for q in history
                     ],
+                    "history_quarters": [q["quarter"] for q in history],
                 }
             )
         except Exception as exc:

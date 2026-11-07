@@ -4,29 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nelson Peltz — Copybook</title>
-<meta name="description" content="Copybook tracks 13F holdings as filed for 41 superinvestors. Latest quarter free. Copycat book, no live prices.">
+<meta name="description" content="Copybook — latest 13F holdings as filed for 41 superinvestors. Copycat book, no live prices.">
+<meta name="theme-color" content="#0b0d10">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css">
 </head>
-<body>
-<header class="site-header">
-  <a class="brand" href="../index.html">Copybook</a>
-  <nav><a href="../index.html#managers">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+<body data-base="../">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../index.html"><span class="mark">C</span> Copybook</a>
+    <nav class="nav" id="nav"><a href="../index.html" aria-current="page">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+      <label class="sr" for="global-search">Search managers</label>
+      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <div id="search-results" class="search-results"></div>
+    </div>
+    <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
+    <a class="top-cta" href="../pricing.html">Join Copy</a>
+  </div>
 </header>
-<main>
+<main id="main">
+<p class="crumb"><a href="../index.html">Holdings</a> / Nelson Peltz</p>
 <section class="hero">
-  <p class="eyebrow">Trian Fund Management LP</p>
-  <h1>Nelson Peltz</h1>
-  <p class="lede">2026Q2 13F-HR filed 2026-08-12 for period 2026-06-30. 8 positions, $4.23B as filed. Largest line: GE at 35.61% of as-filed value.</p>
-  <p class="meta">CIK 0001345471 · 13F-HR · <a href="https://www.sec.gov/Archives/edgar/data/1345471/000134547126000035/0001345471-26-000035-index.html">SEC filing</a></p>
+  <div>
+    <p class="faint">Trian Fund Management LP </p>
+    <h1>Nelson Peltz</h1>
+    <p class="lede">2026Q2 13F-HR filed 12 Aug 2026 for period 2026-06-30. 8 positions, $4.23B as filed. Largest line: GE at 35.61% of as-filed value.</p>
+    <p class="meta">CIK 0001345471 · 13F-HR · <a href="https://www.sec.gov/Archives/edgar/data/1345471/000134547126000035/0001345471-26-000035-index.html">SEC filing</a></p>
+  </div>
 </section>
-<section>
-  <h2>Holdings as filed</h2>
-  <div class="table-wrap"><table><thead><tr><th>Ticker</th><th>Issuer</th><th>CUSIP</th><th>Shares</th><th>Value as filed</th><th>Weight</th></tr></thead><tbody><tr><td class='ticker'>GE</td><td>GE Aerospace</td><td class='mono'>369604301</td><td class='num'>4.03M</td><td class='num'>$1.51B</td><td class='num'>35.61%</td></tr><tr><td class='ticker'>—</td><td>Janus Henderson Group plc</td><td class='mono'>G4474Y214</td><td class='num'>25.65M</td><td class='num'>$1.33B</td><td class='num'>31.53%</td></tr><tr><td class='ticker'>—</td><td>Solventum Corporation</td><td class='mono'>83444M101</td><td class='num'>8.24M</td><td class='num'>$635.5M</td><td class='num'>15.02%</td></tr><tr><td class='ticker'>—</td><td>Ferguson Plc New</td><td class='mono'>G3421J106</td><td class='num'>1.09M</td><td class='num'>$257.8M</td><td class='num'>6.09%</td></tr><tr><td class='ticker'>—</td><td>Wendys Co.</td><td class='mono'>95058W100</td><td class='num'>30.47M</td><td class='num'>$252.6M</td><td class='num'>5.97%</td></tr><tr><td class='ticker'>—</td><td>GE HealthCare Technologies Inc.</td><td class='mono'>36266G107</td><td class='num'>3.09M</td><td class='num'>$197.5M</td><td class='num'>4.67%</td></tr><tr><td class='ticker'>—</td><td>Invesco Ltd.</td><td class='mono'>G491BT108</td><td class='num'>1.63M</td><td class='num'>$42.9M</td><td class='num'>1.01%</td></tr><tr><td class='ticker'>—</td><td>Magnum Ice Cream Co NV</td><td class='mono'>N5505D105</td><td class='num'>241,042</td><td class='num'>$4.2M</td><td class='num'>0.10%</td></tr></tbody></table></div>
+<section id="holdings-app" data-slug="nelson-peltz">
+  <div class="toolbar">
+    <label class="sr" for="holdings-search">Search holdings</label>
+    <input id="holdings-search" type="search" placeholder="Search ticker or issuer">
+  </div>
+  <div id="holdings-table"></div>
 </section>
+<p class="cta-row" style="margin-top:24px"><span><a href="nicolai-tangen.html">← Nicolai Tangen</a></span><span><a href="david-einhorn.html">David Einhorn →</a></span></p>
 </main>
 <footer class="site-footer">
-  <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and ~45 days late. Not investment advice.</p>
-  <p>A Factor Dynamics product. No Yahoo prices. No Dataroma scrape. Holdings only.</p>
+  <div class="inner">
+    <div>
+      <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and about 45 days late. Not investment advice.</p>
+      <p>Factor Dynamics · Holdings only · No Yahoo prices</p>
+    </div>
+    <div>
+      <a href="../about.html">About</a> ·
+      <a href="../pricing.html">Pricing</a> ·
+      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+    </div>
+  </div>
 </footer>
+<script src="../app.js" defer></script>
 </body>
 </html>

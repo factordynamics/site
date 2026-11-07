@@ -4,29 +4,62 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>David Einhorn — Copybook</title>
-<meta name="description" content="Copybook tracks 13F holdings as filed for 41 superinvestors. Latest quarter free. Copycat book, no live prices.">
+<meta name="description" content="Copybook — latest 13F holdings as filed for 41 superinvestors. Copycat book, no live prices.">
+<meta name="theme-color" content="#0b0d10">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../styles.css">
 </head>
-<body>
-<header class="site-header">
-  <a class="brand" href="../index.html">Copybook</a>
-  <nav><a href="../index.html#managers">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+<body data-base="../">
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../index.html"><span class="mark">C</span> Copybook</a>
+    <nav class="nav" id="nav"><a href="../index.html" aria-current="page">Holdings</a><a href="../copycat.html">Copycat</a><a href="../pricing.html">Pricing</a><a href="../about.html">About</a></nav>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+      <label class="sr" for="global-search">Search managers</label>
+      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <div id="search-results" class="search-results"></div>
+    </div>
+    <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
+    <a class="top-cta" href="../pricing.html">Join Copy</a>
+  </div>
 </header>
-<main>
+<main id="main">
+<p class="crumb"><a href="../index.html">Holdings</a> / David Einhorn</p>
 <section class="hero">
-  <p class="eyebrow">DME Capital Management LP</p>
-  <h1>David Einhorn</h1>
-  <p class="lede">2026Q2 13F-HR filed 2026-08-14 for period 2026-06-30. 46 positions, $3.91B as filed. Largest line: GREEN BRICK PARTNERS INC at 19.39% of as-filed value.</p>
-  <p class="meta">CIK 0001489933 · 13F-HR · <a href="https://www.sec.gov/Archives/edgar/data/1489933/000117266126003786/0001172661-26-003786-index.html">SEC filing</a></p>
+  <div>
+    <p class="faint">DME Capital Management LP </p>
+    <h1>David Einhorn</h1>
+    <p class="lede">2026Q2 13F-HR filed 14 Aug 2026 for period 2026-06-30. 46 positions, $3.91B as filed. Largest line: GRBK at 19.39% of as-filed value.</p>
+    <p class="meta">CIK 0001489933 · 13F-HR · <a href="https://www.sec.gov/Archives/edgar/data/1489933/000117266126003786/0001172661-26-003786-index.html">SEC filing</a></p>
+  </div>
 </section>
-<section>
-  <h2>Holdings as filed</h2>
-  <div class="table-wrap"><table><thead><tr><th>Ticker</th><th>Issuer</th><th>CUSIP</th><th>Shares</th><th>Value as filed</th><th>Weight</th></tr></thead><tbody><tr><td class='ticker'>—</td><td>GREEN BRICK PARTNERS INC</td><td class='mono'>392709101</td><td class='num'>9.47M</td><td class='num'>$757.8M</td><td class='num'>19.39%</td></tr><tr><td class='ticker'>—</td><td>FLUOR CORP</td><td class='mono'>343412102</td><td class='num'>4.66M</td><td class='num'>$244.1M</td><td class='num'>6.24%</td></tr><tr><td class='ticker'>—</td><td>CORE NATURAL RESOURCES INC</td><td class='mono'>218937100</td><td class='num'>2.28M</td><td class='num'>$182.7M</td><td class='num'>4.67%</td></tr><tr><td class='ticker'>—</td><td>BRIGHTHOUSE FINL INC</td><td class='mono'>10922N103</td><td class='num'>2.84M</td><td class='num'>$179.9M</td><td class='num'>4.60%</td></tr><tr><td class='ticker'>—</td><td>ACADIA HEALTHCARE COMPANY IN</td><td class='mono'>00404A109</td><td class='num'>4.40M</td><td class='num'>$130.0M</td><td class='num'>3.32%</td></tr><tr><td class='ticker'>—</td><td>PENN ENTERTAINMENT INC</td><td class='mono'>707569109</td><td class='num'>5.86M</td><td class='num'>$125.2M</td><td class='num'>3.20%</td></tr><tr><td class='ticker'>—</td><td>FORTUNE BRANDS INNOVATIONS I</td><td class='mono'>34964C106</td><td class='num'>2.24M</td><td class='num'>$123.1M</td><td class='num'>3.15%</td></tr><tr><td class='ticker'>—</td><td>PG&amp;E CORP</td><td class='mono'>69331C108</td><td class='num'>6.63M</td><td class='num'>$111.6M</td><td class='num'>2.85%</td></tr><tr><td class='ticker'>—</td><td>CENTENE CORP DEL</td><td class='mono'>15135B101</td><td class='num'>1.65M</td><td class='num'>$106.0M</td><td class='num'>2.71%</td></tr><tr><td class='ticker'>—</td><td>GRAPHIC PACKAGING HLDG CO</td><td class='mono'>388689101</td><td class='num'>9.95M</td><td class='num'>$105.2M</td><td class='num'>2.69%</td></tr><tr><td class='ticker'>—</td><td>TD SYNNEX CORPORATION</td><td class='mono'>87162W100</td><td class='num'>381,042</td><td class='num'>$101.9M</td><td class='num'>2.61%</td></tr><tr><td class='ticker'>—</td><td>TEVA PHARMACEUTICAL INDS LTD</td><td class='mono'>881624209</td><td class='num'>2.89M</td><td class='num'>$97.8M</td><td class='num'>2.50%</td></tr><tr><td class='ticker'>—</td><td>VERSIGENT PLC</td><td class='mono'>G9600F104</td><td class='num'>2.28M</td><td class='num'>$95.7M</td><td class='num'>2.45%</td></tr><tr><td class='ticker'>—</td><td>CAPRI HOLDINGS LIMITED</td><td class='mono'>G1890L107</td><td class='num'>4.82M</td><td class='num'>$89.5M</td><td class='num'>2.29%</td></tr><tr><td class='ticker'>—</td><td>BKV CORP</td><td class='mono'>05603J108</td><td class='num'>3.10M</td><td class='num'>$84.7M</td><td class='num'>2.17%</td></tr><tr><td class='ticker'>—</td><td>DHT HOLDINGS INC</td><td class='mono'>Y2065G121</td><td class='num'>5.03M</td><td class='num'>$83.2M</td><td class='num'>2.13%</td></tr><tr><td class='ticker'>—</td><td>CROCS INC</td><td class='mono'>227046109</td><td class='num'>669,140</td><td class='num'>$80.7M</td><td class='num'>2.07%</td></tr><tr><td class='ticker'>—</td><td>ROIVANT SCIENCES LTD</td><td class='mono'>G76279101</td><td class='num'>2.15M</td><td class='num'>$76.2M</td><td class='num'>1.95%</td></tr><tr><td class='ticker'>—</td><td>SOTERA HEALTH CO</td><td class='mono'>83601L102</td><td class='num'>4.14M</td><td class='num'>$73.4M</td><td class='num'>1.88%</td></tr><tr><td class='ticker'>—</td><td>VERSANT MEDIA GROUP INC</td><td class='mono'>925283103</td><td class='num'>1.92M</td><td class='num'>$69.2M</td><td class='num'>1.77%</td></tr><tr><td class='ticker'>—</td><td>PRIMO BRANDS CORPORATION</td><td class='mono'>741623102</td><td class='num'>2.82M</td><td class='num'>$69.0M</td><td class='num'>1.77%</td></tr><tr><td class='ticker'>—</td><td>DAUCH CORP</td><td class='mono'>024061103</td><td class='num'>12.40M</td><td class='num'>$67.2M</td><td class='num'>1.72%</td></tr><tr><td class='ticker'>PYPL</td><td>PAYPAL HLDGS INC</td><td class='mono'>70450Y103</td><td class='num'>1.42M</td><td class='num'>$61.5M</td><td class='num'>1.57%</td></tr><tr><td class='ticker'>—</td><td>SCHEIN HENRY INC</td><td class='mono'>806407102</td><td class='num'>718,550</td><td class='num'>$60.0M</td><td class='num'>1.54%</td></tr><tr><td class='ticker'>—</td><td>WARNER BROS DISCOVERY INC</td><td class='mono'>934423104</td><td class='num'>2.25M</td><td class='num'>$59.9M</td><td class='num'>1.53%</td></tr><tr><td class='ticker'>—</td><td>LIBERTY GLOBAL LTD</td><td class='mono'>G61188101</td><td class='num'>4.96M</td><td class='num'>$56.4M</td><td class='num'>1.44%</td></tr><tr><td class='ticker'>—</td><td>ANTERO RESOURCES CORP</td><td class='mono'>03674X106</td><td class='num'>1.57M</td><td class='num'>$55.3M</td><td class='num'>1.42%</td></tr><tr><td class='ticker'>—</td><td>STUBHUB HLDGS INC</td><td class='mono'>86384P109</td><td class='num'>4.23M</td><td class='num'>$54.5M</td><td class='num'>1.39%</td></tr><tr><td class='ticker'>—</td><td>RESIDEO TECHNOLOGIES INC</td><td class='mono'>76118Y104</td><td class='num'>1.70M</td><td class='num'>$52.9M</td><td class='num'>1.35%</td></tr><tr><td class='ticker'>—</td><td>DECKERS OUTDOOR CORP</td><td class='mono'>243537107</td><td class='num'>506,398</td><td class='num'>$50.3M</td><td class='num'>1.29%</td></tr><tr><td class='ticker'>—</td><td>SPECTRUM BRANDS HOLDINGS INC</td><td class='mono'>84790A105</td><td class='num'>561,438</td><td class='num'>$48.1M</td><td class='num'>1.23%</td></tr><tr><td class='ticker'>—</td><td>CNH INDL N V</td><td class='mono'>N20944109</td><td class='num'>4.19M</td><td class='num'>$47.0M</td><td class='num'>1.20%</td></tr><tr><td class='ticker'>—</td><td>VIATRIS INC</td><td class='mono'>92556V106</td><td class='num'>2.77M</td><td class='num'>$44.0M</td><td class='num'>1.13%</td></tr><tr><td class='ticker'>—</td><td>PARAMOUNT SKYDANCE CORP</td><td class='mono'>69932A204</td><td class='num'>3.93M</td><td class='num'>$38.7M</td><td class='num'>0.99%</td></tr><tr><td class='ticker'>—</td><td>PVH CORPORATION</td><td class='mono'>693656100</td><td class='num'>520,800</td><td class='num'>$38.7M</td><td class='num'>0.99%</td></tr><tr><td class='ticker'>CMCSA</td><td>COMCAST CORP NEW</td><td class='mono'>20030N101</td><td class='num'>1.35M</td><td class='num'>$33.0M</td><td class='num'>0.85%</td></tr><tr><td class='ticker'>—</td><td>SLIDE INS HLDGS INC</td><td class='mono'>831349105</td><td class='num'>1.69M</td><td class='num'>$32.7M</td><td class='num'>0.84%</td></tr><tr><td class='ticker'>—</td><td>TRIPADVISOR INC</td><td class='mono'>896945201</td><td class='num'>2.36M</td><td class='num'>$32.4M</td><td class='num'>0.83%</td></tr><tr><td class='ticker'>—</td><td>SPDR GOLD TR</td><td class='mono'>78463V107</td><td class='num'>83,421</td><td class='num'>$30.7M</td><td class='num'>0.79%</td></tr><tr><td class='ticker'>—</td><td>THE CIGNA GROUP</td><td class='mono'>125523100</td><td class='num'>88,400</td><td class='num'>$24.4M</td><td class='num'>0.62%</td></tr><tr><td class='ticker'>—</td><td>LAKEFRONT BIOTHERAPEUTICS NV</td><td class='mono'>36315X101</td><td class='num'>482,746</td><td class='num'>$14.5M</td><td class='num'>0.37%</td></tr><tr><td class='ticker'>—</td><td>COYA THERAPEUTICS INC</td><td class='mono'>22407B108</td><td class='num'>2.34M</td><td class='num'>$13.7M</td><td class='num'>0.35%</td></tr><tr><td class='ticker'>—</td><td>IMMUNOVANT INC</td><td class='mono'>45258J102</td><td class='num'>93,520</td><td class='num'>$3.6M</td><td class='num'>0.09%</td></tr><tr><td class='ticker'>—</td><td>GOPRO INC</td><td class='mono'>38268T103</td><td class='num'>1.69M</td><td class='num'>$1.3M</td><td class='num'>0.03%</td></tr><tr><td class='ticker'>—</td><td>GAIN THERAPEUTICS INC</td><td class='mono'>36269B105</td><td class='num'>566,130</td><td class='num'>$1.1M</td><td class='num'>0.03%</td></tr><tr><td class='ticker'>—</td><td>NUVATION BIO INC</td><td class='mono'>67080N101</td><td class='num'>34,995</td><td class='num'>$199K</td><td class='num'>0.01%</td></tr></tbody></table></div>
+<section id="holdings-app" data-slug="david-einhorn">
+  <div class="toolbar">
+    <label class="sr" for="holdings-search">Search holdings</label>
+    <input id="holdings-search" type="search" placeholder="Search ticker or issuer">
+  </div>
+  <div id="holdings-table"></div>
 </section>
+<p class="cta-row" style="margin-top:24px"><span><a href="nelson-peltz.html">← Nelson Peltz</a></span><span><a href="li-lu.html">Li Lu →</a></span></p>
 </main>
 <footer class="site-footer">
-  <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and ~45 days late. Not investment advice.</p>
-  <p>A Factor Dynamics product. No Yahoo prices. No Dataroma scrape. Holdings only.</p>
+  <div class="inner">
+    <div>
+      <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and about 45 days late. Not investment advice.</p>
+      <p>Factor Dynamics · Holdings only · No Yahoo prices</p>
+    </div>
+    <div>
+      <a href="../about.html">About</a> ·
+      <a href="../pricing.html">Pricing</a> ·
+      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+    </div>
+  </div>
 </footer>
+<script src="../app.js" defer></script>
 </body>
 </html>

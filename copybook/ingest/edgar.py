@@ -101,11 +101,34 @@ def latest_13f(submissions: dict) -> FilingMeta | None:
     return items[0] if items else None
 
 
+_index_cache: dict[str, dict] = {}
+
+
 def fetch_index(cik: str, accession: str) -> dict:
+    key = f"{cik}:{accession}"
+    cached = _index_cache.get(key)
+    if cached is not None:
+        return cached
     cik_stripped = str(int(cik))
     acc = accession.replace("-", "")
     raw = get(f"{ARCHIVE_BASE}/Archives/edgar/data/{cik_stripped}/{acc}/index.json")
-    return json.loads(raw.decode("utf-8"))
+    data = json.loads(raw.decode("utf-8"))
+    _index_cache[key] = data
+    return data
+
+
+def unique_quarters(metas: list[FilingMeta], limit: int) -> list[FilingMeta]:
+    """Newest filing per report date, up to limit quarters."""
+    seen: set[str] = set()
+    out: list[FilingMeta] = []
+    for meta in metas:
+        if meta.report_date in seen:
+            continue
+        seen.add(meta.report_date)
+        out.append(meta)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def fetch_primary_doc(cik: str, accession: str) -> str | None:
