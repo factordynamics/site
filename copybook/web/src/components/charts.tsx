@@ -224,19 +224,22 @@ export function Treemap({ items, height = 320, ratio = 1.8 }: { items: TItem[]; 
         const wpx = (w / (100 * r)) * px
         const hpx = (h / 100) * height
         const big = wpx > 120 && hpx > 76
-        const mid = wpx > 54 && hpx > 40
+        // Names without a ticker need more room than a ticker; never show a truncated stub.
+        const label = fitLabel(item.label, wpx - 18, big ? 8.6 : 6.8, item.isTicker !== false)
+        const mid = Boolean(label) && wpx > 54 && hpx > 40
+        const light = isLight(item.color)
         return (
           <div
             key={item.key}
-            className="absolute overflow-hidden border border-white/70 p-2 text-white"
+            className={`absolute overflow-hidden border border-white/70 p-2 ${light ? 'text-ink' : 'text-white'}`}
             style={{ left: `${(x / (100 * r)) * 100}%`, top: `${y}%`, width: `${(w / (100 * r)) * 100}%`, height: `${h}%`, background: item.color }}
             title={`${item.label}${item.sub ? ` · ${item.sub}` : ''} · ${pct(item.weight)} · ${money(item.value)}`}
           >
             {mid && (
               <div className="leading-tight">
-                <div className={`truncate font-semibold ${item.isTicker === false ? '' : 'font-mono'} ${big ? 'text-[15px]' : 'text-[11.5px]'}`}>{item.label}</div>
-                <div className={`num ${big ? 'text-[13px]' : 'text-[11px]'} text-white/85`}>{pct(item.weight)}</div>
-                {big && item.sub && <div className="mt-0.5 truncate text-[12px] text-white/75">{item.sub}</div>}
+                <div className={`whitespace-nowrap font-semibold ${item.isTicker === false ? '' : 'font-mono'} ${big ? 'text-[15px]' : 'text-[11.5px]'}`}>{label}</div>
+                <div className={`num ${big ? 'text-[13px]' : 'text-[11px]'}`}>{pct(item.weight)}</div>
+                {big && item.sub && <div className="mt-0.5 truncate text-[12px]">{item.sub}</div>}
               </div>
             )}
           </div>
@@ -244,6 +247,30 @@ export function Treemap({ items, height = 320, ratio = 1.8 }: { items: TItem[]; 
       })}
     </div>
   )
+}
+
+/** Whole words that fit the tile, or '' when not even one does. Tickers are never shortened. */
+function fitLabel(text: string, room: number, charPx: number, ticker: boolean) {
+  if (text.length * charPx <= room) return text
+  if (ticker) return ''
+  const words = text.split(' ')
+  while (words.length > 1) {
+    words.pop()
+    const t = words.join(' ')
+    if (t.length * charPx <= room) return t
+  }
+  return ''
+}
+
+/** True when white text would fail 4.5:1 on this fill. */
+function isLight(hex: string) {
+  const n = parseInt(hex.slice(1), 16)
+  const lin = (c: number) => {
+    const v = c / 255
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  }
+  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255)
+  return 1.05 / (L + 0.05) < 4.5
 }
 
 /** Shades of the accent by rank: the largest positions read darkest. */

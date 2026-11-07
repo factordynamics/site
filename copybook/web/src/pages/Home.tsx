@@ -45,7 +45,7 @@ function Hero({ managers }: { managers?: Manager[] }) {
             Copybook turns SEC 13F filings into clear portfolios: top positions, sector mix and conviction, for the managers worth following.
           </p>
           <div className="mt-7 max-w-xl">
-            <SearchBox size="lg" placeholder="Search Buffett, Ackman, Tepper, or any 13F filer" />
+            <SearchBox size="lg" placeholder="Search any investor or 13F filer" />
             <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-3">
               Popular:
               {['warren-buffett', 'bill-ackman', 'seth-klarman', 'chris-hohn'].map((s) => {
@@ -113,12 +113,12 @@ function ProductFrame({ slug, demo, onPick }: { slug: string; demo: Manager[]; o
   return (
     <div className="overflow-hidden rounded-[18px] bg-card shadow-[var(--shadow-frame)]">
       <div className="flex items-center gap-3 border-b border-line bg-paper-2/70 px-4 py-2.5">
-        <div className="flex gap-1.5" aria-hidden="true">
+        <div className="hidden gap-1.5 sm:flex" aria-hidden="true">
           <span className="size-2.5 rounded-full bg-ink/15" />
           <span className="size-2.5 rounded-full bg-ink/15" />
           <span className="size-2.5 rounded-full bg-ink/15" />
         </div>
-        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto" role="tablist" aria-label="Example portfolios">
+        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,#000_85%,transparent)] [scrollbar-width:none] sm:[mask-image:none]" role="tablist" aria-label="Example portfolios">
           {demo.map((d) => (
             <button
               key={d.slug}
@@ -127,7 +127,8 @@ function ProductFrame({ slug, demo, onPick }: { slug: string; demo: Manager[]; o
               onClick={() => onPick(d.slug)}
               className={`shrink-0 rounded-lg px-3 py-1 text-[13px] transition-colors ${d.slug === slug ? 'bg-card font-medium text-ink shadow-[var(--shadow-card)]' : 'text-ink-3 hover:text-ink'}`}
             >
-              {d.manager}
+              <span className="sm:hidden">{d.manager.split(' ').slice(-1)[0]}</span>
+              <span className="hidden sm:inline">{d.manager}</span>
             </button>
           ))}
         </div>
@@ -208,7 +209,7 @@ function ConsensusSection({ featured }: { featured?: Manager[] }) {
   const book = useAsync(() => (featured ? loadSuperBook(featured) : Promise.resolve(null)), [featured?.length])
   const rows = book.data?.rows.slice(0, 8) ?? []
   const max = rows[0]?.holders.length ?? 1
-  const mix = book.data ? foldSlices(sectorMix(book.data.rows.map((r) => ({ cusip: r.cusip, value: r.value }))), 8) : []
+  const mix = book.data ? foldSlices(sectorMix(book.data.rows), 8) : []
   return (
     <section className="container-x mt-24 md:mt-32">
       <div className="grid gap-12 lg:grid-cols-[0.9fr_1.4fr] lg:gap-16">

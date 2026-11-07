@@ -105,7 +105,7 @@ export function Panel({ title, sub, right, children, className = '' }: { title?:
       {(title || right) && (
         <header className="mb-5 flex items-start justify-between gap-3">
           <div>
-            {title && <h3 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h3>}
+            {title && <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>}
             {sub && <p className="mt-0.5 text-[13px] text-ink-3">{sub}</p>}
           </div>
           {right}

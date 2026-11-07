@@ -17,7 +17,7 @@ export function Consensus() {
   const [open, setOpen] = useState<string | null>(null)
 
   const all = useMemo(() => book.data?.rows ?? [], [book.data])
-  const mix = useMemo(() => foldSlices(sectorMix(all.map((r) => ({ cusip: r.cusip, value: r.value }))), 10), [all])
+  const mix = useMemo(() => foldSlices(sectorMix(all), 10), [all])
   useTitle('Consensus · Copybook')
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
@@ -102,7 +102,7 @@ export function Consensus() {
                   </span>
                   {r.ticker && <span className="block truncate text-[13px] text-ink-3">{r.issuer}</span>}
                 </span>
-                <span className="hidden text-[13px] text-ink-2 md:block">{sectorOf(r.cusip)}</span>
+                <span className="hidden text-[13px] text-ink-2 md:block">{sectorOf(r.cusip, r.sector)}</span>
                 <span className="hidden items-center gap-2 md:flex">
                   <AvatarStack names={r.holders} />
                   <span className="num text-[13px] text-ink-2">{r.holders.length} {r.holders.length === 1 ? 'investor' : 'investors'}</span>

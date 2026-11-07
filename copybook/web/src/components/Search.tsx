@@ -108,6 +108,8 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
           role="combobox"
           aria-expanded={open}
           aria-controls={`search-list-${size}`}
+          aria-autocomplete="list"
+          aria-activedescendant={open && hits[sel] ? `search-opt-${size}-${sel}` : undefined}
           placeholder={placeholder}
           onFocus={() => setOpen(true)}
           onChange={(e) => {
@@ -144,15 +146,18 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
           role="listbox"
           className={`absolute z-50 mt-2 max-h-[420px] w-full overflow-auto rounded-2xl bg-card p-1.5 shadow-[0_0_0_1px_rgb(12_14_19/0.08),0_18px_50px_-12px_rgb(12_14_19/0.3)] ${lg ? '' : 'min-w-[340px] right-0'}`}
         >
-          {!q && <li className="px-3 pb-1 pt-2 text-[12px] font-medium text-ink-3">Popular</li>}
+          {!q && <li role="presentation" className="px-3 pb-1 pt-2 text-[12px] font-medium text-ink-3">Popular</li>}
           {hits.map((h, i) => (
-            <li key={h.kind === 'manager' ? h.m.slug : h.f.cik} role="option" aria-selected={i === sel}>
-              <button
-                type="button"
-                onMouseEnter={() => setSel(i)}
-                onClick={() => go(h)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left ${i === sel ? 'bg-ink/[0.05]' : ''}`}
-              >
+            <li
+              key={h.kind === 'manager' ? h.m.slug : h.f.cik}
+              id={`search-opt-${size}-${i}`}
+              role="option"
+              aria-selected={i === sel}
+              onMouseEnter={() => setSel(i)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => go(h)}
+              className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-left ${i === sel ? 'bg-ink/[0.05]' : ''}`}
+            >
                 {h.kind === 'manager' ? (
                   <>
                     <Monogram name={h.m.manager} size={30} />
@@ -171,8 +176,7 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
                     </span>
                   </>
                 )}
-              </button>
-            </li>
+              </li>
           ))}
         </ul>
       )}

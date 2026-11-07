@@ -9,7 +9,7 @@ export function useBook(holdings: Holding[] | undefined) {
   return useMemo(() => {
     const hs = (holdings || []).filter((h) => h.value > 0)
     const rows: Agg[] = hs
-      .map((h, i) => ({ ...h, sector: sectorOf(h.cusip), key: `${h.cusip}-${h.put_call || ''}-${i}` }))
+      .map((h, i) => ({ ...h, sector: sectorOf(h.cusip, h.sector), key: `${h.cusip}-${h.put_call || ''}-${i}` }))
       .sort((a, b) => b.value - a.value)
     const total = rows.reduce((s, h) => s + h.value, 0)
     const sectors = sectorMix(rows)
@@ -44,5 +44,5 @@ export function mapPlan(rows: Agg[], n: number) {
 }
 
 export function shortIssuer(s: string) {
-  return s.split(/\s+/).slice(0, 2).join(' ').slice(0, 14)
+  return s.split(/\s+/).slice(0, 2).join(' ')
 }

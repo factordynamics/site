@@ -16,6 +16,12 @@ export type Holding = {
   weight: number
   prev_shares?: number | null
   prev_value?: number | null
+  /** Clean name from ingest; issuer stays the as-filed name. */
+  display_name?: string | null
+  /** GICS-style sector from ingest. */
+  sector?: string | null
+  /** As-filed issuer name, kept for tooltips. */
+  filed?: string
   change?: Change | null
 }
 
@@ -70,7 +76,7 @@ export const loadSectors = () =>
   })
 
 function cleanHolding(h: Holding): Holding {
-  return { ...h, issuer: displayName(h.issuer), ticker: TICKER_FIX[h.cusip] ?? h.ticker ?? null }
+  return { ...h, filed: h.issuer, issuer: h.display_name || displayName(h.issuer), ticker: TICKER_FIX[h.cusip] ?? h.ticker ?? null }
 }
 
 export type IndexData = {
@@ -133,6 +139,7 @@ export type BookRow = {
   title?: string
   value: number
   weight: number
+  sector?: string | null
   holders: { slug: string; name: string; weight: number }[]
   avgWeight: number
 }
@@ -148,7 +155,7 @@ export async function loadSuperBook(featured: Manager[]) {
       const key = `${h.cusip}|${h.put_call || ''}`
       let r = rows.get(key)
       if (!r) {
-        r = { key, issuer: h.issuer, ticker: h.ticker, cusip: h.cusip, put_call: h.put_call, title: h.title, value: 0, weight: 0, holders: [], avgWeight: 0 }
+        r = { key, issuer: h.issuer, ticker: h.ticker, cusip: h.cusip, put_call: h.put_call, title: h.title, sector: h.sector, value: 0, weight: 0, holders: [], avgWeight: 0 }
         rows.set(key, r)
       }
       r.value += h.value
@@ -167,18 +174,31 @@ export async function loadSuperBook(featured: Manager[]) {
   return { rows: list, total, managers: files.filter(Boolean) as ManagerFile[] }
 }
 
-export function sectorOf(cusip: string): string {
+// Ingest publishes GICS names; the charts use short labels with fixed colours.
+const GICS: Record<string, string> = {
+  'Information Technology': 'Technology',
+  'Communication Services': 'Communication',
+  'Consumer Discretionary': 'Consumer',
+  'Consumer Staples': 'Staples',
+  'Health Care': 'Health care',
+  'Real Estate': 'Real estate',
+  Unclassified: 'Other',
+}
+
+/** Sector from ingest when the row carries one, else the SEC SIC map shipped with the site. */
+export function sectorOf(cusip: string, fromIngest?: string | null): string {
+  if (fromIngest) return GICS[fromIngest] ?? fromIngest
   const s = sectorsData
   if (!s) return 'Other'
   const i = s.map[cusip]
   return i === undefined ? 'Other' : s.sectors[i]
 }
 
-export function sectorMix(holdings: { cusip: string; value: number }[]) {
+export function sectorMix(holdings: { cusip: string; value: number; sector?: string | null }[]) {
   const by = new Map<string, number>()
   let total = 0
   for (const h of holdings) {
-    const k = sectorOf(h.cusip)
+    const k = sectorOf(h.cusip, h.sector)
     by.set(k, (by.get(k) ?? 0) + h.value)
     total += h.value
   }
