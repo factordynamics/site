@@ -42,6 +42,7 @@ for (const m of index.managers) {
   const who = tc(m.manager)
   const firm = tc(m.name)
   page(`investors/${m.slug}/`, `${who} portfolio · Copybook`, `${who}${firm !== who ? ` (${firm})` : ''}: latest 13F holdings, top positions and sector mix, straight from the SEC filing.`)
+  page(`investors/${m.slug}/history/`, `${who} 13F history · Copybook`, `${who}: eight quarters of 13F holdings, buys and sells across quarters, with CSV export.`)
   redirect(`managers/${m.slug}.html`, `investors/${m.slug}/`)
   n++
 }
@@ -56,5 +57,4 @@ writeFileSync(
   shell.replace('<title>', `<script>if(!location.pathname.startsWith('/gust/copybook'))location.replace('/gust/')</script>\n    <title>`).replace(/<title>.*?<\/title>/, '<title>Page not found · Copybook</title>'),
 )
 writeFileSync(join(dist, '.nojekyll'), '')
-writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /csv/\n`)
 console.log(`wrote ${n} investor pages`)

@@ -9,6 +9,9 @@ export const checkout = {
 }
 export const api = 'https://copybook-api.factordynamics.workers.dev'
 
+// Cloudflare Web Analytics beacon token (public; empty = no analytics).
+export const analytics = { cloudflare: '' }
+
 export const prices = { monthly: 9, yearly: 79 }
 
 export const checkoutEnabled = () => Boolean(checkout.monthly || checkout.yearly)

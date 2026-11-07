@@ -74,7 +74,7 @@ export const loadSectors = () =>
     return s
   })
 
-function cleanHolding(h: Holding): Holding {
+export function cleanHolding(h: Holding): Holding {
   return { ...h, filed: h.issuer, issuer: h.display_name || displayName(h.issuer), ticker: h.ticker || null }
 }
 

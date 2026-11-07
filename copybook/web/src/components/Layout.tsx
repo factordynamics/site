@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { getToken } from '../lib/account'
 import { SearchBox } from './Search'
 import { Button, Wordmark } from './ui'
 
@@ -12,6 +13,8 @@ const NAV = [
 
 export function Layout() {
   const { pathname } = useLocation()
+  // Re-read on every route change, so it updates after checkout or sign-out.
+  const signedIn = Boolean(getToken())
   const [menu, setMenu] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
@@ -53,8 +56,8 @@ export function Layout() {
                 <SearchBox />
               </div>
             )}
-            <Button to="/pricing/" size="sm" variant="dark" className="hidden sm:inline-flex">
-              Get Copy
+            <Button to={signedIn ? '/account/' : '/pricing/'} size="sm" variant="dark" className="hidden sm:inline-flex">
+              {signedIn ? 'Account' : 'Get Copy'}
             </Button>
             <button
               type="button"
@@ -79,8 +82,8 @@ export function Layout() {
                 </NavLink>
               ))}
             </nav>
-            <Button to="/pricing/" variant="dark" className="mt-4 w-full">
-              Get Copy
+            <Button to={signedIn ? '/account/' : '/pricing/'} variant="dark" className="mt-4 w-full">
+              {signedIn ? 'Account' : 'Get Copy'}
             </Button>
           </div>
         )}

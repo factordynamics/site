@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
+import { attributed } from '../lib/attribution'
 import { checkout, checkoutEnabled, DATA_TERMS, prices, RENEWAL_TERMS } from '../config'
 
 const FREE = ['Latest 13F portfolio for every investor', 'Portfolio map, sector mix and top holdings', 'Consensus book with search', 'Every 13F filer in search']
@@ -63,7 +64,7 @@ export function Pricing() {
           <div className="relative mt-6">
             {live ? (
               <>
-                <Button href={link} className="w-full" size="lg">
+                <Button href={attributed(link)} className="w-full" size="lg">
                   Get Copy
                 </Button>
                 <p className="mt-3 text-[12px] leading-relaxed text-white/55">{RENEWAL_TERMS}</p>

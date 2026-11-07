@@ -68,12 +68,15 @@ export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST
 export const setAlerts = (alerts: Member['alerts']) => call<{ member: Member }>('/alerts', { body: { alerts }, auth: true }).then((r) => r.member)
 export const csvUrl = (slug: string) => `${api}/csv/${slug}.csv?token=${encodeURIComponent(getToken() ?? '')}`
 
-/** Signed-in member, or null. Only calls the API when it is configured and a token exists. */
-export function useMember() {
-  const [member, setMember] = useState<Member | null>(null)
+/** undefined while checking, null when signed out or not a member. Calls the API only when a token exists. */
+export function useMemberState() {
+  const [member, setMember] = useState<Member | null | undefined>(() => (api && getToken() ? undefined : null))
   useEffect(() => {
     if (!api || !getToken()) return
     fetchMe().then(setMember, () => setMember(null))
   }, [])
   return member
 }
+
+/** Signed-in member, or null. */
+export const useMember = () => useMemberState() ?? null

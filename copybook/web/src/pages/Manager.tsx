@@ -72,10 +72,15 @@ export function ManagerPage() {
           </div>
         </div>
         {f && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button href={f.sec_url} variant="outline" size="sm">
               View filing on SEC
             </Button>
+            {Boolean(f.history_quarters?.length) && (
+              <Button to={`/investors/${f.slug}/history/`} variant="outline" size="sm">
+                13F history
+              </Button>
+            )}
             {member?.active ? (
               <Button href={csvUrl(f.slug)} variant="dark" size="sm">
                 Download CSV
@@ -157,6 +162,11 @@ export function ManagerPage() {
           {changes.length ? (
             <>
               <ChangeBars items={paid ? changes.slice(0, 12) : changes.slice(0, 4)} />
+              {paid && f && (
+                <Link to={`/investors/${f.slug}/history/`} className="mt-5 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-accent hover:text-accent-2">
+                  Every quarter on file <Arrow />
+                </Link>
+              )}
               {!paid && changes.length > 4 && (
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent-soft px-4 py-3">
                   <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
