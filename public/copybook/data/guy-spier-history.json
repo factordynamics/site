@@ -1,0 +1,1139 @@
+{
+  "slug": "guy-spier",
+  "manager": "Guy Spier",
+  "cik": "0001404599",
+  "history_quarters": [
+    "2022Q2",
+    "2022Q1",
+    "2021Q4",
+    "2021Q3",
+    "2021Q2",
+    "2021Q1",
+    "2020Q4",
+    "2020Q3"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001404599-22-000005",
+      "filing_date": "2022-08-02",
+      "report_date": "2022-06-30",
+      "quarter": "2022Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1404599/000140459922000005/0001404599-22-000005-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": true,
+      "total_value": 170229000.0,
+      "holdings": [
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL B NEW",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 38387000.0,
+          "shares": 140600.0,
+          "put_call": null,
+          "weight": 0.22550211773552098
+        },
+        {
+          "issuer": "AMERICAN EXPRESS CO",
+          "title": "COM",
+          "cusip": "025816109",
+          "ticker": "AXP",
+          "value": 29110000.0,
+          "shares": 210000.0,
+          "put_call": null,
+          "weight": 0.17100494040380898
+        },
+        {
+          "issuer": "BK OF AMERICA CORP",
+          "title": "COM",
+          "cusip": "060505104",
+          "ticker": "BAC",
+          "value": 23903000.0,
+          "shares": 767845.0,
+          "put_call": null,
+          "weight": 0.14041673275411357
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 20743000.0,
+          "shares": 65750.0,
+          "put_call": null,
+          "weight": 0.12185350322213019
+        },
+        {
+          "issuer": "FERRARI N V",
+          "title": "COM",
+          "cusip": "N3167Y103",
+          "ticker": "RACE",
+          "value": 14694000.0,
+          "shares": 80000.0,
+          "put_call": null,
+          "weight": 0.08631901732372275
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 12269000.0,
+          "shares": 30.0,
+          "put_call": null,
+          "weight": 0.0720735009898431
+        },
+        {
+          "issuer": "MICRON TECHNOLOGY INC",
+          "title": "COM",
+          "cusip": "595112103",
+          "ticker": "MU",
+          "value": 11056000.0,
+          "shares": 200000.0,
+          "put_call": null,
+          "weight": 0.06494780560304061
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 7343000.0,
+          "shares": 27000.0,
+          "put_call": null,
+          "weight": 0.04313601090296013
+        },
+        {
+          "issuer": "ALIBABA GROUP HLDG LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "01609W102",
+          "ticker": null,
+          "value": 5400000.0,
+          "shares": 47500.0,
+          "put_call": null,
+          "weight": 0.03172197451668047
+        },
+        {
+          "issuer": "DAILY JOURNAL CORP",
+          "title": "COM",
+          "cusip": "233912104",
+          "ticker": null,
+          "value": 2976000.0,
+          "shares": 11500.0,
+          "put_call": null,
+          "weight": 0.017482332622526128
+        },
+        {
+          "issuer": "SERITAGE GROWTH PPTYS",
+          "title": "CL A",
+          "cusip": "81752R100",
+          "ticker": null,
+          "value": 2605000.0,
+          "shares": 500000.0,
+          "put_call": null,
+          "weight": 0.015302915484435672
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 1743000.0,
+          "shares": 800.0,
+          "put_call": null,
+          "weight": 0.010239148441217419
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001404599-22-000002",
+      "filing_date": "2022-05-12",
+      "report_date": "2022-03-31",
+      "quarter": "2022Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1404599/000140459922000002/0001404599-22-000002-index.html",
+      "line_count": 13,
+      "position_count": 13,
+      "values_in_thousands": true,
+      "total_value": 220658000.0,
+      "holdings": [
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL B NEW",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 49619000.0,
+          "shares": 140600.0,
+          "put_call": null,
+          "weight": 0.2248683483037098
+        },
+        {
+          "issuer": "AMERICAN EXPRESS CO",
+          "title": "COM",
+          "cusip": "025816109",
+          "ticker": "AXP",
+          "value": 39270000.0,
+          "shares": 210000.0,
+          "put_call": null,
+          "weight": 0.1779677147440836
+        },
+        {
+          "issuer": "BK OF AMERICA CORP",
+          "title": "COM",
+          "cusip": "060505104",
+          "ticker": "BAC",
+          "value": 31651000.0,
+          "shares": 767845.0,
+          "put_call": null,
+          "weight": 0.14343916830570386
+        },
+        {
+          "issuer": "MASTERCARD INC",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 23498000.0,
+          "shares": 65750.0,
+          "put_call": null,
+          "weight": 0.10649058724360776
+        },
+        {
+          "issuer": "FERRARI N V",
+          "title": "COM",
+          "cusip": "N3167Y103",
+          "ticker": "RACE",
+          "value": 17592000.0,
+          "shares": 80000.0,
+          "put_call": null,
+          "weight": 0.07972518558130681
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 15868000.0,
+          "shares": 30.0,
+          "put_call": null,
+          "weight": 0.07191218990473947
+        },
+        {
+          "issuer": "MICRON TECHNOLOGY INC",
+          "title": "COM",
+          "cusip": "595112103",
+          "ticker": "MU",
+          "value": 15578000.0,
+          "shares": 200000.0,
+          "put_call": null,
+          "weight": 0.07059793889185981
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 9110000.0,
+          "shares": 27000.0,
+          "put_call": null,
+          "weight": 0.04128560940459897
+        },
+        {
+          "issuer": "SERITAGE GROWTH PPTYS",
+          "title": "CL A",
+          "cusip": "81752R100",
+          "ticker": null,
+          "value": 6330000.0,
+          "shares": 500000.0,
+          "put_call": null,
+          "weight": 0.028686927281131886
+        },
+        {
+          "issuer": "ALIBABA GROUP HLDG LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "01609W102",
+          "ticker": null,
+          "value": 5168000.0,
+          "shares": 47500.0,
+          "put_call": null,
+          "weight": 0.02342085942952442
+        },
+        {
+          "issuer": "DAILY JOURNAL CORP",
+          "title": "COM",
+          "cusip": "233912104",
+          "ticker": null,
+          "value": 3588000.0,
+          "shares": 11500.0,
+          "put_call": null,
+          "weight": 0.01626045735935248
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 2225000.0,
+          "shares": 800.0,
+          "put_call": null,
+          "weight": 0.01008347759881808
+        },
+        {
+          "issuer": "TWITTER INC",
+          "title": "COM",
+          "cusip": "90184L102",
+          "ticker": null,
+          "value": 1161000.0,
+          "shares": 30000.0,
+          "put_call": null,
+          "weight": 0.005261535951563053
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001404599-22-000001",
+      "filing_date": "2022-02-07",
+      "report_date": "2021-12-31",
+      "quarter": "2021Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1404599/000140459922000001/0001404599-22-000001-index.html",
+      "line_count": 13,
+      "position_count": 13,
+      "values_in_thousands": true,
+      "total_value": 217565000.0,
+      "holdings": [
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL B NEW",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 42039000.0,
+          "shares": 140600.0,
+          "put_call": null,
+          "weight": 0.19322501321444166
+        },
+        {
+          "issuer": "AMERICAN EXPRESS CO",
+          "title": "COM",
+          "cusip": "025816109",
+          "ticker": "AXP",
+          "value": 34356000.0,
+          "shares": 210000.0,
+          "put_call": null,
+          "weight": 0.15791142876841405
+        },
+        {
+          "issuer": "BK OF AMERICA CORP",
+          "title": "COM",
+          "cusip": "060505104",
+          "ticker": "BAC",
+          "value": 34161000.0,
+          "shares": 767845.0,
+          "put_call": null,
+          "weight": 0.15701514489922552
+        },
+        {
+          "issuer": "MASTERCARD INC",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 23625000.0,
+          "shares": 65750.0,
+          "put_call": null,
+          "weight": 0.10858823799783973
+        },
+        {
+          "issuer": "FERRARI N V",
+          "title": "COM",
+          "cusip": "N3167Y103",
+          "ticker": "RACE",
+          "value": 20693000.0,
+          "shares": 80000.0,
+          "put_call": null,
+          "weight": 0.09511180566727186
+        },
+        {
+          "issuer": "MICRON TECHNOLOGY INC",
+          "title": "COM",
+          "cusip": "595112103",
+          "ticker": "MU",
+          "value": 18630000.0,
+          "shares": 200000.0,
+          "put_call": null,
+          "weight": 0.08562958196401076
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 13520000.0,
+          "shares": 30.0,
+          "put_call": null,
+          "weight": 0.062142348263737275
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 10546000.0,
+          "shares": 27000.0,
+          "put_call": null,
+          "weight": 0.04847287017672879
+        },
+        {
+          "issuer": "SERITAGE GROWTH PPTYS",
+          "title": "CL A",
+          "cusip": "81752R100",
+          "ticker": null,
+          "value": 6635000.0,
+          "shares": 500000.0,
+          "put_call": null,
+          "weight": 0.030496633190081127
+        },
+        {
+          "issuer": "ALIBABA GROUP HLDG LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "01609W102",
+          "ticker": null,
+          "value": 5643000.0,
+          "shares": 47500.0,
+          "put_call": null,
+          "weight": 0.025937076276055432
+        },
+        {
+          "issuer": "DAILY JOURNAL CORP",
+          "title": "COM",
+          "cusip": "233912104",
+          "ticker": null,
+          "value": 4102000.0,
+          "shares": 11500.0,
+          "put_call": null,
+          "weight": 0.018854135545698987
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 2318000.0,
+          "shares": 800.0,
+          "put_call": null,
+          "weight": 0.01065428722450762
+        },
+        {
+          "issuer": "TWITTER INC",
+          "title": "COM",
+          "cusip": "90184L102",
+          "ticker": null,
+          "value": 1297000.0,
+          "shares": 30000.0,
+          "put_call": null,
+          "weight": 0.005961436811987222
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001404599-21-000006",
+      "filing_date": "2021-10-28",
+      "report_date": "2021-09-30",
+      "quarter": "2021Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1404599/000140459921000006/0001404599-21-000006-index.html",
+      "line_count": 13,
+      "position_count": 13,
+      "values_in_thousands": true,
+      "total_value": 203981000.0,
+      "holdings": [
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL B NEW",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 38375000.0,
+          "shares": 140600.0,
+          "put_call": null,
+          "weight": 0.1881302670346748
+        },
+        {
+          "issuer": "AMERICAN EXPRESS CO",
+          "title": "COM",
+          "cusip": "025816109",
+          "ticker": "AXP",
+          "value": 35181000.0,
+          "shares": 210000.0,
+          "put_call": null,
+          "weight": 0.17247194591653145
+        },
+        {
+          "issuer": "BK OF AMERICA CORP",
+          "title": "COM",
+          "cusip": "060505104",
+          "ticker": "BAC",
+          "value": 32595000.0,
+          "shares": 767845.0,
+          "put_call": null,
+          "weight": 0.1597942945666508
+        },
+        {
+          "issuer": "MASTERCARD INC",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 22860000.0,
+          "shares": 65750.0,
+          "put_call": null,
+          "weight": 0.11206926135277305
+        },
+        {
+          "issuer": "FERRARI N V",
+          "title": "COM",
+          "cusip": "N3167Y103",
+          "ticker": "RACE",
+          "value": 16763000.0,
+          "shares": 80000.0,
+          "put_call": null,
+          "weight": 0.08217922257465156
+        },
+        {
+          "issuer": "MICRON TECHNOLOGY INC",
+          "title": "COM",
+          "cusip": "595112103",
+          "ticker": "MU",
+          "value": 14196000.0,
+          "shares": 200000.0,
+          "put_call": null,
+          "weight": 0.06959471715502914
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 12341000.0,
+          "shares": 30.0,
+          "put_call": null,
+          "weight": 0.06050073291139861
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 9588000.0,
+          "shares": 27000.0,
+          "put_call": null,
+          "weight": 0.047004377858722135
+        },
+        {
+          "issuer": "SERITAGE GROWTH PPTYS",
+          "title": "CL A",
+          "cusip": "81752R100",
+          "ticker": null,
+          "value": 7415000.0,
+          "shares": 500000.0,
+          "put_call": null,
+          "weight": 0.03635142488761208
+        },
+        {
+          "issuer": "ALIBABA GROUP HLDG LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "01609W102",
+          "ticker": null,
+          "value": 7032000.0,
+          "shares": 47500.0,
+          "put_call": null,
+          "weight": 0.034473799030301844
+        },
+        {
+          "issuer": "DAILY JOURNAL CORP",
+          "title": "COM",
+          "cusip": "233912104",
+          "ticker": null,
+          "value": 3684000.0,
+          "shares": 11500.0,
+          "put_call": null,
+          "weight": 0.01806050563532878
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 2139000.0,
+          "shares": 800.0,
+          "put_call": null,
+          "weight": 0.010486270780121678
+        },
+        {
+          "issuer": "TWITTER INC",
+          "title": "COM",
+          "cusip": "90184L102",
+          "ticker": null,
+          "value": 1812000.0,
+          "shares": 30000.0,
+          "put_call": null,
+          "weight": 0.008883180296204059
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001404599-21-000005",
+      "filing_date": "2021-08-04",
+      "report_date": "2021-06-30",
+      "quarter": "2021Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1404599/000140459921000005/0001404599-21-000005-index.html",
+      "line_count": 13,
+      "position_count": 13,
+      "values_in_thousands": true,
+      "total_value": 213163000.0,
+      "holdings": [
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL B NEW",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 39076000.0,
+          "shares": 140600.0,
+          "put_call": null,
+          "weight": 0.1833151156626619
+        },
+        {
+          "issuer": "AMERICAN EXPRESS CO",
+          "title": "COM",
+          "cusip": "025816109",
+          "ticker": "AXP",
+          "value": 34698000.0,
+          "shares": 210000.0,
+          "put_call": null,
+          "weight": 0.16277684213489207
+        },
+        {
+          "issuer": "BK OF AMERICA CORP",
+          "title": "COM",
+          "cusip": "060505104",
+          "ticker": "BAC",
+          "value": 31658000.0,
+          "shares": 767845.0,
+          "put_call": null,
+          "weight": 0.14851545530884816
+        },
+        {
+          "issuer": "MASTERCARD INC",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 24005000.0,
+          "shares": 65750.0,
+          "put_call": null,
+          "weight": 0.11261335222341588
+        },
+        {
+          "issuer": "MICRON TECHNOLOGY INC",
+          "title": "COM",
+          "cusip": "595112103",
+          "ticker": "MU",
+          "value": 16996000.0,
+          "shares": 200000.0,
+          "put_call": null,
+          "weight": 0.07973241134718502
+        },
+        {
+          "issuer": "FERRARI N V",
+          "title": "COM",
+          "cusip": "N3167Y103",
+          "ticker": "RACE",
+          "value": 16506000.0,
+          "shares": 80000.0,
+          "put_call": null,
+          "weight": 0.07743370097061873
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 12558000.0,
+          "shares": 30.0,
+          "put_call": null,
+          "weight": 0.05891266307942748
+        },
+        {
+          "issuer": "ALIBABA GROUP HLDG LTD",
+          "title": "SPONSORED ADS",
+          "cusip": "01609W102",
+          "ticker": null,
+          "value": 10772000.0,
+          "shares": 47500.0,
+          "put_call": null,
+          "weight": 0.050534098319126676
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 9784000.0,
+          "shares": 27000.0,
+          "put_call": null,
+          "weight": 0.0458991476006624
+        },
+        {
+          "issuer": "SERITAGE GROWTH PPTYS",
+          "title": "CL A",
+          "cusip": "81752R100",
+          "ticker": null,
+          "value": 9200000.0,
+          "shares": 500000.0,
+          "put_call": null,
+          "weight": 0.0431594601314487
+        },
+        {
+          "issuer": "DAILY JOURNAL CORP",
+          "title": "COM",
+          "cusip": "233912104",
+          "ticker": null,
+          "value": 3893000.0,
+          "shares": 11500.0,
+          "put_call": null,
+          "weight": 0.01826301937953585
+        },
+        {
+          "issuer": "TWITTER INC",
+          "title": "COM",
+          "cusip": "90184L102",
+          "ticker": null,
+          "value": 2064000.0,
+          "shares": 30000.0,
+          "put_call": null,
+          "weight": 0.009682731055577187
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 1953000.0,
+          "shares": 800.0,
+          "put_call": null,
+          "weight": 0.009162002786599927
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001404599-21-000004",
+      "filing_date": "2021-05-17",
+      "report_date": "2021-03-31",
+      "quarter": "2021Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1404599/000140459921000004/0001404599-21-000004-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": true,
+      "total_value": 191414000.0,
+      "holdings": [
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL B NEW",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 35919000.0,
+          "shares": 140600.0,
+          "put_call": null,
+          "weight": 0.1876508510349295
+        },
+        {
+          "issuer": "BK OF AMERICA CORP",
+          "title": "COM",
+          "cusip": "060505104",
+          "ticker": "BAC",
+          "value": 29708000.0,
+          "shares": 767845.0,
+          "put_call": null,
+          "weight": 0.15520285872506714
+        },
+        {
+          "issuer": "AMERICAN EXPRESS CO",
+          "title": "COM",
+          "cusip": "025816109",
+          "ticker": "AXP",
+          "value": 29702000.0,
+          "shares": 210000.0,
+          "put_call": null,
+          "weight": 0.1551715130554714
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 23410000.0,
+          "shares": 65750.0,
+          "put_call": null,
+          "weight": 0.12230035420606643
+        },
+        {
+          "issuer": "MICRON TECHNOLOGY INC",
+          "title": "COM",
+          "cusip": "595112103",
+          "ticker": "MU",
+          "value": 17642000.0,
+          "shares": 200000.0,
+          "put_call": null,
+          "weight": 0.09216671716802324
+        },
+        {
+          "issuer": "FERRARI N V",
+          "title": "COM",
+          "cusip": "N3167Y103",
+          "ticker": "RACE",
+          "value": 16736000.0,
+          "shares": 80000.0,
+          "put_call": null,
+          "weight": 0.0874335210590657
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 11571000.0,
+          "shares": 30.0,
+          "put_call": null,
+          "weight": 0.060450123815394906
+        },
+        {
+          "issuer": "SERITAGE GROWTH PPTYS",
+          "title": "CL A",
+          "cusip": "81752R100",
+          "ticker": null,
+          "value": 9175000.0,
+          "shares": 500000.0,
+          "put_call": null,
+          "weight": 0.047932753090160596
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 8063000.0,
+          "shares": 27000.0,
+          "put_call": null,
+          "weight": 0.04212335565841579
+        },
+        {
+          "issuer": "WELLS FARGO CO NEW",
+          "title": "COM",
+          "cusip": "949746101",
+          "ticker": null,
+          "value": 5929000.0,
+          "shares": 151741.0,
+          "put_call": null,
+          "weight": 0.03097474583886236
+        },
+        {
+          "issuer": "TWITTER INC",
+          "title": "COM",
+          "cusip": "90184L102",
+          "ticker": null,
+          "value": 1909000.0,
+          "shares": 30000.0,
+          "put_call": null,
+          "weight": 0.009973147209712978
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 1650000.0,
+          "shares": 800.0,
+          "put_call": null,
+          "weight": 0.008620059138829971
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001404599-21-000002",
+      "filing_date": "2021-02-12",
+      "report_date": "2020-12-31",
+      "quarter": "2020Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1404599/000140459921000002/0001404599-21-000002-index.html",
+      "line_count": 12,
+      "position_count": 12,
+      "values_in_thousands": true,
+      "total_value": 171425000.0,
+      "holdings": [
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL B NEW",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 32601000.0,
+          "shares": 140600.0,
+          "put_call": null,
+          "weight": 0.1901764620096252
+        },
+        {
+          "issuer": "AMERICAN EXPRESS CO",
+          "title": "COM",
+          "cusip": "025816109",
+          "ticker": "AXP",
+          "value": 25391000.0,
+          "shares": 210000.0,
+          "put_call": null,
+          "weight": 0.14811725244275922
+        },
+        {
+          "issuer": "MASTERCARD INC",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 23469000.0,
+          "shares": 65750.0,
+          "put_call": null,
+          "weight": 0.1369053521948374
+        },
+        {
+          "issuer": "BK OF AMERICA CORP",
+          "title": "COM",
+          "cusip": "060505104",
+          "ticker": "BAC",
+          "value": 23273000.0,
+          "shares": 767845.0,
+          "put_call": null,
+          "weight": 0.13576199504156336
+        },
+        {
+          "issuer": "FERRARI N V",
+          "title": "COM",
+          "cusip": "N3167Y103",
+          "ticker": "RACE",
+          "value": 18438000.0,
+          "shares": 80000.0,
+          "put_call": null,
+          "weight": 0.1075572407758495
+        },
+        {
+          "issuer": "MICRON TECHNOLOGY INC",
+          "title": "COM",
+          "cusip": "595112103",
+          "ticker": "MU",
+          "value": 15036000.0,
+          "shares": 200000.0,
+          "put_call": null,
+          "weight": 0.08771182732973604
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 10434000.0,
+          "shares": 30.0,
+          "put_call": null,
+          "weight": 0.06086626804725098
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 7836000.0,
+          "shares": 27000.0,
+          "put_call": null,
+          "weight": 0.045710952311506486
+        },
+        {
+          "issuer": "SERITAGE GROWTH PPTYS",
+          "title": "CL A",
+          "cusip": "81752R100",
+          "ticker": null,
+          "value": 7340000.0,
+          "shares": 500000.0,
+          "put_call": null,
+          "weight": 0.042817558699139564
+        },
+        {
+          "issuer": "WELLS FARGO CO NEW",
+          "title": "COM",
+          "cusip": "949746101",
+          "ticker": null,
+          "value": 4580000.0,
+          "shares": 151741.0,
+          "put_call": null,
+          "weight": 0.026717223275484907
+        },
+        {
+          "issuer": "TWITTER INC",
+          "title": "COM",
+          "cusip": "90184L102",
+          "ticker": null,
+          "value": 1625000.0,
+          "shares": 30000.0,
+          "put_call": null,
+          "weight": 0.009479364153419862
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 1402000.0,
+          "shares": 800.0,
+          "put_call": null,
+          "weight": 0.008178503718827475
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001404599-20-000007",
+      "filing_date": "2020-11-13",
+      "report_date": "2020-09-30",
+      "quarter": "2020Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1404599/000140459920000007/0001404599-20-000007-index.html",
+      "line_count": 13,
+      "position_count": 13,
+      "values_in_thousands": true,
+      "total_value": 151598000.0,
+      "holdings": [
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL B NEW",
+          "cusip": "084670702",
+          "ticker": "BRK.B",
+          "value": 29939000.0,
+          "shares": 140600.0,
+          "put_call": null,
+          "weight": 0.19748941278908694
+        },
+        {
+          "issuer": "MASTERCARD INC",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 22235000.0,
+          "shares": 65750.0,
+          "put_call": null,
+          "weight": 0.14667080040633781
+        },
+        {
+          "issuer": "AMERICAN EXPRESS CO",
+          "title": "COM",
+          "cusip": "025816109",
+          "ticker": "AXP",
+          "value": 21053000.0,
+          "shares": 210000.0,
+          "put_call": null,
+          "weight": 0.13887386377128985
+        },
+        {
+          "issuer": "BK OF AMERICA CORP",
+          "title": "COM",
+          "cusip": "060505104",
+          "ticker": "BAC",
+          "value": 18497000.0,
+          "shares": 767845.0,
+          "put_call": null,
+          "weight": 0.12201348302748058
+        },
+        {
+          "issuer": "FERRARI N V",
+          "title": "COM",
+          "cusip": "N3167Y103",
+          "ticker": "RACE",
+          "value": 14689000.0,
+          "shares": 80000.0,
+          "put_call": null,
+          "weight": 0.09689441813216533
+        },
+        {
+          "issuer": "BERKSHIRE HATHAWAY INC DEL",
+          "title": "CL A",
+          "cusip": "084670108",
+          "ticker": "BRK.A",
+          "value": 9600000.0,
+          "shares": 30.0,
+          "put_call": null,
+          "weight": 0.06332537368566868
+        },
+        {
+          "issuer": "FIAT CHRYSLER  AUTOMOBILES N",
+          "title": "SHS",
+          "cusip": "N31738102",
+          "ticker": null,
+          "value": 9325000.0,
+          "shares": 760000.0,
+          "put_call": null,
+          "weight": 0.06151136558529796
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 7826000.0,
+          "shares": 27000.0,
+          "put_call": null,
+          "weight": 0.051623372340004484
+        },
+        {
+          "issuer": "SERITAGE GROWTH PPTYS",
+          "title": "CL A",
+          "cusip": "81752R100",
+          "ticker": null,
+          "value": 6725000.0,
+          "shares": 500000.0,
+          "put_call": null,
+          "weight": 0.04436074354542936
+        },
+        {
+          "issuer": "MICRON TECHNOLOGY INC",
+          "title": "COM",
+          "cusip": "595112103",
+          "ticker": "MU",
+          "value": 5635000.0,
+          "shares": 120000.0,
+          "put_call": null,
+          "weight": 0.03717067507486906
+        },
+        {
+          "issuer": "WELLS FARGO CO NEW",
+          "title": "COM",
+          "cusip": "949746101",
+          "ticker": null,
+          "value": 3567000.0,
+          "shares": 151741.0,
+          "put_call": null,
+          "weight": 0.023529334160081267
+        },
+        {
+          "issuer": "TWITTER INC",
+          "title": "COM",
+          "cusip": "90184L102",
+          "ticker": null,
+          "value": 1335000.0,
+          "shares": 30000.0,
+          "put_call": null,
+          "weight": 0.008806184778163301
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 1172000.0,
+          "shares": 800.0,
+          "put_call": null,
+          "weight": 0.007730972704125384
+        }
+      ]
+    }
+  ]
+}

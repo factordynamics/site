@@ -1,0 +1,919 @@
+{
+  "slug": "chris-hohn",
+  "manager": "Chris Hohn",
+  "cik": "0001647251",
+  "history_quarters": [
+    "2026Q2",
+    "2026Q1",
+    "2025Q4",
+    "2025Q3",
+    "2025Q2",
+    "2025Q1",
+    "2024Q4",
+    "2024Q3"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001647251-26-000007",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1647251/000164725126000007/0001647251-26-000007-index.html",
+      "line_count": 11,
+      "position_count": 11,
+      "values_in_thousands": false,
+      "total_value": 52769884406.0,
+      "holdings": [
+        {
+          "issuer": "GE AEROSPACE",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 17725353519.0,
+          "shares": 47428233.0,
+          "put_call": null,
+          "weight": 0.33589904011585453
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 10462232091.0,
+          "shares": 30494133.0,
+          "put_call": null,
+          "weight": 0.19826141763938432
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 6492167509.0,
+          "shares": 14334027.0,
+          "put_call": null,
+          "weight": 0.12302788952597805
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 5735017808.0,
+          "shares": 14081957.0,
+          "put_call": null,
+          "weight": 0.10867974930314461
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 3925911608.0,
+          "shares": 45325726.0,
+          "put_call": null,
+          "weight": 0.07439682031127624
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 3511682917.0,
+          "shares": 9938819.0,
+          "put_call": null,
+          "weight": 0.06654710269937066
+        },
+        {
+          "issuer": "FERROVIAL NV",
+          "title": "ORD SHS",
+          "cusip": "N3168P101",
+          "ticker": null,
+          "value": 1434611939.0,
+          "shares": 20940441.0,
+          "put_call": null,
+          "weight": 0.027186186878152094
+        },
+        {
+          "issuer": "CANADIAN NATL RY CO",
+          "title": "COM",
+          "cusip": "136375102",
+          "ticker": "CNI",
+          "value": 1124534915.0,
+          "shares": 9433422.0,
+          "put_call": null,
+          "weight": 0.021310164455697368
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 878058090.0,
+          "shares": 2457000.0,
+          "put_call": null,
+          "weight": 0.0166393786888827
+        },
+        {
+          "issuer": "MARTIN MARIETTA MATLS INC",
+          "title": "COM",
+          "cusip": "573284106",
+          "ticker": null,
+          "value": 758423360.0,
+          "shares": 1315109.0,
+          "put_call": null,
+          "weight": 0.014372276318910533
+        },
+        {
+          "issuer": "VULCAN MATLS CO",
+          "title": "COM",
+          "cusip": "929160109",
+          "ticker": null,
+          "value": 721890650.0,
+          "shares": 2447004.0,
+          "put_call": null,
+          "weight": 0.013679974063348909
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001647251-26-000004",
+      "filing_date": "2026-05-15",
+      "report_date": "2026-03-31",
+      "quarter": "2026Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1647251/000164725126000004/0001647251-26-000004-index.html",
+      "line_count": 10,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 45170870798.0,
+      "holdings": [
+        {
+          "issuer": "GE AEROSPACE",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 13482035005.0,
+          "shares": 47510431.0,
+          "put_call": null,
+          "weight": 0.2984674584931167
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 9208688518.0,
+          "shares": 30468133.0,
+          "put_call": null,
+          "weight": 0.2038634269235236
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 6253219279.0,
+          "shares": 14334027.0,
+          "put_call": null,
+          "weight": 0.13843477374974295
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 5969778755.0,
+          "shares": 14035310.0,
+          "put_call": null,
+          "weight": 0.132159921859738
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 3659637907.0,
+          "shares": 46521923.0,
+          "put_call": null,
+          "weight": 0.08101765235754621
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 2539863890.0,
+          "shares": 8854019.0,
+          "put_call": null,
+          "weight": 0.05622791513933922
+        },
+        {
+          "issuer": "FERROVIAL SE",
+          "title": "ORD SHS",
+          "cusip": "N3168P101",
+          "ticker": null,
+          "value": 1327927999.0,
+          "shares": 20740214.0,
+          "put_call": null,
+          "weight": 0.029397883537343624
+        },
+        {
+          "issuer": "CANADIAN NATL RY CO",
+          "title": "COM",
+          "cusip": "136375102",
+          "ticker": "CNI",
+          "value": 1013208255.0,
+          "shares": 9849934.0,
+          "put_call": null,
+          "weight": 0.022430567246112535
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 1009976270.0,
+          "shares": 2728412.0,
+          "put_call": null,
+          "weight": 0.022359017042565363
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 706534920.0,
+          "shares": 2457000.0,
+          "put_call": null,
+          "weight": 0.015641383650971872
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001647251-26-000002",
+      "filing_date": "2026-02-17",
+      "report_date": "2025-12-31",
+      "quarter": "2025Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1647251/000164725126000002/0001647251-26-000002-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 53648816254.0,
+      "holdings": [
+        {
+          "issuer": "GE AEROSPACE",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 14634638061.0,
+          "shares": 47510431.0,
+          "put_call": null,
+          "weight": 0.27278585219312934
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 9723165755.0,
+          "shares": 27724233.0,
+          "put_call": null,
+          "weight": 0.18123728413625623
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 8116088110.0,
+          "shares": 16781953.0,
+          "put_call": null,
+          "weight": 0.15128177426272427
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 6798636497.0,
+          "shares": 13308479.0,
+          "put_call": null,
+          "weight": 0.1267248183969595
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 6161498103.0,
+          "shares": 11790310.0,
+          "put_call": null,
+          "weight": 0.11484872422586967
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 3508630329.0,
+          "shares": 47654423.0,
+          "put_call": null,
+          "weight": 0.06539995798580925
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 2383881802.0,
+          "shares": 7596819.0,
+          "put_call": null,
+          "weight": 0.044434937589555114
+        },
+        {
+          "issuer": "FERROVIAL SE",
+          "title": "ORD SHS",
+          "cusip": "N3168P101",
+          "ticker": null,
+          "value": 1348162940.0,
+          "shares": 20740214.0,
+          "put_call": null,
+          "weight": 0.025129407023952412
+        },
+        {
+          "issuer": "CANADIAN NATL RY CO",
+          "title": "COM",
+          "cusip": "136375102",
+          "ticker": "CNI",
+          "value": 974114657.0,
+          "shares": 9849934.0,
+          "put_call": null,
+          "weight": 0.01815724418574419
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001647251-25-000014",
+      "filing_date": "2025-11-14",
+      "report_date": "2025-09-30",
+      "quarter": "2025Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1647251/000164725125000014/0001647251-25-000014-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 52699548226.0,
+      "holdings": [
+        {
+          "issuer": "GE AEROSPACE",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 14292087853.0,
+          "shares": 47510431.0,
+          "put_call": null,
+          "weight": 0.2711994378340575
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 9578218484.0,
+          "shares": 28057351.0,
+          "put_call": null,
+          "weight": 0.1817514344321165
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 8593932062.0,
+          "shares": 16592204.0,
+          "put_call": null,
+          "weight": 0.16307411261184349
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 6341224074.0,
+          "shares": 13308479.0,
+          "put_call": null,
+          "weight": 0.12032786404175426
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 5446221628.0,
+          "shares": 11189870.0,
+          "put_call": null,
+          "weight": 0.10334474983815965
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 3713514827.0,
+          "shares": 49865735.0,
+          "put_call": null,
+          "weight": 0.07046578105517591
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 1850205267.0,
+          "shares": 7596819.0,
+          "put_call": null,
+          "weight": 0.03510856030616174
+        },
+        {
+          "issuer": "CANADIAN NATL RY CO",
+          "title": "COM",
+          "cusip": "136375102",
+          "ticker": "CNI",
+          "value": 1769673250.0,
+          "shares": 18767774.0,
+          "put_call": null,
+          "weight": 0.03358042544142549
+        },
+        {
+          "issuer": "FERROVIAL SE",
+          "title": "ORD SHS",
+          "cusip": "N3168P101",
+          "ticker": null,
+          "value": 1114470781.0,
+          "shares": 19470666.0,
+          "put_call": null,
+          "weight": 0.021147634439305524
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001647251-25-000009",
+      "filing_date": "2025-08-14",
+      "report_date": "2025-06-30",
+      "quarter": "2025Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1647251/000164725125000009/0001647251-25-000009-index.html",
+      "line_count": 10,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 50706910931.0,
+      "holdings": [
+        {
+          "issuer": "GE AEROSPACE",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 12228709835.0,
+          "shares": 47510431.0,
+          "put_call": null,
+          "weight": 0.24116455943530762
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 8737121552.0,
+          "shares": 17565231.0,
+          "put_call": null,
+          "weight": 0.17230632652596678
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 6769936468.0,
+          "shares": 19067558.0,
+          "put_call": null,
+          "weight": 0.13351111995783507
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 6644552197.0,
+          "shares": 13246979.0,
+          "put_call": null,
+          "weight": 0.13103839447135024
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 5848501892.0,
+          "shares": 11091623.0,
+          "put_call": null,
+          "weight": 0.1153393449653917
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 4188853262.0,
+          "shares": 52826885.0,
+          "put_call": null,
+          "weight": 0.08260911944922121
+        },
+        {
+          "issuer": "CANADIAN NATL RY CO",
+          "title": "COM",
+          "cusip": "136375102",
+          "ticker": "CNI",
+          "value": 2394409913.0,
+          "shares": 22989066.0,
+          "put_call": null,
+          "weight": 0.04722058332952327
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 2300080427.0,
+          "shares": 12966235.0,
+          "put_call": null,
+          "weight": 0.045360294775792204
+        },
+        {
+          "issuer": "FERROVIAL SE",
+          "title": "ORD SHS",
+          "cusip": "N3168P101",
+          "ticker": null,
+          "value": 1038720350.0,
+          "shares": 19470666.0,
+          "put_call": null,
+          "weight": 0.02048478858066212
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 556025035.0,
+          "shares": 3155110.0,
+          "put_call": null,
+          "weight": 0.010965468508949743
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001647251-25-000005",
+      "filing_date": "2025-05-15",
+      "report_date": "2025-03-31",
+      "quarter": "2025Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1647251/000164725125000005/0001647251-25-000005-index.html",
+      "line_count": 10,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 43372530344.0,
+      "holdings": [
+        {
+          "issuer": "GE AEROSPACE",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 9521325042.0,
+          "shares": 47570947.0,
+          "put_call": null,
+          "weight": 0.21952431565517702
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 6494202329.0,
+          "shares": 17299881.0,
+          "put_call": null,
+          "weight": 0.1497307691640911
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 6129927299.0,
+          "shares": 13163107.0,
+          "put_call": null,
+          "weight": 0.1413320193768218
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 5830799979.0,
+          "shares": 16637562.0,
+          "put_call": null,
+          "weight": 0.1344353196079235
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 5264560779.0,
+          "shares": 10361269.0,
+          "put_call": null,
+          "weight": 0.12138007022521527
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 3854575745.0,
+          "shares": 54913285.0,
+          "put_call": null,
+          "weight": 0.08887135969306499
+        },
+        {
+          "issuer": "CANADIAN NATL RY CO",
+          "title": "COM",
+          "cusip": "136375102",
+          "ticker": "CNI",
+          "value": 2619619831.0,
+          "shares": 26899078.0,
+          "put_call": null,
+          "weight": 0.06039813241752424
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 2164681479.0,
+          "shares": 13855735.0,
+          "put_call": null,
+          "weight": 0.04990904293181166
+        },
+        {
+          "issuer": "FERROVIAL SE",
+          "title": "ORD SHS",
+          "cusip": "N3168P101",
+          "ticker": null,
+          "value": 861116451.0,
+          "shares": 19333428.0,
+          "put_call": null,
+          "weight": 0.01985395927261421
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 631721410.0,
+          "shares": 4085110.0,
+          "put_call": null,
+          "weight": 0.014565011655756212
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001647251-25-000003",
+      "filing_date": "2025-02-14",
+      "report_date": "2024-12-31",
+      "quarter": "2024Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1647251/000164725125000003/0001647251-25-000003-index.html",
+      "line_count": 10,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 42413899286.0,
+      "holdings": [
+        {
+          "issuer": "GE AEROSPACE",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 7672319318.0,
+          "shares": 45999876.0,
+          "put_call": null,
+          "weight": 0.1808916286207263
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 6270623042.0,
+          "shares": 13246769.0,
+          "put_call": null,
+          "weight": 0.1478435877757132
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 5898317996.0,
+          "shares": 13993637.0,
+          "put_call": null,
+          "weight": 0.13906568590233154
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 5308582979.0,
+          "shares": 16797187.0,
+          "put_call": null,
+          "weight": 0.12516139917256464
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 5179550348.0,
+          "shares": 10400077.0,
+          "put_call": null,
+          "weight": 0.12211917402533344
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 3973526128.0,
+          "shares": 54913285.0,
+          "put_call": null,
+          "weight": 0.09368452782910208
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 3143603745.0,
+          "shares": 16507056.0,
+          "put_call": null,
+          "weight": 0.07411730111873119
+        },
+        {
+          "issuer": "CANADIAN NATL RY CO",
+          "title": "COM",
+          "cusip": "136375102",
+          "ticker": "CNI",
+          "value": 3013663064.0,
+          "shares": 29693764.0,
+          "put_call": null,
+          "weight": 0.0710536667161548
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 1140988713.0,
+          "shares": 6027410.0,
+          "put_call": null,
+          "weight": 0.026901292552854675
+        },
+        {
+          "issuer": "FERROVIAL SE",
+          "title": "ORD SHS",
+          "cusip": "N3168P101",
+          "ticker": null,
+          "value": 812723953.0,
+          "shares": 19333428.0,
+          "put_call": null,
+          "weight": 0.019161736286488148
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001647251-24-000011",
+      "filing_date": "2024-11-14",
+      "report_date": "2024-09-30",
+      "quarter": "2024Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1647251/000164725124000011/0001647251-24-000011-index.html",
+      "line_count": 10,
+      "position_count": 10,
+      "values_in_thousands": false,
+      "total_value": 44020529632.0,
+      "holdings": [
+        {
+          "issuer": "GE AEROSPACE",
+          "title": "COM NEW",
+          "cusip": "369604301",
+          "ticker": "GE",
+          "value": 9085855306.0,
+          "shares": 48180376.0,
+          "put_call": null,
+          "weight": 0.20640040867193898
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 6286784100.0,
+          "shares": 13246769.0,
+          "put_call": null,
+          "weight": 0.14281482191504405
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 5372887780.0,
+          "shares": 10400077.0,
+          "put_call": null,
+          "weight": 0.12205413757889609
+        },
+        {
+          "issuer": "MICROSOFT CORP",
+          "title": "COM",
+          "cusip": "594918104",
+          "ticker": "MSFT",
+          "value": 5159550877.0,
+          "shares": 11990590.0,
+          "put_call": null,
+          "weight": 0.11720783280284182
+        },
+        {
+          "issuer": "CANADIAN PACIFIC KANSAS CITY",
+          "title": "COM",
+          "cusip": "13646K108",
+          "ticker": "CP",
+          "value": 4696733365.0,
+          "shares": 54913285.0,
+          "put_call": null,
+          "weight": 0.10669415848158689
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 4618386566.0,
+          "shares": 16797187.0,
+          "put_call": null,
+          "weight": 0.10491437982706005
+        },
+        {
+          "issuer": "CANADIAN NATL RY CO",
+          "title": "COM",
+          "cusip": "136375102",
+          "ticker": "CNI",
+          "value": 4150341855.0,
+          "shares": 35437277.0,
+          "put_call": null,
+          "weight": 0.09428196093267759
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL C",
+          "cusip": "02079K107",
+          "ticker": "GOOG",
+          "value": 2830034493.0,
+          "shares": 16927056.0,
+          "put_call": null,
+          "weight": 0.06428896963890122
+        },
+        {
+          "issuer": "ALPHABET INC",
+          "title": "CAP STK CL A",
+          "cusip": "02079K305",
+          "ticker": "GOOGL",
+          "value": 999645949.0,
+          "shares": 6027410.0,
+          "put_call": null,
+          "weight": 0.02270863066293786
+        },
+        {
+          "issuer": "FERROVIAL SE",
+          "title": "ORD SHS",
+          "cusip": "N3168P101",
+          "ticker": null,
+          "value": 820309341.0,
+          "shares": 19095244.0,
+          "put_call": null,
+          "weight": 0.018634699488115417
+        }
+      ]
+    }
+  ]
+}

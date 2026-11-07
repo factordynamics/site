@@ -1,0 +1,799 @@
+{
+  "slug": "dev-kantesaria",
+  "manager": "Dev Kantesaria",
+  "cik": "0001697868",
+  "history_quarters": [
+    "2026Q2",
+    "2026Q1",
+    "2025Q4",
+    "2025Q3",
+    "2025Q2",
+    "2025Q1",
+    "2024Q4",
+    "2024Q3"
+  ],
+  "history": [
+    {
+      "form": "13F-HR",
+      "accession": "0001697868-26-000005",
+      "filing_date": "2026-08-14",
+      "report_date": "2026-06-30",
+      "quarter": "2026Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1697868/000169786826000005/0001697868-26-000005-index.html",
+      "line_count": 7,
+      "position_count": 7,
+      "values_in_thousands": false,
+      "total_value": 3116388059.0,
+      "holdings": [
+        {
+          "issuer": "FAIR ISAAC CORP",
+          "title": "COM",
+          "cusip": "303250104",
+          "ticker": null,
+          "value": 803114389.0,
+          "shares": 672186.0,
+          "put_call": null,
+          "weight": 0.25770679831757115
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 620678901.0,
+          "shares": 1524036.0,
+          "put_call": null,
+          "weight": 0.1991661145047405
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 596580789.0,
+          "shares": 1317188.0,
+          "put_call": null,
+          "weight": 0.1914334087107988
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 547463702.0,
+          "shares": 1065934.0,
+          "put_call": null,
+          "weight": 0.1756725066440129
+        },
+        {
+          "issuer": "ASML HLDG NV",
+          "title": "N Y REGISTRY SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 340359364.0,
+          "shares": 171083.0,
+          "put_call": null,
+          "weight": 0.10921597617378112
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 158843122.0,
+          "shares": 462978.0,
+          "put_call": null,
+          "weight": 0.05097026396994034
+        },
+        {
+          "issuer": "INTUIT",
+          "title": "COM",
+          "cusip": "461202103",
+          "ticker": null,
+          "value": 49347792.0,
+          "shares": 189072.0,
+          "put_call": null,
+          "weight": 0.015834931679155173
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001697868-26-000003",
+      "filing_date": "2026-05-15",
+      "report_date": "2026-03-31",
+      "quarter": "2026Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1697868/000169786826000003/0001697868-26-000003-index.html",
+      "line_count": 7,
+      "position_count": 7,
+      "values_in_thousands": false,
+      "total_value": 3375637687.0,
+      "holdings": [
+        {
+          "issuer": "FAIR ISAAC CORP",
+          "title": "COM",
+          "cusip": "303250104",
+          "ticker": null,
+          "value": 821303359.0,
+          "shares": 769342.0,
+          "put_call": null,
+          "weight": 0.24330317266066237
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 747779195.0,
+          "shares": 1758074.0,
+          "put_call": null,
+          "weight": 0.221522350541289
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 743242251.0,
+          "shares": 1487496.0,
+          "put_call": null,
+          "weight": 0.2201783247835863
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 574623265.0,
+          "shares": 1317188.0,
+          "put_call": null,
+          "weight": 0.17022658184346784
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "N Y REGISTRY SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 225971559.0,
+          "shares": 171083.0,
+          "put_call": null,
+          "weight": 0.06694188771213348
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 180967107.0,
+          "shares": 598753.0,
+          "put_call": null,
+          "weight": 0.053609754298255055
+        },
+        {
+          "issuer": "INTUIT",
+          "title": "COM",
+          "cusip": "461202103",
+          "ticker": null,
+          "value": 81750951.0,
+          "shares": 189072.0,
+          "put_call": null,
+          "weight": 0.02421792816060594
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001697868-26-000001",
+      "filing_date": "2026-02-17",
+      "report_date": "2025-12-31",
+      "quarter": "2025Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1697868/000169786826000001/0001697868-26-000001-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 4411308632.0,
+      "holdings": [
+        {
+          "issuer": "FAIR ISAAC CORP",
+          "title": "COM",
+          "cusip": "303250104",
+          "ticker": null,
+          "value": 1300803603.0,
+          "shares": 769424.0,
+          "put_call": null,
+          "weight": 0.2948793003427288
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 918806764.0,
+          "shares": 1758179.0,
+          "put_call": null,
+          "weight": 0.20828439827014125
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 849132050.0,
+          "shares": 1487409.0,
+          "put_call": null,
+          "weight": 0.19248983030575675
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 672938618.0,
+          "shares": 1317292.0,
+          "put_call": null,
+          "weight": 0.1525485233833895
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 321394151.0,
+          "shares": 916410.0,
+          "put_call": null,
+          "weight": 0.07285687259979501
+        },
+        {
+          "issuer": "INTUIT",
+          "title": "COM",
+          "cusip": "461202103",
+          "ticker": null,
+          "value": 146551151.0,
+          "shares": 221236.0,
+          "put_call": null,
+          "weight": 0.03322169524410642
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "N Y REGISTRY SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 135061266.0,
+          "shares": 126242.0,
+          "put_call": null,
+          "weight": 0.030617052051233582
+        },
+        {
+          "issuer": "MSCI INC",
+          "title": "COM",
+          "cusip": "55354G100",
+          "ticker": null,
+          "value": 34865572.0,
+          "shares": 60770.0,
+          "put_call": null,
+          "weight": 0.007903680043396246
+        },
+        {
+          "issuer": "EQUIFAX INC",
+          "title": "COM",
+          "cusip": "294429105",
+          "ticker": null,
+          "value": 31755457.0,
+          "shares": 146352.0,
+          "put_call": null,
+          "weight": 0.007198647759452438
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001697868-25-000006",
+      "filing_date": "2025-11-14",
+      "report_date": "2025-09-30",
+      "quarter": "2025Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1697868/000169786825000006/0001697868-25-000006-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 4156989872.0,
+      "holdings": [
+        {
+          "issuer": "FAIR ISAAC CORP",
+          "title": "COM",
+          "cusip": "303250104",
+          "ticker": null,
+          "value": 1149966576.0,
+          "shares": 768422.0,
+          "put_call": null,
+          "weight": 0.27663444256762915
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 854223748.0,
+          "shares": 1755098.0,
+          "put_call": null,
+          "weight": 0.20549093798706278
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 844553161.0,
+          "shares": 1484772.0,
+          "put_call": null,
+          "weight": 0.20316459433510017
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 626163333.0,
+          "shares": 1314144.0,
+          "put_call": null,
+          "weight": 0.15062902539590312
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 311344363.0,
+          "shares": 912017.0,
+          "put_call": null,
+          "weight": 0.07489658925972
+        },
+        {
+          "issuer": "INTUIT",
+          "title": "COM",
+          "cusip": "461202103",
+          "ticker": null,
+          "value": 178305752.0,
+          "shares": 261097.0,
+          "put_call": null,
+          "weight": 0.04289299649272756
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "N Y REGISTRY SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 121618242.0,
+          "shares": 125627.0,
+          "put_call": null,
+          "weight": 0.029256323865299038
+        },
+        {
+          "issuer": "EQUIFAX INC",
+          "title": "COM",
+          "cusip": "294429105",
+          "ticker": null,
+          "value": 36940320.0,
+          "shares": 144000.0,
+          "put_call": null,
+          "weight": 0.00888631465013105
+        },
+        {
+          "issuer": "MSCI INC",
+          "title": "COM",
+          "cusip": "55354G100",
+          "ticker": null,
+          "value": 33874377.0,
+          "shares": 59700.0,
+          "put_call": null,
+          "weight": 0.008148775446427165
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001697868-25-000005",
+      "filing_date": "2025-08-14",
+      "report_date": "2025-06-30",
+      "quarter": "2025Q2",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1697868/000169786825000005/0001697868-25-000005-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 4527265517.0,
+      "holdings": [
+        {
+          "issuer": "FAIR ISAAC CORP",
+          "title": "COM",
+          "cusip": "303250104",
+          "ticker": null,
+          "value": 1404644679.0,
+          "shares": 768422.0,
+          "put_call": null,
+          "weight": 0.3102633750385354
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 925445624.0,
+          "shares": 1755098.0,
+          "put_call": null,
+          "weight": 0.20441602563952294
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 834352778.0,
+          "shares": 1484772.0,
+          "put_call": null,
+          "weight": 0.18429508383526072
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 659161489.0,
+          "shares": 1314144.0,
+          "put_call": null,
+          "weight": 0.14559815114108757
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 323811636.0,
+          "shares": 912017.0,
+          "put_call": null,
+          "weight": 0.07152477246675258
+        },
+        {
+          "issuer": "INTUIT",
+          "title": "COM",
+          "cusip": "461202103",
+          "ticker": null,
+          "value": 207392431.0,
+          "shares": 263312.0,
+          "put_call": null,
+          "weight": 0.04580964607029034
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "N Y REGISTRY SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 100676222.0,
+          "shares": 125627.0,
+          "put_call": null,
+          "weight": 0.022237755135403072
+        },
+        {
+          "issuer": "EQUIFAX INC",
+          "title": "COM",
+          "cusip": "294429105",
+          "ticker": null,
+          "value": 37349280.0,
+          "shares": 144000.0,
+          "put_call": null,
+          "weight": 0.00824985410282487
+        },
+        {
+          "issuer": "MSCI INC",
+          "title": "COM",
+          "cusip": "55354G100",
+          "ticker": null,
+          "value": 34431378.0,
+          "shares": 59700.0,
+          "put_call": null,
+          "weight": 0.007605336570322478
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001697868-25-000004",
+      "filing_date": "2025-05-15",
+      "report_date": "2025-03-31",
+      "quarter": "2025Q1",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1697868/000169786825000004/0001697868-25-000004-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 4388954111.0,
+      "holdings": [
+        {
+          "issuer": "FAIR ISAAC CORP",
+          "title": "COM",
+          "cusip": "303250104",
+          "ticker": null,
+          "value": 1417093116.0,
+          "shares": 768422.0,
+          "put_call": null,
+          "weight": 0.32287717760556006
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 891765294.0,
+          "shares": 1755098.0,
+          "put_call": null,
+          "weight": 0.20318400954910326
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 813833229.0,
+          "shares": 1484772.0,
+          "put_call": null,
+          "weight": 0.18542760038440512
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 611983719.0,
+          "shares": 1314144.0,
+          "put_call": null,
+          "weight": 0.13943725623974745
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 319625478.0,
+          "shares": 912017.0,
+          "put_call": null,
+          "weight": 0.07282497604587053
+        },
+        {
+          "issuer": "INTUIT",
+          "title": "COM",
+          "cusip": "461202103",
+          "ticker": null,
+          "value": 182576066.0,
+          "shares": 297360.0,
+          "put_call": null,
+          "weight": 0.041598991783124616
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "N Y REGISTRY SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 83244219.0,
+          "shares": 125627.0,
+          "put_call": null,
+          "weight": 0.018966755380596414
+        },
+        {
+          "issuer": "EQUIFAX INC",
+          "title": "COM",
+          "cusip": "294429105",
+          "ticker": null,
+          "value": 35072640.0,
+          "shares": 144000.0,
+          "put_call": null,
+          "weight": 0.007991115676533898
+        },
+        {
+          "issuer": "MSCI INC",
+          "title": "COM",
+          "cusip": "55354G100",
+          "ticker": null,
+          "value": 33760350.0,
+          "shares": 59700.0,
+          "put_call": null,
+          "weight": 0.007692117335058644
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001697868-25-000001",
+      "filing_date": "2025-02-14",
+      "report_date": "2024-12-31",
+      "quarter": "2024Q4",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1697868/000169786825000001/0001697868-25-000001-index.html",
+      "line_count": 9,
+      "position_count": 9,
+      "values_in_thousands": false,
+      "total_value": 4539792227.0,
+      "holdings": [
+        {
+          "issuer": "FAIR ISAAC CORP",
+          "title": "COM",
+          "cusip": "303250104",
+          "ticker": null,
+          "value": 1561132013.0,
+          "shares": 784122.0,
+          "put_call": null,
+          "weight": 0.343877414414543
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 874091457.0,
+          "shares": 1755098.0,
+          "put_call": null,
+          "weight": 0.19253996951697938
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 781836392.0,
+          "shares": 1484772.0,
+          "put_call": null,
+          "weight": 0.1722185406085546
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 622076345.0,
+          "shares": 1314144.0,
+          "put_call": null,
+          "weight": 0.13702749242581141
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 288233853.0,
+          "shares": 912017.0,
+          "put_call": null,
+          "weight": 0.06349053846247753
+        },
+        {
+          "issuer": "INTUIT",
+          "title": "COM",
+          "cusip": "461202103",
+          "ticker": null,
+          "value": 252833609.0,
+          "shares": 402281.0,
+          "put_call": null,
+          "weight": 0.055692771025135285
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "N Y REGISTRY SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 87069561.0,
+          "shares": 125627.0,
+          "put_call": null,
+          "weight": 0.01917919513632402
+        },
+        {
+          "issuer": "EQUIFAX INC",
+          "title": "COM",
+          "cusip": "294429105",
+          "ticker": null,
+          "value": 36698400.0,
+          "shares": 144000.0,
+          "put_call": null,
+          "weight": 0.008083717968795931
+        },
+        {
+          "issuer": "MSCI INC",
+          "title": "COM",
+          "cusip": "55354G100",
+          "ticker": null,
+          "value": 35820597.0,
+          "shares": 59700.0,
+          "put_call": null,
+          "weight": 0.007890360441378851
+        }
+      ]
+    },
+    {
+      "form": "13F-HR",
+      "accession": "0001697868-24-000008",
+      "filing_date": "2024-11-14",
+      "report_date": "2024-09-30",
+      "quarter": "2024Q3",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1697868/000169786824000008/0001697868-24-000008-index.html",
+      "line_count": 8,
+      "position_count": 8,
+      "values_in_thousands": false,
+      "total_value": 4500146048.0,
+      "holdings": [
+        {
+          "issuer": "FAIR ISAAC CORP",
+          "title": "COM",
+          "cusip": "303250104",
+          "ticker": null,
+          "value": 1571905371.0,
+          "shares": 808793.0,
+          "put_call": null,
+          "weight": 0.3493009680649369
+        },
+        {
+          "issuer": "S&P GLOBAL INC",
+          "title": "COM",
+          "cusip": "78409V104",
+          "ticker": "SPGI",
+          "value": 881301025.0,
+          "shares": 1705898.0,
+          "put_call": null,
+          "weight": 0.19583831626790793
+        },
+        {
+          "issuer": "MASTERCARD INCORPORATED",
+          "title": "CL A",
+          "cusip": "57636Q104",
+          "ticker": "MA",
+          "value": 733180413.0,
+          "shares": 1484772.0,
+          "put_call": null,
+          "weight": 0.162923692960109
+        },
+        {
+          "issuer": "MOODYS CORP",
+          "title": "COM",
+          "cusip": "615369105",
+          "ticker": "MCO",
+          "value": 611482638.0,
+          "shares": 1288444.0,
+          "put_call": null,
+          "weight": 0.13588062064602574
+        },
+        {
+          "issuer": "INTUIT",
+          "title": "COM",
+          "cusip": "461202103",
+          "ticker": null,
+          "value": 276271101.0,
+          "shares": 444881.0,
+          "put_call": null,
+          "weight": 0.06139158552927036
+        },
+        {
+          "issuer": "VISA INC",
+          "title": "COM CL A",
+          "cusip": "92826C839",
+          "ticker": "V",
+          "value": 250759074.0,
+          "shares": 912017.0,
+          "put_call": null,
+          "weight": 0.055722430189003504
+        },
+        {
+          "issuer": "ASML HOLDING N V",
+          "title": "N Y REGISTRY SHS",
+          "cusip": "N07059210",
+          "ticker": "ASML",
+          "value": 104678698.0,
+          "shares": 125627.0,
+          "put_call": null,
+          "weight": 0.023261177944774118
+        },
+        {
+          "issuer": "ASPEN TECHNOLOGY INC",
+          "title": "COM",
+          "cusip": "29109X106",
+          "ticker": null,
+          "value": 70567728.0,
+          "shares": 295485.0,
+          "put_call": null,
+          "weight": 0.01568120839797242
+        }
+      ]
+    }
+  ]
+}
