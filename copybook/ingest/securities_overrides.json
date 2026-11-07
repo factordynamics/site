@@ -1,0 +1,677 @@
+{
+ "_note": "Hand-checked fixes applied after OpenFIGI/SEC mapping. by_cusip may also set ticker (null for no public ticker).",
+ "by_cusip": {
+  "84615Q103": {
+   "ticker": "SPCX",
+   "name": "SpaceX",
+   "sector": "Industrials"
+  }
+ },
+ "by_ticker": {
+  "A": {
+   "sector": "Health Care"
+  },
+  "AAPL": {
+   "name": "Apple"
+  },
+  "ABBV": {
+   "name": "AbbVie"
+  },
+  "ABNB": {
+   "name": "Airbnb",
+   "sector": "Consumer Discretionary"
+  },
+  "ACN": {
+   "name": "Accenture",
+   "sector": "Information Technology"
+  },
+  "ADBE": {
+   "name": "Adobe"
+  },
+  "AFRM": {
+   "sector": "Financials"
+  },
+  "AGG": {
+   "sector": "Funds & ETFs"
+  },
+  "ALLY": {
+   "name": "Ally Financial"
+  },
+  "AMAT": {
+   "name": "Applied Materials"
+  },
+  "AMD": {
+   "name": "AMD"
+  },
+  "AMGN": {
+   "name": "Amgen"
+  },
+  "AMZN": {
+   "name": "Amazon",
+   "sector": "Consumer Discretionary"
+  },
+  "AON": {
+   "name": "Aon"
+  },
+  "APO": {
+   "name": "Apollo Global"
+  },
+  "APP": {
+   "name": "AppLovin",
+   "sector": "Information Technology"
+  },
+  "ARM": {
+   "name": "Arm Holdings"
+  },
+  "ASML": {
+   "name": "ASML",
+   "sector": "Information Technology"
+  },
+  "AVGO": {
+   "name": "Broadcom",
+   "sector": "Information Technology"
+  },
+  "AXP": {
+   "name": "American Express",
+   "sector": "Financials"
+  },
+  "BA": {
+   "name": "Boeing",
+   "sector": "Industrials"
+  },
+  "BABA": {
+   "name": "Alibaba",
+   "sector": "Consumer Discretionary"
+  },
+  "BAC": {
+   "name": "Bank of America"
+  },
+  "BKNG": {
+   "name": "Booking Holdings",
+   "sector": "Consumer Discretionary"
+  },
+  "BLK": {
+   "name": "BlackRock"
+  },
+  "BMY": {
+   "name": "Bristol-Myers Squibb"
+  },
+  "BND": {
+   "sector": "Funds & ETFs"
+  },
+  "BRK.A": {
+   "name": "Berkshire Hathaway Class A"
+  },
+  "BRK.B": {
+   "name": "Berkshire Hathaway Class B"
+  },
+  "BX": {
+   "name": "Blackstone"
+  },
+  "C": {
+   "name": "Citigroup"
+  },
+  "CAT": {
+   "name": "Caterpillar",
+   "sector": "Industrials"
+  },
+  "CB": {
+   "name": "Chubb"
+  },
+  "CHTR": {
+   "name": "Charter Communications",
+   "sector": "Communication Services"
+  },
+  "CI": {
+   "name": "Cigna",
+   "sector": "Health Care"
+  },
+  "CMCSA": {
+   "name": "Comcast"
+  },
+  "CME": {
+   "name": "CME Group"
+  },
+  "CNC": {
+   "sector": "Health Care"
+  },
+  "CNI": {
+   "name": "Canadian National Railway",
+   "sector": "Industrials"
+  },
+  "COF": {
+   "name": "Capital One"
+  },
+  "COP": {
+   "name": "ConocoPhillips"
+  },
+  "COST": {
+   "name": "Costco"
+  },
+  "CP": {
+   "name": "Canadian Pacific Kansas City",
+   "sector": "Industrials"
+  },
+  "CPNG": {
+   "name": "Coupang",
+   "sector": "Consumer Discretionary"
+  },
+  "CRM": {
+   "name": "Salesforce"
+  },
+  "CRWD": {
+   "name": "CrowdStrike",
+   "sector": "Information Technology"
+  },
+  "CSCO": {
+   "name": "Cisco",
+   "sector": "Information Technology"
+  },
+  "CVS": {
+   "name": "CVS Health",
+   "sector": "Health Care"
+  },
+  "CVX": {
+   "name": "Chevron"
+  },
+  "DAL": {
+   "name": "Delta Air Lines",
+   "sector": "Industrials"
+  },
+  "DASH": {
+   "name": "DoorDash",
+   "sector": "Consumer Discretionary"
+  },
+  "DDOG": {
+   "name": "Datadog",
+   "sector": "Information Technology"
+  },
+  "DELL": {
+   "name": "Dell Technologies",
+   "sector": "Information Technology"
+  },
+  "DHI": {
+   "name": "D.R. Horton",
+   "sector": "Consumer Discretionary"
+  },
+  "DHR": {
+   "name": "Danaher",
+   "sector": "Health Care"
+  },
+  "DIA": {
+   "sector": "Funds & ETFs"
+  },
+  "DIS": {
+   "name": "Disney",
+   "sector": "Communication Services"
+  },
+  "DVA": {
+   "name": "DaVita"
+  },
+  "EA": {
+   "sector": "Communication Services"
+  },
+  "EBAY": {
+   "name": "eBay"
+  },
+  "EEM": {
+   "sector": "Funds & ETFs"
+  },
+  "EFA": {
+   "sector": "Funds & ETFs"
+  },
+  "ELV": {
+   "name": "Elevance Health",
+   "sector": "Health Care"
+  },
+  "EXPE": {
+   "sector": "Consumer Discretionary"
+  },
+  "FDX": {
+   "name": "FedEx",
+   "sector": "Industrials"
+  },
+  "FI": {
+   "sector": "Financials"
+  },
+  "FIS": {
+   "sector": "Financials"
+  },
+  "FWONK": {
+   "name": "Formula One Group",
+   "sector": "Communication Services"
+  },
+  "GE": {
+   "name": "GE Aerospace",
+   "sector": "Industrials"
+  },
+  "GEV": {
+   "name": "GE Vernova",
+   "sector": "Industrials"
+  },
+  "GILD": {
+   "name": "Gilead Sciences"
+  },
+  "GLD": {
+   "sector": "Funds & ETFs"
+  },
+  "GOOG": {
+   "name": "Alphabet Class C",
+   "sector": "Communication Services"
+  },
+  "GOOGL": {
+   "name": "Alphabet Class A",
+   "sector": "Communication Services"
+  },
+  "GPN": {
+   "sector": "Financials"
+  },
+  "GS": {
+   "name": "Goldman Sachs"
+  },
+  "HCA": {
+   "name": "HCA Healthcare",
+   "sector": "Health Care"
+  },
+  "HD": {
+   "name": "Home Depot"
+  },
+  "HEI": {
+   "name": "HEICO"
+  },
+  "HEI.A": {
+   "name": "HEICO Class A"
+  },
+  "HON": {
+   "name": "Honeywell",
+   "sector": "Industrials"
+  },
+  "HOOD": {
+   "name": "Robinhood",
+   "sector": "Financials"
+  },
+  "HPE": {
+   "name": "Hewlett Packard Enterprise",
+   "sector": "Information Technology"
+  },
+  "HUM": {
+   "sector": "Health Care"
+  },
+  "IBM": {
+   "name": "IBM",
+   "sector": "Information Technology"
+  },
+  "ICE": {
+   "name": "Intercontinental Exchange"
+  },
+  "ILMN": {
+   "sector": "Health Care"
+  },
+  "INTC": {
+   "name": "Intel"
+  },
+  "INTU": {
+   "name": "Intuit"
+  },
+  "IQV": {
+   "sector": "Health Care"
+  },
+  "ISRG": {
+   "name": "Intuitive Surgical"
+  },
+  "IVV": {
+   "name": "iShares Core S&P 500 ETF",
+   "sector": "Funds & ETFs"
+  },
+  "IWM": {
+   "name": "iShares Russell 2000 ETF",
+   "sector": "Funds & ETFs"
+  },
+  "JEF": {
+   "name": "Jefferies"
+  },
+  "JNJ": {
+   "name": "Johnson & Johnson"
+  },
+  "JPM": {
+   "name": "JPMorgan Chase"
+  },
+  "KDP": {
+   "name": "Keurig Dr Pepper"
+  },
+  "KHC": {
+   "name": "Kraft Heinz"
+  },
+  "KKR": {
+   "name": "KKR"
+  },
+  "KLAC": {
+   "name": "KLA"
+  },
+  "KO": {
+   "name": "Coca-Cola"
+  },
+  "LBRDK": {
+   "name": "Liberty Broadband Class C",
+   "sector": "Communication Services"
+  },
+  "LEN": {
+   "name": "Lennar",
+   "sector": "Consumer Discretionary"
+  },
+  "LLY": {
+   "name": "Eli Lilly"
+  },
+  "LMT": {
+   "name": "Lockheed Martin",
+   "sector": "Industrials"
+  },
+  "LOW": {
+   "name": "Lowe's"
+  },
+  "LPX": {
+   "name": "Louisiana-Pacific"
+  },
+  "LRCX": {
+   "name": "Lam Research"
+  },
+  "LYV": {
+   "sector": "Communication Services"
+  },
+  "M": {
+   "name": "Macy's"
+  },
+  "MA": {
+   "name": "Mastercard",
+   "sector": "Financials"
+  },
+  "MCD": {
+   "name": "McDonald's"
+  },
+  "MCO": {
+   "name": "Moody's",
+   "sector": "Financials"
+  },
+  "MELI": {
+   "name": "MercadoLibre",
+   "sector": "Consumer Discretionary"
+  },
+  "META": {
+   "name": "Meta Platforms",
+   "sector": "Communication Services"
+  },
+  "MKL": {
+   "name": "Markel"
+  },
+  "MOH": {
+   "sector": "Health Care"
+  },
+  "MRK": {
+   "name": "Merck"
+  },
+  "MRVL": {
+   "name": "Marvell"
+  },
+  "MS": {
+   "name": "Morgan Stanley"
+  },
+  "MSCI": {
+   "sector": "Financials"
+  },
+  "MSFT": {
+   "name": "Microsoft"
+  },
+  "MTCH": {
+   "sector": "Communication Services"
+  },
+  "MTD": {
+   "sector": "Health Care"
+  },
+  "MU": {
+   "name": "Micron"
+  },
+  "NET": {
+   "name": "Cloudflare",
+   "sector": "Information Technology"
+  },
+  "NFLX": {
+   "name": "Netflix",
+   "sector": "Communication Services"
+  },
+  "NOW": {
+   "name": "ServiceNow"
+  },
+  "NUE": {
+   "name": "Nucor"
+  },
+  "NVDA": {
+   "name": "NVIDIA",
+   "sector": "Information Technology"
+  },
+  "NVO": {
+   "name": "Novo Nordisk"
+  },
+  "NVR": {
+   "name": "NVR",
+   "sector": "Consumer Discretionary"
+  },
+  "NYT": {
+   "name": "New York Times",
+   "sector": "Communication Services"
+  },
+  "ORCL": {
+   "name": "Oracle"
+  },
+  "OXY": {
+   "name": "Occidental Petroleum"
+  },
+  "PANW": {
+   "name": "Palo Alto Networks",
+   "sector": "Information Technology"
+  },
+  "PDD": {
+   "name": "PDD Holdings",
+   "sector": "Consumer Discretionary"
+  },
+  "PEP": {
+   "name": "PepsiCo"
+  },
+  "PFE": {
+   "name": "Pfizer"
+  },
+  "PG": {
+   "name": "Procter & Gamble"
+  },
+  "PINS": {
+   "sector": "Communication Services"
+  },
+  "PLTR": {
+   "name": "Palantir",
+   "sector": "Information Technology"
+  },
+  "PM": {
+   "name": "Philip Morris International"
+  },
+  "PYPL": {
+   "name": "PayPal",
+   "sector": "Financials"
+  },
+  "QCOM": {
+   "name": "Qualcomm"
+  },
+  "QQQ": {
+   "name": "Invesco QQQ Trust",
+   "sector": "Funds & ETFs"
+  },
+  "RBLX": {
+   "sector": "Communication Services"
+  },
+  "RDDT": {
+   "name": "Reddit",
+   "sector": "Communication Services"
+  },
+  "REGN": {
+   "name": "Regeneron"
+  },
+  "RTX": {
+   "name": "RTX",
+   "sector": "Industrials"
+  },
+  "SAP": {
+   "name": "SAP"
+  },
+  "SCHW": {
+   "name": "Charles Schwab"
+  },
+  "SE": {
+   "name": "Sea Limited",
+   "sector": "Consumer Discretionary"
+  },
+  "SHOP": {
+   "name": "Shopify",
+   "sector": "Information Technology"
+  },
+  "SIRI": {
+   "name": "Sirius XM",
+   "sector": "Communication Services"
+  },
+  "SLV": {
+   "sector": "Funds & ETFs"
+  },
+  "SMH": {
+   "sector": "Funds & ETFs"
+  },
+  "SNAP": {
+   "sector": "Communication Services"
+  },
+  "SNDK": {
+   "name": "SanDisk",
+   "sector": "Information Technology"
+  },
+  "SNOW": {
+   "name": "Snowflake",
+   "sector": "Information Technology"
+  },
+  "SOFI": {
+   "sector": "Financials"
+  },
+  "SPCX": {
+   "name": "SpaceX",
+   "sector": "Industrials"
+  },
+  "SPGI": {
+   "name": "S&P Global",
+   "sector": "Financials"
+  },
+  "SPOT": {
+   "name": "Spotify",
+   "sector": "Communication Services"
+  },
+  "SPY": {
+   "name": "SPDR S&P 500 ETF Trust",
+   "sector": "Funds & ETFs"
+  },
+  "TKO": {
+   "sector": "Communication Services"
+  },
+  "TLT": {
+   "sector": "Funds & ETFs"
+  },
+  "TMO": {
+   "name": "Thermo Fisher Scientific",
+   "sector": "Health Care"
+  },
+  "TMUS": {
+   "name": "T-Mobile US"
+  },
+  "TOST": {
+   "sector": "Financials"
+  },
+  "TSLA": {
+   "name": "Tesla",
+   "sector": "Consumer Discretionary"
+  },
+  "TSM": {
+   "name": "TSMC",
+   "sector": "Information Technology"
+  },
+  "TTWO": {
+   "sector": "Communication Services"
+  },
+  "TXN": {
+   "name": "Texas Instruments"
+  },
+  "UBER": {
+   "name": "Uber",
+   "sector": "Industrials"
+  },
+  "UNH": {
+   "name": "UnitedHealth Group",
+   "sector": "Health Care"
+  },
+  "UNP": {
+   "name": "Union Pacific",
+   "sector": "Industrials"
+  },
+  "UPS": {
+   "name": "UPS",
+   "sector": "Industrials"
+  },
+  "V": {
+   "name": "Visa",
+   "sector": "Financials"
+  },
+  "VEA": {
+   "sector": "Funds & ETFs"
+  },
+  "VOO": {
+   "name": "Vanguard S&P 500 ETF",
+   "sector": "Funds & ETFs"
+  },
+  "VRSN": {
+   "name": "VeriSign"
+  },
+  "VRTX": {
+   "name": "Vertex Pharmaceuticals"
+  },
+  "VTI": {
+   "name": "Vanguard Total Stock Market ETF",
+   "sector": "Funds & ETFs"
+  },
+  "VWO": {
+   "sector": "Funds & ETFs"
+  },
+  "VZ": {
+   "name": "Verizon"
+  },
+  "WAT": {
+   "sector": "Health Care"
+  },
+  "WBD": {
+   "sector": "Communication Services"
+  },
+  "WFC": {
+   "name": "Wells Fargo"
+  },
+  "WM": {
+   "name": "Waste Management",
+   "sector": "Industrials"
+  },
+  "WMT": {
+   "name": "Walmart"
+  },
+  "XLF": {
+   "sector": "Funds & ETFs"
+  },
+  "XLK": {
+   "sector": "Funds & ETFs"
+  },
+  "XOM": {
+   "name": "Exxon Mobil"
+  },
+  "XYZ": {
+   "name": "Block",
+   "sector": "Financials"
+  }
+ }
+}

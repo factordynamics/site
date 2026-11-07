@@ -1,8 +1,10 @@
 # Copybook ingest
 
 SEC 13F-HR holdings, as filed, for the Copybook site (https://refcell.github.io/gust/copybook/).
-No prices, no Form 4 / 13D, no third-party holdings data. Tickers come from OpenFIGI's
-CUSIP mapping (identifiers only); a CUSIP without a single US listing shows no ticker.
+No prices, no Form 4 / 13D, no third-party holdings data. Tickers come from OpenFIGI's CUSIP mapping,
+then SEC `company_tickers.json` name matches for common stock, then `ingest/securities_overrides.json`.
+Sectors come from each issuer's SEC SIC code mapped to GICS-style sectors (plus overrides); ETFs are
+"Funds & ETFs" and anything unknown is "Unclassified", never blank.
 
 ## Where things run
 
@@ -20,13 +22,14 @@ python ingest/universe.py      # curated + all-filer directory from EDGAR full-i
 python ingest/build.py         # curated funds: 8 quarters, QoQ changes, copycat, alerts
 python ingest/bulk.py          # every 13F filer: latest quarter, one shard per CIK, incremental
 python ingest/figi.py web/data # CUSIP -> ticker cache (OpenFIGI, 25 req/min unauthenticated)
-python ingest/reticker.py      # re-apply the ticker cache to published JSON
+python ingest/securities.py web/data  # ticker, display name, sector per CUSIP (SEC SIC codes)
+python ingest/enrich.py        # write ticker/display_name/sector into every published file
 python -m unittest discover -s tests -v
 ```
 
 Env: `COPYBOOK_WEB_DIR` (public tree, data in `$COPYBOOK_WEB_DIR/data`),
 `COPYBOOK_CUSIP_MAP`, `COPYBOOK_HISTORY_QUARTERS` (default 8; 2 is enough for QoQ changes),
-`COPYBOOK_BULK_BUDGET_S`, `COPYBOOK_BULK_REVERSE`, `COPYBOOK_FIGI_BUDGET_S`.
+`COPYBOOK_BULK_BUDGET_S`, `COPYBOOK_BULK_REVERSE`, `COPYBOOK_FIGI_BUDGET_S`, `COPYBOOK_SEC_BUDGET_S`.
 
 SEC User-Agent: `Copybook factordynamics.com copybook@factordynamics.com`, under 10 req/s.
 
@@ -45,8 +48,11 @@ SEC User-Agent: `Copybook factordynamics.com copybook@factordynamics.com`, under
 - `f/{cik}.json`: latest quarter for any filer. `columns` names the fields of each `rows[]` array
   (`ticker, issuer, title, cusip, put_call, shares, value`); top 500 by value, `truncated` if more,
   `position_count` is the full count.
-- `{slug}-history.json`: up to 8 quarters of holdings per curated fund (read by the Copy API).
+- `{slug}-history.json`: up to 8 quarters per curated fund, top 500 rows per quarter (`truncated` flags more). Read by the Copy API.
 - `alerts.json`: `new_filings` from the last run and `recent` (rolling, by accession) for the alert mailer.
-- `cusip_map.json`: CUSIP → ticker cache (`""` = no single US ticker).
+- Every holding row (and every shard row) carries `ticker`, `display_name` (clean name; raw SEC name stays
+  in `issuer`) and `sector`. `copycat_lite.json` has `sectors: [{sector, value, weight}]` summing to 100%.
+- `securities.json`: `{cusip: {ticker, name, sector}}`. `issuers.json`: SEC SIC cache by issuer CIK.
+- `cusip_map.json`: OpenFIGI CUSIP → ticker cache (`""` = no single US ticker).
 
 Values are USD as filed; filings still reported in thousands are scaled.
