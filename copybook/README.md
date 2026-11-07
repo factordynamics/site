@@ -63,4 +63,6 @@ Each quarter is built from the original 13F-HR. A 13F-HR/A replaces it only when
 `RESTATEMENT`; `NEW HOLDINGS` amendments are merged into the original (listed in `amendments`).
 
 Values are USD. A filing whose median implied price per share is under $0.50 was reported in $000s and
-is scaled x1000; over $25,000 means an extra x1000 and is scaled down. `unit_fix` records the factor.
+is scaled x1000; over $2,500 means an extra x1000 and is scaled down (`unit_fix` records the factor).
+Single lines are checked too: a stock line priced about 1000x off the median price other 13F filers report
+for that CUSIP and quarter is rescaled (mixed-unit filings).

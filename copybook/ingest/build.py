@@ -32,6 +32,9 @@ from ingest.parse import (
     looks_like_thousands,
     parse_info_table,
     scale_if_thousands,
+    consensus_factor,
+    consensus_prices,
+    row_overstated,
     unit_fix,
 )
 
@@ -123,16 +126,53 @@ def pick_filings(group: list, types: dict[str, str]):
 
 
 def fix_cached(q: dict) -> dict:
-    """Apply the implied-price unit check to a quarter stored before it existed."""
-    if "unit_fix" in q:
-        return q
-    factor = unit_fix([(h["value"], h["shares"]) for h in q["holdings"] if not h["put_call"]])
-    if factor != 1.0:
+    """Re-run the implied-price unit checks on a stored quarter (idempotent)."""
+    hs = q["holdings"]
+    factor = unit_fix([(h["value"], h["shares"]) for h in hs if not h["put_call"]])
+    changed = factor != 1.0
+    for h in hs:
+        h["value"] *= factor
+        if not h["put_call"] and row_overstated(h["cusip"], h["value"], h["shares"]):
+            h["value"] /= 1000
+            changed = True
+    if changed:
+        hs.sort(key=lambda h: h["value"], reverse=True)
+        total = sum(h["value"] for h in hs)
+        for h in hs:
+            h["weight"] = (h["value"] / total) if total else 0.0
+        q["total_value"] = total
+        if factor > 1:
+            q["values_in_thousands"] = True
+    return q | {"unit_fix": (q.get("unit_fix") or 1.0) * factor}
+
+
+def fix_with_consensus(managers: list[dict]) -> int:
+    """Rescale single lines filed ~1000x off the price other filers report that quarter."""
+    quarters = [q for m in managers for q in m["history"]]
+    cons = consensus_prices(
+        (q["quarter"], [(h["cusip"], h["value"], h["shares"], h["put_call"]) for h in q["holdings"]])
+        for q in quarters
+    )
+    n = 0
+    for q in quarters:
+        changed = False
         for h in q["holdings"]:
-            h["value"] *= factor
-        q["total_value"] = sum(h["value"] for h in q["holdings"])
-        q["values_in_thousands"] = factor > 1
-    return q | {"unit_fix": factor}
+            if h["put_call"] or h["shares"] <= 0:
+                continue
+            f = consensus_factor(h["value"] / h["shares"], cons.get((q["quarter"], h["cusip"])))
+            if f != 1.0:
+                h["value"] *= f
+                changed = True
+                n += 1
+        if changed:
+            q["holdings"].sort(key=lambda h: h["value"], reverse=True)
+            q["total_value"] = sum(h["value"] for h in q["holdings"])
+            for h in q["holdings"]:
+                h["weight"] = (h["value"] / q["total_value"]) if q["total_value"] else 0.0
+    for m in managers:
+        m["holdings"] = m["history"][0]["holdings"]
+        m["total_value"] = m["history"][0]["total_value"]
+    return n
 
 
 def merge_quarter(base: dict, extras: list[dict]) -> dict:
@@ -242,6 +282,8 @@ def load_filing(cik: str, meta) -> dict | None:
     factor = unit_fix([(h.value, h.shares) for h in holdings if not h.put_call])
     for h in holdings:
         h.value *= factor
+        if not h.put_call and row_overstated(h.cusip, h.value, h.shares):
+            h.value /= 1000
     if factor > 1:
         thousands = True
     attach_tickers(holdings)
@@ -348,6 +390,8 @@ def ingest() -> dict:
                 }
             )
 
+    fixed = fix_with_consensus([m for m in managers_out if m.get("ok")])
+    print(f"consensus unit check: rescaled {fixed} lines", flush=True)
     ok = [m for m in managers_out if m.get("ok")]
     featured = featured_ciks()
     for m in managers_out:
@@ -441,6 +485,14 @@ def manager_json(m: dict) -> dict:
     return out
 
 
+def compact_row(h: dict) -> dict:
+    """Whole-dollar values and share counts, 6-digit weights: keeps full books small on Pages."""
+    return {
+        k: (int(v) if k in ("value", "shares") and isinstance(v, float) else round(v, 6) if k == "weight" else v)
+        for k, v in h.items()
+    }
+
+
 def write_history(m: dict) -> None:
     """Full holdings per quarter in h/{slug}/{quarter}.json; {slug}-history.json is the index."""
     folder = HIST / m["slug"]
@@ -451,7 +503,8 @@ def write_history(m: dict) -> None:
         name = f"{q['quarter']}.json"
         keep.add(name)
         meta = {k: v for k, v in q.items() if k not in {"holdings", "truncated"}}
-        body = {"slug": m["slug"], "manager": m["manager"], "cik": m["cik"], **meta, "holdings": q["holdings"]}
+        rows = [compact_row(h) for h in q["holdings"]]
+        body = {"slug": m["slug"], "manager": m["manager"], "cik": m["cik"], **meta, "holdings": rows}
         text = json.dumps(body, separators=(",", ":")) + "\n"
         path = folder / name
         if not path.exists() or path.read_text() != text:

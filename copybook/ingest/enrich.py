@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ingest.figi import load_cache
+from ingest.parse import consensus_factor, consensus_prices
 from ingest.securities import UNCLASSIFIED
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
@@ -98,8 +99,9 @@ def write_csvs() -> int:
     for path in sorted((DATA / "h").glob("*/*.json")):
         text = quarter_csv(json.loads(path.read_text()))
         out = path.with_suffix(".csv")
-        if not out.exists() or out.read_text(newline="") != text:
-            out.write_text(text, newline="")
+        data = text.encode("utf-8")
+        if not out.exists() or out.read_bytes() != data:
+            out.write_bytes(data)
             n += 1
     for path in (DATA / "h").glob("*/*.csv"):
         if not path.with_suffix(".json").exists():
@@ -117,6 +119,37 @@ def write_csvs() -> int:
     return n
 
 
+def fix_shards() -> int:
+    """Consensus unit check for every filer shard, against curated books for the same quarter."""
+    def quarters():
+        for p in (DATA / "h").glob("*/*.json"):
+            q = json.loads(p.read_text())
+            yield q.get("quarter"), [(h["cusip"], h["value"], h["shares"], h["put_call"]) for h in q["holdings"]]
+    cons = consensus_prices(quarters())
+    n = 0
+    for p in sorted((DATA / "f").glob("*.json")):
+        r = json.loads(p.read_text())
+        if not r.get("ok"):
+            continue
+        cols = r["columns"]
+        ci, vi, si, pi = (cols.index(k) for k in ("cusip", "value", "shares", "put_call"))
+        delta = 0
+        for row in r["rows"]:
+            if row[pi] or not row[si]:
+                continue
+            f = consensus_factor(row[vi] / row[si], cons.get((r.get("quarter"), row[ci])))
+            if f != 1.0:
+                new = int(row[vi] * f)
+                delta += new - row[vi]
+                row[vi] = new
+        if delta:
+            r["rows"].sort(key=lambda x: -x[vi])
+            r["total_value"] = max(r["total_value"] + delta, sum(x[vi] for x in r["rows"]))
+            p.write_text(json.dumps(r, separators=(",", ":")) + "\n")
+            n += 1
+    return n
+
+
 def sector_mix(copycat: dict) -> list[dict]:
     total = copycat.get("total_value") or 0
     by: dict[str, float] = {}
@@ -130,6 +163,7 @@ def sector_mix(copycat: dict) -> list[dict]:
 
 
 def main() -> int:
+    print(f"enrich: consensus unit check rescaled {fix_shards()} filer shards")
     secs_path = DATA / "securities.json"
     secs = json.loads(secs_path.read_text()) if secs_path.exists() else {}
     figi = load_cache()

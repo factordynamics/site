@@ -100,8 +100,9 @@ def unit_fix(pairs: list[tuple[float, float]]) -> float:
     """Factor that puts values in dollars, judged by median implied price per share.
 
     Some filers report in $000s with a cover total that hides it, others report
-    dollars x1000. A median price under $0.50 means thousands; over $25,000 means
+    dollars x1000. A median price under $0.50 means thousands; over $2,500 means
     an extra x1000. Needs 5 priced stock rows; otherwise 1 (trust the filing).
+    Idempotent: a corrected book lands back inside the band.
     """
     prices = sorted(v / s for v, s in pairs if v > 0 and s > 0)
     if len(prices) < 5:
@@ -109,9 +110,17 @@ def unit_fix(pairs: list[tuple[float, float]]) -> float:
     mid = prices[len(prices) // 2]
     if mid < 0.5:
         return 1000.0
-    if mid > 25_000:
+    if mid > 2_500:
         return 0.001
     return 1.0
+
+
+ABOVE_20K = {"084670108"}  # Berkshire Class A, the one US stock priced above $20k
+
+
+def row_overstated(cusip: str, value: float, shares: float) -> bool:
+    """A stock line priced above $20k/share was filed in dollars x1000 (mixed-unit filings)."""
+    return shares > 0 and value / shares > 20_000 and cusip not in ABOVE_20K
 
 
 def scale_if_thousands(holdings: list[AggregatedHolding], thousands: bool) -> None:
@@ -142,3 +151,33 @@ def aggregate_holdings(rows: list[HoldingRow]) -> list[AggregatedHolding]:
     out = list(buckets.values())
     out.sort(key=lambda h: h.value, reverse=True)
     return out
+
+
+def consensus_prices(quarters) -> dict[tuple[str, str], float]:
+    """(quarter, cusip) -> median implied price across filers; needs 3+ filers.
+
+    Input: iterable of (quarter, [(cusip, value, shares, put_call), ...]) per filing.
+    """
+    seen: dict[tuple[str, str], list[float]] = {}
+    for quarter, rows in quarters:
+        for cusip, value, shares, put_call in rows:
+            if not put_call and value > 0 and shares > 0:
+                seen.setdefault((quarter, cusip), []).append(value / shares)
+    out = {}
+    for key, prices in seen.items():
+        if len(prices) >= 3:
+            prices.sort()
+            out[key] = prices[len(prices) // 2]
+    return out
+
+
+def consensus_factor(price: float, consensus: float | None) -> float:
+    """1000 or 0.001 when a line is priced ~1000x off what other filers report; else 1."""
+    if not consensus or price <= 0:
+        return 1.0
+    ratio = price / consensus
+    if 300 <= ratio <= 3000:
+        return 0.001
+    if 1 / 3000 <= ratio <= 1 / 300:
+        return 1000.0
+    return 1.0
