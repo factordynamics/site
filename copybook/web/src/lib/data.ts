@@ -255,8 +255,11 @@ export function displayName(s?: string) {
     .join('')
 }
 
+const LEGAL = /^(llc|lp|llp|l|p|inc|incorporated|corp|corporation|co|company|ltd|limited|plc|gp|sa|ag|se|nv|the|of|and|et|al)$/i
 export function initials(name: string) {
-  const parts = name.replace(/[^A-Za-z ]/g, ' ').split(/\s+/).filter(Boolean)
+  const all = name.replace(/[^A-Za-z ]/g, ' ').split(/\s+/).filter(Boolean)
+  const kept = all.filter((w) => !LEGAL.test(w))
+  const parts = kept.length ? kept : all
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : parts[0]?.[1] ?? '')).toUpperCase()
 }
 
@@ -277,3 +280,10 @@ export const shareClass = (title?: string) => {
 
 /** Ticker when the filing maps to one, otherwise the first words of the issuer. */
 export const shortName = (issuer: string) => issuer.split(' ').slice(0, 2).join(' ')
+
+/** Keeps document.title in sync on client-side navigation. */
+export function useTitle(title?: string) {
+  useEffect(() => {
+    if (title) document.title = title
+  }, [title])
+}

@@ -33,8 +33,9 @@ export function useSearch(query: string) {
     const q = norm(query)
     if (!q) return managers.filter((m) => m.featured).slice(0, 6).map((m) => ({ kind: 'manager', m }))
     const ms = managers
-      .map((m) => ({ m, s: score(q, m.manager, m.name) + (m.featured ? 15 : 0) }))
+      .map((m) => ({ m, s: score(q, m.manager, m.name) }))
       .filter((x) => x.s > 0)
+      .map((x) => ({ ...x, s: x.s + (x.m.featured ? 15 : 0) }))
       .sort((a, b) => b.s - a.s || (b.m.total_value ?? 0) - (a.m.total_value ?? 0))
       .slice(0, 6)
     const known = new Set(managers.map((m) => m.cik.replace(/^0+/, '')))
@@ -157,7 +158,7 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
                     <Monogram name={h.m.manager} size={30} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium">{h.m.manager}</span>
-                      <span className="block truncate text-[12.5px] text-ink-3">{h.m.name !== h.m.manager ? h.m.name : `${h.m.position_count} positions`}</span>
+                      <span className="block truncate text-[12.5px] text-ink-3">{h.m.name !== h.m.manager ? h.m.name : `${(h.m.position_count ?? 0).toLocaleString('en-US')} positions`}</span>
                     </span>
                     <span className="num text-[13px] text-ink-2">{money(h.m.total_value)}</span>
                   </>

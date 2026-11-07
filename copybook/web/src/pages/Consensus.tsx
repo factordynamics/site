@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Donut, Legend, WeightBars } from '../components/charts'
-import { Monogram, Panel, Skeleton, Ticker } from '../components/ui'
-import { shortName, loadIndex, loadSuperBook, money, pct, sectorMix, sectorOf, useAsync } from '../lib/data'
+import { Donut, foldSlices, Legend, WeightBars } from '../components/charts'
+import { AvatarStack, Monogram, Panel, Skeleton } from '../components/ui'
+import { useTitle, shortName, loadIndex, loadSuperBook, money, pct, sectorMix, sectorOf, useAsync } from '../lib/data'
 
 type Sort = 'holders' | 'value' | 'conviction'
 
@@ -17,7 +17,8 @@ export function Consensus() {
   const [open, setOpen] = useState<string | null>(null)
 
   const all = useMemo(() => book.data?.rows ?? [], [book.data])
-  const mix = useMemo(() => sectorMix(all.map((r) => ({ cusip: r.cusip, value: r.value }))), [all])
+  const mix = useMemo(() => foldSlices(sectorMix(all.map((r) => ({ cusip: r.cusip, value: r.value }))), 10), [all])
+  useTitle('Consensus · Copybook')
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
     const hits = s ? all.filter((r) => `${r.ticker ?? ''} ${r.issuer}`.toLowerCase().includes(s)) : all
@@ -27,7 +28,6 @@ export function Consensus() {
     return out
   }, [all, q, sort])
   const byValue = useMemo(() => [...all].sort((a, b) => b.value - a.value).slice(0, 10), [all])
-  const managers = book.data?.managers.length ?? 0
 
   return (
     <div className="container-x pt-12 md:pt-16">
@@ -42,7 +42,7 @@ export function Consensus() {
       <div className="mt-10 grid gap-6 lg:grid-cols-2">
         <Panel title="Largest combined positions" sub="Share of the combined reported value">
           {book.data ? (
-            <WeightBars accentFirst={3} valueLabel="both" items={byValue.map((r) => ({ key: r.key, label: r.ticker || shortName(r.issuer), sub: r.ticker ? r.issuer : undefined, value: r.value, weight: r.weight }))} />
+            <WeightBars accentFirst={3} valueLabel="both" items={byValue.map((r) => ({ key: r.key, label: r.ticker || shortName(r.issuer), isTicker: Boolean(r.ticker), sub: r.ticker ? r.issuer : undefined, value: r.value, weight: r.weight }))} />
           ) : (
             <Skeleton className="h-[360px] w-full" />
           )}
@@ -50,8 +50,8 @@ export function Consensus() {
         <Panel title="Sector mix" sub="Combined book, by reported value">
           {book.data ? (
             <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
-              <Donut slices={mix.slice(0, 10)} size={180} thickness={26} center={{ value: pct(mix[0]?.share ?? 0, 0), label: mix[0]?.name ?? '' }} />
-              <Legend slices={mix} limit={12} cols={1} />
+              <Donut slices={mix} size={180} thickness={26} center={{ value: pct(mix[0]?.share ?? 0, 0), label: mix[0]?.name ?? '' }} />
+              <Legend slices={mix} limit={10} cols={1} />
             </div>
           ) : (
             <Skeleton className="h-[360px] w-full" />
@@ -63,7 +63,7 @@ export function Consensus() {
         <header className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4 md:px-6">
           <div className="mr-auto">
             <h2 className="text-[15px] font-semibold">The full book</h2>
-            <p className="text-[13px] text-ink-3">{book.data ? `${rows.length.toLocaleString('en-US')} stocks across ${managers} portfolios` : 'Loading…'}</p>
+            <p className="text-[13px] text-ink-3">{book.data ? `${rows.length.toLocaleString('en-US')} stocks from the investors we follow` : 'Loading…'}</p>
           </div>
           <input
             value={q}
@@ -96,19 +96,15 @@ export function Consensus() {
               <button onClick={() => setOpen(open === r.key ? null : r.key)} aria-expanded={open === r.key} className="grid w-full grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-3 px-5 py-3 text-left hover:bg-ink/[0.025] md:grid-cols-[2rem_minmax(0,1.4fr)_8rem_1fr_6rem_6rem] md:px-6">
                 <span className="num text-[13px] text-ink-3">{i + 1}</span>
                 <span className="min-w-0">
-                  <span className="flex items-center gap-2">
-                    <Ticker t={r.ticker} />
+                  <span className="flex min-w-0 items-center gap-2">
+                    {r.ticker ? <span className="font-mono text-[12.5px] font-medium text-ink">{r.ticker}</span> : <span className="truncate text-[14px] font-medium text-ink">{r.issuer}</span>}
                     {r.put_call && <span className="rounded bg-ink/5 px-1 text-[11px] text-ink-2">{r.put_call}</span>}
                   </span>
-                  <span className="block truncate text-[13px] text-ink-3">{r.issuer}</span>
+                  {r.ticker && <span className="block truncate text-[13px] text-ink-3">{r.issuer}</span>}
                 </span>
                 <span className="hidden text-[13px] text-ink-2 md:block">{sectorOf(r.cusip)}</span>
                 <span className="hidden items-center gap-2 md:flex">
-                  <span className="flex -space-x-2">
-                    {r.holders.slice(0, 5).map((h) => (
-                      <Monogram key={h.slug} name={h.name} size={24} className="ring-2 ring-card" />
-                    ))}
-                  </span>
+                  <AvatarStack names={r.holders} />
                   <span className="num text-[13px] text-ink-2">{r.holders.length} {r.holders.length === 1 ? 'investor' : 'investors'}</span>
                 </span>
                 <span className="num hidden text-right text-[13px] text-ink-2 md:block" title="Average weight in the portfolios that hold it">

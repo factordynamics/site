@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Donut, Legend, Treemap, WeightBars } from '../components/charts'
-import { treemapItems, useBook } from '../components/Portfolio'
+import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/charts'
+import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { SearchBox } from '../components/Search'
-import { Arrow, Button, Check, Monogram, Panel, Skeleton, Ticker } from '../components/ui'
-import { dateLabel, loadIndex, loadManager, loadSuperBook, money, pct, quarterLabel, sectorMix, useAsync, type Manager } from '../lib/data'
+import { Arrow, AvatarStack, Button, Check, Monogram, Panel, Skeleton, Ticker } from '../components/ui'
+import { useTitle, dateLabel, loadIndex, loadManager, loadSuperBook, money, pct, quarterLabel, sectorMix, useAsync, type Manager } from '../lib/data'
 
 const DEMO = ['warren-buffett', 'bill-ackman', 'stanley-druckenmiller', 'david-tepper']
 
 export function Home() {
   const idx = useAsync(loadIndex, [])
+  useTitle('Copybook: see what the world’s best investors own')
   return (
     <>
       <Hero managers={idx.data?.managers} />
@@ -29,6 +30,7 @@ function Hero({ managers }: { managers?: Manager[] }) {
     <section className="relative overflow-hidden">
       <div className="grid-bg pointer-events-none absolute inset-0 -top-16" aria-hidden="true" />
       <div className="container-x relative pb-16 pt-10 md:pt-16">
+        <div className="relative z-20 grid items-end gap-12 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rise max-w-3xl">
           <Link to="/investors/warren-buffett/" className="inline-flex items-center gap-2 rounded-full bg-card py-1 pl-1 pr-3 text-[13px] text-ink-2 shadow-[var(--shadow-card)] hover:text-ink">
             <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent-2">New</span>
@@ -57,6 +59,8 @@ function Hero({ managers }: { managers?: Manager[] }) {
             </p>
           </div>
         </div>
+        <LatestFilings managers={managers} />
+        </div>
 
         <div className="rise mt-12 md:mt-14" style={{ animationDelay: '120ms' }}>
           <ProductFrame slug={slug} demo={demo} onPick={setSlug} />
@@ -66,10 +70,46 @@ function Hero({ managers }: { managers?: Manager[] }) {
   )
 }
 
+function LatestFilings({ managers }: { managers?: Manager[] }) {
+  const recent = (managers ?? [])
+    .filter((m) => m.featured && m.filing_date)
+    .sort((a, b) => (b.filing_date ?? '').localeCompare(a.filing_date ?? ''))
+    .slice(0, 5)
+  return (
+    <aside className="rise hidden rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] xl:block" style={{ animationDelay: '60ms' }} aria-label="Latest filings">
+      <div className="flex items-center justify-between">
+        <p className="text-[14px] font-semibold">Latest filings</p>
+        <span className="inline-flex items-center gap-1.5 text-[12px] text-ink-3">
+          <span className="size-1.5 rounded-full bg-up" /> From SEC EDGAR
+        </span>
+      </div>
+      <ul className="mt-3 divide-y divide-line">
+        {recent.length === 0 && Array.from({ length: 5 }, (_, i) => <li key={i} className="py-2.5"><Skeleton className="h-8 w-full" /></li>)}
+        {recent.map((m) => (
+          <li key={m.slug}>
+            <Link to={`/investors/${m.slug}/`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-ink/[0.035]">
+              <Monogram name={m.manager} size={30} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-medium">{m.manager}</span>
+                <span className="block truncate text-[12.5px] text-ink-3">
+                  {quarterLabel(m.quarter)} 13F · filed {dateLabel(m.filing_date)}
+                </span>
+              </span>
+              <span className="num text-[13px] font-medium">{money(m.total_value)}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  )
+}
+
 function ProductFrame({ slug, demo, onPick }: { slug: string; demo: Manager[]; onPick: (s: string) => void }) {
   const m = useAsync(() => loadManager(slug), [slug])
   const book = useBook(m.data?.holdings)
   const f = m.data
+  const plan = mapPlan(book.rows, 14)
+  const slices = foldSlices(book.sectors, 6)
   return (
     <div className="overflow-hidden rounded-[18px] bg-card shadow-[var(--shadow-frame)]">
       <div className="flex items-center gap-3 border-b border-line bg-paper-2/70 px-4 py-2.5">
@@ -105,22 +145,22 @@ function ProductFrame({ slug, demo, onPick }: { slug: string; demo: Manager[]; o
             </div>
             <dl className="flex gap-7">
               <MiniStat label="Portfolio" value={f ? money(f.total_value) : '—'} />
-              <MiniStat label="Positions" value={f ? String(book.rows.length) : '—'} />
+              <MiniStat label="Positions" value={f ? book.rows.length.toLocaleString('en-US') : '—'} />
               <MiniStat label="Top 10" value={f ? pct(book.top10, 0) : '—'} />
             </dl>
           </div>
-          <div className="mt-6">{f ? <Treemap items={treemapItems(book.rows, 14)} height={300} /> : <Skeleton className="h-[300px] w-full" />}</div>
+          <div className="mt-6">{f ? <Treemap items={treemapItems(book.rows, plan.n, 'rank', !plan.broad)} height={300} /> : <Skeleton className="h-[300px] w-full" />}</div>
         </div>
         <div className="p-5 md:p-7">
           <p className="text-[13px] font-medium text-ink-2">Sector mix</p>
           <div className="mt-4 flex items-center gap-6">
-            {f ? <Donut slices={book.sectors.slice(0, 8)} size={132} thickness={20} center={{ value: book.sectors[0] ? pct(book.sectors[0].share, 0) : '', label: book.sectors[0]?.name ?? '' }} /> : <Skeleton className="size-[132px] rounded-full" />}
-            <div className="min-w-0 flex-1">{f && <Legend slices={book.sectors.slice(0, 5)} limit={5} cols={1} />}</div>
+            {f ? <Donut slices={slices} size={132} thickness={20} center={{ value: slices[0] ? pct(slices[0].share, 0) : '', label: slices[0]?.name ?? '' }} /> : <Skeleton className="size-[132px] rounded-full" />}
+            <div className="min-w-0 flex-1">{f && <Legend slices={slices} limit={6} cols={1} />}</div>
           </div>
           <p className="mt-7 text-[13px] font-medium text-ink-2">Largest positions</p>
           <div className="mt-3">
             {f ? (
-              <WeightBars items={book.rows.slice(0, 5).map((h) => ({ key: h.key, label: h.ticker || h.issuer.split(' ').slice(0, 2).join(' '), sub: h.ticker ? h.issuer : undefined, value: h.value, weight: h.weight }))} />
+              <WeightBars items={book.rows.slice(0, 5).map((h) => ({ key: h.key, label: h.ticker || h.issuer.split(' ').slice(0, 2).join(' '), isTicker: Boolean(h.ticker), sub: h.ticker ? h.issuer : undefined, value: h.value, weight: h.weight }))} />
             ) : (
               <Skeleton className="h-40 w-full" />
             )}
@@ -168,7 +208,7 @@ function ConsensusSection({ featured }: { featured?: Manager[] }) {
   const book = useAsync(() => (featured ? loadSuperBook(featured) : Promise.resolve(null)), [featured?.length])
   const rows = book.data?.rows.slice(0, 8) ?? []
   const max = rows[0]?.holders.length ?? 1
-  const mix = book.data ? sectorMix(book.data.rows.map((r) => ({ cusip: r.cusip, value: r.value }))) : []
+  const mix = book.data ? foldSlices(sectorMix(book.data.rows.map((r) => ({ cusip: r.cusip, value: r.value }))), 8) : []
   return (
     <section className="container-x mt-24 md:mt-32">
       <div className="grid gap-12 lg:grid-cols-[0.9fr_1.4fr] lg:gap-16">
@@ -189,8 +229,8 @@ function ConsensusSection({ featured }: { featured?: Manager[] }) {
             <div className="mt-8">
               <p className="mb-3 text-[13px] text-ink-3">Combined sector mix</p>
               <div className="flex items-center gap-5">
-                <Donut slices={mix.slice(0, 8)} size={112} thickness={16} center={{ value: pct(mix[0].share, 0), label: mix[0].name }} />
-                <Legend slices={mix.slice(0, 4)} limit={4} cols={1} />
+                <Donut slices={mix} size={112} thickness={16} center={{ value: pct(mix[0].share, 0), label: mix[0].name }} />
+                <Legend slices={mix} limit={8} cols={1} />
               </div>
             </div>
           )}
@@ -207,18 +247,16 @@ function ConsensusSection({ featured }: { featured?: Manager[] }) {
                 <li key={r.key} className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-center gap-3 py-3 sm:grid-cols-[1.25rem_minmax(0,11rem)_1fr_auto]">
                   <span className="num text-[13px] text-ink-3">{i + 1}</span>
                   <div className="min-w-0">
-                    <Ticker t={r.ticker} />
-                    <p className="truncate text-[13px] text-ink-3">{r.issuer}</p>
+                    {r.ticker ? <Ticker t={r.ticker} /> : <p className="truncate text-[14px] font-medium">{r.issuer}</p>}
+                    {r.ticker && <p className="truncate text-[13px] text-ink-3">{r.issuer}</p>}
                   </div>
                   <div className="hidden h-2 rounded-full bg-ink/[0.05] sm:block">
-                    <div className="grow-x h-2 rounded-full bg-accent" style={{ width: `${(r.holders.length / max) * 100}%`, opacity: 1 - i * 0.07, animationDelay: `${i * 40}ms` }} />
+                    <div className="h-2 rounded-full bg-accent" style={{ width: `${(r.holders.length / max) * 100}%`, opacity: 1 - i * 0.07, animationDelay: `${i * 40}ms` }} />
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="hidden -space-x-2 md:flex">
-                      {r.holders.slice(0, 4).map((h) => (
-                        <Monogram key={h.slug} name={h.name} size={24} className="ring-2 ring-card" />
-                      ))}
-                    </div>
+                    <span className="hidden md:flex">
+                      <AvatarStack names={r.holders} />
+                    </span>
                     <span className="num w-[5.5rem] text-right text-[13px] font-medium">{r.holders.length} investors</span>
                   </div>
                 </li>
@@ -263,7 +301,7 @@ export function ManagerCard({ m }: { m: Manager }) {
         <Monogram name={m.manager} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15.5px] font-semibold tracking-[-0.015em]">{m.manager}</p>
-          <p className="truncate text-[13px] text-ink-3">{m.name !== m.manager ? m.name : `${m.position_count} positions`}</p>
+          <p className="truncate text-[13px] text-ink-3">{m.name !== m.manager ? m.name : `${(m.position_count ?? 0).toLocaleString('en-US')} positions`}</p>
         </div>
         <Arrow className="text-ink-3 transition-transform group-hover:translate-x-0.5 group-hover:text-ink" />
       </div>

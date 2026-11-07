@@ -20,7 +20,7 @@
   --color-accent: #2b44d6;
   --color-accent-2: #1f33a8;
   --color-accent-soft: #e9ecfc;
-  --color-up: #17804a;
+  --color-up: #126b3c;
   --color-down: #b4322a;
   --color-night: #0c0e13;
   --color-night-2: #161922;
@@ -97,16 +97,8 @@
   .rise {
     animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
-  .grow-x {
-    transform-origin: left;
-    animation: growx 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-  }
 }
 @keyframes rise {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
-}
-@keyframes growx {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
 }

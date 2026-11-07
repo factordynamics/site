@@ -1,3 +1,4 @@
+import { useTitle } from '../lib/data'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
@@ -10,6 +11,7 @@ type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolea
 export function Account() {
   const [params] = useSearchParams()
   const nav = useNavigate()
+  useTitle('Account · Copybook')
   const [state, setState] = useState<State>(() => (api ? { kind: 'loading' } : { kind: 'off' }))
 
   useEffect(() => {

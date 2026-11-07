@@ -21,7 +21,7 @@ export const sectorColor = (s: string) => SECTOR_COLORS[s] ?? '#d6d2c9'
 
 /* ---------- Horizontal weight bars ---------- */
 
-type BarItem = { key: string; label: string; sub?: string; value: number; weight: number; href?: string; tag?: string }
+type BarItem = { key: string; label: string; sub?: string; value: number; weight: number; href?: string; tag?: string; isTicker?: boolean }
 
 export function WeightBars({ items, max, accentFirst = 1, valueLabel = 'pct' }: { items: BarItem[]; max?: number; accentFirst?: number; valueLabel?: 'pct' | 'money' | 'both' }) {
   const m = max ?? Math.max(...items.map((i) => i.weight), 0.0001)
@@ -32,7 +32,7 @@ export function WeightBars({ items, max, accentFirst = 1, valueLabel = 'pct' }: 
           <>
             <div className="flex items-baseline justify-between gap-3 text-[13px]">
               <span className="flex min-w-0 items-baseline gap-2">
-                <span className="font-mono text-[12.5px] font-medium text-ink">{it.label}</span>
+                <span className={it.isTicker === false ? 'truncate text-[13px] font-medium text-ink' : 'font-mono text-[12.5px] font-medium text-ink'}>{it.label}</span>
                 {it.sub && <span className="truncate text-ink-3">{it.sub}</span>}
                 {it.tag && <span className="shrink-0 rounded bg-ink/5 px-1 text-[11px] text-ink-2">{it.tag}</span>}
               </span>
@@ -46,7 +46,7 @@ export function WeightBars({ items, max, accentFirst = 1, valueLabel = 'pct' }: 
             </div>
             <div className="mt-1.5 h-2 rounded-full bg-ink/[0.05]">
               <div
-                className="grow-x h-2 rounded-full"
+                className="h-2 rounded-full"
                 style={{ width: `${Math.max(1.5, (it.weight / m) * 100)}%`, background: i < accentFirst ? 'var(--color-accent)' : '#9aa3b5', animationDelay: `${i * 35}ms` }}
               />
             </div>
@@ -71,6 +71,15 @@ export function WeightBars({ items, max, accentFirst = 1, valueLabel = 'pct' }: 
 /* ---------- Donut ---------- */
 
 type Slice = { name: string; value: number; share: number; color?: string }
+
+/** Keeps the n-1 largest named slices and folds the rest, plus unclassified, into one labeled Other slice. */
+export function foldSlices(slices: Slice[], n = 8): Slice[] {
+  const named = slices.filter((s) => s.name !== 'Other')
+  const head = named.slice(0, n - 1)
+  const tail = [...named.slice(n - 1), ...slices.filter((s) => s.name === 'Other')]
+  if (!tail.length) return head
+  return [...head, { name: 'Other', value: tail.reduce((a, s) => a + s.value, 0), share: tail.reduce((a, s) => a + s.share, 0) }]
+}
 
 export function Donut({ slices, size = 180, thickness = 26, center }: { slices: Slice[]; size?: number; thickness?: number; center?: { value: string; label: string } }) {
   const [hover, setHover] = useState<number | null>(null)
@@ -144,7 +153,7 @@ export function StackBar({ slices, height = 10 }: { slices: Slice[]; height?: nu
 
 /* ---------- Treemap (squarified) ---------- */
 
-type TItem = { key: string; label: string; sub?: string; value: number; weight: number; color: string }
+type TItem = { key: string; label: string; sub?: string; value: number; weight: number; color: string; isTicker?: boolean }
 type Rect = { x: number; y: number; w: number; h: number; item: TItem }
 
 function squarify(items: TItem[], x: number, y: number, w: number, h: number): Rect[] {
@@ -225,7 +234,7 @@ export function Treemap({ items, height = 320, ratio = 1.8 }: { items: TItem[]; 
           >
             {mid && (
               <div className="leading-tight">
-                <div className={`truncate font-mono font-semibold ${big ? 'text-[15px]' : 'text-[11.5px]'}`}>{item.label}</div>
+                <div className={`truncate font-semibold ${item.isTicker === false ? '' : 'font-mono'} ${big ? 'text-[15px]' : 'text-[11.5px]'}`}>{item.label}</div>
                 <div className={`num ${big ? 'text-[13px]' : 'text-[11px]'} text-white/85`}>{pct(item.weight)}</div>
                 {big && item.sub && <div className="mt-0.5 truncate text-[12px] text-white/75">{item.sub}</div>}
               </div>
@@ -256,10 +265,10 @@ export function ChangeBars({ items }: { items: { key: string; label: string; sub
             {it.tag && <span className="truncate text-[11.5px] text-ink-3">{it.tag}</span>}
           </span>
           <div className="flex h-2.5 justify-end">
-            {it.delta < 0 && <div className="grow-x h-2.5 rounded-l-full bg-down/80" style={{ width: `${(Math.abs(it.delta) / m) * 100}%`, transformOrigin: 'right' }} />}
+            {it.delta < 0 && <div className="h-2.5 rounded-l-full bg-down/80" style={{ width: `${(Math.abs(it.delta) / m) * 100}%`, transformOrigin: 'right' }} />}
           </div>
           <div className="flex h-2.5 border-l border-line-2">
-            {it.delta > 0 && <div className="grow-x h-2.5 rounded-r-full bg-up/80" style={{ width: `${(it.delta / m) * 100}%` }} />}
+            {it.delta > 0 && <div className="h-2.5 rounded-r-full bg-up/80" style={{ width: `${(it.delta / m) * 100}%` }} />}
           </div>
           <span className={`num text-right font-medium ${it.delta >= 0 ? 'text-up' : 'text-down'}`}>
             {it.delta >= 0 ? '+' : '−'}

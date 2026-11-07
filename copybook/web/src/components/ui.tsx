@@ -163,3 +163,21 @@ export function Check({ className = '' }: { className?: string }) {
     </svg>
   )
 }
+
+/** Up to three readable avatars, then a +N count. */
+export function AvatarStack({ names, max = 3, size = 22 }: { names: { slug: string; name: string }[]; max?: number; size?: number }) {
+  const shown = names.slice(0, max)
+  const more = names.length - shown.length
+  return (
+    <span className="flex items-center">
+      {shown.map((h, i) => (
+        <span key={h.slug} title={h.name} className="rounded-full" style={{ marginLeft: i ? 3 : 0 }}>
+          <Monogram name={h.name} size={size} />
+        </span>
+      ))}
+      {more > 0 && (
+        <span className="num ml-1 rounded-full bg-ink/[0.06] px-1.5 text-[11.5px] font-medium leading-5 text-ink-2">+{more}</span>
+      )}
+    </span>
+  )
+}

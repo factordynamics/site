@@ -17,22 +17,30 @@ export function useBook(holdings: Holding[] | undefined) {
   }, [holdings])
 }
 
-export function treemapItems(rows: Agg[], n = 18, by: 'rank' | 'sector' = 'rank') {
+export function treemapItems(rows: Agg[], n = 18, by: 'rank' | 'sector' = 'rank', withRest = true) {
   const head = rows.slice(0, n)
   const rest = rows.slice(n)
   const items = head.map((h, i) => ({
     key: h.key,
     label: h.ticker || shortIssuer(h.issuer),
+    isTicker: Boolean(h.ticker),
     sub: h.issuer,
     value: h.value,
     weight: h.weight,
     color: by === 'sector' ? sectorColor(h.sector) : rankColor(i),
   }))
-  if (rest.length) {
+  if (rest.length && withRest) {
     const v = rest.reduce((s, h) => s + h.value, 0)
-    items.push({ key: 'rest', label: `+${rest.length} more`, sub: 'Smaller positions', value: v, weight: rest.reduce((s, h) => s + h.weight, 0), color: '#c9c4b8' })
+    items.push({ key: 'rest', isTicker: false, label: `+${rest.length} more`, sub: 'Smaller positions', value: v, weight: rest.reduce((s, h) => s + h.weight, 0), color: '#c9c4b8' })
   }
   return items
+}
+
+/** Broad books: draw the top positions only and say what is left out, instead of one giant remainder tile. */
+export function mapPlan(rows: Agg[], n: number) {
+  const restShare = rows.slice(n).reduce((s, h) => s + h.weight, 0)
+  const broad = restShare > 0.25
+  return { broad, n: broad ? 25 : n, shown: rows.slice(0, broad ? 25 : n).reduce((s, h) => s + h.weight, 0), hidden: Math.max(0, rows.length - (broad ? 25 : n)) }
 }
 
 export function shortIssuer(s: string) {

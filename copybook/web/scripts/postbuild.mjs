@@ -49,6 +49,12 @@ redirect('copycat.html', 'consensus/')
 redirect('pricing.html', 'pricing/')
 redirect('about.html', 'about/')
 writeFileSync(join(dist, '404.html'), shell)
+// GitHub Pages serves only the project root 404.html (gust/404.html), so ship one that renders the
+// Copybook not-found page for copybook paths and sends anything else to the gust home page.
+writeFileSync(
+  join(dist, '404-root.html'),
+  shell.replace('<title>', `<script>if(!location.pathname.startsWith('/gust/copybook'))location.replace('/gust/')</script>\n    <title>`).replace(/<title>.*?<\/title>/, '<title>Page not found · Copybook</title>'),
+)
 writeFileSync(join(dist, '.nojekyll'), '')
 writeFileSync(join(dist, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /csv/\n`)
 console.log(`wrote ${n} investor pages`)

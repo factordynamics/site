@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ChangeBars, Donut, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
-import { treemapItems, useBook } from '../components/Portfolio'
+import { ChangeBars, Donut, foldSlices, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
+import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
 import { csvUrl, useMember } from '../lib/account'
-import { shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync } from '../lib/data'
+import { useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -15,6 +15,9 @@ export function ManagerPage() {
   const [color, setColor] = useState<'rank' | 'sector'>('rank')
   const f = m.data
   const member = useMember()
+  useTitle(f ? `${f.manager} portfolio · Copybook` : undefined)
+  const plan = mapPlan(book.rows, 20)
+  const slices = foldSlices(book.sectors, 10)
 
   const changes = useMemo(() => {
     const hs = (f?.holdings || []).filter((h) => h.change && h.prev_value != null)
@@ -83,7 +86,7 @@ export function ManagerPage() {
 
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
         <Stat label="Reported portfolio" value={f ? money(f.total_value) : '—'} sub={f ? `As of ${dateLabel(f.report_date)}` : undefined} />
-        <Stat label="Positions" value={f ? book.rows.length : '—'} sub={f ? `Filed ${dateLabel(f.filing_date)}` : undefined} />
+        <Stat label="Positions" value={f ? book.rows.length.toLocaleString('en-US') : '—'} sub={f ? `Filed ${dateLabel(f.filing_date)}` : undefined} />
         <Stat label="Top 10 weight" value={f ? pct(book.top10, 0) : '—'} sub="Share of portfolio" />
         <Stat label="Largest position" value={book.top1 ? book.top1.ticker || shortName(book.top1.issuer) : '—'} sub={book.top1 ? `${pct(book.top1.weight)} of portfolio` : undefined} />
       </div>
@@ -91,7 +94,7 @@ export function ManagerPage() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <Panel
           title="Portfolio map"
-          sub="Each tile is sized by reported value"
+          sub={plan.broad ? `Largest ${plan.n} positions, ${pct(plan.shown, 0)} of the portfolio. Each tile is sized by reported value.` : 'Each tile is sized by reported value'}
           right={
             <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Color tiles by">
               {(['rank', 'sector'] as const).map((c) => (
@@ -102,16 +105,17 @@ export function ManagerPage() {
             </div>
           }
         >
-          {f ? <Treemap items={treemapItems(book.rows, 20, color)} height={360} /> : <Skeleton className="h-[360px] w-full" />}
+          {f && plan.broad && <p className="-mt-2 mb-3 text-[12.5px] text-ink-3">{plan.hidden.toLocaleString('en-US')} smaller positions make up the other {pct(1 - plan.shown, 0)}; see All holdings below.</p>}
+          {f ? <Treemap items={treemapItems(book.rows, plan.n, color, !plan.broad)} height={360} /> : <Skeleton className="h-[360px] w-full" />}
         </Panel>
         <Panel title="Sector mix" sub="Share of reported value">
           {f ? (
             <>
               <div className="flex justify-center">
-                <Donut slices={book.sectors.slice(0, 10)} size={180} thickness={26} center={{ value: pct(book.sectors[0]?.share ?? 0, 0), label: book.sectors[0]?.name ?? '' }} />
+                <Donut slices={slices} size={180} thickness={26} center={{ value: pct(slices[0]?.share ?? 0, 0), label: slices[0]?.name ?? '' }} />
               </div>
               <div className="mt-6 flex">
-                <Legend slices={book.sectors} limit={10} />
+                <Legend slices={slices} limit={10} />
               </div>
             </>
           ) : (
@@ -126,7 +130,7 @@ export function ManagerPage() {
             <WeightBars
               valueLabel="both"
               accentFirst={3}
-              items={book.rows.slice(0, 10).map((h) => ({ key: h.key, label: h.ticker || shortName(h.issuer), sub: h.ticker ? h.issuer : undefined, value: h.value, weight: h.weight, tag: h.put_call || shareClass(h.title) || undefined }))}
+              items={book.rows.slice(0, 10).map((h) => ({ key: h.key, label: h.ticker || shortName(h.issuer), isTicker: Boolean(h.ticker), sub: h.ticker ? h.issuer : undefined, value: h.value, weight: h.weight, tag: h.put_call || shareClass(h.title) || undefined }))}
             />
           ) : (
             <Skeleton className="h-[360px] w-full" />
@@ -146,7 +150,7 @@ export function ManagerPage() {
           <div>
             <h2 className="text-[15px] font-semibold">All holdings</h2>
             <p className="text-[13px] text-ink-3">
-              {rows.length} of {book.rows.length} positions
+              {rows.length.toLocaleString('en-US')} of {book.rows.length.toLocaleString('en-US')} positions
             </p>
           </div>
           <input
@@ -205,7 +209,7 @@ export function ManagerPage() {
         {rows.length > n && (
           <div className="flex items-center justify-between border-t border-line px-6 py-3 text-[13px] text-ink-3">
             <span>
-              Showing {n} of {rows.length}
+              Showing {n} of {rows.length.toLocaleString('en-US')}
             </span>
             <button onClick={() => setN((x) => x + 50)} className="font-medium text-accent hover:text-accent-2">
               Show more

@@ -1,3 +1,4 @@
+import { useTitle } from '../lib/data'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
@@ -10,6 +11,7 @@ const COPY = ['Everything in Free', 'Quarter-over-quarter buys, sells and exits'
 export function Pricing() {
   const [cycle, setCycle] = useState<'yearly' | 'monthly'>('yearly')
   const live = checkoutEnabled()
+  useTitle('Pricing · Copybook')
   const link = cycle === 'yearly' ? checkout.yearly || checkout.monthly : checkout.monthly || checkout.yearly
   return (
     <div className="container-x pt-12 md:pt-16">
@@ -51,7 +53,6 @@ export function Pricing() {
           <div className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-accent/40 blur-[80px]" aria-hidden="true" />
           <div className="relative flex items-center justify-between">
             <h2 className="text-[17px] font-semibold">Copy</h2>
-            <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[12px] font-medium">Most popular</span>
           </div>
           <p className="relative mt-1 text-[14px] text-white/60">For following every move.</p>
           <p className="relative mt-6 flex items-baseline gap-1.5">
@@ -89,9 +90,11 @@ export function Pricing() {
         <dl className="mt-6 divide-y divide-line border-y border-line">
           {[
             ['Where does the data come from?', 'Every holding comes from the Form 13F-HR the fund filed with the SEC. We link each portfolio to its original filing.'],
-            ['How current is it?', 'Funds file within 45 days of quarter end, so a 13F shows positions as of the last quarter end. We check EDGAR several times a day and update as soon as a filing appears.'],
+            ['How current is it?', 'Funds file within 45 days of quarter end, so a 13F shows positions as of the last quarter end. We check EDGAR every three hours and publish new filings on the next run.'],
             ['Do you show live prices or returns?', 'No. Values are what the fund reported. We don’t re-price holdings or estimate performance.'],
-            ['Can I cancel?', 'Yes, any time, from the billing portal linked on your account page. You keep Copy until the end of the period you paid for.'],
+            ['Can I cancel?', live
+              ? 'Yes. Copy renews automatically until you cancel, and you can cancel any time from Manage billing on your account page. You keep access until the end of the period you paid for.'
+              : 'Copy isn’t on sale yet. When it opens, it renews automatically until you cancel, you can cancel any time from Manage billing on your account page, and you keep access until the end of the period you paid for.'],
             ['Is this investment advice?', 'No. Copybook shows public filings. 13F omits short positions, most non-US holdings and cash, so a portfolio here is never the whole picture.'],
           ].map(([q, a]) => (
             <div key={q} className="py-5">

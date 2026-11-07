@@ -1,3 +1,4 @@
+import { useTitle } from '../lib/data'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Monogram, Skeleton } from '../components/ui'
@@ -8,6 +9,7 @@ type Sort = 'value' | 'name' | 'positions' | 'recent'
 
 export function Investors() {
   const idx = useAsync(loadIndex, [])
+  useTitle('Investors · Copybook')
   const [q, setQ] = useState('')
   const [tab, setTab] = useState<'featured' | 'all'>('featured')
   const [sort, setSort] = useState<Sort>('value')
