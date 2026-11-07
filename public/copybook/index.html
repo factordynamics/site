@@ -17,15 +17,15 @@
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="index.html"><span class="mark">C</span> Copybook</a>
-    <nav class="nav" id="nav"><a href="index.html" aria-current="page">Holdings</a><a href="copycat.html">Copycat</a><a href="pricing.html">Pricing</a><a href="about.html">About</a></nav>
+    <nav class="nav" id="nav"><a href="index.html" aria-current="page">Managers</a><a href="copycat.html">Copycat</a><a href="pricing.html">Pricing</a><a href="about.html">About</a></nav>
     <div class="search-wrap">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
       <label class="sr" for="global-search">Search managers</label>
-      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <input id="global-search" type="search" placeholder="Search" autocomplete="off">
       <div id="search-results" class="search-results"></div>
     </div>
     <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
-    <a class="top-cta" href="pricing.html">Join Copy</a>
+    <a class="top-cta" href="pricing.html">Get Copy</a>
   </div>
 </header>
 <main id="main">
@@ -33,11 +33,11 @@
   <div>
     <p class="faint">13F holdings, as filed</p>
     <h1>What 41 superinvestors actually filed.</h1>
-    <p class="lede">Latest-quarter 13F holdings from SEC EDGAR. Values come from the filing, not a price feed. Search a manager, open the copycat book, or join Copy for history and alerts.</p>
+    <p class="lede">Latest-quarter 13F holdings from SEC EDGAR. Values come from the filing, not a price feed.</p>
     <p class="meta">Updated 7 Nov 2026 · 41 of 41 managers · source SEC EDGAR</p>
     <p class="cta-row">
       <a class="btn" href="copycat.html">Open copycat</a>
-      <a class="btn ghost" href="pricing.html">Join Copy waitlist</a>
+      <a class="btn ghost" href="pricing.html">Join the waitlist</a>
     </p>
   </div>
   <div class="stats">
@@ -73,10 +73,8 @@
       <option value="name">Sort by name</option>
     </select>
   </div>
-  <h2 style="font-size:14px;color:var(--muted);margin:18px 0 8px">Featured</h2>
   <div id="featured-grid" class="grid"></div>
-  <h2 style="font-size:14px;color:var(--muted);margin:22px 0 8px">All managers</h2>
-  <div id="manager-grid" class="grid"></div>
+  <div id="manager-grid" class="grid" style="margin-top:10px"></div>
 </section>
 </main>
 <footer class="site-footer">
@@ -88,7 +86,7 @@
     <div>
       <a href="about.html">About</a> ·
       <a href="pricing.html">Pricing</a> ·
-      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+      <a href="pricing.html">Waitlist</a>
     </div>
   </div>
 </footer>

@@ -17,15 +17,15 @@
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="index.html"><span class="mark">C</span> Copybook</a>
-    <nav class="nav" id="nav"><a href="index.html">Holdings</a><a href="copycat.html">Copycat</a><a href="pricing.html">Pricing</a><a href="about.html" aria-current="page">About</a></nav>
+    <nav class="nav" id="nav"><a href="index.html">Managers</a><a href="copycat.html">Copycat</a><a href="pricing.html">Pricing</a><a href="about.html" aria-current="page">About</a></nav>
     <div class="search-wrap">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
       <label class="sr" for="global-search">Search managers</label>
-      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <input id="global-search" type="search" placeholder="Search" autocomplete="off">
       <div id="search-results" class="search-results"></div>
     </div>
     <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
-    <a class="top-cta" href="pricing.html">Join Copy</a>
+    <a class="top-cta" href="pricing.html">Get Copy</a>
   </div>
 </header>
 <main id="main">
@@ -37,6 +37,8 @@
 </section>
 <section class="prose">
   <p>Copybook is a consumer 13F site from <a href="https://www.factordynamics.com">Factor Dynamics</a>. It reads each manager’s latest 13F-HR information table from SEC EDGAR and shows issuer, CUSIP, shares, and the filer-reported value.</p>
+  <div class="about-split">
+  <div>
   <h2>What you are looking at</h2>
   <ul>
     <li>Public 13F-HR filings, as filed. Fair-access User-Agent, under 10 requests/second.</li>
@@ -45,6 +47,8 @@
     <li>The copycat book is the value-weighted sum of those as-filed books. It is not a fund.</li>
     <li>GOOGL and GOOG stay two rows because they are two 13F share classes.</li>
   </ul>
+  </div>
+  <div>
   <h2>What we do not show</h2>
   <ul>
     <li>Live quotes, sparklines, or “up 2% this week.”</li>
@@ -52,6 +56,7 @@
     <li>Form 4 or 13D. Those parsers are empty; this launch is holdings-only.</li>
     <li>Dataroma HTML. Managers are the 41 hard-coded CIKs.</li>
   </ul>
+  </div></div>
   <h2>Lag and holes</h2>
   <p>13F is due 45 days after quarter-end. It omits shorts, many options, and advisers under $100M AUM. Values are the filer’s quarter-end marks, not today’s market.</p>
   <p>Not investment advice. Factor Dynamics is not a registered investment adviser. Past research results are not a live track record.</p>
@@ -66,7 +71,7 @@
     <div>
       <a href="about.html">About</a> ·
       <a href="pricing.html">Pricing</a> ·
-      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+      <a href="pricing.html">Waitlist</a>
     </div>
   </div>
 </footer>

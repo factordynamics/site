@@ -12,7 +12,7 @@ WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or Path(__file__).resolve().parent
 MANAGERS_DIR = WEB / "managers"
 
 NAV = [
-    ("Holdings", "index.html"),
+    ("Managers", "index.html"),
     ("Copycat", "copycat.html"),
     ("Pricing", "pricing.html"),
     ("About", "about.html"),
@@ -51,12 +51,12 @@ def nice_date(iso: str) -> str:
 
 
 def waitlist_form(id_suffix: str = "") -> str:
-    return f"""<form data-waitlist class="waitlist-form" action="https://github.com/factordynamics/site/issues/new" method="get">
+    return f"""<form data-waitlist class="waitlist-form">
   <label class="sr" for="email{id_suffix}">Email</label>
   <input id="email{id_suffix}" type="email" name="email" required placeholder="you@example.com" autocomplete="email">
   <button class="btn" type="submit">Join the waitlist</button>
 </form>
-<p class="faint">Opens a GitHub issue labeled copybook-waitlist so we can actually read signups. No payment details.</p>"""
+<p class="faint">We’ll email you when Copy opens.</p>"""
 
 
 def page(title: str, body: str, path_depth: int = 0, current: str = "") -> str:
@@ -90,11 +90,11 @@ def page(title: str, body: str, path_depth: int = 0, current: str = "") -> str:
     <div class="search-wrap">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
       <label class="sr" for="global-search">Search managers</label>
-      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <input id="global-search" type="search" placeholder="Search" autocomplete="off">
       <div id="search-results" class="search-results"></div>
     </div>
     <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
-    <a class="top-cta" href="{prefix}pricing.html">Join Copy</a>
+    <a class="top-cta" href="{prefix}pricing.html">Get Copy</a>
   </div>
 </header>
 {body}
@@ -107,7 +107,7 @@ def page(title: str, body: str, path_depth: int = 0, current: str = "") -> str:
     <div>
       <a href="{prefix}about.html">About</a> ·
       <a href="{prefix}pricing.html">Pricing</a> ·
-      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+      <a href="{prefix}pricing.html">Waitlist</a>
     </div>
   </div>
 </footer>
@@ -130,11 +130,11 @@ def render_index(payload: dict) -> str:
   <div>
     <p class="faint">13F holdings, as filed</p>
     <h1>What 41 superinvestors actually filed.</h1>
-    <p class="lede">Latest-quarter 13F holdings from SEC EDGAR. Values come from the filing, not a price feed. Search a manager, open the copycat book, or join Copy for history and alerts.</p>
+    <p class="lede">Latest-quarter 13F holdings from SEC EDGAR. Values come from the filing, not a price feed.</p>
     <p class="meta">Updated {escape(updated)} · {payload['filed_count']} of {payload['manager_count']} managers · source SEC EDGAR</p>
     <p class="cta-row">
       <a class="btn" href="copycat.html">Open copycat</a>
-      <a class="btn ghost" href="pricing.html">Join Copy waitlist</a>
+      <a class="btn ghost" href="pricing.html">Join the waitlist</a>
     </p>
   </div>
   <div class="stats">
@@ -170,13 +170,11 @@ def render_index(payload: dict) -> str:
       <option value="name">Sort by name</option>
     </select>
   </div>
-  <h2 style="font-size:14px;color:var(--muted);margin:18px 0 8px">Featured</h2>
   <div id="featured-grid" class="grid"></div>
-  <h2 style="font-size:14px;color:var(--muted);margin:22px 0 8px">All managers</h2>
-  <div id="manager-grid" class="grid"></div>
+  <div id="manager-grid" class="grid" style="margin-top:10px"></div>
 </section>
 </main>""",
-        current="Holdings",
+        current="Managers",
     )
 
 
@@ -185,7 +183,7 @@ def render_copycat(payload: dict) -> str:
     return page(
         "Copycat book — Copybook",
         f"""<main id="main">
-<p class="crumb"><a href="index.html">Holdings</a> / Copycat</p>
+<p class="crumb"><a href="index.html">Managers</a> / Copycat</p>
 <section class="hero" style="grid-template-columns:1fr">
   <div>
     <p class="faint">Copycat</p>
@@ -196,8 +194,8 @@ def render_copycat(payload: dict) -> str:
 </section>
 <section id="copycat-app">
   <div class="toolbar">
-    <label class="sr" for="copycat-search">Search the book</label>
-    <input id="copycat-search" type="search" placeholder="Find NVDA, TSM, Buffett…">
+    <label class="sr" for="copycat-search">This table</label>
+    <input id="copycat-search" type="search" placeholder="This table: ticker, issuer, manager">
     <span id="copycat-meta" class="faint"></span>
   </div>
   <div id="copycat-table"></div>
@@ -214,13 +212,13 @@ def render_copycat(payload: dict) -> str:
 
 def render_manager(m: dict, neighbors: list[dict] | None = None) -> str:
     if not m.get("ok"):
-        body = f"""<main id="main"><p class="crumb"><a href="../index.html">Holdings</a> / {escape(m['manager'])}</p>
+        body = f"""<main id="main"><p class="crumb"><a href="../index.html">Managers</a> / {escape(m['manager'])}</p>
 <section class="hero" style="grid-template-columns:1fr"><div>
 <h1>{escape(m['manager'])}</h1>
 <p class="lede">{escape(m.get('error') or 'Filing not available on this refresh.')}</p>
 <p class="muted">CIK {escape(m['cik'])} · {escape(m['name'])}</p>
 </div></section></main>"""
-        return page(f"{m['manager']} — Copybook", body, path_depth=1, current="Holdings")
+        return page(f"{m['manager']} — Copybook", body, path_depth=1, current="Managers")
     stale = not str(m.get("quarter", "")).startswith("2026")
     badge = (
         f'<span class="pill" style="background:rgba(245,193,90,.12);color:var(--warn)">Last filing {escape(m["quarter"])}</span>'
@@ -249,26 +247,31 @@ def render_manager(m: dict, neighbors: list[dict] | None = None) -> str:
     return page(
         f"{m['manager']} — Copybook",
         f"""<main id="main">
-<p class="crumb"><a href="../index.html">Holdings</a> / {escape(m['manager'])}</p>
+<p class="crumb"><a href="../index.html">Managers</a> / {escape(m['manager'])}</p>
 <section class="hero">
   <div>
     <p class="faint">{escape(m['name'])} {badge}</p>
     <h1>{escape(m['manager'])}</h1>
     <p class="lede">{escape(m['quarter'])} 13F-HR filed {escape(nice_date(m['filing_date']))} for period {escape(m['report_date'])}. {m['position_count']} positions, {money(m['total_value'])} as filed. {escape(top_note)}</p>
     <p class="meta">CIK {escape(m['cik'])} · {escape(m['form'])} · <a href="{escape(m['sec_url'])}">SEC filing</a></p>
+    <div class="quarters" role="tablist" aria-label="Filing quarter">
+      <span class="qtab locked" title="Copy unlocks history">🔒 2026Q1</span>
+      <span class="qtab on">{escape(m['quarter'])}</span>
+      <span class="qtab locked" title="Copy unlocks history">🔒 2026Q3</span>
+    </div>
   </div>
 </section>
 <section id="holdings-app" data-slug="{escape(m['slug'])}">
   <div class="toolbar">
-    <label class="sr" for="holdings-search">Search holdings</label>
-    <input id="holdings-search" type="search" placeholder="Search ticker or issuer">
+    <label class="sr" for="holdings-search">This table</label>
+    <input id="holdings-search" type="search" placeholder="Ticker or issuer">
   </div>
   <div id="holdings-table"></div>
 </section>
 {nav_html}
 </main>""",
         path_depth=1,
-        current="Holdings",
+        current="Managers",
     )
 
 
@@ -280,10 +283,11 @@ def render_pricing() -> str:
   <div>
     <p class="faint">Pricing</p>
     <h1>Latest quarter is free. History is Copy.</h1>
-    <p class="lede">Built for people who refresh a 13F site in the two weeks after the deadline. Q3 2026 filings are due around 14 Nov 2026.</p>
+    <p class="lede">Built for people who refresh a 13F site in the two weeks after the deadline.</p>
+    {waitlist_form("-top")}
   </div>
 </section>
-<section class="plans" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+<section class="plans">
   <article class="plan">
     <h2>Free</h2>
     <p class="price">$0</p>
@@ -302,8 +306,7 @@ def render_pricing() -> str:
       <li>CSV export</li>
       <li>Email when a tracked 13F hits EDGAR</li>
     </ul>
-    <p class="muted">Join the waitlist. Paid signup opens when billing is on.</p>
-    {waitlist_form("-hero")}
+    <p class="muted">History, CSV, and filing email when Copy opens.</p>
   </article>
 </section>
 </main>""",
@@ -323,6 +326,8 @@ def render_about() -> str:
 </section>
 <section class="prose">
   <p>Copybook is a consumer 13F site from <a href="https://www.factordynamics.com">Factor Dynamics</a>. It reads each manager’s latest 13F-HR information table from SEC EDGAR and shows issuer, CUSIP, shares, and the filer-reported value.</p>
+  <div class="about-split">
+  <div>
   <h2>What you are looking at</h2>
   <ul>
     <li>Public 13F-HR filings, as filed. Fair-access User-Agent, under 10 requests/second.</li>
@@ -331,6 +336,8 @@ def render_about() -> str:
     <li>The copycat book is the value-weighted sum of those as-filed books. It is not a fund.</li>
     <li>GOOGL and GOOG stay two rows because they are two 13F share classes.</li>
   </ul>
+  </div>
+  <div>
   <h2>What we do not show</h2>
   <ul>
     <li>Live quotes, sparklines, or “up 2% this week.”</li>
@@ -338,6 +345,7 @@ def render_about() -> str:
     <li>Form 4 or 13D. Those parsers are empty; this launch is holdings-only.</li>
     <li>Dataroma HTML. Managers are the 41 hard-coded CIKs.</li>
   </ul>
+  </div></div>
   <h2>Lag and holes</h2>
   <p>13F is due 45 days after quarter-end. It omits shorts, many options, and advisers under $100M AUM. Values are the filer’s quarter-end marks, not today’s market.</p>
   <p>Not investment advice. Factor Dynamics is not a registered investment adviser. Past research results are not a live track record.</p>

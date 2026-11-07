@@ -18,7 +18,9 @@
   };
   const pct = (w) => `${((Number(w) || 0) * 100).toFixed(2)}%`;
   const ticker = (h) => h.ticker || "—";
+  const tickerTitle = (h) => (h.ticker ? "" : "No public ticker");
   const issuer = (h) => h.issuer || "";
+  const managersLabel = (n) => `${n} manager${Number(n) === 1 ? "" : "s"}`;
   const shareClass = (h) => {
     const t = (h.title || "").toUpperCase();
     if (t.includes("CL A") || t.includes("CLASS A")) return "Class A";
@@ -33,25 +35,31 @@
     menuBtn.addEventListener("click", () => nav.classList.toggle("open"));
   }
 
-  function waitlistHref(email) {
-    const title = `Copy waitlist: ${email}`;
-    const body = [
-      "Copybook waitlist signup",
-      "",
-      `Email: ${email}`,
-      `When: ${new Date().toISOString()}`,
-      "",
-      "Do not include payment details.",
-    ].join("\n");
-    return `https://github.com/factordynamics/site/issues/new?labels=copybook-waitlist&title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
-  }
-
   $$("[data-waitlist]").forEach((form) => {
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const email = form.querySelector('input[type="email"]')?.value.trim();
       if (!email || !email.includes("@")) return;
-      window.location.href = waitlistHref(email);
+      const note = document.createElement("p");
+      note.className = "ok";
+      note.textContent = "You’re on the list. We’ll email you when Copy opens.";
+      form.parentElement?.querySelectorAll(".faint").forEach((el) => el.remove());
+      form.replaceWith(note);
+      fetch("https://ntfy.sh/copybook-waitlist-fd", {
+        method: "POST",
+        headers: { Title: "Copybook waitlist", "Content-Type": "text/plain" },
+        body: email,
+      }).catch((err) => {
+        void err;
+      });
+      try {
+        const key = "copybook-waitlist";
+        const prev = JSON.parse(localStorage.getItem(key) || "[]");
+        prev.push({ email, at: new Date().toISOString() });
+        localStorage.setItem(key, JSON.stringify(prev));
+      } catch (err) {
+        void err;
+      }
     });
   });
 
@@ -60,11 +68,21 @@
     .then((r) => r.json())
     .then((data) => {
       catalog = (data.managers || []).filter((m) => m.ok);
-      initHeaderSearch(catalog);
-      if ($("#manager-grid")) renderManagers(catalog);
-      if ($("#home-copycat")) renderHomeCopycat(data.copycat_top || []);
-      if ($("#copycat-app")) initCopycat();
-      if ($("#holdings-app")) initHoldings();
+      window.__copycatNames = data.copycat_top || [];
+      const ready = () => {
+        initHeaderSearch(catalog);
+        if ($("#manager-grid")) renderManagers(catalog);
+        if ($("#home-copycat")) renderHomeCopycat(data.copycat_top || []);
+        if ($("#copycat-app")) initCopycat();
+        if ($("#holdings-app")) initHoldings();
+      };
+      fetch(`${BASE}data/copycat.json`)
+        .then((r) => r.json())
+        .then((book) => {
+          window.__copycatNames = book.holdings || data.copycat_top || [];
+          ready();
+        })
+        .catch(ready);
     })
     .catch(() => {});
 
@@ -79,23 +97,62 @@
         box.innerHTML = "";
         return;
       }
-      const hits = managers
-        .filter((m) => {
-          const hay = `${m.manager} ${m.name} ${m.slug} ${(m.top || []).map((h) => `${h.ticker || ""} ${h.issuer || ""}`).join(" ")}`.toLowerCase();
-          return hay.includes(query);
-        })
-        .slice(0, 8);
-      if (!hits.length) {
+      const items = [];
+      const names = window.__copycatNames || [];
+      const nameHits = names.filter((h) => {
+        const hay = `${ticker(h)} ${issuer(h)} ${h.cusip || ""}`.toLowerCase();
+        return hay.includes(query);
+      }).slice(0, 3);
+      const tickerHit = nameHits[0];
+      if (tickerHit) {
+        items.push({
+          kind: "label",
+          title: "Name",
+        });
+        items.push({
+          href: `${BASE}copycat.html?q=${encodeURIComponent(ticker(tickerHit) === "—" ? issuer(tickerHit) : ticker(tickerHit))}`,
+          title: `${ticker(tickerHit)} · ${issuer(tickerHit)}`,
+          sub: `${money(tickerHit.total_value)} · ${managersLabel(tickerHit.num_investors)}`,
+        });
+        const slugs = tickerHit.held_by || [];
+        if (slugs.length) {
+          items.push({ kind: "label", title: "Managers who hold it" });
+          slugs.forEach((slug) => {
+            const m = managers.find((x) => x.slug === slug);
+            if (!m) return;
+            items.push({
+              href: `${BASE}managers/${m.slug}.html`,
+              title: m.manager,
+              sub: `Holds ${ticker(tickerHit)}`,
+            });
+          });
+        }
+      }
+      const already = new Set(items.map((it) => it.href).filter(Boolean));
+      const people = managers.filter((m) => `${m.manager} ${m.name} ${m.slug}`.toLowerCase().includes(query));
+      const extraPeople = people.filter((m) => !already.has(`${BASE}managers/${m.slug}.html`));
+      if (extraPeople.length) {
+        items.push({ kind: "label", title: "Managers" });
+        extraPeople.slice(0, 6).forEach((m) => {
+          items.push({
+            href: `${BASE}managers/${m.slug}.html`,
+            title: m.manager,
+            sub: `${m.name} · ${m.quarter}`,
+          });
+        });
+      }
+      if (!items.filter((it) => it.href).length) {
         box.classList.add("open");
-        box.innerHTML = `<div class="empty" style="padding:12px">No managers for “${q}”</div>`;
+        box.innerHTML = `<div class="empty" style="padding:12px">No matches for “${q}”</div>`;
         return;
       }
       box.classList.add("open");
-      box.innerHTML = hits
-        .map(
-          (m, i) =>
-            `<a href="${BASE}managers/${m.slug}.html" class="${i === 0 ? "active" : ""}"><div>${m.manager}</div><div class="sub">${m.name} · ${m.quarter}</div></a>`
-        )
+      box.innerHTML = items
+        .map((it, i) => {
+          if (it.kind === "label") return `<div class="search-label">${it.title}</div>`;
+          const first = items.findIndex((x) => x.href) === i;
+          return `<a href="${it.href}" class="${first ? "active" : ""}"><div>${it.title}</div><div class="sub">${it.sub}</div></a>`;
+        })
         .join("");
     };
     input.addEventListener("input", () => render(input.value));
@@ -141,12 +198,12 @@
         .map((h) => {
           const cls = shareClass(h);
           return `<tr>
-            <td class="ticker">${ticker(h)}</td>
+            <td class="ticker" title="${tickerTitle(h)}">${ticker(h)}</td>
             <td>${issuer(h)}${cls ? ` <span class="pill">${cls}</span>` : ""}</td>
             <td class="num">${money(h.total_value)}</td>
             <td class="num">${pct(h.weight)}</td>
             <td class="num">${h.num_investors}</td>
-            <td>${chips(h.held_by_names, `${h.num_investors} managers`)}</td>
+            <td>${chips(h.held_by_names)}</td>
           </tr>`;
         })
         .join("")}</tbody></table></div>`;
@@ -172,6 +229,8 @@
       if (featured) {
         const pins = FEATURED.map((s) => managers.find((m) => m.slug === s)).filter(Boolean);
         featured.innerHTML = pins.map(managerCard).join("");
+        const featuredSlugs = new Set(FEATURED);
+        list = list.filter((m) => !featuredSlugs.has(m.slug));
       }
       grid.innerHTML = list.length
         ? list.map(managerCard).join("")
@@ -182,12 +241,12 @@
     run();
   }
 
-  function chips(names, extra) {
+  function chips(names) {
     const shown = (names || []).slice(0, 3);
     const more = Math.max(0, (names || []).length - shown.length);
     return `<div class="chips">${shown.map((n) => `<span class="chip">${n}</span>`).join("")}${
       more ? `<span class="chip">+${more}</span>` : ""
-    }${extra ? `<span class="chip">${extra}</span>` : ""}</div>`;
+    }</div>`;
   }
 
   function holdingCard(h, extra = "") {
@@ -196,7 +255,7 @@
     return `<article class="holding-card">
       <div class="row"><span class="ticker">${ticker(h)}</span><strong>${money(h.value ?? h.total_value)}</strong></div>
       <div>${issuer(h)}${cls ? ` · ${cls}` : ""}</div>
-      <div class="faint">${shares(h.shares ?? h.total_shares)} sh · ${pct(h.weight)}${h.num_investors ? ` · ${h.num_investors} managers` : ""}</div>
+      <div class="faint">${shares(h.shares ?? h.total_shares)} sh · ${pct(h.weight)}${h.num_investors ? ` · ${managersLabel(h.num_investors)}` : ""}</div>
       ${names.length ? chips(names) : ""}
       ${extra}
     </article>`;
@@ -239,18 +298,20 @@
             return String(av).localeCompare(String(bv)) * sortDir;
           });
           const shown = list.slice(0, limit);
-          $("#copycat-meta").textContent = `Showing ${shown.length} of ${list.length} names · ${money(book.total_value)} as-filed · ${book.num_investors} managers`;
+          $("#copycat-meta").textContent = query
+            ? `Showing ${shown.length} of ${list.length} matching names`
+            : `Showing ${shown.length} of ${list.length} names · ${money(book.total_value)} as-filed · ${book.num_investors} managers`;
           const desktop = `<div class="table-wrap desktop-only"><table>${tableHead(cols)}<tbody>${shown
             .map((h) => {
               const cls = shareClass(h);
               return `<tr>
-                <td class="ticker">${ticker(h)}</td>
+                <td class="ticker" title="${tickerTitle(h)}">${ticker(h)}</td>
                 <td>${issuer(h)}${cls ? ` <span class="pill">${cls}</span>` : ""}</td>
                 <td class="num">${shares(h.total_shares)}</td>
                 <td class="num">${money(h.total_value)}</td>
                 <td class="num">${pct(h.weight)}</td>
                 <td class="num">${h.num_investors}</td>
-                <td>${chips(h.held_by_names, `${h.num_investors} managers`)}</td>
+                <td>${chips(h.held_by_names)}</td>
               </tr>`;
             })
             .join("")}</tbody></table></div>`;
@@ -271,6 +332,12 @@
           const more = $("#copycat-more");
           if (more) more.style.display = list.length > limit ? "inline-flex" : "none";
         };
+        const params = new URLSearchParams(location.search);
+        if (params.get("q")) {
+          q = params.get("q");
+          const input = $("#copycat-search");
+          if (input) input.value = q;
+        }
         $("#copycat-search")?.addEventListener("input", (e) => {
           q = e.target.value;
           limit = 50;
@@ -285,8 +352,7 @@
   }
 
   function initHoldings() {
-    const root = $("#holdings-app");
-    const slug = root.dataset.slug;
+    const slug = $("#holdings-app").dataset.slug;
     fetch(`${BASE}data/${slug}.json`)
       .then((r) => r.json())
       .then((m) => {
@@ -316,7 +382,7 @@
             .map((h) => {
               const cls = shareClass(h);
               return `<tr>
-                <td class="ticker">${ticker(h)}</td>
+                <td class="ticker" title="${tickerTitle(h)}">${ticker(h)}</td>
                 <td>${issuer(h)}${cls ? ` <span class="pill">${cls}</span>` : ""}</td>
                 <td class="mono">${h.cusip || ""}</td>
                 <td class="num">${shares(h.shares)}</td>

@@ -17,15 +17,15 @@
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="index.html"><span class="mark">C</span> Copybook</a>
-    <nav class="nav" id="nav"><a href="index.html">Holdings</a><a href="copycat.html">Copycat</a><a href="pricing.html" aria-current="page">Pricing</a><a href="about.html">About</a></nav>
+    <nav class="nav" id="nav"><a href="index.html">Managers</a><a href="copycat.html">Copycat</a><a href="pricing.html" aria-current="page">Pricing</a><a href="about.html">About</a></nav>
     <div class="search-wrap">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
       <label class="sr" for="global-search">Search managers</label>
-      <input id="global-search" type="search" placeholder="Search Buffett, Ackman, NVDA…" autocomplete="off">
+      <input id="global-search" type="search" placeholder="Search" autocomplete="off">
       <div id="search-results" class="search-results"></div>
     </div>
     <button class="menu-btn" type="button" aria-label="Menu">Menu</button>
-    <a class="top-cta" href="pricing.html">Join Copy</a>
+    <a class="top-cta" href="pricing.html">Get Copy</a>
   </div>
 </header>
 <main id="main">
@@ -33,10 +33,16 @@
   <div>
     <p class="faint">Pricing</p>
     <h1>Latest quarter is free. History is Copy.</h1>
-    <p class="lede">Built for people who refresh a 13F site in the two weeks after the deadline. Q3 2026 filings are due around 14 Nov 2026.</p>
+    <p class="lede">Built for people who refresh a 13F site in the two weeks after the deadline.</p>
+    <form data-waitlist class="waitlist-form">
+  <label class="sr" for="email-top">Email</label>
+  <input id="email-top" type="email" name="email" required placeholder="you@example.com" autocomplete="email">
+  <button class="btn" type="submit">Join the waitlist</button>
+</form>
+<p class="faint">We’ll email you when Copy opens.</p>
   </div>
 </section>
-<section class="plans" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+<section class="plans">
   <article class="plan">
     <h2>Free</h2>
     <p class="price">$0</p>
@@ -55,13 +61,7 @@
       <li>CSV export</li>
       <li>Email when a tracked 13F hits EDGAR</li>
     </ul>
-    <p class="muted">Join the waitlist. Paid signup opens when billing is on.</p>
-    <form data-waitlist class="waitlist-form" action="https://github.com/factordynamics/site/issues/new" method="get">
-  <label class="sr" for="email-hero">Email</label>
-  <input id="email-hero" type="email" name="email" required placeholder="you@example.com" autocomplete="email">
-  <button class="btn" type="submit">Join the waitlist</button>
-</form>
-<p class="faint">Opens a GitHub issue labeled copybook-waitlist so we can actually read signups. No payment details.</p>
+    <p class="muted">History, CSV, and filing email when Copy opens.</p>
   </article>
 </section>
 </main>
@@ -74,7 +74,7 @@
     <div>
       <a href="about.html">About</a> ·
       <a href="pricing.html">Pricing</a> ·
-      <a href="https://github.com/factordynamics/site/issues?q=label%3Acopybook-waitlist">Waitlist</a>
+      <a href="pricing.html">Waitlist</a>
     </div>
   </div>
 </footer>
