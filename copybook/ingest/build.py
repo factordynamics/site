@@ -367,7 +367,7 @@ def write_json(payload: dict) -> None:
     for m in payload["managers"]:
         if not m.get("ok"):
             continue
-        (DATA / f"{m['slug']}.json").write_text(json.dumps(manager_json(m), indent=1) + "\n")
+        (DATA / f"{m['slug']}.json").write_text(json.dumps(manager_json(m), separators=(",", ":")) + "\n")
         if m.get("history"):
             (DATA / f"{m['slug']}-history.json").write_text(
                 json.dumps(
