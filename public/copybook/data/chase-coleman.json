@@ -1,0 +1,479 @@
+{
+  "cik": "0001167483",
+  "name": "Tiger Global Management LLC",
+  "manager": "Chase Coleman",
+  "slug": "chase-coleman",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0000919574-26-005427",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1167483/000091957426005427/0000919574-26-005427-index.html",
+  "line_count": 46,
+  "position_count": 46,
+  "values_in_thousands": false,
+  "total_value": 23981506027.0,
+  "holdings": [
+    {
+      "issuer": "TAIWAN SEMICONDUCTOR MANUFAC",
+      "title": "SPONSORED ADS",
+      "cusip": "874039100",
+      "ticker": null,
+      "value": 2331022991.0,
+      "shares": 4881008.0,
+      "put_call": null,
+      "weight": 0.0972008592110761
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 2307979214.0,
+      "shares": 9683558.0,
+      "put_call": null,
+      "weight": 0.09623996138530753
+    },
+    {
+      "issuer": "NVIDIA CORPORATION",
+      "title": "COM",
+      "cusip": "67066G104",
+      "ticker": "NVDA",
+      "value": 2240762490.0,
+      "shares": 11198773.0,
+      "put_call": null,
+      "weight": 0.0934371047204958
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 2074778363.0,
+      "shares": 5805687.0,
+      "put_call": null,
+      "weight": 0.08651576596832886
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 1590269062.0,
+      "shares": 2823180.0,
+      "put_call": null,
+      "weight": 0.06631231000294842
+    },
+    {
+      "issuer": "LAM RESEARCH CORP",
+      "title": "COM NEW",
+      "cusip": "512807306",
+      "ticker": null,
+      "value": 1370837288.0,
+      "shares": 3163495.0,
+      "put_call": null,
+      "weight": 0.05716226856047401
+    },
+    {
+      "issuer": "SEA LTD",
+      "title": "SPONSORD ADS",
+      "cusip": "81141R100",
+      "ticker": "XYZ",
+      "value": 1203543536.0,
+      "shares": 12559152.0,
+      "put_call": null,
+      "weight": 0.05018632001864142
+    },
+    {
+      "issuer": "APPLIED MATLS INC",
+      "title": "COM",
+      "cusip": "038222105",
+      "ticker": null,
+      "value": 1180087830.0,
+      "shares": 1632210.0,
+      "put_call": null,
+      "weight": 0.049208245248291635
+    },
+    {
+      "issuer": "GE VERNOVA INC",
+      "title": "COM",
+      "cusip": "36828A101",
+      "ticker": null,
+      "value": 936963773.0,
+      "shares": 797511.0,
+      "put_call": null,
+      "weight": 0.03907026405869184
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 845603887.0,
+      "shares": 2266913.0,
+      "put_call": null,
+      "weight": 0.035260666533951705
+    },
+    {
+      "issuer": "CORPAY INC",
+      "title": "COM SHS",
+      "cusip": "219948106",
+      "ticker": null,
+      "value": 716489508.0,
+      "shares": 2149877.0,
+      "put_call": null,
+      "weight": 0.029876751993529002
+    },
+    {
+      "issuer": "CEREBRAS SYSTEMS INC",
+      "title": "COM CL A",
+      "cusip": "15675D103",
+      "ticker": null,
+      "value": 662779000.0,
+      "shares": 2999000.0,
+      "put_call": null,
+      "weight": 0.027637088315212506
+    },
+    {
+      "issuer": "BROADCOM INC",
+      "title": "COM",
+      "cusip": "11135F101",
+      "ticker": "AVGO",
+      "value": 662596921.0,
+      "shares": 1754062.0,
+      "put_call": null,
+      "weight": 0.02762949583958587
+    },
+    {
+      "issuer": "COUPANG INC",
+      "title": "CL A",
+      "cusip": "22266T109",
+      "ticker": null,
+      "value": 633448674.0,
+      "shares": 36467972.0,
+      "put_call": null,
+      "weight": 0.026414048946167962
+    },
+    {
+      "issuer": "INTEL CORP",
+      "title": "COM",
+      "cusip": "458140100",
+      "ticker": "INTC",
+      "value": 593803105.0,
+      "shares": 4252690.0,
+      "put_call": null,
+      "weight": 0.02476087633243118
+    },
+    {
+      "issuer": "SPOTIFY TECHNOLOGY S A",
+      "title": "SHS",
+      "cusip": "L8681T102",
+      "ticker": null,
+      "value": 537837279.0,
+      "shares": 1171427.0,
+      "put_call": null,
+      "weight": 0.022427168602108076
+    },
+    {
+      "issuer": "TAKE-TWO INTERACTIVE SOFTWAR",
+      "title": "COM",
+      "cusip": "874054109",
+      "ticker": null,
+      "value": 452300813.0,
+      "shares": 1809348.0,
+      "put_call": null,
+      "weight": 0.018860400697552904
+    },
+    {
+      "issuer": "REDDIT INC",
+      "title": "CL A",
+      "cusip": "75734B100",
+      "ticker": null,
+      "value": 438952402.0,
+      "shares": 2528819.0,
+      "put_call": null,
+      "weight": 0.018303787990036895
+    },
+    {
+      "issuer": "ADVANCED MICRO DEVICES INC",
+      "title": "COM",
+      "cusip": "007903107",
+      "ticker": "AMD",
+      "value": 391955662.0,
+      "shares": 674727.0,
+      "put_call": null,
+      "weight": 0.016344080374214608
+    },
+    {
+      "issuer": "BLOCK INC",
+      "title": "CL A",
+      "cusip": "852234103",
+      "ticker": null,
+      "value": 347776532.0,
+      "shares": 4576007.0,
+      "put_call": null,
+      "weight": 0.014501863711497087
+    },
+    {
+      "issuer": "APOLLO GLOBAL MGMT INC",
+      "title": "COM",
+      "cusip": "03769M106",
+      "ticker": null,
+      "value": 322171145.0,
+      "shares": 2723110.0,
+      "put_call": null,
+      "weight": 0.013434149825172695
+    },
+    {
+      "issuer": "SEAGATE TECHNOLOGY HLDNGS PL",
+      "title": "ORD SHS",
+      "cusip": "G7997R103",
+      "ticker": null,
+      "value": 275121500.0,
+      "shares": 285100.0,
+      "put_call": null,
+      "weight": 0.011472236134388292
+    },
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 274024954.0,
+      "shares": 798697.0,
+      "put_call": null,
+      "weight": 0.011426511483118875
+    },
+    {
+      "issuer": "MERCADOLIBRE INC",
+      "title": "COM",
+      "cusip": "58733R102",
+      "ticker": null,
+      "value": 259914541.0,
+      "shares": 153126.0,
+      "put_call": null,
+      "weight": 0.01083812420735256
+    },
+    {
+      "issuer": "LIBERTY MEDIA CORP DEL",
+      "title": "COM LBTY ONE S C",
+      "cusip": "531229755",
+      "ticker": null,
+      "value": 216781723.0,
+      "shares": 2278555.0,
+      "put_call": null,
+      "weight": 0.009039537498434523
+    },
+    {
+      "issuer": "NU HLDGS LTD",
+      "title": "ORD SHS CL A",
+      "cusip": "G6683N103",
+      "ticker": null,
+      "value": 147394937.0,
+      "shares": 11032555.0,
+      "put_call": null,
+      "weight": 0.0061461918544253565
+    },
+    {
+      "issuer": "WEALTHFRONT CORP",
+      "title": "COM",
+      "cusip": "947002101",
+      "ticker": null,
+      "value": 135502480.0,
+      "shares": 15156877.0,
+      "put_call": null,
+      "weight": 0.005650290680136691
+    },
+    {
+      "issuer": "UNITEDHEALTH GROUP INC",
+      "title": "COM",
+      "cusip": "91324P102",
+      "ticker": "UNH",
+      "value": 123629974.0,
+      "shares": 297452.0,
+      "put_call": null,
+      "weight": 0.005155221438587261
+    },
+    {
+      "issuer": "CHIME FINL INC",
+      "title": "COM SHS CL A",
+      "cusip": "16935C109",
+      "ticker": null,
+      "value": 108217240.0,
+      "shares": 5284045.0,
+      "put_call": null,
+      "weight": 0.004512528941183332
+    },
+    {
+      "issuer": "EQUIPMENTSHARE COM INC",
+      "title": "COM CL A",
+      "cusip": "29445S100",
+      "ticker": null,
+      "value": 90035840.0,
+      "shares": 4579646.0,
+      "put_call": null,
+      "weight": 0.003754386396693834
+    },
+    {
+      "issuer": "SHERWIN WILLIAMS CO",
+      "title": "COM",
+      "cusip": "824348106",
+      "ticker": null,
+      "value": 88518819.0,
+      "shares": 257083.0,
+      "put_call": null,
+      "weight": 0.003691128442906777
+    },
+    {
+      "issuer": "DANAHER CORP DEL",
+      "title": "COM",
+      "cusip": "235851102",
+      "ticker": "DHR",
+      "value": 86858880.0,
+      "shares": 456000.0,
+      "put_call": null,
+      "weight": 0.0036219109801614796
+    },
+    {
+      "issuer": "SERVICENOW INC",
+      "title": "COM",
+      "cusip": "81762P102",
+      "ticker": null,
+      "value": 86719591.0,
+      "shares": 873485.0,
+      "put_call": null,
+      "weight": 0.0036161027961448804
+    },
+    {
+      "issuer": "SPACE EXPLORATION TECHN CORP",
+      "title": "CLASS A COM STK",
+      "cusip": "84615Q103",
+      "ticker": null,
+      "value": 64072500.0,
+      "shares": 375000.0,
+      "put_call": null,
+      "weight": 0.0026717463001640867
+    },
+    {
+      "issuer": "WEBULL CORP",
+      "title": "ORD SHS",
+      "cusip": "G9572D103",
+      "ticker": null,
+      "value": 43841373.0,
+      "shares": 6724137.0,
+      "put_call": null,
+      "weight": 0.001828132601457157
+    },
+    {
+      "issuer": "ATRENEW INC",
+      "title": "SPONSORED ADS",
+      "cusip": "00138L108",
+      "ticker": null,
+      "value": 38046814.0,
+      "shares": 9831218.0,
+      "put_call": null,
+      "weight": 0.001586506450310682
+    },
+    {
+      "issuer": "APPLIED DIGITAL CORP",
+      "title": "COM NEW",
+      "cusip": "038169207",
+      "ticker": null,
+      "value": 33010500.0,
+      "shares": 885000.0,
+      "put_call": null,
+      "weight": 0.0013764982050265963
+    },
+    {
+      "issuer": "CIPHER DIGITAL INC",
+      "title": "COM",
+      "cusip": "17253J106",
+      "ticker": null,
+      "value": 22711500.0,
+      "shares": 927000.0,
+      "put_call": null,
+      "weight": 0.0009470422739268276
+    },
+    {
+      "issuer": "CORE SCIENTIFIC INC NEW",
+      "title": "COM",
+      "cusip": "21874A106",
+      "ticker": null,
+      "value": 20907030.0,
+      "shares": 817000.0,
+      "put_call": null,
+      "weight": 0.0008717980420604717
+    },
+    {
+      "issuer": "UBER TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "90353T100",
+      "ticker": "UBER",
+      "value": 10909004.0,
+      "shares": 151178.0,
+      "put_call": null,
+      "weight": 0.00045489236529673766
+    },
+    {
+      "issuer": "JD.COM INC",
+      "title": "SPON ADS CL A",
+      "cusip": "47215P106",
+      "ticker": null,
+      "value": 5134220.0,
+      "shares": 201500.0,
+      "put_call": null,
+      "weight": 0.00021409080790086945
+    },
+    {
+      "issuer": "DOORDASH INC",
+      "title": "CL A",
+      "cusip": "25809K105",
+      "ticker": null,
+      "value": 4675437.0,
+      "shares": 25337.0,
+      "put_call": null,
+      "weight": 0.00019496010779039802
+    },
+    {
+      "issuer": "PONY AI INC",
+      "title": "SPONSORED ADS",
+      "cusip": "732908108",
+      "ticker": null,
+      "value": 2156495.0,
+      "shares": 310287.0,
+      "put_call": null,
+      "weight": 8.992325159112494e-05
+    },
+    {
+      "issuer": "ACCELERANT HOLDINGS",
+      "title": "CL A",
+      "cusip": "G00894108",
+      "ticker": null,
+      "value": 879000.0,
+      "shares": 75000.0,
+      "put_call": null,
+      "weight": 3.665324433796453e-05
+    },
+    {
+      "issuer": "GEMINI SPACE STA INC",
+      "title": "CL A COM",
+      "cusip": "36866J105",
+      "ticker": null,
+      "value": 298200.0,
+      "shares": 70000.0,
+      "put_call": null,
+      "weight": 1.2434581867555203e-05
+    },
+    {
+      "issuer": "MNTN INC",
+      "title": "CL A",
+      "cusip": "55318A108",
+      "ticker": null,
+      "value": 184000.0,
+      "shares": 20000.0,
+      "put_call": null,
+      "weight": 7.672579019551165e-06
+    }
+  ]
+}

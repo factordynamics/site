@@ -1,0 +1,99 @@
+{
+  "cik": "0001345471",
+  "name": "Trian Fund Management LP",
+  "manager": "Nelson Peltz",
+  "slug": "nelson-peltz",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001345471-26-000035",
+  "filing_date": "2026-08-12",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1345471/000134547126000035/0001345471-26-000035-index.html",
+  "line_count": 9,
+  "position_count": 8,
+  "values_in_thousands": false,
+  "total_value": 4230905202.0,
+  "holdings": [
+    {
+      "issuer": "GE Aerospace",
+      "title": "COM NEW",
+      "cusip": "369604301",
+      "ticker": "GE",
+      "value": 1506417803.0,
+      "shares": 4030765.0,
+      "put_call": null,
+      "weight": 0.35605094680162014
+    },
+    {
+      "issuer": "Janus Henderson Group plc",
+      "title": "ORD SHS",
+      "cusip": "G4474Y214",
+      "ticker": null,
+      "value": 1334027864.0,
+      "shares": 25654382.0,
+      "put_call": null,
+      "weight": 0.31530554344951733
+    },
+    {
+      "issuer": "Solventum Corporation",
+      "title": "COM SHS",
+      "cusip": "83444M101",
+      "ticker": null,
+      "value": 635465494.0,
+      "shares": 8236753.0,
+      "put_call": null,
+      "weight": 0.15019610784463044
+    },
+    {
+      "issuer": "Ferguson Plc New",
+      "title": "SHS",
+      "cusip": "G3421J106",
+      "ticker": null,
+      "value": 257825107.0,
+      "shares": 1086357.0,
+      "put_call": null,
+      "weight": 0.06093852135427732
+    },
+    {
+      "issuer": "Wendys Co.",
+      "title": "COM",
+      "cusip": "95058W100",
+      "ticker": null,
+      "value": 252583318.0,
+      "shares": 30468434.0,
+      "put_call": null,
+      "weight": 0.05969959286268121
+    },
+    {
+      "issuer": "GE HealthCare Technologies Inc.",
+      "title": "COM",
+      "cusip": "36266G107",
+      "ticker": null,
+      "value": 197492869.0,
+      "shares": 3085344.0,
+      "put_call": null,
+      "weight": 0.04667863248428321
+    },
+    {
+      "issuer": "Invesco Ltd.",
+      "title": "SHS",
+      "cusip": "G491BT108",
+      "ticker": null,
+      "value": 42896206.0,
+      "shares": 1625472.0,
+      "put_call": null,
+      "weight": 0.010138777389699595
+    },
+    {
+      "issuer": "Magnum Ice Cream Co NV",
+      "title": "ORD SHS",
+      "cusip": "N5505D105",
+      "ticker": null,
+      "value": 4196541.0,
+      "shares": 241042.0,
+      "put_call": null,
+      "weight": 0.0009918778132906982
+    }
+  ]
+}

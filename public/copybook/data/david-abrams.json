@@ -1,0 +1,129 @@
+{
+  "cik": "0001358706",
+  "name": "Abrams Capital Management LP",
+  "manager": "David Abrams",
+  "slug": "david-abrams",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001172661-26-003402",
+  "filing_date": "2026-08-13",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1358706/000117266126003402/0001172661-26-003402-index.html",
+  "line_count": 11,
+  "position_count": 11,
+  "values_in_thousands": false,
+  "total_value": 5479746142.0,
+  "holdings": [
+    {
+      "issuer": "LOAR HOLDINGS INC",
+      "title": "COM SHS",
+      "cusip": "53947R105",
+      "ticker": null,
+      "value": 2583569846.0,
+      "shares": 32050240.0,
+      "put_call": null,
+      "weight": 0.47147619233635657
+    },
+    {
+      "issuer": "LITHIA MTRS INC",
+      "title": "COM",
+      "cusip": "536797103",
+      "ticker": null,
+      "value": 723475222.0,
+      "shares": 2490534.0,
+      "put_call": null,
+      "weight": 0.13202714199748417
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 489773798.0,
+      "shares": 1370495.0,
+      "put_call": null,
+      "weight": 0.08937892108652358
+    },
+    {
+      "issuer": "SOMNIGROUP INTERNATIONAL INC",
+      "title": "COM",
+      "cusip": "88023U101",
+      "ticker": null,
+      "value": 454624038.0,
+      "shares": 5798776.0,
+      "put_call": null,
+      "weight": 0.08296443415790629
+    },
+    {
+      "issuer": "ASBURY AUTOMOTIVE GROUP INC",
+      "title": "COM",
+      "cusip": "043436104",
+      "ticker": null,
+      "value": 433426331.0,
+      "shares": 2155492.0,
+      "put_call": null,
+      "weight": 0.07909606024957351
+    },
+    {
+      "issuer": "COUPANG INC",
+      "title": "CL A",
+      "cusip": "22266T109",
+      "ticker": null,
+      "value": 226122035.0,
+      "shares": 13017964.0,
+      "put_call": null,
+      "weight": 0.041265056654151845
+    },
+    {
+      "issuer": "WILLIS TOWERS WATSON PLC LTD",
+      "title": "SHS",
+      "cusip": "G96629103",
+      "ticker": null,
+      "value": 188390007.0,
+      "shares": 720779.0,
+      "put_call": null,
+      "weight": 0.034379331107342384
+    },
+    {
+      "issuer": "U HAUL HOLDING COMPANY",
+      "title": "COM SER N",
+      "cusip": "023586506",
+      "ticker": null,
+      "value": 187609761.0,
+      "shares": 3251469.0,
+      "put_call": null,
+      "weight": 0.03423694385439653
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 183156560.0,
+      "shares": 325155.0,
+      "put_call": null,
+      "weight": 0.03342427828840105
+    },
+    {
+      "issuer": "NUVATION BIO INC",
+      "title": "COM CL A",
+      "cusip": "67080N101",
+      "ticker": null,
+      "value": 7216463.0,
+      "shares": 1270504.0,
+      "put_call": null,
+      "weight": 0.0013169338164570764
+    },
+    {
+      "issuer": "U HAUL HOLDING COMPANY",
+      "title": "COM",
+      "cusip": "023586100",
+      "ticker": null,
+      "value": 2382081.0,
+      "shares": 36401.0,
+      "put_call": null,
+      "weight": 0.00043470645140699656
+    }
+  ]
+}

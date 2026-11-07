@@ -1,0 +1,129 @@
+{
+  "cik": "0001336528",
+  "name": "Pershing Square Capital Management LP",
+  "manager": "Bill Ackman",
+  "slug": "bill-ackman",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001172661-26-002336",
+  "filing_date": "2026-05-15",
+  "report_date": "2026-03-31",
+  "quarter": "2026Q1",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1336528/000117266126002336/0001172661-26-002336-index.html",
+  "line_count": 11,
+  "position_count": 11,
+  "values_in_thousands": false,
+  "total_value": 13714299861.0,
+  "holdings": [
+    {
+      "issuer": "BROOKFIELD CORP",
+      "title": "CL A LTD VT SH",
+      "cusip": "11271J107",
+      "ticker": null,
+      "value": 2415946008.0,
+      "shares": 59697208.0,
+      "put_call": null,
+      "weight": 0.17616254803282663
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 2385104083.0,
+      "shares": 11451981.0,
+      "put_call": null,
+      "weight": 0.1739136599880416
+    },
+    {
+      "issuer": "UBER TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "90353T100",
+      "ticker": "UBER",
+      "value": 2154934398.0,
+      "shares": 29958771.0,
+      "put_call": null,
+      "weight": 0.15713047110250872
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 2092970053.0,
+      "shares": 5654078.0,
+      "put_call": null,
+      "weight": 0.15261224227361964
+    },
+    {
+      "issuer": "RESTAURANT BRANDS INTL INC",
+      "title": "COM",
+      "cusip": "76131D103",
+      "ticker": null,
+      "value": 1673501194.0,
+      "shares": 22645483.0,
+      "put_call": null,
+      "weight": 0.1220260028555314
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 1522358404.0,
+      "shares": 2660861.0,
+      "put_call": null,
+      "weight": 0.11100518578634862
+    },
+    {
+      "issuer": "HOWARD HUGHES HOLDINGS INC",
+      "title": "COM",
+      "cusip": "44267T102",
+      "ticker": null,
+      "value": 1192581569.0,
+      "shares": 18852064.0,
+      "put_call": null,
+      "weight": 0.08695898303867486
+    },
+    {
+      "issuer": "SEAPORT ENTMT GROUP INC",
+      "title": "COMMON STOCK",
+      "cusip": "812215200",
+      "ticker": null,
+      "value": 107910794.0,
+      "shares": 5023780.0,
+      "put_call": null,
+      "weight": 0.007868487279242815
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL C",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 89421720.0,
+      "shares": 311726.0,
+      "put_call": null,
+      "weight": 0.0065203270240789145
+    },
+    {
+      "issuer": "HERTZ GLOBAL HLDGS INC",
+      "title": "COM NEW",
+      "cusip": "42806J700",
+      "ticker": null,
+      "value": 70261595.0,
+      "shares": 15241127.0,
+      "put_call": null,
+      "weight": 0.00512323601730528
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 9310043.0,
+      "shares": 32376.0,
+      "put_call": null,
+      "weight": 0.0006788566018215343
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+:root {
+  --paper: #f4efe4;
+  --ink: #161513;
+  --muted: #5c5850;
+  --line: #d9d1c3;
+  --accent: #0f5c4c;
+  --accent-soft: #e2efe9;
+  --card: #fffaf1;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.5;
+}
+.site-header, .site-footer, main { width: min(1100px, calc(100% - 2rem)); margin: 0 auto; }
+.site-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 1.25rem 0; border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; letter-spacing: 0.04em; text-decoration: none; color: var(--ink); font-size: 1.15rem; }
+nav { display: flex; gap: 1rem; font-size: 0.95rem; }
+nav a, a { color: var(--accent); }
+.hero { padding: 2.5rem 0 1.5rem; }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.75rem; color: var(--muted); margin: 0 0 0.5rem; }
+h1 { font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.1; margin: 0 0 0.75rem; }
+h2 { font-size: 1.4rem; margin: 0 0 0.6rem; }
+.lede { font-size: 1.15rem; max-width: 42rem; }
+.meta, .muted { color: var(--muted); }
+.cta-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.btn {
+  display: inline-block; background: var(--accent); color: #fff; text-decoration: none;
+  padding: 0.55rem 0.9rem; border-radius: 2px;
+}
+.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+section { padding: 1.25rem 0 2rem; }
+.section-head { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; flex-wrap: wrap; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.75rem; }
+.card {
+  background: var(--card); border: 1px solid var(--line); padding: 0.9rem; text-decoration: none; color: inherit;
+}
+.card h3 { margin: 0 0 0.2rem; font-size: 1.05rem; }
+.stat { margin: 0.4rem 0 0; font-size: 0.9rem; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); background: var(--card); }
+table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+th, td { padding: 0.45rem 0.6rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ticker, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pill { background: var(--accent-soft); color: var(--accent); font-size: 0.7rem; padding: 0.05rem 0.3rem; }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+.plan { background: var(--card); border: 1px solid var(--line); padding: 1rem 1.1rem; }
+.plan.featured { border-color: var(--accent); }
+.price { font-size: 1.4rem; margin: 0.2rem 0 0.8rem; }
+.note, .waitlist, .prose { max-width: 42rem; }
+.site-footer { border-top: 1px solid var(--line); padding: 1.5rem 0 3rem; color: var(--muted); font-size: 0.9rem; }
+@media (max-width: 640px) {
+  .site-header { flex-direction: column; gap: 0.5rem; }
+}

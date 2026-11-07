@@ -1,0 +1,149 @@
+{
+  "cik": "0001454502",
+  "name": "Triple Frond Partners LLC",
+  "manager": "Stuart McLaughlin",
+  "slug": "stuart-mclaughlin",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001454502-26-000007",
+  "filing_date": "2026-08-13",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1454502/000145450226000007/0001454502-26-000007-index.html",
+  "line_count": 13,
+  "position_count": 13,
+  "values_in_thousands": true,
+  "total_value": 1120470000.0,
+  "holdings": [
+    {
+      "issuer": "ASML HOLDING N V",
+      "title": "NY REG SHS",
+      "cusip": "N07059210",
+      "ticker": null,
+      "value": 236578000.0,
+      "shares": 118917.0,
+      "put_call": null,
+      "weight": 0.21114175301436006
+    },
+    {
+      "issuer": "TRANSDIGM GROUP INC",
+      "title": "COM",
+      "cusip": "893641100",
+      "ticker": null,
+      "value": 141921000.0,
+      "shares": 106544.0,
+      "put_call": null,
+      "weight": 0.12666202575704838
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 131491000.0,
+      "shares": 352504.0,
+      "put_call": null,
+      "weight": 0.11735343204191098
+    },
+    {
+      "issuer": "AMAZON.COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 103063000.0,
+      "shares": 432420.0,
+      "put_call": null,
+      "weight": 0.09198193615179344
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL C",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 103011000.0,
+      "shares": 291544.0,
+      "put_call": null,
+      "weight": 0.09193552705561059
+    },
+    {
+      "issuer": "MASTERCARD INC",
+      "title": "CL A",
+      "cusip": "57636Q104",
+      "ticker": "MCD",
+      "value": 90122000.0,
+      "shares": 175472.0,
+      "put_call": null,
+      "weight": 0.08043231858059564
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 66259000.0,
+      "shares": 117628.0,
+      "put_call": null,
+      "weight": 0.05913500584576115
+    },
+    {
+      "issuer": "TRANSUNION COM",
+      "title": "COM",
+      "cusip": "89400J107",
+      "ticker": null,
+      "value": 58998000.0,
+      "shares": 817828.0,
+      "put_call": null,
+      "weight": 0.052654689549921016
+    },
+    {
+      "issuer": "DOORDASH INC",
+      "title": "CL A",
+      "cusip": "25809K105",
+      "ticker": null,
+      "value": 55404000.0,
+      "shares": 300246.0,
+      "put_call": null,
+      "weight": 0.049447107017590836
+    },
+    {
+      "issuer": "S&P GLOBAL INC",
+      "title": "COM",
+      "cusip": "78409V104",
+      "ticker": null,
+      "value": 47527000.0,
+      "shares": 116700.0,
+      "put_call": null,
+      "weight": 0.04241702142850768
+    },
+    {
+      "issuer": "LIVE NATION ENTERTAINMENT IN",
+      "title": "COM",
+      "cusip": "538034109",
+      "ticker": null,
+      "value": 36304000.0,
+      "shares": 198262.0,
+      "put_call": null,
+      "weight": 0.03240068899658179
+    },
+    {
+      "issuer": "CCC INTELLIGENT SOLUTION HOLDINGS INC",
+      "title": "COM",
+      "cusip": "12510Q100",
+      "ticker": null,
+      "value": 27931000.0,
+      "shares": 5413036.0,
+      "put_call": null,
+      "weight": 0.024927932028523746
+    },
+    {
+      "issuer": "CHARTER COMMUNICATIONS INC N",
+      "title": "CL A",
+      "cusip": "16119P108",
+      "ticker": null,
+      "value": 21861000.0,
+      "shares": 153725.0,
+      "put_call": null,
+      "weight": 0.019510562531794694
+    }
+  ]
+}

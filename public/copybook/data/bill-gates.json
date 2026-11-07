@@ -1,0 +1,259 @@
+{
+  "cik": "0001166559",
+  "name": "Gates Foundation Trust",
+  "manager": "Bill Gates",
+  "slug": "bill-gates",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001104659-26-097175",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1166559/000110465926097175/0001104659-26-097175-index.html",
+  "line_count": 24,
+  "position_count": 24,
+  "values_in_thousands": false,
+  "total_value": 34424791932.0,
+  "holdings": [
+    {
+      "issuer": "BERKSHIRE HATHAWAY INC DEL",
+      "title": "CL B NEW",
+      "cusip": "084670702",
+      "ticker": "BRK.B",
+      "value": 7350651039.0,
+      "shares": 14689844.0,
+      "put_call": null,
+      "weight": 0.2135278276632693
+    },
+    {
+      "issuer": "CATERPILLAR INC",
+      "title": "COM",
+      "cusip": "149123101",
+      "ticker": null,
+      "value": 6765963549.0,
+      "shares": 6353614.0,
+      "put_call": null,
+      "weight": 0.19654333895074652
+    },
+    {
+      "issuer": "CANADIAN NATL RY CO",
+      "title": "COM",
+      "cusip": "136375102",
+      "ticker": "CPNG",
+      "value": 6179825963.0,
+      "shares": 51826786.0,
+      "put_call": null,
+      "weight": 0.17951672664302917
+    },
+    {
+      "issuer": "WASTE MGMT INC DEL",
+      "title": "COM",
+      "cusip": "94106L109",
+      "ticker": null,
+      "value": 5955519423.0,
+      "shares": 26720744.0,
+      "put_call": null,
+      "weight": 0.1730008836295673
+    },
+    {
+      "issuer": "DEERE & CO",
+      "title": "COM",
+      "cusip": "244199105",
+      "ticker": null,
+      "value": 2256551587.0,
+      "shares": 3557378.0,
+      "put_call": null,
+      "weight": 0.06555018811609414
+    },
+    {
+      "issuer": "ECOLAB INC",
+      "title": "COM",
+      "cusip": "278865100",
+      "ticker": null,
+      "value": 1453799239.0,
+      "shares": 5218044.0,
+      "put_call": null,
+      "weight": 0.042231169962384074
+    },
+    {
+      "issuer": "WALMART INC",
+      "title": "COM",
+      "cusip": "931142103",
+      "ticker": "WFC",
+      "value": 950305425.0,
+      "shares": 8390477.0,
+      "put_call": null,
+      "weight": 0.02760526270942052
+    },
+    {
+      "issuer": "FEDEX CORP",
+      "title": "COM",
+      "cusip": "31428X106",
+      "ticker": null,
+      "value": 746615273.0,
+      "shares": 2384362.0,
+      "put_call": null,
+      "weight": 0.021688301688934083
+    },
+    {
+      "issuer": "COCA-COLA FEMSA SAB DE CV",
+      "title": "SPONS ADS REP",
+      "cusip": "191241108",
+      "ticker": null,
+      "value": 660313894.0,
+      "shares": 6214719.0,
+      "put_call": null,
+      "weight": 0.019181347422646204
+    },
+    {
+      "issuer": "HOME DEPOT INC",
+      "title": "COM",
+      "cusip": "437076102",
+      "ticker": "HD",
+      "value": 352680000.0,
+      "shares": 1000000.0,
+      "put_call": null,
+      "weight": 0.01024494209570405
+    },
+    {
+      "issuer": "WASTE CONNECTIONS INC",
+      "title": "COM",
+      "cusip": "94106B101",
+      "ticker": null,
+      "value": 339910081.0,
+      "shares": 2039175.0,
+      "put_call": null,
+      "weight": 0.009873990863080054
+    },
+    {
+      "issuer": "MADISON SQUARE GRDN SPRT COR",
+      "title": "CL A",
+      "cusip": "55825T103",
+      "ticker": null,
+      "value": 238052427.0,
+      "shares": 592406.0,
+      "put_call": null,
+      "weight": 0.006915144976627015
+    },
+    {
+      "issuer": "FEDEX FGHT HLDG CO INC",
+      "title": "COMMON STOCK",
+      "cusip": "314352105",
+      "ticker": null,
+      "value": 180019331.0,
+      "shares": 1192181.0,
+      "put_call": null,
+      "weight": 0.0052293513162140785
+    },
+    {
+      "issuer": "COUPANG INC",
+      "title": "CL A",
+      "cusip": "22266T109",
+      "ticker": null,
+      "value": 160638542.0,
+      "shares": 9248045.0,
+      "put_call": null,
+      "weight": 0.00466636203109993
+    },
+    {
+      "issuer": "WEST PHARMACEUTICAL SVSC INC",
+      "title": "COM",
+      "cusip": "955306105",
+      "ticker": null,
+      "value": 159575500.0,
+      "shares": 444500.0,
+      "put_call": null,
+      "weight": 0.004635481902554786
+    },
+    {
+      "issuer": "ANHEUSER BUSCH INBEV SA NV",
+      "title": "SPONSORED ADR",
+      "cusip": "03524A108",
+      "ticker": null,
+      "value": 140327200.0,
+      "shares": 1703000.0,
+      "put_call": null,
+      "weight": 0.004076341268153231
+    },
+    {
+      "issuer": "PACCAR INC",
+      "title": "COM",
+      "cusip": "693718108",
+      "ticker": null,
+      "value": 120120000.0,
+      "shares": 1000000.0,
+      "put_call": null,
+      "weight": 0.0034893457086763373
+    },
+    {
+      "issuer": "SCHRODINGER INC",
+      "title": "COM",
+      "cusip": "80810D103",
+      "ticker": null,
+      "value": 113452040.0,
+      "shares": 6981664.0,
+      "put_call": null,
+      "weight": 0.003295649258363105
+    },
+    {
+      "issuer": "MCDONALDS CORP",
+      "title": "COM",
+      "cusip": "580135101",
+      "ticker": "MCK",
+      "value": 90526819.0,
+      "shares": 334900.0,
+      "put_call": null,
+      "weight": 0.0026296983632847944
+    },
+    {
+      "issuer": "DANAHER CORP DEL",
+      "title": "COM",
+      "cusip": "235851102",
+      "ticker": "DHR",
+      "value": 71049040.0,
+      "shares": 373000.0,
+      "put_call": null,
+      "weight": 0.002063891631947831
+    },
+    {
+      "issuer": "KRAFT HEINZ CO",
+      "title": "COM",
+      "cusip": "500754106",
+      "ticker": "KHC",
+      "value": 58402812.0,
+      "shares": 2472600.0,
+      "put_call": null,
+      "weight": 0.0016965334784118456
+    },
+    {
+      "issuer": "HORMEL FOODS CORP",
+      "title": "COM",
+      "cusip": "440452100",
+      "ticker": null,
+      "value": 51756898.0,
+      "shares": 2085290.0,
+      "put_call": null,
+      "weight": 0.001503477438650507
+    },
+    {
+      "issuer": "ON HLDG AG",
+      "title": "NAMEN AKT A",
+      "cusip": "H5919C104",
+      "ticker": null,
+      "value": 17710000.0,
+      "shares": 500000.0,
+      "put_call": null,
+      "weight": 0.0005144548160227933
+    },
+    {
+      "issuer": "VERALTO CORP",
+      "title": "COM SHS",
+      "cusip": "92338C103",
+      "ticker": null,
+      "value": 11025850.0,
+      "shares": 124333.0,
+      "put_call": null,
+      "weight": 0.00032028806511829
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "cik": "0001766504",
+  "name": "Greenlea Lane Capital Management LLC",
+  "manager": "Josh Tarasoff",
+  "slug": "josh-tarasoff",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001420506-26-001649",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1766504/000142050626001649/0001420506-26-001649-index.html",
+  "line_count": 10,
+  "position_count": 10,
+  "values_in_thousands": false,
+  "total_value": 364211495.0,
+  "holdings": [
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 66818619.0,
+      "shares": 280350.0,
+      "put_call": null,
+      "weight": 0.1834610382080335
+    },
+    {
+      "issuer": "BROOKFIELD CORP",
+      "title": "CL A LTD VT SH",
+      "cusip": "11271J107",
+      "ticker": null,
+      "value": 59316882.0,
+      "shares": 1392742.0,
+      "put_call": null,
+      "weight": 0.16286383822125108
+    },
+    {
+      "issuer": "BERKSHIRE HATHAWAY INC DEL",
+      "title": "CL A",
+      "cusip": "084670108",
+      "ticker": "BRK.A",
+      "value": 47177550.0,
+      "shares": 63.0,
+      "put_call": null,
+      "weight": 0.12953339103149394
+    },
+    {
+      "issuer": "MARKEL GROUP INC",
+      "title": "COM",
+      "cusip": "570535104",
+      "ticker": null,
+      "value": 39655868.0,
+      "shares": 20305.0,
+      "put_call": null,
+      "weight": 0.10888142890712442
+    },
+    {
+      "issuer": "ISHARES TR",
+      "title": "0-3 MTH TREASURY",
+      "cusip": "46436E718",
+      "ticker": null,
+      "value": 38556610.0,
+      "shares": 383000.0,
+      "put_call": null,
+      "weight": 0.10586324300390354
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 35749508.0,
+      "shares": 100035.0,
+      "put_call": null,
+      "weight": 0.09815590252031996
+    },
+    {
+      "issuer": "TESLA INC",
+      "title": "COM",
+      "cusip": "88160R101",
+      "ticker": "TSLA",
+      "value": 19932234.0,
+      "shares": 47390.0,
+      "put_call": null,
+      "weight": 0.05472708652427349
+    },
+    {
+      "issuer": "NETFLIX INC.",
+      "title": "COM",
+      "cusip": "64110L106",
+      "ticker": "NFLX",
+      "value": 19694619.0,
+      "shares": 275835.0,
+      "put_call": null,
+      "weight": 0.054074677132307424
+    },
+    {
+      "issuer": "TRUPANION INC",
+      "title": "COM",
+      "cusip": "898202106",
+      "ticker": null,
+      "value": 19233657.0,
+      "shares": 776490.0,
+      "put_call": null,
+      "weight": 0.05280903338869082
+    },
+    {
+      "issuer": "SPOTIFY TECHNOLOGY S A",
+      "title": "SHS",
+      "cusip": "L8681T102",
+      "ticker": null,
+      "value": 18075948.0,
+      "shares": 39370.0,
+      "put_call": null,
+      "weight": 0.049630361062601824
+    }
+  ]
+}

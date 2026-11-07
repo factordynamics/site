@@ -1,0 +1,309 @@
+{
+  "cik": "0001067983",
+  "name": "Berkshire Hathaway Inc",
+  "manager": "Warren Buffett",
+  "slug": "warren-buffett",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001193125-26-352200",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1067983/000119312526352200/0001193125-26-352200-index.html",
+  "line_count": 89,
+  "position_count": 29,
+  "values_in_thousands": false,
+  "total_value": 299253556246.0,
+  "holdings": [
+    {
+      "issuer": "APPLE INC",
+      "title": "COM",
+      "cusip": "037833100",
+      "ticker": "AAPL",
+      "value": 65950296923.0,
+      "shares": 227917808.0,
+      "put_call": null,
+      "weight": 0.22038266729497397
+    },
+    {
+      "issuer": "AMERICAN EXPRESS CO",
+      "title": "COM",
+      "cusip": "025816109",
+      "ticker": "AXP",
+      "value": 51282319275.0,
+      "shares": 151610700.0,
+      "put_call": null,
+      "weight": 0.17136745146261054
+    },
+    {
+      "issuer": "COCA COLA CO",
+      "title": "COM",
+      "cusip": "191216100",
+      "ticker": "KO",
+      "value": 32508000000.0,
+      "shares": 400000000.0,
+      "put_call": null,
+      "weight": 0.10863028799990918
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 28157599351.0,
+      "shares": 78791167.0,
+      "put_call": null,
+      "weight": 0.09409278106574338
+    },
+    {
+      "issuer": "BANK OF AMER CORP",
+      "title": "COM",
+      "cusip": "060505104",
+      "ticker": null,
+      "value": 27543790975.0,
+      "shares": 483394015.0,
+      "put_call": null,
+      "weight": 0.09204164963158451
+    },
+    {
+      "issuer": "CHEVRON CORPORATION",
+      "title": "COM",
+      "cusip": "166764100",
+      "ticker": "CVX",
+      "value": 13986141890.0,
+      "shares": 84375856.0,
+      "put_call": null,
+      "weight": 0.04673676084404744
+    },
+    {
+      "issuer": "OCCIDENTAL PETE CORP",
+      "title": "COM",
+      "cusip": "674599105",
+      "ticker": "OXY",
+      "value": 12868205304.0,
+      "shares": 264941431.0,
+      "put_call": null,
+      "weight": 0.04300101046559243
+    },
+    {
+      "issuer": "CHUBB LIMITED",
+      "title": "COM",
+      "cusip": "H1467J104",
+      "ticker": null,
+      "value": 11670066615.0,
+      "shares": 34249183.0,
+      "put_call": null,
+      "weight": 0.03899725290284162
+    },
+    {
+      "issuer": "MOODYS CORP",
+      "title": "COM",
+      "cusip": "615369105",
+      "ticker": "MCO",
+      "value": 11173435852.0,
+      "shares": 24669778.0,
+      "put_call": null,
+      "weight": 0.03733768778612251
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL C",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 9606489032.0,
+      "shares": 27188433.0,
+      "put_call": null,
+      "weight": 0.03210150332884609
+    },
+    {
+      "issuer": "KRAFT HEINZ CO",
+      "title": "COM",
+      "cusip": "500754106",
+      "ticker": "KHC",
+      "value": 7691494401.0,
+      "shares": 325634818.0,
+      "put_call": null,
+      "weight": 0.025702265655540756
+    },
+    {
+      "issuer": "DAVITA INC",
+      "title": "COM",
+      "cusip": "23918K108",
+      "ticker": null,
+      "value": 6425268898.0,
+      "shares": 28880209.0,
+      "put_call": null,
+      "weight": 0.021470985937818356
+    },
+    {
+      "issuer": "DELTA AIR LINES INC",
+      "title": "COM NEW",
+      "cusip": "247361702",
+      "ticker": null,
+      "value": 5368591200.0,
+      "shares": 57320000.0,
+      "put_call": null,
+      "weight": 0.017939941190161745
+    },
+    {
+      "issuer": "SIRIUSXM HOLDINGS INC",
+      "title": "COMMON STOCK",
+      "cusip": "829933100",
+      "ticker": null,
+      "value": 3686802237.0,
+      "shares": 124807117.0,
+      "put_call": null,
+      "weight": 0.01231999473372768
+    },
+    {
+      "issuer": "VERISIGN INC",
+      "title": "COM",
+      "cusip": "92343E102",
+      "ticker": null,
+      "value": 2261494212.0,
+      "shares": 8989880.0,
+      "put_call": null,
+      "weight": 0.007557117249898107
+    },
+    {
+      "issuer": "KROGER CO",
+      "title": "COM",
+      "cusip": "501044101",
+      "ticker": null,
+      "value": 2165670000.0,
+      "shares": 39000000.0,
+      "put_call": null,
+      "weight": 0.007236906478797937
+    },
+    {
+      "issuer": "ALLY FINL INC",
+      "title": "COM",
+      "cusip": "02005N100",
+      "ticker": "ALLY",
+      "value": 1240650000.0,
+      "shares": 27000000.0,
+      "put_call": null,
+      "weight": 0.004145815393352016
+    },
+    {
+      "issuer": "LENNAR CORP",
+      "title": "CL A",
+      "cusip": "526057104",
+      "ticker": null,
+      "value": 1186481443.0,
+      "shares": 13111741.0,
+      "put_call": null,
+      "weight": 0.003964803151828406
+    },
+    {
+      "issuer": "LIBERTY LIVE HOLDINGS INC",
+      "title": "COM SHS SER C",
+      "cusip": "530909308",
+      "ticker": null,
+      "value": 1118425787.0,
+      "shares": 10587143.0,
+      "put_call": null,
+      "weight": 0.0037373851159202376
+    },
+    {
+      "issuer": "NEW YORK TIMES CO MTN BE",
+      "title": "CL A",
+      "cusip": "650111107",
+      "ticker": null,
+      "value": 1098686000.0,
+      "shares": 15700000.0,
+      "put_call": null,
+      "weight": 0.0036714216993191896
+    },
+    {
+      "issuer": "CAPITAL ONE FINL CORP",
+      "title": "COM",
+      "cusip": "14040H105",
+      "ticker": null,
+      "value": 601860000.0,
+      "shares": 3000000.0,
+      "put_call": null,
+      "weight": 0.002011204169300644
+    },
+    {
+      "issuer": "LIBERTY LIVE HOLDINGS INC",
+      "title": "COM SER A",
+      "cusip": "530909100",
+      "ticker": null,
+      "value": 504941901.0,
+      "shares": 4986588.0,
+      "put_call": null,
+      "weight": 0.0016873380130691409
+    },
+    {
+      "issuer": "LOUISIANA PAC CORP",
+      "title": "COM",
+      "cusip": "546347105",
+      "ticker": null,
+      "value": 445592617.0,
+      "shares": 5664793.0,
+      "put_call": null,
+      "weight": 0.0014890136063536123
+    },
+    {
+      "issuer": "NUCOR CORP",
+      "title": "COM",
+      "cusip": "670346105",
+      "ticker": null,
+      "value": 413814258.0,
+      "shares": 1857752.0,
+      "put_call": null,
+      "weight": 0.0013828215216257142
+    },
+    {
+      "issuer": "MACYS INC",
+      "title": "COM",
+      "cusip": "55616P104",
+      "ticker": null,
+      "value": 173031882.0,
+      "shares": 7347426.0,
+      "put_call": null,
+      "weight": 0.0005782116148279285
+    },
+    {
+      "issuer": "NVR INC",
+      "title": "COM",
+      "cusip": "62944T105",
+      "ticker": null,
+      "value": 75710501.0,
+      "shares": 11112.0,
+      "put_call": null,
+      "weight": 0.0002529978321720011
+    },
+    {
+      "issuer": "LENNAR CORP",
+      "title": "CL B",
+      "cusip": "526057302",
+      "ticker": null,
+      "value": 26445959.0,
+      "shares": 298117.0,
+      "put_call": null,
+      "weight": 8.837308178306233e-05
+    },
+    {
+      "issuer": "JEFFERIES FINANCIAL GROUP IN",
+      "title": "COM",
+      "cusip": "47233W109",
+      "ticker": null,
+      "value": 21669229.0,
+      "shares": 433558.0,
+      "put_call": null,
+      "weight": 7.241093229377334e-05
+    },
+    {
+      "issuer": "D R HORTON INC",
+      "title": "COM",
+      "cusip": "23331A109",
+      "ticker": null,
+      "value": 580504.0,
+      "shares": 3564.0,
+      "put_call": null,
+      "weight": 1.939839938018312e-06
+    }
+  ]
+}

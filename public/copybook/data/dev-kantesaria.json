@@ -1,0 +1,89 @@
+{
+  "cik": "0001697868",
+  "name": "Valley Forge Capital Management LP",
+  "manager": "Dev Kantesaria",
+  "slug": "dev-kantesaria",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001697868-26-000005",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1697868/000169786826000005/0001697868-26-000005-index.html",
+  "line_count": 7,
+  "position_count": 7,
+  "values_in_thousands": false,
+  "total_value": 3116388059.0,
+  "holdings": [
+    {
+      "issuer": "FAIR ISAAC CORP",
+      "title": "COM",
+      "cusip": "303250104",
+      "ticker": null,
+      "value": 803114389.0,
+      "shares": 672186.0,
+      "put_call": null,
+      "weight": 0.25770679831757115
+    },
+    {
+      "issuer": "S&P GLOBAL INC",
+      "title": "COM",
+      "cusip": "78409V104",
+      "ticker": null,
+      "value": 620678901.0,
+      "shares": 1524036.0,
+      "put_call": null,
+      "weight": 0.1991661145047405
+    },
+    {
+      "issuer": "MOODYS CORP",
+      "title": "COM",
+      "cusip": "615369105",
+      "ticker": "MCO",
+      "value": 596580789.0,
+      "shares": 1317188.0,
+      "put_call": null,
+      "weight": 0.1914334087107988
+    },
+    {
+      "issuer": "MASTERCARD INCORPORATED",
+      "title": "CL A",
+      "cusip": "57636Q104",
+      "ticker": "MCD",
+      "value": 547463702.0,
+      "shares": 1065934.0,
+      "put_call": null,
+      "weight": 0.1756725066440129
+    },
+    {
+      "issuer": "ASML HLDG NV",
+      "title": "N Y REGISTRY SHS",
+      "cusip": "N07059210",
+      "ticker": null,
+      "value": 340359364.0,
+      "shares": 171083.0,
+      "put_call": null,
+      "weight": 0.10921597617378112
+    },
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 158843122.0,
+      "shares": 462978.0,
+      "put_call": null,
+      "weight": 0.05097026396994034
+    },
+    {
+      "issuer": "INTUIT",
+      "title": "COM",
+      "cusip": "461202103",
+      "ticker": null,
+      "value": 49347792.0,
+      "shares": 189072.0,
+      "put_call": null,
+      "weight": 0.015834931679155173
+    }
+  ]
+}

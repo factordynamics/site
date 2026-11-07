@@ -1,0 +1,429 @@
+{
+  "cik": "0001569205",
+  "name": "Fundsmith LLP",
+  "manager": "Terry Smith",
+  "slug": "terry-smith",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001569205-26-000012",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1569205/000156920526000012/0001569205-26-000012-index.html",
+  "line_count": 41,
+  "position_count": 41,
+  "values_in_thousands": false,
+  "total_value": 13648923682.0,
+  "holdings": [
+    {
+      "issuer": "MARRIOTT INTL INC NEW",
+      "title": "CL A",
+      "cusip": "571903202",
+      "ticker": null,
+      "value": 958255687.0,
+      "shares": 2585757.0,
+      "put_call": null,
+      "weight": 0.0702074177661154
+    },
+    {
+      "issuer": "STRYKER CORPORATION",
+      "title": "COM",
+      "cusip": "863667101",
+      "ticker": null,
+      "value": 917391182.0,
+      "shares": 2913833.0,
+      "put_call": null,
+      "weight": 0.06721344505793098
+    },
+    {
+      "issuer": "WATERS CORP",
+      "title": "COM",
+      "cusip": "941848103",
+      "ticker": null,
+      "value": 852702945.0,
+      "shares": 2273632.0,
+      "put_call": null,
+      "weight": 0.062474006366123366
+    },
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 692976613.0,
+      "shares": 2019810.0,
+      "put_call": null,
+      "weight": 0.05077152082796736
+    },
+    {
+      "issuer": "UBER TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "90353T100",
+      "ticker": "UBER",
+      "value": 645337776.0,
+      "shares": 8943151.0,
+      "put_call": null,
+      "weight": 0.047281220925211996
+    },
+    {
+      "issuer": "MASTERCARD INCORPORATED",
+      "title": "CL A",
+      "cusip": "57636Q104",
+      "ticker": "MCD",
+      "value": 639458194.0,
+      "shares": 1245051.0,
+      "put_call": null,
+      "weight": 0.046850448350246696
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 633743519.0,
+      "shares": 1773354.0,
+      "put_call": null,
+      "weight": 0.04643175782686598
+    },
+    {
+      "issuer": "CHURCH & DWIGHT CO INC",
+      "title": "COM",
+      "cusip": "171340102",
+      "ticker": null,
+      "value": 625518702.0,
+      "shares": 6456634.0,
+      "put_call": null,
+      "weight": 0.04582915961534204
+    },
+    {
+      "issuer": "PROCTER & GAMBLE CO",
+      "title": "COM",
+      "cusip": "742718109",
+      "ticker": "PG",
+      "value": 598052323.0,
+      "shares": 4078371.0,
+      "put_call": null,
+      "weight": 0.043816812001718684
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 595614836.0,
+      "shares": 1596737.0,
+      "put_call": null,
+      "weight": 0.04363822744393304
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 592511232.0,
+      "shares": 1051876.0,
+      "put_call": null,
+      "weight": 0.04341083925770609
+    },
+    {
+      "issuer": "AUTOMATIC DATA PROCESSING IN",
+      "title": "COM",
+      "cusip": "053015103",
+      "ticker": null,
+      "value": 582620930.0,
+      "shares": 2601567.0,
+      "put_call": null,
+      "weight": 0.042686217871402705
+    },
+    {
+      "issuer": "FORTINET INC",
+      "title": "COM",
+      "cusip": "34959E109",
+      "ticker": null,
+      "value": 557631076.0,
+      "shares": 3629938.0,
+      "put_call": null,
+      "weight": 0.04085531496783117
+    },
+    {
+      "issuer": "TAIWAN SEMICONDUCTOR MANUFAC",
+      "title": "SPONSORED ADS",
+      "cusip": "874039100",
+      "ticker": null,
+      "value": 548464789.0,
+      "shares": 1148449.0,
+      "put_call": null,
+      "weight": 0.04018373915617297
+    },
+    {
+      "issuer": "IDEXX LABS INC",
+      "title": "COM",
+      "cusip": "45168D104",
+      "ticker": null,
+      "value": 536909312.0,
+      "shares": 1019887.0,
+      "put_call": null,
+      "weight": 0.03933711730750375
+    },
+    {
+      "issuer": "TEXAS INSTRS INC",
+      "title": "COM",
+      "cusip": "882508104",
+      "ticker": null,
+      "value": 536282179.0,
+      "shares": 1799182.0,
+      "put_call": null,
+      "weight": 0.03929116987497271
+    },
+    {
+      "issuer": "PHILIP MORRIS INTL INC",
+      "title": "COM",
+      "cusip": "718172109",
+      "ticker": null,
+      "value": 527116201.0,
+      "shares": 2913693.0,
+      "put_call": null,
+      "weight": 0.03861961670246227
+    },
+    {
+      "issuer": "NETFLIX INC.",
+      "title": "COM",
+      "cusip": "64110L106",
+      "ticker": "NFLX",
+      "value": 499110633.0,
+      "shares": 6990345.0,
+      "put_call": null,
+      "weight": 0.03656776494825154
+    },
+    {
+      "issuer": "GE VERNOVA INC",
+      "title": "COM",
+      "cusip": "36828A101",
+      "ticker": null,
+      "value": 481498748.0,
+      "shares": 409835.0,
+      "put_call": null,
+      "weight": 0.035277415217362044
+    },
+    {
+      "issuer": "APPLOVIN CORP",
+      "title": "COM CL A",
+      "cusip": "03831W108",
+      "ticker": null,
+      "value": 358892731.0,
+      "shares": 696568.0,
+      "put_call": null,
+      "weight": 0.026294581123147642
+    },
+    {
+      "issuer": "TJX COS INC NEW",
+      "title": "COM",
+      "cusip": "872540109",
+      "ticker": null,
+      "value": 344297688.0,
+      "shares": 2272592.0,
+      "put_call": null,
+      "weight": 0.02522526288677654
+    },
+    {
+      "issuer": "NEXTPOWER INC",
+      "title": "CLASS A COM",
+      "cusip": "65290E101",
+      "ticker": null,
+      "value": 340274801.0,
+      "shares": 2856092.0,
+      "put_call": null,
+      "weight": 0.024930522649837174
+    },
+    {
+      "issuer": "VEEVA SYS INC",
+      "title": "CL A COM",
+      "cusip": "922475108",
+      "ticker": null,
+      "value": 144954834.0,
+      "shares": 816785.0,
+      "put_call": null,
+      "weight": 0.010620239176160411
+    },
+    {
+      "issuer": "YUM BRANDS INC",
+      "title": "COM",
+      "cusip": "988498101",
+      "ticker": null,
+      "value": 88899265.0,
+      "shares": 556107.0,
+      "put_call": null,
+      "weight": 0.006513280246210113
+    },
+    {
+      "issuer": "MSCI INC",
+      "title": "COM",
+      "cusip": "55354G100",
+      "ticker": null,
+      "value": 30006943.0,
+      "shares": 53580.0,
+      "put_call": null,
+      "weight": 0.002198484195466102
+    },
+    {
+      "issuer": "MEDPACE HLDGS INC",
+      "title": "COM",
+      "cusip": "58506Q109",
+      "ticker": null,
+      "value": 27735687.0,
+      "shares": 52372.0,
+      "put_call": null,
+      "weight": 0.002032078693250913
+    },
+    {
+      "issuer": "NUTANIX INC",
+      "title": "CL A",
+      "cusip": "67059N108",
+      "ticker": null,
+      "value": 27430800.0,
+      "shares": 538281.0,
+      "put_call": null,
+      "weight": 0.0020097408879335547
+    },
+    {
+      "issuer": "BADGER METER INC",
+      "title": "COM",
+      "cusip": "056525108",
+      "ticker": null,
+      "value": 25911154.0,
+      "shares": 174627.0,
+      "put_call": null,
+      "weight": 0.0018984027315041149
+    },
+    {
+      "issuer": "CLOROX CO DEL",
+      "title": "COM",
+      "cusip": "189054109",
+      "ticker": null,
+      "value": 25894590.0,
+      "shares": 271318.0,
+      "put_call": null,
+      "weight": 0.0018971891559588251
+    },
+    {
+      "issuer": "ROLLINS INC",
+      "title": "COM",
+      "cusip": "775711104",
+      "ticker": null,
+      "value": 25876087.0,
+      "shares": 619935.0,
+      "put_call": null,
+      "weight": 0.001895833517929696
+    },
+    {
+      "issuer": "MANHATTAN ASSOCIATES INC",
+      "title": "COM",
+      "cusip": "562750109",
+      "ticker": null,
+      "value": 24087047.0,
+      "shares": 172977.0,
+      "put_call": null,
+      "weight": 0.0017647579810095681
+    },
+    {
+      "issuer": "NAPCO SEC TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "630402105",
+      "ticker": null,
+      "value": 23052873.0,
+      "shares": 606974.0,
+      "put_call": null,
+      "weight": 0.0016889883434839474
+    },
+    {
+      "issuer": "FAIR ISAAC CORP",
+      "title": "COM",
+      "cusip": "303250104",
+      "ticker": null,
+      "value": 21449885.0,
+      "shares": 17953.0,
+      "put_call": null,
+      "weight": 0.0015715440645541739
+    },
+    {
+      "issuer": "SABRE CORP",
+      "title": "COM",
+      "cusip": "78573M104",
+      "ticker": null,
+      "value": 18838806.0,
+      "shares": 9013783.0,
+      "put_call": null,
+      "weight": 0.0013802411412736039
+    },
+    {
+      "issuer": "INTERDIGITAL INC",
+      "title": "COM",
+      "cusip": "45867G101",
+      "ticker": null,
+      "value": 17079534.0,
+      "shares": 60324.0,
+      "put_call": null,
+      "weight": 0.0012513465821868605
+    },
+    {
+      "issuer": "OREILLY AUTOMOTIVE INC",
+      "title": "COM",
+      "cusip": "67103H107",
+      "ticker": null,
+      "value": 14982214.0,
+      "shares": 162691.0,
+      "put_call": null,
+      "weight": 0.0010976846489191177
+    },
+    {
+      "issuer": "VERTIV HOLDINGS CO",
+      "title": "COM CL A",
+      "cusip": "92537N108",
+      "ticker": null,
+      "value": 14026614.0,
+      "shares": 41893.0,
+      "put_call": null,
+      "weight": 0.0010276718023193355
+    },
+    {
+      "issuer": "VERISIGN INC",
+      "title": "COM",
+      "cusip": "92343E102",
+      "ticker": null,
+      "value": 14015162.0,
+      "shares": 55713.0,
+      "put_call": null,
+      "weight": 0.0010268327618010635
+    },
+    {
+      "issuer": "ADMA BIOLOGICS INC",
+      "title": "COM",
+      "cusip": "000899104",
+      "ticker": null,
+      "value": 13806256.0,
+      "shares": 1649493.0,
+      "put_call": null,
+      "weight": 0.0010115270860666828
+    },
+    {
+      "issuer": "DOXIMITY INC",
+      "title": "CL A",
+      "cusip": "26622P107",
+      "ticker": null,
+      "value": 13549940.0,
+      "shares": 653324.0,
+      "put_call": null,
+      "weight": 0.0009927478763669447
+    },
+    {
+      "issuer": "PAYCOM SOFTWARE INC",
+      "title": "COM",
+      "cusip": "70432V102",
+      "ticker": null,
+      "value": 12663894.0,
+      "shares": 100763.0,
+      "put_call": null,
+      "weight": 0.0009278309627227939
+    }
+  ]
+}

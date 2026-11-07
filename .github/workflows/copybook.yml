@@ -1,0 +1,37 @@
+name: Refresh Copybook 13F
+
+on:
+  schedule:
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "copybook/**"
+      - ".github/workflows/copybook.yml"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Ingest 13F filings
+        env:
+          COPYBOOK_WEB_DIR: public/copybook
+          PYTHONPATH: copybook
+        run: python copybook/ingest/build.py
+      - name: Commit updated site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/copybook
+          if git diff --staged --quiet; then
+            echo "No Copybook changes"
+          else
+            git commit -m "Refresh Copybook 13F holdings"
+            git push
+          fi

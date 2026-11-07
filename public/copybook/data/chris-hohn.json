@@ -1,0 +1,129 @@
+{
+  "cik": "0001647251",
+  "name": "TCI Fund Management Ltd",
+  "manager": "Chris Hohn",
+  "slug": "chris-hohn",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001647251-26-000007",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1647251/000164725126000007/0001647251-26-000007-index.html",
+  "line_count": 11,
+  "position_count": 11,
+  "values_in_thousands": false,
+  "total_value": 52769884406.0,
+  "holdings": [
+    {
+      "issuer": "GE AEROSPACE",
+      "title": "COM NEW",
+      "cusip": "369604301",
+      "ticker": "GE",
+      "value": 17725353519.0,
+      "shares": 47428233.0,
+      "put_call": null,
+      "weight": 0.33589904011585453
+    },
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 10462232091.0,
+      "shares": 30494133.0,
+      "put_call": null,
+      "weight": 0.19826141763938432
+    },
+    {
+      "issuer": "MOODYS CORP",
+      "title": "COM",
+      "cusip": "615369105",
+      "ticker": "MCO",
+      "value": 6492167509.0,
+      "shares": 14334027.0,
+      "put_call": null,
+      "weight": 0.12302788952597805
+    },
+    {
+      "issuer": "S&P GLOBAL INC",
+      "title": "COM",
+      "cusip": "78409V104",
+      "ticker": null,
+      "value": 5735017808.0,
+      "shares": 14081957.0,
+      "put_call": null,
+      "weight": 0.10867974930314461
+    },
+    {
+      "issuer": "CANADIAN PACIFIC KANSAS CITY",
+      "title": "COM",
+      "cusip": "13646K108",
+      "ticker": null,
+      "value": 3925911608.0,
+      "shares": 45325726.0,
+      "put_call": null,
+      "weight": 0.07439682031127624
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL C",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 3511682917.0,
+      "shares": 9938819.0,
+      "put_call": null,
+      "weight": 0.06654710269937066
+    },
+    {
+      "issuer": "FERROVIAL NV",
+      "title": "ORD SHS",
+      "cusip": "N3168P101",
+      "ticker": null,
+      "value": 1434611939.0,
+      "shares": 20940441.0,
+      "put_call": null,
+      "weight": 0.027186186878152094
+    },
+    {
+      "issuer": "CANADIAN NATL RY CO",
+      "title": "COM",
+      "cusip": "136375102",
+      "ticker": "CPNG",
+      "value": 1124534915.0,
+      "shares": 9433422.0,
+      "put_call": null,
+      "weight": 0.021310164455697368
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 878058090.0,
+      "shares": 2457000.0,
+      "put_call": null,
+      "weight": 0.0166393786888827
+    },
+    {
+      "issuer": "MARTIN MARIETTA MATLS INC",
+      "title": "COM",
+      "cusip": "573284106",
+      "ticker": null,
+      "value": 758423360.0,
+      "shares": 1315109.0,
+      "put_call": null,
+      "weight": 0.014372276318910533
+    },
+    {
+      "issuer": "VULCAN MATLS CO",
+      "title": "COM",
+      "cusip": "929160109",
+      "ticker": null,
+      "value": 721890650.0,
+      "shares": 2447004.0,
+      "put_call": null,
+      "weight": 0.013679974063348909
+    }
+  ]
+}

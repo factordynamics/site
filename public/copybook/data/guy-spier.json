@@ -1,0 +1,139 @@
+{
+  "cik": "0001404599",
+  "name": "Aquamarine Capital Management LLC",
+  "manager": "Guy Spier",
+  "slug": "guy-spier",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001404599-22-000005",
+  "filing_date": "2022-08-02",
+  "report_date": "2022-06-30",
+  "quarter": "2022Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1404599/000140459922000005/0001404599-22-000005-index.html",
+  "line_count": 12,
+  "position_count": 12,
+  "values_in_thousands": true,
+  "total_value": 170229000.0,
+  "holdings": [
+    {
+      "issuer": "BERKSHIRE HATHAWAY INC DEL",
+      "title": "CL B NEW",
+      "cusip": "084670702",
+      "ticker": "BRK.B",
+      "value": 38387000.0,
+      "shares": 140600.0,
+      "put_call": null,
+      "weight": 0.22550211773552098
+    },
+    {
+      "issuer": "AMERICAN EXPRESS CO",
+      "title": "COM",
+      "cusip": "025816109",
+      "ticker": "AXP",
+      "value": 29110000.0,
+      "shares": 210000.0,
+      "put_call": null,
+      "weight": 0.17100494040380898
+    },
+    {
+      "issuer": "BK OF AMERICA CORP",
+      "title": "COM",
+      "cusip": "060505104",
+      "ticker": null,
+      "value": 23903000.0,
+      "shares": 767845.0,
+      "put_call": null,
+      "weight": 0.14041673275411357
+    },
+    {
+      "issuer": "MASTERCARD INCORPORATED",
+      "title": "CL A",
+      "cusip": "57636Q104",
+      "ticker": "MCD",
+      "value": 20743000.0,
+      "shares": 65750.0,
+      "put_call": null,
+      "weight": 0.12185350322213019
+    },
+    {
+      "issuer": "FERRARI N V",
+      "title": "COM",
+      "cusip": "N3167Y103",
+      "ticker": null,
+      "value": 14694000.0,
+      "shares": 80000.0,
+      "put_call": null,
+      "weight": 0.08631901732372275
+    },
+    {
+      "issuer": "BERKSHIRE HATHAWAY INC DEL",
+      "title": "CL A",
+      "cusip": "084670108",
+      "ticker": "BRK.A",
+      "value": 12269000.0,
+      "shares": 30.0,
+      "put_call": null,
+      "weight": 0.0720735009898431
+    },
+    {
+      "issuer": "MICRON TECHNOLOGY INC",
+      "title": "COM",
+      "cusip": "595112103",
+      "ticker": null,
+      "value": 11056000.0,
+      "shares": 200000.0,
+      "put_call": null,
+      "weight": 0.06494780560304061
+    },
+    {
+      "issuer": "MOODYS CORP",
+      "title": "COM",
+      "cusip": "615369105",
+      "ticker": "MCO",
+      "value": 7343000.0,
+      "shares": 27000.0,
+      "put_call": null,
+      "weight": 0.04313601090296013
+    },
+    {
+      "issuer": "ALIBABA GROUP HLDG LTD",
+      "title": "SPONSORED ADS",
+      "cusip": "01609W102",
+      "ticker": null,
+      "value": 5400000.0,
+      "shares": 47500.0,
+      "put_call": null,
+      "weight": 0.03172197451668047
+    },
+    {
+      "issuer": "DAILY JOURNAL CORP",
+      "title": "COM",
+      "cusip": "233912104",
+      "ticker": null,
+      "value": 2976000.0,
+      "shares": 11500.0,
+      "put_call": null,
+      "weight": 0.017482332622526128
+    },
+    {
+      "issuer": "SERITAGE GROWTH PPTYS",
+      "title": "CL A",
+      "cusip": "81752R100",
+      "ticker": null,
+      "value": 2605000.0,
+      "shares": 500000.0,
+      "put_call": null,
+      "weight": 0.015302915484435672
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 1743000.0,
+      "shares": 800.0,
+      "put_call": null,
+      "weight": 0.010239148441217419
+    }
+  ]
+}

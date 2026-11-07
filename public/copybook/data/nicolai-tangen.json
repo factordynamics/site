@@ -1,0 +1,239 @@
+{
+  "cik": "0001376879",
+  "name": "AKO Capital LLP",
+  "manager": "Nicolai Tangen",
+  "slug": "nicolai-tangen",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001376879-26-000006",
+  "filing_date": "2026-08-12",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1376879/000137687926000006/0001376879-26-000006-index.html",
+  "line_count": 22,
+  "position_count": 22,
+  "values_in_thousands": true,
+  "total_value": 4292009000.0,
+  "holdings": [
+    {
+      "issuer": "ALCON AG",
+      "title": "ORD SHS",
+      "cusip": "H01301128",
+      "ticker": null,
+      "value": 651941000.0,
+      "shares": 9683004.0,
+      "put_call": null,
+      "weight": 0.15189646620032718
+    },
+    {
+      "issuer": "SUNBELT RENTALS HOLDINGS INC",
+      "title": "SHS",
+      "cusip": "866966104",
+      "ticker": null,
+      "value": 454457000.0,
+      "shares": 6074817.0,
+      "put_call": null,
+      "weight": 0.10588444712021806
+    },
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 337987000.0,
+      "shares": 985126.0,
+      "put_call": null,
+      "weight": 0.07874797093855115
+    },
+    {
+      "issuer": "FERRARI N V",
+      "title": "COM",
+      "cusip": "N3167Y103",
+      "ticker": null,
+      "value": 328940000.0,
+      "shares": 886360.0,
+      "put_call": null,
+      "weight": 0.07664010024210108
+    },
+    {
+      "issuer": "GE AEROSPACE",
+      "title": "COM NEW",
+      "cusip": "369604301",
+      "ticker": "GE",
+      "value": 288302000.0,
+      "shares": 771417.0,
+      "put_call": null,
+      "weight": 0.0671718069556704
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 272145000.0,
+      "shares": 1141835.0,
+      "put_call": null,
+      "weight": 0.06340736936944913
+    },
+    {
+      "issuer": "ANALOG DEVICES INC",
+      "title": "COM",
+      "cusip": "032654105",
+      "ticker": null,
+      "value": 245007000.0,
+      "shares": 616881.0,
+      "put_call": null,
+      "weight": 0.05708445625347011
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 234340000.0,
+      "shares": 628224.0,
+      "put_call": null,
+      "weight": 0.05459913993656584
+    },
+    {
+      "issuer": "CISCO SYS INC",
+      "title": "COM",
+      "cusip": "17275R102",
+      "ticker": "CSCO",
+      "value": 231587000.0,
+      "shares": 1971628.0,
+      "put_call": null,
+      "weight": 0.053957715372917436
+    },
+    {
+      "issuer": "CANADIAN PACIFIC KANSAS CITY",
+      "title": "COM",
+      "cusip": "13646K108",
+      "ticker": null,
+      "value": 210215000.0,
+      "shares": 2426027.0,
+      "put_call": null,
+      "weight": 0.04897822907640688
+    },
+    {
+      "issuer": "MOODYS CORP",
+      "title": "COM",
+      "cusip": "615369105",
+      "ticker": "MCO",
+      "value": 193814000.0,
+      "shares": 427920.0,
+      "put_call": null,
+      "weight": 0.04515694165599373
+    },
+    {
+      "issuer": "AIR PRODUCTS AND CHEMICALS I",
+      "title": "COM",
+      "cusip": "009158106",
+      "ticker": null,
+      "value": 162234000.0,
+      "shares": 553359.0,
+      "put_call": null,
+      "weight": 0.037799081968374254
+    },
+    {
+      "issuer": "FAIR ISAAC CORP",
+      "title": "COM",
+      "cusip": "303250104",
+      "ticker": null,
+      "value": 123802000.0,
+      "shares": 103619.0,
+      "put_call": null,
+      "weight": 0.028844767100907758
+    },
+    {
+      "issuer": "INTERCONTINENTAL EXCHANGE IN",
+      "title": "COM",
+      "cusip": "45866F104",
+      "ticker": null,
+      "value": 123542000.0,
+      "shares": 1003510.0,
+      "put_call": null,
+      "weight": 0.028784189408736095
+    },
+    {
+      "issuer": "WILLIAMS COS INC",
+      "title": "COM",
+      "cusip": "969457100",
+      "ticker": null,
+      "value": 110478000.0,
+      "shares": 1486116.0,
+      "put_call": null,
+      "weight": 0.02574039336823385
+    },
+    {
+      "issuer": "MASTERCARD INCORPORATED",
+      "title": "CL A",
+      "cusip": "57636Q104",
+      "ticker": "MCD",
+      "value": 97554000.0,
+      "shares": 189941.0,
+      "put_call": null,
+      "weight": 0.022729216085054807
+    },
+    {
+      "issuer": "WATERS CORP",
+      "title": "COM",
+      "cusip": "941848103",
+      "ticker": null,
+      "value": 76267000.0,
+      "shares": 203356.0,
+      "put_call": null,
+      "weight": 0.017769534034061903
+    },
+    {
+      "issuer": "CARLISLE COS INC",
+      "title": "COM",
+      "cusip": "142339100",
+      "ticker": null,
+      "value": 69435000.0,
+      "shares": 191414.0,
+      "put_call": null,
+      "weight": 0.016177738676689635
+    },
+    {
+      "issuer": "LINDE PLC",
+      "title": "SHS",
+      "cusip": "G54950103",
+      "ticker": null,
+      "value": 33622000.0,
+      "shares": 64789.0,
+      "put_call": null,
+      "weight": 0.00783362756229076
+    },
+    {
+      "issuer": "EQUIFAX INC",
+      "title": "COM",
+      "cusip": "294429105",
+      "ticker": null,
+      "value": 21338000.0,
+      "shares": 134439.0,
+      "put_call": null,
+      "weight": 0.004971564598303498
+    },
+    {
+      "issuer": "COPART INC",
+      "title": "COM",
+      "cusip": "217204106",
+      "ticker": null,
+      "value": 18509000.0,
+      "shares": 656567.0,
+      "put_call": null,
+      "weight": 0.004312432709251076
+    },
+    {
+      "issuer": "STRYKER CORPORATION",
+      "title": "COM",
+      "cusip": "863667101",
+      "ticker": null,
+      "value": 6493000.0,
+      "shares": 20624.0,
+      "put_call": null,
+      "weight": 0.0015128113664253733
+    }
+  ]
+}

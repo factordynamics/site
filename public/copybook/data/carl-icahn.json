@@ -1,0 +1,139 @@
+{
+  "cik": "0000921669",
+  "name": "Icahn Carl C",
+  "manager": "Carl Icahn",
+  "slug": "carl-icahn",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001539497-26-002243",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/921669/000153949726002243/0001539497-26-002243-index.html",
+  "line_count": 18,
+  "position_count": 12,
+  "values_in_thousands": false,
+  "total_value": 8264090525.0,
+  "holdings": [
+    {
+      "issuer": "Icahn Enterprises LP",
+      "title": "DEPOSITARY UNIT",
+      "cusip": "451100101",
+      "ticker": null,
+      "value": 4458616003.0,
+      "shares": 618393343.0,
+      "put_call": null,
+      "weight": 0.5395168396948314
+    },
+    {
+      "issuer": "CVR Energy Inc",
+      "title": "COM",
+      "cusip": "12662P108",
+      "ticker": null,
+      "value": 1960899637.0,
+      "shares": 71201875.0,
+      "put_call": null,
+      "weight": 0.2372795446840776
+    },
+    {
+      "issuer": "CVR Partners, LP",
+      "title": "COM",
+      "cusip": "126633205",
+      "ticker": null,
+      "value": 464233266.0,
+      "shares": 4164274.0,
+      "put_call": null,
+      "weight": 0.0561747556607265
+    },
+    {
+      "issuer": "Centuri Holdings, Inc.",
+      "title": "COM SHS",
+      "cusip": "155923105",
+      "ticker": null,
+      "value": 433521971.0,
+      "shares": 14336044.0,
+      "put_call": null,
+      "weight": 0.0524585215624801
+    },
+    {
+      "issuer": "International Flavors and Fragrances Inc.",
+      "title": "COM",
+      "cusip": "459506101",
+      "ticker": null,
+      "value": 338665500.0,
+      "shares": 4275000.0,
+      "put_call": null,
+      "weight": 0.04098037152128122
+    },
+    {
+      "issuer": "EchoStar Corporation",
+      "title": "CL A",
+      "cusip": "278768106",
+      "ticker": null,
+      "value": 142561013.0,
+      "shares": 1404542.0,
+      "put_call": null,
+      "weight": 0.017250659654408855
+    },
+    {
+      "issuer": "JetBlue Airways Corp.",
+      "title": "COM",
+      "cusip": "477143101",
+      "ticker": null,
+      "value": 118371366.0,
+      "shares": 20658179.0,
+      "put_call": null,
+      "weight": 0.014323580512811481
+    },
+    {
+      "issuer": "Monro, Inc.",
+      "title": "COM",
+      "cusip": "610236101",
+      "ticker": null,
+      "value": 86894384.0,
+      "shares": 5078573.0,
+      "put_call": null,
+      "weight": 0.010514694113905534
+    },
+    {
+      "issuer": "Caesars Entertainment, Inc.",
+      "title": "COM",
+      "cusip": "12769G100",
+      "ticker": null,
+      "value": 73642490.0,
+      "shares": 2440109.0,
+      "put_call": null,
+      "weight": 0.008911142705567109
+    },
+    {
+      "issuer": "SandRidge Energy, Inc.",
+      "title": "COM NEW",
+      "cusip": "80007P869",
+      "ticker": null,
+      "value": 69252220.0,
+      "shares": 5054907.0,
+      "put_call": null,
+      "weight": 0.008379896104780387
+    },
+    {
+      "issuer": "American Electric Power Company",
+      "title": "COM",
+      "cusip": "025537101",
+      "ticker": null,
+      "value": 59472675.0,
+      "shares": 434710.0,
+      "put_call": null,
+      "weight": 0.0071965178527615414
+    },
+    {
+      "issuer": "Bausch Plus Lomb Corp.",
+      "title": "COMMON SHARES",
+      "cusip": "071705107",
+      "ticker": null,
+      "value": 57960000.0,
+      "shares": 3500000.0,
+      "put_call": null,
+      "weight": 0.00701347593236825
+    }
+  ]
+}

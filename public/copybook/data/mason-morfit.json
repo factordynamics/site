@@ -1,0 +1,199 @@
+{
+  "cik": "0001418814",
+  "name": "ValueAct Holdings LP",
+  "manager": "Mason Morfit",
+  "slug": "mason-morfit",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001418814-26-000003",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1418814/000141881426000003/0001418814-26-000003-index.html",
+  "line_count": 18,
+  "position_count": 18,
+  "values_in_thousands": false,
+  "total_value": 5634931372.0,
+  "holdings": [
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 794682213.0,
+      "shares": 2316250.0,
+      "put_call": null,
+      "weight": 0.1410278423174379
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 701124778.0,
+      "shares": 2941700.0,
+      "put_call": null,
+      "weight": 0.12442472351728937
+    },
+    {
+      "issuer": "ROCKET COS INC",
+      "title": "COM CL A",
+      "cusip": "77311W101",
+      "ticker": null,
+      "value": 656283191.0,
+      "shares": 41668774.0,
+      "put_call": null,
+      "weight": 0.11646693591710348
+    },
+    {
+      "issuer": "BLACKROCK INC",
+      "title": "COM",
+      "cusip": "09290D101",
+      "ticker": null,
+      "value": 559339452.0,
+      "shares": 581700.0,
+      "put_call": null,
+      "weight": 0.09926286853809087
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 515790007.0,
+      "shares": 915674.0,
+      "put_call": null,
+      "weight": 0.09153439020800909
+    },
+    {
+      "issuer": "SALESFORCE INC",
+      "title": "COM",
+      "cusip": "79466L302",
+      "ticker": "CRM",
+      "value": 469119780.0,
+      "shares": 2994509.0,
+      "put_call": null,
+      "weight": 0.0832520840149107
+    },
+    {
+      "issuer": "TOAST INC",
+      "title": "CL A",
+      "cusip": "888787108",
+      "ticker": null,
+      "value": 393208937.0,
+      "shares": 14134038.0,
+      "put_call": null,
+      "weight": 0.0697806079686892
+    },
+    {
+      "issuer": "KKR & CO INC",
+      "title": "COM",
+      "cusip": "48251W104",
+      "ticker": null,
+      "value": 326571596.0,
+      "shares": 3558200.0,
+      "put_call": null,
+      "weight": 0.05795484885987002
+    },
+    {
+      "issuer": "SPOTIFY TECHNOLOGY S A",
+      "title": "SHS",
+      "cusip": "L8681T102",
+      "ticker": null,
+      "value": 241869684.0,
+      "shares": 526800.0,
+      "put_call": null,
+      "weight": 0.042923270583533915
+    },
+    {
+      "issuer": "LIBERTY LIVE HOLDINGS INC",
+      "title": "COM SHS SER C",
+      "cusip": "530909308",
+      "ticker": null,
+      "value": 229491068.0,
+      "shares": 2172388.0,
+      "put_call": null,
+      "weight": 0.04072650629612672
+    },
+    {
+      "issuer": "SIMPSON MFG INC",
+      "title": "COM",
+      "cusip": "829073105",
+      "ticker": null,
+      "value": 173894903.0,
+      "shares": 830642.0,
+      "put_call": null,
+      "weight": 0.03086016341992816
+    },
+    {
+      "issuer": "ROBLOX CORP",
+      "title": "CL A",
+      "cusip": "771049103",
+      "ticker": null,
+      "value": 171156754.0,
+      "shares": 3147421.0,
+      "put_call": null,
+      "weight": 0.030374239312031145
+    },
+    {
+      "issuer": "CBRE GROUP INC",
+      "title": "CL A",
+      "cusip": "12504L109",
+      "ticker": null,
+      "value": 133665144.0,
+      "shares": 992391.0,
+      "put_call": null,
+      "weight": 0.023720811341941574
+    },
+    {
+      "issuer": "LIBERTY LIVE HOLDINGS INC",
+      "title": "COM SER A",
+      "cusip": "530909100",
+      "ticker": null,
+      "value": 79501150.0,
+      "shares": 785119.0,
+      "put_call": null,
+      "weight": 0.014108627905397674
+    },
+    {
+      "issuer": "MONGODB INC",
+      "title": "CL A",
+      "cusip": "60937P106",
+      "ticker": null,
+      "value": 55658630.0,
+      "shares": 165700.0,
+      "put_call": null,
+      "weight": 0.009877428193104177
+    },
+    {
+      "issuer": "LIVE NATION ENTERTAINMENT IN",
+      "title": "COM",
+      "cusip": "538034109",
+      "ticker": null,
+      "value": 55311305.0,
+      "shares": 302066.0,
+      "put_call": null,
+      "weight": 0.009815790352805737
+    },
+    {
+      "issuer": "WIX COM LTD",
+      "title": "SHS",
+      "cusip": "M98068105",
+      "ticker": null,
+      "value": 47384496.0,
+      "shares": 1099370.0,
+      "put_call": null,
+      "weight": 0.008409063548751237
+    },
+    {
+      "issuer": "PAYPAY CORP",
+      "title": "SPONSORED ADS",
+      "cusip": "70450C101",
+      "ticker": null,
+      "value": 30878284.0,
+      "shares": 2154800.0,
+      "put_call": null,
+      "weight": 0.005479797704979041
+    }
+  ]
+}

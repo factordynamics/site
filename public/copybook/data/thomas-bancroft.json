@@ -1,0 +1,129 @@
+{
+  "cik": "0001540866",
+  "name": "Makaira Partners LLC",
+  "manager": "Thomas Bancroft",
+  "slug": "thomas-bancroft",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001420506-26-000298",
+  "filing_date": "2026-02-11",
+  "report_date": "2025-12-31",
+  "quarter": "2025Q4",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1540866/000142050626000298/0001420506-26-000298-index.html",
+  "line_count": 11,
+  "position_count": 11,
+  "values_in_thousands": false,
+  "total_value": 127897188.0,
+  "holdings": [
+    {
+      "issuer": "CHARTER COMMUNICATIONS INC N",
+      "title": "CL A",
+      "cusip": "16119P108",
+      "ticker": null,
+      "value": 34235000.0,
+      "shares": 164000.0,
+      "put_call": null,
+      "weight": 0.2676759398337984
+    },
+    {
+      "issuer": "DOMINOS PIZZA INC",
+      "title": "COM",
+      "cusip": "25754A201",
+      "ticker": null,
+      "value": 15422340.0,
+      "shares": 37000.0,
+      "put_call": null,
+      "weight": 0.1205838864885755
+    },
+    {
+      "issuer": "LAMAR ADVERTISING CO NEW",
+      "title": "CL A",
+      "cusip": "512816109",
+      "ticker": null,
+      "value": 15189600.0,
+      "shares": 120000.0,
+      "put_call": null,
+      "weight": 0.11876414358695674
+    },
+    {
+      "issuer": "BATH & BODY WORKS INC",
+      "title": "COM",
+      "cusip": "070830104",
+      "ticker": null,
+      "value": 14745848.0,
+      "shares": 734355.0,
+      "put_call": null,
+      "weight": 0.11529454423970603
+    },
+    {
+      "issuer": "CDW CORP",
+      "title": "COM",
+      "cusip": "12514G108",
+      "ticker": null,
+      "value": 13620000.0,
+      "shares": 100000.0,
+      "put_call": null,
+      "weight": 0.10649178619939635
+    },
+    {
+      "issuer": "BEL FUSE INC",
+      "title": "CL B",
+      "cusip": "077347300",
+      "ticker": null,
+      "value": 9329650.0,
+      "shares": 55000.0,
+      "put_call": null,
+      "weight": 0.07294648260757695
+    },
+    {
+      "issuer": "FLUTTER ENTMT PLC",
+      "title": "SHS",
+      "cusip": "G3643J108",
+      "ticker": null,
+      "value": 8907387.0,
+      "shares": 41422.0,
+      "put_call": null,
+      "weight": 0.06964490102784746
+    },
+    {
+      "issuer": "LIMBACH HLDGS INC",
+      "title": "COM",
+      "cusip": "53263P105",
+      "ticker": null,
+      "value": 7959306.0,
+      "shares": 102239.0,
+      "put_call": null,
+      "weight": 0.062232064085724854
+    },
+    {
+      "issuer": "CACTUS INC",
+      "title": "CL A",
+      "cusip": "127203107",
+      "ticker": null,
+      "value": 6453944.0,
+      "shares": 141286.0,
+      "put_call": null,
+      "weight": 0.05046196950006438
+    },
+    {
+      "issuer": "SAVERS VALUE VLG INC",
+      "title": "COM",
+      "cusip": "80517M109",
+      "ticker": null,
+      "value": 1486087.0,
+      "shares": 159110.0,
+      "put_call": null,
+      "weight": 0.011619387597481814
+    },
+    {
+      "issuer": "HEICO CORP NEW",
+      "title": "CL A",
+      "cusip": "422806208",
+      "ticker": null,
+      "value": 548026.0,
+      "shares": 2171.0,
+      "put_call": null,
+      "weight": 0.004284894832871541
+    }
+  ]
+}

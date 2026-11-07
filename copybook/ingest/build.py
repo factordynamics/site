@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""Ingest latest 13F-HR filings and generate the Copybook static site."""
+
+from __future__ import annotations
+
+import json
+import sys
+import traceback
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from ingest.cusips import KNOWN_CUSIPS
+from ingest.edgar import (
+    fetch_info_table,
+    fetch_primary_doc,
+    fetch_submissions,
+    list_13f,
+    table_value_total,
+)
+from ingest.managers import MANAGERS
+from ingest.pages import write_site
+from ingest.parse import (
+    AggregatedHolding,
+    aggregate_holdings,
+    looks_like_thousands,
+    parse_info_table,
+    scale_if_thousands,
+)
+
+WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
+DATA = WEB / "data"
+
+
+def quarter_label(report_date: str) -> str:
+    if not report_date or len(report_date) < 7:
+        return report_date or "—"
+    year, month = int(report_date[:4]), int(report_date[5:7])
+    q = (month - 1) // 3 + 1
+    return f"{year}Q{q}"
+
+
+def attach_tickers(holdings: list[AggregatedHolding]) -> None:
+    for h in holdings:
+        known = KNOWN_CUSIPS.get(h.cusip)
+        if known:
+            h.ticker = known[0]
+
+
+def filing_url(cik: str, accession: str) -> str:
+    cik_stripped = str(int(cik))
+    acc = accession.replace("-", "")
+    return f"https://www.sec.gov/Archives/edgar/data/{cik_stripped}/{acc}/{accession}-index.html"
+
+
+def ingest() -> dict:
+    managers_out = []
+    errors = []
+    for cik, name, manager, slug in MANAGERS:
+        print(f"fetch {slug} ({cik})", flush=True)
+        try:
+            submissions = fetch_submissions(cik)
+            metas = list_13f(submissions)
+            if not metas:
+                errors.append({"slug": slug, "error": "no 13F-HR found"})
+                managers_out.append(
+                    {
+                        "cik": cik,
+                        "name": name,
+                        "manager": manager,
+                        "slug": slug,
+                        "ok": False,
+                        "error": "No 13F-HR on EDGAR",
+                    }
+                )
+                continue
+            last_error = "No usable 13F information table"
+            loaded = None
+            for meta in metas[:8]:
+                try:
+                    xml = fetch_info_table(cik, meta.accession)
+                    rows = parse_info_table(xml)
+                    holdings = aggregate_holdings(rows)
+                    cover_total = table_value_total(fetch_primary_doc(cik, meta.accession))
+                    raw_total = sum(h.value for h in holdings)
+                    thousands = looks_like_thousands(raw_total, cover_total)
+                    scale_if_thousands(holdings, thousands)
+                    attach_tickers(holdings)
+                    holdings = [h for h in holdings if h.value > 0 and h.cusip != "000000000"]
+                    total = sum(h.value for h in holdings)
+                    if total <= 0 or not holdings:
+                        last_error = f"Empty 13F information table for {meta.accession}"
+                        continue
+                    loaded = (meta, rows, holdings, thousands, total)
+                    break
+                except Exception as inner:
+                    last_error = str(inner)
+                    continue
+            if loaded is None:
+                raise FileNotFoundError(last_error)
+            meta, rows, holdings, thousands, total = loaded
+            managers_out.append(
+                {
+                    "cik": cik,
+                    "name": name,
+                    "manager": manager,
+                    "slug": slug,
+                    "ok": True,
+                    "form": meta.form,
+                    "accession": meta.accession,
+                    "filing_date": meta.filing_date,
+                    "report_date": meta.report_date,
+                    "quarter": quarter_label(meta.report_date),
+                    "sec_url": filing_url(cik, meta.accession),
+                    "line_count": len(rows),
+                    "position_count": len(holdings),
+                    "values_in_thousands": thousands,
+                    "total_value": total,
+                    "holdings": [
+                        {
+                            "issuer": h.issuer,
+                            "title": h.title,
+                            "cusip": h.cusip,
+                            "ticker": h.ticker,
+                            "value": h.value,
+                            "shares": h.shares,
+                            "put_call": h.put_call,
+                            "weight": (h.value / total) if total else 0.0,
+                        }
+                        for h in holdings
+                    ],
+                }
+            )
+        except Exception as exc:
+            traceback.print_exc()
+            errors.append({"slug": slug, "error": str(exc)})
+            managers_out.append(
+                {
+                    "cik": cik,
+                    "name": name,
+                    "manager": manager,
+                    "slug": slug,
+                    "ok": False,
+                    "error": str(exc),
+                }
+            )
+
+    ok = [m for m in managers_out if m.get("ok")]
+    buckets: dict[str, dict] = {}
+    for m in ok:
+        for h in m["holdings"]:
+            key = h["cusip"] + "|" + (h["put_call"] or "")
+            b = buckets.get(key)
+            if b is None:
+                buckets[key] = {
+                    "issuer": h["issuer"],
+                    "title": h["title"],
+                    "cusip": h["cusip"],
+                    "ticker": h["ticker"],
+                    "put_call": h["put_call"],
+                    "total_value": h["value"],
+                    "total_shares": h["shares"],
+                    "num_investors": 1,
+                    "held_by": [m["slug"]],
+                    "held_by_names": [m["manager"]],
+                }
+            else:
+                b["total_value"] += h["value"]
+                b["total_shares"] += h["shares"]
+                b["num_investors"] += 1
+                b["held_by"].append(m["slug"])
+                b["held_by_names"].append(m["manager"])
+                if not b["ticker"] and h["ticker"]:
+                    b["ticker"] = h["ticker"]
+
+    grand_total = sum(b["total_value"] for b in buckets.values())
+    copycat = []
+    for b in buckets.values():
+        n = b["num_investors"]
+        weight = (b["total_value"] / grand_total) if grand_total else 0.0
+        b["weight"] = weight
+        b["conviction"] = n * weight
+        copycat.append(b)
+    copycat.sort(key=lambda x: x["total_value"], reverse=True)
+
+    return {
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": "SEC EDGAR 13F-HR, as filed",
+        "disclaimer": (
+            "Holdings and values are taken from each filer's 13F information table. "
+            "Values are quarter-end, reported about 45 days after quarter-end, and are "
+            "not live prices. 13F omits shorts, many options, and filers under $100M AUM. "
+            "Not investment advice."
+        ),
+        "manager_count": len(MANAGERS),
+        "filed_count": len(ok),
+        "errors": errors,
+        "managers": managers_out,
+        "copycat": {
+            "total_value": grand_total,
+            "num_positions": len(copycat),
+            "num_investors": len(ok),
+            "holdings": copycat,
+        },
+    }
+
+
+def write_json(payload: dict) -> None:
+    DATA.mkdir(parents=True, exist_ok=True)
+    slim_managers = []
+    for m in payload["managers"]:
+        entry = {k: v for k, v in m.items() if k != "holdings"}
+        if m.get("ok"):
+            entry["top"] = m["holdings"][:8]
+        slim_managers.append(entry)
+    (DATA / "index.json").write_text(
+        json.dumps(
+            {
+                "generated_at": payload["generated_at"],
+                "source": payload["source"],
+                "disclaimer": payload["disclaimer"],
+                "filed_count": payload["filed_count"],
+                "manager_count": payload["manager_count"],
+                "copycat_total_value": payload["copycat"]["total_value"],
+                "managers": slim_managers,
+                "copycat_top": payload["copycat"]["holdings"][:20],
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    for m in payload["managers"]:
+        (DATA / f"{m['slug']}.json").write_text(json.dumps(m, indent=2) + "\n")
+    (DATA / "copycat.json").write_text(json.dumps(payload["copycat"], indent=2) + "\n")
+
+
+def main() -> int:
+    payload = ingest()
+    write_json(payload)
+    write_site(payload)
+    print(
+        f"wrote {payload['filed_count']}/{payload['manager_count']} managers, "
+        f"{payload['copycat']['num_positions']} copycat names"
+    )
+    return 0 if payload["filed_count"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

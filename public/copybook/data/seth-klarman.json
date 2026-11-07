@@ -1,0 +1,249 @@
+{
+  "cik": "0001061768",
+  "name": "Baupost Group LLC",
+  "manager": "Seth Klarman",
+  "slug": "seth-klarman",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001061768-26-000010",
+  "filing_date": "2026-08-13",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1061768/000106176826000010/0001061768-26-000010-index.html",
+  "line_count": 23,
+  "position_count": 23,
+  "values_in_thousands": true,
+  "total_value": 5415853000.0,
+  "holdings": [
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 892310000.0,
+      "shares": 3743854.0,
+      "put_call": null,
+      "weight": 0.16475890316816205
+    },
+    {
+      "issuer": "ELEVANCE HEALTH INC FORMERLY",
+      "title": "COM",
+      "cusip": "036752103",
+      "ticker": null,
+      "value": 493140000.0,
+      "shares": 1275154.0,
+      "put_call": null,
+      "weight": 0.09105490861734984
+    },
+    {
+      "issuer": "RESTAURANT BRANDS INTL INC",
+      "title": "COM",
+      "cusip": "76131D103",
+      "ticker": null,
+      "value": 489612000.0,
+      "shares": 6753112.0,
+      "put_call": null,
+      "weight": 0.09040348768698117
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL C",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 484744000.0,
+      "shares": 1371931.0,
+      "put_call": null,
+      "weight": 0.08950464497466973
+    },
+    {
+      "issuer": "FERGUSON ENTERPRISES INC",
+      "title": "COMMON STOCK NEW",
+      "cusip": "31488V107",
+      "ticker": null,
+      "value": 344269000.0,
+      "shares": 1450594.0,
+      "put_call": null,
+      "weight": 0.06356690257287263
+    },
+    {
+      "issuer": "GENUINE PARTS CO",
+      "title": "COM",
+      "cusip": "372460105",
+      "ticker": null,
+      "value": 332253000.0,
+      "shares": 2816178.0,
+      "put_call": null,
+      "weight": 0.061348230832705394
+    },
+    {
+      "issuer": "UNION PAC CORP",
+      "title": "COM",
+      "cusip": "907818108",
+      "ticker": null,
+      "value": 322427000.0,
+      "shares": 1185395.0,
+      "put_call": null,
+      "weight": 0.05953392752720578
+    },
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 240628000.0,
+      "shares": 701355.0,
+      "put_call": null,
+      "weight": 0.04443030488456758
+    },
+    {
+      "issuer": "WESCO INTL INC",
+      "title": "COM",
+      "cusip": "95082P105",
+      "ticker": null,
+      "value": 228979000.0,
+      "shares": 662881.0,
+      "put_call": null,
+      "weight": 0.04227939716975331
+    },
+    {
+      "issuer": "AON PLC",
+      "title": "SHS CL A",
+      "cusip": "G0403H108",
+      "ticker": null,
+      "value": 227871000.0,
+      "shares": 687000.0,
+      "put_call": null,
+      "weight": 0.042074812591848414
+    },
+    {
+      "issuer": "TELEFLEX INCORPORATED",
+      "title": "COM",
+      "cusip": "879369106",
+      "ticker": null,
+      "value": 178605000.0,
+      "shares": 1409000.0,
+      "put_call": null,
+      "weight": 0.03297818459991436
+    },
+    {
+      "issuer": "NORWEGIAN CRUISE LINE HLDGS",
+      "title": "SHS",
+      "cusip": "G66721104",
+      "ticker": null,
+      "value": 163180000.0,
+      "shares": 7730000.0,
+      "put_call": null,
+      "weight": 0.03013006446075992
+    },
+    {
+      "issuer": "MOLINA HEALTHCARE INC",
+      "title": "COM",
+      "cusip": "60855R100",
+      "ticker": null,
+      "value": 144906000.0,
+      "shares": 633609.0,
+      "put_call": null,
+      "weight": 0.02675589607029585
+    },
+    {
+      "issuer": "CME GROUP INC",
+      "title": "COM",
+      "cusip": "12572Q105",
+      "ticker": null,
+      "value": 136694000.0,
+      "shares": 619000.0,
+      "put_call": null,
+      "weight": 0.02523960676185266
+    },
+    {
+      "issuer": "HERBALIFE LTD",
+      "title": "COM SHS",
+      "cusip": "G4412G101",
+      "ticker": null,
+      "value": 121767000.0,
+      "shares": 9259844.0,
+      "put_call": null,
+      "weight": 0.02248343889688291
+    },
+    {
+      "issuer": "EAGLE MATLS INC",
+      "title": "COM",
+      "cusip": "26969P108",
+      "ticker": null,
+      "value": 119422000.0,
+      "shares": 530763.0,
+      "put_call": null,
+      "weight": 0.022050450778483093
+    },
+    {
+      "issuer": "GDS HLDGS LTD",
+      "title": "SPONSORED ADS",
+      "cusip": "36165L108",
+      "ticker": null,
+      "value": 113208000.0,
+      "shares": 3769818.0,
+      "put_call": null,
+      "weight": 0.020903078425503794
+    },
+    {
+      "issuer": "AMERICOLD REALTY TRUST INC",
+      "title": "COM",
+      "cusip": "03064D108",
+      "ticker": null,
+      "value": 107371000.0,
+      "shares": 6830230.0,
+      "put_call": null,
+      "weight": 0.019825316529086
+    },
+    {
+      "issuer": "LIBERTY GLOBAL LTD",
+      "title": "COM CL C",
+      "cusip": "G61188127",
+      "ticker": null,
+      "value": 93975000.0,
+      "shares": 8543161.0,
+      "put_call": null,
+      "weight": 0.017351837282141888
+    },
+    {
+      "issuer": "GRUPO AEROMEXICO SAB DE CV",
+      "title": "SPONSORED ADS",
+      "cusip": "40054J109",
+      "ticker": null,
+      "value": 87843000.0,
+      "shares": 4880188.0,
+      "put_call": null,
+      "weight": 0.01621960566507252
+    },
+    {
+      "issuer": "AXALTA COATING SYS LTD",
+      "title": "COM",
+      "cusip": "G0750C108",
+      "ticker": null,
+      "value": 43608000.0,
+      "shares": 1274356.0,
+      "put_call": null,
+      "weight": 0.008051917214148907
+    },
+    {
+      "issuer": "DNOW INC",
+      "title": "COM",
+      "cusip": "67011P100",
+      "ticker": null,
+      "value": 36160000.0,
+      "shares": 2788000.0,
+      "put_call": null,
+      "weight": 0.006676695250037252
+    },
+    {
+      "issuer": "PERSHING SQUARE INC",
+      "title": "COMMON STOCK",
+      "cusip": "71531U102",
+      "ticker": null,
+      "value": 12881000.0,
+      "shares": 392000.0,
+      "put_call": null,
+      "weight": 0.002378388039704918
+    }
+  ]
+}

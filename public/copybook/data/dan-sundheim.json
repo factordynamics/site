@@ -1,0 +1,569 @@
+{
+  "cik": "0001747057",
+  "name": "D1 Capital Partners LP",
+  "manager": "Dan Sundheim",
+  "slug": "dan-sundheim",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001172661-26-003662",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1747057/000117266126003662/0001172661-26-003662-index.html",
+  "line_count": 55,
+  "position_count": 55,
+  "values_in_thousands": false,
+  "total_value": 34783267943.0,
+  "holdings": [
+    {
+      "issuer": "SPACE EXPLORATION TECHN CORP",
+      "title": "CLASS A COM STK",
+      "cusip": "84615Q103",
+      "ticker": null,
+      "value": 21535575760.0,
+      "shares": 126042232.0,
+      "put_call": null,
+      "weight": 0.6191360683904329
+    },
+    {
+      "issuer": "MAPLEBEAR INC",
+      "title": "COM",
+      "cusip": "565394103",
+      "ticker": null,
+      "value": 1068425997.0,
+      "shares": 22564435.0,
+      "put_call": null,
+      "weight": 0.030716665229697505
+    },
+    {
+      "issuer": "JAMES HARDIE INDS PLC",
+      "title": "ORD SHS",
+      "cusip": "G4253H101",
+      "ticker": null,
+      "value": 721141609.0,
+      "shares": 27545516.0,
+      "put_call": null,
+      "weight": 0.02073242830954666
+    },
+    {
+      "issuer": "NU HLDGS LTD",
+      "title": "ORD SHS CL A",
+      "cusip": "G6683N103",
+      "ticker": null,
+      "value": 593431734.0,
+      "shares": 44418543.0,
+      "put_call": null,
+      "weight": 0.017060838992255353
+    },
+    {
+      "issuer": "JOHNSON CONTROLS INTERNATION",
+      "title": "SHS",
+      "cusip": "G51502105",
+      "ticker": null,
+      "value": 548188210.0,
+      "shares": 3751887.0,
+      "put_call": null,
+      "weight": 0.01576011233039766
+    },
+    {
+      "issuer": "MERCADOLIBRE INC",
+      "title": "COM",
+      "cusip": "58733R102",
+      "ticker": null,
+      "value": 470983290.0,
+      "shares": 277475.0,
+      "put_call": null,
+      "weight": 0.013540512949266562
+    },
+    {
+      "issuer": "US FOODS HLDG CORP",
+      "title": "COM",
+      "cusip": "912008109",
+      "ticker": null,
+      "value": 460325819.0,
+      "shares": 4501964.0,
+      "put_call": null,
+      "weight": 0.013234116465259809
+    },
+    {
+      "issuer": "DANAHER CORP DEL",
+      "title": "COM",
+      "cusip": "235851102",
+      "ticker": "DHR",
+      "value": 434682789.0,
+      "shares": 2282039.0,
+      "put_call": null,
+      "weight": 0.012496893325616296
+    },
+    {
+      "issuer": "SHERWIN WILLIAMS CO",
+      "title": "COM",
+      "cusip": "824348106",
+      "ticker": null,
+      "value": 431250815.0,
+      "shares": 1252471.0,
+      "put_call": null,
+      "weight": 0.012398225943194839
+    },
+    {
+      "issuer": "REDDIT INC",
+      "title": "CL A",
+      "cusip": "75734B100",
+      "ticker": null,
+      "value": 427772461.0,
+      "shares": 2464411.0,
+      "put_call": null,
+      "weight": 0.012298225161045789
+    },
+    {
+      "issuer": "THERMO FISHER SCIENTIFIC INC",
+      "title": "COM",
+      "cusip": "883556102",
+      "ticker": "TMO",
+      "value": 409672787.0,
+      "shares": 817123.0,
+      "put_call": null,
+      "weight": 0.011777869396036582
+    },
+    {
+      "issuer": "KILROY REALTY CORP",
+      "title": "COM",
+      "cusip": "49427F108",
+      "ticker": null,
+      "value": 393364556.0,
+      "shares": 10498120.0,
+      "put_call": null,
+      "weight": 0.01130901664112222
+    },
+    {
+      "issuer": "CLEAN HARBORS INC",
+      "title": "COM",
+      "cusip": "184496107",
+      "ticker": null,
+      "value": 393005924.0,
+      "shares": 1315501.0,
+      "put_call": null,
+      "weight": 0.011298706166540369
+    },
+    {
+      "issuer": "SOMNIGROUP INTERNATIONAL INC",
+      "title": "COM",
+      "cusip": "88023U101",
+      "ticker": null,
+      "value": 390068538.0,
+      "shares": 4975364.0,
+      "put_call": null,
+      "weight": 0.0112142579196185
+    },
+    {
+      "issuer": "FLOWSERVE CORP",
+      "title": "COM",
+      "cusip": "34354P105",
+      "ticker": null,
+      "value": 368479756.0,
+      "shares": 4968713.0,
+      "put_call": null,
+      "weight": 0.010593592200820083
+    },
+    {
+      "issuer": "APPLOVIN CORP",
+      "title": "COM CL A",
+      "cusip": "03831W108",
+      "ticker": null,
+      "value": 344834165.0,
+      "shares": 669282.0,
+      "put_call": null,
+      "weight": 0.00991379434402444
+    },
+    {
+      "issuer": "META PLATFORMS INC",
+      "title": "CL A",
+      "cusip": "30303M102",
+      "ticker": "META",
+      "value": 319103785.0,
+      "shares": 566500.0,
+      "put_call": null,
+      "weight": 0.009174059939477838
+    },
+    {
+      "issuer": "FERGUSON ENTERPRISES INC",
+      "title": "COMMON STOCK NEW",
+      "cusip": "31488V107",
+      "ticker": null,
+      "value": 304266079.0,
+      "shares": 1282038.0,
+      "put_call": null,
+      "weight": 0.008747483977026155
+    },
+    {
+      "issuer": "DISNEY WALT CO",
+      "title": "COM",
+      "cusip": "254687106",
+      "ticker": "DIS",
+      "value": 276661000.0,
+      "shares": 2874400.0,
+      "put_call": null,
+      "weight": 0.007953852997750805
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 263846271.0,
+      "shares": 738300.0,
+      "put_call": null,
+      "weight": 0.007585436521731365
+    },
+    {
+      "issuer": "SPOTIFY TECHNOLOGY S A",
+      "title": "SHS",
+      "cusip": "L8681T102",
+      "ticker": null,
+      "value": 261178396.0,
+      "shares": 568855.0,
+      "put_call": null,
+      "weight": 0.007508736569203272
+    },
+    {
+      "issuer": "CARVANA CO",
+      "title": "CL A",
+      "cusip": "146869102",
+      "ticker": null,
+      "value": 248767809.0,
+      "shares": 3779517.0,
+      "put_call": null,
+      "weight": 0.007151938955467339
+    },
+    {
+      "issuer": "DOORDASH INC",
+      "title": "CL A",
+      "cusip": "25809K105",
+      "ticker": null,
+      "value": 240572684.0,
+      "shares": 1303705.0,
+      "put_call": null,
+      "weight": 0.006916333577231185
+    },
+    {
+      "issuer": "INTUITIVE SURGICAL INC",
+      "title": "COM NEW",
+      "cusip": "46120E602",
+      "ticker": null,
+      "value": 228347856.0,
+      "shares": 574200.0,
+      "put_call": null,
+      "weight": 0.006564876433525393
+    },
+    {
+      "issuer": "SCHWAB CHARLES CORP",
+      "title": "COM",
+      "cusip": "808513105",
+      "ticker": "SCHW",
+      "value": 227592259.0,
+      "shares": 2466590.0,
+      "put_call": null,
+      "weight": 0.0065431534314992984
+    },
+    {
+      "issuer": "CAPITAL ONE FINL CORP",
+      "title": "COM",
+      "cusip": "14040H105",
+      "ticker": null,
+      "value": 219365532.0,
+      "shares": 1093438.0,
+      "put_call": null,
+      "weight": 0.006306639512983037
+    },
+    {
+      "issuer": "LINEAGE INC",
+      "title": "COM",
+      "cusip": "53566V106",
+      "ticker": null,
+      "value": 204845494.0,
+      "shares": 4736312.0,
+      "put_call": null,
+      "weight": 0.0058891963324344395
+    },
+    {
+      "issuer": "MARTIN MARIETTA MATLS INC",
+      "title": "COM",
+      "cusip": "573284106",
+      "ticker": null,
+      "value": 198996102.0,
+      "shares": 345060.0,
+      "put_call": null,
+      "weight": 0.005721029499761169
+    },
+    {
+      "issuer": "COMPASS INC",
+      "title": "CL A",
+      "cusip": "20464U100",
+      "ticker": null,
+      "value": 187722166.0,
+      "shares": 15224831.0,
+      "put_call": null,
+      "weight": 0.00539690998291546
+    },
+    {
+      "issuer": "COUPANG INC",
+      "title": "CL A",
+      "cusip": "22266T109",
+      "ticker": null,
+      "value": 178774489.0,
+      "shares": 10292141.0,
+      "put_call": null,
+      "weight": 0.005139669144743994
+    },
+    {
+      "issuer": "LINDE PLC",
+      "title": "SHS",
+      "cusip": "G54950103",
+      "ticker": null,
+      "value": 177237730.0,
+      "shares": 341538.0,
+      "put_call": null,
+      "weight": 0.005095488160872142
+    },
+    {
+      "issuer": "TESLA INC",
+      "title": "COM",
+      "cusip": "88160R101",
+      "ticker": "TSLA",
+      "value": 169039140.0,
+      "shares": 401900.0,
+      "put_call": null,
+      "weight": 0.004859783165774062
+    },
+    {
+      "issuer": "LATTICE SEMICONDUCTOR CORP",
+      "title": "COM",
+      "cusip": "518415104",
+      "ticker": null,
+      "value": 165816441.0,
+      "shares": 1084051.0,
+      "put_call": null,
+      "weight": 0.004767132325568907
+    },
+    {
+      "issuer": "SEA LTD",
+      "title": "SPONSORD ADS",
+      "cusip": "81141R100",
+      "ticker": "XYZ",
+      "value": 160834556.0,
+      "shares": 1678332.0,
+      "put_call": null,
+      "weight": 0.004623905846442107
+    },
+    {
+      "issuer": "AFFIRM HLDGS INC",
+      "title": "COM CL A",
+      "cusip": "00827B106",
+      "ticker": null,
+      "value": 155639072.0,
+      "shares": 1908511.0,
+      "put_call": null,
+      "weight": 0.004474538512455146
+    },
+    {
+      "issuer": "AMAZON COM INC",
+      "title": "COM",
+      "cusip": "023135106",
+      "ticker": "AMZN",
+      "value": 149697064.0,
+      "shares": 628082.0,
+      "put_call": null,
+      "weight": 0.004303709020248224
+    },
+    {
+      "issuer": "BUILDERS FIRSTSOURCE INC",
+      "title": "COM",
+      "cusip": "12008R107",
+      "ticker": null,
+      "value": 146677585.0,
+      "shares": 1639222.0,
+      "put_call": null,
+      "weight": 0.004216900644308733
+    },
+    {
+      "issuer": "APOLLO GLOBAL MGMT INC",
+      "title": "COM",
+      "cusip": "03769M106",
+      "ticker": null,
+      "value": 137121290.0,
+      "shares": 1159000.0,
+      "put_call": null,
+      "weight": 0.00394216237027249
+    },
+    {
+      "issuer": "QNITY ELECTRONICS INC",
+      "title": "COMMON STOCK",
+      "cusip": "74743L100",
+      "ticker": null,
+      "value": 136199887.0,
+      "shares": 833996.0,
+      "put_call": null,
+      "weight": 0.0039156725360938865
+    },
+    {
+      "issuer": "TEXAS INSTRS INC",
+      "title": "COM",
+      "cusip": "882508104",
+      "ticker": null,
+      "value": 120859635.0,
+      "shares": 405474.0,
+      "put_call": null,
+      "weight": 0.00347464864997892
+    },
+    {
+      "issuer": "MONOLITHIC PWR SYS INC",
+      "title": "COM",
+      "cusip": "609839105",
+      "ticker": null,
+      "value": 117642983.0,
+      "shares": 85103.0,
+      "put_call": null,
+      "weight": 0.0033821716577287614
+    },
+    {
+      "issuer": "AMRIZE LTD",
+      "title": "SHS",
+      "cusip": "H2927K103",
+      "ticker": null,
+      "value": 116593057.0,
+      "shares": 2187487.0,
+      "put_call": null,
+      "weight": 0.003351986857332188
+    },
+    {
+      "issuer": "UNITY SOFTWARE INC",
+      "title": "COM",
+      "cusip": "91332U101",
+      "ticker": null,
+      "value": 102101278.0,
+      "shares": 3572473.0,
+      "put_call": null,
+      "weight": 0.0029353561076352944
+    },
+    {
+      "issuer": "LITTELFUSE INC",
+      "title": "COM",
+      "cusip": "537008104",
+      "ticker": null,
+      "value": 102068594.0,
+      "shares": 224164.0,
+      "put_call": null,
+      "weight": 0.0029344164604447674
+    },
+    {
+      "issuer": "SHOPIFY INC",
+      "title": "CL A SUB VTG SHS",
+      "cusip": "82509L107",
+      "ticker": null,
+      "value": 94871134.0,
+      "shares": 830891.0,
+      "put_call": null,
+      "weight": 0.002727493407332144
+    },
+    {
+      "issuer": "COREWEAVE INC",
+      "title": "COM CL A",
+      "cusip": "21873S108",
+      "ticker": null,
+      "value": 62555515.0,
+      "shares": 628446.0,
+      "put_call": null,
+      "weight": 0.0017984369698244255
+    },
+    {
+      "issuer": "SNOWFLAKE INC",
+      "title": "COM SHS",
+      "cusip": "833445109",
+      "ticker": null,
+      "value": 54976836.0,
+      "shares": 216019.0,
+      "put_call": null,
+      "weight": 0.001580554078187581
+    },
+    {
+      "issuer": "HYPERLIQUID STRATEGIES INC",
+      "title": "COM",
+      "cusip": "44916Y106",
+      "ticker": null,
+      "value": 49916262.0,
+      "shares": 6342600.0,
+      "put_call": null,
+      "weight": 0.0014350653331883228
+    },
+    {
+      "issuer": "MADISON AIR SOLUTIONS CORP",
+      "title": "COM SHS CL A",
+      "cusip": "55658T105",
+      "ticker": null,
+      "value": 48750000.0,
+      "shares": 1250000.0,
+      "put_call": null,
+      "weight": 0.0014015359361830967
+    },
+    {
+      "issuer": "ANALOG DEVICES INC",
+      "title": "COM",
+      "cusip": "032654105",
+      "ticker": null,
+      "value": 40527227.0,
+      "shares": 102040.0,
+      "put_call": null,
+      "weight": 0.001165135693012305
+    },
+    {
+      "issuer": "CEREBRAS SYSTEMS INC",
+      "title": "COM CL A",
+      "cusip": "15675D103",
+      "ticker": null,
+      "value": 33150000.0,
+      "shares": 150000.0,
+      "put_call": null,
+      "weight": 0.0009530444366045057
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL C",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 30033050.0,
+      "shares": 85000.0,
+      "put_call": null,
+      "weight": 0.0008634338225268462
+    },
+    {
+      "issuer": "SEAGATE TECHNOLOGY HLDNGS PL",
+      "title": "ORD SHS",
+      "cusip": "G7997R103",
+      "ticker": null,
+      "value": 29060975.0,
+      "shares": 30115.0,
+      "put_call": null,
+      "weight": 0.0008354871959593552
+    },
+    {
+      "issuer": "QUANTINUUM INC",
+      "title": "CL A COM",
+      "cusip": "74768A104",
+      "ticker": null,
+      "value": 24522000.0,
+      "shares": 300000.0,
+      "put_call": null,
+      "weight": 0.0007049941379914235
+    },
+    {
+      "issuer": "DPC HOLDINGS PLC",
+      "title": "ORDINARY SHARES",
+      "cusip": "G2R11M108",
+      "ticker": null,
+      "value": 6132500.0,
+      "shares": 125000.0,
+      "put_call": null,
+      "weight": 0.00017630603340805826
+    }
+  ]
+}

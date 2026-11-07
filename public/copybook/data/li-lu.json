@@ -1,0 +1,99 @@
+{
+  "cik": "0001709323",
+  "name": "Himalaya Capital Management LLC",
+  "manager": "Li Lu",
+  "slug": "li-lu",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0002043585-26-000022",
+  "filing_date": "2026-08-14",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1709323/000204358526000022/0002043585-26-000022-index.html",
+  "line_count": 8,
+  "position_count": 8,
+  "values_in_thousands": false,
+  "total_value": 3702921099.0,
+  "holdings": [
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 908899121.0,
+      "shares": 2543300.0,
+      "put_call": null,
+      "weight": 0.24545462803554055
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL C",
+      "cusip": "02079K107",
+      "ticker": "GOOG",
+      "value": 866117829.0,
+      "shares": 2451300.0,
+      "put_call": null,
+      "weight": 0.23390123792643092
+    },
+    {
+      "issuer": "PDD HOLDINGS INC",
+      "title": "SPON ADS",
+      "cusip": "722304102",
+      "ticker": null,
+      "value": 820858157.0,
+      "shares": 10761119.0,
+      "put_call": null,
+      "weight": 0.22167854379119192
+    },
+    {
+      "issuer": "BERKSHIRE HATHAWAY INC DEL",
+      "title": "CL B NEW",
+      "cusip": "084670702",
+      "ticker": "BRK.B",
+      "value": 554591244.0,
+      "shares": 1108318.0,
+      "put_call": null,
+      "weight": 0.14977128304185883
+    },
+    {
+      "issuer": "EAST WEST BANCORP INC",
+      "title": "COM",
+      "cusip": "27579R104",
+      "ticker": null,
+      "value": 358399151.0,
+      "shares": 2776351.0,
+      "put_call": null,
+      "weight": 0.09678822243789861
+    },
+    {
+      "issuer": "CROCS INC",
+      "title": "COM",
+      "cusip": "227046109",
+      "ticker": null,
+      "value": 107018900.0,
+      "shares": 887093.0,
+      "put_call": null,
+      "weight": 0.028901209920163085
+    },
+    {
+      "issuer": "TENCENT MUSIC ENTERTAINM",
+      "title": "SPON ADS",
+      "cusip": "88034P109",
+      "ticker": null,
+      "value": 55033481.0,
+      "shares": 6590836.0,
+      "put_call": null,
+      "weight": 0.014862180297296149
+    },
+    {
+      "issuer": "APPLE INC",
+      "title": "COM",
+      "cusip": "037833100",
+      "ticker": "AAPL",
+      "value": 32003216.0,
+      "shares": 110600.0,
+      "put_call": null,
+      "weight": 0.008642694549619946
+    }
+  ]
+}

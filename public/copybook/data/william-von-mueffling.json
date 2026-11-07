@@ -1,0 +1,289 @@
+{
+  "cik": "0001279936",
+  "name": "Cantillon Capital Management LLC",
+  "manager": "William von Mueffling",
+  "slug": "william-von-mueffling",
+  "ok": true,
+  "form": "13F-HR",
+  "accession": "0001279936-26-000005",
+  "filing_date": "2026-07-29",
+  "report_date": "2026-06-30",
+  "quarter": "2026Q2",
+  "sec_url": "https://www.sec.gov/Archives/edgar/data/1279936/000127993626000005/0001279936-26-000005-index.html",
+  "line_count": 27,
+  "position_count": 27,
+  "values_in_thousands": false,
+  "total_value": 665113090.0,
+  "holdings": [
+    {
+      "issuer": "BROADCOM INC",
+      "title": "COM",
+      "cusip": "11135F101",
+      "ticker": "AVGO",
+      "value": 70548590.0,
+      "shares": 186760.0,
+      "put_call": null,
+      "weight": 0.10607006697161832
+    },
+    {
+      "issuer": "ALPHABET INC",
+      "title": "CAP STK CL A",
+      "cusip": "02079K305",
+      "ticker": "GOOGL",
+      "value": 61133856.0,
+      "shares": 171066.0,
+      "put_call": null,
+      "weight": 0.09191497945108854
+    },
+    {
+      "issuer": "TAIWAN SEMICONDUCTOR MANUFAC",
+      "title": "SPONSORED ADS",
+      "cusip": "874039100",
+      "ticker": null,
+      "value": 54834587.0,
+      "shares": 114820.0,
+      "put_call": null,
+      "weight": 0.0824440051240008
+    },
+    {
+      "issuer": "INTERACTIVE BROKERS GROUP IN",
+      "title": "COM CL A",
+      "cusip": "45841N107",
+      "ticker": null,
+      "value": 45072184.0,
+      "shares": 517833.0,
+      "put_call": null,
+      "weight": 0.0677661959712746
+    },
+    {
+      "issuer": "APPLIED MATLS INC",
+      "title": "COM",
+      "cusip": "038222105",
+      "ticker": null,
+      "value": 36277248.0,
+      "shares": 50176.0,
+      "put_call": null,
+      "weight": 0.05454297704470078
+    },
+    {
+      "issuer": "ANALOG DEVICES INC",
+      "title": "COM",
+      "cusip": "032654105",
+      "ticker": null,
+      "value": 34956520.0,
+      "shares": 88014.0,
+      "put_call": null,
+      "weight": 0.05255725759359209
+    },
+    {
+      "issuer": "S&P GLOBAL INC",
+      "title": "COM",
+      "cusip": "78409V104",
+      "ticker": null,
+      "value": 29016868.0,
+      "shares": 71249.0,
+      "put_call": null,
+      "weight": 0.04362696876105686
+    },
+    {
+      "issuer": "VISA INC",
+      "title": "COM CL A",
+      "cusip": "92826C839",
+      "ticker": "V",
+      "value": 28697077.0,
+      "shares": 83643.0,
+      "put_call": null,
+      "weight": 0.043146161805355535
+    },
+    {
+      "issuer": "MICROSOFT CORP",
+      "title": "COM",
+      "cusip": "594918104",
+      "ticker": "MSFT",
+      "value": 25701451.0,
+      "shares": 68901.0,
+      "put_call": null,
+      "weight": 0.03864222699330726
+    },
+    {
+      "issuer": "CBRE GROUP INC",
+      "title": "CL A",
+      "cusip": "12504L109",
+      "ticker": null,
+      "value": 24390069.0,
+      "shares": 181083.0,
+      "put_call": null,
+      "weight": 0.036670559287894935
+    },
+    {
+      "issuer": "LIVE NATION ENTERTAINMENT IN",
+      "title": "COM",
+      "cusip": "538034109",
+      "ticker": null,
+      "value": 20783534.0,
+      "shares": 113503.0,
+      "put_call": null,
+      "weight": 0.03124812052639048
+    },
+    {
+      "issuer": "BLACKROCK INC",
+      "title": "COM",
+      "cusip": "09290D101",
+      "ticker": null,
+      "value": 20070642.0,
+      "shares": 20873.0,
+      "put_call": null,
+      "weight": 0.03017628475782968
+    },
+    {
+      "issuer": "FERGUSON ENTERPRISES INC",
+      "title": "COMMON STOCK NEW",
+      "cusip": "31488V107",
+      "ticker": null,
+      "value": 19116457.0,
+      "shares": 80548.0,
+      "put_call": null,
+      "weight": 0.02874166406798579
+    },
+    {
+      "issuer": "FASTENAL CO",
+      "title": "COM",
+      "cusip": "311900104",
+      "ticker": null,
+      "value": 18061393.0,
+      "shares": 376044.0,
+      "put_call": null,
+      "weight": 0.027155371427135797
+    },
+    {
+      "issuer": "ENTEGRIS INC",
+      "title": "COM",
+      "cusip": "29362U104",
+      "ticker": null,
+      "value": 17942114.0,
+      "shares": 99756.0,
+      "put_call": null,
+      "weight": 0.026976035007821
+    },
+    {
+      "issuer": "CANADIAN PACIFIC KANSAS CITY",
+      "title": "COM",
+      "cusip": "13646K108",
+      "ticker": null,
+      "value": 17317869.0,
+      "shares": 199860.0,
+      "put_call": null,
+      "weight": 0.026037480332855877
+    },
+    {
+      "issuer": "UBER TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "90353T100",
+      "ticker": "UBER",
+      "value": 17243714.0,
+      "shares": 238965.0,
+      "put_call": null,
+      "weight": 0.025925988015060717
+    },
+    {
+      "issuer": "AGILENT TECHNOLOGIES INC",
+      "title": "COM",
+      "cusip": "00846U101",
+      "ticker": null,
+      "value": 16794627.0,
+      "shares": 126437.0,
+      "put_call": null,
+      "weight": 0.025250784043357198
+    },
+    {
+      "issuer": "INTERCONTINENTAL EXCHANGE IN",
+      "title": "COM",
+      "cusip": "45866F104",
+      "ticker": null,
+      "value": 16677465.0,
+      "shares": 135468.0,
+      "put_call": null,
+      "weight": 0.025074630541401615
+    },
+    {
+      "issuer": "ORACLE CORP",
+      "title": "COM",
+      "cusip": "68389X105",
+      "ticker": "ORCL",
+      "value": 15454723.0,
+      "shares": 105457.0,
+      "put_call": null,
+      "weight": 0.02323623340505898
+    },
+    {
+      "issuer": "CME GROUP INC",
+      "title": "COM",
+      "cusip": "12572Q105",
+      "ticker": null,
+      "value": 14096683.0,
+      "shares": 63835.0,
+      "put_call": null,
+      "weight": 0.021194415223432152
+    },
+    {
+      "issuer": "YUM BRANDS INC",
+      "title": "COM",
+      "cusip": "988498101",
+      "ticker": null,
+      "value": 13336640.0,
+      "shares": 83427.0,
+      "put_call": null,
+      "weight": 0.02005168775132662
+    },
+    {
+      "issuer": "TRADEWEB MKTS INC",
+      "title": "CL A",
+      "cusip": "892672106",
+      "ticker": null,
+      "value": 10861844.0,
+      "shares": 108989.0,
+      "put_call": null,
+      "weight": 0.01633082277782264
+    },
+    {
+      "issuer": "SS&C TECH HLDGS",
+      "title": "COM",
+      "cusip": "78467J100",
+      "ticker": null,
+      "value": 10723233.0,
+      "shares": 172816.0,
+      "put_call": null,
+      "weight": 0.016122420624739172
+    },
+    {
+      "issuer": "SPOTIFY TECHNOLOGY S A",
+      "title": "SHS",
+      "cusip": "L8681T102",
+      "ticker": null,
+      "value": 9281772.0,
+      "shares": 20216.0,
+      "put_call": null,
+      "weight": 0.013955178659917819
+    },
+    {
+      "issuer": "TRIP COM GROUP LTD",
+      "title": "ADS",
+      "cusip": "89677Q107",
+      "ticker": null,
+      "value": 8535401.0,
+      "shares": 214242.0,
+      "put_call": null,
+      "weight": 0.012833007090568612
+    },
+    {
+      "issuer": "MOODYS CORP",
+      "title": "COM",
+      "cusip": "615369105",
+      "ticker": "MCO",
+      "value": 8186529.0,
+      "shares": 18075.0,
+      "put_call": null,
+      "weight": 0.012308476743406148
+    }
+  ]
+}

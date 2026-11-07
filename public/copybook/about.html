@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About — Copybook</title>
+<meta name="description" content="Copybook tracks 13F holdings as filed for 41 superinvestors. Latest quarter free. Copycat book, no live prices.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="index.html">Copybook</a>
+  <nav><a href="index.html#managers">Holdings</a><a href="copycat.html">Copycat</a><a href="pricing.html">Pricing</a><a href="about.html">About</a></nav>
+</header>
+<main>
+<section class="hero">
+  <p class="eyebrow">About</p>
+  <h1>Holdings as filed. Nothing else.</h1>
+</section>
+<section class="prose">
+  <p>Copybook is a consumer 13F site from Factor Dynamics. It reads each manager's latest 13F-HR information table from SEC EDGAR and shows issuer, CUSIP, shares, and the filer-reported value.</p>
+  <h2>What you are looking at</h2>
+  <ul>
+    <li>Public 13F-HR filings, as filed. Fair-access User-Agent, under 10 requests/second.</li>
+    <li>CUSIP to ticker from a static map when we have one. Missing tickers show as a dash, not a guessed price.</li>
+    <li>Split 13F lines (same CUSIP, several other-manager rows) are summed.</li>
+    <li>The copycat book is the value-weighted sum of those as-filed books. It is not a fund.</li>
+  </ul>
+  <h2>What we do not show</h2>
+  <ul>
+    <li>Live quotes, sparklines, or “up 2% this week.”</li>
+    <li>Yahoo or any unlicensed price data.</li>
+    <li>Form 4 or 13D. Those parsers are empty; this launch is holdings-only.</li>
+    <li>Dataroma HTML. Managers are the 41 hard-coded CIKs.</li>
+  </ul>
+  <h2>Lag and holes</h2>
+  <p>13F is due 45 days after quarter-end. It omits shorts, many options, and advisers under $100M AUM. Values are the filer's quarter-end marks, not today's market.</p>
+  <p>Not investment advice. Factor Dynamics is not a registered investment adviser. Past research results are not a live track record.</p>
+</section>
+</main>
+<footer class="site-footer">
+  <p>Source: SEC EDGAR 13F-HR, as filed. Values are quarter-end and ~45 days late. Not investment advice.</p>
+  <p>A Factor Dynamics product. No Yahoo prices. No Dataroma scrape. Holdings only.</p>
+</footer>
+</body>
+</html>
