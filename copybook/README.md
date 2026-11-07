@@ -24,6 +24,7 @@ python ingest/bulk.py          # every 13F filer: latest quarter, one shard per 
 python ingest/figi.py web/data # CUSIP -> ticker cache (OpenFIGI, 25 req/min unauthenticated)
 python ingest/securities.py web/data  # ticker, display name, sector per CUSIP (SEC SIC codes)
 python ingest/enrich.py        # write ticker/display_name/sector into every published file
+python ingest/upload_history.py  # CI only: new/changed h/** to private R2 via the Copy API
 python -m unittest discover -s tests -v
 ```
 
@@ -49,6 +50,9 @@ SEC User-Agent: `Copybook factordynamics.com copybook@factordynamics.com`, under
   (`ticker, issuer, title, cusip, put_call, shares, value`); top 500 by value, `truncated` if more,
   `position_count` is the full count.
 - `h/{slug}/{quarter}.json`: one quarter's full book for a curated fund (every position), up to 8 quarters.
+  Paid data: `ingest/upload_history.py` puts new or changed `h/**` files in the Copy API's private R2
+  bucket (GitHub OIDC auth, audience `copybook-api`). They are not published on Pages; the gust workflow
+  keeps them in the Actions cache between runs.
 - `h/{slug}/{quarter}.csv`: the same book as RFC 4180 CSV (CRLF), columns
   `manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight`.
 - `{slug}-history.json`: index of those quarters: metadata, `holdings_url` and `csv_url` (relative to `data/`) and a
