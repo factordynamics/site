@@ -22,7 +22,8 @@ from ingest.edgar import (
     fetch_submissions,
     list_13f,
     table_value_total,
-    unique_quarters,
+    amendment_type,
+    quarter_groups,
 )
 from ingest.managers import MANAGERS, load_managers
 from ingest.parse import (
@@ -41,6 +42,8 @@ if os.environ.get("COPYBOOK_LATEST_ONLY") == "1":
 LITE_COUNT = 2000
 TOP_ROWS = 50  # preview rows per quarter in {slug}-history.json; full books are in h/
 HIST = DATA / "h"
+AMEND_PATH = DATA / "amendments.json"
+_AMEND: dict[str, str] | None = None
 LITE_HOLDERS = 8
 _CUSIP_MAP: dict[str, str] | None = None
 
@@ -74,8 +77,95 @@ def cached_quarters() -> dict[str, dict]:
         except ValueError:
             continue
         if q.get("accession") and not q.get("truncated"):
-            out[q["accession"]] = q
+            for k in ("slug", "manager", "cik"):
+                q.pop(k, None)
+            out[q.get("filing_key") or q["accession"]] = q
     return out
+
+
+def amend_type(cik: str, meta) -> str:
+    """Cached cover-page amendmentType; it never changes for an accession."""
+    global _AMEND
+    if _AMEND is None:
+        _AMEND = json.loads(AMEND_PATH.read_text()) if AMEND_PATH.exists() else {}
+    if meta.accession not in _AMEND:
+        _AMEND[meta.accession] = amendment_type(cik, meta.accession)
+    return _AMEND[meta.accession]
+
+
+def save_amend_types() -> None:
+    if _AMEND is not None:
+        AMEND_PATH.write_text(json.dumps(dict(sorted(_AMEND.items())), indent=0) + "\n")
+
+
+def pick_filings(group: list, types: dict[str, str]):
+    """Which filings make up one period's book: (base, additions) or (None, []).
+
+    The original 13F-HR is the book. A RESTATEMENT amendment replaces it.
+    NEW HOLDINGS amendments (often confidential positions disclosed later) are
+    added on top and never replace it. An amendment of unknown type is only
+    used when nothing else exists for the period.
+    """
+    by_date = lambda m: m.filing_date
+    originals = sorted((m for m in group if m.form == "13F-HR"), key=by_date)
+    amends = sorted((m for m in group if m.form != "13F-HR"), key=by_date)
+    restated = [m for m in amends if types.get(m.accession) == "RESTATEMENT"]
+    unknown = [m for m in amends if not types.get(m.accession)]
+    base = (restated or originals or unknown or [None])[-1]
+    if base is None:
+        return None, []
+    additions = [
+        m for m in amends
+        if types.get(m.accession) == "NEW HOLDINGS" and m.filing_date >= base.filing_date
+    ]
+    return base, additions
+
+
+def merge_quarter(base: dict, extras: list[dict]) -> dict:
+    rows: dict[tuple, dict] = {}
+    for q in [base, *extras]:
+        for h in q["holdings"]:
+            key = (h["cusip"], h["put_call"] or "")
+            if key in rows:
+                rows[key]["value"] += h["value"]
+                rows[key]["shares"] += h["shares"]
+            else:
+                rows[key] = dict(h)
+    holdings = sorted(rows.values(), key=lambda h: h["value"], reverse=True)
+    total = sum(h["value"] for h in holdings)
+    for h in holdings:
+        h["weight"] = (h["value"] / total) if total else 0.0
+    return base | {
+        "holdings": holdings,
+        "total_value": total,
+        "position_count": len(holdings),
+        "line_count": sum(q.get("line_count") or 0 for q in [base, *extras]),
+        "amendments": [q["accession"] for q in extras],
+    }
+
+
+def load_period(cik: str, group: list, cache: dict) -> dict | None:
+    """One period's book from its original filing plus additive amendments."""
+    types = {m.accession: amend_type(cik, m) for m in group if m.form != "13F-HR"}
+    base, additions = pick_filings(group, types)
+    if base is None:
+        return None
+    key = "|".join([base.accession] + [m.accession for m in additions])
+    if key in cache:
+        return cache[key]
+    loaded = load_filing(cik, base)
+    if loaded is None:
+        return None
+    extras = []
+    for m in additions:
+        try:
+            x = load_filing(cik, m)
+        except Exception as exc:
+            print(f"  skip amendment {m.accession}: {exc}", flush=True)
+            continue
+        if x:
+            extras.append(x)
+    return merge_quarter(loaded, extras) | {"filing_key": key}
 
 
 def with_changes(latest: dict, prev: dict | None) -> list[dict]:
@@ -192,11 +282,11 @@ def ingest() -> dict:
                 continue
             last_error = "No usable 13F information table"
             history = []
-            for meta in unique_quarters(metas, HISTORY_QUARTERS):
+            for group in quarter_groups(metas, HISTORY_QUARTERS):
                 try:
-                    loaded = cache.get(meta.accession) or load_filing(cik, meta)
+                    loaded = load_period(cik, group, cache)
                     if loaded is None:
-                        last_error = f"Empty 13F information table for {meta.accession}"
+                        last_error = f"Empty 13F information table for {group[0].report_date}"
                         continue
                     history.append(loaded)
                 except Exception as inner:
@@ -469,6 +559,7 @@ def write_alerts(payload: dict) -> None:
 
 def main() -> int:
     payload = ingest()
+    save_amend_types()
     write_alerts(payload)
     write_json(payload)
     print(

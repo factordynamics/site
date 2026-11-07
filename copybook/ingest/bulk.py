@@ -22,8 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ingest.build import WEB, load_filing
-from ingest.edgar import fetch_submissions, get, list_13f, unique_quarters
+from ingest.build import WEB, load_period
+from ingest.edgar import fetch_submissions, get, list_13f, quarter_groups
 from ingest.universe import parse_index, slugify
 
 DATA = WEB / "data"
@@ -34,6 +34,7 @@ MAX_ROWS = 500  # shard cap by value; position_count keeps the full count
 SHARD_KEYS = (
     "ok", "cik", "name", "form", "accession", "filing_date", "report_date", "quarter",
     "sec_url", "position_count", "total_value", "values_in_thousands", "indexed_date", "error",
+    "filing_key", "amendments",
 )
 # Rows are arrays in this column order to keep 9k shards small.
 COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value")
@@ -70,11 +71,12 @@ def ingest_one(cik: str) -> dict:
     if not metas:
         return {"ok": False, "cik": cik, "error": "no 13F-HR"}
     last_error = "no usable table"
-    for meta in unique_quarters(metas, 1):
+    # Latest period whose original (or restated) book parses; falls back one quarter.
+    for group in quarter_groups(metas, 2):
         try:
-            loaded = load_filing(cik, meta)
+            loaded = load_period(cik, group, {})
             if loaded is None:
-                last_error = f"empty {meta.accession}"
+                last_error = f"empty {group[0].report_date}"
                 continue
             return {"ok": True, "cik": cik, "name": submissions.get("name") or "", **loaded}
         except Exception as exc:
@@ -141,7 +143,9 @@ def main() -> int:
             f["position_count"] = rec.get("position_count")
             f["quarter"] = rec.get("quarter")
             checked = rec.get("indexed_date") or rec.get("filing_date") or ""
-            if (f.get("filing_date") or "") <= checked:
+            # Shards built from a 13F-HR/A before amendment handling are refetched once.
+            stale_amend = rec.get("form") == "13F-HR/A" and "filing_key" not in rec
+            if (f.get("filing_date") or "") <= checked and not stale_amend:
                 continue
         todo.append(f)
 
@@ -166,7 +170,8 @@ def main() -> int:
         if dest.exists():  # another worker may have fetched it since this run started
             try:
                 rec = json.loads(dest.read_text())
-                if (f.get("filing_date") or "") <= (rec.get("indexed_date") or rec.get("filing_date") or ""):
+                fresh = not (rec.get("form") == "13F-HR/A" and "filing_key" not in rec)
+                if fresh and (f.get("filing_date") or "") <= (rec.get("indexed_date") or rec.get("filing_date") or ""):
                     f["ok"], f["position_count"], f["quarter"] = bool(rec.get("ok")), rec.get("position_count"), rec.get("quarter")
                     continue
             except ValueError:

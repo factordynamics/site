@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
@@ -118,18 +119,19 @@ def fetch_index(cik: str, accession: str) -> dict:
     return data
 
 
-def unique_quarters(metas: list[FilingMeta], limit: int) -> list[FilingMeta]:
-    """Newest filing per report date, up to limit quarters."""
-    seen: set[str] = set()
-    out: list[FilingMeta] = []
+def quarter_groups(metas: list[FilingMeta], limit: int) -> list[list[FilingMeta]]:
+    """Every 13F-HR and 13F-HR/A per report date, newest period first, up to limit periods."""
+    groups: dict[str, list[FilingMeta]] = {}
     for meta in metas:
-        if meta.report_date in seen:
-            continue
-        seen.add(meta.report_date)
-        out.append(meta)
-        if len(out) >= limit:
-            break
-    return out
+        groups.setdefault(meta.report_date, []).append(meta)
+    return [groups[d] for d in sorted(groups, reverse=True)[:limit]]
+
+
+def amendment_type(cik: str, accession: str) -> str:
+    """'RESTATEMENT', 'NEW HOLDINGS', or '' when the cover page does not say."""
+    doc = fetch_primary_doc(cik, accession) or ""
+    m = re.search(r"<(?:\w+:)?amendmentType>\s*([^<]+?)\s*<", doc, re.I)
+    return m.group(1).upper() if m else ""
 
 
 def fetch_primary_doc(cik: str, accession: str) -> str | None:
