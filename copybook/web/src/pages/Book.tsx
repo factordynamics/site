@@ -28,26 +28,30 @@ type Row = {
   sold: number
   net: number
   latest: { form: string; date: string; manager: string } | null
+  split: string | null
 }
 type Key = 'ticker' | 'holders' | 'change' | 'added' | 'exited' | 'top10' | 'over5' | 'filed' | 'net' | 'latest'
 
 const COLS: [Key, string, string][] = [
   ['ticker', 'Name', 'left'],
-  ['holders', 'Funds holding', 'right'],
-  ['change', 'vs last 13F', 'right'],
+  ['holders', 'Funds', 'right'],
+  ['change', 'vs last', 'right'],
   ['added', 'New', 'right'],
   ['exited', 'Exited', 'right'],
-  ['top10', 'In a top 10', 'right'],
+  ['top10', 'Top 10', 'right'],
   ['over5', 'Over 5%', 'right'],
   ['filed', 'Filed this season', 'right'],
-  ['net', 'Their net trades', 'right'],
-  ['latest', 'Latest Form 4 / 13D', 'left'],
+  ['net', 'Net trades', 'right'],
+  ['latest', 'Latest 4 / 13D', 'left'],
 ]
 
 function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: string): Row {
   const h: StockHolder[] = stock?.holders ?? []
   const ex: StockHolder[] = stock?.exited ?? []
+  // Share changes in a quarter that looks like a split aren't trades: kept out of the counts and net.
+  const split = stock?.splits?.[season] ?? null
   const filed = [...h, ...ex].filter((x) => x.quarter === season)
+  const traded = split ? [] : filed
   const ev = stock?.since?.[0]
   return {
     ticker,
@@ -63,9 +67,10 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
     over5: h.filter((x) => x.weight > 0.05).length,
     filed: filed.length,
     filedOf: h.length + ex.length,
-    bought: filed.filter((x) => x.change === 'new' || x.change === 'added').length,
-    sold: filed.filter((x) => x.change === 'trimmed' || x.change === 'exited').length,
-    net: filed.reduce((a, x) => a + (x.change && x.change !== 'unchanged' ? x.delta_value : 0), 0),
+    bought: traded.filter((x) => x.change === 'new' || x.change === 'added').length,
+    sold: traded.filter((x) => x.change === 'trimmed' || x.change === 'exited').length,
+    net: traded.reduce((a, x) => a + (x.change && x.change !== 'unchanged' ? x.delta_value : 0), 0),
+    split,
     latest: ev ? { form: ev.form, date: ev.filing_date, manager: ev.manager } : null,
   }
 }
@@ -101,7 +106,7 @@ export function Book() {
   const moves = useMemo(
     () =>
       rows
-        .flatMap((r) => [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])].filter((x) => x.quarter === season && x.change && x.change !== 'unchanged' && x.delta_value).map((x) => ({ r, x })))
+        .flatMap((r) => (r.split ? [] : [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])]).filter((x) => x.quarter === season && x.change && x.change !== 'unchanged' && x.delta_value).map((x) => ({ r, x })))
         .sort((a, b) => Math.abs(b.x.delta_value) - Math.abs(a.x.delta_value))
         .slice(0, 12),
     [rows, season],
@@ -176,7 +181,7 @@ export function Book() {
                     {COLS.map(([k, l, align]) => (
                       <th key={k} aria-sort={sort.k === k ? (sort.desc ? 'descending' : 'ascending') : 'none'} className={`whitespace-nowrap px-3 py-2.5 font-medium first:pl-5 last:pr-5 md:first:pl-6 md:last:pr-6 ${align === 'right' ? 'text-right' : 'text-left'}`}>
                         <button type="button" onClick={() => setSort((s) => ({ k, desc: s.k === k ? !s.desc : k !== 'ticker' }))} className="inline-flex items-center gap-1 hover:text-ink">
-                          {k === 'filed' && season ? `Filed ${quarterLabel(season)}` : l}
+                          {k === 'filed' && season ? `Filed ${quarterLabel(season).split(' ')[0]}` : l}
                           <span aria-hidden="true" className={sort.k === k ? 'text-ink' : 'opacity-0'}>
                             {sort.desc ? '↓' : '↑'}
                           </span>
@@ -204,13 +209,13 @@ export function Book() {
                               <Link to={stockPath(r.ticker)} className="font-mono text-[13px] font-semibold hover:text-accent">
                                 {r.ticker}
                               </Link>
-                              <span className="max-w-[12rem] truncate text-ink-2">{r.name}</span>
-                              {r.owned && <Badge>Owned</Badge>}
+                              <span className="max-w-[9rem] truncate text-ink-2" title={r.name}>{r.name}</span>
+                              {r.owned ? <Badge tone="accent">Owned</Badge> : <Badge>Watched</Badge>}
                             </span>
                           </td>
                           {r.stock ? (
                             <>
-                              <td className="num px-3 py-2.5 text-right font-medium">
+                              <td className="num whitespace-nowrap px-3 py-2.5 text-right font-medium">
                                 {r.holders}
                                 {r.featured > 0 && <span className="ml-1 text-[12px] font-normal text-ink-3">({r.featured} super)</span>}
                               </td>
@@ -223,11 +228,11 @@ export function Book() {
                                 {r.filed} of {r.filedOf}
                                 {r.filed > 0 && (
                                   <span className="block whitespace-nowrap text-[12px] text-ink-3">
-                                    {r.bought} bought · {r.sold} sold
+                                    {r.split ? `Possible ${r.split} split` : `${r.bought} bought · ${r.sold} sold`}
                                   </span>
                                 )}
                               </td>
-                              <td className={`num px-3 py-2.5 text-right font-medium ${r.net > 0 ? 'text-up' : r.net < 0 ? 'text-down' : 'text-ink-3'}`}>{r.filed ? signed(r.net) : '—'}</td>
+                              <td className={`num px-3 py-2.5 text-right font-medium ${r.net > 0 ? 'text-up' : r.net < 0 ? 'text-down' : 'text-ink-3'}`}>{r.split ? <span className="text-[12.5px] font-normal">Not counted</span> : r.filed ? signed(r.net) : '—'}</td>
                               <td className="px-3 py-2.5 pr-5 text-[12.5px] md:pr-6">
                                 {r.latest ? (
                                   <span className="block max-w-[14rem]">

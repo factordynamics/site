@@ -130,6 +130,12 @@ export function StockPage() {
           <p className="mt-2 flex flex-wrap items-center gap-2 text-[15px] text-ink-2">
             {d?.sector && <Badge>{d.sector}</Badge>}
             {d && d.classes.length > 1 && <span className="text-[13.5px] text-ink-3">Share classes combined</span>}
+            {d?.splits &&
+              Object.entries(d.splits).map(([q, r]) => (
+                <Badge key={q} tone="warn">
+                  Possible {r} split in {quarterLabel(q)}
+                </Badge>
+              ))}
           </p>
         </div>
         {d && <FollowButton kind="stock" id={d.ticker} name={d.ticker} size="md" />}

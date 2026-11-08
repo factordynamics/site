@@ -34,6 +34,8 @@ export type Stock = {
   options: StockOption[]
   counts: { holders: number; prev_holders: number; new: number; added: number; trimmed: number; exited: number }
   quarters: string[]
+  /** Quarters whose share changes look like a split ("4:1"), until ingest's split field ships. */
+  splits?: Record<string, string>
   generated_at: string
   /** Form 4 and 13D/G filings since each fund's latest 13F (scripts/stocks.mjs). */
   since?: (Ev & { slug: string; manager: string; quarter?: string })[]
@@ -58,6 +60,8 @@ export type FlowRow = {
 }
 export type FlowScope = { funds: number; bought: FlowRow[]; sold: FlowRow[]; most_buyers: FlowRow[]; most_sellers: FlowRow[]; new_multi: FlowRow[]; fresh: FlowRow[] }
 export type FlowPeriod = {
+  /** Stocks left out of the rankings because their share changes look like a split. */
+  splits?: { ticker: string; name: string; ratio: string }[]
   quarter: string
   funds_filed: number
   funds_total: number
@@ -80,6 +84,44 @@ export type Flow = {
   featured: FlowScope
   all: FlowScope
   generated_at: string
+}
+
+export type SeasonRow = Pick<FlowRow, 'ticker' | 'name' | 'net_value' | 'buy_value' | 'sell_value' | 'n_buyers' | 'n_sellers' | 'buyers' | 'sellers'>
+export type SeasonFlow = { funds: number; bought: SeasonRow[]; sold: SeasonRow[]; most_buyers: SeasonRow[] }
+export type Season = {
+  quarter: string
+  deadline: string
+  curated: { filed: number; total: number }
+  featured: { filed: number; total: number }
+  filers: { filed: number; total: number }
+  by_day: { date: string; count: number }[]
+  latest: { slug: string; manager: string; firm: string; filing_date?: string; accession?: string; featured: boolean; total_value?: number; changes: Record<string, number> | null }[]
+  splits?: { ticker: string; name: string; ratio: string }[]
+  featured_flow: SeasonFlow
+  all_flow: SeasonFlow
+  generated_at: string
+}
+export const loadSeason = () =>
+  getJSON<Season>(`${D}season.json`).then((s) => {
+    const fix = (f: SeasonFlow): SeasonFlow => {
+      const rows = (r: SeasonRow[]) => r.map((x) => ({ ...x, buyers: x.buyers.map(named), sellers: x.sellers.map(named) }))
+      return { ...f, bought: rows(f.bought), sold: rows(f.sold), most_buyers: rows(f.most_buyers) }
+    }
+    return { ...s, latest: s.latest.map((x) => ({ ...named(x), firm: displayName(x.firm) })), featured_flow: fix(s.featured_flow), all_flow: fix(s.all_flow) }
+  })
+
+/** The 13F season under way: the deadline of the quarter that ended last, shown from 3 weeks before it to 4 days after. */
+export function seasonNow(now = new Date()) {
+  const y = now.getUTCFullYear()
+  const m = now.getUTCMonth()
+  const qEnd = new Date(Date.UTC(y, Math.floor(m / 3) * 3, 0))
+  const due = new Date(qEnd.getTime() + 45 * 864e5)
+  while (due.getUTCDay() === 0 || due.getUTCDay() === 6) due.setUTCDate(due.getUTCDate() + 1)
+  const q = Math.floor(qEnd.getUTCMonth() / 3) + 1
+  due.setUTCHours(17 + (q <= 2 ? 4 : 5), 30)
+  const t = now.getTime()
+  const live = t >= due.getTime() - 21 * 864e5 && t <= due.getTime() + 4 * 864e5
+  return { quarter: `${qEnd.getUTCFullYear()}Q${q}`, deadline: due, live }
 }
 
 export const loadStockIndex = () => getJSON<{ funds: number; stocks: StockRef[] }>(`${D}stocks.json`)
@@ -129,6 +171,11 @@ export const loadFilerHolders = (t: string) =>
   }))
 
 /** Public filing cards built this deploy (scripts/cards.mjs): slug -> latest card accession. */
+/** Every filing card's accession, to link a filing to its card once one is built. */
+export const loadCardSet = () =>
+  getJSON<{ cards: { accession: string }[] }>(`${D}f/index.json`)
+    .then((d) => new Set(d.cards.map((c) => c.accession)))
+    .catch(() => new Set<string>())
 export const loadCards = () =>
   getJSON<{ cards: { accession: string; slug: string }[] }>(`${D}f/index.json`)
     .then((d) => new Map(d.cards.map((c) => [c.slug, c.accession])))

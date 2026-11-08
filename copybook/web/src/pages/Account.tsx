@@ -167,7 +167,7 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
                   `Investors I follow + stocks I own or watch${follows.investors.length || follows.stocks.length ? ` (${follows.investors.length} + ${follows.stocks.length})` : ''}`,
                   'Stocks alert when a hedge fund or active manager trades them, never banks, brokers or index funds.',
                 ],
-                ['all', `Every investor (all ${idx.data?.managers.length ?? 199} funds)`, ''],
+                ['all', `Every fund we track closely (${idx.data?.managers.length ?? 199})`, ''],
                 ['off', 'Off', ''],
               ] as const
             ).map(([k, l, d]) => (

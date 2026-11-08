@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom'
 import { useTitle } from '../lib/data'
 
 const UPDATED = 'November 8, 2026'
+const email = (
+  <a href="mailto:hello@factordynamics.com" className="font-medium text-accent hover:text-accent-2">
+    hello@factordynamics.com
+  </a>
+)
 const contact = (
   <Link to="/contact/" className="font-medium text-accent hover:text-accent-2">
     contact form
@@ -24,7 +29,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['Site content', 'You can link to and quote Copybook pages and share individual charts. Don’t scrape the site in bulk; use the API instead.'],
       ['Changes and termination', 'We may change or discontinue features, and we’ll give notice of material changes to paid plans. We may suspend accounts that break these terms. You can stop using Copybook and delete your data at any time.'],
       ['Liability', 'To the extent the law allows, Factor Dynamics is not liable for indirect or consequential losses, or for losses from decisions made using Copybook, and our total liability is limited to what you paid us in the 12 months before the claim.'],
-      ['Contact', <>Questions about these terms: use the {contact}.</>],
+      ['Contact', <>Questions about these terms: use the {contact} or email {email}.</>],
     ],
   },
   privacy: {
@@ -44,7 +49,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['What we don’t do', 'We don’t sell or rent your data, share it with advertisers, or use advertising cookies. Your follows and owned stocks are never shown to other members or used in public aggregates.'],
       ['In your browser', 'We keep your sign-in session and, for 30 days, the campaign link you arrived from (so a purchase can be attributed to it) in your browser’s local storage. Nothing else is stored there.'],
       ['Who processes it', 'Cloudflare runs our API and stores account data; Stripe handles payments; our email provider delivers alerts and sign-in links. Each processes data only to provide that service.'],
-      ['Deleting your data', <>Cancel any paid plan from Manage billing, then ask us to delete your account through the {contact} (choose “Delete my data”). We delete your account record, follows and keys; Stripe keeps billing records it must keep by law.</>],
+      ['Deleting your data', <>Cancel any paid plan from Manage billing, then ask us to delete your account through the {contact} (choose “Delete my data”) or by email to {email}. We delete your account record, follows and keys; Stripe keeps billing records it must keep by law.</>],
     ],
   },
   security: {

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { getToken } from '../lib/account'
+import { quarterLabel } from '../lib/data'
+import { seasonNow } from '../lib/stocks'
 import { SearchBox } from './Search'
 import { Button, Wordmark } from './ui'
 
@@ -16,7 +18,10 @@ export function Layout() {
   const { pathname } = useLocation()
   // Re-read on every route change, so it updates after checkout or sign-out.
   const signedIn = Boolean(getToken())
-  const nav = signedIn ? [...NAV.slice(0, 3), { to: '/my-book/', label: 'My book' }, ...NAV.slice(3)] : NAV
+  const sn = seasonNow()
+  // During a 13F season the tracker sits after Flow.
+  const base = sn.live ? [...NAV.slice(0, 2), { to: '/season/', label: `${quarterLabel(sn.quarter).split(' ')[0]} season` }, ...NAV.slice(2)] : NAV
+  const nav = signedIn ? [...base.slice(0, base.length - 2), { to: '/my-book/', label: 'My book' }, ...base.slice(-2)] : base
   const [menu, setMenu] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
@@ -107,6 +112,9 @@ function Footer() {
           <p className="mt-4 text-[14px] leading-relaxed text-white/60">
             Portfolios of the world’s great investors, read straight from their SEC filings.
           </p>
+          <a href="mailto:hello@factordynamics.com" className="mt-4 inline-block text-[14px] text-white/80 hover:text-white">
+            hello@factordynamics.com
+          </a>
         </div>
         <FooterCol title="Product" links={[['Investors', '/investors/'], ['Flow', '/flow/'], ['Pricing', '/pricing/'], ['API', '/api/']]} />
         <FooterCol title="Company" links={[['About', '/about/'], ['Methodology', '/methodology/'], ['Contact', '/contact/'], ['Terms', '/terms/'], ['Privacy', '/privacy/'], ['Security', '/security/']]} />

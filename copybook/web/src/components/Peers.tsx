@@ -198,7 +198,7 @@ export function Peers({ names, shared }: { names: string[]; shared?: boolean }) 
                                 style={{ background: x === null ? 'var(--color-paper)' : `color-mix(in oklab, var(--color-accent) ${Math.round(8 + ((x ?? 0) / top) * 80)}%, var(--color-card))` }}
                                 title={x === null ? undefined : `${b.manager} and ${books[j].manager}: ${pct(x)}`}
                               >
-                                {x === null ? '—' : pct(x, 0)}
+                                {x === null ? '—' : x > 0 && x < 0.0005 ? '<0.1%' : pct(x)}
                               </span>
                             </td>
                           ))}

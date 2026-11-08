@@ -73,7 +73,13 @@ export function Contact() {
               .
             </p>
           )}
-          <p className="mt-6 text-[15px] font-medium text-ink">Use the form; we reply within one business day.</p>
+          <p className="mt-6 text-[15px] font-medium text-ink">
+            Use the form, or email{' '}
+            <a href="mailto:hello@factordynamics.com" className="text-accent hover:text-accent-2">
+              hello@factordynamics.com
+            </a>
+            . We reply within one business day.
+          </p>
           <p className="mt-3 text-[13.5px] text-ink-3">
             Copybook is operated by Factor Dynamics. See our <Link to="/terms/" className="underline underline-offset-2 hover:text-ink">terms</Link>, <Link to="/privacy/" className="underline underline-offset-2 hover:text-ink">privacy</Link> and{' '}
             <Link to="/security/" className="underline underline-offset-2 hover:text-ink">security</Link> pages.

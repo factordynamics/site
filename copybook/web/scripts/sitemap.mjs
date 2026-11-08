@@ -25,6 +25,7 @@ const urls = [
   ['privacy/'],
   ['security/'],
   ['flow/', newest],
+  ['season/', newest],
   ...managers.map((m) => [`investors/${m.slug}/`, m.filing_date]),
 ]
 try {

@@ -1,10 +1,11 @@
 import { Signup } from '../components/Signup'
 import { useState } from 'react'
+import { SplitNote } from './Season'
 import { Link, useSearchParams } from 'react-router-dom'
-import { AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
+import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { dateLabel, money, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { useMember } from '../lib/account'
-import { loadCards, loadFlow, stockPath, type FlowPeriod, type FlowRow, type FlowScope } from '../lib/stocks'
+import { loadCards, loadFlow, seasonNow, stockPath, type FlowPeriod, type FlowRow, type FlowScope } from '../lib/stocks'
 
 type Tab = 'bought' | 'sold' | 'most_buyers' | 'new_multi'
 const TABS: [Tab, string][] = [
@@ -54,6 +55,11 @@ export function Flow() {
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
           One report period at a time: each fund’s 13F for the quarter, compared with its own filing before. Updated as filings arrive through the deadline.
         </p>
+        {seasonNow().live && (
+          <Link to="/season/" className="mt-4 inline-flex items-center gap-1.5 text-[14px] font-medium text-accent hover:text-accent-2">
+            {quarterLabel(seasonNow().quarter)} season tracker: who has filed, and the deadline countdown <Arrow className="size-3" />
+          </Link>
+        )}
       </header>
 
       {d && newest && (
@@ -127,6 +133,7 @@ export function Flow() {
               ))}
             </ol>
           )}
+          {d && tab !== 'sold' && <SplitNote splits={d.splits} />}
           {d && paid && rows.length > limit && (
             <div className="border-t border-line px-5 py-3 md:px-6">
               <button type="button" onClick={() => setLimit((n) => n + 40)} className="text-[13px] font-medium text-accent hover:text-accent-2">

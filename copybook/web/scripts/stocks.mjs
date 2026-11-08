@@ -93,6 +93,21 @@ for (const b of books) {
   }
 }
 
+// Possible stock splits, until ingest's split field ships: in a quarter where most holders' share counts
+// moved by a clean factor (within 25%) and the implied price per share moved inversely by about the
+// same factor (within 50%, allowing for the quarter's price move), the share changes are a split, not
+// trades. Those stocks stay out of the flow rankings and their pages say so. CRWD 4:1 and APH 2:1 in Q3 2026.
+const FACTORS = [2, 3, 4, 5, 10].flatMap((k) => [k, 1 / k])
+for (const st of stocks.values()) {
+  const byQ = new Map()
+  for (const h of st.holders) if (h.shares > 0 && h.prev_shares > 0 && h.value > 0 && h.prev_value > 0) (byQ.get(h.quarter) ?? byQ.set(h.quarter, []).get(h.quarter)).push({ s: h.shares / h.prev_shares, p: h.prev_value / h.prev_shares / (h.value / h.shares) })
+  for (const [q, r] of byQ) {
+    if (r.length < 3) continue
+    const k = FACTORS.find((f) => r.filter((x) => Math.abs(Math.log(x.s / f)) < Math.log(1.25) && Math.abs(x.p / f - 1) < 0.5).length >= r.length / 2)
+    if (k) (st.splits ??= {})[q] = k >= 1 ? `${k}:1` : `1:${Math.round(1 / k)}`
+  }
+}
+
 const list = []
 const byTicker = {}
 mkdirSync(join(out, 'd', 'stocks'), { recursive: true })
@@ -117,6 +132,7 @@ for (const s of stocks.values()) {
     options: s.options.sort((a, b) => b.value - a.value),
     counts: { holders: holders.length, prev_holders: prevHolders, new: count('new'), added: count('added'), trimmed: count('trimmed'), exited: count('exited') },
     quarters: [...new Set(holders.map((h) => h.quarter))].sort().reverse(),
+    ...(s.splits ? { splits: s.splits } : {}),
     generated_at: index.generated_at,
   }
   writeFileSync(join(out, 'd', 'stocks', `${ticker}.json`), JSON.stringify(file))
@@ -178,11 +194,11 @@ if (books.filter((b) => qn(b.quarter) === season).length < 10) season -= 1
 const filed = books.filter((b) => qn(b.quarter) === season && b.prev_quarter)
 // Two scopes: the featured superinvestors (the "smart money"), and every curated fund, which
 // includes banks and market makers whose inventory swings dominate dollar totals.
-function flowFor(scope, full = false) {
+function flowFor(scope, full = false, q = '') {
   const slugs = new Set(scope.map((b) => b.slug))
   const flows = []
   for (const s of stocks.values()) {
-    if (!s.classes.size) continue
+    if (!s.classes.size || s.splits?.[q]) continue
     const ticker = [...s.classes.values()].sort((a, b) => b.value - a.value)[0].ticker
     const moves = s.holders.filter((h) => slugs.has(h.slug) && h.change && h.change !== 'unchanged')
     if (!moves.length) continue
@@ -237,13 +253,55 @@ const period = (q, full = false) => {
       .map((b) => ({ slug: b.slug, manager: b.manager, firm: b.name, filing_date: b.filing_date, accession: b.accession, featured: Boolean(b.featured), changes: b.changes ?? null }))
       .sort((a, b) => (b.filing_date ?? '').localeCompare(a.filing_date ?? ''))
       .slice(0, 40),
-    featured: flowFor(filedQ.filter((b) => b.featured), full),
-    all: flowFor(filedQ, full),
+    featured: flowFor(filedQ.filter((b) => b.featured), full, toQ(q)),
+    all: flowFor(filedQ, full, toQ(q)),
+    // Left out of the rankings above: share changes that look like a split, not trades.
+    splits: [...stocks.values()].filter((st) => st.splits?.[toQ(q)] && st.classes.size).map((st) => ({ ticker: [...st.classes.values()].sort((a, b) => b.value - a.value)[0].ticker, name: st.name, ratio: st.splits[toQ(q)] })),
   }
 }
 const periods = [period(season), period(season - 1)]
 const flow = { ...periods[0], periods, generated_at: index.generated_at }
 writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
+// The 13F season tracker (/season/): the newest quarter's filing progress, latest curated filings and
+// the most bought and sold names so far. Rebuilt with every Pages build (every 20 minutes in the wave).
+{
+  const q = newest
+  const Q = toQ(q)
+  const y = Math.floor(q / 4)
+  const n = (q % 4) + 1
+  // Due 45 days after quarter end, moved past a weekend, at 5:30 pm Eastern (EDT in May and August).
+  const due = new Date(Date.UTC(y, n * 3, 0) + 45 * 864e5)
+  while (due.getUTCDay() === 0 || due.getUTCDay() === 6) due.setUTCDate(due.getUTCDate() + 1)
+  due.setUTCHours(17 + (n <= 2 ? 4 : 5), 30)
+  const active = live.filter((m) => qn(m.quarter) >= q - 1)
+  const fl = (await read('filers.json').catch(() => null))?.filers?.filter((f) => f.ok) ?? []
+  const filedAll = fl.filter((f) => f.quarter === Q)
+  const days = {}
+  for (const f of filedAll) if (f.filing_date) days[f.filing_date] = (days[f.filing_date] ?? 0) + 1
+  const sp = q === season ? periods[0] : period(q)
+  const top = (sc) => {
+    const cut = (rows) => rows.slice(0, 40).map((f) => ({ ticker: f.ticker, name: f.name, net_value: f.net_value, buy_value: f.buy_value, sell_value: f.sell_value, n_buyers: f.n_buyers, n_sellers: f.n_sellers, buyers: f.buyers.slice(0, 5), sellers: f.sellers.slice(0, 5) }))
+    return { funds: sc.funds, bought: cut(sc.bought), sold: cut(sc.sold), most_buyers: cut(sc.most_buyers) }
+  }
+  const seasonOut = {
+    quarter: Q,
+    deadline: due.toISOString(),
+    curated: { filed: active.filter((m) => qn(m.quarter) === q).length, total: active.length },
+    featured: { filed: active.filter((m) => m.featured && qn(m.quarter) === q).length, total: active.filter((m) => m.featured).length },
+    filers: { filed: filedAll.length, total: fl.filter((f) => qn(f.quarter) >= q - 1).length },
+    by_day: Object.entries(days).sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count })),
+    latest: books
+      .filter((b) => qn(b.quarter) === q)
+      .map((b) => ({ slug: b.slug, manager: b.manager, firm: b.name, filing_date: b.filing_date, accession: b.accession, featured: Boolean(b.featured), total_value: b.total_value, changes: b.changes ?? null }))
+      .sort((a, b) => (b.filing_date ?? '').localeCompare(a.filing_date ?? '') || (b.total_value ?? 0) - (a.total_value ?? 0)),
+    splits: sp.splits,
+    featured_flow: top(sp.featured),
+    all_flow: top(sp.all),
+    generated_at: index.generated_at,
+  }
+  writeFileSync(join(out, 'd', 'season.json'), JSON.stringify(seasonOut))
+  console.log(`season ${Q}: ${seasonOut.curated.filed} of ${seasonOut.curated.total} curated, ${seasonOut.filers.filed} of ${seasonOut.filers.total} filers, due ${seasonOut.deadline}`)
+}
 // FLOW_FULL=<path outside dist>: the untrimmed lists, same shape, for the API's GET /flow.
 if (process.env.FLOW_FULL) {
   const fp = [period(season, true), period(season - 1, true)]

@@ -1,6 +1,7 @@
 import { Signup } from '../components/Signup'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { loadSeason, seasonNow } from '../lib/stocks'
 import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { SearchBox } from '../components/Search'
@@ -36,11 +37,7 @@ function Hero({ managers }: { managers?: Manager[] }) {
       <div className="container-x relative pb-16 pt-10 md:pt-16">
         <div className="relative z-20 grid items-end gap-12 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rise max-w-3xl">
-          <Link to="/investors/warren-buffett/" className="inline-flex items-center gap-2 rounded-full bg-card py-1 pl-1 pr-3 text-[13px] text-ink-2 shadow-[var(--shadow-card)] hover:text-ink">
-            <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent-2">New</span>
-            Q3 2026 13Fs are due Nov 16. See Berkshire’s latest book
-            <Arrow />
-          </Link>
+          <SeasonPill />
           <h1 className="mt-6 text-[42px] font-semibold leading-[1.02] tracking-[-0.045em] sm:text-[54px] lg:text-[64px]">
             See what the world’s best investors own,{' '}
             <span className="font-serif font-normal italic tracking-[-0.025em] text-accent">straight from the filing.</span>
@@ -440,5 +437,32 @@ function CTABand() {
         </div>
       </div>
     </section>
+  )
+}
+
+// During a 13F season the hero's pill points at the live tracker; otherwise at Berkshire's latest book.
+function SeasonPill() {
+  const sn = seasonNow()
+  const d = useAsync(() => (sn.live ? loadSeason() : Promise.resolve(null)), [sn.live])
+  const days = Math.ceil((sn.deadline.getTime() - Date.now()) / 864e5)
+  const cls = 'inline-flex max-w-full items-center gap-2 rounded-full bg-card py-1 pl-1 pr-3 text-[13px] text-ink-2 shadow-[var(--shadow-card)] hover:text-ink'
+  if (!sn.live)
+    return (
+      <Link to="/investors/warren-buffett/" className={cls}>
+        <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent-2">New</span>
+        See Berkshire’s latest book
+        <Arrow />
+      </Link>
+    )
+  return (
+    <Link to="/season/" className={cls}>
+      <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent-2">Live</span>
+      <span className="truncate">
+        {quarterLabel(sn.quarter)} 13F season
+        {d.data ? `: ${d.data.curated.filed} of ${d.data.curated.total} funds we track have filed` : ''}
+        {days > 0 ? ` · ${days} ${days === 1 ? 'day' : 'days'} left` : ''}
+      </span>
+      <Arrow />
+    </Link>
   )
 }

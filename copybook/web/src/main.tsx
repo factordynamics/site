@@ -13,6 +13,7 @@ import { Consensus } from './pages/Consensus'
 import { Pricing } from './pages/Pricing'
 import { Account } from './pages/Account'
 import { Book } from './pages/Book'
+import { Season } from './pages/Season'
 import { About } from './pages/About'
 import { Methodology } from './pages/Methodology'
 import { ApiDocs } from './pages/Api'
@@ -60,6 +61,7 @@ handoff.then(() =>
             <Route path="investors/:slug/history" element={<History />} />
             <Route path="stocks/:ticker" element={<StockPage />} />
             <Route path="flow" element={<Flow />} />
+            <Route path="season" element={<Season />} />
             <Route path="consensus" element={<Consensus />} />
             <Route path="pricing" element={<Pricing />} />
             <Route path="account" element={<Account />} />

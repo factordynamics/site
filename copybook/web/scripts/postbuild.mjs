@@ -35,6 +35,12 @@ page('investors/', 'Investors · Copybook', 'Latest 13F portfolios of legendary 
 page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.')
 page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, full history, filing alerts and CSV export.')
 page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
+{
+  // The season tracker's title names the quarter now filing, for search during filing week.
+  const qs = index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort()
+  const q = qs.at(-1)?.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1') ?? 'Quarterly'
+  page('season/', `${q} 13F filing season tracker: who has filed and what they bought · Copybook`, `Live through the 13F deadline: how many superinvestors and filers have filed ${q} 13Fs, the latest filings, and the most bought and sold stocks so far. From SEC EDGAR.`)
+}
 page('my-book/', 'My book · Copybook', 'Your stocks through the eyes of every 13F filer: who holds them, who bought and sold this season, and every Form 4 and 13D.')
 page('methodology/', 'Methodology · Copybook', 'How Copybook reads SEC 13F, Form 4 and Schedule 13D/G filings: amendments, unit fixes, options, tickers, refresh cadence, and a changelog of every data correction.')
 page('api/', 'API · Copybook', 'The Copybook API: 13F, Form 4 and Schedule 13D/G data from SEC EDGAR as JSON, for Copy Pro and Copy Fund.')
