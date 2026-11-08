@@ -53,8 +53,8 @@ export function useFollows() {
   return s
 }
 
-// Saves run one at a time and each one reads /follows back, so a quick second click can't
-// overwrite the first and the page never claims a follow the server doesn't have.
+// Saves run one at a time and render from the server's answer, so the page never claims a follow
+// the server doesn't have.
 let queue: Promise<unknown> = Promise.resolve()
 const enqueue = <T>(job: () => Promise<T>): Promise<T> => {
   const run = queue.then(job, job)
@@ -78,12 +78,11 @@ export function setFollow(kind: 'investors' | 'stocks', id: string, want: boolea
   set({ ...state, pending: { ...state.pending, [key]: { want, state: 'saving' } } })
   return enqueue(async () => {
     try {
-      const cur = state.follows
-      const list = want ? [...new Set([...cur[kind], id])] : cur[kind].filter((x) => x !== id)
-      // Unwatching a stock also drops it from owned.
-      const patch: Partial<Follows> = kind === 'stocks' && !want ? { stocks: list, owned: cur.owned.filter((x) => x !== id) } : { [kind]: list }
-      await call('/follows', { method: 'PUT', body: patch, auth: true })
-      const f = await readBack()
+      // One item per request ({api}/follows/{slug}, /follows/stocks/{TICKER}); the server serializes
+      // writes and answers with the full follows, which the button renders from.
+      const path = kind === 'investors' ? `/follows/${encodeURIComponent(id)}` : `/follows/stocks/${encodeURIComponent(id)}`
+      const r = await call<{ follows: Follows }>(path, { method: want ? 'POST' : 'DELETE', auth: true })
+      const f = { ...EMPTY, ...r.follows }
       const ok = f[kind].includes(id) === want
       set({ status: 'ready', follows: f, pending: ok ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error' } } })
       if (!ok) throw new Error('not_confirmed')
