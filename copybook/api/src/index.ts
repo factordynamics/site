@@ -537,7 +537,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // Every followed fund's latest 13F in one CSV, streamed fund by fund.
   if (req.method === 'GET' && path === '/follows.csv') {
-    const f = await getFollows(env, m);
+    // The member's object holds the authoritative follows; KV can lag a fresh Follow click by a minute.
+    const r = await changeFollows(env, m, { get: true });
+    const f = r.ok ? r.follows : await getFollows(env, m);
     const list = await curatedFilers(env);
     const history = [];
     for (const slug of f.investors.slice(0, 100)) {
