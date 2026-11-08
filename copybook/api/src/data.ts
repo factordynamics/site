@@ -122,7 +122,8 @@ export async function runAlerts(env: Env): Promise<{ new: number; emails: number
   const next = { ...periods };
   const fresh: Filing[] = [];
   for (const f of index.managers ?? []) {
-    if (!f.ok || !f.slug || !f.accession || !f.report_date || f.form !== '13F-HR') continue;
+    // Holdings reports (13F-HR and restated 13F-HR/A) record the period; notices (13F-NT) don't.
+    if (!f.ok || !f.slug || !f.accession || !f.report_date || !f.form?.startsWith('13F-HR')) continue;
     const prev = periods[f.slug];
     if (prev && f.report_date <= prev) continue;
     next[f.slug] = f.report_date;

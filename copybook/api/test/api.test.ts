@@ -213,7 +213,7 @@ describe('copybook api', () => {
       await pending;
     };
 
-    index = { managers: ['warren-buffett', 'bill-ackman', 'pershing-square-inc', 'dan-loeb', 'seth-klarman', 'david-tepper'].map((s) => mk(s, `${s}-2`, Q2)) };
+    index = { managers: ['warren-buffett', 'bill-ackman', 'pershing-square-inc', 'dan-loeb', 'seth-klarman', 'david-tepper', 'chase-coleman'].map((s) => mk(s, `${s}-2`, Q2)) };
     await run();
     expect(sent).toHaveLength(0);
 
@@ -225,6 +225,7 @@ describe('copybook api', () => {
       mk('seth-klarman', 'K3', Q3, { filing_date: '2026-08-01' }), // new period filed long ago: no alert
       mk('david-tepper', 'T3', Q3, { form: '13F-NT' }), // notice, not holdings: no alert, period not advanced
       mk('howard-marks', 'M3', Q3), // first seen: no alert
+      mk('chase-coleman', 'C3', Q3, { form: '13F-HR/A' }), // amendment form: records the period, no alert
     ];
     index = { managers: later };
     await run();
@@ -232,7 +233,7 @@ describe('copybook api', () => {
     const all = sent.find((m) => m.to[0] === 'all@example.com')!.text;
     expect(all).toContain('warren-buffett LP');
     expect(all.match(/sec\.gov\/P3/g)).toHaveLength(1);
-    for (const s of ['dan-loeb', 'seth-klarman', 'david-tepper', 'howard-marks']) expect(all).not.toContain(s);
+    for (const s of ['dan-loeb', 'seth-klarman', 'david-tepper', 'howard-marks', 'chase-coleman']) expect(all).not.toContain(s);
     const ackman = sent.find((m) => m.to[0] === 'ackman@example.com')!.text;
     expect(ackman).toContain('sec.gov/P3');
     expect(ackman).not.toContain('warren-buffett');
