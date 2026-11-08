@@ -96,6 +96,11 @@ MANAGERS: list[tuple[str, str, str, str]] = [
 ]
 
 
+def clean_name(name: str) -> str:
+    """EDGAR conformed names can end in a stray backslash (e.g. "DEUTSCHE BANK AG\\")."""
+    return name.strip().rstrip("\\").strip()
+
+
 def load_managers():
     """Featured 41 plus curated names from universe.json when built."""
     import json
@@ -115,7 +120,7 @@ def load_managers():
         if cik in seen:
             continue
         seen.add(cik)
-        rows.append((cik, row["name"], row["manager"], row["slug"]))
+        rows.append((cik, clean_name(row["name"]), clean_name(row["manager"]), row["slug"]))
     for item in MANAGERS:
         if item[0] not in seen:
             rows.append(item)

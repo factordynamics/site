@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ingest.managers import MANAGERS
+from ingest.managers import MANAGERS, clean_name
 
 NEEDLES = {
     x.strip().lower()
@@ -68,7 +68,7 @@ def parse_index(path: Path) -> dict[str, dict]:
         form = line[:12].strip()
         if form not in {"13F-HR", "13F-HR/A"}:
             continue
-        name = line[12:74].strip()
+        name = clean_name(line[12:74])
         rest = line[74:].split()
         if len(rest) < 3:
             continue
