@@ -40,6 +40,8 @@ export interface Env {
   RESEND_API_KEY?: string;
   /** Fine-grained GitHub PAT (refcell/gust only, Actions: read and write) to dispatch the data refresh. */
   GITHUB_DISPATCH_TOKEN?: string;
+  /** SEC requests per minute run: 40 fits the free plan's 50 subrequests; raise on Workers Paid. */
+  SEC_BUDGET?: string;
   /** Durable Object namespace: one KeyMeter per API key (rate limits and usage). */
   METER: import('./keys').MeterNamespace;
 }

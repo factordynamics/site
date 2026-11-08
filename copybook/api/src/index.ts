@@ -1,4 +1,4 @@
-import { runScheduled } from './alerts';
+import { resolveFollowedFilers, runScheduled } from './alerts';
 import { fetchHistory, historyCsv, shard, SHARD_KEY, SLUG } from './data';
 import { verifyGithubOidc } from './oidc';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
@@ -194,6 +194,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const a = (await body(req)).alerts;
     const valid = a === 'all' || a === 'off' || (Array.isArray(a) && a.length <= 500 && a.every((s) => typeof s === 'string' && SLUG.test(s)));
     if (!valid) return json({ ok: false, error: 'alerts must be "all", "off", or a list of manager slugs' }, 400, h);
+    if (Array.isArray(a)) {
+      const unknown = await resolveFollowedFilers(env, a as string[]);
+      if (unknown.length) return json({ ok: false, error: `not a 13F filer on Copybook: ${unknown.join(', ')}`, code: 'unknown_investor' }, 400, h);
+    }
     const updated: Member = { ...m, alerts: a as Member['alerts'], alerts_chosen: true, alerts_note: undefined };
     await putMember(env, updated);
     if (Array.isArray(a)) await putFollows(env, updated, { ...(await getFollows(env, m)), investors: [...new Set(a as string[])] });
@@ -216,6 +220,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const flags = ['onboarded', 'include_13g', 'digest'] as const;
     if (investors === null || stocks === null || owned === null || flags.some((k) => b[k] !== undefined && typeof b[k] !== 'boolean')) {
       return json({ ok: false, error: `investors: manager slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded, include_13g, digest: boolean` }, 400, h);
+    }
+    // Any 13F filer can be followed: non-curated ones are looked up and added to the minute poll.
+    if (investors?.length) {
+      const unknown = await resolveFollowedFilers(env, investors.filter((x) => !current.investors.includes(x)));
+      if (unknown.length) return json({ ok: false, error: `not a 13F filer on Copybook: ${unknown.join(', ')}`, code: 'unknown_investor' }, 400, h);
     }
     const next: Follows = {
       investors: investors ?? current.investors,

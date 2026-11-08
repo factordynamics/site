@@ -77,6 +77,11 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
     const watched = a.tickers.filter((t) => f.stocks.includes(t) && !f.owned.includes(t)).length;
     const yours = [owned && `${owned} ${owned === 1 ? 'is a stock' : 'are stocks'} you own`, watched && `${watched} ${watched === 1 ? 'is' : 'are'} on your watchlist`].filter(Boolean);
     if (yours.length) lines.push(`  Of the positions that changed, ${yours.join(' and ')}.`);
+  } else if (a.top?.length) {
+    lines.push('  No earlier quarter on file for this filer, so no changes yet. Largest holdings:');
+    lines.push(`  ${a.top.map((r) => `${r.ticker || r.display_name || r.issuer}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} ${usd(r.value, false)}${flag(r.ticker, f)}`).join(', ')}`);
+  } else if (a.extra) {
+    lines.push('  Holdings are on the filer page below.');
   } else {
     lines.push('  Too many positions to diff on filing. A second email with its position changes follows after the next data refresh, usually within a few hours.');
   }
@@ -86,20 +91,69 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
 
 const FORM_LABEL: Record<string, string> = { form4: 'Form 4', '13d': 'Schedule 13D', '13g': 'Schedule 13G' };
 
-function eventLine(e: AlertEvent, f: Follows): string {
-  const what = e.ticker || e.display_name || e.issuer || 'a security';
-  const form = /\/A$/.test(e.form) ? `${FORM_LABEL[e.kind]}/A` : FORM_LABEL[e.kind];
-  let detail: string;
-  if (e.kind === 'form4') {
-    const verb = e.action === 'buy' ? 'bought' : 'sold';
-    const sh = e.shares ? `${Math.abs(e.shares).toLocaleString('en-US')} shares of ` : '';
-    const money = e.value_usd ? ` (${usd(Math.abs(e.value_usd), false)}${e.avg_price ? `, avg $${e.avg_price.toFixed(2)}` : ''})` : '';
-    detail = `${verb} ${sh}${what}${money}`;
-  } else {
-    const verb = e.action === 'new_stake' ? 'disclosed a new stake in' : e.action === 'below_threshold' ? 'dropped below 5% of' : 'updated its stake in';
-    detail = `${verb} ${what}${e.percent_of_class != null ? `, ${e.percent_of_class}% of the class` : ''}`;
+const n = (v: number) => {
+  const a = Math.abs(v);
+  return a >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : a >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : a >= 1e4 ? `${(v / 1e3).toFixed(1)}K` : v.toLocaleString('en-US');
+};
+
+/** What changed in a 13D/G stake, and why: trading, dilution or issuance, thresholds, 13G to 13D. */
+export function stakeChange(e: AlertEvent): { line: string | null; note: string | null } {
+  const pct = e.percent_of_class;
+  const prev = e.prev_percent_of_class;
+  if (pct == null) return { line: null, note: null };
+  if (prev == null) return { line: `${pct}% of the class${e.shares_after != null ? `, ${e.shares_after.toLocaleString('en-US')} shares` : ''}`, note: e.action === 'new_stake' ? 'new stake' : null };
+  const sh = e.shares_after;
+  const psh = e.prev_shares_after;
+  const shares = sh != null && psh != null ? (sh === psh ? `${sh.toLocaleString('en-US')} shares (unchanged)` : `${psh.toLocaleString('en-US')} → ${sh.toLocaleString('en-US')} shares (${sh > psh ? '+' : ''}${n(sh - psh)})`) : null;
+  const notes: string[] = [];
+  if (sh != null && psh != null) {
+    if (sh === psh && pct < prev) notes.push('diluted, no shares sold');
+    else if (sh === psh && pct > prev) notes.push('fewer shares outstanding, no shares bought');
+    else if (sh > psh) notes.push('bought');
+    else if (sh < psh) notes.push('sold');
   }
-  return `${form}: ${e.manager} ${detail}${flag(e.ticker, f)}, filed ${e.filing_date}\n  ${e.url}`;
+  for (const t of [5, 10, 20, 50]) {
+    if (prev < t && pct >= t) notes.push(`crossed above ${t}%`);
+    if (prev >= t && pct < t) notes.push(`fell below ${t}%`);
+  }
+  if (e.prev_form?.includes('13G') && e.kind === '13d') notes.push('switched from passive 13G to activist 13D');
+  return { line: `${prev}% → ${pct}% of the class${shares ? `; ${shares}` : ''}`, note: notes.join('; ') || null };
+}
+
+function eventLine(env: Env, e: AlertEvent, f: Follows): string {
+  const what = e.ticker || e.display_name || e.issuer || 'a security';
+  const form = `${FORM_LABEL[e.kind]}${/\/A$/.test(e.form) ? '/A' : ''}${e.amendment_no ? ` (amendment ${e.amendment_no})` : ''}`;
+  const who = e.manager || 'A filer';
+  const lines: string[] = [];
+  if (e.details_pending) {
+    lines.push(`${form}: ${who}${e.issuer || e.ticker ? `, ${what}` : ''}. Details follow once the filing is processed.`);
+  } else if (e.kind === 'form4') {
+    const verb = e.action === 'buy' ? 'bought' : e.action === 'sell' ? 'sold' : e.action === 'mixed' ? 'bought and sold' : 'reported';
+    const money = e.value_usd ? ` (${usd(Math.abs(e.value_usd), false)}${e.avg_price ? `, avg $${e.avg_price.toFixed(2)}` : ''})` : '';
+    const sh = e.shares && e.action !== 'mixed' ? `${Math.abs(e.shares).toLocaleString('en-US')} shares of ` : '';
+    lines.push(`${form}: ${who} ${verb} ${sh}${what}${money}`);
+    // Holdings per class: Class A and Class B are separate securities.
+    for (const c of e.classes ?? []) {
+      const delta = c.bought - c.sold;
+      if (c.shares_after == null && !delta) continue;
+      const pctChg = c.shares_before && c.shares_after != null ? ` (${c.shares_after >= c.shares_before ? '+' : ''}${(((c.shares_after - c.shares_before) / c.shares_before) * 100).toFixed(1)}%)` : '';
+      lines.push(`  ${c.security}: ${c.shares_before != null ? `${n(c.shares_before)} → ` : ''}${c.shares_after != null ? n(c.shares_after) : '?'} shares${pctChg}`);
+    }
+    if (!e.classes && e.shares_after != null) lines.push(`  Shares held after: ${e.shares_after.toLocaleString('en-US')}`);
+  } else {
+    const verb = e.action === 'new_stake' ? 'disclosed a new stake in' : e.action === 'below_threshold' ? 'reported below 5% of' : 'filed an amendment on';
+    const c = stakeChange(e);
+    const inline = e.prev_percent_of_class == null && c.line;
+    lines.push(`${form}: ${who} ${verb} ${what}${inline ? `, ${c.line}` : ''}`);
+    if (c.line && !inline) lines.push(`  Stake: ${c.line}${c.note ? ` (${c.note})` : ''}`);
+    if (e.item4) lines.push(`  Purpose (Item 4): ${e.item4}`);
+  }
+  for (const fn of (e.footnotes ?? []).slice(0, 3)) lines.push(`  Footnote: ${fn.length > 240 ? `${fn.slice(0, 240)}…` : fn}`);
+  const stamp = e.accepted ? `accepted by EDGAR ${e.accepted.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}` : `filed ${e.filing_date}`;
+  lines.push(`  ${flag(e.ticker, f).trim() ? `${flag(e.ticker, f).trim()} · ` : ''}Accession ${e.id}, ${stamp}`);
+  if (e.slug) lines.push(`  Copybook: ${env.SITE_URL}investors/${e.slug}`);
+  lines.push(`  SEC: ${e.url}`);
+  return lines.join('\n');
 }
 
 function body(env: Env, intro: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member): string {
@@ -108,7 +162,7 @@ function body(env: Env, intro: string, filings: Alert13F[], events: AlertEvent[]
     parts.push(`Alert change: you now get alerts only for the ${f.investors.length} fund${f.investors.length === 1 ? '' : 's'} you follow, plus active managers' moves in stocks you own or watch. To get every curated fund again, choose "Every investor" in alert settings at ${env.SITE_URL}account/.`);
   }
   if (filings.length) parts.push(filings.map((a) => filingBlock(env, a, f)).join('\n\n'));
-  if (events.length) parts.push(`Between-quarter moves:\n${events.map((e) => eventLine(e, f)).join('\n')}`);
+  if (events.length) parts.push(`Between-quarter moves:\n${events.map((e) => eventLine(env, e, f)).join('\n')}`);
   return `${parts.join('\n\n')}\n\nChoose whom you follow and how you get alerts at ${env.SITE_URL}account/.${FOOTER}`;
 }
 

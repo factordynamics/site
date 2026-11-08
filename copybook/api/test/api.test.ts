@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker, { handleRequest } from '../src/index';
 import type { Env, KV, R2 } from '../src/env';
 import { MeterLogic } from '../src/keys';
+import { resolveFollowedFilers } from '../src/alerts';
 import { hmacHex } from '../src/tokens';
+import form4Len from './fixtures/form4-len.xml?raw';
+import sc13dCvi from './fixtures/sc13da-cvi.xml?raw';
 
 class MemKV implements KV {
   m = new Map<string, string>();
@@ -47,6 +50,8 @@ let sent: { to: string[]; subject: string; text: string }[];
 let stripeObjects: Record<string, unknown>;
 let index: unknown;
 let secFiles: Record<string, string>;
+let filers: Record<string, unknown>[];
+let shards: Record<string, unknown>;
 let events: unknown[];
 let recentMoves: unknown[];
 let gh: { method: string; url: string; body?: string }[];
@@ -70,7 +75,7 @@ function memMeters(now: () => number = Date.now) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   hist = new MemR2();
   env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', METER: memMeters() };
   // 2026Q1 lives only in the private bucket; 2026Q2 still falls back to the public copy.
@@ -79,6 +84,10 @@ beforeEach(() => {
   stripeObjects = {};
   index = { managers: [] };
   secFiles = {};
+  filers = [{ cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', ok: true, position_count: 2, quarter: '2026Q2', error: null }];
+  shards = {};
+  // The curated managers the tests follow, as the hourly run maps them from index.json.
+  await env.DB.put('alerts:ciks', JSON.stringify(Object.fromEntries([['0001067983', 'warren-buffett'], ['0001040273', 'dan-loeb'], ['0001336528', 'bill-ackman'], ['0001061768', 'seth-klarman']].map(([cik, slug]) => [cik, [{ slug, manager: slug, name: slug, cik, featured: true }]]))));
   events = [];
   recentMoves = [];
   gh = [];
@@ -103,6 +112,8 @@ beforeEach(() => {
       return new Response(null, { status: 204 });
     }
     if (url === `${SITE}data/index.json`) return Response.json(index);
+    if (url === `${SITE}data/filers.json`) return new Response(JSON.stringify({ count: filers.length, filers }, null, 1));
+    if (url.startsWith(`${SITE}data/f/`)) return shards[url.slice(`${SITE}data/f/`.length)] ? Response.json(shards[url.slice(`${SITE}data/f/`.length)]) : new Response('not found', { status: 404 });
     if (url === `${SITE}data/alerts.json`) return Response.json({ recent: recentMoves });
     if (url === `${SITE}data/events.json`) return Response.json({ events });
     if (url === `${SITE}data/securities.json`) return new Response('{"037833100":{"ticker":"AAPL","name":"Apple"},"23331A109":{"ticker":"DHI","name":"D.R. Horton","sector":"Consumer Discretionary"}}');
@@ -113,6 +124,8 @@ beforeEach(() => {
           ? `company:${u.searchParams.get('CIK')}`
           : `feed${Number(u.searchParams.get('start')) ? `@${u.searchParams.get('start')}` : ''}`
         : url.slice('https://www.sec.gov/'.length);
+      const typed = `${key}:${u.searchParams.get('type')}`;
+      if (key.startsWith('feed') && u.searchParams.get('type') !== '13F-HR') return new Response(secFiles[typed] ?? '<feed></feed>');
       if (key.startsWith('company:') || key.startsWith('feed@')) return new Response(secFiles[key] ?? '<feed></feed>');
       return key in secFiles ? new Response(secFiles[key]) : new Response(key === 'feed' ? '<feed></feed>' : 'not found', { status: key === 'feed' ? 200 : 404 });
     }
@@ -375,6 +388,13 @@ describe('copybook api', () => {
     const r = await (await put({ stocks: ['aapl', 'BRK.B'], owned: ['googl'], onboarded: true, include_13g: true })).json();
     expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], onboarded: true, include_13g: true, digest: false });
 
+    // Any 13F filer can be followed, not only curated funds; a slug that is no filer is refused.
+    const unknown = await put({ investors: ['warren-buffett', 'no-such-filer-1234'] });
+    expect(unknown.status).toBe(400);
+    expect((await unknown.json()).code).toBe('unknown_investor');
+    expect((await put({ investors: ['warren-buffett', 'situational-awareness-lp-5724'] })).status).toBe(200);
+    expect(JSON.parse((await env.DB.get('alerts:extra'))!)['0002045724'][0]).toMatchObject({ slug: 'situational-awareness-lp-5724', report_date: '2026-06-30', extra: true });
+
     // Followed investors become the alert targets while alerts is a list.
     await put({ investors: ['bill-ackman', 'dan-loeb'] });
     expect((await (await call('/me', { token: t })).json()).member.alerts).toEqual(['bill-ackman', 'dan-loeb']);
@@ -584,6 +604,117 @@ describe('copybook api', () => {
     await cron(47);
     expect(to('migrate@example.com')).toContain('sec.gov/L2');
     expect(to('migrate@example.com')).not.toContain('you now get alerts only');
+  });
+
+  it('follows of any 13F filer alert within the minute: moves against its prior quarter, else its largest holdings; never to "every investor"', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    await cron(17);
+    filers.push({ cik: '0001541617', name: 'Altimeter Capital Management, LP', slug: 'altimeter-capital-management-lp-1617', ok: true, quarter: '2026Q2' });
+    expect(await resolveFollowedFilers(env, ['situational-awareness-lp-5724', 'altimeter-capital-management-lp-1617'])).toEqual([]);
+    await putMember('s', 'sa@example.com', 'active', ['situational-awareness-lp-5724', 'altimeter-capital-management-lp-1617']);
+    await putFollows('s', { investors: ['situational-awareness-lp-5724', 'altimeter-capital-management-lp-1617'] });
+    await putMember('all', 'all@example.com', 'active', 'all');
+    // Its Q2 book from the all-filer shard is the baseline: NVDA trimmed 100 -> 60, BE exited, MU new.
+    shards['0002045724.json'] = { report_date: '2026-06-30', columns: ['ticker', 'issuer', 'title', 'cusip', 'put_call', 'shares', 'value', 'display_name', 'sector'], rows: [['NVDA', 'NVIDIA CORP', 'COM', '67066G104', null, 100, 18000, 'Nvidia', null], ['BE', 'BLOOM ENERGY CORP', 'COM CL A', '093712107', null, 50, 5000, 'Bloom Energy', null]] };
+    const sa = '0000935836-26-000555';
+    const alt = '0001541617-26-000009';
+    const e = (cik: string, a: string, name: string) => `<entry><title>13F-HR - ${name} (${cik}) (Filer)</title><updated>${today}T16:05:00-05:00</updated><category scheme="https://www.sec.gov/" label="form type" term="13F-HR"/><id>urn:tag:sec.gov,2008:accession-number=${a}</id></entry>`;
+    // A Berkshire filing that throws while being read must not hold back the others.
+    const bad = '0000950123-26-099999';
+    secFiles[`Archives/edgar/data/1067983/${bad.replace(/-/g, '')}/index.json`] = 'not json';
+    secFiles.feed = `<feed>${e('0001067983', bad, 'BERKSHIRE')}${e('0002045724', sa, 'Situational Awareness LP')}${e('0001541617', alt, 'Altimeter')}</feed>`;
+    const it = (name: string, cusip: string, value: number, shares: number) => `<infoTable><nameOfIssuer>${name}</nameOfIssuer><cusip>${cusip}</cusip><value>${value}</value><shrsOrPrnAmt><sshPrnamt>${shares}</sshPrnamt></shrsOrPrnAmt></infoTable>`;
+    for (const [cik, a, table] of [
+      ['2045724', sa, `${it('NVIDIA CORP', '67066G104', 12000, 60)}${it('MICRON TECHNOLOGY INC', '595112103', 9000, 40)}`],
+      ['1541617', alt, `${it('SNOWFLAKE INC', '833445109', 70000, 300)}${it('NVIDIA CORP', '67066G104', 90000, 450)}`],
+    ]) {
+      const dir = `Archives/edgar/data/${cik}/${a.replace(/-/g, '')}/`;
+      secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: 'info.xml', size: '4000' }] } });
+      secFiles[`${dir}primary_doc.xml`] = '<edgarSubmission><periodOfReport>09-30-2026</periodOfReport></edgarSubmission>';
+      secFiles[`${dir}info.xml`] = `<informationTable>${table}</informationTable>`;
+    }
+    sent = [];
+    await cron(5);
+    expect(sent.map((m) => m.to[0])).toEqual(['sa@example.com']);
+    const t = sent[0].text;
+    expect(t).toMatch(/Situational Awareness LP[^\n]*Q3 2026 13F/);
+    expect(t).toMatch(/New: MICRON[^\n]*\+\$9K/);
+    expect(t).toMatch(/Trimmed: NVDA -\$8K/); // 40 shares sold at this quarter's $200
+    expect(t).toMatch(/Exited: BE -\$5K/);
+    expect(t).toContain('investors/situational-awareness-lp-5724');
+    // No earlier quarter for Altimeter: its largest holdings, NVDA first.
+    expect(t).toMatch(/Largest holdings:\n\s+NVIDIA CORP \$90K, SNOWFLAKE INC \$70K/);
+    const handled = JSON.parse((await env.DB.get('alerts:handled'))!) as string[];
+    expect(handled).toEqual(expect.arrayContaining([sa, alt]));
+    expect(handled).not.toContain(bad); // retried next minute
+    sent = [];
+    await cron(6);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    await cron(17); // CIK map
+    await putMember('b', 'buffett@example.com', 'active', ['warren-buffett']);
+    await putFollows('b', { investors: ['warren-buffett'] });
+    await putMember('o', 'owner@example.com', 'active', []);
+    await putFollows('o', { stocks: ['CVI'], owned: ['CVI'] });
+    await putMember('x', 'other@example.com', 'active', []);
+    await putFollows('x', { stocks: ['MSFT'] });
+    secFiles['files/company_tickers.json'] = JSON.stringify({ 0: { cik_str: 1376139, ticker: 'CVI' }, 1: { cik_str: 789019, ticker: 'MSFT' } });
+    await cron(52); // watch map: CVR Energy -> CVI
+    sent = [];
+
+    const e = (form: string, cik: string, acc: string, name: string, role: string) =>
+      `<entry><title>${form} - ${name} (${cik}) (${role})</title><updated>${today}T16:05:00-05:00</updated><category scheme="https://www.sec.gov/" label="form type" term="${form}"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
+    const len = '0001193125-26-400001';
+    const unread = '0001193125-26-400002';
+    const cvi = '0001193125-26-451979';
+    const prev = '0001193125-26-445965';
+    secFiles['feed:4'] = `<feed>${e('4', '0001067983', len, 'BERKSHIRE', 'Reporting')}${e('4', '0000920760', len, 'LENNAR', 'Issuer')}${e('4', '0001067983', unread, 'BERKSHIRE', 'Reporting')}${e('4', '0000111111', '0001193125-26-400003', 'SOMEONE', 'Reporting')}</feed>`;
+    secFiles['feed:SCHEDULE 13'] = `<feed>${e('SCHEDULE 13D/A', '0000921669', cvi, 'ICAHN CARL C', 'Filed by')}${e('SCHEDULE 13D/A', '0001376139', cvi, 'CVR ENERGY', 'Subject')}${e('SCHEDULE 13G', '0000222222', '0001193125-26-400004', 'OTHER', 'Filed by')}${e('SCHEDULE 13G', '0000333333', '0001193125-26-400004', 'UNWATCHED CO', 'Subject')}</feed>`;
+    const dir = (cik: string, acc: string) => `Archives/edgar/data/${Number(cik)}/${acc.replace(/-/g, '')}/`;
+    secFiles[`${dir('0001067983', len)}index.json`] = JSON.stringify({ directory: { item: [{ name: 'wk-form4.xml' }] } });
+    secFiles[`${dir('0001067983', len)}wk-form4.xml`] = form4Len;
+    const cur = sc13dCvi;
+    secFiles[`${dir('0000921669', cvi)}primary_doc.xml`] = cur;
+    // The previous amendment held the same 71,201,875 shares at 70.8%: diluted, nothing sold.
+    secFiles[`${dir('0001376139', prev)}primary_doc.xml`] = cur.replace(/64\.1/g, '70.8').replace(/<amendmentNo>41/, '<amendmentNo>40');
+    secFiles['company:0001376139'] = `<feed>${e('SCHEDULE 13D/A', '0001376139', cvi, 'CVR', 'Subject')}${e('SCHEDULE 13D/A', '0001376139', prev, 'CVR', 'Subject')}</feed>`;
+
+    await cron(5);
+    const to = (a: string) => sent.filter((m) => m.to[0] === a).map((m) => m.text).join('\n');
+    expect(sent.map((m) => m.to[0]).sort()).toEqual(['buffett@example.com', 'owner@example.com']);
+    const b = to('buffett@example.com');
+    // Class A and Class B are reported separately, never summed.
+    expect(b).toMatch(/Class A[^\n]*26\.03M → 28\.44M shares/);
+    expect(b).toMatch(/Class B[^\n]*553\.0K → 568\.0K shares/);
+    expect(b).not.toContain('29,006,073');
+    expect(b).toContain(`Form 4: Warren Buffett. Details follow`); // unread: alerted with what the feed says
+    expect(b).not.toContain('CVI');
+    const o = to('owner@example.com');
+    expect(o).toContain('Schedule 13D/A (amendment 41)');
+    expect(o).toContain('70.8% → 64.1% of the class; 71,201,875 shares (unchanged) (diluted, no shares sold)');
+    expect(o).toContain(cvi);
+    expect(o).not.toContain('its stake');
+
+    // Next minute: nothing is sent twice.
+    sent = [];
+    await cron(6);
+    expect(sent).toHaveLength(0);
+
+    // The data run later carries the unread filing: a follow-up goes out; the LEN one is not repeated.
+    const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: null, ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: null });
+    events = [ev('seed')];
+    await cron(47);
+    events = [ev('seed'), ev(len), ev(unread)];
+    await cron(47);
+    expect(sent.map((m) => m.to[0])).toEqual(['buffett@example.com']);
+    expect(sent[0].text).toContain(unread);
+    expect(sent[0].text).not.toContain(len);
+    expect(sent[0].text).toContain('bought 1,000 shares of SIRI');
   });
 
   it('deadline-day coverage: pages back through a burst, finds a missed filing in its filer feed; replays never count in /health; new members default to follows', async () => {

@@ -4,7 +4,16 @@
  */
 
 export const SEC_UA = 'Copybook copybook@factordynamics.com';
-const sec = (url: string) => fetch(url, { headers: { 'user-agent': SEC_UA, accept: '*/*' } });
+/**
+ * SEC requests left in this invocation. The free plan allows 50 subrequests per run; the cron sets
+ * a budget below that (leaving room for the mailer and GitHub), and optional work stops when it's spent.
+ */
+export const secBudget = { left: Infinity };
+const sec = (url: string) => {
+  if (secBudget.left <= 0) return Promise.reject(new Error('subrequest budget spent'));
+  secBudget.left--;
+  return fetch(url, { headers: { 'user-agent': SEC_UA, accept: '*/*' } });
+};
 
 /** Biggest infotable we parse in the Worker; bigger books wait for the data run's moves. */
 const MAX_TABLE_BYTES = 400_000;
@@ -15,6 +24,8 @@ export interface FeedEntry {
   cik: string; // 10 digits
   accession: string;
   accepted: string; // ISO time EDGAR accepted the filing
+  /** The CIK's role in a getcurrent entry: Filer, Reporting, Issuer, Filed by, Subject. */
+  role?: string;
 }
 
 /** EDGAR's "latest filings" Atom feed for one form type (prefix match, so 13F-HR also lists 13F-HR/A), 100 per page. */
@@ -36,10 +47,11 @@ export function parseFeed(xml: string, cik?: string): FeedEntry[] {
   const out: FeedEntry[] = [];
   for (const e of xml.split('<entry>').slice(1)) {
     const form = e.match(/term="([^"]+)"/)?.[1];
-    const filer = cik ?? e.match(/<title>[^<]*\((\d{10})\)/)?.[1];
+    const t = e.match(/<title>[^<]*\((\d{10})\)\s*\(([^)]+)\)/);
+    const filer = cik ?? t?.[1] ?? e.match(/<title>[^<]*\((\d{10})\)/)?.[1];
     const accession = e.match(/accession-number=(\d{10}-\d{2}-\d{6})/)?.[1];
     const accepted = e.match(/<updated>([^<]+)<\/updated>/)?.[1];
-    if (form && filer && accession && accepted) out.push({ form, cik: filer, accession, accepted: new Date(accepted).toISOString() });
+    if (form && filer && accession && accepted) out.push({ form, cik: filer, accession, accepted: new Date(accepted).toISOString(), ...(t?.[2] ? { role: t[2] } : {}) });
   }
   return out;
 }
@@ -256,4 +268,170 @@ export async function fetchFilingMeta(cik: string, accession: string): Promise<F
     primary = r.ok ? await r.text() : null;
   }
   return parseFilingMeta(accession, headers, primary);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Form 4 and Schedule 13D/G, parsed in the Worker so an alert can go out within the minute.
+
+const all = (xml: string, name: string) => [...xml.matchAll(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, 'g'))].map((m) => m[1]);
+/** A Form 4 value: either <x><value>v</value></x> or <x>v</x>. */
+const val = (block: string, name: string) => {
+  const m = block.match(new RegExp(`<${name}>\\s*(?:<value>)?([^<]*)`));
+  return m ? unescape(m[1]) : '';
+};
+
+export interface Form4Class {
+  /** securityTitle as filed, e.g. "Class A Common Stock". */
+  security: string;
+  bought: number; // open-market purchase shares (code P)
+  sold: number; // open-market sale shares (code S)
+  value_usd: number; // |P and S shares| x price
+  shares_before: number | null;
+  shares_after: number | null;
+}
+
+export interface Form4 {
+  issuer_cik: string;
+  issuer: string;
+  ticker: string | null;
+  owners: { cik: string; name: string }[];
+  ten_percent_owner: boolean;
+  classes: Form4Class[];
+  action: 'buy' | 'sell' | 'mixed' | 'other';
+  footnotes: string[];
+}
+
+/**
+ * One Form 4, holdings split per security class (Class A and Class B are different CUSIPs).
+ * Shares after are the last reported balance per class and ownership line (direct, each indirect
+ * holder), summed; shares before back out this filing's transactions from the first balance.
+ */
+export function parseForm4(xml: string): Form4 | null {
+  const issuer_cik = val(xml, 'issuerCik');
+  if (!issuer_cik) return null;
+  const byClass = new Map<string, Form4Class & { lines: Map<string, { first: number; firstDelta: number; last: number }> }>();
+  for (const b of [...all(xml, 'nonDerivativeTransaction'), ...all(xml, 'nonDerivativeHolding')]) {
+    const security = val(b, 'securityTitle') || 'Common Stock';
+    const c = byClass.get(security) ?? { security, bought: 0, sold: 0, value_usd: 0, shares_before: null, shares_after: null, lines: new Map() };
+    const code = val(b, 'transactionCode');
+    const shares = Number(val(b, 'transactionShares')) || 0;
+    const price = Number(val(b, 'transactionPricePerShare')) || 0;
+    const ad = val(b, 'transactionAcquiredDisposedCode');
+    if (code === 'P') c.bought += shares;
+    if (code === 'S') c.sold += shares;
+    if (code === 'P' || code === 'S') c.value_usd += shares * price;
+    const after = val(b, 'sharesOwnedFollowingTransaction');
+    if (after !== '') {
+      const line = `${val(b, 'directOrIndirectOwnership')}|${val(b, 'natureOfOwnership')}`;
+      const delta = !code ? 0 : ad === 'D' ? -shares : shares;
+      const l = c.lines.get(line);
+      if (l) l.last = Number(after);
+      else c.lines.set(line, { first: Number(after), firstDelta: delta, last: Number(after) });
+    }
+    byClass.set(security, c);
+  }
+  const classes: Form4Class[] = [...byClass.values()].map(({ lines, ...c }) => {
+    const ls = [...lines.values()];
+    return {
+      ...c,
+      value_usd: Math.round(c.value_usd),
+      shares_after: ls.length ? ls.reduce((s, l) => s + l.last, 0) : null,
+      // Before this filing: the first balance minus its own transaction, across lines; open-market net otherwise.
+      shares_before: ls.length ? ls.reduce((s, l) => s + l.first - l.firstDelta, 0) : null,
+    };
+  });
+  const bought = classes.some((c) => c.bought > 0);
+  const sold = classes.some((c) => c.sold > 0);
+  return {
+    issuer_cik: issuer_cik.padStart(10, '0'),
+    issuer: val(xml, 'issuerName'),
+    ticker: val(xml, 'issuerTradingSymbol').toUpperCase() || null,
+    owners: all(xml, 'reportingOwnerId').map((o) => ({ cik: val(o, 'rptOwnerCik').padStart(10, '0'), name: val(o, 'rptOwnerName') })),
+    ten_percent_owner: /<isTenPercentOwner>\s*(true|1)/.test(xml),
+    classes,
+    action: bought && sold ? 'mixed' : bought ? 'buy' : sold ? 'sell' : 'other',
+    footnotes: all(xml, 'footnote').map((f) => unescape(f).replace(/\s+/g, ' ')),
+  };
+}
+
+export interface Schedule13 {
+  form: string;
+  amendment_no: number | null;
+  issuer_cik: string;
+  issuer: string;
+  cusip: string | null;
+  security: string | null;
+  event_date: string | null;
+  persons: { cik: string | null; name: string }[];
+  shares: number | null; // largest aggregate amount beneficially owned among reporting persons
+  percent_of_class: number | null; // 0-100, as filed
+  item4: string | null; // purpose of transaction (13D Item 4), excerpt
+  item5c: string | null; // transactions in the last 60 days (13D Item 5(c)), excerpt
+}
+
+const excerpt = (s: string, n = 600) => {
+  const t = unescape(s).replace(/\s+/g, ' ').trim();
+  return t ? (t.length > n ? `${t.slice(0, n).replace(/\s\S*$/, '')}…` : t) : null;
+};
+
+/** A structured Schedule 13D or 13G (EDGAR XML, required since December 2024). */
+export function parseSchedule13(xml: string): Schedule13 | null {
+  const form = val(xml, 'submissionType');
+  const issuer_cik = val(xml, 'issuerCIK') || val(xml, 'issuerCik');
+  if (!form || !issuer_cik) return null;
+  const persons = all(xml, 'reportingPersonInfo').map((b) => ({ cik: val(b, 'reportingPersonCIK') || null, name: val(b, 'reportingPersonName') }));
+  const shares = all(xml, 'aggregateAmountOwned').map(Number).filter((n) => !Number.isNaN(n));
+  const pct = all(xml, 'percentOfClass').map(Number).filter((n) => !Number.isNaN(n));
+  const ev = val(xml, 'dateOfEvent').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return {
+    form,
+    amendment_no: val(xml, 'amendmentNo') ? Number(val(xml, 'amendmentNo')) : null,
+    issuer_cik: issuer_cik.padStart(10, '0'),
+    issuer: val(xml, 'issuerName'),
+    cusip: (val(xml, 'issuerCusipNumber') || val(xml, 'issuerCusip')).toUpperCase() || null,
+    security: val(xml, 'securitiesClassTitle') || val(xml, 'securityClassTitle') || null,
+    event_date: ev ? `${ev[3]}-${ev[1]}-${ev[2]}` : null,
+    persons,
+    shares: shares.length ? Math.max(...shares) : null,
+    percent_of_class: pct.length ? Math.max(...pct) : null,
+    item4: excerpt(all(xml, 'transactionPurpose')[0] ?? ''),
+    item5c: excerpt(all(xml, 'transactionDesc')[0] ?? '', 300),
+  };
+}
+
+const archive = (cik: string, accession: string) => `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replace(/-/g, '')}/`;
+
+/** The ownership XML of a Form 4 (its file name varies, so via the filing index). */
+export async function fetchForm4(cik: string, accession: string): Promise<Form4 | null> {
+  const dir = await sec(`${archive(cik, accession)}index.json`);
+  if (!dir.ok) return null;
+  const items = ((await dir.json()) as { directory?: { item?: { name: string }[] } }).directory?.item ?? [];
+  const x = items.find((i) => i.name.toLowerCase().endsWith('.xml'));
+  if (!x) return null;
+  const res = await sec(`${archive(cik, accession)}${x.name}`);
+  return res.ok ? parseForm4(await res.text()) : null;
+}
+
+export async function fetchSchedule13(cik: string, accession: string): Promise<Schedule13 | null> {
+  const res = await sec(`${archive(cik, accession)}primary_doc.xml`);
+  return res.ok ? parseSchedule13(await res.text()) : null;
+}
+
+/**
+ * The same filer's previous Schedule 13D/G on this issuer: the subject company's EDGAR feed lists
+ * every Schedule 13 filed on it; the first earlier one whose reporting persons overlap is it.
+ * Only structured (XML) filings parse, so a previous one from before December 2024 returns null.
+ */
+export async function previousSchedule13(cur: Schedule13, accession: string, tries = 3): Promise<(Schedule13 & { accession: string }) | null> {
+  const res = await sec(`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cur.issuer_cik}&type=SCHEDULE%2013&dateb=&owner=include&count=20&output=atom`);
+  if (!res.ok) return null;
+  const mine = new Set(cur.persons.map((p) => p.cik).filter(Boolean));
+  const feed = parseFeed(await res.text(), cur.issuer_cik);
+  const i = feed.findIndex((e) => e.accession === accession);
+  for (const e of feed.slice(i + 1, i + 1 + tries)) {
+    if (!e.form.startsWith('SCHEDULE 13')) break; // older SC 13D/G filings are not structured
+    const p = await fetchSchedule13(cur.issuer_cik, e.accession);
+    if (p && p.persons.some((x) => x.cik && mine.has(x.cik))) return { ...p, accession: e.accession };
+  }
+  return null;
 }
