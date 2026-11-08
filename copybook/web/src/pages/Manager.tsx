@@ -110,6 +110,8 @@ export function ManagerPage() {
         <Stat label="Largest position" value={book.top1 ? book.top1.ticker || shortName(book.top1.issuer) : '—'} sub={book.top1 ? `${pct(book.top1.weight)} of portfolio` : undefined} />
       </div>
 
+      {f && !f.filer && <SinceLast13F slug={f.slug} quarter={f.quarter} />}
+
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <Panel
           title="Portfolio map"
@@ -199,7 +201,6 @@ export function ManagerPage() {
         )}
       </div>
 
-      {f && !f.filer && <SinceLast13F slug={f.slug} quarter={f.quarter} />}
 
       <section className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 md:px-6">

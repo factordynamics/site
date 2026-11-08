@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChangeBars } from '../components/charts'
 import { FollowButton } from '../components/FollowButton'
-import { Arrow, Badge, Button, Monogram, Panel, Skeleton, Stat } from '../components/ui'
-import { money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
+import { PositionLine, rollUp, type Position } from '../components/FundNotes'
+import { useMember } from '../lib/account'
+import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
+import { dateLabel, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { loadStock, resolveTicker, stockPath, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
@@ -18,7 +20,11 @@ export function StockPage() {
   const { ticker = '' } = useParams()
   const nav = useNavigate()
   const s = useAsync(() => loadStock(ticker.toUpperCase()), [ticker])
-  const [scope, setScope] = useState<'featured' | 'all'>('all')
+  // The lens lives in the URL (?funds=all) so a view can be shared; superinvestors by default.
+  const [params, setParams] = useSearchParams()
+  const scope: 'featured' | 'all' = params.get('funds') === 'all' ? 'all' : 'featured'
+  const setScope = (k: 'featured' | 'all') => setParams(k === 'all' ? { funds: 'all' } : {}, { replace: true })
+  const member = useMember()
   const [n, setN] = useState(25)
   const d = s.data
   useTitle(d ? `${d.ticker} · ${d.name}: who owns it · Copybook` : undefined)
@@ -37,6 +43,21 @@ export function StockPage() {
         .sort((a, b) => Math.abs(b.delta_value) - Math.abs(a.delta_value)),
     [d, scope],
   )
+
+  // Holdings filed since each fund's 13F, one roll-up per fund.
+  const since = useMemo(() => {
+    const per = new Map<string, { who: { slug: string; manager: string }; p: Position }>()
+    const groups = new Map<string, NonNullable<typeof d>['since']>()
+    for (const e of d?.since ?? []) groups.set(e.slug, [...(groups.get(e.slug) ?? []), e])
+    for (const [slug, evs] of groups) {
+      const p = rollUp(evs!)[0]
+      if (p) per.set(slug, { who: { slug, manager: evs![0].manager }, p })
+    }
+    return per
+  }, [d])
+  const featuredSlugs = useMemo(() => new Set([...(d?.holders ?? []), ...(d?.exited ?? [])].filter((h) => h.featured).map((h) => h.slug)), [d])
+  const sinceRows = [...since.values()].filter((x) => scope === 'all' || featuredSlugs.has(x.who.slug))
+  const paid = Boolean(member?.active)
 
   if (s.error)
     return (
@@ -88,12 +109,18 @@ export function StockPage() {
       </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13px] text-ink-3">{d ? `From each fund’s latest 13F (${d.quarters.map(quarterLabel).join(', ')}), compared with its filing before.` : ''}</p>
+        <p className="text-[13px] text-ink-3">
+          {d
+            ? d.quarters.length > 1
+              ? `Mid-season: ${holders.filter((h) => h.quarter === d.quarters[0]).length} of ${holders.length} funds shown have filed ${quarterLabel(d.quarters[0])}; the rest are still on ${d.quarters.slice(1).map(quarterLabel).join(' or ')}. Each row is labelled with its quarter, compared with that fund’s filing before.`
+              : `From each fund’s ${quarterLabel(d.quarters[0])} 13F, compared with its filing before.`
+            : ''}
+        </p>
         <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Investors">
           {(
             [
-              ['all', 'All funds we track'],
               ['featured', 'Superinvestors'],
+              ['all', 'All funds we track'],
             ] as const
           ).map(([k, l]) => (
             <button key={k} role="tab" aria-selected={scope === k} onClick={() => setScope(k)} className={`rounded-full px-3 py-1.5 ${scope === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
@@ -102,6 +129,24 @@ export function StockPage() {
           ))}
         </div>
       </div>
+
+      {sinceRows.length > 0 && (
+        <Panel className="mt-4" title="Since the latest 13Fs" sub="Holdings filed after each fund’s 13F, on Form 4 and Schedule 13D/G">
+          <ul className="divide-y divide-line">
+            {(paid ? sinceRows : sinceRows.slice(0, 2)).map(({ who, p }) => (
+              <PositionLine key={who.slug} p={p} who={who} />
+            ))}
+          </ul>
+          {!paid && sinceRows.length > 2 && (
+            <p className="mt-3 flex items-center gap-2 text-[13px] text-accent-2">
+              <Lock /> {sinceRows.length - 2} more funds filed on {d?.ticker} since their 13F.{' '}
+              <Link to="/pricing/" className="font-medium underline underline-offset-2">
+                See them with Copy
+              </Link>
+            </p>
+          )}
+        </Panel>
+      )}
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[1.3fr_1fr] [&>*]:min-w-0">
         <Panel title="Who bought and sold" sub="Change in shares since each fund’s previous filing, at quarter-end value">
@@ -150,10 +195,17 @@ export function StockPage() {
                     <Link to={`/investors/${h.slug}/`} className="flex min-w-0 items-center gap-2.5 hover:text-accent">
                       <Monogram name={h.manager} size={24} />
                       <span className="min-w-0 max-w-[7.75rem] truncate font-medium sm:max-w-[22rem]">{h.manager}</span>
-                      <span className="hidden shrink-0 text-[12px] text-ink-3 md:inline">{quarterLabel(h.quarter)}</span>
+                      <span className={`shrink-0 rounded px-1 text-[11.5px] ${d && d.quarters.length > 1 && h.quarter === d.quarters[0] ? 'bg-accent-soft text-accent-2' : 'text-ink-3'}`}>{quarterLabel(h.quarter)}</span>
                     </Link>
                   </td>
-                  <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">{sharesFmt(h.shares)}</td>
+                  <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">
+                    {sharesFmt(h.shares)}
+                    {since.get(h.slug)?.p.to != null && since.get(h.slug)!.p.to !== h.shares && (
+                      <span className="block whitespace-nowrap text-[11.5px] text-ink-3">
+                        {sharesFmt(since.get(h.slug)!.p.to)} as of {dateLabel(since.get(h.slug)!.p.asOf)}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-right">
                     <ChangeCell h={h} />
                   </td>

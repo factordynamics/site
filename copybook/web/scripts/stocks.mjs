@@ -116,6 +116,32 @@ for (const s of stocks.values()) {
 list.sort((a, b) => b.h - a.h || b.v - a.v)
 writeFileSync(join(out, 'd', 'stocks.json'), JSON.stringify({ generated_at: index.generated_at, funds: books.length, stocks: list }))
 
+// Form 4 and 13D/G filings since each fund's latest 13F (data/events/{slug}.json), attached to
+// the stock they're about so its page can show holdings newer than the 13F.
+const byCusip = {}
+for (const s of stocks.values()) for (const c of s.classes.values()) if (byTicker[c.ticker]) byCusip[c.cusip] = byTicker[c.ticker]
+const since = {}
+for (let i = 0; i < books.length; i += 16) {
+  const part = await Promise.all(books.slice(i, i + 16).map((b) => read(`events/${b.slug}.json`).catch(() => null)))
+  for (const ev of part) {
+    if (!ev?.events) continue
+    for (const e of ev.events) {
+      const t = (e.ticker && byTicker[e.ticker]) || (e.cusip && byCusip[e.cusip])
+      if (!t) continue
+      ;(since[t] ??= []).push({ ...e, manager: ev.manager, slug: ev.slug, quarter: ev.latest_13f_quarter })
+    }
+  }
+}
+let withSince = 0
+for (const [t, evs] of Object.entries(since)) {
+  const f = join(out, 'd', 'stocks', `${t}.json`)
+  const file = JSON.parse(readFileSync(f, 'utf8'))
+  file.since = evs.sort((a, b) => b.filing_date.localeCompare(a.filing_date)).slice(0, 60)
+  writeFileSync(f, JSON.stringify(file))
+  withSince++
+}
+console.log(`since-13F filings on ${withSince} stock pages`)
+
 // Filing-season flow: moves by funds that filed the newest quarter, against their previous filing.
 const toQ = (n) => `${Math.floor(n / 4)}Q${(n % 4) + 1}`
 let season = newest

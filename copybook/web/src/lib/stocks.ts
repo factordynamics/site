@@ -1,3 +1,4 @@
+import type { Ev } from '../components/FundNotes'
 import { BASE, displayName, getJSON, type Change } from './data'
 
 // Derived at build time by scripts/stocks.mjs from the curated 13F books, served from the site host.
@@ -31,6 +32,8 @@ export type Stock = {
   counts: { holders: number; prev_holders: number; new: number; added: number; trimmed: number; exited: number }
   quarters: string[]
   generated_at: string
+  /** Form 4 and 13D/G filings since each fund's latest 13F (scripts/stocks.mjs). */
+  since?: (Ev & { slug: string; manager: string; quarter?: string })[]
 }
 /** t ticker, n name, s sector, h holders, dh holder change, v combined value, a other share-class tickers. */
 export type StockRef = { t: string; n: string; s: string | null; h: number; dh: number; v: number; a: string[] }
