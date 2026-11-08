@@ -1,6 +1,8 @@
 import { DATA, DERIVED } from './config'
 import { firmName, issuerName, pmName, FUNDS } from './names'
 import ROSTER from './roster.json'
+import TICKERS from './tickers.json'
+import CORRECTIONS from './corrections.json'
 
 export type Change = 'new' | 'added' | 'trimmed' | 'exited' | 'unchanged' | null
 export type Holding = {
@@ -8,6 +10,8 @@ export type Holding = {
   title: string
   cusip: string
   ticker: string | null
+  /** Former ticker of a company no longer listed (src/tickers.json). */
+  former?: string
   display_name?: string
   sector?: string | null
   value: number
@@ -62,6 +66,8 @@ export type Event = {
   issuer: string
   display_name?: string
   ticker: string | null
+  cusip?: string | null
+  former?: string
   sector?: string | null
   shares: number | null
   value_usd: number | null
@@ -126,9 +132,20 @@ function get<T>(url: string): Promise<T> {
   return p
 }
 
+const OVERRIDE = TICKERS as unknown as Record<string, { ticker: string; listed: boolean }>
+/** Fills tickers Copybook hasn't mapped from src/tickers.json (each entry cites its SEC source). */
+export function fillTicker<T extends { cusip?: string | null; ticker: string | null; former?: string }>(h: T): T {
+  const o = !h.ticker && h.cusip ? OVERRIDE[h.cusip] : undefined
+  if (o) {
+    if (o.listed) h.ticker = o.ticker
+    else h.former = o.ticker
+  }
+  return h
+}
 function name(m: Manager) {
   m.firm = firmName(m.slug, m.name)
   m.pm = pmName(m.slug)
+  m.top?.forEach(fillTicker)
   return m
 }
 /** One sector per issuer: share classes (same 6-character CUSIP prefix) take the sector of the largest classified line. */
@@ -141,6 +158,7 @@ function normalise(hs: Holding[]) {
     if (!cur || h.value > cur.value) by.set(k, { sector: h.sector, value: h.value })
   }
   for (const h of hs) {
+    fillTicker(h)
     const s = by.get(h.cusip.slice(0, 6))
     if (s) h.sector = s.sector
     h.display_name = issuerName(h.display_name || h.issuer)
@@ -153,17 +171,44 @@ export const loadIndex = () =>
     ix.managers.forEach(name)
     return ix
   }))
+type Correction = { prev_quarter: string; prev_add: { cusip: string; shares: number; value: number }[]; history_add: Record<string, number> }
+const FIX = CORRECTIONS as unknown as Record<string, Correction>
+/** Adds lines a second filer reported for the prior quarter (src/corrections.json) and re-derives the changes. */
+function correct(b: Book) {
+  const c = FIX[b.slug]
+  if (!c || b.prev_quarter !== c.prev_quarter || b.prev_total_value == null) return b
+  for (const a of c.prev_add) {
+    const h = b.holdings.find((x) => x.cusip === a.cusip && !x.put_call)
+    if (!h) continue
+    h.prev_shares = (h.prev_shares ?? 0) + a.shares
+    h.prev_value = (h.prev_value ?? 0) + a.value
+    h.share_change = h.shares - h.prev_shares
+    h.value_delta = h.shares ? h.share_change * (h.value / h.shares) : -h.prev_value
+    h.pct_of_book = b.total_value ? h.value_delta / b.total_value : null
+    h.change = h.share_change > 0 ? 'added' : h.share_change < 0 ? (h.shares ? 'trimmed' : 'exited') : 'unchanged'
+    b.prev_total_value += a.value
+  }
+  for (const h of b.holdings) h.prev_weight = h.prev_value != null ? h.prev_value / b.prev_total_value : h.prev_weight
+  const changes: Record<string, number> = {}
+  for (const h of b.holdings) if (h.change) changes[h.change] = (changes[h.change] ?? 0) + 1
+  b.changes = changes
+  return b
+}
 const books = new Map<string, Promise<Book>>()
 export const loadBook = (slug: string) => {
   let p = books.get(slug)
   if (!p) {
-    p = get<Book>(`${DATA}${slug}.json`).then((b) => (normalise(b.holdings), name(b) as Book))
+    p = get<Book>(`${DATA}${slug}.json`).then((b) => (normalise(b.holdings), correct(name(b) as Book)))
     books.set(slug, p)
   }
   return p
 }
-export const loadHistory = (slug: string) => get<{ history: HistoryRow[] }>(`${DATA}${slug}-history.json`)
-export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json')
+export const loadHistory = (slug: string) =>
+  get<{ history: HistoryRow[] }>(`${DATA}${slug}-history.json`).then((d) => {
+    const add = FIX[slug]?.history_add ?? {}
+    return { history: d.history.map((r) => (add[r.quarter] ? { ...r, total_value: r.total_value + add[r.quarter] } : r)) }
+  })
+export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach(fillTicker), d))
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
 export const loadInsiders = () => get<{ updated_at: string; rows: Insider[] } | Insider[]>(DATA + 'insiders.json').then((d) => (Array.isArray(d) ? d : d.rows ?? [])).catch(() => null)
 export const loadStock = (t: string) => get<StockFile>(`${DERIVED}stocks/${encodeURIComponent(t)}.json`)
@@ -171,8 +216,9 @@ export const loadStockIndex = () => get<{ stocks: StockIndexRow[] }>(DERIVED + '
 
 const qn = (q: string) => (q ? Number(q.slice(0, 4)) * 4 + Number(q.slice(5)) - 1 : -1)
 
-export type RosterFund = { slug: string; filer_slug: string; firm: string; value: number; positions: number; quarters: number; top10: number; turnover: number; predecessor: string | null }
-export const roster = ROSTER as unknown as { generated_at: string; rule: Record<string, number | string>; universe: number; screened: number; funds: RosterFund[]; near_misses: RosterFund[] }
+export type RosterFund = { cik: string; slug: string; filer_slug: string; firm: string; value: number; positions: number; top10: number; turnover: number; predecessor: string | null }
+type Candidate = Omit<RosterFund, 'slug' | 'filer_slug'> & { slug: string | null; filer_slug: string | null; fails: string[] }
+export const roster = ROSTER as unknown as { generated_at: string; period: string; rule: Record<string, number>; screened: number; funds: RosterFund[]; pending: Candidate[]; near_misses: Candidate[] }
 export const ROSTER_SLUGS = new Set(roster.funds.flatMap((f) => [f.slug, f.filer_slug]))
 export const inRoster = (slug: string) => ROSTER_SLUGS.has(slug)
 export const searchNames = (m: Manager) => [m.firm, m.pm, m.name, m.manager, ...(FUNDS[m.slug]?.aka ?? [])].filter(Boolean).join(' | ')
@@ -197,6 +243,7 @@ export type Who = { slug: string; manager: string; weight: number; change: Chang
 export type Agg = {
   key: string
   ticker: string | null
+  former?: string
   name: string
   sector: string
   value: number
@@ -210,18 +257,26 @@ export type Agg = {
   maxWeight: number
 }
 
-/** Rolls the latest books up by stock: common stock and ADRs only (options excluded). */
+/** Rolls the latest books up by company: share classes of one issuer (same 6-character CUSIP prefix,
+ * e.g. GOOGL and GOOG) count as one stock, shown under its most-held ticker. Options are excluded. */
 export function aggregate(books: Book[]): { rows: Agg[]; total: number } {
   const m = new Map<string, Agg>()
+  const classValue = new Map<string, Map<string, number>>()
   let total = 0
   for (const b of books) {
     for (const h of b.holdings) {
       if (h.put_call) continue
-      const key = h.ticker || h.cusip
+      const key = h.cusip ? h.cusip.slice(0, 6) : h.ticker || h.issuer
       let a = m.get(key)
       if (!a) {
-        a = { key, ticker: h.ticker, name: h.display_name || issuerName(h.issuer), sector: h.sector || 'Unclassified', value: 0, holders: [], buyers: [], sellers: [], newBuyers: 0, net: 0, buy: 0, sell: 0, maxWeight: 0 }
+        a = { key, ticker: h.ticker, former: h.former, name: h.display_name || issuerName(h.issuer), sector: h.sector || 'Unclassified', value: 0, holders: [], buyers: [], sellers: [], newBuyers: 0, net: 0, buy: 0, sell: 0, maxWeight: 0 }
         m.set(key, a)
+        classValue.set(key, new Map())
+      }
+      if (h.ticker) {
+        const cv = classValue.get(key)!
+        cv.set(h.ticker, (cv.get(h.ticker) ?? 0) + h.value)
+        a.ticker = [...cv.entries()].sort((x, y) => y[1] - x[1])[0][0]
       }
       const d = h.value_delta ?? 0
       const who: Who = { slug: b.slug, manager: b.firm, weight: h.weight, change: h.change, delta: d, quarter: b.quarter }

@@ -8,7 +8,8 @@ import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { funds, loadIndex, loadStockIndex, searchNames, type Manager, type StockIndexRow } from './data'
 import { A, navigate, usePath } from './lib'
-import { About, Account, Alerts, Consensus, Filings, Flows, Fund, Funds, Home, ISSUES, NotFound, Privacy, Stock, Terms } from './pages'
+import { dataSlug, fundPath, publicSlug } from './names'
+import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Home, ISSUES, NotFound, Privacy, Stock, Terms } from './pages'
 
 // [path, label, g-key]
 const NAV: [string, string, string][] = [
@@ -31,7 +32,11 @@ function route(path: string) {
   }
   if (p === '/') return <Home />
   if (p === '/funds') return <Funds />
-  if ((m = p.match(/^\/m\/([a-z0-9-]+)$/))) return <Fund slug={m[1]} />
+  if ((m = p.match(/^\/m\/([a-z0-9-]+)$/))) {
+    const slug = dataSlug(m[1])
+    if (publicSlug(slug) !== m[1]) history.replaceState(null, '', fundPath(slug))
+    return <Fund slug={slug} />
+  }
   if ((m = p.match(/^\/s\/([^/]+)$/))) return <Stock ticker={decodeURIComponent(m[1]).toUpperCase()} />
   if (p === '/consensus') return <Consensus />
   if (p === '/flows') return <Flows />
@@ -78,7 +83,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
     const out: Hit[] = []
     for (const m of mgrs) {
       const hay = searchNames(m).toLowerCase()
-      if (hay.includes(s)) out.push({ kind: 'investor', label: m.firm, sub: m.pm ? `PM ${m.pm}` : 'fund', to: `/m/${m.slug}`, score: m.firm.toLowerCase().startsWith(s) ? 4 : hay.split(/[ |]+/).some((w) => w.startsWith(s)) ? 3 : 1 })
+      if (hay.includes(s)) out.push({ kind: 'investor', label: m.firm, sub: m.pm ? `PM ${m.pm}` : 'fund', to: fundPath(m.slug), score: m.firm.toLowerCase().startsWith(s) ? 4 : hay.split(/[ |]+/).some((w) => w.startsWith(s)) ? 3 : 1 })
     }
     for (const r of stocks) {
       const t = r.t.toLowerCase()
@@ -172,15 +177,6 @@ function Help({ close }: { close: () => void }) {
   )
 }
 
-function Clock() {
-  const [t, set] = useState(() => new Date())
-  useEffect(() => {
-    const i = setInterval(() => set(new Date()), 30_000)
-    return () => clearInterval(i)
-  }, [])
-  return <span className="dim hide-sm">{t.toISOString().slice(0, 16).replace('T', ' ')} UTC</span>
-}
-
 function App() {
   const path = usePath()
   const [search, setSearch] = useState(false)
@@ -235,10 +231,7 @@ function App() {
       <main key={path}>{route(path)}</main>
       <footer className="foot">
         <span>
-          holdterm · SEC EDGAR filings as filed · no ads · not investment advice · <A to="/about">about</A> · <A to="/alerts">alerts $3/mo</A> · <A to="/account">account</A> · <A to="/terms">terms</A> · <A to="/privacy">privacy</A> · <a href={ISSUES}>report a data error</a>
-        </span>
-        <span>
-          <Clock /> <button className="linkish" onClick={() => setHelp(true)}>? keys</button>
+          holdterm · SEC EDGAR filings as filed · no ads · not investment advice · <A to="/about">about</A> · <A to="/alerts">alerts $3/mo</A> · <A to="/account">account</A> · <A to="/terms">terms</A> · <A to="/privacy">privacy</A> · <a href={`mailto:${CONTACT}`}>{CONTACT}</a> · <a href={ISSUES}>report a data error</a>
         </span>
       </footer>
       <Search open={search} setOpen={setSearch} />

@@ -1,0 +1,113 @@
+{
+ "_note": "Fallback CUSIP to ticker map for lines Copybook has not mapped. Each entry cites its SEC source. Listed: a current ticker. Not listed: the former ticker of a company that has left the exchange, shown with a dagger and no link.",
+ "F92124100": {
+  "ticker": "TTE",
+  "listed": true,
+  "source": "SEC company_tickers.json: TTE = CIK 879764 (TotalEnergies SE)"
+ },
+ "G16258108": {
+  "ticker": "BEPC",
+  "listed": true,
+  "source": "SEC company_tickers.json: BEPC = CIK 1791863 (Brookfield Renewable Corp)"
+ },
+ "G25457105": {
+  "ticker": "CRDO",
+  "listed": true,
+  "source": "SEC company_tickers.json: CRDO = CIK 1807794 (Credo Technology Group Holding Ltd)"
+ },
+ "G25508105": {
+  "ticker": "CRH",
+  "listed": true,
+  "source": "SEC company_tickers.json: CRH = CIK 849395 (CRH plc)"
+ },
+ "G4253H101": {
+  "ticker": "JHX",
+  "listed": true,
+  "source": "SEC company_tickers.json: JHX = CIK 1159152 (James Hardie Industries plc)"
+ },
+ "G51502105": {
+  "ticker": "JCI",
+  "listed": true,
+  "source": "SEC company_tickers.json: JCI = CIK 833444 (Johnson Controls International plc)"
+ },
+ "G4705A100": {
+  "ticker": "ICLR",
+  "listed": true,
+  "source": "SEC company_tickers.json: ICLR = CIK 1060955 (ICON plc)"
+ },
+ "N20944109": {
+  "ticker": "CNH",
+  "listed": true,
+  "source": "SEC company_tickers.json: CNH = CIK 1567094 (CNH Industrial N.V.)"
+ },
+ "G1151C101": {
+  "ticker": "ACN",
+  "listed": true,
+  "source": "SEC company_tickers.json: ACN = CIK 1467373 (Accenture plc)"
+ },
+ "G61188101": {
+  "ticker": "LBTYA",
+  "listed": true,
+  "source": "SEC company_tickers.json: LBTYA = CIK 1570585 (Liberty Global Ltd., class A)"
+ },
+ "G4474Y214": {
+  "ticker": "JHG",
+  "listed": false,
+  "source": "SEC EDGAR CIK 1274173 (Janus Henderson Group): taken private in 2026; no longer in the SEC ticker list"
+ },
+ "74736K101": {
+  "ticker": "QRVO",
+  "listed": false,
+  "source": "SEC EDGAR CIK 1604778 (Qorvo): Form 15-12G, deregistered Oct 2026"
+ },
+ "285512109": {
+  "ticker": "EA",
+  "listed": false,
+  "source": "SEC EDGAR CIK 712515 (Electronic Arts): Form 15-12G, deregistered Aug 2026"
+ },
+ "934423104": {
+  "ticker": "WBD",
+  "listed": false,
+  "source": "SEC EDGAR CIK 1437107 (Warner Bros. Discovery): Form 15-15D, Oct 2026"
+ },
+ "M2682V108": {
+  "ticker": "CYBR",
+  "listed": false,
+  "source": "SEC EDGAR CIK 1598110 (CyberArk Software): Form 15-12G, 2026"
+ },
+ "16115Q308": {
+  "ticker": "GTLS",
+  "listed": false,
+  "source": "SEC EDGAR CIK 892553 (Chart Industries): Form 15-12G, 2026"
+ },
+ "15677J108": {
+  "ticker": "DAY",
+  "listed": false,
+  "source": "SEC EDGAR CIK 1725057 (Dayforce): taken private in 2026"
+ },
+ "35909D109": {
+  "ticker": "FYBR",
+  "listed": false,
+  "source": "SEC EDGAR CIK 20520 (Frontier Communications): Form 15-12G, 2026"
+ },
+ "00912X302": {
+  "ticker": "AL",
+  "listed": false,
+  "source": "SEC EDGAR CIK 1487712 (Air Lease, now Sumisho Air Lease): acquired in 2026"
+ },
+ "436440101": {
+  "ticker": "HOLX",
+  "listed": false,
+  "source": "SEC EDGAR CIK 859737 (Hologic): Form 15-12G, 2026"
+ },
+ "530307305": {
+  "ticker": "LBRDK",
+  "listed": false,
+  "source": "SEC EDGAR CIK 1611983 (Liberty Broadband): Form 15-12G, 2026"
+ },
+ "G3421J106": {
+  "ticker": "FERG",
+  "listed": false,
+  "source": "SEC EDGAR CIK 1832433 (Ferguson plc, the pre-2024 Jersey line): replaced by Ferguson Enterprises (FERG, CUSIP 31488V107); Form 15-12G"
+ }
+}

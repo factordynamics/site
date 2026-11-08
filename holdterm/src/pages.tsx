@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, checkout, price as PRICE } from './config'
+import { api, checkout, price as PRICE, SITE } from './config'
 import {
   aggregate,
   funds,
@@ -13,6 +13,7 @@ import {
   loadIndex,
   loadInsiders,
   loadStock,
+  loadStockIndex,
   quarterLabel,
   roster,
   SECTOR_COLOR,
@@ -28,14 +29,26 @@ import {
   type StockHolder,
 } from './data'
 import { A, Bar, ChangeTag, date, Failed, Grid, Loading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
-import { HBars, SeasonChart, ValueHistory } from './charts'
-import { firmName, issuerName } from './names'
+import { HBars, ValueHistory } from './charts'
+import { firmName, fundPath, issuerName } from './names'
+import EXCLUSIONS from '../scripts/roster-exclusions.json'
 import { follows, Follow, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, type Follows } from './account'
 
 const title = (t: string) => {
   document.title = `${t} · holdterm`
+  const url = SITE + (location.pathname.replace(/\/+$/, '') || '/')
+  document.querySelector('link[rel=canonical]')?.setAttribute('href', url)
+  document.querySelector('meta[property="og:url"]')?.setAttribute('content', url)
+  document.querySelector('meta[property="og:title"]')?.setAttribute('content', `${t} · holdterm`)
 }
-export const ISSUES = 'https://github.com/factordynamics/site/issues/new?labels=holdterm&title=Holdterm%3A+'
+export const REPO = 'https://github.com/factordynamics/site'
+export const ISSUES = `${REPO}/issues/new?labels=holdterm&title=Holdterm%3A+`
+export const CONTACT = 'hello@factordynamics.com'
+const qOf = (period: string) => {
+  // "30-JUN-2026" -> "2026Q2"
+  const m = ['MAR', 'JUN', 'SEP', 'DEC'].indexOf(period.slice(3, 6))
+  return `${period.slice(7)}Q${m + 1}`
+}
 
 // ---------- fund names and links ----------
 /** Roster fund slug for any filer slug (a successor filer links to the fund it files for). */
@@ -46,7 +59,7 @@ function useFirms(): Map<string, string> {
 }
 const firmOf = (firms: Map<string, string>, slug: string, fallback: string) => firms.get(fundSlug(slug)) ?? firmName(slug, fallback)
 function FundLink({ slug, name }: { slug: string; name: string }) {
-  return inRoster(slug) ? <A to={`/m/${fundSlug(slug)}`}>{name}</A> : <span>{name}</span>
+  return inRoster(slug) ? <A to={fundPath(fundSlug(slug))}>{name}</A> : <span>{name}</span>
 }
 
 // ---------- shared bits ----------
@@ -65,7 +78,7 @@ function Who({ list, max = 3 }: { list: { slug: string; manager: string }[]; max
       {list.slice(0, max).map((w, i) => (
         <span key={w.slug}>
           {i > 0 && <span className="dim">, </span>}
-          <A to={`/m/${w.slug}`}>{w.manager}</A>
+          <A to={fundPath(w.slug)}>{w.manager}</A>
         </span>
       ))}
       {list.length > max && <span className="dim"> +{list.length - max}</span>}
@@ -73,32 +86,18 @@ function Who({ list, max = 3 }: { list: { slug: string; manager: string }[]; max
   )
 }
 /** A stock cell: ticker link when there is one, else the company name (never a guessed ticker). */
-function StockCell({ t, name }: { t: string | null; name: string }) {
-  return t ? <Tick t={t} name={name} /> : <span className="noticker" title="no US ticker mapped for this CUSIP">{name}</span>
+function StockCell({ t, name, former }: { t: string | null; name: string; former?: string }) {
+  if (t) return <Tick t={t} name={name} />
+  if (former) return <span className="former" title={`${name}: no longer listed (former ticker ${former})`}>{former}†</span>
+  return <span className="noticker" title="no US ticker for this CUSIP">{name}</span>
 }
 const aggCols = {
-  ticker: { key: 'ticker', label: 'ticker', render: (r: Agg) => <StockCell t={r.ticker} name={r.name} />, sort: (r: Agg) => r.ticker ?? r.name, width: '80px' } as Col<Agg>,
+  ticker: { key: 'ticker', label: 'ticker', render: (r: Agg) => <StockCell t={r.ticker} name={r.name} former={r.former} />, sort: (r: Agg) => r.ticker ?? r.name, width: '80px' } as Col<Agg>,
   name: { key: 'name', label: 'company', link: true, render: (r: Agg) => <span className="trunc">{r.name}</span>, sort: (r: Agg) => r.name } as Col<Agg>,
   sector: { key: 'sector', label: 'sector', hideSm: true, render: (r: Agg) => <Sector s={r.sector} />, sort: (r: Agg) => r.sector } as Col<Agg>,
 }
 const stockHref = (r: { ticker: string | null }) => (r.ticker ? `/s/${encodeURIComponent(r.ticker)}` : null)
 
-function SectorStrip({ items }: { items: { sector?: string | null; value: number }[] }) {
-  const mix = sectorMix(items)
-  return (
-    <div className="sector-strip">
-      <StackBar parts={mix.map((m) => ({ label: m.sector, value: m.value, color: SECTOR_COLOR[m.sector] ?? '#555' }))} />
-      <div className="legend">
-        {mix.slice(0, 8).map((m) => (
-          <span key={m.sector}>
-            <i style={{ background: SECTOR_COLOR[m.sector] ?? '#555' }} aria-hidden />
-            {m.sector} <span className="num dim">{pct(m.weight, 1)}</span>
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
 function SectorRows({ items }: { items: { sector?: string | null; value: number }[] }) {
   const mix = sectorMix(items)
   const max = mix[0]?.weight ?? 1
@@ -137,10 +136,15 @@ const ACTION: Record<string, [string, string]> = {
   buy: ['BUY', 'pos'],
   sell: ['SELL', 'neg'],
   mixed: ['MIXED', ''],
-  other: ['OTHER', 'dim'],
+  other: ['NO TRADE', 'dim'],
   new_stake: ['NEW 5%+', 'pos'],
   stake_update: ['UPDATE', ''],
   below_threshold: ['<5%', 'neg'],
+}
+function ActionTag({ e }: { e: Event }) {
+  const [label, tone] = ACTION[e.action] ?? [e.action, '']
+  const why = e.action === 'other' ? 'Form 4 with no open-market purchase or sale: a gift, award, conversion, distribution or a holdings report' : undefined
+  return <span className={`tag ${tone}`} title={why}>{label}</span>
 }
 const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => [
   { key: 'filed', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, sort: (e) => e.filing_date, width: '84px' },
@@ -151,13 +155,13 @@ const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => 
     label: 'issuer',
     render: (e) => (
       <span className="iss">
-        <StockCell t={ownVehicle(e) ? null : e.ticker} name={issuerName(e.display_name || e.issuer)} />
+        <StockCell t={ownVehicle(e) ? null : e.ticker} name={issuerName(e.display_name || e.issuer)} former={ownVehicle(e) ? undefined : e.former} />
         {ownVehicle(e) && <span className="badge">own fund</span>}
       </span>
     ),
   },
-  { key: 'act', label: 'action', render: (e) => <span className={`tag ${ACTION[e.action]?.[1] ?? ''}`}>{ACTION[e.action]?.[0] ?? e.action}</span>, sort: (e) => e.action },
-  { key: 'pc', label: '% class', num: true, hideSm: true, render: (e) => (e.percent_of_class != null ? `${e.percent_of_class.toFixed(1)}%` : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
+  { key: 'act', label: 'action', render: (e) => <ActionTag e={e} />, sort: (e) => e.action },
+  { key: 'pc', label: '% class', num: true, hideSm: true, render: (e) => (e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 2 : 1)}%` : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
   { key: 'val', label: 'value', num: true, render: (e) => (e.value_usd != null ? <span className={e.action === 'sell' ? 'neg' : e.action === 'buy' ? 'pos' : ''}>{usd(e.value_usd)}</span> : <span className="dim">—</span>), sort: (e) => e.value_usd ?? -1 },
   { key: 'sa', label: 'shares after', num: true, hideSm: true, render: (e) => num(e.shares_after), sort: (e) => e.shares_after ?? -1 },
   {
@@ -185,155 +189,181 @@ function season(now = new Date()) {
 }
 
 // ---------- home ----------
+/** Each fund's latest book for the funds that filed in a given quarter. */
+const loadQuarterBooks = (slugs: string[]) => Promise.all(slugs.map((x) => loadBook(x).catch(() => null))).then((bs) => bs.filter((b): b is Book => Boolean(b)))
+const moveLabel = (h: Holding) => (h.change === 'new' ? 'NEW' : h.change === 'exited' ? 'SOLD OUT' : h.change === 'added' ? 'ADD' : 'TRIM')
 export function Home() {
-  title('13F terminal for concentrated long-term funds')
+  title('13F filings and trades of concentrated long-term funds')
   const ix = useLoad(loadIndex, [])
-  const books = useLoad(loadBooks, [])
   const ev = useLoad(loadEvents, [])
   const firms = useFirms()
   const ms = useMemo(() => (ix.data ? funds(ix.data) : []), [ix.data])
-  const agg = useMemo(() => (books.data ? aggregate(books.data) : null), [books.data])
+  const s = season()
+  const seasonFiled = ms.filter((m) => m.quarter === s.q)
+  // Before three funds have filed this season, lead with the previous quarter's filings instead.
+  const lead = seasonFiled.length >= 3 ? s.q : [...new Set(ms.map((m) => m.quarter))].sort().reverse().find((q) => q !== s.q) ?? s.q
+  // Every fund's latest 13F, newest first; the trades panel uses the lead quarter only.
+  const filers = useMemo(() => [...ms].sort((a, b) => b.filing_date.localeCompare(a.filing_date) || b.total_value - a.total_value).slice(0, 30), [ms])
+  const need = useMemo(() => [...new Set([...filers, ...ms.filter((m) => m.quarter === lead)].map((m) => m.slug))], [filers, ms, lead])
+  const books = useLoad(() => (need.length ? loadQuarterBooks(need) : Promise.resolve([] as Book[])), [need.join()])
   if (ix.error) return <Failed error={ix.error} />
   if (!ix.data) return <Loading what="loading filings" />
-  const s = season()
-  const filed = ms.filter((m) => m.quarter === s.q)
+  const bySlug = new Map((books.data ?? []).map((b) => [b.slug, b]))
+  // One trade per company per fund: share classes (GOOGL and GOOG) are combined.
+  const trades = (b: Book) => {
+    const by = new Map<string, Holding>()
+    for (const h of b.holdings) {
+      if (h.put_call || !h.value_delta) continue
+      const k = h.cusip.slice(0, 6)
+      const cur = by.get(k)
+      if (!cur) by.set(k, { ...h })
+      else {
+        if (Math.abs(h.value) > Math.abs(cur.value)) Object.assign(cur, { ticker: h.ticker, former: h.former, display_name: h.display_name, cusip: h.cusip })
+        cur.value_delta = (cur.value_delta ?? 0) + h.value_delta
+        cur.value += h.value
+        if (cur.change !== h.change) cur.change = cur.value_delta > 0 ? (cur.change === 'new' && h.change === 'new' ? 'new' : 'added') : cur.value > 0 ? 'trimmed' : 'exited'
+      }
+    }
+    return [...by.values()]
+  }
+  const biggest = (b: Book) => [...trades(b)].sort((x, y) => Math.abs(y.value_delta!) - Math.abs(x.value_delta!))[0]
+  const moves = (books.data ?? [])
+    .filter((b) => b.quarter === lead)
+    .flatMap((b) => trades(b).map((h) => ({ b, h })))
+    .sort((x, y) => Math.abs(y.h.value_delta!) - Math.abs(x.h.value_delta!))
+    .slice(0, 15)
   const due = ms.filter((m) => m.quarter !== s.q)
   const daysLeft = Math.ceil((Date.parse(s.due) - Date.now()) / 86_400_000)
-  const total = ms.reduce((x, m) => x + m.total_value, 0)
   const events = (ev.data?.events ?? []).filter((e) => inRoster(e.slug) && !ownVehicle(e))
-  const rows = agg?.rows ?? []
-  // Lead story: the largest single trades of the season (or of the latest filings, before anyone has filed).
-  const seasonBooks = (books.data ?? []).filter((b) => b.quarter === s.q)
-  const moveBooks = seasonBooks.length >= 3 ? seasonBooks : (books.data ?? [])
-  // At most two trades per fund, so one early filer can't fill the list.
-  const perFund = new Map<string, number>()
-  const moves = moveBooks
-    .flatMap((b) => b.holdings.filter((h) => !h.put_call && h.value_delta).map((h) => ({ b, h })))
-    .sort((a, b) => Math.abs(b.h.value_delta!) - Math.abs(a.h.value_delta!))
-    .filter(({ b }) => {
-      const n = perFund.get(b.slug) ?? 0
-      perFund.set(b.slug, n + 1)
-      return n < 2
-    })
-    .slice(0, 8)
-  const flows = [...rows].filter((r) => r.net > 0).sort((a, b) => b.net - a.net).slice(0, 6).concat([...rows].filter((r) => r.net < 0).sort((a, b) => a.net - b.net).slice(0, 6))
-  const consensus = [...rows].sort((a, b) => b.holders.length - a.holders.length || b.value - a.value).slice(0, 10)
-  const conviction = [...rows].filter((r) => r.sector !== 'Funds & ETFs').sort((a, b) => b.maxWeight - a.maxWeight).slice(0, 10)
-  const latest = [...ms].sort((a, b) => b.filing_date.localeCompare(a.filing_date)).slice(0, 12)
+  // Highest conviction from each fund's largest positions (index), share classes combined per fund.
+  const conv = new Map<string, { key: string; ticker: string | null; former?: string; name: string; slug: string; firm: string; weight: number }>()
+  for (const m of ms)
+    for (const h of m.top ?? []) {
+      if (h.put_call || isFundLike(h) || !h.cusip) continue
+      const k = h.cusip.slice(0, 6)
+      const id = `${k}|${m.slug}`
+      const cur = conv.get(id)
+      if (cur) cur.weight += h.weight
+      else conv.set(id, { key: id, ticker: h.ticker, former: h.former, name: issuerName(h.display_name || h.issuer), slug: m.slug, firm: m.firm, weight: h.weight })
+    }
+  const conviction = [...conv.values()].sort((a, b) => b.weight - a.weight).slice(0, 12)
   return (
-    <div className="page">
-      <section className="lead">
-        <div className="lead-season">
-          <div className="eyebrow">{quarterLabel(s.q)} 13F season</div>
-          <div className="headline">
-            <span className="big num">{filed.length}</span>
-            <span className="of">of {ms.length} funds filed</span>
-          </div>
-          <div className="dim small">
-            {daysLeft > 0 ? `${daysLeft} days to the ${date(s.due)} deadline` : `deadline was ${date(s.due)}`} · each tick is one filing
-          </div>
-          <SeasonChart title={`${filed.length} of ${ms.length} funds have filed for ${quarterLabel(s.q)}`} start={s.end} deadline={s.due} filed={filed.map((m) => ({ key: m.slug, date: m.filing_date, label: m.firm }))} />
-          <div className="due small">
-            <span className="dim">filed:</span>{' '}
-            {filed.length ? filed.map((m, i) => (
-              <span key={m.slug}>
-                {i > 0 && ', '}
-                <A to={`/m/${m.slug}`}>{m.firm}</A>
-              </span>
-            )) : <span className="dim">none yet</span>}
-            <br />
-            <span className="dim">still due:</span> {due.slice(0, 8).map((m, i) => (
-              <span key={m.slug}>
-                {i > 0 && ', '}
-                <A to={`/m/${m.slug}`}>{m.firm}</A>
-              </span>
-            ))}
-            {due.length > 8 && <span className="dim"> +{due.length - 8}</span>}
-          </div>
-        </div>
-        <div className="lead-moves">
-          <div className="eyebrow">{seasonBooks.length >= 3 ? `largest trades of ${quarterLabel(s.q)}` : 'largest trades in the latest 13Fs'}</div>
-          {books.data ? (
-            <HBars
-              title="largest trades"
-              inline
-              labelWidth={260}
-              rows={moves.map(({ b, h }) => ({
-                key: b.slug + h.cusip,
-                href: stockHref(h),
-                label: (
-                  <>
-                    <span className="strong mono">{h.ticker ?? h.display_name}</span> <span className="fg">{b.firm}</span>
-                  </>
-                ),
-                sub: h.change === 'new' ? 'new position' : h.change === 'exited' ? 'sold out' : h.change === 'added' ? 'added' : 'trimmed',
-                value: h.value_delta!,
-              }))}
-            />
-          ) : (
-            <Loading what="reading the books" />
-          )}
-        </div>
-      </section>
-
-      <div className="stats">
-        <Stat label="funds on the roster" value={ms.length} sub={<A to="/about#roster">how funds qualify →</A>} />
-        <Stat label="their 13F books" value={usd(total)} sub={agg ? `${usd(agg.total)} in stocks; the rest options and funds` : `${num(ms.reduce((x, m) => x + m.position_count, 0))} positions`} />
-        <Stat label="13D/G + Form 4, 30 days" value={events.length} sub={<A to="/filings">filings →</A>} />
-        <Stat label="email alerts" value={`$${PRICE.monthly}/mo`} sub={<A to="/alerts">sample and pricing →</A>} />
-      </div>
-
-      <div className="duo">
-        <Panel title="net flows by stock" right={<A to="/flows">all flows →</A>}>
-          {agg ? <HBars inline title="net dollars bought and sold by stock" labelWidth={230} rows={flows.map((r) => ({ key: r.key, href: stockHref(r), label: <span className="strong mono">{r.ticker ?? r.name}</span>, sub: `${r.buyers.length} buying · ${r.sellers.length} selling`, value: r.net }))} /> : <Loading />}
-        </Panel>
-        <Panel title="latest 13F filings" right={<A to="/funds">all funds →</A>}>
+    <div className="page home">
+      <div className="home-grid">
+        <Panel
+          title="latest 13F filings"
+          right={
+            <span className="dim">
+              {seasonFiled.length} of {ms.length} filed for {quarterLabel(s.q)} · {daysLeft > 0 ? `due ${date(s.due)}, ${daysLeft} days` : `deadline was ${date(s.due)}`}
+            </span>
+          }
+        >
           <Grid
-            rows={latest}
-            href={(m) => `/m/${m.slug}`}
+            keyboard
+            rows={filers}
+            href={(m) => fundPath(m.slug)}
             cols={[
               { key: 'f', label: 'filed', render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
-              { key: 'm', label: 'fund', link: true, render: (m) => <span className="trunc">{m.firm}</span> },
-              { key: 'q', label: 'qtr', render: (m) => <span className={m.quarter === s.q ? 'tag pos' : 'dim'}>{quarterLabel(m.quarter)}</span> },
-              { key: 'v', label: 'book', num: true, render: (m) => usd(m.total_value) },
+              { key: 'm', label: 'fund', link: true, render: (m) => <span className="trunc strong">{m.firm}</span> },
+              { key: 'q', label: 'qtr', hideSm: true, render: (m) => <span className={m.quarter === s.q ? 'tag acc' : 'dim'}>{quarterLabel(m.quarter)}</span> },
+              { key: 'v', label: 'book', num: true, hideSm: true, render: (m) => usd(m.total_value) },
+              {
+                key: 'd',
+                label: 'vs prior qtr',
+                num: true,
+                hideSm: true,
+                render: (m) => {
+                  const b = bySlug.get(m.slug)
+                  if (!b?.prev_total_value) return <span className="dim">—</span>
+                  const d = b.total_value / b.prev_total_value - 1
+                  return <span className={d > 0 ? 'pos' : d < 0 ? 'neg' : ''}>{d > 0 ? '+' : ''}{pct(d, 0)}</span>
+                },
+              },
+              {
+                key: 'mv',
+                label: 'largest trade',
+                render: (m) => {
+                  const b = bySlug.get(m.slug)
+                  const h = b && biggest(b)
+                  if (!h) return <span className="dim">{b ? 'no trades' : '…'}</span>
+                  return (
+                    <span className="move">
+                      <StockCell t={h.ticker} name={h.display_name || h.issuer} former={h.former} /> <span className={`tag ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(h)}</span> <span className={`num ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{signedUsd(h.value_delta)}</span>
+                    </span>
+                  )
+                },
+              },
             ]}
+            empty={`no ${quarterLabel(lead)} 13Fs yet`}
           />
+          {due.length > 0 && (
+            <div className="due small">
+              <span className="dim">not filed yet ({due.length}):</span>{' '}
+              {due
+                .sort((a, b) => b.total_value - a.total_value)
+                .slice(0, 14)
+                .map((m, i) => (
+                  <span key={m.slug}>
+                    {i > 0 && ', '}
+                    <A to={fundPath(m.slug)}>{m.firm}</A>
+                  </span>
+                ))}
+              {due.length > 14 && (
+                <>
+                  {' '}
+                  <A to="/funds">+{due.length - 14} more</A>
+                </>
+              )}
+            </div>
+          )}
         </Panel>
-      </div>
-
-      <div className="trio">
-        <Panel title="consensus" right={<span className="dim">funds holding</span>}>
-          {agg ? <Grid rank rows={consensus} href={stockHref} cols={[aggCols.ticker, aggCols.name, { key: 'h', label: 'funds', num: true, render: (r) => r.holders.length }]} /> : <Loading />}
-        </Panel>
-        <Panel title="highest conviction" right={<span className="dim">largest % of one book</span>}>
-          {agg ? (
+        <div className="home-side">
+          <Panel title={`largest trades · ${quarterLabel(lead)}`} right={<A to="/flows">flows →</A>}>
+            {books.data ? (
+              <Grid
+                rows={moves}
+                href={(x) => stockHref(x.h)}
+                cols={[
+                  { key: 't', label: 'stock', render: (x) => <StockCell t={x.h.ticker} name={x.h.display_name || x.h.issuer} former={x.h.former} />, width: '72px' },
+                  { key: 'f', label: 'fund', link: true, render: (x) => <span className="trunc">{x.b.firm}</span> },
+                  { key: 'a', label: '', render: (x) => <span className={`tag ${x.h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(x.h)}</span> },
+                  { key: 'v', label: '$ traded', num: true, render: (x) => <span className={x.h.value_delta! > 0 ? 'pos' : 'neg'}>{signedUsd(x.h.value_delta)}</span> },
+                ]}
+              />
+            ) : (
+              <Loading what="reading the books" />
+            )}
+          </Panel>
+          <Panel title="13D/G and Form 4 · 30 days" right={<A to="/filings">all →</A>}>
+            {ev.data ? (
+              <Grid
+                rows={events.slice(0, 10)}
+                href={(e) => (e.ticker ? `/s/${e.ticker}` : null)}
+                cols={[
+                  { key: 'f', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, width: '72px' },
+                  { key: 'w', label: 'fund', render: (e) => <span className="trunc">{firmOf(firms, e.slug, e.manager)}</span> },
+                  { key: 't', label: 'stock', render: (e) => <StockCell t={e.ticker} name={issuerName(e.display_name || e.issuer)} former={e.former} /> },
+                  { key: 'a', label: '', render: (e) => <ActionTag e={e} /> },
+                ]}
+                empty="no filings in the last 30 days"
+              />
+            ) : (
+              <Loading />
+            )}
+          </Panel>
+          <Panel title="highest conviction" right={<span className="dim">largest % of one book</span>}>
             <Grid
               rank
               rows={conviction}
-              href={stockHref}
-              cols={[aggCols.ticker, { key: 'w', label: 'fund', render: (r) => <Who list={[...r.holders].sort((a, b) => b.weight - a.weight)} max={1} /> }, { key: 'mw', label: 'weight', num: true, render: (r) => pct(r.maxWeight, 1) }]}
-            />
-          ) : (
-            <Loading />
-          )}
-        </Panel>
-        <Panel title="13D/G and Form 4" right={<A to="/filings">all →</A>}>
-          {ev.data ? (
-            <Grid
-              rows={events.slice(0, 10)}
-              href={(e) => (e.ticker ? `/s/${e.ticker}` : null)}
+              href={(r) => stockHref(r)}
               cols={[
-                { key: 'f', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span> },
-                { key: 'w', label: 'fund', render: (e) => <span className="trunc">{firmOf(firms, e.slug, e.manager)}</span> },
-                { key: 't', label: 'issuer', render: (e) => <StockCell t={e.ticker} name={issuerName(e.display_name || e.issuer)} /> },
-                { key: 'a', label: '', render: (e) => <span className={`tag ${ACTION[e.action]?.[1] ?? ''}`}>{ACTION[e.action]?.[0] ?? e.action}</span> },
+                { key: 't', label: 'stock', render: (r) => <StockCell t={r.ticker} name={r.name} former={r.former} />, width: '72px' },
+                { key: 'f', label: 'fund', render: (r) => <A to={fundPath(r.slug)}>{r.firm}</A> },
+                { key: 'w', label: 'weight', num: true, render: (r) => pct(r.weight, 1) },
               ]}
-              empty="no filings in the last 30 days"
             />
-          ) : (
-            <Loading />
-          )}
-        </Panel>
+          </Panel>
+        </div>
       </div>
     </div>
   )
@@ -359,7 +389,7 @@ export function Funds() {
           rank
           rows={ms}
           initial={['v', 'desc']}
-          href={(m) => `/m/${m.slug}`}
+          href={(m) => fundPath(m.slug)}
           cols={[
             {
               key: 'm',
@@ -373,7 +403,7 @@ export function Funds() {
               ),
               sort: (m) => m.firm,
             },
-            { key: 'v', label: '13F book', num: true, render: (m) => usd(m.total_value), sort: (m) => m.total_value },
+            { key: 'v', label: '13F book', num: true, hideSm: true, render: (m) => usd(m.total_value), sort: (m) => m.total_value },
             { key: 'n', label: 'positions', num: true, hideSm: true, render: (m) => m.position_count, sort: (m) => m.position_count },
             { key: 't', label: 'top 10', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.top10, 0), sort: (m) => metric.get(m.slug)?.top10 ?? 0, title: 'share of the book in the 10 largest positions' },
             { key: 'to', label: 'turnover', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.turnover, 0), sort: (m) => metric.get(m.slug)?.turnover ?? 0, title: 'latest quarter: (bought + sold) / 2 / average book' },
@@ -383,23 +413,24 @@ export function Funds() {
               hideSm: true,
               render: (m) => (
                 <span className="tks">
-                  {m.top.filter((h) => !h.put_call).slice(0, 5).map((h) => (
-                    <StockCell key={h.cusip} t={h.ticker} name={issuerName(h.display_name || h.issuer).split(' ').slice(0, 2).join(' ')} />
+                  {m.top.filter((h) => !h.put_call && !isFundLike(h)).slice(0, 5).map((h) => (
+                    <StockCell key={h.cusip} t={h.ticker} former={h.former} name={issuerName(h.display_name || h.issuer).split(' ').slice(0, 2).join(' ')} />
                   ))}
                 </span>
               ),
             },
             {
               key: 'q',
-              label: 'latest 13F',
+              label: 'latest',
               render: (m) => (
                 <span>
                   {quarterLabel(m.quarter)} {isStale(m, all) && <span className="badge warn">stale</span>}
+                  <span className="dim show-sm"> · {date(m.filing_date).slice(0, 6)}</span>
                 </span>
               ),
               sort: (m) => m.quarter,
             },
-            { key: 'f', label: 'filed', num: true, render: (m) => <span className="dim">{date(m.filing_date)}</span>, sort: (m) => m.filing_date },
+            { key: 'f', label: 'filed', num: true, hideSm: true, render: (m) => <span className="dim">{date(m.filing_date)}</span>, sort: (m) => m.filing_date },
           ]}
         />
       </Panel>
@@ -453,21 +484,13 @@ export function Fund({ slug }: { slug: string }) {
         </div>
         <Follow kind="investors" id={slug} />
       </div>
-      <div className="stats">
+      <div className="stats fund-stats">
         <Stat label="period" value={quarterLabel(book.quarter)} sub={`filed ${date(book.filing_date)}`} />
         <Stat label="13F book" value={usd(book.total_value)} sub={book.prev_total_value ? `${signedUsd(book.total_value - book.prev_total_value)} vs ${quarterLabel(book.prev_quarter ?? '')}` : 'first filing'} />
         <Stat label="positions" value={live.length} sub={book.changes ? `${book.changes.new ?? 0} new · ${book.changes.exited ?? 0} sold out` : ''} />
         <Stat label="top 10 weight" value={pct(top10, 1)} sub={<Bar value={top10} max={1} />} />
         <Stat label="bought" value={usd(bought)} tone="pos" sub={`${buys.length} positions`} />
         <Stat label="sold" value={usd(-sold)} tone="neg" sub={`${sells.length} positions`} />
-      </div>
-      <div className="duo wide">
-        <Panel title="13F book by quarter" right={<span className="dim">reported value · change vs prior quarter</span>}>
-          {hist.length > 1 ? <ValueHistory title={`${book.firm} 13F book by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.total_value }))} /> : <div className="dim empty">one quarter on file</div>}
-        </Panel>
-        <Panel title="sector mix">
-          <SectorRows items={live} />
-        </Panel>
       </div>
       <Tabs<ITab>
         value={tab}
@@ -481,7 +504,7 @@ export function Fund({ slug }: { slug: string }) {
         ]}
       />
       <Panel title={tab} right={tab === 'holdings' ? <span className="dim hide-sm">reported price = value ÷ shares as filed</span> : undefined}>
-        {tab === 'holdings' && <HoldingsGrid rows={live} />}
+        {tab === 'holdings' && <HoldingsGrid rows={live} own={(x) => ownHolding(book, x)} />}
         {tab === 'buys' && <MovesGrid rows={buys} />}
         {tab === 'sells' && <MovesGrid rows={sells} />}
         {tab === 'filings' && (
@@ -507,6 +530,14 @@ export function Fund({ slug }: { slug: string }) {
         )}
         {tab === 'events' && <Grid rows={events} cols={eventCols(firms, false)} empty="no Form 4 or 13D/G filed since the latest 13F period" />}
       </Panel>
+      <div className="duo wide">
+        <Panel title="13F book by quarter" right={<span className="dim">reported value · change vs prior quarter</span>}>
+          {hist.length > 1 ? <ValueHistory title={`${book.firm} 13F book by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.total_value }))} /> : <div className="dim empty">one quarter on file</div>}
+        </Panel>
+        <Panel title="sector mix">
+          <SectorRows items={live} />
+        </Panel>
+      </div>
     </div>
   )
 }
@@ -520,7 +551,14 @@ function WeightShift({ prev, now, max }: { prev: number; now: number; max: numbe
     </span>
   )
 }
-function HoldingsGrid({ rows }: { rows: Holding[] }) {
+/** A holding in the fund's own vehicle (its listed fund or holding company), e.g. PSUS for Pershing Square. */
+const ownHolding = (b: Book, h: Holding) => {
+  const own = new Set([...tokens(b.firm), ...tokens(b.name)])
+  return tokens(h.display_name || h.issuer).some((w) => own.has(w))
+}
+/** ETFs, index and T-bill funds: shown, but never as a fund's "largest positions". */
+const isFundLike = (h: Holding) => h.sector === 'Funds & ETFs' || /\b(ETF|ISHARES|SPDR|VANGUARD|INDEX|TREASURY|T-BILL|SELECT SECTOR)\b/i.test(`${h.issuer} ${h.title}`)
+function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => boolean }) {
   const max = Math.max(...rows.map((r) => Math.max(r.weight, r.prev_weight ?? 0)))
   return (
     <Grid
@@ -530,8 +568,8 @@ function HoldingsGrid({ rows }: { rows: Holding[] }) {
       initial={['w', 'desc']}
       href={stockHref}
       cols={[
-        { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} />, sort: (r) => r.ticker ?? '', width: '80px' },
-        { key: 'n', label: 'company', link: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge"> {r.put_call}</span> : null}</span>, sort: (r) => r.display_name ?? '' },
+        { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, sort: (r) => r.ticker ?? '', width: '80px' },
+        { key: 'n', label: 'company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge">{r.put_call}</span> : null}{own?.(r) ? <span className="badge">own fund</span> : null}</span>, sort: (r) => r.display_name ?? '' },
         { key: 's', label: 'sector', hideSm: true, render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
         { key: 'w', label: '% of book', num: true, render: (r) => pct(r.weight), sort: (r) => r.weight },
         { key: 'ws', label: 'last qtr → now', hideSm: true, render: (r) => <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />, title: 'weight last quarter (grey) and now' },
@@ -551,7 +589,7 @@ function MovesGrid({ rows }: { rows: Holding[] }) {
       rows={rows}
       href={stockHref}
       cols={[
-        { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} />, width: '80px' },
+        { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
         { key: 'n', label: 'company', link: true, render: (r) => <span className="trunc">{r.display_name}</span> },
         { key: 'c', label: 'activity', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} /> },
         { key: 'sc', label: 'Δ shares', num: true, hideSm: true, render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
@@ -568,8 +606,10 @@ type ATab = 'buyers' | 'buy$' | 'new' | 'sellers' | 'exits'
 export function Flows() {
   title('flows: buys and sells')
   const books = useLoad(loadBooks, [])
-  const [q, setQ] = useState<string>('latest')
+  const [picked, setQ] = useState<string | null>(null)
   const [tab, setTab] = useState<ATab>('buyers')
+  const sq = season().q
+  const q = picked ?? ((books.data ?? []).filter((b) => b.quarter === sq).length >= 3 ? sq : 'latest')
   const quarters = useMemo(() => [...new Set((books.data ?? []).map((b) => b.quarter))].sort().reverse(), [books.data])
   const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q)).rows : []), [books.data, q])
   if (books.error) return <Failed error={books.error} />
@@ -618,7 +658,7 @@ export function Flows() {
           href={stockHref}
           cols={[
             aggCols.ticker,
-            aggCols.name,
+            { ...aggCols.name, hideSm: true },
             aggCols.sector,
             isBuy
               ? { key: 'b', label: tab === 'new' ? 'new' : 'buyers', num: true, render: (r) => <span className="pos">{tab === 'new' ? r.newBuyers : r.buyers.length}</span> }
@@ -667,7 +707,7 @@ export function Consensus() {
         consensus <span className="dim">· the stocks in all {n} roster funds’ latest 13Fs, combined · {usd(agg.total)} in stocks (options and fund units excluded)</span>
       </h1>
       <Panel title="by sector" right={<span className="dim hide-sm">choose a sector to filter</span>}>
-        <SectorStrip items={agg.rows} />
+        <StackBar parts={mix.map((m) => ({ label: m.sector, value: m.value, color: SECTOR_COLOR[m.sector] ?? '#555' }))} />
         <div className="filters" role="group" aria-label="sector filter">
           <button className={!sector ? 'chip on' : 'chip'} aria-pressed={!sector} onClick={() => setSector(null)}>
             all sectors
@@ -736,12 +776,6 @@ export function Filings() {
       <h1>
         filings <span className="dim">· Schedule 13D/13G and Form 4 filed by funds since their latest 13F · last {ev.data.window_days} days</span>
       </h1>
-      <div className="stats">
-        <Stat label={scope === 'roster' ? 'roster filings' : 'all tracked funds'} value={scoped.length} sub={`updated ${ev.data.updated_at.slice(0, 16).replace('T', ' ')} UTC`} />
-        <Stat label="new 5%+ stakes" value={scoped.filter((e) => e.action === 'new_stake').length} tone="pos" />
-        <Stat label="dropped below 5%" value={scoped.filter((e) => e.action === 'below_threshold').length} tone="neg" />
-        <Stat label="Form 4 buys / sells" value={`${scoped.filter((e) => e.action === 'buy').length} / ${scoped.filter((e) => e.action === 'sell').length}`} />
-      </div>
       <Tabs<ETab>
         value={tab}
         onChange={setTab}
@@ -808,7 +842,15 @@ export function Filings() {
 // ---------- stock ----------
 type STab = 'holders' | 'activity' | 'options' | 'filings'
 export function Stock({ ticker }: { ticker: string }) {
-  const s = useLoad(() => loadStock(ticker), [ticker])
+  const s = useLoad(
+    () =>
+      loadStock(ticker).catch(async (e) => {
+        const alias = (await loadStockIndex()).stocks.find((r) => r.a.includes(ticker))
+        if (!alias) throw e
+        return loadStock(alias.t)
+      }),
+    [ticker],
+  )
   const ev = useLoad(loadEvents, [])
   const firms = useFirms()
   const [tab, setTab] = useState<STab>('holders')
@@ -837,7 +879,7 @@ export function Stock({ ticker }: { ticker: string }) {
     { key: 'v', label: 'value', num: true, render: (h) => usd(h.value), sort: (h) => h.value },
     { key: 'q', label: 'qtr', num: true, hideSm: true, render: (h) => <span className="dim">{quarterLabel(h.quarter)}</span>, sort: (h) => h.quarter },
   ]
-  const fundHref = (h: StockHolder) => (inRoster(h.slug) ? `/m/${fundSlug(h.slug)}` : null)
+  const fundHref = (h: StockHolder) => (inRoster(h.slug) ? fundPath(fundSlug(h.slug)) : null)
   return (
     <div className="page">
       <div className="head">
@@ -863,25 +905,10 @@ export function Stock({ ticker }: { ticker: string }) {
       <div className="stats">
         <Stat label={`holders · ${scopeLabel}`} value={holders.length} sub={`${prevHolders} last quarter`} />
         <Stat label={`value held · ${scopeLabel}`} value={usd(value)} />
-        <Stat label="change in holders" value={`${holders.length - prevHolders >= 0 ? '+' : ''}${holders.length - prevHolders}`} tone={holders.length >= prevHolders ? 'pos' : 'neg'} sub={`${prevHolders} → ${holders.length}`} />
-        <Stat label="new / added" value={`${nNew} / ${cnt('added')}`} tone="pos" />
-        <Stat label="trimmed / sold out" value={`${cnt('trimmed')} / ${exited.length}`} tone="neg" />
+        <Stat label="change in holders" value={`${holders.length - prevHolders >= 0 ? '+' : ''}${holders.length - prevHolders}`} tone={holders.length > prevHolders ? 'pos' : holders.length < prevHolders ? 'neg' : undefined} sub={`${prevHolders} → ${holders.length}`} />
+        <Stat label="new / added" value={`${nNew} / ${cnt('added')}`} tone={nNew + cnt('added') > 0 ? 'pos' : undefined} />
+        <Stat label="trimmed / sold out" value={`${cnt('trimmed')} / ${exited.length}`} tone={cnt('trimmed') + exited.length > 0 ? 'neg' : undefined} />
       </div>
-      <div className="duo">
-        <Panel title={`what holders did · ${scopeLabel}`} right={<span className="dim">latest 13F vs prior quarter</span>}>
-          <HBars
-            title="holders by activity"
-            fmt={(v) => String(Math.abs(v))}
-            labelWidth={110}
-            rows={[
-              { key: 'new', label: 'new position', value: nNew },
-              { key: 'added', label: 'added', value: cnt('added') },
-              { key: 'unch', label: 'unchanged', value: cnt('unchanged') },
-              { key: 'trim', label: 'trimmed', value: -cnt('trimmed') },
-              { key: 'exit', label: 'sold out', value: -exited.length },
-            ]}
-          />
-        </Panel>
         <Panel title={`largest positions by % of book · ${scopeLabel}`}>
           {holders.length ? (
             <HBars title="largest holders by weight" fmt={(v) => pct(v, 1)} labelWidth={190} rows={[...holders].sort((a, b) => b.weight - a.weight).slice(0, 6).map((h) => ({ key: h.slug, href: fundHref(h), label: name(h), value: h.weight }))} />
@@ -889,7 +916,6 @@ export function Stock({ ticker }: { ticker: string }) {
             <div className="empty dim">no roster fund holds it; count all tracked funds</div>
           )}
         </Panel>
-      </div>
       <Tabs<STab>
         value={tab}
         onChange={setTab}
@@ -947,11 +973,11 @@ function sampleEmail(b: Book) {
     `TOP SELLS`,
     ...sells.map(fmt),
     ``,
-    `  https://holdterm.pages.dev/m/${b.slug}`,
-    `  SEC: ${b.sec_url.replace(/-index\.html$/, '')}`,
+    `  ${SITE}${fundPath(b.slug)}`,
+    `  SEC filing ${b.accession}`,
     ``,
     `--`,
-    `Manage alerts: https://holdterm.pages.dev/account/ · SEC EDGAR data, not investment advice.`,
+    `Manage alerts: ${SITE}/account/ · SEC EDGAR data, not investment advice.`,
   ].join('\n')
 }
 export function Alerts() {
@@ -965,6 +991,7 @@ export function Alerts() {
         alerts <span className="dim">· the one thing Holdterm sells; the site stays free with no ads</span>
       </h1>
       <div className="alerts-grid">
+        <div className="alerts-side">
         <Panel title="holdterm alerts">
           <div className="price">
             <span className="big">${yearly ? PRICE.yearly : PRICE.monthly}</span>
@@ -1004,8 +1031,19 @@ export function Alerts() {
             </li>
           </ul>
         </Panel>
+        </div>
         <Panel title="sample alert" right={<span className="dim">built from a real filing</span>} className="sample">
-          {sample.data ? <pre className="email">{sampleEmail(sample.data)}</pre> : <Loading />}
+          {sample.data ? (
+            <pre className="email">
+              {sampleEmail(sample.data)}
+              {'\n'}
+              <a href={sample.data.sec_url} target="_blank" rel="noreferrer">
+                open this filing on SEC EDGAR ↗
+              </a>
+            </pre>
+          ) : (
+            <Loading />
+          )}
         </Panel>
       </div>
     </div>
@@ -1175,34 +1213,65 @@ export function About() {
       </Panel>
       <Panel title="who is on the roster" className="anchor">
         <span id="roster" />
-        <p>Nobody is hand-picked. Each quarter, after the 13F deadline, every one of the {roster.universe} 13F filers we track is screened against the same rule, and the roster is whoever passes:</p>
+        <p>
+          Nobody is hand-picked. The starting universe is every 13F-HR filer in the SEC’s own quarterly{' '}
+          <a href="https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets" target="_blank" rel="noreferrer">
+            Form 13F data sets ↗
+          </a>{' '}
+          ({quarterLabel(qOf(roster.period))} filings, {num(roster.screened)} filers with a book of {usd(r.min_value, 0)} or more). Each is screened against one rule, and the roster is whoever passes:
+        </p>
         <table className="grid rule">
           <tbody>
-            <tr>
-              <td>type</td>
-              <td>independent investment manager: no banks, brokers, insurers, pensions, endowments, foundations, sovereign funds or private-equity sponsors</td>
-            </tr>
             <tr>
               <td>size</td>
               <td>13F book of at least {usd(r.min_value, 0)}</td>
             </tr>
             <tr>
               <td>focus</td>
-              <td>at most {r.max_positions} positions, with the 10 largest at least {pct(r.min_top10, 0)} of the book</td>
+              <td>
+                {r.min_positions} to {r.max_positions} positions; the 10 largest at least {pct(r.min_top10, 0)} of the book; the largest at most {pct(r.max_top1, 0)}; ETFs and index funds at most {pct(r.max_etf, 0)}
+              </td>
             </tr>
             <tr>
               <td>patience</td>
-              <td>turnover of at most {pct(r.max_turnover, 0)} in the latest quarter ((bought + sold) ÷ 2 ÷ average book)</td>
+              <td>turnover of at most {pct(r.max_turnover, 0)} in the latest quarter: shares bought and sold, valued at the quarter’s filed prices, ÷ 2 ÷ book</td>
             </tr>
             <tr>
               <td>record</td>
-              <td>{r.min_quarters} quarters (two years) of 13F filings; a predecessor filer’s history counts</td>
+              <td>a 13F for the same quarter {r.min_years} years earlier; a predecessor filer counts (Pershing Square Inc. carries Pershing Square Capital Management’s record, and their books are summed in a quarter where both filed)</td>
+            </tr>
+            <tr>
+              <td>type</td>
+              <td>
+                investment managers, and companies whose 13F is a concentrated portfolio of outside stocks (Berkshire Hathaway, Icahn, Cincinnati Financial, Graham Holdings) are in. Out: banks, brokers, pensions, endowments and foundations; private-equity and venture sponsors and companies whose 13F lists strategic stakes; sector specialists (biotech, real estate, energy infrastructure); funds of ETFs. The {Object.keys(EXCLUSIONS).length} type exclusions are listed one by one, with the reason for each, in{' '}
+                <a href={`${REPO}/blob/main/holdterm/scripts/roster-exclusions.json`} target="_blank" rel="noreferrer">
+                  roster-exclusions.json ↗
+                </a>
+              </td>
             </tr>
           </tbody>
         </table>
         <p className="dim small">
-          This quarter: {roster.universe} filers, {roster.screened} past the size, focus, record and type screens, {roster.funds.length} on the roster. Closest misses: {roster.near_misses.slice(0, 6).map((f) => `${firmName(f.slug, f.firm)} (${f.turnover != null && f.turnover > (r.max_turnover as number) ? `turnover ${pct(f.turnover, 0)}` : `top 10 ${pct(f.top10, 0)}`})`).join(', ')}. Roster as of {roster.generated_at.slice(0, 10)}.
+          {roster.funds.length + roster.pending.length} funds pass. {roster.funds.length} are live here; {roster.pending.length ? `${roster.pending.length} are being added as their 13F history is loaded.` : 'all are live.'} Closest misses:{' '}
+          {roster.near_misses
+            .slice(0, 8)
+            .map((f) => `${firmName(f.slug ?? '', f.firm)} (${f.fails.join(', ')})`)
+            .join(', ')}
+          . The screen and its output are public:{' '}
+          <a href={`${REPO}/blob/main/holdterm/scripts/screen.py`} target="_blank" rel="noreferrer">
+            screen.py ↗
+          </a>{' '}
+          and{' '}
+          <a href={`${REPO}/blob/main/holdterm/scripts/universe.json`} target="_blank" rel="noreferrer">
+            universe.json ↗
+          </a>
+          . Reconstituted when the SEC publishes each quarter’s data set; roster as of {roster.generated_at.slice(0, 10)}.
         </p>
+        {roster.pending.length > 0 && (
+          <p className="small">
+            <span className="dim">being added:</span> {roster.pending.map((f) => firmName('', f.firm)).join(', ')}
+          </p>
+        )}
       </Panel>
       <Panel title="data">
         <ul className="list">
@@ -1216,7 +1285,7 @@ export function About() {
             <span className="acc">▸</span> Schedule 13D and 13G (5%+ ownership) and Form 4 where a tracked fund is the filer. Filings on a fund’s own vehicles are labelled “own fund” and left out of feeds by default.
           </li>
           <li>
-            <span className="acc">▸</span> No market prices: everything comes from SEC filings. Reported price is the filing’s value divided by its share count. Tickers come from CUSIP mapping; where none exists we show the company name rather than guess.
+            <span className="acc">▸</span> No market prices: everything comes from SEC filings. Reported price is the filing’s value divided by its share count. Tickers come from CUSIP mapping, with a small sourced fallback file (src/tickers.json); a company that has left the exchange shows its former ticker with a †, and where no ticker exists we show the company name rather than guess.
           </li>
           <li>
             <span className="acc">▸</span> Funds are named by firm. A person is shown only when they run the portfolio today.
@@ -1225,7 +1294,7 @@ export function About() {
       </Panel>
       <Panel title="contact and corrections">
         <p>
-          Found a wrong number, ticker or name? <a href={ISSUES}>Report it on GitHub ↗</a> with the page link, and we’ll check it against the SEC filing. Billing questions: <a href={checkout.portal}>Stripe billing portal ↗</a>.
+          Email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> for anything: a wrong number, ticker or name (send the page link and we’ll check it against the SEC filing), billing, or deleting your data. You can also <a href={ISSUES}>open a GitHub issue ↗</a>. Manage or cancel a subscription in the <a href={checkout.portal}>Stripe billing portal ↗</a>.
         </p>
       </Panel>
       <Panel title="keys">
@@ -1257,7 +1326,7 @@ export function Terms() {
       </Panel>
       <Panel title="contact">
         <p>
-          Questions or corrections: <a href={ISSUES}>open an issue on GitHub ↗</a>.
+          Questions or corrections: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>, or <a href={ISSUES}>open an issue on GitHub ↗</a>.
         </p>
       </Panel>
     </div>
@@ -1274,7 +1343,8 @@ export function Privacy() {
           <li><span className="acc">▸</span> If you buy alerts we keep your email, your Stripe customer and subscription ids, and the funds and stocks you follow. That is all we need to send alerts.</li>
           <li><span className="acc">▸</span> Card details go to Stripe and never reach us. Emails are sent through Resend.</li>
           <li><span className="acc">▸</span> Signing in stores a session token in your browser’s local storage. No other cookies.</li>
-          <li><span className="acc">▸</span> We don’t sell or share your data. Cancel and ask for deletion through <a href={ISSUES}>GitHub ↗</a> or the billing portal, and we delete your record.</li>
+          <li><span className="acc">▸</span> We don’t sell or share your data. Cancel in the billing portal and email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> to ask for deletion, and we delete your record.</li>
+          <li><span className="acc">▸</span> Contact: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.</li>
         </ul>
       </Panel>
     </div>

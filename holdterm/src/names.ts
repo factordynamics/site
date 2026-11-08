@@ -34,6 +34,15 @@ export const FUNDS: Record<string, FundName> = {
   'stuart-mclaughlin': { firm: 'Triple Frond Partners', pm: 'Stuart McLaughlin' },
 }
 
+const slugify = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+/** Fund URLs use the firm (/m/ako-capital), not the data slug, which can be a person's name. */
+const PUBLIC: Record<string, string> = Object.fromEntries(Object.entries(FUNDS).map(([slug, f]) => [slug, slugify(f.firm)]))
+const DATA_SLUG: Record<string, string> = Object.fromEntries(Object.entries(PUBLIC).map(([a, b]) => [b, a]))
+export const fundPath = (slug: string) => `/m/${PUBLIC[slug] ?? slug}`
+/** Data slug for a URL slug; old person-named URLs resolve too. */
+export const dataSlug = (urlSlug: string) => DATA_SLUG[urlSlug] ?? urlSlug
+export const publicSlug = (slug: string) => PUBLIC[slug] ?? slug
+
 const SUFFIX = /[\s,]+(L\.?L\.?C\.?|L\.?P\.?|LLP|Inc\.?|Ltd\.?|Limited|Corp\.?|Co\.?|plc|S\.A\.|AG|N\.?V\.?|GmbH|\(UK\)|\/[A-Z]{2}\/?)$/i
 const titleCase = (s: string) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()))
 /** Firm name for any filer: our map first, else the EDGAR name without legal suffixes. */
