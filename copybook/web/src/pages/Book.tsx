@@ -4,7 +4,7 @@ import { Peers } from '../components/Peers'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
 import { ApiError, isPro, useMember } from '../lib/account'
-import { quarterLabel, dateLabel, money, useAsync, useTitle } from '../lib/data'
+import { quarterLabel, dateLabel, displayName, money, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
 import { loadStock, resolveTicker, stockPath, tickerText, type Stock, type StockHolder } from '../lib/stocks'
 
@@ -71,7 +71,7 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
     sold: traded.filter((x) => x.change === 'trimmed' || x.change === 'exited').length,
     net: traded.reduce((a, x) => a + (x.change && x.change !== 'unchanged' ? x.delta_value : 0), 0),
     split,
-    latest: ev ? { form: ev.form, date: ev.filing_date, manager: ev.manager } : null,
+    latest: ev ? { form: ev.form, date: ev.filing_date, manager: displayName(ev.manager) } : null,
   }
 }
 
@@ -209,7 +209,7 @@ export function Book() {
                               <Link to={stockPath(r.ticker)} className="font-mono text-[13px] font-semibold hover:text-accent">
                                 {r.ticker}
                               </Link>
-                              <span className="max-w-[9rem] truncate text-ink-2" title={r.name}>{r.name}</span>
+                              <span className="max-w-[7rem] truncate text-ink-2" title={r.name}>{r.name}</span>
                               {r.owned ? <Badge tone="accent">Owned</Badge> : <Badge>Watched</Badge>}
                             </span>
                           </td>
@@ -237,7 +237,7 @@ export function Book() {
                                 {r.latest ? (
                                   <span className="block max-w-[14rem]">
                                     <span className="font-medium">{r.latest.form.replace(/^SCHEDULE /i, '')}</span> · {dateLabel(r.latest.date)}
-                                    <span className="block truncate text-ink-3">{r.latest.manager}</span>
+                                    <span className="block max-w-[9rem] truncate text-ink-3" title={r.latest.manager}>{r.latest.manager}</span>
                                   </span>
                                 ) : (
                                   <span className="text-ink-3">None since the 13Fs</span>
