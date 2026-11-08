@@ -11,6 +11,8 @@ export interface Mail {
   html?: string;
   /** Sender, when not Copybook's (Holdterm). */
   from?: string;
+  /** Where replies go, when not CONTACT_EMAIL (a request notice replies to the requester). */
+  replyTo?: string;
 }
 
 /** Sends through Resend's batch API (100 per request). Returns a short status for logs. */
@@ -22,7 +24,7 @@ export async function sendMail(env: Env, mails: Mail[]): Promise<string> {
   }
   const statuses: string[] = [];
   for (let i = 0; i < mails.length; i += 100) {
-    const batch = mails.slice(i, i + 100).map((m) => ({ from: m.from ?? env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...(m.html ? { html: m.html } : {}) }));
+    const batch = mails.slice(i, i + 100).map((m) => ({ from: m.from ?? env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...((m.replyTo ?? env.CONTACT_EMAIL) ? { reply_to: m.replyTo ?? env.CONTACT_EMAIL } : {}), ...(m.html ? { html: m.html } : {}) }));
     const res = await fetch('https://api.resend.com/emails/batch', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -56,6 +58,20 @@ export function leadAckMail(env: Env, l: { topic: unknown; name: string | null; 
     to: l.email,
     subject: l.topic === 'delete' ? 'Your Copybook data deletion request' : l.topic === 'support' ? 'We got your message' : 'Your Copy Fund request',
     text: `${hi}\n\n${what}${got.length ? `\n\nWhat you sent:\n${got.join('\n')}` : ''}\n\nCopybook: ${env.SITE_URL}${FOOTER}`,
+  };
+}
+
+/** The copy of a site request that goes to our inbox (CONTACT_EMAIL); replying answers the requester. */
+export function leadNoticeMail(env: Env, l: Record<string, unknown> & { topic: unknown; email: string }, id: string): Mail {
+  const kind = l.topic === 'delete' ? 'Data deletion request' : l.topic === 'support' ? 'Support message' : 'Copy Fund request';
+  const rows = ['name', 'email', 'fund', 'seats', 'invoice', 'plan_interval', 'page', 'received_at']
+    .filter((k) => l[k] !== null && l[k] !== undefined)
+    .map((k) => `${k}: ${String(l[k])}`);
+  return {
+    to: env.CONTACT_EMAIL,
+    replyTo: l.email,
+    subject: `${kind}: ${l.fund ?? l.name ?? l.email}`,
+    text: `${kind} from the Copybook site. Reply to this email to answer ${l.email}.\n\n${rows.join('\n')}${l.message ? `\n\nMessage:\n${String(l.message)}` : ''}\n\nId: ${id}`,
   };
 }
 
@@ -419,7 +435,7 @@ function htmlBody(env: Env, intro: string, filings: Alert13F[], events: AlertEve
 // Holdterm: a separate brand on this Worker. Plain, terminal-style mail that never names Copybook.
 
 export const HOLDTERM_FROM = 'Holdterm <holdterm@factordynamics.com>';
-const htSite = (env: Env) => env.HOLDTERM_SITE_URL ?? 'https://holdterm.pages.dev/';
+const htSite = (env: Env) => env.HOLDTERM_SITE_URL ?? 'https://holdterm.factordynamics.com/';
 const htFooter = (env: Env) => `\n\n--\nManage alerts: ${htSite(env)}account/ · SEC EDGAR data, not investment advice.`;
 
 export function holdtermLoginMail(env: Env, to: string, token: string, welcome: boolean): Mail {

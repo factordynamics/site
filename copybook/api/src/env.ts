@@ -37,6 +37,8 @@ export interface Env {
   DATA_URL: string;
   ALLOWED_ORIGINS?: string;
   EMAIL_FROM: string;
+  /** Our inbox (forwards to the owner): reply-to on every email, and where site requests go. */
+  CONTACT_EMAIL: string;
   /** This Worker's public base URL (trailing slash), for links in email. */
   API_URL?: string;
   /** Bearer token for /health's private business block (Worker secret). */

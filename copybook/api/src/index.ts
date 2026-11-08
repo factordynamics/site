@@ -7,7 +7,7 @@ import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
 import { handleV1 } from './v1';
 
 export { KeyMeter } from './keys';
-import { holdtermLoginMail, leadAckMail, loginMail, sendMail } from './email';
+import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
 import { isActive, isCopy, isPro, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
@@ -221,6 +221,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     await env.DB.put(`lead:${id}`, JSON.stringify({ ...lead, ...(test ? { test: true } : {}) }));
     if (!test) await env.DB.put('leads:count', String(Number((await env.DB.get('leads:count')) ?? 0) + 1));
     const mail = await sendMail(env, [leadAckMail(env, lead)]);
+    if (!test && env.CONTACT_EMAIL) await sendMail(env, [leadNoticeMail(env, lead, id)]);
     return json({ ok: true, id, acknowledgement: mail === '200' ? 'sent' : 'not sent' }, 200, h);
   }
 

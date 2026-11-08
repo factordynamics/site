@@ -53,7 +53,7 @@ let env: Env;
 let hist: MemR2;
 let stockPages: Record<string, unknown> = {};
 const WORKFLOW = 'refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main';
-let sent: { from?: string; to: string[]; subject: string; text: string; html?: string }[];
+let sent: { from?: string; to: string[]; subject: string; text: string; html?: string; reply_to?: string }[];
 let stripeObjects: Record<string, unknown>;
 let index: unknown;
 let secFiles: Record<string, string>;
@@ -102,7 +102,7 @@ function memFollows() {
 
 beforeEach(async () => {
   hist = new MemR2();
-  env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', METER: memMeters(), FOLLOWS: undefined as never };
+  env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', CONTACT_EMAIL: 'hello@example.com', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', METER: memMeters(), FOLLOWS: undefined as never };
   env.HEALTH_TOKEN = 'health_test_token';
   // 2026Q1 lives only in the private bucket; 2026Q2 still falls back to the public copy.
   hist.m.set('h/warren-buffett/2026Q1.csv', new TextEncoder().encode('manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight,change,prev_shares,share_change,value_delta_usd,pct_of_book\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1,new,,5,100,0.1\r\n'));
@@ -1112,8 +1112,11 @@ describe('copybook api', () => {
     const leads = (await env.DB.list({ prefix: 'lead:' })).keys;
     expect(leads).toHaveLength(1);
     expect(JSON.parse((await env.DB.get(leads[0].name))!)).toMatchObject({ topic: 'fund', email: 'pat@fund.example', seats: 5, invoice: true, plan_interval: 'yearly', message: 'Annual please' });
-    expect(sent.map((m) => m.to[0])).toEqual(['pat@fund.example']);
+    // The requester gets an acknowledgement that replies to our inbox; our inbox gets the request, replying to them.
+    expect(sent.map((m) => [m.to[0], m.reply_to])).toEqual([['pat@fund.example', 'hello@example.com'], ['hello@example.com', 'pat@fund.example']]);
     expect(sent[0].text).toContain('annual invoice quote');
+    expect(sent[1].text).toContain('fund: Pat Capital');
+    expect(sent[1].text).toContain('Annual please');
     // A bot filling the hidden field gets a quiet 200 and nothing is stored or sent.
     sent = [];
     expect((await post({ ...ok, email: 'bot@x.example', website: 'http://spam' })).status).toBe(200);
@@ -1125,7 +1128,9 @@ describe('copybook api', () => {
     expect((await post(ok, '7.7.7.7')).status).toBe(429);
     expect((await (await privateHealth()).json()).business.fund_requests).toBe(3);
     // A reviewer's TEST submission is stored but not counted.
+    sent = [];
     expect((await post({ ...ok, email: 'copybook-test-pm@x.example', name: 'TEST PM critic' }, '8.8.8.8')).status).toBe(200);
+    expect(sent.map((m) => m.to[0])).toEqual(['copybook-test-pm@x.example']);
     expect((await (await privateHealth()).json()).business.fund_requests).toBe(3);
 
     const t = Date.now();
