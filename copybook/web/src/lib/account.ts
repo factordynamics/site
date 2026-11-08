@@ -5,7 +5,10 @@ export type Member = {
   email: string
   status: string
   active: boolean
-  plan: string
+  /** The product: copy, pro or fund. Older records read as copy. */
+  plan: 'copy' | 'pro' | 'fund' | string
+  interval?: 'monthly' | 'yearly' | 'unknown'
+  trial_end?: number | null
   period_end?: number | string | null
   alerts: 'all' | 'off' | string[]
 }
@@ -61,6 +64,9 @@ export async function startSession(body: { checkout_session: string } | { login:
   setToken(r.token)
   return r.member
 }
+
+export const PLAN_NAME: Record<string, string> = { copy: 'Copy', pro: 'Copy Pro', fund: 'Copy Fund' }
+export const isPro = (m?: Member | null) => Boolean(m?.active && (m.plan === 'pro' || m.plan === 'fund'))
 
 export const fetchMe = () => call<{ member: Member }>('/me', { auth: true }).then((r) => r.member)
 export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email } })

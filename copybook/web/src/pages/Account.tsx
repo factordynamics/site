@@ -8,7 +8,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, RENEWAL_TERMS, TRIAL_TERMS } from '../config'
-import { fetchMe, getToken, openPortal, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
+import { fetchMe, getToken, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean } | { kind: 'out'; error?: string } | { kind: 'off' }
 
@@ -62,7 +62,8 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
   const [busy, setBusy] = useState(false)
   const { status, follows } = useFollows()
   const [editing, setEditing] = useState(false)
-  const end = member.period_end ? new Date(typeof member.period_end === 'number' ? member.period_end * 1000 : member.period_end) : null
+  const endRaw = member.status === 'trialing' && member.trial_end ? member.trial_end : member.period_end
+  const end = endRaw ? new Date(typeof endRaw === 'number' ? endRaw * 1000 : endRaw) : null
   const endLabel = end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   const trial = member.status === 'trialing'
   const alertMode = member.alerts === 'off' ? 'off' : Array.isArray(member.alerts) ? 'follows' : 'all'
@@ -93,7 +94,6 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
       {onboard && (
         <div className="mt-10">
           <Onboarding
-            alerts={member.alerts}
             onDone={(m) => {
               setEditing(false)
               if (m) onChange(m)
@@ -110,7 +110,8 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
           </div>
           <p className="mt-3 text-[14px] text-ink-2">{member.email}</p>
           <p className="mt-1 text-[14px] text-ink-2">
-            Copy {member.plan === 'yearly' ? 'yearly' : 'monthly'}
+            {PLAN_NAME[member.plan] ?? 'Copy'}
+            {member.interval === 'yearly' ? ', yearly' : member.interval === 'monthly' ? ', monthly' : ''}
             {endLabel && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`}
           </p>
           <Button
@@ -136,21 +137,27 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
             <legend className="sr-only">Send alerts for</legend>
             {(
               [
-                ['follows', `Investors I follow${follows.investors.length ? ` (${follows.investors.length})` : ''}`],
-                ['all', 'Every investor we track'],
-                ['off', 'Off'],
+                [
+                  'follows',
+                  `Investors I follow + stocks I own or watch${follows.investors.length || follows.stocks.length ? ` (${follows.investors.length} + ${follows.stocks.length})` : ''}`,
+                  'Stocks alert when a hedge fund or active manager trades them, never banks, brokers or index funds.',
+                ],
+                ['all', `Every investor (all ${idx.data?.managers.length ?? 199} funds)`, ''],
+                ['off', 'Off', ''],
               ] as const
-            ).map(([k, l]) => (
-              <label key={k} className="flex cursor-pointer items-center gap-3">
+            ).map(([k, l, d]) => (
+              <label key={k} className="flex cursor-pointer items-start gap-3">
                 <input
                   type="radio"
                   name="alerts"
-                  className="size-4 accent-[var(--color-accent)]"
+                  className="mt-0.5 size-4 accent-[var(--color-accent)]"
                   checked={alertMode === k}
-                  disabled={k === 'follows' && !follows.investors.length}
                   onChange={() => setAlerts(k === 'follows' ? follows.investors : k).then(onChange, () => null)}
                 />
-                <span className={k === 'follows' && !follows.investors.length ? 'text-ink-3' : ''}>{l}</span>
+                <span>
+                  <span className="block">{l}</span>
+                  {d && <span className="block text-[12.5px] text-ink-3">{d}</span>}
+                </span>
               </label>
             ))}
           </fieldset>

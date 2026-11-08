@@ -1,29 +1,40 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { loadIndex, money, useAsync } from '../lib/data'
-import { setAlerts, type Member } from '../lib/account'
+import { fetchMe, type Member } from '../lib/account'
 import { saveFollows, toggle, useFollows } from '../lib/follows'
 import { loadStockIndex, stockPath, tickerText } from '../lib/stocks'
 import { Button, Check, Monogram, Skeleton } from './ui'
 
 /** First-run setup for members: whom to follow, and which stocks they own. */
-/** alerts: the member's current setting. Saving follows switches "all" to the followed funds; "off" stays off. */
-export function Onboarding({ alerts, onDone }: { alerts?: Member['alerts']; onDone?: (member?: Member) => void }) {
+// Investor styles for the picker. Editorial grouping; any slug missing from the index is skipped.
+const GROUPS = [
+  ['Value', ['warren-buffett', 'seth-klarman', 'li-lu', 'mason-hawkins', 'francois-rochon', 'tweedy-browne', 'bill-nygren', 'ruane-cunniff', 'terry-smith', 'howard-marks', 'david-abrams', 'david-einhorn']],
+  ['Activist', ['carl-icahn', 'bill-ackman', 'nelson-peltz', 'dan-loeb', 'mason-morfit', 'chris-hohn', 'elliott-investment-management-l-p', 'starboard-value-lp', 'jana-partners-management-lp', 'sachem-head-capital-management-lp']],
+  ['Tiger cubs & growth', ['chase-coleman', 'stephen-mandel', 'andreas-halvorsen', 'philippe-laffont', 'dan-sundheim', 'maverick-capital-ltd']],
+  ['Macro & multi-strategy', ['stanley-druckenmiller', 'david-tepper', 'ray-dalio', 'soros-fund-management-llc', 'tudor-investment-corp-et-al']],
+  ['Largest', []],
+] as const
+
+export function Onboarding({ onDone }: { onDone?: (member?: Member) => void }) {
   const idx = useAsync(loadIndex, [])
   const { follows } = useFollows()
   const [investors, setInvestors] = useState<string[]>(follows.investors)
   const [owned, setOwned] = useState<string[]>(follows.owned)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
-  const featured = (idx.data?.featured ?? []).slice(0, 18)
+  const [group, setGroup] = useState<(typeof GROUPS)[number][0]>('Value')
+  const bySlug = new Map((idx.data?.managers ?? []).map((m) => [m.slug, m]))
+  const pick = GROUPS.find(([g]) => g === group)![1]
+  const featured = (pick.length ? pick.map((sl) => bySlug.get(sl)).filter((m) => m !== undefined) : (idx.data?.featured ?? []).slice(0, 18))
 
   const finish = async (skip = false) => {
     setBusy(true)
     setError(false)
     try {
       await saveFollows(skip ? { onboarded: true } : { investors, owned, onboarded: true })
-      const member = !skip && investors.length && alerts !== 'off' ? await setAlerts(investors) : undefined
-      onDone?.(member)
+      // The API moves a member who never picked an alert scope to followed funds when follows are saved.
+      onDone?.(await fetchMe().catch(() => undefined))
     } catch {
       setError(true)
     } finally {
@@ -38,7 +49,25 @@ export function Onboarding({ alerts, onDone }: { alerts?: Member['alerts']; onDo
         Whom do you want to follow?
       </h2>
       <p className="mt-1.5 text-[15px] text-ink-2">We’ll email you minutes after they file, with their biggest buys and sells in it.</p>
-      <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-5 flex flex-wrap gap-1.5" role="tablist" aria-label="Investor style">
+        {GROUPS.map(([g, slugs]) => {
+          const n = slugs.filter((sl) => investors.includes(sl)).length
+          return (
+            <button
+              key={g}
+              type="button"
+              role="tab"
+              aria-selected={group === g}
+              onClick={() => setGroup(g)}
+              className={`rounded-full px-3 py-1.5 text-[13px] ${group === g ? 'bg-ink font-medium text-white' : 'bg-ink/[0.05] text-ink-2 hover:bg-ink/[0.08]'}`}
+            >
+              {g}
+              {n > 0 && <span className={`ml-1.5 text-[12px] ${group === g ? 'text-white/70' : 'text-accent'}`}>{n}</span>}
+            </button>
+          )
+        })}
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {!idx.data &&
           Array.from({ length: 9 }, (_, i) => (
             <Skeleton key={i} className="h-14 w-full rounded-xl" />
