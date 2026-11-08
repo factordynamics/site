@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { call, isPro, openPortal, type Member } from '../lib/account'
-import { checkout } from '../config'
+import { api, checkout } from '../config'
 import { Button } from './ui'
 
 // API keys: GET/POST /keys, DELETE /keys/{id} (session auth; Copy members get 403 pro_required).
@@ -24,7 +24,7 @@ function Spark({ usage }: { usage: Key['usage'] }) {
   )
 }
 
-export function ApiKeys({ member }: { member: Member }) {
+export function ApiKeys({ member, focus = false }: { member: Member; focus?: boolean }) {
   const pro = isPro(member)
   const [keys, setKeys] = useState<Key[] | null>(null)
   const [max, setMax] = useState(10)
@@ -44,6 +44,11 @@ export function ApiKeys({ member }: { member: Member }) {
       () => setKeys([]),
     )
   }, [pro])
+
+  // Just after a Pro checkout, bring the quickstart into view once we know there are no keys yet.
+  useEffect(() => {
+    if (focus && keys?.length === 0) document.getElementById('api-keys')?.scrollIntoView({ block: 'start' })
+  }, [focus, keys])
 
   const create = async () => {
     setBusy(true)
@@ -133,6 +138,7 @@ export function ApiKeys({ member }: { member: Member }) {
               ))}
             </ul>
           )}
+          {keys?.length === 0 && <Step n={1} title="Create your first key" sub="Name it after where you’ll use it; you can have up to 10." />}
           {keys && keys.length < max && (
             <form
               className="mt-4 flex flex-wrap gap-2"
@@ -162,8 +168,75 @@ export function ApiKeys({ member }: { member: Member }) {
               {error}
             </p>
           )}
+          {keys && (keys.length === 0 || fresh) && <Quickstart apiKey={fresh?.key} />}
         </>
       )}
     </section>
+  )
+}
+
+function Step({ n, title, sub }: { n: number; title: string; sub?: string }) {
+  return (
+    <div className="mt-6 flex items-start gap-3">
+      <span className="num inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-[12.5px] font-semibold text-white">{n}</span>
+      <div>
+        <h3 className="text-[14.5px] font-semibold">{title}</h3>
+        {sub && <p className="mt-0.5 text-[13px] text-ink-3">{sub}</p>}
+      </div>
+    </div>
+  )
+}
+
+// First-call examples, with the new key filled in when one was just created. A User-Agent is required:
+// the API blocks library defaults such as Python urllib's.
+function Quickstart({ apiKey }: { apiKey?: string }) {
+  const [tab, setTab] = useState<'curl' | 'python'>('curl')
+  const [copied, setCopied] = useState(false)
+  const k = apiKey ?? 'YOUR_API_KEY'
+  const url = `${api}/v1/filers/warren-buffett/holdings/latest`
+  const code =
+    tab === 'curl'
+      ? `curl ${url} \\
+  -H "Authorization: Bearer ${k}" \\
+  -H "User-Agent: my-research/1.0"`
+      : `import requests  # pip install requests\n\nr = requests.get(\n    "${url}",\n    headers={"Authorization": "Bearer ${k}", "User-Agent": "my-research/1.0"},\n)\nr.raise_for_status()\nbook = r.json()["data"]\nprint(book["quarter"], book["filing"]["accepted_at"])\nfor h in book["holdings"][:10]:\n    print(h["ticker"], h["shares"], h["value_usd"])`
+  return (
+    <div>
+      <Step n={2} title="Make your first call" sub={apiKey ? 'Your new key is filled in. Run this to get Berkshire Hathaway’s latest 13F.' : 'Berkshire Hathaway’s latest 13F. Your key goes in once you create it.'} />
+      <div className="ml-9 mt-3 overflow-hidden rounded-xl bg-night">
+        <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+          <div className="flex gap-1 text-[12.5px]" role="tablist" aria-label="Language">
+            {(['curl', 'python'] as const).map((t) => (
+              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`rounded-full px-2.5 py-1 ${tab === t ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white'}`}>
+                {t === 'curl' ? 'curl' : 'Python'}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="rounded-full px-2.5 py-1 text-[12.5px] text-white/70 hover:bg-white/10 hover:text-white"
+            onClick={() => navigator.clipboard.writeText(code).then(() => setCopied(true), () => null)}
+          >
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+        <pre className="overflow-x-auto p-4 font-mono text-[12.5px] leading-relaxed text-white/90">
+          <code>{code}</code>
+        </pre>
+      </div>
+      <p className="ml-9 mt-2 text-[12.5px] text-ink-3">Send a User-Agent that names your app. Library defaults such as Python urllib’s are blocked.</p>
+      <Step n={3} title="Explore the API" />
+      <p className="ml-9 mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[14px]">
+        <Link to="/api/" className="font-medium text-accent hover:text-accent-2">
+          Endpoints and docs
+        </Link>
+        <a href={`${import.meta.env.BASE_URL}api/sample-holdings.json`} className="font-medium text-accent hover:text-accent-2">
+          Sample response
+        </a>
+        <a href={`${api}/v1/openapi.json`} className="font-medium text-accent hover:text-accent-2">
+          OpenAPI spec
+        </a>
+      </p>
+    </div>
   )
 }

@@ -93,20 +93,43 @@ for (const b of books) {
   }
 }
 
-// Possible stock splits, until ingest's split field ships: in a quarter where most holders' share counts
-// moved by a clean factor (within 25%) and the implied price per share moved inversely by about the
-// same factor (within 50%, allowing for the quarter's price move), the share changes are a split, not
-// trades. Those stocks stay out of the flow rankings and their pages say so. CRWD 4:1 and APH 2:1 in Q3 2026.
+// Stock splits. Ingest confirms splits (data/splits.json) and multiplies earlier share counts by the
+// ratio, so those are "adjusted" and counted normally. Until it covers every case, a stock it hasn't
+// confirmed is flagged "excluded" (left out of the rankings and net trades) only when, among at least
+// 5 holders in both quarters, the median share ratio is within 25% of a clean factor k (2, 3, 4, 5, 10
+// or the inverse) and the median implied price ratio (now / prior) is within 25% of 1/k. ETFs are exempt.
+// Every flagged name, with its evidence, goes to d/splits.json for /methodology/.
+const confirmed = (await read('splits.json').catch(() => null))?.splits ?? []
+const splitLog = []
 const FACTORS = [2, 3, 4, 5, 10].flatMap((k) => [k, 1 / k])
+const med = (xs) => {
+  const a = [...xs].sort((x, y) => x - y)
+  return a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2
+}
+const ratioLabel = (k) => (k >= 1 ? `${+k.toFixed(2)}:1` : `1:${+(1 / k).toFixed(2)}`)
 for (const st of stocks.values()) {
+  const cusips = new Set([...st.classes.values()].map((c) => c.cusip))
+  const ticker = [...st.classes.values()].sort((a, b) => b.value - a.value)[0]?.ticker ?? null
+  for (const c of confirmed.filter((x) => cusips.has(x.cusip))) {
+    ;(st.splits ??= {})[c.to_quarter] = { ratio: ratioLabel(c.ratio), adjusted: true }
+    splitLog.push({ ticker: ticker ?? c.ticker, name: st.name, quarter: c.to_quarter, ratio: ratioLabel(c.ratio), treatment: 'adjusted', holders: c.holders, share_ratio: c.ratio, price_ratio: c.price_ratio, xbrl_shares_ratio: c.xbrl_shares_ratio ?? null, source: `Ingest: ${c.confirmed_by}` })
+  }
+  if (st.sector === 'Funds & ETFs') continue
   const byQ = new Map()
-  for (const h of st.holders) if (h.shares > 0 && h.prev_shares > 0 && h.value > 0 && h.prev_value > 0) (byQ.get(h.quarter) ?? byQ.set(h.quarter, []).get(h.quarter)).push({ s: h.shares / h.prev_shares, p: h.prev_value / h.prev_shares / (h.value / h.shares) })
+  for (const h of st.holders) if (h.shares > 0 && h.prev_shares > 0 && h.value > 0 && h.prev_value > 0) (byQ.get(h.quarter) ?? byQ.set(h.quarter, []).get(h.quarter)).push({ s: h.shares / h.prev_shares, p: h.value / h.shares / (h.prev_value / h.prev_shares) })
   for (const [q, r] of byQ) {
-    if (r.length < 3) continue
-    const k = FACTORS.find((f) => r.filter((x) => Math.abs(Math.log(x.s / f)) < Math.log(1.25) && Math.abs(x.p / f - 1) < 0.5).length >= r.length / 2)
-    if (k) (st.splits ??= {})[q] = k >= 1 ? `${k}:1` : `1:${Math.round(1 / k)}`
+    if (r.length < 5 || st.splits?.[q]) continue
+    const ms = med(r.map((x) => x.s))
+    const mp = med(r.map((x) => x.p))
+    // The closest clean factor that both medians agree on.
+    const k = FACTORS.filter((f) => Math.abs(Math.log(ms / f)) < Math.log(1.25) && Math.abs(mp * f - 1) < 0.25).sort((a, b) => Math.abs(Math.log(ms / a)) - Math.abs(Math.log(ms / b)))[0]
+    if (!k || !ticker) continue
+    ;(st.splits ??= {})[q] = { ratio: ratioLabel(k), adjusted: false }
+    splitLog.push({ ticker, name: st.name, quarter: q, ratio: ratioLabel(k), treatment: 'excluded', holders: r.length, share_ratio: +ms.toFixed(3), price_ratio: +mp.toFixed(3), xbrl_shares_ratio: null, source: 'Copybook holder check' })
   }
 }
+mkdirSync(join(out, 'd'), { recursive: true })
+writeFileSync(join(out, 'd', 'splits.json'), JSON.stringify({ generated_at: index.generated_at, splits: splitLog.sort((a, b) => b.quarter.localeCompare(a.quarter) || (a.ticker ?? '').localeCompare(b.ticker ?? '')) }))
 
 const list = []
 const byTicker = {}
@@ -198,7 +221,7 @@ function flowFor(scope, full = false, q = '') {
   const slugs = new Set(scope.map((b) => b.slug))
   const flows = []
   for (const s of stocks.values()) {
-    if (!s.classes.size || s.splits?.[q]) continue
+    if (!s.classes.size || s.splits?.[q]?.adjusted === false) continue
     const ticker = [...s.classes.values()].sort((a, b) => b.value - a.value)[0].ticker
     const moves = s.holders.filter((h) => slugs.has(h.slug) && h.change && h.change !== 'unchanged')
     if (!moves.length) continue
@@ -256,7 +279,7 @@ const period = (q, full = false) => {
     featured: flowFor(filedQ.filter((b) => b.featured), full, toQ(q)),
     all: flowFor(filedQ, full, toQ(q)),
     // Left out of the rankings above: share changes that look like a split, not trades.
-    splits: [...stocks.values()].filter((st) => st.splits?.[toQ(q)] && st.classes.size).map((st) => ({ ticker: [...st.classes.values()].sort((a, b) => b.value - a.value)[0].ticker, name: st.name, ratio: st.splits[toQ(q)] })),
+    splits: [...stocks.values()].filter((st) => st.splits?.[toQ(q)]?.adjusted === false && st.classes.size).map((st) => ({ ticker: [...st.classes.values()].sort((a, b) => b.value - a.value)[0].ticker, name: st.name, ratio: st.splits[toQ(q)].ratio })),
   }
 }
 const periods = [period(season), period(season - 1)]

@@ -219,7 +219,7 @@ export function ForQuants() {
       <H2 sub="Built so a backtest sees what the market saw, and every number traces back to a filing.">Point in time, with lineage</H2>
       <Features
         items={[
-          ['Accession on every filing', 'Each response names the 13F’s accession number, form, filing date and SEC URL, and lists the amendments applied.'],
+          ['Lineage on every position', 'Each position carries the accession of the filing that disclosed it and when that filing was accepted (source_accession, first_disclosed_at); each response also names the filing, its SEC URL and the amendments applied.'],
           ['Acceptance time to the second', 'The EDGAR acceptance timestamp, so you can date a position by when it became public, not by its quarter end.'],
           ['Amendments, dated', 'Positions added by a later amendment count from that amendment’s acceptance time. An as_of parameter for full point-in-time history ships this month.'],
           ['Aggregated by CUSIP', 'Lines are rolled up by CUSIP and put/call, the way funds report one position across several lines. Options are kept separate.'],

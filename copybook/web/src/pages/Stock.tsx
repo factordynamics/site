@@ -132,9 +132,9 @@ export function StockPage() {
             {d && d.classes.length > 1 && <span className="text-[13.5px] text-ink-3">Share classes combined</span>}
             {d?.splits &&
               Object.entries(d.splits).map(([q, r]) => (
-                <Badge key={q} tone="warn">
-                  Possible {r} split in {quarterLabel(q)}
-                </Badge>
+                <Link key={q} to="/methodology/#splits">
+                  <Badge tone={r.adjusted ? 'neutral' : 'warn'}>{r.adjusted ? `Split ${r.ratio} in ${quarterLabel(q)}, adjusted` : `Possible ${r.ratio} split in ${quarterLabel(q)}, not counted`}</Badge>
+                </Link>
               ))}
           </p>
         </div>

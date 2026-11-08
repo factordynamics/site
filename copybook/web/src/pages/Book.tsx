@@ -28,7 +28,7 @@ type Row = {
   sold: number
   net: number
   latest: { form: string; date: string; manager: string } | null
-  split: string | null
+  split: { ratio: string; adjusted: boolean } | null
 }
 type Key = 'ticker' | 'holders' | 'change' | 'added' | 'exited' | 'top10' | 'over5' | 'filed' | 'net' | 'latest'
 
@@ -51,7 +51,7 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
   // Share changes in a quarter that looks like a split aren't trades: kept out of the counts and net.
   const split = stock?.splits?.[season] ?? null
   const filed = [...h, ...ex].filter((x) => x.quarter === season)
-  const traded = split ? [] : filed
+  const traded = split && !split.adjusted ? [] : filed
   const ev = stock?.since?.[0]
   return {
     ticker,
@@ -106,7 +106,7 @@ export function Book() {
   const moves = useMemo(
     () =>
       rows
-        .flatMap((r) => (r.split ? [] : [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])]).filter((x) => x.quarter === season && x.change && x.change !== 'unchanged' && x.delta_value).map((x) => ({ r, x })))
+        .flatMap((r) => (r.split && !r.split.adjusted ? [] : [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])]).filter((x) => x.quarter === season && x.change && x.change !== 'unchanged' && x.delta_value).map((x) => ({ r, x })))
         .sort((a, b) => Math.abs(b.x.delta_value) - Math.abs(a.x.delta_value))
         .slice(0, 12),
     [rows, season],
@@ -228,11 +228,18 @@ export function Book() {
                                 {r.filed} of {r.filedOf}
                                 {r.filed > 0 && (
                                   <span className="block whitespace-nowrap text-[12px] text-ink-3">
-                                    {r.split ? `Possible ${r.split} split` : `${r.bought} bought · ${r.sold} sold`}
+                                    {r.split && !r.split.adjusted ? `Possible ${r.split.ratio} split` : `${r.bought} bought · ${r.sold} sold`}
                                   </span>
                                 )}
                               </td>
-                              <td className={`num px-3 py-2.5 text-right font-medium ${r.net > 0 ? 'text-up' : r.net < 0 ? 'text-down' : 'text-ink-3'}`}>{r.split ? <span className="text-[12.5px] font-normal">Not counted</span> : r.filed ? signed(r.net) : '—'}</td>
+                              <td className={`num px-3 py-2.5 text-right font-medium ${r.net > 0 ? 'text-up' : r.net < 0 ? 'text-down' : 'text-ink-3'}`}>{r.split && !r.split.adjusted ? (
+                                  <span className="text-[12.5px] font-normal">Not counted</span>
+                                ) : (
+                                  <>
+                                    {r.filed ? signed(r.net) : '—'}
+                                    {r.split && <span className="block whitespace-nowrap text-[11.5px] font-normal text-ink-3">Split {r.split.ratio}, adjusted</span>}
+                                  </>
+                                )}</td>
                               <td className="px-3 py-2.5 pr-5 text-[12.5px] md:pr-6">
                                 {r.latest ? (
                                   <span className="block max-w-[14rem]">

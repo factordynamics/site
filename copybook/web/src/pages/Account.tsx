@@ -14,7 +14,7 @@ import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/u
 import { api, checkout, DATA_TERMS, renewalTerms, trialTerms } from '../config'
 import { ApiError, downloadFile, fetchMe, getToken, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
 
-type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean } | { kind: 'out'; error?: string } | { kind: 'off' }
+type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' }
 
 export function Account() {
   const [params] = useSearchParams()
@@ -26,7 +26,9 @@ export function Account() {
     if (!api) return
     const sid = params.get('session_id')
     const login = params.get('login')
-    const welcome = params.get('checkout') === 'success'
+    // Back from Stripe (checkout=success, or a checkout session id) or a plan=pro link.
+    const welcome = params.get('checkout') === 'success' || Boolean(sid?.startsWith('cs_'))
+    const pro = params.get('plan') === 'pro'
     const run = async () => {
       try {
         let member: Member
@@ -35,7 +37,7 @@ export function Account() {
         else if (getToken()) member = await fetchMe()
         else return setState({ kind: 'out' })
         resetFollows()
-        setState({ kind: 'in', member, welcome })
+        setState({ kind: 'in', member, welcome, focus: welcome || pro })
       } catch {
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
       }
@@ -54,7 +56,7 @@ export function Account() {
           <Skeleton className="mt-8 h-40 w-full" />
         </div>
       )}
-      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState({ kind: 'in', member, welcome: false })} />}
+      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState({ kind: 'in', member, welcome: false })} />}
       {state.kind === 'out' && <SignedOut error={state.error} />}
       {state.kind === 'off' && <NotOpen />}
       <p className="mt-10 text-[13px] leading-relaxed text-ink-3">{DATA_TERMS}</p>
@@ -62,7 +64,7 @@ export function Account() {
   )
 }
 
-function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcome: boolean; onOut: () => void; onChange: (m: Member) => void }) {
+function SignedIn({ member, welcome, focus = false, onOut, onChange }: { member: Member; welcome: boolean; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
   const [busy, setBusy] = useState(false)
   const { status, follows } = useFollows()
   const [editing, setEditing] = useState(false)
@@ -211,7 +213,7 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
 
       {member.active && member.plan === 'fund' && !member.seat && <Team />}
       {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
-      {member.active && <ApiKeys member={member} />}
+      {member.active && <ApiKeys member={member} focus={focus} />}
 
       {member.active && status === 'ready' && follows.onboarded && !editing && (
         <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">

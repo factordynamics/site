@@ -4,6 +4,7 @@ import { Panel } from '../components/ui'
 import { api } from '../config'
 import { gapLabel, loadLatency } from '../lib/account'
 import { DATA, dateLabel, quarterLabel, useAsync, useTitle } from '../lib/data'
+import { loadSplitLog, stockPath } from '../lib/stocks'
 
 // data/changelog.json from ingest: append-only, newest first; id is a stable anchor.
 type Entry = { id: string; date: string; title: string; body: string; kind: 'methodology' | 'restatement' | 'data_fix' | string; funds?: string[]; quarters?: string[]; accessions?: string[] }
@@ -163,6 +164,7 @@ export function Methodology() {
   const entries = log.data?.entries ?? []
   // Shown only once live alerts have gone out this season; replays are excluded by the API.
   const lat = useAsync(loadLatency, [])
+  const splits = useAsync(loadSplitLog, [])
   const latency = lat.data && lat.data.count > 0 ? lat.data : null
   // Sections that load late (latency, changelog) still honour a #hash in the URL, e.g. from /latency/.
   const { hash } = useLocation()
@@ -181,7 +183,7 @@ export function Methodology() {
       <div className="mt-12 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[13rem_minmax(0,1fr)]">
         <nav aria-label="On this page" className="hidden lg:block">
           <ul className="sticky top-24 space-y-1.5 text-[14px]">
-            {[...SECTIONS, { id: 'latency', title: 'Alert latency' }, { id: 'changelog', title: 'Changelog' }].map((s) => (
+            {[...SECTIONS, { id: 'splits', title: 'Stock splits' }, { id: 'latency', title: 'Alert latency' }, { id: 'changelog', title: 'Changelog' }].map((s) => (
               <li key={s.id}>
                 <a href={`#${s.id}`} className="text-ink-2 hover:text-ink">
                   {s.title}
@@ -197,6 +199,61 @@ export function Methodology() {
               <div className="prose-cb mt-3 space-y-3 text-[15.5px] leading-relaxed text-ink-2 [&_li]:pl-1 [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5">{s.body}</div>
             </section>
           ))}
+
+          <section id="splits" className="scroll-mt-24">
+            <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Stock splits</h2>
+            <div className="mt-3 space-y-3 text-[15.5px] leading-relaxed text-ink-2">
+              <p>A split changes every holder’s share count without anyone trading. Each flagged name gets one of two treatments, shown on its stock page and in My book:</p>
+              <ul className="list-disc space-y-1.5 pl-5">
+                <li>
+                  <span className="font-medium text-ink">Adjusted.</span> The split is confirmed from holders’ share counts and, where it’s available, SEC XBRL shares outstanding. Earlier quarters’ shares are multiplied by the ratio, so buying and selling are counted as usual.
+                </li>
+                <li>
+                  <span className="font-medium text-ink">Not counted.</span> Not yet confirmed, but among at least 5 holders the median share ratio is within 25% of a clean factor (2, 3, 4, 5 or 10, or the inverse) and the median price per share moved the other way by about the same factor. Those share changes are left out of Flow, the season rankings and My book’s net trades. ETFs are exempt.
+                </li>
+              </ul>
+            </div>
+            <Panel className="mt-4">
+              {!splits.data ? (
+                <p className="text-[14px] text-ink-3">Loading…</p>
+              ) : (
+                <div className="-mx-5 overflow-x-auto md:-mx-6" tabIndex={0} role="region" aria-label="Flagged splits">
+                  <table className="w-full min-w-[640px] text-[13.5px]">
+                    <thead>
+                      <tr className="border-b border-line text-left text-[12px] text-ink-3">
+                        <th className="px-5 py-2 font-medium md:px-6">Stock</th>
+                        <th className="px-3 py-2 font-medium">Quarter</th>
+                        <th className="px-3 py-2 font-medium">Treatment</th>
+                        <th className="px-3 py-2 text-right font-medium">Holders</th>
+                        <th className="px-3 py-2 text-right font-medium">Share ratio</th>
+                        <th className="px-3 py-2 text-right font-medium">Price ratio</th>
+                        <th className="px-5 py-2 text-right font-medium md:px-6">XBRL shares</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {splits.data.map((x) => (
+                        <tr key={x.ticker + x.quarter}>
+                          <td className="px-5 py-2 md:px-6">
+                            <Link to={stockPath(x.ticker)} className="font-mono text-[13px] font-semibold hover:text-accent">
+                              {x.ticker}
+                            </Link>{' '}
+                            <span className="text-ink-3">{x.ratio}</span>
+                          </td>
+                          <td className="px-3 py-2 text-ink-2">{quarterLabel(x.quarter)}</td>
+                          <td className={`px-3 py-2 ${x.treatment === 'adjusted' ? 'text-ink-2' : 'text-[#8a5a0b]'}`}>{x.treatment === 'adjusted' ? 'Adjusted' : 'Not counted'}</td>
+                          <td className="num px-3 py-2 text-right">{x.holders}</td>
+                          <td className="num px-3 py-2 text-right">{x.share_ratio.toFixed(2)}</td>
+                          <td className="num px-3 py-2 text-right">{x.price_ratio.toFixed(2)}</td>
+                          <td className="num px-5 py-2 text-right text-ink-3 md:px-6">{x.xbrl_shares_ratio != null ? x.xbrl_shares_ratio.toFixed(2) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Panel>
+            <p className="mt-2 text-[13px] text-ink-3">Ratios are medians across holders that reported the stock in both quarters: shares now ÷ shares before, and price per share now ÷ before. XBRL shares is the company’s own shares-outstanding change, where reported.</p>
+          </section>
 
           {!latency && (
             <section id="latency" className="scroll-mt-24">

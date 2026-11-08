@@ -34,8 +34,8 @@ export type Stock = {
   options: StockOption[]
   counts: { holders: number; prev_holders: number; new: number; added: number; trimmed: number; exited: number }
   quarters: string[]
-  /** Quarters whose share changes look like a split ("4:1"), until ingest's split field ships. */
-  splits?: Record<string, string>
+  /** Splits by quarter: adjusted (ingest confirmed and multiplied earlier share counts) or excluded (looks like a split, left out of counts). */
+  splits?: Record<string, { ratio: string; adjusted: boolean }>
   generated_at: string
   /** Form 4 and 13D/G filings since each fund's latest 13F (scripts/stocks.mjs). */
   since?: (Ev & { slug: string; manager: string; quarter?: string })[]
@@ -123,6 +123,9 @@ export function seasonNow(now = new Date()) {
   const live = t >= due.getTime() - 21 * 864e5 && t <= due.getTime() + 4 * 864e5
   return { quarter: `${qEnd.getUTCFullYear()}Q${q}`, deadline: due, live }
 }
+
+export type SplitLog = { ticker: string; name: string; quarter: string; ratio: string; treatment: 'adjusted' | 'excluded'; holders: number; share_ratio: number; price_ratio: number; xbrl_shares_ratio: number | null; source: string }
+export const loadSplitLog = () => getJSON<{ splits: SplitLog[] }>(`${D}splits.json`).then((d) => d.splits)
 
 export const loadStockIndex = () => getJSON<{ funds: number; stocks: StockRef[] }>(`${D}stocks.json`)
 const named = <T extends { manager: string }>(x: T) => ({ ...x, manager: displayName(x.manager) })
