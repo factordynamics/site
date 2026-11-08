@@ -157,7 +157,8 @@ export async function businessSummary(env: Env, now: number) {
   let cancelling = 0;
   let seats = 0;
   for (const m of members) {
-    if (!isActive(m)) continue;
+    // Synthetic records (the latency probe) have no plan and aren't members.
+    if (!isActive(m) || (!PRICES[m.plan] && m.plan !== 'holdterm')) continue;
     if (m.seat_of) {
       seats++;
       continue;
