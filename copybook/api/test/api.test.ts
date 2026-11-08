@@ -197,34 +197,57 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['a@example.com']);
   });
 
-  it('cron seeds silently, then emails each active member only the managers they track', async () => {
-    const mk = (slug: string, acc: string) => ({ ok: true, slug, accession: acc, manager: slug, name: `${slug} LP`, quarter: '2026Q3', filing_date: new Date().toISOString().slice(0, 10), sec_url: `https://www.sec.gov/${acc}` });
-    index = { managers: [mk('warren-buffett', 'A2'), mk('bill-ackman', 'B2')] };
+  it('cron alerts once per new reporting period, never on amendments, notices, stale or first-seen filings', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const Q2 = '2026-06-30';
+    const Q3 = '2026-09-30';
+    const mk = (slug: string, acc: string, report_date: string, extra: Record<string, unknown> = {}) => ({ ok: true, slug, accession: acc, manager: slug, name: `${slug} LP`, quarter: 'q', report_date, form: '13F-HR', filing_date: today, sec_url: `https://www.sec.gov/${acc}`, ...extra });
     const put = (c: string, email: string, status: string, alerts: unknown) => env.DB.put(`cus:${c}`, JSON.stringify({ customer: c, email, status, plan: 'monthly', period_end: 0, subscription: `sub_${c}`, alerts, welcomed: true }));
     await put('c1', 'all@example.com', 'active', 'all');
     await put('c2', 'ackman@example.com', 'active', ['bill-ackman']);
     await put('c3', 'off@example.com', 'active', 'off');
     await put('c4', 'gone@example.com', 'canceled', 'all');
-
-    const ctx = { waitUntil: (p: Promise<unknown>) => p };
     let pending: Promise<unknown> = Promise.resolve();
-    await worker.scheduled({}, env, { waitUntil: (p) => (pending = ctx.waitUntil(p)) });
-    await pending;
+    const run = async () => {
+      await worker.scheduled({}, env, { waitUntil: (p) => (pending = p) });
+      await pending;
+    };
+
+    index = { managers: ['warren-buffett', 'bill-ackman', 'pershing-square-inc', 'dan-loeb', 'seth-klarman', 'david-tepper'].map((s) => mk(s, `${s}-2`, Q2)) };
+    await run();
     expect(sent).toHaveLength(0);
 
-    // A fund added to the roster with an old filing must not alert; Buffett's new accession must.
-    // Ackman's accession flips on an old filing (e.g. an amendment): no email. Klarman is new to the roster with an old filing: no email.
-    index = { managers: [mk('warren-buffett', 'A3'), { ...mk('bill-ackman', 'B3'), filing_date: '2026-08-13' }, { ...mk('seth-klarman', 'K1'), filing_date: '2026-02-14' }] };
-    await worker.scheduled({}, env, { waitUntil: (p) => (pending = p) });
-    await pending;
+    const later = [
+      mk('warren-buffett', 'A3', Q3), // new period: alert
+      mk('bill-ackman', 'P3', Q3, { reported_by: 'pershing-square-inc' }), // one filing under two slugs: listed once
+      mk('pershing-square-inc', 'P3', Q3), // the same filing as above
+      mk('dan-loeb', 'L2b', Q2), // accession flip on an old period (amendment): no alert
+      mk('seth-klarman', 'K3', Q3, { filing_date: '2026-08-01' }), // new period filed long ago: no alert
+      mk('david-tepper', 'T3', Q3, { form: '13F-NT' }), // notice, not holdings: no alert, period not advanced
+      mk('howard-marks', 'M3', Q3), // first seen: no alert
+    ];
+    index = { managers: later };
+    await run();
+    expect(sent.map((m) => m.to[0]).sort()).toEqual(['ackman@example.com', 'all@example.com']);
+    const all = sent.find((m) => m.to[0] === 'all@example.com')!.text;
+    expect(all).toContain('warren-buffett LP');
+    expect(all.match(/sec\.gov\/P3/g)).toHaveLength(1);
+    for (const s of ['dan-loeb', 'seth-klarman', 'david-tepper', 'howard-marks']) expect(all).not.toContain(s);
+    const ackman = sent.find((m) => m.to[0] === 'ackman@example.com')!.text;
+    expect(ackman).toContain('sec.gov/P3');
+    expect(ackman).not.toContain('warren-buffett');
+
+    // Tepper's real 13F-HR for Q3 arrives: alert. Buffett rolls back to Q2 and returns: no alert either way.
+    sent = [];
+    index = { managers: later.map((f) => (f.slug === 'david-tepper' ? mk('david-tepper', 'T3b', Q3) : f.slug === 'warren-buffett' ? mk('warren-buffett', 'A2', Q2) : f)) };
+    await run();
     expect(sent.map((m) => m.to[0])).toEqual(['all@example.com']);
-    expect(sent[0].text).toContain('warren-buffett LP');
-    expect(sent[0].text).not.toContain('seth-klarman');
-    expect(sent.map((m) => m.to[0])).not.toContain('ackman@example.com');
+    expect(sent[0].text).toContain('david-tepper LP');
+    expect(sent[0].text).not.toContain('warren-buffett');
 
     sent = [];
-    await worker.scheduled({}, env, { waitUntil: (p) => (pending = p) });
-    await pending;
+    index = { managers: later };
+    await run();
     expect(sent).toHaveLength(0);
   });
 

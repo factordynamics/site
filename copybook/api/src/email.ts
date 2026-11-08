@@ -32,7 +32,7 @@ const FOOTER = '\n\nSource: SEC EDGAR 13F-HR filings, as filed. Not investment a
 export function loginMail(env: Env, to: string, token: string, welcome: boolean): Mail {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
   const intro = welcome
-    ? 'Thanks for subscribing to Copy. Your plan includes full 13F history, CSV export, and an email when a tracked manager files a new 13F.'
+    ? 'Thanks for subscribing to Copy. Your plan includes 8 quarters of 13F history (every position each quarter), CSV export, and an email when a tracked manager files a new 13F.'
     : 'Here is your Copybook sign-in link.';
   return {
     to,

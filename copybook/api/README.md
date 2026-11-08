@@ -5,7 +5,7 @@ Paid "Copy" plan backend for the static Copybook site: a Cloudflare Worker (free
 - Stripe Payment Links sell Copy ($9/mo, $79/yr). The Stripe webhook grants and revokes access per customer.
 - Sign-in has no passwords: right after checkout the site trades the Checkout Session id for a 30-day session token, and later sign-ins use an emailed magic link (7 days).
 - Paid data: per-manager 13F history (JSON) and CSV, built from the published `data/{slug}-history.json`.
-- An hourly cron diffs each manager's latest 13F accession in `data/index.json` and emails active members who track that manager. A filing dated more than 3 days ago never sends an email (`MAX_ALERT_AGE_DAYS`).
+- An hourly cron diffs each manager's latest 13F accession in `data/index.json` and emails active members who track that manager. Seen-state is the latest `report_date` alerted per manager (KV `alerts:periods`) and only moves forward, so amendments and re-parses of old periods never alert; first sightings only record state. Only an original `13F-HR` filed within 3 days sends (`MAX_ALERT_AGE_DAYS`). A filing reported under two slugs is listed once per email.
 - Billing (cancel, switch plan, card, invoices) is the Stripe customer portal.
 
 Paid history lives in the private R2 bucket `copybook-history` (`h/{slug}/{quarter}.json|csv`); the latest quarter and the 50-row previews stay public on Pages. A missing object falls back to the public `DATA_URL` copy.
