@@ -114,6 +114,11 @@ for (const s of stocks.values()) {
   list.push({ t: ticker, n: s.name, s: s.sector, h: holders.length, dh: holders.length - prevHolders, v: file.value, a: classes.slice(1).map((c) => c.ticker) })
 }
 list.sort((a, b) => b.h - a.h || b.v - a.v)
+// Coverage figures for copy (pricing, account): every filer with parsed holdings, and the curated set.
+{
+  const fl = await read('filers.json').catch(() => null)
+  writeFileSync(join(out, 'd', 'coverage.json'), JSON.stringify({ filers: fl?.holdings_ok ?? fl?.filers?.filter((f) => f.ok).length ?? 0, curated: index.managers.filter((m) => m.ok).length, generated_at: index.generated_at }))
+}
 writeFileSync(join(out, 'd', 'stocks.json'), JSON.stringify({ generated_at: index.generated_at, funds: books.length, stocks: list }))
 
 // Form 4 and 13D/G filings since each fund's latest 13F (data/events/{slug}.json), attached to

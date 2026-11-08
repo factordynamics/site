@@ -5,7 +5,8 @@ import { useAsync, useTitle } from '../lib/data'
 
 // Renders the live OpenAPI document ({api}/v1/openapi.json), so new endpoints appear here as the API ships them.
 type Op = { summary?: string; description?: string; parameters?: { name: string; in: string; required?: boolean; description?: string; schema?: { type?: string } }[]; responses?: Record<string, { description?: string }> }
-type Spec = { info: { title: string; version: string; description?: string }; servers?: { url: string }[]; paths: Record<string, Record<string, Op>> }
+type Param = NonNullable<Op['parameters']>[number]
+type Spec = { info: { title: string; version: string; description?: string }; servers?: { url: string }[]; paths: Record<string, Record<string, Op>>; components?: { parameters?: Record<string, Param> } }
 
 const SPEC = `${api}/v1/openapi.json`
 
@@ -25,7 +26,18 @@ export function ApiDocs() {
   const s = spec.data
   const base = s?.servers?.[0]?.url ?? api
   const info = parseInfo(s?.info.description)
-  const ops = s ? Object.entries(s.paths).flatMap(([path, m]) => Object.entries(m).map(([method, op]) => ({ path, method, op }))) : []
+  // Parameters are often $refs into components.parameters; resolve them so the table has names.
+  const resolve = (x: Param | { $ref?: string }): Param | null => {
+    const ref = (x as { $ref?: string }).$ref
+    return ref ? (s?.components?.parameters?.[ref.split('/').pop()!] ?? null) : (x as Param)
+  }
+  const ops = s
+    ? Object.entries(s.paths).flatMap(([path, m]) =>
+        Object.entries(m)
+          .filter(([method]) => ['get', 'post', 'put', 'patch', 'delete'].includes(method))
+          .map(([method, op]) => ({ path, method, op: { ...op, parameters: (op.parameters ?? []).map(resolve).filter((x): x is Param => Boolean(x?.name)) } })),
+      )
+    : []
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">

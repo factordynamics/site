@@ -9,7 +9,7 @@ import { Button, Check, Monogram, Skeleton } from './ui'
 /** First-run setup for members: whom to follow, and which stocks they own. */
 // Investor styles for the picker. Editorial grouping; any slug missing from the index is skipped.
 const GROUPS = [
-  ['Value', ['warren-buffett', 'seth-klarman', 'li-lu', 'mason-hawkins', 'francois-rochon', 'tweedy-browne', 'bill-nygren', 'ruane-cunniff', 'terry-smith', 'howard-marks', 'david-abrams', 'david-einhorn']],
+  ['Value', ['warren-buffett', 'seth-klarman', 'li-lu', 'mason-hawkins', 'francois-rochon', 'tweedy-browne', 'bill-nygren', 'ruane-cunniff', 'terry-smith', 'howard-marks', 'david-abrams', 'david-einhorn', 'richard-pzena']],
   ['Activist', ['carl-icahn', 'bill-ackman', 'nelson-peltz', 'dan-loeb', 'mason-morfit', 'chris-hohn', 'elliott-investment-management-l-p', 'starboard-value-lp', 'jana-partners-management-lp', 'sachem-head-capital-management-lp']],
   ['Tiger cubs & growth', ['chase-coleman', 'stephen-mandel', 'andreas-halvorsen', 'philippe-laffont', 'dan-sundheim', 'maverick-capital-ltd']],
   ['Macro & multi-strategy', ['stanley-druckenmiller', 'david-tepper', 'ray-dalio', 'soros-fund-management-llc', 'tudor-investment-corp-et-al']],

@@ -15,6 +15,8 @@ import { Account } from './pages/Account'
 import { About } from './pages/About'
 import { Methodology } from './pages/Methodology'
 import { ApiDocs } from './pages/Api'
+import { Contact } from './pages/Contact'
+import { Legal } from './pages/Legal'
 import { NotFound } from './pages/NotFound'
 import { captureAttribution } from './lib/attribution'
 import { getToken, startSession } from './lib/account'
@@ -62,6 +64,10 @@ handoff.then(() =>
             <Route path="about" element={<About />} />
             <Route path="methodology" element={<Methodology />} />
             <Route path="api" element={<ApiDocs />} />
+            <Route path="contact" element={<Contact />} />
+            <Route path="terms" element={<Legal page="terms" />} />
+            <Route path="privacy" element={<Legal page="privacy" />} />
+            <Route path="security" element={<Legal page="security" />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

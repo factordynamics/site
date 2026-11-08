@@ -36,6 +36,10 @@ page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds q
 page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
 page('methodology/', 'Methodology · Copybook', 'How Copybook reads SEC 13F, Form 4 and Schedule 13D/G filings: amendments, unit fixes, options, tickers, refresh cadence, and a changelog of every data correction.')
 page('api/', 'API · Copybook', 'The Copybook API: 13F, Form 4 and Schedule 13D/G data from SEC EDGAR as JSON, for Copy Pro and Copy Fund.')
+page('contact/', 'Contact · Copybook', 'Request Copy Fund access for your team, ask a question, or ask us to delete your data.')
+page('terms/', 'Terms of use · Copybook', 'The terms for using Copybook, its paid plans and its API.')
+page('privacy/', 'Privacy · Copybook', 'What Copybook stores about you, why, and how to have it deleted. We never sell your data.')
+page('security/', 'Security · Copybook', 'Where Copybook keeps data and how it is protected.')
 page('about/', 'About · Copybook', 'Portfolios, as filed. How Copybook reads SEC 13F filings, and what it won’t do.')
 let n = 0
 mkdirSync(join(dist, 'managers'), { recursive: true })

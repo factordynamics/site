@@ -108,7 +108,7 @@ function Footer() {
           </p>
         </div>
         <FooterCol title="Product" links={[['Investors', '/investors/'], ['Flow', '/flow/'], ['Pricing', '/pricing/'], ['API', '/api/']]} />
-        <FooterCol title="Company" links={[['About', '/about/'], ['Methodology', '/methodology/'], ['Account', '/account/']]} />
+        <FooterCol title="Company" links={[['About', '/about/'], ['Methodology', '/methodology/'], ['Contact', '/contact/'], ['Terms', '/terms/'], ['Privacy', '/privacy/'], ['Security', '/security/']]} />
         <FooterCol title="Popular" links={[['Warren Buffett', '/investors/warren-buffett/'], ['Bill Ackman', '/investors/bill-ackman/'], ['Stanley Druckenmiller', '/investors/stanley-druckenmiller/']]} />
       </div>
       <div className="border-t border-night-line">

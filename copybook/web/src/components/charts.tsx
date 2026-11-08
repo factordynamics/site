@@ -286,10 +286,10 @@ export function ChangeBars({ items, names = false }: { items: { key: string; lab
   return (
     <ul className="space-y-2">
       {items.map((it) => (
-        <li key={it.key} className={`grid ${names ? 'grid-cols-[minmax(0,7.5rem)_1fr_1fr_4.5rem] sm:grid-cols-[minmax(0,12rem)_1fr_1fr_5.5rem]' : 'grid-cols-[minmax(0,9rem)_1fr_1fr_5.5rem]'} items-center gap-2 text-[13px]`}>
+        <li key={it.key} className={`grid ${names ? 'grid-cols-[minmax(0,7.5rem)_1fr_1fr_4.5rem] sm:grid-cols-[minmax(0,16rem)_1fr_1fr_5.5rem]' : 'grid-cols-[minmax(0,9rem)_1fr_1fr_5.5rem]'} items-center gap-2 text-[13px]`}>
           <span className="flex min-w-0 items-baseline gap-2">
             <span className={names ? 'truncate font-medium' : 'font-mono text-[12.5px] font-medium'} title={names ? it.label : undefined}>{it.label}</span>
-            {it.tag && <span className="truncate text-[11.5px] text-ink-3">{it.tag}</span>}
+            {it.tag && <span className="min-w-0 truncate text-[11.5px] text-ink-3 sm:shrink-0">{it.tag}</span>}
           </span>
           <div className="flex h-2.5 justify-end">
             {it.delta < 0 && <div className="h-2.5 rounded-l-full bg-down/80" style={{ width: `${(Math.abs(it.delta) / m) * 100}%`, transformOrigin: 'right' }} />}

@@ -109,3 +109,8 @@ export async function resolveTicker(t: string) {
 }
 
 export const stockPath = (t: string) => `/stocks/${encodeURIComponent(t)}/`
+
+/** Coverage for copy: filers with a parsed latest 13F, and the managers we track closely. */
+export const loadCoverage = () => getJSON<{ filers: number; curated: number }>(`${D}coverage.json`).catch(() => ({ filers: 8900, curated: 199 }))
+/** 8,964 -> "8,900+": never overstate coverage. */
+export const aboutCount = (n: number) => (n >= 1000 ? `${(Math.floor(n / 100) * 100).toLocaleString('en-US')}+` : n.toLocaleString('en-US'))

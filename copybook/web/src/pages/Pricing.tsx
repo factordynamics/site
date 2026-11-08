@@ -4,49 +4,73 @@ import { Link } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
 import { attributed } from '../lib/attribution'
-import { useTitle } from '../lib/data'
+import { useAsync, useTitle } from '../lib/data'
+import { aboutCount, loadCoverage } from '../lib/stocks'
 import { checkoutEnabled, DATA_TERMS, plans, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
-type Feature = { t: string; d?: string; soon?: boolean }
-// soon: not live yet. Labelled so nothing is sold before it ships; drop the flag as each one lands.
-const SOON = 'Rolling out this month'
+type Feature = { t: string; d?: string }
+type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[] }
 
-const FREE: Feature[] = [
-  { t: 'The latest 13F of every filer', d: 'Nearly 9,000 funds, with top holdings and sector mix.' },
-  { t: 'Stock pages', d: 'Who holds a ticker, and who bought or sold it.' },
-  { t: 'Top buys and sells', d: 'The four biggest moves per fund, and the top of each season’s flow.' },
-  { t: 'Search and consensus', d: 'Find any fund or ticker; see where great investors agree.' },
-]
-const COPY: Feature[] = [
-  { t: 'An email minutes after they file', d: 'We check EDGAR every minute. The moves are in the email: new, added, trimmed, exited, with dollars and share of the book.' },
-  { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
-  { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, within a few hours.' },
-  { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and 8 quarters of history with CSV.' },
-]
-const PRO: Feature[] = [
-  { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
-  { t: 'Holdings, history and events endpoints', d: 'Every filer’s 13F, Form 4 and 13D/G data as JSON.', soon: true },
-  { t: 'Point-in-time history', d: 'Each position dated by when it was disclosed, so backtests don’t see the future.', soon: true },
-  { t: 'Bulk exports and webhooks', d: 'Whole-quarter files, and a POST to your endpoint when a filing lands.', soon: true },
-  { t: 'My book and peer overlap', d: 'Crowding in your names, and overlap with the funds you benchmark against.', soon: true },
-]
-const FUND: Feature[] = [
-  { t: '5 seats', d: 'Invite your team; each seat gets its own alerts.', soon: true },
-  { t: 'Shared book and peer lists', d: 'One list of holdings and peers the whole team works from.', soon: true },
-  { t: 'Alerts in Slack', d: 'Filings and moves in your channel.', soon: true },
-  { t: 'Annual invoice billing', d: 'Pay by invoice on the yearly plan.', soon: true },
+const tiers = (filers: string, curated: number): Tier[] => [
+  {
+    id: 'free',
+    who: 'For reading what great investors own.',
+    now: [
+      { t: `The latest 13F of ${filers} filers`, d: 'Every fund that files, with top holdings and sector mix.' },
+      { t: 'Stock pages', d: 'Who holds a ticker, and who bought or sold it.' },
+      { t: 'Top buys and sells', d: 'The four biggest moves per fund, and the top of each season’s flow.' },
+      { t: 'Search and consensus', d: 'Find any fund or ticker; see where great investors agree.' },
+    ],
+  },
+  {
+    id: 'copy',
+    who: 'For individual investors who follow the best funds.',
+    lead: 'Everything in Free, plus',
+    now: [
+      { t: 'An email minutes after they file', d: `We check EDGAR every minute. Alerts, moves and history cover the ${curated} managers we track closely, and the list is growing.` },
+      { t: 'The moves inside the email', d: 'New, added, trimmed and exited positions, with dollars and share of the book.' },
+      { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
+      { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, within a few hours.' },
+      { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and 8 quarters of history with CSV.' },
+    ],
+  },
+  {
+    id: 'pro',
+    who: 'For quants, analysts and small funds. 1 seat.',
+    lead: 'Everything in Copy, plus',
+    now: [
+      { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
+      { t: 'Filer and holdings endpoints', d: 'Every filer, and any filer’s holdings for any quarter on file, as JSON.' },
+      { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
+    ],
+    soon: [
+      { t: 'History and events endpoints', d: 'Changes across quarters, Form 4 and 13D/G as JSON.' },
+      { t: 'Point-in-time history', d: 'Each position dated by when it was disclosed, so backtests don’t see the future.' },
+      { t: 'Bulk exports and signed webhooks', d: 'Whole-quarter files, and a signed POST to your endpoint when a filing lands.' },
+      { t: 'My book and peer overlap', d: 'Crowding in your names, and overlap with the funds you benchmark against.' },
+    ],
+  },
+  {
+    id: 'fund',
+    who: 'For investment teams. 5 seats.',
+    lead: 'Everything in Pro, plus',
+    now: [{ t: 'Invoice billing', d: 'W-9 and invoice on request.' }],
+    soon: [
+      { t: '5 seats', d: 'Invite your team; each seat gets its own alerts.' },
+      { t: 'Shared book and peer lists', d: 'One list of holdings and peers the whole team works from.' },
+      { t: 'Alerts in Slack', d: 'Filings and moves in your channel.' },
+    ],
+  },
 ]
 
-const TIERS: { id: 'free' | PlanId; who: string; lead?: string; features: Feature[] }[] = [
-  { id: 'free', who: 'For reading what great investors own.', features: FREE },
-  { id: 'copy', who: 'For individual investors who follow the best funds.', lead: 'Everything in Free, plus', features: COPY },
-  { id: 'pro', who: 'For quants, analysts and small funds. 1 seat.', lead: 'Everything in Copy, plus', features: PRO },
-  { id: 'fund', who: 'For investment teams. 5 seats.', lead: 'Everything in Pro, plus', features: FUND },
-]
+const FOUNDING: Partial<Record<PlanId, string>> = {
+  pro: 'Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay subscribed.',
+  fund: 'Founding price: subscribe before Dec 31 and keep $1,990/yr for as long as you stay subscribed.',
+}
 
-// What each plan includes. true = included, false = not, string = shown as is.
-const COMPARE: [string, ...(boolean | string)[]][] = [
-  ['Latest 13F of every filer', true, true, true, true],
+// What each plan includes. true = included, false = not, 'soon' = coming this month, string = shown as is.
+const compare = (filers: string): [string, ...(boolean | string)[]][] => [
+  [`Latest 13F of ${filers} filers`, true, true, true, true],
   ['Stock pages and search', true, true, true, true],
   ['Top 4 buys and sells per fund', true, true, true, true],
   ['Follow investors and stocks', false, true, true, true],
@@ -54,19 +78,25 @@ const COMPARE: [string, ...(boolean | string)[]][] = [
   ['Form 4 and 13D moves between 13Fs', false, true, true, true],
   ['Every move and full flow', false, true, true, true],
   ['8 quarters of history and CSV', false, true, true, true],
-  ['API keys', false, false, true, true],
-  ['API data endpoints', false, false, SOON, SOON],
-  ['Point-in-time history', false, false, SOON, SOON],
-  ['Bulk exports and webhooks', false, false, SOON, SOON],
-  ['My book and peer overlap', false, false, SOON, SOON],
-  ['Seats', '1', '1', '1', '5'],
-  ['Shared book, Slack, invoice billing', false, false, false, SOON],
+  ['API keys, filer and holdings endpoints', false, false, true, true],
+  ['History and events endpoints', false, false, 'soon', 'soon'],
+  ['Point-in-time history', false, false, 'soon', 'soon'],
+  ['Bulk exports and signed webhooks', false, false, 'soon', 'soon'],
+  ['My book and peer overlap', false, false, 'soon', 'soon'],
+  ['Seats', '1', '1', '1', '5 (coming)'],
+  ['Shared book and Slack', false, false, false, 'soon'],
+  ['Invoice billing, W-9', false, false, false, true],
 ]
 
 export function Pricing() {
   const [cycle, setCycle] = useState<'yearly' | 'monthly'>('yearly')
   const live = checkoutEnabled()
   useTitle('Pricing · Copybook')
+  const cov = useAsync(loadCoverage, [])
+  const filers = aboutCount(cov.data?.filers ?? 8900)
+  const curated = cov.data?.curated ?? 199
+  const TIERS = tiers(filers, curated)
+  const COMPARE = compare(filers)
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="mx-auto max-w-2xl text-center">
@@ -115,6 +145,11 @@ export function Pricing() {
                   <Button to="/investors/" variant="outline" className="w-full">
                     Browse investors
                   </Button>
+                ) : tier.id === 'fund' ? (
+                  // Funds buy by request until seats ship; the card trial stays as a quiet second path.
+                  <Button to="/contact/?topic=fund" variant="dark" className="w-full">
+                    Request Fund access
+                  </Button>
                 ) : live ? (
                   <Button href={attributed(link)} variant={dark ? 'primary' : 'dark'} className="w-full">
                     Start {TRIAL_DAYS}-day free trial
@@ -122,22 +157,36 @@ export function Pricing() {
                 ) : (
                   <WaitlistForm cta="Get early access" dark={dark} id={`wl-${tier.id}`} />
                 )}
-                <p className={`mt-2.5 min-h-[3.6em] text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>{plan ? trialTerms(tier.id) : 'Free forever. Upgrade when you want alerts and history.'}</p>
+                <p className={`mt-2.5 min-h-[3.6em] text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>
+                  {tier.id === 'fund' ? (
+                    <>
+                      Founding price $1,990/yr, invoiced when seats go live. W-9 and invoice on request.{' '}
+                      {live && (
+                        <a href={attributed(link)} className="underline underline-offset-2 hover:text-ink">
+                          Or start a {TRIAL_DAYS}-day card trial
+                        </a>
+                      )}
+                    </>
+                  ) : plan ? (
+                    trialTerms(tier.id)
+                  ) : (
+                    'Free forever. Upgrade when you want alerts and history.'
+                  )}
+                </p>
+                {plan && FOUNDING[tier.id as PlanId] && (
+                  <p className="mt-3 rounded-lg bg-accent-soft px-3 py-2 text-[12px] font-medium leading-snug text-accent-2">{FOUNDING[tier.id as PlanId]}</p>
+                )}
               </div>
               <div className={`relative mt-5 border-t pt-5 ${dark ? 'border-white/10' : 'border-line'}`}>
                 {tier.lead && <p className={`mb-3 text-[12.5px] font-medium ${dark ? 'text-white/70' : 'text-ink-2'}`}>{tier.lead}:</p>}
-                <ul className="space-y-3.5">
-                  {tier.features.map((f) => (
-                    <li key={f.t} className="flex gap-2.5">
-                      <Check className={`mt-0.5 shrink-0 ${dark ? 'text-[#9fb0ff]' : f.soon ? 'text-ink-3' : 'text-accent'}`} />
-                      <span>
-                        <span className={`block text-[14px] font-medium ${dark ? 'text-white' : ''}`}>{f.t}</span>
-                        {f.soon && <span className="mt-1 inline-block rounded-full bg-[#f6ead2] px-2 text-[11px] font-medium leading-5 text-[#5c3f0b]">{SOON}</span>}
-                        {f.d && <span className={`mt-0.5 block text-[12.5px] leading-relaxed ${dark ? 'text-white/65' : 'text-ink-3'}`}>{f.d}</span>}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                {tier.soon && <h3 className="mb-2.5 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3">Included now</h3>}
+                <FeatureList items={tier.now} dark={dark} />
+                {tier.soon && (
+                  <>
+                    <h3 className="mb-2.5 mt-6 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[#8a5a0b]">Coming this month</h3>
+                    <FeatureList items={tier.soon} soon />
+                  </>
+                )}
               </div>
             </article>
           )
@@ -172,8 +221,8 @@ export function Pricing() {
                         <span className="text-ink-3" aria-label="Not included">
                           –
                         </span>
-                      ) : c === SOON ? (
-                        <span className="text-[12px] font-medium text-[#8a5a0b]">Rolling out</span>
+                      ) : c === 'soon' ? (
+                        <span className="text-[12px] font-medium text-[#8a5a0b]">This month</span>
                       ) : (
                         <span className="num font-medium">{c}</span>
                       )}
@@ -197,12 +246,13 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                'Everything in Copy, plus API keys and the API docs. The data endpoints, point-in-time history, bulk exports, webhooks, My book, peer overlap, seats, Slack and invoice billing are rolling out this month and turn on for your plan as each ships, at no extra cost. Each is marked above until it’s live.',
+                'Pro: everything in Copy, API keys, the filer and holdings endpoints, and filing acceptance times. History and events endpoints, point-in-time history, bulk exports, signed webhooks, My book and peer overlap are coming this month and turn on as each ships, at no extra cost. Fund is sold by request with invoice billing; its seats, shared book and Slack are coming this month, and you’re invoiced when seats go live.',
               ],
               [
                 'How does the free trial work?',
                 `Every paid plan is free for ${TRIAL_DAYS} days. Stripe takes a card at signup so the plan continues without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then.`,
               ],
+              ['What does the founding price mean?', 'Subscribe to Pro or Fund before December 31 and your price stays at $39/mo ($390/yr) for Pro or $1,990/yr for Fund for as long as you stay subscribed, even if list prices rise.'],
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [
                 'How fast are filing alerts?',
@@ -243,5 +293,25 @@ export function Pricing() {
         </p>
       </section>
     </div>
+  )
+}
+
+function FeatureList({ items, dark = false, soon = false }: { items: Feature[]; dark?: boolean; soon?: boolean }) {
+  return (
+    <ul className="space-y-3.5">
+      {items.map((f) => (
+        <li key={f.t} className="flex gap-2.5">
+          {soon ? (
+            <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-[#c99a4a] mx-[5px]" aria-hidden="true" />
+          ) : (
+            <Check className={`mt-0.5 shrink-0 ${dark ? 'text-[#9fb0ff]' : 'text-accent'}`} />
+          )}
+          <span>
+            <span className={`block text-[14px] font-medium ${dark ? 'text-white' : soon ? 'text-ink-2' : ''}`}>{f.t}</span>
+            {f.d && <span className={`mt-0.5 block text-[12.5px] leading-relaxed ${dark ? 'text-white/65' : 'text-ink-3'}`}>{f.d}</span>}
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }

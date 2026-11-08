@@ -5,7 +5,13 @@ import { checkout } from '../config'
 import { Button } from './ui'
 
 // API keys: GET/POST /keys, DELETE /keys/{id} (session auth; Copy members get 403 pro_required).
-type Key = { id: string; name: string; prefix: string; created: number; requests_today: number; usage: { day: string; requests: number }[] }
+type Key = { id: string; name: string; prefix: string; created: number | string; requests_today: number; usage: { day: string; requests: number }[] }
+
+/** created arrives as unix seconds, milliseconds or an ISO string; never print Invalid Date. */
+function when(c: number | string | undefined) {
+  const d = typeof c === 'number' ? new Date(c < 1e12 ? c * 1000 : c) : c ? new Date(c) : null
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'just now'
+}
 
 function Spark({ usage }: { usage: Key['usage'] }) {
   const max = Math.max(1, ...usage.map((u) => u.requests))
@@ -115,7 +121,7 @@ export function ApiKeys({ member }: { member: Member }) {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{k.name}</span>
                     <span className="block font-mono text-[12px] text-ink-3">
-                      {k.prefix}… · created {new Date(k.created * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {k.prefix}… · created {when(k.created)}
                     </span>
                   </span>
                   {k.usage?.length > 0 && <Spark usage={k.usage} />}

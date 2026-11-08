@@ -84,6 +84,29 @@ export function FundNotice({ f }: { f: WithStatus }) {
 }
 
 // data/events/{slug}.json from ingest: Form 4 and Schedule 13D/G filings since the latest 13F.
+/** SEC Form 4 transaction codes (Form 4 General Instructions, item 8), in plain English. */
+export const FORM4_CODE: Record<string, string> = {
+  P: 'open-market purchase',
+  S: 'open-market sale',
+  A: 'grant or award',
+  D: 'disposed to the issuer',
+  F: 'shares withheld for tax or exercise price',
+  G: 'gift',
+  I: 'discretionary transaction',
+  J: 'other acquisition or disposition; the filing’s footnotes explain it',
+  K: 'equity swap',
+  L: 'small acquisition',
+  M: 'option exercise or conversion',
+  C: 'conversion of a derivative',
+  E: 'expiration of a short derivative',
+  H: 'expiration of a long derivative',
+  O: 'exercise of an out-of-the-money derivative',
+  X: 'exercise of an in-the-money derivative',
+  U: 'disposed in a tender offer',
+  W: 'acquired or disposed by will or inheritance',
+  Z: 'deposit into or withdrawal from a voting trust',
+}
+
 export type BookLine = { cusip: string; ticker?: string | null; title?: string; shares: number }
 
 /** "Class A Common Stock" -> "Class A"; "" when the security names no class. */
@@ -184,7 +207,7 @@ function form4Line(e: Ev) {
   if (e.shares) return [`${sharesFmt(Math.abs(e.shares))} shares`, e.avg_price ? `avg $${e.avg_price.toFixed(2)}` : null, heldAfter(e)].filter(Boolean).join(' · ')
   const tx = (e.transactions ?? []).filter((t) => t.shares)
   const what = tx.map((t) => {
-    const how = t.code_label && t.code_label !== 'other' ? `, ${t.code_label}` : ''
+    const how = FORM4_CODE[t.code] ? `, ${FORM4_CODE[t.code]}` : t.code_label && t.code_label !== 'other' ? `, ${t.code_label}` : ''
     return `${t.acquired ? 'Acquired' : 'Disposed of'} ${sharesFmt(t.shares)}${t.derivative ? ' derivative' : ''} (code ${t.code}${how})`
   })
   const after = heldAfter(e)
@@ -205,6 +228,10 @@ export type Position = {
   asOf?: string
   source?: string
   /** Open-market trades reported on Form 4 (codes P and S). */
+  /** Non-market Form 4 rows (codes A, G, J, M, F…): shares only, never counted as bought or sold. */
+  acquiredOther: number
+  disposedOther: number
+  otherCodes: string[]
   boughtShares: number
   boughtUsd: number
   soldShares: number
@@ -238,6 +265,9 @@ export function rollUp(events: Ev[]): Position[] {
         name: e.display_name || e.issuer,
         // Known 13F book: a class it didn't hold started at 0. Unknown book: no baseline.
         from: book ? (h?.shares ?? 0) : undefined,
+        acquiredOther: 0,
+        disposedOther: 0,
+        otherCodes: [],
         boughtShares: 0,
         boughtUsd: 0,
         soldShares: 0,
@@ -258,6 +288,11 @@ export function rollUp(events: Ev[]): Position[] {
         p.to = t.shares_after
         p.asOf = t.date || e.event_date || e.filing_date
         p.source = 'Form 4'
+      }
+      if (t.code !== 'P' && t.code !== 'S') {
+        if (t.acquired) p.acquiredOther += t.shares!
+        else p.disposedOther += t.shares!
+        if (!p.otherCodes.includes(t.code)) p.otherCodes.push(t.code)
       }
       if (t.price && (t.code === 'P' || t.code === 'S')) {
         if (t.code === 'P') {
@@ -329,13 +364,27 @@ function stakePct(p: Position) {
 export function PositionLine({ p, who }: { p: Position; who?: { slug: string; manager: string } }) {
   const net = p.boughtUsd - p.soldUsd
   const tone = net > 0 ? 'up' : net < 0 ? 'down' : p.to != null && p.from != null && p.to !== p.from ? (p.to > p.from ? 'up' : 'down') : 'neutral'
-  const moved = p.from != null && p.to != null && p.to !== p.from && p.source === 'Form 4'
-  const label = p.boughtUsd && p.soldUsd ? 'Bought and sold' : p.boughtUsd ? 'Bought' : p.soldUsd ? 'Sold' : moved ? (p.to! > p.from! ? 'Added' : 'Reduced') : p.stake ? (ACTION[p.stake.action] ?? ACTION.other).label : 'Filed'
+  const other = p.acquiredOther || p.disposedOther
+  const label =
+    p.boughtUsd && p.soldUsd ? 'Bought and sold' : p.boughtUsd ? 'Bought' : p.soldUsd ? 'Sold' : other ? (p.acquiredOther >= p.disposedOther ? 'Acquired' : 'Disposed') : p.stake ? (ACTION[p.stake.action] ?? ACTION.other).label : 'Filed'
+  const codes = p.otherCodes.map((c) => `code ${c}: ${FORM4_CODE[c] ?? 'other'}`).join('; ')
+  const otherLine = other
+    ? [p.acquiredOther ? `${sharesFmt(p.acquiredOther)} acquired` : null, p.disposedOther ? `${sharesFmt(p.disposedOther)} disposed` : null].filter(Boolean).join(' and ') + ` outside the market (${codes}), not counted as bought or sold`
+    : ''
+  // Form 4s only start once a filer is an insider (10%+), so part of the change since the 13F can predate them.
+  const change = p.from != null && p.to != null ? p.to - p.from : 0
+  const covered = p.boughtShares - p.soldShares + p.acquiredOther - p.disposedOther
+  const gap = change - covered
+  const partial = p.source === 'Form 4' && (p.boughtUsd || p.soldUsd) && Math.abs(change) > 0 && Math.abs(gap) / Math.abs(change) > 0.02 && Math.sign(gap) === Math.sign(change)
   const delta = p.from != null && p.to != null && p.from > 0 ? p.to / p.from - 1 : null
-  const trades = [
-    p.boughtUsd ? `about ${money(p.boughtUsd)} bought${span(p.first, p.last)}, average about $${(p.boughtUsd / p.boughtShares).toFixed(2)}` : null,
-    p.soldUsd ? `about ${money(p.soldUsd)} sold${p.boughtUsd ? '' : span(p.first, p.last)}, average about $${(p.soldUsd / p.soldShares).toFixed(2)}` : null,
-  ].filter(Boolean)
+  const trades = partial
+    ? [
+        `Form 4s cover ${sharesFmt(Math.abs(covered))} of the ${change > 0 ? '+' : '−'}${sharesFmt(Math.abs(change))} shares: ${money(change > 0 ? p.boughtUsd : p.soldUsd)}${span(p.first, p.last)}, average $${(change > 0 ? p.boughtUsd / p.boughtShares : p.soldUsd / p.soldShares).toFixed(2)}; the other ${sharesFmt(Math.abs(gap))} were ${change > 0 ? 'bought' : 'sold'} before the first Form 4 and aren’t priced`,
+      ]
+    : [
+        p.boughtUsd ? `about ${money(p.boughtUsd)} bought${span(p.first, p.last)}, average about $${(p.boughtUsd / p.boughtShares).toFixed(2)} on Form 4` : null,
+        p.soldUsd ? `about ${money(p.soldUsd)} sold${p.boughtUsd ? '' : span(p.first, p.last)}, average about $${(p.soldUsd / p.soldShares).toFixed(2)} on Form 4` : null,
+      ].filter(Boolean)
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 py-3 text-[14px]">
       <span className="min-w-0">
@@ -369,7 +418,8 @@ export function PositionLine({ p, who }: { p: Position; who?: { slug: string; ma
               {p.from === 0 && ', a new position since the 13F'}
             </>
           ) : null}
-          {trades.length > 0 && `${p.to != null ? ' · ' : ''}${trades.join(' · ')} on Form 4`}
+          {trades.length > 0 && `${p.to != null ? ' · ' : ''}${trades.join(' · ')}`}
+          {otherLine && ` · ${otherLine}`}
           {p.stake && p.stake.percent_of_class != null && ` · ${stakePct(p)}`}
         </span>
       </span>

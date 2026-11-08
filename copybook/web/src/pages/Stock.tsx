@@ -36,13 +36,26 @@ export function StockPage() {
   }, [s.error, ticker, nav])
 
   const holders = useMemo(() => (d?.holders ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
+  const exited = useMemo(() => (d?.exited ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
+  const options = useMemo(() => (d?.options ?? []).filter((o) => scope === 'all' || o.featured), [d, scope])
+  const [allMoves, setAllMoves] = useState(false)
   const moves = useMemo(
     () =>
-      [...(d?.holders ?? []), ...(d?.exited ?? [])]
-        .filter((h) => (scope === 'all' || h.featured) && h.change && h.change !== 'unchanged' && h.delta_value)
+      [...holders, ...exited]
+        .filter((h) => h.change && h.change !== 'unchanged' && h.delta_value)
         .sort((a, b) => Math.abs(b.delta_value) - Math.abs(a.delta_value)),
-    [d, scope],
+    [holders, exited],
   )
+  // Hide token moves: under 0.1% of the fund's book or $1M, whichever is larger.
+  const bigMoves = useMemo(() => moves.filter((h) => Math.abs(h.delta_value) >= Math.max(1e6, h.weight > 0 ? (h.value / h.weight) * 0.001 : 0)), [moves])
+  const shownMoves = allMoves ? moves : bigMoves
+  // Header cards follow the lens: counted from the same holders the tables list.
+  const c = useMemo(() => {
+    if (!d) return null
+    const n = (k: string) => holders.filter((h) => h.change === k).length
+    return { holders: holders.length, prev_holders: holders.filter((h) => h.change !== 'new').length + exited.length, new: n('new'), added: n('added'), trimmed: n('trimmed'), exited: exited.length }
+  }, [d, holders, exited])
+  const multi = Boolean(d && d.quarters.length > 1)
 
   // Holdings filed since each fund's 13F, one roll-up per fund.
   const since = useMemo(() => {
@@ -77,7 +90,6 @@ export function StockPage() {
       </div>
     )
 
-  const c = d?.counts
   const dh = c ? c.holders - c.prev_holders : 0
   const featuredCount = d?.holders.filter((h) => h.featured).length ?? 0
   return (
@@ -105,7 +117,11 @@ export function StockPage() {
       </header>
 
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
-        <Stat label="Funds holding it" value={c ? c.holders : '—'} sub={c ? `${featuredCount} of them superinvestors` : undefined} />
+        <Stat
+          label={scope === 'featured' ? 'Superinvestors holding it' : 'Funds holding it'}
+          value={c ? c.holders : '—'}
+          sub={d ? (scope === 'featured' ? `${d.holders.length} of all funds we track hold it` : `${featuredCount} of them superinvestors`) : undefined}
+        />
         <Stat
           label="Change in holders"
           value={c ? <span className={dh > 0 ? 'text-up' : dh < 0 ? 'text-down' : ''}>{dh > 0 ? `+${dh}` : dh < 0 ? `−${-dh}` : '0'}</span> : '—'}
@@ -159,10 +175,23 @@ export function StockPage() {
         <Panel title="Who bought and sold" sub="Change in shares since each fund’s previous filing, at quarter-end value">
           {!d ? (
             <Skeleton className="h-[300px] w-full" />
-          ) : moves.length ? (
-            <ChangeBars names items={moves.slice(0, 14).map((h) => ({ key: h.slug, label: h.manager, tag: h.change === 'new' || h.change === 'exited' ? CHANGE[h.change].label.toLowerCase() : undefined, delta: h.delta_value }))} />
+          ) : shownMoves.length ? (
+            <ChangeBars
+              names
+              items={shownMoves.slice(0, 14).map((h) => ({
+                key: h.slug,
+                label: h.manager,
+                tag: [quarterLabel(h.quarter), h.change === 'new' || h.change === 'exited' ? CHANGE[h.change].label.toLowerCase() : ''].filter(Boolean).join(' · '),
+                delta: h.delta_value,
+              }))}
+            />
           ) : (
-            <p className="text-[14px] text-ink-2">No buying or selling in the latest filings.</p>
+            <p className="text-[14px] text-ink-2">{moves.length ? 'Only small moves, under $1M or 0.1% of the fund’s book.' : 'No buying or selling in the latest filings.'}</p>
+          )}
+          {d && moves.length > bigMoves.length && (
+            <button onClick={() => setAllMoves((x) => !x)} className="mt-3 text-[13px] font-medium text-accent hover:text-accent-2">
+              {allMoves ? 'Hide small moves' : `Show all ${moves.length} moves (${moves.length - bigMoves.length} under $1M or 0.1% of the fund’s book)`}
+            </button>
           )}
         </Panel>
         <Panel title="Largest holders" sub="Value as filed, and weight in each fund’s portfolio">
@@ -171,7 +200,7 @@ export function StockPage() {
           ) : (
             <ul className="divide-y divide-line">
               {holders.slice(0, 8).map((h) => (
-                <HolderRow key={h.slug} h={h} />
+                <HolderRow key={h.slug} h={h} fresh={multi && h.quarter === d.quarters[0]} />
               ))}
               {!holders.length && <li className="py-3 text-[14px] text-ink-2">None of the superinvestors hold it right now.</li>}
             </ul>
@@ -202,7 +231,7 @@ export function StockPage() {
                     <Link to={`/investors/${h.slug}/`} className="flex min-w-0 items-center gap-2.5 hover:text-accent">
                       <Monogram name={h.manager} size={24} />
                       <span className="min-w-0 max-w-[7.75rem] truncate font-medium sm:max-w-[22rem]">{h.manager}</span>
-                      <span className={`shrink-0 rounded px-1 text-[11.5px] ${d && d.quarters.length > 1 && h.quarter === d.quarters[0] ? 'bg-accent-soft text-accent-2' : 'text-ink-3'}`}>{quarterLabel(h.quarter)}</span>
+                      <QuarterTag q={h.quarter} fresh={multi && h.quarter === d!.quarters[0]} />
                     </Link>
                   </td>
                   <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">
@@ -235,30 +264,29 @@ export function StockPage() {
         )}
       </section>
 
-      {d && (d.exited.length > 0 || d.options.length > 0) && (
+      {d && (exited.length > 0 || options.length > 0) && (
         <div className="mt-6 grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
-          {d.exited.length > 0 && (
+          {exited.length > 0 && (
             <Panel title="Sold out completely" sub="Held it in the previous filing, none in the latest">
               <ul className="divide-y divide-line">
-                {d.exited
-                  .filter((h) => scope === 'all' || h.featured)
-                  .slice(0, 10)
-                  .map((h) => (
+                {exited.slice(0, 10).map((h) => (
                     <li key={h.slug} className="flex items-center justify-between gap-3 py-2 text-[13.5px]">
-                      <Link to={`/investors/${h.slug}/`} className="min-w-0 truncate font-medium hover:text-accent">
-                        {h.manager}
-                      </Link>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Link to={`/investors/${h.slug}/`} className="min-w-0 truncate font-medium hover:text-accent">
+                          {h.manager}
+                        </Link>
+                        <QuarterTag q={h.quarter} fresh={multi && h.quarter === d.quarters[0]} />
+                      </span>
                       <span className="num shrink-0 text-ink-2">{money(h.prev_value)} sold</span>
                     </li>
                   ))}
               </ul>
             </Panel>
           )}
-          {d.options.length > 0 && (
+          {options.length > 0 && (
             <Panel title="Options" sub="Calls and puts as filed. The value is the notional of the underlying shares, not the option’s price.">
               <ul className="divide-y divide-line">
-                {d.options
-                  .filter((o) => scope === 'all' || o.featured)
+                {options
                   .slice(0, 10)
                   .map((o) => (
                     <li key={o.slug + o.put_call} className="flex items-center justify-between gap-3 py-2 text-[13.5px]">
@@ -269,6 +297,7 @@ export function StockPage() {
                         <Link to={`/investors/${o.slug}/`} className="truncate font-medium hover:text-accent">
                           {o.manager}
                         </Link>
+                        <QuarterTag q={o.quarter} fresh={multi && o.quarter === d.quarters[0]} />
                       </span>
                       <span className="num shrink-0 text-ink-2">{money(o.value)} notional</span>
                     </li>
@@ -286,14 +315,22 @@ export function StockPage() {
   )
 }
 
-function HolderRow({ h }: { h: StockHolder }) {
+/** Every stock-page row says which 13F it comes from; the newest quarter is highlighted mid-season. */
+function QuarterTag({ q, fresh }: { q: string; fresh: boolean }) {
+  return <span className={`shrink-0 whitespace-nowrap rounded px-1 text-[11.5px] ${fresh ? 'bg-accent-soft text-accent-2' : 'text-ink-3'}`}>{quarterLabel(q)}</span>
+}
+
+function HolderRow({ h, fresh }: { h: StockHolder; fresh: boolean }) {
   return (
     <li className="flex items-center justify-between gap-3 py-2.5 text-[13.5px]">
       <Link to={`/investors/${h.slug}/`} className="flex min-w-0 items-center gap-2.5 hover:text-accent">
         <Monogram name={h.manager} size={26} />
         <span className="min-w-0">
           <span className="block truncate font-medium">{h.manager}</span>
-          <span className="block truncate text-[12px] text-ink-3">{pct(h.weight)} of portfolio</span>
+          <span className="flex items-center gap-1.5 text-[12px] text-ink-3">
+            <span className="truncate">{pct(h.weight)} of portfolio</span>
+            <QuarterTag q={h.quarter} fresh={fresh} />
+          </span>
         </span>
       </Link>
       <span className="flex shrink-0 items-center gap-2">
