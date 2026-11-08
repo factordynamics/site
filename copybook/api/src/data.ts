@@ -14,7 +14,8 @@ function cell(v: unknown): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export const SHARD_KEY = /^h\/[a-z0-9][a-z0-9-]{0,120}\/(\d{4}Q[1-4]\.(json|csv)|index\.json)$/;
+// Per quarter: .json and .csv (history pages, CSV export) and .v1.json (point-in-time /v1 layout).
+export const SHARD_KEY = /^h\/[a-z0-9][a-z0-9-]{0,120}\/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$/;
 
 /**
  * A per-quarter history file from the private R2 bucket. Until the bucket holds

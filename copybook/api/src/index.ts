@@ -117,7 +117,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // The data workflow uploads per-quarter history here, authenticated by its GitHub OIDC token.
   if (req.method === 'PUT' && path.startsWith('/ingest/')) {
     const key = path.slice('/ingest/'.length);
-    if (!SHARD_KEY.test(key)) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|csv or h/{slug}/index.json' }, 400, {});
+    if (!SHARD_KEY.test(key)) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json or h/{slug}/index.json' }, 400, {});
     const why = await verifyGithubOidc(req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '', env.INGEST_WORKFLOW);
     if (why) return json({ ok: false, error: why }, 401, {});
     await env.HIST.put(key, req.body, { httpMetadata: { contentType: key.endsWith('.csv') ? 'text/csv; charset=utf-8' : 'application/json' } });

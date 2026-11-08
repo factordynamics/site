@@ -338,6 +338,9 @@ describe('copybook api', () => {
     expect(await put('index.json', await jwt({}))).toBe(400);
     expect(await put('h/bill-ackman/index.jsonx', await jwt({}))).toBe(400);
     expect(await put('h/bill-ackman/index.json', await jwt({}))).toBe(200);
+    expect(await put('h/bill-ackman/2026Q2.v1.json', await jwt({}))).toBe(200);
+    expect(await put('h/bill-ackman/2026Q2.v2.json', await jwt({}))).toBe(400);
+    expect(await put('h/bill-ackman/2026Q2.v1.csv', await jwt({}))).toBe(400);
     expect(hist.m.has('h/bill-ackman/2026Q2.json')).toBe(false);
     expect(await put('h/bill-ackman/2026Q2.json', await jwt({}))).toBe(200);
     expect(new TextDecoder().decode(hist.m.get('h/bill-ackman/2026Q2.json'))).toBe('{"holdings":[]}');
