@@ -4,7 +4,8 @@ import { ChangeBars } from '../components/charts'
 import { Arrow, Badge, Button, Check, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
 import { ApiError, openPortal, useMemberState } from '../lib/account'
 import { CsvButton } from '../components/CsvButton'
-import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle } from '../lib/data'
+import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle, type Holding } from '../lib/data'
+import { stockPath } from '../lib/stocks'
 import { diff, holdingKey, loadHistory, type Quarter } from '../lib/history'
 import { checkout } from '../config'
 
@@ -287,19 +288,85 @@ function MoveList({ title, tone, items }: { title: string; tone: 'up' | 'down'; 
   )
 }
 
-/** Weight of the selected quarter's largest positions in every quarter on file. */
+type GridSort = 'now' | 'first' | 'held' | 'name'
+
+/** Every position held in any quarter on file: shares or weight per quarter, when it was first held and for how long. */
 function PositionMatrix({ quarters, sel }: { quarters: Quarter[]; sel: number }) {
-  const cols = [...quarters].reverse()
-  const maps = cols.map((c) => new Map(c.holdings.map((h) => [holdingKey(h), h])))
-  const top = [...quarters[sel].holdings].sort((a, b) => b.value - a.value).slice(0, 12)
-  const max = Math.max(...top.flatMap((h) => maps.map((mp) => mp.get(holdingKey(h))?.weight ?? 0)), 0.0001)
+  const [mode, setMode] = useState<'weight' | 'shares'>('weight')
+  const [sort, setSort] = useState<GridSort>('now')
+  const [filter, setFilter] = useState('')
+  const [n, setN] = useState(25)
+  const cols = useMemo(() => [...quarters].reverse(), [quarters])
+  const partial = cols.some((c) => c.partial)
+  const rows = useMemo(() => {
+    const maps = cols.map((c) => new Map(c.holdings.map((h) => [holdingKey(h), h])))
+    const keys = new Map<string, Holding>()
+    for (const c of [...cols].reverse()) for (const h of c.holdings) if (!keys.has(holdingKey(h))) keys.set(holdingKey(h), h)
+    const selCol = cols.indexOf(quarters[sel])
+    return [...keys].map(([k, h]) => {
+      const cells = maps.map((mp) => mp.get(k) ?? null)
+      const first = cells.findIndex(Boolean)
+      const held = cells.filter(Boolean).length
+      const now = cells[selCol]
+      // Held through the end of the window and not in the selected quarter: exited by then.
+      const lastHeld = cells.map(Boolean).lastIndexOf(true)
+      return { k, h, cells, first, held, now, exited: !now && lastHeld < selCol && lastHeld >= 0, max: Math.max(...cells.map((c) => (mode === 'weight' ? c?.weight : c?.shares) ?? 0), 0) }
+    })
+  }, [cols, quarters, sel, mode])
+  const shown = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    const list = q ? rows.filter((r) => `${r.h.ticker ?? ''} ${r.h.issuer} ${r.h.cusip}`.toLowerCase().includes(q)) : rows
+    const by: Record<GridSort, (a: (typeof rows)[number], b: (typeof rows)[number]) => number> = {
+      now: (a, b) => (b.now?.value ?? 0) - (a.now?.value ?? 0) || Number(b.exited) - Number(a.exited) || b.held - a.held,
+      first: (a, b) => a.first - b.first || (b.now?.value ?? 0) - (a.now?.value ?? 0),
+      held: (a, b) => b.held - a.held || (b.now?.value ?? 0) - (a.now?.value ?? 0),
+      name: (a, b) => (a.h.ticker || a.h.issuer).localeCompare(b.h.ticker || b.h.issuer),
+    }
+    return [...list].sort(by[sort])
+  }, [rows, filter, sort])
+  const firstLabel = (i: number) => (i === 0 && !partial ? `${qShort(cols[0].quarter)} or earlier` : qShort(cols[i].quarter))
   return (
-    <Panel title="Position history" sub={`Weight of the ${quarterLabel(quarters[sel].quarter)} top positions in each quarter`}>
-      <div className="-mx-1 overflow-x-auto px-1" tabIndex={0} role="region" aria-label="Position weights by quarter">
-        <table className="w-full min-w-[560px] border-separate border-spacing-[3px] text-[12.5px]">
+    <Panel
+      title="Position history"
+      sub={`All ${rows.length.toLocaleString('en-US')} positions held in any of the last ${cols.length} quarters, by CUSIP and share class`}
+      right={
+        <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Show">
+          {(['weight', 'shares'] as const).map((m) => (
+            <button key={m} role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={`rounded-full px-2.5 py-1 ${mode === m ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+              {m === 'weight' ? 'Weight' : 'Shares'}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      <div className="-mt-1 mb-3 flex flex-wrap items-center gap-2">
+        <input
+          value={filter}
+          onChange={(e) => {
+            setFilter(e.target.value)
+            setN(25)
+          }}
+          aria-label="Filter positions"
+          placeholder="Filter by ticker or company"
+          className="h-8 min-w-0 flex-1 rounded-full bg-paper px-3.5 text-[13px] shadow-[0_0_0_1px_var(--color-line)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)] sm:max-w-64"
+        />
+        <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
+          Sort
+          <select value={sort} onChange={(e) => setSort(e.target.value as GridSort)} className="h-8 rounded-full bg-paper px-3 text-[12.5px] shadow-[0_0_0_1px_var(--color-line)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]">
+            <option value="now">Size in {qShort(quarters[sel].quarter)}</option>
+            <option value="first">First held</option>
+            <option value="held">Quarters held</option>
+            <option value="name">Name</option>
+          </select>
+        </label>
+      </div>
+      <div className="-mx-1 overflow-x-auto px-1" tabIndex={0} role="region" aria-label={`Position ${mode} by quarter`}>
+        <table className="w-full min-w-[760px] border-separate border-spacing-[3px] text-[12.5px]">
           <thead>
             <tr>
-              <th className="w-[9rem] pb-1 text-left font-medium text-ink-3">Position</th>
+              <th className="w-[10rem] pb-1 text-left font-medium text-ink-3">Position</th>
+              <th className="w-[6.5rem] pb-1 text-left font-medium text-ink-3">First held</th>
+              <th className="w-[3.5rem] pb-1 text-center font-medium text-ink-3">Held</th>
               {cols.map((c) => (
                 <th key={c.quarter} className={`pb-1 text-center font-medium ${c === quarters[sel] ? 'text-ink' : 'text-ink-3'}`}>
                   {qShort(c.quarter)}
@@ -308,24 +375,36 @@ function PositionMatrix({ quarters, sel }: { quarters: Quarter[]; sel: number })
             </tr>
           </thead>
           <tbody>
-            {top.map((h) => (
-              <tr key={holdingKey(h)}>
-                <td className="truncate pr-2">
-                  {h.ticker ? <span className="font-mono font-medium">{h.ticker}</span> : <span className="font-medium">{shortName(h.issuer)}</span>}
+            {shown.slice(0, n).map((r) => (
+              <tr key={r.k}>
+                <td className="max-w-[10rem] truncate pr-2">
+                  {r.h.ticker ? (
+                    <Link to={stockPath(r.h.ticker)} className="font-mono font-medium hover:text-accent">
+                      {r.h.ticker}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{shortName(r.h.issuer)}</span>
+                  )}
+                  {r.h.put_call && <span className="ml-1 text-ink-3">{r.h.put_call.toLowerCase() === 'put' ? 'puts' : 'calls'}</span>}
+                  {r.exited && <Badge tone="down" className="ml-1.5">Exited</Badge>}
                 </td>
-                {maps.map((mp, i) => {
-                  const w = mp.get(holdingKey(h))?.weight ?? 0
+                <td className="whitespace-nowrap text-ink-2">{firstLabel(r.first)}</td>
+                <td className="num text-center text-ink-2">
+                  {r.held}/{cols.length}
+                </td>
+                {r.cells.map((c, i) => {
+                  const v = (mode === 'weight' ? c?.weight : c?.shares) ?? 0
                   // Dark text up to 0.74 alpha, white from 0.8; nothing in between passes 4.5:1 with either.
-                  let a = w ? 0.1 + 0.85 * (w / max) : 0
+                  let a = v ? 0.1 + 0.85 * (v / (r.max || 1)) : 0
                   if (a > 0.74 && a < 0.8) a = 0.8
                   return (
                     <td
                       key={cols[i].quarter}
-                      className={`num h-8 rounded-md text-center ${a >= 0.8 ? 'text-white' : w ? 'text-ink' : 'text-ink-3'}`}
-                      style={{ background: w ? `rgb(43 68 214 / ${a})` : 'rgb(12 14 19 / 0.03)' }}
-                      title={w ? `${pct(w)} in ${quarterLabel(cols[i].quarter)}` : `Not held in ${quarterLabel(cols[i].quarter)}`}
+                      className={`num h-8 rounded-md px-1 text-center ${a >= 0.8 ? 'text-white' : v ? 'text-ink' : 'text-ink-3'}`}
+                      style={{ background: v ? `rgb(43 68 214 / ${a})` : 'rgb(12 14 19 / 0.03)' }}
+                      title={c ? `${quarterLabel(cols[i].quarter)}: ${sharesFmt(c.shares)} shares, ${money(c.value)}, ${pct(c.weight)} of the book` : `Not held in ${quarterLabel(cols[i].quarter)}`}
                     >
-                      {w ? pct(w, 1) : '—'}
+                      {c ? (mode === 'weight' ? pct(c.weight, 1) : sharesFmt(c.shares)) : '—'}
                     </td>
                   )
                 })}
@@ -333,6 +412,16 @@ function PositionMatrix({ quarters, sel }: { quarters: Quarter[]; sel: number })
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-ink-3">
+        <span>
+          Showing {Math.min(n, shown.length).toLocaleString('en-US')} of {shown.length.toLocaleString('en-US')}. Shading is relative to each position’s own largest quarter.
+        </span>
+        {shown.length > n && (
+          <button onClick={() => setN((x) => x + 50)} className="font-medium text-accent hover:text-accent-2">
+            Show more
+          </button>
+        )}
       </div>
     </Panel>
   )
