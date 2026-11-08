@@ -1,9 +1,4 @@
-import { alertMail, sendMail } from './email';
-import { isActive, type Env } from './env';
-import { listMembers } from './members';
-
-/** A filing dated more than this many days ago never triggers an email. */
-export const MAX_ALERT_AGE_DAYS = 3;
+import type { Env } from './env';
 
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
 
@@ -97,63 +92,4 @@ export async function fetchHistory(env: Env, slug: string): Promise<unknown | nu
   const res = await fetch(`${env.DATA_URL}${slug}-history.json`, { cf: { cacheTtl: 900 } } as RequestInit);
   if (!res.ok) return null;
   return res.json();
-}
-
-interface Filing {
-  slug: string;
-  manager: string;
-  name: string;
-  quarter: string;
-  report_date: string;
-  form: string;
-  filing_date: string;
-  sec_url: string;
-  accession: string;
-  reported_by?: string;
-}
-
-/** Independent of what the data says: only an original 13F-HR filed in the last few days is news. */
-export function alertable(f: Pick<Filing, 'form' | 'filing_date'>, now = Date.now()): boolean {
-  return f.form === '13F-HR' && now - Date.parse(f.filing_date) <= MAX_ALERT_AGE_DAYS * 86400_000;
-}
-
-/**
- * Cron: a manager's filing is new when its report_date (the quarter it covers) is later than
- * any period already alerted for that manager. Seen-state only moves forward, so amendments,
- * re-parses and rollbacks of an old period never alert. First sightings (and the first run) only
- * record state. One email per member, with a filing listed once even if two slugs report it.
- */
-export async function runAlerts(env: Env): Promise<{ new: number; emails: number; status: string }> {
-  const res = await fetch(`${env.DATA_URL}index.json`);
-  if (!res.ok) throw new Error(`index.json ${res.status}`);
-  const index = (await res.json()) as { managers?: (Filing & { ok?: boolean })[] };
-
-  const raw = await env.DB.get('alerts:periods');
-  const periods: Record<string, string> = raw ? JSON.parse(raw) : {};
-  const next = { ...periods };
-  const fresh: Filing[] = [];
-  for (const f of index.managers ?? []) {
-    // Holdings reports (13F-HR and restated 13F-HR/A) record the period; notices (13F-NT) don't.
-    if (!f.ok || !f.slug || !f.accession || !f.report_date || !f.form?.startsWith('13F-HR')) continue;
-    const prev = periods[f.slug];
-    if (prev && f.report_date <= prev) continue;
-    next[f.slug] = f.report_date;
-    if (raw && prev && alertable(f)) fresh.push(f);
-  }
-  await env.DB.put('alerts:periods', JSON.stringify(next));
-  if (!raw) {
-    await env.DB.delete('alerts:seen'); // the old accession-keyed state
-    return { new: 0, emails: 0, status: 'seeded' };
-  }
-  if (!fresh.length) return { new: 0, emails: 0, status: 'none' };
-
-  const mails = [];
-  for (const m of await listMembers(env)) {
-    if (!isActive(m) || !m.email || m.alerts === 'off') continue;
-    const tracked = m.alerts === 'all' ? fresh : fresh.filter((f) => (m.alerts as string[]).includes(f.slug));
-    const mine = tracked.filter((f, i) => tracked.findIndex((g) => g.accession === f.accession) === i);
-    if (mine.length) mails.push(alertMail(env, m.email, mine));
-  }
-  const status = await sendMail(env, mails);
-  return { new: fresh.length, emails: mails.length, status };
 }

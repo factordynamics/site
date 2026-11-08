@@ -11,6 +11,7 @@ export interface KV {
 
 export interface R2Object {
   body: ReadableStream<Uint8Array>;
+  size?: number;
 }
 
 export interface R2 {

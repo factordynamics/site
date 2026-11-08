@@ -45,6 +45,9 @@ const WORKFLOW = 'refcell/gust/.github/workflows/copybook-data.yml@refs/heads/ma
 let sent: { to: string[]; subject: string; text: string }[];
 let stripeObjects: Record<string, unknown>;
 let index: unknown;
+let secFiles: Record<string, string>;
+let events: unknown[];
+let recentMoves: unknown[];
 let jwks: unknown = { keys: [] };
 
 beforeEach(() => {
@@ -55,6 +58,9 @@ beforeEach(() => {
   sent = [];
   stripeObjects = {};
   index = { managers: [] };
+  secFiles = {};
+  events = [];
+  recentMoves = [];
   vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
     const url = String(input);
     if (url === 'https://api.resend.com/emails/batch') {
@@ -69,6 +75,13 @@ beforeEach(() => {
     }
     if (url === 'https://token.actions.githubusercontent.com/.well-known/jwks') return Response.json(jwks);
     if (url === `${SITE}data/index.json`) return Response.json(index);
+    if (url === `${SITE}data/alerts.json`) return Response.json({ recent: recentMoves });
+    if (url === `${SITE}data/events.json`) return Response.json({ events });
+    if (url === `${SITE}data/securities.json`) return new Response('{"037833100":{"ticker":"AAPL","name":"Apple"},"23331A109":{"ticker":"DHI","name":"D.R. Horton","sector":"Consumer Discretionary"}}');
+    if (url.startsWith('https://www.sec.gov/')) {
+      const key = url.startsWith('https://www.sec.gov/cgi-bin/browse-edgar') ? 'feed' : url.slice('https://www.sec.gov/'.length);
+      return key in secFiles ? new Response(secFiles[key]) : new Response(key === 'feed' ? '<feed></feed>' : 'not found', { status: key === 'feed' ? 200 : 404 });
+    }
     if (url === `${SITE}data/warren-buffett-history.json`) {
       return Response.json({
         slug: 'warren-buffett', manager: 'Warren Buffett', cik: '0001067983', history_quarters: ['2026Q2', '2026Q1'],
@@ -111,6 +124,19 @@ function call(path: string, opts: { method?: string; body?: unknown; token?: str
 function loginTokenFrom(text: string): string {
   return decodeURIComponent(text.match(/account\/\?login=([^\s]+)/)![1]);
 }
+
+/** Runs the minute cron as if at hh:mm UTC today (hour 3 is the digest hour, so avoided by default), or at a given time. */
+async function cron(minute: number, at?: number) {
+  const t = new Date(at ?? Date.now());
+  if (at === undefined) t.setUTCHours(t.getUTCHours() === 3 ? 4 : t.getUTCHours(), minute, 0, 0);
+  let pending: Promise<unknown> = Promise.resolve();
+  await worker.scheduled({ scheduledTime: t.getTime() }, env, { waitUntil: (p) => (pending = p) });
+  return pending;
+}
+
+const putMember = (c: string, email: string, status: string, alerts: unknown) =>
+  env.DB.put(`cus:${c}`, JSON.stringify({ customer: c, email, status, plan: 'monthly', period_end: 0, subscription: `sub_${c}`, alerts, welcomed: true }));
+const putFollows = (c: string, f: Record<string, unknown>) => env.DB.put(`follows:${c}`, JSON.stringify({ investors: [], stocks: [], owned: [], onboarded: true, ...f }));
 
 describe('copybook api', () => {
   it('rejects webhooks signed with the wrong secret and grants nothing', async () => {
@@ -212,16 +238,11 @@ describe('copybook api', () => {
     const Q2 = '2026-06-30';
     const Q3 = '2026-09-30';
     const mk = (slug: string, acc: string, report_date: string, extra: Record<string, unknown> = {}) => ({ ok: true, slug, accession: acc, manager: slug, name: `${slug} LP`, quarter: 'q', report_date, form: '13F-HR', filing_date: today, sec_url: `https://www.sec.gov/${acc}`, ...extra });
-    const put = (c: string, email: string, status: string, alerts: unknown) => env.DB.put(`cus:${c}`, JSON.stringify({ customer: c, email, status, plan: 'monthly', period_end: 0, subscription: `sub_${c}`, alerts, welcomed: true }));
-    await put('c1', 'all@example.com', 'active', 'all');
-    await put('c2', 'ackman@example.com', 'active', ['bill-ackman']);
-    await put('c3', 'off@example.com', 'active', 'off');
-    await put('c4', 'gone@example.com', 'canceled', 'all');
-    let pending: Promise<unknown> = Promise.resolve();
-    const run = async () => {
-      await worker.scheduled({}, env, { waitUntil: (p) => (pending = p) });
-      await pending;
-    };
+    await putMember('c1', 'all@example.com', 'active', 'all');
+    await putMember('c2', 'ackman@example.com', 'active', ['bill-ackman']);
+    await putMember('c3', 'off@example.com', 'active', 'off');
+    await putMember('c4', 'gone@example.com', 'canceled', 'all');
+    const run = () => cron(17);
 
     index = { managers: ['warren-buffett', 'bill-ackman', 'pershing-square-inc', 'dan-loeb', 'seth-klarman', 'david-tepper', 'chase-coleman'].map((s) => mk(s, `${s}-2`, Q2)) };
     await run();
@@ -309,13 +330,13 @@ describe('copybook api', () => {
 
     expect((await call('/follows')).status).toBe(401);
     await call('/alerts', { body: { alerts: ['warren-buffett'] }, token: t });
-    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], onboarded: false });
+    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], onboarded: false, include_13g: false, digest: false });
 
-    for (const bad of [{ investors: ['Not A Slug'] }, { stocks: ['$AAPL'] }, { owned: 'AAPL' }, { onboarded: 'yes' }, { stocks: Array.from({ length: 501 }, (_, i) => `T${i}`) }]) {
+    for (const bad of [{ investors: ['Not A Slug'] }, { stocks: ['$AAPL'] }, { owned: 'AAPL' }, { onboarded: 'yes' }, { digest: 1 }, { stocks: Array.from({ length: 501 }, (_, i) => `T${i}`) }]) {
       expect((await put(bad)).status).toBe(400);
     }
-    const r = await (await put({ stocks: ['aapl', 'BRK.B'], owned: ['googl'], onboarded: true })).json();
-    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], onboarded: true });
+    const r = await (await put({ stocks: ['aapl', 'BRK.B'], owned: ['googl'], onboarded: true, include_13g: true })).json();
+    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], onboarded: true, include_13g: true, digest: false });
 
     // Followed investors become the alert targets while alerts is a list.
     await put({ investors: ['bill-ackman', 'dan-loeb'] });
@@ -327,5 +348,104 @@ describe('copybook api', () => {
 
     await webhook({ type: 'customer.subscription.deleted', data: { object: sub('sub_f', 'cus_f', 'canceled') } });
     expect((await call('/follows', { token: t })).status).toBe(402);
+  });
+
+  it('minute poll: emails a curated 13F within the minute with its moves, targeted by follows and watchlist, once', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const row = (slug: string, cik: string, extra: Record<string, unknown> = {}) => ({ ok: true, slug, cik, manager: slug === 'warren-buffett' ? 'Warren Buffett' : slug, name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: `${slug}-q2`, report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2', ...extra });
+    index = { managers: [row('warren-buffett', '0001067983'), row('dan-loeb', '0001040273')] };
+    await cron(17); // seeds periods and the CIK map
+    expect(sent).toHaveLength(0);
+
+    await putMember('f', 'follows@example.com', 'active', ['warren-buffett']);
+    await putFollows('f', { investors: ['warren-buffett'], stocks: ['DHI'], owned: ['DHI'] });
+    await putMember('w', 'watcher@example.com', 'active', []);
+    await putFollows('w', { stocks: ['BAC'] });
+    await putMember('n', 'nobody@example.com', 'active', []);
+    await putFollows('n', { investors: ['dan-loeb'], stocks: ['MSFT'] });
+
+    const acc = '0000950123-26-011111';
+    const entry = (form: string, cik: string, a: string, name: string) =>
+      `<entry><title>${form} - ${name} (${cik}) (Filer)</title><updated>${today}T16:05:00-05:00</updated><category scheme="https://www.sec.gov/" label="form type" term="${form}"/><id>urn:tag:sec.gov,2008:accession-number=${a}</id></entry>`;
+    // Dan Loeb's book is too big to diff in the Worker: alerted at once, moves follow from the data run.
+    const big = '0000950123-26-044444';
+    const bigDir = `Archives/edgar/data/1040273/${big.replace(/-/g, '')}/`;
+    secFiles[`${bigDir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: 'table.xml', size: '900000' }] } });
+    secFiles[`${bigDir}primary_doc.xml`] = '<periodOfReport>09-30-2026</periodOfReport>';
+    secFiles.feed = `<feed>${entry('13F-HR', '0001040273', big, 'THIRD POINT')}${entry('13F-HR', '0001067983', acc, 'BERKSHIRE')}${entry('13F-HR/A', '0001067983', '0000950123-26-022222', 'BERKSHIRE')}${entry('13F-HR', '0009999999', '0000950123-26-033333', 'SOMEONE ELSE')}</feed>`;
+    const dir = `Archives/edgar/data/1067983/${acc.replace(/-/g, '')}/`;
+    secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: '9999.xml', size: '4000' }] } });
+    secFiles[`${dir}primary_doc.xml`] = '<edgarSubmission><periodOfReport>09-30-2026</periodOfReport></edgarSubmission>';
+    const it = (name: string, cusip: string, value: number, shares: number, pc = '') =>
+      `<ns1:infoTable><ns1:nameOfIssuer>${name}</ns1:nameOfIssuer><ns1:cusip>${cusip}</ns1:cusip><ns1:value>${value}</ns1:value><ns1:shrsOrPrnAmt><ns1:sshPrnamt>${shares}</ns1:sshPrnamt></ns1:shrsOrPrnAmt>${pc && `<ns1:putCall>${pc}</ns1:putCall>`}</ns1:infoTable>`;
+    // AAPL trimmed 100 -> 80 shares; DHI new, filed on two lines; an AAPL call is a separate new position; BAC exited.
+    secFiles[`${dir}9999.xml`] = `<ns1:informationTable>${it('APPLE INC', '037833100', 16000, 80)}${it('D R HORTON INC', '23331A109', 3000, 30)}${it('D R HORTON INC', '23331a109', 1000, 10)}${it('APPLE INC', '037833100', 500, 10, 'CALL')}</ns1:informationTable>`;
+    hist.m.set('h/warren-buffett/2026Q2.json', new TextEncoder().encode(JSON.stringify({ holdings: [{ cusip: '037833100', put_call: null, issuer: 'APPLE INC', ticker: 'AAPL', shares: 100, value: 20000 }, { cusip: '060505104', put_call: null, issuer: 'BANK OF AMERICA', ticker: 'BAC', shares: 50, value: 2000 }] })));
+
+    await cron(5);
+    expect(sent.map((m) => m.to[0]).sort()).toEqual(['follows@example.com', 'nobody@example.com', 'watcher@example.com']);
+    expect((await (await call('/health')).json()).alert_latency).toHaveLength(2);
+    const loeb = sent.find((m) => m.to[0] === 'nobody@example.com')!;
+    expect(loeb.text).toContain('Position changes appear on Copybook after the next data refresh');
+    expect(loeb.text).not.toContain('warren-buffett');
+    const mail = sent.find((m) => m.to[0] === 'follows@example.com')!;
+    expect(mail.subject).toBe('Copybook: Warren Buffett filed Q3 2026 13F (2 new, 1 exited)');
+    // Total book 20,500: DHI +4,000 is 19.5%; the AAPL trim is 20 shares at $200 = -4,000; BAC exits at its prior $2,000.
+    expect(mail.text).toContain('Bought $5K, sold $6K this quarter.');
+    expect(mail.text).toContain('New: DHI +$4K (19.5% of book) [you own], AAPL calls +$1K (2.4% of book)');
+    expect(mail.text).toContain('Trimmed: AAPL -$4K (19.5% of book)');
+    expect(mail.text).toContain('Exited: BAC -$2K (9.8% of book)');
+    expect(mail.text).toContain('Of the positions that changed, 1 is a stock you own.');
+    expect(mail.text).toContain('https://refcell.github.io/gust/copybook/investors/warren-buffett');
+    expect(sent.find((m) => m.to[0] === 'watcher@example.com')!.text).toContain('Exited: BAC -$2K (9.8% of book) [watchlist]');
+    const latency = JSON.parse((await env.DB.get('alerts:latency'))!);
+    expect(latency.map((l: { slug: string }) => l.slug).sort()).toEqual(['dan-loeb', 'warren-buffett']);
+
+    // Still in the feed next minute, and then in the data run's index: never sent twice.
+    sent = [];
+    await cron(6);
+    index = { managers: [row('warren-buffett', '0001067983', { accession: acc, report_date: '2026-09-30', filing_date: today, quarter: '2026Q3' }), row('dan-loeb', '0001040273', { accession: big, report_date: '2026-09-30', filing_date: today, quarter: '2026Q3' })] };
+    await cron(17);
+    expect(sent).toHaveLength(0); // the data run has no moves for Loeb yet
+
+    const mv = (ticker: string, value_delta: number) => ({ ticker, display_name: null, issuer: ticker, cusip: 'X', put_call: null, shares: 1, prev_shares: 0, value: value_delta, value_delta, pct_of_book: 0.012 });
+    recentMoves = [{ accession: big, moves: { bought_usd: 3e8, sold_usd: 0, new: [mv('MSFT', 3e8)], added: [], trimmed: [], exited: [] } }];
+    await cron(17);
+    expect(sent.map((m) => m.to[0])).toEqual(['nobody@example.com']);
+    expect(sent[0].subject).toBe('Copybook: dan-loeb position changes, Q3 2026 13F (1 new)');
+    expect(sent[0].text).toContain('New: MSFT +$300.0M (1.2% of book) [watchlist]');
+    sent = [];
+    await cron(17);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('between-quarter alerts: Form 4 buys/sells and 13D by default, 13G opt-in, fresh only, digest members get one email at night', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const old = new Date(Date.now() - 5 * 86400_000).toISOString().slice(0, 10);
+    const ev = (id: string, kind: string, action: string, extra: Record<string, unknown> = {}) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: kind === 'form4' ? '4' : kind === '13d' ? 'SCHEDULE 13D/A' : 'SCHEDULE 13G', kind, action, filing_date: today, url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: 'Sirius XM', ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: null, ...extra });
+    events = [ev('seed', 'form4', 'buy')];
+    await cron(47); // first run only records
+    await putMember('a', 'a@example.com', 'active', ['warren-buffett']);
+    await putFollows('a', { investors: ['warren-buffett'] });
+    await putMember('g', 'g@example.com', 'active', ['warren-buffett']);
+    await putFollows('g', { investors: ['warren-buffett'], include_13g: true });
+    await putMember('d', 'd@example.com', 'active', ['warren-buffett']);
+    await putFollows('d', { investors: ['warren-buffett'], digest: true });
+    events = [ev('seed', 'form4', 'buy'), ev('F4', 'form4', 'buy'), ev('G1', '13g', 'new_stake', { percent_of_class: 5.2 }), ev('D1', '13d', 'stake_update', { filing_date: old }), ev('X1', 'form4', 'other')];
+    await cron(47);
+    expect(sent.map((m) => m.to[0]).sort()).toEqual(['a@example.com', 'g@example.com']);
+    const a = sent.find((m) => m.to[0] === 'a@example.com')!.text;
+    expect(a).toContain('Form 4: Warren Buffett bought 1,000 shares of SIRI ($25K, avg $25.00)');
+    for (const no of ['sec.gov/G1', 'sec.gov/D1', 'sec.gov/X1', 'sec.gov/seed']) expect(a).not.toContain(no);
+    expect(sent.find((m) => m.to[0] === 'g@example.com')!.text).toContain('Schedule 13G: Warren Buffett disclosed a new stake in SIRI, 5.2% of the class');
+
+    sent = [];
+    await cron(47);
+    expect(sent).toHaveLength(0);
+    // 03:32 UTC after this ET day ends, once EDGAR has closed: the digest.
+    const day = new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10);
+    await cron(32, Date.parse(`${day}T03:32:00Z`) + 86400_000);
+    expect(sent.map((m) => m.to[0])).toEqual(['d@example.com']);
+    expect(sent[0].subject).toMatch(/^Copybook daily digest for \d{4}-\d{2}-\d{2}: 1 Form 4\/13D\/G$/);
   });
 });

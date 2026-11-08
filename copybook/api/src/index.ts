@@ -1,8 +1,9 @@
-import { fetchHistory, historyCsv, runAlerts, shard, SHARD_KEY, SLUG } from './data';
+import { runScheduled } from './alerts';
+import { fetchHistory, historyCsv, shard, SHARD_KEY, SLUG } from './data';
 import { verifyGithubOidc } from './oidc';
 import { loginMail, sendMail } from './email';
 import { isActive, type Env, type Member } from './env';
-import { getFollows, getMember, LOGIN_TTL, putFollows, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
+import { type Follows, getFollows, getMember, LOGIN_TTL, putFollows, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 import { stripe, verifyStripeSignature } from './stripe';
 import { signToken, verifyToken } from './tokens';
 
@@ -94,7 +95,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'POST' && path === '/webhook') return handleWebhook(req, env);
   if (req.method === 'POST' && req.headers.get('origin') && !origin) return json({ ok: false, error: 'origin not allowed' }, 403, {});
 
-  if (req.method === 'GET' && path === '/health') return json({ ok: true }, 200, h);
+  if (req.method === 'GET' && path === '/health') {
+    // Seconds from EDGAR acceptance to handing the alert to the mailer, for the latest alerted filings.
+    const latency = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
+    return json({ ok: true, alert_latency: latency.slice(0, 10) }, 200, h);
+  }
 
   // The data workflow uploads per-quarter history here, authenticated by its GitHub OIDC token.
   if (req.method === 'PUT' && path.startsWith('/ingest/')) {
@@ -195,14 +200,17 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const investors = list(b.investors, SLUG, false);
     const stocks = list(b.stocks, TICKER, true);
     const owned = list(b.owned, TICKER, true);
-    if (investors === null || stocks === null || owned === null || (b.onboarded !== undefined && typeof b.onboarded !== 'boolean')) {
-      return json({ ok: false, error: `investors: manager slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded: boolean` }, 400, h);
+    const flags = ['onboarded', 'include_13g', 'digest'] as const;
+    if (investors === null || stocks === null || owned === null || flags.some((k) => b[k] !== undefined && typeof b[k] !== 'boolean')) {
+      return json({ ok: false, error: `investors: manager slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded, include_13g, digest: boolean` }, 400, h);
     }
-    const next = {
+    const next: Follows = {
       investors: investors ?? current.investors,
       stocks: stocks ?? current.stocks,
       owned: owned ?? current.owned,
       onboarded: (b.onboarded as boolean | undefined) ?? current.onboarded,
+      include_13g: (b.include_13g as boolean | undefined) ?? current.include_13g,
+      digest: (b.digest as boolean | undefined) ?? current.digest,
     };
     // Owned stocks are always on the watchlist.
     next.stocks = [...new Set([...next.stocks, ...next.owned])];
@@ -247,7 +255,7 @@ export default {
       return json({ ok: false, error: 'server error' }, 500, cors(allowedOrigin(req.headers.get('origin'), env)));
     });
   },
-  async scheduled(_event: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
-    ctx.waitUntil(runAlerts(env).then((r) => console.log(`alerts: ${JSON.stringify(r)}`)));
+  async scheduled(event: { scheduledTime?: number }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
+    ctx.waitUntil(runScheduled(env, event.scheduledTime ?? Date.now()).then((r) => console.log(`cron: ${JSON.stringify(r)}`)));
   },
 };

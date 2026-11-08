@@ -14,7 +14,7 @@ binding = "HIST"
 bucket_name = "copybook-history"
 
 [triggers]
-crons = ["17 * * * *"]
+crons = ["* * * * *"]
 
 [vars]
 SITE_URL = "https://copybook.factordynamics.com/"

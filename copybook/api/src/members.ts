@@ -85,13 +85,17 @@ export interface Follows {
   stocks: string[];
   owned: string[];
   onboarded: boolean;
+  /** Also alert on Schedule 13G/13G-A filings (mostly routine passive-stake updates). */
+  include_13g: boolean;
+  /** One end-of-day email instead of an email per filing. */
+  digest: boolean;
 }
 
 export async function getFollows(env: Env, m: Member): Promise<Follows> {
   const raw = await env.DB.get(`follows:${m.customer}`);
-  if (raw) return JSON.parse(raw) as Follows;
+  if (raw) return { include_13g: false, digest: false, ...(JSON.parse(raw) as Partial<Follows>) } as Follows;
   // First read: seed from the follows the site kept in member.alerts before /follows existed.
-  const seeded: Follows = { investors: Array.isArray(m.alerts) ? m.alerts : [], stocks: [], owned: [], onboarded: false };
+  const seeded: Follows = { investors: Array.isArray(m.alerts) ? m.alerts : [], stocks: [], owned: [], onboarded: false, include_13g: false, digest: false };
   await env.DB.put(`follows:${m.customer}`, JSON.stringify(seeded));
   return seeded;
 }
