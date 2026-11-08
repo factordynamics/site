@@ -421,7 +421,7 @@ async function filerShardBook(env: Env, cik: string, reportDate: string): Promis
 }
 
 /** Tickers and names for CUSIPs from the public securities map, without parsing all of it. */
-async function lookupTickers(env: Env, rows: { cusip: string; ticker: string | null; display_name: string | null }[]): Promise<void> {
+export async function lookupTickers(env: Env, rows: { cusip: string; ticker: string | null; display_name: string | null }[]): Promise<void> {
   const missing = rows.filter((r) => !r.ticker);
   if (!missing.length) return;
   const res = await fetch(`${env.DATA_URL}securities.json`, { cf: { cacheTtl: 86400 } } as RequestInit);

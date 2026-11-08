@@ -153,6 +153,26 @@ export async function fetch13F(cik: string, accession: string): Promise<Filing13
   return { report_date, holdings: res.ok ? parseInfoTable(await res.text()) : null };
 }
 
+/** One 13F-HR or 13F-HR/A a CIK filed. */
+export interface Filed13F {
+  accession: string;
+  form: string;
+  report_date: string;
+}
+
+/** Every 13F-HR and 13F-HR/A among a CIK's recent EDGAR filings (submissions JSON, up to its latest 1,000 filings). */
+export async function filings13F(cik: string): Promise<Filed13F[] | null> {
+  const res = await sec(`https://data.sec.gov/submissions/CIK${cik.padStart(10, '0')}.json`);
+  if (!res.ok) return null;
+  const r = ((await res.json()) as { filings?: { recent?: { accessionNumber: string[]; form: string[]; reportDate: string[] } } }).filings?.recent;
+  if (!r) return null;
+  const out: Filed13F[] = [];
+  r.form.forEach((form, i) => {
+    if (form === '13F-HR' || form === '13F-HR/A') out.push({ accession: r.accessionNumber[i], form, report_date: r.reportDate[i] });
+  });
+  return out;
+}
+
 export function quarterOf(reportDate: string): string {
   const [y, m] = reportDate.split('-').map(Number);
   return `${y}Q${Math.ceil(m / 3)}`;

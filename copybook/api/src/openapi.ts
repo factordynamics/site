@@ -145,7 +145,7 @@ export function openapi() {
                 sec_url: { type: 'string', format: 'uri' },
                 amendments: {
                   type: 'array',
-                  description: '13F-HR/A filings merged into this book, oldest first. A quarter whose book changed after a date you care about has an amendment accepted after it.',
+                  description: 'Every 13F-HR/A EDGAR has for this period other than the served filing, oldest first (whether or not merged; see versions for each one\'s status). A quarter whose book changed after a date you care about has an amendment accepted after it.',
                   items: {
                     type: 'object',
                     required: ['accession', 'filed_on', 'accepted_at', 'amendment_type', 'amendment_no', 'confidential_treatment_expired'],
@@ -156,6 +156,23 @@ export function openapi() {
                       amendment_type: { type: ['string', 'null'], enum: ['NEW HOLDINGS', 'RESTATEMENT', null], description: 'From the amendment cover page: NEW HOLDINGS adds rows, RESTATEMENT replaces the book' },
                       amendment_no: { type: ['integer', 'null'] },
                       confidential_treatment_expired: { type: ['boolean', 'null'], description: 'True when the amendment discloses positions whose confidential treatment was denied or expired (backdated disclosure)' },
+                    },
+                  },
+                },
+                amendment_type: { type: ['string', 'null'], enum: ['NEW HOLDINGS', 'RESTATEMENT', null], description: 'The served filing\'s own amendment type (RESTATEMENT when a restatement replaced the original)' },
+                versions: {
+                  type: ['array', 'null'],
+                  description: 'Every 13F-HR and 13F-HR/A for this period, oldest first, including originals a restatement replaced. null when EDGAR could not be read; retry.',
+                  items: {
+                    type: 'object',
+                    required: ['accession', 'form', 'amendment_type', 'accepted_at', 'filed_on', 'status'],
+                    properties: {
+                      accession: { type: 'string' },
+                      form: { type: 'string', enum: ['13F-HR', '13F-HR/A'] },
+                      amendment_type: { type: ['string', 'null'], enum: ['NEW HOLDINGS', 'RESTATEMENT', null] },
+                      accepted_at: { type: ['string', 'null'], format: 'date-time' },
+                      filed_on: { type: ['string', 'null'], format: 'date' },
+                      status: { type: 'string', enum: ['current', 'superseded', 'merged', 'not_merged'], description: 'current: the served book; superseded: replaced by a later restatement; merged: NEW HOLDINGS folded into the served book; not_merged: filed after the served book and not folded in yet' },
                     },
                   },
                 },
@@ -207,7 +224,12 @@ export function openapi() {
       '/v1/filers/{filer}/holdings/{quarter}': {
         get: {
           summary: "A filer's full 13F book for one quarter, with changes vs the prior quarter",
-          parameters: [{ $ref: '#/components/parameters/filer' }, { $ref: '#/components/parameters/quarter' }, { $ref: '#/components/parameters/as_of' }],
+          parameters: [
+            { $ref: '#/components/parameters/filer' },
+            { $ref: '#/components/parameters/quarter' },
+            { $ref: '#/components/parameters/as_of' },
+            { name: 'version', in: 'query', required: false, description: 'original, or an accession from filing.versions: the book exactly as that one filing reported it (no changes vs the prior quarter; `change` fields are null). Response adds `version`. 501 when that filing is too large to read live and the data run has not published it yet.', schema: { type: 'string' } },
+          ],
           responses: {
             '200': {
               description: 'Holdings',
@@ -217,7 +239,7 @@ export function openapi() {
                   filer: { slug: 'warren-buffett', cik: '0001067983', name: 'Berkshire Hathaway Inc', manager: 'Warren Buffett', curated: true },
                   quarter: '2026Q2',
                   report_date: '2026-06-30',
-                  filing: { accession: '0001193125-26-352200', filer_cik: '0001067983', form: '13F-HR', filing_date: '2026-08-14', accepted_at: '2026-08-14T20:05:12Z', sec_url: 'https://www.sec.gov/Archives/edgar/data/1067983/000119312526352200/0001193125-26-352200-index.html', amendments: [] },
+                  filing: { accession: '0001193125-26-352200', filer_cik: '0001067983', form: '13F-HR', filing_date: '2026-08-14', accepted_at: '2026-08-14T20:05:12Z', sec_url: 'https://www.sec.gov/Archives/edgar/data/1067983/000119312526352200/0001193125-26-352200-index.html', amendment_type: null, amendments: [], versions: [{ accession: '0001193125-26-352200', form: '13F-HR', amendment_type: null, accepted_at: '2026-08-14T20:05:12Z', filed_on: '2026-08-14', status: 'current' }] },
                   prev_quarter: '2026Q1',
                   total_value_usd: 259000000000,
                   position_count: 41,

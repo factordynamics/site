@@ -1,5 +1,6 @@
 import type { Env } from './env';
 import { authKey, limitHeaders, meter, type ApiKey } from './keys';
+import { secBudget } from './edgar';
 
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-08';
@@ -18,6 +19,9 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
       'GET /v1/filers/{filer}/holdings?from=&to=: up to 8 quarters per call, with `missing` and `next_from`.',
       'GET /v1/stocks/{ticker|cusip}/holders?cohort=all|curated&quarter=: every 13F holder of one issuer, with prior shares, share and value change.',
       'GET /v1/bulk and /v1/bulk/{YYYYQn}.csv.gz|.parquet: persistent per-quarter exports of every filer\'s book.',
+      'filing.versions[]: every 13F-HR and 13F-HR/A for the period, oldest first, including originals a restatement replaced, each with status current, superseded, merged or not_merged. filing.amendment_type for the served filing.',
+      'filing.amendments now lists every 13F-HR/A EDGAR has for the period, not only those merged into the book.',
+      '?version=original|{accession} on holdings: the book exactly as that filing reported it.',
     ],
   },
   {
@@ -101,6 +105,9 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
   if (path === '/v1/changelog') return v1json({ data: CHANGELOG }, 200, { 'cache-control': 'public, max-age=300' });
   const pin = req.headers.get('copybook-schema-version');
   if (pin && !SCHEMA_VERSIONS.includes(pin)) return v1error('bad_request', 400, `Unknown Copybook-Schema-Version ${pin}; served versions: ${SCHEMA_VERSIONS.join(', ')}.`);
+  // The cron sets a per-run SEC budget on this module; a request after it in the same isolate
+  // must not inherit a spent one (filing lookups would fail).
+  secBudget.left = Math.max(secBudget.left, 30);
   const auth = await authKey(env, req.headers.get('authorization'));
   if (!auth.ok) return v1error(auth.code as ErrorCode, auth.status, auth.message);
   const r = await meter(env, auth.key.id).hit();

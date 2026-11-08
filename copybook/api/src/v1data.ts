@@ -1,5 +1,6 @@
 import type { Env } from './env';
-import { fetchFilingMeta, type FilingMeta } from './edgar';
+import { lookupTickers } from './alerts';
+import { fetch13F, fetchFilingMeta, filings13F, type Filed13F, type FilingMeta } from './edgar';
 import { ROUTES, v1error, v1json } from './v1';
 
 /**
@@ -174,6 +175,54 @@ async function amendmentsOf(env: Env, cik: string, list: any[]) {
   return out.sort((a, b) => (a.accepted_at ?? '').localeCompare(b.accepted_at ?? ''));
 }
 
+interface Version {
+  accession: string;
+  form: string;
+  amendment_type: 'NEW HOLDINGS' | 'RESTATEMENT' | null;
+  accepted_at: string | null;
+  filed_on: string | null;
+  /** current: the book served; superseded: replaced by a later restatement; merged: NEW HOLDINGS folded
+   * into the served book; not_merged: an amendment filed after the served book and not folded in yet. */
+  status: 'current' | 'superseded' | 'merged' | 'not_merged';
+}
+
+/** Every 13F-HR and 13F-HR/A a CIK filed, from EDGAR's submissions JSON, cached for an hour. */
+async function filed13F(env: Env, cik: string): Promise<Filed13F[] | null> {
+  const key = `subs13f:${pad(cik)}`;
+  const cached = await env.DB.get(key);
+  if (cached) return JSON.parse(cached) as Filed13F[];
+  const list = await filings13F(cik);
+  if (list) await env.DB.put(key, JSON.stringify(list), { expirationTtl: 3600 });
+  return list;
+}
+
+/**
+ * Every filing for one period, oldest first, including originals a restatement replaced, with what
+ * each is to the served book. Null when EDGAR can't be read right now.
+ */
+async function versionsFor(env: Env, cik: string, reportDate: string, served: string | null, merged: string[]): Promise<Version[] | null> {
+  try {
+    const list = await filed13F(env, cik);
+    if (!list) return null;
+    const vs: Omit<Version, 'status'>[] = [];
+    for (const f of list.filter((x) => x.report_date === reportDate)) {
+      const m = await filingMeta(env, cik, f.accession);
+      vs.push({ accession: f.accession, form: m?.form ?? f.form, amendment_type: m?.amendment_type ?? null, accepted_at: m?.accepted_at ?? null, filed_on: m?.filed_on ?? null });
+    }
+    if (!vs.length) return null;
+    vs.sort((a, b) => (a.accepted_at ?? '').localeCompare(b.accepted_at ?? ''));
+    // The book in force: what the data run serves; failing that, the latest restatement, else the original.
+    const base = (served && vs.find((v) => v.accession === served)) || [...vs].reverse().find((v) => v.amendment_type === 'RESTATEMENT') || vs.find((v) => v.form === '13F-HR') || vs[0];
+    const at = base.accepted_at ?? '';
+    return vs.map((v) => ({
+      ...v,
+      status: v === base ? 'current' : (v.accepted_at ?? '') < at ? 'superseded' : merged.includes(v.accession) ? 'merged' : v.amendment_type === 'RESTATEMENT' ? 'superseded' : 'not_merged',
+    }));
+  } catch {
+    return null;
+  }
+}
+
 /** One filer's book for one quarter, in the /v1 holdings shape; null when there is none. */
 async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<string, unknown> | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -190,6 +239,10 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
   const cik = cikOf(q.sec_url, f.row.cik);
   const equityTotal = holdings.filter(isEquity).reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
   const main = q.accession ? await filingMeta(env, cik, q.accession) : null;
+  const merged = ((q.amendments ?? []) as unknown[]).map((a) => (typeof a === 'string' ? a : (a as { accession?: string })?.accession)).filter(Boolean) as string[];
+  const versions = await versionsFor(env, cik, q.report_date ?? quarterEnd(quarter), q.accession ?? null, merged);
+  // Amendments: every 13F-HR/A EDGAR has for the period (not only those the data run merged).
+  const amendments = versions ? versions.filter((v) => v.form.endsWith('/A') && v.accession !== q.accession).map((v) => v.accession) : (q.amendments ?? []);
   return {
     filer: f.curated ? { slug: f.row.slug, cik: f.row.cik, name: f.row.name, manager: f.row.manager, curated: true } : { slug: f.row.slug, cik: f.row.cik, name: f.row.name, manager: null, curated: false },
     quarter: q.quarter ?? quarter,
@@ -201,7 +254,9 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
       filing_date: q.filing_date ?? null,
       accepted_at: main?.accepted_at ?? null,
       sec_url: q.sec_url ?? null,
-      amendments: await amendmentsOf(env, cik, q.amendments ?? []),
+      amendment_type: main?.amendment_type ?? null,
+      amendments: await amendmentsOf(env, cik, amendments),
+      versions,
     },
     prev_quarter: q.prev_quarter ?? null,
     total_value_usd: q.total_value ?? holdings.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0),
@@ -211,6 +266,52 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
     holdings: holdings.map((h: unknown) => position(h, equityTotal)),
     exited: (q.exited ?? []).map((h: unknown) => position(h, equityTotal)),
   };
+}
+
+/** Superseded and original books: the data run's copy in R2 (v/{cik}/{accession}.json), else EDGAR when the table is small. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function versionHoldings(env: Env, cik: string, v: Version): Promise<any[] | null> {
+  const obj = await env.HIST.get(`v/${pad(cik)}/${v.accession}.json`);
+  if (obj) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const b = (await new Response(obj.body).json()) as any;
+    return b.holdings ?? (b.columns ? rowsOf(b) : null);
+  }
+  const f = await fetch13F(cik, v.accession);
+  if (!f?.holdings) return null;
+  // Filings made before 2023-01-03 report value in thousands.
+  const scale = (v.filed_on ?? '9999') < '2023-01-03' ? 1000 : 1;
+  const rows = f.holdings.map((p) => ({ ...p, value: p.value * scale, ticker: null as string | null, display_name: null as string | null }));
+  await lookupTickers(env, rows);
+  return rows.sort((a, b) => b.value - a.value);
+}
+
+/** The book as it stood at one filing (?version=original or an accession), or an error response. */
+async function versionBook(env: Env, book: Record<string, unknown>, version: string): Promise<Response> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const filing = book.filing as any;
+  const versions = filing.versions as Version[] | null;
+  if (!versions) return v1error('server_error', 503, 'EDGAR filing list unavailable; retry shortly.');
+  const v = version === 'original' ? versions.find((x) => x.form === '13F-HR') : versions.find((x) => x.accession === version);
+  if (!v) return v1error('not_found', 404, `No such filing for this period; see filing.versions (${versions.map((x) => x.accession).join(', ')}).`);
+  if (v.status === 'current' && !versions.some((x) => x.status === 'merged')) return v1json({ data: { ...book, version: v.accession } });
+  const rows = await versionHoldings(env, filing.filer_cik, v);
+  if (!rows) return v1error('not_yet_available', 501, `The book as filed in ${v.accession} is too large to read live; it is served once the data run publishes superseded books.`);
+  const equityTotal = rows.filter(isEquity).reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
+  const dir = `https://www.sec.gov/Archives/edgar/data/${Number(filing.filer_cik)}/${v.accession.replace(/-/g, '')}/`;
+  return v1json({
+    data: {
+      ...book,
+      version: v.accession,
+      filing: { ...filing, accession: v.accession, form: v.form, filing_date: v.filed_on, accepted_at: v.accepted_at, amendment_type: v.amendment_type, sec_url: `${dir}${v.accession}-index.html`, amendments: [] },
+      total_value_usd: rows.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0),
+      position_count: rows.length,
+      truncated: false,
+      // As filed in that one filing: no changes against the prior quarter.
+      holdings: rows.map((h: unknown) => position(h, equityTotal)),
+      exited: [],
+    },
+  });
 }
 
 const latestOf = (f: Filer) => (f.curated ? f.row.latest_quarter : f.row.quarter);
@@ -256,7 +357,9 @@ ROUTES.push(
     const quarter = qp === 'latest' ? latestOf(f) : qp;
     const book = quarter ? await bookFor(env, f, quarter) : null;
     if (!book) return v1error('not_found', 404, `No ${qp} 13F for ${f.row.slug}; latest is ${latestOf(f) ?? 'none'}.`);
-    return v1json({ data: book });
+    const version = url.searchParams.get('version');
+    if (version && version !== 'original' && !/^\d{10}-\d{2}-\d{6}$/.test(version)) return v1error('bad_request', 400, 'version is original or an accession like 0001104659-26-097200.');
+    return version ? versionBook(env, book, version) : v1json({ data: book });
   }],
   ['GET', /^\/v1\/filers\/([^/]+)\/holdings$/, async ({ env, url }, [id]) => {
     const from = url.searchParams.get('from') ?? '';

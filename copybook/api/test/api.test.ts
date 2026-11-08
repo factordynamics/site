@@ -153,6 +153,7 @@ beforeEach(async () => {
     if (url === `${SITE}data/alerts.json`) return Response.json({ recent: recentMoves });
     if (url === `${SITE}data/events.json`) return Response.json({ events });
     if (url === `${SITE}data/securities.json`) return new Response('{"037833100":{"ticker":"AAPL","name":"Apple"},"23331A109":{"ticker":"DHI","name":"D.R. Horton","sector":"Consumer Discretionary"}}');
+    if (url.startsWith('https://data.sec.gov/submissions/')) return url.slice('https://data.sec.gov/'.length) in secFiles ? new Response(secFiles[url.slice('https://data.sec.gov/'.length)]) : new Response('not found', { status: 404 });
     if (url.startsWith('https://www.sec.gov/')) {
       const u = new URL(url);
       const key = url.startsWith('https://www.sec.gov/cgi-bin/browse-edgar')
@@ -1276,6 +1277,58 @@ describe('copybook api', () => {
     const gz = await handleRequest(new Request('https://api.test/v1/bulk/2026Q2.csv.gz', { headers: { authorization: `Bearer ${key}` } }), env);
     expect(gz.headers.get('content-disposition')).toBe('attachment; filename="copybook-13f-2026Q2.csv.gz"');
     expect([...new Uint8Array(await gz.arrayBuffer())]).toEqual([31, 139, 8, 0, 1, 2, 3]);
+  });
+
+  it('/v1 restatement lineage: versions[] oldest first with status, every amendment attached, ?version= serves the book as originally filed', async () => {
+    index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR/A', accession: 'R', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-09-02', total_value: 3000, position_count: 1, history_quarters: ['2026Q2'] }] };
+    await cron(17);
+    const ORIG = '0001104659-26-097200', REST = '0001104659-26-104387', NEWH = '0001104659-26-110001';
+    // The data run serves the restatement and merged nothing; a later NEW HOLDINGS amendment isn't in it.
+    hist.m.set('h/warren-buffett/2026Q2.json', new TextEncoder().encode(JSON.stringify({
+      quarter: '2026Q2', report_date: '2026-06-30', accession: REST, form: '13F-HR/A', filing_date: '2026-09-02', sec_url: 'https://www.sec.gov/Archives/edgar/data/1067983/x-index.html', amendments: [], prev_quarter: '2026Q1', total_value: 3000, position_count: 1,
+      holdings: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', title: 'COM', put_call: null, shares: 15, value: 3000, weight: 1, change: 'added', prev_shares: 10, share_change: 5, value_delta: 1000 }],
+    })));
+    secFiles['submissions/CIK0001067983.json'] = JSON.stringify({ filings: { recent: {
+      accessionNumber: [NEWH, REST, ORIG, '0001104659-26-062477'], form: ['13F-HR/A', '13F-HR/A', '13F-HR', '13F-HR'], reportDate: ['2026-06-30', '2026-06-30', '2026-06-30', '2026-03-31'],
+    } } });
+    const dir = (a: string) => `Archives/edgar/data/1067983/${a.replace(/-/g, '')}/`;
+    secFiles[`${dir(ORIG)}${ORIG}-index-headers.html`] = '<ACCEPTANCE-DATETIME>20260814161847\n<TYPE>13F-HR\n<FILING-DATE>20260814\n';
+    secFiles[`${dir(REST)}${REST}-index-headers.html`] = '<ACCEPTANCE-DATETIME>20260901181400\n<TYPE>13F-HR/A\n<FILING-DATE>20260902\n';
+    secFiles[`${dir(REST)}primary_doc.xml`] = '<isAmendment>true</isAmendment><amendmentNo>1</amendmentNo><amendmentType>RESTATEMENT</amendmentType>';
+    secFiles[`${dir(NEWH)}${NEWH}-index-headers.html`] = '<ACCEPTANCE-DATETIME>20261002090000\n<TYPE>13F-HR/A\n<FILING-DATE>20261002\n';
+    secFiles[`${dir(NEWH)}primary_doc.xml`] = '<isAmendment>true</isAmendment><amendmentNo>2</amendmentNo><amendmentType>NEW HOLDINGS</amendmentType><confDeniedExpired>false</confDeniedExpired>';
+    // The original as filed on EDGAR: 10 AAPL and 20 BAC.
+    secFiles[`${dir(ORIG)}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '900' }, { name: 'infotable.xml', size: '700' }] } });
+    secFiles[`${dir(ORIG)}primary_doc.xml`] = '<periodOfReport>06-30-2026</periodOfReport>';
+    secFiles[`${dir(ORIG)}infotable.xml`] = '<infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><titleOfClass>COM</titleOfClass><cusip>037833100</cusip><value>2000</value><sshPrnamt>10</sshPrnamt></infoTable><infoTable><nameOfIssuer>BANK OF AMERICA</nameOfIssuer><titleOfClass>COM</titleOfClass><cusip>060505104</cusip><value>800</value><sshPrnamt>20</sshPrnamt></infoTable>';
+
+    stripeObjects['checkout/sessions/cs_test_ver'] = { id: 'cs_test_ver', status: 'complete', created: now(), subscription: 'sub_ver', customer_details: { email: 'ver@example.com' } };
+    stripeObjects['subscriptions/sub_ver'] = sub('sub_ver', 'cus_ver', 'active', 'month', 'pro_monthly');
+    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_ver' } })).json()).token;
+    const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
+    const v1 = async (path: string) => {
+      const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
+      return { status: r.status, body: await r.json() };
+    };
+
+    const cur = (await v1('/v1/filers/warren-buffett/holdings/2026Q2')).body.data;
+    expect(cur.filing).toMatchObject({ accession: REST, accepted_at: '2026-09-01T22:14:00.000Z', amendment_type: 'RESTATEMENT' });
+    expect(cur.filing.versions.map((v: { accession: string; status: string; accepted_at: string }) => [v.accession, v.status, v.accepted_at])).toEqual([
+      [ORIG, 'superseded', '2026-08-14T20:18:47.000Z'],
+      [REST, 'current', '2026-09-01T22:14:00.000Z'],
+      [NEWH, 'not_merged', '2026-10-02T13:00:00.000Z'],
+    ]);
+    // Amendments come from EDGAR, not only the ones the data run merged.
+    expect(cur.filing.amendments.map((a: { accession: string; amendment_type: string }) => [a.accession, a.amendment_type])).toEqual([[NEWH, 'NEW HOLDINGS']]);
+
+    const orig = await v1('/v1/filers/warren-buffett/holdings/2026Q2?version=original');
+    expect(orig.status).toBe(200);
+    expect(orig.body.data).toMatchObject({ version: ORIG, total_value_usd: 2800, position_count: 2, filing: { accession: ORIG, form: '13F-HR', accepted_at: '2026-08-14T20:18:47.000Z', amendment_type: null, filing_date: '2026-08-14' } });
+    expect(orig.body.data.holdings.map((h: { ticker: string; shares: number; value_usd: number; change: string | null }) => [h.ticker, h.shares, h.value_usd, h.change])).toEqual([['AAPL', 10, 2000, null], [null, 20, 800, null]]);
+    expect((await v1(`/v1/filers/1067983/holdings/2026Q2?version=${ORIG}`)).body.data.version).toBe(ORIG);
+    expect((await v1(`/v1/filers/warren-buffett/holdings/2026Q2?version=${REST}`)).body.data).toMatchObject({ version: REST, total_value_usd: 3000 });
+    expect((await v1('/v1/filers/warren-buffett/holdings/2026Q2?version=0000000000-26-000000')).status).toBe(404);
+    expect((await v1('/v1/filers/warren-buffett/holdings/2026Q2?version=first')).status).toBe(400);
   });
 
   it('/v1 filers and holdings: by slug or CIK, every field the OpenAPI schema requires, as_of not served yet', async () => {
