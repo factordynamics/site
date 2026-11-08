@@ -1,7 +1,7 @@
 import { loadIndex, useAsync, useTitle } from '../lib/data'
 import { Link } from 'react-router-dom'
 import { Onboarding } from '../components/Onboarding'
-import { resetFollows, useFollows } from '../lib/follows'
+import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -125,7 +125,7 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
         </section>
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[15px] font-semibold">Filing alerts</h2>
-          <p className="mt-1 text-[14px] text-ink-2">An email when a new 13F appears on EDGAR, usually within the hour.</p>
+          <p className="mt-1 text-[14px] text-ink-2">An email with the moves inside, usually within a couple of minutes of a new 13F on EDGAR. Form 4 and 13D filings by funds you follow arrive within a few hours.</p>
           <fieldset className="mt-4 space-y-2.5 text-[14px]">
             <legend className="sr-only">Send alerts for</legend>
             {(
@@ -148,6 +148,25 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
               </label>
             ))}
           </fieldset>
+          {status === 'ready' && (
+            <fieldset className="mt-5 space-y-2.5 border-t border-line pt-4 text-[14px]">
+              <legend className="sr-only">Alert options</legend>
+              {(
+                [
+                  ['include_13g', 'Also Schedule 13G filings', 'Passive 5% stakes. Big asset managers file many of these.'],
+                  ['digest', 'One daily digest', 'A single email after EDGAR closes, about 10:30 pm ET, instead of one per filing.'],
+                ] as const
+              ).map(([k, l, d]) => (
+                <label key={k} className="flex cursor-pointer items-start gap-3">
+                  <input type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent)]" checked={follows[k]} onChange={(e) => saveFollows({ [k]: e.target.checked }).catch(() => null)} />
+                  <span>
+                    <span className="block">{l}</span>
+                    <span className="block text-[12.5px] text-ink-3">{d}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          )}
         </section>
       </div>
 
@@ -185,7 +204,7 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
                   ))}
                 </ul>
               )}
-              <p className="mt-3 text-[12.5px] text-ink-3">Saved stocks are a watchlist for now; stock alerts are coming.</p>
+              <p className="mt-3 text-[12.5px] text-ink-3">You’ll get a fund’s 13F email whenever it changes a position in one of these stocks, even if you don’t follow the fund.</p>
             </>
           )}
         </section>

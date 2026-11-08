@@ -34,7 +34,7 @@ export function Onboarding({ onDone }: { onDone?: () => void }) {
       <h2 id="onb-title" className="mt-2 text-[26px] font-semibold tracking-[-0.03em]">
         Whom do you want to follow?
       </h2>
-      <p className="mt-1.5 text-[15px] text-ink-2">We’ll email you when they file, with every buy and sell in it.</p>
+      <p className="mt-1.5 text-[15px] text-ink-2">We’ll email you minutes after they file, with their biggest buys and sells in it.</p>
       <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {!idx.data &&
           Array.from({ length: 9 }, (_, i) => (
@@ -62,7 +62,7 @@ export function Onboarding({ onDone }: { onDone?: () => void }) {
       </div>
 
       <h2 className="mt-10 text-[22px] font-semibold tracking-[-0.03em]">Which stocks do you own?</h2>
-      <p className="mt-1.5 text-[15px] text-ink-2">We’ll point out when the investors we track buy or sell them. Only you see this list.</p>
+      <p className="mt-1.5 text-[15px] text-ink-2">We’ll email you when a fund buys or sells them, and tag them in every alert. Only you see this list.</p>
       <TickerPicker value={owned} onChange={setOwned} />
 
       <div className="mt-8 flex flex-wrap items-center gap-3">

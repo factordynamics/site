@@ -3,10 +3,10 @@ import { ApiError, call, getToken } from './account'
 
 // Follows live in the Copy API (GET/PUT {api}/follows). Following is a Copy feature: 401 and 402
 // leave the store empty and the Follow buttons show the upgrade prompt.
-export type Follows = { investors: string[]; stocks: string[]; owned: string[]; onboarded: boolean }
+export type Follows = { investors: string[]; stocks: string[]; owned: string[]; onboarded: boolean; include_13g: boolean; digest: boolean }
 type State = { status: 'idle' | 'loading' | 'ready' | 'guest'; follows: Follows }
 
-const EMPTY: Follows = { investors: [], stocks: [], owned: [], onboarded: false }
+const EMPTY: Follows = { investors: [], stocks: [], owned: [], onboarded: false, include_13g: false, digest: false }
 let state: State = { status: 'idle', follows: EMPTY }
 const subs = new Set<() => void>()
 const set = (s: State) => {
