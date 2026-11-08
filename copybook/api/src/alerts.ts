@@ -34,8 +34,21 @@ export interface Alert13F {
   top?: MoveRow[];
 }
 
+export interface Insider {
+  cik: string;
+  name: string;
+  roles: string[];
+  bought_usd: number;
+  accession: string;
+  accepted: string;
+}
+
 export interface AlertEvent {
   id: string;
+  /** A company insider's open-market buy on a stock members own or watch. */
+  insider?: Insider;
+  /** Three or more insiders of one company buying within 30 days. */
+  cluster?: Insider[];
   /** Accepted by EDGAR too long ago to send as news: held for the nightly digest instead. */
   late?: boolean;
   /** EDGAR acceptance time as the data run writes it. */
@@ -128,7 +141,10 @@ export function forMember(m: Member, f: Follows, filings: Alert13F[], events: Al
       (e.kind !== '13g' || f.include_13g) &&
       ((!!e.slug && ((all && !e.extra) || investors.has(e.slug) || (!!e.ticker && stocks.has(e.ticker) && stockAlerts(meta, e.slug)))) ||
         // A 13D/G on a stock the member owns or watches, from any filer.
-        (e.kind !== 'form4' && (e.subject_tickers ?? []).some((t) => stocks.has(t)))),
+        (e.kind !== 'form4' && f.any_13d !== false && (e.subject_tickers ?? []).some((t) => stocks.has(t))) ||
+        // Company insiders buying on the open market, and clusters of them.
+        (!!e.insider && f.insider_buys !== false && e.insider.bought_usd >= (f.insider_min_usd ?? 100_000) && (e.subject_tickers ?? []).some((t) => stocks.has(t))) ||
+        (!!e.cluster && f.cluster_buys !== false && (e.subject_tickers ?? []).some((t) => stocks.has(t)))),
   );
   return {
     filings: fl.filter((x, i) => fl.findIndex((y) => y.accession === x.accession) === i),
@@ -697,7 +713,7 @@ export async function runWatchMap(env: Env): Promise<Record<string, unknown>> {
 }
 
 const EVENT_PAGES = 2;
-const EVENTS_PER_MINUTE = 4;
+const EVENTS_PER_MINUTE = 8;
 
 /** Form 4 and 13D/G feed pages back to `since` (newest first), at most EVENT_PAGES each. */
 async function eventFeed(type: string, since: number): Promise<FeedEntry[]> {
@@ -709,6 +725,26 @@ async function eventFeed(type: string, since: number): Promise<FeedEntry[]> {
     if (entries.length < 100 || !last || Date.parse(last.accepted) < since) break;
   }
   return out;
+}
+
+const CLUSTER_DAYS = 30;
+const CLUSTER_MIN = 3;
+
+/**
+ * Keeps each watched company's insider buys of the last 30 days (KV insider:{issuer CIK}). Returns
+ * the buyers when this buy makes 3 or more distinct insiders and no cluster was alerted in 30 days.
+ */
+async function recordInsiderBuy(env: Env, issuerCik: string, buy: Insider, now: number): Promise<Insider[] | null> {
+  const key = `insider:${issuerCik}`;
+  const state = JSON.parse((await env.DB.get(key)) ?? '{"buys":[]}') as { buys: Insider[]; cluster_at?: number };
+  const since = now - CLUSTER_DAYS * DAY;
+  state.buys = [...state.buys.filter((b) => Date.parse(b.accepted) >= since && b.accession !== buy.accession), buy];
+  const byInsider = new Map<string, Insider>();
+  for (const b of state.buys) byInsider.set(b.cik, { ...b, bought_usd: (byInsider.get(b.cik)?.bought_usd ?? 0) + b.bought_usd });
+  const hit = byInsider.size >= CLUSTER_MIN && !(state.cluster_at && state.cluster_at >= since);
+  if (hit) state.cluster_at = now;
+  await env.DB.put(key, JSON.stringify(state), { expirationTtl: (CLUSTER_DAYS + 1) * 86400 });
+  return hit ? [...byInsider.values()] : null;
 }
 
 const kindOf = (form: string): AlertEvent['kind'] => (form.startsWith('4') ? 'form4' : form.includes('13D') ? '13d' : '13g');
@@ -738,15 +774,15 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
   const byAcc = new Map<string, FeedEntry[]>();
   for (const e of entries) if (Date.parse(e.accepted) >= now - MAX_ALERT_AGE_DAYS * DAY) (byAcc.get(e.accession) ?? byAcc.set(e.accession, []).get(e.accession)!).push(e);
   const candidates = [...byAcc.entries()].filter(([, es]) =>
-    es.some((e) => ((e.role === 'Reporting' || e.role === 'Filed by') && ciks[e.cik]) || (e.form.startsWith('SCHEDULE 13') && e.role === 'Subject' && watch[e.cik])),
+    es.some((e) => ((e.role === 'Reporting' || e.role === 'Filed by') && ciks[e.cik]) || (e.role === 'Subject' && e.form.startsWith('SCHEDULE 13') && watch[e.cik]) || (e.role === 'Issuer' && e.form === '4' && watch[e.cik])),
   );
-  if (!candidates.length) return { status: 'none', ...(errors.length ? { errors } : {}) };
   const rawHandled = await env.DB.get('events:handled');
-  if (!rawHandled) {
+  if (!rawHandled && !errors.length) {
     // First run: record what is already there, send nothing.
     await env.DB.put('events:handled', JSON.stringify(candidates.map(([acc]) => acc).slice(-1000)));
     return { status: 'seeded', events: candidates.length };
   }
+  if (!candidates.length || !rawHandled) return { status: 'none', ...(errors.length ? { errors } : {}) };
   const handled = JSON.parse(rawHandled) as string[];
   const todo = candidates.filter(([acc]) => !handled.includes(acc)).slice(0, EVENTS_PER_MINUTE);
   if (!todo.length) return { status: 'none', ...(errors.length ? { errors } : {}) };
@@ -781,12 +817,27 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
       avg_price: null,
       shares_after: null,
       percent_of_class: null,
-      subject_tickers: subject && kind !== 'form4' ? (watch[subject.cik] ?? []) : [],
+      subject_tickers: subject && (kind !== 'form4' || !filer) ? (watch[subject.cik] ?? []) : [],
     };
+    // A Form 4 on a watched company by someone we don't track: alert only an insider's open-market buy.
+    const insiderOnly = kind === 'form4' && !filer;
     let ev: AlertEvent | null = null;
     try {
       if (kind === 'form4') {
         const f4 = await fetchForm4(anyCik, accession);
+        if (f4 && insiderOnly) {
+          const who = f4.insiders.filter((i) => i.roles.length);
+          handled.push(accession);
+          if (!f4.bought_usd || !who.length) continue; // a sale, grant or exercise: not an alert
+          const ins: Insider = { cik: who[0].cik, name: who[0].name, roles: [...new Set(who.flatMap((i) => i.roles))], bought_usd: f4.bought_usd, accession, accepted: es[0].accepted };
+          const bought = f4.classes.reduce((s, c) => s + c.bought, 0);
+          const ev: AlertEvent = { ...base, manager: who.map((i) => i.name).join(', '), action: 'buy', issuer: f4.issuer, ticker: base.ticker ?? f4.ticker, shares: bought, value_usd: f4.bought_usd, avg_price: bought ? f4.bought_usd / bought : null, classes: f4.classes, footnotes: f4.footnotes, insider: ins };
+          if (eventAlertable(ev, now)) fresh.push(ev);
+          const cluster = await recordInsiderBuy(env, subject!.cik, ins, now);
+          if (cluster) fresh.push({ ...ev, id: `cluster:${subject!.cik}:${accession}`, manager: `${cluster.length} insiders`, insider: undefined, cluster, value_usd: cluster.reduce((s, i) => s + i.bought_usd, 0), shares: null, avg_price: null, classes: undefined, footnotes: undefined });
+          continue;
+        }
+        if (!f4 && insiderOnly) continue; // unreadable now: retried next minute, never sent half-known
         if (f4) {
           const bought = f4.classes.reduce((s, c) => s + c.bought, 0);
           const sold = f4.classes.reduce((s, c) => s + c.sold, 0);
@@ -841,7 +892,7 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
   await env.DB.put('events:handled', JSON.stringify(handled.slice(-1000)));
   if (pending.length) await env.DB.put('events:pending', JSON.stringify([...(JSON.parse((await env.DB.get('events:pending')) ?? '[]') as string[]), ...pending].slice(-200)));
   const sent = await deliver(env, [], fresh, now);
-  const live = fresh.filter((e) => !isLate(e, now));
+  const live = fresh.filter((e) => !isLate(e, now) && !e.cluster);
   if (live.length) await logLatency(env, live.map((e) => ({ slug: e.slug || e.subject_tickers?.join(',') || '', manager: e.manager, form: e.form, kind: e.kind, accession: e.id, accepted: e.accepted })), Date.now());
   return { status: 'checked', events: fresh.map((e) => `${e.kind} ${e.slug || e.manager} ${e.ticker ?? e.issuer ?? ''}${e.details_pending ? ' (pending)' : ''}`), ...sent, ...(errors.length ? { errors } : {}) };
 }

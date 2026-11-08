@@ -108,13 +108,23 @@ export interface Follows {
   include_13g: boolean;
   /** One end-of-day email instead of an email per filing. */
   digest: boolean;
+  /** Open-market buys (Form 4 code P) by a company's directors, officers and 10% owners, on owned and watched stocks. */
+  insider_buys: boolean;
+  /** Smallest insider buy that alerts, in USD. */
+  insider_min_usd: number;
+  /** Three or more insiders of one company buying within 30 days. */
+  cluster_buys: boolean;
+  /** A new Schedule 13D (or 13G) by any filer on owned and watched stocks. */
+  any_13d: boolean;
 }
+
+export const FOLLOW_DEFAULTS = { include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true };
 
 export async function getFollows(env: Env, m: Member): Promise<Follows> {
   const raw = await env.DB.get(`follows:${m.customer}`);
-  if (raw) return { include_13g: false, digest: false, ...(JSON.parse(raw) as Partial<Follows>) } as Follows;
+  if (raw) return { ...FOLLOW_DEFAULTS, ...(JSON.parse(raw) as Partial<Follows>) } as Follows;
   // First read: seed from the follows the site kept in member.alerts before /follows existed.
-  const seeded: Follows = { investors: Array.isArray(m.alerts) ? m.alerts : [], stocks: [], owned: [], onboarded: false, include_13g: false, digest: false };
+  const seeded: Follows = { investors: Array.isArray(m.alerts) ? m.alerts : [], stocks: [], owned: [], onboarded: false, ...FOLLOW_DEFAULTS };
   await env.DB.put(`follows:${m.customer}`, JSON.stringify(seeded));
   return seeded;
 }

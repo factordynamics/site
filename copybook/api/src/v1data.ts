@@ -46,8 +46,10 @@ const isEquity = (h: any) => !h.put_call && (h.shares_type ?? h.sh_prn ?? 'SH') 
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function position(h: any, equityTotal: number) {
-  // The data run's new schema (with delta_pct_of_book) uses pct_of_book for the equity-book weight.
-  const eqw = 'delta_pct_of_book' in h ? (h.pct_of_book ?? null) : isEquity(h) && equityTotal > 0 && h.value ? h.value / equityTotal : isEquity(h) ? 0 : null;
+  // Once the data run publishes its equity-book weight (ingest item W: pct_of_book next to the
+  // renamed trade size delta_pct_of_book), `weight` is that definition; before, the all-rows weight.
+  const w = 'delta_pct_of_book' in h;
+  const eqw = w ? (h.pct_of_book ?? null) : isEquity(h) && equityTotal > 0 && h.value ? h.value / equityTotal : isEquity(h) ? 0 : null;
   return {
     cusip: h.cusip,
     ticker: h.ticker ?? null,
@@ -58,7 +60,8 @@ function position(h: any, equityTotal: number) {
     shares: h.shares,
     shares_type: h.shares_type ?? h.sh_prn ?? null,
     value_usd: h.value,
-    weight: h.weight,
+    weight: w ? eqw : h.weight,
+    // Alias of the equity-only weight, kept for one release after `weight` switches.
     weight_equity: eqw,
     value_scale: h.value_scale ?? null,
     value_as_filed: h.value_as_filed ?? null,

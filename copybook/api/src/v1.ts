@@ -17,7 +17,7 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
       'Position: weight_equity (share of the equity book: SH rows without put/call), value_scale, value_as_filed, value_adjusted, zero_value, passed through from the data run when it publishes them.',
       'filing.filer_cik: the CIK that filed (e.g. Pershing Square for Ackman).',
       'GET /v1/changelog (no key needed). Versioning policy in the spec.',
-      'Notice: `weight` will switch to the equity-only definition (weight_equity) in schema 2027-02-08, 90 days from now. Use weight_equity today for the new definition.',
+      '`weight` becomes the equity-only definition as soon as the data run publishes it (SH rows without put/call over their summed value; null for options and PRN rows). No 90-day notice: the API is pre-launch, and the notice policy starts at public launch. weight_equity carries the same value and stays for one release as an alias.',
     ],
   },
   {

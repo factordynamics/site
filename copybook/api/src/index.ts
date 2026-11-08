@@ -311,9 +311,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const investors = list(b.investors, SLUG, false);
     const stocks = list(b.stocks, TICKER, true);
     const owned = list(b.owned, TICKER, true);
-    const flags = ['onboarded', 'include_13g', 'digest'] as const;
-    if (investors === null || stocks === null || owned === null || flags.some((k) => b[k] !== undefined && typeof b[k] !== 'boolean')) {
-      return json({ ok: false, error: `investors: manager slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded, include_13g, digest: boolean` }, 400, h);
+    const flags = ['onboarded', 'include_13g', 'digest', 'insider_buys', 'cluster_buys', 'any_13d'] as const;
+    const minUsd = b.insider_min_usd;
+    const badMin = minUsd !== undefined && !(typeof minUsd === 'number' && Number.isFinite(minUsd) && minUsd >= 0 && minUsd <= 1e10);
+    if (investors === null || stocks === null || owned === null || badMin || flags.some((k) => b[k] !== undefined && typeof b[k] !== 'boolean')) {
+      return json({ ok: false, error: `investors: manager slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded, include_13g, digest, insider_buys, cluster_buys, any_13d: boolean; insider_min_usd: USD from 0` }, 400, h);
     }
     // Any 13F filer can be followed: non-curated ones are looked up and added to the minute poll.
     if (investors?.length) {
@@ -327,6 +329,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       onboarded: (b.onboarded as boolean | undefined) ?? current.onboarded,
       include_13g: (b.include_13g as boolean | undefined) ?? current.include_13g,
       digest: (b.digest as boolean | undefined) ?? current.digest,
+      insider_buys: (b.insider_buys as boolean | undefined) ?? current.insider_buys,
+      insider_min_usd: (minUsd as number | undefined) ?? current.insider_min_usd,
+      cluster_buys: (b.cluster_buys as boolean | undefined) ?? current.cluster_buys,
+      any_13d: (b.any_13d as boolean | undefined) ?? current.any_13d,
     };
     // Owned stocks are always on the watchlist.
     next.stocks = [...new Set([...next.stocks, ...next.owned])];

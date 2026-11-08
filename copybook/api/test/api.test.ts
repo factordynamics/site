@@ -381,13 +381,13 @@ describe('copybook api', () => {
 
     expect((await call('/follows')).status).toBe(401);
     await call('/alerts', { body: { alerts: ['warren-buffett'] }, token: t });
-    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], onboarded: false, include_13g: false, digest: false });
+    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
 
-    for (const bad of [{ investors: ['Not A Slug'] }, { stocks: ['$AAPL'] }, { owned: 'AAPL' }, { onboarded: 'yes' }, { digest: 1 }, { stocks: Array.from({ length: 501 }, (_, i) => `T${i}`) }]) {
+    for (const bad of [{ investors: ['Not A Slug'] }, { stocks: ['$AAPL'] }, { owned: 'AAPL' }, { onboarded: 'yes' }, { digest: 1 }, { insider_min_usd: -1 }, { insider_min_usd: '100k' }, { cluster_buys: 'no' }, { stocks: Array.from({ length: 501 }, (_, i) => `T${i}`) }]) {
       expect((await put(bad)).status).toBe(400);
     }
     const r = await (await put({ stocks: ['aapl', 'BRK.B'], owned: ['googl'], onboarded: true, include_13g: true })).json();
-    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], onboarded: true, include_13g: true, digest: false });
+    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], onboarded: true, include_13g: true, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
 
     // Any 13F filer can be followed, not only curated funds; a slug that is no filer is refused.
     const unknown = await put({ investors: ['warren-buffett', 'no-such-filer-1234'] });
@@ -662,16 +662,79 @@ describe('copybook api', () => {
     // From EDGAR 0001193125-26-352200 vs 0001193125-26-226661.
     const moves = { bought_usd: 19.2e9, sold_usd: 4.1e9, new: [row('DHI', 3564, 0, 580504, 580504, 0.0000019)], added: [row('GOOGL', 78791167, 54249798, 28157599351, 8770349040, 0.0293)], trimmed: [row('BAC', 1, 2, 1, -1.7e9, -0.006)], exited: [row('STZ', 0, 1, 0, -94.9e6, -0.0003)] };
     const a = { slug: 'warren-buffett', slugs: ['warren-buffett'], manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', accession: '0001193125-26-352200', sec_url: 'https://www.sec.gov/x', accepted: '2026-08-14T20:05:04Z', moves, tickers: [] };
-    const m = alertMail(env, 'x@example.com', [a], [], { investors: [], stocks: [], owned: [], onboarded: true, include_13g: false, digest: false });
+    const m = alertMail(env, 'x@example.com', [a], [], { investors: [], stocks: [], owned: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true });
     expect(m.subject).toBe('Buffett Q2: NEW DHI · EXIT STZ · GOOGL +$8.8B');
     expect(m.text).toContain('Bought $19.2B, sold $4.1B this quarter.');
     expect(m.text).toContain('Added: GOOGL +$8.8B (+45% shares, 2.9% of book)');
     expect(m.text).toContain('New: DHI +$581K (<0.1% of book)');
   });
 
+  it('insider buys on owned and watched stocks: code P by officers, directors and 10% owners above the member threshold; 3 insiders in 30 days is a cluster, once', async () => {
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    await cron(17);
+    await putMember('o', 'owner@example.com', 'active', []);
+    await putFollows('o', { stocks: ['KMX'], owned: ['KMX'] });
+    await putMember('h', 'high@example.com', 'active', []);
+    await putFollows('h', { stocks: ['KMX'], insider_min_usd: 500_000, cluster_buys: true });
+    await putMember('n', 'noinsider@example.com', 'active', []);
+    await putFollows('n', { stocks: ['KMX'], insider_buys: false, cluster_buys: false });
+    secFiles['files/company_tickers.json'] = JSON.stringify({ 0: { cik_str: 1170010, ticker: 'KMX' } });
+    await cron(52);
+    secFiles['feed:4'] = '<feed></feed>';
+    await cron(3); // seeds the event poll
+    sent = [];
+
+    const at = new Date(Date.now() - 3 * 60_000).toISOString();
+    const entry = (cik: string, acc: string, name: string, role: string) => `<entry><title>4 - ${name} (${cik}) (${role})</title><updated>${at}</updated><category scheme="https://www.sec.gov/" label="form type" term="4"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
+    const form4 = (owner: string, name: string, rel: string, code: string, shares: number, price: number) =>
+      `<ownershipDocument><issuer><issuerCik>0001170010</issuerCik><issuerName>CARMAX INC</issuerName><issuerTradingSymbol>KMX</issuerTradingSymbol></issuer><reportingOwner><reportingOwnerId><rptOwnerCik>${owner}</rptOwnerCik><rptOwnerName>${name}</rptOwnerName></reportingOwnerId><reportingOwnerRelationship>${rel}</reportingOwnerRelationship></reportingOwner><nonDerivativeTable><nonDerivativeTransaction><securityTitle><value>Common Stock</value></securityTitle><transactionCoding><transactionCode>${code}</transactionCode></transactionCoding><transactionAmounts><transactionShares><value>${shares}</value></transactionShares><transactionPricePerShare><value>${price}</value></transactionPricePerShare><transactionAcquiredDisposedCode><value>${code === 'S' ? 'D' : 'A'}</value></transactionAcquiredDisposedCode></transactionAmounts><postTransactionAmounts><sharesOwnedFollowingTransaction><value>${shares * 2}</value></sharesOwnedFollowingTransaction></postTransactionAmounts><ownershipNature><directOrIndirectOwnership><value>D</value></directOrIndirectOwnership></ownershipNature></nonDerivativeTransaction></nonDerivativeTable></ownershipDocument>`;
+    const filings: [string, string, string, string, string, number, number][] = [
+      ['0000000101', '0000000101-26-000001', 'SMITH JOHN A', '<isOfficer>1</isOfficer><officerTitle>Chief Executive Officer</officerTitle>', 'P', 5000, 60],  // $300K
+      ['0000000102', '0000000102-26-000001', 'DOE JANE', '<isDirector>1</isDirector>', 'P', 1000, 60],  // $60K: under every default
+      ['0000000103', '0000000103-26-000001', 'ROE RICHARD', '<isOfficer>1</isOfficer><officerTitle>CFO</officerTitle>', 'S', 9000, 60],  // a sale
+      ['0000000104', '0000000104-26-000001', 'BIG HOLDER LP', '<isTenPercentOwner>1</isTenPercentOwner>', 'P', 10000, 60],  // $600K
+    ];
+    for (const [cik, acc, name, rel, code, sh, px] of filings) {
+      const dir = `Archives/edgar/data/${Number(cik)}/${acc.replace(/-/g, '')}/`;
+      secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'f4.xml' }] } });
+      secFiles[`${dir}f4.xml`] = form4(cik, name, rel, code, sh, px);
+    }
+    secFiles['feed:4'] = `<feed>${filings.map(([cik, acc, name]) => `${entry(cik, acc, name, 'Reporting')}${entry('0001170010', acc, 'CARMAX', 'Issuer')}`).join('')}</feed>`;
+    await cron(5);
+    const to = (a: string) => sent.filter((m) => m.to[0] === a);
+    const o = to('owner@example.com').map((m) => m.text).join('\n');
+    expect(o).toContain('John A Smith (Chief Executive Officer of CARMAX INC) bought 5,000 shares of KMX ($300K, avg $60.00)');
+    expect(o).toContain('Big Holder LP (10% owner of CARMAX INC) bought 10,000 shares');
+    expect(o).not.toContain('Jane Doe (Director of'); // $60K, under the $100K default
+    expect(o).not.toContain('Roe'); // a sale never alerts
+    // Three distinct insiders bought (Doe counts toward the cluster even under the threshold).
+    expect(o).toMatch(/Cluster buy: KMX: 3 insiders bought \$960K in 30 days/);
+    expect(to('owner@example.com')[0].subject).toMatch(/^KMX insider buy: Chief Executive Officer John A Smith bought \$300K \+ 2 more$/);
+    const hi = to('high@example.com').map((m) => m.text).join('\n');
+    expect(hi).toContain('Big Holder LP');
+    expect(hi).not.toContain('John A Smith (Chief Executive Officer of'); // $300K, under this member's $500K
+    expect(to('noinsider@example.com')).toHaveLength(0);
+
+    // A fourth buyer within 30 days alerts on its own but doesn't repeat the cluster.
+    sent = [];
+    const acc5 = '0000000105-26-000001';
+    const dir5 = `Archives/edgar/data/105/${acc5.replace(/-/g, '')}/`;
+    secFiles[`${dir5}index.json`] = JSON.stringify({ directory: { item: [{ name: 'f4.xml' }] } });
+    secFiles[`${dir5}f4.xml`] = form4('0000000105', 'NEW DIRECTOR', '<isDirector>1</isDirector>', 'P', 5000, 60);
+    secFiles['feed:4'] = secFiles['feed:4'].replace('</feed>', `${entry('0000000105', acc5, 'NEW DIRECTOR', 'Reporting')}${entry('0001170010', acc5, 'CARMAX', 'Issuer')}</feed>`);
+    await cron(6);
+    const again = sent.map((m) => m.text).join('\n');
+    expect(again).toContain('Director New (Director of CARMAX INC)');
+    expect(again).not.toContain('Cluster buy');
+    expect(again).not.toContain('John A Smith');
+  });
+
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
     const today = new Date().toISOString().slice(0, 10);
     index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }, { ok: true, slug: 'carl-icahn', cik: '0000921669', manager: 'Carl Icahn', name: 'Icahn Carl C', featured: true, form: '13F-HR', accession: 'q2i', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    // Already in the feed when the poll first runs (with the CIK map): recorded, never sent.
+    const old = '0001193125-26-300000';
+    secFiles['feed:4'] = `<feed><entry><title>4 - BERKSHIRE (0001067983) (Reporting)</title><updated>${new Date(Date.now() - 60 * 60_000).toISOString()}</updated><category scheme="https://www.sec.gov/" label="form type" term="4"/><id>urn:tag:sec.gov,2008:accession-number=${old}</id></entry></feed>`;
     await cron(17); // CIK map
     await putMember('b', 'buffett@example.com', 'active', ['warren-buffett']);
     await putFollows('b', { investors: ['warren-buffett'] });
@@ -683,10 +746,8 @@ describe('copybook api', () => {
     await cron(52); // watch map: CVR Energy -> CVI
     // The poll's first run only records what is already in the feeds.
     const before = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
-    const old = '0001193125-26-300000';
     const e = (form: string, cik: string, acc: string, name: string, role: string, at = before(4)) =>
       `<entry><title>${form} - ${name} (${cik}) (${role})</title><updated>${at}</updated><category scheme="https://www.sec.gov/" label="form type" term="${form}"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
-    secFiles['feed:4'] = `<feed>${e('4', '0001067983', old, 'BERKSHIRE', 'Reporting', before(60))}</feed>`;
     await cron(4);
     expect(sent).toHaveLength(0);
     sent = [];
@@ -906,6 +967,17 @@ describe('copybook api', () => {
     expect(d.holdings[0]).toMatchObject({ weight_equity: 1, zero_value: false });
     expect(d.exited[0]).toMatchObject({ zero_value: false });
     expect(d.filing.filer_cik).toBe('0001067983');
+    // Once the data run publishes its equity-book weight (with delta_pct_of_book), weight is that,
+    // at once; weight_equity is the alias. An option row gets null.
+    hist.m.set('h/warren-buffett/2025Q2.json', new TextEncoder().encode(JSON.stringify({
+      quarter: '2025Q2', report_date: '2025-06-30', accession: '0000950123-25-005701', form: '13F-HR', filing_date: '2025-08-14', sec_url: 'https://www.sec.gov/x', prev_quarter: '2025Q1', total_value: 1500,
+      holdings: [
+        { cusip: '670346105', ticker: 'NUE', issuer: 'NUCOR CORP', shares: 10, value: 1000, weight: 0.6667, pct_of_book: 1, delta_pct_of_book: 0 },
+        { cusip: '670346105', ticker: 'NUE', issuer: 'NUCOR CORP', put_call: 'Call', shares: 5, value: 500, weight: 0.3333, pct_of_book: null, delta_pct_of_book: 0.33 },
+      ],
+    })));
+    const w = (await v1('/v1/filers/warren-buffett/holdings/2025Q2')).body.data.holdings;
+    expect(w.map((r: { weight: number | null; weight_equity: number | null }) => [r.weight, r.weight_equity])).toEqual([[1, 1], [null, null]]);
     for (const k of spec.components.schemas.Error.required) expect((await v1('/v1/filers/warren-buffett/holdings/2025Q9')).body).toHaveProperty(k);
     expect((await handleRequest(new Request('https://api.test/v1/changelog'), env)).status).toBe(200); // no key needed
     expect((await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '1999-01-01' } }), env)).status).toBe(400);

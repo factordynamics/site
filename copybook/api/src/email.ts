@@ -196,10 +196,26 @@ export function stakeChange(e: AlertEvent): { line: string | null; note: string 
   return { line: `${prev}% → ${pct}% of the class${shares ? `; ${shares}` : ''}`, note: notes.join('; ') || null };
 }
 
+/** EDGAR's "SMITH JOHN A" as "John A Smith"; other names as they are. */
+export function titleName(n: string): string {
+  if (n !== n.toUpperCase()) return n;
+  const legal = /^(LP|LLC|L\.?P\.?|INC\.?|CORP\.?|CO\.?|LTD\.?|PLC|N\.?A\.?|II|III|IV)$/;
+  const w = n.trim().split(/\s+/).map((x) => (legal.test(x) ? x : x.charAt(0) + x.slice(1).toLowerCase()));
+  // Firms and trusts keep their word order; people are filed surname first.
+  const entity = /\b(LP|LLC|L\.P\.|INC|CORP|CO|LTD|PLC|TRUST|FUND|PARTNERS|CAPITAL|HOLDINGS?|MANAGEMENT|GROUP|ADVISORS|INVESTMENTS?|FOUNDATION|ESTATE|BANK)\b/;
+  return entity.test(n) || w.length < 2 ? w.join(' ') : [...w.slice(1), w[0]].join(' ');
+}
+
+const clusterRows = (e: AlertEvent) => (e.cluster ?? []).map((i) => [titleName(i.name), i.roles.join(', '), i.accepted.slice(0, 10), usd(i.bought_usd, false)]);
+
 function eventLine(env: Env, e: AlertEvent, f: Follows): string {
   const what = e.ticker || e.display_name || e.issuer || 'a security';
+  if (e.cluster) {
+    const lines = [`Cluster buy: ${eventHeadline(e)}${flag(e.ticker, f)}`, ...clusterRows(e).map((r) => `  ${r[0]} (${r[1]}), ${r[2]}: ${r[3]}`), `  SEC: ${e.url}`];
+    return lines.join('\n');
+  }
   const form = `${FORM_LABEL[e.kind]}${/\/A$/.test(e.form) ? '/A' : ''}${e.amendment_no ? ` (amendment ${e.amendment_no})` : ''}`;
-  const who = e.manager || 'A filer';
+  const who = e.insider ? `${titleName(e.insider.name)} (${e.insider.roles.join(', ')} of ${e.issuer ?? what})` : e.manager || 'A filer';
   const lines: string[] = [];
   if (e.details_pending) {
     lines.push(`${form}: ${who}${e.issuer || e.ticker ? `, ${what}` : ''}. Details follow once the filing is processed.`);
@@ -259,6 +275,8 @@ export function eventHeadline(e: AlertEvent): string {
   const what = e.ticker || e.display_name || e.issuer || '';
   const form = e.kind === 'form4' ? 'Form 4' : `${e.kind === '13d' ? '13D' : '13G'}${/\/A$/.test(e.form) ? '/A' : ''}`;
   const head = `${who}${what ? ` ${what}` : ''} ${form}`;
+  if (e.cluster) return `${what}: ${e.cluster.length} insiders bought ${usd(e.cluster.reduce((s, i) => s + i.bought_usd, 0), false)} in 30 days`;
+  if (e.insider) return `${what} insider buy: ${e.insider.roles[0] ?? 'Insider'} ${titleName(e.insider.name)} bought ${usd(e.insider.bought_usd, false)}`;
   if (e.details_pending) return `${head} filed (details to follow)`;
   if (e.kind === 'form4') {
     const verb = e.action === 'buy' ? 'bought' : e.action === 'sell' ? 'sold' : e.action === 'mixed' ? 'bought and sold' : 'filed';
@@ -324,6 +342,12 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
 
 function eventHtml(env: Env, e: AlertEvent, f: Follows): string {
   const parts = [`<h3 style="margin:16px 0 2px;font-size:16px">${esc(eventHeadline(e))}${esc(flag(e.ticker, f))}</h3>`];
+  if (e.cluster) {
+    parts.push(table(['Insider', 'Role', 'Filed', 'Bought'], clusterRows(e).map((r) => r.map(esc)), [3]));
+    parts.push(`<p style="margin:4px 0 18px;font-size:12px;color:#6b7280">Open-market purchases (Form 4 code P) in the last 30 days · ${link(e.url, 'latest filing')}</p>`);
+    return parts.join('');
+  }
+  if (e.insider) parts.push(`<p style="margin:2px 0">${esc(titleName(e.insider.name))}, ${esc(e.insider.roles.join(', '))} of ${esc(e.issuer ?? '')}, bought on the open market.</p>`);
   if (e.details_pending) parts.push('<p style="margin:2px 0">Details follow once the filing is processed.</p>');
   if (e.kind === 'form4') {
     // One row per share class: Class A and Class B are separate securities.

@@ -296,6 +296,10 @@ export interface Form4 {
   ticker: string | null;
   owners: { cik: string; name: string }[];
   ten_percent_owner: boolean;
+  /** Each reporting owner's relationship to the issuer: director, officer (with title), 10% owner. */
+  insiders: { cik: string; name: string; roles: string[] }[];
+  /** Open-market purchases (code P), shares x price, all classes. */
+  bought_usd: number;
   classes: Form4Class[];
   action: 'buy' | 'sell' | 'mixed' | 'other';
   footnotes: string[];
@@ -348,6 +352,17 @@ export function parseForm4(xml: string): Form4 | null {
     ticker: val(xml, 'issuerTradingSymbol').toUpperCase() || null,
     owners: all(xml, 'reportingOwnerId').map((o) => ({ cik: val(o, 'rptOwnerCik').padStart(10, '0'), name: val(o, 'rptOwnerName') })),
     ten_percent_owner: /<isTenPercentOwner>\s*(true|1)/.test(xml),
+    insiders: all(xml, 'reportingOwner').map((o) => {
+      const yes = (t: string) => /^(true|1)$/i.test(val(o, t).trim());
+      const title = val(o, 'officerTitle').trim();
+      const roles = [yes('isOfficer') && (title || 'Officer'), yes('isDirector') && 'Director', yes('isTenPercentOwner') && '10% owner'].filter((r): r is string => !!r);
+      return { cik: val(o, 'rptOwnerCik').padStart(10, '0'), name: val(o, 'rptOwnerName'), roles };
+    }),
+    bought_usd: Math.round(
+      all(xml, 'nonDerivativeTransaction')
+        .filter((b) => val(b, 'transactionCode') === 'P')
+        .reduce((s, b) => s + (Number(val(b, 'transactionShares')) || 0) * (Number(val(b, 'transactionPricePerShare')) || 0), 0),
+    ),
     classes,
     action: bought && sold ? 'mixed' : bought ? 'buy' : sold ? 'sell' : 'other',
     footnotes: all(xml, 'footnote').map((f) => unescape(f).replace(/\s+/g, ' ')),
