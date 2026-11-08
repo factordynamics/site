@@ -64,8 +64,8 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['API keys', 'A key’s secret is shown once, when you create it. Revoke a key from your account page and requests with it fail immediately.'],
       ['Deleting data', <>Remove follows, owned stocks and keys yourself on your account page at any time, or ask us to delete everything through the {contact}.</>],
       ['Breach notification', 'If a breach affects member data, we notify the affected members within 72 hours of finding it.'],
-      ['Vendor questionnaires', <>A vendor security questionnaire answer is available on request through the {contact}.</>],
-      ['Reporting a problem', <>If you find a security issue, please tell us through the {contact} before disclosing it. We’ll respond quickly.</>],
+      ['Vendor questionnaires', <>A vendor security questionnaire answer is available on request: email {email} or use the {contact}.</>],
+      ['Reporting a problem', <>If you find a security issue, please email {email} or use the {contact} before disclosing it. We’ll respond quickly.</>],
     ],
   },
 }

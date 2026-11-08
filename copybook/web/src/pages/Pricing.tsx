@@ -184,7 +184,11 @@ export function Pricing() {
                 <p className={`mt-2.5 min-h-[3.6em] text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>
                   {tier.id === 'fund' ? (
                     <>
-                      Founding price $1,990/yr, invoiced net 30. W-9 on request.{' '}
+                      Founding price $1,990/yr, invoiced net 30. W-9 on request. Or email{' '}
+                      <a href="mailto:hello@factordynamics.com" className="underline underline-offset-2 hover:text-ink">
+                        hello@factordynamics.com
+                      </a>
+                      .{' '}
                       {live && (
                         <a href={attributed(link)} className="underline underline-offset-2 hover:text-ink">
                           Or start a {TRIAL_DAYS}-day card trial
