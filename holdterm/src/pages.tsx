@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, checkout, price } from './config'
+import { api, checkout, emailLogin, price } from './config'
 import {
   aggregate,
   loadBook,
@@ -22,7 +22,7 @@ import {
   type StockHolder,
 } from './data'
 import { A, Bar, ChangeTag, Columns, date, Failed, Grid, Loading, num, Panel, pct, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
-import { follows, Follow, useMember, startFromUrl, requestLogin, saveFollows, openPortal, signOut, type Follows } from './account'
+import { follows, Follow, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, type Follows } from './account'
 
 const title = (t: string) => {
   document.title = `${t} · holdterm`
@@ -795,8 +795,13 @@ export function Account() {
   const [sent, setSent] = useState(false)
   const [f, setF] = useState<Follows | null>(null)
   const ix = useLoad(loadIndex, [])
+  const [pending, setPending] = useState(() => /[?&](session_id|login)=/.test(location.search))
+  const [welcome, setWelcome] = useState(false)
   useEffect(() => {
-    startFromUrl().then((m) => m && setMember(m))
+    startFromUrl().then((m) => {
+      if (m) (setMember(m), setWelcome(true))
+      setPending(false)
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (member?.active) follows().then(setF).catch(() => {})
@@ -810,13 +815,21 @@ export function Account() {
         </Panel>
       </div>
     )
+  if (pending) return <Loading what="signing you in" />
   if (!member)
     return (
       <div className="page narrow">
         <h1>account</h1>
         <Panel title="sign in">
           {err && <div className="neg">{err}</div>}
-          {sent ? (
+          {!emailLogin ? (
+            <div>
+              <p>Checkout signs you in on the device you paid from. Email sign-in links for other devices are coming shortly.</p>
+              <p>
+                <a href={checkout.portal}>manage or cancel billing on Stripe ↗</a>
+              </p>
+            </div>
+          ) : sent ? (
             <div>If {email} has an active plan, a sign-in link is on its way. It works for 7 days.</div>
           ) : (
             <form
@@ -839,17 +852,21 @@ export function Account() {
     )
   const ms = ix.data ? superinvestors(ix.data) : []
   const on = new Set(f?.investors ?? [])
-  const toggle = (slug: string) => {
-    const next = on.has(slug) ? [...on].filter((x) => x !== slug) : [...on, slug]
-    saveFollows({ investors: next }).then(setF)
-  }
+  const toggle = (slug: string) => setFollow('investors', slug, !on.has(slug)).then(setF, () => {})
   return (
     <div className="page narrow">
       <h1>account</h1>
+      {welcome && (
+        <Panel title="you're in">
+          <p>
+            Alerts are on. Follow nobody and you get every superinvestor; or pick investors below, and use <span className="acc">+ follow</span> on any investor or stock page.
+          </p>
+        </Panel>
+      )}
       <div className="stats">
         <Stat label="email" value={<span className="small">{member.email}</span>} />
-        <Stat label="plan" value={member.active ? 'alerts' : member.status} tone={member.active ? 'pos' : 'neg'} sub={member.period_end ? `renews ${String(member.period_end).slice(0, 10)}` : undefined} />
-        <Stat label="following" value={on.size || 'all'} sub={on.size ? 'investors' : 'every superinvestor'} />
+        <Stat label="plan" value={member.active ? 'alerts' : member.status} tone={member.active ? 'pos' : 'neg'} sub={member.period_end ? `${member.status === 'trialing' ? 'trial ends' : 'renews'} ${String(member.period_end).slice(0, 10)}` : undefined} />
+        <Stat label="following" value={on.size || 'all'} sub={on.size ? (on.size === 1 ? 'investor' : 'investors') : 'every superinvestor'} />
       </div>
       <div className="filters">
         <button className="chip" onClick={() => openPortal()}>
@@ -894,7 +911,7 @@ function StockFollows({ f, setF }: { f: Follows | null; setF: (f: Follows) => vo
         {list.map((x) => (
           <span key={x} className="chip on">
             <Tick t={x} />
-            <button className="linkish" onClick={() => saveFollows({ stocks: list.filter((y) => y !== x) }).then(setF)}>
+            <button className="linkish" onClick={() => setFollow('stocks', x, false).then(setF, () => {})}>
               ×
             </button>
           </span>
@@ -906,7 +923,7 @@ function StockFollows({ f, setF }: { f: Follows | null; setF: (f: Follows) => vo
         onSubmit={(e) => {
           e.preventDefault()
           const v = t.trim().toUpperCase()
-          if (/^[A-Z][A-Z0-9.-]{0,9}$/.test(v) && !list.includes(v)) saveFollows({ stocks: [...list, v] }).then(setF)
+          if (/^[A-Z][A-Z0-9.-]{0,9}$/.test(v) && !list.includes(v)) setFollow('stocks', v, true).then(setF, () => {})
           setT('')
         }}
       >

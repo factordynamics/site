@@ -6,9 +6,13 @@ export const DERIVED = 'https://copybook.factordynamics.com/d/'
 // Paid email alerts: Stripe Payment Links and the alerts API. While a link is empty the
 // subscribe button shows that checkout is opening soon instead of linking anywhere.
 export const checkout = {
-  monthly: '',
-  yearly: '',
-  portal: '',
+  monthly: 'https://buy.stripe.com/eVq5kD4pw3Hsf4edrwgjC06',
+  yearly: 'https://buy.stripe.com/7sY6oH7BI91M5tEgDIgjC07',
+  // Stripe billing portal login (Holdterm's own configuration): manage or cancel without signing in here.
+  portal: 'https://billing.stripe.com/p/login/7sYeVd1dkguecW6gDIgjC01',
 }
-export const api = ''
+// Shared alerts API (Holdterm members are plan "holdterm": alerts and follows only).
+export const api = 'https://copybook-api.factordynamics.workers.dev'
+// Emailed sign-in links for Holdterm (POST /login {brand:'holdterm'}) aren't live yet; checkout signs people in.
+export const emailLogin = false
 export const price = { monthly: 3, yearly: 29, trialDays: 7 }

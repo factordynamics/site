@@ -50,7 +50,9 @@ export async function startFromUrl(): Promise<Member | null> {
 export const requestLogin = (email: string) => call('/login', { body: { email, brand: 'holdterm' } })
 export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST', auth: true }).then((r) => (location.href = r.url))
 export const follows = () => call<{ follows: Follows }>('/follows', { auth: true }).then((r) => r.follows)
-export const saveFollows = (f: Partial<Follows>) => call<{ follows: Follows }>('/follows', { method: 'PUT', body: f, auth: true }).then((r) => r.follows)
+/** One follow per click (POST adds, DELETE removes), so concurrent changes are never lost. */
+export const setFollow = (kind: keyof Follows, id: string, on: boolean) =>
+  call<{ follows: Follows }>(`/follows/${kind}/${encodeURIComponent(id)}`, { method: on ? 'POST' : 'DELETE', auth: true }).then((r) => r.follows)
 
 export function useMember(): [Member | null, (m: Member | null) => void, string | null] {
   const [m, set] = useState<Member | null>(null)
@@ -83,7 +85,7 @@ export function Follow({ kind, id }: { kind: keyof Follows; id: string }) {
     <button
       className={`btn ${on ? '' : 'ghost'}`}
       disabled={!f}
-      onClick={() => f && saveFollows({ [kind]: on ? f[kind].filter((x) => x !== id) : [...f[kind], id] }).then(setF)}
+      onClick={() => f && setFollow(kind, id, !on).then(setF, () => {})}
     >
       {on ? '✓ following' : '+ follow'}
     </button>
