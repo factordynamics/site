@@ -89,7 +89,8 @@ const rowName = (r: MoveRow) => (r.ticker || r.display_name || r.issuer || r.cus
 /** The trade as a share of this filing's book (the data run renamed it delta_pct_of_book). */
 const bookPct = (r: MoveRow) => {
   const d = r.delta_pct_of_book ?? r.pct_of_book;
-  return d ? `${(Math.abs(d) * 100).toFixed(1)}%` : '';
+  if (!d) return '';
+  return Math.abs(d) < 0.0005 ? '<0.1%' : `${(Math.abs(d) * 100).toFixed(1)}%`;
 };
 
 /** How much of the position itself changed: a trim of 40% of the shares reads differently from 0.4% of the book. */
@@ -115,13 +116,18 @@ export function shortName(manager: string): string {
   return name.replace(/[,\s]+(LLC|L\.L\.C\.|LP|L\.P\.|INC\.?|CORP\.?|LTD\.?|PLC)\.?$/i, '') || name;
 }
 
-/** "NEW DHI · EXIT STZ · GOOGL +$8.8B": the three largest moves by dollar change. */
+/**
+ * "NEW DHI · EXIT STZ · GOOGL +$8.8B": the largest new position and the largest exit (a new name
+ * or a full exit is the news, whatever its size), then the largest adds and trims by dollars.
+ */
 function headlineMoves(mv: Moves): string {
-  const all = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => ({ label, r })));
-  all.sort((a, b) => Math.abs(b.r.value_delta) - Math.abs(a.r.value_delta));
-  return all
+  const big = (rows: MoveRow[]) => [...rows].sort((a, b) => Math.abs(b.value_delta) - Math.abs(a.value_delta));
+  return [
+    ...big(mv.new).slice(0, 1).map((r) => `NEW ${rowName(r)}`),
+    ...big(mv.exited).slice(0, 1).map((r) => `EXIT ${rowName(r)}`),
+    ...big([...mv.added, ...mv.trimmed]).map((r) => `${rowName(r)} ${usd(r.value_delta)}`),
+  ]
     .slice(0, 3)
-    .map(({ label, r }) => (label === 'New' ? `NEW ${rowName(r)}` : label === 'Exited' ? `EXIT ${rowName(r)}` : `${rowName(r)} ${usd(r.value_delta)}`))
     .join(' · ');
 }
 

@@ -3,6 +3,7 @@ import worker, { handleRequest } from '../src/index';
 import type { Env, KV, R2 } from '../src/env';
 import { MeterLogic } from '../src/keys';
 import { resolveFollowedFilers, runDigest } from '../src/alerts';
+import { alertMail } from '../src/email';
 import { hmacHex } from '../src/tokens';
 import form4Len from './fixtures/form4-len.xml?raw';
 import sc13dCvi from './fixtures/sc13da-cvi.xml?raw';
@@ -446,7 +447,7 @@ describe('copybook api', () => {
     expect(loeb.text).toContain('A second email with its position changes follows');
     expect(loeb.text).not.toContain('warren-buffett');
     const mail = sent.find((m) => m.to[0] === 'follows@example.com')!;
-    expect(mail.subject).toBe('Buffett Q3: NEW DHI · AAPL -$4K · EXIT BAC');
+    expect(mail.subject).toBe('Buffett Q3: NEW DHI · EXIT BAC · AAPL -$4K');
     // The HTML part lays the moves out as a table, with how much of the position was sold.
     expect(mail.html).toMatch(/<table[^>]*>.*<th[^>]*>Move<\/th>.*<td[^>]*>Trimmed<\/td><td[^>]*><b>AAPL<\/b><\/td><td[^>]*>-\$4K<\/td><td[^>]*>sold 20%<\/td>/);
     expect(mail.html).toContain('Accession 0000950123-26-011111, accepted by EDGAR');
@@ -654,6 +655,18 @@ describe('copybook api', () => {
     sent = [];
     await cron(6);
     expect(sent).toHaveLength(0);
+  });
+
+  it('13F alert dollars at real scale: Berkshire Q2 2026 GOOGL add of $8,770,349,040 reads +$8.8B', () => {
+    const row = (ticker: string, shares: number, prev_shares: number, value: number, value_delta: number, d: number) => ({ ticker, display_name: null, issuer: ticker, cusip: ticker, put_call: null, shares, prev_shares, value, value_delta, delta_pct_of_book: d });
+    // From EDGAR 0001193125-26-352200 vs 0001193125-26-226661.
+    const moves = { bought_usd: 19.2e9, sold_usd: 4.1e9, new: [row('DHI', 3564, 0, 580504, 580504, 0.0000019)], added: [row('GOOGL', 78791167, 54249798, 28157599351, 8770349040, 0.0293)], trimmed: [row('BAC', 1, 2, 1, -1.7e9, -0.006)], exited: [row('STZ', 0, 1, 0, -94.9e6, -0.0003)] };
+    const a = { slug: 'warren-buffett', slugs: ['warren-buffett'], manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', accession: '0001193125-26-352200', sec_url: 'https://www.sec.gov/x', accepted: '2026-08-14T20:05:04Z', moves, tickers: [] };
+    const m = alertMail(env, 'x@example.com', [a], [], { investors: [], stocks: [], owned: [], onboarded: true, include_13g: false, digest: false });
+    expect(m.subject).toBe('Buffett Q2: NEW DHI · EXIT STZ · GOOGL +$8.8B');
+    expect(m.text).toContain('Bought $19.2B, sold $4.1B this quarter.');
+    expect(m.text).toContain('Added: GOOGL +$8.8B (+45% shares, 2.9% of book)');
+    expect(m.text).toContain('New: DHI +$581K (<0.1% of book)');
   });
 
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
