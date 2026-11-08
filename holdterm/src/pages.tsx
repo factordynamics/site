@@ -161,7 +161,7 @@ export function Home() {
         <Stat label="alerts" value={`$${price.monthly}/mo`} sub={<A to="/alerts">email on every filing →</A>} />
       </div>
       {agg && (
-        <Panel title="grand portfolio · sector mix" right={<span className="dim">{usd(agg.total)} across {num(rows.length)} stocks</span>}>
+        <Panel title={<A to="/grand">grand portfolio</A>} right={<span className="dim">{usd(agg.total)} · {num(rows.length)} stocks</span>}>
           <SectorStrip items={rows} />
         </Panel>
       )}

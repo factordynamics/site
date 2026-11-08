@@ -7,9 +7,10 @@ import { loadIndex, loadStockIndex, superinvestors, type Manager, type StockInde
 import { A, navigate, usePath } from './lib'
 import { About, Account, Activity, Alerts, Grand, Home, Insiders, Investor, Investors, NotFound, Stock } from './pages'
 
-const NAV: [string, string, string][] = [
+// [path, label, g-key, phone label]
+const NAV: [string, string, string, string?][] = [
   ['/', 'home', 'h'],
-  ['/m', 'investors', 'm'],
+  ['/m', 'investors', 'm', 'funds'],
   ['/activity', 'activity', 'a'],
   ['/grand', 'grand', 'p'],
   ['/insiders', 'insiders', 'i'],
@@ -194,15 +195,26 @@ function App() {
           <span className="cursor" />
         </A>
         <nav>
-          {NAV.map(([to, label, k]) => (
+          {NAV.map(([to, label, k, shortLabel]) => (
             <A key={to} to={to} className={(to === '/' ? path === '/' : section === to || (to === '/m' && section === '/m')) ? 'on' : ''} title={`g ${k}`}>
-              {label}
+              {shortLabel ? (
+                <>
+                  <span className="long">{label}</span>
+                  <span className="short">{shortLabel}</span>
+                </>
+              ) : (
+                label
+              )}
             </A>
           ))}
         </nav>
         <button className="search-btn" onClick={() => setSearch(true)}>
           <span className="dim">search</span>
           <kbd>/</kbd>
+          <svg className="glass" viewBox="0 0 16 16" width="14" height="14" aria-label="search">
+            <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
         </button>
       </header>
       <main key={path}>{route(path)}</main>

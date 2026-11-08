@@ -798,3 +798,29 @@ svg.stackbar {
     display: none;
   }
 }
+.top nav .short {
+  display: none;
+}
+@media (max-width: 720px) {
+  .top nav a {
+    padding: 4px 5px;
+  }
+  .top nav .long {
+    display: none;
+  }
+  .top nav .short {
+    display: inline;
+  }
+}
+.search-btn .glass {
+  display: none;
+  color: var(--acc);
+}
+@media (max-width: 720px) {
+  .search-btn kbd {
+    display: none;
+  }
+  .search-btn .glass {
+    display: block;
+  }
+}
