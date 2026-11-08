@@ -13,6 +13,5 @@ export const checkout = {
 }
 // Shared alerts API (Holdterm members are plan "holdterm": alerts and follows only).
 export const api = 'https://copybook-api.factordynamics.workers.dev'
-// Emailed sign-in links for Holdterm (POST /login {brand:'holdterm'}) aren't live yet; checkout signs people in.
-export const emailLogin = false
+
 export const price = { monthly: 3, yearly: 29, trialDays: 7 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, checkout, emailLogin, price } from './config'
+import { api, checkout, price } from './config'
 import {
   aggregate,
   loadBook,
@@ -822,14 +822,7 @@ export function Account() {
         <h1>account</h1>
         <Panel title="sign in">
           {err && <div className="neg">{err}</div>}
-          {!emailLogin ? (
-            <div>
-              <p>Checkout signs you in on the device you paid from. Email sign-in links for other devices are coming shortly.</p>
-              <p>
-                <a href={checkout.portal}>manage or cancel billing on Stripe ↗</a>
-              </p>
-            </div>
-          ) : sent ? (
+          {sent ? (
             <div>If {email} has an active plan, a sign-in link is on its way. It works for 7 days.</div>
           ) : (
             <form
@@ -845,7 +838,7 @@ export function Account() {
             </form>
           )}
           <p className="dim small">
-            No account yet? <A to="/alerts">start a {price.trialDays}-day trial →</A>
+            No account yet? <A to="/alerts">start a {price.trialDays}-day trial →</A> · <a href={checkout.portal}>manage or cancel billing on Stripe ↗</a>
           </p>
         </Panel>
       </div>
