@@ -27,6 +27,7 @@ EMAIL_FROM = "Copybook <copybook@factordynamics.com>"
 # bpc_... printed by scripts/stripe-setup.mjs (portal_configuration).
 # GitHub Actions OIDC workflow_ref allowed to PUT /ingest/.
 INGEST_WORKFLOW = "refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main"
+PAGES_WORKFLOW = "factordynamics/site/.github/workflows/copybook-pages.yml@refs/heads/main"
 PORTAL_CONFIGURATION = "bpc_1UZHZgDSKGGzRqYZbvRwUas4"
 
 # Secrets (npx wrangler secret put NAME): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SESSION_SECRET, RESEND_API_KEY

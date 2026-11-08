@@ -27,6 +27,8 @@ export interface Env {
   HIST: R2;
   /** GitHub Actions OIDC identity allowed to upload history, e.g. refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main */
   INGEST_WORKFLOW: string;
+  /** The site's Pages workflow, allowed to upload the full Flow lists (flow/full.json). */
+  PAGES_WORKFLOW?: string;
   /** Site root, e.g. https://refcell.github.io/gust/copybook/ (trailing slash). */
   SITE_URL: string;
   /** Where {slug}-history.json and alerts.json live. */

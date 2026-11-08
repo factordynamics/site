@@ -51,6 +51,7 @@ function sub(id: string, customer: string, status: string, interval = 'month', l
 
 let env: Env;
 let hist: MemR2;
+let stockPages: Record<string, unknown> = {};
 const WORKFLOW = 'refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main';
 let sent: { from?: string; to: string[]; subject: string; text: string; html?: string }[];
 let stripeObjects: Record<string, unknown>;
@@ -113,6 +114,7 @@ beforeEach(async () => {
   hookStatus = 200;
   filers = [{ cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', ok: true, position_count: 2, quarter: '2026Q2', error: null }];
   shards = {};
+  stockPages = {};
   // The curated managers the tests follow, as the hourly run maps them from index.json.
   await env.DB.put('alerts:ciks', JSON.stringify(Object.fromEntries([['0001067983', 'warren-buffett'], ['0001040273', 'dan-loeb'], ['0001336528', 'bill-ackman'], ['0001061768', 'seth-klarman']].map(([cik, slug]) => [cik, [{ slug, manager: slug, name: slug, cik, featured: true }]]))));
   events = [];
@@ -146,6 +148,7 @@ beforeEach(async () => {
       return new Response('ok', { status: url.startsWith('https://hooks.example.com') ? hookStatus : 200 });
     }
     if (url === `${SITE}data/index.json`) return Response.json(index);
+    if (url.startsWith(`${SITE}d/stocks/`)) { const k = url.slice(`${SITE}d/stocks/`.length).replace('.json', ''); return stockPages[k] ? Response.json(stockPages[k]) : new Response('not found', { status: 404 }); }
     if (url === `${SITE}d/f/index.json`) return Response.json({ cards: [{ accession: '0000950123-26-011111', slug: 'warren-buffett' }] });
     if (url === `${SITE}data/filers.json`) return new Response(JSON.stringify({ count: filers.length, filers }, null, 1));
     if (url.startsWith(`${SITE}data/f/`)) return shards[url.slice(`${SITE}data/f/`.length)] ? Response.json(shards[url.slice(`${SITE}data/f/`.length)]) : new Response('not found', { status: 404 });
@@ -1277,6 +1280,38 @@ describe('copybook api', () => {
     const gz = await handleRequest(new Request('https://api.test/v1/bulk/2026Q2.csv.gz', { headers: { authorization: `Bearer ${key}` } }), env);
     expect(gz.headers.get('content-disposition')).toBe('attachment; filename="copybook-13f-2026Q2.csv.gz"');
     expect([...new Uint8Array(await gz.arrayBuffer())]).toEqual([31, 139, 8, 0, 1, 2, 3]);
+  });
+
+  it('Copy paid data: the full Flow from R2, a per-stock holder CSV, one CSV across followed funds', async () => {
+    index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR', accession: 'A2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 2000, position_count: 1, history_quarters: ['2026Q2', '2026Q1'] }] };
+    await cron(17);
+    stripeObjects['checkout/sessions/cs_test_pd'] = { id: 'cs_test_pd', status: 'complete', created: now(), subscription: 'sub_pd', customer_details: { email: 'pd@example.com' } };
+    stripeObjects['subscriptions/sub_pd'] = sub('sub_pd', 'cus_pd', 'active');
+    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_pd' } })).json()).token;
+    expect((await call('/flow')).status).toBe(401);
+
+    expect((await call('/flow', { token: t })).status).toBe(404);
+    hist.m.set('flow/full.json', new TextEncoder().encode('{"periods":[{"quarter":"2026Q2","featured":{"bought":[{"ticker":"NVDA","n_buyers":31}]}}]}'));
+    expect((await (await call('/flow', { token: t })).json()).periods[0].featured.bought[0].n_buyers).toBe(31);
+
+    // Every 13F holder once published: share change computed, names with commas quoted.
+    stockPages['NVDA'] = { classes: [{ cusip: '67066G104' }], holders: [{ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q2', shares: 10, prev_shares: 0, value: 1800, change: 'new', weight: 0.9 }] };
+    let csv = await call('/stocks/nvda/holders.csv', { token: t });
+    expect(csv.headers.get('x-copybook-coverage')).toBe('curated');
+    expect((await csv.text()).split('\r\n')[1]).toBe(',Warren Buffett,warren-buffett,equity,2026Q2,10,0,10,1800,,new,0.9,,');
+    hist.m.set('s/67066G.json', new TextEncoder().encode(JSON.stringify({ issuer: '67066G', period: '2026Q2', columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change'], holders: [['0001387322', 'Whale Rock, LLC', null, 'equity', 100, 140, 18000, 20000, 'trimmed']] })));
+    csv = await call('/stocks/NVDA/holders.csv', { token: t });
+    expect(csv.headers.get('x-copybook-coverage')).toBe('all-filers');
+    expect((await csv.text()).split('\r\n')[1]).toBe('0001387322,"Whale Rock, LLC",,equity,2026Q2,100,140,-40,18000,20000,trimmed,,,');
+    expect((await call('/stocks/ZZZZ/holders.csv', { token: t })).status).toBe(404);
+
+    // The followed funds' latest books in one file, one row per position with its fund.
+    await call('/follows/warren-buffett', { method: 'POST', token: t });
+    const all = await call('/follows.csv', { token: t });
+    expect(all.headers.get('x-copybook-funds')).toBe('1');
+    const lines = (await all.text()).trim().split('\r\n');
+    expect(lines[0]).toMatch(/^manager,slug,cik,quarter/);
+    expect(lines[1]).toMatch(/^Warren Buffett,warren-buffett,0001067983,2026Q2,2026-06-30,2026-08-14,A2,AAPL,APPLE INC,037833100/);
   });
 
   it('/v1 restatement lineage: versions[] oldest first with status, every amendment attached, ?version= serves the book as originally filed', async () => {

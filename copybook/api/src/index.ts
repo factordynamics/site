@@ -1,10 +1,10 @@
 import { resolveFollowedFilers, runScheduled } from './alerts';
-import { fetchHistory, historyCsv, shard, SHARD_KEY, SLUG } from './data';
+import { fetchHistory, historyCsv, holdersCsv, shard, SHARD_KEY, SLUG } from './data';
+import { filers as curatedFilers } from './v1data';
 import { verifyGithubOidc } from './oidc';
 import { channelsView, getChannels, rotateFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
 import { handleV1 } from './v1';
-import './v1data';
 
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, loginMail, sendMail } from './email';
@@ -230,8 +230,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // The data workflow uploads per-quarter history here, authenticated by its GitHub OIDC token.
   if (req.method === 'PUT' && path.startsWith('/ingest/')) {
     const key = path.slice('/ingest/'.length);
-    if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key)) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, v/{cik10}/{accession}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
-    const why = await verifyGithubOidc(req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '', env.INGEST_WORKFLOW);
+    const flow = key === 'flow/full.json';
+    if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key) && !flow) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, v/{cik10}/{accession}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
+    const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    // The full Flow lists are built by the site's Pages workflow; everything else by the data workflow.
+    let why = await verifyGithubOidc(tok, env.INGEST_WORKFLOW);
+    if (why && flow && env.PAGES_WORKFLOW) why = await verifyGithubOidc(tok, env.PAGES_WORKFLOW);
     if (why) return json({ ok: false, error: why }, 401, {});
     const type = key.endsWith('.csv') ? 'text/csv; charset=utf-8' : key.endsWith('.csv.gz') ? 'application/gzip' : key.endsWith('.parquet') ? 'application/vnd.apache.parquet' : 'application/json';
     await env.HIST.put(key, req.body, { httpMetadata: { contentType: type } });
@@ -458,6 +462,51 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     await env.DB.put(`dl:${n}`, '1', { expirationTtl: DOWNLOAD_TTL });
     const token = await signToken(env.SESSION_SECRET, 'download', m.customer, DOWNLOAD_TTL, { s: link[1], n });
     return json({ ok: true, url: `${url.origin}/csv/${link[1]}.csv?dl=${token}` }, 200, h);
+  }
+
+  // The full Flow lists (every name, every fund behind each move); the public file has the top rows.
+  if (req.method === 'GET' && path === '/flow') {
+    const obj = await env.HIST.get('flow/full.json');
+    if (!obj) return json({ ok: false, error: 'full flow not published yet', code: 'not_yet_available' }, 404, h);
+    return new Response(obj.body, { headers: { ...h, 'content-type': 'application/json', 'cache-control': 'private, max-age=300' } });
+  }
+
+  // Holders of one stock as CSV: every 13F filer once the data run publishes them, until then Copybook's curated funds.
+  const holders = path.match(/^\/stocks\/([A-Za-z0-9.-]{1,10})\/holders\.csv$/);
+  if (req.method === 'GET' && holders) {
+    const ticker = holders[1].toUpperCase();
+    const pub = await fetch(`${env.SITE_URL}d/stocks/${ticker}.json`, { cf: { cacheTtl: 900 } } as RequestInit);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const st: any = pub.ok ? await pub.json() : null;
+    const code = (st?.classes?.[0]?.cusip ?? '').slice(0, 6);
+    const full = code ? await env.HIST.get(`s/${code}.json`) : null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let rows: any[];
+    if (full) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s: any = await new Response(full.body).json();
+      rows = s.holders.map((r: unknown[]) => ({ ...Object.fromEntries(s.columns.map((c: string, i: number) => [c, r[i]])), quarter: s.period }));
+    } else if (st) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rows = (st.holders ?? []).map((x: any) => ({ cik: null, name: x.manager, slug: x.slug, kind: 'equity', quarter: x.quarter, shares: x.shares, prev_shares: x.prev_shares ?? null, value: x.value, prev_value: x.prev_value ?? null, change: x.change ?? null, weight: x.weight }));
+    } else return json({ ok: false, error: 'unknown ticker' }, 404, h);
+    return new Response(holdersCsv(rows), { headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="copybook-${ticker}-holders.csv"`, 'cache-control': 'private, no-store', 'x-copybook-coverage': full ? 'all-filers' : 'curated' } });
+  }
+
+  // Every followed fund's latest 13F in one CSV, streamed fund by fund.
+  if (req.method === 'GET' && path === '/follows.csv') {
+    const f = await getFollows(env, m);
+    const list = await curatedFilers(env);
+    const history = [];
+    for (const slug of f.investors.slice(0, 100)) {
+      const c = list.find((x) => x.slug === slug);
+      const q = c?.latest_quarter;
+      if (!c || !q) continue;
+      history.push({ manager: c.manager, slug, cik: c.cik, quarter: q, report_date: c.latest_report_date, filing_date: c.latest_filing_date, accession: c.latest_accession, csv_url: `h/${slug}/${q}.csv`, holdings_url: `h/${slug}/${q}.json` });
+    }
+    return new Response(historyCsv(env, { history }), {
+      headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="copybook-followed-funds-13f.csv"', 'cache-control': 'private, no-store', 'x-copybook-funds': String(history.length) },
+    });
   }
 
   const hist = path.match(/^\/history\/([a-z0-9-]+)$/);

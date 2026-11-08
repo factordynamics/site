@@ -51,10 +51,11 @@ export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
     let w = writable.getWriter();
     await w.write(enc.encode(CSV_FIELDS.join(',') + '\r\n'));
     for (const q of h.history ?? []) {
-      if (q.csv_url) {
+      // A ready CSV when there is one; otherwise the JSON book below.
+      const body = q.csv_url ? (q.holdings_url ? await shard(env, q.csv_url) : await mustShard(env, q.csv_url)) : null;
+      if (body) {
         // Drop the shard's header line in JS, then let the runtime pipe the rest
         // natively: per-chunk JS would cost ~0.5 s CPU on the largest books.
-        const body = await mustShard(env, q.csv_url);
         const reader = body.getReader();
         for (let r = await reader.read(); !r.done; r = await reader.read()) {
           const nl = r.value.indexOf(10);
@@ -69,10 +70,11 @@ export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
         continue;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const shard: { holdings?: any[]; exited?: any[] } = q.holdings ? q : q.holdings_url ? await new Response(await mustShard(env, q.holdings_url)).json() : {};
-      const rows = [...(shard.holdings ?? []), ...(shard.exited ?? [])].map(
+      const book: { holdings?: any[]; exited?: any[] } = q.holdings ? q : q.holdings_url ? await new Response(await mustShard(env, q.holdings_url)).json() : {};
+      const rows = [...(book.holdings ?? []), ...(book.exited ?? [])].map(
         (p) =>
-          [h.manager, h.slug, h.cik, q.quarter, q.report_date, q.filing_date, q.accession, p.ticker ?? '', p.issuer ?? '', p.cusip ?? '', p.title ?? '', p.put_call ?? '', p.shares ?? 0, p.value ?? 0, p.weight ?? 0, ...CHANGE_FIELDS.map((k) => p[k])]
+          // Several funds in one file (the follows CSV) carry their own manager, slug and CIK per quarter.
+          [q.manager ?? h.manager, q.slug ?? h.slug, q.cik ?? h.cik, q.quarter, q.report_date, q.filing_date, q.accession, p.ticker ?? '', p.issuer ?? '', p.cusip ?? '', p.title ?? '', p.put_call ?? '', p.shares ?? 0, p.value ?? 0, p.weight ?? 0, ...CHANGE_FIELDS.map((k) => p[k])]
             .map(cell)
             .join(',') + '\r\n',
       );
@@ -93,4 +95,12 @@ export async function fetchHistory(env: Env, slug: string): Promise<unknown | nu
   const res = await fetch(`${env.DATA_URL}${slug}-history.json`, { cf: { cacheTtl: 900 } } as RequestInit);
   if (!res.ok) return null;
   return res.json();
+}
+
+/** Holders of one stock as CSV: every 13F holder (R2 s/{issuer}.json) when published, else Copybook's curated funds. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function holdersCsv(rows: any[]): string {
+  const head = ['filer_cik', 'filer_name', 'slug', 'kind', 'quarter', 'shares', 'prev_shares', 'share_change', 'value_usd', 'prev_value_usd', 'change', 'weight', 'accession', 'accepted_at'];
+  const out = rows.map((r) => [r.cik, r.name, r.slug, r.kind, r.quarter, r.shares, r.prev_shares, r.prev_shares == null ? '' : r.shares - r.prev_shares, r.value, r.prev_value, r.change, r.weight, r.accession, r.accepted_at].map(cell).join(','));
+  return [head.join(','), ...out].join('\r\n') + '\r\n';
 }
