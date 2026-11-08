@@ -8,7 +8,8 @@ import './v1data';
 export { KeyMeter } from './keys';
 import { leadAckMail, loginMail, sendMail } from './email';
 import { isActive, isPro, type Env, type Member } from './env';
-import { type Follows, getFollows, getMember, LOGIN_TTL, putFollows, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
+import { changeFollows, type FollowList, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
+export { MemberFollows } from './members';
 import { stripe, verifyStripeSignature } from './stripe';
 import { signToken, verifyToken } from './tokens';
 
@@ -76,7 +77,6 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
   return json({ ok: true }, 200, {});
 }
 
-const MAX_FOLLOWS = 500;
 
 interface LatencyRow {
   slug: string;
@@ -201,11 +201,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       page: str(b.page, 200),
       received_at: at,
     };
+    // Test submissions (reviewers, our own checks) are kept but never counted as leads.
+    const test = /\btest\b/i.test([lead.name, lead.fund, lead.message].join(' ')) || email.startsWith('copybook-test-');
     const id = `${at}-${crypto.randomUUID().slice(0, 8)}`;
-    await env.DB.put(`lead:${id}`, JSON.stringify(lead));
-    await env.DB.put('leads:count', String(Number((await env.DB.get('leads:count')) ?? 0) + 1));
+    await env.DB.put(`lead:${id}`, JSON.stringify({ ...lead, ...(test ? { test: true } : {}) }));
+    if (!test) await env.DB.put('leads:count', String(Number((await env.DB.get('leads:count')) ?? 0) + 1));
     const mail = await sendMail(env, [leadAckMail(env, lead)]);
     return json({ ok: true, id, acknowledgement: mail === '200' ? 'sent' : 'not sent' }, 200, h);
+  }
+
+  // The data workflow reads which non-curated filers members follow (CIKs only), to back-fill a prior quarter.
+  if (req.method === 'GET' && path === '/ingest/followed.json') {
+    const why = await verifyGithubOidc(req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '', env.INGEST_WORKFLOW);
+    if (why) return json({ ok: false, error: why }, 401, {});
+    const obj = await env.HIST.get('followed/ciks.json');
+    return obj ? new Response(obj.body, { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }) : json({ updated_at: null, ciks: [] }, 200, {});
   }
 
   // The data workflow uploads per-quarter history here, authenticated by its GitHub OIDC token.
@@ -294,13 +304,30 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     }
     const updated: Member = { ...m, alerts: a as Member['alerts'], alerts_chosen: true, alerts_note: undefined };
     await putMember(env, updated);
-    if (Array.isArray(a)) await putFollows(env, updated, { ...(await getFollows(env, m)), investors: [...new Set(a as string[])] });
+    if (Array.isArray(a)) await changeFollows(env, updated, { set: { investors: [...new Set(a as string[])] } });
     return json({ ok: true, member: publicView(updated) }, 200, h);
   }
 
+  // One follow at a time, for the Follow buttons: POST adds, DELETE removes. Concurrent clicks never
+  // overwrite each other. /follows/{slug} is an investor; /follows/{investors|stocks|owned}/{id}.
+  const one = path.match(/^\/follows\/(?:(investors|stocks|owned)\/)?([^/]+)$/);
+  if (one && (req.method === 'POST' || req.method === 'DELETE')) {
+    const list = (one[1] ?? 'investors') as FollowList;
+    const value = list === 'investors' ? decodeURIComponent(one[2]) : decodeURIComponent(one[2]).toUpperCase();
+    if (!(list === 'investors' ? SLUG : TICKER).test(value)) return json({ ok: false, error: list === 'investors' ? 'not a manager slug' : 'not a ticker like BRK.B', code: 'bad_request' }, 400, h);
+    if (req.method === 'POST' && list === 'investors') {
+      const unknown = await resolveFollowedFilers(env, [value]);
+      if (unknown.length) return json({ ok: false, error: `not a 13F filer on Copybook: ${value}`, code: 'unknown_investor' }, 400, h);
+    }
+    const r = await changeFollows(env, m, req.method === 'POST' ? { add: { list, value } } : { remove: { list, value } });
+    return r.ok ? json({ ok: true, follows: r.follows }, 200, h) : json({ ok: false, error: r.error }, 400, h);
+  }
+
   if (path === '/follows' && (req.method === 'GET' || req.method === 'PUT')) {
-    const current = await getFollows(env, m);
-    if (req.method === 'GET') return json({ ok: true, follows: current }, 200, h);
+    if (req.method === 'GET') {
+      const r = await changeFollows(env, m, { get: true });
+      return json({ ok: true, follows: r.ok ? r.follows : await getFollows(env, m) }, 200, h);
+    }
     const b = await body(req);
     const list = (v: unknown, re: RegExp, upper: boolean): string[] | null | undefined => {
       if (v === undefined) return undefined;
@@ -319,28 +346,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     }
     // Any 13F filer can be followed: non-curated ones are looked up and added to the minute poll.
     if (investors?.length) {
-      const unknown = await resolveFollowedFilers(env, investors.filter((x) => !current.investors.includes(x)));
+      const unknown = await resolveFollowedFilers(env, investors);
       if (unknown.length) return json({ ok: false, error: `not a 13F filer on Copybook: ${unknown.join(', ')}`, code: 'unknown_investor' }, 400, h);
     }
-    const next: Follows = {
-      investors: investors ?? current.investors,
-      stocks: stocks ?? current.stocks,
-      owned: owned ?? current.owned,
-      onboarded: (b.onboarded as boolean | undefined) ?? current.onboarded,
-      include_13g: (b.include_13g as boolean | undefined) ?? current.include_13g,
-      digest: (b.digest as boolean | undefined) ?? current.digest,
-      insider_buys: (b.insider_buys as boolean | undefined) ?? current.insider_buys,
-      insider_min_usd: (minUsd as number | undefined) ?? current.insider_min_usd,
-      cluster_buys: (b.cluster_buys as boolean | undefined) ?? current.cluster_buys,
-      any_13d: (b.any_13d as boolean | undefined) ?? current.any_13d,
-    };
-    // Owned stocks are always on the watchlist.
-    next.stocks = [...new Set([...next.stocks, ...next.owned])];
-    if (next.stocks.length > MAX_FOLLOWS) return json({ ok: false, error: `at most ${MAX_FOLLOWS} stocks` }, 400, h);
-    // Saving follows without ever choosing an alert scope means "alert me on these funds".
-    const scope = m.alerts === 'all' && !m.alerts_chosen && next.investors.length ? { ...m, alerts: next.investors } : m;
-    await putFollows(env, scope, next);
-    return json({ ok: true, follows: next }, 200, h);
+    // Only the fields sent change, so a settings save never undoes a Follow click made meanwhile.
+    const set: Partial<Follows> = Object.fromEntries(
+      Object.entries({ investors, stocks, owned, ...Object.fromEntries(flags.map((k) => [k, b[k]])), insider_min_usd: minUsd }).filter(([, v]) => v !== undefined),
+    );
+    const r = await changeFollows(env, m, { set });
+    return r.ok ? json({ ok: true, follows: r.follows }, 200, h) : json({ ok: false, error: r.error }, 400, h);
   }
 
   // Copy Pro API keys, managed from the account page. The secret is returned once, at creation.

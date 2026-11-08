@@ -311,7 +311,12 @@ export async function resolveFollowedFilers(env: Env, slugs: string[]): Promise<
       unknown.push(slug);
     }
   }
-  if (unknown.length < missing.length) await env.DB.put('alerts:extra', JSON.stringify(extra));
+  if (unknown.length < missing.length) {
+    await saveExtra(env, extra);
+    // Keep each new filer's current book as its baseline now: the data run will replace the shard
+    // with the next quarter, possibly before that quarter's 13F reaches us.
+    for (const [cik, ms] of Object.entries(extra)) if (ms.some((m) => missing.includes(m.slug))) await snapshotBaseline(env, cik).catch(() => false);
+  }
   return unknown;
 }
 
@@ -324,21 +329,51 @@ async function pruneExtra(env: Env, followed: Set<string>): Promise<void> {
     if (keep.length) extra[cik] = keep;
     else delete extra[cik];
   }
-  if (JSON.stringify(extra) !== before) await env.DB.put('alerts:extra', JSON.stringify(extra));
+  if (JSON.stringify(extra) !== before) await saveExtra(env, extra);
 }
 
 /** Curated managers plus followed non-curated filers; a CIK in both stays curated. */
 const withExtra = (ciks: CikMap, extra: CikMap): CikMap => ({ ...extra, ...ciks });
 
-/** A non-curated filer's latest book from the data run's all-filer shard, if it is the quarter wanted. */
+/**
+ * Saves the followed non-curated filers, and the list of their CIKs (no member data) for the data
+ * run, which back-fills a prior quarter for each: R2 followed/ciks.json, served to the data
+ * workflow at GET /ingest/followed.json.
+ */
+async function saveExtra(env: Env, extra: CikMap): Promise<void> {
+  await env.DB.put('alerts:extra', JSON.stringify(extra));
+  await env.HIST.put('followed/ciks.json', JSON.stringify({ updated_at: new Date().toISOString(), ciks: Object.keys(extra).sort() }), { httpMetadata: { contentType: 'application/json' } });
+}
+
+const baselineKey = (cik: string, reportDate: string) => `b/${cik}/${reportDate}.json`;
+
+/** Rows of an all-filer shard (data/f/{cik}.json) as positions. */
+function shardPositions(d: { columns: string[]; rows: unknown[][] }): Position[] {
+  const at = (k: string) => d.columns.indexOf(k);
+  const [t, is, cu, pc, sh, v, dn] = ['ticker', 'issuer', 'cusip', 'put_call', 'shares', 'value', 'display_name'].map(at);
+  return d.rows.map((r) => ({ ticker: r[t] as string | null, issuer: r[is] as string, cusip: r[cu] as string, put_call: (r[pc] as string | null) ?? null, shares: Number(r[sh]), value: Number(r[v]), display_name: (r[dn] as string | null) ?? null }));
+}
+
+/** Copies a non-curated filer's current shard into R2 as the baseline for its next quarter. */
+async function snapshotBaseline(env: Env, cik: string): Promise<boolean> {
+  const res = await fetch(`${env.DATA_URL}f/${cik}.json`);
+  if (!res.ok) return false;
+  const d = (await res.json()) as { report_date?: string; accession?: string; columns?: string[]; rows?: unknown[][] };
+  if (!d.report_date || !d.columns || !d.rows) return false;
+  if (await env.HIST.get(baselineKey(cik, d.report_date))) return true;
+  await env.HIST.put(baselineKey(cik, d.report_date), JSON.stringify({ report_date: d.report_date, accession: d.accession ?? null, holdings: shardPositions({ columns: d.columns, rows: d.rows }) }));
+  return true;
+}
+
+/** A non-curated filer's book for a quarter: the R2 snapshot, else the all-filer shard if it is that quarter. */
 async function filerShardBook(env: Env, cik: string, reportDate: string): Promise<Position[] | null> {
+  const snap = await env.HIST.get(baselineKey(cik, reportDate));
+  if (snap) return ((await new Response(snap.body).json()) as { holdings: Position[] }).holdings;
   const res = await fetch(`${env.DATA_URL}f/${cik}.json`);
   if (!res.ok) return null;
   const d = (await res.json()) as { report_date?: string; columns?: string[]; rows?: unknown[][] };
   if (d.report_date !== reportDate || !d.columns || !d.rows) return null;
-  const at = (k: string) => d.columns!.indexOf(k);
-  const [t, is, cu, pc, sh, v, dn] = ['ticker', 'issuer', 'cusip', 'put_call', 'shares', 'value', 'display_name'].map(at);
-  return d.rows.map((r) => ({ ticker: r[t] as string | null, issuer: r[is] as string, cusip: r[cu] as string, put_call: (r[pc] as string | null) ?? null, shares: Number(r[sh]), value: Number(r[v]), display_name: (r[dn] as string | null) ?? null }));
+  return shardPositions({ columns: d.columns, rows: d.rows });
 }
 
 /** Tickers and names for CUSIPs from the public securities map, without parsing all of it. */
@@ -475,6 +510,8 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
           await lookupTickers(env, top);
         }
       }
+      // This quarter is the next one's baseline for a filer the data run doesn't curate.
+      if (isExtra && f.holdings) await env.HIST.put(baselineKey(e.cik, f.report_date), JSON.stringify({ report_date: f.report_date, accession: e.accession, holdings: f.holdings }));
       const lead = mgrs.find((m) => m.featured && slugs.includes(m.slug)) ?? mgrs.find((m) => m.cik === e.cik) ?? mgrs[0];
       fresh.push({
         slug: lead.slug,
@@ -697,6 +734,13 @@ export async function runWatchMap(env: Env): Promise<Record<string, unknown>> {
   // Follows saved before any filer could be followed get their CIKs here.
   await resolveFollowedFilers(env, [...followed]).catch(() => []);
   await pruneExtra(env, followed);
+  // Baselines for followed filers that don't have one yet (followed before snapshots existed).
+  let snaps = 0;
+  for (const [cik, ms] of Object.entries(await extraMap(env))) {
+    const rd = ms[0]?.report_date;
+    if (snaps >= 5 || !rd || (await env.HIST.get(baselineKey(cik, rd)))) continue;
+    if (await snapshotBaseline(env, cik).catch(() => false)) snaps++;
+  }
   const map: Record<string, string[]> = {};
   if (want.size) {
     const res = await fetch('https://www.sec.gov/files/company_tickers.json', { headers: { 'user-agent': 'Copybook copybook@factordynamics.com' } });

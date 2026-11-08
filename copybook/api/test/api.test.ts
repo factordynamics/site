@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker, { handleRequest } from '../src/index';
 import type { Env, KV, R2 } from '../src/env';
 import { MeterLogic } from '../src/keys';
+import { MemberFollows } from '../src/members';
 import { resolveFollowedFilers, runDigest } from '../src/alerts';
 import { alertMail } from '../src/email';
 import { hmacHex } from '../src/tokens';
 import form4Len from './fixtures/form4-len.xml?raw';
+import durableQ2 from './fixtures/durable-q2-shard.json';
 import sc13dCvi from './fixtures/sc13da-cvi.xml?raw';
 
 class MemKV implements KV {
@@ -76,11 +78,28 @@ function memMeters(now: () => number = Date.now) {
   };
 }
 
+/** One MemberFollows per member, with in-memory storage, as the FOLLOWS namespace. */
+function memFollows() {
+  const objs = new Map<string, MemberFollows>();
+  return {
+    idFromName: (n: string) => n,
+    get: (id: unknown) => {
+      const n = String(id);
+      if (!objs.has(n)) {
+        const store = new Map<string, unknown>();
+        objs.set(n, new MemberFollows({ storage: { get: async <T,>(k: string) => { const v = structuredClone(store.get(k)) as T | undefined; await new Promise((r) => setTimeout(r, 5)); return v; }, put: async (k: string, v: unknown) => void store.set(k, structuredClone(v)) } }, env));
+      }
+      return { fetch: (u: string, init?: RequestInit) => objs.get(n)!.fetch(new Request(u, init)) };
+    },
+  };
+}
+
 beforeEach(async () => {
   hist = new MemR2();
-  env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', METER: memMeters() };
+  env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', METER: memMeters(), FOLLOWS: undefined as never };
   // 2026Q1 lives only in the private bucket; 2026Q2 still falls back to the public copy.
   hist.m.set('h/warren-buffett/2026Q1.csv', new TextEncoder().encode('manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight,change,prev_shares,share_change,value_delta_usd,pct_of_book\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1,new,,5,100,0.1\r\n'));
+  env.FOLLOWS = memFollows();
   sent = [];
   stripeObjects = {};
   index = { managers: [] };
@@ -660,13 +679,22 @@ describe('copybook api', () => {
   it('13F alert dollars at real scale: Berkshire Q2 2026 GOOGL add of $8,770,349,040 reads +$8.8B', () => {
     const row = (ticker: string, shares: number, prev_shares: number, value: number, value_delta: number, d: number) => ({ ticker, display_name: null, issuer: ticker, cusip: ticker, put_call: null, shares, prev_shares, value, value_delta, delta_pct_of_book: d });
     // From EDGAR 0001193125-26-352200 vs 0001193125-26-226661.
-    const moves = { bought_usd: 19.2e9, sold_usd: 4.1e9, new: [row('DHI', 3564, 0, 580504, 580504, 0.0000019)], added: [row('GOOGL', 78791167, 54249798, 28157599351, 8770349040, 0.0293)], trimmed: [row('BAC', 1, 2, 1, -1.7e9, -0.006)], exited: [row('STZ', 0, 1, 0, -94.9e6, -0.0003)] };
+    const moves = { bought_usd: 19.2e9, sold_usd: 4.1e9, new: [row('DHI', 3564, 0, 580504, 580504, 0.0000019)], added: [row('GOOGL', 78791167, 54249798, 28157599351, 8770349040, 0.0293)], trimmed: [row('BAC', 1, 2, 1, -1.7e9, -0.006), row('COF', 5, 12, 5, -832.6e6, -0.003)], exited: [row('STZ', 0, 1, 0, -94.9e6, -0.0003)] };
     const a = { slug: 'warren-buffett', slugs: ['warren-buffett'], manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', accession: '0001193125-26-352200', sec_url: 'https://www.sec.gov/x', accepted: '2026-08-14T20:05:04Z', moves, tickers: [] };
     const m = alertMail(env, 'x@example.com', [a], [], { investors: [], stocks: [], owned: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true });
     expect(m.subject).toBe('Buffett Q2: NEW DHI · EXIT STZ · GOOGL +$8.8B');
     expect(m.text).toContain('Bought $19.2B, sold $4.1B this quarter.');
     expect(m.text).toContain('Added: GOOGL +$8.8B (+45% shares, 2.9% of book)');
     expect(m.text).toContain('New: DHI +$581K (<0.1% of book)');
+    // The trader owns GOOGL; the retail critic owns COF and DHI and watches BAC: tagged in text and HTML.
+    const f = { investors: [], stocks: ['GOOGL', 'COF', 'DHI', 'BAC'], owned: ['GOOGL', 'COF', 'DHI'], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true };
+    const tagged = alertMail(env, 'x@example.com', [a], [], f);
+    for (const t of ['GOOGL', 'COF', 'DHI']) {
+      expect(tagged.text).toMatch(new RegExp(`${t} [+-]\\$[^[]*\\[you own\\]`));
+      expect(tagged.html).toContain(`<b>${t}</b> [you own]`);
+    }
+    expect(tagged.html).toContain('<b>BAC</b> [watchlist]');
+    expect(tagged.html).not.toContain('<b>STZ</b> [');
   });
 
   it('insider buys on owned and watched stocks: code P by officers, directors and 10% owners above the member threshold; 3 insiders in 30 days is a cluster, once', async () => {
@@ -727,6 +755,64 @@ describe('copybook api', () => {
     expect(again).toContain('Director New (Director of CARMAX INC)');
     expect(again).not.toContain('Cluster buy');
     expect(again).not.toContain('John A Smith');
+  });
+
+  it('single-item follows: Follow clicks a second apart both land, a settings save never undoes them, owned implies watched', async () => {
+    stripeObjects['checkout/sessions/cs_test_c'] = { id: 'cs_test_c', status: 'complete', created: now(), subscription: 'sub_c', customer_details: { email: 'c@example.com' } };
+    stripeObjects['subscriptions/sub_c'] = sub('sub_c', 'cus_c', 'active');
+    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_c' } })).json()).token;
+    filers.push({ cik: '0001798849', name: 'Durable Capital Partners LP', slug: 'durable-capital-partners-lp-8849', ok: true, quarter: '2026Q2' }, { cik: '0001541617', name: 'Altimeter Capital Management, LP', slug: 'altimeter-capital-management-lp-1617', ok: true, quarter: '2026Q2' });
+    const req = (method: string, path: string, b?: unknown) => handleRequest(new Request(`https://api.test${path}`, { method, body: b ? JSON.stringify(b) : undefined, headers: { origin: 'https://refcell.github.io', authorization: `Bearer ${t}` } }), env);
+    // Two clicks in flight together, plus a settings save that doesn't touch investors.
+    const rs = await Promise.all([req('POST', '/follows/durable-capital-partners-lp-8849'), req('POST', '/follows/altimeter-capital-management-lp-1617'), req('PUT', '/follows', { digest: true }), req('POST', '/follows/owned/cof')]);
+    expect(rs.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+    const f = (await (await req('GET', '/follows')).json()).follows;
+    expect(f.investors.sort()).toEqual(['altimeter-capital-management-lp-1617', 'durable-capital-partners-lp-8849']);
+    expect(f).toMatchObject({ digest: true, owned: ['COF'], stocks: ['COF'] });
+    // The alert jobs read KV: it carries the same follows.
+    expect(JSON.parse((await env.DB.get('follows:cus_c'))!).investors.sort()).toEqual(f.investors);
+    expect((await req('POST', '/follows/no-such-filer-1')).status).toBe(400);
+    await Promise.all([req('DELETE', '/follows/durable-capital-partners-lp-8849'), req('DELETE', '/follows/stocks/COF')]);
+    expect((await (await req('GET', '/follows')).json()).follows).toMatchObject({ investors: ['altimeter-capital-management-lp-1617'], stocks: [], owned: [] });
+  });
+
+  it("a followed non-curated filer's Q3 email has moves against its Q2 book, snapshotted at follow time even after the data run moves its shard to Q3", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    await cron(17);
+    filers.push({ cik: '0001798849', name: 'Durable Capital Partners LP', slug: 'durable-capital-partners-lp-8849', ok: true, quarter: '2026Q2' });
+    // Durable's real Q2 2026 shard, as the data run publishes it today.
+    shards['0001798849.json'] = durableQ2;
+    expect(await resolveFollowedFilers(env, ['durable-capital-partners-lp-8849'])).toEqual([]);
+    await putMember('d', 'durable@example.com', 'active', ['durable-capital-partners-lp-8849']);
+    await putFollows('d', { investors: ['durable-capital-partners-lp-8849'], owned: ['DASH'], stocks: ['DASH'] });
+    // The data run tells the ingest which CIKs to back-fill; only its workflow may read the list.
+    expect(JSON.parse(new TextDecoder().decode(hist.m.get('followed/ciks.json')))).toMatchObject({ ciks: ['0001798849'] });
+    expect((await call('/ingest/followed.json')).status).toBe(401);
+    // Then the data run replaces the shard with something else before Durable's Q3 13F arrives.
+    shards['0001798849.json'] = { ...durableQ2, report_date: '2026-09-30', quarter: '2026Q3', rows: [] };
+
+    // Q3: RBC sold out, DASH +50%, Q (Qnity) -40%, a new position; the rest unchanged.
+    type Row = [string, string, string, string, string | null, number, number];
+    const rows = (durableQ2.rows as unknown as Row[]).filter((r) => r[0] !== 'RBC').map((r): Row => (r[0] === 'DASH' ? [...r.slice(0, 5), Math.round(r[5] * 1.5), Math.round(r[6] * 1.5)] as Row : r[0] === 'Q' ? [...r.slice(0, 5), Math.round(r[5] * 0.6), Math.round(r[6] * 0.6)] as Row : r));
+    rows.push(['NEWCO', 'NEWCO HOLDINGS INC', 'COM', '99999X109', null, 100000, 50_000_000]);
+    const acc = '0001798849-26-000011';
+    const dir = `Archives/edgar/data/1798849/${acc.replace(/-/g, '')}/`;
+    secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: 'info.xml', size: '9000' }] } });
+    secFiles[`${dir}primary_doc.xml`] = '<edgarSubmission><periodOfReport>09-30-2026</periodOfReport></edgarSubmission>';
+    secFiles[`${dir}info.xml`] = `<informationTable>${rows.map((r) => `<infoTable><nameOfIssuer>${r[1]}</nameOfIssuer><cusip>${r[3]}</cusip><value>${r[6]}</value><shrsOrPrnAmt><sshPrnamt>${r[5]}</sshPrnamt></shrsOrPrnAmt>${r[4] ? `<putCall>${r[4]}</putCall>` : ''}</infoTable>`).join('')}</informationTable>`;
+    secFiles.feed = `<feed><entry><title>13F-HR - Durable Capital Partners LP (0001798849) (Filer)</title><updated>${today}T16:05:00-05:00</updated><category scheme="https://www.sec.gov/" label="form type" term="13F-HR"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry></feed>`;
+    sent = [];
+    await cron(5);
+    expect(sent.map((m) => m.to[0])).toEqual(['durable@example.com']);
+    const { text, html, subject } = sent[0];
+    expect(subject).toMatch(/^Durable Capital Partners Q3: NEW NEWCO HOLDINGS INC · EXIT RBC · DASH \+\$383\.3M/);
+    expect(text).toMatch(/Added: DASH \+\$383\.3M \(\+50% shares, [\d.]+% of book\) \[you own\]/);
+    expect(text).toMatch(/Trimmed: Q -\$297\.4M \(sold 40% of the position/);
+    expect(text).toMatch(/Exited: RBC -\$1\.1B/);
+    expect(html).toMatch(/<b>DASH<\/b> \[you own\]/);
+    // The Q3 book is kept as the Q4 baseline.
+    expect(hist.m.has('b/0001798849/2026-09-30.json')).toBe(true);
   });
 
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
@@ -834,6 +920,9 @@ describe('copybook api', () => {
     await post(ok, '5.5.5.5');
     await post(ok, '6.6.6.6');
     expect((await post(ok, '7.7.7.7')).status).toBe(429);
+    expect((await (await call('/health')).json()).fund_requests).toBe(3);
+    // A reviewer's TEST submission is stored but not counted.
+    expect((await post({ ...ok, email: 'copybook-test-pm@x.example', name: 'TEST PM critic' }, '8.8.8.8')).status).toBe(200);
     expect((await (await call('/health')).json()).fund_requests).toBe(3);
 
     const t = Date.now();

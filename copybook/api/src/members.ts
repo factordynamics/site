@@ -134,3 +134,74 @@ export async function putFollows(env: Env, m: Member, f: Follows): Promise<void>
   // Followed investors are the alert targets whenever alerts is a list (not "all" or "off").
   if (Array.isArray(m.alerts)) await putMember(env, { ...m, alerts: f.investors });
 }
+
+export const MAX_FOLLOWS = 500;
+export type FollowList = 'investors' | 'stocks' | 'owned';
+export type FollowOp = { get: true } | { set: Partial<Follows> } | { add: { list: FollowList; value: string } } | { remove: { list: FollowList; value: string } };
+
+/** One change to a member's follows. Owned stocks are always on the watchlist. */
+export function applyFollowOp(cur: Follows, op: FollowOp): Follows | string {
+  const next: Follows = { ...cur, investors: [...cur.investors], stocks: [...cur.stocks], owned: [...cur.owned] };
+  if ('get' in op) return next;
+  if ('set' in op) Object.assign(next, op.set);
+  else if ('add' in op) {
+    const { list, value } = op.add;
+    if (!next[list].includes(value)) next[list].push(value);
+  } else {
+    const { list, value } = op.remove;
+    next[list] = next[list].filter((x) => x !== value);
+    if (list === 'stocks') next.owned = next.owned.filter((x) => x !== value);
+  }
+  next.stocks = [...new Set([...next.stocks, ...next.owned])];
+  for (const k of ['investors', 'stocks', 'owned'] as const) if (next[k].length > MAX_FOLLOWS) return `at most ${MAX_FOLLOWS} ${k}`;
+  return next;
+}
+
+export interface FollowsNamespace {
+  idFromName(name: string): unknown;
+  get(id: unknown): { fetch(url: string, init?: RequestInit): Promise<Response> };
+}
+
+/**
+ * Applies a follows change for one member, serialized: two clicks a second apart (Follow Durable,
+ * then Follow Altimeter) must both land. KV has no compare-and-swap, so every write goes through
+ * this member's Durable Object, which keeps the authoritative copy in its own storage and writes it
+ * through to KV for the alert jobs.
+ */
+export async function changeFollows(env: Env, m: Member, op: FollowOp): Promise<{ ok: true; follows: Follows; member: Member } | { ok: false; error: string }> {
+  const stub = env.FOLLOWS.get(env.FOLLOWS.idFromName(m.customer));
+  return (await stub.fetch('https://follows/apply', { method: 'POST', body: JSON.stringify({ member: m, op }) })).json();
+}
+
+interface FollowsStorage {
+  get<T>(key: string): Promise<T | undefined>;
+  put(key: string, value: unknown): Promise<void>;
+}
+
+export class MemberFollows {
+  private chain: Promise<unknown> = Promise.resolve();
+  constructor(
+    private state: { storage: FollowsStorage },
+    private env: Env,
+  ) {}
+
+  async fetch(req: Request): Promise<Response> {
+    const { member, op } = (await req.json()) as { member: Member; op: FollowOp };
+    // One change at a time, even across the awaits on KV.
+    const run = this.chain.then(() => this.apply(member, op));
+    this.chain = run.catch(() => undefined);
+    return Response.json(await run);
+  }
+
+  private async apply(m: Member, op: FollowOp) {
+    const cur = (await this.state.storage.get<Follows>('follows')) ?? (await getFollows(this.env, m));
+    const next = applyFollowOp({ ...FOLLOW_DEFAULTS, ...cur }, op);
+    if (typeof next === 'string') return { ok: false, error: next };
+    if ('get' in op) return { ok: true, follows: next, member: m };
+    // Saving follows without ever choosing an alert scope means "alert me on these funds".
+    const member = m.alerts === 'all' && !m.alerts_chosen && next.investors.length ? { ...m, alerts: next.investors } : m;
+    await this.state.storage.put('follows', next);
+    await putFollows(this.env, member, next);
+    return { ok: true, follows: next, member: Array.isArray(member.alerts) ? { ...member, alerts: next.investors } : member };
+  }
+}

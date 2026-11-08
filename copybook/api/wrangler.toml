@@ -33,6 +33,15 @@ PORTAL_CONFIGURATION = "bpc_1UZHZgDSKGGzRqYZbvRwUas4"
 name = "METER"
 class_name = "KeyMeter"
 
+# Each member's follows, written one change at a time (KV has no compare-and-swap).
+[[durable_objects.bindings]]
+name = "FOLLOWS"
+class_name = "MemberFollows"
+
 [[migrations]]
 tag = "v1-key-meter"
 new_sqlite_classes = ["KeyMeter"]
+
+[[migrations]]
+tag = "v2-member-follows"
+new_sqlite_classes = ["MemberFollows"]

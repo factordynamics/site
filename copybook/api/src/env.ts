@@ -44,6 +44,7 @@ export interface Env {
   SEC_BUDGET?: string;
   /** Durable Object namespace: one KeyMeter per API key (rate limits and usage). */
   METER: import('./keys').MeterNamespace;
+  FOLLOWS: import('./members').FollowsNamespace;
 }
 
 /** What we keep per Stripe customer. */
