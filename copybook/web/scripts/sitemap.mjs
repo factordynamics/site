@@ -27,6 +27,14 @@ try {
 } catch {
   // No stock index in this build.
 }
+try {
+  const fsrc = src.replace(/index\.json$/, 'filers.json')
+  const filers = (fsrc.startsWith('http') ? await (await fetch(fsrc)).json() : JSON.parse(readFileSync(fsrc, 'utf8'))).filers
+  const curated = new Set(managers.map((m) => m.cik.replace(/^0+/, '')))
+  for (const f of filers) if (f.ok && f.slug && !curated.has(f.cik.replace(/^0+/, ''))) urls.push([`investors/${f.slug}/`, f.filing_date])
+} catch {
+  // No filer list in this build.
+}
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map(([p, d]) => `  <url><loc>${SITE}${p}</loc>${d ? `<lastmod>${d}</lastmod>` : ''}</url>`).join('\n')}

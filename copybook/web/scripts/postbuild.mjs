@@ -11,13 +11,13 @@ const shell = readFileSync(join(dist, 'index.html'), 'utf8')
 const SITE = process.env.VITE_SITE || 'https://copybook.factordynamics.com/'
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
-function page(path, title, desc) {
+function page(path, title, desc, extra = '') {
   let html = shell
     .replace(/<title>.*?<\/title>/, `<title>${esc(title)}</title>`)
     .replace(/(<meta name="description" content=")[^"]*/, `$1${esc(desc)}`)
     .replace(/(<meta property="og:title" content=")[^"]*/, `$1${esc(title)}`)
     .replace(/(<meta property="og:description" content=")[^"]*/, `$1${esc(desc)}`)
-    .replace('<meta property="og:type"', `<link rel="canonical" href="${SITE}${path}" />\n    <meta property="og:type"`)
+    .replace('<meta property="og:type"', `<link rel="canonical" href="${SITE}${path}" />${extra}\n    <meta property="og:type"`)
   const dir = join(dist, path)
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'index.html'), html)
@@ -29,7 +29,7 @@ function redirect(file, to) {
   )
 }
 
-const tc = (s) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()))
+const tc = (s) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\b(Llc|Lp|Llp|Plc|Etf|Ag|Sa|Nv|Se|Ii|Iii|Usa)\b/g, (w) => w.toUpperCase()))
 page('investors/', 'Investors · Copybook', 'Latest 13F portfolios of legendary value investors, hedge-fund founders, activists and the largest institutions.')
 page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.')
 page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, full history, filing alerts and CSV export.')
@@ -46,6 +46,36 @@ for (const m of index.managers) {
   redirect(`managers/${m.slug}.html`, `investors/${m.slug}/`)
   n++
 }
+// Every other 13F filer (data/filers.json): one shell per filer, holdings load from data/f/{cik}.json.
+// A filer that is also a curated fund redirects to the curated page.
+let fn = 0
+try {
+  const filersSrc = src.replace(/index\.json$/, 'filers.json')
+  const filers = (filersSrc.startsWith('http') ? await (await fetch(filersSrc)).json() : JSON.parse(readFileSync(filersSrc, 'utf8'))).filers
+  const curated = new Map(index.managers.filter((m) => m.ok).map((m) => [m.cik.replace(/^0+/, ''), m.slug]))
+  const usd = (v) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`)
+  for (const f of filers) {
+    if (!f.ok || !f.slug) continue
+    const to = curated.get(f.cik.replace(/^0+/, ''))
+    if (to) {
+      mkdirSync(join(dist, 'investors', f.slug), { recursive: true })
+      redirect(`investors/${f.slug}/index.html`, `investors/${to}/`)
+      continue
+    }
+    const who = tc(f.name)
+    const q = f.quarter ? `Q${f.quarter.slice(5)} ${f.quarter.slice(0, 4)}` : 'latest'
+    page(
+      `investors/${f.slug}/`,
+      `${who} 13F holdings · Copybook`,
+      `${who}: ${q} 13F portfolio, ${f.position_count?.toLocaleString('en-US') ?? ''} positions${f.total_value ? ` worth ${usd(f.total_value)}` : ''}, with top holdings and sector mix, straight from the SEC filing.`,
+      `\n    <meta name="cb-filer" content="${f.slug}:${f.cik}" />`,
+    )
+    fn++
+  }
+} catch (e) {
+  console.warn(`filer pages skipped: ${e.message}`)
+}
+console.log(`wrote ${fn} filer pages`)
 page('flow/', 'Smart money flow · Copybook', 'What the best investors bought and sold this 13F season: most bought, most sold, and new positions opened by two or more funds.')
 // Stock pages (scripts/stocks.mjs runs first): prerender tickers held by 2+ funds; the rest render from 404.html.
 let st = 0

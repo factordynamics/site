@@ -101,6 +101,18 @@ type Ev = {
   percent_of_class?: number | null
   change_vs_13f?: number | null
   shares_in_13f?: number | null
+  issuer_cik?: string | null
+  cusip?: string | null
+  amendment_no?: number | null
+  // The previous Schedule 13D/G on this issuer (from ingest, or the next older row in this feed).
+  prev_percent_of_class?: number | null
+  prev_shares_after?: number | null
+  prev_amendment_no?: number | null
+  prev_filing_date?: string | null
+  /** Item 4, Purpose of Transaction: a short excerpt. */
+  item4?: string | null
+  footnotes?: { id: string; text: string }[] | null
+  transactions?: { code: string; code_label?: string; shares?: number | null; price?: number | null; acquired?: boolean; derivative?: boolean; footnote_ids?: string[] }[]
 }
 const ACTION: Record<Ev['action'], { label: string; tone: 'up' | 'down' | 'neutral' | 'accent' }> = {
   buy: { label: 'Bought', tone: 'up' },
@@ -112,15 +124,56 @@ const ACTION: Record<Ev['action'], { label: string; tone: 'up' | 'down' | 'neutr
   below_threshold: { label: 'Below 5%', tone: 'down' },
 }
 const FREE_EVENTS = 2
-/** A 13D/G stake against the same issuer's line in the latest 13F. */
-const vs13f = (e: Ev) =>
-  e.change_vs_13f == null ? null : e.change_vs_13f === 0 ? 'unchanged since the 13F' : `${e.change_vs_13f > 0 ? '+' : '−'}${sharesFmt(Math.abs(e.change_vs_13f))} shares vs the 13F`
+// percent_of_class is a percentage (64.1 = 64.1%).
+const pctOf = (x?: number | null) => (x == null ? null : x / 100)
+const signed = (n: number) => `${n > 0 ? '+' : '−'}${sharesFmt(Math.abs(n))}`
+
+/** Fill prev_* for 13D/G rows from the next older filing on the same issuer in this feed. */
+function withPrevious(events: Ev[]): Ev[] {
+  return events.map((e, i) => {
+    if (e.kind === 'form4' || e.prev_percent_of_class != null || e.prev_shares_after != null) return e
+    const key = e.issuer_cik || e.cusip || e.issuer
+    const p = events.slice(i + 1).find((x) => x.kind !== 'form4' && (x.issuer_cik || x.cusip || x.issuer) === key)
+    return p ? { ...e, prev_percent_of_class: p.percent_of_class, prev_shares_after: p.shares_after, prev_amendment_no: p.amendment_no, prev_filing_date: p.filing_date } : e
+  })
+}
+
+/** A 13D/G stake: against the previous amendment when we have it, else the latest 13F line. */
+function stakeLine(e: Ev) {
+  const now = pctOf(e.percent_of_class)
+  const was = pctOf(e.prev_percent_of_class)
+  const parts: string[] = []
+  if (now != null) parts.push(was != null && Math.abs(now - was) >= 0.0005 ? `${pct(was)} → ${pct(now)} of the class` : `${pct(now)} of the class${was != null ? ', unchanged' : ''}`)
+  if (e.shares_after != null) {
+    if (e.prev_shares_after != null) {
+      const d = e.shares_after - e.prev_shares_after
+      parts.push(d ? `${signed(d)} shares to ${sharesFmt(e.shares_after)}` : `${sharesFmt(e.shares_after)} shares, unchanged`)
+    } else if (e.change_vs_13f != null) {
+      parts.push(e.change_vs_13f ? `${sharesFmt(e.shares_after)} shares, ${signed(e.change_vs_13f)} vs the 13F` : `${sharesFmt(e.shares_after)} shares, as in the 13F`)
+    } else parts.push(`${sharesFmt(e.shares_after)} shares reported`)
+  }
+  if (e.prev_shares_after != null && e.shares_after === e.prev_shares_after && now != null && was != null && Math.abs(now - was) >= 0.0005)
+    parts.push('the class size changed, not the stake')
+  if (e.prev_amendment_no != null || e.prev_filing_date) parts.push(`vs ${e.prev_amendment_no != null ? `No. ${e.prev_amendment_no}` : 'the previous filing'}${e.prev_filing_date ? ` of ${dateLabel(e.prev_filing_date)}` : ''}`)
+  return parts.join(' · ')
+}
+
+/** Form 4 without open-market trades (gifts, conversions, awards): name what happened. */
+function form4Line(e: Ev) {
+  if (e.shares) return [`${sharesFmt(Math.abs(e.shares))} shares`, e.avg_price ? `avg $${e.avg_price.toFixed(2)}` : null, e.shares_after != null ? `${sharesFmt(e.shares_after)} held after` : null].filter(Boolean).join(' · ')
+  const tx = (e.transactions ?? []).filter((t) => t.shares)
+  const what = tx.map((t) => {
+    const how = t.code_label && t.code_label !== 'other' ? `, ${t.code_label}` : ''
+    return `${t.acquired ? 'Acquired' : 'Disposed of'} ${sharesFmt(t.shares)}${t.derivative ? ' derivative' : ''} (code ${t.code}${how})`
+  })
+  return [...new Set(what)].slice(0, 2).concat(e.shares_after != null ? [`${sharesFmt(e.shares_after)} held after`] : []).join(' · ')
+}
 
 /** Between-quarter moves: Form 4 trades and 13D/G stake filings since the latest 13F. Hidden until ingest publishes the feed. */
 export function SinceLast13F({ slug, quarter }: { slug: string; quarter?: string }) {
   const r = useAsync(() => fetch(`${DATA}events/${slug}.json`).then((x) => (x.ok ? (x.json() as Promise<{ events?: Ev[] }>) : null)), [slug])
   const member = useMember()
-  const events = (r.data?.events ?? []).filter((e) => !('skip' in e))
+  const events = withPrevious((r.data?.events ?? []).filter((e) => !('skip' in e)))
   if (!events.length) return null
   const paid = Boolean(member?.active)
   const shown = paid ? events.slice(0, 20) : events.slice(0, FREE_EVENTS)
@@ -129,7 +182,6 @@ export function SinceLast13F({ slug, quarter }: { slug: string; quarter?: string
       <ul className="divide-y divide-line">
         {shown.map((e) => {
           const a = ACTION[e.action] ?? ACTION.other
-          const pctClass = e.percent_of_class != null ? (e.percent_of_class > 1 ? e.percent_of_class / 100 : e.percent_of_class) : null
           return (
             <li key={e.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3 text-[14px] md:grid-cols-[6.5rem_minmax(0,1fr)_auto]">
               <span className="hidden text-[13px] text-ink-3 md:block">{dateLabel(e.filing_date)}</span>
@@ -145,14 +197,28 @@ export function SinceLast13F({ slug, quarter }: { slug: string; quarter?: string
                 </span>
                 <span className="mt-0.5 block text-[12.5px] text-ink-3">
                   <span className="md:hidden">{dateLabel(e.filing_date)} · </span>
-                  {e.kind === 'form4'
-                    ? [e.shares ? `${sharesFmt(Math.abs(e.shares))} shares` : null, e.avg_price ? `avg $${e.avg_price.toFixed(2)}` : null, e.shares_after != null ? `${sharesFmt(e.shares_after)} held after` : null].filter(Boolean).join(' · ')
-                    : [pctClass != null ? `${pct(pctClass)} of the class` : null, e.shares_after != null ? `${sharesFmt(e.shares_after)} shares reported` : null, vs13f(e)].filter(Boolean).join(' · ')}
+                  {e.kind === 'form4' ? form4Line(e) : stakeLine(e)}
                   {' · '}
                   <a href={e.url} className="underline underline-offset-2 hover:text-ink">
-                    Form {e.form.replace('SCHEDULE ', '')}
+                    {e.kind === 'form4' ? 'Form 4' : `Schedule ${e.form.replace('SCHEDULE ', '')}${e.amendment_no ? ` No. ${e.amendment_no}` : ''}`}
                   </a>
                 </span>
+                {e.item4 && (
+                  <span className="mt-1.5 block border-l-2 border-line-2 pl-2.5 text-[12.5px] italic leading-relaxed text-ink-2">
+                    <span className="not-italic text-ink-3">Item 4: </span>
+                    {e.item4.length > 400 ? `${e.item4.slice(0, 397).trimEnd()}…` : e.item4}
+                  </span>
+                )}
+                {e.footnotes && e.footnotes.length > 0 && (e.kind === 'form4' || !e.item4) && (
+                  <span className="mt-1.5 block space-y-0.5 text-[12px] leading-relaxed text-ink-3">
+                    {e.footnotes.slice(0, e.shares ? 2 : 4).map((n) => (
+                      <span key={n.id} className="block">
+                        <sup className="mr-0.5">{n.id.replace(/^F/, '')}</sup>
+                        {n.text.length > 280 ? `${n.text.slice(0, 277).trimEnd()}…` : n.text}
+                      </span>
+                    ))}
+                  </span>
+                )}
               </span>
               <span className="num text-right text-[14px] font-medium">{e.value_usd ? money(e.value_usd) : ''}</span>
             </li>

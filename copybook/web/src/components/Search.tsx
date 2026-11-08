@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { loadFilers, loadIndex, money, secFilerUrl, type Filer, type Manager } from '../lib/data'
-import { loadStockIndex, stockPath, type StockRef } from '../lib/stocks'
+import { filerCiks, loadFilers, loadIndex, money, quarterLabel, secFilerUrl, type Filer, type Manager } from '../lib/data'
+import { loadStockIndex, stockPath, tickerText, type StockRef } from '../lib/stocks'
 import { Monogram, SearchIcon } from './ui'
 
 type Hit = { kind: 'manager'; m: Manager } | { kind: 'filer'; f: Filer } | { kind: 'stock'; s: StockRef }
@@ -43,7 +43,7 @@ export function useSearch(query: string) {
       .slice(0, 6)
     // Tickers: exact or prefix match on any share class, then company names. Uppercase queries of
     // five letters or fewer read as tickers first (NVDA, COF).
-    const up = query.trim().toUpperCase()
+    const up = tickerText(query)
     const tickerish = /^[A-Z.\-]{1,6}$/.test(up)
     const ss = (stocks || [])
       .map((x) => {
@@ -53,7 +53,9 @@ export function useSearch(query: string) {
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s || b.x.h - a.x.h)
       .slice(0, 4)
-    const exactTicker = ss.length > 0 && ss[0].s >= 120
+    // An ETF named after a fund ("AKRE") never outranks the fund itself.
+    const etf = (x: StockRef) => x.s === 'Funds & ETFs'
+    const exactTicker = ss.length > 0 && ss[0].s >= 120 && !etf(ss[0].x)
     const known = new Set(managers.map((m) => m.cik.replace(/^0+/, '')))
     const fs = (filers || [])
       .filter((f) => !known.has(f.cik.replace(/^0+/, '')))
@@ -64,7 +66,8 @@ export function useSearch(query: string) {
     const mh = ms.map(({ m }) => ({ kind: 'manager' as const, m }))
     const sh = ss.map(({ x }) => ({ kind: 'stock' as const, s: x }))
     const fh = fs.map(({ f }) => ({ kind: 'filer' as const, f }))
-    return exactTicker || (tickerish && !ms.length) ? [...sh, ...mh, ...fh] : [...mh, ...sh, ...fh]
+    if (exactTicker || (tickerish && !ms.length && !fh.length)) return [...sh, ...mh, ...fh]
+    return [...mh, ...sh.filter((h) => !etf(h.s)), ...fh, ...sh.filter((h) => etf(h.s))]
   }, [query, managers, filers, stocks])
 }
 
@@ -103,7 +106,11 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
     input.current?.blur()
     if (h.kind === 'manager') nav(`/investors/${h.m.slug}/`)
     else if (h.kind === 'stock') nav(stockPath(h.s.t))
-    else window.open(secFilerUrl(h.f.cik), '_blank', 'noopener')
+    else if (h.f.ok === false) window.open(secFilerUrl(h.f.cik), '_blank', 'noopener')
+    else {
+      filerCiks.set(h.f.slug, h.f.cik)
+      nav(`/investors/${h.f.slug}/`)
+    }
   }
 
   const lg = size === 'lg'
@@ -199,10 +206,16 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
                   </>
                 ) : (
                   <>
-                    <span className="flex size-[30px] items-center justify-center rounded-full bg-ink/[0.06] text-[11px] font-semibold text-ink-3">SEC</span>
+                    {h.f.ok === false ? (
+                      <span className="flex size-[30px] items-center justify-center rounded-full bg-ink/[0.06] text-[11px] font-semibold text-ink-3">SEC</span>
+                    ) : (
+                      <Monogram name={h.f.name} size={30} />
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium">{h.f.name}</span>
-                      <span className="block truncate text-[12.5px] text-ink-3">13F filer · opens on SEC EDGAR</span>
+                      <span className="block truncate text-[12.5px] text-ink-3">
+                        {h.f.ok === false ? '13F filer · opens on SEC EDGAR' : `13F filer${h.f.position_count ? ` · ${h.f.position_count.toLocaleString('en-US')} positions` : ''}${h.f.quarter ? ` · ${quarterLabel(h.f.quarter)}` : ''}`}
+                      </span>
                     </span>
                   </>
                 )}

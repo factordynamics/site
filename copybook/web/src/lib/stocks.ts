@@ -75,8 +75,16 @@ export const loadFlow = () =>
   })
 
 /** The page ticker for any share-class ticker (GOOG -> GOOGL). */
+/** "$tsla" -> "TSLA", "BRK-B" -> "BRK.B": how people type tickers, to how 13F data spells them. */
+export const tickerText = (s: string) =>
+  s
+    .trim()
+    .replace(/^\$/, '')
+    .toUpperCase()
+    .replace(/^([A-Z]{1,5})[-/]([A-Z])$/, '$1.$2')
+
 export async function resolveTicker(t: string) {
-  const up = t.toUpperCase()
+  const up = tickerText(t)
   const idx = await loadStockIndex()
   return idx.stocks.find((s) => s.t === up || s.a.includes(up))?.t ?? null
 }

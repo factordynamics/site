@@ -44,11 +44,15 @@ export type Manager = {
   changes?: { new: number; added: number; trimmed: number; exited: number; unchanged: number } | null
   featured?: boolean
   top?: Holding[]
+  /** A page built from the all-filer shard (data/f/{cik}.json): latest quarter only. */
+  filer?: boolean
+  /** The shard keeps only the largest positions of very large books. */
+  truncated?: boolean
 }
 
 export type ManagerFile = Manager & { holdings: Holding[] }
 
-export type Filer = { cik: string; name: string; slug: string; filing_date?: string }
+export type Filer = { cik: string; name: string; slug: string; filing_date?: string; ok?: boolean; position_count?: number; quarter?: string }
 
 export type Sectors = { sectors: string[]; map: Record<string, number> }
 
@@ -115,8 +119,75 @@ export async function loadIndex(): Promise<IndexData> {
   }
 }
 
+/** Slug -> CIK for filer pages; seeded by the prerendered page and by links, else filers.json. */
+export const filerCiks = new Map<string, string>()
+if (typeof document !== 'undefined') {
+  const meta = document.querySelector('meta[name="cb-filer"]')?.getAttribute('content')?.split(':')
+  if (meta?.length === 2) filerCiks.set(meta[0], meta[1])
+}
+
+/** Thrown when a filer slug belongs to a fund that has its own curated page. */
+export class CuratedRedirect extends Error {
+  slug: string
+  constructor(slug: string) {
+    super(slug)
+    this.slug = slug
+  }
+}
+
+type Shard = { cik: string; name: string; accession?: string; filing_date: string; report_date: string; quarter: string; sec_url: string; position_count: number; total_value: number; truncated?: boolean; columns: string[]; rows: unknown[][] }
+
+/** Any 13F filer's latest filing, from data/f/{cik}.json. */
+async function loadFiler(slug: string): Promise<ManagerFile> {
+  let cik = filerCiks.get(slug)
+  if (!cik) {
+    const all = await getJSON<{ filers: Filer[] }>(`${DATA}filers.json`)
+    cik = all.filers.find((f) => f.slug === slug && f.ok !== false)?.cik
+    if (!cik) throw new Error(`404 ${slug}`)
+  }
+  const idx = await getJSON<{ managers: Manager[] }>(`${DATA}index.json`)
+  const curated = idx.managers.find((m) => m.ok && m.cik.replace(/^0+/, '') === cik!.replace(/^0+/, ''))
+  if (curated) throw new CuratedRedirect(curated.slug)
+  const f = await getJSON<Shard>(`${DATA}f/${cik.padStart(10, '0')}.json`)
+  const col = Object.fromEntries(f.columns.map((c, i) => [c, i]))
+  const total = f.total_value || 1
+  const holdings = f.rows
+    .map((r) => ({
+      ticker: (r[col.ticker] as string) || null,
+      issuer: r[col.issuer] as string,
+      title: r[col.title] as string,
+      cusip: r[col.cusip] as string,
+      put_call: (r[col.put_call] as string) || null,
+      shares: Number(r[col.shares]) || 0,
+      value: Number(r[col.value]) || 0,
+      display_name: r[col.display_name] as string,
+      sector: r[col.sector] as string,
+      weight: (Number(r[col.value]) || 0) / total,
+    }))
+    .map(cleanHolding)
+  const name = displayName(f.name)
+  return {
+    cik: f.cik,
+    name,
+    manager: name,
+    slug,
+    ok: true,
+    quarter: f.quarter,
+    filing_date: f.filing_date,
+    report_date: f.report_date,
+    sec_url: f.sec_url,
+    position_count: f.position_count,
+    total_value: f.total_value,
+    truncated: f.truncated,
+    filer: true,
+    holdings,
+  }
+}
+
 export async function loadManager(slug: string): Promise<ManagerFile> {
   await loadSectors().catch(() => null)
+  // Curated slugs never end in the "-NNNN" CIK suffix that every filers.json slug carries.
+  if (/-\d{1,4}$/.test(slug) && !(await getJSON<{ managers: Manager[] }>(`${DATA}index.json`)).managers.some((m) => m.slug === slug)) return loadFiler(slug)
   const m = await getJSON<ManagerFile>(`${DATA}${slug}.json`)
   return {
     ...m,

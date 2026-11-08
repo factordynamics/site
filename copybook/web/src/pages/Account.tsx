@@ -92,7 +92,13 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
 
       {onboard && (
         <div className="mt-10">
-          <Onboarding onDone={() => setEditing(false)} />
+          <Onboarding
+            alerts={member.alerts}
+            onDone={(m) => {
+              setEditing(false)
+              if (m) onChange(m)
+            }}
+          />
         </div>
       )}
 

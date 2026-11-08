@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { loadIndex, money, useAsync } from '../lib/data'
+import { setAlerts, type Member } from '../lib/account'
 import { saveFollows, toggle, useFollows } from '../lib/follows'
-import { loadStockIndex, stockPath } from '../lib/stocks'
+import { loadStockIndex, stockPath, tickerText } from '../lib/stocks'
 import { Button, Check, Monogram, Skeleton } from './ui'
 
 /** First-run setup for members: whom to follow, and which stocks they own. */
-export function Onboarding({ onDone }: { onDone?: () => void }) {
+/** alerts: the member's current setting. Saving follows switches "all" to the followed funds; "off" stays off. */
+export function Onboarding({ alerts, onDone }: { alerts?: Member['alerts']; onDone?: (member?: Member) => void }) {
   const idx = useAsync(loadIndex, [])
   const { follows } = useFollows()
   const [investors, setInvestors] = useState<string[]>(follows.investors)
@@ -20,7 +22,8 @@ export function Onboarding({ onDone }: { onDone?: () => void }) {
     setError(false)
     try {
       await saveFollows(skip ? { onboarded: true } : { investors, owned, onboarded: true })
-      onDone?.()
+      const member = !skip && investors.length && alerts !== 'off' ? await setAlerts(investors) : undefined
+      onDone?.(member)
     } catch {
       setError(true)
     } finally {
@@ -87,7 +90,7 @@ export function TickerPicker({ value, onChange }: { value: string[]; onChange: (
   const idx = useAsync(loadStockIndex, [])
   const [q, setQ] = useState('')
   const hits = useMemo(() => {
-    const up = q.trim().toUpperCase()
+    const up = tickerText(q)
     if (!up || !idx.data) return []
     const low = up.toLowerCase()
     return idx.data.stocks

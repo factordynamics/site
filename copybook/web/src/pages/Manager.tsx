@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { ChangeBars, Donut, foldSlices, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
@@ -8,7 +8,7 @@ import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
 import { stockPath } from '../lib/stocks'
-import { useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync } from '../lib/data'
+import { CuratedRedirect, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -44,6 +44,7 @@ export function ManagerPage() {
     return s ? all.filter((h) => `${h.ticker ?? ''} ${h.issuer} ${h.cusip}`.toLowerCase().includes(s)) : all
   }, [book.rows, book.options, view, q])
 
+  if (m.error instanceof CuratedRedirect) return <Navigate to={`/investors/${m.error.slug}/`} replace />
   if (m.error)
     return (
       <div className="container-x pt-20">
@@ -82,7 +83,7 @@ export function ManagerPage() {
         </div>
         {f && (
           <div className="flex flex-wrap gap-2">
-            <FollowButton kind="investor" id={f.slug} name={f.manager} />
+            {!f.filer && <FollowButton kind="investor" id={f.slug} name={f.manager} />}
             <Button href={f.sec_url} variant="outline" size="sm">
               View filing on SEC
             </Button>
@@ -91,7 +92,7 @@ export function ManagerPage() {
                 13F history
               </Button>
             )}
-            {member?.active && <CsvButton slug={f.slug} variant="outline" />}
+            {member?.active && !f.filer && <CsvButton slug={f.slug} variant="outline" />}
           </div>
         )}
       </header>
@@ -154,6 +155,9 @@ export function ManagerPage() {
             <Skeleton className="h-[360px] w-full" />
           )}
         </Panel>
+        {f?.filer ? (
+          <FilerPanel f={f} />
+        ) : (
         <Panel
           title="Quarter-over-quarter changes"
           sub={f?.prev_quarter ? `${quarterLabel(f.prev_quarter)} to ${quarterLabel(f.quarter)}: shares bought or sold, at quarter-end value` : 'Biggest buys and sells since the prior filing'}
@@ -192,9 +196,10 @@ export function ManagerPage() {
             <LockedChanges top={book.rows.slice(0, 6).map((h) => h.ticker || shortName(h.issuer))} />
           )}
         </Panel>
+        )}
       </div>
 
-      {f && <SinceLast13F slug={f.slug} quarter={f.quarter} />}
+      {f && !f.filer && <SinceLast13F slug={f.slug} quarter={f.quarter} />}
 
       <section className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
@@ -203,7 +208,7 @@ export function ManagerPage() {
             <p className="text-[13px] text-ink-3">
               {view === 'options'
                 ? `${rows.length.toLocaleString('en-US')} option lines · value is the notional of the underlying shares, as filed`
-                : `${rows.length.toLocaleString('en-US')} of ${book.rows.length.toLocaleString('en-US')} share positions`}
+                : `${rows.length.toLocaleString('en-US')} of ${book.rows.length.toLocaleString('en-US')} share positions${f?.truncated ? ` · the largest of ${f.position_count?.toLocaleString('en-US')} lines in the filing` : ''}`}
             </p>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
@@ -308,6 +313,37 @@ export function ManagerPage() {
         </p>
       )}
     </div>
+  )
+}
+
+function FilerPanel({ f }: { f: ManagerFile }) {
+  const rows: [string, string][] = [
+    ['Period', `Quarter ending ${dateLabel(f.report_date)}`],
+    ['Filed with the SEC', dateLabel(f.filing_date)],
+    ['Lines in the filing', (f.position_count ?? f.holdings.length).toLocaleString('en-US')],
+    ['Reported value', money(f.total_value)],
+    ['SEC CIK', f.cik.replace(/^0+/, '')],
+  ]
+  return (
+    <Panel title="About this filing" sub={`${quarterLabel(f.quarter)} Form 13F-HR, as filed`}>
+      <dl className="divide-y divide-line text-[14px]">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex items-center justify-between gap-4 py-2.5">
+            <dt className="text-ink-3">{k}</dt>
+            <dd className="num text-right font-medium">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-5 rounded-xl bg-accent-soft px-4 py-3.5 text-[13.5px] leading-relaxed text-accent-2">
+        <p className="font-medium">Tracking a fund over time?</p>
+        <p className="mt-0.5 opacity-90">
+          Quarter-over-quarter buys and sells, 8 quarters of history and filing alerts cover the investors we follow closely.{' '}
+          <Link to="/investors/" className="font-medium underline underline-offset-2">
+            See them
+          </Link>
+        </p>
+      </div>
+    </Panel>
   )
 }
 
