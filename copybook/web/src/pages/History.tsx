@@ -49,7 +49,12 @@ export function History() {
             Latest portfolio
           </Button>
           {active && (
-            <CsvButton slug={slug} />
+            <>
+              <CsvButton slug={slug} />
+              <Link to="/methodology/#csv" className="self-center text-[13px] text-ink-3 underline-offset-2 hover:text-ink hover:underline">
+                What’s in the CSV
+              </Link>
+            </>
           )}
         </div>
       </header>

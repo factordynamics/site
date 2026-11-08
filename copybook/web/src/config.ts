@@ -14,11 +14,31 @@ export const analytics = { cloudflare: '' }
 
 export const prices = { monthly: 9, yearly: 79 }
 
+// The three paid products (Stripe Payment Links, 14-day trial, card up front). Upgrades go through the portal.
+export type PlanId = 'copy' | 'pro' | 'fund'
+export const plans: Record<PlanId, { name: string; monthly: number; yearly: number; links: { monthly: string; yearly: string } }> = {
+  copy: { name: 'Copy', monthly: 9, yearly: 79, links: { monthly: checkout.monthly, yearly: checkout.yearly } },
+  pro: {
+    name: 'Copy Pro',
+    monthly: 39,
+    yearly: 390,
+    links: { monthly: 'https://buy.stripe.com/9B69AT5tA0vg9JUfzEgjC02', yearly: 'https://buy.stripe.com/9B67sL1dk91Me0agDIgjC03' },
+  },
+  fund: {
+    name: 'Copy Fund',
+    monthly: 199,
+    yearly: 1990,
+    links: { monthly: 'https://buy.stripe.com/fZu5kD1dk91M4pAevAgjC04', yearly: 'https://buy.stripe.com/3cIfZhbRY1zk9JUafkgjC05' },
+  },
+}
+const planOf = (id?: string) => plans[(id as PlanId) in plans ? (id as PlanId) : 'copy']
+export const trialTerms = (id?: string) =>
+  `Free for 14 days, then $${planOf(id).monthly.toLocaleString('en-US')}/month or $${planOf(id).yearly.toLocaleString('en-US')}/year until you cancel. Cancel any time from Manage billing before the trial ends and you won’t be charged.`
+export const renewalTerms = (id?: string) =>
+  `${planOf(id).name} renews automatically at $${planOf(id).monthly.toLocaleString('en-US')}/month or $${planOf(id).yearly.toLocaleString('en-US')}/year until you cancel. Cancel any time from Manage billing; you keep access until the end of the period you paid for.`
+
 export const checkoutEnabled = () => Boolean(checkout.monthly || checkout.yearly)
 
 export const TRIAL_DAYS = 14
-export const TRIAL_TERMS =
-  'Free for 14 days, then $9/month or $79/year until you cancel. Cancel any time from Manage billing before the trial ends and you won’t be charged.'
-export const RENEWAL_TERMS =
-  'Copy renews automatically at $9/month or $79/year until you cancel. Cancel any time from Manage billing; you keep access until the end of the period you paid for.'
+export const TRIAL_TERMS = trialTerms('copy')
 export const DATA_TERMS = 'SEC EDGAR 13F filings as filed. Not investment advice.'

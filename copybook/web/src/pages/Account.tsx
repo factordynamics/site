@@ -1,13 +1,14 @@
 import { loadIndex, useAsync, useTitle } from '../lib/data'
 import { Link } from 'react-router-dom'
 import { Onboarding } from '../components/Onboarding'
+import { ApiKeys } from '../components/ApiKeys'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
-import { api, checkout, DATA_TERMS, RENEWAL_TERMS, TRIAL_TERMS } from '../config'
+import { api, checkout, DATA_TERMS, renewalTerms, trialTerms } from '../config'
 import { fetchMe, getToken, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean } | { kind: 'out'; error?: string } | { kind: 'off' }
@@ -128,7 +129,7 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
           >
             {busy ? 'Opening…' : 'Manage billing'} <Arrow />
           </Button>
-          <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">{trial ? TRIAL_TERMS : RENEWAL_TERMS}</p>
+          <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">{trial ? trialTerms(member.plan) : renewalTerms(member.plan)}</p>
         </section>
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[15px] font-semibold">Filing alerts</h2>
@@ -182,6 +183,8 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
           )}
         </section>
       </div>
+
+      {member.active && <ApiKeys member={member} />}
 
       {member.active && status === 'ready' && follows.onboarded && !editing && (
         <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">

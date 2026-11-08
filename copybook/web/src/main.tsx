@@ -13,6 +13,8 @@ import { Consensus } from './pages/Consensus'
 import { Pricing } from './pages/Pricing'
 import { Account } from './pages/Account'
 import { About } from './pages/About'
+import { Methodology } from './pages/Methodology'
+import { ApiDocs } from './pages/Api'
 import { NotFound } from './pages/NotFound'
 import { captureAttribution } from './lib/attribution'
 import { getToken, startSession } from './lib/account'
@@ -58,6 +60,8 @@ handoff.then(() =>
             <Route path="pricing" element={<Pricing />} />
             <Route path="account" element={<Account />} />
             <Route path="about" element={<About />} />
+            <Route path="methodology" element={<Methodology />} />
+            <Route path="api" element={<ApiDocs />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

@@ -107,8 +107,8 @@ function Footer() {
             Portfolios of the world’s great investors, read straight from their SEC filings.
           </p>
         </div>
-        <FooterCol title="Product" links={[['Investors', '/investors/'], ['Consensus', '/consensus/'], ['Pricing', '/pricing/']]} />
-        <FooterCol title="Company" links={[['About', '/about/'], ['Methodology', '/about/#method'], ['Account', '/account/']]} />
+        <FooterCol title="Product" links={[['Investors', '/investors/'], ['Flow', '/flow/'], ['Pricing', '/pricing/'], ['API', '/api/']]} />
+        <FooterCol title="Company" links={[['About', '/about/'], ['Methodology', '/methodology/'], ['Account', '/account/']]} />
         <FooterCol title="Popular" links={[['Warren Buffett', '/investors/warren-buffett/'], ['Bill Ackman', '/investors/bill-ackman/'], ['Stanley Druckenmiller', '/investors/stanley-druckenmiller/']]} />
       </div>
       <div className="border-t border-night-line">

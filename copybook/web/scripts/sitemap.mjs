@@ -18,6 +18,8 @@ const urls = [
   ['consensus/', newest],
   ['pricing/'],
   ['about/'],
+  ['methodology/'],
+  ['api/'],
   ['flow/', newest],
   ...managers.map((m) => [`investors/${m.slug}/`, m.filing_date]),
 ]
