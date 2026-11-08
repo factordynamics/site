@@ -49,7 +49,7 @@ function sub(id: string, customer: string, status: string, interval = 'month', l
 let env: Env;
 let hist: MemR2;
 const WORKFLOW = 'refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main';
-let sent: { to: string[]; subject: string; text: string; html?: string }[];
+let sent: { from?: string; to: string[]; subject: string; text: string; html?: string }[];
 let stripeObjects: Record<string, unknown>;
 let index: unknown;
 let secFiles: Record<string, string>;
@@ -826,7 +826,11 @@ describe('copybook api', () => {
     expect(s.headers.get('access-control-allow-origin')).toBe('https://holdterm.pages.dev');
     const { token, member } = await s.json();
     expect(member).toMatchObject({ plan: 'holdterm', active: true });
-    expect(sent).toHaveLength(0); // no "Welcome to Copybook"
+    // The welcome comes from Holdterm, with a Holdterm sign-in link, and never names Copybook.
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ from: 'Holdterm <holdterm@factordynamics.com>', subject: 'Holdterm alerts are on' });
+    expect(sent[0].text).toContain('https://holdterm.pages.dev/account?login=');
+    expect(JSON.stringify(sent[0])).not.toMatch(/copybook/i);
     const ht = (method: string, path: string, b?: unknown) => handleRequest(new Request(`https://api.test${path}`, { method, body: b ? JSON.stringify(b) : undefined, headers: { origin: 'https://holdterm.pages.dev', authorization: `Bearer ${token}` } }), env);
     expect((await ht('GET', '/me')).status).toBe(200);
     expect((await ht('GET', '/follows')).status).toBe(200);
@@ -844,6 +848,32 @@ describe('copybook api', () => {
     await ht('POST', '/portal');
     expect(portalBody).toContain('configuration=bpc_ht');
     expect(decodeURIComponent(portalBody)).toContain('return_url=https://holdterm.pages.dev/account/');
+
+    // Sign-in from Holdterm: a Holdterm link.
+    sent = [];
+    await handleRequest(new Request('https://api.test/login', { method: 'POST', body: JSON.stringify({ email: 'ht@example.com', brand: 'holdterm' }), headers: { origin: 'https://holdterm.pages.dev' } }), env);
+    expect(sent.map((m) => [m.from, m.subject])).toEqual([['Holdterm <holdterm@factordynamics.com>', 'Your Holdterm sign-in link']]);
+
+    // Alerts: following nobody means every featured investor; a followed stock brings any filer's event on it.
+    await ht('DELETE', '/follows/warren-buffett');
+    await ht('POST', '/follows/stocks/NVDA');
+    const today = new Date().toISOString().slice(0, 10);
+    const ev = (id: string, slug: string, ticker: string, kind = 'form4') => ({ id, slug, manager: slug === 'warren-buffett' ? 'Warren Buffett' : slug, form: kind === 'form4' ? '4' : 'SCHEDULE 13G', kind, action: kind === 'form4' ? 'buy' : 'new_stake', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: ticker, display_name: ticker, ticker, shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: kind === 'form4' ? null : 6.1 });
+    events = [ev('seed', 'warren-buffett', 'SIRI')];
+    await cron(47);
+    sent = [];
+    events = [ev('seed', 'warren-buffett', 'SIRI'), ev('HT1', 'warren-buffett', 'SIRI'), ev('HT2', 'some-bank', 'NVDA', '13g'), ev('HT3', 'some-bank', 'AAPL'), ev('HT4', 'warren-buffett', 'NVDA')];
+    await cron(47);
+    // One email, Holdterm's: a featured filer's move in a followed stock would also match Copybook's rules.
+    expect(sent.filter((m) => m.to[0] === 'ht@example.com').map((m) => m.from)).toEqual(['Holdterm <holdterm@factordynamics.com>']);
+    const mail = sent.find((m) => m.to[0] === 'ht@example.com')!;
+    expect(mail.from).toBe('Holdterm <holdterm@factordynamics.com>');
+    expect(mail.text).toContain('https://holdterm.pages.dev/s/SIRI');
+    expect(mail.text).toContain('https://holdterm.pages.dev/s/NVDA');
+    expect(mail.text).not.toContain('HT3');
+    expect(mail.text).toContain('Manage alerts: https://holdterm.pages.dev/account/ · SEC EDGAR data, not investment advice.');
+    expect(mail.html).toContain('<pre style="font:13px/1.45 ui-monospace');
+    expect(JSON.stringify(mail)).not.toMatch(/copybook/i);
   });
 
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {

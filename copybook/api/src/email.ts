@@ -9,6 +9,8 @@ export interface Mail {
   text: string;
   /** The same content laid out as tables, for mail clients that show HTML. */
   html?: string;
+  /** Sender, when not Copybook's (Holdterm). */
+  from?: string;
 }
 
 /** Sends through Resend's batch API (100 per request). Returns a short status for logs. */
@@ -20,7 +22,7 @@ export async function sendMail(env: Env, mails: Mail[]): Promise<string> {
   }
   const statuses: string[] = [];
   for (let i = 0; i < mails.length; i += 100) {
-    const batch = mails.slice(i, i + 100).map((m) => ({ from: env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...(m.html ? { html: m.html } : {}) }));
+    const batch = mails.slice(i, i + 100).map((m) => ({ from: m.from ?? env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...(m.html ? { html: m.html } : {}) }));
     const res = await fetch('https://api.resend.com/emails/batch', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -386,4 +388,68 @@ function htmlBody(env: Env, intro: string, filings: Alert13F[], events: AlertEve
   if (late.length) parts.push('<h2 style="font-size:15px;margin:20px 0 0;color:#374151">Earlier filings you may have missed (accepted by EDGAR more than 6 hours before we could alert):</h2>', ...late.map((e) => eventHtml(env, e, f)));
   parts.push(`<p style="margin-top:24px;font-size:12px;color:#6b7280">Choose whom you follow and how you get alerts at ${link(`${env.SITE_URL}account/`, 'your account')}.<br>Source: SEC EDGAR filings (13F-HR, Form 4, Schedules 13D and 13G), as filed. Not investment advice.<br>Copybook by Factor Dynamics.</p>`);
   return `<!doctype html><html><body style="margin:0;padding:16px;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111827;max-width:680px">${parts.join('')}</body></html>`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Holdterm: a separate brand on this Worker. Plain, terminal-style mail that never names Copybook.
+
+export const HOLDTERM_FROM = 'Holdterm <holdterm@factordynamics.com>';
+const htSite = (env: Env) => env.HOLDTERM_SITE_URL ?? 'https://holdterm.pages.dev/';
+const htFooter = (env: Env) => `\n\n--\nManage alerts: ${htSite(env)}account/ · SEC EDGAR data, not investment advice.`;
+
+export function holdtermLoginMail(env: Env, to: string, token: string, welcome: boolean): Mail {
+  const link = `${htSite(env)}account?login=${encodeURIComponent(token)}`;
+  const intro = welcome
+    ? 'HOLDTERM ALERTS: ACTIVE\n\nYou will get an email when an investor you follow files a 13F, 13D, 13G or Form 4, and when one is filed on a stock you follow. Follow nobody and you get every featured investor.'
+    : 'HOLDTERM SIGN-IN';
+  const text = `${intro}\n\nSign in (link works for 7 days):\n${link}${htFooter(env)}`;
+  return { to, from: HOLDTERM_FROM, subject: welcome ? 'Holdterm alerts are on' : 'Your Holdterm sign-in link', text, html: pre(text) };
+}
+
+const pre = (text: string) =>
+  `<!doctype html><html><body style="margin:0;padding:16px;background:#fff"><pre style="font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#111;white-space:pre-wrap;margin:0">${esc(text)}</pre></body></html>`;
+
+const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length));
+const lpad = (s: string, n: number) => (s.length >= n ? s : ' '.repeat(n - s.length) + s);
+
+function holdtermFiling(env: Env, a: Alert13F): string {
+  const lines = [`${a.manager.toUpperCase()} · ${quarterLabel(a.quarter)} 13F-HR`, `filed ${a.filing_date}${a.accepted ? ` · accepted ${acceptedUtc(a.accepted)}` : ''}`];
+  const mv = a.moves;
+  if (mv) {
+    lines.push(`bought ${usd(mv.bought_usd, false)} · sold ${usd(mv.sold_usd, false)}`, '');
+    const buys = [...mv.new.map((r) => ['NEW', r] as const), ...mv.added.map((r) => ['ADD', r] as const)].sort((x, y) => y[1].value_delta - x[1].value_delta).slice(0, 5);
+    const sells = [...mv.exited.map((r) => ['EXIT', r] as const), ...mv.trimmed.map((r) => ['TRIM', r] as const)].sort((x, y) => x[1].value_delta - y[1].value_delta).slice(0, 5);
+    for (const [title, rows] of [['TOP BUYS', buys], ['TOP SELLS', sells]] as const) {
+      if (!rows.length) continue;
+      lines.push(title);
+      for (const [label, r] of rows) lines.push(`  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad(usd(r.value_delta), 9)}  ${positionChange(label === 'ADD' ? 'Added' : label === 'TRIM' ? 'Trimmed' : label === 'NEW' ? 'New' : 'Exited', r)}`);
+    }
+  } else if (a.top?.length) {
+    lines.push('', 'LARGEST HOLDINGS', ...a.top.slice(0, 5).map((r) => `  ${pad(rowName(r), 19)}${lpad(usd(r.value, false), 9)}`));
+  } else {
+    lines.push('', 'Position changes follow once the filing is processed.');
+  }
+  lines.push('', `${htSite(env)}m/${a.slug}`, a.sec_url);
+  return lines.join('\n');
+}
+
+function holdtermEvent(env: Env, e: AlertEvent): string {
+  const lines = [eventHeadline(e).toUpperCase()];
+  if (e.accepted) lines.push(`accepted ${acceptedUtc(e.accepted)} · ${e.id.startsWith('cluster:') ? 'cluster' : e.id}`);
+  if (e.kind === 'form4') for (const c of e.classes ?? []) if (c.shares_after != null) lines.push(`  ${pad(c.security, 28)}${c.shares_before != null ? `${n(c.shares_before)} -> ` : ''}${n(c.shares_after)}`);
+  if (e.kind !== 'form4') {
+    const c = stakeChange(e);
+    if (c.line) lines.push(`  ${c.line}${c.note ? ` (${c.note})` : ''}`);
+  }
+  const t = e.ticker ?? e.subject_tickers?.[0];
+  lines.push('', t ? `${htSite(env)}s/${t}` : e.slug ? `${htSite(env)}m/${e.slug}` : '', e.url);
+  return lines.filter((l, i, a) => l || a[i - 1]).join('\n');
+}
+
+export function holdtermAlertMail(env: Env, to: string, filings: Alert13F[], events: AlertEvent[]): Mail {
+  const heads = [...filings.map(filingHeadline), ...events.map(eventHeadline)];
+  const subject = `${heads[0]}${heads.length > 1 ? ` + ${heads.length - 1} more` : ''}`;
+  const rule = '-'.repeat(48);
+  const text = `${[...filings.map((a) => holdtermFiling(env, a)), ...events.map((e) => holdtermEvent(env, e))].join(`\n${rule}\n`)}${htFooter(env)}`;
+  return { to, from: HOLDTERM_FROM, subject, text, html: pre(text) };
 }

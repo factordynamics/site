@@ -1,4 +1,4 @@
-import { loginMail, sendMail } from './email';
+import { holdtermLoginMail, loginMail, sendMail } from './email';
 import { isActive, type Env, type Member } from './env';
 import { stripe } from './stripe';
 import { signToken } from './tokens';
@@ -71,11 +71,12 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
   };
   // A stale event (older subscription) must not overwrite a newer active one.
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
-  // Holdterm's welcome comes from Holdterm, never a Copybook email.
-  if (isActive(m) && !m.welcomed && m.email && m.plan !== 'holdterm') {
+  if (isActive(m) && !m.welcomed && m.email) {
     const token = await signToken(env.SESSION_SECRET, 'login', customer, LOGIN_TTL);
-    // Only a delivered welcome counts; otherwise the next subscription event retries it.
-    m.welcomed = (await sendMail(env, [loginMail(env, m.email, token, true)])) === '200';
+    // Only a delivered welcome counts; otherwise the next subscription event retries it. Holdterm's
+    // welcome comes from Holdterm, never Copybook.
+    const welcome = m.plan === 'holdterm' ? holdtermLoginMail(env, m.email, token, true) : loginMail(env, m.email, token, true);
+    m.welcomed = (await sendMail(env, [welcome])) === '200';
   }
   await putMember(env, m);
   return m;

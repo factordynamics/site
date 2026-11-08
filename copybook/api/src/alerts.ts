@@ -1,4 +1,4 @@
-import { alertMail, digestMail, sendMail } from './email';
+import { alertMail, digestMail, holdtermAlertMail, sendMail } from './email';
 import { companyFilings, computeMoves, fetch13F, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, type Env, type Member } from './env';
 import { getFollows, listMembers, putMember, type Follows } from './members';
@@ -129,6 +129,20 @@ function stockAlerts(meta: FilerMeta, slug: string): boolean {
   return m.type ? STOCK_ALERT_TYPES.has(m.type) : !!m.featured;
 }
 
+/**
+ * Holdterm Alerts: 13F filings from followed investors (every featured one when nobody is followed),
+ * and 13D, 13G and Form 4 filings by a followed investor or on a followed stock.
+ */
+export function forHoldterm(f: Follows, filings: Alert13F[], events: AlertEvent[], meta: FilerMeta): { filings: Alert13F[]; events: AlertEvent[] } {
+  const inv = new Set(f.investors);
+  const stocks = new Set(f.stocks);
+  const followed = (slug: string) => (inv.size ? inv.has(slug) : !!meta[slug]?.featured);
+  return {
+    filings: filings.filter((a) => a.slugs.some(followed)),
+    events: events.filter((e) => (!!e.slug && followed(e.slug)) || [e.ticker, ...(e.subject_tickers ?? [])].some((t) => !!t && stocks.has(t))),
+  };
+}
+
 /** Which of these filings and events a member gets, by their alert switch and follows. */
 export function forMember(m: Member, f: Follows, filings: Alert13F[], events: AlertEvent[], meta: FilerMeta = {}): { filings: Alert13F[]; events: AlertEvent[] } {
   if (m.alerts === 'off') return { filings: [], events: [] };
@@ -206,8 +220,13 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   const notes: Member[] = [];
   let digest = 0;
   for (const raw of await listMembers(env)) {
-    // Holdterm members get Holdterm-branded alerts, never Copybook's.
-    if (!isActive(raw) || !raw.email || raw.alerts === 'off' || raw.plan === 'holdterm') continue;
+    if (!isActive(raw) || !raw.email || raw.alerts === 'off') continue;
+    if (raw.plan === 'holdterm') {
+      // Holdterm members get Holdterm-branded alerts, never Copybook's.
+      const mine = forHoldterm(await getFollows(env, raw), filings, events, meta);
+      if (mine.filings.length || mine.events.length) mails.push(holdtermAlertMail(env, raw.email, mine.filings, mine.events));
+      continue;
+    }
     const f = await getFollows(env, raw);
     const m = await scoped(env, raw, f);
     const mine = forMember(m, f, filings, events, meta);

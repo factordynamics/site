@@ -6,7 +6,7 @@ import { handleV1 } from './v1';
 import './v1data';
 
 export { KeyMeter } from './keys';
-import { leadAckMail, loginMail, sendMail } from './email';
+import { holdtermLoginMail, leadAckMail, loginMail, sendMail } from './email';
 import { isActive, isCopy, isPro, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
@@ -230,12 +230,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // Email a sign-in link to an active member. Always answers ok so it can't be used to probe emails.
   if (req.method === 'POST' && path === '/login') {
-    const email = String((await body(req)).email ?? '').trim().toLowerCase();
+    const b = await body(req);
+    const email = String(b.email ?? '').trim().toLowerCase();
     if (!EMAIL.test(email)) return json({ ok: false, error: 'invalid email' }, 400, h);
     const m = await memberByEmail(env, email);
     if (isActive(m) && !(await env.DB.get(`rl:${email}`))) {
       await env.DB.put(`rl:${email}`, '1', { expirationTtl: 60 });
-      await sendMail(env, [loginMail(env, m.email, await signToken(env.SESSION_SECRET, 'login', m.customer, LOGIN_TTL), false)]);
+      const token = await signToken(env.SESSION_SECRET, 'login', m.customer, LOGIN_TTL);
+      // A Holdterm member only ever hears from Holdterm; a sign-in started on Holdterm gets a Holdterm link.
+      const holdterm = m.plan === 'holdterm' || b.brand === 'holdterm' || /holdterm/.test(origin ?? '');
+      await sendMail(env, [holdterm ? holdtermLoginMail(env, m.email, token, false) : loginMail(env, m.email, token, false)]);
     }
     return json({ ok: true }, 200, h);
   }
