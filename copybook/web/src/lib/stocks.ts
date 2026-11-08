@@ -114,3 +114,12 @@ export const stockPath = (t: string) => `/stocks/${encodeURIComponent(t)}/`
 export const loadCoverage = () => getJSON<{ filers: number; curated: number }>(`${D}coverage.json`).catch(() => ({ filers: 8900, curated: 199 }))
 /** 8,964 -> "8,900+": never overstate coverage. */
 export const aboutCount = (n: number) => (n >= 1000 ? `${(Math.floor(n / 100) * 100).toLocaleString('en-US')}+` : n.toLocaleString('en-US'))
+
+/** Every 13F filer's latest position in a stock (scripts/stocks.mjs, d/h/{TICKER}.json): the 200 largest, plus counts. */
+export type FilerHolder = { slug: string; name: string; quarter: string; shares: number; value: number; weight: number; tier: 0 | 1 | 2 }
+export const loadFilerHolders = (t: string) =>
+  getJSON<{ filers: number; quarters: Record<string, number>; rows: [string, string, string, number, number, number, 0 | 1 | 2][] }>(`${D}h/${encodeURIComponent(t)}.json`).then((d) => ({
+    filers: d.filers,
+    quarters: d.quarters,
+    rows: d.rows.map(([slug, name, quarter, shares, value, weight, tier]): FilerHolder => ({ slug, name: displayName(name), quarter, shares, value, weight, tier })),
+  }))

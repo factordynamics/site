@@ -6,7 +6,7 @@ import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { useMember } from '../lib/account'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
 import { dateLabel, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
-import { loadStock, resolveTicker, stockPath, type StockHolder } from '../lib/stocks'
+import { loadFilerHolders, loadStock, resolveTicker, stockPath, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
   new: { label: 'New', tone: 'up' },
@@ -22,8 +22,11 @@ export function StockPage() {
   const s = useAsync(() => loadStock(ticker.toUpperCase()), [ticker])
   // The lens lives in the URL (?funds=all) so a view can be shared; superinvestors by default.
   const [params, setParams] = useSearchParams()
-  const scope: 'featured' | 'all' = params.get('funds') === 'all' ? 'all' : 'featured'
-  const setScope = (k: 'featured' | 'all') => setParams(k === 'all' ? { funds: 'all' } : {}, { replace: true })
+  const lens = params.get('funds')
+  const view: 'featured' | 'all' | 'filers' = lens === 'all' || lens === 'filers' ? lens : 'featured'
+  const setView = (k: typeof view) => setParams(k === 'featured' ? {} : { funds: k }, { replace: true })
+  // Curated data (moves, exits, options) follows the closest curated lens; "All 13F filers" widens the holder list.
+  const scope: 'featured' | 'all' = view === 'featured' ? 'featured' : 'all'
   const member = useMember()
   const [n, setN] = useState(25)
   const d = s.data
@@ -35,16 +38,28 @@ export function StockPage() {
     resolveTicker(ticker).then((t) => t && t !== ticker && nav(stockPath(t), { replace: true }))
   }, [s.error, ticker, nav])
 
-  const holders = useMemo(() => (d?.holders ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
+  const tracked = useMemo(() => (d?.holders ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
+  const fh = useAsync(() => (view === 'filers' && d ? loadFilerHolders(d.ticker) : Promise.resolve(null)), [view, d?.ticker])
+  const filers = view === 'filers' ? fh.data : null
+  const filersLoading = view === 'filers' && !fh.data && !fh.error
+  // Every filer's latest position; a fund we track closely keeps its row, with its change since the filing before.
+  const holders = useMemo(() => {
+    if (!filers) return tracked
+    const mine = new Map(tracked.map((h) => [h.slug, h]))
+    return filers.rows.map(
+      (r): StockHolder =>
+        mine.get(r.slug) ?? { slug: r.slug, manager: r.name, firm: r.name, quarter: r.quarter, featured: r.tier === 2, shares: r.shares, value: r.value, weight: r.weight, prev_shares: 0, prev_value: 0, delta_value: 0, change: null },
+    )
+  }, [filers, tracked])
   const exited = useMemo(() => (d?.exited ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
   const options = useMemo(() => (d?.options ?? []).filter((o) => scope === 'all' || o.featured), [d, scope])
   const [allMoves, setAllMoves] = useState(false)
   const moves = useMemo(
     () =>
-      [...holders, ...exited]
+      [...tracked, ...exited]
         .filter((h) => h.change && h.change !== 'unchanged' && h.delta_value)
         .sort((a, b) => Math.abs(b.delta_value) - Math.abs(a.delta_value)),
-    [holders, exited],
+    [tracked, exited],
   )
   // Hide token moves: under 0.1% of the fund's book or $1M, whichever is larger.
   const bigMoves = useMemo(() => moves.filter((h) => Math.abs(h.delta_value) >= Math.max(1e6, h.weight > 0 ? (h.value / h.weight) * 0.001 : 0)), [moves])
@@ -52,9 +67,9 @@ export function StockPage() {
   // Header cards follow the lens: counted from the same holders the tables list.
   const c = useMemo(() => {
     if (!d) return null
-    const n = (k: string) => holders.filter((h) => h.change === k).length
-    return { holders: holders.length, prev_holders: holders.filter((h) => h.change !== 'new').length + exited.length, new: n('new'), added: n('added'), trimmed: n('trimmed'), exited: exited.length }
-  }, [d, holders, exited])
+    const n = (k: string) => tracked.filter((h) => h.change === k).length
+    return { holders: tracked.length, prev_holders: tracked.filter((h) => h.change !== 'new').length + exited.length, new: n('new'), added: n('added'), trimmed: n('trimmed'), exited: exited.length }
+  }, [d, tracked, exited])
   const multi = Boolean(d && d.quarters.length > 1)
 
   // Holdings filed since each fund's 13F, one roll-up per fund.
@@ -92,6 +107,8 @@ export function StockPage() {
 
   const dh = c ? c.holders - c.prev_holders : 0
   const featuredCount = d?.holders.filter((h) => h.featured).length ?? 0
+  // All-filer lens: filers per report quarter, newest first.
+  const fq = filers ? Object.entries(filers.quarters).sort((a, b) => b[0].localeCompare(a[0])) : null
   return (
     <div className="container-x pt-10 md:pt-14">
       <nav className="text-[13px] text-ink-3" aria-label="Breadcrumb">
@@ -117,6 +134,19 @@ export function StockPage() {
       </header>
 
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
+        {view === 'filers' ? (
+          <>
+            <Stat label="13F filers holding it" value={filers ? filers.filers.toLocaleString('en-US') : '—'} sub={filers && filers.filers > filers.rows.length ? `The ${filers.rows.length} largest are listed below` : 'Latest 13F of each filer'} />
+            <Stat
+              label={fq ? `Filed ${quarterLabel(fq[0][0])} so far` : 'Filed so far'}
+              value={fq ? fq[0][1].toLocaleString('en-US') : '—'}
+              sub={fq && filers ? (fq.length > 1 ? `of ${filers.filers.toLocaleString('en-US')}; the rest are on ${fq.slice(1).map(([q]) => quarterLabel(q)).join(' or ')}` : `all ${filers.filers.toLocaleString('en-US')}`) : undefined}
+            />
+            <Stat label="Superinvestors among them" value={d ? featuredCount : '—'} sub={d ? `${d.holders.length} of the funds we track closely` : undefined} />
+            <Stat label="Largest holder" value={holders[0] ? <span className="block truncate text-[20px]">{holders[0].manager}</span> : '—'} sub={holders[0] ? `${sharesFmt(holders[0].shares)} shares · ${quarterLabel(holders[0].quarter)}` : undefined} />
+          </>
+        ) : (
+          <>
         <Stat
           label={scope === 'featured' ? 'Superinvestors holding it' : 'Funds holding it'}
           value={c ? c.holders : '—'}
@@ -129,11 +159,19 @@ export function StockPage() {
         />
         <Stat label="Bought" value={c ? c.new + c.added : '—'} sub={c ? `${c.new} new positions` : undefined} />
         <Stat label="Sold" value={c ? c.trimmed + c.exited : '—'} sub={c ? `${c.exited} exited completely` : undefined} />
+          </>
+        )}
       </div>
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-ink-3">
-          {d
+          {view === 'filers'
+            ? fq && filers
+              ? fq.length > 1
+                ? `Mid-season: ${fq[0][1].toLocaleString('en-US')} of ${filers.filers.toLocaleString('en-US')} 13F filers holding it have filed ${quarterLabel(fq[0][0])}; the rest are on ${fq.slice(1).map(([q]) => quarterLabel(q)).join(' or ')}. Each row is labelled with its quarter.`
+                : `From each filer’s ${quarterLabel(fq[0][0])} 13F.`
+              : ''
+            : d
             ? d.quarters.length > 1
               ? `Mid-season: ${holders.filter((h) => h.quarter === d.quarters[0]).length} of ${holders.length} funds shown have filed ${quarterLabel(d.quarters[0])}; the rest are still on ${d.quarters.slice(1).map(quarterLabel).join(' or ')}. Each row is labelled with its quarter, compared with that fund’s filing before.`
               : `From each fund’s ${quarterLabel(d.quarters[0])} 13F, compared with its filing before.`
@@ -143,10 +181,11 @@ export function StockPage() {
           {(
             [
               ['featured', 'Superinvestors'],
-              ['all', 'All funds we track'],
+              ['all', 'Funds we track'],
+              ['filers', 'All 13F filers'],
             ] as const
           ).map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={scope === k} onClick={() => setScope(k)} className={`rounded-full px-3 py-1.5 ${scope === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+            <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`rounded-full px-3 py-1.5 ${view === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
               {l}
             </button>
           ))}
@@ -172,7 +211,14 @@ export function StockPage() {
       )}
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[1.3fr_1fr] [&>*]:min-w-0">
-        <Panel title="Who bought and sold" sub="Change in shares since each fund’s previous filing, at quarter-end value">
+        <Panel
+          title="Who bought and sold"
+          sub={
+            view === 'filers'
+              ? 'Among the funds we track closely, since each one’s previous filing. Buys and sells for every filer come once their prior quarters are on file.'
+              : 'Change in shares since each fund’s previous filing, at quarter-end value'
+          }
+        >
           {!d ? (
             <Skeleton className="h-[300px] w-full" />
           ) : shownMoves.length ? (
@@ -195,7 +241,7 @@ export function StockPage() {
           )}
         </Panel>
         <Panel title="Largest holders" sub="Value as filed, and weight in each fund’s portfolio">
-          {!d ? (
+          {!d || filersLoading ? (
             <Skeleton className="h-[300px] w-full" />
           ) : (
             <ul className="divide-y divide-line">
@@ -211,7 +257,10 @@ export function StockPage() {
       <section className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
         <header className="border-b border-line px-5 py-4 md:px-6">
           <h2 className="text-[15px] font-semibold">Every holder</h2>
-          <p className="text-[13px] text-ink-3">{holders.length.toLocaleString('en-US')} funds · shares only; options are listed separately below</p>
+          <p className="text-[13px] text-ink-3">
+            {filers && filers.filers > holders.length ? `The ${holders.length} largest of ${filers.filers.toLocaleString('en-US')} 13F filers` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
+            {view === 'filers' && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
+          </p>
         </header>
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every holder">
           <table className="w-full text-[14px]">

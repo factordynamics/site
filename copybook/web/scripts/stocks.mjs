@@ -233,3 +233,62 @@ const periods = [period(season), period(season - 1)]
 const flow = { ...periods[0], periods, generated_at: index.generated_at }
 writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
 console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flow.quarter}: ${filed.length} funds filed (${flow.featured_filed} featured), ${periods.map((p) => `${p.quarter} ${p.funds_filed} funds`).join(', ')}`)
+
+// Every 13F filer's latest holdings (data/f/{cik}.json shards), per stock page: the 200 largest
+// holders, written to d/h/{TICKER}.json for the "All 13F filers" lens. Loaded only when a reader picks it.
+{
+  const fl = await read('filers.json').catch(() => null)
+  const filers = (fl?.filers ?? []).filter((f) => f.ok)
+  const curatedByCik = new Map(index.managers.filter((m) => m.ok).map((m) => [m.cik, m]))
+  const pageOf = (h) => (h.cusip && byCusip[h.cusip]) || (h.ticker && byTicker[h.ticker]) || null
+  const per = new Map() // page ticker -> rows
+  const quarters = new Map() // page ticker -> {quarter: filers}
+  let read_ok = 0
+  for (let i = 0; i < filers.length; i += 48) {
+    const part = await Promise.all(filers.slice(i, i + 48).map((f) => read(`f/${f.cik}.json`).then((d) => [f, d], () => null)))
+    for (const x of part) {
+      if (!x || !x[1]?.ok || !Array.isArray(x[1].rows)) continue
+      const [f, d] = x
+      // Same freshness rule as the curated set: more than two quarters behind isn't a current holder.
+      if (qn(d.quarter) < newest - 2) continue
+      read_ok++
+      const col = Object.fromEntries((d.columns ?? []).map((c, j) => [c, j]))
+      const total = d.total_value || 1
+      const cur = curatedByCik.get(f.cik)
+      const who = cur ? { slug: cur.slug, name: cur.manager, flag: cur.featured ? 2 : 1 } : { slug: f.slug, name: f.name, flag: 0 }
+      const mine = new Map() // page -> [shares, value]; classes of one issuer roll up like the curated rows
+      for (const r of d.rows) {
+        if (r[col.put_call]) continue
+        const t = pageOf({ cusip: r[col.cusip], ticker: r[col.ticker] })
+        if (!t) continue
+        const p = mine.get(t) ?? [0, 0]
+        p[0] += r[col.shares] || 0
+        p[1] += r[col.value] || 0
+        mine.set(t, p)
+      }
+      for (const [t, [shares, value]] of mine) {
+        if (shares <= 0) continue
+        const rows = per.get(t) ?? []
+        rows.push([who.slug, who.name, d.quarter, shares, Math.round(value), Number((value / total).toPrecision(4)), who.flag])
+        per.set(t, rows)
+        const q = quarters.get(t) ?? {}
+        q[d.quarter] = (q[d.quarter] ?? 0) + 1
+        quarters.set(t, q)
+      }
+    }
+  }
+  mkdirSync(join(out, 'd', 'h'), { recursive: true })
+  let files = 0
+  let rowsOut = 0
+  for (const [t, rows] of per) {
+    rows.sort((a, b) => b[4] - a[4])
+    const top = rows.slice(0, 200)
+    rowsOut += top.length
+    writeFileSync(
+      join(out, 'd', 'h', `${t}.json`),
+      JSON.stringify({ ticker: t, filers: rows.length, quarters: quarters.get(t), columns: ['slug', 'name', 'quarter', 'shares', 'value', 'weight', 'tier'], rows: top, generated_at: fl?.generated_at ?? index.generated_at }),
+    )
+    files++
+  }
+  console.log(`all-filer holders: ${read_ok} filers, ${files} stocks, ${rowsOut} rows (200 largest per stock)`)
+}
