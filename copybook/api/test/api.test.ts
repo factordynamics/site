@@ -142,6 +142,7 @@ beforeEach(async () => {
       return new Response('ok', { status: url.startsWith('https://hooks.example.com') ? hookStatus : 200 });
     }
     if (url === `${SITE}data/index.json`) return Response.json(index);
+    if (url === `${SITE}d/f/index.json`) return Response.json({ cards: [{ accession: '0000950123-26-011111', slug: 'warren-buffett' }] });
     if (url === `${SITE}data/filers.json`) return new Response(JSON.stringify({ count: filers.length, filers }, null, 1));
     if (url.startsWith(`${SITE}data/f/`)) return shards[url.slice(`${SITE}data/f/`.length)] ? Response.json(shards[url.slice(`${SITE}data/f/`.length)]) : new Response('not found', { status: 404 });
     if (url === `${SITE}data/alerts.json`) return Response.json({ recent: recentMoves });
@@ -486,7 +487,10 @@ describe('copybook api', () => {
     expect(mail.text).toContain('Trimmed: AAPL -$4K (sold 20% of the position, 19.5% of book)');
     expect(mail.text).toContain('Exited: BAC -$2K (9.8% of book)');
     expect(mail.text).toContain('Of the positions that changed, 1 is a stock you own.');
-    expect(mail.text).toContain('https://refcell.github.io/gust/copybook/investors/warren-buffett');
+    // Buffett's filing has a public card; Loeb's doesn't yet, so it links the investor page.
+    expect(mail.text).toContain('Copybook: https://refcell.github.io/gust/copybook/f/0000950123-26-011111/');
+    expect(mail.html).toContain('>Filing card</a>');
+    expect(loeb.text).toContain('Copybook: https://refcell.github.io/gust/copybook/investors/dan-loeb');
     expect(sent.find((m) => m.to[0] === 'watcher@example.com')!.text).toContain('Exited: BAC -$2K (9.8% of book) [watchlist]');
     const latency = JSON.parse((await env.DB.get('alerts:latency'))!);
     expect(latency.map((l: { slug: string }) => l.slug).sort()).toEqual(['dan-loeb', 'warren-buffett']);

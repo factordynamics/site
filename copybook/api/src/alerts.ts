@@ -33,6 +33,21 @@ export interface Alert13F {
   extra?: boolean;
   /** Largest holdings, when there is no prior quarter to diff against. */
   top?: MoveRow[];
+  /** The site has a public filing card at /f/{accession}/ for this filing. */
+  card?: boolean;
+}
+
+/** Marks the filings that have a public card; cards are rebuilt every 3 hours, so new ones may not yet. */
+export async function withCards(env: Env, filings: Alert13F[]): Promise<Alert13F[]> {
+  if (!filings.length) return filings;
+  try {
+    const res = await fetch(`${env.SITE_URL}d/f/index.json`, { cf: { cacheTtl: 600 } } as RequestInit);
+    if (!res.ok) return filings;
+    const have = new Set(((await res.json()) as { cards: { accession: string }[] }).cards.map((c) => c.accession));
+    return filings.map((a) => ({ ...a, card: have.has(a.accession) }));
+  } catch {
+    return filings;
+  }
 }
 
 export interface Insider {
@@ -217,6 +232,7 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   if (!filings.length && !events.length) return { emails: 0, digest: 0, mail: 'none', late: late.length };
 
   const meta = await filerMeta(env);
+  filings = await withCards(env, filings);
   const mails = [];
   const notes: Member[] = [];
   const chats: string[] = [];
@@ -254,8 +270,9 @@ export async function runDigest(env: Env, now: number): Promise<{ emails: number
   const day = etDay(now);
   const raw = await env.DB.get(`digest:${day}`);
   if (!raw) return { emails: 0, status: 'none' };
-  const { filings, events, late = [] } = JSON.parse(raw) as DigestDay;
+  const { filings: stored, events, late = [] } = JSON.parse(raw) as DigestDay;
   const meta = await filerMeta(env);
+  const filings = await withCards(env, stored);
   const mails = [];
   const notes: Member[] = [];
   for (const raw of await listMembers(env)) {

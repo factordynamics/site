@@ -135,6 +135,9 @@ function headlineMoves(mv: Moves): string {
 
 const acceptedUtc = (iso: string) => iso.replace('T', ' ').replace(/(\.\d+)?Z$/, ' UTC');
 
+/** The filing's public card when the site has built it, otherwise the investor page. */
+export const filingUrl = (env: Env, a: Alert13F) => (a.card ? `${env.SITE_URL}f/${a.accession}/` : `${env.SITE_URL}investors/${a.slug}`);
+
 function filingBlock(env: Env, a: Alert13F, f: Follows): string {
   const head = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}: ${quarterLabel(a.quarter)} 13F, filed ${a.filing_date}${a.followup ? ' (position changes)' : ''}`;
   const lines = [head];
@@ -163,7 +166,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
     lines.push('  Too many positions to diff on filing. A second email with its position changes follows after the next data refresh, usually within a few hours.');
   }
   if (a.accepted) lines.push(`  Accession ${a.accession}, accepted by EDGAR ${acceptedUtc(a.accepted)}`);
-  lines.push(`  Copybook: ${env.SITE_URL}investors/${a.slug}`, `  SEC: ${a.sec_url}`);
+  lines.push(`  Copybook: ${filingUrl(env, a)}`, `  SEC: ${a.sec_url}`);
   return lines.join('\n');
 }
 
@@ -322,8 +325,8 @@ function table(head: string[], rows: string[][], right: number[] = []): string {
   return `<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:14px;margin:6px 0 4px">${th ? `<tr>${th}</tr>` : ''}${tr}</table>`;
 }
 
-const meta = (env: Env, slug: string, accession: string, accepted: string | undefined, sec: string) =>
-  `<p style="margin:4px 0 18px;font-size:12px;color:#6b7280">Accession ${esc(accession)}${accepted ? `, accepted by EDGAR ${esc(acceptedUtc(accepted))}` : ''} · ${slug ? `${link(`${env.SITE_URL}investors/${slug}`, 'Copybook page')} · ` : ''}${link(sec, 'SEC filing')}</p>`;
+const meta = (page: string | null, accession: string, accepted: string | undefined, sec: string, label = 'Copybook page') =>
+  `<p style="margin:4px 0 18px;font-size:12px;color:#6b7280">Accession ${esc(accession)}${accepted ? `, accepted by EDGAR ${esc(acceptedUtc(accepted))}` : ''} · ${page ? `${link(page, label)} · ` : ''}${link(sec, 'SEC filing')}</p>`;
 
 function filingHtml(env: Env, a: Alert13F, f: Follows): string {
   const out = [`<h3 style="margin:16px 0 2px;font-size:16px">${esc(a.manager)}${a.name && a.name !== a.manager ? ` <span style="color:#6b7280;font-weight:400">(${esc(a.name)})</span>` : ''}: ${esc(quarterLabel(a.quarter))} 13F${a.followup ? ' position changes' : ''}</h3>`];
@@ -338,7 +341,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
   } else {
     out.push(`<p style="margin:2px 0">${a.extra ? 'Holdings are on the filer page.' : 'Too many positions to diff on filing. A second email with its position changes follows after the next data refresh, usually within a few hours.'}</p>`);
   }
-  out.push(meta(env, a.slug, a.accession, a.accepted, a.sec_url));
+  out.push(meta(a.slug ? filingUrl(env, a) : null, a.accession, a.accepted, a.sec_url, a.card ? 'Filing card' : 'Copybook page'));
   return out.join('');
 }
 
@@ -374,7 +377,7 @@ function eventHtml(env: Env, e: AlertEvent, f: Follows): string {
     if (e.item4) parts.push(`<p style="margin:4px 0;font-size:13px"><b>Purpose (Item 4):</b> ${esc(e.item4)}</p>`);
   }
   for (const fn of (e.footnotes ?? []).slice(0, 3)) parts.push(`<p style="margin:2px 0;font-size:12px;color:#4b5563">Footnote: ${esc(fn.length > 240 ? `${fn.slice(0, 240)}…` : fn)}</p>`);
-  parts.push(meta(env, e.slug, e.id, e.accepted, e.url));
+  parts.push(meta(e.slug ? `${env.SITE_URL}investors/${e.slug}` : null, e.id, e.accepted, e.url));
   return parts.join('');
 }
 
@@ -478,7 +481,7 @@ export interface FeedItem {
 export function feedItems(env: Env, filings: Alert13F[], events: AlertEvent[], now: number): FeedItem[] {
   const none: Follows = { investors: [], stocks: [], owned: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 0, cluster_buys: true, any_13d: true };
   return [
-    ...filings.map((a) => ({ id: `${a.accession}${a.followup ? ':moves' : ''}`, title: filingHeadline(a), text: filingBlock(env, a, none), url: `${env.SITE_URL}investors/${a.slug}`, published: a.accepted ?? new Date(now).toISOString() })),
+    ...filings.map((a) => ({ id: `${a.accession}${a.followup ? ':moves' : ''}`, title: filingHeadline(a), text: filingBlock(env, a, none), url: filingUrl(env, a), published: a.accepted ?? new Date(now).toISOString() })),
     ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, title: eventHeadline(e), text: eventLine(env, e, none), url: e.slug ? `${env.SITE_URL}investors/${e.slug}` : e.url, published: e.accepted ?? new Date(now).toISOString() })),
   ];
 }
