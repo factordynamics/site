@@ -13,6 +13,18 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
     schema_version: SCHEMA_VERSION,
     breaking: false,
     changes: [
+      'Every 13F filer: /v1/filers lists all of them (about 9,000) with `curated` and `type`; ?curated=true|false filters. Holdings work for any filer by its slug or CIK.',
+      'Holdings: `latest` as the quarter, `truncated` (true while only the public top-500 shard is available for a filer), filer.curated.',
+      'GET /v1/filers/{filer}/holdings?from=&to=: up to 8 quarters per call, with `missing` and `next_from`.',
+      'GET /v1/stocks/{ticker|cusip}/holders?cohort=all|curated&quarter=: every 13F holder of one issuer, with prior shares, share and value change.',
+      'GET /v1/bulk and /v1/bulk/{YYYYQn}.csv.gz|.parquet: persistent per-quarter exports of every filer\'s book.',
+    ],
+  },
+  {
+    date: '2026-11-08',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    changes: [
       'Every response carries data_built_at and build_id: when the data was built and which build it is, so a change in served data is detectable.',
       'Position: weight_equity (share of the equity book: SH rows without put/call), value_scale, value_as_filed, value_adjusted, zero_value, passed through from the data run when it publishes them.',
       'filing.filer_cik: the CIK that filed (e.g. Pershing Square for Ackman).',

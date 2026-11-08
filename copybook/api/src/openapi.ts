@@ -46,7 +46,7 @@ export function openapi() {
       version: SCHEMA_VERSION,
       description: `13F holdings, Form 4 and Schedule 13D/G data from SEC EDGAR, as filed. Copy Pro and Copy Fund. Units: money is whole US dollars (filings reported in thousands are rescaled); shares are as filed (principal amount for PRN rows); weights and fractions are 0-1; dates are ISO 8601, datetimes UTC. Authenticate with \`Authorization: Bearer cbk_live_...\` (create keys on your Copybook account page). Limits per key: ${LIMITS.minute} requests/minute and ${LIMITS.day} requests/day, reported in RateLimit-* and X-RateLimit-* headers; 429 responses carry Retry-After. Every response has \`schema_version\`, \`data_built_at\` and \`build_id\`. Error codes: ${Object.entries(ERRORS).map(([k, v]) => `\`${k}\` (${v})`).join('; ')}.
 
-**Coverage.** /v1/filers lists the 199 curated filers today. Every 13F filer (about 9,000) is coming to /v1; until then, other filers return 404.
+**Coverage.** Every 13F filer (about 9,000). /v1/filers marks Copybook's curated filers with \`curated: true\`; they have quarterly history with changes. Other filers serve their latest 13F, from the full book when it is loaded and otherwise the top 500 positions by value (\`truncated: true\`), plus earlier quarters as full books are loaded.
 
 **Send a User-Agent.** Requests with Python urllib's default User-Agent (\`Python-urllib/3.x\`) are refused by Cloudflare before they reach the API, with HTTP 403 and "error code: 1010" (not a JSON error). Set any descriptive User-Agent, e.g. \`urllib.request.Request(url, headers={"User-Agent": "myfund-research/1.0", "Authorization": "Bearer ..."})\`. requests, httpx, curl and Go's net/http work as they are.
 
@@ -63,7 +63,7 @@ export function openapi() {
       securitySchemes: { apiKey: { type: 'http', scheme: 'bearer', description: 'A Copybook API key, cbk_live_...' } },
       parameters: {
         filer: { name: 'filer', in: 'path', required: true, description: 'Filer slug from /v1/filers (e.g. warren-buffett) or its SEC CIK, with or without leading zeros (1067983).', schema: { type: 'string' } },
-        quarter: { name: 'quarter', in: 'path', required: true, description: 'Calendar quarter of the 13F report period, e.g. 2025Q1 for the period ending 2025-03-31.', schema: { type: 'string', pattern: '^\\d{4}Q[1-4]$' } },
+        quarter: { name: 'quarter', in: 'path', required: true, description: 'Calendar quarter of the 13F report period, e.g. 2025Q1 for the period ending 2025-03-31, or latest.', schema: { type: 'string', pattern: '^(\\d{4}Q[1-4]|latest)$' } },
         as_of: {
           name: 'as_of',
           in: 'query',
@@ -78,14 +78,15 @@ export function openapi() {
         Usage: { type: 'array', items: { type: 'object', required: ['day', 'requests'], properties: { day: { type: 'string', format: 'date', description: 'UTC day' }, requests: { type: 'integer', description: 'Allowed requests that day (429s not counted)' } } } },
         Filer: {
           type: 'object',
-          required: ['slug', 'cik', 'name', 'manager', 'featured', 'status', 'latest_quarter', 'latest_report_date', 'latest_filing_date', 'latest_accession', 'total_value_usd', 'position_count', 'history_quarters'],
+          required: ['slug', 'cik', 'name', 'manager', 'featured', 'status', 'latest_quarter', 'latest_report_date', 'latest_filing_date', 'latest_accession', 'total_value_usd', 'position_count', 'history_quarters', 'curated', 'type'],
           properties: {
+            curated: { type: 'boolean', description: "In Copybook's curated list (quarterly history and changes). Fields other filers lack are null." },
             slug: { type: 'string', description: 'Stable Copybook identifier' },
             cik: { type: 'string', pattern: '^\\d{10}$', description: 'SEC CIK, 10 digits' },
             name: { type: 'string', description: 'Filer name as on EDGAR' },
-            manager: { type: 'string', description: 'Display name (the person, for superinvestors)' },
+            manager: { type: ['string', 'null'], description: 'Display name (the person, for superinvestors); null for filers outside the curated list' },
             featured: { type: 'boolean' },
-            type: { type: 'string', enum: ['hedge_fund', 'active', 'bank', 'broker', 'index', 'other'], description: 'Filer type. Omitted until the filer is classified.' },
+            type: { type: ['string', 'null'], enum: ['hedge_fund', 'active', 'bank', 'broker', 'index', 'other', null], description: 'Filer type; null until the data run classifies the filer.' },
             status: { type: ['string', 'null'], enum: ['current', 'stale', 'inactive', 'empty_latest', 'reported_by_other', 'notice_pending', 'unreadable_latest', null] },
             latest_quarter: { type: ['string', 'null'] },
             latest_report_date: { type: ['string', 'null'], format: 'date' },
@@ -126,9 +127,10 @@ export function openapi() {
         },
         Holdings: {
           type: 'object',
-          required: ['filer', 'quarter', 'report_date', 'filing', 'prev_quarter', 'total_value_usd', 'position_count', 'holdings', 'exited'],
+          required: ['filer', 'quarter', 'report_date', 'filing', 'prev_quarter', 'total_value_usd', 'position_count', 'truncated', 'holdings', 'exited'],
           properties: {
-            filer: { type: 'object', required: ['slug', 'cik', 'name', 'manager'], properties: { slug: { type: 'string' }, cik: { type: 'string' }, name: { type: 'string' }, manager: { type: 'string' } } },
+            filer: { type: 'object', required: ['slug', 'cik', 'name', 'manager', 'curated'], properties: { slug: { type: 'string' }, cik: { type: 'string' }, name: { type: 'string' }, manager: { type: ['string', 'null'] }, curated: { type: 'boolean' } } },
+            truncated: { type: 'boolean', description: 'True when only the top 500 positions by value are served (position_count has the full count).' },
             quarter: { type: 'string' },
             report_date: { type: 'string', format: 'date', description: 'periodOfReport' },
             filing: {
@@ -184,14 +186,18 @@ export function openapi() {
       '/v1/filers': {
         get: {
           summary: 'Every filer Copybook covers, with its latest 13F and available quarters',
-          description: 'The 199 curated filers today; every 13F filer is coming.',
+          description: 'Every 13F filer: curated filers first, then all others. ?curated=true or false filters.',
+          parameters: [{ name: 'curated', in: 'query', required: false, schema: { type: 'string', enum: ['true', 'false'] } }],
           responses: {
             '200': {
               description: 'Filers',
               content: json(envelope({ type: 'array', items: { $ref: '#/components/schemas/Filer' } }, { count: { type: 'integer' } }), {
                 ...BUILD,
-                data: [{ slug: 'warren-buffett', cik: '0001067983', name: 'Berkshire Hathaway Inc', manager: 'Warren Buffett', featured: true, status: 'current', latest_quarter: '2026Q2', latest_report_date: '2026-06-30', latest_filing_date: '2026-08-14', latest_accession: '0001193125-26-352200', total_value_usd: 259000000000, position_count: 41, history_quarters: ['2026Q2', '2026Q1'] }],
-                count: 199,
+                data: [
+                  { slug: 'warren-buffett', cik: '0001067983', name: 'Berkshire Hathaway Inc', manager: 'Warren Buffett', featured: true, status: 'current', latest_quarter: '2026Q2', latest_report_date: '2026-06-30', latest_filing_date: '2026-08-14', latest_accession: '0001193125-26-352200', total_value_usd: 259000000000, position_count: 41, history_quarters: ['2026Q2', '2026Q1'], curated: true, type: null },
+                  { slug: 'whale-rock-capital-management-llc-7322', cik: '0001387322', name: 'Whale Rock Capital Management LLC', manager: null, featured: false, status: null, latest_quarter: '2026Q2', latest_report_date: '2026-06-30', latest_filing_date: '2026-08-14', latest_accession: null, total_value_usd: null, position_count: 35, history_quarters: ['2026Q2'], curated: false, type: null },
+                ],
+                count: 8964,
               }),
             },
             ...errResponses,
@@ -208,13 +214,14 @@ export function openapi() {
               content: json(envelope({ $ref: '#/components/schemas/Holdings' }), {
                 ...BUILD,
                 data: {
-                  filer: { slug: 'warren-buffett', cik: '0001067983', name: 'Berkshire Hathaway Inc', manager: 'Warren Buffett' },
+                  filer: { slug: 'warren-buffett', cik: '0001067983', name: 'Berkshire Hathaway Inc', manager: 'Warren Buffett', curated: true },
                   quarter: '2026Q2',
                   report_date: '2026-06-30',
                   filing: { accession: '0001193125-26-352200', filer_cik: '0001067983', form: '13F-HR', filing_date: '2026-08-14', accepted_at: '2026-08-14T20:05:12Z', sec_url: 'https://www.sec.gov/Archives/edgar/data/1067983/000119312526352200/0001193125-26-352200-index.html', amendments: [] },
                   prev_quarter: '2026Q1',
                   total_value_usd: 259000000000,
                   position_count: 41,
+                  truncated: false,
                   holdings: [POSITION_EXAMPLE],
                   exited: [],
                 },
@@ -224,6 +231,66 @@ export function openapi() {
             '501': { description: 'not_yet_available (as_of)', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
             ...errResponses,
           },
+        },
+      },
+      '/v1/filers/{filer}/holdings': {
+        get: {
+          summary: "A filer's books for a range of quarters (at most 8 per call)",
+          parameters: [
+            { $ref: '#/components/parameters/filer' },
+            { name: 'from', in: 'query', required: true, schema: { type: 'string', pattern: '^\\d{4}Q[1-4]$' } },
+            { name: 'to', in: 'query', required: true, schema: { type: 'string', pattern: '^\\d{4}Q[1-4]$' } },
+          ],
+          responses: {
+            '200': {
+              description: 'One Holdings object per quarter on file, oldest first; quarters without a book are in `missing`. When the range is longer than 8 quarters, `next_from` continues it.',
+              content: json(envelope({ type: 'array', items: { $ref: '#/components/schemas/Holdings' } }, { missing: { type: 'array', items: { type: 'string' } }, next_from: { type: ['string', 'null'] } }), { ...BUILD, data: [], missing: ['2025Q4'], next_from: null }),
+            },
+            '400': { description: 'bad_request', content: json({ $ref: '#/components/schemas/Error' }, { ...BUILD, error: { code: 'bad_request', message: 'from and to must be quarters like 2025Q1, from <= to.' } }) },
+            ...errResponses,
+          },
+        },
+      },
+      '/v1/stocks/{stock}/holders': {
+        get: {
+          summary: 'Every 13F holder of one issuer, with the change vs the prior quarter',
+          description: 'Share classes of one issuer (same 6-character CUSIP issuer code) are rolled up; calls and puts are separate rows (`kind`). Served for the latest complete 13F period.',
+          parameters: [
+            { name: 'stock', in: 'path', required: true, description: 'Ticker (NVDA), 9-character CUSIP or 6-character issuer code.', schema: { type: 'string' } },
+            { name: 'cohort', in: 'query', required: false, schema: { type: 'string', enum: ['all', 'curated'], default: 'all' } },
+            { name: 'quarter', in: 'query', required: false, schema: { type: 'string', pattern: '^\\d{4}Q[1-4]$' } },
+          ],
+          responses: {
+            '200': {
+              description: 'Holders, largest first',
+              content: json(envelope({ type: 'object' }, { count: { type: 'integer' } }), {
+                ...BUILD,
+                data: { issuer: '67066G', ticker: 'NVDA', display_name: 'NVIDIA', quarter: '2026Q2', prev_quarter: '2026Q1', cohort: 'all', holders: [{ filer: { cik: '0001387322', name: 'Whale Rock Capital Management LLC', slug: 'whale-rock-capital-management-llc-7322' }, kind: 'equity', shares: 1200000, prev_shares: 900000, share_change: 300000, value_usd: 216000000, prev_value_usd: 140000000, change: 'added', accession: null, accepted_at: null }] },
+                count: 1,
+              }),
+            },
+            '501': { description: 'not_yet_available: holder lists are loading', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            ...errResponses,
+          },
+        },
+      },
+      '/v1/bulk': {
+        get: {
+          summary: 'Persistent bulk exports: every filer\'s 13F book for a quarter, as gzip CSV (and Parquet where available)',
+          responses: {
+            '200': {
+              description: 'Available files, newest first',
+              content: json(envelope({ type: 'array', items: { type: 'object', required: ['file', 'quarter', 'bytes', 'uploaded_at', 'url'], properties: { file: { type: 'string' }, quarter: { type: 'string' }, bytes: { type: 'integer' }, uploaded_at: { type: 'string', format: 'date-time' }, url: { type: 'string' } } } }), { ...BUILD, data: [{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 48211933, uploaded_at: '2026-11-09T02:10:00.000Z', url: 'https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz' }] }),
+            },
+            ...errResponses,
+          },
+        },
+      },
+      '/v1/bulk/{file}': {
+        get: {
+          summary: 'Download one bulk export (streams the file; not JSON)',
+          parameters: [{ name: 'file', in: 'path', required: true, schema: { type: 'string', pattern: '^\\d{4}Q[1-4]\\.(csv\\.gz|parquet)$' } }],
+          responses: { '200': { description: 'The file', content: { 'application/gzip': {}, 'application/vnd.apache.parquet': {} } }, ...errResponses },
         },
       },
       '/v1/changelog': {

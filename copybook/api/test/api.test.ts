@@ -37,6 +37,9 @@ class MemR2 implements R2 {
   async put(k: string, v: ReadableStream | ArrayBuffer | string | null) {
     this.m.set(k, new Uint8Array(await new Response(v).arrayBuffer()));
   }
+  async list({ prefix }: { prefix: string }) {
+    return { objects: [...this.m].filter(([k]) => k.startsWith(prefix)).map(([key, v]) => ({ key, size: v.length, uploaded: new Date(0) })) };
+  }
 }
 
 const SITE = 'https://refcell.github.io/gust/copybook/';
@@ -89,7 +92,7 @@ function memFollows() {
       const n = String(id);
       if (!objs.has(n)) {
         const store = new Map<string, unknown>();
-        objs.set(n, new MemberFollows({ storage: { get: async <T,>(k: string) => { const v = structuredClone(store.get(k)) as T | undefined; await new Promise((r) => setTimeout(r, 5)); return v; }, put: async (k: string, v: unknown) => void store.set(k, structuredClone(v)) } }, env));
+        objs.set(n, new MemberFollows({ storage: { get: async <T,>(k: string) => { const v = structuredClone(store.get(k)) as T | undefined; await new Promise((r) => setTimeout(r, 5)); return v; }, put: async (k: string, v: unknown) => void store.set(k, structuredClone(v)), delete: async (k: string) => store.delete(k) } }, env));
       }
       return { fetch: (u: string, init?: RequestInit) => objs.get(n)!.fetch(new Request(u, init)) };
     },
@@ -120,6 +123,7 @@ beforeEach(async () => {
     const url = String(input);
     if (url === 'https://api.resend.com/emails/batch') {
       sent.push(...JSON.parse(String(init?.body)));
+      await new Promise((r) => setTimeout(r, 10)); // slow enough for concurrent webhooks to overlap
       return new Response('{"data":[]}', { status: 200 });
     }
     if (url.startsWith('https://api.stripe.com/v1/')) {
@@ -145,6 +149,7 @@ beforeEach(async () => {
     if (url === `${SITE}d/f/index.json`) return Response.json({ cards: [{ accession: '0000950123-26-011111', slug: 'warren-buffett' }] });
     if (url === `${SITE}data/filers.json`) return new Response(JSON.stringify({ count: filers.length, filers }, null, 1));
     if (url.startsWith(`${SITE}data/f/`)) return shards[url.slice(`${SITE}data/f/`.length)] ? Response.json(shards[url.slice(`${SITE}data/f/`.length)]) : new Response('not found', { status: 404 });
+    if (url === `${SITE}data/stock_holders.json`) return new Response('{"stocks":[{"issuer":"67066G","ticker":"NVDA","display_name":"NVIDIA"},{"issuer":"037833","ticker":"AAPL"}]}');
     if (url === `${SITE}data/alerts.json`) return Response.json({ recent: recentMoves });
     if (url === `${SITE}data/events.json`) return Response.json({ events });
     if (url === `${SITE}data/securities.json`) return new Response('{"037833100":{"ticker":"AAPL","name":"Apple"},"23331A109":{"ticker":"DHI","name":"D.R. Horton","sector":"Consumer Discretionary"}}');
@@ -832,10 +837,16 @@ describe('copybook api', () => {
   it('Holdterm members: alerts settings only, 402 everywhere else, Holdterm portal, no Copybook email', async () => {
     stripeObjects['checkout/sessions/cs_live_ht'] = { id: 'cs_live_ht', status: 'complete', created: now(), subscription: 'sub_ht', customer_details: { email: 'ht@example.com' } };
     stripeObjects['subscriptions/sub_ht'] = { ...sub('sub_ht', 'cus_ht', 'trialing'), items: { data: [{ price: { id: 'price_ht', lookup_key: 'holdterm_monthly', metadata: { copybook: 'holdterm' }, recurring: { interval: 'month' } } }] } };
+    stripeObjects['customers/cus_ht'] = { id: 'cus_ht', email: 'ht@example.com' };
     env.HOLDTERM_SITE_URL = 'https://holdterm.pages.dev/';
     env.ALLOWED_ORIGINS = 'https://holdterm.pages.dev'; // as in wrangler.toml
     env.HOLDTERM_PORTAL_CONFIGURATION = 'bpc_ht';
-    const s = await handleRequest(new Request('https://api.test/session', { method: 'POST', body: JSON.stringify({ checkout_session: 'cs_live_ht' }), headers: { origin: 'https://holdterm.pages.dev' } }), env);
+    // Checkout's return and its two webhooks arrive together: still one welcome.
+    const [s] = await Promise.all([
+      handleRequest(new Request('https://api.test/session', { method: 'POST', body: JSON.stringify({ checkout_session: 'cs_live_ht' }), headers: { origin: 'https://holdterm.pages.dev' } }), env),
+      webhook({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_ht', customer_details: { email: 'ht@example.com' } } } }),
+      webhook({ type: 'customer.subscription.created', data: { object: stripeObjects['subscriptions/sub_ht'] } }),
+    ]);
     expect(s.status).toBe(200);
     expect(s.headers.get('access-control-allow-origin')).toBe('https://holdterm.pages.dev');
     const { token, member } = await s.json();
@@ -846,7 +857,10 @@ describe('copybook api', () => {
     expect(sent[0].text).toContain('https://holdterm.pages.dev/account?login=');
     expect(JSON.stringify(sent[0])).not.toMatch(/copybook/i);
     const ht = (method: string, path: string, b?: unknown) => handleRequest(new Request(`https://api.test${path}`, { method, body: b ? JSON.stringify(b) : undefined, headers: { origin: 'https://holdterm.pages.dev', authorization: `Bearer ${token}` } }), env);
-    expect((await ht('GET', '/me')).status).toBe(200);
+    expect((await (await ht('GET', '/me')).json()).member).toMatchObject({ cancel_at_period_end: false, cancel_at: null });
+    // A portal cancel shows on /me as a pending end, so the site can say "ends" instead of "renews".
+    await webhook({ type: 'customer.subscription.updated', data: { object: { ...(stripeObjects['subscriptions/sub_ht'] as object), status: 'active', cancel_at_period_end: true, cancel_at: 1796774400 } } });
+    expect((await (await ht('GET', '/me')).json()).member).toMatchObject({ active: true, cancel_at_period_end: true, cancel_at: 1796774400 });
     expect((await ht('GET', '/follows')).status).toBe(200);
     expect((await ht('POST', '/follows/warren-buffett')).status).toBe(200);
     for (const [m, p] of [['GET', '/history/warren-buffett'], ['POST', '/csv-link/warren-buffett'], ['GET', '/keys'], ['POST', '/keys']]) {
@@ -1144,6 +1158,77 @@ describe('copybook api', () => {
     expect(await env.DB.get('dispatch:pending')).not.toBeNull();
   });
 
+  it('/v1 every filer: the all-filer list, books from the public shard then the full R2 book, ranges, stock holders', async () => {
+    index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR', accession: 'A2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 2000, position_count: 1, history_quarters: ['2026Q2'] }] };
+    await cron(17);
+    stripeObjects['checkout/sessions/cs_test_af'] = { id: 'cs_test_af', status: 'complete', created: now(), subscription: 'sub_af', customer_details: { email: 'af@example.com' } };
+    stripeObjects['subscriptions/sub_af'] = sub('sub_af', 'cus_af', 'active', 'month', 'pro_monthly');
+    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_af' } })).json()).token;
+    const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
+    const v1 = async (path: string) => {
+      const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
+      return { status: r.status, body: await r.json() };
+    };
+    const cols = ['ticker', 'issuer', 'title', 'cusip', 'put_call', 'shares', 'value', 'display_name', 'sector'];
+    const nvda = ['NVDA', 'NVIDIA CORP', 'COM', '67066G104', null, 100, 18000, 'Nvidia', null];
+    const be = ['BE', 'BLOOM ENERGY CORP', 'COM CL A', '093712107', null, 50, 5000, 'Bloom Energy', null];
+    const small = ['XYZ', 'XYZ CORP', 'COM', '98422D105', null, 7, 700, 'Xyz', null];
+    // The public shard keeps the top rows only: 2 of 3 positions.
+    shards['0002045724.json'] = { ok: true, cik: '0002045724', quarter: '2026Q2', report_date: '2026-06-30', form: '13F-HR', accession: '0002045724-26-000003', filing_date: '2026-08-14', sec_url: 'https://www.sec.gov/Archives/edgar/data/2045724/000204572426000003/x-index.html', position_count: 3, total_value: 23700, columns: cols, rows: [nvda, be] };
+
+    const all = await v1('/v1/filers');
+    expect(all.body.count).toBe(2);
+    expect(all.body.data.map((f: { slug: string; curated: boolean }) => [f.slug, f.curated])).toEqual([['warren-buffett', true], ['situational-awareness-lp-5724', false]]);
+    expect((await v1('/v1/filers?curated=false')).body.data).toHaveLength(1);
+
+    const shard = await v1('/v1/filers/situational-awareness-lp-5724/holdings/latest');
+    expect(shard.status).toBe(200);
+    expect(shard.body.data).toMatchObject({ filer: { cik: '0002045724', curated: false, manager: null }, quarter: '2026Q2', position_count: 3, truncated: true, filing: { accession: '0002045724-26-000003', filer_cik: '0002045724' } });
+    expect(shard.body.data.holdings.map((h: { ticker: string; value_usd: number }) => [h.ticker, h.value_usd])).toEqual([['NVDA', 18000], ['BE', 5000]]);
+    expect((await v1('/v1/filers/2045724/holdings/2026Q2')).body).toEqual(shard.body);
+    expect((await v1('/v1/filers/2045724/holdings/2026Q1')).status).toBe(404);
+    expect((await v1('/v1/filers/0009999999/holdings/latest')).status).toBe(404);
+
+    // The full book, once in R2, wins over the shard: all 3 rows, weights over the whole equity book.
+    hist.m.set('fb/2026Q2/0002045724.json', new TextEncoder().encode(JSON.stringify({ ...(shards['0002045724.json'] as object), rows: [nvda, be, small] })));
+    const full = (await v1('/v1/filers/2045724/holdings/2026Q2')).body.data;
+    expect(full.truncated).toBe(false);
+    expect(full.holdings).toHaveLength(3);
+    expect(full.holdings[2]).toMatchObject({ ticker: 'XYZ', value_usd: 700, weight_equity: 700 / 23700 });
+
+    const range = (await v1('/v1/filers/2045724/holdings?from=2025Q4&to=2026Q2')).body;
+    expect(range.data.map((b: { quarter: string }) => b.quarter)).toEqual(['2026Q2']);
+    expect(range.missing).toEqual(['2025Q4', '2026Q1']);
+    expect(range.next_from).toBeNull();
+    const long = (await v1('/v1/filers/2045724/holdings?from=2024Q1&to=2026Q2')).body;
+    expect(long.missing).toHaveLength(8);
+    expect(long.next_from).toBe('2026Q1');
+    expect((await v1('/v1/filers/2045724/holdings?from=2026Q2&to=2026Q1')).status).toBe(400);
+
+    // Holders of one stock, by ticker or CUSIP, from the paid per-issuer list.
+    expect((await v1('/v1/stocks/NVDA/holders')).status).toBe(501);
+    hist.m.set('s/67066G.json', new TextEncoder().encode(JSON.stringify({
+      issuer: '67066G', ticker: 'NVDA', display_name: 'NVIDIA', period: '2026Q2', prev_period: '2026Q1',
+      columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change'],
+      holders: [['0002045724', 'Situational Awareness LP', 'situational-awareness-lp-5724', 'equity', 100, 40, 18000, 6000, 'added'], ['0001067983', 'Berkshire Hathaway Inc', 'warren-buffett', 'equity', 10, 0, 1800, 0, 'new']],
+    })));
+    const h = (await v1('/v1/stocks/NVDA/holders')).body;
+    expect(h.data).toMatchObject({ issuer: '67066G', ticker: 'NVDA', quarter: '2026Q2', prev_quarter: '2026Q1', cohort: 'all' });
+    expect(h.data.holders[0]).toMatchObject({ filer: { cik: '0002045724' }, shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, change: 'added' });
+    expect((await v1('/v1/stocks/67066G104/holders')).body.data).toEqual(h.data);
+    expect((await v1('/v1/stocks/NVDA/holders?cohort=curated')).body.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0001067983']);
+    expect((await v1('/v1/stocks/NVDA/holders?quarter=2026Q1')).status).toBe(404);
+    expect((await v1('/v1/stocks/ZZZZ/holders')).status).toBe(404);
+
+    // Bulk exports: listed, then streamed as uploaded.
+    expect((await v1('/v1/bulk/2026Q2.csv.gz')).status).toBe(404);
+    hist.m.set('bulk/2026Q2.csv.gz', new Uint8Array([31, 139, 8, 0, 1, 2, 3]));
+    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 7, uploaded_at: '1970-01-01T00:00:00.000Z', url: 'https://api.test/v1/bulk/2026Q2.csv.gz' }]);
+    const gz = await handleRequest(new Request('https://api.test/v1/bulk/2026Q2.csv.gz', { headers: { authorization: `Bearer ${key}` } }), env);
+    expect(gz.headers.get('content-disposition')).toBe('attachment; filename="copybook-13f-2026Q2.csv.gz"');
+    expect([...new Uint8Array(await gz.arrayBuffer())]).toEqual([31, 139, 8, 0, 1, 2, 3]);
+  });
+
   it('/v1 filers and holdings: by slug or CIK, every field the OpenAPI schema requires, as_of not served yet', async () => {
     index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR', accession: 'A2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 2000, position_count: 1, history_quarters: ['2026Q2', '2025Q1'] }] };
     await cron(17);
@@ -1180,7 +1265,7 @@ describe('copybook api', () => {
     expect(d.filing.accepted_at).toBe('2025-05-15T20:05:12.000Z');
     expect(d.filing.amendments).toEqual([{ accession: '0000950123-25-008361', filed_on: '2025-08-14', accepted_at: '2025-08-14T20:10:02.000Z', amendment_type: 'NEW HOLDINGS', amendment_no: 1, confidential_treatment_expired: true }]);
     for (const k of spec.components.schemas.Holdings.properties.filing.required) expect(d.filing).toHaveProperty(k);
-    expect(fl.body.data[0]).not.toHaveProperty('type'); // omitted until classified
+    expect(fl.body.data[0]).toMatchObject({ curated: true, type: null }); // null until classified
     // Cached after the first read: EDGAR is not asked again.
     delete secFiles[`${dir('0000950123-25-008361')}0000950123-25-008361-index-headers.html`];
     expect((await v1('/v1/filers/warren-buffett/holdings/2025Q1')).body.data.filing.amendments[0].amendment_type).toBe('NEW HOLDINGS');

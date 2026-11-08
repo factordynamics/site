@@ -12,16 +12,18 @@ export interface KV {
 export interface R2Object {
   body: ReadableStream<Uint8Array>;
   size?: number;
+  httpMetadata?: { contentType?: string };
 }
 
 export interface R2 {
   get(key: string): Promise<R2Object | null>;
   put(key: string, value: ReadableStream | ArrayBuffer | string | null, opts?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+  list(opts: { prefix: string }): Promise<{ objects: { key: string; size: number; uploaded: Date }[] }>;
 }
 
 export interface Env {
   DB: KV;
-  /** Private bucket for paid history: h/{slug}/{quarter}.json and .csv. */
+  /** Private bucket for paid data: h/{slug}/{quarter}.json|.csv, fb/{quarter}/{cik}.json full books, s/{issuer}.json holders, bulk/{quarter}.csv.gz exports. */
   HIST: R2;
   /** GitHub Actions OIDC identity allowed to upload history, e.g. refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main */
   INGEST_WORKFLOW: string;
@@ -65,6 +67,9 @@ export interface Member {
   /** "all", or the manager slugs to alert on. */
   alerts: 'all' | 'off' | string[];
   welcomed?: boolean;
+  /** Cancelled in the portal: active until period_end (or cancel_at), then it ends. */
+  cancel_at_period_end?: boolean;
+  cancel_at?: number | null;
   /** Set once the member picks an alert scope themselves (POST /alerts). */
   alerts_chosen?: boolean;
   /** A one-time line for the next email, e.g. "followed" after moving "all" to followed funds. */

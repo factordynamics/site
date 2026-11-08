@@ -68,22 +68,28 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     // New members get alerts for the funds they follow and active managers' moves in stocks they own or watch.
     alerts: prev?.alerts ?? [],
     welcomed: prev?.welcomed ?? false,
+    // Set by a cancel in the billing portal: still active until period_end, then it ends.
+    cancel_at_period_end: Boolean(sub.cancel_at_period_end),
+    cancel_at: Number(sub.cancel_at ?? 0) || null,
   };
   // A stale event (older subscription) must not overwrite a newer active one.
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
-  if (isActive(m) && !m.welcomed && m.email) {
+  // Checkout fires several events at once (session completed, subscription created, the return to
+  // /session); only the one that claims the welcome sends it.
+  if (isActive(m) && !m.welcomed && m.email && (await claim(env, customer, 'welcome', true))) {
     const token = await signToken(env.SESSION_SECRET, 'login', customer, LOGIN_TTL);
-    // Only a delivered welcome counts; otherwise the next subscription event retries it. Holdterm's
-    // welcome comes from Holdterm, never Copybook.
+    // Only a delivered welcome counts; otherwise the claim is released and the next event retries it.
+    // Holdterm's welcome comes from Holdterm, never Copybook.
     const welcome = m.plan === 'holdterm' ? holdtermLoginMail(env, m.email, token, true) : loginMail(env, m.email, token, true);
     m.welcomed = (await sendMail(env, [welcome])) === '200';
+    if (!m.welcomed) await claim(env, customer, 'welcome', false);
   }
   await putMember(env, m);
   return m;
 }
 
 export function publicView(m: Member) {
-  return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, period_end: m.period_end, alerts: m.alerts };
+  return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, alerts: m.alerts };
 }
 
 export async function listMembers(env: Env): Promise<Member[]> {
@@ -175,9 +181,16 @@ export async function changeFollows(env: Env, m: Member, op: FollowOp): Promise<
   return (await stub.fetch('https://follows/apply', { method: 'POST', body: JSON.stringify({ member: m, op }) })).json();
 }
 
+/** Claims (or releases) a once-per-customer action such as the welcome email; true only for the first claim. */
+async function claim(env: Env, customer: string, name: string, take: boolean): Promise<boolean> {
+  const stub = env.FOLLOWS.get(env.FOLLOWS.idFromName(customer));
+  return ((await (await stub.fetch('https://follows/claim', { method: 'POST', body: JSON.stringify({ claim: name, take }) })).json()) as { first: boolean }).first;
+}
+
 interface FollowsStorage {
   get<T>(key: string): Promise<T | undefined>;
   put(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<boolean>;
 }
 
 export class MemberFollows {
@@ -188,11 +201,19 @@ export class MemberFollows {
   ) {}
 
   async fetch(req: Request): Promise<Response> {
-    const { member, op } = (await req.json()) as { member: Member; op: FollowOp };
+    const b = (await req.json()) as { member: Member; op: FollowOp } | { claim: string; take: boolean };
     // One change at a time, even across the awaits on KV.
-    const run = this.chain.then(() => this.apply(member, op));
+    const run = this.chain.then((): Promise<unknown> => ('claim' in b ? this.claim(b.claim, b.take) : this.apply(b.member, b.op)));
     this.chain = run.catch(() => undefined);
     return Response.json(await run);
+  }
+
+  private async claim(name: string, take: boolean) {
+    const key = `claim:${name}`;
+    if (!take) return { first: await this.state.storage.delete(key) };
+    if (await this.state.storage.get(key)) return { first: false };
+    await this.state.storage.put(key, Date.now());
+    return { first: true };
   }
 
   private async apply(m: Member, op: FollowOp) {
