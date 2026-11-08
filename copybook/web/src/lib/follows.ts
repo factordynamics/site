@@ -7,6 +7,8 @@ export type Follows = {
   investors: string[]
   stocks: string[]
   owned: string[]
+  /** Funds a Pro or Fund member benchmarks against (peer overlap). */
+  peers: string[]
   onboarded: boolean
   include_13g: boolean
   digest: boolean
@@ -20,7 +22,7 @@ export type Follows = {
 export type Pending = Record<string, { want: boolean; state: 'saving' | 'error' }>
 type State = { status: 'idle' | 'loading' | 'ready' | 'guest'; follows: Follows; pending: Pending }
 
-const EMPTY: Follows = { investors: [], stocks: [], owned: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true }
+const EMPTY: Follows = { investors: [], stocks: [], owned: [], peers: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true }
 let state: State = { status: 'idle', follows: EMPTY, pending: {} }
 const subs = new Set<() => void>()
 const set = (s: State) => {
@@ -73,14 +75,14 @@ export function saveFollows(patch: Partial<Follows>) {
 }
 
 /** Follow or unfollow one investor or stock. Shown as saving until /follows confirms it, else as an error to retry. */
-export function setFollow(kind: 'investors' | 'stocks', id: string, want: boolean) {
+export function setFollow(kind: 'investors' | 'stocks' | 'peers', id: string, want: boolean) {
   const key = `${kind}:${id}`
   set({ ...state, pending: { ...state.pending, [key]: { want, state: 'saving' } } })
   return enqueue(async () => {
     try {
       // One item per request ({api}/follows/{slug}, /follows/stocks/{TICKER}); the server serializes
       // writes and answers with the full follows, which the button renders from.
-      const path = kind === 'investors' ? `/follows/${encodeURIComponent(id)}` : `/follows/stocks/${encodeURIComponent(id)}`
+      const path = kind === 'investors' ? `/follows/${encodeURIComponent(id)}` : `/follows/${kind}/${encodeURIComponent(id)}`
       const r = await call<{ follows: Follows }>(path, { method: want ? 'POST' : 'DELETE', auth: true })
       const f = { ...EMPTY, ...r.follows }
       const ok = f[kind].includes(id) === want

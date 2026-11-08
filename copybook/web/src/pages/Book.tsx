@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Peers } from '../components/Peers'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
 import { isPro, useMember } from '../lib/account'
 import { quarterLabel, dateLabel, money, useAsync, useTitle } from '../lib/data'
@@ -253,7 +254,7 @@ export function Book() {
             </div>
           </section>
 
-          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <Panel title={season ? `What they did in your names, ${quarterLabel(season)}` : 'What they did in your names'} sub="Largest moves by funds that have filed this season, valued at quarter-end">
               {!data.data ? (
                 <Skeleton className="h-48 w-full" />
@@ -287,6 +288,7 @@ export function Book() {
           </p>
         </>
       )}
+      <Peers names={names} shared={member?.plan === 'fund'} />
     </div>
   )
 }
