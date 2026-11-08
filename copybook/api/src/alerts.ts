@@ -242,7 +242,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
 async function logLatency(env: Env, filings: Alert13F[], sentAt: number): Promise<void> {
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
   const add = filings.filter((f) => f.accepted).map((f) => ({ slug: f.slug, accession: f.accession, accepted: f.accepted, sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000) }));
-  await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 50)));
+  await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 300)));
 }
 
 interface IndexRow {

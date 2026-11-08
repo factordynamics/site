@@ -97,8 +97,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   if (req.method === 'GET' && path === '/health') {
     // Seconds from EDGAR acceptance to handing the alert to the mailer, for the latest alerted filings.
+    // ?latency=all returns every stored entry (up to 300) instead of the latest 10.
     const latency = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
-    return json({ ok: true, alert_latency: latency.slice(0, 10) }, 200, h);
+    return json({ ok: true, alert_latency: url.searchParams.get('latency') === 'all' ? latency : latency.slice(0, 10) }, 200, h);
   }
 
   // The data workflow uploads per-quarter history here, authenticated by its GitHub OIDC token.
