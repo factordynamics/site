@@ -48,9 +48,12 @@ const titleCase = (s: string) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(
 /** Firm name for any filer: our map first, else the EDGAR name without legal suffixes. */
 export function firmName(slug: string, edgarName: string): string {
   if (FUNDS[slug]) return FUNDS[slug].firm
-  let n = edgarName.trim()
-  for (let i = 0; i < 3; i++) n = n.replace(SUFFIX, '')
-  return titleCase(n)
+  let n = edgarName.trim().replace(/\/[A-Z]{2,3}\/?$/i, '')
+  for (let i = 0; i < 3; i++) n = n.replace(SUFFIX, '').replace(/[\s,&]+$/, '')
+  // EDGAR all-caps: title case, but keep vowel-less tokens (YCG, RWWM, MHR, JV) as acronyms.
+  if (!/[a-z]/.test(n)) n = n.toLowerCase().replace(/\b[a-z][a-z']*/g, (w) => (/[aeiou]/.test(w) && w.length > 1 ? w[0].toUpperCase() + w.slice(1) : w.toUpperCase()))
+  else n = n.replace(/\b([A-Z][a-z]{1,3})\b/g, (w) => (/[aeiou]/.test(w.slice(1)) ? w : w.toUpperCase()))
+  return n.replace(/\bMc([a-z])/g, (_, c) => `Mc${c.toUpperCase()}`).replace(/\bIi\b/g, 'II').replace(/\bIii\b/g, 'III')
 }
 export const pmName = (slug: string) => FUNDS[slug]?.pm ?? null
 

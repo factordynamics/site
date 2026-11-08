@@ -49,14 +49,15 @@ export const onRequest = async ({ request, next }: { request: Request; next: () 
   const title = `${t} · holdterm`
   const fm = path.match(/^\/m\/([a-z0-9-]+)$/)
   const canonical = SITE + (fm ? fundPath(dataSlug(fm[1])) : path)
-  const out = new HTMLRewriter()
+  let rw = new HTMLRewriter()
     .on('title', { element: (e) => void e.setInnerContent(title) })
     .on('meta[name="description"]', { element: (e) => void e.setAttribute('content', d) })
     .on('meta[property="og:title"]', { element: (e) => void e.setAttribute('content', title) })
     .on('meta[property="og:description"]', { element: (e) => void e.setAttribute('content', d) })
     .on('meta[property="og:url"]', { element: (e) => void e.setAttribute('content', canonical) })
-    .on('link[rel="canonical"]', { element: (e) => void e.setAttribute('href', canonical) })
-    .transform(res)
-  if (m) return out
+  if (m) return rw.on('link[rel="canonical"]', { element: (e) => void e.setAttribute('href', canonical) }).transform(res)
+  // A 404 points nowhere and asks not to be indexed.
+  rw = rw.on('link[rel="canonical"]', { element: (e) => void e.remove() }).on('meta[property="og:url"]', { element: (e) => void e.remove() }).on('head', { element: (e) => void e.append('<meta name="robots" content="noindex" />', { html: true }) })
+  const out = rw.transform(res)
   return new Response(out.body, { status: 404, headers: out.headers })
 }

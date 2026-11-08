@@ -56,11 +56,11 @@ export function A({ to, children, className, title }: { to: string; children: Re
   )
 }
 export const stockHref = (t: string | null) => (t ? `/s/${encodeURIComponent(t)}` : '')
-export function Tick({ t, name }: { t: string | null; name?: string }) {
+export function Tick({ t, name, label }: { t: string | null; name?: string; label?: string }) {
   if (!t) return <span className="dim" title={name}>—</span>
   return (
-    <A to={stockHref(t)} className="tk" title={name}>
-      {t}
+    <A to={stockHref(t)} className="tk" title={label && label !== t ? `${name}: share classes ${label} combined` : name}>
+      {label ?? t}
     </A>
   )
 }

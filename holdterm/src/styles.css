@@ -1084,8 +1084,16 @@ pre.email {
   .show-sm {
     display: inline;
   }
-  .fund-stats .stat:nth-child(n + 3):not(:nth-child(5)) {
+  .narrow-sm {
+    max-width: 128px;
+  }
+  .fund-stats .stat:nth-child(3),
+  .fund-stats .stat:nth-child(4) {
     display: none;
+  }
+  .page > .panel .filters[aria-label='sector filter'] {
+    flex-wrap: nowrap;
+    overflow-x: auto;
   }
   .hide-sm {
     display: none;

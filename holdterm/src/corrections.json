@@ -1,10 +1,14 @@
 {
  "_note": "Holdterm-side corrections to Copybook's public books, each citing the SEC filing. Remove an entry once the upstream data carries the fix.",
  "bill-ackman": {
-  "why": "Pershing Square Inc. (CIK 2026053) filed its own 13F-HR next to Pershing Square Capital Management's in Q4 2025 and Q1 2026. The fund's book is the sum of both.",
-  "prev_quarter": "2026Q1",
-  "prev_add": [{ "cusip": "44267T102", "shares": 9000000, "value": 569340000, "source": "0001172661-26-002339" }],
-  "history_add": { "2026Q1": 569340000, "2025Q4": 717930000 },
-  "history_source": { "2026Q1": "0001172661-26-002339", "2025Q4": "0001172661-26-001095" }
+  "why": "Pershing Square Inc. (CIK 2026053) filed its own 13F-HR next to Pershing Square Capital Management's in Q4 2025 and Q1 2026. Copybook's book now sums Q1 (prev_combined_with 0001172661-26-002339); its history file does not yet, so the history totals are added here.",
+  "history_add": {
+   "2026Q1": 569340000,
+   "2025Q4": 717930000
+  },
+  "history_source": {
+   "2026Q1": "0001172661-26-002339",
+   "2025Q4": "0001172661-26-001095"
+  }
  }
 }

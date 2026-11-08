@@ -6,13 +6,17 @@
 import collections, csv, json, os, re, sys
 
 csv.field_size_limit(10**9)
-RULE = dict(min_value=1e9, min_positions=5, max_positions=100, min_top10=0.5, max_top1=0.6, max_etf=0.1, max_turnover=0.25, min_years=2)
+RULE = dict(min_value=1e9, min_positions=5, max_positions=100, min_top10=0.5, max_top1=0.6, max_etf=0.1, max_turnover=0.25, min_years=2, incumbent_buffer=0.2)
 # A filer whose 13F moved to a new entity: the new CIK inherits the old one's history, and in a quarter
 # where both filed, their books are summed.
 PRED = {'0002026053': '0001336528'}  # Pershing Square Inc. <- Pershing Square Capital Management
 ETF = re.compile(r'\b(ETF|ISHARES|SPDR|VANGUARD|INVESCO QQQ|SELECT SECTOR|PROSHARES|DIREXION|WISDOMTREE|INDEX|TR UNIT)\b', re.I)
 TYPE = re.compile(r'\b(bank|banco|bancorp|securities|insurance|assurance|life|pension|retirement|teachers|university|regents|college|endowment|foundation|trust co|trust company|national association|sovereign|investment board|wealth|family office|capital markets)\b', re.I)
+# T-bill and money-market funds are cash: left out of the book before any test.
+CASH = re.compile(r'TREASUR|T-BILL|TBILL|MONEY MKT|MONEY MARKET|ULTRA SHORT|0-3 M|1-3 M|0-1 Y', re.I)
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Funds already on the roster stay until they miss a test by more than the buffer, so it doesn't churn on noise.
+INCUMBENTS = set(json.load(open(os.path.join(HERE, 'incumbents.json')))['ciks'])
 EXCLUDED = json.load(open(os.path.join(HERE, 'roster-exclusions.json')))
 dq, dp, do, pq, pp, po = sys.argv[1:7]
 
@@ -69,16 +73,20 @@ for new, old in PRED.items():
 
 out = []
 for c, bk in B.items():
-    live = {k: h for k, h in bk.items() if h[0] > 0}
+    live = {k: h for k, h in bk.items() if h[0] > 0 and not CASH.search(h[2])}
     tot = sum(h[0] for h in live.values())
-    if c not in o or c not in p or tot < RULE['min_value'] or not RULE['min_positions'] <= len(live) <= RULE['max_positions']:
+    b = RULE['incumbent_buffer'] if c in INCUMBENTS else 0
+    lo, hi = 1 - b, 1 + b
+    if c not in o or c not in p or tot < RULE['min_value'] * lo or not RULE['min_positions'] <= len(live) <= RULE['max_positions'] * hi:
         continue
     name = names.get(q[c][-1], '')
     w = sorted((h[0] / tot for h in live.values()), reverse=True)
     etf = sum(h[0] for h in live.values() if ETF.search(h[2])) / tot
-    traded = sum(abs(live.get(k, [0, 0])[1] - P[c].get(k, [0, 0])[1]) * (price.get(k) or 0) for k in set(live) | set(P[c]))
+    prev = {k: h for k, h in P[c].items() if not CASH.search(h[2])}
+    traded = sum(abs(live.get(k, [0, 0])[1] - prev.get(k, [0, 0])[1]) * (price.get(k) or 0) for k in set(live) | set(prev))
     row = dict(cik=c, name=name, value=round(tot), positions=len(live), top10=round(sum(w[:10]), 4), top1=round(w[0], 4), etf=round(etf, 4), turnover=round(traded / 2 / tot, 4))
-    fails = [k for k, bad in [('top10', row['top10'] < RULE['min_top10']), ('top1', row['top1'] > RULE['max_top1']), ('etf', etf > RULE['max_etf']), ('turnover', row['turnover'] > RULE['max_turnover']), ('type', bool(TYPE.search(name)) or c in EXCLUDED)] if bad]
+    fails = [k for k, bad in [('top10', row['top10'] < RULE['min_top10'] * lo), ('top1', row['top1'] > RULE['max_top1'] * hi), ('etf', etf > RULE['max_etf'] * hi), ('turnover', row['turnover'] > RULE['max_turnover'] * hi), ('type', bool(TYPE.search(name)) or c in EXCLUDED)] if bad]
+    if b: row['incumbent'] = True
     if c in EXCLUDED: row['excluded'] = EXCLUDED[c]
     row['fails'] = fails
     out.append(row)

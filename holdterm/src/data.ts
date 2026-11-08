@@ -171,13 +171,23 @@ export const loadIndex = () =>
     ix.managers.forEach(name)
     return ix
   }))
-type Correction = { prev_quarter: string; prev_add: { cusip: string; shares: number; value: number }[]; history_add: Record<string, number> }
+type Correction = {
+  prev_quarter?: string
+  prev_add?: { cusip: string; shares: number; value: number; source: string }[]
+  history_add?: Record<string, number>
+  history_source?: Record<string, string>
+}
 const FIX = CORRECTIONS as unknown as Record<string, Correction>
-/** Adds lines a second filer reported for the prior quarter (src/corrections.json) and re-derives the changes. */
+/** Adds lines a second filer reported for the prior quarter (src/corrections.json) and re-derives the changes.
+ * Idempotent: a line whose source accession the upstream book already cites is skipped
+ * (scripts/check-corrections.mjs also fails the build when that happens). */
 function correct(b: Book) {
   const c = FIX[b.slug]
-  if (!c || b.prev_quarter !== c.prev_quarter || b.prev_total_value == null) return b
-  for (const a of c.prev_add) {
+  if (!c?.prev_add || b.prev_quarter !== c.prev_quarter || b.prev_total_value == null) return b
+  const upstream = JSON.stringify({ ...b, holdings: undefined })
+  const todo = c.prev_add.filter((a) => !upstream.includes(a.source))
+  if (!todo.length) return b
+  for (const a of todo) {
     const h = b.holdings.find((x) => x.cusip === a.cusip && !x.put_call)
     if (!h) continue
     h.prev_shares = (h.prev_shares ?? 0) + a.shares
@@ -205,8 +215,10 @@ export const loadBook = (slug: string) => {
 }
 export const loadHistory = (slug: string) =>
   get<{ history: HistoryRow[] }>(`${DATA}${slug}-history.json`).then((d) => {
-    const add = FIX[slug]?.history_add ?? {}
-    return { history: d.history.map((r) => (add[r.quarter] ? { ...r, total_value: r.total_value + add[r.quarter] } : r)) }
+    const c = FIX[slug]
+    const add = c?.history_add ?? {}
+    // Skip a quarter whose upstream row already cites the second filing.
+    return { history: d.history.map((r) => (add[r.quarter] && !JSON.stringify(r).includes(c?.history_source?.[r.quarter] ?? '\u0000') ? { ...r, total_value: r.total_value + add[r.quarter] } : r)) }
   })
 export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach(fillTicker), d))
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
@@ -243,6 +255,8 @@ export type Who = { slug: string; manager: string; weight: number; change: Chang
 export type Agg = {
   key: string
   ticker: string | null
+  /** "GOOGL+GOOG" when several share classes are combined. */
+  label?: string
   former?: string
   name: string
   sector: string
@@ -276,7 +290,10 @@ export function aggregate(books: Book[]): { rows: Agg[]; total: number } {
       if (h.ticker) {
         const cv = classValue.get(key)!
         cv.set(h.ticker, (cv.get(h.ticker) ?? 0) + h.value)
-        a.ticker = [...cv.entries()].sort((x, y) => y[1] - x[1])[0][0]
+        const ranked = [...cv.entries()].sort((x, y) => y[1] - x[1]).map((e) => e[0])
+        a.ticker = ranked[0]
+        a.label = ranked.join('+')
+        if (ranked.length > 1) a.name = a.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')
       }
       const d = h.value_delta ?? 0
       const who: Who = { slug: b.slug, manager: b.firm, weight: h.weight, change: h.change, delta: d, quarter: b.quarter }

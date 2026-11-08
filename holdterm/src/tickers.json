@@ -109,5 +109,105 @@
   "ticker": "FERG",
   "listed": false,
   "source": "SEC EDGAR CIK 1832433 (Ferguson plc, the pre-2024 Jersey line): replaced by Ferguson Enterprises (FERG, CUSIP 31488V107); Form 15-12G"
+ },
+ "G61188127": {
+  "ticker": "LBTYK",
+  "listed": true,
+  "source": "SEC company_tickers.json: LBTYK = CIK 1570585 (Liberty Global Ltd., class C)"
+ },
+ "881624209": {
+  "ticker": "TEVA",
+  "listed": true,
+  "source": "SEC company_tickers.json: TEVA = CIK 818686 (Teva Pharmaceutical Industries)"
+ },
+ "G9600F104": {
+  "ticker": "VGNT",
+  "listed": true,
+  "source": "SEC company_tickers.json: VGNT = CIK 2078008 (Versigent PLC)"
+ },
+ "H8817H100": {
+  "ticker": "RIG",
+  "listed": true,
+  "source": "SEC company_tickers.json: RIG = CIK 1451505 (Transocean Ltd.)"
+ },
+ "G5784H106": {
+  "ticker": "MANU",
+  "listed": true,
+  "source": "SEC company_tickers.json: MANU = CIK 1549107 (Manchester United plc)"
+ },
+ "G9572D103": {
+  "ticker": "BULL",
+  "listed": true,
+  "source": "SEC company_tickers.json: BULL = CIK 1866364 (Webull Corp)"
+ },
+ "G9618E107": {
+  "ticker": "WTM",
+  "listed": true,
+  "source": "SEC company_tickers.json: WTM = CIK 776867 (White Mountains Insurance Group)"
+ },
+ "G3730V105": {
+  "ticker": "FTAI",
+  "listed": true,
+  "source": "SEC company_tickers.json: FTAI = CIK 1590364 (FTAI Aviation Ltd.)"
+ },
+ "V7780T103": {
+  "ticker": "RCL",
+  "listed": true,
+  "source": "SEC company_tickers.json: RCL = CIK 884887 (Royal Caribbean Cruises)"
+ },
+ "G6564A105": {
+  "ticker": "NOMD",
+  "listed": true,
+  "source": "SEC company_tickers.json: NOMD = CIK 1651717 (Nomad Foods)"
+ },
+ "G00894108": {
+  "ticker": "ARX",
+  "listed": true,
+  "source": "SEC company_tickers.json: ARX = CIK 1997350 (Accelerant Holdings)"
+ },
+ "P31076105": {
+  "ticker": "CPA",
+  "listed": true,
+  "source": "SEC company_tickers.json: CPA = CIK 1345105 (Copa Holdings)"
+ },
+ "D18190898": {
+  "ticker": "DB",
+  "listed": true,
+  "source": "SEC company_tickers.json: DB = CIK 1159508 (Deutsche Bank AG)"
+ },
+ "M9T951109": {
+  "ticker": "ZIM",
+  "listed": true,
+  "source": "SEC company_tickers.json: ZIM = CIK 1654126 (ZIM Integrated Shipping Services)"
+ },
+ "679369108": {
+  "ticker": "OLPX",
+  "listed": false,
+  "source": "Olaplex Holdings: former ticker OLPX; not in SEC company_tickers.json on 2026-11-08"
+ },
+ "530307107": {
+  "ticker": "LBRDA",
+  "listed": false,
+  "source": "Liberty Broadband, series A: former ticker LBRDA; not in SEC company_tickers.json on 2026-11-08"
+ },
+ "07556Q881": {
+  "ticker": "BZH",
+  "listed": false,
+  "source": "Beazer Homes USA: former ticker BZH; not in SEC company_tickers.json on 2026-11-08"
+ },
+ "04650F101": {
+  "ticker": "ATAI",
+  "listed": false,
+  "source": "AtaiBeckley: former ticker ATAI; not in SEC company_tickers.json on 2026-11-08"
+ },
+ "03152W109": {
+  "ticker": "FOLD",
+  "listed": false,
+  "source": "Amicus Therapeutics: former ticker FOLD; not in SEC company_tickers.json on 2026-11-08"
+ },
+ "09174P303": {
+  "ticker": "BTM",
+  "listed": false,
+  "source": "Bitcoin Depot: former ticker BTM; not in SEC company_tickers.json on 2026-11-08"
  }
 }

@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-08T23:30:29.091Z",
+ "generated_at": "2026-11-08T23:52:13.086Z",
  "period": "30-JUN-2026",
  "source": "SEC Form 13F data sets",
  "rule": {
@@ -10,7 +10,8 @@
   "max_top1": 0.6,
   "max_etf": 0.1,
   "max_turnover": 0.25,
-  "min_years": 2
+  "min_years": 2,
+  "incumbent_buffer": 0.2
  },
  "screened": 599,
  "funds": [
@@ -81,6 +82,17 @@
    "predecessor": null
   },
   {
+   "cik": "0001581811",
+   "slug": "egerton-capital-uk-llp",
+   "filer_slug": "egerton-capital-uk-llp",
+   "firm": "Egerton Capital (UK) LLP",
+   "value": 10351358177,
+   "positions": 23,
+   "top10": 0.7602,
+   "turnover": 0.2516,
+   "predecessor": null
+  },
+  {
    "cik": "0000921669",
    "slug": "carl-icahn",
    "filer_slug": "carl-icahn",
@@ -99,7 +111,7 @@
    "value": 7965350969,
    "positions": 72,
    "top10": 0.516,
-   "turnover": 0.087,
+   "turnover": 0.0874,
    "predecessor": null
   },
   {
@@ -122,6 +134,17 @@
    "positions": 54,
    "top10": 0.6658,
    "turnover": 0.0776,
+   "predecessor": null
+  },
+  {
+   "cik": "0001508822",
+   "slug": "acr-alpine-capital-research-llc",
+   "filer_slug": "acr-alpine-capital-research-llc",
+   "firm": "ACR Alpine Capital Research, LLC",
+   "value": 5668846934,
+   "positions": 36,
+   "top10": 0.6913,
+   "turnover": 0.1184,
    "predecessor": null
   },
   {
@@ -505,10 +528,10 @@
    "slug": null,
    "filer_slug": null,
    "firm": "GREENHAVEN ASSOCIATES INC",
-   "value": 8660705519,
-   "positions": 28,
-   "top10": 0.7912,
-   "turnover": 0.1173,
+   "value": 8610605359,
+   "positions": 27,
+   "top10": 0.7958,
+   "turnover": 0.1156,
    "predecessor": null
   },
   {
@@ -1154,9 +1177,9 @@
    "slug": null,
    "filer_slug": null,
    "firm": "NEW SOUTH CAPITAL MANAGEMENT INC",
-   "value": 2280932798,
-   "positions": 48,
-   "top10": 0.5931,
+   "value": 2280183544,
+   "positions": 47,
+   "top10": 0.5933,
    "turnover": 0.0979,
    "predecessor": null
   },
@@ -1341,10 +1364,10 @@
    "slug": null,
    "filer_slug": null,
    "firm": "Saratoga Research & Investment Management",
-   "value": 1827574709,
-   "positions": 46,
-   "top10": 0.6407,
-   "turnover": 0.0776,
+   "value": 1807871284,
+   "positions": 45,
+   "top10": 0.6477,
+   "turnover": 0.0784,
    "predecessor": null
   },
   {
@@ -1733,17 +1756,6 @@
    "predecessor": null
   },
   {
-   "cik": "0001507683",
-   "slug": null,
-   "filer_slug": null,
-   "firm": "RWWM, INC.",
-   "value": 1353388287,
-   "positions": 40,
-   "top10": 0.849,
-   "turnover": 0.0874,
-   "predecessor": null
-  },
-  {
    "cik": "0001732539",
    "slug": null,
    "filer_slug": null,
@@ -1785,6 +1797,17 @@
    "positions": 81,
    "top10": 0.5665,
    "turnover": 0.0419,
+   "predecessor": null
+  },
+  {
+   "cik": "0001507683",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "RWWM, INC.",
+   "value": 1268298024,
+   "positions": 39,
+   "top10": 0.8658,
+   "turnover": 0.0883,
    "predecessor": null
   },
   {
@@ -1913,9 +1936,9 @@
    "slug": null,
    "filer_slug": null,
    "firm": "YCG, LLC",
-   "value": 1136308300,
-   "positions": 41,
-   "top10": 0.5517,
+   "value": 1135027957,
+   "positions": 40,
+   "top10": 0.5523,
    "turnover": 0.089,
    "predecessor": null
   },
@@ -1979,9 +2002,9 @@
    "slug": null,
    "filer_slug": null,
    "firm": "DOCK STREET ASSET MANAGEMENT INC",
-   "value": 1081389339,
-   "positions": 64,
-   "top10": 0.7084,
+   "value": 1081007296,
+   "positions": 63,
+   "top10": 0.7087,
    "turnover": 0.031,
    "predecessor": null
   },
@@ -2030,17 +2053,6 @@
    "predecessor": null
   },
   {
-   "cik": "0001076964",
-   "slug": null,
-   "filer_slug": null,
-   "firm": "Provident Investment Management, Inc.",
-   "value": 1029212048,
-   "positions": 89,
-   "top10": 0.5804,
-   "turnover": 0.1769,
-   "predecessor": null
-  },
-  {
    "cik": "0001665590",
    "slug": null,
    "filer_slug": null,
@@ -2049,6 +2061,17 @@
    "positions": 29,
    "top10": 0.7347,
    "turnover": 0.1837,
+   "predecessor": null
+  },
+  {
+   "cik": "0001076964",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "Provident Investment Management, Inc.",
+   "value": 1027281090,
+   "positions": 88,
+   "top10": 0.5815,
+   "turnover": 0.1771,
    "predecessor": null
   },
   {
@@ -2064,20 +2087,6 @@
   }
  ],
  "near_misses": [
-  {
-   "cik": "0001704268",
-   "slug": null,
-   "filer_slug": null,
-   "firm": "Mubadala Investment Co PJSC",
-   "value": 34771171317,
-   "positions": 72,
-   "top10": 0.988,
-   "turnover": 0.0371,
-   "predecessor": null,
-   "fails": [
-    "top1"
-   ]
-  },
   {
    "cik": "0001663865",
    "slug": null,
@@ -2135,20 +2144,6 @@
    ]
   },
   {
-   "cik": "0001484429",
-   "slug": null,
-   "filer_slug": null,
-   "firm": "Alecta Tjanstepension Omsesidigt",
-   "value": 23772263607,
-   "positions": 91,
-   "top10": 0.4528,
-   "turnover": 0.0984,
-   "predecessor": null,
-   "fails": [
-    "top10"
-   ]
-  },
-  {
    "cik": "0001575677",
    "slug": null,
    "filer_slug": null,
@@ -2163,17 +2158,17 @@
    ]
   },
   {
-   "cik": "0001065521",
+   "cik": "0001846236",
    "slug": null,
    "filer_slug": null,
-   "firm": "SOFTBANK GROUP CORP.",
-   "value": 18174540337,
-   "positions": 30,
-   "top10": 0.9675,
-   "turnover": 0.0324,
+   "firm": "True Link Financial Advisors, LLC",
+   "value": 21522482000,
+   "positions": 98,
+   "top10": 0.9332,
+   "turnover": 0.0021,
    "predecessor": null,
    "fails": [
-    "top1"
+    "etf"
    ]
   },
   {
@@ -2219,20 +2214,6 @@
    ]
   },
   {
-   "cik": "0000889232",
-   "slug": null,
-   "filer_slug": null,
-   "firm": "INVESTOR AB",
-   "value": 14403406346,
-   "positions": 7,
-   "top10": 1,
-   "turnover": 0.0003,
-   "predecessor": null,
-   "fails": [
-    "top1"
-   ]
-  },
-  {
    "cik": "0001569205",
    "slug": "terry-smith",
    "filer_slug": "terry-smith",
@@ -2244,34 +2225,6 @@
    "predecessor": null,
    "fails": [
     "turnover"
-   ]
-  },
-  {
-   "cik": "0001774552",
-   "slug": null,
-   "filer_slug": null,
-   "firm": "WealthNavi Inc.",
-   "value": 12762862000,
-   "positions": 11,
-   "top10": 0.9946,
-   "turnover": 0.0136,
-   "predecessor": null,
-   "fails": [
-    "etf"
-   ]
-  },
-  {
-   "cik": "0000060086",
-   "slug": null,
-   "filer_slug": null,
-   "firm": "Loews Corp",
-   "value": 12522601997,
-   "positions": 28,
-   "top10": 0.9848,
-   "turnover": 0.0134,
-   "predecessor": null,
-   "fails": [
-    "top1"
    ]
   },
   {
@@ -2303,20 +2256,6 @@
    ]
   },
   {
-   "cik": "0001493215",
-   "slug": null,
-   "filer_slug": null,
-   "firm": "RTW INVESTMENTS, LP",
-   "value": 11712926784,
-   "positions": 84,
-   "top10": 0.4772,
-   "turnover": 0.0996,
-   "predecessor": null,
-   "fails": [
-    "top10"
-   ]
-  },
-  {
    "cik": "0001777813",
    "slug": null,
    "filer_slug": null,
@@ -2345,48 +2284,6 @@
    ]
   },
   {
-   "cik": "0001581811",
-   "slug": "egerton-capital-uk-llp",
-   "filer_slug": "egerton-capital-uk-llp",
-   "firm": "Egerton Capital (UK) LLP",
-   "value": 10351358177,
-   "positions": 23,
-   "top10": 0.7602,
-   "turnover": 0.2516,
-   "predecessor": null,
-   "fails": [
-    "turnover"
-   ]
-  },
-  {
-   "cik": "0001527166",
-   "slug": "carlyle-group-inc",
-   "filer_slug": "carlyle-group-inc",
-   "firm": "Carlyle Group Inc.",
-   "value": 10000861951,
-   "positions": 19,
-   "top10": 0.9994,
-   "turnover": 0.0013,
-   "predecessor": null,
-   "fails": [
-    "top1"
-   ]
-  },
-  {
-   "cik": "0001162777",
-   "slug": null,
-   "filer_slug": null,
-   "firm": "Partners Value Investments L.P.",
-   "value": 9796108271,
-   "positions": 7,
-   "top10": 1,
-   "turnover": 0.0026,
-   "predecessor": null,
-   "fails": [
-    "top1"
-   ]
-  },
-  {
    "cik": "0000860561",
    "slug": null,
    "filer_slug": null,
@@ -2409,6 +2306,132 @@
    "positions": 45,
    "top10": 0.4891,
    "turnover": 0.0722,
+   "predecessor": null,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001768375",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "Aspex Management (HK) Ltd",
+   "value": 8872977000,
+   "positions": 25,
+   "top10": 0.8026,
+   "turnover": 0.2819,
+   "predecessor": null,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000024386",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "COOKE & BIELER LP",
+   "value": 8646740264,
+   "positions": 100,
+   "top10": 0.2629,
+   "turnover": 0.0972,
+   "predecessor": null,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000905567",
+   "slug": "yacktman-asset-management-lp",
+   "filer_slug": "yacktman-asset-management-lp",
+   "firm": "YACKTMAN ASSET MANAGEMENT LP",
+   "value": 8067581195,
+   "positions": 73,
+   "top10": 0.4829,
+   "turnover": 0.0638,
+   "predecessor": null,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001731509",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "SB INVESTMENT ADVISERS (UK) LTD",
+   "value": 7662358625,
+   "positions": 9,
+   "top10": 1,
+   "turnover": 0.009,
+   "predecessor": null,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001351950",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "Findlay Park Partners LLP",
+   "value": 7407454503,
+   "positions": 49,
+   "top10": 0.3298,
+   "turnover": 0.1376,
+   "predecessor": null,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001559706",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "Slate Path Capital LP",
+   "value": 7224088306,
+   "positions": 40,
+   "top10": 0.5528,
+   "turnover": 0.5429,
+   "predecessor": null,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000764532",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "FIDUCIARY MANAGEMENT INC /WI/",
+   "value": 7030555164,
+   "positions": 56,
+   "top10": 0.3343,
+   "turnover": 0.2406,
+   "predecessor": null,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000733986",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "CAMBRIDGE ASSOCIATES LLC /MA/ /ADV",
+   "value": 6904593334,
+   "positions": 55,
+   "top10": 0.8447,
+   "turnover": 0.0345,
+   "predecessor": null,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001856083",
+   "slug": null,
+   "filer_slug": null,
+   "firm": "Deep Track Capital, LP",
+   "value": 6788059447,
+   "positions": 66,
+   "top10": 0.4009,
+   "turnover": 0.1926,
    "predecessor": null,
    "fails": [
     "top10"
