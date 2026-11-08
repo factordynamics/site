@@ -1,4 +1,6 @@
 import { DATA, DERIVED } from './config'
+import { firmName, issuerName, pmName, FUNDS } from './names'
+import ROSTER from './roster.json'
 
 export type Change = 'new' | 'added' | 'trimmed' | 'exited' | 'unchanged' | null
 export type Holding = {
@@ -36,6 +38,9 @@ export type Manager = {
   total_value: number
   status: string
   top: Holding[]
+  /** Holdterm display: firm first, current PM if any. */
+  firm: string
+  pm: string | null
 }
 export type Book = Manager & {
   holdings: Holding[]
@@ -121,8 +126,42 @@ function get<T>(url: string): Promise<T> {
   return p
 }
 
-export const loadIndex = () => get<Index>(DATA + 'index.json')
-export const loadBook = (slug: string) => get<Book>(`${DATA}${slug}.json`)
+function name(m: Manager) {
+  m.firm = firmName(m.slug, m.name)
+  m.pm = pmName(m.slug)
+  return m
+}
+/** One sector per issuer: share classes (same 6-character CUSIP prefix) take the sector of the largest classified line. */
+function normalise(hs: Holding[]) {
+  const by = new Map<string, { sector: string; value: number }>()
+  for (const h of hs) {
+    if (!h.sector || h.sector === 'Unclassified') continue
+    const k = h.cusip.slice(0, 6)
+    const cur = by.get(k)
+    if (!cur || h.value > cur.value) by.set(k, { sector: h.sector, value: h.value })
+  }
+  for (const h of hs) {
+    const s = by.get(h.cusip.slice(0, 6))
+    if (s) h.sector = s.sector
+    h.display_name = issuerName(h.display_name || h.issuer)
+  }
+  return hs
+}
+let ixP: Promise<Index> | null = null
+export const loadIndex = () =>
+  (ixP ??= get<Index>(DATA + 'index.json').then((ix) => {
+    ix.managers.forEach(name)
+    return ix
+  }))
+const books = new Map<string, Promise<Book>>()
+export const loadBook = (slug: string) => {
+  let p = books.get(slug)
+  if (!p) {
+    p = get<Book>(`${DATA}${slug}.json`).then((b) => (normalise(b.holdings), name(b) as Book))
+    books.set(slug, p)
+  }
+  return p
+}
 export const loadHistory = (slug: string) => get<{ history: HistoryRow[] }>(`${DATA}${slug}-history.json`)
 export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json')
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
@@ -132,16 +171,24 @@ export const loadStockIndex = () => get<{ stocks: StockIndexRow[] }>(DERIVED + '
 
 const qn = (q: string) => (q ? Number(q.slice(0, 4)) * 4 + Number(q.slice(5)) - 1 : -1)
 
-/** Featured investors with a usable, reasonably current filing: the "superinvestor" universe. */
-export function superinvestors(ix: Index): Manager[] {
-  const live = ix.managers.filter((m) => m.ok && m.total_value > 0 && !['inactive', 'reported_by_other'].includes(m.status))
-  const newest = Math.max(...live.map((m) => qn(m.quarter)))
-  return live.filter((m) => m.featured && qn(m.quarter) >= newest - 2)
+export type RosterFund = { slug: string; filer_slug: string; firm: string; value: number; positions: number; quarters: number; top10: number; turnover: number; predecessor: string | null }
+export const roster = ROSTER as unknown as { generated_at: string; rule: Record<string, number | string>; universe: number; screened: number; funds: RosterFund[]; near_misses: RosterFund[] }
+export const ROSTER_SLUGS = new Set(roster.funds.flatMap((f) => [f.slug, f.filer_slug]))
+export const inRoster = (slug: string) => ROSTER_SLUGS.has(slug)
+export const searchNames = (m: Manager) => [m.firm, m.pm, m.name, m.manager, ...(FUNDS[m.slug]?.aka ?? [])].filter(Boolean).join(' | ')
+const newestQ = (ms: Manager[]) => Math.max(...ms.map((m) => qn(m.quarter)))
+/** Stale: the fund's latest usable 13F is older than the newest quarter any fund has filed, by more than one quarter. */
+export const isStale = (m: Manager, all: Manager[]) => qn(m.quarter) < newestQ(all) - 1 || ['stale', 'empty_latest', 'unreadable_latest', 'inactive'].includes(m.status)
+
+/** The Holdterm roster (rule in src/roster.json, reconstituted quarterly), in index order by value. */
+export function funds(ix: Index): Manager[] {
+  const by = new Map(ix.managers.map((m) => [m.slug, m]))
+  return roster.funds.map((f) => by.get(f.slug)).filter((m): m is Manager => Boolean(m && m.ok)).sort((a, b) => b.total_value - a.total_value)
 }
 
-/** Every superinvestor's latest full book (about 380 KB gzipped for ~40 funds). */
+/** Every roster fund's latest full book. */
 export async function loadBooks(): Promise<Book[]> {
-  const ms = superinvestors(await loadIndex())
+  const ms = funds(await loadIndex())
   const books = await Promise.all(ms.map((m) => loadBook(m.slug).catch(() => null)))
   return books.filter((b): b is Book => Boolean(b))
 }
@@ -173,11 +220,11 @@ export function aggregate(books: Book[]): { rows: Agg[]; total: number } {
       const key = h.ticker || h.cusip
       let a = m.get(key)
       if (!a) {
-        a = { key, ticker: h.ticker, name: h.display_name || h.issuer, sector: h.sector || 'Unclassified', value: 0, holders: [], buyers: [], sellers: [], newBuyers: 0, net: 0, buy: 0, sell: 0, maxWeight: 0 }
+        a = { key, ticker: h.ticker, name: h.display_name || issuerName(h.issuer), sector: h.sector || 'Unclassified', value: 0, holders: [], buyers: [], sellers: [], newBuyers: 0, net: 0, buy: 0, sell: 0, maxWeight: 0 }
         m.set(key, a)
       }
       const d = h.value_delta ?? 0
-      const who: Who = { slug: b.slug, manager: b.manager, weight: h.weight, change: h.change, delta: d, quarter: b.quarter }
+      const who: Who = { slug: b.slug, manager: b.firm, weight: h.weight, change: h.change, delta: d, quarter: b.quarter }
       if (h.value > 0) {
         a.value += h.value
         total += h.value

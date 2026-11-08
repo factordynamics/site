@@ -3,7 +3,7 @@ import { api } from './config'
 import { A } from './lib'
 
 // Paid alerts account, against the alerts API (POST /session, /login, /portal; GET /me; GET/PUT /follows).
-export type Member = { email: string; status: string; active: boolean; plan: string; period_end?: number | string | null }
+export type Member = { email: string; status: string; active: boolean; plan: string; period_end?: number | string | null; cancel_at_period_end?: boolean }
 export type Follows = { investors: string[]; stocks: string[] }
 
 const KEY = 'holdterm-session'
@@ -76,7 +76,7 @@ export function Follow({ kind, id }: { kind: keyof Follows; id: string }) {
   }, [signedIn])
   if (!signedIn)
     return (
-      <A to="/alerts" className="btn ghost" title="email me when this changes">
+      <A to="/alerts" className="btn ghost" title="get an email when this changes">
         + alert me
       </A>
     )

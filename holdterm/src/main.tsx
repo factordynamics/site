@@ -1,36 +1,59 @@
-import '@fontsource/jetbrains-mono/400.css'
-import '@fontsource/jetbrains-mono/600.css'
+import '@fontsource/ibm-plex-sans/400.css'
+import '@fontsource/ibm-plex-sans/500.css'
+import '@fontsource/ibm-plex-sans/600.css'
+import '@fontsource/ibm-plex-mono/400.css'
+import '@fontsource/ibm-plex-mono/500.css'
 import './styles.css'
 import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { loadIndex, loadStockIndex, superinvestors, type Manager, type StockIndexRow } from './data'
+import { funds, loadIndex, loadStockIndex, searchNames, type Manager, type StockIndexRow } from './data'
 import { A, navigate, usePath } from './lib'
-import { About, Account, Activity, Alerts, Grand, Home, Insiders, Investor, Investors, NotFound, Stock } from './pages'
+import { About, Account, Alerts, Consensus, Filings, Flows, Fund, Funds, Home, ISSUES, NotFound, Privacy, Stock, Terms } from './pages'
 
-// [path, label, g-key, phone label]
-const NAV: [string, string, string, string?][] = [
-  ['/', 'home', 'h'],
-  ['/m', 'investors', 'm', 'funds'],
-  ['/activity', 'activity', 'a'],
-  ['/grand', 'grand', 'p'],
-  ['/insiders', 'insiders', 'i'],
+// [path, label, g-key]
+const NAV: [string, string, string][] = [
+  ['/', 'pulse', 'h'],
+  ['/flows', 'flows', 'f'],
+  ['/consensus', 'consensus', 'c'],
+  ['/funds', 'funds', 'm'],
+  ['/filings', '13D·F4', 'd'],
   ['/alerts', 'alerts', 'e'],
 ]
+// Old paths keep working.
+const MOVED: Record<string, string> = { '/m': '/funds', '/activity': '/flows', '/grand': '/consensus', '/insiders': '/filings' }
 
 function route(path: string) {
   const p = path.replace(/\/+$/, '') || '/'
   let m: RegExpMatchArray | null
+  if (MOVED[p]) {
+    history.replaceState(null, '', MOVED[p])
+    return route(MOVED[p])
+  }
   if (p === '/') return <Home />
-  if (p === '/m') return <Investors />
-  if ((m = p.match(/^\/m\/([a-z0-9-]+)$/))) return <Investor slug={m[1]} />
+  if (p === '/funds') return <Funds />
+  if ((m = p.match(/^\/m\/([a-z0-9-]+)$/))) return <Fund slug={m[1]} />
   if ((m = p.match(/^\/s\/([^/]+)$/))) return <Stock ticker={decodeURIComponent(m[1]).toUpperCase()} />
-  if (p === '/grand') return <Grand />
-  if (p === '/activity') return <Activity />
-  if (p === '/insiders') return <Insiders />
+  if (p === '/consensus') return <Consensus />
+  if (p === '/flows') return <Flows />
+  if (p === '/filings') return <Filings />
   if (p === '/alerts') return <Alerts />
   if (p === '/account') return <Account />
   if (p === '/about') return <About />
+  if (p === '/terms') return <Terms />
+  if (p === '/privacy') return <Privacy />
   return <NotFound />
+}
+
+/** Wordmark: a ranked-weights glyph (a 13F book, largest position first) and the name. */
+export function Mark({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden className="mark">
+      <rect width="20" height="20" rx="3" fill="var(--acc)" />
+      <rect x="4" y="4.5" width="12" height="2.2" fill="#0b0b0a" />
+      <rect x="4" y="8.9" width="8.5" height="2.2" fill="#0b0b0a" />
+      <rect x="4" y="13.3" width="5" height="2.2" fill="#0b0b0a" />
+    </svg>
+  )
 }
 
 type Hit = { kind: 'stock' | 'investor'; label: string; sub: string; to: string; score: number }
@@ -47,16 +70,15 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
     setCur(0)
     input.current?.focus()
     if (!stocks.length) loadStockIndex().then((d) => setStocks(d.stocks)).catch(() => {})
-    if (!mgrs.length) loadIndex().then((ix) => setMgrs(superinvestors(ix))).catch(() => {})
+    if (!mgrs.length) loadIndex().then((ix) => setMgrs(funds(ix))).catch(() => {})
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const hits = useMemo<Hit[]>(() => {
     const s = q.trim().toLowerCase()
     if (!s) return []
     const out: Hit[] = []
     for (const m of mgrs) {
-      const a = m.manager.toLowerCase()
-      const b = m.name.toLowerCase()
-      if (a.includes(s) || b.includes(s)) out.push({ kind: 'investor', label: m.manager, sub: m.name, to: `/m/${m.slug}`, score: a.startsWith(s) ? 3 : 1 })
+      const hay = searchNames(m).toLowerCase()
+      if (hay.includes(s)) out.push({ kind: 'investor', label: m.firm, sub: m.pm ? `PM ${m.pm}` : 'fund', to: `/m/${m.slug}`, score: m.firm.toLowerCase().startsWith(s) ? 4 : hay.split(/[ |]+/).some((w) => w.startsWith(s)) ? 3 : 1 })
     }
     for (const r of stocks) {
       const t = r.t.toLowerCase()
@@ -68,7 +90,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   }, [q, stocks, mgrs])
   if (!open) return null
   const go = (h?: Hit) => {
-    const to = h?.to ?? (q.trim() ? `/s/${encodeURIComponent(q.trim().toUpperCase())}` : null)
+    const to = h?.to ?? (/^[a-z.]{1,6}$/i.test(q.trim()) ? `/s/${encodeURIComponent(q.trim().toUpperCase())}` : null)
     if (!to) return
     setOpen(false)
     navigate(to)
@@ -81,7 +103,8 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
           <input
             ref={input}
             value={q}
-            placeholder="ticker, company or investor"
+            placeholder="ticker, company, fund or manager"
+            aria-label="search tickers, companies, funds and managers"
             onChange={(e) => {
               setQ(e.target.value)
               setCur(0)
@@ -100,12 +123,12 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
         <ul>
           {hits.map((h, i) => (
             <li key={h.to} className={i === cur ? 'cur' : ''} onMouseEnter={() => setCur(i)} onClick={() => go(h)}>
-              <span className={`kind ${h.kind}`}>{h.kind === 'stock' ? 'STK' : 'INV'}</span>
+              <span className={`kind ${h.kind}`}>{h.kind === 'stock' ? 'stock' : 'fund'}</span>
               <span className="lbl">{h.label}</span>
               <span className="dim sub">{h.sub}</span>
             </li>
           ))}
-          {q && !hits.length && <li className="dim">no match · enter opens /s/{q.trim().toUpperCase()}</li>}
+          {q && !hits.length && <li className="dim">no match{/^[a-z.]{1,6}$/i.test(q.trim()) ? ` · enter tries ticker ${q.trim().toUpperCase()}` : ''}</li>}
         </ul>
       </div>
     </div>
@@ -115,11 +138,11 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
 function Help({ close }: { close: () => void }) {
   const rows: [string, string][] = [
     ['/  or  ⌘K', 'search tickers and investors'],
-    ['g h', 'home'],
-    ['g m', 'superinvestors'],
-    ['g a', 'activity: buys and sells'],
-    ['g p', 'grand portfolio'],
-    ['g i', 'insiders, 13D/G'],
+    ['g h', 'pulse (home)'],
+    ['g f', 'flows: buys and sells'],
+    ['g c', 'consensus'],
+    ['g m', 'funds'],
+    ['g d', '13D, 13G and Form 4'],
     ['g e', 'email alerts'],
     ['j / k', 'move down / up a table'],
     ['enter', 'open the selected row'],
@@ -189,22 +212,14 @@ function App() {
   return (
     <>
       <header className="top">
-        <A to="/" className="brand">
-          <span className="mark">H</span>
-          <span>holdterm</span>
-          <span className="cursor" />
+        <A to="/" className="brand" title="holdterm home">
+          <Mark />
+          <span className="word">holdterm</span>
         </A>
         <nav>
-          {NAV.map(([to, label, k, shortLabel]) => (
-            <A key={to} to={to} className={(to === '/' ? path === '/' : section === to || (to === '/m' && section === '/m')) ? 'on' : ''} title={`g ${k}`}>
-              {shortLabel ? (
-                <>
-                  <span className="long">{label}</span>
-                  <span className="short">{shortLabel}</span>
-                </>
-              ) : (
-                label
-              )}
+          {NAV.map(([to, label, k]) => (
+            <A key={to} to={to} className={(to === '/' ? path === '/' : section === to || (to === '/funds' && section === '/m')) ? 'on' : ''} title={`g ${k}`}>
+              {label}
             </A>
           ))}
         </nav>
@@ -220,7 +235,7 @@ function App() {
       <main key={path}>{route(path)}</main>
       <footer className="foot">
         <span>
-          holdterm · SEC EDGAR 13F, Form 4, 13D/G as filed · no ads · <A to="/about">about</A> · <A to="/alerts">alerts $3/mo</A> · <A to="/account">account</A>
+          holdterm · SEC EDGAR filings as filed · no ads · not investment advice · <A to="/about">about</A> · <A to="/alerts">alerts $3/mo</A> · <A to="/account">account</A> · <A to="/terms">terms</A> · <A to="/privacy">privacy</A> · <a href={ISSUES}>report a data error</a>
         </span>
         <span>
           <Clock /> <button className="linkish" onClick={() => setHelp(true)}>? keys</button>

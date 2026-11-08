@@ -11,6 +11,9 @@ export function usd(v: number | null | undefined, digits = 1): string {
   if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(digits)}K`
   return `${s}$${a.toFixed(0)}`
 }
+/** Axis labels: no trailing ".0" ($300B, $2.5B). */
+export const usdAxis = (v: number) => usd(v, 1).replace(/\.0(?=[KMBT])/, '')
+export const price = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 export const signedUsd = (v: number | null | undefined) => (v == null ? '—' : v > 0 ? `+${usd(v)}` : usd(v))
 export const pct = (v: number | null | undefined, d = 2) => (v == null || !isFinite(v) ? '—' : `${(v * 100).toFixed(d)}%`)
 export const num = (v: number | null | undefined) => (v == null ? '—' : Math.round(v).toLocaleString('en-US'))
@@ -137,7 +140,7 @@ export function Tabs<T extends string>({ value, options, onChange }: { value: T;
   )
 }
 
-export const CHANGE_LABEL: Record<string, string> = { new: 'NEW', added: 'ADD', trimmed: 'TRIM', exited: 'EXIT', unchanged: '' }
+export const CHANGE_LABEL: Record<string, string> = { new: 'NEW', added: 'ADD', trimmed: 'TRIM', exited: 'SOLD', unchanged: '' }
 export function ChangeTag({ change, share_change, prev_shares }: { change: string | null; share_change?: number | null; prev_shares?: number | null }) {
   if (!change || change === 'unchanged') return <span className="dim">·</span>
   const tone = change === 'new' || change === 'added' ? 'pos' : 'neg'
@@ -160,6 +163,8 @@ export type Col<R> = {
   hideSm?: boolean
   title?: string
   width?: string
+  /** Wrap this cell in a real link to the row's href (keyboard, middle-click, copy link). */
+  link?: boolean
 }
 let activeGrid: symbol | null = null
 export function Grid<R>({
@@ -188,6 +193,18 @@ export function Grid<R>({
   const [shown, setShown] = useState(limit ?? Infinity)
   const id = useRef(Symbol('grid'))
   const body = useRef<HTMLTableSectionElement>(null)
+  const wrap = useRef<HTMLDivElement>(null)
+  const [cue, setCue] = useState(false)
+  useEffect(() => {
+    const el = wrap.current
+    if (!el) return
+    const check = () => setCue(el.scrollWidth - el.clientWidth - el.scrollLeft > 4)
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    el.addEventListener('scroll', check, { passive: true })
+    return () => (ro.disconnect(), el.removeEventListener('scroll', check))
+  }, [rows.length])
   const sorted = useMemo(() => {
     if (!sort) return rows
     const c = cols.find((c) => c.key === sort[0])
@@ -227,7 +244,8 @@ export function Grid<R>({
 
   if (!rows.length) return <div className="empty dim">{empty}</div>
   return (
-    <div className="grid-wrap">
+    <div className={`grid-outer ${cue ? 'cue' : ''}`}>
+    <div className="grid-wrap" ref={wrap}>
       <table className="grid">
         <thead>
           <tr>
@@ -235,13 +253,20 @@ export function Grid<R>({
             {cols.map((c) => (
               <th
                 key={c.key}
-                className={`${c.num ? 'num' : ''} ${c.hideSm ? 'hide-sm' : ''} ${c.sort ? 'sortable' : ''}`}
+                scope="col"
+                className={`${c.num ? 'num' : ''} ${c.hideSm ? 'hide-sm' : ''}`}
                 style={c.width ? { width: c.width } : undefined}
                 title={c.title}
-                onClick={() => c.sort && setSort(sort?.[0] === c.key ? [c.key, sort[1] === 'desc' ? 'asc' : 'desc'] : [c.key, c.num ? 'desc' : 'asc'])}
+                aria-sort={sort?.[0] === c.key ? (sort[1] === 'desc' ? 'descending' : 'ascending') : c.sort ? 'none' : undefined}
               >
-                {c.label}
-                {sort?.[0] === c.key ? <span className="arrow">{sort[1] === 'desc' ? '▼' : '▲'}</span> : null}
+                {c.sort ? (
+                  <button className="sorter" onClick={() => setSort(sort?.[0] === c.key ? [c.key, sort[1] === 'desc' ? 'asc' : 'desc'] : [c.key, c.num ? 'desc' : 'asc'])}>
+                    {c.label}
+                    {sort?.[0] === c.key ? <span className="arrow" aria-hidden>{sort[1] === 'desc' ? '▼' : '▲'}</span> : null}
+                  </button>
+                ) : (
+                  c.label
+                )}
               </th>
             ))}
           </tr>
@@ -261,7 +286,13 @@ export function Grid<R>({
                 {rank && <td className="num rank dim">{i + 1}</td>}
                 {cols.map((c) => (
                   <td key={c.key} className={`${c.num ? 'num' : ''} ${c.hideSm ? 'hide-sm' : ''}`}>
-                    {c.render(r, i)}
+                    {c.link && to ? (
+                      <A to={to} className="rowlink">
+                        {c.render(r, i)}
+                      </A>
+                    ) : (
+                      c.render(r, i)
+                    )}
                   </td>
                 ))}
               </tr>
@@ -269,6 +300,7 @@ export function Grid<R>({
           })}
         </tbody>
       </table>
+    </div>
       {sorted.length > shown && (
         <button className="more" onClick={() => setShown(Infinity)}>
           show all {sorted.length} rows ↓
@@ -293,6 +325,7 @@ export function StackBar({ parts, height = 10 }: { parts: { label: string; value
   let x = 0
   return (
     <svg className="stackbar" viewBox={`0 0 1000 ${height}`} preserveAspectRatio="none" style={{ height }} role="img">
+      <title>{parts.map((p) => `${p.label} ${((p.value / t) * 100).toFixed(1)}%`).join(', ')}</title>
       {parts.map((p) => {
         const w = (p.value / t) * 1000
         const r = <rect key={p.label} x={x} y={0} width={Math.max(0, w - 2)} height={height} fill={p.color}><title>{`${p.label} ${((p.value / t) * 100).toFixed(1)}%`}</title></rect>
@@ -303,54 +336,3 @@ export function StackBar({ parts, height = 10 }: { parts: { label: string; value
   )
 }
 
-/** Vertical bar chart with labelled axis; crisp 1px gridlines. */
-export function Columns({ data, height = 140, fmt = usd, color = 'var(--acc)' }: { data: { label: string; value: number; hint?: string }[]; height?: number; fmt?: (v: number) => string; color?: string }) {
-  const W = 600
-  const H = height
-  const pad = { l: 52, r: 6, t: 8, b: 20 }
-  const max = Math.max(...data.map((d) => d.value), 1)
-  const step = niceStep(max / 4)
-  const top = Math.ceil(max / step) * step
-  const iw = W - pad.l - pad.r
-  const ih = H - pad.t - pad.b
-  const bw = iw / data.length
-  const ticks = []
-  for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v)
-  return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img">
-      {ticks.map((v) => {
-        const y = Math.round(pad.t + ih - (v / top) * ih) + 0.5
-        return (
-          <g key={v}>
-            <line x1={pad.l} x2={W - pad.r} y1={y} y2={y} className="gridline" />
-            <text x={pad.l - 6} y={y + 3} textAnchor="end" className="axis">
-              {fmt(v)}
-            </text>
-          </g>
-        )
-      })}
-      {data.map((d, i) => {
-        const h = (d.value / top) * ih
-        const x = pad.l + i * bw + bw * 0.18
-        return (
-          <g key={d.label}>
-            <rect x={x} y={pad.t + ih - h} width={bw * 0.64} height={h} fill={color}>
-              <title>{`${d.label}: ${d.hint ?? fmt(d.value)}`}</title>
-            </rect>
-            {(data.length <= 12 || i % Math.ceil(data.length / 12) === 0) && (
-              <text x={x + bw * 0.32} y={H - 6} textAnchor="middle" className="axis">
-                {d.label}
-              </text>
-            )}
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
-function niceStep(raw: number) {
-  if (raw <= 0) return 1
-  const p = Math.pow(10, Math.floor(Math.log10(raw)))
-  const f = raw / p
-  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p
-}
