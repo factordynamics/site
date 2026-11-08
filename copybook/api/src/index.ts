@@ -240,13 +240,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'PUT' && path.startsWith('/ingest/')) {
     const key = path.slice('/ingest/'.length);
     const flow = key === 'flow/full.json';
-    if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key) && !flow) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, v/{cik10}/{accession}.json, changes/{YYYYQn}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
+    const pre = /^pre\/(stock-codes|sec-tickers)\.json$|^pre\/v1-filers-rest\.txt$/.test(key);
+    if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key) && !flow && !pre) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, v/{cik10}/{accession}.json, changes/{YYYYQn}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
     const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
     // The full Flow lists are built by the site's Pages workflow; everything else by the data workflow.
     let why = await verifyGithubOidc(tok, env.INGEST_WORKFLOW);
     if (why && flow && env.PAGES_WORKFLOW) why = await verifyGithubOidc(tok, env.PAGES_WORKFLOW);
+    if (why && pre && env.PRECOMPUTE_WORKFLOW) why = await verifyGithubOidc(tok, env.PRECOMPUTE_WORKFLOW);
     if (why) return json({ ok: false, error: why }, 401, {});
-    const type = key.endsWith('.csv') ? 'text/csv; charset=utf-8' : key.endsWith('.csv.gz') ? 'application/gzip' : key.endsWith('.parquet') ? 'application/vnd.apache.parquet' : 'application/json';
+    const type = key.endsWith('.csv') ? 'text/csv; charset=utf-8' : key.endsWith('.csv.gz') ? 'application/gzip' : key.endsWith('.parquet') ? 'application/vnd.apache.parquet' : key.endsWith('.txt') ? 'text/plain' : 'application/json';
     await env.HIST.put(key, req.body, { httpMetadata: { contentType: type } });
     return json({ ok: true, key }, 200, {});
   }

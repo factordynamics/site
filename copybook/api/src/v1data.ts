@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { lookupTickers } from './alerts';
 import { fetch13F, fetchFilingMeta, filings13F, type Filed13F, type FilingMeta } from './edgar';
-import { ROUTES, v1error, v1json } from './v1';
+import { ROUTES, v1error, v1json, v1prefix } from './v1';
 
 /**
  * /v1 data endpoints. Everything is from SEC EDGAR filings as filed. Units: money in whole US
@@ -327,10 +327,64 @@ async function issuerCode(env: Env, id: string): Promise<{ code: string; ticker:
     } else return { code: up.slice(0, 6), ticker: null };
   }
   if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(up)) return null;
+  // The precomputed ticker -> issuer map (90 KB) instead of scanning the 3.5 MB stock list.
+  const pre = await env.HIST.get('pre/stock-codes.json');
+  if (pre) {
+    const text = await new Response(pre.body).text();
+    const at = text.indexOf(`"${up}":"`);
+    return at >= 0 ? { code: text.slice(at + up.length + 4, at + up.length + 10), ticker: up } : /^[0-9A-Z]{6}$/.test(up) ? { code: up, ticker: null } : null;
+  }
   const res = await fetch(`${env.DATA_URL}stock_holders.json`, { cf: { cacheTtl: 3600 } } as RequestInit);
   if (!res.ok) return null;
   const m = (await res.text()).match(new RegExp(`"issuer":"([0-9A-Z]{6})","ticker":"${up.replace(/[.-]/g, '\\$&')}"`));
   return m ? { code: m[1], ticker: up } : /^[0-9A-Z]{6}$/.test(up) ? { code: up, ticker: null } : null;
+}
+
+/**
+ * /v1/filers from the precomputed file ("<count>\n[rows]") without parsing its 3 MB: the envelope and
+ * curated rows are written, then the file's rows are piped through natively.
+ */
+function streamFilers(body: ReadableStream<Uint8Array>, curated: unknown[]): Response {
+  const enc = new TextEncoder();
+  const Identity = (globalThis as { IdentityTransformStream?: typeof TransformStream }).IdentityTransformStream ?? TransformStream;
+  const { readable, writable } = new Identity<Uint8Array, Uint8Array>();
+  (async () => {
+    let w = writable.getWriter();
+    const reader = body.getReader();
+    // The count line, then the opening bracket of the rows.
+    let head = '';
+    let rest: Uint8Array | null = null;
+    while (rest === null) {
+      const r = await reader.read();
+      if (r.done) throw new Error('pre/v1-filers-rest.txt: no rows');
+      const nl = r.value.indexOf(10);
+      if (nl < 0) head += new TextDecoder().decode(r.value);
+      else {
+        head += new TextDecoder().decode(r.value.subarray(0, nl));
+        rest = r.value.subarray(nl + 1);
+      }
+    }
+    while (!rest.length) {
+      const r = await reader.read();
+      if (r.done) throw new Error('pre/v1-filers-rest.txt: no rows');
+      rest = r.value;
+    }
+    const n = Number(head.trim());
+    const cur = JSON.stringify(curated).slice(1, -1);
+    await w.write(enc.encode(`${v1prefix()}"data":[${cur}${cur && n ? ',' : ''}`));
+    // Drop the file's own "[": its closing "]" closes data.
+    if (rest.length > 1) await w.write(rest.subarray(1));
+    reader.releaseLock();
+    w.releaseLock();
+    await body.pipeTo(writable, { preventClose: true });
+    w = writable.getWriter();
+    await w.write(enc.encode(`,"count":${curated.length + n}}`));
+    await w.close();
+  })().catch((err) => {
+    console.log(`v1 filers stream: ${err}`);
+    writable.abort(err).catch(() => {});
+  });
+  return new Response(readable, { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'private, no-store' } });
 }
 
 ROUTES.push(
@@ -339,6 +393,8 @@ ROUTES.push(
     const want = url.searchParams.get('curated');
     const curated = (await filers(env)).map(({ type, ...f }) => ({ ...f, curated: true, ...(type ? { type } : { type: null }) }));
     if (want === 'true') return v1json({ data: curated, count: curated.length });
+    const pre = await env.HIST.get('pre/v1-filers-rest.txt');
+    if (pre) return streamFilers(pre.body, want === 'false' ? [] : curated);
     const text = await filersJson(env);
     if (!text) return v1error('server_error', 503, 'The filer list is unavailable; retry shortly.');
     const seen = new Set(curated.map((f) => f.cik));

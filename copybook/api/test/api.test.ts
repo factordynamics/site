@@ -1519,6 +1519,46 @@ describe('copybook api', () => {
     expect(JSON.stringify(b)).not.toMatch(/@/);
   });
 
+  it('CPU: a busy alert minute defers the hourly jobs to the next quiet one; precomputed lookups replace big parses', async () => {
+    const row = (slug: string, cik: string) => ({ ok: true, slug, cik, manager: slug, name: slug, featured: true, form: '13F-HR', accession: `${slug}-q2`, report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' });
+    index = { managers: [row('warren-buffett', '0001067983')] };
+    await cron(17);
+    expect(JSON.parse((await env.DB.get('v1:filers'))!)).toHaveLength(1);
+    // Minute :17 again, now with a 13F in the feed that the poll can't finish this minute: busy.
+    index = { managers: [row('warren-buffett', '0001067983'), row('dan-loeb', '0001040273')] };
+    const today = new Date().toISOString().slice(0, 10);
+    secFiles.feed = `<feed><entry><title>13F-HR - BERKSHIRE (0001067983) (Filer)</title><updated>${today}T00:05:00-05:00</updated><category term="13F-HR"/><id>urn:tag:sec.gov,2008:accession-number=0000950123-26-077777</id></entry></feed>`;
+    env.SEC_BUDGET = '5';
+    await cron(17);
+    expect(JSON.parse((await env.DB.get('jobs:due'))!).map((j: { name: string }) => j.name)).toEqual(['backstop']);
+    expect(JSON.parse((await env.DB.get('v1:filers'))!)).toHaveLength(1); // not yet
+    // The next quiet minute runs it.
+    secFiles.feed = '<feed></feed>';
+    env.SEC_BUDGET = '40';
+    await cron(18);
+    expect(JSON.parse((await env.DB.get('v1:filers'))!)).toHaveLength(2);
+    expect(await env.DB.get('jobs:due')).toBe('[]');
+
+    // /v1/filers streams the precomputed non-curated rows after the curated ones, without parsing them.
+    stripeObjects['checkout/sessions/cs_test_cpu'] = { id: 'cs_test_cpu', status: 'complete', created: now(), subscription: 'sub_cpu', customer_details: { email: 'cpu@example.com' } };
+    stripeObjects['subscriptions/sub_cpu'] = sub('sub_cpu', 'cus_cpu', 'active', 'month', 'pro_monthly');
+    const tk = (await (await call('/session', { body: { checkout_session: 'cs_test_cpu' } })).json()).token;
+    const key = (await (await call('/keys', { body: { name: 'k' }, token: tk })).json()).key;
+    const v1 = async (path: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env)).json();
+    const rest = [{ slug: 'whale-rock-7322', cik: '0001387322', curated: false }, { slug: 'x-1', cik: '0000000001', curated: false }];
+    hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`2\n${JSON.stringify(rest)}`));
+    const all = await v1('/v1/filers');
+    expect(all).toMatchObject({ schema_version: expect.any(String), count: 4 });
+    expect(all.data.map((f: { slug: string }) => f.slug)).toEqual(['warren-buffett', 'dan-loeb', 'whale-rock-7322', 'x-1']);
+    expect((await v1('/v1/filers?curated=false')).data.map((f: { slug: string }) => f.slug)).toEqual(['whale-rock-7322', 'x-1']);
+    expect((await v1('/v1/filers?curated=true')).count).toBe(2);
+
+    // Ticker -> issuer from the precomputed map (the full stock list is never fetched).
+    hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"NVDAX":"999999","NVDA":"67066G"}'));
+    hist.m.set('s/67066G.json', new TextEncoder().encode(JSON.stringify({ issuer: '67066G', period: '2026Q2', columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change'], holders: [] })));
+    expect((await v1('/v1/stocks/NVDA/holders')).data.issuer).toBe('67066G');
+  });
+
   it('/v1 restatement lineage: versions[] oldest first with status, every amendment attached, ?version= serves the book as originally filed', async () => {
     index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR/A', accession: 'R', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-09-02', total_value: 3000, position_count: 1, history_quarters: ['2026Q2'] }] };
     await cron(17);

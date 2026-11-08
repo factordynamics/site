@@ -29,6 +29,8 @@ export interface Env {
   INGEST_WORKFLOW: string;
   /** The site's Pages workflow, allowed to upload the full Flow lists (flow/full.json). */
   PAGES_WORKFLOW?: string;
+  /** The API's own precompute workflow, allowed to upload pre/ lookup files. */
+  PRECOMPUTE_WORKFLOW?: string;
   /** Site root, e.g. https://refcell.github.io/gust/copybook/ (trailing slash). */
   SITE_URL: string;
   /** Where {slug}-history.json and alerts.json live. */

@@ -723,10 +723,45 @@ interface IndexRow {
  * Hourly backstop from the data run's index.json, for anything the minute poll missed: same
  * forward-only periods, moves taken from alerts.json. Also refreshes the CIK map for the poll.
  */
+/** The data run's moves per accession (alerts.json), fetched once on first use. */
+function recentMoves(env: Env): (acc: string) => Promise<Moves | null> {
+  let recent: { accession: string; moves?: Moves }[] | null = null;
+  return async (acc) => {
+    if (!recent) {
+      const r = await fetch(`${env.DATA_URL}alerts.json`);
+      recent = r.ok ? (((await r.json()) as { recent?: { accession: string; moves?: Moves }[] }).recent ?? []) : [];
+    }
+    return recent.find((x) => x.accession === acc)?.moves ?? null;
+  };
+}
+
+const changedTickers = (m: Moves) => [...m.new, ...m.added, ...m.trimmed, ...m.exited].map((r) => r.ticker).filter((t): t is string => !!t);
+
+/** Follow-ups with the moves for filings the minute poll sent without them. */
+async function pendingFollowups(env: Env, now: number, movesFor = recentMoves(env)): Promise<Record<string, unknown>> {
+  const pendingRaw = await env.DB.get('alerts:pending-moves');
+  if (!pendingRaw) return {};
+  const pending = JSON.parse(pendingRaw) as Alert13F[];
+  const ready: Alert13F[] = [];
+  const wait: Alert13F[] = [];
+  for (const p of pending) {
+    const moves = await movesFor(p.accession);
+    if (moves) ready.push({ ...p, moves, tickers: changedTickers(moves), followup: true });
+    else if (now - Date.parse(p.filing_date) <= MAX_ALERT_AGE_DAYS * DAY) wait.push(p);
+  }
+  if (wait.length) await env.DB.put('alerts:pending-moves', JSON.stringify(wait));
+  else await env.DB.delete('alerts:pending-moves');
+  return ready.length ? { followups: { filings: ready.map((f) => f.slug), ...(await deliver(env, ready, [], now)) } } : {};
+}
+
 export async function runBackstop(env: Env, now: number): Promise<Record<string, unknown>> {
-  const res = await fetch(`${env.DATA_URL}index.json`);
-  if (!res.ok) throw new Error(`index.json ${res.status}`);
-  const idx = (await res.json()) as { managers?: IndexRow[]; generated_at?: string; build_id?: string };
+  // index.json (900 KB) only changes with a data build: when it hasn't, skip parsing it and go
+  // straight to the follow-ups. Its derived KV (CIK map, /v1 filers, periods) is unchanged too.
+  const etag = await env.DB.get('idx:etag');
+  const res = await fetch(`${env.DATA_URL}index.json`, etag ? { headers: { 'if-none-match': etag } } : {});
+  if (res.status !== 304 && !res.ok) throw new Error(`index.json ${res.status}`);
+  const idx = (res.status === 304 ? { managers: [] } : await res.json()) as { managers?: IndexRow[]; generated_at?: string; build_id?: string };
+  if (res.status === 304) return { status: 'unchanged', ...(await pendingFollowups(env, now)) };
   const rows = idx.managers ?? [];
   // /v1 responses say when and from which build the data was made.
   const build = JSON.stringify({ data_built_at: idx.generated_at ?? null, build_id: idx.build_id ?? (idx.generated_at ? idx.generated_at.replace(/[-:]/g, '') : null) });
@@ -766,31 +801,8 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   const periods = JSON.parse(raw ?? '{}') as Record<string, string>;
   const before = JSON.stringify(periods);
   const out: Record<string, unknown> = {};
-  let recent: { accession: string; moves?: Moves }[] | null = null;
-  const movesFor = async (acc: string) => {
-    if (!recent) {
-      const r = await fetch(`${env.DATA_URL}alerts.json`);
-      recent = r.ok ? (((await r.json()) as { recent?: { accession: string; moves?: Moves }[] }).recent ?? []) : [];
-    }
-    return recent.find((x) => x.accession === acc)?.moves ?? null;
-  };
-  const changedTickers = (m: Moves) => [...m.new, ...m.added, ...m.trimmed, ...m.exited].map((r) => r.ticker).filter((t): t is string => !!t);
-
-  // Follow-ups with the moves for filings the minute poll sent without them.
-  const pendingRaw = await env.DB.get('alerts:pending-moves');
-  if (pendingRaw) {
-    const pending = JSON.parse(pendingRaw) as Alert13F[];
-    const ready: Alert13F[] = [];
-    const wait: Alert13F[] = [];
-    for (const p of pending) {
-      const moves = await movesFor(p.accession);
-      if (moves) ready.push({ ...p, moves, tickers: changedTickers(moves), followup: true });
-      else if (now - Date.parse(p.filing_date) <= MAX_ALERT_AGE_DAYS * DAY) wait.push(p);
-    }
-    if (wait.length) await env.DB.put('alerts:pending-moves', JSON.stringify(wait));
-    else await env.DB.delete('alerts:pending-moves');
-    if (ready.length) out.followups = { filings: ready.map((f) => f.slug), ...(await deliver(env, ready, [], now)) };
-  }
+  const movesFor = recentMoves(env);
+  Object.assign(out, await pendingFollowups(env, now, movesFor));
   const fresh: IndexRow[] = [];
   for (const f of rows) {
     // Holdings reports (13F-HR and restated 13F-HR/A) record the period; notices (13F-NT) don't.
@@ -798,6 +810,8 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
     if (advance(periods, [f.slug], f.report_date).fresh.length && raw && alertable({ form: f.form, filing_date: f.filing_date ?? '' }, now)) fresh.push(f);
   }
   if (JSON.stringify(periods) !== before || !raw) await env.DB.put('alerts:periods', JSON.stringify(periods));
+  const tag = res.headers.get('etag');
+  if (tag && tag !== etag) await env.DB.put('idx:etag', tag);
   if (!raw) {
     await env.DB.delete('alerts:seen'); // the old accession-keyed state
     return { ...out, status: 'seeded' };
@@ -880,7 +894,15 @@ export async function runWatchMap(env: Env): Promise<Record<string, unknown>> {
     if (await snapshotBaseline(env, cik).catch(() => false)) snaps++;
   }
   const map: Record<string, string[]> = {};
-  if (want.size) {
+  const pre = want.size ? await env.HIST.get('pre/sec-tickers.json') : null;
+  if (pre) {
+    // The precomputed ticker -> CIK map: a string search per watched ticker, no 800 KB parse.
+    const text = await new Response(pre.body).text();
+    for (const t of want) {
+      const at = text.indexOf(`"${t}":"`);
+      if (at >= 0) (map[text.slice(at + t.length + 4, at + t.length + 14)] ??= []).push(t);
+    }
+  } else if (want.size) {
     const res = await fetch('https://www.sec.gov/files/company_tickers.json', { headers: { 'user-agent': 'Copybook copybook@factordynamics.com' } });
     if (!res.ok) return { status: `company_tickers ${res.status}` };
     for (const v of Object.values((await res.json()) as Record<string, { cik_str: number; ticker: string }>)) {
@@ -1125,6 +1147,11 @@ export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reaso
 }
 
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
+interface Job {
+  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue';
+  at: number;
+}
+
 export async function runScheduled(env: Env, scheduledTime: number): Promise<Record<string, unknown>> {
   const t = new Date(scheduledTime);
   const out: Record<string, unknown> = {};
@@ -1135,18 +1162,42 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
       out[name] = `error: ${err}`;
     }
   };
-  // Spread the hourly jobs over the hour so each invocation stays within the free plan's CPU time.
-  if (t.getUTCMinutes() === 17) await step('backstop', () => runBackstop(env, scheduledTime));
-  if (t.getUTCMinutes() === 47) await step('events', () => runEvents(env, scheduledTime));
-  if (t.getUTCMinutes() === 32 && t.getUTCHours() === 3) await step('digest', () => runDigest(env, scheduledTime - 3600_000));
-  if (t.getUTCMinutes() === 52) await step('watch', () => runWatchMap(env));
-  // Trial reminders and the season recap, once a day mid-morning in New York.
-  if (t.getUTCMinutes() === 12 && t.getUTCHours() === 15) await step('revenue', () => runRevenue(env, scheduledTime));
-  // SEC requests this run may make; the rest of the 50-subrequest limit is for mail, GitHub and data.
+  // Alerts first: the 13F and Form 4 / 13D/G polls always run, at the start of the invocation.
   secBudget.left = Number(env.SEC_BUDGET ?? 40);
   await step('poll', () => runPoll(env, scheduledTime));
   await step('events_poll', () => runEventPoll(env, scheduledTime));
-  await step('webhooks', () => runWebhookRetries(env, scheduledTime));
+  // A minute that sent or read filings has spent its CPU on them: the hourly and daily jobs wait for
+  // the next quiet minute (one per minute), and webhook retries for the next.
+  const count = (x: unknown) => (Array.isArray(x) ? x.length : typeof x === 'number' ? x : 0);
+  const p = out.poll as { filings?: unknown; deferred?: number } | undefined;
+  const e = out.events_poll as { events?: unknown } | undefined;
+  const busy = count(p?.filings) + count(p?.deferred) + count(e?.events) > 0;
+  const m = t.getUTCMinutes();
+  const h = t.getUTCHours();
+  const due: Job[] = [];
+  if (m === 17) due.push({ name: 'backstop', at: scheduledTime });
+  if (m === 47) due.push({ name: 'events', at: scheduledTime });
+  if (m === 32 && h === 3) due.push({ name: 'digest', at: scheduledTime - 3600_000 });
+  if (m === 52) due.push({ name: 'watch', at: scheduledTime });
+  // Trial reminders and the season recap, once a day mid-morning in New York.
+  if (m === 12 && h === 15) due.push({ name: 'revenue', at: scheduledTime });
+  const rawQueue = await env.DB.get('jobs:due');
+  const queue = [...(JSON.parse(rawQueue ?? '[]') as Job[]), ...due].filter((j, i, all) => all.findIndex((x) => x.name === j.name) === i);
+  if (!busy && queue.length) {
+    const job = queue.shift()!;
+    const run: Record<Job['name'], () => Promise<unknown>> = {
+      backstop: () => runBackstop(env, job.at),
+      events: () => runEvents(env, scheduledTime),
+      digest: () => runDigest(env, job.at),
+      watch: () => runWatchMap(env),
+      revenue: () => runRevenue(env, scheduledTime),
+    };
+    await step(job.name, run[job.name]);
+  }
+  if (queue.length) out.deferred_jobs = queue.map((j) => j.name);
+  const next = JSON.stringify(queue);
+  if (next !== (rawQueue ?? '[]')) await env.DB.put('jobs:due', next);
+  if (!busy) await step('webhooks', () => runWebhookRetries(env, scheduledTime));
   // Every 3 hours, 10 minutes after gust's own cron: a full refresh only if that run didn't start.
   if (t.getUTCMinutes() === 33 && t.getUTCHours() % 3 === 0) await step('dispatch', () => dispatchRefresh(env, 'full', 'scheduled by copybook-api', scheduledTime));
   else if (env.GITHUB_DISPATCH_TOKEN) {

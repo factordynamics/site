@@ -20,8 +20,8 @@ crons = ["* * * * *"]
 SITE_URL = "https://copybook.factordynamics.com/"
 DATA_URL = "https://refcell.github.io/gust/copybook/data/"
 ALLOWED_ORIGINS = "https://copybook.factordynamics.com,https://refcell.github.io,https://holdterm.pages.dev,https://holdterm.factordynamics.com"
-# Holdterm, a separate brand on this Worker: its site (moves to holdterm.factordynamics.com with DNS) and billing portal.
-HOLDTERM_SITE_URL = "https://holdterm.pages.dev/"
+# Holdterm, a separate brand on this Worker: its site and billing portal.
+HOLDTERM_SITE_URL = "https://holdterm.factordynamics.com/"
 HOLDTERM_PORTAL_CONFIGURATION = "bpc_1UZeGADSKGGzRqYZ2TuZE74Y"
 EMAIL_FROM = "Copybook <copybook@factordynamics.com>"
 API_URL = "https://copybook-api.factordynamics.workers.dev/"
@@ -29,6 +29,7 @@ API_URL = "https://copybook-api.factordynamics.workers.dev/"
 # GitHub Actions OIDC workflow_ref allowed to PUT /ingest/.
 INGEST_WORKFLOW = "refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main"
 PAGES_WORKFLOW = "factordynamics/site/.github/workflows/copybook-pages.yml@refs/heads/main"
+PRECOMPUTE_WORKFLOW = "factordynamics/site/.github/workflows/copybook-api-precompute.yml@refs/heads/main"
 PORTAL_CONFIGURATION = "bpc_1UZHZgDSKGGzRqYZbvRwUas4"
 
 # Secrets (npx wrangler secret put NAME): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SESSION_SECRET, RESEND_API_KEY

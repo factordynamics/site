@@ -69,6 +69,11 @@ export function v1json(data: Record<string, unknown>, status = 200, headers: Rec
   return new Response(JSON.stringify({ schema_version: SCHEMA_VERSION, ...build, ...data }), { status, headers: { ...base, ...headers } });
 }
 
+/** The start of a /v1 JSON body, up to the comma before the payload: for streamed responses. */
+export function v1prefix(): string {
+  return JSON.stringify({ schema_version: SCHEMA_VERSION, ...build }).slice(0, -1) + ',';
+}
+
 export function v1error(code: ErrorCode, status: number, message?: string, headers: Record<string, string> = {}): Response {
   return v1json({ error: { code, message: message ?? ERRORS[code] } }, status, headers);
 }

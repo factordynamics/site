@@ -59,7 +59,7 @@ const PRODUCTS = {
     name: 'Holdterm Alerts',
     description: 'Email alerts when the superinvestors you follow file a 13F, 13D, 13G or Form 4. SEC EDGAR data, not investment advice.',
     prices: [['monthly', 300, 'month'], ['yearly', 2900, 'year']],
-    success: 'https://holdterm.pages.dev/account?checkout=success&session_id={CHECKOUT_SESSION_ID}',
+    success: 'https://holdterm.factordynamics.com/account?checkout=success&session_id={CHECKOUT_SESSION_ID}',
     trial: 7,
     descriptor: 'HOLDTERM',
   },
@@ -125,7 +125,7 @@ const portal = found
   : await stripe('POST', 'billing_portal/configurations', portalParams);
 
 // Holdterm's own portal: its plan only, back to its site, no Copybook plans to switch to.
-const HOLDTERM_SITE = 'https://holdterm.pages.dev/';
+const HOLDTERM_SITE = 'https://holdterm.factordynamics.com/';
 const holdtermPortalParams = {
   'business_profile[headline]': 'Holdterm: manage your alerts subscription',
   default_return_url: `${HOLDTERM_SITE}account/`,

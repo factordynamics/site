@@ -1,0 +1,35 @@
+name: Copybook API precompute
+
+# Small lookup files for the Copy API (copybook/api/scripts/precompute.mjs), built from the published
+# data so the Worker never parses multi-megabyte files within its 10 ms CPU budget. Uploaded to the
+# API's R2 bucket with this workflow's OIDC token (accepted as PRECOMPUTE_WORKFLOW in wrangler.toml).
+on:
+  schedule:
+    - cron: "25 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - "copybook/api/scripts/precompute.mjs"
+      - ".github/workflows/copybook-api-precompute.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: copybook-api-precompute
+  cancel-in-progress: false
+
+jobs:
+  precompute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: copybook/api/scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node copybook/api/scripts/precompute.mjs
