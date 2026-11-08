@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ChangeBars } from '../components/charts'
 import { Arrow, Badge, Button, Check, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
-import { ApiError, csvUrl, openPortal, useMemberState } from '../lib/account'
+import { ApiError, openPortal, useMemberState } from '../lib/account'
+import { CsvButton } from '../components/CsvButton'
 import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle } from '../lib/data'
 import { diff, holdingKey, loadHistory, type Quarter } from '../lib/history'
 import { checkout } from '../config'
@@ -48,9 +49,7 @@ export function History() {
             Latest portfolio
           </Button>
           {active && (
-            <Button href={csvUrl(slug)} variant="dark" size="sm">
-              Download CSV
-            </Button>
+            <CsvButton slug={slug} />
           )}
         </div>
       </header>
@@ -187,9 +186,7 @@ function HistoryBody({ slug, quarters }: { slug: string; quarters: Quarter[] }) 
               placeholder="Filter by ticker or company"
               className="h-9 min-w-0 flex-1 rounded-full bg-paper px-4 text-[14px] shadow-[0_0_0_1px_var(--color-line)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)] sm:w-60"
             />
-            <Button href={csvUrl(slug)} variant="outline" size="sm" className="shrink-0">
-              CSV
-            </Button>
+            <CsvButton slug={slug} label="CSV" variant="outline" className="shrink-0" />
           </div>
         </header>
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={`Holdings, ${quarterLabel(q.quarter)}`}>

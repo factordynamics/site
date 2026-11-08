@@ -66,7 +66,16 @@ export const fetchMe = () => call<{ member: Member }>('/me', { auth: true }).the
 export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email } })
 export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
 export const setAlerts = (alerts: Member['alerts']) => call<{ member: Member }>('/alerts', { body: { alerts }, auth: true }).then((r) => r.member)
-export const csvUrl = (slug: string) => `${api}/csv/${slug}.csv?token=${encodeURIComponent(getToken() ?? '')}`
+/** Download a fund's CSV. The API mints a single-use 60-second link on click; session tokens never go in a URL. */
+export async function downloadCsv(slug: string) {
+  const { url } = await call<{ url: string }>(`/csv-link/${slug}`, { method: 'POST', auth: true })
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${slug}.csv`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
 
 /** undefined while checking, null when signed out or not a member. Calls the API only when a token exists. */
 export function useMemberState() {

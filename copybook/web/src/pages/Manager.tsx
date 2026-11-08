@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { ChangeBars, Donut, foldSlices, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
-import { csvUrl, useMember } from '../lib/account'
+import { useMember } from '../lib/account'
+import { CsvButton } from '../components/CsvButton'
 import { useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync } from '../lib/data'
 
 export function ManagerPage() {
@@ -82,9 +83,7 @@ export function ManagerPage() {
               </Button>
             )}
             {member?.active ? (
-              <Button href={csvUrl(f.slug)} variant="dark" size="sm">
-                Download CSV
-              </Button>
+              <CsvButton slug={f.slug} />
             ) : (
               <Button to="/pricing/" variant="dark" size="sm">
                 Track changes
