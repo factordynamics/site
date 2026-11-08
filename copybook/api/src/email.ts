@@ -34,7 +34,7 @@ export async function sendMail(env: Env, mails: Mail[]): Promise<string> {
   return statuses.join(',');
 }
 
-const FOOTER = '\n\nSource: SEC EDGAR filings (13F-HR, Form 4, Schedules 13D and 13G), as filed. Not investment advice.\nCopybook by Factor Dynamics.';
+export const FOOTER = '\n\nSource: SEC EDGAR filings (13F-HR, Form 4, Schedules 13D and 13G), as filed. Not investment advice.\nCopybook by Factor Dynamics.';
 
 /** The reply to a fund-plan, support or data-deletion request from the site. */
 export function leadAckMail(env: Env, l: { topic: unknown; name: string | null; email: string; fund: string | null; seats: number | null; invoice: boolean | null; plan_interval: string | null; message: string | null }): Mail {

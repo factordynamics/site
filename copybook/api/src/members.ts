@@ -1,6 +1,7 @@
 import { holdtermLoginMail, loginMail, sendMail } from './email';
 import { isActive, type Env, type Member } from './env';
 import { stripe } from './stripe';
+import { maybeCancelMail } from './revenue';
 import { mirrorSeats } from './seats';
 import { signToken } from './tokens';
 
@@ -58,6 +59,8 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     email = String(c.email || '').trim().toLowerCase();
   }
   const m: Member = {
+    // Keep what we track per member (alert scope, lifecycle emails); the subscription fields below are Stripe's.
+    ...(prev ?? {}),
     customer,
     email,
     status: String(sub.status),
@@ -85,6 +88,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     m.welcomed = (await sendMail(env, [welcome])) === '200';
     if (!m.welcomed) await claim(env, customer, 'welcome', false);
   }
+  await maybeCancelMail(env, prev, m);
   await putMember(env, m);
   await mirrorSeats(env, m);
   return m;

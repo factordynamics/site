@@ -12,6 +12,7 @@ import { isActive, isCopy, isPro, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
+import { businessSummary, handleWhy } from './revenue';
 import { inviteSeat, listSeats, removeSeat, seatsView } from './seats';
 import { stripe, verifyStripeSignature } from './stripe';
 import { signToken, verifyToken } from './tokens';
@@ -165,8 +166,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const q = (p: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null);
     const summary = { count: sorted.length, p50: q(0.5), p90: q(0.9), max: sorted.length ? sorted[sorted.length - 1] : null };
     const leads = Number((await env.DB.get('leads:count')) ?? 0);
-    return json({ ok: true, alert_latency_summary: summary, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, fund_requests: leads }, 200, h);
+    const business = { ...(await businessSummary(env, Date.now())), fund_requests: leads };
+    return json({ ok: true, alert_latency_summary: summary, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, fund_requests: leads, business }, 200, h);
   }
+
+  // The one-click cancellation reason from the follow-up email (and an optional note).
+  if ((req.method === 'GET' || req.method === 'POST') && path === '/why') return handleWhy(env, req, url);
 
   // Public alert latency for the methodology page: this filing season's live alerts, replays excluded.
   if (req.method === 'GET' && path === '/latency') {

@@ -35,6 +35,8 @@ export interface Env {
   DATA_URL: string;
   ALLOWED_ORIGINS?: string;
   EMAIL_FROM: string;
+  /** This Worker's public base URL (trailing slash), for links in email. */
+  API_URL?: string;
   /** bpc_... from scripts/stripe-setup.mjs; empty uses the account's default portal settings. */
   PORTAL_CONFIGURATION?: string;
   STRIPE_SECRET_KEY: string;
@@ -72,6 +74,10 @@ export interface Member {
   /** Cancelled in the portal: active until period_end (or cancel_at), then it ends. */
   cancel_at_period_end?: boolean;
   cancel_at?: number | null;
+  /** Lifecycle email already sent: the trial_end reminded, the season recapped, the subscription asked why. */
+  trial_reminded?: number | null;
+  recap_sent?: string;
+  why_sent?: string;
   /** A Copy Fund seat: the owner's Stripe customer id. Billing, seats and shared lists are the owner's. */
   seat_of?: string;
   /** Set once the member picks an alert scope themselves (POST /alerts). */

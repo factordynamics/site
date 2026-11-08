@@ -1,6 +1,6 @@
 // Signed, expiring tokens: base64url(JSON payload) + "." + base64url(HMAC-SHA256).
 
-export type TokenKind = 'login' | 'session' | 'download';
+export type TokenKind = 'login' | 'session' | 'download' | 'why';
 
 export interface TokenPayload {
   k: TokenKind;

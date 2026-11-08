@@ -1,5 +1,6 @@
 import { addToFeed, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
+import { countAlerts, logSent, runRevenue } from './revenue';
 import { alertMail, digestMail, holdtermAlertMail, sendMail } from './email';
 import { companyFilings, computeMoves, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, type Env, type Member } from './env';
@@ -272,6 +273,7 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
     const m = await scoped(env, raw, f);
     const mine = forMember(m, f, filings, events, meta);
     if (!mine.filings.length && !mine.events.length) continue;
+    await countAlerts(env, m.customer, mine.filings.length + mine.events.length);
     // Chat, feed and webhook get every alert as it happens, whatever the email schedule.
     const ch = await getChannels(env, m.customer);
     if (ch.discord || ch.slack || ch.telegram) chats.push(...Object.entries(await sendChats(env, ch, mine.filings, mine.events, f)).map(([k, v]) => `${k} ${v}`));
@@ -284,6 +286,7 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
     }
   }
   const mail = await sendMail(env, mails);
+  await logSent(env, mails.length, now);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   return { emails: mails.length, digest, mail, ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }
@@ -310,6 +313,7 @@ export async function runDigest(env: Env, now: number): Promise<{ emails: number
     }
   }
   const status = await sendMail(env, mails);
+  await logSent(env, mails.length, now);
   if (status.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   return { emails: mails.length, status };
 }
@@ -1136,6 +1140,8 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
   if (t.getUTCMinutes() === 47) await step('events', () => runEvents(env, scheduledTime));
   if (t.getUTCMinutes() === 32 && t.getUTCHours() === 3) await step('digest', () => runDigest(env, scheduledTime - 3600_000));
   if (t.getUTCMinutes() === 52) await step('watch', () => runWatchMap(env));
+  // Trial reminders and the season recap, once a day mid-morning in New York.
+  if (t.getUTCMinutes() === 12 && t.getUTCHours() === 15) await step('revenue', () => runRevenue(env, scheduledTime));
   // SEC requests this run may make; the rest of the 50-subrequest limit is for mail, GitHub and data.
   secBudget.left = Number(env.SEC_BUDGET ?? 40);
   await step('poll', () => runPoll(env, scheduledTime));

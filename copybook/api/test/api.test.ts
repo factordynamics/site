@@ -1452,6 +1452,63 @@ describe('copybook api', () => {
     expect((await v1('/v1/changes/2026Q2?change=sold')).status).toBe(400);
   });
 
+  it('lifecycle email: trial ending in 3 days, the season recap for monthly members, one question on cancel; /health counts', async () => {
+    const put = (c: string, m: Record<string, unknown>) => env.DB.put(`cus:${c}`, JSON.stringify({ customer: c, email: `${c}@example.com`, status: 'active', plan: 'copy', interval: 'monthly', period_end: 1795000000, subscription: `sub_${c}`, alerts: [], welcomed: true, ...m }));
+    const at = Date.UTC(2026, 10, 10, 15, 12);
+    const trialEnd = Math.floor(at / 1000) + 2.5 * 86400;
+    await put('trial', { status: 'trialing', trial_end: trialEnd });
+    await putFollows('trial', { investors: ['warren-buffett', 'bill-ackman'], stocks: ['AAPL'] });
+    await env.DB.put('sent:trial', '7');
+    await put('later', { status: 'trialing', trial_end: trialEnd + 2 * 86400 }); // 4.5 days out: not yet
+    await put('ht', { status: 'trialing', trial_end: trialEnd, plan: 'holdterm' }); // Holdterm: never a Copybook email
+    await put('seat_x', { status: 'trialing', trial_end: trialEnd, plan: 'fund', seat_of: 'cus_owner' }); // seats don't pay
+    await put('promo', { plan: 'pro' });
+    await put('yearly', { interval: 'yearly' });
+
+    await cron(12, at);
+    expect(sent.map((m) => m.to[0])).toEqual(['trial@example.com']);
+    expect(sent[0].subject).toBe('Your Copy trial ends November 12');
+    expect(sent[0].text).toContain('charged $9/month (or $79/year if you switch to yearly)');
+    expect(sent[0].text).toContain('During your trial so far: 7 alerts sent to you, 2 funds followed, 1 stock on your watchlist.');
+    sent = [];
+    await cron(12, at + 86400_000);
+    expect(sent).toHaveLength(0); // once per trial
+
+    // After filing week: monthly payers get the recap with the yearly price; yearly and Holdterm don't.
+    await env.DB.put('sent:promo', '41');
+    await env.DB.put('alerts:latency', JSON.stringify([{ seconds: 50, sent: '2026-11-14T21:00:00Z' }, { seconds: 70, sent: '2026-11-14T21:01:00Z' }, { seconds: 90, sent: '2026-11-14T21:02:00Z' }, { seconds: 4000, sent: '2026-11-14T21:03:00Z', replay: true }]));
+    await cron(12, Date.UTC(2026, 10, 18, 15, 12));
+    expect(sent.map((m) => m.to[0])).toEqual(['promo@example.com']);
+    expect(sent[0].subject).toBe('Your Q3 2026 filing season on Copybook, and $78 off with yearly');
+    expect(sent[0].text).toContain('Copybook sent you 41 alerts. Our median time from EDGAR acceptance to your inbox this season was 70 seconds.');
+    expect(sent[0].text).toContain('Copy Pro monthly: $468 a year. Yearly is $390');
+    sent = [];
+    await cron(12, Date.UTC(2026, 10, 19, 15, 12));
+    expect(sent).toHaveLength(0);
+
+    // A portal cancel: one email with one-click reasons; the webhook repeating sends nothing more.
+    const cancel = (id: string, plan = 'copy_monthly') => webhook({ type: 'customer.subscription.updated', data: { object: { ...sub(`sub_${id}`, id, 'active', 'month', plan), cancel_at_period_end: true } } });
+    await cancel('yearly');
+    await cancel('yearly');
+    await cancel('ht', 'holdterm_monthly');
+    expect(sent.map((m) => m.to[0])).toEqual(['yearly@example.com']);
+    expect(sent[0].subject).toBe('One question about your Copybook cancellation');
+    const link = sent[0].text.match(/Too expensive: (\S+)/)![1];
+    expect(link).toMatch(/^https:\/\/copybook-api\.factordynamics\.workers\.dev\/why\?t=.+&r=price$/);
+    const u = new URL(link);
+    const page = await handleRequest(new Request(`https://api.test/why${u.search}`), env);
+    expect(await page.text()).toContain('“Too expensive” is noted');
+    expect((await handleRequest(new Request('https://api.test/why?t=bogus&r=price'), env)).status).toBe(200);
+    await handleRequest(new Request('https://api.test/why', { method: 'POST', body: new URLSearchParams({ t: u.searchParams.get('t')!, note: 'Need options data' }) }), env);
+    expect(JSON.parse((await env.DB.get('why:yearly'))!)).toMatchObject({ reason: 'price', note: 'Need options data' });
+
+    const b = (await (await call('/health')).json()).business;
+    // Holdterm counts as its own plan in the business numbers (its cancel too), though it gets no Copybook email.
+    expect(b).toMatchObject({ trials: 2, cancellations_scheduled: 2, fund_seats: 1, cancel_reasons: { price: 1 } });
+    expect(b.by_plan).toEqual({ copy_monthly: 3, pro_monthly: 1, holdterm_monthly: 1 });
+    expect(JSON.stringify(b)).not.toMatch(/@/);
+  });
+
   it('/v1 restatement lineage: versions[] oldest first with status, every amendment attached, ?version= serves the book as originally filed', async () => {
     index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR/A', accession: 'R', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-09-02', total_value: 3000, position_count: 1, history_quarters: ['2026Q2'] }] };
     await cron(17);
