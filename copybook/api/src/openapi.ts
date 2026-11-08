@@ -54,7 +54,11 @@ export function openapi() {
 
 **Weight.** \`weight\` is the share of the equity book: value_usd over the summed value of SH rows without put/call, as a 0-1 fraction; null for options and PRN rows. It takes that definition as soon as the data run publishes it per row; until then it is value_usd over the filing's total reported value, all rows. \`weight_equity\` always carries the equity-only value and is an alias of \`weight\` for one release after the switch.
 
-**Changelog.** ${CHANGELOG.flatMap((c) => c.changes.map((x) => `${c.date}: ${x}`)).join(' ')}`,
+**Non-curated filers.** Holdings of filers outside the curated set carry \`change\`, \`prev_shares\`, \`share_change\` and \`value_delta_usd\` only once a prior quarter is on file for them (the data run back-fills one for every filer a member follows, peers and linked books included); until then those fields are null. \`shares_type\` is null until the data run publishes it for them.
+
+**Webhooks (Copy Pro).** Each alert is POSTed as JSON to the URL set in /account/ (see \`webhooks\` below for the payload). Headers: \`Copybook-Delivery\` (the alert id, stable across retries: use it to deduplicate) and \`Copybook-Signature: t=<unix seconds>,v1=<hex>\`, where v1 is HMAC-SHA256, keyed with your \`whsec_\` secret (the whole string, prefix included), over the bytes \`<t>.<raw body>\`. To verify: split the header on commas, recompute the HMAC over t, a dot and the raw request body exactly as received, compare in constant time, and reject a t more than 5 minutes from your clock (the replay window; each attempt is signed afresh with its own t). Answer 2xx within 10 seconds; anything else is retried after 1, 5, 30, 120 and 720 minutes, then dropped. Rotating the secret in /account/ takes effect on the next delivery.
+
+**Changelog.** ${CHANGELOG.flatMap((c) => c.changes.map((x) => `${c.date} (${c.status}): ${x}`)).join(' ')}`,
     },
     servers: [{ url: 'https://copybook-api.factordynamics.workers.dev' }],
     'x-versioning': { current: SCHEMA_VERSION, pin_header: 'Copybook-Schema-Version', notice_days: 90, changelog: '/v1/changelog' },
@@ -275,8 +279,9 @@ export function openapi() {
       },
       '/v1/stocks/{stock}/holders': {
         get: {
-          summary: 'Every 13F holder of one issuer, with the change vs the prior quarter',
-          description: 'Share classes of one issuer (same 6-character CUSIP issuer code) are rolled up; calls and puts are separate rows (`kind`). Served for the latest complete 13F period.',
+          summary: 'Every 13F holder of one issuer, with the change vs the prior quarter (coming: returns 501 today)',
+          'x-status': 'coming',
+          description: '**Coming, not live yet:** returns 501 not_yet_available until the data run publishes per-stock holder files; /v1/changelog logs the day it ships. Share classes of one issuer (same 6-character CUSIP issuer code) are rolled up; calls and puts are separate rows (`kind`). Served for the latest complete 13F period.',
           parameters: [
             { name: 'stock', in: 'path', required: true, description: 'Ticker (NVDA), 9-character CUSIP or 6-character issuer code.', schema: { type: 'string' } },
             { name: 'cohort', in: 'query', required: false, schema: { type: 'string', enum: ['all', 'curated'], default: 'all' } },
@@ -299,7 +304,7 @@ export function openapi() {
       '/v1/events': {
         get: {
           summary: 'Form 4 and Schedule 13D/G filings, newest first, with filters',
-          description: 'Copybook\'s curated filers\' filings for the last 30 days (data run), plus every filing the minute poll parsed (followed filers, and any filer\'s 13D/G on members\' names), with EDGAR acceptance time, per-class Form 4 holdings and the 13D/G stake before and after.',
+          description: 'The same filings the investor pages show: each curated filer\'s Form 4 and 13D/G since its latest 13F, plus every filing the minute poll parsed (followed filers, and any filer\'s 13D/G on members\' names). Each carries EDGAR\'s acceptance time (`accepted_at`), per-class Form 4 holdings (`classes`), the 13D\'s Item 4 excerpt (`purpose`) and the same filer\'s previous Schedule 13D/G on the issuer (`prev`). Details are read from EDGAR hourly, so a filing from the last hour can show null detail fields until then.',
           parameters: [
             { name: 'filer', in: 'query', required: false, description: 'Filer slug or CIK', schema: { type: 'string' } },
             { name: 'ticker', in: 'query', required: false, schema: { type: 'string' } },
@@ -328,7 +333,9 @@ export function openapi() {
       '/v1/changes/{quarter}': {
         get: {
           summary: 'New, added, trimmed and exited positions for one report period, largest moves first',
-          description: 'With filer=: that filer\'s change rows (exact). With ticker= or cusip=: every 13F holder\'s change in that stock (latest complete period). Without either: across all filers from the data run\'s per-quarter change file (501 until published), with cohort=curated or a filer type.',
+          'x-status': 'partial',
+          'x-status-detail': { 'filer=': 'live', 'ticker= / cusip=': 'coming', 'across filers': 'coming' },
+          description: 'With filer=: that filer\'s change rows (exact); live. **Coming, not live yet** (501 not_yet_available until the data run publishes their files; /v1/changelog logs the day each ships): with ticker= or cusip=, every 13F holder\'s change in that stock; without either, across all filers with cohort=curated or a filer type.',
           parameters: [
             { $ref: '#/components/parameters/quarter' },
             { name: 'change', in: 'query', required: false, description: 'new, added, trimmed, exited (comma-separated)', schema: { type: 'string' } },
@@ -358,7 +365,9 @@ export function openapi() {
       },
       '/v1/bulk': {
         get: {
-          summary: 'Persistent bulk exports: every filer\'s 13F book for a quarter, as gzip CSV (and Parquet where available)',
+          summary: 'Persistent bulk exports: every filer\'s 13F book for a quarter, as gzip CSV (and Parquet where available) (coming: the list is empty today)',
+          'x-status': 'coming',
+          description: '**Coming, not live yet:** the list stays empty until the data run uploads its first export; /v1/changelog logs the day it ships.',
           responses: {
             '200': {
               description: 'Available files, newest first',
@@ -382,11 +391,69 @@ export function openapi() {
           responses: {
             '200': {
               description: 'Changelog',
-              content: json(envelope({ type: 'array', items: { type: 'object', required: ['date', 'schema_version', 'breaking', 'changes'], properties: { date: { type: 'string', format: 'date' }, schema_version: { type: 'string' }, breaking: { type: 'boolean' }, changes: { type: 'array', items: { type: 'string' } } } } }), { ...BUILD, data: CHANGELOG.slice(0, 1) }),
+              content: json(envelope({ type: 'array', items: { type: 'object', required: ['date', 'schema_version', 'breaking', 'status', 'changes'], properties: { date: { type: 'string', format: 'date' }, schema_version: { type: 'string' }, breaking: { type: 'boolean' }, status: { type: 'string', enum: ['shipped', 'announced'], description: 'shipped: live and returning data. announced: coming; not live yet.' }, changes: { type: 'array', items: { type: 'string' } } } } }), { ...BUILD, data: CHANGELOG.slice(0, 1) }),
             },
           },
         },
       },
     } as Record<string, unknown>,
+    webhooks: {
+      alert: {
+        post: {
+          summary: 'One alert, POSTed to your webhook URL (Copy Pro)',
+          description: 'Sent once per filing (13F) or event (Form 4, 13D/G, insider buy, cluster). A follow-up with the same accession and `followup: true` (id suffixed :moves or :details) completes an alert first sent before its detail could be read. Verify Copybook-Signature as described in the API description.',
+          parameters: [
+            { name: 'Copybook-Signature', in: 'header', required: true, description: 't=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>" keyed with the whsec_ secret>', schema: { type: 'string' }, example: 't=1794180000,v1=5f2b…' },
+            { name: 'Copybook-Delivery', in: 'header', required: true, description: 'The alert id; the same across retries.', schema: { type: 'string' }, example: '0001193125-26-352200' },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['schema_version', 'type', 'id', 'detected_at', 'filer', 'sec_url'],
+                  properties: {
+                    schema_version: { type: 'string' },
+                    type: { type: 'string', enum: ['13f', 'form4', '13d', '13g', 'insider_buy', 'insider_cluster'] },
+                    id: { type: 'string', description: 'Accession, with :moves or :details on a follow-up; cluster ids start with cluster:.' },
+                    accession: { type: ['string', 'null'] },
+                    form: { type: 'string' },
+                    accepted_at: { type: ['string', 'null'], format: 'date-time', description: "EDGAR's acceptance time (UTC)." },
+                    detected_at: { type: 'string', format: 'date-time', description: 'When Copybook read the filing.' },
+                    followup: { type: 'boolean' },
+                    filer: { type: 'object', properties: { slug: { type: ['string', 'null'] }, manager: { type: 'string' }, name: { type: 'string' } } },
+                    quarter: { type: 'string', description: '13f only' },
+                    report_date: { type: 'string', format: 'date', description: '13f only' },
+                    moves: { type: ['object', 'null'], description: "13f only: { bought_usd, sold_usd, new[], added[], trimmed[], exited[] }, each row { cusip, ticker, issuer, shares, prev_shares, value, value_delta, ... }; null when the filing is too large to read live (a followup carries it)." },
+                    top_holdings: { type: ['array', 'null'], description: '13f only: largest holdings when there is no prior quarter to compare.' },
+                    issuer: { type: 'string', description: 'events only' },
+                    ticker: { type: ['string', 'null'] },
+                    action: { type: ['string', 'null'], description: 'buy, sell, mixed, other (Form 4); new_stake, stake_update, exit (13D/G)' },
+                    details_pending: { type: 'boolean' },
+                    shares: { type: ['number', 'null'] },
+                    value_usd: { type: ['number', 'null'] },
+                    avg_price: { type: ['number', 'null'] },
+                    classes: { type: ['array', 'null'], description: 'Form 4 per share class: { security, bought, sold, value_usd, shares_before, shares_after }' },
+                    percent_of_class: { type: ['number', 'null'], description: '0-100, as filed' },
+                    shares_after: { type: ['number', 'null'] },
+                    prev_percent_of_class: { type: ['number', 'null'] },
+                    prev_shares_after: { type: ['number', 'null'] },
+                    amendment_no: { type: ['integer', 'null'] },
+                    item4: { type: ['string', 'null'], description: '13D Item 4 (purpose of transaction), excerpt' },
+                    insider: { type: ['object', 'null'], description: 'insider_buy: { name, roles[], bought_usd }' },
+                    insiders: { type: ['array', 'null'], description: 'insider_cluster: the insiders who bought' },
+                    sec_url: { type: 'string' },
+                    copybook_url: { type: ['string', 'null'] },
+                  },
+                },
+                example: { schema_version: '2026-11-08', type: '13d', id: '0001193125-26-451979', accession: '0001193125-26-451979', form: 'SCHEDULE 13D/A', accepted_at: '2026-11-06T21:15:32.000Z', detected_at: '2026-11-06T21:16:01.000Z', filer: { slug: 'carl-icahn', name: 'Carl Icahn' }, issuer: 'CVR Energy, Inc.', ticker: 'CVI', action: 'stake_update', details_pending: false, followup: false, shares: null, value_usd: null, avg_price: null, classes: null, percent_of_class: 64.1, shares_after: 71201875, prev_percent_of_class: 70.8, prev_shares_after: 71201875, amendment_no: 41, item4: null, insider: null, insiders: null, sec_url: 'https://www.sec.gov/Archives/edgar/data/921669/000119312526451979/0001193125-26-451979-index.html', copybook_url: 'https://copybook.factordynamics.com/investors/carl-icahn' },
+              },
+            },
+          },
+          responses: { '200': { description: 'Any 2xx acknowledges the delivery.' } },
+        },
+      },
+    },
   };
 }

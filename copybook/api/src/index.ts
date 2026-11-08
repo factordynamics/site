@@ -1,6 +1,6 @@
 import { resolveFollowedFilers, runScheduled } from './alerts';
 import { fetchHistory, historyCsv, holdersCsv, shard, SHARD_KEY, SLUG } from './data';
-import { filers as curatedFilers } from './v1data';
+import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } from './v1data';
 import { verifyGithubOidc } from './oidc';
 import { channelsView, getChannels, rotateFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
@@ -251,7 +251,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'PUT' && path.startsWith('/ingest/')) {
     const key = path.slice('/ingest/'.length);
     const flow = key === 'flow/full.json';
-    const pre = /^pre\/(stock-codes|sec-tickers)\.json$|^pre\/v1-filers-rest\.txt$/.test(key);
+    const pre = /^pre\/(stock-codes|sec-tickers|events)\.json$|^pre\/v1-filers-rest\.txt$/.test(key);
     if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key) && !flow && !pre) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, v/{cik10}/{accession}.json, changes/{YYYYQn}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
     const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
     // The full Flow lists are built by the site's Pages workflow; everything else by the data workflow.
@@ -517,6 +517,20 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     } else if (st) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rows = (st.holders ?? []).map((x: any) => ({ cik: null, name: x.manager, slug: x.slug, kind: 'equity', quarter: x.quarter, shares: x.shares, prev_shares: x.prev_shares ?? null, value: x.value, prev_value: x.prev_value ?? null, change: x.change ?? null, weight: x.weight }));
+      // Each curated fund's CIK and, for its latest quarter, the 13F's accession and EDGAR acceptance
+      // (cached per filing; at most 20 new EDGAR reads per download, the rest fill in on later ones).
+      const list = await curatedFilers(env);
+      let reads = 0;
+      for (const r of rows) {
+        const c = list.find((x) => x.slug === r.slug);
+        if (!c) continue;
+        r.cik = c.cik;
+        if (r.quarter !== c.latest_quarter || !c.latest_accession) continue;
+        r.accession = c.latest_accession;
+        const cached = await env.DB.get(`filing:${c.latest_accession}`);
+        const meta = cached ? JSON.parse(cached) : reads++ < 20 ? await filingMeta(env, c.cik, c.latest_accession).catch(() => null) : null;
+        r.accepted_at = meta?.accepted_at ?? null;
+      }
     } else return json({ ok: false, error: 'unknown ticker' }, 404, h);
     return new Response(holdersCsv(rows), { headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="copybook-${ticker}-holders.csv"`, 'cache-control': 'private, no-store', 'x-copybook-coverage': full ? 'all-filers' : 'curated' } });
   }
@@ -529,8 +543,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     for (const slug of f.investors.slice(0, 100)) {
       const c = list.find((x) => x.slug === slug);
       const q = c?.latest_quarter;
-      if (!c || !q) continue;
-      history.push({ manager: c.manager, slug, cik: c.cik, quarter: q, report_date: c.latest_report_date, filing_date: c.latest_filing_date, accession: c.latest_accession, csv_url: `h/${slug}/${q}.csv`, holdings_url: `h/${slug}/${q}.json` });
+      if (c && q) {
+        history.push({ manager: c.manager, slug, cik: c.cik, quarter: q, report_date: c.latest_report_date, filing_date: c.latest_filing_date, accession: c.latest_accession, csv_url: `h/${slug}/${q}.csv`, holdings_url: `h/${slug}/${q}.json` });
+        continue;
+      }
+      // Any other filer: its latest book (full book, public shard, or the follow-time snapshot).
+      const a = c ? null : await resolveAny(env, slug);
+      if (!a || a.curated || !a.row.quarter) continue;
+      const book = await filerBook(env, a.row.cik, a.row.quarter);
+      if (!book) continue;
+      history.push({ manager: a.row.name, slug, cik: a.row.cik, quarter: a.row.quarter, report_date: book.report_date ?? null, filing_date: book.filing_date ?? a.row.filing_date, accession: book.accession ?? null, holdings: book.holdings ?? (book.columns ? rowsOf(book) : []) });
     }
     return new Response(historyCsv(env, { history }), {
       headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="copybook-followed-funds-13f.csv"', 'cache-control': 'private, no-store', 'x-copybook-funds': String(history.length) },

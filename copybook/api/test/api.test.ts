@@ -260,10 +260,25 @@ describe('copybook api', () => {
     const csv = await (await call('/csv/warren-buffett.csv', { token: session.token })).text();
     const lines = csv.trim().split('\r\n');
     expect(lines).toHaveLength(4);
-    expect(lines[0].split(',')).toHaveLength(20);
-    expect(lines[1]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q2,2026-06-30,2026-08-14,A2,AAPL,APPLE INC,037833100,COM,,10,2000,0.5,added,4,6,1200,0.3');
-    expect(lines[2]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q2,2026-06-30,2026-08-14,A2,BAC,BANK OF AMERICA,060505104,COM,,0,0,0,exited,5,-5,-100,-0.025');
-    expect(lines[3]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1,new,,5,100,0.1');
+    // Every row has exactly the header's fields (the follows CSV once had 20 header fields and 33 per row).
+    const head = lines[0].split(',');
+    expect(head).toHaveLength(33);
+    const parse = (l: string) => {
+      const out = [''];
+      let q = false;
+      for (let i = 0; i < l.length; i++) {
+        if (q && l[i] === '"' && l[i + 1] === '"') (out[out.length - 1] += '"'), i++;
+        else if (l[i] === '"') q = !q;
+        else if (l[i] === ',' && !q) out.push('');
+        else out[out.length - 1] += l[i];
+      }
+      return out;
+    };
+    const rec = (l: string) => Object.fromEntries(head.map((k, i) => [k, parse(l)[i]]));
+    for (const l of lines.slice(1)) expect(parse(l)).toHaveLength(head.length);
+    expect(rec(lines[1])).toMatchObject({ quarter: '2026Q2', accession: 'A2', ticker: 'AAPL', shares: '10', value_usd: '2000', weight: '0.5', change: 'added', prev_shares: '4', share_change: '6', value_delta_usd: '1200', pct_of_book: '0.3' });
+    expect(rec(lines[2])).toMatchObject({ ticker: 'BAC', shares: '0', change: 'exited', value_delta_usd: '-100', pct_of_book: '-0.025' });
+    expect(rec(lines[3])).toMatchObject({ quarter: '2026Q1', accession: 'A1', issuer: 'BANK, "OF" AMERICA', change: 'new', value_delta_usd: '100', pct_of_book: '0.1' });
     expect(csv.match(/^manager,/gm)).toHaveLength(1);
 
     // The session token is never accepted from a URL.
@@ -862,6 +877,14 @@ describe('copybook api', () => {
     // The data run tells the ingest which CIKs to back-fill; only its workflow may read the list.
     expect(JSON.parse(new TextDecoder().decode(hist.m.get('followed/ciks.json')))).toMatchObject({ ciks: ['0001798849'] });
     expect((await call('/ingest/followed.json')).status).toBe(401);
+    // Peers and linked books need a prior quarter too: after the hourly run they're on the list (non-curated only).
+    filers.push({ cik: '0001387322', name: 'Whale Rock Capital Management LLC', slug: 'whale-rock-capital-management-llc-7322', ok: true, quarter: '2026Q2' });
+    await putMember('p', 'pm@example.com', 'active', []);
+    await putFollows('p', { peers: ['whale-rock-capital-management-llc-7322', 'warren-buffett'], book: { cik: '0001541617', name: 'Altimeter', quarter: '2026Q2', tickers: [] } });
+    await putMember('p2', 'pm2@example.com', 'active', []);
+    await putFollows('p2', { book: { cik: '0001067983', name: 'Berkshire', quarter: '2026Q2', tickers: [] } });
+    await cron(52);
+    expect(JSON.parse(new TextDecoder().decode(hist.m.get('followed/ciks.json'))).ciks).toEqual(['0001387322', '0001541617', '0001798849']);
     // Then the data run replaces the shard with something else before Durable's Q3 13F arrives.
     shards['0001798849.json'] = { ...durableQ2, report_date: '2026-09-30', quarter: '2026Q3', rows: [] };
 
@@ -1354,9 +1377,11 @@ describe('copybook api', () => {
 
     // Every 13F holder once published: share change computed, names with commas quoted.
     stockPages['NVDA'] = { classes: [{ cusip: '67066G104' }], holders: [{ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q2', shares: 10, prev_shares: 0, value: 1800, change: 'new', weight: 0.9 }] };
+    // Curated rows carry the fund's CIK, its 13F's accession and EDGAR acceptance (cached per filing).
+    await env.DB.put('filing:A2', JSON.stringify({ accession: 'A2', accepted_at: '2026-08-14T20:05:04.000Z' }));
     let csv = await call('/stocks/nvda/holders.csv', { token: t });
     expect(csv.headers.get('x-copybook-coverage')).toBe('curated');
-    expect((await csv.text()).split('\r\n')[1]).toBe(',Warren Buffett,warren-buffett,equity,2026Q2,10,0,10,1800,,new,0.9,,');
+    expect((await csv.text()).split('\r\n')[1]).toBe('0001067983,Warren Buffett,warren-buffett,equity,2026Q2,10,0,10,1800,,new,0.9,A2,2026-08-14T20:05:04.000Z');
     hist.m.set('s/67066G.json', new TextEncoder().encode(JSON.stringify({ issuer: '67066G', period: '2026Q2', columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change'], holders: [['0001387322', 'Whale Rock, LLC', null, 'equity', 100, 140, 18000, 20000, 'trimmed']] })));
     csv = await call('/stocks/NVDA/holders.csv', { token: t });
     expect(csv.headers.get('x-copybook-coverage')).toBe('all-filers');
@@ -1370,6 +1395,17 @@ describe('copybook api', () => {
     const lines = (await all.text()).trim().split('\r\n');
     expect(lines[0]).toMatch(/^manager,slug,cik,quarter/);
     expect(lines[1]).toMatch(/^Warren Buffett,warren-buffett,0001067983,2026Q2,2026-06-30,2026-08-14,A2,AAPL,APPLE INC,037833100/);
+
+    // A non-curated follow (Durable, from its public shard) is in the file too, and every row matches the header.
+    filers.push({ cik: '0001798849', name: 'Durable Capital Partners LP', slug: 'durable-capital-partners-lp-8849', ok: true, quarter: '2026Q2', filing_date: '2026-08-14' });
+    shards['0001798849.json'] = durableQ2;
+    expect((await call('/follows/durable-capital-partners-lp-8849', { method: 'POST', token: t })).status).toBe(200);
+    const both = await call('/follows.csv', { token: t });
+    expect(both.headers.get('x-copybook-funds')).toBe('2');
+    const rowsOut = (await both.text()).trim().split('\r\n');
+    const n = (l: string) => l.replace(/"(?:[^"]|"")*"/g, '').split(',').length;
+    for (const l of rowsOut) expect(n(l)).toBe(n(rowsOut[0]));
+    expect(rowsOut.filter((l) => l.startsWith('Durable Capital Partners LP,durable-capital-partners-lp-8849,0001798849,2026Q2,')).length).toBe((durableQ2.rows as unknown[]).length);
   });
 
   it('book import: pasted list, broker CSV, and a 13F filer by CIK that follows its newest quarter', async () => {
@@ -1424,7 +1460,7 @@ describe('copybook api', () => {
   });
 
   it('/v1 events and changes: filters, the poll\'s detail over the data run\'s rows, cross-filer moves by size', async () => {
-    index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR', accession: 'A2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 2000, position_count: 2, history_quarters: ['2026Q2'] }] };
+    index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR', accession: 'A2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 2000, position_count: 2, history_quarters: ['2026Q2'] }, { ok: true, slug: 'carl-icahn', cik: '0000921669', manager: 'Carl Icahn', name: 'ICAHN CARL C', featured: true, status: 'current', form: '13F-HR', accession: 'I2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 1000, position_count: 1, history_quarters: ['2026Q2'] }] };
     await cron(17);
     stripeObjects['checkout/sessions/cs_test_ec'] = { id: 'cs_test_ec', status: 'complete', created: now(), subscription: 'sub_ec', customer_details: { email: 'ec@example.com' } };
     stripeObjects['subscriptions/sub_ec'] = sub('sub_ec', 'cus_ec', 'active', 'month', 'pro_monthly');
@@ -1452,6 +1488,25 @@ describe('copybook api', () => {
     r = await v1('/v1/events?limit=2');
     expect(r.body).toMatchObject({ count: 4, next_offset: 2 });
     expect((await v1('/v1/events?form=10k')).status).toBe(400);
+
+    // Once the hourly build publishes pre/events.json, /v1/events serves every filing the investor page
+    // shows, with EDGAR's detail. Icahn's real CVI 13D/A #41 (0001193125-26-451979), paired with #40.
+    const icahn = (id: string, extra: Record<string, unknown>) => ({ id, slug: 'carl-icahn', manager: 'Carl Icahn', form: 'SCHEDULE 13D/A', kind: '13d', action: 'stake_update', filing_date: '2026-11-06', url: `https://www.sec.gov/Archives/edgar/data/921669/${id.replace(/-/g, '')}/${id}-index.html`, issuer: 'CVR Energy, Inc.', issuer_cik: '0001376139', ticker: 'CVI', cusip: '12662P108', shares_after: 71201875, ...extra });
+    hist.m.set('pre/events.json', new TextEncoder().encode(JSON.stringify({ events: [
+      icahn('0001193125-26-451979', { accepted: '2026-11-06T21:46:52.000Z', percent_of_class: 64.1, amendment_no: 41, item4: 'Item 4 of the Initial 13D is hereby amended and supplemented by adding the following: On November 3, 2026, the Issuer entered into an underwriting agreement', prev_accession: '0001193125-26-445965', prev_form: 'SCHEDULE 13D/A', prev_percent_of_class: 70.8, prev_shares_after: 71201875 }),
+      icahn('0001193125-26-445965', { filing_date: '2026-11-03', accepted: '2026-11-04T02:57:23.000Z', percent_of_class: 70.8, amendment_no: 40 }),
+      { ...icahn('0001539497-26-002606', { form: '4', kind: 'form4', action: 'buy', filing_date: '2026-09-25', ticker: 'IEP', issuer: 'Icahn Enterprises L.P.', issuer_cik: '0000813762', cusip: null, accepted: '2026-09-25T20:31:10.000Z', classes: [{ security: 'Depositary Units', bought: 1000, sold: 0, value_usd: 9000, shares_before: 1, shares_after: 1001 }] }) },
+    ] })));
+    // The poll's own record of #41 has no Item 4: it must not blank the build's.
+    await env.DB.put('v1:events', JSON.stringify([icahn('0001193125-26-451979', { accepted: '2026-11-06T21:46:52.000Z', percent_of_class: 64.1, item4: null })]));
+    r = await v1('/v1/events?ticker=CVI');
+    expect(r.body.data.map((e: { accession: string }) => e.accession)).toEqual(['0001193125-26-451979', '0001193125-26-445965']);
+    expect(r.body.data[0]).toMatchObject({ accepted_at: '2026-11-06T21:46:52.000Z', percent_of_class: 64.1, amendment_no: 41, prev: { accession: '0001193125-26-445965', percent_of_class: 70.8 }, filer: { slug: 'carl-icahn', cik: '0000921669' } });
+    expect(r.body.data[0].purpose).toMatch(/^Item 4 of the Initial 13D/);
+    r = await v1('/v1/events?filer=carl-icahn');
+    expect(r.body.count).toBe(3);
+    expect(r.body.data[2]).toMatchObject({ kind: 'form4', classes: [{ shares_after: 1001 }] });
+    hist.m.delete('pre/events.json');
 
     // Changes for one filer: its book's change rows, largest first.
     hist.m.set('h/warren-buffett/2026Q2.json', new TextEncoder().encode(JSON.stringify({

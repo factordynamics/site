@@ -83,7 +83,7 @@ function position(h: any, equityTotal: number) {
 }
 
 /** Acceptance time and amendment type per accession, from EDGAR once, then KV (filings never change). */
-async function filingMeta(env: Env, cik: string, accession: string): Promise<FilingMeta | null> {
+export async function filingMeta(env: Env, cik: string, accession: string): Promise<FilingMeta | null> {
   const key = `filing:${accession}`;
   const cached = await env.DB.get(key);
   if (cached) return JSON.parse(cached) as FilingMeta;
@@ -126,7 +126,7 @@ async function findFiler(env: Env, id: string): Promise<AllFiler | null> {
 
 type Filer = { curated: true; row: FilerRow } | { curated: false; row: AllFiler };
 
-async function resolveAny(env: Env, id: string): Promise<Filer | null> {
+export async function resolveAny(env: Env, id: string): Promise<Filer | null> {
   const c = await resolve(env, id);
   if (c) return { curated: true, row: c };
   const a = CIK.test(id) || SLUG.test(id) ? await findFiler(env, id) : null;
@@ -449,7 +449,7 @@ ROUTES.push(
     const is = await issuerCode(env, decodeURIComponent(id));
     if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
     const obj = await env.HIST.get(`s/${is.code}.json`);
-    if (!obj) return v1error('not_yet_available', 501, 'Per-stock holder lists are published with the next full data run.');
+    if (!obj) return v1error('not_yet_available', 501, 'Coming: per-stock holder lists are not published yet. /v1/changelog logs the day this ships.');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const s = (await new Response(obj.body).json()) as any;
     if (quarter && quarter !== s.period) return v1error('not_found', 404, `Holder lists are served for ${s.period} (vs ${s.prev_period}); other quarters are in /v1/filers/{filer}/holdings.`);
@@ -506,16 +506,21 @@ ROUTES.push(
     const ticker = p.get('ticker')?.toUpperCase() ?? null;
     const cusip = p.get('cusip')?.toUpperCase() ?? null;
     const issuerCik = p.get('issuer_cik') ? pad(p.get('issuer_cik')!) : null;
-    // The data run's events (curated filers, last 30 days), overlaid with what the minute poll parsed.
-    const res = await fetch(`${env.DATA_URL}events.json`, { cf: { cacheTtl: 300 } } as RequestInit);
+    // Every event the investor pages show, with acceptance, Item 4, classes and the previous stake read
+    // from EDGAR (pre/events.json, built hourly by scripts/events.mts), overlaid with what the minute
+    // poll parsed. Before the first build: the data run's 30-day events.json.
+    const pre = await env.HIST.get('pre/events.json');
+    const res = pre ? null : await fetch(`${env.DATA_URL}events.json`, { cf: { cacheTtl: 300 } } as RequestInit);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const base: any[] = res.ok ? (((await res.json()) as { events?: unknown[] }).events ?? []) : [];
+    const base: any[] = pre ? (((await new Response(pre.body).json()) as { events?: unknown[] }).events ?? []) : res?.ok ? (((await res.json()) as { events?: unknown[] }).events ?? []) : [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ring: any[] = JSON.parse((await env.DB.get('v1:events')) ?? '[]');
     const key = (e: { id: string; slug: string }) => `${e.id}|${e.slug}`;
     const polled = new Map(ring.map((e) => [key(e), e]));
     const inBase = new Set(base.map(key));
-    const all = [...base.map((e) => ({ ...e, ...(polled.get(key(e)) ?? {}) })), ...ring.filter((e) => !inBase.has(key(e)))];
+    // The poll's fields win where it has them; a null from the poll never blanks a value the build read.
+    const over = (e: Record<string, unknown>) => ({ ...e, ...Object.fromEntries(Object.entries(polled.get(key(e as { id: string; slug: string })) ?? {}).filter(([, v]) => v !== null && v !== undefined)) });
+    const all = [...base.map(over), ...ring.filter((e) => !inBase.has(key(e)))];
     const rows = all
       .map((e) => ({
         accession: e.id,
@@ -587,7 +592,7 @@ ROUTES.push(
       const is = await issuerCode(env, stock);
       const obj = is ? await env.HIST.get(`s/${is.code}.json`) : null;
       if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
-      if (!obj) return v1error('not_yet_available', 501, 'Per-stock holder lists are published with the next full data run.');
+      if (!obj) return v1error('not_yet_available', 501, 'Coming: per-stock holder lists are not published yet. /v1/changelog logs the day this ships.');
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const st = (await new Response(obj.body).json()) as any;
       if (st.period !== quarter) return v1error('not_found', 404, `Per-stock changes are served for ${st.period}; use filer= for other quarters.`);
@@ -596,7 +601,7 @@ ROUTES.push(
     } else {
       // Across filers: the data run's per-quarter change file (largest moves first).
       const obj = await env.HIST.get(`changes/${quarter}.json`);
-      if (!obj) return v1error('not_yet_available', 501, `Cross-filer changes for ${quarter} are published by the data run; meanwhile pass filer= or ticker=.`);
+      if (!obj) return v1error('not_yet_available', 501, `Coming: cross-filer changes for ${quarter} are not published yet; /v1/changelog logs the day this ships. Meanwhile pass filer=.`);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (await new Response(obj.body).json()) as any;
       rows = rowsOf(c).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: h.type ?? null }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ?? null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: h.accepted_at ?? null }));

@@ -413,7 +413,14 @@ const withExtra = (ciks: CikMap, extra: CikMap): CikMap => ({ ...extra, ...ciks 
  */
 async function saveExtra(env: Env, extra: CikMap): Promise<void> {
   await env.DB.put('alerts:extra', JSON.stringify(extra));
-  await env.HIST.put('followed/ciks.json', JSON.stringify({ updated_at: new Date().toISOString(), ciks: Object.keys(extra).sort() }), { httpMetadata: { contentType: 'application/json' } });
+  await writeFollowedCiks(env, extra);
+}
+
+/** followed/ciks.json: followed and peer non-curated filers (alerts:extra) plus non-curated filers whose 13F is a member's linked book (KV followed:book-ciks, hourly). */
+async function writeFollowedCiks(env: Env, extra: CikMap): Promise<void> {
+  const books = JSON.parse((await env.DB.get('followed:book-ciks')) ?? '[]') as string[];
+  const ciks = [...new Set([...Object.keys(extra), ...books])].sort();
+  await env.HIST.put('followed/ciks.json', JSON.stringify({ updated_at: new Date().toISOString(), ciks }), { httpMetadata: { contentType: 'application/json' } });
 }
 
 const baselineKey = (cik: string, reportDate: string) => `b/${cik}/${reportDate}.json`;
@@ -874,6 +881,7 @@ export async function runEvents(env: Env, now: number): Promise<Record<string, u
 export async function runWatchMap(env: Env): Promise<Record<string, unknown>> {
   const want = new Set<string>();
   const followed = new Set<string>();
+  const bookCiks = new Set<string>();
   const members = await listMembers(env);
   // Books imported from a 13F filer follow its newest quarter.
   const books = await refreshBooks(env, members.filter((m) => isActive(m))).catch(() => 0);
@@ -881,11 +889,17 @@ export async function runWatchMap(env: Env): Promise<Record<string, unknown>> {
     if (!isActive(m) || m.alerts === 'off') continue;
     const f = await getFollows(env, m);
     for (const t of f.stocks) want.add(t);
-    for (const s of [...f.investors, ...(Array.isArray(m.alerts) ? m.alerts : [])]) followed.add(s);
+    // Peers count as followed filers here (their CIKs reach the data run for a prior quarter, and they
+    // get baselines); their alerts still go only to members who follow them as investors.
+    for (const s of [...f.investors, ...(f.peers ?? []), ...(Array.isArray(m.alerts) ? m.alerts : [])]) followed.add(s);
+    if (f.book?.cik) bookCiks.add(f.book.cik);
   }
   // Follows saved before any filer could be followed get their CIKs here.
   await resolveFollowedFilers(env, [...followed]).catch(() => []);
+  const curatedCiks = new Set(Object.keys((await cikMap(env)) ?? {}));
+  await env.DB.put('followed:book-ciks', JSON.stringify([...bookCiks].filter((c) => !curatedCiks.has(c)).sort()));
   await pruneExtra(env, followed);
+  await writeFollowedCiks(env, await extraMap(env));
   // Baselines for followed filers that don't have one yet (followed before snapshots existed).
   let snaps = 0;
   for (const [cik, ms] of Object.entries(await extraMap(env))) {

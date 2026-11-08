@@ -111,7 +111,7 @@ export async function rotateFeed(env: Env, m: Member, revoke = false): Promise<C
 
 async function post(url: string, body: unknown, headers: Record<string, string> = {}): Promise<string> {
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': 'Copybook-Alerts/1', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'user-agent': 'Copybook-Alerts/1', ...headers }, body: typeof body === 'string' ? body : JSON.stringify(body), signal: AbortSignal.timeout(10_000) });
     return String(res.status);
   } catch (err) {
     return `error ${err}`;

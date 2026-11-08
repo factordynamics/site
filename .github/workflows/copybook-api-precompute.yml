@@ -10,6 +10,8 @@ on:
     branches: [main]
     paths:
       - "copybook/api/scripts/precompute.mjs"
+      - "copybook/api/scripts/events.mts"
+      - "copybook/api/src/edgar.ts"
       - ".github/workflows/copybook-api-precompute.yml"
   workflow_dispatch:
 
@@ -24,12 +26,24 @@ concurrency:
 jobs:
   precompute:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: copybook/api/scripts
+          sparse-checkout: |
+            copybook/api/scripts
+            copybook/api/src
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: node copybook/api/scripts/precompute.mjs
+      # /v1/events detail (acceptance, Item 4, classes, prior stake) read from EDGAR with the Worker's
+      # parser; the cache keeps what earlier runs already read, so each run only reads new filings.
+      - uses: actions/cache@v4
+        with:
+          path: .cache/events-detail.json
+          key: copybook-events-${{ github.run_id }}
+          restore-keys: copybook-events-
+      - run: npx -y tsx@4 copybook/api/scripts/events.mts
+        env:
+          COPYBOOK_EVENTS_CACHE: .cache/events-detail.json

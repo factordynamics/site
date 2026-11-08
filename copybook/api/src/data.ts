@@ -2,12 +2,36 @@ import type { Env } from './env';
 
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
 
+/** The data run's per-quarter CSV columns (h/{slug}/{q}.csv); every export row has exactly these. */
 const CSV_FIELDS = [
   'manager', 'slug', 'cik', 'quarter', 'report_date', 'filing_date', 'accession', 'ticker', 'issuer', 'cusip', 'title', 'put_call', 'shares', 'value_usd', 'weight',
   // Change vs the prior quarter; exited positions come last with shares 0.
-  'change', 'prev_shares', 'share_change', 'value_delta_usd', 'pct_of_book',
+  'change', 'prev_shares', 'share_change', 'value_delta_usd', 'delta_pct_of_book', 'pct_of_book',
+  'shares_type', 'principal_amount', 'split_ratio', 'prev_shares_as_filed', 'source_accession', 'first_disclosed_at', 'late_disclosure',
+  'discretion', 'other_managers', 'vote_sole', 'vote_shared', 'vote_none',
 ];
-const CHANGE_FIELDS = ['change', 'prev_shares', 'share_change', 'value_delta', 'pct_of_book'];
+const HEADER = CSV_FIELDS.join(',');
+/** JSON book field for a CSV column, where the names differ. */
+const JSON_FIELD: Record<string, string> = { value_usd: 'value', value_delta_usd: 'value_delta' };
+
+/** One CSV line into cells (RFC 4180 quoting). */
+function splitCsv(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) {
+      if (c === '"' && line[i + 1] === '"') (cur += '"'), i++;
+      else if (c === '"') q = false;
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') out.push(cur), (cur = '');
+    else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
 
 function cell(v: unknown): string {
   const s = v === null || v === undefined ? '' : String(v);
@@ -49,34 +73,61 @@ export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
   const { readable, writable } = new Identity<Uint8Array, Uint8Array>();
   (async () => {
     let w = writable.getWriter();
-    await w.write(enc.encode(CSV_FIELDS.join(',') + '\r\n'));
+    await w.write(enc.encode(HEADER + '\r\n'));
     for (const q of h.history ?? []) {
       // A ready CSV when there is one; otherwise the JSON book below.
       const body = q.csv_url ? (q.holdings_url ? await shard(env, q.csv_url) : await mustShard(env, q.csv_url)) : null;
       if (body) {
-        // Drop the shard's header line in JS, then let the runtime pipe the rest
-        // natively: per-chunk JS would cost ~0.5 s CPU on the largest books.
+        // Read the shard's header line in JS. With today's columns, the runtime pipes the rest natively
+        // (per-chunk JS would cost ~0.5 s CPU on the largest books); an older layout is remapped per row.
         const reader = body.getReader();
+        let head = '';
+        let rest: Uint8Array | null = null;
+        const dec = new TextDecoder();
         for (let r = await reader.read(); !r.done; r = await reader.read()) {
           const nl = r.value.indexOf(10);
-          if (nl < 0) continue;
-          if (nl + 1 < r.value.length) await w.write(r.value.subarray(nl + 1));
+          if (nl < 0) {
+            head += dec.decode(r.value, { stream: true });
+            continue;
+          }
+          head += dec.decode(r.value.subarray(0, nl));
+          rest = r.value.subarray(nl + 1);
           break;
         }
+        head = head.replace(/\r$/, '');
+        if (head === HEADER) {
+          if (rest?.length) await w.write(rest);
+          reader.releaseLock();
+          w.releaseLock();
+          await body.pipeTo(writable, { preventClose: true });
+          w = writable.getWriter();
+          continue;
+        }
+        const cols = splitCsv(head);
+        const at = CSV_FIELDS.map((f) => cols.indexOf(f));
+        let text = rest ? dec.decode(rest, { stream: true }) : '';
+        for (let r = await reader.read(); !r.done; r = await reader.read()) text += dec.decode(r.value, { stream: true });
+        text += dec.decode();
         reader.releaseLock();
-        w.releaseLock();
-        await body.pipeTo(writable, { preventClose: true });
-        w = writable.getWriter();
+        const lines = text.split(/\r?\n/).filter((l) => l);
+        const rows = lines.map((l) => {
+          const c = splitCsv(l);
+          return at.map((i) => cell(i < 0 ? '' : c[i])).join(',') + '\r\n';
+        });
+        if (rows.length) await w.write(enc.encode(rows.join('')));
         continue;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const book: { holdings?: any[]; exited?: any[] } = q.holdings ? q : q.holdings_url ? await new Response(await mustShard(env, q.holdings_url)).json() : {};
+      // Several funds in one file (the follows CSV) carry their own manager, slug and CIK per quarter.
+      const filing: Record<string, unknown> = { manager: q.manager ?? h.manager, slug: q.slug ?? h.slug, cik: q.cik ?? h.cik, quarter: q.quarter, report_date: q.report_date, filing_date: q.filing_date, accession: q.accession };
       const rows = [...(book.holdings ?? []), ...(book.exited ?? [])].map(
         (p) =>
-          // Several funds in one file (the follows CSV) carry their own manager, slug and CIK per quarter.
-          [q.manager ?? h.manager, q.slug ?? h.slug, q.cik ?? h.cik, q.quarter, q.report_date, q.filing_date, q.accession, p.ticker ?? '', p.issuer ?? '', p.cusip ?? '', p.title ?? '', p.put_call ?? '', p.shares ?? 0, p.value ?? 0, p.weight ?? 0, ...CHANGE_FIELDS.map((k) => p[k])]
-            .map(cell)
-            .join(',') + '\r\n',
+          CSV_FIELDS.map((f) => {
+            const v = f in filing ? filing[f] : (p[JSON_FIELD[f] ?? f] ?? (f === 'title' ? p.title_of_class : undefined));
+            // Lists (other_managers) are space-separated, as in the data run's CSV.
+            return cell(Array.isArray(v) ? v.join(' ') : v);
+          }).join(',') + '\r\n',
       );
       if (rows.length) await w.write(enc.encode(rows.join('')));
     }

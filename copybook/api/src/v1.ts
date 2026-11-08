@@ -8,28 +8,37 @@ export const SCHEMA_VERSION = '2026-11-08';
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
-export const CHANGELOG: { date: string; schema_version: string; breaking: boolean; changes: string[] }[] = [
+export const CHANGELOG: { date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
   {
     date: '2026-11-08',
     schema_version: SCHEMA_VERSION,
     breaking: false,
+    status: 'announced',
     changes: [
-      'Every 13F filer: /v1/filers lists all of them (about 9,000) with `curated` and `type`; ?curated=true|false filters. Holdings work for any filer by its slug or CIK.',
-      'Holdings: `latest` as the quarter, `truncated` (true while only the public top-500 shard is available for a filer), filer.curated.',
-      'GET /v1/filers/{filer}/holdings?from=&to=: up to 8 quarters per call, with `missing` and `next_from`.',
-      'GET /v1/stocks/{ticker|cusip}/holders?cohort=all|curated&quarter=: every 13F holder of one issuer, with prior shares, share and value change.',
-      'GET /v1/bulk and /v1/bulk/{YYYYQn}.csv.gz|.parquet: persistent per-quarter exports of every filer\'s book.',
-      'filing.versions[]: every 13F-HR and 13F-HR/A for the period, oldest first, including originals a restatement replaced, each with status current, superseded, merged or not_merged. filing.amendment_type for the served filing.',
-      'filing.amendments now lists every 13F-HR/A EDGAR has for the period, of any type and including a served restatement, not only those merged into the book: the amendment subset of versions[].',
-      '?version=original|{accession} on holdings: the book exactly as that filing reported it.',
-      'GET /v1/events: Form 4 and 13D/G with filer, ticker, cusip, issuer_cik, form and date filters, acceptance time, per-class holdings and prior stake.',
-      'GET /v1/changes/{quarter}: new, added, trimmed and exited positions by filer, by stock, or across filers with cohort.',
+      'Coming, not live yet (these return 501 not_yet_available until the data run publishes their files; each moves to a shipped entry the day it returns data): GET /v1/stocks/{ticker|cusip}/holders; GET /v1/changes/{quarter} with ticker=/cusip= and across filers (filer= is live); persistent bulk exports at GET /v1/bulk/{YYYYQn}.csv.gz|.parquet (GET /v1/bulk lists what exists, empty until then); as_of point-in-time books.',
     ],
   },
   {
     date: '2026-11-08',
     schema_version: SCHEMA_VERSION,
     breaking: false,
+    status: 'shipped',
+    changes: [
+      'Every 13F filer: /v1/filers lists all of them (about 9,000) with `curated` and `type`; ?curated=true|false filters. Holdings work for any filer by its slug or CIK.',
+      'Holdings: `latest` as the quarter, `truncated` (true while only the public top-500 shard is available for a filer), filer.curated.',
+      'GET /v1/filers/{filer}/holdings?from=&to=: up to 8 quarters per call, with `missing` and `next_from`.',
+      'filing.versions[]: every 13F-HR and 13F-HR/A for the period, oldest first, including originals a restatement replaced, each with status current, superseded, merged or not_merged. filing.amendment_type for the served filing.',
+      'filing.amendments now lists every 13F-HR/A EDGAR has for the period, of any type and including a served restatement, not only those merged into the book: the amendment subset of versions[].',
+      '?version=original|{accession} on holdings: the book exactly as that filing reported it.',
+      'GET /v1/events: every Form 4 and 13D/G the investor pages show (each curated filer\'s since its latest 13F, plus what the minute poll parsed), with filer, ticker, cusip, issuer_cik, form and date filters, EDGAR acceptance time, per-class Form 4 holdings, the 13D/G\'s Item 4 (`purpose`) and the same filer\'s previous stake (`prev`).',
+      'GET /v1/changes/{quarter}?filer=: that filer\'s new, added, trimmed and exited positions.',
+    ],
+  },
+  {
+    date: '2026-11-08',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
     changes: [
       'Every response carries data_built_at and build_id: when the data was built and which build it is, so a change in served data is detectable.',
       'Position: weight_equity (share of the equity book: SH rows without put/call), value_scale, value_as_filed, value_adjusted, zero_value, passed through from the data run when it publishes them.',
@@ -42,6 +51,7 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
     date: '2026-11-08',
     schema_version: SCHEMA_VERSION,
     breaking: false,
+    status: 'shipped',
     changes: ['Launch: /v1/me, /v1/filers, /v1/filers/{filer}/holdings/{quarter} with filing.accepted_at and amendments[] objects, schema_version, stable error codes, per-key rate limits.'],
   },
 ];
