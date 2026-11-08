@@ -1,3 +1,4 @@
+import { addToFeed, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { alertMail, digestMail, holdtermAlertMail, sendMail } from './email';
 import { companyFilings, computeMoves, fetch13F, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, type Env, type Member } from './env';
@@ -218,6 +219,7 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   const meta = await filerMeta(env);
   const mails = [];
   const notes: Member[] = [];
+  const chats: string[] = [];
   let digest = 0;
   for (const raw of await listMembers(env)) {
     if (!isActive(raw) || !raw.email || raw.alerts === 'off') continue;
@@ -231,6 +233,11 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
     const m = await scoped(env, raw, f);
     const mine = forMember(m, f, filings, events, meta);
     if (!mine.filings.length && !mine.events.length) continue;
+    // Chat, feed and webhook get every alert as it happens, whatever the email schedule.
+    const ch = await getChannels(env, m.customer);
+    if (ch.discord || ch.slack || ch.telegram) chats.push(...Object.entries(await sendChats(env, ch, mine.filings, mine.events, f)).map(([k, v]) => `${k} ${v}`));
+    if (ch.webhook) await sendWebhooks(env, m, ch, mine.filings, mine.events, now);
+    if (ch.feed_token) await addToFeed(env, m, ch, mine.filings, mine.events, now);
     if (f.digest) digest++;
     else {
       mails.push(alertMail(env, m.email, mine.filings, mine.events, f, m));
@@ -239,7 +246,7 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   }
   const mail = await sendMail(env, mails);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
-  return { emails: mails.length, digest, mail, ...(late.length ? { late: late.length } : {}) };
+  return { emails: mails.length, digest, mail, ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }
 
 /** After EDGAR closes: one email per digest member with the day's filings and events they follow. */
@@ -1026,6 +1033,7 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
   secBudget.left = Number(env.SEC_BUDGET ?? 40);
   await step('poll', () => runPoll(env, scheduledTime));
   await step('events_poll', () => runEventPoll(env, scheduledTime));
+  await step('webhooks', () => runWebhookRetries(env, scheduledTime));
   // Every 3 hours, 10 minutes after gust's own cron: a full refresh only if that run didn't start.
   if (t.getUTCMinutes() === 33 && t.getUTCHours() % 3 === 0) await step('dispatch', () => dispatchRefresh(env, 'full', 'scheduled by copybook-api', scheduledTime));
   else if (env.GITHUB_DISPATCH_TOKEN) {

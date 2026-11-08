@@ -1,6 +1,7 @@
 import { resolveFollowedFilers, runScheduled } from './alerts';
 import { fetchHistory, historyCsv, shard, SHARD_KEY, SLUG } from './data';
 import { verifyGithubOidc } from './oidc';
+import { channelsView, getChannels, rotateFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
 import { handleV1 } from './v1';
 import './v1data';
@@ -210,6 +211,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, id, acknowledgement: mail === '200' ? 'sent' : 'not sent' }, 200, h);
   }
 
+  // A member's private alert feed: the token in the path is the only credential, and revocable.
+  const feed = path.match(/^\/feed\/([\w-]+)\.(json|rss)$/);
+  if (req.method === 'GET' && feed) return serveFeed(env, feed[1], feed[2] as 'json' | 'rss', url.href);
+
   // The data workflow reads which non-curated filers members follow (CIKs only), to back-fill a prior quarter.
   if (req.method === 'GET' && path === '/ingest/followed.json') {
     const why = await verifyGithubOidc(req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '', env.INGEST_WORKFLOW);
@@ -305,6 +310,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // Holdterm Alerts: alert settings only. History, CSV, keys and everything else are Copy features.
   if (m.plan === 'holdterm' && path !== '/alerts' && path !== '/follows' && !path.startsWith('/follows/')) {
     return json({ ok: false, error: 'Not part of Holdterm Alerts', code: 'holdterm_plan' }, 402, h);
+  }
+
+  // Where alerts go besides email: Discord, Slack, Telegram and a private feed (Copy); a signed webhook (Pro).
+  if (path === '/channels' || path.startsWith('/channels/')) {
+    if (req.method === 'GET' && path === '/channels') return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), url.origin) }, 200, h);
+    if (req.method === 'PUT' && path === '/channels') {
+      const r = await updateChannels(env, m, await body(req));
+      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, url.origin) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : 400, h);
+    }
+    if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, results: await testChannels(m, await getChannels(env, m.customer)) }, 200, h);
+    if (path === '/channels/feed' && (req.method === 'POST' || req.method === 'DELETE')) {
+      const c = await rotateFeed(env, m, req.method === 'DELETE');
+      return json({ ok: true, channels: channelsView(m, c, url.origin) }, 200, h);
+    }
+    return json({ ok: false, error: 'not found' }, 404, h);
   }
 
   if (req.method === 'POST' && path === '/alerts') {

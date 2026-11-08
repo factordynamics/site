@@ -453,3 +453,32 @@ export function holdtermAlertMail(env: Env, to: string, filings: Alert13F[], eve
   const text = `${[...filings.map((a) => holdtermFiling(env, a)), ...events.map((e) => holdtermEvent(env, e))].join(`\n${rule}\n`)}${htFooter(env)}`;
   return { to, from: HOLDTERM_FROM, subject, text, html: pre(text) };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Chat (Discord, Slack, Telegram) and the private feed: the same alert, as plain text.
+
+/** One message with every alert in this delivery: the headline, then the details and links. */
+export function chatText(env: Env, filings: Alert13F[], events: AlertEvent[], f: Follows): string {
+  const blocks = [
+    ...filings.map((a) => `${filingHeadline(a)}\n${filingBlock(env, a, f).split('\n').slice(1).join('\n')}`),
+    ...events.map((e) => `${eventHeadline(e)}\n${eventLine(env, e, f)}`),
+  ];
+  return `${blocks.join('\n\n')}\n\nCopybook · SEC EDGAR filings, as filed. Not investment advice.`;
+}
+
+export interface FeedItem {
+  id: string;
+  title: string;
+  text: string;
+  url: string;
+  published: string;
+}
+
+/** Feed entries for this delivery, one per filing; ids are stable so a follow-up gets its own entry. */
+export function feedItems(env: Env, filings: Alert13F[], events: AlertEvent[], now: number): FeedItem[] {
+  const none: Follows = { investors: [], stocks: [], owned: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 0, cluster_buys: true, any_13d: true };
+  return [
+    ...filings.map((a) => ({ id: `${a.accession}${a.followup ? ':moves' : ''}`, title: filingHeadline(a), text: filingBlock(env, a, none), url: `${env.SITE_URL}investors/${a.slug}`, published: a.accepted ?? new Date(now).toISOString() })),
+    ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, title: eventHeadline(e), text: eventLine(env, e, none), url: e.slug ? `${env.SITE_URL}investors/${e.slug}` : e.url, published: e.accepted ?? new Date(now).toISOString() })),
+  ];
+}

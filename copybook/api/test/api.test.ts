@@ -54,6 +54,8 @@ let stripeObjects: Record<string, unknown>;
 let index: unknown;
 let secFiles: Record<string, string>;
 let filers: Record<string, unknown>[];
+let posts: { url: string; body: string; headers: Record<string, string> }[];
+let hookStatus: number;
 let shards: Record<string, unknown>;
 let events: unknown[];
 let recentMoves: unknown[];
@@ -104,6 +106,8 @@ beforeEach(async () => {
   stripeObjects = {};
   index = { managers: [] };
   secFiles = {};
+  posts = [];
+  hookStatus = 200;
   filers = [{ cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', ok: true, position_count: 2, quarter: '2026Q2', error: null }];
   shards = {};
   // The curated managers the tests follow, as the hourly run maps them from index.json.
@@ -130,6 +134,12 @@ beforeEach(async () => {
       if (url.includes('/runs?status=queued')) return Response.json({ total_count: ghQueued });
       if (url.includes('/runs?')) return Response.json({ total_count: 0 });
       return new Response(null, { status: 204 });
+    }
+    if (/^https:\/\/(hooks\.slack\.com|discord\.com|api\.telegram\.org|hooks\.example\.com)\//.test(url)) {
+      const hd: Record<string, string> = {};
+      new Headers(init?.headers).forEach((v, k) => void (hd[k] = v));
+      posts.push({ url, body: String(init?.body), headers: hd });
+      return new Response('ok', { status: url.startsWith('https://hooks.example.com') ? hookStatus : 200 });
     }
     if (url === `${SITE}data/index.json`) return Response.json(index);
     if (url === `${SITE}data/filers.json`) return new Response(JSON.stringify({ count: filers.length, filers }, null, 1));
@@ -874,6 +884,66 @@ describe('copybook api', () => {
     expect(mail.text).toContain('Manage alerts: https://holdterm.pages.dev/account/ · SEC EDGAR data, not investment advice.');
     expect(mail.html).toContain('<pre style="font:13px/1.45 ui-monospace');
     expect(JSON.stringify(mail)).not.toMatch(/copybook/i);
+  });
+
+  it('delivery channels: Discord, Slack, Telegram and a revocable private feed for Copy; signed webhooks with retry for Pro', async () => {
+    const session = async (id: string, plan?: string) => {
+      stripeObjects[`checkout/sessions/cs_test_${id}`] = { id: `cs_test_${id}`, status: 'complete', created: now(), subscription: `sub_${id}`, customer_details: { email: `${id}@example.com` } };
+      stripeObjects[`subscriptions/sub_${id}`] = plan ? sub(`sub_${id}`, `cus_${id}`, 'active', 'month', plan) : sub(`sub_${id}`, `cus_${id}`, 'active');
+      return (await (await call('/session', { body: { checkout_session: `cs_test_${id}` } })).json()).token as string;
+    };
+    const copy = await session('chan');
+    const pro = await session('hook', 'pro_monthly');
+    const req = (t: string, method: string, path: string, b?: unknown) => handleRequest(new Request(`https://api.test${path}`, { method, body: b ? JSON.stringify(b) : undefined, headers: { origin: 'https://refcell.github.io', authorization: `Bearer ${t}` } }), env);
+    const slack = 'https://hooks.slack.com/services/T000/B000/abcdefghijklmnop';
+    const discord = 'https://discord.com/api/webhooks/123456789/abcdefghijklmnopqrstuvwxyz';
+    for (const bad of [{ slack: 'https://evil.example.com/x' }, { discord: slack }, { telegram: { bot_token: 'x', chat_id: '1' } }, { webhook: 'https://hooks.example.com/cb' }]) {
+      expect((await req(copy, 'PUT', '/channels', bad)).status).toBe(bad.webhook ? 403 : 400); // webhooks are Pro
+    }
+    const set = await (await req(copy, 'PUT', '/channels', { slack, discord, telegram: { bot_token: '123456789:AAbbccddeeffgghhiijjkkllmmnnoopp', chat_id: '-1001234' } })).json();
+    expect(set.channels).toMatchObject({ slack: 'https://hooks.slack.com/…mnop', telegram: { chat_id: '-1001234' }, webhook: null, webhook_available: false });
+    const feedUrls = (await (await req(copy, 'POST', '/channels/feed')).json()).channels.feed;
+    expect(feedUrls.json_url).toMatch(/^https:\/\/api\.test\/feed\/[\w-]{30,}\.json$/);
+    const hook = await (await req(pro, 'PUT', '/channels', { webhook: 'https://hooks.example.com/cb' })).json();
+    const secret = hook.channels.webhook.secret as string;
+    expect(secret).toMatch(/^whsec_/);
+    await putFollows('cus_chan', { investors: ['warren-buffett'] });
+    await putFollows('cus_hook', { investors: ['warren-buffett'] });
+
+    const today = new Date().toISOString().slice(0, 10);
+    const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: null, ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: null });
+    events = [ev('seed')];
+    await cron(47);
+    hookStatus = 500; // the Pro endpoint is down at first
+    events = [ev('seed'), ev('C1')];
+    await cron(47);
+    const by = (host: string) => posts.filter((p) => p.url.includes(host));
+    expect(JSON.parse(by('hooks.slack.com')[0].body).text).toContain('Buffett SIRI Form 4: bought $25K');
+    expect(JSON.parse(by('discord.com')[0].body).content).toContain('https://www.sec.gov/C1');
+    expect(by('api.telegram.org')[0].url).toBe('https://api.telegram.org/bot123456789:AAbbccddeeffgghhiijjkkllmmnnoopp/sendMessage');
+    expect(JSON.parse(by('api.telegram.org')[0].body)).toMatchObject({ chat_id: '-1001234' });
+    // The webhook is signed: t=<seconds>,v1=HMAC(secret, "<t>.<body>").
+    const first = by('hooks.example.com')[0];
+    const [, t, v1] = first.headers['copybook-signature'].match(/^t=(\d+),v1=([0-9a-f]{64})$/)!;
+    expect(v1).toBe(await hmacHex(secret, `${t}.${first.body}`));
+    expect(JSON.parse(first.body)).toMatchObject({ type: 'form4', accession: 'C1', filer: { slug: 'warren-buffett' }, ticker: 'SIRI' });
+    expect(JSON.parse(first.body).detected_at).toBeTruthy();
+    // Failed: retried after a minute, then delivered.
+    hookStatus = 200;
+    posts = [];
+    await cron(47); // the same minute: not due yet
+    expect(by('hooks.example.com')).toHaveLength(0);
+    await cron(48); // a minute later
+    expect(by('hooks.example.com')).toHaveLength(1);
+    expect(await env.DB.get('webhooks:retry')).toBeNull();
+
+    // The private feed has the alert as JSON Feed and RSS; a rotated token stops working.
+    const jf = await (await handleRequest(new Request(feedUrls.json_url), env)).json();
+    expect(jf.items[0]).toMatchObject({ id: 'C1', title: 'Buffett SIRI Form 4: bought $25K' });
+    const rss = await (await handleRequest(new Request(feedUrls.rss_url), env)).text();
+    expect(rss).toContain('<title>Buffett SIRI Form 4: bought $25K</title>');
+    await req(copy, 'DELETE', '/channels/feed');
+    expect((await handleRequest(new Request(feedUrls.json_url), env)).status).toBe(404);
   });
 
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
