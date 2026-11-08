@@ -1,8 +1,12 @@
 import { runScheduled } from './alerts';
 import { fetchHistory, historyCsv, shard, SHARD_KEY, SLUG } from './data';
 import { verifyGithubOidc } from './oidc';
+import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
+import { handleV1 } from './v1';
+
+export { KeyMeter } from './keys';
 import { loginMail, sendMail } from './email';
-import { isActive, type Env, type Member } from './env';
+import { isActive, isPro, type Env, type Member } from './env';
 import { type Follows, getFollows, getMember, LOGIN_TTL, putFollows, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 import { stripe, verifyStripeSignature } from './stripe';
 import { signToken, verifyToken } from './tokens';
@@ -18,7 +22,7 @@ function allowedOrigin(origin: string | null, env: Env): string | null {
 
 function cors(origin: string | null): Record<string, string> {
   return origin
-    ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }
+    ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }
     : {};
 }
 
@@ -91,15 +95,22 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   const origin = allowedOrigin(req.headers.get('origin'), env);
   const h = cors(origin);
 
+  // The versioned API for Copy Pro: API-key auth, open CORS, its own error shape.
+  if (path === '/v1' || path.startsWith('/v1/')) return handleV1(req, env, url, path);
+
   if (req.method === 'OPTIONS') return new Response(null, { status: origin ? 204 : 403, headers: h });
   if (req.method === 'POST' && path === '/webhook') return handleWebhook(req, env);
   if (req.method === 'POST' && req.headers.get('origin') && !origin) return json({ ok: false, error: 'origin not allowed' }, 403, {});
 
   if (req.method === 'GET' && path === '/health') {
     // Seconds from EDGAR acceptance to handing the alert to the mailer, for the latest alerted filings.
-    // ?latency=all returns every stored entry (up to 300) instead of the latest 10.
-    const latency = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
-    return json({ ok: true, alert_latency: url.searchParams.get('latency') === 'all' ? latency : latency.slice(0, 10) }, 200, h);
+    // Live alerts only (test replays excluded); ?latency=all returns every stored one instead of the latest 10.
+    const all = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as { seconds: number; replay?: boolean }[];
+    const live = all.filter((l) => !l.replay);
+    const sorted = live.map((l) => l.seconds).sort((a, b) => a - b);
+    const q = (p: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null);
+    const summary = { count: sorted.length, p50: q(0.5), p90: q(0.9), max: sorted.length ? sorted[sorted.length - 1] : null };
+    return json({ ok: true, alert_latency_summary: summary, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length }, 200, h);
   }
 
   // The data workflow uploads per-quarter history here, authenticated by its GitHub OIDC token.
@@ -182,7 +193,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const a = (await body(req)).alerts;
     const valid = a === 'all' || a === 'off' || (Array.isArray(a) && a.length <= 500 && a.every((s) => typeof s === 'string' && SLUG.test(s)));
     if (!valid) return json({ ok: false, error: 'alerts must be "all", "off", or a list of manager slugs' }, 400, h);
-    const updated: Member = { ...m, alerts: a as Member['alerts'] };
+    const updated: Member = { ...m, alerts: a as Member['alerts'], alerts_chosen: true, alerts_note: undefined };
     await putMember(env, updated);
     if (Array.isArray(a)) await putFollows(env, updated, { ...(await getFollows(env, m)), investors: [...new Set(a as string[])] });
     return json({ ok: true, member: publicView(updated) }, 200, h);
@@ -216,8 +227,36 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // Owned stocks are always on the watchlist.
     next.stocks = [...new Set([...next.stocks, ...next.owned])];
     if (next.stocks.length > MAX_FOLLOWS) return json({ ok: false, error: `at most ${MAX_FOLLOWS} stocks` }, 400, h);
-    await putFollows(env, m, next);
+    // Saving follows without ever choosing an alert scope means "alert me on these funds".
+    const scope = m.alerts === 'all' && !m.alerts_chosen && next.investors.length ? { ...m, alerts: next.investors } : m;
+    await putFollows(env, scope, next);
     return json({ ok: true, follows: next }, 200, h);
+  }
+
+  // Copy Pro API keys, managed from the account page. The secret is returned once, at creation.
+  if (path === '/keys' || path.startsWith('/keys/')) {
+    if (!isPro(m)) return json({ ok: false, error: 'API keys are part of Copy Pro', code: 'pro_required' }, 403, h);
+    if (req.method === 'GET' && path === '/keys') {
+      const keys = await listKeys(env, m.customer);
+      const out = [];
+      for (const k of keys) {
+        const usage = await meter(env, k.id).usage(30);
+        out.push({ id: k.id, name: k.name, prefix: k.prefix, created: k.created, requests_today: usage[0]?.requests ?? 0, usage });
+      }
+      return json({ ok: true, keys: out, max: MAX_KEYS }, 200, h);
+    }
+    if (req.method === 'POST' && path === '/keys') {
+      const name = String((await body(req)).name ?? '').trim().slice(0, 60) || 'API key';
+      const made = await createKey(env, m, name);
+      if (!made) return json({ ok: false, error: `at most ${MAX_KEYS} keys; revoke one first` }, 400, h);
+      const { id, prefix, created } = made.record;
+      return json({ ok: true, key: made.key, id, name, prefix, created }, 201, h);
+    }
+    const del = path.match(/^\/keys\/(key_[a-z0-9]{16})$/);
+    if (req.method === 'DELETE' && del) {
+      return (await revokeKey(env, m.customer, del[1])) ? json({ ok: true }, 200, h) : json({ ok: false, error: 'no such key' }, 404, h);
+    }
+    return json({ ok: false, error: 'not found' }, 404, h);
   }
 
   // One full quarter for the history page: the same object as data/h/{slug}/{quarter}.json used to be.

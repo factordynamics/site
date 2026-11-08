@@ -38,6 +38,8 @@ export interface Env {
   /** HMAC key for login and session tokens. */
   SESSION_SECRET: string;
   RESEND_API_KEY?: string;
+  /** Durable Object namespace: one KeyMeter per API key (rate limits and usage). */
+  METER: import('./keys').MeterNamespace;
 }
 
 /** What we keep per Stripe customer. */
@@ -45,15 +47,28 @@ export interface Member {
   customer: string;
   email: string;
   status: string;
-  plan: 'monthly' | 'yearly' | 'unknown';
+  /** Which product: Copy, or Copy Pro (everything in Copy plus API keys, /v1, webhooks, bulk export). */
+  plan: 'copy' | 'pro' | 'fund';
+  interval: 'monthly' | 'yearly' | 'unknown';
+  /** Unix seconds when a 14-day trial ends, while trialing. */
+  trial_end?: number | null;
   period_end: number;
   subscription: string;
   /** "all", or the manager slugs to alert on. */
   alerts: 'all' | 'off' | string[];
   welcomed?: boolean;
+  /** Set once the member picks an alert scope themselves (POST /alerts). */
+  alerts_chosen?: boolean;
+  /** A one-time line for the next email, e.g. "followed" after moving "all" to followed funds. */
+  alerts_note?: 'followed';
 }
 
 export const ACTIVE = new Set(['active', 'trialing', 'past_due']);
+
+/** Copy Pro and Copy Fund: API keys, /v1, webhooks, bulk export. */
+export function isPro(m: Member | null): boolean {
+  return isActive(m) && (m.plan === 'pro' || m.plan === 'fund');
+}
 
 export function isActive(m: Member | null): m is Member {
   return !!m && ACTIVE.has(m.status);

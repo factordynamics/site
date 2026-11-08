@@ -8,7 +8,11 @@ export const SESSION_TTL = 30 * 24 * 3600;
 
 export async function getMember(env: Env, customer: string): Promise<Member | null> {
   const raw = await env.DB.get(`cus:${customer}`);
-  return raw ? (JSON.parse(raw) as Member) : null;
+  if (!raw) return null;
+  const m = JSON.parse(raw) as Member & { plan: string };
+  // Records from before Copy Pro kept the billing interval in `plan`.
+  if (m.plan !== 'copy' && m.plan !== 'pro' && m.plan !== 'fund') return { ...m, interval: m.plan as Member['interval'], plan: 'copy' };
+  return m;
 }
 
 export async function memberByEmail(env: Env, email: string): Promise<Member | null> {
@@ -22,8 +26,20 @@ export async function putMember(env: Env, m: Member): Promise<void> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+function priceOf(sub: any) {
+  return sub?.items?.data?.[0]?.price ?? sub?.plan;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function planOf(sub: any): Member['plan'] {
-  const interval = sub?.items?.data?.[0]?.price?.recurring?.interval ?? sub?.plan?.interval;
+  const p = priceOf(sub);
+  const tier = String(p?.metadata?.copybook ?? String(p?.lookup_key ?? '').split('_')[0]);
+  return tier === 'pro' || tier === 'fund' ? tier : 'copy';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function intervalOf(sub: any): Member['interval'] {
+  const interval = priceOf(sub)?.recurring?.interval ?? priceOf(sub)?.interval;
   return interval === 'month' ? 'monthly' : interval === 'year' ? 'yearly' : 'unknown';
 }
 
@@ -45,9 +61,12 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     email,
     status: String(sub.status),
     plan: planOf(sub),
+    interval: intervalOf(sub),
+    trial_end: sub.status === 'trialing' ? Number(sub.trial_end ?? 0) || null : null,
     period_end: Number(sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? 0),
     subscription: String(sub.id),
-    alerts: prev?.alerts ?? 'all',
+    // New members get alerts for the funds they follow and active managers' moves in stocks they own or watch.
+    alerts: prev?.alerts ?? [],
     welcomed: prev?.welcomed ?? false,
   };
   // A stale event (older subscription) must not overwrite a newer active one.
@@ -62,7 +81,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
 }
 
 export function publicView(m: Member) {
-  return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, period_end: m.period_end, alerts: m.alerts };
+  return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, period_end: m.period_end, alerts: m.alerts };
 }
 
 export async function listMembers(env: Env): Promise<Member[]> {

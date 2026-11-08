@@ -1,7 +1,7 @@
 import { alertMail, digestMail, sendMail } from './email';
-import { computeMoves, fetch13F, latestFilings, quarterOf, type MoveRow, type Moves, type Position } from './edgar';
+import { companyFilings, computeMoves, fetch13F, latestFilings, quarterOf, type FeedEntry, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, type Env, type Member } from './env';
-import { getFollows, listMembers, type Follows } from './members';
+import { getFollows, listMembers, putMember, type Follows } from './members';
 
 /** A filing dated more than this many days ago never triggers an email, whatever the data says. */
 export const MAX_ALERT_AGE_DAYS = 3;
@@ -55,6 +55,8 @@ interface Manager {
   name: string;
   cik: string;
   featured?: boolean;
+  /** Filer type from the data run, e.g. hedge_fund, active, bank, broker, index. */
+  type?: string | null;
 }
 
 /** EDGAR filer CIK -> curated managers it reports for, built from index.json (incl. reported_by parents). */
@@ -66,18 +68,56 @@ const etDay = (t: number) => new Date(t - 5 * 3600_000).toISOString().slice(0, 1
 // ---------------------------------------------------------------------------------------------
 // Targeting and delivery
 
+/** Filer types whose moves in a stock are worth an alert to someone who only watches or owns that stock. */
+const STOCK_ALERT_TYPES = new Set(['hedge_fund', 'active']);
+export type FilerMeta = Record<string, { featured?: boolean; type?: string | null }>;
+
+/**
+ * A watched or owned stock alerts only through active managers (hedge funds and other active
+ * filers), never banks, brokers or index sponsors; otherwise filing season floods members (109 of
+ * NVDA's 119 holders changed last quarter). Until the data run labels filer types, the featured
+ * superinvestors stand in for active managers.
+ */
+function stockAlerts(meta: FilerMeta, slug: string): boolean {
+  const m = meta[slug];
+  if (!m) return false;
+  return m.type ? STOCK_ALERT_TYPES.has(m.type) : !!m.featured;
+}
+
 /** Which of these filings and events a member gets, by their alert switch and follows. */
-export function forMember(m: Member, f: Follows, filings: Alert13F[], events: AlertEvent[]): { filings: Alert13F[]; events: AlertEvent[] } {
+export function forMember(m: Member, f: Follows, filings: Alert13F[], events: AlertEvent[], meta: FilerMeta = {}): { filings: Alert13F[]; events: AlertEvent[] } {
   if (m.alerts === 'off') return { filings: [], events: [] };
   const all = m.alerts === 'all';
   const investors = new Set(Array.isArray(m.alerts) ? [...m.alerts, ...f.investors] : f.investors);
   const stocks = new Set(f.stocks);
-  const fl = filings.filter((x) => all || x.slugs.some((s) => investors.has(s)) || x.tickers.some((t) => stocks.has(t)));
-  const ev = events.filter((e) => (e.kind !== '13g' || f.include_13g) && (all || investors.has(e.slug) || (!!e.ticker && stocks.has(e.ticker))));
+  const fl = filings.filter((x) => all || x.slugs.some((s) => investors.has(s)) || (x.slugs.some((s) => stockAlerts(meta, s)) && x.tickers.some((t) => stocks.has(t))));
+  const ev = events.filter((e) => (e.kind !== '13g' || f.include_13g) && (all || investors.has(e.slug) || (!!e.ticker && stocks.has(e.ticker) && stockAlerts(meta, e.slug))));
   return {
     filings: fl.filter((x, i) => fl.findIndex((y) => y.accession === x.accession) === i),
     events: ev.filter((x, i) => ev.findIndex((y) => y.id === x.id) === i),
   };
+}
+
+async function filerMeta(env: Env): Promise<FilerMeta> {
+  const meta: FilerMeta = {};
+  for (const list of Object.values((await cikMap(env)) ?? {})) for (const m of list) meta[m.slug] = { featured: m.featured, type: m.type };
+  return meta;
+}
+
+/**
+ * Members who saved follows but never chose an alert scope still have the old "all" default:
+ * move them to their followed funds once, and say so in their next email.
+ */
+async function scoped(env: Env, m: Member, f: Follows): Promise<Member> {
+  if (m.alerts !== 'all' || m.alerts_chosen || !f.investors.length) return m;
+  const next: Member = { ...m, alerts: f.investors, alerts_note: 'followed' };
+  await putMember(env, next);
+  return next;
+}
+
+/** Clears the one-time note once an email carrying it has been handed to the mailer. */
+async function noted(env: Env, m: Member): Promise<void> {
+  if (m.alerts_note) await putMember(env, { ...m, alerts_note: undefined });
 }
 
 async function deliver(env: Env, filings: Alert13F[], events: AlertEvent[], now: number): Promise<{ emails: number; digest: number; mail: string }> {
@@ -89,17 +129,25 @@ async function deliver(env: Env, filings: Alert13F[], events: AlertEvent[], now:
   day.events.push(...events);
   await env.DB.put(key, JSON.stringify(day), { expirationTtl: 3 * 86400 });
 
+  const meta = await filerMeta(env);
   const mails = [];
+  const notes: Member[] = [];
   let digest = 0;
-  for (const m of await listMembers(env)) {
-    if (!isActive(m) || !m.email || m.alerts === 'off') continue;
-    const f = await getFollows(env, m);
-    const mine = forMember(m, f, filings, events);
+  for (const raw of await listMembers(env)) {
+    if (!isActive(raw) || !raw.email || raw.alerts === 'off') continue;
+    const f = await getFollows(env, raw);
+    const m = await scoped(env, raw, f);
+    const mine = forMember(m, f, filings, events, meta);
     if (!mine.filings.length && !mine.events.length) continue;
     if (f.digest) digest++;
-    else mails.push(alertMail(env, m.email, mine.filings, mine.events, f));
+    else {
+      mails.push(alertMail(env, m.email, mine.filings, mine.events, f, m));
+      notes.push(m);
+    }
   }
-  return { emails: mails.length, digest, mail: await sendMail(env, mails) };
+  const mail = await sendMail(env, mails);
+  if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
+  return { emails: mails.length, digest, mail };
 }
 
 /** After EDGAR closes: one email per digest member with the day's filings and events they follow. */
@@ -108,15 +156,23 @@ export async function runDigest(env: Env, now: number): Promise<{ emails: number
   const raw = await env.DB.get(`digest:${day}`);
   if (!raw) return { emails: 0, status: 'none' };
   const { filings, events } = JSON.parse(raw) as { filings: Alert13F[]; events: AlertEvent[] };
+  const meta = await filerMeta(env);
   const mails = [];
-  for (const m of await listMembers(env)) {
-    if (!isActive(m) || !m.email || m.alerts === 'off') continue;
-    const f = await getFollows(env, m);
+  const notes: Member[] = [];
+  for (const raw of await listMembers(env)) {
+    if (!isActive(raw) || !raw.email || raw.alerts === 'off') continue;
+    const f = await getFollows(env, raw);
     if (!f.digest) continue;
-    const mine = forMember(m, f, filings, events);
-    if (mine.filings.length || mine.events.length) mails.push(digestMail(env, m.email, day, mine.filings, mine.events, f));
+    const m = await scoped(env, raw, f);
+    const mine = forMember(m, f, filings, events, meta);
+    if (mine.filings.length || mine.events.length) {
+      mails.push(digestMail(env, m.email, day, mine.filings, mine.events, f, m));
+      notes.push(m);
+    }
   }
-  return { emails: mails.length, status: await sendMail(env, mails) };
+  const status = await sendMail(env, mails);
+  if (status.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
+  return { emails: mails.length, status };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -172,6 +228,31 @@ async function priorBook(env: Env, slug: string, reportDate: string): Promise<Po
   return ((await new Response(obj.body).json()) as { holdings?: Position[] }).holdings ?? null;
 }
 
+/** How far back each poll pages through the latest-filings feed; covers a few failed polls. */
+const LOOKBACK_MS = 10 * 60_000;
+/** 500 entries: on the Nov 14, 2025 deadline EDGAR took 1,731 13F-HRs in a day. */
+const MAX_PAGES = 5;
+
+/** Feed pages, newest first, until one reaches back past `since` (or the page cap). */
+async function feedSince(type: string, since: number): Promise<FeedEntry[]> {
+  const out: FeedEntry[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const entries = await latestFilings(type, page * 100);
+    out.push(...entries);
+    const last = entries[entries.length - 1];
+    if (entries.length < 100 || !last || Date.parse(last.accepted) < since) break;
+  }
+  return out;
+}
+
+/** This minute's company-feed checks: 3 featured filers and 3 of all, cycling without stored state. */
+export function rotation(ciks: CikMap, minute: number, n = 3): string[] {
+  const all = Object.keys(ciks).sort();
+  const featured = all.filter((c) => ciks[c].some((m) => m.featured));
+  const pick = (list: string[]) => Array.from({ length: Math.min(n, list.length) }, (_, i) => list[(minute * n + i) % list.length]);
+  return [...new Set([...pick(featured), ...pick(all)])];
+}
+
 /**
  * Every minute: EDGAR's latest 13F-HR filings, matched to curated managers by CIK, emailed with the
  * moves computed here from the filing and last quarter's book in R2. KV is written only when a
@@ -180,12 +261,29 @@ async function priorBook(env: Env, slug: string, reportDate: string): Promise<Po
 export async function runPoll(env: Env, now: number): Promise<Record<string, unknown>> {
   const ciks = await cikMap(env);
   if (!ciks) return { status: 'no cik map yet' };
-  const feed = (await latestFilings('13F-HR')).filter((e) => e.form === '13F-HR' && ciks[e.cik]);
-  if (!feed.length) return { status: 'none' };
+  const errors: string[] = [];
+  let entries: FeedEntry[] = [];
+  try {
+    entries = await feedSince('13F-HR', now - LOOKBACK_MS);
+  } catch (err) {
+    errors.push(String(err));
+  }
+  // Backstop for a filing the feed pages missed (a failed poll, or a deadline-day burst): a few
+  // curated filers' own feeds each minute, in rotation, featured managers more often.
+  for (const cik of rotation(ciks, Math.floor(now / 60_000))) {
+    try {
+      entries.push(...(await companyFilings(cik, '13F-HR')));
+    } catch (err) {
+      errors.push(String(err));
+    }
+  }
+  const ids = new Set<string>();
+  const feed = entries.filter((e) => e.form === '13F-HR' && ciks[e.cik] && now - Date.parse(e.accepted) <= MAX_ALERT_AGE_DAYS * DAY && !ids.has(e.accession) && !!ids.add(e.accession));
+  if (!feed.length) return { status: 'none', ...(errors.length ? { errors } : {}) };
   const handled = JSON.parse((await env.DB.get('alerts:handled')) ?? '[]') as string[];
   // At most 8 filings a minute keeps the run under the free plan's 50 subrequests; the rest go next minute.
   const todo = feed.filter((e) => !handled.includes(e.accession)).slice(0, 8);
-  if (!todo.length) return { status: 'none' };
+  if (!todo.length) return { status: 'none', ...(errors.length ? { errors } : {}) };
 
   const rawPeriods = await env.DB.get('alerts:periods');
   const periods = JSON.parse(rawPeriods ?? '{}') as Record<string, string>;
@@ -235,13 +333,19 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
   if (later.length) await env.DB.put('alerts:pending-moves', JSON.stringify([...JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]'), ...later]));
   const sent = await deliver(env, fresh, [], now);
   if (fresh.length) await logLatency(env, fresh, Date.now());
-  return { status: 'checked', filings: fresh.map((f) => `${f.slug} ${f.quarter}${f.moves ? '' : ' (no moves)'}`), ...sent };
+  return { status: 'checked', filings: fresh.map((f) => `${f.slug} ${f.quarter}${f.moves ? '' : ' (no moves)'}`), ...sent, ...(errors.length ? { errors } : {}) };
 }
 
-/** Acceptance-to-send latency per alerted filing, newest first, for /health. */
+/**
+ * Acceptance-to-send latency per alerted filing, newest first, for /health. Accessions listed in
+ * KV alerts:replays (test sends of old filings) are marked and never counted.
+ */
 async function logLatency(env: Env, filings: Alert13F[], sentAt: number): Promise<void> {
+  const replays = new Set(JSON.parse((await env.DB.get('alerts:replays')) ?? '[]') as string[]);
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
-  const add = filings.filter((f) => f.accepted).map((f) => ({ slug: f.slug, accession: f.accession, accepted: f.accepted, sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000) }));
+  const add = filings
+    .filter((f) => f.accepted)
+    .map((f) => ({ slug: f.slug, accession: f.accession, accepted: f.accepted, sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}) }));
   await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 300)));
 }
 
@@ -252,6 +356,7 @@ interface IndexRow {
   manager: string;
   name: string;
   featured?: boolean;
+  type?: string | null;
   form?: string;
   accession?: string;
   report_date?: string;
@@ -271,7 +376,7 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   const rows = ((await res.json()) as { managers?: IndexRow[] }).managers ?? [];
 
   const ciks: CikMap = {};
-  const byCik = (cik: string, m: IndexRow) => (ciks[cik.padStart(10, '0')] ??= []).push({ slug: m.slug, manager: m.manager, name: m.name, cik: m.cik.padStart(10, '0'), featured: m.featured });
+  const byCik = (cik: string, m: IndexRow) => (ciks[cik.padStart(10, '0')] ??= []).push({ slug: m.slug, manager: m.manager, name: m.name, cik: m.cik.padStart(10, '0'), featured: m.featured, type: m.type ?? null });
   for (const m of rows) {
     if (!m.slug || !m.cik) continue;
     byCik(m.cik, m);

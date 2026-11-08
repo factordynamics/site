@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker, { handleRequest } from '../src/index';
 import type { Env, KV, R2 } from '../src/env';
+import { MeterLogic } from '../src/keys';
 import { hmacHex } from '../src/tokens';
 
 class MemKV implements KV {
@@ -35,8 +36,8 @@ class MemR2 implements R2 {
 const SITE = 'https://refcell.github.io/gust/copybook/';
 const now = () => Math.floor(Date.now() / 1000);
 
-function sub(id: string, customer: string, status: string, interval = 'month') {
-  return { id, customer, status, items: { data: [{ price: { recurring: { interval } }, current_period_end: now() + 30 * 86400 }] } };
+function sub(id: string, customer: string, status: string, interval = 'month', lookup_key = `copy_${interval}ly`) {
+  return { id, customer, status, items: { data: [{ price: { lookup_key, recurring: { interval } }, current_period_end: now() + 30 * 86400 }] } };
 }
 
 let env: Env;
@@ -50,9 +51,26 @@ let events: unknown[];
 let recentMoves: unknown[];
 let jwks: unknown = { keys: [] };
 
+/** Durable Object namespace stand-in: one MeterLogic per key id, with in-memory storage. */
+function memMeters(now: () => number = Date.now) {
+  const meters = new Map<string, MeterLogic>();
+  return {
+    idFromName: (n: string) => n,
+    get: (id: unknown) => {
+      const n = String(id);
+      if (!meters.has(n)) {
+        const store = new Map<string, unknown>();
+        meters.set(n, new MeterLogic({ get: async <T,>(k: string) => store.get(k) as T | undefined, put: async (k: string, v: unknown) => void store.set(k, v) }, now));
+      }
+      const m = meters.get(n)!;
+      return { fetch: async (u: string) => Response.json(u.includes('/hit') ? await m.hit() : await m.usage(Number(new URL(u).searchParams.get('days')) || 30)) };
+    },
+  };
+}
+
 beforeEach(() => {
   hist = new MemR2();
-  env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x' };
+  env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', METER: memMeters() };
   // 2026Q1 lives only in the private bucket; 2026Q2 still falls back to the public copy.
   hist.m.set('h/warren-buffett/2026Q1.csv', new TextEncoder().encode('manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight,change,prev_shares,share_change,value_delta_usd,pct_of_book\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1,new,,5,100,0.1\r\n'));
   sent = [];
@@ -79,7 +97,13 @@ beforeEach(() => {
     if (url === `${SITE}data/events.json`) return Response.json({ events });
     if (url === `${SITE}data/securities.json`) return new Response('{"037833100":{"ticker":"AAPL","name":"Apple"},"23331A109":{"ticker":"DHI","name":"D.R. Horton","sector":"Consumer Discretionary"}}');
     if (url.startsWith('https://www.sec.gov/')) {
-      const key = url.startsWith('https://www.sec.gov/cgi-bin/browse-edgar') ? 'feed' : url.slice('https://www.sec.gov/'.length);
+      const u = new URL(url);
+      const key = url.startsWith('https://www.sec.gov/cgi-bin/browse-edgar')
+        ? u.searchParams.get('action') === 'getcompany'
+          ? `company:${u.searchParams.get('CIK')}`
+          : `feed${Number(u.searchParams.get('start')) ? `@${u.searchParams.get('start')}` : ''}`
+        : url.slice('https://www.sec.gov/'.length);
+      if (key.startsWith('company:') || key.startsWith('feed@')) return new Response(secFiles[key] ?? '<feed></feed>');
       return key in secFiles ? new Response(secFiles[key]) : new Response(key === 'feed' ? '<feed></feed>' : 'not found', { status: key === 'feed' ? 200 : 404 });
     }
     if (url === `${SITE}data/warren-buffett-history.json`) {
@@ -157,7 +181,7 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(1);
 
     const session = await (await call('/session', { body: { login: loginTokenFrom(sent[0].text) } })).json();
-    expect(session.member).toMatchObject({ email: 'buyer@example.com', active: true, plan: 'yearly' });
+    expect(session.member).toMatchObject({ email: 'buyer@example.com', active: true, plan: 'copy', interval: 'yearly' });
 
     expect((await call('/history/warren-buffett')).status).toBe(401);
     const history = await (await call('/history/warren-buffett', { token: session.token })).json();
@@ -214,7 +238,7 @@ describe('copybook api', () => {
     stripeObjects['checkout/sessions/cs_test_abc'] = { id: 'cs_test_abc', status: 'complete', created: now() - 30, subscription: 'sub_2', customer_details: { email: 'fast@example.com' } };
     stripeObjects['subscriptions/sub_2'] = sub('sub_2', 'cus_2', 'active');
     const r = await (await call('/session', { body: { checkout_session: 'cs_test_abc' } })).json();
-    expect(r.member).toMatchObject({ email: 'fast@example.com', active: true, plan: 'monthly' });
+    expect(r.member).toMatchObject({ email: 'fast@example.com', active: true, plan: 'copy', interval: 'monthly' });
     expect((await call('/me', { token: r.token })).status).toBe(200);
 
     stripeObjects['checkout/sessions/cs_test_open'] = { id: 'cs_test_open', status: 'open', created: now(), subscription: null };
@@ -447,5 +471,153 @@ describe('copybook api', () => {
     await cron(32, Date.parse(`${day}T03:32:00Z`) + 86400_000);
     expect(sent.map((m) => m.to[0])).toEqual(['d@example.com']);
     expect(sent[0].subject).toMatch(/^Copybook daily digest for \d{4}-\d{2}-\d{2}: 1 Form 4\/13D\/G$/);
+  });
+
+  it('Copy Pro: keys only for Pro, shown once, /v1 needs an active Pro key, rate limits with standard headers, revoke works', async () => {
+    let clock = Date.parse('2026-11-09T15:00:10Z');
+    env.METER = memMeters(() => clock);
+    const session = async (c: string, lookup: string, interval = 'month') => {
+      stripeObjects[`checkout/sessions/cs_test_${c}`] = { id: `cs_test_${c}`, status: 'complete', created: now(), subscription: `sub_${c}`, customer_details: { email: `${c}@example.com` } };
+      stripeObjects[`subscriptions/sub_${c}`] = sub(`sub_${c}`, `cus_${c}`, 'active', interval, lookup);
+      return (await (await call('/session', { body: { checkout_session: `cs_test_${c}` } })).json()) as { token: string; member: { plan: string } };
+    };
+    const copy = await session('copy1', 'copy_monthly');
+    const pro = await session('pro1', 'pro_yearly', 'year');
+    const fund = await session('fund1', 'fund_monthly');
+    expect([copy.member.plan, pro.member.plan, fund.member.plan]).toEqual(['copy', 'pro', 'fund']);
+
+    expect((await call('/keys', { method: 'POST', body: { name: 'x' }, token: copy.token })).status).toBe(403);
+    const made = await (await call('/keys', { body: { name: 'research box' }, token: pro.token })).json();
+    expect(made.key).toMatch(/^cbk_live_[A-Za-z0-9_-]{43}$/);
+    const listed = await (await call('/keys', { token: pro.token })).json();
+    expect(listed.keys).toHaveLength(1);
+    expect(JSON.stringify(listed)).not.toContain(made.key); // the secret is never shown again
+    expect(JSON.stringify([...(env.DB as unknown as { m: Map<string, string> }).m.values()])).not.toContain(made.key); // nor stored
+    expect((await call('/keys', { body: {}, token: fund.token })).status).toBe(201); // Fund includes Pro
+
+    const v1 = (path: string, key?: string) => handleRequest(new Request(`https://api.test${path}`, { headers: key ? { authorization: `Bearer ${key}` } : {} }), env);
+    const noKey = await v1('/v1/me');
+    expect(noKey.status).toBe(401);
+    expect(await noKey.json()).toMatchObject({ schema_version: expect.any(String), error: { code: 'unauthorized' } });
+    expect((await (await v1('/v1/me', 'cbk_live_' + 'x'.repeat(43))).json()).error.code).toBe('invalid_key');
+    expect((await (await v1('/v1/me', made.key)).json()).error).toBeUndefined();
+    // A session token is not an API key.
+    expect((await (await v1('/v1/me', pro.token)).json()).error.code).toBe('invalid_key');
+
+    // 60 a minute per key: the 2nd call above was #1, so 59 more pass, then 429 with Retry-After until the minute rolls.
+    for (let i = 0; i < 58; i++) expect((await v1('/v1/me', made.key)).status).toBe(200);
+    const last = await v1('/v1/me', made.key);
+    expect(last.headers.get('RateLimit-Limit')).toBe('60');
+    expect(last.headers.get('RateLimit-Remaining')).toBe('0');
+    const limited = await v1('/v1/me', made.key);
+    expect(limited.status).toBe(429);
+    expect((await limited.json()).error.code).toBe('rate_limited');
+    expect(limited.headers.get('Retry-After')).toBe('50');
+    clock += 60_000;
+    const next = await v1('/v1/me', made.key);
+    expect(next.status).toBe(200);
+    expect((await next.json()).data.usage[0]).toEqual({ day: '2026-11-09', requests: 61 }); // only allowed requests count
+
+    const spec = await (await v1('/v1/openapi.json')).json();
+    expect(spec.openapi).toBe('3.1.0');
+
+    expect((await call(`/keys/${made.id}`, { method: 'DELETE', token: pro.token })).status).toBe(200);
+    expect((await (await v1('/v1/me', made.key)).json()).error.code).toBe('invalid_key');
+
+    // Downgrade to Copy: Pro keys stop working.
+    const k2 = (await (await call('/keys', { body: {}, token: pro.token })).json()).key;
+    await webhook({ type: 'customer.subscription.updated', data: { object: sub('sub_pro1', 'cus_pro1', 'active', 'month', 'copy_monthly') } });
+    expect((await (await v1('/v1/me', k2)).json()).error.code).toBe('pro_required');
+  });
+
+  it('stock alerts only through active managers; follows without a chosen scope move "all" to followed funds once, with a note', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const row = (slug: string, cik: string, featured: boolean, type?: string) => ({ ok: true, slug, cik, manager: slug, name: slug, featured, type, form: '13F-HR', accession: `${slug}-q2`, report_date: '2026-06-30', filing_date: '2026-08-14' });
+    index = { managers: [row('warren-buffett', '1', true), row('big-bank', '2', false, 'bank'), row('dan-loeb', '3', true), row('quiet-hf', '4', false, 'hedge_fund')] };
+    events = [];
+    await cron(17); // CIK map with featured flags and types
+    await cron(47); // seed event state
+
+    await putMember('w', 'watcher@example.com', 'active', []);
+    await putFollows('w', { stocks: ['NVDA'] });
+    await putMember('m', 'migrate@example.com', 'active', 'all');
+    await putFollows('m', { investors: ['dan-loeb'] });
+    await putMember('c', 'chosen@example.com', 'active', 'all');
+    await env.DB.put('cus:c', JSON.stringify({ ...JSON.parse((await env.DB.get('cus:c'))!), alerts_chosen: true }));
+    await putFollows('c', { investors: ['dan-loeb'] });
+
+    const ev = (id: string, slug: string, ticker: string) => ({ id, slug, manager: slug, form: '4', kind: 'form4', action: 'buy', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: ticker, display_name: ticker, ticker, shares: 10, value_usd: 1000, avg_price: 100, shares_after: 20, percent_of_class: null });
+    events = [ev('B1', 'big-bank', 'NVDA'), ev('W1', 'warren-buffett', 'NVDA'), ev('Q1', 'quiet-hf', 'NVDA'), ev('L1', 'dan-loeb', 'AGX')];
+    await cron(47);
+    const to = (e: string) => sent.find((m) => m.to[0] === e)?.text ?? '';
+    // A watched stock alerts through Buffett (featured) and a hedge fund, never through a bank.
+    expect(to('watcher@example.com')).toContain('sec.gov/W1');
+    expect(to('watcher@example.com')).toContain('sec.gov/Q1');
+    expect(to('watcher@example.com')).not.toContain('sec.gov/B1');
+    // "all" with follows and no chosen scope -> followed funds only, said once.
+    expect(to('migrate@example.com')).toContain('sec.gov/L1');
+    expect(to('migrate@example.com')).not.toContain('sec.gov/W1');
+    expect(to('migrate@example.com')).toContain('you now get alerts only for the 1 fund you follow');
+    expect(JSON.parse((await env.DB.get('cus:m'))!)).toMatchObject({ alerts: ['dan-loeb'] });
+    // A member who chose "all" keeps it.
+    expect(to('chosen@example.com')).toContain('sec.gov/B1');
+
+    sent = [];
+    events = [...events, ev('L2', 'dan-loeb', 'AGX')];
+    await cron(47);
+    expect(to('migrate@example.com')).toContain('sec.gov/L2');
+    expect(to('migrate@example.com')).not.toContain('you now get alerts only');
+  });
+
+  it('deadline-day coverage: pages back through a burst, finds a missed filing in its filer feed; replays never count in /health; new members default to follows', async () => {
+    const row = (slug: string, cik: string, featured = true) => ({ ok: true, slug, cik, manager: slug, name: slug, featured, form: '13F-HR', accession: `${slug}-q2`, report_date: '2026-06-30', filing_date: '2026-08-14' });
+    index = { managers: [row('warren-buffett', '0001067983'), row('dan-loeb', '0001040273')] };
+    await cron(17);
+    await putMember('a', 'all@example.com', 'active', 'all');
+    await env.DB.put('cus:a', JSON.stringify({ ...JSON.parse((await env.DB.get('cus:a'))!), alerts_chosen: true }));
+
+    const t = new Date();
+    t.setUTCHours(t.getUTCHours() === 3 ? 4 : t.getUTCHours(), 30, 0, 0);
+    const at = (minAgo: number) => new Date(t.getTime() - minAgo * 60_000).toISOString();
+    const entry = (cik: string, acc: string, accepted: string, name = 'X') =>
+      `<entry><title>13F-HR - ${name} (${cik}) (Filer)</title><updated>${accepted}</updated><category term="13F-HR"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
+    const filing = (cik: string, acc: string) => {
+      const dir = `Archives/edgar/data/${Number(cik)}/${acc.replace(/-/g, '')}/`;
+      secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: 't.xml', size: '900000' }] } });
+      secFiles[`${dir}primary_doc.xml`] = '<periodOfReport>09-30-2026</periodOfReport>';
+    };
+    // A burst: page 1 is 100 unrelated filings from the last 2 minutes; Buffett's is on page 2.
+    const noise = (start: number) => Array.from({ length: 100 }, (_, i) => entry('0009' + String(start + i).padStart(6, '0'), `0009999999-26-${String(start + i).padStart(6, '0')}`, at(1))).join('');
+    secFiles.feed = `<feed>${noise(0)}</feed>`;
+    secFiles['feed@100'] = `<feed>${entry('0001067983', '0000950123-26-000001', at(3), 'BERKSHIRE')}${noise(100).slice(0, 2000)}</feed>`;
+    filing('0001067983', '0000950123-26-000001');
+    // Loeb's filing never shows in the paged window (a failed poll long ago); only its company feed has it.
+    filing('0001040273', '0000950123-26-000002');
+    for (const cik of ['0001040273']) secFiles[`company:${cik}`] = `<feed>${entry(cik, '0000950123-26-000002', at(40))}</feed>`;
+    await env.DB.put('alerts:replays', JSON.stringify(['0000950123-26-000002']));
+
+    await cron(30, t.getTime());
+    const text = sent.map((m) => m.text).join('\n');
+    expect(text).toContain('0000950123-26-000001'.replace(/-/g, '')); // paged
+    expect(text).toContain('0000950123-26-000002'.replace(/-/g, '')); // company-feed backstop
+    const health = await (await call('/health')).json();
+    expect(health.alert_latency.map((l: { slug: string }) => l.slug)).toEqual(['warren-buffett']);
+    expect(health.replays_excluded).toBe(1);
+    expect(health.alert_latency_summary.count).toBe(1);
+
+    // A brand-new subscriber starts on followed funds (an empty list), not every fund.
+    stripeObjects['checkout/sessions/cs_test_new'] = { id: 'cs_test_new', status: 'complete', created: now(), subscription: 'sub_new', customer_details: { email: 'new@example.com' } };
+    stripeObjects['subscriptions/sub_new'] = sub('sub_new', 'cus_new', 'active');
+    const s = await (await call('/session', { body: { checkout_session: 'cs_test_new' } })).json();
+    expect(s.member.alerts).toEqual([]);
+  });
+
+  it('rotation reaches every curated filer and featured ones more often', async () => {
+    const { rotation } = await import('../src/alerts');
+    const ciks = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [String(i).padStart(10, '0'), [{ slug: `s${i}`, manager: '', name: '', cik: '', featured: i < 4 }]]));
+    const seen = new Map<string, number>();
+    for (let m = 0; m < 7; m++) for (const c of rotation(ciks, m)) seen.set(c, (seen.get(c) ?? 0) + 1);
+    expect(seen.size).toBe(20);
+    expect(seen.get('0000000000')!).toBeGreaterThan(seen.get('0000000019')!);
   });
 });

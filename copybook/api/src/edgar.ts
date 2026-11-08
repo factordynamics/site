@@ -17,21 +17,29 @@ export interface FeedEntry {
   accepted: string; // ISO time EDGAR accepted the filing
 }
 
-/** EDGAR's "latest filings" Atom feed for one form type (prefix match, so 13F-HR also lists 13F-HR/A). */
-export async function latestFilings(type: string): Promise<FeedEntry[]> {
-  const res = await sec(`https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=${encodeURIComponent(type)}&company=&dateb=&owner=include&start=0&count=100&output=atom`);
-  if (!res.ok) throw new Error(`edgar feed ${type}: ${res.status}`);
+/** EDGAR's "latest filings" Atom feed for one form type (prefix match, so 13F-HR also lists 13F-HR/A), 100 per page. */
+export async function latestFilings(type: string, start = 0): Promise<FeedEntry[]> {
+  const res = await sec(`https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=${encodeURIComponent(type)}&company=&dateb=&owner=include&start=${start}&count=100&output=atom`);
+  if (!res.ok) throw new Error(`edgar feed ${type}@${start}: ${res.status}`);
   return parseFeed(await res.text());
 }
 
-export function parseFeed(xml: string): FeedEntry[] {
+/** One filer's latest filings of a type, from its EDGAR company feed (a few KB). */
+export async function companyFilings(cik: string, type: string, count = 3): Promise<FeedEntry[]> {
+  const res = await sec(`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=${encodeURIComponent(type)}&dateb=&owner=include&count=${count}&output=atom`);
+  if (!res.ok) throw new Error(`edgar company ${cik}: ${res.status}`);
+  return parseFeed(await res.text(), cik);
+}
+
+/** Entries of a getcurrent feed, or of a company feed when `cik` is given (its titles carry no CIK). */
+export function parseFeed(xml: string, cik?: string): FeedEntry[] {
   const out: FeedEntry[] = [];
   for (const e of xml.split('<entry>').slice(1)) {
     const form = e.match(/term="([^"]+)"/)?.[1];
-    const cik = e.match(/<title>[^<]*\((\d{10})\)/)?.[1];
+    const filer = cik ?? e.match(/<title>[^<]*\((\d{10})\)/)?.[1];
     const accession = e.match(/accession-number=(\d{10}-\d{2}-\d{6})/)?.[1];
     const accepted = e.match(/<updated>([^<]+)<\/updated>/)?.[1];
-    if (form && cik && accession && accepted) out.push({ form, cik, accession, accepted: new Date(accepted).toISOString() });
+    if (form && filer && accession && accepted) out.push({ form, cik: filer, accession, accepted: new Date(accepted).toISOString() });
   }
   return out;
 }

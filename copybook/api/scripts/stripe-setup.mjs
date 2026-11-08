@@ -33,44 +33,58 @@ async function stripe(method, path, params = {}) {
 
 const mode = key.startsWith('sk_live_') || key.startsWith('rk_live_') ? 'live' : 'test';
 
-let product = (await stripe('GET', 'products', { active: true, limit: 100 })).data.find((p) => p.metadata?.copybook === 'copy');
-if (!product) {
-  product = await stripe('POST', 'products', {
+// Copy for individuals, and Copy Pro (everything in Copy plus API keys, /v1, webhooks and bulk export).
+const PRODUCTS = {
+  copy: {
     name: 'Copy',
-    description: '8 quarters of 13F history (every position each quarter), CSV export, and an email when a tracked manager files a new 13F. SEC filings as filed; not investment advice.',
-    'metadata[copybook]': 'copy',
-    statement_descriptor: 'COPYBOOK',
-  });
-}
-
-const prices = {};
-const existing = (await stripe('GET', 'prices', { 'lookup_keys[]': ['copy_monthly', 'copy_yearly'], active: true })).data;
-for (const [plan, amount, interval] of [['monthly', 900, 'month'], ['yearly', 7900, 'year']]) {
-  prices[plan] =
-    existing.find((p) => p.lookup_key === `copy_${plan}`) ??
-    (await stripe('POST', 'prices', { product: product.id, currency: 'usd', unit_amount: amount, 'recurring[interval]': interval, lookup_key: `copy_${plan}`, nickname: `Copy ${plan}` }));
-}
+    description: '8 quarters of 13F history (every position each quarter), CSV export, and email alerts with each filing\'s moves. SEC filings as filed; not investment advice.',
+    prices: [['monthly', 900, 'month'], ['yearly', 7900, 'year']],
+    redirect: '',
+  },
+  pro: {
+    name: 'Copy Pro',
+    description: 'Everything in Copy, plus API keys for the versioned /v1 API, signed webhooks for filings, and bulk quarterly exports. SEC filings as filed; not investment advice.',
+    prices: [['monthly', 3900, 'month'], ['yearly', 39000, 'year']],
+    redirect: '&plan=pro',
+  },
+  fund: {
+    name: 'Copy Fund',
+    description: 'Everything in Copy Pro for a team of 5 seats, with a shared book and peer lists, Slack and webhook delivery. Annual plans can be invoiced. SEC filings as filed; not investment advice.',
+    prices: [['monthly', 19900, 'month'], ['yearly', 199000, 'year']],
+    redirect: '&plan=fund',
+  },
+};
 
 const TRIAL_DAYS = 14; // card collected up front; converts automatically unless cancelled
-const success = `${SITE}account/?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+const products = {};
+const prices = {};
 const links = {};
+const activeProducts = (await stripe('GET', 'products', { active: true, limit: 100 })).data;
 const activeLinks = (await stripe('GET', 'payment_links', { active: true, limit: 100 })).data;
-for (const plan of ['monthly', 'yearly']) {
-  const redirect = { 'after_completion[type]': 'redirect', 'after_completion[redirect][url]': success, 'subscription_data[trial_period_days]': TRIAL_DAYS };
-  const found = activeLinks.find((l) => l.metadata?.copybook === plan);
-  links[plan] = found
-    ? await stripe('POST', `payment_links/${found.id}`, redirect)
-    : await stripe('POST', 'payment_links', {
-        'line_items[0][price]': prices[plan].id,
-        'line_items[0][quantity]': 1,
-        ...redirect,
-        allow_promotion_codes: true,
-        'metadata[copybook]': plan,
-      });
+for (const [tier, spec] of Object.entries(PRODUCTS)) {
+  products[tier] =
+    activeProducts.find((p) => p.metadata?.copybook === tier) ??
+    (await stripe('POST', 'products', { name: spec.name, description: spec.description, 'metadata[copybook]': tier, statement_descriptor: 'COPYBOOK' }));
+  const keys = spec.prices.map(([plan]) => `${tier}_${plan}`);
+  const existing = (await stripe('GET', 'prices', { 'lookup_keys[]': keys, active: true })).data;
+  for (const [plan, amount, interval] of spec.prices) {
+    const key = `${tier}_${plan}`;
+    prices[key] =
+      existing.find((p) => p.lookup_key === key) ??
+      (await stripe('POST', 'prices', { product: products[tier].id, currency: 'usd', unit_amount: amount, 'recurring[interval]': interval, lookup_key: key, nickname: `${spec.name} ${plan}`, 'metadata[copybook]': tier }));
+    const success = `${SITE}account/?checkout=success&session_id={CHECKOUT_SESSION_ID}${spec.redirect}`;
+    const redirect = { 'after_completion[type]': 'redirect', 'after_completion[redirect][url]': success, 'subscription_data[trial_period_days]': TRIAL_DAYS };
+    // Copy's links predate tiers and are tagged with the bare interval.
+    const tag = tier === 'copy' ? plan : key;
+    const found = activeLinks.find((l) => l.metadata?.copybook === tag);
+    links[key] = found
+      ? await stripe('POST', `payment_links/${found.id}`, redirect)
+      : await stripe('POST', 'payment_links', { 'line_items[0][price]': prices[key].id, 'line_items[0][quantity]': 1, ...redirect, allow_promotion_codes: true, 'metadata[copybook]': tag });
+  }
 }
 
 const portalParams = {
-  'business_profile[headline]': 'Copybook by Factor Dynamics: manage your Copy plan',
+  'business_profile[headline]': 'Copybook: manage your Copy, Pro or Fund plan',
   default_return_url: `${SITE}account/`,
   'features[customer_update][enabled]': true,
   'features[customer_update][allowed_updates][]': ['email'],
@@ -80,8 +94,17 @@ const portalParams = {
   'features[subscription_cancel][mode]': 'at_period_end',
   'features[subscription_update][enabled]': true,
   'features[subscription_update][default_allowed_updates][]': ['price'],
-  'features[subscription_update][products][0][product]': product.id,
-  'features[subscription_update][products][0][prices][]': [prices.monthly.id, prices.yearly.id],
+  'features[subscription_update][products][0][product]': products.copy.id,
+  'features[subscription_update][products][0][prices][]': [prices.copy_monthly.id, prices.copy_yearly.id],
+  'features[subscription_update][products][0][adjustable_quantity][enabled]': false,
+  'features[subscription_update][products][1][product]': products.pro.id,
+  'features[subscription_update][products][1][prices][]': [prices.pro_monthly.id, prices.pro_yearly.id],
+  'features[subscription_update][products][1][adjustable_quantity][enabled]': false,
+  'features[subscription_update][products][2][product]': products.fund.id,
+  'features[subscription_update][products][2][prices][]': [prices.fund_monthly.id, prices.fund_yearly.id],
+  'features[subscription_update][products][2][adjustable_quantity][enabled]': false,
+  // Copy -> Pro (and interval changes) bill the difference now, prorated.
+  'features[subscription_update][proration_behavior]': 'create_prorations',
   'login_page[enabled]': true,
   'metadata[copybook]': 'portal',
 };
@@ -104,9 +127,9 @@ if (api) {
 
 const result = {
   mode,
-  product: product.id,
-  prices: { monthly: prices.monthly.id, yearly: prices.yearly.id },
-  checkout: { monthly: links.monthly.url, yearly: links.yearly.url },
+  products: Object.fromEntries(Object.entries(products).map(([k, p]) => [k, p.id])),
+  prices: Object.fromEntries(Object.entries(prices).map(([k, p]) => [k, p.id])),
+  checkout: Object.fromEntries(Object.entries(links).map(([k, l]) => [k, l.url])),
   portal: portal.login_page?.url ?? null,
   portal_configuration: portal.id,
   webhook: webhook ? { id: webhook.id, url: webhook.url } : null,

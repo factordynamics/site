@@ -27,3 +27,12 @@ INGEST_WORKFLOW = "refcell/gust/.github/workflows/copybook-data.yml@refs/heads/m
 PORTAL_CONFIGURATION = "bpc_1UZHZgDSKGGzRqYZbvRwUas4"
 
 # Secrets (npx wrangler secret put NAME): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SESSION_SECRET, RESEND_API_KEY
+
+# Per-API-key rate limits and usage counters (Copy Pro), one SQLite-backed Durable Object per key.
+[[durable_objects.bindings]]
+name = "METER"
+class_name = "KeyMeter"
+
+[[migrations]]
+tag = "v1-key-meter"
+new_sqlite_classes = ["KeyMeter"]

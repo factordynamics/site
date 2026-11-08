@@ -1,5 +1,5 @@
 import type { Alert13F, AlertEvent } from './alerts';
-import type { Env } from './env';
+import type { Env, Member } from './env';
 import type { Follows } from './members';
 
 export interface Mail {
@@ -34,7 +34,7 @@ const FOOTER = '\n\nSource: SEC EDGAR filings (13F-HR, Form 4, Schedules 13D and
 export function loginMail(env: Env, to: string, token: string, welcome: boolean): Mail {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
   const intro = welcome
-    ? 'Thanks for subscribing to Copy. Your plan includes 8 quarters of 13F history (every position each quarter), CSV export, and email alerts: a manager you follow files a 13F and you get its new, added, trimmed and exited positions, usually within minutes, plus their Form 4 and Schedule 13D filings between quarters. Choose whom and which stocks to follow on Copybook.'
+    ? 'Thanks for subscribing to Copy. Your plan includes 8 quarters of 13F history (every position each quarter), CSV export, and email alerts: a manager you follow files a 13F and you get its new, added, trimmed and exited positions, usually within minutes, plus their Form 4 and Schedule 13D filings between quarters. Alerts start once you follow funds or add stocks you own on Copybook; you can switch to every curated fund in alert settings.'
     : 'Here is your Copybook sign-in link.';
   return {
     to,
@@ -100,8 +100,11 @@ function eventLine(e: AlertEvent, f: Follows): string {
   return `${form}: ${e.manager} ${detail}${flag(e.ticker, f)}, filed ${e.filing_date}\n  ${e.url}`;
 }
 
-function body(env: Env, intro: string, filings: Alert13F[], events: AlertEvent[], f: Follows): string {
+function body(env: Env, intro: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member): string {
   const parts = [intro];
+  if (m?.alerts_note === 'followed') {
+    parts.push(`Alert change: you now get alerts only for the ${f.investors.length} fund${f.investors.length === 1 ? '' : 's'} you follow, plus active managers' moves in stocks you own or watch. To get every curated fund again, choose "Every investor" in alert settings at ${env.SITE_URL}account/.`);
+  }
   if (filings.length) parts.push(filings.map((a) => filingBlock(env, a, f)).join('\n\n'));
   if (events.length) parts.push(`Between-quarter moves:\n${events.map((e) => eventLine(e, f)).join('\n')}`);
   return `${parts.join('\n\n')}\n\nChoose whom you follow and how you get alerts at ${env.SITE_URL}account/.${FOOTER}`;
@@ -115,14 +118,14 @@ function summary(filings: Alert13F[]): string {
   return `${a.manager} ${a.followup ? 'position changes,' : 'filed'} ${quarterLabel(a.quarter)} 13F${bits.length ? ` (${bits.join(', ')})` : ''}`;
 }
 
-export function alertMail(env: Env, to: string, filings: Alert13F[], events: AlertEvent[], f: Follows): Mail {
+export function alertMail(env: Env, to: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member): Mail {
   const subject = filings.length
     ? `Copybook: ${summary(filings)}${events.length ? ` + ${events.length} more` : ''}`
     : `Copybook: ${events.length === 1 ? `${events[0].manager} ${FORM_LABEL[events[0].kind]} filing` : `${events.length} new Form 4 and 13D/G filings`}`;
-  return { to, subject, text: body(env, 'New filings from managers and stocks you follow:', filings, events, f) };
+  return { to, subject, text: body(env, 'New filings from managers and stocks you follow:', filings, events, f, m) };
 }
 
-export function digestMail(env: Env, to: string, day: string, filings: Alert13F[], events: AlertEvent[], f: Follows): Mail {
+export function digestMail(env: Env, to: string, day: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member): Mail {
   const n = [filings.length && `${filings.length} 13F${filings.length === 1 ? '' : 's'}`, events.length && `${events.length} Form 4/13D/G`].filter(Boolean).join(', ');
-  return { to, subject: `Copybook daily digest for ${day}: ${n}`, text: body(env, `Today's filings from managers and stocks you follow (${day}):`, filings, events, f) };
+  return { to, subject: `Copybook daily digest for ${day}: ${n}`, text: body(env, `Today's filings from managers and stocks you follow (${day}):`, filings, events, f, m) };
 }
