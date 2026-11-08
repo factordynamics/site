@@ -538,7 +538,11 @@ interface IndexRow {
 export async function runBackstop(env: Env, now: number): Promise<Record<string, unknown>> {
   const res = await fetch(`${env.DATA_URL}index.json`);
   if (!res.ok) throw new Error(`index.json ${res.status}`);
-  const rows = ((await res.json()) as { managers?: IndexRow[] }).managers ?? [];
+  const idx = (await res.json()) as { managers?: IndexRow[]; generated_at?: string; build_id?: string };
+  const rows = idx.managers ?? [];
+  // /v1 responses say when and from which build the data was made.
+  const build = JSON.stringify({ data_built_at: idx.generated_at ?? null, build_id: idx.build_id ?? (idx.generated_at ? idx.generated_at.replace(/[-:]/g, '') : null) });
+  if ((await env.DB.get('v1:build')) !== build) await env.DB.put('v1:build', build);
 
   const ciks: CikMap = {};
   const byCik = (cik: string, m: IndexRow) => (ciks[cik.padStart(10, '0')] ??= []).push({ slug: m.slug, manager: m.manager, name: m.name, cik: m.cik.padStart(10, '0'), featured: m.featured, type: m.type ?? null });

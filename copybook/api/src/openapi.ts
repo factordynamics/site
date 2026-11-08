@@ -1,9 +1,24 @@
 import { LIMITS } from './keys';
-import { ERRORS, SCHEMA_VERSION } from './v1';
+import { CHANGELOG, ERRORS, SCHEMA_VERSION } from './v1';
+
+const META = {
+  schema_version: { type: 'string', description: 'Response schema version (a date). See the versioning policy.' },
+  data_built_at: { type: ['string', 'null'], format: 'date-time', description: 'When the served data was built (UTC). Changes whenever the data is rebuilt.' },
+  build_id: { type: ['string', 'null'], description: 'Identifier of the data build. Compare across calls to detect that served data changed.' },
+};
 
 function envelope(data: unknown, extra: Record<string, unknown> = {}) {
-  return { type: 'object', required: ['schema_version', 'data'], properties: { schema_version: { type: 'string' }, data, ...extra } };
+  return { type: 'object', required: ['schema_version', 'data_built_at', 'build_id', 'data'], properties: { ...META, data, ...extra } };
 }
+
+const json = (schema: unknown, example: unknown) => ({ 'application/json': { schema, example } });
+const BUILD = { schema_version: SCHEMA_VERSION, data_built_at: '2026-11-08T21:29:01Z', build_id: '20261108T212901Z' };
+
+const POSITION_EXAMPLE = {
+  cusip: '02079K305', ticker: 'GOOGL', issuer: 'ALPHABET INC', title_of_class: 'CAP STK CL A', put_call: null, sector: 'Communication Services',
+  shares: 54000000, shares_type: 'SH', value_usd: 9512640000, weight: 0.0367, weight_equity: 0.0367, value_scale: null, value_as_filed: null, value_adjusted: null, zero_value: false,
+  change: 'added', prev_shares: 4200000, share_change: 49800000, value_delta_usd: 8770349040, source_accession: null, first_disclosed_at: null,
+};
 
 /** OpenAPI 3.1 description of /v1, served at /v1/openapi.json. */
 export function openapi() {
@@ -11,7 +26,7 @@ export function openapi() {
     type: 'object',
     required: ['schema_version', 'error'],
     properties: {
-      schema_version: { type: 'string' },
+      ...META,
       error: { type: 'object', required: ['code', 'message'], properties: { code: { type: 'string', enum: Object.keys(ERRORS) }, message: { type: 'string' } } },
     },
   };
@@ -22,16 +37,27 @@ export function openapi() {
       ['403', 'pro_required'],
       ['404', 'not_found'],
       ['429', 'rate_limited'],
-    ].map(([s, d]) => [s, { description: d, content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }]),
+    ].map(([s, d]) => [s, { description: d, content: json({ $ref: '#/components/schemas/Error' }, { ...BUILD, error: { code: d.split(' ')[0], message: ERRORS[d.split(' ')[0] as keyof typeof ERRORS] } }) }]),
   );
   return {
     openapi: '3.1.0',
     info: {
       title: 'Copybook API',
       version: SCHEMA_VERSION,
-      description: `13F holdings, Form 4 and Schedule 13D/G data from SEC EDGAR, as filed. Copy Pro and Copy Fund. Units: money is whole US dollars (filings reported in thousands are rescaled); shares are as filed (principal amount for PRN rows); weights and fractions are 0-1; dates are ISO 8601, datetimes UTC. Authenticate with \`Authorization: Bearer cbk_live_...\` (create keys on your Copybook account page). Limits per key: ${LIMITS.minute} requests/minute and ${LIMITS.day} requests/day, reported in RateLimit-* and X-RateLimit-* headers; 429 responses carry Retry-After. Every response has \`schema_version\`. Error codes: ${Object.entries(ERRORS).map(([k, v]) => `\`${k}\` (${v})`).join('; ')}`,
+      description: `13F holdings, Form 4 and Schedule 13D/G data from SEC EDGAR, as filed. Copy Pro and Copy Fund. Units: money is whole US dollars (filings reported in thousands are rescaled); shares are as filed (principal amount for PRN rows); weights and fractions are 0-1; dates are ISO 8601, datetimes UTC. Authenticate with \`Authorization: Bearer cbk_live_...\` (create keys on your Copybook account page). Limits per key: ${LIMITS.minute} requests/minute and ${LIMITS.day} requests/day, reported in RateLimit-* and X-RateLimit-* headers; 429 responses carry Retry-After. Every response has \`schema_version\`, \`data_built_at\` and \`build_id\`. Error codes: ${Object.entries(ERRORS).map(([k, v]) => `\`${k}\` (${v})`).join('; ')}.
+
+**Coverage.** /v1/filers lists the 199 curated filers today. Every 13F filer (about 9,000) is coming to /v1; until then, other filers return 404.
+
+**Send a User-Agent.** Requests with Python urllib's default User-Agent (\`Python-urllib/3.x\`) are refused by Cloudflare before they reach the API, with HTTP 403 and "error code: 1010" (not a JSON error). Set any descriptive User-Agent, e.g. \`urllib.request.Request(url, headers={"User-Agent": "myfund-research/1.0", "Authorization": "Bearer ..."})\`. requests, httpx, curl and Go's net/http work as they are.
+
+**Versioning policy.** \`schema_version\` is a date and changes only on a breaking change. Not breaking (no new version, listed in /v1/changelog): new endpoints, new optional query parameters, new response fields, new values in enums documented as growing (\`type\`, \`status\`), new error codes for new situations. Breaking: removing or renaming a field, changing a field's type, unit or meaning, removing an endpoint or parameter, changing an existing error code. Breaking changes are announced in /v1/changelog and by email to key owners at least 90 days before they take effect; during that window the old shape stays available to clients that pin it by sending \`Copybook-Schema-Version: <date>\` (an unknown version returns 400 bad_request). Data corrections (a restated filing, a better CUSIP-to-ticker map) are not schema changes; they show up as a new \`build_id\`.
+
+**Weight.** \`weight\` is value_usd over the filing's total reported value, all rows (options at their underlying value, notes at principal). \`weight_equity\` is the share of the equity book: SH rows without put/call only, options and PRN rows excluded (null for them). \`weight\` switches to the \`weight_equity\` definition in schema 2027-02-08; pin 2026-11-08 to keep the old one until then.
+
+**Changelog.** ${CHANGELOG.flatMap((c) => c.changes.map((x) => `${c.date}: ${x}`)).join(' ')}`,
     },
     servers: [{ url: 'https://copybook-api.factordynamics.workers.dev' }],
+    'x-versioning': { current: SCHEMA_VERSION, pin_header: 'Copybook-Schema-Version', notice_days: 90, changelog: '/v1/changelog' },
     security: [{ apiKey: [] }],
     components: {
       securitySchemes: { apiKey: { type: 'http', scheme: 'bearer', description: 'A Copybook API key, cbk_live_...' } },
@@ -73,7 +99,7 @@ export function openapi() {
         Position: {
           type: 'object',
           description: 'One position: info-table rows summed per (CUSIP, put/call).',
-          required: ['cusip', 'ticker', 'issuer', 'title_of_class', 'put_call', 'sector', 'shares', 'shares_type', 'value_usd', 'weight', 'change', 'prev_shares', 'share_change', 'value_delta_usd', 'source_accession', 'first_disclosed_at'],
+          required: ['cusip', 'ticker', 'issuer', 'title_of_class', 'put_call', 'sector', 'shares', 'shares_type', 'value_usd', 'weight', 'weight_equity', 'value_scale', 'value_as_filed', 'value_adjusted', 'zero_value', 'change', 'prev_shares', 'share_change', 'value_delta_usd', 'source_accession', 'first_disclosed_at'],
           properties: {
             cusip: { type: 'string', pattern: '^[0-9A-Z]{9}$' },
             ticker: { type: ['string', 'null'], description: 'Mapped from CUSIP; null when unknown' },
@@ -84,7 +110,12 @@ export function openapi() {
             shares: { type: 'number', description: 'sshPrnamt as filed: shares (SH) or principal amount (PRN). 0 for exited rows.' },
             shares_type: { type: ['string', 'null'], enum: ['SH', 'PRN', null], description: 'sshPrnamtType as filed: SH (shares) or PRN (principal amount, e.g. convertible notes). Null until the data run publishes it; until then a PRN row is counted in weight like any other.' },
             value_usd: { type: 'integer', description: 'Reported value, whole USD. 0 for exited rows.' },
-            weight: { type: 'number', minimum: 0, maximum: 1, description: 'value_usd / filing total_value_usd, as a 0-1 fraction (all rows, options included)' },
+            weight: { type: 'number', minimum: 0, maximum: 1, description: 'value_usd / filing total_value_usd, as a 0-1 fraction, all rows (options at underlying value, PRN at principal). Switches to the weight_equity definition in schema 2027-02-08.' },
+            weight_equity: { type: ['number', 'null'], minimum: 0, maximum: 1, description: 'Share of the equity book, 0-1: value_usd over the summed value of SH rows without put/call. Null for options and PRN rows. Until shares_type is published, a PRN row without it counts as equity.' },
+            value_scale: { type: ['number', 'null'], description: 'Factor applied to the value as filed to get whole USD (1000 for filers that reported in thousands). Null until the data run publishes it.' },
+            value_as_filed: { type: ['number', 'null'], description: 'The value column exactly as filed, before value_scale. Null until published.' },
+            value_adjusted: { type: ['boolean', 'null'], description: 'True when value_usd differs from value_as_filed x 1 (a unit fix was applied). Null until published.' },
+            zero_value: { type: 'boolean', description: 'True for a held row filed with value 0 (not an exit); weight is 0 for it.' },
             change: { type: ['string', 'null'], enum: ['new', 'added', 'trimmed', 'unchanged', 'exited', null], description: 'vs prev_quarter; null when there is no prior quarter' },
             prev_shares: { type: ['number', 'null'], description: 'Shares in prev_quarter (0 for new)' },
             share_change: { type: ['number', 'null'], description: 'shares - prev_shares' },
@@ -102,9 +133,10 @@ export function openapi() {
             report_date: { type: 'string', format: 'date', description: 'periodOfReport' },
             filing: {
               type: 'object',
-              required: ['accession', 'form', 'filing_date', 'accepted_at', 'sec_url', 'amendments'],
+              required: ['accession', 'filer_cik', 'form', 'filing_date', 'accepted_at', 'sec_url', 'amendments'],
               properties: {
                 accession: { type: 'string', description: 'The original 13F-HR' },
+                filer_cik: { type: 'string', pattern: '^\\d{10}$', description: 'CIK of the entity that filed this 13F (may differ from the manager, e.g. Pershing Square Capital Management for Bill Ackman)' },
                 form: { type: 'string' },
                 filing_date: { type: 'string', format: 'date', description: 'EDGAR filing date (ET)' },
                 accepted_at: { type: ['string', 'null'], format: 'date-time', description: 'EDGAR acceptance datetime of the original, UTC (from the filing index headers). Null only if EDGAR could not be read.' },
@@ -143,7 +175,7 @@ export function openapi() {
           responses: {
             '200': {
               description: 'Key and usage',
-              content: { 'application/json': { schema: envelope({ type: 'object', properties: { key: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, prefix: { type: 'string' }, created: { type: 'string', format: 'date-time' }, last_used_at: { type: ['string', 'null'], format: 'date-time', description: 'Latest use, to the minute' } } }, usage: { $ref: '#/components/schemas/Usage' } } }) } },
+              content: json(envelope({ type: 'object', properties: { key: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, prefix: { type: 'string' }, created: { type: 'string', format: 'date-time' }, last_used_at: { type: ['string', 'null'], format: 'date-time', description: 'Latest use, to the minute' } } }, usage: { $ref: '#/components/schemas/Usage' } } }), { ...BUILD, data: { key: { id: 'k_8f3a', name: 'research', prefix: 'cbk_live_8f3a', created: '2026-11-08T19:02:11Z', last_used_at: '2026-11-08T21:40:00Z' }, usage: [{ day: '2026-11-08', requests: 412 }] } }),
             },
             ...errResponses,
           },
@@ -152,7 +184,18 @@ export function openapi() {
       '/v1/filers': {
         get: {
           summary: 'Every filer Copybook covers, with its latest 13F and available quarters',
-          responses: { '200': { description: 'Filers', content: { 'application/json': { schema: envelope({ type: 'array', items: { $ref: '#/components/schemas/Filer' } }, { count: { type: 'integer' } }) } } }, ...errResponses },
+          description: 'The 199 curated filers today; every 13F filer is coming.',
+          responses: {
+            '200': {
+              description: 'Filers',
+              content: json(envelope({ type: 'array', items: { $ref: '#/components/schemas/Filer' } }, { count: { type: 'integer' } }), {
+                ...BUILD,
+                data: [{ slug: 'warren-buffett', cik: '0001067983', name: 'Berkshire Hathaway Inc', manager: 'Warren Buffett', featured: true, status: 'current', latest_quarter: '2026Q2', latest_report_date: '2026-06-30', latest_filing_date: '2026-08-14', latest_accession: '0001193125-26-352200', total_value_usd: 259000000000, position_count: 41, history_quarters: ['2026Q2', '2026Q1'] }],
+                count: 199,
+              }),
+            },
+            ...errResponses,
+          },
         },
       },
       '/v1/filers/{filer}/holdings/{quarter}': {
@@ -160,10 +203,38 @@ export function openapi() {
           summary: "A filer's full 13F book for one quarter, with changes vs the prior quarter",
           parameters: [{ $ref: '#/components/parameters/filer' }, { $ref: '#/components/parameters/quarter' }, { $ref: '#/components/parameters/as_of' }],
           responses: {
-            '200': { description: 'Holdings', content: { 'application/json': { schema: envelope({ $ref: '#/components/schemas/Holdings' }) } } },
-            '400': { description: 'bad_request', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            '200': {
+              description: 'Holdings',
+              content: json(envelope({ $ref: '#/components/schemas/Holdings' }), {
+                ...BUILD,
+                data: {
+                  filer: { slug: 'warren-buffett', cik: '0001067983', name: 'Berkshire Hathaway Inc', manager: 'Warren Buffett' },
+                  quarter: '2026Q2',
+                  report_date: '2026-06-30',
+                  filing: { accession: '0001193125-26-352200', filer_cik: '0001067983', form: '13F-HR', filing_date: '2026-08-14', accepted_at: '2026-08-14T20:05:12Z', sec_url: 'https://www.sec.gov/Archives/edgar/data/1067983/000119312526352200/0001193125-26-352200-index.html', amendments: [] },
+                  prev_quarter: '2026Q1',
+                  total_value_usd: 259000000000,
+                  position_count: 41,
+                  holdings: [POSITION_EXAMPLE],
+                  exited: [],
+                },
+              }),
+            },
+            '400': { description: 'bad_request', content: json({ $ref: '#/components/schemas/Error' }, { ...BUILD, error: { code: 'bad_request', message: 'quarter must look like 2025Q1.' } }) },
             '501': { description: 'not_yet_available (as_of)', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
             ...errResponses,
+          },
+        },
+      },
+      '/v1/changelog': {
+        get: {
+          summary: 'Changes to /v1, newest first. No API key needed.',
+          security: [],
+          responses: {
+            '200': {
+              description: 'Changelog',
+              content: json(envelope({ type: 'array', items: { type: 'object', required: ['date', 'schema_version', 'breaking', 'changes'], properties: { date: { type: 'string', format: 'date' }, schema_version: { type: 'string' }, breaking: { type: 'boolean' }, changes: { type: 'array', items: { type: 'string' } } } } }), { ...BUILD, data: CHANGELOG.slice(0, 1) }),
+            },
           },
         },
       },

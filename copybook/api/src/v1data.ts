@@ -40,8 +40,14 @@ async function resolve(env: Env, id: string): Promise<FilerRow | null> {
   return SLUG.test(id) ? (list.find((f) => f.slug === id) ?? null) : null;
 }
 
+/** Equity rows: shares (not principal amounts), no put/call. The denominator of weight_equity. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function position(h: any) {
+const isEquity = (h: any) => !h.put_call && (h.shares_type ?? h.sh_prn ?? 'SH') !== 'PRN';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function position(h: any, equityTotal: number) {
+  // The data run's new schema (with delta_pct_of_book) uses pct_of_book for the equity-book weight.
+  const eqw = 'delta_pct_of_book' in h ? (h.pct_of_book ?? null) : isEquity(h) && equityTotal > 0 && h.value ? h.value / equityTotal : isEquity(h) ? 0 : null;
   return {
     cusip: h.cusip,
     ticker: h.ticker ?? null,
@@ -53,6 +59,11 @@ function position(h: any) {
     shares_type: h.shares_type ?? h.sh_prn ?? null,
     value_usd: h.value,
     weight: h.weight,
+    weight_equity: eqw,
+    value_scale: h.value_scale ?? null,
+    value_as_filed: h.value_as_filed ?? null,
+    value_adjusted: h.value_adjusted ?? null,
+    zero_value: h.zero_value ?? (h.change !== 'exited' && h.value === 0),
     change: h.change ?? null,
     prev_shares: h.prev_shares ?? null,
     share_change: h.share_change ?? null,
@@ -93,6 +104,8 @@ ROUTES.push(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const q: any = await new Response(obj.body).json();
     const cik = cikOf(q.sec_url, f.cik);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const equityTotal = ((q.holdings ?? []) as any[]).filter(isEquity).reduce((s, h) => s + (h.value || 0), 0);
     const main = await filingMeta(env, cik, q.accession);
     const amendments = [];
     for (const a of (q.amendments ?? []) as string[]) {
@@ -113,6 +126,7 @@ ROUTES.push(
         report_date: q.report_date,
         filing: {
           accession: q.accession,
+          filer_cik: (q.filer_cik ?? cik).padStart(10, '0'),
           form: q.form,
           filing_date: q.filing_date,
           accepted_at: main?.accepted_at ?? null,
@@ -122,8 +136,8 @@ ROUTES.push(
         prev_quarter: q.prev_quarter ?? null,
         total_value_usd: q.total_value,
         position_count: q.position_count ?? (q.holdings ?? []).length,
-        holdings: (q.holdings ?? []).map(position),
-        exited: (q.exited ?? []).map(position),
+        holdings: (q.holdings ?? []).map((h: unknown) => position(h, equityTotal)),
+        exited: (q.exited ?? []).map((h: unknown) => position(h, equityTotal)),
       },
     });
   }],

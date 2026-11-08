@@ -3,6 +3,33 @@ import { authKey, limitHeaders, meter, type ApiKey } from './keys';
 
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-08';
+/** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
+export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
+
+/** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
+export const CHANGELOG: { date: string; schema_version: string; breaking: boolean; changes: string[] }[] = [
+  {
+    date: '2026-11-08',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    changes: [
+      'Every response carries data_built_at and build_id: when the data was built and which build it is, so a change in served data is detectable.',
+      'Position: weight_equity (share of the equity book: SH rows without put/call), value_scale, value_as_filed, value_adjusted, zero_value, passed through from the data run when it publishes them.',
+      'filing.filer_cik: the CIK that filed (e.g. Pershing Square for Ackman).',
+      'GET /v1/changelog (no key needed). Versioning policy in the spec.',
+      'Notice: `weight` will switch to the equity-only definition (weight_equity) in schema 2027-02-08, 90 days from now. Use weight_equity today for the new definition.',
+    ],
+  },
+  {
+    date: '2026-11-08',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    changes: ['Launch: /v1/me, /v1/filers, /v1/filers/{filer}/holdings/{quarter} with filing.accepted_at and amendments[] objects, schema_version, stable error codes, per-key rate limits.'],
+  },
+];
+
+/** When the served data was built, from the data run's index (KV v1:build, refreshed hourly). */
+let build: { data_built_at: string | null; build_id: string | null } = { data_built_at: null, build_id: null };
 
 /** Stable error codes; documented in the OpenAPI spec. */
 export const ERRORS = {
@@ -21,7 +48,7 @@ export type ErrorCode = keyof typeof ERRORS;
 const base = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'private, no-store' };
 
 export function v1json(data: Record<string, unknown>, status = 200, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify({ schema_version: SCHEMA_VERSION, ...data }), { status, headers: { ...base, ...headers } });
+  return new Response(JSON.stringify({ schema_version: SCHEMA_VERSION, ...build, ...data }), { status, headers: { ...base, ...headers } });
 }
 
 export function v1error(code: ErrorCode, status: number, message?: string, headers: Record<string, string> = {}): Response {
@@ -57,6 +84,11 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     const { openapi } = await import('./openapi');
     return new Response(JSON.stringify(openapi()), { headers: { ...base, 'cache-control': 'public, max-age=300' } });
   }
+  const b = await env.DB.get('v1:build');
+  if (b) build = JSON.parse(b);
+  if (path === '/v1/changelog') return v1json({ data: CHANGELOG }, 200, { 'cache-control': 'public, max-age=300' });
+  const pin = req.headers.get('copybook-schema-version');
+  if (pin && !SCHEMA_VERSIONS.includes(pin)) return v1error('bad_request', 400, `Unknown Copybook-Schema-Version ${pin}; served versions: ${SCHEMA_VERSIONS.join(', ')}.`);
   const auth = await authKey(env, req.headers.get('authorization'));
   if (!auth.ok) return v1error(auth.code as ErrorCode, auth.status, auth.message);
   const r = await meter(env, auth.key.id).hit();
