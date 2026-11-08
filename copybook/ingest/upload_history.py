@@ -25,6 +25,8 @@ API = os.environ.get("COPYBOOK_API", "https://copybook-api.factordynamics.worker
 MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-manifest.json"))
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/\d{4}Q[1-4]\.(json|csv)$")
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
+# Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
+USER_AGENT = "Copybook-ingest/1.0 (+https://copybook.factordynamics.com)"
 
 
 class Token:
@@ -55,7 +57,7 @@ def put(key: str, body: bytes, token: Token) -> None:
             f"{API}/ingest/{key}",
             data=body,
             method="PUT",
-            headers={"Authorization": "Bearer " + token.get(), "Content-Type": ctype},
+            headers={"Authorization": "Bearer " + token.get(), "Content-Type": ctype, "User-Agent": USER_AGENT},
         )
         try:
             with urlopen(req, timeout=120) as resp:
