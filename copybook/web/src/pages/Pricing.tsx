@@ -60,11 +60,13 @@ const tiers = (filers: string, curated: number): Tier[] => [
     id: 'fund',
     who: 'For investment teams. 5 seats.',
     lead: 'Everything in Pro, plus',
-    now: [{ t: 'Invoice billing', d: 'W-9 and invoice on request.' }],
-    soon: [
-      { t: '5 seats', d: 'Invite your team; each seat gets its own alerts.' },
-      { t: 'Shared book and peer lists', d: 'One list of holdings and peers the whole team works from.' },
+    now: [
+      { t: '5 seats', d: 'Invite your team by email; each seat signs in on its own and keeps its own alerts and channels.' },
+      { t: 'Shared book and peer lists', d: 'One set of follows, watchlist, owned book and peers the whole team works from.' },
+      { t: 'Team alerts in Slack', d: 'Every alert in your team’s channel, as it happens.' },
+      { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 on request.' },
     ],
+    soon: [{ t: 'My book and peer overlap for the team', d: 'Crowding in your shared book, and overlap with your peer list.' }],
   },
 ]
 
@@ -91,8 +93,8 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Signed webhooks', false, false, true, true],
   ['Bulk exports', false, false, 'soon', 'soon'],
   ['My book and peer overlap', false, false, 'soon', 'soon'],
-  ['Seats', '1', '1', '1', '5 (coming)'],
-  ['Shared book and peer lists', false, false, false, 'soon'],
+  ['Seats', '1', '1', '1', '5'],
+  ['Shared book and peer lists', false, false, false, true],
   ['Invoice billing, W-9', false, false, false, true],
 ]
 
@@ -166,7 +168,7 @@ export function Pricing() {
                     Browse investors
                   </Button>
                 ) : tier.id === 'fund' ? (
-                  // Funds buy by request until seats ship; the card trial stays as a quiet second path.
+                  // Funds mostly buy by invoice; the card trial stays as a quiet second path.
                   <Button to="/contact/?topic=fund" variant="dark" className="w-full">
                     Request Fund access
                   </Button>
@@ -180,7 +182,7 @@ export function Pricing() {
                 <p className={`mt-2.5 min-h-[3.6em] text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>
                   {tier.id === 'fund' ? (
                     <>
-                      Founding price $1,990/yr, invoiced when seats go live. W-9 and invoice on request.{' '}
+                      Founding price $1,990/yr, invoiced net 30. W-9 on request.{' '}
                       {live && (
                         <a href={attributed(link)} className="underline underline-offset-2 hover:text-ink">
                           Or start a {TRIAL_DAYS}-day card trial
@@ -279,7 +281,7 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                'Pro: everything in Copy, API keys, the filer and holdings endpoints, filing acceptance times and signed webhooks. History and events endpoints, point-in-time history, bulk exports, My book and peer overlap are coming this month and turn on as each ships, at no extra cost. Fund is sold by request with invoice billing; its seats, shared book and peer lists are coming this month, and you’re invoiced when seats go live.',
+                'Pro: everything in Copy, API keys, the filer and holdings endpoints, filing acceptance times and signed webhooks. History and events endpoints, point-in-time history, bulk exports, My book and peer overlap are coming this month and turn on as each ships, at no extra cost. Fund adds 5 seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.',
               ],
               [
                 'How does the free trial work?',

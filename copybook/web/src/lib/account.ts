@@ -14,6 +14,10 @@ export type Member = {
   cancel_at_period_end?: boolean
   cancel_at?: number | null
   alerts: 'all' | 'off' | string[]
+  /** A Copy Fund seat: billing and the team belong to the owner. */
+  seat?: boolean
+  /** The Fund owner's email, when the API sends it to a seat. */
+  owner?: string | null
 }
 
 const KEY = 'copybook-session'

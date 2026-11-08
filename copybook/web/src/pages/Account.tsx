@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
 import { Channels } from '../components/Channels'
+import { Team } from '../components/Team'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -101,6 +102,7 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
       {onboard && (
         <div className="mt-10">
           <Onboarding
+            shared={member.plan === 'fund'}
             onDone={(m) => {
               setEditing(false)
               if (m) onChange(m)
@@ -121,6 +123,12 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
             {member.interval === 'yearly' ? ', yearly' : member.interval === 'monthly' ? ', monthly' : ''}
             {endLabel && !cancelling && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`}
           </p>
+          {member.seat ? (
+            <p className="mt-4 rounded-xl bg-accent-soft px-3.5 py-2.5 text-[14px] text-accent-2">
+              Part of {member.owner ? `${member.owner}’s` : 'your team’s'} Copy Fund plan. Billing and seats are managed by the plan owner.
+            </p>
+          ) : (
+            <>
           {cancelling && (
             <p className="mt-3 rounded-xl bg-[#fdf3e1] px-3.5 py-2.5 text-[14px] text-[#7a4b06]">
               Your plan ends {endLabel ?? 'at the end of this period'}. You keep everything until then and won’t be charged again.
@@ -143,6 +151,8 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
             {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
           </p>
+            </>
+          )}
         </section>
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[15px] font-semibold">Filing alerts</h2>
@@ -198,13 +208,17 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
         </section>
       </div>
 
+      {member.active && member.plan === 'fund' && !member.seat && <Team />}
       {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
       {member.active && <ApiKeys member={member} />}
 
       {member.active && status === 'ready' && follows.onboarded && !editing && (
         <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-[15px] font-semibold">Following</h2>
+            <h2 className="flex items-center gap-2 text-[15px] font-semibold">
+              Following
+              {member.plan === 'fund' && <Badge tone="accent">Shared with your team</Badge>}
+            </h2>
             <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
               Edit
             </Button>

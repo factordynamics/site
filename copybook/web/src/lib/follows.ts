@@ -96,3 +96,20 @@ export function setFollow(kind: 'investors' | 'stocks', id: string, want: boolea
 export const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 
 export const isPaywall = (e: unknown) => e instanceof ApiError && (e.status === 401 || e.status === 402)
+
+/** Add many tickers as owned or watched (My book import), one request each, queued behind other follow changes. */
+export function addStocks(tickers: string[], owned: boolean) {
+  return enqueue(async () => {
+    const failed: string[] = []
+    for (const t of tickers) {
+      try {
+        const r = await call<{ follows: Follows }>(`/follows/${owned ? 'owned' : 'stocks'}/${encodeURIComponent(t)}`, { method: 'POST', auth: true })
+        set({ ...state, status: 'ready', follows: { ...EMPTY, ...r.follows } })
+      } catch (e) {
+        if (isPaywall(e)) throw e
+        failed.push(t)
+      }
+    }
+    return failed
+  })
+}

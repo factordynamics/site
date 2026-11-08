@@ -55,9 +55,9 @@ export function Contact() {
           <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">{fund ? 'Copybook for your fund.' : 'Get in touch.'}</h1>
           {fund ? (
             <>
-              <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Copy Pro for a team: the API, signed webhooks and Slack alerts today, with 5 seats and a shared book and peer lists arriving this month.</p>
+              <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Copy Pro for a team of up to 5: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-ink-2">
-                {['Founding price $1,990/yr, kept for as long as you stay subscribed', 'Invoiced when seats go live, not before', 'W-9 and invoice on request', 'Your uploaded book stays private to your team'].map((x) => (
+                {['Founding price $1,990/yr, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 on request', 'Your uploaded book stays private to your team'].map((x) => (
                   <li key={x} className="flex gap-2.5">
                     <Check className="mt-1 shrink-0 text-accent" /> {x}
                   </li>
@@ -87,7 +87,7 @@ export function Contact() {
                 <Check />
               </span>
               <h2 className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">Thanks, it’s sent.</h2>
-              <p className="mt-2 text-[15px] text-ink-2">{fund ? 'We’ll reply within one business day with access and an invoice.' : 'We’ll reply by email, usually within one business day.'}</p>
+              <p className="mt-2 text-[15px] text-ink-2">{fund ? 'We’ll reply within one business day with your invoice and team access.' : 'We’ll reply by email, usually within one business day.'}</p>
             </div>
           ) : (
             <form
