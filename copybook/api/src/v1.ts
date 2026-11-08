@@ -22,6 +22,8 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
       'filing.versions[]: every 13F-HR and 13F-HR/A for the period, oldest first, including originals a restatement replaced, each with status current, superseded, merged or not_merged. filing.amendment_type for the served filing.',
       'filing.amendments now lists every 13F-HR/A EDGAR has for the period, of any type and including a served restatement, not only those merged into the book: the amendment subset of versions[].',
       '?version=original|{accession} on holdings: the book exactly as that filing reported it.',
+      'GET /v1/events: Form 4 and 13D/G with filer, ticker, cusip, issuer_cik, form and date filters, acceptance time, per-class holdings and prior stake.',
+      'GET /v1/changes/{quarter}: new, added, trimmed and exited positions by filer, by stock, or across filers with cohort.',
     ],
   },
   {

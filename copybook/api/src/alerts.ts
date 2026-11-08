@@ -224,12 +224,25 @@ export function isLate(e: AlertEvent, now: number): boolean {
   return now - Date.parse(e.filing_date) > DAY + LATE_MS;
 }
 
+/** The last 1,000 Form 4 and 13D/G events the minute poll parsed, newest first (KV v1:events). Follow-ups replace their first record. */
+async function rememberEvents(env: Env, events: AlertEvent[]): Promise<void> {
+  const real = events.filter((e) => !e.cluster && e.id);
+  if (!real.length) return;
+  const keep = ({ late, followup, details_pending, subject_tickers, insider, ...e }: AlertEvent) => ({ ...e, ...(insider ? { insider: { name: insider.name, roles: insider.roles, bought_usd: insider.bought_usd } } : {}), ...(details_pending && !followup ? { details_pending } : {}) });
+  const ring = JSON.parse((await env.DB.get('v1:events')) ?? '[]') as AlertEvent[];
+  const k = (e: AlertEvent) => `${e.id}|${e.slug}`;
+  const ids = new Set(real.map(k));
+  await env.DB.put('v1:events', JSON.stringify([...real.map(keep), ...ring.filter((e) => !ids.has(k(e)))].slice(0, 1000)));
+}
+
 type DigestDay = { filings: Alert13F[]; events: AlertEvent[]; late?: AlertEvent[] };
 
 async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], now: number): Promise<{ emails: number; digest: number; mail: string; late?: number }> {
   if (!filings.length && !allEvents.length) return { emails: 0, digest: 0, mail: 'none' };
   // Old filings are never presented as news: they go to tonight's digest as "earlier filings".
   // Follow-ups complete an alert already sent, so they go out whenever they're ready.
+  // /v1/events serves what the poll parsed (acceptance, classes, prior stake), newest first.
+  await rememberEvents(env, allEvents);
   const late = allEvents.filter((e) => !e.followup && isLate(e, now)).map((e) => ({ ...e, late: true }));
   const events = allEvents.filter((e) => e.followup || !isLate(e, now));
   // Everything goes in the day's digest store; digest members get it from there tonight.

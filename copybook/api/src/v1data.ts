@@ -427,4 +427,131 @@ ROUTES.push(
       headers: { 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
     });
   }],
+  ['GET', /^\/v1\/events$/, async ({ env, url }) => {
+    const p = url.searchParams;
+    const kinds = p.get('form')?.toLowerCase().split(',').map((x) => ({ '4': 'form4', 'form4': 'form4', '13d': '13d', '13g': '13g', 'sc13d': '13d', 'sc13g': '13g' })[x.trim().replace(/[^a-z0-9]/g, '')]);
+    const from = p.get('from');
+    const to = p.get('to');
+    const limit = Number(p.get('limit') ?? 100);
+    const offset = Number(p.get('offset') ?? 0);
+    const date = /^\d{4}-\d{2}-\d{2}$/;
+    if ((kinds && kinds.some((k) => !k)) || (from && !date.test(from)) || (to && !date.test(to)) || !Number.isInteger(limit) || limit < 1 || limit > 500 || !Number.isInteger(offset) || offset < 0) {
+      return v1error('bad_request', 400, 'form: form4, 13d, 13g (comma-separated); from, to: YYYY-MM-DD filing dates; limit 1-500; offset from 0.');
+    }
+    let filerSlug: string | null = null;
+    let filerCik: string | null = null;
+    const filer = p.get('filer');
+    if (filer) {
+      const f = await resolveAny(env, filer);
+      if (!f) return v1error('not_found', 404, 'No such filer (use a slug from /v1/filers or a CIK).');
+      filerSlug = f.row.slug;
+      filerCik = f.row.cik;
+    }
+    const ticker = p.get('ticker')?.toUpperCase() ?? null;
+    const cusip = p.get('cusip')?.toUpperCase() ?? null;
+    const issuerCik = p.get('issuer_cik') ? pad(p.get('issuer_cik')!) : null;
+    // The data run's events (curated filers, last 30 days), overlaid with what the minute poll parsed.
+    const res = await fetch(`${env.DATA_URL}events.json`, { cf: { cacheTtl: 300 } } as RequestInit);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const base: any[] = res.ok ? (((await res.json()) as { events?: unknown[] }).events ?? []) : [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ring: any[] = JSON.parse((await env.DB.get('v1:events')) ?? '[]');
+    const key = (e: { id: string; slug: string }) => `${e.id}|${e.slug}`;
+    const polled = new Map(ring.map((e) => [key(e), e]));
+    const inBase = new Set(base.map(key));
+    const all = [...base.map((e) => ({ ...e, ...(polled.get(key(e)) ?? {}) })), ...ring.filter((e) => !inBase.has(key(e)))];
+    const rows = all
+      .map((e) => ({
+        accession: e.id,
+        form: e.form,
+        kind: e.kind,
+        action: e.action ?? null,
+        filer: { slug: e.slug || null, cik: pad(cikOf(e.url, '0')), name: e.manager ?? null },
+        issuer: { name: e.issuer ?? null, cik: e.issuer_cik ?? null, ticker: e.ticker ?? null, cusip: e.cusip ?? null, display_name: e.display_name ?? null },
+        filing_date: e.filing_date,
+        accepted_at: e.accepted ?? e.accepted_at ?? null,
+        event_date: e.event_date ?? null,
+        shares: e.shares ?? null,
+        value_usd: e.value_usd ?? null,
+        avg_price: e.avg_price ?? null,
+        shares_after: e.shares_after ?? null,
+        percent_of_class: e.percent_of_class ?? null,
+        ten_percent_owner: e.ten_percent_owner ?? null,
+        amendment_no: e.amendment_no ?? null,
+        prev: e.prev_accession || e.prev_percent_of_class != null ? { accession: e.prev_accession ?? null, form: e.prev_form ?? null, percent_of_class: e.prev_percent_of_class ?? null, shares_after: e.prev_shares_after ?? null } : null,
+        classes: e.classes ?? null,
+        purpose: e.item4 ?? null,
+        insider: e.insider ?? null,
+        details_pending: e.details_pending ?? false,
+        sec_url: e.url,
+      }))
+      .filter(
+        (e) =>
+          (!kinds || kinds.includes(e.kind)) &&
+          (!filerSlug || e.filer.slug === filerSlug || e.filer.cik === filerCik) &&
+          (!ticker || e.issuer.ticker === ticker) &&
+          (!cusip || (e.issuer.cusip ?? '').startsWith(cusip.slice(0, cusip.length >= 9 ? 9 : 6))) &&
+          (!issuerCik || e.issuer.cik === issuerCik) &&
+          (!from || e.filing_date >= from) &&
+          (!to || e.filing_date <= to),
+      )
+      .sort((a, b) => (b.accepted_at ?? `${b.filing_date}T23`).localeCompare(a.accepted_at ?? `${a.filing_date}T23`) || b.accession.localeCompare(a.accession));
+    const page = rows.slice(offset, offset + limit);
+    return v1json({ data: page, count: rows.length, next_offset: offset + limit < rows.length ? offset + limit : null });
+  }],
+  ['GET', /^\/v1\/changes\/([^/]+)$/, async ({ env, url }, [quarter]) => {
+    const p = url.searchParams;
+    const CHANGES = ['new', 'added', 'trimmed', 'exited'];
+    const want = (p.get('change') ?? CHANGES.join(',')).split(',').map((x) => x.trim());
+    const limit = Number(p.get('limit') ?? 100);
+    const offset = Number(p.get('offset') ?? 0);
+    const minValue = Number(p.get('min_value_usd') ?? 0);
+    const cohort = p.get('cohort') ?? 'all';
+    if (!QUARTER.test(quarter) || want.some((c) => !CHANGES.includes(c)) || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0 || !Number.isFinite(minValue) || minValue < 0) {
+      return v1error('bad_request', 400, 'quarter like 2026Q2; change: new, added, trimmed, exited (comma-separated); limit 1-1000; offset from 0; min_value_usd from 0.');
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let rows: any[];
+    let source: string;
+    const filer = p.get('filer');
+    const stock = p.get('ticker') ?? p.get('cusip');
+    if (filer) {
+      // One filer: its book's change rows (exact, every position).
+      const f = await resolveAny(env, filer);
+      if (!f) return v1error('not_found', 404, 'No such filer (use a slug from /v1/filers or a CIK).');
+      const book = await bookFor(env, f, quarter);
+      if (!book) return v1error('not_found', 404, `No ${quarter} 13F for ${f.row.slug}.`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fl = book.filer as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rows = [...(book.holdings as any[]), ...(book.exited as any[])].filter((h) => h.change).map((h) => ({ filer: { cik: fl.cik, slug: fl.slug, name: fl.name, curated: fl.curated }, ...h }));
+      source = 'filer';
+    } else if (stock) {
+      // One stock: every 13F holder's change in it (the per-issuer list, for the period it covers).
+      const is = await issuerCode(env, stock);
+      const obj = is ? await env.HIST.get(`s/${is.code}.json`) : null;
+      if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
+      if (!obj) return v1error('not_yet_available', 501, 'Per-stock holder lists are published with the next full data run.');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const st = (await new Response(obj.body).json()) as any;
+      if (st.period !== quarter) return v1error('not_found', 404, `Per-stock changes are served for ${st.period}; use filer= for other quarters.`);
+      rows = rowsOf({ columns: st.columns, rows: st.holders }).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.name, curated: null }, cusip: null, ticker: st.ticker ?? is.ticker, issuer: st.display_name ?? null, put_call: h.kind === 'equity' ? null : h.kind === 'calls' ? 'Call' : 'Put', shares: h.shares, prev_shares: h.prev_shares, share_change: h.prev_shares == null ? null : h.shares - h.prev_shares, value_usd: h.value, value_delta_usd: h.prev_value == null ? null : h.value - h.prev_value, change: h.change }));
+      source = 'stock';
+    } else {
+      // Across filers: the data run's per-quarter change file (largest moves first).
+      const obj = await env.HIST.get(`changes/${quarter}.json`);
+      if (!obj) return v1error('not_yet_available', 501, `Cross-filer changes for ${quarter} are published by the data run; meanwhile pass filer= or ticker=.`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (await new Response(obj.body).json()) as any;
+      rows = rowsOf(c).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: h.type ?? null }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ?? null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: h.accepted_at ?? null }));
+      source = 'all';
+    }
+    const curatedCiks = cohort === 'curated' ? new Set((await filers(env)).map((f) => f.cik)) : null;
+    if (cohort !== 'all' && cohort !== 'curated' && source !== 'all') return v1error('bad_request', 400, 'cohort by filer type works on cross-filer queries (no filer= or ticker=).');
+    const out = rows
+      .filter((r) => want.includes(r.change) && Math.abs(r.value_delta_usd ?? r.value_usd ?? 0) >= minValue)
+      .filter((r) => cohort === 'all' || (curatedCiks ? curatedCiks.has(r.filer.cik) : r.filer.type === cohort))
+      .sort((a, b) => Math.abs(b.value_delta_usd ?? 0) - Math.abs(a.value_delta_usd ?? 0));
+    return v1json({ data: out.slice(offset, offset + limit), quarter, count: out.length, next_offset: offset + limit < out.length ? offset + limit : null });
+  }],
 );

@@ -296,6 +296,66 @@ export function openapi() {
           },
         },
       },
+      '/v1/events': {
+        get: {
+          summary: 'Form 4 and Schedule 13D/G filings, newest first, with filters',
+          description: 'Copybook\'s curated filers\' filings for the last 30 days (data run), plus every filing the minute poll parsed (followed filers, and any filer\'s 13D/G on members\' names), with EDGAR acceptance time, per-class Form 4 holdings and the 13D/G stake before and after.',
+          parameters: [
+            { name: 'filer', in: 'query', required: false, description: 'Filer slug or CIK', schema: { type: 'string' } },
+            { name: 'ticker', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'cusip', in: 'query', required: false, description: '9-character CUSIP or 6-character issuer code', schema: { type: 'string' } },
+            { name: 'issuer_cik', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'form', in: 'query', required: false, description: 'form4, 13d, 13g (comma-separated)', schema: { type: 'string' } },
+            { name: 'from', in: 'query', required: false, description: 'Filing date, YYYY-MM-DD', schema: { type: 'string', format: 'date' } },
+            { name: 'to', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 500, default: 100 } },
+            { name: 'offset', in: 'query', required: false, schema: { type: 'integer', minimum: 0, default: 0 } },
+          ],
+          responses: {
+            '200': {
+              description: 'Events',
+              content: json(envelope({ type: 'array', items: { type: 'object' } }, { count: { type: 'integer' }, next_offset: { type: ['integer', 'null'] } }), {
+                ...BUILD,
+                data: [{ accession: '0000921669-26-000412', form: 'SC 13D/A', kind: '13d', action: 'stake_update', filer: { slug: 'carl-icahn', cik: '0000921669', name: 'Carl Icahn' }, issuer: { name: 'CVR ENERGY INC', cik: '0001376139', ticker: 'CVI', cusip: '12662P108', display_name: 'CVR Energy' }, filing_date: '2026-11-05', accepted_at: '2026-11-05T21:14:03.000Z', event_date: '2026-11-03', shares: null, value_usd: null, avg_price: null, shares_after: 71198718, percent_of_class: 64.1, ten_percent_owner: null, amendment_no: 27, prev: { accession: '0000921669-25-000301', form: 'SC 13D/A', percent_of_class: 70.8, shares_after: 71198718 }, classes: null, purpose: null, insider: null, details_pending: false, sec_url: 'https://www.sec.gov/Archives/edgar/data/921669/000092166926000412/0000921669-26-000412-index.html' }],
+                count: 1,
+                next_offset: null,
+              }),
+            },
+            ...errResponses,
+          },
+        },
+      },
+      '/v1/changes/{quarter}': {
+        get: {
+          summary: 'New, added, trimmed and exited positions for one report period, largest moves first',
+          description: 'With filer=: that filer\'s change rows (exact). With ticker= or cusip=: every 13F holder\'s change in that stock (latest complete period). Without either: across all filers from the data run\'s per-quarter change file (501 until published), with cohort=curated or a filer type.',
+          parameters: [
+            { $ref: '#/components/parameters/quarter' },
+            { name: 'change', in: 'query', required: false, description: 'new, added, trimmed, exited (comma-separated)', schema: { type: 'string' } },
+            { name: 'filer', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'ticker', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'cusip', in: 'query', required: false, schema: { type: 'string' } },
+            { name: 'cohort', in: 'query', required: false, description: 'all, curated, or a filer type (hedge_fund, active, bank, broker, index, other)', schema: { type: 'string', default: 'all' } },
+            { name: 'min_value_usd', in: 'query', required: false, description: 'Smallest |value_delta_usd|', schema: { type: 'number', minimum: 0 } },
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 1000, default: 100 } },
+            { name: 'offset', in: 'query', required: false, schema: { type: 'integer', minimum: 0, default: 0 } },
+          ],
+          responses: {
+            '200': {
+              description: 'Change rows',
+              content: json(envelope({ type: 'array', items: { type: 'object' } }, { quarter: { type: 'string' }, count: { type: 'integer' }, next_offset: { type: ['integer', 'null'] } }), {
+                ...BUILD,
+                data: [{ filer: { cik: '0001067983', slug: 'warren-buffett', name: 'Berkshire Hathaway Inc', curated: true }, cusip: '02079K305', ticker: 'GOOGL', issuer: 'ALPHABET INC', put_call: null, shares: 54000000, prev_shares: 4200000, share_change: 49800000, value_usd: 9512640000, value_delta_usd: 8770349040, change: 'added' }],
+                quarter: '2026Q2',
+                count: 1,
+                next_offset: null,
+              }),
+            },
+            '501': { description: 'not_yet_available: cross-filer changes not published yet', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
+            ...errResponses,
+          },
+        },
+      },
       '/v1/bulk': {
         get: {
           summary: 'Persistent bulk exports: every filer\'s 13F book for a quarter, as gzip CSV (and Parquet where available)',

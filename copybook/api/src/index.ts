@@ -17,7 +17,7 @@ import { stripe, verifyStripeSignature } from './stripe';
 import { signToken, verifyToken } from './tokens';
 
 /** Paid data the data workflow uploads besides h/: every filer's full book per quarter, per-issuer holders, bulk exports. */
-const INGEST_KEY = /^(fb\/\d{4}Q[1-4]\/\d{10}\.json|s\/[0-9A-Z]{6}\.json|v\/\d{10}\/\d{10}-\d{2}-\d{6}\.json|bulk\/\d{4}Q[1-4]\.(csv\.gz|parquet))$/;
+const INGEST_KEY = /^(fb\/\d{4}Q[1-4]\/\d{10}\.json|s\/[0-9A-Z]{6}\.json|v\/\d{10}\/\d{10}-\d{2}-\d{6}\.json|changes\/\d{4}Q[1-4]\.json|bulk\/\d{4}Q[1-4]\.(csv\.gz|parquet))$/;
 
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$/;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
@@ -232,7 +232,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'PUT' && path.startsWith('/ingest/')) {
     const key = path.slice('/ingest/'.length);
     const flow = key === 'flow/full.json';
-    if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key) && !flow) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, v/{cik10}/{accession}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
+    if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key) && !flow) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, v/{cik10}/{accession}.json, changes/{YYYYQn}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
     const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
     // The full Flow lists are built by the site's Pages workflow; everything else by the data workflow.
     let why = await verifyGithubOidc(tok, env.INGEST_WORKFLOW);

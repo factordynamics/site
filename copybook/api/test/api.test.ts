@@ -1397,6 +1397,61 @@ describe('copybook api', () => {
     expect((await call('/book/import', { body: { text: '!!! ???' }, token: t })).status).toBe(400);
   });
 
+  it('/v1 events and changes: filters, the poll\'s detail over the data run\'s rows, cross-filer moves by size', async () => {
+    index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR', accession: 'A2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 2000, position_count: 2, history_quarters: ['2026Q2'] }] };
+    await cron(17);
+    stripeObjects['checkout/sessions/cs_test_ec'] = { id: 'cs_test_ec', status: 'complete', created: now(), subscription: 'sub_ec', customer_details: { email: 'ec@example.com' } };
+    stripeObjects['subscriptions/sub_ec'] = sub('sub_ec', 'cus_ec', 'active', 'month', 'pro_monthly');
+    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_ec' } })).json()).token;
+    const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
+    const v1 = async (path: string) => {
+      const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
+      return { status: r.status, body: await r.json() };
+    };
+    const ev = (id: string, kind: string, ticker: string, date: string, extra: Record<string, unknown> = {}) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: kind === 'form4' ? '4' : 'SC 13D', kind, action: 'buy', filing_date: date, url: `https://www.sec.gov/Archives/edgar/data/1067983/${id.replace(/-/g, '')}/${id}-index.html`, issuer: ticker, issuer_cik: '0000000001', ticker, cusip: ticker === 'OXY' ? '674599105' : null, shares: 100, value_usd: 5000, shares_after: 1000, percent_of_class: null, ...extra });
+    events = [ev('0001-26-000001', 'form4', 'OXY', '2026-11-03'), ev('0001-26-000002', '13d', 'SIRI', '2026-11-05'), ev('0001-26-000003', 'form4', 'OXY', '2026-10-01')];
+    // The minute poll's parse of #1 (acceptance, classes) and an any-filer 13D the data run doesn't carry.
+    await env.DB.put('v1:events', JSON.stringify([
+      { ...ev('0001-26-000001', 'form4', 'OXY', '2026-11-03'), accepted: '2026-11-03T21:00:00.000Z', classes: [{ security: 'Common Stock', bought: 100, sold: 0, value_usd: 5000, shares_before: 900, shares_after: 1000 }] },
+      { ...ev('0009-26-000009', '13d', 'OXY', '2026-11-06'), slug: '', manager: 'Some Activist', url: 'https://www.sec.gov/Archives/edgar/data/9999/x-index.html', accepted: '2026-11-06T14:00:00.000Z', prev_accession: '0009-26-000001', prev_percent_of_class: 4.1, percent_of_class: 6.2 },
+    ]));
+    let r = await v1('/v1/events?ticker=oxy');
+    expect(r.body.count).toBe(3);
+    expect(r.body.data.map((e: { accession: string }) => e.accession)).toEqual(['0009-26-000009', '0001-26-000001', '0001-26-000003']);
+    expect(r.body.data[1]).toMatchObject({ accepted_at: '2026-11-03T21:00:00.000Z', filer: { slug: 'warren-buffett', cik: '0001067983' }, classes: [{ shares_before: 900, shares_after: 1000 }] });
+    expect(r.body.data[0]).toMatchObject({ filer: { cik: '0000009999', name: 'Some Activist' }, prev: { accession: '0009-26-000001', percent_of_class: 4.1 }, percent_of_class: 6.2 });
+    expect((await v1('/v1/events?filer=1067983&form=13d')).body.data.map((e: { accession: string }) => e.accession)).toEqual(['0001-26-000002']);
+    expect((await v1('/v1/events?from=2026-11-01&to=2026-11-04')).body.data.map((e: { accession: string }) => e.accession)).toEqual(['0001-26-000001']);
+    expect((await v1('/v1/events?cusip=674599105')).body.count).toBe(3); // the OXY rows, by issuer CUSIP
+    r = await v1('/v1/events?limit=2');
+    expect(r.body).toMatchObject({ count: 4, next_offset: 2 });
+    expect((await v1('/v1/events?form=10k')).status).toBe(400);
+
+    // Changes for one filer: its book's change rows, largest first.
+    hist.m.set('h/warren-buffett/2026Q2.json', new TextEncoder().encode(JSON.stringify({
+      quarter: '2026Q2', report_date: '2026-06-30', accession: 'A2', form: '13F-HR', total_value: 2000, position_count: 2,
+      holdings: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', shares: 10, value: 1500, change: 'trimmed', prev_shares: 20, share_change: -10, value_delta: -1500 }, { cusip: '674599105', ticker: 'OXY', issuer: 'OCCIDENTAL', shares: 5, value: 500, change: 'unchanged', prev_shares: 5, share_change: 0, value_delta: 20 }],
+      exited: [{ cusip: '060505104', ticker: 'BAC', issuer: 'BANK OF AMERICA', shares: 0, value: 0, change: 'exited', prev_shares: 5, share_change: -5, value_delta: -2500 }],
+    })));
+    r = await v1('/v1/changes/2026Q2?filer=warren-buffett');
+    expect(r.body.data.map((x: { ticker: string; change: string }) => [x.ticker, x.change])).toEqual([['BAC', 'exited'], ['AAPL', 'trimmed']]);
+    expect((await v1('/v1/changes/2026Q2?filer=warren-buffett&change=exited')).body.count).toBe(1);
+    // Across filers: the data run's file; cohort by filer type.
+    expect((await v1('/v1/changes/2026Q2')).status).toBe(501);
+    hist.m.set('changes/2026Q2.json', new TextEncoder().encode(JSON.stringify({ columns: ['cik', 'slug', 'filer_name', 'curated', 'type', 'cusip', 'ticker', 'issuer', 'put_call', 'change', 'shares', 'prev_shares', 'value', 'value_delta'], rows: [
+      ['1067983', 'warren-buffett', 'Berkshire', true, 'active', '037833100', 'AAPL', 'APPLE', null, 'trimmed', 10, 20, 1500, -1500],
+      ['1387322', null, 'Whale Rock', false, 'hedge_fund', '67066G104', 'NVDA', 'NVIDIA', null, 'new', 50, 0, 9000, 9000],
+      ['0000102909', null, 'Vanguard', false, 'index', '037833100', 'AAPL', 'APPLE', null, 'added', 1000, 990, 300000, 400],
+    ] })));
+    r = await v1('/v1/changes/2026Q2');
+    expect(r.body.data.map((x: { filer: { name: string } }) => x.filer.name)).toEqual(['Whale Rock', 'Berkshire', 'Vanguard']);
+    expect(r.body.data[0]).toMatchObject({ filer: { cik: '0001387322', type: 'hedge_fund' }, share_change: 50, value_delta_usd: 9000 });
+    expect((await v1('/v1/changes/2026Q2?cohort=hedge_fund')).body.data.map((x: { ticker: string }) => x.ticker)).toEqual(['NVDA']);
+    expect((await v1('/v1/changes/2026Q2?cohort=curated')).body.data.map((x: { ticker: string }) => x.ticker)).toEqual(['AAPL']);
+    expect((await v1('/v1/changes/2026Q2?min_value_usd=1000&change=new,trimmed')).body.count).toBe(2);
+    expect((await v1('/v1/changes/2026Q2?change=sold')).status).toBe(400);
+  });
+
   it('/v1 restatement lineage: versions[] oldest first with status, every amendment attached, ?version= serves the book as originally filed', async () => {
     index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR/A', accession: 'R', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-09-02', total_value: 3000, position_count: 1, history_quarters: ['2026Q2'] }] };
     await cron(17);
