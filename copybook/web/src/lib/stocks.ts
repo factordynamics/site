@@ -50,9 +50,24 @@ export type FlowRow = {
   buyers: FlowMove[]
   sellers: FlowMove[]
   new_by: string[]
+  n_buyers?: number
+  n_sellers?: number
 }
 export type FlowScope = { funds: number; bought: FlowRow[]; sold: FlowRow[]; most_buyers: FlowRow[]; most_sellers: FlowRow[]; new_multi: FlowRow[]; fresh: FlowRow[] }
+export type FlowPeriod = {
+  quarter: string
+  funds_filed: number
+  funds_total: number
+  featured_filed: number
+  featured_total: number
+  moved_on?: number
+  featured_moved_on?: number
+  recent: Flow['recent']
+  featured: FlowScope
+  all: FlowScope
+}
 export type Flow = {
+  periods?: FlowPeriod[]
   quarter: string
   funds_filed: number
   funds_total: number
@@ -74,7 +89,8 @@ export const loadFlow = () =>
       const fix = (rows: FlowRow[]) => rows.map((r) => ({ ...r, buyers: r.buyers.map(named), sellers: r.sellers.map(named) }))
       return { ...s, bought: fix(s.bought), sold: fix(s.sold), most_buyers: fix(s.most_buyers), most_sellers: fix(s.most_sellers), new_multi: fix(s.new_multi), fresh: fix(s.fresh) }
     }
-    return { ...f, recent: f.recent.map(named), featured: scope(f.featured), all: scope(f.all) }
+    const fix = <P extends FlowPeriod>(p: P): P => ({ ...p, recent: p.recent.map(named), featured: scope(p.featured), all: scope(p.all) })
+    return { ...fix(f as FlowPeriod & Flow), periods: (f.periods ?? [f as FlowPeriod]).map(fix) }
   })
 
 /** The page ticker for any share-class ticker (GOOG -> GOOGL). */

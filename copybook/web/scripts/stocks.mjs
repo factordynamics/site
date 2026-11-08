@@ -189,29 +189,42 @@ function flowFor(scope) {
     })
   }
   const n = 40
-  return {
-    funds: scope.length,
+  // Ship the counts and the 12 largest funds on each side; the page needs no more than that.
+  const trim = (rows) => rows.map((f) => ({ ...f, n_buyers: f.buyers.length, n_sellers: f.sellers.length, buyers: f.buyers.slice(0, 12), sellers: f.sellers.slice(0, 12) }))
+  const out = {
     bought: [...flows].filter((f) => f.net_value > 0).sort((a, b) => b.net_value - a.net_value).slice(0, n),
     sold: [...flows].filter((f) => f.net_value < 0).sort((a, b) => a.net_value - b.net_value).slice(0, n),
     most_buyers: [...flows].filter((f) => f.buyers.length).sort((a, b) => b.buyers.length - a.buyers.length || b.buy_value - a.buy_value).slice(0, n),
     most_sellers: [...flows].filter((f) => f.sellers.length).sort((a, b) => b.sellers.length - a.sellers.length || a.sell_value - b.sell_value).slice(0, n),
-    new_multi: [...flows].filter((f) => f.new_by.length >= 2 && !f.fresh).sort((a, b) => b.new_by.length - a.new_by.length || b.buy_value - a.buy_value),
+    new_multi: [...flows].filter((f) => f.new_by.length >= 2 && !f.fresh).sort((a, b) => b.new_by.length - a.new_by.length || b.buy_value - a.buy_value).slice(0, n),
     fresh: [...flows].filter((f) => f.fresh && f.buyers.length >= 2).sort((a, b) => b.buyers.length - a.buyers.length).slice(0, 20),
   }
+  for (const k of Object.keys(out)) out[k] = trim(out[k])
+  return { funds: scope.length, ...out }
 }
-const flow = {
-  quarter: toQ(season),
-  funds_filed: filed.length,
-  funds_total: books.filter((b) => qn(b.quarter) >= season - 1).length,
-  featured_filed: filed.filter((b) => b.featured).length,
-  featured_total: books.filter((b) => b.featured && qn(b.quarter) >= season - 1).length,
-  recent: filed
-    .map((b) => ({ slug: b.slug, manager: b.manager, firm: b.name, filing_date: b.filing_date, featured: Boolean(b.featured), changes: b.changes ?? null }))
-    .sort((a, b) => (b.filing_date ?? '').localeCompare(a.filing_date ?? ''))
-    .slice(0, 40),
-  featured: flowFor(filed.filter((b) => b.featured)),
-  all: flowFor(filed),
-  generated_at: index.generated_at,
+// One report period at a time: a fund counts in the period of its latest 13F, compared with its
+// filing before. A fund that has already filed the next quarter is in that period, not this one.
+const period = (q) => {
+  const filedQ = books.filter((b) => qn(b.quarter) === q && b.prev_quarter)
+  const live = books.filter((b) => qn(b.quarter) >= q)
+  return {
+    quarter: toQ(q),
+    funds_filed: filedQ.length,
+    funds_total: books.filter((b) => qn(b.quarter) >= season - 1).length,
+    featured_filed: filedQ.filter((b) => b.featured).length,
+    featured_total: books.filter((b) => b.featured && qn(b.quarter) >= season - 1).length,
+    // Funds already past this period (filed the next quarter), so a reader knows who's missing.
+    moved_on: live.length - filedQ.length,
+    featured_moved_on: live.filter((b) => b.featured).length - filedQ.filter((b) => b.featured).length,
+    recent: filedQ
+      .map((b) => ({ slug: b.slug, manager: b.manager, firm: b.name, filing_date: b.filing_date, featured: Boolean(b.featured), changes: b.changes ?? null }))
+      .sort((a, b) => (b.filing_date ?? '').localeCompare(a.filing_date ?? ''))
+      .slice(0, 40),
+    featured: flowFor(filedQ.filter((b) => b.featured)),
+    all: flowFor(filedQ),
+  }
 }
+const periods = [period(season), period(season - 1)]
+const flow = { ...periods[0], periods, generated_at: index.generated_at }
 writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
-console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flow.quarter}: ${filed.length} funds filed (${flow.featured_filed} featured), ${flow.all.new_multi.length} new by 2+`)
+console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flow.quarter}: ${filed.length} funds filed (${flow.featured_filed} featured), ${periods.map((p) => `${p.quarter} ${p.funds_filed} funds`).join(', ')}`)

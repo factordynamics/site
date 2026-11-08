@@ -1,9 +1,8 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { dateLabel, money, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { useMember } from '../lib/account'
-import { loadFlow, stockPath, type FlowRow, type FlowScope } from '../lib/stocks'
+import { loadFlow, stockPath, type FlowPeriod, type FlowRow, type FlowScope } from '../lib/stocks'
 
 type Tab = 'bought' | 'sold' | 'most_buyers' | 'new_multi'
 const TABS: [Tab, string][] = [
@@ -18,10 +17,26 @@ export function Flow() {
   const f = useAsync(loadFlow, [])
   const member = useMember()
   const paid = Boolean(member?.active)
-  const [scope, setScope] = useState<'featured' | 'all'>('all')
-  const [tab, setTab] = useState<Tab>('bought')
+  // Lens, period and ranking live in the URL so a view can be shared: ?funds=all&q=2026Q2&tab=sold.
+  const [params, setParams] = useSearchParams()
+  const scope: 'featured' | 'all' = params.get('funds') === 'all' ? 'all' : 'featured'
+  const tab: Tab = (TABS.find(([k]) => k === params.get('tab'))?.[0] as Tab) ?? 'bought'
+  const set = (k: string, v: string | null) => {
+    const n = new URLSearchParams(params)
+    if (v == null) n.delete(k)
+    else n.set(k, v)
+    setParams(n, { replace: true })
+  }
+  const setScope = (v: 'featured' | 'all') => set('funds', v === 'all' ? 'all' : null)
+  const setTab = (v: Tab) => set('tab', v === 'bought' ? null : v)
   useTitle('Smart money flow · Copybook')
-  const d = f.data
+  const periods: FlowPeriod[] = f.data?.periods ?? []
+  const filedOf = (p: FlowPeriod) => (scope === 'featured' ? p.featured_filed : p.funds_filed)
+  const totalOf = (p: FlowPeriod) => (scope === 'featured' ? p.featured_total : p.funds_total)
+  // Default to the newest period once a third of the lens has filed it; until then, the last complete one.
+  const auto = periods.find((p) => filedOf(p) >= Math.max(3, totalOf(p) / 3)) ?? periods[periods.length - 1]
+  const d = periods.find((p) => p.quarter === params.get('q')) ?? auto
+  const newest = periods[0]
   const s: FlowScope | undefined = d?.[scope]
   const rows = s?.[tab] ?? []
   const shown = paid ? rows.slice(0, 40) : rows.slice(0, FREE_ROWS)
@@ -29,22 +44,38 @@ export function Flow() {
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">
-        <p className="text-[13px] font-medium text-accent">Smart money flow{d ? ` · ${quarterLabel(d.quarter)} filings` : ''}</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">What the best investors bought and sold this season.</h1>
+        <p className="text-[13px] font-medium text-accent">Smart money flow{d ? ` · ${quarterLabel(d.quarter)} 13Fs` : ''}</p>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">What the best investors bought and sold, filing by filing.</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
-          Every 13F that has landed for the latest quarter, compared with the same fund’s filing before. Updated as filings arrive through the deadline.
+          One report period at a time: each fund’s 13F for the quarter, compared with its own filing before. Updated as filings arrive through the deadline.
         </p>
       </header>
 
-      {d && (
-        <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-[14px] text-ink-2">
-          <span>
-            <span className="num font-semibold text-ink">{d.featured_filed}</span> of {d.featured_total} superinvestors have filed {quarterLabel(d.quarter)}
-          </span>
-          <span className="hidden text-ink-3 sm:inline">·</span>
-          <span>
-            <span className="num font-semibold text-ink">{d.funds_filed}</span> funds in total
-          </span>
+      {d && newest && (
+        <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
+          <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Report period">
+            {periods.map((p, i) => (
+              <button
+                key={p.quarter}
+                role="tab"
+                aria-selected={d.quarter === p.quarter}
+                onClick={() => set('q', p === auto ? null : p.quarter)}
+                className={`rounded-full px-3 py-1.5 ${d.quarter === p.quarter ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}
+              >
+                {quarterLabel(p.quarter)}
+                <span className="ml-1.5 text-[12px] text-ink-3">{i === 0 ? 'filing now' : 'last season'}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[14px] text-ink-2">
+            <span className="num font-semibold text-ink">{filedOf(newest)}</span> of {totalOf(newest)} {scope === 'featured' ? 'superinvestors' : 'funds we track'} have filed {quarterLabel(newest.quarter)}
+            {d !== newest && (
+              <>
+                {' · '}showing {quarterLabel(d.quarter)} from {filedOf(d)} {scope === 'featured' ? 'superinvestors' : 'funds'}
+                {(scope === 'featured' ? d.featured_moved_on : d.moved_on) ? `; the ${scope === 'featured' ? d.featured_moved_on : d.moved_on} that already filed ${quarterLabel(newest.quarter)} are under ${quarterLabel(newest.quarter)}` : ''}
+              </>
+            )}
+          </p>
         </div>
       )}
 
@@ -61,8 +92,8 @@ export function Flow() {
             <label className="flex items-center gap-2 text-[13px] text-ink-2">
               <span>Investors</span>
               <select value={scope} onChange={(e) => setScope(e.target.value as 'featured' | 'all')} className="h-8 rounded-full bg-paper px-3 text-[13px] shadow-[0_0_0_1px_var(--color-line)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]">
+                <option value="featured">Superinvestors</option>
                 <option value="all">All funds we track</option>
-                <option value="featured">Superinvestors only</option>
               </select>
             </label>
           </header>
@@ -80,14 +111,14 @@ export function Flow() {
             </div>
           ) : rows.length === 0 ? (
             <p className="px-6 py-10 text-[14px] text-ink-2">
-              {scope === 'featured' && (d.featured_filed ?? 0) < 3
-                ? `Only ${d.featured_filed} superinvestors have filed for ${quarterLabel(d.quarter)} so far. This fills in as the deadline approaches.`
+              {filedOf(d) < 3
+                ? `Only ${filedOf(d)} ${scope === 'featured' ? 'superinvestors have' : 'funds have'} filed for ${quarterLabel(d.quarter)} so far. This fills in as the deadline approaches.`
                 : 'Nothing here yet for this quarter.'}
             </p>
           ) : (
             <ol>
               {shown.map((r, i) => (
-                <FlowItem key={r.ticker} r={r} i={i} tab={tab} />
+                <FlowItem key={r.ticker} r={r} i={i} tab={tab} quarter={d.quarter} />
               ))}
             </ol>
           )}
@@ -137,7 +168,7 @@ export function Flow() {
   )
 }
 
-function FlowItem({ r, i, tab }: { r: FlowRow; i: number; tab: Tab }) {
+function FlowItem({ r, i, tab, quarter }: { r: FlowRow; i: number; tab: Tab; quarter: string }) {
   const sell = tab === 'sold'
   const who = sell ? r.sellers : tab === 'new_multi' ? r.buyers.filter((b) => b.change === 'new') : r.buyers
   const value = tab === 'sold' ? r.net_value : tab === 'bought' ? r.net_value : r.buy_value
@@ -149,13 +180,16 @@ function FlowItem({ r, i, tab }: { r: FlowRow; i: number; tab: Tab }) {
           <span className="flex items-center gap-2">
             <span className="font-mono text-[13px] font-medium">{r.ticker}</span>
             {tab === 'new_multi' && <Badge tone="up">{r.new_by.length} new</Badge>}
+            {tab === 'most_buyers' && <Badge tone="up">{r.n_buyers ?? r.buyers.length} funds</Badge>}
           </span>
-          <span className="block truncate text-[13px] text-ink-3">{r.name}</span>
+          <span className="block truncate text-[13px] text-ink-3">
+            {r.name} · {quarterLabel(quarter)}
+          </span>
         </span>
         <span className="hidden items-center gap-2 md:flex">
           <AvatarStack names={who.map((w) => ({ slug: w.slug, name: w.manager }))} />
           <span className="truncate text-[12.5px] text-ink-3">
-            {r.buyers.length} bought · {r.sellers.length} sold
+            {r.n_buyers ?? r.buyers.length} bought · {r.n_sellers ?? r.sellers.length} sold
           </span>
         </span>
         <span className={`num text-right text-[14px] font-medium ${value >= 0 ? 'text-up' : 'text-down'}`}>
