@@ -47,13 +47,14 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, with its latest holdings as JSON; 8 quarters of history for the ${curated} we track closely, back to 2013 coming this month.` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
+      { t: 'My book', d: 'Your owned and watched stocks in one table: how many funds hold each, who bought and sold this season, and the latest Form 4 or 13D. CSV export.' },
     ],
     soon: [
       { t: 'History and events endpoints', d: 'Changes across quarters, Form 4 and 13D/G as JSON.' },
       { t: 'Point-in-time history', d: 'Each position dated by when it was disclosed, so backtests don’t see the future.' },
       { t: 'Stock holders endpoint', d: 'Every filer holding a stock, as JSON. Arriving this week.' },
       { t: 'Bulk exports', d: 'Whole-quarter files for every filer we cover. Arriving this week.' },
-      { t: 'My book and peer overlap', d: 'Crowding in your names, and overlap with the funds you benchmark against.' },
+      { t: 'Peer overlap', d: 'How your book overlaps the funds you benchmark against.' },
     ],
   },
   {
@@ -66,7 +67,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'Team alerts in Slack', d: 'Every alert in your team’s channel, as it happens.' },
       { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 on request.' },
     ],
-    soon: [{ t: 'My book and peer overlap for the team', d: 'Crowding in your shared book, and overlap with your peer list.' }],
+    soon: [{ t: 'Peer overlap for the team', d: 'How your shared book overlaps your peer list.' }],
   },
 ]
 
@@ -92,7 +93,8 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Point-in-time history', false, false, 'soon', 'soon'],
   ['Signed webhooks', false, false, true, true],
   ['Bulk exports', false, false, 'soon', 'soon'],
-  ['My book and peer overlap', false, false, 'soon', 'soon'],
+  ['My book', false, false, true, true],
+  ['Peer overlap', false, false, 'soon', 'soon'],
   ['Seats', '1', '1', '1', '5'],
   ['Shared book and peer lists', false, false, false, true],
   ['Invoice billing, W-9', false, false, false, true],
@@ -281,7 +283,7 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                'Pro: everything in Copy, API keys, the filer and holdings endpoints, filing acceptance times and signed webhooks. History and events endpoints, point-in-time history, bulk exports, My book and peer overlap are coming this month and turn on as each ships, at no extra cost. Fund adds 5 seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.',
+                'Pro: everything in Copy, API keys, the filer and holdings endpoints, filing acceptance times, signed webhooks and My book. History and events endpoints, point-in-time history, bulk exports and peer overlap are coming this month and turn on as each ships, at no extra cost. Fund adds 5 seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.',
               ],
               [
                 'How does the free trial work?',

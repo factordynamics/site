@@ -12,6 +12,7 @@ import { Flow } from './pages/Flow'
 import { Consensus } from './pages/Consensus'
 import { Pricing } from './pages/Pricing'
 import { Account } from './pages/Account'
+import { Book } from './pages/Book'
 import { About } from './pages/About'
 import { Methodology } from './pages/Methodology'
 import { ApiDocs } from './pages/Api'
@@ -62,6 +63,7 @@ handoff.then(() =>
             <Route path="consensus" element={<Consensus />} />
             <Route path="pricing" element={<Pricing />} />
             <Route path="account" element={<Account />} />
+            <Route path="my-book" element={<Book />} />
             <Route path="about" element={<About />} />
             <Route path="methodology" element={<Methodology />} />
             <Route path="f/:accession" element={<FilingCard />} />

@@ -16,6 +16,7 @@ export function Layout() {
   const { pathname } = useLocation()
   // Re-read on every route change, so it updates after checkout or sign-out.
   const signedIn = Boolean(getToken())
+  const nav = signedIn ? [...NAV.slice(0, 3), { to: '/my-book/', label: 'My book' }, ...NAV.slice(3)] : NAV
   const [menu, setMenu] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
@@ -41,7 +42,7 @@ export function Layout() {
             <Wordmark />
           </Link>
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <NavLink
                 key={n.to}
                 to={n.to}
@@ -77,7 +78,7 @@ export function Layout() {
           <div className="container-x border-t border-line pb-5 pt-3 md:hidden">
             <SearchBox />
             <nav className="mt-3 grid" aria-label="Mobile">
-              {NAV.map((n) => (
+              {nav.map((n) => (
                 <NavLink key={n.to} to={n.to} className={({ isActive }) => `border-b border-line py-3 text-[16px] ${isActive ? 'font-medium text-ink' : 'text-ink-2'}`}>
                   {n.label}
                 </NavLink>
