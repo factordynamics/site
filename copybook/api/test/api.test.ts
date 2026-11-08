@@ -447,6 +447,53 @@ describe('copybook api', () => {
     expect((await call('/follows', { token: t })).status).toBe(402);
   });
 
+  it('minute poll: a NEW HOLDINGS 13F-HR/A is sent as a reveal to followers and owners of the name; restatements are not', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: false, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    // Not featured: a watchlist alone doesn't get its moves, but owning a revealed name does.
+    await cron(17);
+    await putMember('f', 'follows@example.com', 'active', ['warren-buffett']);
+    await putFollows('f', { investors: ['warren-buffett'] });
+    await putMember('o', 'owner@example.com', 'active', []);
+    await putFollows('o', { stocks: ['DHI'], owned: ['DHI'] });
+    await putMember('w', 'watcher@example.com', 'active', []);
+    await putFollows('w', { stocks: ['DHI'] });
+    // The served Q2 book: $25.6B, not yet merged with the amendment.
+    hist.m.set('h/warren-buffett/2026Q2.json', new TextEncoder().encode(JSON.stringify({ quarter: '2026Q2', total_value: 25_600_000_000, amendments: [] })));
+    const NEWH = '0000950123-26-055555', REST = '0000950123-26-066666';
+    const entry = (a: string) => `<entry><title>13F-HR/A - BERKSHIRE (0001067983) (Filer)</title><updated>${today}T16:05:00-05:00</updated><category term="13F-HR/A"/><id>urn:tag:sec.gov,2008:accession-number=${a}</id></entry>`;
+    secFiles.feed = `<feed>${entry(NEWH)}${entry(REST)}</feed>`;
+    const amend = (a: string, type: string, conf: boolean) => {
+      const dir = `Archives/edgar/data/1067983/${a.replace(/-/g, '')}/`;
+      const stamp = `${today.replace(/-/g, '')}160500`;
+      secFiles[`${dir}${a}-index-headers.html`] = `<ACCEPTANCE-DATETIME>${stamp}\n<TYPE>13F-HR/A\n<FILING-DATE>${today.replace(/-/g, '')}\n`;
+      secFiles[`${dir}primary_doc.xml`] = `<periodOfReport>06-30-2026</periodOfReport><isAmendment>true</isAmendment><amendmentNo>1</amendmentNo><amendmentType>${type}</amendmentType><confDeniedExpired>${conf}</confDeniedExpired>`;
+      secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '900' }, { name: 'info.xml', size: '700' }] } });
+      secFiles[`${dir}info.xml`] = '<infoTable><nameOfIssuer>D R HORTON INC</nameOfIssuer><cusip>23331A109</cusip><value>6000000000</value><sshPrnamt>40000000</sshPrnamt></infoTable>';
+    };
+    amend(NEWH, 'NEW HOLDINGS', true);
+    amend(REST, 'RESTATEMENT', false);
+
+    await cron(30);
+    expect(sent.map((m) => m.to[0]).sort()).toEqual(['follows@example.com', 'owner@example.com']);
+    const mail = sent.find((m) => m.to[0] === 'owner@example.com')!;
+    // $6.0B of a $31.6B amended book.
+    expect(mail.subject).toBe('Buffett revealed DHI ($6.0B, 19.0% of book), previously confidential');
+    expect(mail.text).toContain('Q2 2026 13F amendment no. 1 (new holdings)');
+    expect(mail.text).toContain('Positions held at 2026-06-30 that were kept confidential until now:');
+    expect(mail.text).toContain('DHI 40,000,000 sh, $6.0B (19.0% of book) [you own]');
+    expect(mail.text).toContain(`Accession ${NEWH}, accepted by EDGAR`);
+    expect(mail.text).not.toContain(REST);
+    expect(mail.html).toMatch(/<td[^>]*><b>DHI<\/b> \[you own\]<\/td><td[^>]*>40,000,000<\/td><td[^>]*>\$6\.0B<\/td><td[^>]*>19\.0%<\/td>/);
+    const lat = JSON.parse((await env.DB.get('alerts:latency'))!);
+    expect(lat[0]).toMatchObject({ accession: NEWH, form: '13F-HR/A' });
+
+    // Handled once: the next minute sends nothing.
+    sent = [];
+    await cron(31);
+    expect(sent).toHaveLength(0);
+  });
+
   it('minute poll: emails a curated 13F within the minute with its moves, targeted by follows and watchlist, once', async () => {
     const today = new Date().toISOString().slice(0, 10);
     const row = (slug: string, cik: string, extra: Record<string, unknown> = {}) => ({ ok: true, slug, cik, manager: slug === 'warren-buffett' ? 'Warren Buffett' : slug, name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: `${slug}-q2`, report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2', ...extra });
@@ -1390,7 +1437,7 @@ describe('copybook api', () => {
       [NEWH, 'not_merged', '2026-10-02T13:00:00.000Z'],
     ]);
     // Amendments come from EDGAR, not only the ones the data run merged.
-    expect(cur.filing.amendments.map((a: { accession: string; amendment_type: string }) => [a.accession, a.amendment_type])).toEqual([[NEWH, 'NEW HOLDINGS']]);
+    expect(cur.filing.amendments.map((a: { accession: string; amendment_type: string }) => [a.accession, a.amendment_type])).toEqual([[REST, 'RESTATEMENT'], [NEWH, 'NEW HOLDINGS']]);
 
     const orig = await v1('/v1/filers/warren-buffett/holdings/2026Q2?version=original');
     expect(orig.status).toBe(200);

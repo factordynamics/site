@@ -145,7 +145,7 @@ export function openapi() {
                 sec_url: { type: 'string', format: 'uri' },
                 amendments: {
                   type: 'array',
-                  description: 'Every 13F-HR/A EDGAR has for this period other than the served filing, oldest first (whether or not merged; see versions for each one\'s status). A quarter whose book changed after a date you care about has an amendment accepted after it.',
+                  description: 'The subset of versions[] that are amendments: every 13F-HR/A EDGAR has for this period, oldest first, of any type (RESTATEMENT or NEW HOLDINGS), including the served filing when it is a restatement, merged or not. A quarter whose book changed after a date you care about has an amendment accepted after it.',
                   items: {
                     type: 'object',
                     required: ['accession', 'filed_on', 'accepted_at', 'amendment_type', 'amendment_no', 'confidential_treatment_expired'],
@@ -162,7 +162,7 @@ export function openapi() {
                 amendment_type: { type: ['string', 'null'], enum: ['NEW HOLDINGS', 'RESTATEMENT', null], description: 'The served filing\'s own amendment type (RESTATEMENT when a restatement replaced the original)' },
                 versions: {
                   type: ['array', 'null'],
-                  description: 'Every 13F-HR and 13F-HR/A for this period, oldest first, including originals a restatement replaced. null when EDGAR could not be read; retry.',
+                  description: 'The full lineage: every 13F-HR and 13F-HR/A for this period, oldest first, including originals a restatement replaced, each with its status. amendments is the subset that are 13F-HR/A. null when EDGAR could not be read; retry.',
                   items: {
                     type: 'object',
                     required: ['accession', 'form', 'amendment_type', 'accepted_at', 'filed_on', 'status'],

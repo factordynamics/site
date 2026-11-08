@@ -1,7 +1,7 @@
 import { addToFeed, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
 import { alertMail, digestMail, holdtermAlertMail, sendMail } from './email';
-import { companyFilings, computeMoves, fetch13F, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { companyFilings, computeMoves, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, type Env, type Member } from './env';
 import { getFollows, listMembers, putMember, type Follows } from './members';
 
@@ -34,6 +34,8 @@ export interface Alert13F {
   extra?: boolean;
   /** Largest holdings, when there is no prior quarter to diff against. */
   top?: MoveRow[];
+  /** A 13F-HR/A of type NEW HOLDINGS: positions added to an earlier quarter's book, often previously confidential. */
+  reveal?: { confidential: boolean; amendment_no: number | null; book_total: number | null; rows: MoveRow[] };
   /** The site has a public filing card at /f/{accession}/ for this filing. */
   card?: boolean;
 }
@@ -166,7 +168,14 @@ export function forMember(m: Member, f: Follows, filings: Alert13F[], events: Al
   const all = m.alerts === 'all';
   const investors = new Set(Array.isArray(m.alerts) ? [...m.alerts, ...f.investors] : f.investors);
   const stocks = new Set(f.stocks);
-  const fl = filings.filter((x) => (all && !x.extra) || x.slugs.some((s) => investors.has(s)) || (x.slugs.some((s) => stockAlerts(meta, s)) && x.tickers.some((t) => stocks.has(t))));
+  const fl = filings.filter(
+    (x) =>
+      (all && !x.extra) ||
+      x.slugs.some((s) => investors.has(s)) ||
+      (x.slugs.some((s) => stockAlerts(meta, s)) && x.tickers.some((t) => stocks.has(t))) ||
+      // Any curated or followed fund revealing a position in a stock the member owns.
+      (!!x.reveal && x.tickers.some((t) => f.owned.includes(t))),
+  );
   const ev = events.filter(
     (e) =>
       (e.kind !== '13g' || f.include_13g) &&
@@ -481,6 +490,54 @@ export function rotation(ciks: CikMap, minute: number, n = 3): string[] {
  * moves computed here from the filing and last quarter's book in R2. KV is written only when a
  * curated manager has filed, so the minute cron stays inside the free tier.
  */
+/**
+ * A NEW HOLDINGS amendment as an alert: the positions it adds, each with its share of the amended
+ * book (the period's book plus the amendment, unless the data run already merged it). Returns
+ * undefined when EDGAR couldn't be read, null when there is nothing to send.
+ */
+async function revealAlert(env: Env, e: FeedEntry, meta: FilingMeta, mgrs: Manager[], isExtra: boolean): Promise<Alert13F | null | undefined> {
+  const f = await fetch13F(e.cik, e.accession);
+  if (!f) return undefined;
+  if (!f.holdings?.length) return null;
+  const lead = mgrs.find((m) => m.featured) ?? mgrs.find((m) => m.cik === e.cik) ?? mgrs[0];
+  const quarter = quarterOf(f.report_date);
+  // The period's book as served (curated: R2 history; others: the follow-time snapshot).
+  let total: number | null = null;
+  if (isExtra) {
+    const b = await filerShardBook(env, e.cik, f.report_date);
+    total = b ? b.reduce((a, h) => a + h.value, 0) : null;
+  } else {
+    const obj = await env.HIST.get(`h/${lead.slug}/${quarter}.json`);
+    if (obj && (obj.size ?? 0) < 2_000_000) {
+      const q = (await new Response(obj.body).json()) as { total_value?: number; amendments?: (string | { accession: string })[] };
+      const merged = (q.amendments ?? []).some((a) => (typeof a === 'string' ? a : a.accession) === e.accession);
+      total = q.total_value != null ? q.total_value : null;
+      if (total != null && !merged) total += f.holdings.reduce((a, h) => a + h.value, 0);
+    }
+  }
+  const rows: MoveRow[] = [...f.holdings]
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10)
+    .map((h) => ({ ticker: null, display_name: null, issuer: h.issuer, cusip: h.cusip, put_call: h.put_call, shares: h.shares, prev_shares: 0, value: h.value, value_delta: h.value, delta_pct_of_book: total ? h.value / total : null }));
+  await lookupTickers(env, rows);
+  return {
+    slug: lead.slug,
+    slugs: mgrs.map((m) => m.slug),
+    manager: lead.manager,
+    name: lead.name,
+    quarter,
+    report_date: f.report_date,
+    filing_date: e.accepted.slice(0, 10),
+    accession: e.accession,
+    sec_url: `https://www.sec.gov/Archives/edgar/data/${Number(e.cik)}/${e.accession.replace(/-/g, '')}/${e.accession}-index.html`,
+    accepted: e.accepted,
+    moves: null,
+    tickers: [...new Set(rows.map((r) => r.ticker).filter((t): t is string => !!t))],
+    reveal: { confidential: meta.confidential_treatment_expired === true, amendment_no: meta.amendment_no, book_total: total, rows },
+    ...(isExtra ? { extra: true } : {}),
+  };
+}
+
 export async function runPoll(env: Env, now: number): Promise<Record<string, unknown>> {
   const curated = await cikMap(env);
   if (!curated) return { status: 'no cik map yet' };
@@ -505,7 +562,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
     }
   }
   const ids = new Set<string>();
-  const feed = entries.filter((e) => e.form === '13F-HR' && ciks[e.cik] && now - Date.parse(e.accepted) <= MAX_ALERT_AGE_DAYS * DAY && !ids.has(e.accession) && !!ids.add(e.accession));
+  const feed = entries.filter((e) => (e.form === '13F-HR' || e.form === '13F-HR/A') && ciks[e.cik] && now - Date.parse(e.accepted) <= MAX_ALERT_AGE_DAYS * DAY && !ids.has(e.accession) && !!ids.add(e.accession));
   if (!feed.length) return { status: 'none', ...(errors.length ? { errors } : {}) };
   const handled = JSON.parse((await env.DB.get('alerts:handled')) ?? '[]') as string[];
   const todo = feed.filter((e) => !handled.includes(e.accession));
@@ -524,6 +581,22 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
       break;
     }
     try {
+      if (e.form === '13F-HR/A') {
+        // Amendments: only NEW HOLDINGS ones are news (positions revealed late); restatements reach
+        // members through the data run's refreshed book.
+        if (secBudget.left < SEC_PER_FILING + 2 + EVENT_POLL_RESERVE) {
+          deferred = todo.length - done.length;
+          break;
+        }
+        const meta = await fetchFilingMeta(e.cik, e.accession);
+        if (!meta) continue;
+        const r = meta.amendment_type === 'NEW HOLDINGS' && rawPeriods && alertable({ form: '13F-HR', filing_date: e.accepted }, now) ? await revealAlert(env, e, meta, ciks[e.cik], !curated[e.cik]) : null;
+        if (r === undefined) continue; // the table couldn't be read yet: retried next minute
+        handled.push(e.accession);
+        done.push(e);
+        if (r) fresh.push(r);
+        continue;
+      }
       const f = await fetch13F(e.cik, e.accession);
       if (!f) continue; // EDGAR hiccup: retried next minute while still in the feed
       handled.push(e.accession);
@@ -584,13 +657,13 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
     await env.DB.put('alerts:periods', JSON.stringify(periods));
   }
   // Curated books too big to diff here get their moves in a follow-up once the data run has them.
-  const later = fresh.filter((f) => !f.moves && !f.extra);
+  const later = fresh.filter((f) => !f.moves && !f.extra && !f.reveal);
   if (later.length) await env.DB.put('alerts:pending-moves', JSON.stringify([...JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]'), ...later]));
   const sent = await deliver(env, fresh, [], now);
   // A curated filer filed: refresh the data now, so pages, history and moves follow within ~15 minutes.
   const filed = done.filter((e) => curated[e.cik]);
   const refresh = filed.length && rawPeriods ? await dispatchRefresh(env, 'curated', `filing by ${curated[filed[0].cik][0].slug}`, now, filed[0].accession) : undefined;
-  if (fresh.length) await logLatency(env, fresh, Date.now());
+  if (fresh.length) await logLatency(env, fresh.map((f) => (f.reveal ? { ...f, form: '13F-HR/A' } : f)), Date.now());
   return { status: 'checked', filings: fresh.map((f) => `${f.slug} ${f.quarter}${f.moves ? '' : ' (no moves)'}`), ...sent, ...(deferred ? { deferred } : {}), ...(refresh ? { refresh } : {}), ...(errors.length ? { errors } : {}) };
 }
 

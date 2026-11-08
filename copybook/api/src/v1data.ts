@@ -241,8 +241,9 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
   const main = q.accession ? await filingMeta(env, cik, q.accession) : null;
   const merged = ((q.amendments ?? []) as unknown[]).map((a) => (typeof a === 'string' ? a : (a as { accession?: string })?.accession)).filter(Boolean) as string[];
   const versions = await versionsFor(env, cik, q.report_date ?? quarterEnd(quarter), q.accession ?? null, merged);
-  // Amendments: every 13F-HR/A EDGAR has for the period (not only those the data run merged).
-  const amendments = versions ? versions.filter((v) => v.form.endsWith('/A') && v.accession !== q.accession).map((v) => v.accession) : (q.amendments ?? []);
+  // Amendments: every 13F-HR/A EDGAR has for the period, whatever its type and including a served
+  // restatement (not only those the data run merged); versions[] adds the original.
+  const amendments = versions ? versions.filter((v) => v.form.endsWith('/A')).map((v) => v.accession) : (q.amendments ?? []);
   return {
     filer: f.curated ? { slug: f.row.slug, cik: f.row.cik, name: f.row.name, manager: f.row.manager, curated: true } : { slug: f.row.slug, cik: f.row.cik, name: f.row.name, manager: null, curated: false },
     quarter: q.quarter ?? quarter,

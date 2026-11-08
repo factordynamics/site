@@ -20,7 +20,7 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
       'GET /v1/stocks/{ticker|cusip}/holders?cohort=all|curated&quarter=: every 13F holder of one issuer, with prior shares, share and value change.',
       'GET /v1/bulk and /v1/bulk/{YYYYQn}.csv.gz|.parquet: persistent per-quarter exports of every filer\'s book.',
       'filing.versions[]: every 13F-HR and 13F-HR/A for the period, oldest first, including originals a restatement replaced, each with status current, superseded, merged or not_merged. filing.amendment_type for the served filing.',
-      'filing.amendments now lists every 13F-HR/A EDGAR has for the period, not only those merged into the book.',
+      'filing.amendments now lists every 13F-HR/A EDGAR has for the period, of any type and including a served restatement, not only those merged into the book: the amendment subset of versions[].',
       '?version=original|{accession} on holdings: the book exactly as that filing reported it.',
     ],
   },

@@ -152,7 +152,11 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
   const head = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}: ${quarterLabel(a.quarter)} 13F, filed ${a.filing_date}${a.followup ? ' (position changes)' : ''}`;
   const lines = [head];
   const mv = a.moves;
-  if (mv) {
+  if (a.reveal) {
+    lines[0] = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}: ${quarterLabel(a.quarter)} 13F amendment${a.reveal.amendment_no ? ` no. ${a.reveal.amendment_no}` : ''} (new holdings)`;
+    lines.push(a.reveal.confidential ? `  Positions held at ${a.report_date} that were kept confidential until now:` : `  Positions added to the ${a.report_date} book:`);
+    lines.push(`  ${a.reveal.rows.map((r) => `${rowName(r)} ${r.shares.toLocaleString('en-US')} sh, ${usd(r.value, false)}${bookPct(r) ? ` (${bookPct(r)} of book)` : ''}${flag(r.ticker, f)}`).join(', ')}`);
+  } else if (mv) {
     lines.push(`Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.`);
     for (const [label, rows] of [['New', mv.new], ['Added', mv.added], ['Trimmed', mv.trimmed], ['Exited', mv.exited]] as const) {
       if (!rows.length) continue;
@@ -280,6 +284,11 @@ function body(env: Env, intro: string, filings: Alert13F[], events: AlertEvent[]
 function filingHeadline(a: Alert13F): string {
   const q = /^\d{4}Q[1-4]$/.test(a.quarter) ? `Q${a.quarter[5]}` : a.quarter;
   const who = shortName(a.manager);
+  if (a.reveal) {
+    const r = a.reveal.rows[0];
+    const what = `${rowName(r)} (${[usd(r.value, false), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean).join(', ')})${a.reveal.rows.length > 1 ? ` + ${a.reveal.rows.length - 1} more` : ''}`;
+    return a.reveal.confidential ? `${who} revealed ${what}, previously confidential` : `${who} added ${what} to its ${q} 13F`;
+  }
   if (a.moves) return `${who} ${q}${a.followup ? ' changes' : ''}: ${headlineMoves(a.moves) || 'no position changes'}`;
   return `${who} filed its ${q} 13F`;
 }
@@ -339,9 +348,12 @@ const meta = (page: string | null, accession: string, accepted: string | undefin
   `<p style="margin:4px 0 18px;font-size:12px;color:#6b7280">Accession ${esc(accession)}${accepted ? `, accepted by EDGAR ${esc(acceptedUtc(accepted))}` : ''} · ${page ? `${link(page, label)} · ` : ''}${link(sec, 'SEC filing')}</p>`;
 
 function filingHtml(env: Env, a: Alert13F, f: Follows): string {
-  const out = [`<h3 style="margin:16px 0 2px;font-size:16px">${esc(a.manager)}${a.name && a.name !== a.manager ? ` <span style="color:#6b7280;font-weight:400">(${esc(a.name)})</span>` : ''}: ${esc(quarterLabel(a.quarter))} 13F${a.followup ? ' position changes' : ''}</h3>`];
+  const out = [`<h3 style="margin:16px 0 2px;font-size:16px">${esc(a.manager)}${a.name && a.name !== a.manager ? ` <span style="color:#6b7280;font-weight:400">(${esc(a.name)})</span>` : ''}: ${esc(quarterLabel(a.quarter))} 13F${a.reveal ? ' amendment (new holdings)' : a.followup ? ' position changes' : ''}</h3>`];
   const mv = a.moves;
-  if (mv) {
+  if (a.reveal) {
+    out.push(`<p style="margin:2px 0">${a.reveal.confidential ? `Positions held at ${esc(a.report_date)} that were kept confidential until now:` : `Positions added to the ${esc(a.report_date)} book:`}</p>`);
+    out.push(table(['Stock', 'Shares', 'Value', '% of book'], a.reveal.rows.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, r.shares.toLocaleString('en-US'), usd(r.value, false), bookPct(r)]), [1, 2, 3]));
+  } else if (mv) {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
     const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, usd(r.value_delta), esc(positionChange(label, r)), bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', '% of book'], rows, [2, 4]));
