@@ -1,5 +1,5 @@
 import type { Env, Member } from './env';
-import { changeFollows, getFollows, MAX_FOLLOWS, type Follows } from './members';
+import { changeFollows, getFollows, manualOf, MAX_FOLLOWS, type Follows } from './members';
 import { filerBook, rowsOf } from './v1data';
 
 /**
@@ -65,13 +65,14 @@ async function bookOfFiler(env: Env, cik: string): Promise<{ cik: string; name: 
   return { cik, name: shard.name ?? cik, quarter: shard.quarter, tickers: tickers.slice(0, MAX_FOLLOWS) };
 }
 
-/** Owned list with an imported book swapped from `old` to `next`, keeping what the member added by hand. */
-function swapBook(f: Follows, old: string[], next: string[], replace: boolean) {
-  const gone = new Set(old.filter((t) => !next.includes(t)));
-  const base = replace ? [] : f.owned.filter((t) => !gone.has(t));
-  const owned = [...new Set([...base, ...next])];
-  const stocks = f.stocks.filter((t) => !gone.has(t) && (!replace || !f.owned.includes(t) || next.includes(t)));
-  return { owned, stocks };
+/**
+ * Owned is the hand-added names plus the linked 13F book's tickers. Linking, refreshing or unlinking a
+ * book never touches hand-added names; names that leave owned also leave the watchlist.
+ */
+function ownedWith(f: Follows, manual: string[], book: string[]) {
+  const owned = [...new Set([...manual, ...book])];
+  const stocks = f.stocks.filter((t) => owned.includes(t) || !f.owned.includes(t));
+  return { owned, owned_manual: manual, stocks };
 }
 
 export async function importBook(env: Env, m: Member, b: Record<string, unknown>) {
@@ -82,7 +83,7 @@ export async function importBook(env: Env, m: Member, b: Record<string, unknown>
     if (!/^\d{10}$/.test(cik) || /^0+$/.test(cik)) return { ok: false as const, status: 400, error: 'cik must be a SEC CIK like 1067983' };
     const book = await bookOfFiler(env, cik);
     if (!book?.tickers.length) return { ok: false as const, status: 404, error: 'no 13F book with tickers for that CIK' };
-    const r = await changeFollows(env, m, { set: { ...swapBook(f, f.book?.tickers ?? [], book.tickers, mode === 'replace'), book } });
+    const r = await changeFollows(env, m, { set: { ...ownedWith(f, manualOf(f), book.tickers), book } });
     return r.ok ? { ok: true as const, follows: r.follows, imported: book.tickers.length, skipped: [], source: { cik, name: book.name, quarter: book.quarter } } : { ok: false as const, status: 400, error: r.error };
   }
   const text = typeof b.csv === 'string' ? b.csv : typeof b.text === 'string' ? b.text : null;
@@ -90,8 +91,9 @@ export async function importBook(env: Env, m: Member, b: Record<string, unknown>
   const { tickers, skipped } = parseBook(text);
   if (!tickers.length) return { ok: false as const, status: 400, error: 'no tickers found', skipped };
   if (tickers.length > MAX_FOLLOWS) return { ok: false as const, status: 400, error: `at most ${MAX_FOLLOWS} stocks` };
-  // A pasted or uploaded book replaces an imported 13F book.
-  const r = await changeFollows(env, m, { set: { ...swapBook(f, f.book?.tickers ?? [], tickers, mode === 'replace'), book: null } });
+  // A pasted list or CSV replaces the hand-added names (or adds to them with mode "merge"); a linked 13F book stays.
+  const manual = mode === 'replace' ? tickers : [...new Set([...manualOf(f), ...tickers])];
+  const r = await changeFollows(env, m, { set: { ...ownedWith(f, manual, f.book?.tickers ?? []) } });
   return r.ok ? { ok: true as const, follows: r.follows, imported: tickers.length, skipped, source: null } : { ok: false as const, status: 400, error: r.error };
 }
 
@@ -107,7 +109,7 @@ export async function refreshBooks(env: Env, members: Member[], limit = 5): Prom
     if (!q || q <= f.book.quarter) continue;
     const book = await bookOfFiler(env, f.book.cik);
     if (!book?.tickers.length) continue;
-    await changeFollows(env, m, { set: { ...swapBook(f, f.book.tickers, book.tickers, false), book } });
+    await changeFollows(env, m, { set: { ...ownedWith(f, manualOf(f), book.tickers), book } });
     n++;
   }
   return n;

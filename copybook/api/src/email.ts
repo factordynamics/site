@@ -2,6 +2,7 @@ import type { Alert13F, AlertEvent } from './alerts';
 import type { MoveRow, Moves } from './edgar';
 import type { Env, Member } from './env';
 import type { Follows } from './members';
+import { firmName } from '../../../holdterm/src/names';
 
 export interface Mail {
   to: string;
@@ -297,9 +298,9 @@ function body(env: Env, intro: string, filings: Alert13F[], events: AlertEvent[]
 }
 
 /** One alert as a subject line: "Buffett Q3: NEW DHI · EXIT STZ · GOOGL +$8.8B". */
-function filingHeadline(a: Alert13F): string {
+function filingHeadline(a: Alert13F, firm = false): string {
   const q = /^\d{4}Q[1-4]$/.test(a.quarter) ? `Q${a.quarter[5]}` : a.quarter;
-  const who = shortName(a.manager);
+  const who = firm ? a.manager : shortName(a.manager);
   if (a.reveal) {
     const r = a.reveal.rows[0];
     const what = `${rowName(r)} (${[usd(r.value, false), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean).join(', ')})${a.reveal.rows.length > 1 ? ` + ${a.reveal.rows.length - 1} more` : ''}`;
@@ -310,8 +311,8 @@ function filingHeadline(a: Alert13F): string {
 }
 
 /** "Icahn CVI 13D/A: 70.8% → 64.1% (diluted, no shares sold)"; "Buffett LEN Form 4: bought $192.6M". */
-export function eventHeadline(e: AlertEvent): string {
-  const who = shortName(e.manager || 'A filer');
+export function eventHeadline(e: AlertEvent, firm = false): string {
+  const who = firm ? e.manager || 'A filer' : shortName(e.manager || 'A filer');
   const what = e.ticker || e.display_name || e.issuer || '';
   const form = e.kind === 'form4' ? 'Form 4' : `${e.kind === '13d' ? '13D' : '13G'}${/\/A$/.test(e.form) ? '/A' : ''}`;
   const head = `${who}${what ? ` ${what}` : ''} ${form}`;
@@ -330,7 +331,7 @@ export function eventHeadline(e: AlertEvent): string {
 }
 
 export function alertMail(env: Env, to: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member): Mail {
-  const heads = [...filings.map(filingHeadline), ...events.map(eventHeadline)];
+  const heads = [...filings.map((a) => filingHeadline(a)), ...events.map((e) => eventHeadline(e))];
   const subject = `${heads[0]}${heads.length > 1 ? ` + ${heads.length - 1} more` : ''}`;
   const intro = 'New filings from managers and stocks you follow:';
   return { to, subject, text: body(env, intro, filings, events, f, m), html: htmlBody(env, intro, filings, events, f, m) };
@@ -487,8 +488,11 @@ function holdtermEvent(env: Env, e: AlertEvent): string {
   return lines.filter((l, i, a) => l || a[i - 1]).join('\n');
 }
 
-export function holdtermAlertMail(env: Env, to: string, filings: Alert13F[], events: AlertEvent[]): Mail {
-  const heads = [...filings.map(filingHeadline), ...events.map(eventHeadline)];
+export function holdtermAlertMail(env: Env, to: string, allFilings: Alert13F[], allEvents: AlertEvent[]): Mail {
+  // Holdterm leads with the firm ("Berkshire Hathaway"), never the person, in the subject and the header.
+  const filings = allFilings.map((a) => ({ ...a, manager: firmName(a.slug, a.name || a.manager) }));
+  const events = allEvents.map((e) => (e.manager ? { ...e, manager: firmName(e.slug ?? '', e.manager) } : e));
+  const heads = [...filings.map((a) => filingHeadline(a, true)), ...events.map((e) => eventHeadline(e, true))];
   const subject = `${heads[0]}${heads.length > 1 ? ` + ${heads.length - 1} more` : ''}`;
   const rule = '-'.repeat(48);
   const text = `${[...filings.map((a) => holdtermFiling(env, a)), ...events.map((e) => holdtermEvent(env, e))].join(`\n${rule}\n`)}${htFooter(env)}`;

@@ -9,7 +9,7 @@ import { handleV1 } from './v1';
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
 import { isActive, isCopy, isPro, type Env, type Member } from './env';
-import { changeFollows, type FollowList, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
+import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
 import { businessSummary, handleWhy } from './revenue';
@@ -167,8 +167,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const summary = { count: sorted.length, p50: q(0.5), p90: q(0.9), max: sorted.length ? sorted[sorted.length - 1] : null };
     const leads = Number((await env.DB.get('leads:count')) ?? 0);
     // Member and revenue counts only with the private token; the public view is operational.
-    const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
-    const priv = !!env.HEALTH_TOKEN && tok.length === env.HEALTH_TOKEN.length && (await hmacHex(env.SESSION_SECRET, tok)) === (await hmacHex(env.SESSION_SECRET, env.HEALTH_TOKEN));
+    const priv = await isOperator(env, req);
     const business = priv ? { business: { ...(await businessSummary(env, Date.now())), fund_requests: leads } } : {};
     return json({ ok: true, alert_latency_summary: summary, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, ...business }, 200, h);
   }
@@ -180,6 +179,17 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'GET' && path === '/latency') {
     const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
     return json(latencyReport(log, Date.now()), 200, { ...h, 'cache-control': 'public, max-age=60' });
+  }
+
+  // Support fixes to a member's follows (e.g. restoring lost names), through the same serialized path
+  // as the member's own changes. Operator token only.
+  const ops = path.match(/^\/ops\/follows\/(cus_\w+)$/);
+  if (req.method === 'POST' && ops) {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const m = await getMember(env, ops[1]);
+    if (!m) return json({ ok: false, error: 'no such member' }, 404, h);
+    const r = await changeFollows(env, m, (await body(req)) as unknown as FollowOp);
+    return json(r.ok ? { ok: true, follows: r.follows } : r, r.ok ? 200 : 400, h);
   }
 
   // Fund-plan, support and data-deletion requests from the contact and pricing pages. No sign-in;
@@ -551,3 +561,9 @@ export default {
     ctx.waitUntil(runScheduled(env, event.scheduledTime ?? Date.now()).then((r) => console.log(`cron: ${JSON.stringify(r)}`)));
   },
 };
+
+/** The operator's bearer token (HEALTH_TOKEN), compared in constant time. */
+async function isOperator(env: Env, req: Request): Promise<boolean> {
+  const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+  return !!env.HEALTH_TOKEN && tok.length === env.HEALTH_TOKEN.length && (await hmacHex(env.SESSION_SECRET, tok)) === (await hmacHex(env.SESSION_SECRET, env.HEALTH_TOKEN));
+}

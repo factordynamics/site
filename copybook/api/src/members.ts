@@ -130,6 +130,8 @@ export interface Follows {
   owned: string[];
   /** Funds the member benchmarks against (any 13F filer's slug); shared across a Fund team. */
   peers: string[];
+  /** Owned stocks the member added by hand (list, CSV, Follow). `owned` is these plus the linked book's tickers. */
+  owned_manual?: string[];
   /** Owned stocks imported from a 13F filer's book, refreshed when it files a new quarter. */
   book?: { cik: string; name: string; quarter: string; tickers: string[] } | null;
   onboarded: boolean;
@@ -150,7 +152,7 @@ export interface Follows {
 export const FOLLOW_DEFAULTS = { include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true };
 
 /** What a Fund team shares: the seats read and write the owner's lists; alert settings stay per seat. */
-const SHARED = ['investors', 'stocks', 'owned', 'peers', 'book', 'onboarded'] as const;
+const SHARED = ['investors', 'stocks', 'owned', 'owned_manual', 'peers', 'book', 'onboarded'] as const;
 const sharedOf = (f: Follows) => Object.fromEntries(SHARED.map((k) => [k, f[k]])) as Pick<Follows, (typeof SHARED)[number]>;
 
 export async function getFollows(env: Env, m: Member): Promise<Follows> {
@@ -178,19 +180,30 @@ export const MAX_FOLLOWS = 500;
 export type FollowList = 'investors' | 'stocks' | 'owned' | 'peers';
 export type FollowOp = { get: true } | { set: Partial<Follows> } | { add: { list: FollowList; value: string } } | { remove: { list: FollowList; value: string } };
 
+/** Hand-added owned names; records from before `owned_manual` count every owned name outside the linked book. */
+export const manualOf = (f: Pick<Follows, 'owned' | 'owned_manual' | 'book'>) => f.owned_manual ?? f.owned.filter((t) => !(f.book?.tickers ?? []).includes(t));
+
 /** One change to a member's follows. Owned stocks are always on the watchlist. */
 export function applyFollowOp(cur: Follows, op: FollowOp): Follows | string {
   const next: Follows = { ...cur, investors: [...cur.investors], stocks: [...cur.stocks], owned: [...cur.owned], peers: [...(cur.peers ?? [])] };
   if ('get' in op) return next;
-  if ('set' in op) Object.assign(next, op.set);
-  else if ('add' in op) {
+  let manual = manualOf(cur);
+  if ('set' in op) {
+    Object.assign(next, op.set);
+    // A whole owned list (PUT /follows): names outside the linked book, or already hand-added, are hand-added.
+    if (op.set.owned_manual) manual = op.set.owned_manual;
+    else if (op.set.owned) manual = op.set.owned.filter((t) => manual.includes(t) || !(next.book?.tickers ?? []).includes(t));
+  } else if ('add' in op) {
     const { list, value } = op.add;
     if (!next[list].includes(value)) next[list].push(value);
+    if (list === 'owned' && !manual.includes(value)) manual = [...manual, value];
   } else {
     const { list, value } = op.remove;
     next[list] = next[list].filter((x) => x !== value);
     if (list === 'stocks') next.owned = next.owned.filter((x) => x !== value);
+    if (list === 'stocks' || list === 'owned') manual = manual.filter((x) => x !== value);
   }
+  next.owned_manual = manual;
   next.stocks = [...new Set([...next.stocks, ...next.owned])];
   for (const k of ['investors', 'stocks', 'owned', 'peers'] as const) if (next[k].length > MAX_FOLLOWS) return `at most ${MAX_FOLLOWS} ${k}`;
   return next;

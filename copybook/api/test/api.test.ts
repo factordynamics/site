@@ -423,13 +423,13 @@ describe('copybook api', () => {
 
     expect((await call('/follows')).status).toBe(401);
     await call('/alerts', { body: { alerts: ['warren-buffett'] }, token: t });
-    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], peers: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
+    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], owned_manual: [], peers: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
 
     for (const bad of [{ investors: ['Not A Slug'] }, { stocks: ['$AAPL'] }, { owned: 'AAPL' }, { onboarded: 'yes' }, { digest: 1 }, { insider_min_usd: -1 }, { insider_min_usd: '100k' }, { cluster_buys: 'no' }, { stocks: Array.from({ length: 501 }, (_, i) => `T${i}`) }]) {
       expect((await put(bad)).status).toBe(400);
     }
     const r = await (await put({ stocks: ['aapl', 'BRK.B'], owned: ['googl'], onboarded: true, include_13g: true })).json();
-    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], peers: [], onboarded: true, include_13g: true, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
+    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], owned_manual: ['GOOGL'], peers: [], onboarded: true, include_13g: true, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
 
     // Any 13F filer can be followed, not only curated funds; a slug that is no filer is refused.
     const unknown = await put({ investors: ['warren-buffett', 'no-such-filer-1234'] });
@@ -953,6 +953,9 @@ describe('copybook api', () => {
     expect(mail.text).toContain('https://holdterm.pages.dev/s/SIRI');
     expect(mail.text).toContain('https://holdterm.pages.dev/s/NVDA');
     expect(mail.text).not.toContain('HT3');
+    // Holdterm names the firm, never the person: "Berkshire Hathaway SIRI Form 4", not "Buffett".
+    expect(mail.subject).toMatch(/^Berkshire Hathaway SIRI Form 4: bought/);
+    expect(mail.text).not.toMatch(/Buffett/i);
     expect(mail.text).toContain('Manage alerts: https://holdterm.pages.dev/account/ · SEC EDGAR data, not investment advice.');
     expect(mail.html).toContain('<pre style="font:13px/1.45 ui-monospace');
     expect(JSON.stringify(mail)).not.toMatch(/copybook/i);
@@ -1385,21 +1388,36 @@ describe('copybook api', () => {
     expect(r.follows.stocks).toEqual(['NVDA', 'COF']); // replace: the old book left the watchlist too
     await call('/follows/stocks/TSLA', { method: 'POST', token: t });
 
-    // A 13F filer's book: tickers largest first, options left out; hand-added owned names survive a refresh.
+    // A 13F filer's book: tickers largest first, options left out. Linking it (the default mode, as the
+    // site sends it) keeps the hand-added names: the PM lost CRWD, APH and others this way.
     const cols = ['ticker', 'issuer', 'title', 'cusip', 'put_call', 'shares', 'value', 'display_name', 'sector'];
     shards['0002045724.json'] = { ok: true, name: 'Situational Awareness LP', quarter: '2026Q2', columns: cols, rows: [['BE', 'BLOOM', 'COM', '093712107', null, 1, 500, null, null], ['NVDA', 'NVIDIA', 'COM', '67066G104', null, 1, 900, null, null], ['TSM', 'TSMC', 'ADR', '874039100', 'Call', 1, 2000, null, null]] };
     r = await imp({ cik: '2045724' });
     expect(r).toMatchObject({ ok: true, imported: 2, source: { cik: '0002045724', quarter: '2026Q2' } });
-    expect(r.follows.owned).toEqual(['NVDA', 'BE']);
-    expect(r.follows.stocks).toEqual(['NVDA', 'TSLA', 'BE']);
+    expect(r.follows.owned).toEqual(['NVDA', 'COF', 'BE']);
+    expect(r.follows.owned_manual).toEqual(['NVDA', 'COF']);
+    expect(r.follows.stocks).toEqual(['NVDA', 'COF', 'TSLA', 'BE']);
     await call('/follows/owned/AMD', { method: 'POST', token: t });
+    // A pasted list in merge mode adds hand-added names and keeps the link.
+    r = await imp({ text: 'CRWD', mode: 'merge' });
+    expect(r.follows.owned).toEqual(['NVDA', 'COF', 'AMD', 'CRWD', 'BE']);
+    expect(r.follows.book).toMatchObject({ cik: '0002045724' });
 
+    // The filer's next quarter: BE (linked only) leaves, INTC arrives, every hand-added name stays.
     shards['0002045724.json'] = { ...(shards['0002045724.json'] as object), quarter: '2026Q3', rows: [['NVDA', 'NVIDIA', 'COM', '67066G104', null, 1, 900, null, null], ['INTC', 'INTEL', 'COM', '458140100', null, 1, 100, null, null]] };
     await cron(52);
-    const f = (await (await call('/follows', { token: t })).json()).follows;
-    expect(f.owned).toEqual(['NVDA', 'AMD', 'INTC']);
-    expect(f.stocks).toEqual(['NVDA', 'TSLA', 'AMD', 'INTC']);
+    let f = (await (await call('/follows', { token: t })).json()).follows;
+    expect(f.owned).toEqual(['NVDA', 'COF', 'AMD', 'CRWD', 'INTC']);
+    expect(f.stocks).toEqual(['NVDA', 'COF', 'TSLA', 'AMD', 'CRWD', 'INTC']);
     expect(f.book).toMatchObject({ cik: '0002045724', quarter: '2026Q3', tickers: ['NVDA', 'INTC'] });
+    // Linking again (same or another filer) still keeps them; removing one by hand drops it for good.
+    r = await imp({ cik: '2045724' });
+    expect(r.follows.owned).toEqual(['NVDA', 'COF', 'AMD', 'CRWD', 'INTC']);
+    await call('/follows/owned/COF', { method: 'DELETE', token: t });
+    await cron(52);
+    f = (await (await call('/follows', { token: t })).json()).follows;
+    expect(f.owned_manual).toEqual(['NVDA', 'AMD', 'CRWD']);
+    expect(f.owned).toEqual(['NVDA', 'AMD', 'CRWD', 'INTC']);
 
     expect((await call('/book/import', { body: { cik: '0009999999' }, token: t })).status).toBe(404);
     expect((await call('/book/import', { body: { text: '!!! ???' }, token: t })).status).toBe(400);
