@@ -51,11 +51,12 @@ for (const [plan, amount, interval] of [['monthly', 900, 'month'], ['yearly', 79
     (await stripe('POST', 'prices', { product: product.id, currency: 'usd', unit_amount: amount, 'recurring[interval]': interval, lookup_key: `copy_${plan}`, nickname: `Copy ${plan}` }));
 }
 
+const TRIAL_DAYS = 14; // card collected up front; converts automatically unless cancelled
 const success = `${SITE}account/?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
 const links = {};
 const activeLinks = (await stripe('GET', 'payment_links', { active: true, limit: 100 })).data;
 for (const plan of ['monthly', 'yearly']) {
-  const redirect = { 'after_completion[type]': 'redirect', 'after_completion[redirect][url]': success };
+  const redirect = { 'after_completion[type]': 'redirect', 'after_completion[redirect][url]': success, 'subscription_data[trial_period_days]': TRIAL_DAYS };
   const found = activeLinks.find((l) => l.metadata?.copybook === plan);
   links[plan] = found
     ? await stripe('POST', `payment_links/${found.id}`, redirect)
