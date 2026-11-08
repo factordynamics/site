@@ -41,7 +41,9 @@ DATA = WEB / "data"
 FB = DATA / "fb"
 CACHE = Path(os.environ.get("COPYBOOK_DATASET_CACHE") or (Path(os.environ.get("RUNNER_TEMP") or "/tmp") / "copybook-13f-sets"))
 PAGE = f"{ARCHIVE_BASE}/data-research/sec-markets-data/form-13f-data-sets"
-COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value")
+COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type")
+# Bump when the fb/ book layout changes: periods seeded by an older format are read again.
+FORMAT = "2"  # 2: shares_type (SH, or PRN where shares is a principal amount)
 DOLLARS_FROM = "2023-01-03"  # VALUE is in $000s for filings before this date (data set readme)
 MONTHS = {m: i + 1 for i, m in enumerate("JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split())}
 csv.field_size_limit(10_000_000)
@@ -197,11 +199,12 @@ def read_period(q: str, zips: list[Path], ciks: set[str] | None = None) -> dict[
                     value, shares = float(r["VALUE"] or 0), float(r["SSHPRNAMT"] or 0)
                 except ValueError:
                     continue
-                key = (cusip, pc or "")
+                typ = "PRN" if (r.get("SSHPRNAMTTYPE") or "").strip().upper() == "PRN" else "SH"
+                key = (cusip, pc or "", typ)
                 b = books.setdefault(acc, {})
                 row = b.get(key)
                 if row is None:
-                    b[key] = [r["NAMEOFISSUER"].strip(), r["TITLEOFCLASS"].strip(), cusip, pc, shares, value]
+                    b[key] = [r["NAMEOFISSUER"].strip(), r["TITLEOFCLASS"].strip(), cusip, pc, shares, value, typ]
                 else:
                     row[4] += shares
                     row[5] += value
@@ -222,13 +225,13 @@ def book(q: str, base: dict, extra: list[dict], books: dict, lines: dict) -> dic
                 merged[key][4] += r[4]
                 merged[key][5] += v
             else:
-                merged[key] = r[:5] + [v]
+                merged[key] = r[:5] + [v] + r[6:]
     rows = list(merged.values())
     # Same implied-price checks as the live ingest (filing-level, then single lines).
-    factor = unit_fix([(r[5], r[4]) for r in rows if not r[3]])
+    factor = unit_fix([(r[5], r[4]) for r in rows if not r[3] and r[6] == "SH"])
     for r in rows:
         r[5] *= factor
-        if not r[3] and r[4] > 0 and r[5] / r[4] > 20_000 and r[2] not in ABOVE_20K:
+        if not r[3] and r[6] == "SH" and r[4] > 0 and r[5] / r[4] > 20_000 and r[2] not in ABOVE_20K:
             r[5] /= 1000
     rows = [r for r in rows if r[5] > 0 and r[2] != "000000000"]
     rows.sort(key=lambda r: r[5], reverse=True)
@@ -252,7 +255,7 @@ def book(q: str, base: dict, extra: list[dict], books: dict, lines: dict) -> dic
         "amendments": [f["accession"] for f in extra],
         "source": "SEC Form 13F data set",
         "columns": list(COLUMNS),
-        "rows": [[None, r[0], r[1], r[2], r[3], round(r[4]), round(r[5])] for r in rows],
+        "rows": [[None, r[0], r[1], r[2], r[3], round(r[4]), round(r[5]), r[6]] for r in rows],
     }
 
 
@@ -286,8 +289,11 @@ def seed(periods: list[str]) -> int:
     done = 0
     for q in periods:
         marker = FB / q / ".complete"
-        if marker.exists():
-            continue
+        try:
+            if json.loads(marker.read_text()).get("format") == FORMAT:
+                continue
+        except (OSError, ValueError):
+            pass
         published = published or windows()
         urls = sets_for(q, published)
         if not urls:
@@ -298,7 +304,7 @@ def seed(periods: list[str]) -> int:
         write_period(q, books)
         # Complete only once the late-filing window is out too.
         if len(urls) == 2:
-            marker.write_text(json.dumps({"sets": urls, "filers": len(books)}) + "\n")
+            marker.write_text(json.dumps({"sets": urls, "filers": len(books), "format": FORMAT}) + "\n")
         print(f"datasets: {q}: {sum(1 for b in books.values() if b['ok'])} filer books from {len(urls)} data set(s)")
         done += 1
     return done

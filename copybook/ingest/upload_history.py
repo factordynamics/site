@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Upload new or changed data/h/{slug}/{quarter}.(json|csv) to the Copy API's private R2 bucket.
+"""Upload new or changed paid data to the Copy API's private R2 bucket.
+
+- h/{slug}/{quarter}.(json|csv|v1.json) and h/{slug}/index.json: curated history (build.py)
+- fb/{quarter}/{cik}.json: every filer's full book; for its latest quarter the copy with change
+  columns from fq/{quarter}/{cik}.json (moves.py) is sent in place of the plain book
+- s/{issuer}.json: per-issuer holder lists (stocks.py)
+- bulk/{quarter}.csv.gz: one export per quarter of every filer's book (export.py)
 
 Auth is the GitHub Actions OIDC token (audience copybook-api); no stored secret.
 A manifest of SHA-256 hashes (COPYBOOK_H_MANIFEST) records what R2 already has,
@@ -13,7 +19,9 @@ import json
 import os
 import re
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -23,10 +31,12 @@ WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 HIST = WEB / "data" / "h"
 API = os.environ.get("COPYBOOK_API", "https://copybook-api.factordynamics.workers.dev").rstrip("/")
 MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-manifest.json"))
-KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$")
+KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
+                 r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$")
 # Keys the Worker may not accept yet: a failure warns instead of failing the run,
 # and the rest of that kind are skipped until the next run.
-OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$")
+OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/")
+WORKERS = 8
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
 USER_AGENT = "Copybook-ingest/1.0 (+https://copybook.factordynamics.com)"
@@ -36,8 +46,13 @@ class Token:
     def __init__(self) -> None:
         self.value = ""
         self.at = 0.0
+        self.lock = threading.Lock()
 
     def get(self) -> str:
+        with self.lock:
+            return self._get()
+
+    def _get(self) -> str:
         if self.value and time.monotonic() - self.at < TOKEN_TTL:
             return self.value
         static = os.environ.get("COPYBOOK_INGEST_TOKEN")
@@ -53,7 +68,8 @@ class Token:
 
 
 def put(key: str, body: bytes, token: Token) -> None:
-    ctype = "text/csv; charset=utf-8" if key.endswith(".csv") else "application/json"
+    ctype = ("application/gzip" if key.endswith(".gz") else "text/csv; charset=utf-8" if key.endswith(".csv")
+             else "application/json")
     last = ""
     for attempt in range(4):
         req = Request(
@@ -83,35 +99,55 @@ def put(key: str, body: bytes, token: Token) -> None:
 def main() -> int:
     manifest = json.loads(MANIFEST.read_text()) if MANIFEST.exists() else {}
     token = Token()
-    files = sorted(p for p in HIST.glob("*/*") if p.suffix in (".json", ".csv"))
-    sent = 0
+    root = HIST.parent
+    sources: dict[str, Path] = {}
+    for pattern in ("h/*/*.json", "h/*/*.csv", "fb/*/*.json", "s/*.json", "bulk/*.csv.gz"):
+        for p in sorted(root.glob(pattern)):
+            sources[p.relative_to(root).as_posix()] = p
+    for p in sorted(root.glob("fq/*/*.json")):  # change rows replace the plain book for the same quarter
+        sources["fb/" + p.relative_to(root / "fq").as_posix()] = p
+    files = list(sources.values())
+    todo = []
+    for key, path in sorted(sources.items()):
+        if KEY.match(key):
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if manifest.get(key) != digest:
+                todo.append((key, path, digest))
+    print(f"upload: {len(todo)} new or changed of {len(files)} files", flush=True)
     refused: set[str] = set()
-    for i, path in enumerate(files):
-        key = path.relative_to(HIST.parent).as_posix()
-        if not KEY.match(key):
-            continue
+    lock = threading.Lock()
+    sent = 0
+
+    def one(item) -> None:
+        nonlocal sent
+        key, path, digest = item
         kind = OPTIONAL.search(key)
         if kind and kind.group() in refused:
-            continue
-        body = path.read_bytes()
-        digest = hashlib.sha256(body).hexdigest()
-        if manifest.get(key) == digest:
-            continue
+            return
         try:
-            put(key, body, token)
+            put(key, path.read_bytes(), token)
         except RuntimeError as exc:
             if not kind:
                 raise
-            refused.add(kind.group())
-            print(f"::warning::{exc} (skipping the other *{kind.group().lstrip('/')} keys this run)", flush=True)
-            continue
-        manifest[key] = digest
-        sent += 1
-        if sent % 100 == 0:
-            MANIFEST.write_text(json.dumps(manifest, separators=(",", ":")))
-            print(f"upload: {sent} sent ({i + 1}/{len(files)} checked)", flush=True)
-    MANIFEST.write_text(json.dumps(manifest, separators=(",", ":")))
-    print(f"upload: {sent} new or changed of {len(files)} files in R2")
+            with lock:
+                if kind.group() not in refused:
+                    refused.add(kind.group())
+                    print(f"::warning::{exc} (skipping the other {kind.group()} keys this run)", flush=True)
+            return
+        with lock:
+            manifest[key] = digest
+            sent += 1
+            if sent % 200 == 0:
+                MANIFEST.write_text(json.dumps(manifest, separators=(",", ":")))
+                print(f"upload: {sent}/{len(todo)} sent", flush=True)
+
+    try:
+        with ThreadPoolExecutor(WORKERS) as pool:
+            for _ in pool.map(one, todo):  # re-raises the first required failure
+                pass
+    finally:
+        MANIFEST.write_text(json.dumps(manifest, separators=(",", ":")))
+    print(f"upload: {sent} new or changed files in R2")
     return 0
 
 

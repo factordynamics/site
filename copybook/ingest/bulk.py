@@ -38,7 +38,8 @@ SHARD_KEYS = (
     "filing_key", "amendments", "unit_fix",
 )
 # Rows are arrays in this column order to keep 9k shards small.
-COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value")
+# shares is SSHPRNAMT as filed: a share count, or a principal amount where shares_type is PRN.
+COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type")
 
 
 def numeric_cik(cik: str) -> bool:
@@ -53,10 +54,14 @@ def slim(rec: dict, max_rows: int | None = MAX_ROWS) -> dict:
             rows = [dict(zip(rec.get("columns") or COLUMNS, r)) for r in rows]
         out["truncated"] = max_rows is not None and len(rows) > max_rows
         out["columns"] = list(COLUMNS)
-        out["rows"] = [
-            [int(h[k]) if k in ("value", "shares") else h[k] for k in COLUMNS]
-            for h in rows[:max_rows]
-        ]
+        def cell(h: dict, k: str):
+            if k == "shares_type":
+                return h.get("shares_type") or "SH"
+            if k == "shares" and h.get("shares_type") == "PRN":
+                return int(h.get("principal_amount") or h.get("shares") or 0)
+            return int(h.get(k) or 0) if k in ("value", "shares") else h.get(k)
+
+        out["rows"] = [[cell(h, k) for k in COLUMNS] for h in rows[:max_rows]]
     return out
 
 

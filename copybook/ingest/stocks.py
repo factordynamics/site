@@ -40,6 +40,8 @@ MIN_FILERS = 1000  # a quarter needs this many full books before stock pages use
 
 
 def kind_of(h: dict) -> str | None:
+    if h.get("shares_type") == "PRN":
+        return None  # principal-amount notes are not shareholders
     pc = (h.get("put_call") or "").strip().lower() or (h.get("title") or "").strip().lower()
     kind = {"put": "puts", "puts": "puts", "call": "calls", "calls": "calls"}.get(pc, "equity")
     if kind == "equity" and DEBT.search(h.get("title") or ""):
@@ -82,7 +84,7 @@ def roll_up(now: dict[str, dict], prev: dict[str, dict] | None = None, names: di
     """Per-issuer stats and holder lists from {cik: book} for this quarter and the one before.
 
     Returns (issuers, holders): issuers[code] is the public row; holders[code] lists
-    [cik, name, slug, kind, shares, prev_shares, value, prev_value, change] per filer.
+    [cik, name, slug, kind, shares, prev_shares, value, prev_value, change, accession] per filer.
     """
     prev = prev or {}
     names = names or {}
@@ -138,6 +140,7 @@ def roll_up(now: dict[str, dict], prev: dict[str, dict] | None = None, names: di
                     cik, name, meta.get("slug"), kind, round((c or {}).get("shares", 0)),
                     round(o["shares"]) if o else (0 if comparable else None), round((c or {}).get("value", 0)),
                     round(o["value"]) if o else (0 if comparable else None), change,
+                    (now.get(cik) or {}).get("accession"),
                 ])
     for code, it in issuers.items():
         classes = sorted(it["classes"].items(), key=lambda kv: kv[1]["value"], reverse=True)
@@ -254,7 +257,8 @@ def main() -> int:
             body = json.dumps({
                 "issuer": code, "ticker": it["ticker"], "display_name": it["display_name"], "period": period,
                 "prev_period": prior,
-                "columns": ["cik", "name", "slug", "kind", "shares", "prev_shares", "value", "prev_value", "change"],
+                "columns": ["cik", "name", "slug", "kind", "shares", "prev_shares", "value", "prev_value", "change",
+                            "accession"],
                 "holders": hs,
             }, separators=(",", ":")) + "\n"
             path = out / f"{code}.json"

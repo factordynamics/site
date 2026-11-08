@@ -15,6 +15,56 @@
    "ticker": "ASML",
    "name": "ASML",
    "sector": "Information Technology"
+  },
+  "G51502105": {
+   "ticker": "JCI",
+   "name": "Johnson Controls",
+   "sector": "Industrials"
+  },
+  "G1151C101": {
+   "ticker": "ACN",
+   "name": "Accenture",
+   "sector": "Information Technology"
+  },
+  "G25508105": {
+   "ticker": "CRH",
+   "name": "CRH",
+   "sector": "Materials"
+  },
+  "12626K203": {
+   "ticker": "CRH",
+   "name": "CRH",
+   "sector": "Materials"
+  },
+  "G4253H101": {
+   "ticker": "JHX",
+   "name": "James Hardie Industries",
+   "sector": "Materials"
+  },
+  "G4253H119": {
+   "ticker": "JHX",
+   "name": "James Hardie Industries",
+   "sector": "Materials"
+  },
+  "G4705A100": {
+   "ticker": "ICLR",
+   "name": "ICON",
+   "sector": "Health Care"
+  },
+  "682680103": {
+   "ticker": "OKE",
+   "name": "ONEOK",
+   "sector": "Energy"
+  },
+  "285512109": {
+   "ticker": "EA",
+   "name": "Electronic Arts",
+   "sector": "Communication Services"
+  },
+  "G3421J106": {
+   "ticker": "FERG",
+   "name": "Ferguson",
+   "sector": "Industrials"
   }
  },
  "by_ticker": {
