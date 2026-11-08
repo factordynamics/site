@@ -89,28 +89,6 @@ class ParseTests(unittest.TestCase):
         self.assertIn("0001067983", ciks)
         self.assertIn("0001336528", ciks)
 
-    def test_new_filings_detects_accession_change(self):
-        from ingest.alerts import new_filings
-
-        prev = {"warren-buffett": "old"}
-        managers = [
-            {
-                "ok": True,
-                "slug": "warren-buffett",
-                "manager": "Warren Buffett",
-                "name": "Berkshire",
-                "accession": "new",
-                "quarter": "2026Q2",
-                "filing_date": "2026-08-14",
-                "report_date": "2026-06-30",
-                "sec_url": "https://example.com",
-            }
-        ]
-        found = new_filings(managers, prev)
-        self.assertEqual(len(found), 1)
-        self.assertEqual(found[0]["previous_accession"], "old")
-        self.assertEqual(new_filings(managers, {"warren-buffett": "new"}), [])
-
     def test_unit_fix_by_implied_price(self):
         from ingest.parse import unit_fix
 

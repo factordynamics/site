@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ingest.figi import load_cache as load_cusip_map
-from ingest.alerts import email_body, new_filings, previous_accessions, send_email
+from ingest.alerts import MAX_AGE_DAYS, age_days, email_body, new_filings, next_periods, previous_periods, send_email
 from ingest.edgar import (
     fetch_info_table,
     fetch_primary_doc,
@@ -23,6 +23,8 @@ from ingest.edgar import (
     list_13f,
     table_value_total,
     amendment_type,
+    list_notices,
+    notice_reporters,
     quarter_groups,
 )
 from ingest.managers import MANAGERS, load_managers
@@ -47,6 +49,10 @@ LITE_COUNT = 2000
 TOP_ROWS = 50  # preview rows per quarter in {slug}-history.json; full books are in h/
 HIST = DATA / "h"
 AMEND_PATH = DATA / "amendments.json"
+NOTICE_PATH = DATA / "notices.json"
+_NOTICES: dict[str, dict] | None = None
+_SUBS: dict[str, dict] = {}
+INACTIVE_AFTER = 4  # quarters behind the expected period before a filer is retired
 _AMEND: dict[str, str] | None = None
 LITE_HOLDERS = 8
 _CUSIP_MAP: dict[str, str] | None = None
@@ -100,6 +106,119 @@ def amend_type(cik: str, meta) -> str:
 def save_amend_types() -> None:
     if _AMEND is not None:
         AMEND_PATH.write_text(json.dumps(dict(sorted(_AMEND.items())), indent=0) + "\n")
+    if _NOTICES is not None:
+        NOTICE_PATH.write_text(json.dumps(dict(sorted(_NOTICES.items())), indent=1) + "\n")
+
+
+def notice_info(cik: str, meta) -> dict:
+    """Cached 13F-NT cover page: which manager reports this filer's holdings."""
+    global _NOTICES
+    if _NOTICES is None:
+        _NOTICES = json.loads(NOTICE_PATH.read_text()) if NOTICE_PATH.exists() else {}
+    if meta.accession not in _NOTICES:
+        _NOTICES[meta.accession] = notice_reporters(cik, meta.accession)
+    return _NOTICES[meta.accession]
+
+
+def submissions_for(cik: str) -> dict:
+    if cik not in _SUBS:
+        _SUBS[cik] = fetch_submissions(cik)
+    return _SUBS[cik]
+
+
+def expected_report_date(today: str) -> str:
+    """Latest quarter-end whose 13F deadline (45 days) has passed."""
+    d = datetime.fromisoformat(today[:10]).date()
+    y, q = d.year, (d.month - 1) // 3 + 1
+    for _ in range(6):
+        q -= 1
+        if q == 0:
+            y, q = y - 1, 4
+        end = {1: f"{y}-03-31", 2: f"{y}-06-30", 3: f"{y}-09-30", 4: f"{y}-12-31"}[q]
+        if (d - datetime.fromisoformat(end).date()).days >= 45:
+            return end
+    return end
+
+
+def notice_periods(cik: str, metas: list, notices: list, cache: dict) -> tuple[list[dict], list[dict]]:
+    """Quarters where the filer sent a 13F-NT, loaded from the manager that reports for it.
+
+    After the newest notice the original filer often goes quiet (a CIK succession),
+    so later quarters of the reporting manager are carried on as well.
+    """
+    own = {m.report_date for m in metas}
+    loaded, skipped, done = [], [], set()
+    newest = None
+    for nt in sorted(notices, key=lambda m: (m.report_date, m.filing_date), reverse=True):
+        if nt.report_date in own or nt.report_date in done:
+            continue
+        done.add(nt.report_date)
+        info = notice_info(cik, nt)
+        rep = next((r for r in info["reporters"] if r.get("cik")), None)
+        base = {
+            "quarter": quarter_label(nt.report_date),
+            "report_date": nt.report_date,
+            "notice_accession": nt.accession,
+            "notice_filing_date": nt.filing_date,
+            "notice_note": info.get("note") or "",
+            "reported_by": {"cik": rep["cik"], "name": rep["name"]} if rep else None,
+        }
+        if rep is None:
+            skipped.append(base | {"reason": "notice", "detail": "13F-NT names no other manager"})
+            continue
+        groups = {g[0].report_date: g for g in quarter_groups(list_13f(submissions_for(rep["cik"])), 12)}
+        if newest is None:
+            newest = (nt, rep, base, groups)
+        g = groups.get(nt.report_date)
+        q = load_period(rep["cik"], g, cache) if g else None
+        if q is None:
+            skipped.append(base | {"reason": "notice", "detail": "reporting manager has no holdings for this quarter yet"})
+            continue
+        loaded.append(q | base | {"status": "notice"})
+    if newest and newest[0].report_date > max(own, default=""):
+        nt, rep, base, groups = newest
+        for period in sorted(groups, reverse=True):
+            if period <= nt.report_date or period in own:
+                continue
+            q = load_period(rep["cik"], groups[period], cache)
+            if q is not None:
+                loaded.append(q | {"status": "successor", "reported_by": base["reported_by"],
+                                   "notice_accession": nt.accession, "notice_note": base["notice_note"]})
+    return loaded, skipped
+
+
+def manager_status(history: list[dict], skipped: list[dict], today: str) -> dict:
+    """Why the latest book is what it is, for the front end to explain."""
+    latest = history[0]
+    expected = expected_report_date(today)
+    q = latest["quarter"]
+    newer = [s for s in skipped if s["report_date"] > latest["report_date"]]
+    who = (latest.get("reported_by") or {}).get("name")
+    if newer:
+        s = max(newer, key=lambda x: x["report_date"])
+        if s["reason"] == "empty":
+            filed = f" on {s['filing_date']}" if s.get("filing_date") else ""
+            return {"status": "empty_latest", "status_note":
+                    f"The {s['quarter']} 13F filed{filed} lists no holdings (a blank or placeholder "
+                    f"information table); showing {q}."}
+        if s["reason"] == "notice":
+            return {"status": "notice_pending", "status_note":
+                    f"Filed a 13F notice for {s['quarter']} ({s.get('detail')}); showing {q}."}
+        return {"status": "unreadable_latest", "status_note":
+                f"The {s['quarter']} 13F could not be read; showing {q}."}
+    if latest["report_date"] < expected:
+        behind = (int(expected[:4]) - int(latest["report_date"][:4])) * 4 + (
+            int(expected[5:7]) - int(latest["report_date"][5:7])) // 3
+        if behind >= INACTIVE_AFTER:
+            return {"status": "inactive", "status_note":
+                    f"No 13F since {q}; this filer appears to have stopped filing and is left out of Consensus."}
+        return {"status": "stale", "status_note":
+                f"No 13F for {quarter_label(expected)} yet; showing {q}."}
+    if latest.get("status") in ("notice", "successor") and who:
+        return {"status": "reported_by_other", "status_note":
+                f"Holdings for {q} are reported by {who.title() if who.isupper() else who} "
+                f"(this filer filed a 13F notice)."}
+    return {"status": "current", "status_note": ""}
 
 
 def pick_filings(group: list, types: dict[str, str]):
@@ -222,47 +341,77 @@ def load_period(cik: str, group: list, cache: dict) -> dict | None:
     return merge_quarter(loaded, extras) | {"filing_key": key}
 
 
+CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "pct_of_book")
+MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
+
+
 def with_changes(latest: dict, prev: dict | None) -> list[dict]:
-    """Latest holdings with prior-quarter fields, plus exited positions as value-0 rows."""
+    """Holdings with prior-quarter fields, plus exited positions as value-0 rows.
+
+    value_delta is the trade in dollars at this filing's own reported value per share
+    (new: +value, exited: -prior value, added/trimmed: share change x value/shares), so
+    price moves between quarters do not count as buying or selling. pct_of_book is
+    value_delta over this filing's total value. All figures come from the two 13Fs.
+    """
     if prev is None:
-        return [h | {"prev_shares": None, "prev_value": None, "change": None} for h in latest["holdings"]]
+        return [h | {f: None for f in CHANGE_FIELDS} for h in latest["holdings"]]
+    total = latest.get("total_value") or sum(h["value"] for h in latest["holdings"]) or None
+    prev_total = prev.get("total_value") or sum(h["value"] for h in prev["holdings"]) or None
     before = {(h["cusip"], h["put_call"] or ""): h for h in prev["holdings"]}
     rows = []
+
+    def extra(p, change, delta, share_change):
+        return {
+            "prev_shares": p["shares"] if p else 0,
+            "prev_value": p["value"] if p else 0,
+            "prev_weight": round(p["value"] / prev_total, 6) if p and prev_total else 0.0,
+            "change": change,
+            "share_change": share_change,
+            "value_delta": round(delta),
+            "pct_of_book": round(delta / total, 6) if total else None,
+        }
+
     for h in latest["holdings"]:
         p = before.pop((h["cusip"], h["put_call"] or ""), None)
         if p is None:
-            change = "new"
-        elif h["shares"] > p["shares"]:
-            change = "added"
-        elif h["shares"] < p["shares"]:
-            change = "trimmed"
+            change, delta, ds = "new", h["value"], h["shares"]
         else:
-            change = "unchanged"
-        rows.append(
-            h
-            | {
-                "prev_shares": p["shares"] if p else 0,
-                "prev_value": p["value"] if p else 0,
-                "change": change,
-            }
-        )
+            ds = h["shares"] - p["shares"]
+            change = "added" if ds > 0 else "trimmed" if ds < 0 else "unchanged"
+            delta = ds * h["value"] / h["shares"] if h["shares"] else 0
+        rows.append(h | extra(p, change, delta, ds))
     for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):
         rows.append(
             {
                 "issuer": p["issuer"],
                 "title": p["title"],
                 "cusip": p["cusip"],
-                "ticker": ticker_for(p["cusip"]),
+                "ticker": p.get("ticker") or ticker_for(p["cusip"]),
                 "value": 0,
                 "shares": 0,
                 "put_call": p["put_call"],
                 "weight": 0.0,
-                "prev_shares": p["shares"],
-                "prev_value": p["value"],
-                "change": "exited",
+                **{k: p[k] for k in ("display_name", "sector") if k in p},
+                **extra(p, "exited", -p["value"], -p["shares"]),
             }
         )
     return rows
+
+
+def moves(rows: list[dict], limit: int = MOVE_ROWS) -> dict | None:
+    """Biggest new, exited, added and trimmed positions by dollar size of the trade."""
+    if not rows or rows[0].get("change") is None:
+        return None
+    keep = ("ticker", "display_name", "issuer", "cusip", "title", "put_call", "sector", "shares", "prev_shares",
+            "share_change", "value", "prev_value", "value_delta", "pct_of_book", "weight", "prev_weight")
+    out: dict = {
+        "bought_usd": round(sum(r["value_delta"] for r in rows if r["value_delta"] > 0)),
+        "sold_usd": round(-sum(r["value_delta"] for r in rows if r["value_delta"] < 0)),
+    }
+    for c in ("new", "exited", "added", "trimmed"):
+        bucket = sorted((r for r in rows if r["change"] == c), key=lambda r: abs(r["value_delta"]), reverse=True)
+        out[c] = [{k: r.get(k) for k in keep} for r in bucket[:limit]]
+    return out
 
 
 def filing_url(cik: str, accession: str) -> str:
@@ -327,9 +476,10 @@ def ingest() -> dict:
     for cik, name, manager, slug in roster:
         print(f"fetch {slug} ({cik})", flush=True)
         try:
-            submissions = fetch_submissions(cik)
+            submissions = submissions_for(cik)
             metas = list_13f(submissions)
-            if not metas:
+            notices = list_notices(submissions)
+            if not metas and not notices:
                 errors.append({"slug": slug, "error": "no 13F-HR found"})
                 managers_out.append(
                     {
@@ -343,17 +493,24 @@ def ingest() -> dict:
                 )
                 continue
             last_error = "No usable 13F information table"
-            history = []
+            history, skipped = [], []
             for group in quarter_groups(metas, HISTORY_QUARTERS):
+                gap = {"quarter": quarter_label(group[0].report_date), "report_date": group[0].report_date,
+                       "accession": group[0].accession}
                 try:
                     loaded = load_period(cik, group, cache)
                     if loaded is None:
                         last_error = f"Empty 13F information table for {group[0].report_date}"
+                        skipped.append(gap | {"reason": "empty", "filing_date": group[0].filing_date})
                         continue
-                    history.append(loaded)
+                    history.append(loaded | {"status": "filed"})
                 except Exception as inner:
                     last_error = str(inner)
+                    skipped.append(gap | {"reason": "unreadable"})
                     continue
+            via, gaps = notice_periods(cik, metas, notices, cache)
+            history = sorted(history + via, key=lambda q: q["report_date"], reverse=True)[:HISTORY_QUARTERS]
+            skipped = sorted(skipped + gaps, key=lambda q: q["report_date"], reverse=True)
             if not history:
                 raise FileNotFoundError(last_error)
             latest = history[0]
@@ -374,6 +531,8 @@ def ingest() -> dict:
                         for q in history
                     ],
                     "history_quarters": [q["quarter"] for q in history],
+                    "skipped_quarters": skipped,
+                    **manager_status(history, skipped, datetime.now(timezone.utc).isoformat()),
                 }
             )
         except Exception as exc:
@@ -397,7 +556,18 @@ def ingest() -> dict:
     for m in managers_out:
         m["featured"] = m["cik"] in featured
     buckets: dict[str, dict] = {}
+    # A filer whose book is reported by another curated filer would be counted twice.
+    curated_ok = {m["cik"] for m in ok}
+    slug_by_cik = {m["cik"]: m["slug"] for m in ok}
     for m in ok:
+        for row in [m] + (m.get("history") or []):
+            if row.get("reported_by"):
+                row["reported_by"]["slug"] = slug_by_cik.get(row["reported_by"].get("cik"))
+    in_book = [
+        m for m in ok
+        if (m.get("reported_by") or {}).get("cik") not in curated_ok and m.get("status") != "inactive"
+    ]
+    for m in in_book:
         for h in m["holdings"]:
             key = h["cusip"] + "|" + (h["put_call"] or "")
             b = buckets.get(key)
@@ -455,7 +625,7 @@ def ingest() -> dict:
         "copycat": {
             "total_value": grand_total,
             "num_positions": len(copycat),
-            "num_investors": len(ok),
+            "num_investors": len(in_book),
             "holdings": copycat,
         },
     }
@@ -476,11 +646,12 @@ def manager_json(m: dict) -> dict:
     out["prev_report_date"] = prev["report_date"] if prev else None
     out["prev_accession"] = prev["accession"] if prev else None
     out["prev_total_value"] = prev["total_value"] if prev else None
-    rows = with_changes({"holdings": m["holdings"]}, prev)
+    rows = with_changes({"holdings": m["holdings"], "total_value": m.get("total_value")}, prev)
     out["changes"] = {
         c: sum(1 for r in rows if r["change"] == c)
         for c in ("new", "added", "trimmed", "exited", "unchanged")
     }
+    out["moves"] = moves(rows)
     out["holdings"] = rows
     return out
 
@@ -499,12 +670,20 @@ def write_history(m: dict) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     keep = set()
     index = []
-    for q in m["history"]:
+    hist = m["history"]  # newest first
+    for i, q in enumerate(hist):
         name = f"{q['quarter']}.json"
         keep.add(name)
         meta = {k: v for k, v in q.items() if k not in {"holdings", "truncated"}}
-        rows = [compact_row(h) for h in q["holdings"]]
-        body = {"slug": m["slug"], "manager": m["manager"], "cik": m["cik"], **meta, "holdings": rows}
+        prev = hist[i + 1] if i + 1 < len(hist) else None
+        rows = [compact_row(h) for h in with_changes(q, prev)]
+        # `holdings` stays the filed book; positions sold out since the prior quarter go in `exited`.
+        body = {
+            "slug": m["slug"], "manager": m["manager"], "cik": m["cik"], **meta,
+            "prev_quarter": prev["quarter"] if prev else None,
+            "holdings": [r for r in rows if r["change"] != "exited"],
+            "exited": [r for r in rows if r["change"] == "exited"],
+        }
         text = json.dumps(body, separators=(",", ":")) + "\n"
         path = folder / name
         if not path.exists() or path.read_text() != text:
@@ -526,6 +705,32 @@ def write_history(m: dict) -> None:
         )
         + "\n"
     )
+
+
+def write_status(payload: dict) -> None:
+    """status.json: staleness monitor for curated funds (anything not 'current')."""
+    ok = [m for m in payload["managers"] if m.get("ok")]
+    expected = expected_report_date(payload["generated_at"])
+    counts: dict[str, int] = {}
+    for m in ok:
+        counts[m["status"]] = counts.get(m["status"], 0) + 1
+    flagged = [
+        {k: m.get(k) for k in ("slug", "manager", "cik", "quarter", "report_date", "status", "status_note")}
+        for m in sorted(ok, key=lambda m: m["report_date"])
+        if m["status"] != "current"
+    ]
+    failed = [{"slug": m["slug"], "manager": m["manager"], "error": m.get("error")}
+              for m in payload["managers"] if not m.get("ok")]
+    (DATA / "status.json").write_text(json.dumps({
+        "generated_at": payload["generated_at"],
+        "expected_quarter": quarter_label(expected),
+        "counts": counts,
+        "flagged": flagged,
+        "failed": failed,
+    }, indent=1) + "\n")
+    behind = sum(1 for f in flagged if f["status"] in ("stale", "empty_latest", "unreadable_latest", "notice_pending"))
+    if behind or failed:
+        print(f"::warning::{behind} curated funds behind {quarter_label(expected)}, {len(failed)} failed; see status.json")
 
 
 def write_json(payload: dict) -> None:
@@ -564,6 +769,7 @@ def write_json(payload: dict) -> None:
         (DATA / f"{m['slug']}.json").write_text(json.dumps(manager_json(m), separators=(",", ":")) + "\n")
         if m.get("history"):
             write_history(m)
+    write_status(payload)
     names = {m["slug"]: m["manager"] for m in payload["managers"]}
     (DATA / "copycat.json").write_text(json.dumps(payload["copycat"], separators=(",", ":")) + "\n")
     lite = [
@@ -595,39 +801,53 @@ def write_json(payload: dict) -> None:
 
 
 def write_alerts(payload: dict) -> None:
-    """alerts.json: this run's new filings plus a rolling feed keyed by accession.
+    """alerts.json: this run's new filings, a rolling `recent` feed, and the
+    latest period recorded per fund (`periods`), which is what makes a filing new.
 
-    A mailer (Copy subscribers) diffs `recent` by accession, so a missed run
-    never drops an alert.
+    Only a fresh original 13F-HR for a later period counts; see alerts.is_alertable.
     """
-    prev = previous_accessions(DATA)
-    filings = new_filings(payload["managers"], prev) if prev else []
+    now = payload["generated_at"]
+    prev = previous_periods(DATA)
+    filings = new_filings(payload["managers"], prev, now)
+    by_slug = {m["slug"]: m for m in payload["managers"] if m.get("ok")}
+    for f in filings:
+        mv = manager_json(by_slug[f["slug"]]).get("moves") if f["slug"] in by_slug else None
+        f["moves"] = {k: (v[:5] if isinstance(v, list) else v) for k, v in mv.items()} if mv else None
     path = DATA / "alerts.json"
     old = json.loads(path.read_text()) if path.exists() else {}
-    seen = {f["accession"] for f in old.get("recent") or []}
-    recent = [
-        f | {"detected_at": payload["generated_at"]}
-        for f in filings
-        if f["accession"] not in seen and not f["is_first_seen"]
-    ] + (old.get("recent") or [])
+    seen = {(f["slug"], f.get("report_date")) for f in old.get("recent") or []}
+    # Drop anything already in the feed that would fail today's rule (old filings, amendments).
+    kept = [
+        f for f in old.get("recent") or []
+        if f.get("filing_date") and f.get("detected_at")
+        and age_days(f["filing_date"], f["detected_at"]) <= MAX_AGE_DAYS
+        and f.get("form", "13F-HR") == "13F-HR"
+    ]
+    recent = [f | {"detected_at": now} for f in filings if (f["slug"], f["report_date"]) not in seen] + kept
     status = None
     if filings:
-        subject, body = email_body(filings, payload["generated_at"])
+        subject, body = email_body(filings, now)
         status = send_email(subject, body)
     DATA.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {
-                "generated_at": payload["generated_at"],
+                "generated_at": now,
+                "rule": (
+                    f"New = original 13F-HR for a report period later than any recorded for the fund, "
+                    f"filed within {MAX_AGE_DAYS} days. Amendments, restatements, 13F-NT notices and "
+                    "accession changes on old periods never alert."
+                ),
                 "new_filings": filings,
                 "recent": recent[:500],
+                "periods": next_periods(payload["managers"], prev),
                 "email_status": status,
             },
             indent=1,
         )
         + "\n"
     )
-    print(f"alerts: {len(filings)} new filings, email={status}")
+    print(f"alerts: {len(filings)} new filings, dropped {len(old.get('recent') or []) - len(kept)} stale, email={status}")
 
 
 def main() -> int:

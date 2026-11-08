@@ -70,7 +70,11 @@ def fetch_submissions(cik: str) -> dict:
     return json.loads(raw.decode("utf-8"))
 
 
-def list_13f(submissions: dict) -> list[FilingMeta]:
+HOLDINGS_FORMS = {"13F-HR", "13F-HR/A"}
+NOTICE_FORMS = {"13F-NT", "13F-NT/A"}
+
+
+def list_13f(submissions: dict, forms_wanted: set[str] = HOLDINGS_FORMS) -> list[FilingMeta]:
     recent = submissions.get("filings", {}).get("recent", {})
     forms = recent.get("form", [])
     accessions = recent.get("accessionNumber", [])
@@ -79,7 +83,7 @@ def list_13f(submissions: dict) -> list[FilingMeta]:
     primaries = recent.get("primaryDocument", [""] * len(forms))
     out: list[FilingMeta] = []
     for i, form in enumerate(forms):
-        if str(form) not in {"13F-HR", "13F-HR/A"}:
+        if str(form) not in forms_wanted:
             continue
         report_date = report_dates[i] if i < len(report_dates) else ""
         if not report_date:
@@ -132,6 +136,23 @@ def amendment_type(cik: str, accession: str) -> str:
     doc = fetch_primary_doc(cik, accession) or ""
     m = re.search(r"<(?:\w+:)?amendmentType>\s*([^<]+?)\s*<", doc, re.I)
     return m.group(1).upper() if m else ""
+
+
+def list_notices(submissions: dict) -> list[FilingMeta]:
+    """13F-NT filings: the filer's holdings are reported by another manager."""
+    return list_13f(submissions, NOTICE_FORMS)
+
+
+def notice_reporters(cik: str, accession: str) -> dict:
+    """Other managers named on a 13F-NT cover page, plus its explanation."""
+    doc = fetch_primary_doc(cik, accession) or ""
+    reporters = []
+    for block in re.findall(r"<(?:\w+:)?otherManager>(.*?)</(?:\w+:)?otherManager>", doc, re.S | re.I):
+        c = re.search(r"<(?:\w+:)?cik>\s*(\d+)\s*<", block, re.I)
+        n = re.search(r"<(?:\w+:)?name>\s*([^<]+?)\s*<", block, re.I)
+        reporters.append({"cik": c.group(1).zfill(10) if c else None, "name": n.group(1) if n else ""})
+    info = re.search(r"<(?:\w+:)?additionalInformation>\s*([^<]*?)\s*<", doc, re.I)
+    return {"reporters": reporters, "note": info.group(1) if info else ""}
 
 
 def fetch_primary_doc(cik: str, accession: str) -> str | None:

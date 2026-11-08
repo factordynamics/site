@@ -5,55 +5,121 @@ from __future__ import annotations
 import json
 import os
 import smtplib
+from datetime import date
 from email.message import EmailMessage
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 
-def previous_accessions(data_dir: Path) -> dict[str, str]:
-    path = data_dir / "index.json"
-    if not path.exists():
-        return {}
-    try:
-        payload = json.loads(path.read_text())
-    except json.JSONDecodeError:
-        return {}
+MAX_AGE_DAYS = 7  # an alert for a filing older than this is never "new"
+
+
+def previous_periods(data_dir: Path) -> dict[str, str]:
+    """Latest report period already recorded per slug (alerted or not).
+
+    alerts.json `periods` is the source of truth; index.json fills in funds that
+    predate it. Periods only move forward, so a fund falling back to an older
+    filing and then returning never re-alerts.
+    """
     out: dict[str, str] = {}
-    for m in payload.get("managers") or []:
-        slug = m.get("slug")
-        acc = m.get("accession")
-        if slug and acc:
-            out[slug] = acc
+    for name, key in (("index.json", "managers"),):
+        path = data_dir / name
+        if path.exists():
+            try:
+                for m in json.loads(path.read_text()).get(key) or []:
+                    if m.get("slug") and m.get("report_date"):
+                        out[m["slug"]] = m["report_date"]
+            except json.JSONDecodeError:
+                pass
+    path = data_dir / "alerts.json"
+    if path.exists():
+        try:
+            for slug, period in (json.loads(path.read_text()).get("periods") or {}).items():
+                out[slug] = max(out.get(slug, ""), period)
+        except json.JSONDecodeError:
+            pass
     return out
 
 
-def new_filings(managers: list[dict], previous: dict[str, str]) -> list[dict]:
+def age_days(filing_date: str, now: str) -> int:
+    return (date.fromisoformat(now[:10]) - date.fromisoformat(filing_date[:10])).days
+
+
+def is_alertable(m: dict, previous: dict[str, str], now: str) -> bool:
+    """A genuinely new 13F-HR for a period this fund has never reported before.
+
+    Amendments, restatements, accession changes on an old period, 13F-NT
+    notices, first sightings of a fund, and anything filed more than
+    MAX_AGE_DAYS ago never alert.
+    """
+    prev = previous.get(m.get("slug") or "")
+    period = m.get("report_date") or ""
+    return bool(
+        m.get("ok")
+        and prev
+        and period > prev
+        and m.get("form") == "13F-HR"
+        and m.get("filing_date")
+        and 0 <= age_days(m["filing_date"], now) <= MAX_AGE_DAYS
+    )
+
+
+def new_filings(managers: list[dict], previous: dict[str, str], now: str) -> list[dict]:
     found = []
     for m in managers:
-        if not m.get("ok"):
+        if not is_alertable(m, previous, now):
             continue
-        acc = m.get("accession")
-        slug = m.get("slug")
-        if not acc or not slug:
-            continue
-        prev = previous.get(slug)
-        if prev != acc:
-            found.append(
-                {
-                    "slug": slug,
-                    "manager": m.get("manager"),
-                    "name": m.get("name"),
-                    "quarter": m.get("quarter"),
-                    "filing_date": m.get("filing_date"),
-                    "report_date": m.get("report_date"),
-                    "accession": acc,
-                    "previous_accession": prev,
-                    "sec_url": m.get("sec_url"),
-                    "is_first_seen": prev is None,
-                }
-            )
+        found.append(
+            {
+                "slug": m["slug"],
+                "manager": m.get("manager"),
+                "name": m.get("name"),
+                "quarter": m.get("quarter"),
+                "filing_date": m.get("filing_date"),
+                "report_date": m.get("report_date"),
+                "previous_report_date": previous.get(m["slug"]),
+                "form": m.get("form"),
+                "accession": m.get("accession"),
+                "sec_url": m.get("sec_url"),
+                "reported_by": m.get("reported_by"),
+            }
+        )
     return found
+
+
+def next_periods(managers: list[dict], previous: dict[str, str]) -> dict[str, str]:
+    out = dict(previous)
+    for m in managers:
+        if m.get("ok") and m.get("slug") and m.get("report_date"):
+            out[m["slug"]] = max(out.get(m["slug"], ""), m["report_date"])
+    return dict(sorted(out.items()))
+
+
+def _usd(v: float) -> str:
+    a = abs(v)
+    s = f"${a / 1e9:.1f}B" if a >= 1e9 else f"${a / 1e6:.1f}M" if a >= 1e6 else f"${a / 1e3:.0f}K"
+    return ("-" if v < 0 else "+") + s
+
+
+def move_lines(mv: dict | None) -> list[str]:
+    """'New: DHI +$1.2B (0.4% of book)' style lines from a filing's `moves`."""
+    if not mv:
+        return []
+    out = []
+    for label, key in (("New", "new"), ("Added", "added"), ("Trimmed", "trimmed"), ("Exited", "exited")):
+        rows = mv.get(key) or []
+        if not rows:
+            continue
+        parts = []
+        for r in rows[:5]:
+            name = r.get("ticker") or r.get("display_name") or r.get("issuer") or r.get("cusip")
+            if r.get("put_call"):
+                name = f"{name} {r['put_call'].lower()}s"
+            pct = r.get("pct_of_book")
+            parts.append(f"{name} {_usd(r['value_delta'])}" + (f" ({abs(pct) * 100:.1f}% of book)" if pct else ""))
+        out.append(f"{label}: " + ", ".join(parts))
+    return out
 
 
 def email_body(filings: list[dict], generated_at: str) -> tuple[str, str]:
@@ -69,6 +135,8 @@ def email_body(filings: list[dict], generated_at: str) -> tuple[str, str]:
         lines.append(
             f"- {f['manager']} ({f['name']}) {f['quarter']} filed {f['filing_date']}"
         )
+        for line in move_lines(f.get("moves")):
+            lines.append(f"  {line}")
         if f.get("sec_url"):
             lines.append(f"  {f['sec_url']}")
     lines.append("")

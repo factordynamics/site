@@ -24,7 +24,7 @@ from ingest.securities import UNCLASSIFIED
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
-SKIP = {"universe.json", "filers.json", "alerts.json", "cusip_map.json", "securities.json", "issuers.json", "amendments.json"}
+SKIP = {"universe.json", "filers.json", "alerts.json", "cusip_map.json", "securities.json", "issuers.json", "amendments.json", "notices.json", "status.json"}
 FIELDS = ("ticker", "display_name", "sector")
 
 
@@ -72,6 +72,8 @@ def walk(obj, secs: dict, figi: dict) -> bool:
 CSV_FIELDS = (
     "manager", "slug", "cik", "quarter", "report_date", "filing_date", "accession", "ticker",
     "issuer", "cusip", "title", "put_call", "shares", "value_usd", "weight",
+    # Change vs the prior quarter in this history; exited positions are listed with shares 0.
+    "change", "prev_shares", "share_change", "value_delta_usd", "pct_of_book",
 )
 
 
@@ -85,18 +87,19 @@ def quarter_csv(q: dict) -> str:
     w = csv.writer(buf, lineterminator="\r\n")
     w.writerow(CSV_FIELDS)
     meta = [q.get(k) or "" for k in ("manager", "slug", "cik", "quarter", "report_date", "filing_date", "accession")]
-    for h in q.get("holdings") or []:
+    for h in (q.get("holdings") or []) + (q.get("exited") or []):
         w.writerow(meta + [
             h.get("ticker") or "", h.get("issuer") or "", h.get("cusip") or "", h.get("title") or "",
             h.get("put_call") or "", num(h.get("shares") or 0), num(h.get("value") or 0), h.get("weight") or 0,
-        ])
+        ] + ["" if h.get(k) is None else num(h[k])
+             for k in ("change", "prev_shares", "share_change", "value_delta", "pct_of_book")])
     return buf.getvalue()
 
 
 def write_csvs() -> int:
     """h/{slug}/{quarter}.csv next to each quarter file, and csv_url in {slug}-history.json."""
     n = 0
-    for path in sorted((DATA / "h").glob("*/*.json")):
+    for path in sorted((DATA / "h").glob("*/*Q?.json")):
         text = quarter_csv(json.loads(path.read_text()))
         out = path.with_suffix(".csv")
         data = text.encode("utf-8")
@@ -116,6 +119,10 @@ def write_csvs() -> int:
                 changed = True
         if changed:
             path.write_text(json.dumps(idx, separators=(",", ":")) + "\n")
+        # Full index (every quarter's preview rows) for the Copy API's /history route in R2.
+        folder = DATA / "h" / idx["slug"]
+        if folder.is_dir():
+            (folder / "index.json").write_text(json.dumps(idx, separators=(",", ":")) + "\n")
     return n
 
 

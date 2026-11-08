@@ -23,7 +23,9 @@ WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 HIST = WEB / "data" / "h"
 API = os.environ.get("COPYBOOK_API", "https://copybook-api.factordynamics.workers.dev").rstrip("/")
 MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-manifest.json"))
-KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/\d{4}Q[1-4]\.(json|csv)$")
+KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4]\.(json|csv)|index\.json)$")
+# Keys the Worker may not accept yet: a failure warns instead of failing the run.
+OPTIONAL = re.compile(r"/index\.json$")
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
 USER_AGENT = "Copybook-ingest/1.0 (+https://copybook.factordynamics.com)"
@@ -90,7 +92,13 @@ def main() -> int:
         digest = hashlib.sha256(body).hexdigest()
         if manifest.get(key) == digest:
             continue
-        put(key, body, token)
+        try:
+            put(key, body, token)
+        except RuntimeError as exc:
+            if not OPTIONAL.search(key):
+                raise
+            print(f"::warning::{exc}", flush=True)
+            continue
         manifest[key] = digest
         sent += 1
         if sent % 100 == 0:
