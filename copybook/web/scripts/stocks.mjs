@@ -23,6 +23,14 @@ for (let i = 0; i < current.length; i += 16) {
   books.push(...part.filter(Boolean))
 }
 
+// Ingest names some ETF trusts per issuer, not per fund: every "ISHARES TR" CUSIP reads "iShares Core
+// S&P 500 ETF". A display name used for more than two tickers is ignored in favour of the issuer name.
+{
+  const tickersOf = new Map()
+  for (const b of books) for (const h of b.holdings) if (h.display_name && h.ticker) (tickersOf.get(h.display_name) ?? tickersOf.set(h.display_name, new Set()).get(h.display_name)).add(h.ticker.split(/[.-]/)[0])
+  for (const b of books) for (const h of b.holdings) if (h.display_name && (tickersOf.get(h.display_name)?.size ?? 0) > 2) h.display_name = null
+}
+
 const tc = (s) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()))
 const baseName = (n) => n.replace(/\s+(Class|Cl)\s+[A-Z]\b.*$/i, '').replace(/\s+(Ordinary Shares|Common Stock|Shs)$/i, '').trim()
 const r0 = (x) => Math.round(x)

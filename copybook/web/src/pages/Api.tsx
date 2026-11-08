@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Badge, Button, Panel, Skeleton } from '../components/ui'
 import { api } from '../config'
 import { useAsync, useTitle } from '../lib/data'
+import { aboutCount, loadCoverage } from '../lib/stocks'
 
 // Renders the live OpenAPI document ({api}/v1/openapi.json), so new endpoints appear here as the API ships them.
 type Op = { summary?: string; description?: string; parameters?: { name: string; in: string; required?: boolean; description?: string; schema?: { type?: string } }[]; responses?: Record<string, { description?: string }> }
@@ -10,10 +11,10 @@ type Spec = { info: { title: string; version: string; description?: string }; se
 
 const SPEC = `${api}/v1/openapi.json`
 const SAMPLE = `${import.meta.env.BASE_URL}api/sample-holdings.json`
-const CURATED = 199
 
 // Newest first. Breaking changes are announced here at least 90 days ahead.
 const CHANGES: [string, string][] = [
+  ['2026-11-08', 'Every 13F filer in /v1/filers and its holdings endpoint, not only the managers tracked closely.'],
   ['2026-11-08', 'v1 published: /v1/me, /v1/filers and /v1/filers/{filer}/holdings/{quarter}. The as_of parameter is documented and returns 501 not_yet_available until point-in-time data is served.'],
 ]
 
@@ -29,6 +30,7 @@ const METHOD_TONE: Record<string, 'up' | 'accent' | 'down' | 'neutral'> = { get:
 
 export function ApiDocs() {
   useTitle('API · Copybook')
+  const cov = useAsync(loadCoverage, [])
   const spec = useAsync(() => fetch(SPEC).then((r) => (r.ok ? (r.json() as Promise<Spec>) : Promise.reject(new Error(String(r.status))))), [])
   const s = spec.data
   const base = s?.servers?.[0]?.url ?? api
@@ -61,7 +63,7 @@ export function ApiDocs() {
           </Button>
         </div>
         <p className="mt-4 text-[14px] text-ink-3">
-          Coverage: the {CURATED} managers we track closely today; every 13F filer (about 8,900) is coming to the API this month. Use is covered by our{' '}
+          Coverage: every 13F filer is in /v1, with the latest 13F for {cov.data ? aboutCount(cov.data.filers) : '8,900+'} filers and 8 quarters of history for the {cov.data?.curated ?? 199} managers we track closely. Stock holders and bulk exports arrive this week. Use is covered by our{' '}
           <Link to="/terms/" className="font-medium text-accent hover:text-accent-2">
             terms
           </Link>

@@ -64,7 +64,8 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
   const [busy, setBusy] = useState(false)
   const { status, follows } = useFollows()
   const [editing, setEditing] = useState(false)
-  const endRaw = member.status === 'trialing' && member.trial_end ? member.trial_end : member.period_end
+  const cancelling = Boolean(member.cancel_at_period_end)
+  const endRaw = cancelling && member.cancel_at ? member.cancel_at : member.status === 'trialing' && member.trial_end ? member.trial_end : member.period_end
   const end = endRaw ? new Date(typeof endRaw === 'number' ? endRaw * 1000 : endRaw) : null
   const endLabel = end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   const trial = member.status === 'trialing'
@@ -112,14 +113,19 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-semibold">Plan</h2>
-            <Badge tone={trial ? 'accent' : member.active ? 'up' : 'warn'}>{trial ? 'Free trial' : member.active ? 'Active' : member.status}</Badge>
+            <Badge tone={cancelling ? 'warn' : trial ? 'accent' : member.active ? 'up' : 'warn'}>{cancelling ? 'Cancelled' : trial ? 'Free trial' : member.active ? 'Active' : member.status}</Badge>
           </div>
           <p className="mt-3 text-[14px] text-ink-2">{member.email}</p>
           <p className="mt-1 text-[14px] text-ink-2">
             {PLAN_NAME[member.plan] ?? 'Copy'}
             {member.interval === 'yearly' ? ', yearly' : member.interval === 'monthly' ? ', monthly' : ''}
-            {endLabel && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`}
+            {endLabel && !cancelling && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`}
           </p>
+          {cancelling && (
+            <p className="mt-3 rounded-xl bg-[#fdf3e1] px-3.5 py-2.5 text-[14px] text-[#7a4b06]">
+              Your plan ends {endLabel ?? 'at the end of this period'}. You keep everything until then and won’t be charged again.
+            </p>
+          )}
           <Button
             variant="dark"
             className="mt-5"
@@ -132,9 +138,11 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
               })
             }}
           >
-            {busy ? 'Opening…' : 'Manage billing'} <Arrow />
+            {busy ? 'Opening…' : cancelling ? 'Resume plan' : 'Manage billing'} <Arrow />
           </Button>
-          <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">{trial ? trialTerms(member.plan) : renewalTerms(member.plan)}</p>
+          <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
+            {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
+          </p>
         </section>
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[15px] font-semibold">Filing alerts</h2>

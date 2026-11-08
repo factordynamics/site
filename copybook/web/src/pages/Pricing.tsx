@@ -44,14 +44,15 @@ const tiers = (filers: string, curated: number): Tier[] => [
     lead: 'Everything in Copy, plus',
     now: [
       { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
-      { t: 'Filer and holdings endpoints', d: `Holdings for any quarter on file, as JSON: 8 quarters today, back to 2013 coming this month. ${curated} managers today; all ${filers} filers coming.` },
+      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, with its latest holdings as JSON; 8 quarters of history for the ${curated} we track closely, back to 2013 coming this month.` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
     ],
     soon: [
       { t: 'History and events endpoints', d: 'Changes across quarters, Form 4 and 13D/G as JSON.' },
       { t: 'Point-in-time history', d: 'Each position dated by when it was disclosed, so backtests don’t see the future.' },
-      { t: 'Bulk exports', d: 'Whole-quarter files for every filer we cover.' },
+      { t: 'Stock holders endpoint', d: 'Every filer holding a stock, as JSON. Arriving this week.' },
+      { t: 'Bulk exports', d: 'Whole-quarter files for every filer we cover. Arriving this week.' },
       { t: 'My book and peer overlap', d: 'Crowding in your names, and overlap with the funds you benchmark against.' },
     ],
   },

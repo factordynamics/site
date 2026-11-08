@@ -10,6 +10,9 @@ export type Member = {
   interval?: 'monthly' | 'yearly' | 'unknown'
   trial_end?: number | null
   period_end?: number | string | null
+  /** Cancelled in the billing portal: access continues until cancel_at (unix seconds). */
+  cancel_at_period_end?: boolean
+  cancel_at?: number | null
   alerts: 'all' | 'off' | string[]
 }
 

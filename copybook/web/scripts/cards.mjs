@@ -6,6 +6,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
+import { displayName } from '../src/lib/names.mjs'
 
 const out = process.argv[2] || 'dist'
 const base = process.argv[3] || process.env.VITE_DATA_BASE || 'https://refcell.github.io/gust/copybook/data/'
@@ -28,7 +29,6 @@ const money = (v) => {
 }
 const x = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s)
-const tc = (s) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()))
 
 const index = await read('index.json')
 const live = index.managers.filter((m) => m.ok && (m.total_value ?? 0) > 0 && !['inactive', 'reported_by_other'].includes(m.status))
@@ -80,17 +80,21 @@ for (let i = 0; i < recent.length; i += 16) {
   for (const b of part) {
     if (!b?.prev_quarter || !b.moves || !b.accession) continue
     // Share positions only: an option's filed value is the underlying's notional, not a trade size.
+    // A display name shared by several tickers in one book is ingest naming the trust, not the fund (see stocks.mjs).
+    const named = new Map()
+    for (const h of b.holdings ?? []) if (h.display_name && h.ticker) (named.get(h.display_name) ?? named.set(h.display_name, new Set()).get(h.display_name)).add(h.ticker.split(/[.-]/)[0])
+    const nameOf = (h) => (h.display_name && (named.get(h.display_name)?.size ?? 0) <= 1 ? h.display_name : displayName(h.issuer))
     const all = ['new', 'added', 'trimmed', 'exited'].flatMap((k) => (b.moves[k] ?? []).filter((h) => !h.put_call && h.value_delta).map((h) => ({ ...h, change: k })))
     if (!all.length) continue
     const moves = all
       .sort((a, z) => Math.abs(z.value_delta) - Math.abs(a.value_delta))
       .slice(0, 5)
-      .map((h) => ({ ticker: h.ticker, name: h.display_name || tc(h.issuer), cusip: h.cusip, change: h.change, value_delta: Math.round(h.value_delta), shares: h.shares, prev_shares: h.prev_shares, weight: h.weight }))
+      .map((h) => ({ ticker: h.ticker, name: nameOf(h), cusip: h.cusip, change: h.change, value_delta: Math.round(h.value_delta), shares: h.shares, prev_shares: h.prev_shares, weight: h.weight }))
     const c = {
       accession: b.accession,
       slug: b.slug,
-      manager: b.manager,
-      firm: tc(b.name),
+      manager: displayName(b.manager),
+      firm: displayName(b.name),
       featured: Boolean(b.featured),
       quarter: b.quarter,
       prev_quarter: b.prev_quarter,

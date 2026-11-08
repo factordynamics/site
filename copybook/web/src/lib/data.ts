@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { displayName } from './names.mjs'
+export { displayName }
 
 export const BASE = import.meta.env.BASE_URL
 // Data can live on another origin (VITE_DATA_BASE); GitHub Pages serves it with CORS *.
@@ -82,6 +84,14 @@ export const loadSectors = () =>
 export function cleanHolding(h: Holding): Holding {
   return { ...h, filed: h.issuer, issuer: h.display_name || displayName(h.issuer), ticker: h.ticker || null }
 }
+/** Ingest sometimes names an ETF trust rather than the fund (every iShares CUSIP as "iShares Core S&P 500 ETF"):
+ *  a display name shared by several tickers in one book is dropped, so the issuer name shows instead. */
+function cleanBook(holdings: Holding[]): Holding[] {
+  const tickers = new Map<string, Set<string>>()
+  // Share classes (BRK.A, BRK.B) may share a name; count ticker roots.
+  for (const h of holdings) if (h.display_name && h.ticker) (tickers.get(h.display_name) ?? tickers.set(h.display_name, new Set()).get(h.display_name)!).add(h.ticker.split(/[.-]/)[0])
+  return holdings.map((h) => cleanHolding(h.display_name && (tickers.get(h.display_name)?.size ?? 0) > 1 ? { ...h, display_name: undefined } : h))
+}
 
 export type IndexData = {
   generated_at: string
@@ -151,8 +161,8 @@ async function loadFiler(slug: string): Promise<ManagerFile> {
   const f = await getJSON<Shard>(`${DATA}f/${cik.padStart(10, '0')}.json`)
   const col = Object.fromEntries(f.columns.map((c, i) => [c, i]))
   const total = f.total_value || 1
-  const holdings = f.rows
-    .map((r) => ({
+  const holdings = cleanBook(
+    f.rows.map((r) => ({
       ticker: (r[col.ticker] as string) || null,
       issuer: r[col.issuer] as string,
       title: r[col.title] as string,
@@ -168,7 +178,7 @@ async function loadFiler(slug: string): Promise<ManagerFile> {
         ? { change: (r[col.change] as Holding['change']) || null, prev_shares: Number(r[col.prev_shares]) || 0, prev_value: Number(r[col.prev_value]) || 0 }
         : {}),
     }))
-    .map(cleanHolding)
+  )
   const name = displayName(f.name)
   return {
     cik: f.cik,
@@ -198,7 +208,7 @@ export async function loadManager(slug: string): Promise<ManagerFile> {
     ...m,
     manager: displayName(m.manager),
     name: displayName(m.name),
-    holdings: (m.holdings || []).map(cleanHolding),
+    holdings: cleanBook(m.holdings || []),
   }
 }
 
@@ -330,26 +340,8 @@ export function dateLabel(d?: string) {
   return t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-const KEEP = new Set(['LP', 'LLC', 'PLC', 'ETF', 'SPDR', 'S&P', 'NV', 'SA', 'AG', 'SE', 'II', 'III', 'IV', 'USA', 'UK', 'AQR', 'GQG', 'HSBC', 'BNP', 'FMR', 'BHP', 'ASML', 'NVIDIA', 'AT&T', 'ADR', 'REIT', 'GE', 'MSCI', 'IBM', 'AMD', 'KLA', 'UBS', 'CVS', 'TJX', 'LLP', 'PDT', 'CPP', 'DE', 'US'])
-const SMALL = new Set(['of', 'and', 'the', 'for', 'de', 'du'])
 
 /** "BANK OF AMER CORP" -> "Bank of Amer Corp". Mixed-case input is left alone. */
-export function displayName(s?: string) {
-  if (!s) return ''
-  const trimmed = s.replace(/\\+$/, '').replace(/\s+\/[A-Z]{2,3}\/?$/, '').trim()
-  if (/[a-z]/.test(trimmed)) return trimmed
-  return trimmed
-    .toLowerCase()
-    .split(/(\s+|-|\/)/)
-    .map((w, i) => {
-      const up = w.toUpperCase()
-      if (KEEP.has(up.replace(/[.,]/g, ''))) return up
-      if (i > 0 && SMALL.has(w)) return w
-      if (/^[a-z]\.?$/.test(w) || /^([a-z]\.){2,}$/.test(w)) return up
-      return w.charAt(0).toUpperCase() + w.slice(1)
-    })
-    .join('')
-}
 
 const LEGAL = /^(llc|lp|llp|l|p|inc|incorporated|corp|corporation|co|company|ltd|limited|plc|gp|sa|ag|se|nv|the|of|and|et|al)$/i
 export function initials(name: string) {
