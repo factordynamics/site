@@ -3,10 +3,11 @@
 // Usage: node scripts/postbuild.mjs <index.json path or URL>
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { getJson } from './getjson.mjs'
 
 const dist = new URL('../dist/', import.meta.url).pathname
 const src = process.argv[2] || 'https://refcell.github.io/gust/copybook/data/index.json'
-const index = src.startsWith('http') ? await (await fetch(src)).json() : JSON.parse(readFileSync(src, 'utf8'))
+const index = src.startsWith('http') ? await getJson(src) : JSON.parse(readFileSync(src, 'utf8'))
 const shell = readFileSync(join(dist, 'index.html'), 'utf8')
 const SITE = process.env.VITE_SITE || 'https://copybook.factordynamics.com/'
 
@@ -67,7 +68,7 @@ for (const m of index.managers) {
 let fn = 0
 try {
   const filersSrc = src.replace(/index\.json$/, 'filers.json')
-  const filers = (filersSrc.startsWith('http') ? await (await fetch(filersSrc)).json() : JSON.parse(readFileSync(filersSrc, 'utf8'))).filers
+  const filers = (filersSrc.startsWith('http') ? await getJson(filersSrc) : JSON.parse(readFileSync(filersSrc, 'utf8'))).filers
   const curated = new Map(index.managers.filter((m) => m.ok).map((m) => [m.cik.replace(/^0+/, ''), m.slug]))
   const usd = (v) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`)
   for (const f of filers) {

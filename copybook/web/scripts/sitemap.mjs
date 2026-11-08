@@ -4,11 +4,12 @@
 // Usage: node sitemap.mjs <output dir> [index.json path or URL, default <output dir>/data/index.json]
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { getJson } from './getjson.mjs'
 
 const dir = process.argv[2] || 'dist/copybook'
 const SITE = process.env.VITE_SITE || 'https://copybook.factordynamics.com/'
 const src = process.argv[3] || join(dir, 'data', 'index.json')
-const index = src.startsWith('http') ? await (await fetch(src)).json() : JSON.parse(readFileSync(src, 'utf8'))
+const index = src.startsWith('http') ? await getJson(src) : JSON.parse(readFileSync(src, 'utf8'))
 const managers = index.managers.filter((m) => m.ok)
 const newest = managers.map((m) => m.filing_date).filter(Boolean).sort().pop()
 
@@ -43,7 +44,7 @@ try {
 }
 try {
   const fsrc = src.replace(/index\.json$/, 'filers.json')
-  const filers = (fsrc.startsWith('http') ? await (await fetch(fsrc)).json() : JSON.parse(readFileSync(fsrc, 'utf8'))).filers
+  const filers = (fsrc.startsWith('http') ? await getJson(fsrc) : JSON.parse(readFileSync(fsrc, 'utf8'))).filers
   const curated = new Set(managers.map((m) => m.cik.replace(/^0+/, '')))
   for (const f of filers) if (f.ok && f.slug && !curated.has(f.cik.replace(/^0+/, ''))) urls.push([`investors/${f.slug}/`, f.filing_date])
 } catch {

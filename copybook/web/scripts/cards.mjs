@@ -7,12 +7,13 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
 import { displayName } from '../src/lib/names.mjs'
+import { getJson } from './getjson.mjs'
 
 const out = process.argv[2] || 'dist'
 const base = process.argv[3] || process.env.VITE_DATA_BASE || 'https://refcell.github.io/gust/copybook/data/'
 const SITE = process.env.VITE_SITE || 'https://copybook.factordynamics.com/'
 const read = async (f) =>
-  base.startsWith('http') ? await fetch(base + f).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${f}`)))) : JSON.parse(readFileSync(join(base, f), 'utf8'))
+  base.startsWith('http') ? await getJson(base + f) : JSON.parse(readFileSync(join(base, f), 'utf8'))
 
 const fonts = new URL('../node_modules/geist/dist/fonts/', import.meta.url).pathname
 const fontFiles = [
