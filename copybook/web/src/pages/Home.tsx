@@ -45,7 +45,7 @@ function Hero({ managers }: { managers?: Manager[] }) {
             Copybook turns SEC 13F filings into clear portfolios: top positions, sector mix and conviction, for the managers worth following.
           </p>
           <div className="mt-7 max-w-xl">
-            <SearchBox size="lg" placeholder="Search any investor or 13F filer" />
+            <SearchBox size="lg" placeholder="Search an investor or a ticker" />
             <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-3">
               Popular:
               {['warren-buffett', 'bill-ackman', 'seth-klarman', 'chris-hohn'].map((s) => {

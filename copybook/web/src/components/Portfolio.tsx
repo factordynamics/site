@@ -4,16 +4,18 @@ import { rankColor, sectorColor } from './charts'
 
 export type Agg = Holding & { sector: string; key: string }
 
-/** Long positions, options split out, sorted by value. */
+/** Share positions, sorted by value, with weights against the share book. Options (calls and puts,
+ * filed at the underlying's notional) are split out so they never count as shares. */
 export function useBook(holdings: Holding[] | undefined) {
   return useMemo(() => {
-    const hs = (holdings || []).filter((h) => h.value > 0)
-    const rows: Agg[] = hs
-      .map((h, i) => ({ ...h, sector: sectorOf(h.cusip, h.sector), key: `${h.cusip}-${h.put_call || ''}-${i}` }))
-      .sort((a, b) => b.value - a.value)
-    const total = rows.reduce((s, h) => s + h.value, 0)
+    const hs = (holdings || []).filter((h) => h.value > 0).map((h, i) => ({ ...h, sector: sectorOf(h.cusip, h.sector), key: `${h.cusip}-${h.put_call || ''}-${i}` }))
+    const shares = hs.filter((h) => !h.put_call)
+    const total = shares.reduce((s, h) => s + h.value, 0)
+    const rows: Agg[] = shares.map((h) => ({ ...h, weight: total ? h.value / total : 0 })).sort((a, b) => b.value - a.value)
+    const options: Agg[] = hs.filter((h) => h.put_call).sort((a, b) => b.value - a.value)
+    const optionsValue = options.reduce((s, h) => s + h.value, 0)
     const sectors = sectorMix(rows)
-    return { rows, total, sectors, top10: concentration(rows, 10), top1: rows[0] }
+    return { rows, total, options, optionsValue, sectors, top10: concentration(rows, 10), top1: rows[0] }
   }, [holdings])
 }
 

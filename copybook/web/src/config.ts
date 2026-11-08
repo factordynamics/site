@@ -16,6 +16,9 @@ export const prices = { monthly: 9, yearly: 79 }
 
 export const checkoutEnabled = () => Boolean(checkout.monthly || checkout.yearly)
 
+export const TRIAL_DAYS = 14
+export const TRIAL_TERMS =
+  'Free for 14 days, then $9/month or $79/year until you cancel. Cancel any time from Manage billing before the trial ends and you won’t be charged.'
 export const RENEWAL_TERMS =
   'Copy renews automatically at $9/month or $79/year until you cancel. Cancel any time from Manage billing; you keep access until the end of the period you paid for.'
 export const DATA_TERMS = 'SEC EDGAR 13F filings as filed. Not investment advice.'

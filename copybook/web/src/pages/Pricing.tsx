@@ -1,13 +1,26 @@
-import { useTitle } from '../lib/data'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
 import { attributed } from '../lib/attribution'
-import { checkout, checkoutEnabled, DATA_TERMS, prices, RENEWAL_TERMS } from '../config'
+import { useTitle } from '../lib/data'
+import { checkout, checkoutEnabled, DATA_TERMS, prices, TRIAL_DAYS, TRIAL_TERMS } from '../config'
 
-const FREE = ['Latest 13F portfolio for every investor', 'Portfolio map, sector mix and top holdings', 'Consensus book with search', 'Every 13F filer in search']
-const COPY = ['Everything in Free', 'Quarter-over-quarter buys, sells and exits', '8 quarters of 13F history and CSV export', 'Email the day a fund you follow files']
+const FREE = [
+  'The latest 13F portfolio of every investor we track',
+  'Stock pages: who holds a ticker, and who bought or sold it',
+  'The top buys and sells for each fund, and the top of this season’s flow',
+  'Consensus book and search across every 13F filer',
+]
+/** soon: shipping in rollout; labelled so nothing is promised as live before it is. */
+const COPY: { t: string; d: string; soon?: boolean }[] = [
+  { t: 'Follow investors and stocks', d: 'One click on any investor or stock page. Tell us what you own and we’ll flag it.' },
+  { t: 'An email when they file', d: 'For the investors you follow, usually within the hour of the 13F appearing on EDGAR.' },
+  { t: 'Every move, not just the top four', d: 'All buys, sells, new positions and exits for every fund, and the full filing-season flow.' },
+  { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D/G stake filings since the last 13F, on each investor page.', soon: true },
+  { t: 'Alerts with the moves inside', d: 'The new, added, trimmed and exited positions, with dollars and share of the book, in the email itself.', soon: true },
+  { t: '8 quarters of history and CSV', d: 'Every position in every quarter, quarter tabs, and a download for your own spreadsheet.' },
+]
 
 export function Pricing() {
   const [cycle, setCycle] = useState<'yearly' | 'monthly'>('yearly')
@@ -18,8 +31,10 @@ export function Pricing() {
     <div className="container-x pt-12 md:pt-16">
       <header className="mx-auto max-w-2xl text-center">
         <p className="text-[13px] font-medium text-accent">Pricing</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">The latest quarter is free. Copy shows what changed.</h1>
-        <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Read any portfolio today. Upgrade when you want the buys, the sells and an email the moment a filing lands.</p>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Know what they bought the day they file.</h1>
+        <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
+          Reading a portfolio is free. Copy follows the investors and stocks you care about, emails you when a filing lands, and shows every move in it.
+        </p>
         <div className="mt-8 inline-flex rounded-full bg-ink/[0.05] p-1 text-[14px]" role="tablist" aria-label="Billing period">
           {(['monthly', 'yearly'] as const).map((c) => (
             <button key={c} role="tab" aria-selected={cycle === c} onClick={() => setCycle(c)} className={`rounded-full px-4 py-1.5 ${cycle === c ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
@@ -30,7 +45,7 @@ export function Pricing() {
         </div>
       </header>
 
-      <div className="mx-auto mt-10 grid max-w-4xl gap-5 md:grid-cols-2">
+      <div className="mx-auto mt-10 grid max-w-5xl gap-5 md:grid-cols-[1fr_1.35fr]">
         <article className="flex flex-col rounded-[18px] bg-card p-7 shadow-[var(--shadow-card)] md:p-8">
           <h2 className="text-[17px] font-semibold">Free</h2>
           <p className="mt-1 text-[14px] text-ink-3">For reading what great investors own.</p>
@@ -52,34 +67,41 @@ export function Pricing() {
 
         <article className="relative flex flex-col overflow-hidden rounded-[18px] bg-night p-7 text-white shadow-[var(--shadow-frame)] md:p-8">
           <div className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-accent/40 blur-[80px]" aria-hidden="true" />
-          <div className="relative flex items-center justify-between">
+          <div className="relative flex items-center justify-between gap-3">
             <h2 className="text-[17px] font-semibold">Copy</h2>
+            <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[12px] font-medium text-white/85">{TRIAL_DAYS} days free</span>
           </div>
-          <p className="relative mt-1 text-[14px] text-white/60">For following every move.</p>
+          <p className="relative mt-1 text-[14px] text-white/60">For following every move, as it’s filed.</p>
           <p className="relative mt-6 flex items-baseline gap-1.5">
             <span className="num text-[44px] font-semibold tracking-[-0.04em]">${cycle === 'yearly' ? prices.yearly : prices.monthly}</span>
             <span className="text-[14px] text-white/60">{cycle === 'yearly' ? 'per year' : 'per month'}</span>
           </p>
-          <p className="relative text-[13px] text-white/60">{cycle === 'yearly' ? `About $${(prices.yearly / 12).toFixed(2)} a month, billed yearly` : `Or $${prices.yearly} a year`}</p>
+          <p className="relative text-[13px] text-white/60">
+            {cycle === 'yearly' ? `About $${(prices.yearly / 12).toFixed(2)} a month, billed yearly after the trial` : `Or $${prices.yearly} a year`}
+          </p>
           <div className="relative mt-6">
             {live ? (
               <>
                 <Button href={attributed(link)} className="w-full" size="lg">
-                  Get Copy
+                  Start {TRIAL_DAYS}-day free trial
                 </Button>
-                <p className="mt-3 text-[12px] leading-relaxed text-white/55">{RENEWAL_TERMS}</p>
+                <p className="mt-3 text-[12px] leading-relaxed text-white/60">{TRIAL_TERMS}</p>
               </>
             ) : (
-              <>
-                <WaitlistForm cta="Get early access" dark id="wl-pricing" />
-                <p className="mt-2 text-[12.5px] text-white/55">Copy opens with the Q3 2026 filings. Join and we’ll email you first.</p>
-              </>
+              <WaitlistForm cta="Get early access" dark id="wl-pricing" />
             )}
           </div>
-          <ul className="relative mt-7 space-y-3 text-[14.5px] text-white/80">
+          <ul className="relative mt-7 grid gap-x-6 gap-y-4 sm:grid-cols-2">
             {COPY.map((f) => (
-              <li key={f} className="flex gap-2.5">
-                <Check className="mt-0.5 shrink-0 text-[#9fb0ff]" /> {f}
+              <li key={f.t} className="flex gap-2.5">
+                <Check className="mt-0.5 shrink-0 text-[#9fb0ff]" />
+                <span>
+                  <span className="flex flex-wrap items-center gap-x-2 text-[14.5px] font-medium text-white">
+                    {f.t}
+                    {f.soon && <span className="rounded-full bg-white/10 px-1.5 text-[11px] font-medium leading-5 text-white/75">Rolling out</span>}
+                  </span>
+                  <span className="mt-0.5 block text-[13px] leading-relaxed text-white/65">{f.d}</span>
+                </span>
               </li>
             ))}
           </ul>
@@ -90,12 +112,19 @@ export function Pricing() {
         <h2 className="text-[28px] font-semibold tracking-[-0.03em]">Questions</h2>
         <dl className="mt-6 divide-y divide-line border-y border-line">
           {[
-            ['Where does the data come from?', 'Every holding comes from the Form 13F-HR the fund filed with the SEC. We link each portfolio to its original filing.'],
-            ['How current is it?', 'Funds file within 45 days of quarter end, so a 13F shows positions as of the last quarter end. We check EDGAR every three hours and publish new filings on the next run.'],
-            ['Do you show live prices or returns?', 'No. Values are what the fund reported. We don’t re-price holdings or estimate performance.'],
-            ['Can I cancel?', live
-              ? 'Yes. Copy renews automatically until you cancel, and you can cancel any time from Manage billing on your account page. You keep access until the end of the period you paid for.'
-              : 'Copy isn’t on sale yet. When it opens, it renews automatically until you cancel, you can cancel any time from Manage billing on your account page, and you keep access until the end of the period you paid for.'],
+            [
+              'How does the free trial work?',
+              `You get every Copy feature for ${TRIAL_DAYS} days. Stripe takes a card at signup so the plan continues without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then.`,
+            ],
+            [
+              'How fast are filing alerts?',
+              'We check EDGAR on a schedule and email usually within the hour of a 13F appearing there. Funds have 45 days after quarter end to file, so the filing itself is always a few weeks after the positions it shows.',
+            ],
+            ['What does “Rolling out” mean?', 'Those features are being finished for the Q3 filing season. Copy members get them as soon as they ship, at no extra cost.'],
+            ['Where does the data come from?', 'Every holding comes from the Form 13F-HR the fund filed with the SEC, and every between-quarter move from its Form 4 or Schedule 13D/G. We link each one to the original filing.'],
+            ['Do you show live prices or returns?', 'No. Values are what the fund reported at quarter end. We don’t re-price holdings or estimate performance.'],
+            ['How are options shown?', 'Calls and puts are listed apart from shares. A 13F reports options at the value of the underlying shares, so we label them as notional and leave them out of portfolio weights and holder counts.'],
+            ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for.'],
             ['Is this investment advice?', 'No. Copybook shows public filings. 13F omits short positions, most non-US holdings and cash, so a portfolio here is never the whole picture.'],
           ].map(([q, a]) => (
             <div key={q} className="py-5">
@@ -105,7 +134,11 @@ export function Pricing() {
           ))}
         </dl>
         <p className="mt-6 text-[14px] text-ink-3">
-          Already subscribed? <Link to="/account/" className="font-medium text-accent hover:text-accent-2">Sign in to your account</Link>. {DATA_TERMS}
+          Already a member?{' '}
+          <Link to="/account/" className="font-medium text-accent hover:text-accent-2">
+            Sign in to your account
+          </Link>
+          . {DATA_TERMS}
         </p>
       </section>
     </div>

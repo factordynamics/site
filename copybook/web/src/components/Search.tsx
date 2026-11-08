@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { loadFilers, loadIndex, money, secFilerUrl, type Filer, type Manager } from '../lib/data'
+import { loadStockIndex, stockPath, type StockRef } from '../lib/stocks'
 import { Monogram, SearchIcon } from './ui'
 
-type Hit = { kind: 'manager'; m: Manager } | { kind: 'filer'; f: Filer }
+type Hit = { kind: 'manager'; m: Manager } | { kind: 'filer'; f: Filer } | { kind: 'stock'; s: StockRef }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
 
@@ -23,12 +24,14 @@ function score(q: string, ...fields: string[]) {
 export function useSearch(query: string) {
   const [managers, setManagers] = useState<Manager[]>([])
   const [filers, setFilers] = useState<Filer[] | null>(null)
+  const [stocks, setStocks] = useState<StockRef[] | null>(null)
   useEffect(() => {
     loadIndex().then((d) => setManagers(d.managers)).catch(() => null)
   }, [])
   useEffect(() => {
     if (query && !filers) loadFilers().then(setFilers).catch(() => setFilers([]))
-  }, [query, filers])
+    if (query && !stocks) loadStockIndex().then((d) => setStocks(d.stocks)).catch(() => setStocks([]))
+  }, [query, filers, stocks])
   return useMemo<Hit[]>(() => {
     const q = norm(query)
     if (!q) return managers.filter((m) => m.featured).slice(0, 6).map((m) => ({ kind: 'manager', m }))
@@ -38,18 +41,34 @@ export function useSearch(query: string) {
       .map((x) => ({ ...x, s: x.s + (x.m.featured ? 15 : 0) }))
       .sort((a, b) => b.s - a.s || (b.m.total_value ?? 0) - (a.m.total_value ?? 0))
       .slice(0, 6)
+    // Tickers: exact or prefix match on any share class, then company names. Uppercase queries of
+    // five letters or fewer read as tickers first (NVDA, COF).
+    const up = query.trim().toUpperCase()
+    const tickerish = /^[A-Z.\-]{1,6}$/.test(up)
+    const ss = (stocks || [])
+      .map((x) => {
+        const tick = x.t === up || x.a.includes(up) ? 120 : x.t.startsWith(up) && tickerish ? 70 : 0
+        return { x, s: Math.max(tick, q.length >= 3 ? score(q, x.n) : 0) }
+      })
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s || b.x.h - a.x.h)
+      .slice(0, 4)
+    const exactTicker = ss.length > 0 && ss[0].s >= 120
     const known = new Set(managers.map((m) => m.cik.replace(/^0+/, '')))
     const fs = (filers || [])
       .filter((f) => !known.has(f.cik.replace(/^0+/, '')))
       .map((f) => ({ f, s: score(q, f.name) }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s)
-      .slice(0, ms.length ? 4 : 8)
-    return [...ms.map(({ m }) => ({ kind: 'manager' as const, m })), ...fs.map(({ f }) => ({ kind: 'filer' as const, f }))]
-  }, [query, managers, filers])
+      .slice(0, ms.length || ss.length ? 3 : 8)
+    const mh = ms.map(({ m }) => ({ kind: 'manager' as const, m }))
+    const sh = ss.map(({ x }) => ({ kind: 'stock' as const, s: x }))
+    const fh = fs.map(({ f }) => ({ kind: 'filer' as const, f }))
+    return exactTicker || (tickerish && !ms.length) ? [...sh, ...mh, ...fh] : [...mh, ...sh, ...fh]
+  }, [query, managers, filers, stocks])
 }
 
-export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Search investors and funds' }: { size?: 'md' | 'lg'; autoFocus?: boolean; placeholder?: string }) {
+export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Search investors or tickers' }: { size?: 'md' | 'lg'; autoFocus?: boolean; placeholder?: string }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [sel, setSel] = useState(0)
@@ -83,6 +102,7 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
     setQ('')
     input.current?.blur()
     if (h.kind === 'manager') nav(`/investors/${h.m.slug}/`)
+    else if (h.kind === 'stock') nav(stockPath(h.s.t))
     else window.open(secFilerUrl(h.f.cik), '_blank', 'noopener')
   }
 
@@ -90,7 +110,7 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
   return (
     <div ref={wrap} className="relative w-full">
       <label className="sr-only" htmlFor={`search-${size}`}>
-        Search investors and funds
+        Search investors, funds or tickers
       </label>
       <div
         className={`flex items-center gap-2.5 rounded-full bg-card transition-shadow ${
@@ -149,7 +169,7 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
           {!q && <li role="presentation" className="px-3 pb-1 pt-2 text-[12px] font-medium text-ink-3">Popular</li>}
           {hits.map((h, i) => (
             <li
-              key={h.kind === 'manager' ? h.m.slug : h.f.cik}
+              key={h.kind === 'manager' ? h.m.slug : h.kind === 'stock' ? `s-${h.s.t}` : h.f.cik}
               id={`search-opt-${size}-${i}`}
               role="option"
               aria-selected={i === sel}
@@ -166,6 +186,16 @@ export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Searc
                       <span className="block truncate text-[12.5px] text-ink-3">{h.m.name !== h.m.manager ? h.m.name : `${(h.m.position_count ?? 0).toLocaleString('en-US')} positions`}</span>
                     </span>
                     <span className="num text-[13px] text-ink-2">{money(h.m.total_value)}</span>
+                  </>
+                ) : h.kind === 'stock' ? (
+                  <>
+                    <span className="flex h-[30px] min-w-[30px] items-center justify-center rounded-lg bg-accent-soft px-1.5 font-mono text-[10.5px] font-semibold text-accent-2">{h.s.t.length > 4 ? h.s.t.slice(0, 4) : h.s.t}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] font-medium">
+                        <span className="font-mono">{h.s.t}</span> <span className="font-normal text-ink-2">{h.s.n}</span>
+                      </span>
+                      <span className="block truncate text-[12.5px] text-ink-3">Stock · held by {h.s.h} {h.s.h === 1 ? 'fund' : 'funds'} we track</span>
+                    </span>
                   </>
                 ) : (
                   <>

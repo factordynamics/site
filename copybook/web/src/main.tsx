@@ -7,6 +7,8 @@ import { Home } from './pages/Home'
 import { Investors } from './pages/Investors'
 import { ManagerPage } from './pages/Manager'
 import { History } from './pages/History'
+import { StockPage } from './pages/Stock'
+import { Flow } from './pages/Flow'
 import { Consensus } from './pages/Consensus'
 import { Pricing } from './pages/Pricing'
 import { Account } from './pages/Account'
@@ -50,6 +52,8 @@ handoff.then(() =>
             <Route path="investors" element={<Investors />} />
             <Route path="investors/:slug" element={<ManagerPage />} />
             <Route path="investors/:slug/history" element={<History />} />
+            <Route path="stocks/:ticker" element={<StockPage />} />
+            <Route path="flow" element={<Flow />} />
             <Route path="consensus" element={<Consensus />} />
             <Route path="pricing" element={<Pricing />} />
             <Route path="account" element={<Account />} />

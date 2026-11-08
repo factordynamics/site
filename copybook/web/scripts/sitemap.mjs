@@ -18,8 +18,15 @@ const urls = [
   ['consensus/', newest],
   ['pricing/'],
   ['about/'],
+  ['flow/', newest],
   ...managers.map((m) => [`investors/${m.slug}/`, m.filing_date]),
 ]
+try {
+  const stocks = JSON.parse(readFileSync(join(dir, 'd', 'stocks.json'), 'utf8')).stocks
+  for (const s of stocks) if (s.h >= 2) urls.push([`stocks/${s.t}/`, newest])
+} catch {
+  // No stock index in this build.
+}
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map(([p, d]) => `  <url><loc>${SITE}${p}</loc>${d ? `<lastmod>${d}</lastmod>` : ''}</url>`).join('\n')}

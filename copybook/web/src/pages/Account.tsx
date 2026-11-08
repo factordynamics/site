@@ -1,9 +1,13 @@
-import { useTitle } from '../lib/data'
+import { loadIndex, useAsync, useTitle } from '../lib/data'
+import { Link } from 'react-router-dom'
+import { Onboarding } from '../components/Onboarding'
+import { resetFollows, useFollows } from '../lib/follows'
+import { stockPath } from '../lib/stocks'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
-import { Arrow, Badge, Button, Check, Skeleton } from '../components/ui'
-import { api, checkout, DATA_TERMS, RENEWAL_TERMS } from '../config'
+import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
+import { api, checkout, DATA_TERMS, RENEWAL_TERMS, TRIAL_TERMS } from '../config'
 import { fetchMe, getToken, openPortal, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean } | { kind: 'out'; error?: string } | { kind: 'off' }
@@ -26,6 +30,7 @@ export function Account() {
         else if (login) member = await startSession({ login })
         else if (getToken()) member = await fetchMe()
         else return setState({ kind: 'out' })
+        resetFollows()
         setState({ kind: 'in', member, welcome })
       } catch {
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
@@ -55,8 +60,15 @@ export function Account() {
 
 function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcome: boolean; onOut: () => void; onChange: (m: Member) => void }) {
   const [busy, setBusy] = useState(false)
+  const { status, follows } = useFollows()
+  const [editing, setEditing] = useState(false)
   const end = member.period_end ? new Date(typeof member.period_end === 'number' ? member.period_end * 1000 : member.period_end) : null
-  const alertsOn = member.alerts !== 'off'
+  const endLabel = end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const trial = member.status === 'trialing'
+  const alertMode = member.alerts === 'off' ? 'off' : Array.isArray(member.alerts) ? 'follows' : 'all'
+  const idx = useAsync(loadIndex, [])
+  const names = new Map((idx.data?.managers ?? []).map((m) => [m.slug, m.manager]))
+  const onboard = member.active && status === 'ready' && (!follows.onboarded || editing)
   return (
     <>
       <header>
@@ -66,7 +78,9 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
               <Check />
             </span>
             <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Welcome to Copy.</h1>
-            <p className="mt-3 text-[17px] text-ink-2">Your payment went through. Stripe is emailing your receipt.</p>
+            <p className="mt-3 text-[17px] text-ink-2">
+              {trial ? `Your free trial runs until ${endLabel}. Stripe is emailing your confirmation.` : 'Your payment went through. Stripe is emailing your receipt.'}
+            </p>
           </>
         ) : (
           <>
@@ -75,16 +89,23 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
           </>
         )}
       </header>
+
+      {onboard && (
+        <div className="mt-10">
+          <Onboarding onDone={() => setEditing(false)} />
+        </div>
+      )}
+
       <div className="mt-10 grid gap-5 md:grid-cols-2">
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-semibold">Plan</h2>
-            <Badge tone={member.active ? 'up' : 'warn'}>{member.active ? 'Active' : member.status}</Badge>
+            <Badge tone={trial ? 'accent' : member.active ? 'up' : 'warn'}>{trial ? 'Free trial' : member.active ? 'Active' : member.status}</Badge>
           </div>
           <p className="mt-3 text-[14px] text-ink-2">{member.email}</p>
           <p className="mt-1 text-[14px] text-ink-2">
             Copy {member.plan === 'yearly' ? 'yearly' : 'monthly'}
-            {end && ` · ${member.active ? 'renews' : 'ends'} ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+            {endLabel && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`}
           </p>
           <Button
             variant="dark"
@@ -100,29 +121,83 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
           >
             {busy ? 'Opening…' : 'Manage billing'} <Arrow />
           </Button>
-          <p className="mt-4 text-[13px] leading-relaxed text-ink-2">Includes quarter-over-quarter changes, 8 quarters of 13F history and CSV export, and filing alerts.</p>
-          <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">{RENEWAL_TERMS}</p>
+          <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">{trial ? TRIAL_TERMS : RENEWAL_TERMS}</p>
         </section>
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[15px] font-semibold">Filing alerts</h2>
-          <p className="mt-1 text-[14px] text-ink-2">An email the day an investor you follow files a new 13F.</p>
-          <label className="mt-5 flex cursor-pointer items-center gap-3 text-[14px]">
-            <input
-              type="checkbox"
-              className="size-4 accent-[var(--color-accent)]"
-              checked={alertsOn}
-              onChange={(e) => setAlerts(e.target.checked ? 'all' : 'off').then(onChange, () => null)}
-            />
-            {alertsOn ? (Array.isArray(member.alerts) ? `On for ${member.alerts.length} investors` : 'On for every investor') : 'Off'}
-          </label>
+          <p className="mt-1 text-[14px] text-ink-2">An email when a new 13F appears on EDGAR, usually within the hour.</p>
+          <fieldset className="mt-4 space-y-2.5 text-[14px]">
+            <legend className="sr-only">Send alerts for</legend>
+            {(
+              [
+                ['follows', `Investors I follow${follows.investors.length ? ` (${follows.investors.length})` : ''}`],
+                ['all', 'Every investor we track'],
+                ['off', 'Off'],
+              ] as const
+            ).map(([k, l]) => (
+              <label key={k} className="flex cursor-pointer items-center gap-3">
+                <input
+                  type="radio"
+                  name="alerts"
+                  className="size-4 accent-[var(--color-accent)]"
+                  checked={alertMode === k}
+                  disabled={k === 'follows' && !follows.investors.length}
+                  onChange={() => setAlerts(k === 'follows' ? follows.investors : k).then(onChange, () => null)}
+                />
+                <span className={k === 'follows' && !follows.investors.length ? 'text-ink-3' : ''}>{l}</span>
+              </label>
+            ))}
+          </fieldset>
         </section>
       </div>
+
+      {member.active && status === 'ready' && follows.onboarded && !editing && (
+        <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-[15px] font-semibold">Following</h2>
+            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          </div>
+          {follows.investors.length + follows.stocks.length === 0 ? (
+            <p className="mt-2 text-[14px] text-ink-2">Nothing yet. Press Follow on any investor or stock page.</p>
+          ) : (
+            <>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {follows.investors.map((slug) => (
+                  <li key={slug}>
+                    <Link to={`/investors/${slug}/`} className="inline-flex items-center gap-2 rounded-full bg-paper py-1 pl-1 pr-3 text-[13px] shadow-[0_0_0_1px_var(--color-line)] hover:shadow-[0_0_0_1px_var(--color-ink-3)]">
+                      <Monogram name={names.get(slug) ?? slug} size={22} />
+                      {names.get(slug) ?? slug}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {follows.stocks.length > 0 && (
+                <ul className="mt-3 flex flex-wrap gap-2">
+                  {follows.stocks.map((t) => (
+                    <li key={t}>
+                      <Link to={stockPath(t)} className="inline-flex items-center gap-1.5 rounded-full bg-paper px-3 py-1 text-[13px] shadow-[0_0_0_1px_var(--color-line)] hover:shadow-[0_0_0_1px_var(--color-ink-3)]">
+                        <span className="font-mono font-medium">{t}</span>
+                        {follows.owned.includes(t) && <span className="text-[11.5px] text-ink-3">owned</span>}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-3 text-[12.5px] text-ink-3">Saved stocks are a watchlist for now; stock alerts are coming.</p>
+            </>
+          )}
+        </section>
+      )}
+
       <div className="mt-8 flex flex-wrap gap-3">
-        <Button to="/investors/">Browse investors</Button>
+        <Button to="/flow/">See this season’s flow</Button>
         <Button
           variant="ghost"
           onClick={() => {
             signOut()
+            resetFollows()
             onOut()
           }}
         >

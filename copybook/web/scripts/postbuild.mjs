@@ -46,6 +46,20 @@ for (const m of index.managers) {
   redirect(`managers/${m.slug}.html`, `investors/${m.slug}/`)
   n++
 }
+page('flow/', 'Smart money flow · Copybook', 'What the best investors bought and sold this 13F season: most bought, most sold, and new positions opened by two or more funds.')
+// Stock pages (scripts/stocks.mjs runs first): prerender tickers held by 2+ funds; the rest render from 404.html.
+let st = 0
+try {
+  const stocks = JSON.parse(readFileSync(join(dist, 'd', 'stocks.json'), 'utf8')).stocks
+  for (const s of stocks) {
+    if (s.h < 2) continue
+    page(`stocks/${s.t}/`, `${s.t} ${s.n}: who owns it · Copybook`, `${s.n} (${s.t}): which of the investors we track hold it, who bought and sold it in the latest 13F filings, and how the holder count changed.`)
+    st++
+  }
+} catch {
+  // No stock index: build without stock pages.
+}
+console.log(`wrote ${st} stock pages`)
 redirect('copycat.html', 'consensus/')
 redirect('pricing.html', 'pricing/')
 redirect('about.html', 'about/')

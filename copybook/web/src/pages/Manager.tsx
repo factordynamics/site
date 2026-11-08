@@ -5,6 +5,9 @@ import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
 import { useMember } from '../lib/account'
 import { CsvButton } from '../components/CsvButton'
+import { FollowButton } from '../components/FollowButton'
+import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
+import { stockPath } from '../lib/stocks'
 import { useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync } from '../lib/data'
 
 export function ManagerPage() {
@@ -14,6 +17,7 @@ export function ManagerPage() {
   const [q, setQ] = useState('')
   const [n, setN] = useState(25)
   const [color, setColor] = useState<'rank' | 'sector'>('rank')
+  const [view, setView] = useState<'shares' | 'options'>('shares')
   const f = m.data
   const member = useMember()
   useTitle(f ? `${f.manager} portfolio · Copybook` : undefined)
@@ -23,7 +27,7 @@ export function ManagerPage() {
   // Trades, not price moves: the change in shares, valued at the filing's own per-share value.
   const changes = useMemo(() => {
     return (f?.holdings || [])
-      .filter((h) => h.change && h.change !== 'unchanged')
+      .filter((h) => !h.put_call && h.change && h.change !== 'unchanged')
       .map((h) => {
         const per = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value || 0) / h.prev_shares : 0
         const delta = h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
@@ -36,8 +40,9 @@ export function ManagerPage() {
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
-    return s ? book.rows.filter((h) => `${h.ticker ?? ''} ${h.issuer} ${h.cusip}`.toLowerCase().includes(s)) : book.rows
-  }, [book.rows, q])
+    const all = view === 'options' ? book.options : book.rows
+    return s ? all.filter((h) => `${h.ticker ?? ''} ${h.issuer} ${h.cusip}`.toLowerCase().includes(s)) : all
+  }, [book.rows, book.options, view, q])
 
   if (m.error)
     return (
@@ -50,7 +55,7 @@ export function ManagerPage() {
       </div>
     )
 
-  const stale = f?.quarter && f.quarter < '2026Q1'
+  const stale = f ? fundStatus(f).status !== 'current' : false
   return (
     <div className="container-x pt-10 md:pt-14">
       <nav className="text-[13px] text-ink-3" aria-label="Breadcrumb">
@@ -74,6 +79,7 @@ export function ManagerPage() {
         </div>
         {f && (
           <div className="flex flex-wrap gap-2">
+            <FollowButton kind="investor" id={f.slug} name={f.manager} />
             <Button href={f.sec_url} variant="outline" size="sm">
               View filing on SEC
             </Button>
@@ -82,20 +88,20 @@ export function ManagerPage() {
                 13F history
               </Button>
             )}
-            {member?.active ? (
-              <CsvButton slug={f.slug} />
-            ) : (
-              <Button to="/pricing/" variant="dark" size="sm">
-                Track changes
-              </Button>
-            )}
+            {member?.active && <CsvButton slug={f.slug} variant="outline" />}
           </div>
         )}
       </header>
 
+      {f && <FundNotice f={f} />}
+
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
-        <Stat label="Reported portfolio" value={f ? money(f.total_value) : '—'} sub={f ? `As of ${dateLabel(f.report_date)}` : undefined} />
-        <Stat label="Positions" value={f ? book.rows.length.toLocaleString('en-US') : '—'} sub={f ? `Filed ${dateLabel(f.filing_date)}` : undefined} />
+        <Stat
+          label={book.options.length ? 'Value in shares' : 'Reported portfolio'}
+          value={f ? money(book.options.length ? book.total : f.total_value) : '—'}
+          sub={f ? (book.options.length ? `Plus ${money(book.optionsValue)} options notional` : `As of ${dateLabel(f.report_date)}`) : undefined}
+        />
+        <Stat label="Positions" value={f ? book.rows.length.toLocaleString('en-US') : '—'} sub={f ? (book.options.length ? `${book.options.length.toLocaleString('en-US')} option lines apart` : `Filed ${dateLabel(f.filing_date)}`) : undefined} />
         <Stat label="Top 10 weight" value={f ? pct(book.top10, 0) : '—'} sub="Share of portfolio" />
         <Stat label="Largest position" value={book.top1 ? book.top1.ticker || shortName(book.top1.issuer) : '—'} sub={book.top1 ? `${pct(book.top1.weight)} of portfolio` : undefined} />
       </div>
@@ -185,14 +191,28 @@ export function ManagerPage() {
         </Panel>
       </div>
 
+      {f && <SinceLast13F slug={f.slug} quarter={f.quarter} />}
+
       <section className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
           <div>
             <h2 className="text-[15px] font-semibold">All holdings</h2>
             <p className="text-[13px] text-ink-3">
-              {rows.length.toLocaleString('en-US')} of {book.rows.length.toLocaleString('en-US')} positions
+              {view === 'options'
+                ? `${rows.length.toLocaleString('en-US')} option lines · value is the notional of the underlying shares, as filed`
+                : `${rows.length.toLocaleString('en-US')} of ${book.rows.length.toLocaleString('en-US')} share positions`}
             </p>
           </div>
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          {book.options.length > 0 && (
+            <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Holding type">
+              {(['shares', 'options'] as const).map((v) => (
+                <button key={v} role="tab" aria-selected={view === v} onClick={() => { setView(v); setN(25) }} className={`rounded-full px-2.5 py-1 ${view === v ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                  {v === 'shares' ? 'Shares' : `Options (${book.options.length.toLocaleString('en-US')})`}
+                </button>
+              ))}
+            </div>
+          )}
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -200,6 +220,7 @@ export function ManagerPage() {
             placeholder="Filter by ticker or company"
             className="h-9 w-full rounded-full bg-paper px-4 text-[14px] shadow-[0_0_0_1px_var(--color-line)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)] sm:w-64"
           />
+          </div>
         </header>
         <div className="overflow-x-auto">
           <table className="w-full text-[14px]">
@@ -209,7 +230,7 @@ export function ManagerPage() {
                 <th className="hidden px-3 py-2.5 font-medium md:table-cell">Sector</th>
                 <th className="hidden px-3 py-2.5 text-right font-medium sm:table-cell">Shares</th>
                 <th className="px-3 py-2.5 text-right font-medium">Value</th>
-                <th className="w-[28%] px-5 py-2.5 text-right font-medium md:px-6">Weight</th>
+                <th className="w-[28%] px-5 py-2.5 text-right font-medium md:px-6">{view === 'options' ? 'Share of filing' : 'Weight'}</th>
               </tr>
             </thead>
             <tbody>
@@ -225,9 +246,21 @@ export function ManagerPage() {
                 <tr key={h.key} className="border-b border-line last:border-0 hover:bg-ink/[0.025]">
                   <td className="px-5 py-2.5 md:px-6">
                     <div className="flex items-center gap-2">
-                      <Ticker t={h.ticker} className="w-14 shrink-0" />
+                      {h.ticker ? (
+                        <Link to={stockPath(h.ticker)} className="w-14 shrink-0 hover:text-accent">
+                          <Ticker t={h.ticker} />
+                        </Link>
+                      ) : (
+                        <Ticker t={h.ticker} className="w-14 shrink-0" />
+                      )}
                       <span className="min-w-0 truncate text-ink-2">{h.issuer}</span>
-                      {(h.put_call || (!h.issuer.includes('Class') && shareClass(h.title))) && <Badge className="shrink-0">{h.put_call || shareClass(h.title)}</Badge>}
+                      {h.put_call ? (
+                        <Badge tone={h.put_call.toLowerCase() === 'put' ? 'down' : 'up'} className="shrink-0">
+                          {h.put_call.toLowerCase() === 'put' ? 'Puts' : 'Calls'}
+                        </Badge>
+                      ) : (
+                        !h.issuer.includes('Class') && shareClass(h.title) && <Badge className="shrink-0">{shareClass(h.title)}</Badge>
+                      )}
                     </div>
                   </td>
                   <td className="hidden px-3 py-2.5 text-ink-2 md:table-cell">{h.sector}</td>
@@ -236,7 +269,7 @@ export function ManagerPage() {
                   <td className="px-5 py-2.5 md:px-6">
                     <div className="flex items-center justify-end gap-3">
                       <div className="hidden h-1.5 w-24 rounded-full bg-ink/[0.05] sm:block">
-                        <div className="h-1.5 rounded-full bg-accent" style={{ width: `${Math.max(2, (h.weight / (book.top1?.weight || 1)) * 100)}%` }} />
+                        <div className="h-1.5 rounded-full bg-accent" style={{ width: `${Math.max(2, (h.weight / ((view === 'options' ? book.options[0]?.weight : book.top1?.weight) || 1)) * 100)}%` }} />
                       </div>
                       <span className="num w-14 text-right">{pct(h.weight)}</span>
                     </div>

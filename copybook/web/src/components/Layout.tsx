@@ -6,6 +6,7 @@ import { Button, Wordmark } from './ui'
 
 const NAV = [
   { to: '/investors/', label: 'Investors' },
+  { to: '/flow/', label: 'Flow' },
   { to: '/consensus/', label: 'Consensus' },
   { to: '/pricing/', label: 'Pricing' },
   { to: '/about/', label: 'About' },
@@ -57,7 +58,7 @@ export function Layout() {
               </div>
             )}
             <Button to={signedIn ? '/account/' : '/pricing/'} size="sm" variant="dark" className="hidden sm:inline-flex">
-              {signedIn ? 'Account' : 'Get Copy'}
+              {signedIn ? 'Account' : 'Try Copy free'}
             </Button>
             <button
               type="button"
@@ -83,7 +84,7 @@ export function Layout() {
               ))}
             </nav>
             <Button to={signedIn ? '/account/' : '/pricing/'} variant="dark" className="mt-4 w-full">
-              {signedIn ? 'Account' : 'Get Copy'}
+              {signedIn ? 'Account' : 'Try Copy free'}
             </Button>
           </div>
         )}

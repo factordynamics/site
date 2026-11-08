@@ -281,14 +281,14 @@ export function rankColor(i: number) {
 
 /* ---------- Diverging change bars (QoQ) ---------- */
 
-export function ChangeBars({ items }: { items: { key: string; label: string; sub?: string; delta: number; tag?: string }[] }) {
+export function ChangeBars({ items, names = false }: { items: { key: string; label: string; sub?: string; delta: number; tag?: string }[]; names?: boolean }) {
   const m = Math.max(...items.map((i) => Math.abs(i.delta)), 1)
   return (
     <ul className="space-y-2">
       {items.map((it) => (
-        <li key={it.key} className="grid grid-cols-[minmax(0,9rem)_1fr_1fr_5.5rem] items-center gap-2 text-[13px]">
+        <li key={it.key} className={`grid ${names ? 'grid-cols-[minmax(0,7.5rem)_1fr_1fr_4.5rem] sm:grid-cols-[minmax(0,12rem)_1fr_1fr_5.5rem]' : 'grid-cols-[minmax(0,9rem)_1fr_1fr_5.5rem]'} items-center gap-2 text-[13px]`}>
           <span className="flex min-w-0 items-baseline gap-2">
-            <span className="font-mono text-[12.5px] font-medium">{it.label}</span>
+            <span className={names ? 'truncate font-medium' : 'font-mono text-[12.5px] font-medium'} title={names ? it.label : undefined}>{it.label}</span>
             {it.tag && <span className="truncate text-[11.5px] text-ink-3">{it.tag}</span>}
           </span>
           <div className="flex h-2.5 justify-end">
