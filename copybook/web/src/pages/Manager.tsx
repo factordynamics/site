@@ -55,7 +55,10 @@ export function ManagerPage() {
       </div>
     )
 
-  const stale = f ? fundStatus(f).status !== 'current' : false
+  const status = f ? fundStatus(f).status : 'current'
+  const stale = !['current', 'reported_by_other', 'notice_pending'].includes(status)
+  // An empty or unreadable newest filing still counts as filed: the page shows the last readable quarter.
+  const shownLabel = f ? (status === 'empty_latest' || status === 'unreadable_latest' ? `Showing ${quarterLabel(f.quarter)}` : `Last filed ${quarterLabel(f.quarter)}`) : ''
   return (
     <div className="container-x pt-10 md:pt-14">
       <nav className="text-[13px] text-ink-3" aria-label="Breadcrumb">
@@ -73,7 +76,7 @@ export function ManagerPage() {
             <h1 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-[44px]">{f?.manager ?? '\u00a0'}</h1>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-[15px] text-ink-2">
               {f && f.name !== f.manager && <span>{f.name}</span>}
-              {f && <Badge tone={stale ? 'warn' : 'neutral'}>{stale ? `Last filed ${quarterLabel(f.quarter)}` : `${quarterLabel(f.quarter)} 13F`}</Badge>}
+              {f && <Badge tone={stale ? 'warn' : 'neutral'}>{stale ? shownLabel : `${quarterLabel(f.quarter)} 13F`}</Badge>}
             </p>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useMember } from '../lib/account'
-import { DATA, dateLabel, money, pct, quarterLabel, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
+import { DATA, dateLabel, displayName, money, pct, quarterLabel, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
 import { stockPath } from '../lib/stocks'
 import { Badge, Lock, Panel } from './ui'
 
@@ -24,7 +24,7 @@ export function fundStatus(f: WithStatus): { status: FundStatus; behind: number 
 export function FundNotice({ f }: { f: WithStatus }) {
   const { status, behind } = fundStatus(f)
   if (status === 'current') return null
-  const by = f.reported_by
+  const by = f.reported_by ? { ...f.reported_by, name: f.reported_by.name ? displayName(f.reported_by.name) : undefined } : null
   const text: Record<Exclude<FundStatus, 'current'>, { title: string; body: string; tone: 'warn' | 'info' }> = {
     stale: {
       title: `Latest 13F on file is ${quarterLabel(f.quarter)}`,
@@ -47,7 +47,7 @@ export function FundNotice({ f }: { f: WithStatus }) {
       tone: 'info',
     },
     empty_latest: {
-      title: `The ${quarterLabel(f.quarter)} filing lists no holdings`,
+      title: 'The newest 13F lists no holdings',
       body: 'The fund filed a 13F with an empty table, which usually means it’s winding down or holds nothing reportable. Holdings below are from its last full filing.',
       tone: 'info',
     },
@@ -100,6 +100,7 @@ type Ev = {
   shares_after?: number | null
   percent_of_class?: number | null
   change_vs_13f?: number | null
+  shares_in_13f?: number | null
 }
 const ACTION: Record<Ev['action'], { label: string; tone: 'up' | 'down' | 'neutral' | 'accent' }> = {
   buy: { label: 'Bought', tone: 'up' },
@@ -111,6 +112,9 @@ const ACTION: Record<Ev['action'], { label: string; tone: 'up' | 'down' | 'neutr
   below_threshold: { label: 'Below 5%', tone: 'down' },
 }
 const FREE_EVENTS = 2
+/** A 13D/G stake against the same issuer's line in the latest 13F. */
+const vs13f = (e: Ev) =>
+  e.change_vs_13f == null ? null : e.change_vs_13f === 0 ? 'unchanged since the 13F' : `${e.change_vs_13f > 0 ? '+' : '−'}${sharesFmt(Math.abs(e.change_vs_13f))} shares vs the 13F`
 
 /** Between-quarter moves: Form 4 trades and 13D/G stake filings since the latest 13F. Hidden until ingest publishes the feed. */
 export function SinceLast13F({ slug, quarter }: { slug: string; quarter?: string }) {
@@ -143,7 +147,7 @@ export function SinceLast13F({ slug, quarter }: { slug: string; quarter?: string
                   <span className="md:hidden">{dateLabel(e.filing_date)} · </span>
                   {e.kind === 'form4'
                     ? [e.shares ? `${sharesFmt(Math.abs(e.shares))} shares` : null, e.avg_price ? `avg $${e.avg_price.toFixed(2)}` : null, e.shares_after != null ? `${sharesFmt(e.shares_after)} held after` : null].filter(Boolean).join(' · ')
-                    : [pctClass != null ? `${pct(pctClass)} of the class` : null, e.shares_after != null ? `${sharesFmt(e.shares_after)} shares reported` : null].filter(Boolean).join(' · ')}
+                    : [pctClass != null ? `${pct(pctClass)} of the class` : null, e.shares_after != null ? `${sharesFmt(e.shares_after)} shares reported` : null, vs13f(e)].filter(Boolean).join(' · ')}
                   {' · '}
                   <a href={e.url} className="underline underline-offset-2 hover:text-ink">
                     Form {e.form.replace('SCHEDULE ', '')}
