@@ -51,7 +51,8 @@ class Form4Test(unittest.TestCase):
         self.assertIsNone(parse_form4(FORM4, "315090"))
 
     def test_placeholder_symbols_are_not_tickers(self):
-        self.assertEqual([clean_ticker(t) for t in ("N/A", "NONE", "brk.b", "")], [None, None, "BRK.B", None])
+        self.assertEqual([clean_ticker(t) for t in ("N/A", "NONE", "brk.b", "", "LEN, LEN.B")],
+                         [None, None, "BRK.B", None, "LEN"])
 
 
 class ScheduleTest(unittest.TestCase):

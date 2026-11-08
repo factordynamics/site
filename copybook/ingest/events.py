@@ -36,7 +36,7 @@ BUDGET_S = float(os.environ.get("COPYBOOK_EVENTS_BUDGET_S", "900"))
 MAX_PER_MANAGER = 100  # newest filings parsed per manager per window
 STREAM_DAYS = 30
 LOOKBACK_DAYS = 200  # window start when a manager has no recent 13F
-PARSER = 2  # bump to reparse every cached filing after a parser change
+PARSER = 3  # bump to reparse every cached filing after a parser change
 
 FORM4 = {"4", "4/A"}
 SCHEDULE = {"SCHEDULE 13D", "SCHEDULE 13D/A", "SCHEDULE 13G", "SCHEDULE 13G/A"}
@@ -117,7 +117,7 @@ def holdings_after(xml: str) -> float | None:
 
 
 def clean_ticker(raw: str | None) -> str | None:
-    t = (raw or "").strip().upper()
+    t = re.split(r"[,;/ ]+", (raw or "").strip().upper())[0]  # "LEN, LEN.B" lists every class
     return t if re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,6}", t) and t not in ("NA", "NONE", "N") else None
 
 
