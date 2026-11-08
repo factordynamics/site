@@ -288,4 +288,32 @@ describe('copybook api', () => {
     await webhook({ type: 'customer.subscription.deleted', data: { object: sub('sub_q', 'cus_q', 'canceled') } });
     expect((await call('/holdings/bill-ackman/2026Q2', { token: s.token })).status).toBe(402);
   });
+
+  it('follows: seeds from alerts, validates, keeps owned on the watchlist, drives alert targets, and is members-only', async () => {
+    stripeObjects['checkout/sessions/cs_test_f'] = { id: 'cs_test_f', status: 'complete', created: now(), subscription: 'sub_f', customer_details: { email: 'f@example.com' } };
+    stripeObjects['subscriptions/sub_f'] = sub('sub_f', 'cus_f', 'active');
+    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_f' } })).json()).token;
+    const put = (b: unknown) => handleRequest(new Request('https://api.test/follows', { method: 'PUT', body: JSON.stringify(b), headers: { origin: 'https://refcell.github.io', authorization: `Bearer ${t}` } }), env);
+
+    expect((await call('/follows')).status).toBe(401);
+    await call('/alerts', { body: { alerts: ['warren-buffett'] }, token: t });
+    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], onboarded: false });
+
+    for (const bad of [{ investors: ['Not A Slug'] }, { stocks: ['$AAPL'] }, { owned: 'AAPL' }, { onboarded: 'yes' }, { stocks: Array.from({ length: 501 }, (_, i) => `T${i}`) }]) {
+      expect((await put(bad)).status).toBe(400);
+    }
+    const r = await (await put({ stocks: ['aapl', 'BRK.B'], owned: ['googl'], onboarded: true })).json();
+    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], onboarded: true });
+
+    // Followed investors become the alert targets while alerts is a list.
+    await put({ investors: ['bill-ackman', 'dan-loeb'] });
+    expect((await (await call('/me', { token: t })).json()).member.alerts).toEqual(['bill-ackman', 'dan-loeb']);
+    // "all" stays the master switch.
+    await call('/alerts', { body: { alerts: 'all' }, token: t });
+    await put({ investors: ['seth-klarman'] });
+    expect((await (await call('/me', { token: t })).json()).member.alerts).toBe('all');
+
+    await webhook({ type: 'customer.subscription.deleted', data: { object: sub('sub_f', 'cus_f', 'canceled') } });
+    expect((await call('/follows', { token: t })).status).toBe(402);
+  });
 });

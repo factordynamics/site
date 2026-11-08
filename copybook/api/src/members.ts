@@ -78,3 +78,26 @@ export async function listMembers(env: Env): Promise<Member[]> {
   } while (cursor);
   return out;
 }
+
+/** What a member follows. `investors` mirrors `member.alerts` when that is a list of slugs. */
+export interface Follows {
+  investors: string[];
+  stocks: string[];
+  owned: string[];
+  onboarded: boolean;
+}
+
+export async function getFollows(env: Env, m: Member): Promise<Follows> {
+  const raw = await env.DB.get(`follows:${m.customer}`);
+  if (raw) return JSON.parse(raw) as Follows;
+  // First read: seed from the follows the site kept in member.alerts before /follows existed.
+  const seeded: Follows = { investors: Array.isArray(m.alerts) ? m.alerts : [], stocks: [], owned: [], onboarded: false };
+  await env.DB.put(`follows:${m.customer}`, JSON.stringify(seeded));
+  return seeded;
+}
+
+export async function putFollows(env: Env, m: Member, f: Follows): Promise<void> {
+  await env.DB.put(`follows:${m.customer}`, JSON.stringify(f));
+  // Followed investors are the alert targets whenever alerts is a list (not "all" or "off").
+  if (Array.isArray(m.alerts)) await putMember(env, { ...m, alerts: f.investors });
+}

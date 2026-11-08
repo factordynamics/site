@@ -22,6 +22,8 @@ All responses are JSON. Authenticated routes take `Authorization: Bearer <sessio
 | POST | `/login` | `{email}` → `{ok: true}` always; emails a sign-in link if the address has an active plan |
 | POST | `/csv-link/{slug}` | → `{url}`: `/csv/{slug}.csv?dl=…`, single use, 60 s, that file only |
 | POST | `/handoff` | → `{login}`: a 2-minute sign-in token to carry a session across origins (exchange with `POST /session {login}`) |
+| GET | `/follows` | → `{follows: {investors, stocks, owned, onboarded}}`; first read seeds `investors` from a list-form `alerts` |
+| PUT | `/follows` | partial `{investors?, stocks?, owned?, onboarded?}` → `{follows}`; slugs / tickers `^[A-Z][A-Z0-9.-]{0,9}$`, ≤500 each; owned are always added to stocks; when `alerts` is a list, it mirrors `investors` |
 | GET | `/me` | → `{member: {email, status, active, plan, period_end, alerts}}` |
 | POST | `/portal` | → `{url}` of a Stripe customer portal session |
 | POST | `/alerts` | `{alerts: "all" \| "off" \| ["warren-buffett", ...]}` → `{member}` |

@@ -2,7 +2,7 @@ import { fetchHistory, historyCsv, runAlerts, shard, SHARD_KEY, SLUG } from './d
 import { verifyGithubOidc } from './oidc';
 import { loginMail, sendMail } from './email';
 import { isActive, type Env, type Member } from './env';
-import { getMember, LOGIN_TTL, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
+import { getFollows, getMember, LOGIN_TTL, putFollows, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 import { stripe, verifyStripeSignature } from './stripe';
 import { signToken, verifyToken } from './tokens';
 
@@ -17,7 +17,7 @@ function allowedOrigin(origin: string | null, env: Env): string | null {
 
 function cors(origin: string | null): Record<string, string> {
   return origin
-    ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }
+    ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization', 'Access-Control-Max-Age': '86400', Vary: 'Origin' }
     : {};
 }
 
@@ -70,6 +70,8 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
   return json({ ok: true }, 200, {});
 }
 
+const MAX_FOLLOWS = 500;
+const TICKER = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 const DOWNLOAD_TTL = 60; // KV's minimum expiry
 const HANDOFF_TTL = 120;
 
@@ -176,7 +178,37 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!valid) return json({ ok: false, error: 'alerts must be "all", "off", or a list of manager slugs' }, 400, h);
     const updated: Member = { ...m, alerts: a as Member['alerts'] };
     await putMember(env, updated);
+    if (Array.isArray(a)) await putFollows(env, updated, { ...(await getFollows(env, m)), investors: [...new Set(a as string[])] });
     return json({ ok: true, member: publicView(updated) }, 200, h);
+  }
+
+  if (path === '/follows' && (req.method === 'GET' || req.method === 'PUT')) {
+    const current = await getFollows(env, m);
+    if (req.method === 'GET') return json({ ok: true, follows: current }, 200, h);
+    const b = await body(req);
+    const list = (v: unknown, re: RegExp, upper: boolean): string[] | null | undefined => {
+      if (v === undefined) return undefined;
+      if (!Array.isArray(v) || v.length > MAX_FOLLOWS || !v.every((x) => typeof x === 'string')) return null;
+      const out = [...new Set((v as string[]).map((x) => (upper ? x.trim().toUpperCase() : x.trim())))];
+      return out.every((x) => re.test(x)) ? out : null;
+    };
+    const investors = list(b.investors, SLUG, false);
+    const stocks = list(b.stocks, TICKER, true);
+    const owned = list(b.owned, TICKER, true);
+    if (investors === null || stocks === null || owned === null || (b.onboarded !== undefined && typeof b.onboarded !== 'boolean')) {
+      return json({ ok: false, error: `investors: manager slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded: boolean` }, 400, h);
+    }
+    const next = {
+      investors: investors ?? current.investors,
+      stocks: stocks ?? current.stocks,
+      owned: owned ?? current.owned,
+      onboarded: (b.onboarded as boolean | undefined) ?? current.onboarded,
+    };
+    // Owned stocks are always on the watchlist.
+    next.stocks = [...new Set([...next.stocks, ...next.owned])];
+    if (next.stocks.length > MAX_FOLLOWS) return json({ ok: false, error: `at most ${MAX_FOLLOWS} stocks` }, 400, h);
+    await putFollows(env, m, next);
+    return json({ ok: true, follows: next }, 200, h);
   }
 
   // One full quarter for the history page: the same object as data/h/{slug}/{quarter}.json used to be.
