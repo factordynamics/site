@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker, { handleRequest } from '../src/index';
 import type { Env, KV, R2 } from '../src/env';
 import { MeterLogic } from '../src/keys';
-import { resolveFollowedFilers } from '../src/alerts';
+import { resolveFollowedFilers, runDigest } from '../src/alerts';
 import { hmacHex } from '../src/tokens';
 import form4Len from './fixtures/form4-len.xml?raw';
 import sc13dCvi from './fixtures/sc13da-cvi.xml?raw';
@@ -46,7 +46,7 @@ function sub(id: string, customer: string, status: string, interval = 'month', l
 let env: Env;
 let hist: MemR2;
 const WORKFLOW = 'refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main';
-let sent: { to: string[]; subject: string; text: string }[];
+let sent: { to: string[]; subject: string; text: string; html?: string }[];
 let stripeObjects: Record<string, unknown>;
 let index: unknown;
 let secFiles: Record<string, string>;
@@ -446,11 +446,14 @@ describe('copybook api', () => {
     expect(loeb.text).toContain('A second email with its position changes follows');
     expect(loeb.text).not.toContain('warren-buffett');
     const mail = sent.find((m) => m.to[0] === 'follows@example.com')!;
-    expect(mail.subject).toBe('Copybook: Warren Buffett filed Q3 2026 13F (2 new, 1 exited)');
+    expect(mail.subject).toBe('Buffett Q3: NEW DHI · AAPL -$4K · EXIT BAC');
+    // The HTML part lays the moves out as a table, with how much of the position was sold.
+    expect(mail.html).toMatch(/<table[^>]*>.*<th[^>]*>Move<\/th>.*<td[^>]*>Trimmed<\/td><td[^>]*><b>AAPL<\/b><\/td><td[^>]*>-\$4K<\/td><td[^>]*>sold 20%<\/td>/);
+    expect(mail.html).toContain('Accession 0000950123-26-011111, accepted by EDGAR');
     // Total book 20,500: DHI +4,000 is 19.5%; the AAPL trim is 20 shares at $200 = -4,000; BAC exits at its prior $2,000.
     expect(mail.text).toContain('Bought $5K, sold $6K this quarter.');
     expect(mail.text).toContain('New: DHI +$4K (19.5% of book) [you own], AAPL calls +$1K (2.4% of book)');
-    expect(mail.text).toContain('Trimmed: AAPL -$4K (19.5% of book)');
+    expect(mail.text).toContain('Trimmed: AAPL -$4K (sold 20% of the position, 19.5% of book)');
     expect(mail.text).toContain('Exited: BAC -$2K (9.8% of book)');
     expect(mail.text).toContain('Of the positions that changed, 1 is a stock you own.');
     expect(mail.text).toContain('https://refcell.github.io/gust/copybook/investors/warren-buffett');
@@ -469,7 +472,7 @@ describe('copybook api', () => {
     recentMoves = [{ accession: big, moves: { bought_usd: 3e8, sold_usd: 0, new: [mv('MSFT', 3e8)], added: [], trimmed: [], exited: [] } }];
     await cron(17);
     expect(sent.map((m) => m.to[0])).toEqual(['nobody@example.com']);
-    expect(sent[0].subject).toBe('Copybook: dan-loeb position changes, Q3 2026 13F (1 new)');
+    expect(sent[0].subject).toBe('dan-loeb Q3 changes: NEW MSFT');
     expect(sent[0].text).toContain('New: MSFT +$300.0M (1.2% of book) [watchlist]');
     sent = [];
     await cron(17);
@@ -655,7 +658,7 @@ describe('copybook api', () => {
 
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
     const today = new Date().toISOString().slice(0, 10);
-    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }, { ok: true, slug: 'carl-icahn', cik: '0000921669', manager: 'Carl Icahn', name: 'Icahn Carl C', featured: true, form: '13F-HR', accession: 'q2i', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
     await cron(17); // CIK map
     await putMember('b', 'buffett@example.com', 'active', ['warren-buffett']);
     await putFollows('b', { investors: ['warren-buffett'] });
@@ -665,15 +668,22 @@ describe('copybook api', () => {
     await putFollows('x', { stocks: ['MSFT'] });
     secFiles['files/company_tickers.json'] = JSON.stringify({ 0: { cik_str: 1376139, ticker: 'CVI' }, 1: { cik_str: 789019, ticker: 'MSFT' } });
     await cron(52); // watch map: CVR Energy -> CVI
+    // The poll's first run only records what is already in the feeds.
+    const before = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+    const old = '0001193125-26-300000';
+    const e = (form: string, cik: string, acc: string, name: string, role: string, at = before(4)) =>
+      `<entry><title>${form} - ${name} (${cik}) (${role})</title><updated>${at}</updated><category scheme="https://www.sec.gov/" label="form type" term="${form}"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
+    secFiles['feed:4'] = `<feed>${e('4', '0001067983', old, 'BERKSHIRE', 'Reporting', before(60))}</feed>`;
+    await cron(4);
+    expect(sent).toHaveLength(0);
     sent = [];
-
-    const e = (form: string, cik: string, acc: string, name: string, role: string) =>
-      `<entry><title>${form} - ${name} (${cik}) (${role})</title><updated>${today}T16:05:00-05:00</updated><category scheme="https://www.sec.gov/" label="form type" term="${form}"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
     const len = '0001193125-26-400001';
     const unread = '0001193125-26-400002';
     const cvi = '0001193125-26-451979';
     const prev = '0001193125-26-445965';
-    secFiles['feed:4'] = `<feed>${e('4', '0001067983', len, 'BERKSHIRE', 'Reporting')}${e('4', '0000920760', len, 'LENNAR', 'Issuer')}${e('4', '0001067983', unread, 'BERKSHIRE', 'Reporting')}${e('4', '0000111111', '0001193125-26-400003', 'SOMEONE', 'Reporting')}</feed>`;
+    // A Form 4 accepted 2 days ago (new to the poll, say after an outage) is not news: digest only.
+    const stale = '0001193125-26-300001';
+    secFiles['feed:4'] = `<feed>${e('4', '0001067983', stale, 'BERKSHIRE', 'Reporting', before(48 * 60))}${e('4', '0001067983', len, 'BERKSHIRE', 'Reporting')}${e('4', '0000920760', len, 'LENNAR', 'Issuer')}${e('4', '0001067983', unread, 'BERKSHIRE', 'Reporting')}${e('4', '0000111111', '0001193125-26-400003', 'SOMEONE', 'Reporting')}</feed>`;
     secFiles['feed:SCHEDULE 13'] = `<feed>${e('SCHEDULE 13D/A', '0000921669', cvi, 'ICAHN CARL C', 'Filed by')}${e('SCHEDULE 13D/A', '0001376139', cvi, 'CVR ENERGY', 'Subject')}${e('SCHEDULE 13G', '0000222222', '0001193125-26-400004', 'OTHER', 'Filed by')}${e('SCHEDULE 13G', '0000333333', '0001193125-26-400004', 'UNWATCHED CO', 'Subject')}</feed>`;
     const dir = (cik: string, acc: string) => `Archives/edgar/data/${Number(cik)}/${acc.replace(/-/g, '')}/`;
     secFiles[`${dir('0001067983', len)}index.json`] = JSON.stringify({ directory: { item: [{ name: 'wk-form4.xml' }] } });
@@ -694,16 +704,29 @@ describe('copybook api', () => {
     expect(b).not.toContain('29,006,073');
     expect(b).toContain(`Form 4: Warren Buffett. Details follow`); // unread: alerted with what the feed says
     expect(b).not.toContain('CVI');
+    expect(b).not.toContain(stale);
+    expect(b).not.toContain(old);
     const o = to('owner@example.com');
     expect(o).toContain('Schedule 13D/A (amendment 41)');
     expect(o).toContain('70.8% → 64.1% of the class; 71,201,875 shares (unchanged) (diluted, no shares sold)');
     expect(o).toContain(cvi);
     expect(o).not.toContain('its stake');
+    expect(sent.find((m) => m.to[0] === 'owner@example.com')!.subject).toBe('Icahn CVI 13D/A: 70.8% → 64.1% (diluted, no shares sold)');
+    expect(sent.find((m) => m.to[0] === 'buffett@example.com')!.subject).toBe('Buffett LEN Form 4: bought $192.6M + 1 more');
+    expect(sent.find((m) => m.to[0] === 'buffett@example.com')!.html).toMatch(/Class A Common Stock<\/td><td[^>]*>2\.40M<\/td><td[^>]*><\/td><td[^>]*>26\.03M<\/td><td[^>]*>28\.44M<\/td>/);
 
     // Next minute: nothing is sent twice.
     sent = [];
     await cron(6);
     expect(sent).toHaveLength(0);
+    // Tonight the stale one reaches the member as an earlier filing they may have missed.
+    await runDigest(env, Date.now());
+    expect(sent.map((m) => m.to[0])).toEqual(['buffett@example.com']);
+    expect(sent[0].subject).toBe('Copybook: 1 earlier filing you may have missed');
+    expect(sent[0].text).toContain(stale);
+    expect(sent[0].text).not.toContain(len);
+    expect(JSON.parse((await env.DB.get('alerts:latency'))!).map((l: { accession: string }) => l.accession)).not.toContain(stale);
+    sent = [];
 
     // The data run later carries the unread filing: a follow-up goes out; the LEN one is not repeated.
     const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: null, ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: null });

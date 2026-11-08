@@ -1,4 +1,5 @@
 import type { Alert13F, AlertEvent } from './alerts';
+import type { MoveRow, Moves } from './edgar';
 import type { Env, Member } from './env';
 import type { Follows } from './members';
 
@@ -6,6 +7,8 @@ export interface Mail {
   to: string;
   subject: string;
   text: string;
+  /** The same content laid out as tables, for mail clients that show HTML. */
+  html?: string;
 }
 
 /** Sends through Resend's batch API (100 per request). Returns a short status for logs. */
@@ -17,7 +20,7 @@ export async function sendMail(env: Env, mails: Mail[]): Promise<string> {
   }
   const statuses: string[] = [];
   for (let i = 0; i < mails.length; i += 100) {
-    const batch = mails.slice(i, i + 100).map((m) => ({ from: env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text }));
+    const batch = mails.slice(i, i + 100).map((m) => ({ from: env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...(m.html ? { html: m.html } : {}) }));
     const res = await fetch('https://api.resend.com/emails/batch', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -79,6 +82,51 @@ function flag(ticker: string | null, f: Follows): string {
   return f.owned.includes(ticker) ? ' [you own]' : f.stocks.includes(ticker) ? ' [watchlist]' : '';
 }
 
+const MOVE_LABELS = [['New', 'new'], ['Added', 'added'], ['Trimmed', 'trimmed'], ['Exited', 'exited']] as const;
+
+const rowName = (r: MoveRow) => (r.ticker || r.display_name || r.issuer || r.cusip) + (r.put_call ? ` ${r.put_call.toLowerCase()}s` : '');
+
+/** The trade as a share of this filing's book (the data run renamed it delta_pct_of_book). */
+const bookPct = (r: MoveRow) => {
+  const d = r.delta_pct_of_book ?? r.pct_of_book;
+  return d ? `${(Math.abs(d) * 100).toFixed(1)}%` : '';
+};
+
+/** How much of the position itself changed: a trim of 40% of the shares reads differently from 0.4% of the book. */
+function positionChange(label: string, r: MoveRow): string {
+  if (label === 'New') return 'new';
+  if (label === 'Exited') return 'sold all';
+  if (!r.prev_shares) return '';
+  const p = ((r.shares - r.prev_shares) / r.prev_shares) * 100;
+  return label === 'Trimmed' ? `sold ${Math.abs(p).toFixed(0)}%` : `+${p.toFixed(0)}% shares`;
+}
+
+/** Short name for subjects: a person's surname ("Buffett"), else the firm without its legal suffix. */
+export function shortName(manager: string): string {
+  const name = manager.trim();
+  // EDGAR writes filer names in capitals, people surname first ("ICAHN CARL C"): keep the order, drop the legal suffix.
+  if (name === name.toUpperCase()) {
+    const bare = name.replace(/[,\s]+(LLC|L\.L\.C\.|LP|L\.P\.|INC\.?|CORP\.?|LTD\.?|PLC|CO\.?|ET AL)\.?$/i, '') || name;
+    return bare.toLowerCase().replace(/(^|[\s\-/&(])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase());
+  }
+  const firm = /\b(LLC|L\.?L\.?C\.?|LP|L\.?P\.?|INC|CORP|CO|LTD|PLC|GROUP|MANAGEMENT|CAPITAL|PARTNERS|ADVIS[OE]RS|TRUST|FUND|HOLDINGS|ASSOCIATES|INVESTMENTS?|ASSET|ENTERPRISES|BANK|S\.?A\.?|AG|GMBH)\b/i;
+  const words = name.split(/\s+/);
+  if (words.length >= 2 && words.length <= 3 && !firm.test(name)) return words[words.length - 1];
+  return name.replace(/[,\s]+(LLC|L\.L\.C\.|LP|L\.P\.|INC\.?|CORP\.?|LTD\.?|PLC)\.?$/i, '') || name;
+}
+
+/** "NEW DHI · EXIT STZ · GOOGL +$8.8B": the three largest moves by dollar change. */
+function headlineMoves(mv: Moves): string {
+  const all = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => ({ label, r })));
+  all.sort((a, b) => Math.abs(b.r.value_delta) - Math.abs(a.r.value_delta));
+  return all
+    .slice(0, 3)
+    .map(({ label, r }) => (label === 'New' ? `NEW ${rowName(r)}` : label === 'Exited' ? `EXIT ${rowName(r)}` : `${rowName(r)} ${usd(r.value_delta)}`))
+    .join(' · ');
+}
+
+const acceptedUtc = (iso: string) => iso.replace('T', ' ').replace(/(\.\d+)?Z$/, ' UTC');
+
 function filingBlock(env: Env, a: Alert13F, f: Follows): string {
   const head = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}: ${quarterLabel(a.quarter)} 13F, filed ${a.filing_date}${a.followup ? ' (position changes)' : ''}`;
   const lines = [head];
@@ -88,11 +136,9 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
     for (const [label, rows] of [['New', mv.new], ['Added', mv.added], ['Trimmed', mv.trimmed], ['Exited', mv.exited]] as const) {
       if (!rows.length) continue;
       const parts = rows.map((r) => {
-        const name = (r.ticker || r.display_name || r.issuer || r.cusip) + (r.put_call ? ` ${r.put_call.toLowerCase()}s` : '');
-        // The data run is renaming the trade size to delta_pct_of_book (pct_of_book becomes the position's weight).
-        const d = r.delta_pct_of_book ?? r.pct_of_book;
-        const pct = d ? ` (${(Math.abs(d) * 100).toFixed(1)}% of book)` : '';
-        return `${name} ${usd(r.value_delta)}${pct}${flag(r.ticker, f)}`;
+        const pos = label === 'Trimmed' || label === 'Added' ? positionChange(label, r) : '';
+        const bits = [pos && (label === 'Trimmed' ? `${pos} of the position` : pos), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean);
+        return `${rowName(r)} ${usd(r.value_delta)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}`;
       });
       lines.push(`  ${label}: ${parts.join(', ')}`);
     }
@@ -108,6 +154,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
   } else {
     lines.push('  Too many positions to diff on filing. A second email with its position changes follows after the next data refresh, usually within a few hours.');
   }
+  if (a.accepted) lines.push(`  Accession ${a.accession}, accepted by EDGAR ${acceptedUtc(a.accepted)}`);
   lines.push(`  Copybook: ${env.SITE_URL}investors/${a.slug}`, `  SEC: ${a.sec_url}`);
   return lines.join('\n');
 }
@@ -172,7 +219,7 @@ function eventLine(env: Env, e: AlertEvent, f: Follows): string {
     if (e.item4) lines.push(`  Purpose (Item 4): ${e.item4}`);
   }
   for (const fn of (e.footnotes ?? []).slice(0, 3)) lines.push(`  Footnote: ${fn.length > 240 ? `${fn.slice(0, 240)}…` : fn}`);
-  const stamp = e.accepted ? `accepted by EDGAR ${e.accepted.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}` : `filed ${e.filing_date}`;
+  const stamp = e.accepted ? `accepted by EDGAR ${acceptedUtc(e.accepted)}` : `filed ${e.filing_date}`;
   lines.push(`  ${flag(e.ticker, f).trim() ? `${flag(e.ticker, f).trim()} · ` : ''}Accession ${e.id}, ${stamp}`);
   if (e.slug) lines.push(`  Copybook: ${env.SITE_URL}investors/${e.slug}`);
   lines.push(`  SEC: ${e.url}`);
@@ -185,26 +232,128 @@ function body(env: Env, intro: string, filings: Alert13F[], events: AlertEvent[]
     parts.push(`Alert change: you now get alerts only for the ${f.investors.length} fund${f.investors.length === 1 ? '' : 's'} you follow, plus active managers' moves in stocks you own or watch. To get every curated fund again, choose "Every investor" in alert settings at ${env.SITE_URL}account/.`);
   }
   if (filings.length) parts.push(filings.map((a) => filingBlock(env, a, f)).join('\n\n'));
-  if (events.length) parts.push(`Between-quarter moves:\n${events.map((e) => eventLine(env, e, f)).join('\n')}`);
+  const now = events.filter((e) => !e.late);
+  const late = events.filter((e) => e.late);
+  if (now.length) parts.push(`Between-quarter moves:\n${now.map((e) => eventLine(env, e, f)).join('\n')}`);
+  if (late.length) parts.push(`Earlier filings you may have missed (accepted by EDGAR more than 6 hours before we could alert):\n${late.map((e) => eventLine(env, e, f)).join('\n')}`);
   return `${parts.join('\n\n')}\n\nChoose whom you follow and how you get alerts at ${env.SITE_URL}account/.${FOOTER}`;
 }
 
-function summary(filings: Alert13F[]): string {
-  if (filings.length !== 1) return `${filings.length} new 13F filings`;
-  const a = filings[0];
-  const mv = a.moves;
-  const bits = mv ? [mv.new.length && `${mv.new.length}${mv.new.length === 5 ? '+' : ''} new`, mv.exited.length && `${mv.exited.length}${mv.exited.length === 5 ? '+' : ''} exited`].filter(Boolean) : [];
-  return `${a.manager} ${a.followup ? 'position changes,' : 'filed'} ${quarterLabel(a.quarter)} 13F${bits.length ? ` (${bits.join(', ')})` : ''}`;
+/** One alert as a subject line: "Buffett Q3: NEW DHI · EXIT STZ · GOOGL +$8.8B". */
+function filingHeadline(a: Alert13F): string {
+  const q = /^\d{4}Q[1-4]$/.test(a.quarter) ? `Q${a.quarter[5]}` : a.quarter;
+  const who = shortName(a.manager);
+  if (a.moves) return `${who} ${q}${a.followup ? ' changes' : ''}: ${headlineMoves(a.moves) || 'no position changes'}`;
+  return `${who} filed its ${q} 13F`;
+}
+
+/** "Icahn CVI 13D/A: 70.8% → 64.1% (diluted, no shares sold)"; "Buffett LEN Form 4: bought $192.6M". */
+export function eventHeadline(e: AlertEvent): string {
+  const who = shortName(e.manager || 'A filer');
+  const what = e.ticker || e.display_name || e.issuer || '';
+  const form = e.kind === 'form4' ? 'Form 4' : `${e.kind === '13d' ? '13D' : '13G'}${/\/A$/.test(e.form) ? '/A' : ''}`;
+  const head = `${who}${what ? ` ${what}` : ''} ${form}`;
+  if (e.details_pending) return `${head} filed (details to follow)`;
+  if (e.kind === 'form4') {
+    const verb = e.action === 'buy' ? 'bought' : e.action === 'sell' ? 'sold' : e.action === 'mixed' ? 'bought and sold' : 'filed';
+    return `${head}: ${verb}${e.value_usd ? ` ${usd(Math.abs(e.value_usd), false)}` : ''}`;
+  }
+  const pct = e.percent_of_class;
+  if (pct == null) return `${head} filed`;
+  const c = stakeChange(e);
+  if (e.prev_percent_of_class != null) return `${head}: ${e.prev_percent_of_class}% → ${pct}%${c.note ? ` (${c.note})` : ''}`;
+  return `${head}: ${e.action === 'new_stake' ? `new ${pct}% stake` : `${pct}%`}`;
 }
 
 export function alertMail(env: Env, to: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member): Mail {
-  const subject = filings.length
-    ? `Copybook: ${summary(filings)}${events.length ? ` + ${events.length} more` : ''}`
-    : `Copybook: ${events.length === 1 ? `${events[0].manager} ${FORM_LABEL[events[0].kind]} filing` : `${events.length} new Form 4 and 13D/G filings`}`;
-  return { to, subject, text: body(env, 'New filings from managers and stocks you follow:', filings, events, f, m) };
+  const heads = [...filings.map(filingHeadline), ...events.map(eventHeadline)];
+  const subject = `${heads[0]}${heads.length > 1 ? ` + ${heads.length - 1} more` : ''}`;
+  const intro = 'New filings from managers and stocks you follow:';
+  return { to, subject, text: body(env, intro, filings, events, f, m), html: htmlBody(env, intro, filings, events, f, m) };
 }
 
-export function digestMail(env: Env, to: string, day: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member): Mail {
+export function digestMail(env: Env, to: string, day: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member, lateOnly = false): Mail {
+  if (lateOnly) {
+    const intro = 'Filings from managers and stocks you follow that EDGAR accepted too long ago to send as news:';
+    return { to, subject: `Copybook: ${events.length} earlier filing${events.length === 1 ? '' : 's'} you may have missed`, text: body(env, intro, [], events, f), html: htmlBody(env, intro, [], events, f) };
+  }
   const n = [filings.length && `${filings.length} 13F${filings.length === 1 ? '' : 's'}`, events.length && `${events.length} Form 4/13D/G`].filter(Boolean).join(', ');
-  return { to, subject: `Copybook daily digest for ${day}: ${n}`, text: body(env, `Today's filings from managers and stocks you follow (${day}):`, filings, events, f, m) };
+  const intro = `Today's filings from managers and stocks you follow (${day}):`;
+  return { to, subject: `Copybook daily digest for ${day}: ${n}`, text: body(env, intro, filings, events, f, m), html: htmlBody(env, intro, filings, events, f, m) };
+}
+
+// ---------------------------------------------------------------------------------------------
+// HTML: the same alert as tables
+
+const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const TD = 'padding:4px 10px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top';
+const TDR = `${TD};text-align:right;font-variant-numeric:tabular-nums`;
+const link = (href: string, text: string) => `<a href="${esc(href)}" style="color:#1d4ed8">${esc(text)}</a>`;
+
+function table(head: string[], rows: string[][], right: number[] = []): string {
+  const th = head.map((h, i) => `<th style="${right.includes(i) ? TDR : TD};font-weight:600;color:#6b7280;font-size:12px">${esc(h)}</th>`).join('');
+  const tr = rows.map((r) => `<tr>${r.map((c, i) => `<td style="${right.includes(i) ? TDR : TD}">${c}</td>`).join('')}</tr>`).join('');
+  return `<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-size:14px;margin:6px 0 4px">${th ? `<tr>${th}</tr>` : ''}${tr}</table>`;
+}
+
+const meta = (env: Env, slug: string, accession: string, accepted: string | undefined, sec: string) =>
+  `<p style="margin:4px 0 18px;font-size:12px;color:#6b7280">Accession ${esc(accession)}${accepted ? `, accepted by EDGAR ${esc(acceptedUtc(accepted))}` : ''} · ${slug ? `${link(`${env.SITE_URL}investors/${slug}`, 'Copybook page')} · ` : ''}${link(sec, 'SEC filing')}</p>`;
+
+function filingHtml(env: Env, a: Alert13F, f: Follows): string {
+  const out = [`<h3 style="margin:16px 0 2px;font-size:16px">${esc(a.manager)}${a.name && a.name !== a.manager ? ` <span style="color:#6b7280;font-weight:400">(${esc(a.name)})</span>` : ''}: ${esc(quarterLabel(a.quarter))} 13F${a.followup ? ' position changes' : ''}</h3>`];
+  const mv = a.moves;
+  if (mv) {
+    out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
+    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, usd(r.value_delta), esc(positionChange(label, r)), bookPct(r)]));
+    out.push(table(['Move', 'Stock', 'Value change', 'Position', '% of book'], rows, [2, 4]));
+  } else if (a.top?.length) {
+    out.push('<p style="margin:2px 0">No earlier quarter on file for this filer, so no changes yet. Largest holdings:</p>');
+    out.push(table(['Stock', 'Value'], a.top.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, usd(r.value, false)]), [1]));
+  } else {
+    out.push(`<p style="margin:2px 0">${a.extra ? 'Holdings are on the filer page.' : 'Too many positions to diff on filing. A second email with its position changes follows after the next data refresh, usually within a few hours.'}</p>`);
+  }
+  out.push(meta(env, a.slug, a.accession, a.accepted, a.sec_url));
+  return out.join('');
+}
+
+function eventHtml(env: Env, e: AlertEvent, f: Follows): string {
+  const parts = [`<h3 style="margin:16px 0 2px;font-size:16px">${esc(eventHeadline(e))}${esc(flag(e.ticker, f))}</h3>`];
+  if (e.details_pending) parts.push('<p style="margin:2px 0">Details follow once the filing is processed.</p>');
+  if (e.kind === 'form4') {
+    // One row per share class: Class A and Class B are separate securities.
+    const rows = (e.classes ?? []).map((c) => {
+      const chg = c.shares_before && c.shares_after != null ? `${c.shares_after >= c.shares_before ? '+' : ''}${(((c.shares_after - c.shares_before) / c.shares_before) * 100).toFixed(1)}%` : '';
+      return [esc(c.security), c.bought ? n(c.bought) : '—', c.sold ? n(c.sold) : '—', c.shares_before != null ? n(c.shares_before) : '', c.shares_after != null ? n(c.shares_after) : '', chg];
+    });
+    if (rows.length) parts.push(table(['Class', 'Bought', 'Sold', 'Held before', 'Held after', 'Change'], rows, [1, 2, 3, 4, 5]));
+    if (e.value_usd && !e.details_pending) parts.push(`<p style="margin:2px 0">${usd(Math.abs(e.value_usd), false)}${e.avg_price ? ` at an average $${e.avg_price.toFixed(2)}` : ''}</p>`);
+  } else {
+    const c = stakeChange(e);
+    if (c.line) {
+      const prev = e.prev_percent_of_class;
+      const stake = [
+        ['% of class', prev != null ? `${prev}% → ${e.percent_of_class}%` : `${e.percent_of_class}%`],
+        ['Shares', e.prev_shares_after != null && e.shares_after != null ? `${e.prev_shares_after.toLocaleString('en-US')} → ${e.shares_after.toLocaleString('en-US')}` : (e.shares_after?.toLocaleString('en-US') ?? '')],
+        ...(c.note ? [['What changed', c.note]] : []),
+        ...(e.amendment_no ? [['Amendment', String(e.amendment_no)]] : []),
+      ];
+      parts.push(table([], stake.map(([k, v]) => [`<span style="color:#6b7280">${esc(k)}</span>`, esc(v)])));
+    }
+    if (e.item4) parts.push(`<p style="margin:4px 0;font-size:13px"><b>Purpose (Item 4):</b> ${esc(e.item4)}</p>`);
+  }
+  for (const fn of (e.footnotes ?? []).slice(0, 3)) parts.push(`<p style="margin:2px 0;font-size:12px;color:#4b5563">Footnote: ${esc(fn.length > 240 ? `${fn.slice(0, 240)}…` : fn)}</p>`);
+  parts.push(meta(env, e.slug, e.id, e.accepted, e.url));
+  return parts.join('');
+}
+
+function htmlBody(env: Env, intro: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member): string {
+  const parts = [`<p style="margin:0 0 8px">${esc(intro)}</p>`];
+  if (m?.alerts_note === 'followed') parts.push(`<p style="padding:8px 10px;background:#fef9c3">Alert change: you now get alerts only for the ${f.investors.length} fund${f.investors.length === 1 ? '' : 's'} you follow, plus active managers' moves in stocks you own or watch. To get every curated fund again, choose "Every investor" in ${link(`${env.SITE_URL}account/`, 'alert settings')}.</p>`);
+  parts.push(...filings.map((a) => filingHtml(env, a, f)));
+  const now = events.filter((e) => !e.late);
+  const late = events.filter((e) => e.late);
+  if (now.length) parts.push('<h2 style="font-size:15px;margin:20px 0 0;color:#374151">Between-quarter moves</h2>', ...now.map((e) => eventHtml(env, e, f)));
+  if (late.length) parts.push('<h2 style="font-size:15px;margin:20px 0 0;color:#374151">Earlier filings you may have missed (accepted by EDGAR more than 6 hours before we could alert):</h2>', ...late.map((e) => eventHtml(env, e, f)));
+  parts.push(`<p style="margin-top:24px;font-size:12px;color:#6b7280">Choose whom you follow and how you get alerts at ${link(`${env.SITE_URL}account/`, 'your account')}.<br>Source: SEC EDGAR filings (13F-HR, Form 4, Schedules 13D and 13G), as filed. Not investment advice.<br>Copybook by Factor Dynamics.</p>`);
+  return `<!doctype html><html><body style="margin:0;padding:16px;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#111827;max-width:680px">${parts.join('')}</body></html>`;
 }

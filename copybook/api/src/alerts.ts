@@ -36,6 +36,10 @@ export interface Alert13F {
 
 export interface AlertEvent {
   id: string;
+  /** Accepted by EDGAR too long ago to send as news: held for the nightly digest instead. */
+  late?: boolean;
+  /** EDGAR acceptance time as the data run writes it. */
+  accepted_at?: string;
   /** Filed by a followed non-curated filer: never sent to "every investor". */
   extra?: boolean;
   slug: string;
@@ -154,14 +158,32 @@ async function noted(env: Env, m: Member): Promise<void> {
   if (m.alerts_note) await putMember(env, { ...m, alerts_note: undefined });
 }
 
-async function deliver(env: Env, filings: Alert13F[], events: AlertEvent[], now: number): Promise<{ emails: number; digest: number; mail: string }> {
-  if (!filings.length && !events.length) return { emails: 0, digest: 0, mail: 'none' };
+/** A Form 4 or 13D/G accepted more than this long ago is no longer news: it waits for the digest. */
+export const LATE_MS = 6 * 3600_000;
+
+/** Late when EDGAR accepted it over 6 hours ago; with only a filing date, 6 hours after that day ends. */
+export function isLate(e: AlertEvent, now: number): boolean {
+  const at = e.accepted ?? e.accepted_at;
+  if (at) return now - Date.parse(at) > LATE_MS;
+  return now - Date.parse(e.filing_date) > DAY + LATE_MS;
+}
+
+type DigestDay = { filings: Alert13F[]; events: AlertEvent[]; late?: AlertEvent[] };
+
+async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], now: number): Promise<{ emails: number; digest: number; mail: string; late?: number }> {
+  if (!filings.length && !allEvents.length) return { emails: 0, digest: 0, mail: 'none' };
+  // Old filings are never presented as news: they go to tonight's digest as "earlier filings".
+  // Follow-ups complete an alert already sent, so they go out whenever they're ready.
+  const late = allEvents.filter((e) => !e.followup && isLate(e, now)).map((e) => ({ ...e, late: true }));
+  const events = allEvents.filter((e) => e.followup || !isLate(e, now));
   // Everything goes in the day's digest store; digest members get it from there tonight.
   const key = `digest:${etDay(now)}`;
-  const day = JSON.parse((await env.DB.get(key)) ?? '{"filings":[],"events":[]}') as { filings: Alert13F[]; events: AlertEvent[] };
+  const day = JSON.parse((await env.DB.get(key)) ?? '{"filings":[],"events":[]}') as DigestDay;
   day.filings.push(...filings);
   day.events.push(...events);
+  day.late = [...(day.late ?? []), ...late];
   await env.DB.put(key, JSON.stringify(day), { expirationTtl: 3 * 86400 });
+  if (!filings.length && !events.length) return { emails: 0, digest: 0, mail: 'none', late: late.length };
 
   const meta = await filerMeta(env);
   const mails = [];
@@ -181,7 +203,7 @@ async function deliver(env: Env, filings: Alert13F[], events: AlertEvent[], now:
   }
   const mail = await sendMail(env, mails);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
-  return { emails: mails.length, digest, mail };
+  return { emails: mails.length, digest, mail, ...(late.length ? { late: late.length } : {}) };
 }
 
 /** After EDGAR closes: one email per digest member with the day's filings and events they follow. */
@@ -189,19 +211,19 @@ export async function runDigest(env: Env, now: number): Promise<{ emails: number
   const day = etDay(now);
   const raw = await env.DB.get(`digest:${day}`);
   if (!raw) return { emails: 0, status: 'none' };
-  const { filings, events } = JSON.parse(raw) as { filings: Alert13F[]; events: AlertEvent[] };
+  const { filings, events, late = [] } = JSON.parse(raw) as DigestDay;
   const meta = await filerMeta(env);
   const mails = [];
   const notes: Member[] = [];
   for (const raw of await listMembers(env)) {
     if (!isActive(raw) || !raw.email || raw.alerts === 'off') continue;
     const f = await getFollows(env, raw);
-    if (!f.digest) continue;
     const m = await scoped(env, raw, f);
-    const mine = forMember(m, f, filings, events, meta);
+    // Digest members get the whole day; everyone else only the late filings they never got.
+    const mine = f.digest ? forMember(m, f, filings, [...events, ...late], meta) : forMember(m, f, [], late, meta);
     if (mine.filings.length || mine.events.length) {
-      mails.push(digestMail(env, m.email, day, mine.filings, mine.events, f, m));
-      notes.push(m);
+      mails.push(digestMail(env, m.email, day, mine.filings, mine.events, f, m, !f.digest));
+      if (f.digest) notes.push(m);
     }
   }
   const status = await sendMail(env, mails);
@@ -715,7 +737,13 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
     es.some((e) => ((e.role === 'Reporting' || e.role === 'Filed by') && ciks[e.cik]) || (e.form.startsWith('SCHEDULE 13') && e.role === 'Subject' && watch[e.cik])),
   );
   if (!candidates.length) return { status: 'none', ...(errors.length ? { errors } : {}) };
-  const handled = JSON.parse((await env.DB.get('events:handled')) ?? '[]') as string[];
+  const rawHandled = await env.DB.get('events:handled');
+  if (!rawHandled) {
+    // First run: record what is already there, send nothing.
+    await env.DB.put('events:handled', JSON.stringify(candidates.map(([acc]) => acc).slice(-1000)));
+    return { status: 'seeded', events: candidates.length };
+  }
+  const handled = JSON.parse(rawHandled) as string[];
   const todo = candidates.filter(([acc]) => !handled.includes(acc)).slice(0, EVENTS_PER_MINUTE);
   if (!todo.length) return { status: 'none', ...(errors.length ? { errors } : {}) };
 
@@ -809,7 +837,8 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
   await env.DB.put('events:handled', JSON.stringify(handled.slice(-1000)));
   if (pending.length) await env.DB.put('events:pending', JSON.stringify([...(JSON.parse((await env.DB.get('events:pending')) ?? '[]') as string[]), ...pending].slice(-200)));
   const sent = await deliver(env, [], fresh, now);
-  if (fresh.length) await logLatency(env, fresh.map((e) => ({ slug: e.slug || e.subject_tickers?.join(',') || '', manager: e.manager, form: e.form, kind: e.kind, accession: e.id, accepted: e.accepted })), Date.now());
+  const live = fresh.filter((e) => !isLate(e, now));
+  if (live.length) await logLatency(env, live.map((e) => ({ slug: e.slug || e.subject_tickers?.join(',') || '', manager: e.manager, form: e.form, kind: e.kind, accession: e.id, accepted: e.accepted })), Date.now());
   return { status: 'checked', events: fresh.map((e) => `${e.kind} ${e.slug || e.manager} ${e.ticker ?? e.issuer ?? ''}${e.details_pending ? ' (pending)' : ''}`), ...sent, ...(errors.length ? { errors } : {}) };
 }
 
