@@ -36,10 +36,9 @@ async function body(req: Request): Promise<Record<string, unknown>> {
   }
 }
 
-/** Member from `Authorization: Bearer <session token>` (or `?token=` for plain download links). */
+/** Member from `Authorization: Bearer <session token>`. Session tokens are never accepted from a URL. */
 async function authed(req: Request, env: Env): Promise<Member | null> {
-  const url = new URL(req.url);
-  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || url.searchParams.get('token') || '';
+  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   const p = await verifyToken(env.SESSION_SECRET, token, 'session');
   return p ? getMember(env, p.c) : null;
 }
@@ -69,6 +68,18 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
       break;
   }
   return json({ ok: true }, 200, {});
+}
+
+const DOWNLOAD_TTL = 60; // KV's minimum expiry
+const HANDOFF_TTL = 120;
+
+async function csvResponse(env: Env, slug: string, h: Record<string, string>, data?: unknown): Promise<Response> {
+  const hist = data ?? (await fetchHistory(env, slug));
+  if (!hist) return json({ ok: false, error: 'unknown manager' }, 404, h);
+  return new Response(historyCsv(env, hist), {
+    status: 200,
+    headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="copybook-${slug}-13f-history.csv"`, 'cache-control': 'private, no-store', 'referrer-policy': 'no-referrer' },
+  });
 }
 
 export async function handleRequest(req: Request, env: Env): Promise<Response> {
@@ -129,8 +140,26 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: 'login or checkout_session required' }, 400, h);
   }
 
+  // A plain download link: /csv/{slug}.csv?dl=<token from POST /csv-link/{slug}>, valid once, for 60 s, for that one file.
+  const dl = url.searchParams.get('dl');
+  const dlSlug = path.match(/^\/csv\/([a-z0-9-]+)\.csv$/)?.[1];
+  if (req.method === 'GET' && dl && dlSlug) {
+    const p = await verifyToken(env.SESSION_SECRET, dl, 'download');
+    const unused = p?.n && p.s === dlSlug && (await env.DB.get(`dl:${p.n}`));
+    if (!p || !unused) return json({ ok: false, error: 'download link expired or already used' }, 401, h);
+    await env.DB.delete(`dl:${p.n}`);
+    const owner = await getMember(env, p.c);
+    if (!isActive(owner)) return json({ ok: false, error: 'Copy subscription required' }, 402, h);
+    return csvResponse(env, dlSlug, h);
+  }
+
   const m = await authed(req, env);
   if (!m) return json({ ok: false, error: 'sign in required' }, 401, h);
+
+  // Short-lived sign-in token for carrying a session across origins in a URL (e.g. the old-host redirect).
+  if (req.method === 'POST' && path === '/handoff') {
+    return json({ ok: true, login: await signToken(env.SESSION_SECRET, 'login', m.customer, HANDOFF_TTL) }, 200, h);
+  }
 
   if (req.method === 'GET' && path === '/me') return json({ ok: true, member: publicView(m) }, 200, h);
 
@@ -158,6 +187,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return new Response(body, { status: 200, headers: { ...h, 'content-type': 'application/json', 'cache-control': 'private, max-age=3600' } });
   }
 
+  const link = path.match(/^\/csv-link\/([a-z0-9-]+)$/);
+  if (req.method === 'POST' && link && SLUG.test(link[1])) {
+    const n = crypto.randomUUID();
+    await env.DB.put(`dl:${n}`, '1', { expirationTtl: DOWNLOAD_TTL });
+    const token = await signToken(env.SESSION_SECRET, 'download', m.customer, DOWNLOAD_TTL, { s: link[1], n });
+    return json({ ok: true, url: `${url.origin}/csv/${link[1]}.csv?dl=${token}` }, 200, h);
+  }
+
   const hist = path.match(/^\/history\/([a-z0-9-]+)$/);
   const csv = path.match(/^\/csv\/([a-z0-9-]+)\.csv$/);
   const slug = hist?.[1] ?? csv?.[1];
@@ -165,10 +202,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const data = await fetchHistory(env, slug);
     if (!data) return json({ ok: false, error: 'unknown manager' }, 404, h);
     if (hist) return json(data, 200, { ...h, 'cache-control': 'private, max-age=300' });
-    return new Response(historyCsv(env, data), {
-      status: 200,
-      headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="copybook-${slug}-13f-history.csv"`, 'cache-control': 'private, max-age=300' },
-    });
+    return csvResponse(env, slug, h, data);
   }
 
   return json({ ok: false, error: 'not found' }, 404, h);

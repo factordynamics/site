@@ -5,7 +5,7 @@ Paid "Copy" plan backend for the static Copybook site: a Cloudflare Worker (free
 - Stripe Payment Links sell Copy ($9/mo, $79/yr). The Stripe webhook grants and revokes access per customer.
 - Sign-in has no passwords: right after checkout the site trades the Checkout Session id for a 30-day session token, and later sign-ins use an emailed magic link (7 days).
 - Paid data: per-manager 13F history (JSON) and CSV, built from the published `data/{slug}-history.json`.
-- An hourly cron diffs each manager's latest 13F accession in `data/index.json` and emails active members who track that manager.
+- An hourly cron diffs each manager's latest 13F accession in `data/index.json` and emails active members who track that manager. A filing dated more than 3 days ago never sends an email (`MAX_ALERT_AGE_DAYS`).
 - Billing (cancel, switch plan, card, invoices) is the Stripe customer portal.
 
 Paid history lives in the private R2 bucket `copybook-history` (`h/{slug}/{quarter}.json|csv`); the latest quarter and the 50-row previews stay public on Pages. A missing object falls back to the public `DATA_URL` copy.
@@ -14,12 +14,14 @@ Source data is SEC EDGAR 13F-HR only.
 
 ## API
 
-All responses are JSON. Authenticated routes take `Authorization: Bearer <session token>` (CSV also accepts `?token=` so it works as a plain download link).
+All responses are JSON. Authenticated routes take `Authorization: Bearer <session token>`; the session token is never accepted from a URL. For a plain download link, `POST /csv-link/{slug}` returns a URL with a single-use token valid for 60 s for that one file.
 
 | Method | Path | Body / response |
 | --- | --- | --- |
 | POST | `/session` | `{checkout_session: "cs_..."}` or `{login: "<token from email>"}` → `{token, member}` |
 | POST | `/login` | `{email}` → `{ok: true}` always; emails a sign-in link if the address has an active plan |
+| POST | `/csv-link/{slug}` | → `{url}`: `/csv/{slug}.csv?dl=…`, single use, 60 s, that file only |
+| POST | `/handoff` | → `{login}`: a 2-minute sign-in token to carry a session across origins (exchange with `POST /session {login}`) |
 | GET | `/me` | → `{member: {email, status, active, plan, period_end, alerts}}` |
 | POST | `/portal` | → `{url}` of a Stripe customer portal session |
 | POST | `/alerts` | `{alerts: "all" \| "off" \| ["warren-buffett", ...]}` → `{member}` |

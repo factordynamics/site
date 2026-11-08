@@ -2,6 +2,9 @@ import { alertMail, sendMail } from './email';
 import { isActive, type Env } from './env';
 import { listMembers } from './members';
 
+/** A filing dated more than this many days ago never triggers an email. */
+export const MAX_ALERT_AGE_DAYS = 3;
+
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
 
 const CSV_FIELDS = ['manager', 'slug', 'cik', 'quarter', 'report_date', 'filing_date', 'accession', 'ticker', 'issuer', 'cusip', 'title', 'put_call', 'shares', 'value_usd', 'weight'];
@@ -113,9 +116,10 @@ export async function runAlerts(env: Env): Promise<{ new: number; emails: number
     await env.DB.put('alerts:seen', JSON.stringify(next));
     return { new: 0, emails: 0, status: 'seeded' };
   }
-  // A fund newly added to the roster is not news unless its filing is recent.
-  const recent = (d: string) => Date.now() - Date.parse(d) < 10 * 86400_000;
-  const fresh = Object.values(current).filter((f) => seen[f.slug] !== f.accession && (seen[f.slug] || recent(f.filing_date)));
+  // Only filings from the last few days are news. This also stops a changed accession on an old
+  // filing (an amendment, a re-parse, a fund added to the roster) from mailing a stale alert.
+  const recent = (d: string) => Date.now() - Date.parse(d) < MAX_ALERT_AGE_DAYS * 86400_000;
+  const fresh = Object.values(current).filter((f) => seen[f.slug] !== f.accession && recent(f.filing_date));
   if (!fresh.length) return { new: 0, emails: 0, status: 'none' };
 
   const mails = [];

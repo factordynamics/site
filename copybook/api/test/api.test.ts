@@ -140,11 +140,36 @@ describe('copybook api', () => {
     expect(lines[2]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1');
     expect(csv.match(/^manager,/gm)).toHaveLength(1);
 
+    // The session token is never accepted from a URL.
+    expect((await call(`/csv/warren-buffett.csv?token=${session.token}`)).status).toBe(401);
+    expect((await call(`/me?token=${session.token}`)).status).toBe(401);
+
+    // Download links: single use, one file, no session token in the URL.
+    const link = (await (await call('/csv-link/warren-buffett', { method: 'POST', token: session.token })).json()).url as string;
+    expect(link).toMatch(/^https:\/\/api\.test\/csv\/warren-buffett\.csv\?dl=/);
+    expect(link).not.toContain(session.token);
+    const dlPath = link.slice('https://api.test'.length);
+    expect((await call(dlPath.replace('/warren-buffett.csv', '/bill-ackman.csv'))).status).toBe(401);
+    expect(await (await call(dlPath)).text()).toBe(csv);
+    expect((await call(dlPath)).status).toBe(401);
+    const forged = dlPath.replace(/\.[^.]+$/, '.AAAA');
+    expect((await call(forged)).status).toBe(401);
+
+    // Handoff tokens sign in on another origin but are not session tokens.
+    const handoff = (await (await call('/handoff', { method: 'POST', token: session.token })).json()).login as string;
+    expect((await call('/me', { token: handoff })).status).toBe(401);
+    expect((await (await call('/session', { body: { login: handoff } })).json()).member.email).toBe('buyer@example.com');
+
+    const unusedLink = (await (await call('/csv-link/warren-buffett', { method: 'POST', token: session.token })).json()).url as string;
+
     const portal = await (await call('/portal', { method: 'POST', token: session.token })).json();
     expect(portal.url).toMatch(/^https:\/\/billing\.stripe\.com\//);
 
     await webhook({ type: 'customer.subscription.deleted', data: { object: sub('sub_1', 'cus_1', 'canceled', 'year') } });
     expect((await call('/csv/warren-buffett.csv', { token: session.token })).status).toBe(402);
+    // A link minted before cancelling stops working once the plan ends.
+    expect((await call(unusedLink.slice('https://api.test'.length))).status).toBe(402);
+    expect((await call('/csv-link/warren-buffett', { method: 'POST', token: session.token })).status).toBe(402);
     // Billing stays reachable after cancelling, so they can resubscribe or fetch invoices.
     expect((await call('/portal', { method: 'POST', token: session.token })).status).toBe(200);
   });
@@ -188,12 +213,14 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
 
     // A fund added to the roster with an old filing must not alert; Buffett's new accession must.
-    index = { managers: [mk('warren-buffett', 'A3'), mk('bill-ackman', 'B2'), { ...mk('seth-klarman', 'K1'), filing_date: '2026-02-14' }] };
+    // Ackman's accession flips on an old filing (e.g. an amendment): no email. Klarman is new to the roster with an old filing: no email.
+    index = { managers: [mk('warren-buffett', 'A3'), { ...mk('bill-ackman', 'B3'), filing_date: '2026-08-13' }, { ...mk('seth-klarman', 'K1'), filing_date: '2026-02-14' }] };
     await worker.scheduled({}, env, { waitUntil: (p) => (pending = p) });
     await pending;
     expect(sent.map((m) => m.to[0])).toEqual(['all@example.com']);
     expect(sent[0].text).toContain('warren-buffett LP');
     expect(sent[0].text).not.toContain('seth-klarman');
+    expect(sent.map((m) => m.to[0])).not.toContain('ackman@example.com');
 
     sent = [];
     await worker.scheduled({}, env, { waitUntil: (p) => (pending = p) });

@@ -37,7 +37,7 @@ let product = (await stripe('GET', 'products', { active: true, limit: 100 })).da
 if (!product) {
   product = await stripe('POST', 'products', {
     name: 'Copy',
-    description: 'Full 13F history, CSV export, and an email when a tracked manager files a new 13F. SEC filings as filed; not investment advice.',
+    description: '8 quarters of 13F history (every position each quarter), CSV export, and an email when a tracked manager files a new 13F. SEC filings as filed; not investment advice.',
     'metadata[copybook]': 'copy',
     statement_descriptor: 'COPYBOOK',
   });

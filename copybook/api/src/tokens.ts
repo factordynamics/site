@@ -1,11 +1,13 @@
 // Signed, expiring tokens: base64url(JSON payload) + "." + base64url(HMAC-SHA256).
 
-export type TokenKind = 'login' | 'session';
+export type TokenKind = 'login' | 'session' | 'download';
 
 export interface TokenPayload {
   k: TokenKind;
   c: string; // Stripe customer id
   x: number; // expiry, unix seconds
+  s?: string; // scope, e.g. the manager slug a download token is for
+  n?: string; // nonce for single-use tokens
 }
 
 const enc = new TextEncoder();
@@ -30,8 +32,8 @@ export async function hmacHex(secret: string, data: string): Promise<string> {
   return [...sig].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function signToken(secret: string, kind: TokenKind, customer: string, ttlSeconds: number, now = Date.now() / 1000): Promise<string> {
-  const body = b64url(enc.encode(JSON.stringify({ k: kind, c: customer, x: Math.floor(now + ttlSeconds) })));
+export async function signToken(secret: string, kind: TokenKind, customer: string, ttlSeconds: number, extra: { s?: string; n?: string } = {}, now = Date.now() / 1000): Promise<string> {
+  const body = b64url(enc.encode(JSON.stringify({ k: kind, c: customer, x: Math.floor(now + ttlSeconds), ...extra })));
   const sig = new Uint8Array(await crypto.subtle.sign('HMAC', await hmacKey(secret), enc.encode(body)));
   return `${body}.${b64url(sig)}`;
 }
