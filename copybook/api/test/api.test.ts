@@ -815,6 +815,37 @@ describe('copybook api', () => {
     expect(hist.m.has('b/0001798849/2026-09-30.json')).toBe(true);
   });
 
+  it('Holdterm members: alerts settings only, 402 everywhere else, Holdterm portal, no Copybook email', async () => {
+    stripeObjects['checkout/sessions/cs_live_ht'] = { id: 'cs_live_ht', status: 'complete', created: now(), subscription: 'sub_ht', customer_details: { email: 'ht@example.com' } };
+    stripeObjects['subscriptions/sub_ht'] = { ...sub('sub_ht', 'cus_ht', 'trialing'), items: { data: [{ price: { id: 'price_ht', lookup_key: 'holdterm_monthly', metadata: { copybook: 'holdterm' }, recurring: { interval: 'month' } } }] } };
+    env.HOLDTERM_SITE_URL = 'https://holdterm.pages.dev/';
+    env.ALLOWED_ORIGINS = 'https://holdterm.pages.dev'; // as in wrangler.toml
+    env.HOLDTERM_PORTAL_CONFIGURATION = 'bpc_ht';
+    const s = await handleRequest(new Request('https://api.test/session', { method: 'POST', body: JSON.stringify({ checkout_session: 'cs_live_ht' }), headers: { origin: 'https://holdterm.pages.dev' } }), env);
+    expect(s.status).toBe(200);
+    expect(s.headers.get('access-control-allow-origin')).toBe('https://holdterm.pages.dev');
+    const { token, member } = await s.json();
+    expect(member).toMatchObject({ plan: 'holdterm', active: true });
+    expect(sent).toHaveLength(0); // no "Welcome to Copybook"
+    const ht = (method: string, path: string, b?: unknown) => handleRequest(new Request(`https://api.test${path}`, { method, body: b ? JSON.stringify(b) : undefined, headers: { origin: 'https://holdterm.pages.dev', authorization: `Bearer ${token}` } }), env);
+    expect((await ht('GET', '/me')).status).toBe(200);
+    expect((await ht('GET', '/follows')).status).toBe(200);
+    expect((await ht('POST', '/follows/warren-buffett')).status).toBe(200);
+    for (const [m, p] of [['GET', '/history/warren-buffett'], ['POST', '/csv-link/warren-buffett'], ['GET', '/keys'], ['POST', '/keys']]) {
+      const r = await ht(m, p, m === 'POST' ? { name: 'k' } : undefined);
+      expect([p, r.status]).toEqual([p, 402]);
+    }
+    let portalBody = '';
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u).includes('billing_portal/sessions')) portalBody = String(init?.body);
+      return orig(u, init);
+    });
+    await ht('POST', '/portal');
+    expect(portalBody).toContain('configuration=bpc_ht');
+    expect(decodeURIComponent(portalBody)).toContain('return_url=https://holdterm.pages.dev/account/');
+  });
+
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
     const today = new Date().toISOString().slice(0, 10);
     index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }, { ok: true, slug: 'carl-icahn', cik: '0000921669', manager: 'Carl Icahn', name: 'Icahn Carl C', featured: true, form: '13F-HR', accession: 'q2i', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };

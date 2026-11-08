@@ -45,6 +45,9 @@ export interface Env {
   /** Durable Object namespace: one KeyMeter per API key (rate limits and usage). */
   METER: import('./keys').MeterNamespace;
   FOLLOWS: import('./members').FollowsNamespace;
+  /** Holdterm's site root (trailing slash) and billing portal configuration. */
+  HOLDTERM_SITE_URL?: string;
+  HOLDTERM_PORTAL_CONFIGURATION?: string;
 }
 
 /** What we keep per Stripe customer. */
@@ -53,7 +56,7 @@ export interface Member {
   email: string;
   status: string;
   /** Which product: Copy, or Copy Pro (everything in Copy plus API keys, /v1, webhooks, bulk export). */
-  plan: 'copy' | 'pro' | 'fund';
+  plan: 'copy' | 'pro' | 'fund' | 'holdterm';
   interval: 'monthly' | 'yearly' | 'unknown';
   /** Unix seconds when a 14-day trial ends, while trialing. */
   trial_end?: number | null;
@@ -73,6 +76,11 @@ export const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 /** Copy Pro and Copy Fund: API keys, /v1, webhooks, bulk export. */
 export function isPro(m: Member | null): boolean {
   return isActive(m) && (m.plan === 'pro' || m.plan === 'fund');
+}
+
+/** Holdterm members (a separate brand on this Worker) get alerts and nothing else. */
+export function isCopy(m: Member | null): m is Member {
+  return isActive(m) && m.plan !== 'holdterm';
 }
 
 export function isActive(m: Member | null): m is Member {

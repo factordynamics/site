@@ -206,7 +206,8 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   const notes: Member[] = [];
   let digest = 0;
   for (const raw of await listMembers(env)) {
-    if (!isActive(raw) || !raw.email || raw.alerts === 'off') continue;
+    // Holdterm members get Holdterm-branded alerts, never Copybook's.
+    if (!isActive(raw) || !raw.email || raw.alerts === 'off' || raw.plan === 'holdterm') continue;
     const f = await getFollows(env, raw);
     const m = await scoped(env, raw, f);
     const mine = forMember(m, f, filings, events, meta);
@@ -232,7 +233,7 @@ export async function runDigest(env: Env, now: number): Promise<{ emails: number
   const mails = [];
   const notes: Member[] = [];
   for (const raw of await listMembers(env)) {
-    if (!isActive(raw) || !raw.email || raw.alerts === 'off') continue;
+    if (!isActive(raw) || !raw.email || raw.alerts === 'off' || raw.plan === 'holdterm') continue;
     const f = await getFollows(env, raw);
     const m = await scoped(env, raw, f);
     // Digest members get the whole day; everyone else only the late filings they never got.

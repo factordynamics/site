@@ -7,7 +7,7 @@ import './v1data';
 
 export { KeyMeter } from './keys';
 import { leadAckMail, loginMail, sendMail } from './email';
-import { isActive, isPro, type Env, type Member } from './env';
+import { isActive, isCopy, isPro, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { stripe, verifyStripeSignature } from './stripe';
@@ -273,7 +273,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!p || !unused) return json({ ok: false, error: 'download link expired or already used' }, 401, h);
     await env.DB.delete(`dl:${p.n}`);
     const owner = await getMember(env, p.c);
-    if (!isActive(owner)) return json({ ok: false, error: 'Copy subscription required' }, 402, h);
+    if (!isCopy(owner)) return json({ ok: false, error: 'Copy subscription required' }, 402, h);
     return csvResponse(env, dlSlug, h);
   }
 
@@ -288,11 +288,20 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'GET' && path === '/me') return json({ ok: true, member: publicView(m) }, 200, h);
 
   if (req.method === 'POST' && path === '/portal') {
-    const s = await stripe(env, 'POST', 'billing_portal/sessions', { customer: m.customer, return_url: `${env.SITE_URL}account/`, configuration: env.PORTAL_CONFIGURATION || undefined });
+    const ht = m.plan === 'holdterm';
+    const s = await stripe(env, 'POST', 'billing_portal/sessions', {
+      customer: m.customer,
+      return_url: `${ht ? env.HOLDTERM_SITE_URL : env.SITE_URL}account/`,
+      configuration: (ht ? env.HOLDTERM_PORTAL_CONFIGURATION : env.PORTAL_CONFIGURATION) || undefined,
+    });
     return json({ ok: true, url: s.url }, 200, h);
   }
 
   if (!isActive(m)) return json({ ok: false, error: 'Copy subscription required', member: publicView(m) }, 402, h);
+  // Holdterm Alerts: alert settings only. History, CSV, keys and everything else are Copy features.
+  if (m.plan === 'holdterm' && path !== '/alerts' && path !== '/follows' && !path.startsWith('/follows/')) {
+    return json({ ok: false, error: 'Not part of Holdterm Alerts', code: 'holdterm_plan' }, 402, h);
+  }
 
   if (req.method === 'POST' && path === '/alerts') {
     const a = (await body(req)).alerts;

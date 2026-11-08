@@ -11,7 +11,7 @@ export async function getMember(env: Env, customer: string): Promise<Member | nu
   if (!raw) return null;
   const m = JSON.parse(raw) as Member & { plan: string };
   // Records from before Copy Pro kept the billing interval in `plan`.
-  if (m.plan !== 'copy' && m.plan !== 'pro' && m.plan !== 'fund') return { ...m, interval: m.plan as Member['interval'], plan: 'copy' };
+  if (m.plan !== 'copy' && m.plan !== 'pro' && m.plan !== 'fund' && m.plan !== 'holdterm') return { ...m, interval: m.plan as Member['interval'], plan: 'copy' };
   return m;
 }
 
@@ -34,7 +34,7 @@ function priceOf(sub: any) {
 function planOf(sub: any): Member['plan'] {
   const p = priceOf(sub);
   const tier = String(p?.metadata?.copybook ?? String(p?.lookup_key ?? '').split('_')[0]);
-  return tier === 'pro' || tier === 'fund' ? tier : 'copy';
+  return tier === 'pro' || tier === 'fund' || tier === 'holdterm' ? tier : 'copy';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,7 +71,8 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
   };
   // A stale event (older subscription) must not overwrite a newer active one.
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
-  if (isActive(m) && !m.welcomed && m.email) {
+  // Holdterm's welcome comes from Holdterm, never a Copybook email.
+  if (isActive(m) && !m.welcomed && m.email && m.plan !== 'holdterm') {
     const token = await signToken(env.SESSION_SECRET, 'login', customer, LOGIN_TTL);
     // Only a delivered welcome counts; otherwise the next subscription event retries it.
     m.welcomed = (await sendMail(env, [loginMail(env, m.email, token, true)])) === '200';
