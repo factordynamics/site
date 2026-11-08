@@ -135,7 +135,7 @@ export class CuratedRedirect extends Error {
   }
 }
 
-type Shard = { cik: string; name: string; accession?: string; filing_date: string; report_date: string; quarter: string; sec_url: string; position_count: number; total_value: number; truncated?: boolean; columns: string[]; rows: unknown[][] }
+type Shard = { cik: string; name: string; accession?: string; filing_date: string; report_date: string; quarter: string; prev_quarter?: string | null; sec_url: string; position_count: number; total_value: number; truncated?: boolean; columns: string[]; rows: unknown[][] }
 
 /** Any 13F filer's latest filing, from data/f/{cik}.json. */
 async function loadFiler(slug: string): Promise<ManagerFile> {
@@ -163,6 +163,10 @@ async function loadFiler(slug: string): Promise<ManagerFile> {
       display_name: r[col.display_name] as string,
       sector: r[col.sector] as string,
       weight: (Number(r[col.value]) || 0) / total,
+      // Ingest adds the prior quarter for followed filers; its change fields are used as filed, never derived here.
+      ...(col.change != null && f.prev_quarter
+        ? { change: (r[col.change] as Holding['change']) || null, prev_shares: Number(r[col.prev_shares]) || 0, prev_value: Number(r[col.prev_value]) || 0 }
+        : {}),
     }))
     .map(cleanHolding)
   const name = displayName(f.name)
@@ -173,6 +177,7 @@ async function loadFiler(slug: string): Promise<ManagerFile> {
     slug,
     ok: true,
     quarter: f.quarter,
+    prev_quarter: col.change != null ? f.prev_quarter ?? undefined : undefined,
     filing_date: f.filing_date,
     report_date: f.report_date,
     sec_url: f.sec_url,

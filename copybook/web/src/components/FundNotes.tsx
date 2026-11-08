@@ -423,7 +423,15 @@ export function PositionLine({ p, who }: { p: Position; who?: { slug: string; ma
           {p.stake && p.stake.percent_of_class != null && ` · ${stakePct(p)}`}
         </span>
       </span>
-      <span className={`num text-right text-[14px] font-medium ${net > 0 ? 'text-up' : net < 0 ? 'text-down' : ''}`}>{net ? `${net > 0 ? '+' : '−'}${money(Math.abs(net))}` : ''}</span>
+      {/* The dollar figure is what Form 4s priced; when they cover only part of the change it's a floor, not the total. */}
+      {net ? (
+        <span className={`num text-right text-[14px] font-medium ${net > 0 ? 'text-up' : 'text-down'}`}>
+          {partial ? `≥ ${money(Math.abs(net))}` : `${net > 0 ? '+' : '−'}${money(Math.abs(net))}`}
+          <span className="block text-[11.5px] font-normal text-ink-3">{partial ? `${net > 0 ? 'bought' : 'sold'} on Form 4s` : 'on Form 4s'}</span>
+        </span>
+      ) : (
+        <span />
+      )}
     </li>
   )
 }

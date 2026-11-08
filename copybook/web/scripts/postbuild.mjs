@@ -98,6 +98,8 @@ try {
 console.log(`wrote ${st} stock pages`)
 redirect('copycat.html', 'consensus/')
 redirect('pricing.html', 'pricing/')
+mkdirSync(join(dist, 'latency'), { recursive: true })
+redirect('latency/index.html', 'methodology/#latency')
 redirect('about.html', 'about/')
 writeFileSync(join(dist, '404.html'), shell)
 writeFileSync(join(dist, '.nojekyll'), '')

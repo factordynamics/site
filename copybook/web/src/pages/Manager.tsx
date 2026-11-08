@@ -157,8 +157,8 @@ export function ManagerPage() {
             <Skeleton className="h-[360px] w-full" />
           )}
         </Panel>
-        {f?.filer ? (
-          <FilerPanel f={f} />
+        {f?.filer && !f.prev_quarter ? (
+          <FilerPanel f={f} member={paid} />
         ) : (
         <Panel
           title="Quarter-over-quarter changes"
@@ -176,7 +176,7 @@ export function ManagerPage() {
           {changes.length ? (
             <>
               <ChangeBars items={paid ? changes.slice(0, 12) : changes.slice(0, 4)} />
-              {paid && f && (
+              {paid && f && !f.filer && (
                 <Link to={`/investors/${f.slug}/history/`} className="mt-5 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-accent hover:text-accent-2">
                   Every quarter on file <Arrow />
                 </Link>
@@ -194,6 +194,8 @@ export function ManagerPage() {
             </>
           ) : f?.prev_quarter ? (
             <p className="text-[14px] text-ink-2">No shares bought or sold since {quarterLabel(f.prev_quarter)}.</p>
+          ) : paid ? (
+            <p className="text-[14px] text-ink-2">This is the first 13F we have on file for this fund, so there’s no earlier quarter to compare with yet.</p>
           ) : (
             <LockedChanges top={book.rows.slice(0, 6).map((h) => h.ticker || shortName(h.issuer))} />
           )}
@@ -317,7 +319,7 @@ export function ManagerPage() {
   )
 }
 
-function FilerPanel({ f }: { f: ManagerFile }) {
+function FilerPanel({ f, member }: { f: ManagerFile; member: boolean }) {
   const rows: [string, string][] = [
     ['Period', `Quarter ending ${dateLabel(f.report_date)}`],
     ['Filed with the SEC', dateLabel(f.filing_date)],
@@ -335,13 +337,19 @@ function FilerPanel({ f }: { f: ManagerFile }) {
           </div>
         ))}
       </dl>
+      {/* Members already have Follow in the header; only visitors see the offer. */}
       <div className="mt-5 rounded-xl bg-accent-soft px-4 py-3.5 text-[13.5px] leading-relaxed text-accent-2">
-        <p className="font-medium">Get an email when this filer files</p>
+        <p className="font-medium">{member ? 'Follow it for its next 13F' : 'Get an email when this filer files'}</p>
         <p className="mt-0.5 opacity-90">
-          Follow it with Copy and its next 13F lands in your inbox minutes after EDGAR accepts it, with the top holdings. Buys and sells show here once we have two quarters of its filings on file.{' '}
-          <Link to="/pricing/" className="font-medium underline underline-offset-2">
-            See Copy
-          </Link>
+          When it files, you get an email with its new, added, trimmed and exited positions vs the last quarter, minutes after EDGAR accepts it. Buys and sells show on this page as soon as we keep its previous quarter.
+          {!member && (
+            <>
+              {' '}
+              <Link to="/pricing/" className="font-medium underline underline-offset-2">
+                See Copy
+              </Link>
+            </>
+          )}
         </p>
       </div>
     </Panel>

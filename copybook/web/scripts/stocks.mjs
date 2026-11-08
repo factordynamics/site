@@ -234,7 +234,7 @@ const flow = { ...periods[0], periods, generated_at: index.generated_at }
 writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
 console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flow.quarter}: ${filed.length} funds filed (${flow.featured_filed} featured), ${periods.map((p) => `${p.quarter} ${p.funds_filed} funds`).join(', ')}`)
 
-// Every 13F filer's latest holdings (data/f/{cik}.json shards), per stock page: the 200 largest
+// Every 13F filer's latest holdings (data/f/{cik}.json shards), per stock page: the 500 largest
 // holders, written to d/h/{TICKER}.json for the "All 13F filers" lens. Loaded only when a reader picks it.
 {
   const fl = await read('filers.json').catch(() => null)
@@ -282,7 +282,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   let rowsOut = 0
   for (const [t, rows] of per) {
     rows.sort((a, b) => b[4] - a[4])
-    const top = rows.slice(0, 200)
+    const top = rows.slice(0, 500)
     rowsOut += top.length
     writeFileSync(
       join(out, 'd', 'h', `${t}.json`),
@@ -290,5 +290,5 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
     )
     files++
   }
-  console.log(`all-filer holders: ${read_ok} filers, ${files} stocks, ${rowsOut} rows (200 largest per stock)`)
+  console.log(`all-filer holders: ${read_ok} filers, ${files} stocks, ${rowsOut} rows (500 largest per stock)`)
 }

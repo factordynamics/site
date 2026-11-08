@@ -4,7 +4,7 @@ import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
@@ -185,6 +185,7 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
               ))}
             </fieldset>
           )}
+          {status === 'ready' && <InsiderSettings />}
         </section>
       </div>
 
@@ -319,5 +320,64 @@ function NotOpen() {
         <WaitlistForm id="wl-account" />
       </div>
     </>
+  )
+}
+
+/** Insider and 13D alerts on the stocks a member owns or watches ({api}/follows fields). */
+function InsiderSettings() {
+  const { follows } = useFollows()
+  const [min, setMin] = useState(String(follows.insider_min_usd))
+  const [err, setErr] = useState('')
+  useEffect(() => setMin(String(follows.insider_min_usd)), [follows.insider_min_usd])
+  const save = (patch: Parameters<typeof saveFollows>[0]) =>
+    saveFollows(patch).then(
+      () => setErr(''),
+      (e) => setErr(e instanceof Error && e.message ? e.message : 'That didn’t save. Please try again.'),
+    )
+  const box = (k: 'insider_buys' | 'cluster_buys' | 'any_13d', l: string, d: string, extra?: ReactNode) => (
+    <div key={k} className="flex items-start gap-3">
+      <input id={`f-${k}`} type="checkbox" className="mt-0.5 size-4 accent-[var(--color-accent)]" checked={follows[k]} onChange={(e) => save({ [k]: e.target.checked })} />
+      <span>
+        <label htmlFor={`f-${k}`} className="block cursor-pointer">
+          {l}
+        </label>
+        <span className="block text-[12.5px] text-ink-3">{d}</span>
+        {extra}
+      </span>
+    </div>
+  )
+  return (
+    <fieldset className="mt-5 space-y-2.5 border-t border-line pt-4 text-[14px]">
+      <legend className="mb-2.5 text-[13px] font-medium text-ink-2">On stocks you own or watch</legend>
+      {box(
+        'insider_buys',
+        'Insider buys',
+        'Open-market purchases (Form 4 code P) by the company’s directors, officers or 10% owners.',
+        follows.insider_buys && (
+          <span className="mt-2 flex items-center gap-2 text-[13px] text-ink-2">
+            <label htmlFor="f-insider-min">Only buys of at least</label>
+            <span className="relative">
+              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3">$</span>
+              <input
+                id="f-insider-min"
+                inputMode="numeric"
+                value={min}
+                onChange={(e) => setMin(e.target.value.replace(/[^0-9]/g, ''))}
+                onBlur={() => Number(min) !== follows.insider_min_usd && save({ insider_min_usd: Number(min) || 0 })}
+                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                className="num h-8 w-32 rounded-lg bg-paper pl-6 pr-2 shadow-[0_0_0_1px_var(--color-line-2)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]"
+              />
+            </span>
+          </span>
+        ),
+      )}
+      {box('cluster_buys', 'Cluster buys', 'Three or more insiders of one company buying within 30 days. At most one alert per company every 30 days.')}
+      {box('any_13d', 'Any filer’s 13D or 13G', 'A new Schedule 13D or 13G by anyone, not only the funds you follow.')}
+      {err && (
+        <p role="alert" className="text-[13px] text-down">
+          {err}
+        </p>
+      )}
+    </fieldset>
   )
 }

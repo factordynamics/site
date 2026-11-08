@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
 import { Layout } from './components/Layout'
 import { Home } from './pages/Home'
@@ -63,6 +63,7 @@ handoff.then(() =>
             <Route path="account" element={<Account />} />
             <Route path="about" element={<About />} />
             <Route path="methodology" element={<Methodology />} />
+            <Route path="latency" element={<Navigate to="/methodology/#latency" replace />} />
             <Route path="api" element={<ApiDocs />} />
             <Route path="contact" element={<Contact />} />
             <Route path="terms" element={<Legal page="terms" />} />

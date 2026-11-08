@@ -31,6 +31,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'An email minutes after they file', d: `We check EDGAR every minute. Alerts, moves and history cover the ${curated} managers we track closely, and the list is growing.` },
       { t: 'The moves inside the email', d: 'New, added, trimmed and exited positions, with dollars and share of the book.' },
       { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
+      { t: 'Insider buys and any filer’s 13D', d: 'On stocks you own or watch: open-market insider buys over a threshold you set, cluster buys by 3+ insiders, and a new 13D or 13G by anyone.' },
       { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, usually within minutes: holdings per share class, % of the class before → after, threshold crossings and the 13D’s Item 4.' },
       { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and 8 quarters of history with CSV.' },
     ],
