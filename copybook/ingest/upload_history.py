@@ -6,6 +6,8 @@
   columns from fq/{quarter}/{cik}.json (moves.py) is sent in place of the plain book
 - s/{issuer}.json: per-issuer holder lists (stocks.py)
 - bulk/{quarter}.csv.gz: one export per quarter of every filer's book (export.py)
+- changes/{quarter}.json: every filer's moves per report period (moves.py)
+- v/{cik}/{accession}.json: superseded 13F books, as that one filing reported them (build.py)
 
 Auth is the GitHub Actions OIDC token (audience copybook-api); no stored secret.
 A manifest of SHA-256 hashes (COPYBOOK_H_MANIFEST) records what R2 already has,
@@ -32,10 +34,11 @@ HIST = WEB / "data" / "h"
 API = os.environ.get("COPYBOOK_API", "https://copybook-api.factordynamics.workers.dev").rstrip("/")
 MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-manifest.json"))
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
-                 r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$")
+                 r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$"
+                 r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$")
 # Keys the Worker may not accept yet: a failure warns instead of failing the run,
 # and the rest of that kind are skipped until the next run.
-OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/")
+OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/")
 WORKERS = 8
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
@@ -101,7 +104,8 @@ def main() -> int:
     token = Token()
     root = HIST.parent
     sources: dict[str, Path] = {}
-    for pattern in ("h/*/*.json", "h/*/*.csv", "fb/*/*.json", "s/*.json", "bulk/*.csv.gz"):
+    for pattern in ("h/*/*.json", "h/*/*.csv", "v/*/*.json", "changes/*.json", "fb/*/*.json", "s/*.json",
+                    "bulk/*.csv.gz"):
         for p in sorted(root.glob(pattern)):
             sources[p.relative_to(root).as_posix()] = p
     for p in sorted(root.glob("fq/*/*.json")):  # change rows replace the plain book for the same quarter

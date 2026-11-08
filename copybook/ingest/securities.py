@@ -224,6 +224,23 @@ def raw_issuers(data_dir: Path) -> dict[str, tuple[str, str]]:
     return out
 
 
+TRUST_WORDS = re.compile(r"\s+(TR|TRUST|FD|FDS|FUND|FUNDS|ETF|ETFS|SER|SERIES|I{1,3}|IV|VI{0,3})\b.*$", re.I)
+
+
+GENERIC_TITLE = re.compile(r"^\s*((TR|TRUST)\s+)?(UNIT|UNITS|COM|COMMON|SHS|SHARES|ETF|SBI|BEN INT)(\s+SER\s+\d+)?\s*$|^\s*$", re.I)
+
+
+def fund_name(raw: str, title: str) -> str:
+    """'ISHARES TR', 'MSCI EMG MKT ETF' -> 'iShares MSCI Emg Mkt ETF': the fund family plus its own class title."""
+    if GENERIC_TITLE.match(title or ""):  # 'TR UNIT', 'COM': the trust itself is the fund
+        return clean_name(raw, expand=True).replace(" Etf", " ETF")
+    first = re.match(r"^FIRST\s+(TR|TRUST)\b", (raw or "").strip(), re.I)
+    brand = "First Trust" if first else clean_name(TRUST_WORDS.sub("", raw or "").strip() or raw, expand=True)
+    brand = {"Ishares": "iShares", "Spdr": "SPDR", "Proshares": "ProShares", "Vaneck": "VanEck"}.get(brand, brand)
+    t = clean_name(title, expand=True).replace(" Etf", " ETF").replace("Etf ", "ETF ")
+    return t if t.lower().startswith(brand.lower()) else f"{brand} {t}"
+
+
 def build(data_dir: Path, budget_s: float | None = None) -> dict[str, dict]:
     tmp = Path(os.environ.get("RUNNER_TEMP") or "/tmp")
     figi = load_figi()
@@ -253,6 +270,9 @@ def build(data_dir: Path, budget_s: float | None = None) -> dict[str, dict]:
     ciks = [sec[t]["cik"] for c in order if (t := tickers[c]) and t in sec]
     issuers = issuers_detail(ciks, data_dir / "issuers.json", budget_s)
 
+    per_cik: dict[str, int] = {}
+    for row in sec.values():
+        per_cik[row["cik"]] = per_cik.get(row["cik"], 0) + 1
     out: dict[str, dict] = {}
     for c in order:
         raw, title = raws.get(c, ("", ""))
@@ -264,12 +284,16 @@ def build(data_dir: Path, budget_s: float | None = None) -> dict[str, dict]:
             rec["sector"] = sic_sector(info.get("sic") or 0)
         if FUND_RE.search(f"{raw} {title}") or FUND_RE.search(rec["name"] or ""):
             rec["sector"] = FUNDS
+            if t and t in sec and per_cik[sec[t]["cik"]] > 1:  # a trust's name, shared by all its funds
+                rec["name"] = fund_name(raw, title)
         if t and t in by_ticker:
             rec.update({k: v for k, v in by_ticker[t].items() if k != "ticker"})
         if c in by_cusip:
             rec.update(by_cusip[c])
         out[c] = rec
     # Bonds, notes, warrants: inherit name/sector from a mapped CUSIP of the same issuer.
+    # A row with its own ticker never takes another CUSIP's name: ETF trusts share a CUSIP
+    # issuer prefix across hundreds of funds (iShares Trust 464287: IVV, EEM, TLT, ...).
     issuer6: dict[str, dict] = {}
     for c in order:
         r = out[c]
@@ -278,7 +302,9 @@ def build(data_dir: Path, budget_s: float | None = None) -> dict[str, dict]:
     for c in order:
         r = out[c]
         base = issuer6.get(c[:6])
-        if base and not r["name"]:
+        if not r["name"] and r["ticker"] and r["sector"] == FUNDS:
+            r["name"] = fund_name(*raws.get(c, ("", "")))
+        if base and not r["name"] and not r["ticker"]:
             r["name"] = base["name"]
         if base and not r["sector"]:
             r["sector"] = base["sector"]
@@ -286,6 +312,23 @@ def build(data_dir: Path, budget_s: float | None = None) -> dict[str, dict]:
             r["name"] = clean_name(raws.get(c, ("", ""))[0], expand=True)
         if not r["sector"]:
             r["sector"] = UNCLASSIFIED
+    # One name per ticker: a name shared by several tickers is a trust or family name, so each
+    # of those CUSIPs is named from its own class title instead (hand overrides keep theirs).
+    tickers_by_name: dict[str, set[str]] = {}
+    for r in out.values():
+        if r["ticker"]:
+            tickers_by_name.setdefault(r["name"], set()).add(r["ticker"])
+    for c, r in out.items():
+        named = "name" in (by_cusip.get(c) or {}) or "name" in (by_ticker.get(r["ticker"] or "") or {})
+        if r["ticker"] and not named and len(tickers_by_name.get(r["name"], ())) > 1:
+            r["name"] = fund_name(*raws.get(c, ("", "")))
+    tickers_by_name.clear()
+    for r in out.values():
+        if r["ticker"]:
+            tickers_by_name.setdefault(r["name"], set()).add(r["ticker"])
+    for r in out.values():  # titles like FUND or SHS name nothing: the ticker tells them apart
+        if r["ticker"] and len(tickers_by_name.get(r["name"], ())) > 1 and not r["name"].endswith(f"({r['ticker']})"):
+            r["name"] = f"{r['name']} ({r['ticker']})"
     (data_dir / "securities.json").write_text(json.dumps(out, separators=(",", ":")) + "\n")
     return out
 

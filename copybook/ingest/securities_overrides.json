@@ -65,6 +65,56 @@
    "ticker": "FERG",
    "name": "Ferguson",
    "sector": "Industrials"
+  },
+  "N20944109": {
+   "ticker": "CNH",
+   "name": "CNH Industrial",
+   "sector": "Industrials"
+  },
+  "74736K101": {
+   "ticker": "QRVO",
+   "name": "Qorvo",
+   "sector": "Information Technology"
+  },
+  "G4474Y214": {
+   "ticker": "JHG",
+   "name": "Janus Henderson Group",
+   "sector": "Financials"
+  },
+  "G5480U104": {
+   "ticker": "LBTYA",
+   "name": "Liberty Global Class A",
+   "sector": "Communication Services"
+  },
+  "G5480U120": {
+   "ticker": "LBTYK",
+   "name": "Liberty Global Class C",
+   "sector": "Communication Services"
+  },
+  "G61188101": {
+   "ticker": "LBTYA",
+   "name": "Liberty Global Class A",
+   "sector": "Communication Services"
+  },
+  "G61188127": {
+   "ticker": "LBTYK",
+   "name": "Liberty Global Class C",
+   "sector": "Communication Services"
+  },
+  "G61188119": {
+   "ticker": "LBTYB",
+   "name": "Liberty Global Class B",
+   "sector": "Communication Services"
+  },
+  "H8817H100": {
+   "ticker": "RIG",
+   "name": "Transocean",
+   "sector": "Energy"
+  },
+  "G90073100": {
+   "ticker": "RIG",
+   "name": "Transocean",
+   "sector": "Energy"
   }
  },
  "by_ticker": {

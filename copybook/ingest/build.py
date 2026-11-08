@@ -1126,6 +1126,52 @@ def write_build_info() -> dict:
     return info
 
 
+VERSION_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type",
+                   "discretion", "vote_sole", "vote_shared", "vote_none")
+
+
+def write_versions(payload: dict) -> int:
+    """v/{cik10}/{accession}.json: each superseded 13F book (an original replaced by a RESTATEMENT,
+    or an earlier restatement) exactly as that one filing reported it, in whole dollars. Paid; R2 only.
+    A filing never changes, so a book is fetched once."""
+    from ingest.edgar import FilingMeta
+
+    n = 0
+    for m in payload["managers"]:
+        for q in (m.get("history") or []) if m.get("ok") else []:
+            for f in q.get("filings") or []:
+                if f.get("role") != "superseded":
+                    continue
+                cik = (q.get("reported_by") or {}).get("cik") or m["cik"]
+                path = DATA / "v" / cik.zfill(10) / f"{f['accession']}.json"
+                if path.exists():
+                    continue
+                meta = FilingMeta(cik=cik, accession=f["accession"], form=f["form"], filing_date=f["filing_date"],
+                                  report_date=q["report_date"], primary_document="", accepted_at=f.get("accepted_at") or "")
+                try:
+                    book = load_filing(cik, meta)
+                except Exception as exc:  # noqa: BLE001 - retried next run
+                    print(f"  version {f['accession']}: {exc}", flush=True)
+                    continue
+                if not book:
+                    continue
+                rows = [[round(h.get("principal_amount") or 0) if k == "shares" and h.get("shares_type") == "PRN" else
+                         round(h[k]) if k in ("shares", "value") else h.get(k) for k in VERSION_COLUMNS]
+                        for h in book["holdings"]]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps({
+                    "cik": cik.zfill(10), "slug": m["slug"], "accession": f["accession"], "form": f["form"],
+                    "amendment_type": f.get("amendment_type"), "amendment_no": f.get("amendment_no"),
+                    "filing_date": f["filing_date"], "accepted_at": f.get("accepted_at"), "quarter": q["quarter"],
+                    "report_date": q["report_date"], "role": "superseded", "superseded_by": q.get("accession"),
+                    "sec_url": book.get("sec_url"), "values_in_thousands": book.get("values_in_thousands"),
+                    "unit_fix": book.get("unit_fix"), "total_value": round(book["total_value"]),
+                    "position_count": len(rows), "columns": list(VERSION_COLUMNS), "rows": rows,
+                }, separators=(",", ":")) + "\n")
+                n += 1
+    return n
+
+
 def main() -> int:
     payload = ingest()
     payload["build"] = write_build_info()
@@ -1133,6 +1179,7 @@ def main() -> int:
     save_amend_types()
     write_alerts(payload)
     write_json(payload)
+    print(f"versions: {write_versions(payload)} superseded books written", flush=True)
     print(
         f"wrote {payload['filed_count']}/{payload['manager_count']} managers, "
         f"{payload['copycat']['num_positions']} copycat names"

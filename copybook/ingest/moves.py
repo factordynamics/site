@@ -27,6 +27,7 @@ if str(ROOT) not in sys.path:
 from ingest import build
 from ingest import splits as sp
 from ingest.datasets import prev_quarter
+from ingest.parse import ABOVE_20K, consensus_factor, consensus_prices
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
@@ -34,10 +35,51 @@ TOP = 10
 MOVE_COLUMNS = ("ticker", "issuer", "cusip", "put_call", "shares", "prev_shares", "value", "value_delta", "change")
 FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type", "prev_shares", "prev_value",
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
-                "split_ratio")
+                "split_ratio", "value_as_filed", "price_outlier")
 
 
 SECS: dict[str, dict] = {}
+CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied price over every filer
+FIXED = [0]
+
+
+def books_of(q: str, b: dict):
+    cols = b["columns"]
+    ci, vi, si, pi = (cols.index(k) for k in ("cusip", "value", "shares", "put_call"))
+    ti = cols.index("shares_type") if "shares_type" in cols else None
+    yield q, [(r[ci], r[vi] or 0, r[si] or 0, r[pi]) for r in b["rows"] if ti is None or r[ti] != "PRN"]
+
+
+def outlier(price: float, cusip: str, consensus: float | None) -> bool:
+    """A line priced far from every other filer's (or absurdly high with nothing to compare): kept as filed,
+    flagged, and left out of cross-filer rankings."""
+    if consensus:
+        return not (1 / 50 <= price / consensus <= 50)
+    return price > 20_000 and cusip not in ABOVE_20K
+
+
+def load_consensus(quarters: set[str]) -> None:
+    """Median implied price per CUSIP from every filer's full book, for the cross-filer unit check."""
+    def books():
+        for q in sorted(quarters):
+            have = set()
+            for p in (DATA / "fb" / q).glob("*.json"):
+                have.add(p.stem)
+                b = read(p)
+                if not b or not b.get("ok"):
+                    continue
+                cols = b["columns"]
+                ci, vi, si, pi = (cols.index(k) for k in ("cusip", "value", "shares", "put_call"))
+                ti = cols.index("shares_type") if "shares_type" in cols else None
+                yield q, [(r[ci], r[vi] or 0, r[si] or 0, r[pi]) for r in b["rows"]
+                          if ti is None or r[ti] != "PRN"]
+            for p in (DATA / "f").glob("*.json"):  # filers of q with no full book yet (data set not out)
+                if p.stem in have:
+                    continue
+                b = read(p)
+                if b and b.get("ok") and b.get("quarter") == q:
+                    yield from books_of(q, b)
+    CONS.update(consensus_prices(books()))
 
 
 def book(rec: dict | None) -> dict | None:
@@ -51,6 +93,15 @@ def book(rec: dict | None) -> dict | None:
         if h["shares_type"] == "PRN":  # notes: principal amount, never shares
             h["principal_amount"], h["shares"] = h.get("shares") or 0, 0
         h["ticker"] = h.get("ticker") or (SECS.get(h.get("cusip") or "") or {}).get("ticker")
+        if not h["put_call"] and h["shares_type"] == "SH" and h.get("shares") and h.get("value"):
+            f = consensus_factor(h["value"] / h["shares"], CONS.get((rec.get("quarter"), h.get("cusip"))))
+            if f != 1.0:  # a line filed in thousands (or 1000x too large) against every other filer's price
+                h["value_as_filed"], h["value"], h["value_adjusted"] = h["value"], h["value"] * f, True
+                FIXED[0] += 1
+            q = rec.get("quarter") or ""
+            near = CONS.get((q, h.get("cusip"))) or CONS.get((prev_quarter(q) if q else "", h.get("cusip")))
+            if outlier(h["value"] / h["shares"], h.get("cusip") or "", near):
+                h["price_outlier"] = True
     q = {k: v for k, v in rec.items() if k not in ("rows", "columns")} | {"holdings": rows}
     return build.apply_weights(q)
 
@@ -84,7 +135,14 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
     if cur is None or prev is None:
         return None
     rows = build.with_changes(cur, prev)
-    moved = [r for r in rows if r["change"] not in ("unchanged", None) and not r.get("put_call")]
+    odd = {(h["cusip"], h["put_call"] or "") for h in cur["holdings"] + prev["holdings"] if h.get("price_outlier")}
+    for r in rows:
+        # A trade bigger than 5x both the old and the new position can only come from a mis-filed line.
+        big = 5 * max(r.get("value") or 0, r.get("prev_value") or 0)
+        if (r["cusip"], r.get("put_call") or "") in odd or abs(r.get("value_delta") or 0) > big:
+            r["price_outlier"] = True
+    moved = [r for r in rows if r["change"] not in ("unchanged", None) and not r.get("put_call")
+             and not r.get("price_outlier")]
     counts = {c: sum(1 for r in rows if r["change"] == c and not r.get("put_call"))
               for c in ("new", "added", "trimmed", "exited", "unchanged")}
     pick = lambda r: [r.get(k) if k not in ("shares", "prev_shares", "value", "value_delta") else int(round(r.get(k) or 0))
@@ -99,15 +157,36 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
     return summary, rows
 
 
+CHANGE_COLUMNS = ("cik", "slug", "filer_name", "curated", "type", "cusip", "ticker", "issuer", "put_call", "change",
+                  "shares", "prev_shares", "share_change", "value", "value_delta", "accession", "accepted_at")
+CHANGES_MAX = 20_000  # largest |value_delta| per quarter; the Worker parses the whole file
+
+
+def write_changes(per_quarter: dict[str, list[list]]) -> None:
+    """changes/{quarter}.json: every filer's moves in a report period (paid; R2 for /v1/changes)."""
+    for q, rows in per_quarter.items():
+        rows.sort(key=lambda r: -abs(r[14] or 0))
+        write(DATA / "changes" / f"{q}.json", {
+            "quarter": q, "rows_total": len(rows), "rows_kept": min(len(rows), CHANGES_MAX),
+            "note": "new, added, trimmed and exited positions of every 13F filer against its previous quarter, "
+                    "split-adjusted, whole USD; the largest by |value_delta| when rows_total exceeds rows_kept",
+            "columns": list(CHANGE_COLUMNS), "rows": rows[:CHANGES_MAX]})
+
+
 def main() -> int:
     build.SPLITS.clear()
     build.SPLITS.update(sp.table())
     SECS.update(read(DATA / "securities.json") or {})
+    shards = [s for p in sorted((DATA / "f").glob("*.json")) if (s := read(p))]
+    qs = {s["quarter"] for s in shards if s.get("ok") and s.get("quarter")}
+    load_consensus(qs | {prev_quarter(q) for q in qs})
     n = with_prev = 0
-    for path in sorted((DATA / "f").glob("*.json")):
-        shard = read(path)
-        if not shard:
-            continue
+    index = read(DATA / "index.json") or {}
+    curated = {m["cik"]: m for m in index.get("managers") or []}
+    filers = {f["cik"]: f for f in (read(DATA / "filers.json") or {}).get("filers") or []}
+    per_quarter: dict[str, list[list]] = {}
+    for shard in shards:
+        path = DATA / "f" / f"{shard['cik']}.json"
         n += 1
         got = changes(shard)
         base = {k: v for k, v in shard.items() if k not in ("prev_quarter", "changes", "moves")}
@@ -116,6 +195,17 @@ def main() -> int:
             continue
         summary, rows = got
         with_prev += 1
+        cik = shard["cik"]
+        meta = curated.get(cik) or filers.get(cik) or {}
+        for r in rows:
+            if r["change"] in ("new", "added", "trimmed", "exited") and r.get("shares_type") != "PRN" \
+                    and not r.get("price_outlier"):
+                per_quarter.setdefault(shard["quarter"], []).append([
+                    cik, meta.get("slug"), shard.get("name"), cik in curated, meta.get("type"), r["cusip"],
+                    r.get("ticker"), r.get("issuer"), r.get("put_call"), r["change"], int(round(r.get("shares") or 0)),
+                    int(round(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
+                    int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), shard.get("accession"),
+                    shard.get("accepted_at")])
         write(path, base | summary)
         full = {k: v for k, v in base.items() if k not in ("rows", "columns", "truncated")} | {
             "prev_quarter": summary["prev_quarter"],
@@ -130,7 +220,10 @@ def main() -> int:
         }
         # Uploaded as R2 fb/{quarter}/{cik}.json in place of the plain book (upload_history.py).
         write(DATA / "fq" / shard["quarter"] / f"{shard['cik']}.json", full)
-    print(f"moves: {with_prev}/{n} filers have a prior quarter on file")
+    write_changes(per_quarter)
+    print(f"moves: {with_prev}/{n} filers have a prior quarter on file; {FIXED[0]} lines rescaled by the "
+          f"cross-filer unit check; changes for "
+          + ", ".join(f"{q} {len(v)} rows" for q, v in sorted(per_quarter.items())))
     return 0
 
 
