@@ -1,0 +1,41 @@
+name: Holdterm
+
+# Builds holdterm/ and deploys it to Cloudflare Pages (project "holdterm") when the repo has a
+# CLOUDFLARE_API_TOKEN secret. Data loads in the browser, so no scheduled rebuild is needed.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "holdterm/**"
+      - ".github/workflows/holdterm.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: holdterm
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: holdterm
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 967e13dd88bb23b24662e62cbb6fd84f
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: holdterm/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npx wrangler pages deploy dist --project-name holdterm --branch main
+      - if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "::notice::No CLOUDFLARE_API_TOKEN secret; build checked, deploy skipped."
