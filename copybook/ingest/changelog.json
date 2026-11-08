@@ -1,0 +1,87 @@
+{
+ "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
+ "entries": [
+  {
+   "id": "2026-11-08-ticker-incident",
+   "date": "2026-11-08",
+   "kind": "incident",
+   "title": "Tickers missing from foreign and some US holdings for about two hours",
+   "body": "From the 20:07 UTC data build until the 21:57 UTC build on 2026-11-08, the step that applies tickers and sectors to every fund's holdings failed, and the build published without it. Securities whose ticker comes from that step, mostly non-US-domiciled issuers with US listings plus a few US ones, showed no ticker: among others XOM (old CUSIP 30231G102), CB, LIN, STX, ASML, ETN, AZN, TT, MDT, NXPI, SPOT, FLEX, UBS, NU, KVUE and WTW. Across the 199 curated funds, holdings without a ticker rose from 2.1% to 6.0% of value (9.7% to 14.5% of rows), and 67 instead of 35 of the 602 index preview CUSIPs had none. Stock pages and Flow dropped or split those names; Exxon's CUSIP change showed as +$30.0B of buying because the exits under the old CUSIP no longer matched it (it is +$4.4B, 12 bought, 12 sold). The step was fixed at 21:57 UTC. Each build now stops before publishing if ticker coverage falls more than 0.5 percentage points, if any of the 1,000 largest CUSIPs loses its ticker, or if any required step fails; the previous data then stays live."
+  },
+  {
+   "id": "2026-11-08-stock-splits",
+   "date": "2026-11-08",
+   "kind": "correction",
+   "title": "Stock splits no longer count as buying",
+   "body": "13F share counts are as filed, so a split made every holder look like a buyer. Copybook now detects a k-for-1 split per CUSIP when filers holding it in both quarters cluster at an exact share ratio of k, the median price moves by about 1/k, and SEC XBRL shares outstanding (dei:EntityCommonStockSharesOutstanding) does not contradict it. The earlier quarter's shares are then multiplied by k in every change: fund moves, Flow, stock pages, CSV change columns and alerts. Rows carry split {ratio, from_quarter, to_quarter} and prev_shares_as_filed; splits.json lists every detected split. Flow, 2026Q3 so far: CRWD (4-for-1) read 21 bought, 0 sold, +$9.13B; it is 10 bought, 6 sold, +$0.79B. APH (2-for-1) read 20 bought, 0 sold, +$5.45B; it is 11 bought, 9 sold, -$0.08B. The ICICI Prudential alert \"Added: APH +$5.0M\" should have read +$4.1M (70,968 shares against a split-adjusted 22,600), and its CRWD position was trimmed (16,710 against 16,840), not added. ALAB's 2026Q2 increases (Norges Bank +310%) are not a split: its price rose from about $110 to $483 and holders do not cluster at a ratio.",
+   "quarters": [
+    "2026Q3"
+   ]
+  },
+  {
+   "id": "2026-11-08-successor-baseline",
+   "date": "2026-11-08",
+   "kind": "correction",
+   "title": "Ackman's HHH was flat, not bought",
+   "body": "When a fund's holdings are reported by a successor or parent CIK, the prior-quarter baseline now combines every CIK that reported the fund that quarter. Bill Ackman's page showed \"HHH added +$643.4M\" for 2026Q2 because the baseline used only one filer's 2026Q1 book (18.85M shares); Pershing Square Inc.'s own 2026Q1 13F (0001172661-26-002339) held another 9.0M. The combined 27.85M was unchanged in 2026Q2.",
+   "funds": [
+    "bill-ackman"
+   ],
+   "quarters": [
+    "2026Q2"
+   ],
+   "accessions": [
+    "0001172661-26-002339"
+   ]
+  },
+  {
+   "id": "2026-11-08-placeholder-cusips",
+   "date": "2026-11-08",
+   "kind": "correction",
+   "title": "False 13D on Dan Loeb's page removed",
+   "body": "Third Point's Schedule 13D filings for its own private funds use placeholder CUSIPs (0000000000, 000000000). They were matched by prefix to unrelated securities, which put \"New 5%+ stake: AGX Argan, 100.0% of the class\" (and a 64.8% 13D/A) on Dan Loeb's page. Placeholder and all-zero CUSIPs are now dropped, the subject company is resolved by its SEC CIK first, and filings whose subject is the filer's own fund or affiliate are skipped. No placeholder match remains in any events file.",
+   "funds": [
+    "dan-loeb"
+   ]
+  },
+  {
+   "id": "2026-11-08-share-class-comparisons",
+   "date": "2026-11-08",
+   "kind": "correction",
+   "title": "13D/G and Form 4 compare against the same share class",
+   "body": "Schedule 13D/G and Form 4 holdings were compared with the 13F position summed over every share class of the issuer. They now compare per CUSIP, and Form 4 holdings are reported per class in classes[]; classes roll up only for display. Berkshire Hathaway's Lennar Class A 13G of 2026-08-14 (13,111,741 shares) read \"-298.1K vs the 13F\" because the 13F's 298,117 Class B shares were added in; it is unchanged against the 13F's 13,111,741 Class A shares. The 2026-10-07 13G/A read +12.62M; it is +12.92M. Form 4s since the 13F: Class A 13.11M to 28.44M shares (about $586.4M bought at an average of about $79.4), Class B 298.1K to 568.0K (about $8.8M); the combined 29.01M figure is no longer compared with one class.",
+   "funds": [
+    "warren-buffett"
+   ]
+  },
+  {
+   "id": "2026-11-08-weight-definition",
+   "date": "2026-11-08",
+   "kind": "methodology",
+   "title": "One weight: % of the equity book",
+   "body": "pct_of_book is now the same number on every page, file, alert and API response: the position's value divided by the total value of the filer's share (SH) positions. Put and call options (reported at notional) and principal-amount notes (PRN, such as convertible bonds) are excluded from the denominator and shown separately with their own notional. Stock pages used to divide by the total including option notional, so Elliott's HPE stake read 6.4% on the HPE page against 10.2% on Elliott's page (LUV 5.5% against 8.7%); the one definition gives 10.2% and 8.7%. The old pct_of_book field, which held a trade's size as a share of the book, is now delta_pct_of_book. Books also carry equity_value, options_notional and prn_value. PRN rows keep their principal amount in principal_amount and count 0 shares, so notes no longer enter share-based change math.",
+   "funds": [
+    "elliott-investment-management-l-p"
+   ]
+  },
+  {
+   "id": "2026-11-08-amendments-point-in-time",
+   "date": "2026-11-08",
+   "kind": "methodology",
+   "title": "Positions added by a later amendment count from the amendment's acceptance time",
+   "body": "A 13F-HR/A NEW HOLDINGS amendment can add positions to a quarter months after the original filing, with or without a confidential-treatment request. Copybook used to merge those rows into the original filing, stamped with its date and accession, so they showed as bought in that quarter. Every holding row now carries source_accession and first_disclosed_at (the EDGAR acceptance time, UTC). Positions added by a later amendment count from the amendment's acceptance time, and quarter-over-quarter changes compare against what was public when each filing was accepted. A RESTATEMENT amendment replaces the book from its own acceptance time, and each quarter keeps the version trail of its filings. Corrected examples: Berkshire Hathaway 2025Q1 NUE ($692.7M), LEN ($221.5M) and DHI ($192.3M) were shown as new buys filed 2025-05-15 (0000950123-25-005701); they were first disclosed on 2025-08-14 20:10:02 UTC in 0000950123-25-008361. Blackstone 2025Q4 MDLN ($6.00B) was shown as filed 2026-02-17; it was disclosed on 2026-10-09 20:05:02 UTC in amendment No. 3, 0001193125-26-419075.",
+   "funds": [
+    "warren-buffett",
+    "blackstone-inc"
+   ],
+   "quarters": [
+    "2025Q1",
+    "2025Q4"
+   ],
+   "accessions": [
+    "0000950123-25-008361",
+    "0001193125-26-419075"
+   ]
+  }
+ ]
+}

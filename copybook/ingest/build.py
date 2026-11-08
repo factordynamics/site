@@ -985,6 +985,7 @@ def write_json(payload: dict) -> None:
         json.dumps(
             {
                 "generated_at": payload["generated_at"],
+                **{k: (payload.get("build") or {}).get(k) for k in ("data_built_at", "build_id")},
                 "source": payload["source"],
                 "disclaimer": payload["disclaimer"],
                 "filed_count": payload["filed_count"],
@@ -1105,8 +1106,29 @@ def detect_splits(payload: dict) -> int:
     return sum(len(v) for v in SPLITS.values())
 
 
+CHANGELOG = Path(__file__).with_name("changelog.json")
+
+
+def write_build_info() -> dict:
+    """data/build.json (when and which build made this data) and data/changelog.json."""
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    run = os.environ.get("GITHUB_RUN_ID")
+    info = {
+        "data_built_at": now,
+        "build_id": f"gh-{run}-{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}" if run else f"local-{now}",
+        "scope": os.environ.get("SCOPE") or "local",
+    }
+    (DATA / "build.json").write_text(json.dumps(info, separators=(",", ":")) + "\n")
+    log = json.loads(CHANGELOG.read_text())
+    (DATA / "changelog.json").write_text(json.dumps(
+        {"updated_at": max(e["date"] for e in log["entries"]), "entries": log["entries"]},
+        separators=(",", ":"), ensure_ascii=False) + "\n")
+    return info
+
+
 def main() -> int:
     payload = ingest()
+    payload["build"] = write_build_info()
     print(f"splits: {detect_splits(payload)} known", flush=True)
     save_amend_types()
     write_alerts(payload)
