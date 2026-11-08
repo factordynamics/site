@@ -125,7 +125,7 @@ def write_csvs() -> int:
 def fix_shards() -> int:
     """Consensus unit check for every filer shard, against curated books for the same quarter."""
     def quarters():
-        for p in (DATA / "h").glob("*/*.json"):
+        for p in (DATA / "h").glob("*/*Q?.json"):
             q = json.loads(p.read_text())
             yield q.get("quarter"), [(h["cusip"], h["value"], h["shares"], h["put_call"]) for h in q["holdings"]]
     cons = consensus_prices(quarters())
