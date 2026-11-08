@@ -7,6 +7,8 @@ export type Follows = {
   investors: string[]
   stocks: string[]
   owned: string[]
+  /** Owned names the member added by hand (owned = these plus the linked 13F book's tickers). */
+  owned_manual?: string[]
   /** Funds a Pro or Fund member benchmarks against (peer overlap). */
   peers: string[]
   /** A 13F filer's book linked as the owned list; it refreshes when that filer files again. */

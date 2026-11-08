@@ -342,6 +342,10 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   const pageOf = (h) => (h.cusip && byCusip[h.cusip]) || (h.ticker && byTicker[h.ticker]) || null
   const per = new Map() // page ticker -> rows
   const quarters = new Map() // page ticker -> {quarter: filers}
+  // Crowding over every filer, not just the 500 rows shipped: how many hold it in their ten largest
+  // share positions, and how many at over 5% of their 13F book.
+  const top10 = new Map()
+  const over5 = new Map()
   let read_ok = 0
   for (let i = 0; i < filers.length; i += 48) {
     const part = await Promise.all(filers.slice(i, i + 48).map((f) => read(`f/${f.cik}.json`).then((d) => [f, d], () => null)))
@@ -365,6 +369,9 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
         p[1] += r[col.value] || 0
         mine.set(t, p)
       }
+      const ranked = [...mine.entries()].filter(([, [sh]]) => sh > 0).sort((a, b) => b[1][1] - a[1][1])
+      ranked.slice(0, 10).forEach(([t]) => top10.set(t, (top10.get(t) ?? 0) + 1))
+      for (const [t, [, value]] of ranked) if (value / total > 0.05) over5.set(t, (over5.get(t) ?? 0) + 1)
       for (const [t, [shares, value]] of mine) {
         if (shares <= 0) continue
         const rows = per.get(t) ?? []
@@ -385,7 +392,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
     rowsOut += top.length
     writeFileSync(
       join(out, 'd', 'h', `${t}.json`),
-      JSON.stringify({ ticker: t, filers: rows.length, quarters: quarters.get(t), columns: ['slug', 'name', 'quarter', 'shares', 'value', 'weight', 'tier'], rows: top, generated_at: fl?.generated_at ?? index.generated_at }),
+      JSON.stringify({ ticker: t, filers: rows.length, quarters: quarters.get(t), top10: top10.get(t) ?? 0, over5: over5.get(t) ?? 0, columns: ['slug', 'name', 'quarter', 'shares', 'value', 'weight', 'tier'], rows: top, generated_at: fl?.generated_at ?? index.generated_at }),
     )
     files++
   }

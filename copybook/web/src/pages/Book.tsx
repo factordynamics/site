@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Peers } from '../components/Peers'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
 import { ApiError, isPro, useMember } from '../lib/account'
 import { quarterLabel, dateLabel, displayName, money, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
-import { loadStock, resolveTicker, stockPath, tickerText, type Stock, type StockHolder } from '../lib/stocks'
+import { loadFilerHolders, loadStock, resolveTicker, stockPath, tickerText, type Stock, type StockHolder } from '../lib/stocks'
 
 // My book (Copy Pro and Fund): crowding and filing-season activity in the names a member owns or
 // watches, from the curated stock files the site already builds (d/stocks/{TICKER}.json).
@@ -29,6 +29,8 @@ type Row = {
   net: number
   latest: { form: string; date: string; manager: string } | null
   split: { ratio: string; adjusted: boolean } | null
+  /** Counts are across every 13F filer; changes are the tracked funds'. */
+  all: boolean
 }
 type Key = 'ticker' | 'holders' | 'change' | 'added' | 'exited' | 'top10' | 'over5' | 'filed' | 'net' | 'latest'
 
@@ -45,7 +47,10 @@ const COLS: [Key, string, string][] = [
   ['latest', 'Latest 4 / 13D', 'left'],
 ]
 
-function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: string): Row {
+// all: crowding across every 13F filer (d/h/{TICKER}.json); changes stay with the tracked funds.
+type Agg = Awaited<ReturnType<typeof loadFilerHolders>>
+
+function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: string, all: Agg | null = null): Row {
   const h: StockHolder[] = stock?.holders ?? []
   const ex: StockHolder[] = stock?.exited ?? []
   // Share changes in a quarter that looks like a split aren't trades: kept out of the counts and net.
@@ -53,9 +58,7 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
   const filed = [...h, ...ex].filter((x) => x.quarter === season)
   const traded = split && !split.adjusted ? [] : filed
   const ev = stock?.since?.[0]
-  return {
-    ticker,
-    name: stock?.name ?? '',
+  const base = {
     owned,
     stock,
     holders: h.length,
@@ -73,10 +76,17 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
     split,
     latest: ev ? { form: ev.form, date: ev.filing_date, manager: displayName(ev.manager) } : null,
   }
+  return {
+    ticker,
+    name: stock?.name ?? '',
+    ...base,
+    all: Boolean(all),
+    ...(all ? { holders: all.filers, prev: NaN, top10: all.top10 ?? 0, over5: all.over5 ?? 0, filed: all.quarters?.[season] ?? 0, filedOf: all.filers } : {}),
+  }
 }
 
 const sortVal = (r: Row, k: Key) =>
-  k === 'ticker' ? r.ticker : k === 'change' ? r.holders - r.prev : k === 'filed' ? r.filed : k === 'latest' ? (r.latest?.date ?? '') : (r[k] as number)
+  k === 'ticker' ? r.ticker : k === 'change' ? (r.all ? 0 : r.holders - r.prev) : k === 'filed' ? r.filed : k === 'latest' ? (r.latest?.date ?? '') : (r[k] as number)
 
 export function Book() {
   useTitle('My book · Copybook')
@@ -85,6 +95,17 @@ export function Book() {
   const { status, follows } = useFollows()
   const names = useMemo(() => [...new Set([...follows.owned, ...follows.stocks])], [follows.owned, follows.stocks])
   const data = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadStock(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(',')])
+  // Lens: every 13F filer (default) or the funds we track closely, in the URL so a view can be shared.
+  const [params, setParams] = useSearchParams()
+  const lens: 'all' | 'tracked' = params.get('funds') === 'tracked' ? 'tracked' : 'all'
+  const setLens = (l: 'all' | 'tracked') => setParams(l === 'all' ? {} : { funds: l }, { replace: true })
+  const agg = useAsync(() => (pro && names.length && lens === 'all' ? Promise.all(names.map((t) => loadFilerHolders(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(','), lens])
+  const ready = Boolean(data.data && (lens === 'tracked' || agg.data))
+  // Names that came from a linked 13F, as opposed to ones added by hand.
+  const linked = useMemo(() => {
+    const manual = new Set(follows.owned_manual ?? [])
+    return new Set((follows.book?.tickers ?? []).filter((t) => !manual.has(t)))
+  }, [follows.book, follows.owned_manual])
   const [sort, setSort] = useState<{ k: Key; desc: boolean }>({ k: 'holders', desc: true })
 
   // The newest quarter any of these funds has filed: the season under way.
@@ -93,14 +114,14 @@ export function Book() {
     return qs.sort().at(-1) ?? ''
   }, [data.data])
   const rows = useMemo(() => {
-    const r = names.map((t, i) => rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season))
+    const r = names.map((t, i) => rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, lens === 'all' ? (agg.data?.[i] ?? null) : null))
     const dir = sort.desc ? -1 : 1
     return r.sort((a, b) => {
       const x = sortVal(a, sort.k)
       const y = sortVal(b, sort.k)
       return (x < y ? -1 : x > y ? 1 : 0) * dir || a.ticker.localeCompare(b.ticker)
     })
-  }, [names, follows.owned, data.data, season, sort])
+  }, [names, follows.owned, data.data, agg.data, lens, season, sort])
 
   // What the funds that have filed this season did in these names, largest first.
   const moves = useMemo(
@@ -136,9 +157,9 @@ export function Book() {
     )
 
   const csv = () => {
-    const head = ['ticker', 'name', 'owned', 'funds_holding', 'funds_last_13f', 'superinvestors', 'new', 'exited', 'in_top10', 'over_5pct', `filed_${season}`, 'funds_total', 'bought', 'sold', 'net_usd', 'latest_form', 'latest_date', 'latest_filer']
+    const head = ['lens', 'ticker', 'name', 'owned', 'funds_holding', 'funds_last_13f', 'superinvestors', 'new', 'exited', 'in_top10', 'over_5pct', `filed_${season}`, 'funds_total', 'bought', 'sold', 'net_usd', 'latest_form', 'latest_date', 'latest_filer']
     const q = (v: unknown) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))
-    const body = rows.map((r) => [r.ticker, r.name, r.owned ? 'owned' : 'watched', r.holders, r.prev, r.featured, r.added, r.exited, r.top10, r.over5, r.filed, r.filedOf, r.bought, r.sold, Math.round(r.net), r.latest?.form ?? '', r.latest?.date ?? '', r.latest?.manager ?? ''].map(q).join(','))
+    const body = rows.map((r) => [lens === 'all' ? 'all_13f_filers' : 'funds_tracked_closely', r.ticker, r.name, r.owned ? 'owned' : 'watched', r.holders, Number.isNaN(r.prev) ? '' : r.prev, r.featured, r.added, r.exited, r.top10, r.over5, r.filed, r.filedOf, r.bought, r.sold, Math.round(r.net), r.latest?.form ?? '', r.latest?.date ?? '', r.latest?.manager ?? ''].map(q).join(','))
     const url = URL.createObjectURL(new Blob([[head.join(','), ...body].join('\n')], { type: 'text/csv' }))
     const a = Object.assign(document.createElement('a'), { href: url, download: `copybook-my-book-${new Date().toISOString().slice(0, 10)}.csv` })
     a.click()
@@ -158,20 +179,48 @@ export function Book() {
         <>
           <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
             <Stat label="Names in your book" value={names.length} sub={`${follows.owned.length} owned, ${names.length - follows.owned.length} watched`} />
-            <Stat label={season ? `Filed ${quarterLabel(season)} so far` : 'Filed so far'} value={data.data ? `${fundsFiled} of ${fundsAll}` : '—'} sub="funds that hold your names" />
-            <Stat label="Crowded names" value={data.data ? rows.filter((r) => r.top10 >= 3).length : '—'} sub="in 3 or more funds’ top 10" />
+            {lens === 'all' ? (
+              <>
+                <Stat
+                  label={season ? `Filed ${quarterLabel(season)} so far` : 'Filed so far'}
+                  value={ready ? `${Math.round((rows.reduce((a, r) => a + r.filed, 0) / Math.max(1, rows.reduce((a, r) => a + r.filedOf, 0))) * 100)}%` : '—'}
+                  sub="of the 13F holders of your names"
+                />
+                {(() => {
+                  const top = ready ? [...rows].sort((a, b) => b.top10 / Math.max(1, b.holders) - a.top10 / Math.max(1, a.holders))[0] : null
+                  return <Stat label="Most crowded name" value={top ? top.ticker : '—'} sub={top ? `in ${top.top10.toLocaleString('en-US')} of its ${top.holders.toLocaleString('en-US')} holders’ top 10` : 'share of holders with it in their top 10'} />
+                })()}
+              </>
+            ) : (
+              <>
+                <Stat label={season ? `Filed ${quarterLabel(season)} so far` : 'Filed so far'} value={data.data ? `${fundsFiled} of ${fundsAll}` : '—'} sub="funds that hold your names" />
+                <Stat label="Crowded names" value={data.data ? rows.filter((r) => r.top10 >= 3).length : '—'} sub="in 3 or more funds’ top 10" />
+              </>
+            )}
             <Stat
               label="Their net trades this season"
               value={data.data ? <span className={moves.length ? (rows.reduce((a, r) => a + r.net, 0) >= 0 ? 'text-up' : 'text-down') : ''}>{signed(rows.reduce((a, r) => a + r.net, 0))}</span> : '—'}
-              sub="in your names, at quarter-end value"
+              sub={lens === 'all' ? 'by the funds we track closely, at quarter-end value' : 'in your names, at quarter-end value'}
             />
           </div>
 
           <section className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
             <header className="flex flex-wrap items-end justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
-              <div>
+              <div className="max-w-2xl">
                 <h2 className="text-[15px] font-semibold">Your names</h2>
-                <p className="text-[13px] text-ink-3">Among the funds we track closely, from each one’s latest 13F. Click a column to sort.</p>
+                <p className="text-[13px] text-ink-3">
+                  {lens === 'all'
+                    ? 'Funds, top 10, over 5% and filed count every 13F filer’s latest filing. Columns marked * (new, exited, bought, sold, net) cover the funds we track closely until every filer’s prior quarter is on file.'
+                    : 'Among the funds we track closely, from each one’s latest 13F.'}{' '}
+                  Click a column to sort.
+                </p>
+              </div>
+              <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which funds">
+                {(['all', 'tracked'] as const).map((l) => (
+                  <button key={l} type="button" role="tab" aria-selected={lens === l} onClick={() => setLens(l)} className={`rounded-full px-3 py-1.5 ${lens === l ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                    {l === 'all' ? 'All 13F filers' : 'Funds we track closely'}
+                  </button>
+                ))}
               </div>
             </header>
             <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Your names">
@@ -182,6 +231,7 @@ export function Book() {
                       <th key={k} aria-sort={sort.k === k ? (sort.desc ? 'descending' : 'ascending') : 'none'} className={`whitespace-nowrap px-3 py-2.5 font-medium first:pl-5 last:pr-5 md:first:pl-6 md:last:pr-6 ${align === 'right' ? 'text-right' : 'text-left'}`}>
                         <button type="button" onClick={() => setSort((s) => ({ k, desc: s.k === k ? !s.desc : k !== 'ticker' }))} className="inline-flex items-center gap-1 hover:text-ink">
                           {k === 'filed' && season ? `Filed ${quarterLabel(season).split(' ')[0]}` : l}
+                          {lens === 'all' && (k === 'added' || k === 'exited' || k === 'net') && '*'}
                           <span aria-hidden="true" className={sort.k === k ? 'text-ink' : 'opacity-0'}>
                             {sort.desc ? '↓' : '↑'}
                           </span>
@@ -191,7 +241,7 @@ export function Book() {
                   </tr>
                 </thead>
                 <tbody>
-                  {!data.data &&
+                  {!ready &&
                     names.slice(0, 6).map((t) => (
                       <tr key={t}>
                         <td colSpan={COLS.length} className="px-6 py-2.5">
@@ -199,7 +249,7 @@ export function Book() {
                         </td>
                       </tr>
                     ))}
-                  {data.data &&
+                  {ready &&
                     rows.map((r) => {
                       const d = r.holders - r.prev
                       return (
@@ -209,26 +259,26 @@ export function Book() {
                               <Link to={stockPath(r.ticker)} className="font-mono text-[13px] font-semibold hover:text-accent">
                                 {r.ticker}
                               </Link>
-                              <span className="max-w-[7rem] truncate text-ink-2" title={r.name}>{r.name}</span>
-                              {r.owned ? <Badge tone="accent">Owned</Badge> : <Badge>Watched</Badge>}
+                              <span className="max-w-[6rem] truncate text-ink-2" title={r.name}>{r.name}</span>
+                              {r.owned ? <Badge tone="accent" className="whitespace-nowrap">{linked.has(r.ticker) ? 'Owned · 13F' : 'Owned'}</Badge> : <Badge className="whitespace-nowrap">Watched</Badge>}
                             </span>
                           </td>
-                          {r.stock ? (
+                          {r.stock || r.all ? (
                             <>
                               <td className="num whitespace-nowrap px-3 py-2.5 text-right font-medium">
-                                {r.holders}
-                                {r.featured > 0 && <span className="ml-1 text-[12px] font-normal text-ink-3">({r.featured} super)</span>}
+                                {r.holders.toLocaleString('en-US')}
+                                {r.featured > 0 && <span className="block text-[12px] font-normal text-ink-3">{r.featured} super</span>}
                               </td>
-                              <td className={`num px-3 py-2.5 text-right ${d > 0 ? 'text-up' : d < 0 ? 'text-down' : 'text-ink-3'}`}>{d > 0 ? `+${d}` : d < 0 ? `−${-d}` : '0'}</td>
+                              <td className={`num px-3 py-2.5 text-right ${d > 0 ? 'text-up' : d < 0 ? 'text-down' : 'text-ink-3'}`} title={r.all ? 'Needs every filer’s prior quarter' : undefined}>{r.all ? '—' : d > 0 ? `+${d}` : d < 0 ? `−${-d}` : '0'}</td>
                               <td className="num px-3 py-2.5 text-right">{r.added || <span className="text-ink-3">0</span>}</td>
                               <td className="num px-3 py-2.5 text-right">{r.exited || <span className="text-ink-3">0</span>}</td>
-                              <td className="num px-3 py-2.5 text-right">{r.top10 || <span className="text-ink-3">0</span>}</td>
-                              <td className="num px-3 py-2.5 text-right">{r.over5 || <span className="text-ink-3">0</span>}</td>
+                              <td className="num px-3 py-2.5 text-right">{r.top10 ? r.top10.toLocaleString('en-US') : <span className="text-ink-3">0</span>}</td>
+                              <td className="num px-3 py-2.5 text-right">{r.over5 ? r.over5.toLocaleString('en-US') : <span className="text-ink-3">0</span>}</td>
                               <td className="num px-3 py-2.5 text-right text-ink-2">
-                                {r.filed} of {r.filedOf}
+                                {r.filed.toLocaleString('en-US')} of {r.filedOf.toLocaleString('en-US')}
                                 {r.filed > 0 && (
                                   <span className="block whitespace-nowrap text-[12px] text-ink-3">
-                                    {r.split && !r.split.adjusted ? `Possible ${r.split.ratio} split` : `${r.bought} bought · ${r.sold} sold`}
+                                    {r.split && !r.split.adjusted ? `Possible ${r.split.ratio} split` : `${r.bought} bought · ${r.sold} sold${r.all ? '*' : ''}`}
                                   </span>
                                 )}
                               </td>
@@ -268,7 +318,10 @@ export function Book() {
           </section>
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-            <Panel title={season ? `What they did in your names, ${quarterLabel(season)}` : 'What they did in your names'} sub="Largest moves by funds that have filed this season, valued at quarter-end">
+            <Panel
+              title={season ? `What they did in your names, ${quarterLabel(season)}` : 'What they did in your names'}
+              sub={lens === 'all' ? 'Largest moves by the funds we track closely that have filed this season, valued at quarter-end. Other filers’ moves appear once their prior quarter is on file.' : 'Largest moves by funds that have filed this season, valued at quarter-end'}
+            >
               {!data.data ? (
                 <Skeleton className="h-48 w-full" />
               ) : moves.length ? (
@@ -297,7 +350,7 @@ export function Book() {
             </Panel>
           </div>
           <p className="mt-6 text-[13px] leading-relaxed text-ink-3">
-            Counts cover the funds we track closely, from each one’s latest 13F; “super” counts the superinvestors among them. “In a top 10” means one of the fund’s ten largest share positions. Your book is private to you and never used in aggregates. Hedge-fund-only counts and % of shares outstanding arrive with the next data release.
+            {lens === 'all' ? 'Holder counts cover every 13F filer’s latest filing; new, exited and trades cover the funds we track closely' : 'Counts cover the funds we track closely, from each one’s latest 13F'}; “super” counts the superinvestors among them. “In a top 10” means one of the fund’s ten largest share positions. Your book is private to you and never used in aggregates. Hedge-fund-only counts and % of shares outstanding arrive with the next data release.
           </p>
         </>
       )}
@@ -404,9 +457,19 @@ function LinkFund() {
     <div className="mt-5 border-t border-line pt-4">
       <h3 className="text-[14px] font-semibold">Or link your fund’s 13F</h3>
       {b ? (
-        <p className="mt-1 text-[13px] text-ink-2">
-          Linked to <span className="font-medium text-ink">{b.name}</span>’s {quarterLabel(b.quarter)} 13F, {b.tickers.length} names. Your owned list follows it each time it files; names you add by hand stay.
-        </p>
+        <div className="mt-1 space-y-1.5 text-[13px] text-ink-2">
+          <p>
+            Linked to <span className="font-medium text-ink">{b.name}</span>’s {quarterLabel(b.quarter)} 13F: {b.tickers.length} names, marked “Owned · 13F” in the table. They follow its filings.
+          </p>
+          {(() => {
+            const hand = follows.owned_manual ?? follows.owned.filter((t) => !b.tickers.includes(t))
+            return (
+              <p>
+                Added by hand: {hand.length ? <span className="font-mono text-[12.5px] text-ink">{hand.join(', ')}</span> : 'none'}. These stay if you link a different 13F or unlink.
+              </p>
+            )
+          })()}
+        </div>
       ) : (
         <p className="mt-1 text-[13px] text-ink-2">Your owned names become its latest 13F book, largest first, and update each time it files. Names you add by hand stay.</p>
       )}
