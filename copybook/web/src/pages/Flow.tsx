@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { dateLabel, money, quarterLabel, useAsync, useTitle } from '../lib/data'
@@ -14,15 +15,17 @@ const TABS: [Tab, string][] = [
 const FREE_ROWS = 5
 
 export function Flow() {
-  const f = useAsync(loadFlow, [])
-  const cards = useAsync(loadCards, [])
   const member = useMember()
   const paid = Boolean(member?.active)
+  const f = useAsync(() => loadFlow(paid), [paid])
+  const cards = useAsync(loadCards, [])
+  const [limit, setLimit] = useState(40)
   // Lens, period and ranking live in the URL so a view can be shared: ?funds=all&q=2026Q2&tab=sold.
   const [params, setParams] = useSearchParams()
   const scope: 'featured' | 'all' = params.get('funds') === 'all' ? 'all' : 'featured'
   const tab: Tab = (TABS.find(([k]) => k === params.get('tab'))?.[0] as Tab) ?? 'bought'
   const set = (k: string, v: string | null) => {
+    setLimit(40)
     const n = new URLSearchParams(params)
     if (v == null) n.delete(k)
     else n.set(k, v)
@@ -40,7 +43,7 @@ export function Flow() {
   const newest = periods[0]
   const s: FlowScope | undefined = d?.[scope]
   const rows = s?.[tab] ?? []
-  const shown = paid ? rows.slice(0, 40) : rows.slice(0, FREE_ROWS)
+  const shown = paid ? rows.slice(0, limit) : rows.slice(0, FREE_ROWS)
 
   return (
     <div className="container-x pt-12 md:pt-16">
@@ -122,6 +125,13 @@ export function Flow() {
                 <FlowItem key={r.ticker} r={r} i={i} tab={tab} quarter={d.quarter} />
               ))}
             </ol>
+          )}
+          {d && paid && rows.length > limit && (
+            <div className="border-t border-line px-5 py-3 md:px-6">
+              <button type="button" onClick={() => setLimit((n) => n + 40)} className="text-[13px] font-medium text-accent hover:text-accent-2">
+                Show {Math.min(40, rows.length - limit)} more of {rows.length}
+              </button>
+            </div>
           )}
           {d && !paid && rows.length > FREE_ROWS && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-accent-soft px-5 py-4 md:px-6">

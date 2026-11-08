@@ -65,6 +65,18 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node scripts/stocks.mjs dist "${VITE_DATA_BASE}"
+        env:
+          FLOW_FULL: ${{ runner.temp }}/flow-full.json
+      # Members' Flow lists (every fund on each side) for the API's GET /flow, sent with this
+      # workflow's OIDC token. A failed upload leaves the last one in place and doesn't block the deploy.
+      - name: Publish full Flow to the API
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          token=$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=copybook-api" | jq -r .value)
+          curl -fsS -X PUT -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" \
+            --data-binary @"${RUNNER_TEMP}/flow-full.json" https://copybook-api.factordynamics.workers.dev/ingest/flow/full.json
+          echo
       - run: node scripts/cards.mjs dist "${VITE_DATA_BASE}"
       - run: node scripts/postbuild.mjs "${VITE_DATA_BASE}index.json"
       - run: node scripts/sitemap.mjs dist "${VITE_DATA_BASE}index.json"

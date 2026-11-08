@@ -4,6 +4,7 @@ import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
 import { Channels } from '../components/Channels'
 import { Team } from '../components/Team'
+import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -11,7 +12,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, renewalTerms, trialTerms } from '../config'
-import { ApiError, fetchMe, getToken, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
+import { ApiError, downloadFile, fetchMe, getToken, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean } | { kind: 'out'; error?: string } | { kind: 'off' }
 
@@ -219,9 +220,12 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
               Following
               {member.plan === 'fund' && <Badge tone="accent">Shared with your team</Badge>}
             </h2>
-            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-              Edit
-            </Button>
+            <span className="flex items-center gap-1">
+              {follows.investors.length > 0 && <CsvButton variant="outline" label="All their 13Fs (CSV)" download={() => downloadFile('/follows.csv', `copybook-followed-${new Date().toISOString().slice(0, 10)}.csv`)} />}
+              <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+            </span>
           </div>
           {follows.investors.length + follows.stocks.length === 0 ? (
             <p className="mt-2 text-[14px] text-ink-2">Nothing yet. Press Follow on any investor or stock page.</p>

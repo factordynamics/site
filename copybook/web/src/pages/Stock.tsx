@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChangeBars } from '../components/charts'
+import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
-import { useMember } from '../lib/account'
+import { downloadFile, useMember } from '../lib/account'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
 import { dateLabel, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type StockHolder } from '../lib/stocks'
@@ -255,12 +256,15 @@ export function StockPage() {
       </div>
 
       <section className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
-        <header className="border-b border-line px-5 py-4 md:px-6">
-          <h2 className="text-[15px] font-semibold">Every holder</h2>
-          <p className="text-[13px] text-ink-3">
-            {filers && filers.filers > holders.length ? `The ${holders.length} largest of ${filers.filers.toLocaleString('en-US')} 13F filers` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
-            {view === 'filers' && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
-          </p>
+        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold">Every holder</h2>
+            <p className="text-[13px] text-ink-3">
+              {filers && filers.filers > holders.length ? `The ${holders.length} largest of ${filers.filers.toLocaleString('en-US')} 13F filers` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
+              {view === 'filers' && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
+            </p>
+          </div>
+          {paid && d && <CsvButton variant="outline" label="Holders CSV" download={() => downloadFile(`/stocks/${encodeURIComponent(d.ticker)}/holders.csv`, `copybook-${d.ticker}-holders.csv`)} />}
         </header>
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every holder">
           <table className="w-full text-[14px]">

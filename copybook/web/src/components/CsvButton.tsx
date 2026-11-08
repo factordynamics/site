@@ -4,7 +4,7 @@ import { ApiError, downloadCsv } from '../lib/account'
 import { Button } from './ui'
 
 /** Fetches a single-use download link on click. 401 sends to sign-in, 402 to pricing. */
-export function CsvButton({ slug, label = 'Download CSV', variant = 'dark', className }: { slug: string; label?: string; variant?: 'dark' | 'outline'; className?: string }) {
+export function CsvButton({ slug, download, label = 'Download CSV', variant = 'dark', className }: { slug?: string; download?: () => Promise<unknown>; label?: string; variant?: 'dark' | 'outline'; className?: string }) {
   const [busy, setBusy] = useState(false)
   const nav = useNavigate()
   return (
@@ -15,7 +15,7 @@ export function CsvButton({ slug, label = 'Download CSV', variant = 'dark', clas
       disabled={busy}
       onClick={() => {
         setBusy(true)
-        downloadCsv(slug)
+        ;(download ? download() : downloadCsv(slug!))
           .catch((e) => {
             if (e instanceof ApiError && e.status === 401) nav('/account/')
             else if (e instanceof ApiError && e.status === 402) nav('/pricing/')

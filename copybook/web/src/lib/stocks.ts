@@ -1,4 +1,5 @@
 import type { Ev } from '../components/FundNotes'
+import { call } from './account'
 import { BASE, displayName, getJSON, type Change } from './data'
 
 // Derived at build time by scripts/stocks.mjs from the curated 13F books, served from the site host.
@@ -85,8 +86,9 @@ export const loadStockIndex = () => getJSON<{ funds: number; stocks: StockRef[] 
 const named = <T extends { manager: string }>(x: T) => ({ ...x, manager: displayName(x.manager) })
 export const loadStock = (t: string) =>
   getJSON<Stock>(`${D}stocks/${encodeURIComponent(t)}.json`).then((s) => ({ ...s, holders: s.holders.map(named), exited: s.exited.map(named), options: s.options.map(named) }))
-export const loadFlow = () =>
-  getJSON<Flow>(`${D}flow.json`).then((f) => {
+/** The site's flow.json (top 40 per list), or for members the API's fuller lists, falling back to the site's. */
+export const loadFlow = (member = false) =>
+  (member ? call<Flow | { flow: Flow }>('/flow', { auth: true }).then((r) => ('flow' in r ? r.flow : r)).catch(() => getJSON<Flow>(`${D}flow.json`)) : getJSON<Flow>(`${D}flow.json`)).then((f) => {
     const scope = (s: FlowScope): FlowScope => {
       const fix = (rows: FlowRow[]) => rows.map((r) => ({ ...r, buyers: r.buyers.map(named), sellers: r.sellers.map(named) }))
       return { ...s, bought: fix(s.bought), sold: fix(s.sold), most_buyers: fix(s.most_buyers), most_sellers: fix(s.most_sellers), new_multi: fix(s.new_multi), fresh: fix(s.fresh) }

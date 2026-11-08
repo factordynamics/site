@@ -84,6 +84,20 @@ export const fetchMe = () => call<{ member: Member }>('/me', { auth: true }).the
 export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email } })
 export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
 export const setAlerts = (alerts: Member['alerts']) => call<{ member: Member }>('/alerts', { body: { alerts }, auth: true }).then((r) => r.member)
+/** Download an authenticated CSV route ({api}/stocks/{T}/holders.csv, {api}/follows.csv) as a file. */
+export async function downloadFile(path: string, filename: string) {
+  const t = getToken()
+  if (!t) throw new ApiError(401)
+  const res = await fetch(`${api}${path}`, { headers: { Authorization: `Bearer ${t}` } })
+  if (res.status === 401) signOut()
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null))
+  const url = URL.createObjectURL(await res.blob())
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename })
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
 /** Download a fund's CSV. The API mints a single-use 60-second link on click; session tokens never go in a URL. */
 export async function downloadCsv(slug: string) {
   const { url } = await call<{ url: string }>(`/csv-link/${slug}`, { method: 'POST', auth: true })

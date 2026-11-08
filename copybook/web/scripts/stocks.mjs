@@ -178,7 +178,7 @@ if (books.filter((b) => qn(b.quarter) === season).length < 10) season -= 1
 const filed = books.filter((b) => qn(b.quarter) === season && b.prev_quarter)
 // Two scopes: the featured superinvestors (the "smart money"), and every curated fund, which
 // includes banks and market makers whose inventory swings dominate dollar totals.
-function flowFor(scope) {
+function flowFor(scope, full = false) {
   const slugs = new Set(scope.map((b) => b.slug))
   const flows = []
   for (const s of stocks.values()) {
@@ -203,7 +203,9 @@ function flowFor(scope) {
       new_by: buyers.filter((h) => h.change === 'new').map((h) => h.slug),
     })
   }
-  const n = 40
+  // Members' lists (GET /flow from the API) keep every fund on each side and the top 200 names per
+  // ranking; uncapped they come to over 100 MB. The site ships the top 40 with 12 funds a side.
+  const n = full ? 200 : 40
   // Ship the counts and the 12 largest funds on each side; the page needs no more than that.
   const trim = (rows) => rows.map((f) => ({ ...f, n_buyers: f.buyers.length, n_sellers: f.sellers.length, buyers: f.buyers.slice(0, 12), sellers: f.sellers.slice(0, 12) }))
   const out = {
@@ -212,14 +214,14 @@ function flowFor(scope) {
     most_buyers: [...flows].filter((f) => f.buyers.length).sort((a, b) => b.buyers.length - a.buyers.length || b.buy_value - a.buy_value).slice(0, n),
     most_sellers: [...flows].filter((f) => f.sellers.length).sort((a, b) => b.sellers.length - a.sellers.length || a.sell_value - b.sell_value).slice(0, n),
     new_multi: [...flows].filter((f) => f.new_by.length >= 2 && !f.fresh).sort((a, b) => b.new_by.length - a.new_by.length || b.buy_value - a.buy_value).slice(0, n),
-    fresh: [...flows].filter((f) => f.fresh && f.buyers.length >= 2).sort((a, b) => b.buyers.length - a.buyers.length).slice(0, 20),
+    fresh: [...flows].filter((f) => f.fresh && f.buyers.length >= 2).sort((a, b) => b.buyers.length - a.buyers.length).slice(0, full ? n : 20),
   }
-  for (const k of Object.keys(out)) out[k] = trim(out[k])
+  for (const k of Object.keys(out)) out[k] = full ? out[k].map((f) => ({ ...f, n_buyers: f.buyers.length, n_sellers: f.sellers.length })) : trim(out[k])
   return { funds: scope.length, ...out }
 }
 // One report period at a time: a fund counts in the period of its latest 13F, compared with its
 // filing before. A fund that has already filed the next quarter is in that period, not this one.
-const period = (q) => {
+const period = (q, full = false) => {
   const filedQ = books.filter((b) => qn(b.quarter) === q && b.prev_quarter)
   const live = books.filter((b) => qn(b.quarter) >= q)
   return {
@@ -235,13 +237,19 @@ const period = (q) => {
       .map((b) => ({ slug: b.slug, manager: b.manager, firm: b.name, filing_date: b.filing_date, accession: b.accession, featured: Boolean(b.featured), changes: b.changes ?? null }))
       .sort((a, b) => (b.filing_date ?? '').localeCompare(a.filing_date ?? ''))
       .slice(0, 40),
-    featured: flowFor(filedQ.filter((b) => b.featured)),
-    all: flowFor(filedQ),
+    featured: flowFor(filedQ.filter((b) => b.featured), full),
+    all: flowFor(filedQ, full),
   }
 }
 const periods = [period(season), period(season - 1)]
 const flow = { ...periods[0], periods, generated_at: index.generated_at }
 writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
+// FLOW_FULL=<path outside dist>: the untrimmed lists, same shape, for the API's GET /flow.
+if (process.env.FLOW_FULL) {
+  const fp = [period(season, true), period(season - 1, true)]
+  writeFileSync(process.env.FLOW_FULL, JSON.stringify({ ...fp[0], periods: fp, generated_at: index.generated_at }))
+  console.log(`full flow: ${process.env.FLOW_FULL}`)
+}
 console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flow.quarter}: ${filed.length} funds filed (${flow.featured_filed} featured), ${periods.map((p) => `${p.quarter} ${p.funds_filed} funds`).join(', ')}`)
 
 // Every 13F filer's latest holdings (data/f/{cik}.json shards), per stock page: the 500 largest
