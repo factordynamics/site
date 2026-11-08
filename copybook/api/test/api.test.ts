@@ -103,6 +103,7 @@ function memFollows() {
 beforeEach(async () => {
   hist = new MemR2();
   env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', METER: memMeters(), FOLLOWS: undefined as never };
+  env.HEALTH_TOKEN = 'health_test_token';
   // 2026Q1 lives only in the private bucket; 2026Q2 still falls back to the public copy.
   hist.m.set('h/warren-buffett/2026Q1.csv', new TextEncoder().encode('manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight,change,prev_shares,share_change,value_delta_usd,pct_of_book\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1,new,,5,100,0.1\r\n'));
   env.FOLLOWS = memFollows();
@@ -207,6 +208,8 @@ function call(path: string, opts: { method?: string; body?: unknown; token?: str
     env,
   );
 }
+
+const privateHealth = () => handleRequest(new Request('https://api.test/health', { headers: { authorization: 'Bearer health_test_token' } }), env);
 
 function loginTokenFrom(text: string): string {
   return decodeURIComponent(text.match(/account\/\?login=([^\s]+)/)![1]);
@@ -1120,10 +1123,10 @@ describe('copybook api', () => {
     await post(ok, '5.5.5.5');
     await post(ok, '6.6.6.6');
     expect((await post(ok, '7.7.7.7')).status).toBe(429);
-    expect((await (await call('/health')).json()).fund_requests).toBe(3);
+    expect((await (await privateHealth()).json()).business.fund_requests).toBe(3);
     // A reviewer's TEST submission is stored but not counted.
     expect((await post({ ...ok, email: 'copybook-test-pm@x.example', name: 'TEST PM critic' }, '8.8.8.8')).status).toBe(200);
-    expect((await (await call('/health')).json()).fund_requests).toBe(3);
+    expect((await (await privateHealth()).json()).business.fund_requests).toBe(3);
 
     const t = Date.now();
     const row = (acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q3', kind: '13f', accession: acc, accepted: new Date(t - seconds * 1000).toISOString(), sent: new Date(t).toISOString(), seconds, ...extra });
@@ -1462,6 +1465,7 @@ describe('copybook api', () => {
     await put('later', { status: 'trialing', trial_end: trialEnd + 2 * 86400 }); // 4.5 days out: not yet
     await put('ht', { status: 'trialing', trial_end: trialEnd, plan: 'holdterm' }); // Holdterm: never a Copybook email
     await put('seat_x', { status: 'trialing', trial_end: trialEnd, plan: 'fund', seat_of: 'cus_owner' }); // seats don't pay
+    await put('comp', { status: 'trialing', trial_end: trialEnd, comped: true }); // critics: never a revenue email
     await put('promo', { plan: 'pro' });
     await put('yearly', { interval: 'yearly' });
 
@@ -1491,6 +1495,8 @@ describe('copybook api', () => {
     await cancel('yearly');
     await cancel('yearly');
     await cancel('ht', 'holdterm_monthly');
+    // A comped subscription (forever 100% off) cancelling: no email either.
+    await webhook({ type: 'customer.subscription.updated', data: { object: { ...sub('sub_promo', 'promo', 'active', 'month', 'pro_monthly'), cancel_at_period_end: true, discount: { coupon: { id: 'c', percent_off: 100, duration: 'forever' } } } } });
     expect(sent.map((m) => m.to[0])).toEqual(['yearly@example.com']);
     expect(sent[0].subject).toBe('One question about your Copybook cancellation');
     const link = sent[0].text.match(/Too expensive: (\S+)/)![1];
@@ -1502,10 +1508,14 @@ describe('copybook api', () => {
     await handleRequest(new Request('https://api.test/why', { method: 'POST', body: new URLSearchParams({ t: u.searchParams.get('t')!, note: 'Need options data' }) }), env);
     expect(JSON.parse((await env.DB.get('why:yearly'))!)).toMatchObject({ reason: 'price', note: 'Need options data' });
 
-    const b = (await (await call('/health')).json()).business;
+    const pub = await (await call('/health')).json();
+    expect(pub).not.toHaveProperty('business');
+    expect(pub).not.toHaveProperty('fund_requests');
+    expect(await (await handleRequest(new Request('https://api.test/health', { headers: { authorization: 'Bearer wrong-token-of-length-x' } }), env)).json()).not.toHaveProperty('business');
+    const b = (await (await privateHealth()).json()).business;
     // Holdterm counts as its own plan in the business numbers (its cancel too), though it gets no Copybook email.
-    expect(b).toMatchObject({ trials: 2, cancellations_scheduled: 2, fund_seats: 1, cancel_reasons: { price: 1 } });
-    expect(b.by_plan).toEqual({ copy_monthly: 3, pro_monthly: 1, holdterm_monthly: 1 });
+    expect(b).toMatchObject({ trials: 2, cancellations_scheduled: 2, fund_seats: 1, comped: 2, cancel_reasons: { price: 1 } });
+    expect(b.by_plan).toEqual({ copy_monthly: 3, holdterm_monthly: 1 });
     expect(JSON.stringify(b)).not.toMatch(/@/);
   });
 

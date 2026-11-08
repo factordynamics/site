@@ -37,6 +37,8 @@ export interface Env {
   EMAIL_FROM: string;
   /** This Worker's public base URL (trailing slash), for links in email. */
   API_URL?: string;
+  /** Bearer token for /health's private business block (Worker secret). */
+  HEALTH_TOKEN?: string;
   /** bpc_... from scripts/stripe-setup.mjs; empty uses the account's default portal settings. */
   PORTAL_CONFIGURATION?: string;
   STRIPE_SECRET_KEY: string;
@@ -76,6 +78,8 @@ export interface Member {
   cancel_at?: number | null;
   /** Lifecycle email already sent: the trial_end reminded, the season recapped, the subscription asked why. */
   trial_reminded?: number | null;
+  /** Free of charge for good (critics, a forever 100%-off coupon): no revenue email. */
+  comped?: boolean;
   recap_sent?: string;
   why_sent?: string;
   /** A Copy Fund seat: the owner's Stripe customer id. Billing, seats and shared lists are the owner's. */

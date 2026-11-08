@@ -45,6 +45,14 @@ function intervalOf(sub: any): Member['interval'] {
   return interval === 'month' ? 'monthly' : interval === 'year' ? 'yearly' : 'unknown';
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function isComped(sub: any): boolean {
+  if (sub?.metadata?.test_member === 'true' || sub?.metadata?.copybook === 'smoke') return true;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const coupons = [sub?.discount?.coupon, ...((sub?.discounts ?? []) as any[]).map((d) => d?.coupon)].filter((c) => c && typeof c === 'object');
+  return coupons.some((c) => c.percent_off === 100 && c.duration === 'forever');
+}
+
 /**
  * Upserts the member for a Stripe subscription object and sends the welcome
  * email (with a sign-in link) the first time the customer becomes active.
@@ -72,6 +80,8 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     // New members get alerts for the funds they follow and active managers' moves in stocks they own or watch.
     alerts: prev?.alerts ?? [],
     welcomed: prev?.welcomed ?? false,
+    // Comped: a forever 100%-off coupon or a test member (critics). No revenue email goes to them.
+    comped: isComped(sub),
     // Set by a cancel in the billing portal: still active until period_end, then it ends.
     cancel_at_period_end: Boolean(sub.cancel_at_period_end),
     cancel_at: Number(sub.cancel_at ?? 0) || null,

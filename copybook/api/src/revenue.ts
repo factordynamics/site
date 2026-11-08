@@ -15,7 +15,7 @@ const PRICES: Record<string, { name: string; month: number; year: number }> = {
   fund: { name: 'Copy Fund', month: 199, year: 1990 },
 };
 
-const billable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !!PRICES[m.plan];
+const billable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !m.comped && !!PRICES[m.plan];
 const day = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 
@@ -149,18 +149,23 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
   return { emails: mails.length, status };
 }
 
-/** Counts only: members by plan and interval, trials, scheduled cancellations, cancel reasons, alerts sent. */
+/** Counts only: paying members by plan and interval (comped and seats counted apart), trials, scheduled cancellations, cancel reasons, alerts sent. */
 export async function businessSummary(env: Env, now: number) {
   const members = await listMembers(env);
   const by: Record<string, number> = {};
   let trials = 0;
   let cancelling = 0;
   let seats = 0;
+  let comped = 0;
   for (const m of members) {
     // Synthetic records (the latency probe) have no plan and aren't members.
     if (!isActive(m) || (!PRICES[m.plan] && m.plan !== 'holdterm')) continue;
     if (m.seat_of) {
       seats++;
+      continue;
+    }
+    if (m.comped) {
+      comped++;
       continue;
     }
     by[`${m.plan}_${m.interval}`] = (by[`${m.plan}_${m.interval}`] ?? 0) + 1;
@@ -185,6 +190,7 @@ export async function businessSummary(env: Env, now: number) {
     trials,
     cancellations_scheduled: cancelling,
     fund_seats: seats,
+    comped,
     cancel_reasons: reasons,
     alert_emails_24h: sent,
   };

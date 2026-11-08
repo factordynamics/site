@@ -15,7 +15,7 @@ import { importBook } from './book';
 import { businessSummary, handleWhy } from './revenue';
 import { inviteSeat, listSeats, removeSeat, seatsView } from './seats';
 import { stripe, verifyStripeSignature } from './stripe';
-import { signToken, verifyToken } from './tokens';
+import { hmacHex, signToken, verifyToken } from './tokens';
 
 /** Paid data the data workflow uploads besides h/: every filer's full book per quarter, per-issuer holders, bulk exports. */
 const INGEST_KEY = /^(fb\/\d{4}Q[1-4]\/\d{10}\.json|s\/[0-9A-Z]{6}\.json|v\/\d{10}\/\d{10}-\d{2}-\d{6}\.json|changes\/\d{4}Q[1-4]\.json|bulk\/\d{4}Q[1-4]\.(csv\.gz|parquet))$/;
@@ -166,8 +166,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const q = (p: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null);
     const summary = { count: sorted.length, p50: q(0.5), p90: q(0.9), max: sorted.length ? sorted[sorted.length - 1] : null };
     const leads = Number((await env.DB.get('leads:count')) ?? 0);
-    const business = { ...(await businessSummary(env, Date.now())), fund_requests: leads };
-    return json({ ok: true, alert_latency_summary: summary, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, fund_requests: leads, business }, 200, h);
+    // Member and revenue counts only with the private token; the public view is operational.
+    const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    const priv = !!env.HEALTH_TOKEN && tok.length === env.HEALTH_TOKEN.length && (await hmacHex(env.SESSION_SECRET, tok)) === (await hmacHex(env.SESSION_SECRET, env.HEALTH_TOKEN));
+    const business = priv ? { business: { ...(await businessSummary(env, Date.now())), fund_requests: leads } } : {};
+    return json({ ok: true, alert_latency_summary: summary, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, ...business }, 200, h);
   }
 
   // The one-click cancellation reason from the follow-up email (and an optional note).
