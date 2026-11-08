@@ -66,6 +66,17 @@ async function mustShard(env: Env, key: string): Promise<ReadableStream<Uint8Arr
  * `holdings_url` (a JSON shard with `holdings`), or inline `holdings`.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+const [W, V, PC, ST] = ['weight', 'value_usd', 'put_call', 'shares_type'].map((f) => CSV_FIELDS.indexOf(f));
+const isEquityRow = (r: unknown[]) => !r[PC] && String(r[ST] ?? '').toUpperCase() !== 'PRN';
+/**
+ * One quarter's rows: `weight` becomes the share of the equity book, as the methodology defines it:
+ * value over the summed value of SH rows without put/call, rounded to 6 places; blank for options and PRN rows.
+ */
+function equityWeights(rows: unknown[][]): void {
+  const total = rows.reduce((s, r) => s + (isEquityRow(r) ? Number(r[V]) || 0 : 0), 0);
+  for (const r of rows) r[W] = isEquityRow(r) && total > 0 ? Math.round(((Number(r[V]) || 0) / total) * 1e6) / 1e6 : null;
+}
+
 export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();
   // Workers' IdentityTransformStream pipes bytes natively; the standard one runs JS per chunk.
@@ -95,7 +106,7 @@ export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
           break;
         }
         head = head.replace(/\r$/, '');
-        if (head === HEADER) {
+        if (head === HEADER && !h.equity_weight) {
           if (rest?.length) await w.write(rest);
           reader.releaseLock();
           w.releaseLock();
@@ -109,27 +120,27 @@ export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
         for (let r = await reader.read(); !r.done; r = await reader.read()) text += dec.decode(r.value, { stream: true });
         text += dec.decode();
         reader.releaseLock();
-        const lines = text.split(/\r?\n/).filter((l) => l);
-        const rows = lines.map((l) => {
+        const vals = text.split(/\r?\n/).filter((l) => l).map((l) => {
           const c = splitCsv(l);
-          return at.map((i) => cell(i < 0 ? '' : c[i])).join(',') + '\r\n';
+          return at.map((i): unknown => (i < 0 ? '' : c[i]));
         });
-        if (rows.length) await w.write(enc.encode(rows.join('')));
+        if (h.equity_weight) equityWeights(vals);
+        if (vals.length) await w.write(enc.encode(vals.map((v) => v.map(cell).join(',') + '\r\n').join('')));
         continue;
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const book: { holdings?: any[]; exited?: any[] } = q.holdings ? q : q.holdings_url ? await new Response(await mustShard(env, q.holdings_url)).json() : {};
       // Several funds in one file (the follows CSV) carry their own manager, slug and CIK per quarter.
       const filing: Record<string, unknown> = { manager: q.manager ?? h.manager, slug: q.slug ?? h.slug, cik: q.cik ?? h.cik, quarter: q.quarter, report_date: q.report_date, filing_date: q.filing_date, accession: q.accession };
-      const rows = [...(book.holdings ?? []), ...(book.exited ?? [])].map(
-        (p) =>
-          CSV_FIELDS.map((f) => {
-            const v = f in filing ? filing[f] : (p[JSON_FIELD[f] ?? f] ?? (f === 'title' ? p.title_of_class : undefined));
-            // Lists (other_managers) are space-separated, as in the data run's CSV.
-            return cell(Array.isArray(v) ? v.join(' ') : v);
-          }).join(',') + '\r\n',
+      const vals = [...(book.holdings ?? []), ...(book.exited ?? [])].map((p) =>
+        CSV_FIELDS.map((f) => {
+          const v = f in filing ? filing[f] : (p[JSON_FIELD[f] ?? f] ?? (f === 'title' ? p.title_of_class : f === 'shares_type' ? p.sh_prn : undefined));
+          // Lists (other_managers) are space-separated, as in the data run's CSV.
+          return Array.isArray(v) ? v.join(' ') : v;
+        }),
       );
-      if (rows.length) await w.write(enc.encode(rows.join('')));
+      if (h.equity_weight) equityWeights(vals);
+      if (vals.length) await w.write(enc.encode(vals.map((v) => v.map(cell).join(',') + '\r\n').join('')));
     }
     await w.close();
   })().catch((err) => {

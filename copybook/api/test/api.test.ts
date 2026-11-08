@@ -1328,7 +1328,7 @@ describe('copybook api', () => {
     const full = (await v1('/v1/filers/2045724/holdings/2026Q2')).body.data;
     expect(full.truncated).toBe(false);
     expect(full.holdings).toHaveLength(3);
-    expect(full.holdings[2]).toMatchObject({ ticker: 'XYZ', value_usd: 700, weight_equity: 700 / 23700 });
+    expect(full.holdings[2]).toMatchObject({ ticker: 'XYZ', value_usd: 700, weight: 700 / 23700, weight_equity: 700 / 23700 });
 
     const range = (await v1('/v1/filers/2045724/holdings?from=2025Q4&to=2026Q2')).body;
     expect(range.data.map((b: { quarter: string }) => b.quarter)).toEqual(['2026Q2']);
@@ -1406,6 +1406,19 @@ describe('copybook api', () => {
     const n = (l: string) => l.replace(/"(?:[^"]|"")*"/g, '').split(',').length;
     for (const l of rowsOut) expect(n(l)).toBe(n(rowsOut[0]));
     expect(rowsOut.filter((l) => l.startsWith('Durable Capital Partners LP,durable-capital-partners-lp-8849,0001798849,2026Q2,')).length).toBe((durableQ2.rows as unknown[]).length);
+
+    // weight is the equity-book share in every fund's rows: filled for a non-curated book, and, for a curated
+    // CSV whose data-run weight counts options (Tepper's summed to 1.034), recomputed with options blank.
+    const head = rowsOut[0].split(',');
+    const field = (l: string, k: string) => l.replace(/"(?:[^"]|"")*"/g, 'q').split(',')[head.indexOf(k)];
+    const sum = (slug: string) => rowsOut.filter((l) => field(l, 'slug') === slug).reduce((a, l) => a + Number(field(l, 'weight')), 0);
+    expect(rowsOut.filter((l) => field(l, 'slug') === 'durable-capital-partners-lp-8849' && field(l, 'weight') === '')).toHaveLength(0);
+    expect(sum('durable-capital-partners-lp-8849')).toBeCloseTo(1, 4);
+    const row = (t: string, pc: string, sh: number, v: number, w: number) => ['Warren Buffett', 'warren-buffett', '0001067983', '2026Q2', '2026-06-30', '2026-08-14', 'A2', t, t, '000000000', 'COM', pc, sh, v, w, ...Array(18).fill('')].join(',');
+    hist.m.set('h/warren-buffett/2026Q2.csv', new TextEncoder().encode([head.join(','), row('AAPL', '', 10, 300, 0.29), row('AAPL', 'PUT', 5, 30, 0.03), row('OXY', '', 5, 700, 0.68)].join('\r\n') + '\r\n'));
+    const tep = (await (await call('/follows.csv', { token: t })).text()).trim().split('\r\n').filter((l) => field(l, 'slug') === 'warren-buffett');
+    expect(tep.map((l) => [field(l, 'ticker'), field(l, 'put_call'), field(l, 'weight')])).toEqual([['AAPL', '', '0.3'], ['AAPL', 'PUT', ''], ['OXY', '', '0.7']]);
+    hist.m.delete('h/warren-buffett/2026Q2.csv');
   });
 
   it('book import: pasted list, broker CSV, and a 13F filer by CIK that follows its newest quarter', async () => {

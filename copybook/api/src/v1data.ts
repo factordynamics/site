@@ -65,7 +65,8 @@ function position(h: any, equityTotal: number) {
     shares: h.shares,
     shares_type: h.shares_type ?? h.sh_prn ?? null,
     value_usd: h.value,
-    weight: w ? eqw : h.weight,
+    // A filer whose book carries no weight (any non-curated shard) gets the equity-only one.
+    weight: w || h.weight == null ? eqw : h.weight,
     // Alias of the equity-only weight, kept for one release after `weight` switches.
     weight_equity: eqw,
     value_scale: h.value_scale ?? null,

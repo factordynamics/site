@@ -556,7 +556,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       if (!book) continue;
       history.push({ manager: a.row.name, slug, cik: a.row.cik, quarter: a.row.quarter, report_date: book.report_date ?? null, filing_date: book.filing_date ?? a.row.filing_date, accession: book.accession ?? null, holdings: book.holdings ?? (book.columns ? rowsOf(book) : []) });
     }
-    return new Response(historyCsv(env, { history }), {
+    // One quarter per fund, so rows are rewritten in JS: weight is the equity-book share for every fund.
+    return new Response(historyCsv(env, { history, equity_weight: true }), {
       headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="copybook-followed-funds-13f.csv"', 'cache-control': 'private, no-store', 'x-copybook-funds': String(history.length) },
     });
   }
