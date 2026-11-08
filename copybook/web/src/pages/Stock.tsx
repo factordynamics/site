@@ -1,3 +1,4 @@
+import { Signup } from '../components/Signup'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChangeBars } from '../components/charts'
@@ -360,6 +361,8 @@ export function StockPage() {
           )}
         </div>
       )}
+
+      <Signup source="stock" className="mt-6" />
 
       <p className="mt-6 text-[13px] leading-relaxed text-ink-3">
         Built from each fund’s latest Form 13F-HR as filed with the SEC. Holder counts include share positions only. 13F filings are quarter-end snapshots filed up to 45 days later. Not investment advice.

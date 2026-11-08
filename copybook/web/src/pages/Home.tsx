@@ -1,3 +1,4 @@
+import { Signup } from '../components/Signup'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/charts'
@@ -17,6 +18,9 @@ export function Home() {
       <ProofStrip total={idx.data?.totalValue} filers={idx.data?.filerCount} updated={idx.data?.generated_at} />
       <ConsensusSection featured={idx.data?.featured} />
       <FeaturedSection featured={idx.data?.featured} />
+      <div className="container-x mt-16 md:mt-20">
+        <Signup source="home" />
+      </div>
       <HowSection />
       <CTABand />
     </>

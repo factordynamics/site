@@ -1,3 +1,4 @@
+import { Signup } from '../components/Signup'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
@@ -176,6 +177,8 @@ export function Flow() {
           )}
         </Panel>
       </div>
+
+      <Signup source="flow" className="mt-6" />
 
       <p className="mt-6 text-[13px] leading-relaxed text-ink-3">
         Built from Form 13F-HR filings as filed with the SEC. Each fund is compared with its own previous filing; share changes are valued at the newer filing’s quarter-end value. Options are left out. Not investment advice.

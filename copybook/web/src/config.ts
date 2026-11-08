@@ -8,6 +8,8 @@ export const checkout = {
   portal: 'https://billing.stripe.com/p/login/aFa7sL1dk2Do5tE2MSgjC00',
 }
 export const api = 'https://copybook-api.factordynamics.workers.dev'
+// Free weekly email box (POST {api}/signup). On once the API route is live.
+export const signupLive = false
 
 // Cloudflare Web Analytics beacon token (public; empty = no analytics).
 export const analytics = { cloudflare: '' }

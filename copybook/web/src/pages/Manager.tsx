@@ -1,3 +1,4 @@
+import { Signup } from '../components/Signup'
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { ChangeBars, Donut, foldSlices, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
@@ -308,6 +309,8 @@ export function ManagerPage() {
           </div>
         )}
       </section>
+
+      <Signup source="investor" className="mt-6" />
 
       {f && (
         <p className="mt-6 text-[13px] leading-relaxed text-ink-3">

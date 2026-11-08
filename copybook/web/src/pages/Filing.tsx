@@ -1,3 +1,4 @@
+import { Signup } from '../components/Signup'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { FollowButton } from '../components/FollowButton'
@@ -148,6 +149,7 @@ export function FilingCard() {
           )}
         </aside>
       </div>
+      <Signup source="card" className="mt-8" />
     </div>
   )
 }
