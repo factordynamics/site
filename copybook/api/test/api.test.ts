@@ -49,6 +49,8 @@ let index: unknown;
 let secFiles: Record<string, string>;
 let events: unknown[];
 let recentMoves: unknown[];
+let gh: { method: string; url: string; body?: string }[];
+let ghQueued: number;
 let jwks: unknown = { keys: [] };
 
 /** Durable Object namespace stand-in: one MeterLogic per key id, with in-memory storage. */
@@ -79,6 +81,8 @@ beforeEach(() => {
   secFiles = {};
   events = [];
   recentMoves = [];
+  gh = [];
+  ghQueued = 0;
   vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
     const url = String(input);
     if (url === 'https://api.resend.com/emails/batch') {
@@ -92,6 +96,12 @@ beforeEach(() => {
       return obj ? Response.json(obj) : Response.json({ error: { message: 'No such object' } }, { status: 404 });
     }
     if (url === 'https://token.actions.githubusercontent.com/.well-known/jwks') return Response.json(jwks);
+    if (url.startsWith('https://api.github.com/repos/refcell/gust/actions/workflows/copybook-data.yml')) {
+      gh.push({ method: init?.method ?? 'GET', url, body: init?.body ? String(init.body) : undefined });
+      if (url.includes('/runs?status=queued')) return Response.json({ total_count: ghQueued });
+      if (url.includes('/runs?')) return Response.json({ total_count: 0 });
+      return new Response(null, { status: 204 });
+    }
     if (url === `${SITE}data/index.json`) return Response.json(index);
     if (url === `${SITE}data/alerts.json`) return Response.json({ recent: recentMoves });
     if (url === `${SITE}data/events.json`) return Response.json({ events });
@@ -491,6 +501,7 @@ describe('copybook api', () => {
     expect(made.key).toMatch(/^cbk_live_[A-Za-z0-9_-]{43}$/);
     const listed = await (await call('/keys', { token: pro.token })).json();
     expect(listed.keys).toHaveLength(1);
+    expect(listed.keys[0].last_used_at).toBeNull();
     expect(JSON.stringify(listed)).not.toContain(made.key); // the secret is never shown again
     expect(JSON.stringify([...(env.DB as unknown as { m: Map<string, string> }).m.values()])).not.toContain(made.key); // nor stored
     expect((await call('/keys', { body: {}, token: fund.token })).status).toBe(201); // Fund includes Pro
@@ -516,7 +527,10 @@ describe('copybook api', () => {
     clock += 60_000;
     const next = await v1('/v1/me', made.key);
     expect(next.status).toBe(200);
-    expect((await next.json()).data.usage[0]).toEqual({ day: '2026-11-09', requests: 61 }); // only allowed requests count
+    const nextBody = await next.json();
+    expect(nextBody.data.usage[0]).toEqual({ day: '2026-11-09', requests: 61 }); // only allowed requests count
+    expect(nextBody.data.key.last_used_at).toBe('2026-11-09T15:01:10.000Z');
+    expect((await (await call('/keys', { token: pro.token })).json()).keys.find((k: { id: string }) => k.id === made.id).last_used_at).toBe('2026-11-09T15:01:10.000Z');
 
     const spec = await (await v1('/v1/openapi.json')).json();
     expect(spec.openapi).toBe('3.1.0');
@@ -619,5 +633,69 @@ describe('copybook api', () => {
     for (let m = 0; m < 7; m++) for (const c of rotation(ciks, m)) seen.set(c, (seen.get(c) ?? 0) + 1);
     expect(seen.size).toBe(20);
     expect(seen.get('0000000000')!).toBeGreaterThan(seen.get('0000000019')!);
+  });
+
+  it('data refresh: a curated filing dispatches a curated run, at most every 20 minutes, never onto a queued run; none without a token', async () => {
+    const t0 = Date.parse('2026-11-16T15:01:00Z');
+    const { dispatchRefresh } = await import('../src/alerts');
+    expect(await dispatchRefresh(env, 'curated', 'x', t0)).toBe('no token');
+    env.GITHUB_DISPATCH_TOKEN = 'ghp_test';
+    expect(await dispatchRefresh(env, 'curated', 'filing by warren-buffett', t0, 'A1')).toBe('dispatched');
+    expect(JSON.parse(gh.find((c) => c.method === 'POST')!.body!)).toEqual({ ref: 'main', inputs: { scope: 'curated', reason: 'filing by warren-buffett', accession: 'A1' } });
+    // 5 minutes later another filer files: held, then sent by the minute cron once 20 minutes have passed.
+    expect(await dispatchRefresh(env, 'curated', 'filing by dan-loeb', t0 + 5 * 60_000, 'A2')).toBe('spaced');
+    gh = [];
+    await cron(10, t0 + 10 * 60_000);
+    expect(gh.filter((c) => c.method === 'POST')).toHaveLength(0);
+    await cron(21, t0 + 20 * 60_000);
+    expect(JSON.parse(gh.find((c) => c.method === 'POST')!.body!).inputs.accession).toBe('A2');
+    expect(await env.DB.get('dispatch:pending')).toBeNull();
+    // A run already queued: skipped and kept pending.
+    ghQueued = 1;
+    expect(await dispatchRefresh(env, 'curated', 'later', t0 + 60 * 60_000)).toBe('skipped: run queued');
+    expect(await env.DB.get('dispatch:pending')).not.toBeNull();
+  });
+
+  it('/v1 filers and holdings: by slug or CIK, every field the OpenAPI schema requires, as_of not served yet', async () => {
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR', accession: 'A2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 2000, position_count: 1, history_quarters: ['2026Q2', '2025Q1'] }] };
+    await cron(17);
+    hist.m.set('h/warren-buffett/2025Q1.json', new TextEncoder().encode(JSON.stringify({
+      quarter: '2025Q1', report_date: '2025-03-31', accession: '0000950123-25-005701', form: '13F-HR', filing_date: '2025-05-15', sec_url: 'https://www.sec.gov/x', amendments: ['0000950123-25-008361'], prev_quarter: '2024Q4', total_value: 1000, position_count: 1,
+      holdings: [{ cusip: '670346105', ticker: 'NUE', issuer: 'NUCOR CORP', display_name: 'Nucor', title: 'COM', put_call: null, sector: 'Materials', shares: 10, value: 1000, weight: 1, change: 'new', prev_shares: 0, share_change: 10, value_delta: 1000, pct_of_book: 1 }],
+      exited: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', title: 'COM', put_call: null, shares: 0, value: 0, weight: 0, change: 'exited', prev_shares: 5, share_change: -5, value_delta: -500 }],
+    })));
+    stripeObjects['checkout/sessions/cs_test_v'] = { id: 'cs_test_v', status: 'complete', created: now(), subscription: 'sub_v', customer_details: { email: 'v@example.com' } };
+    stripeObjects['subscriptions/sub_v'] = sub('sub_v', 'cus_v', 'active', 'month', 'pro_monthly');
+    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_v' } })).json()).token;
+    const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
+    const v1 = async (path: string) => {
+      const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
+      return { status: r.status, body: await r.json() };
+    };
+    const spec = (await v1('/v1/openapi.json')).body;
+
+    const fl = await v1('/v1/filers');
+    expect(fl.body.data[0]).toMatchObject({ slug: 'warren-buffett', cik: '0001067983', latest_quarter: '2026Q2', history_quarters: ['2026Q2', '2025Q1'] });
+    for (const k of spec.components.schemas.Filer.required) expect(fl.body.data[0]).toHaveProperty(k);
+
+    const bySlug = await v1('/v1/filers/warren-buffett/holdings/2025Q1');
+    const byCik = await v1('/v1/filers/1067983/holdings/2025Q1');
+    expect(bySlug.status).toBe(200);
+    expect(byCik.body).toEqual(bySlug.body);
+    const d = bySlug.body.data;
+    expect(d.filing.amendments).toEqual(['0000950123-25-008361']);
+    expect(d.holdings[0]).toMatchObject({ ticker: 'NUE', value_usd: 1000, weight: 1, change: 'new', value_delta_usd: 1000, source_accession: null, first_disclosed_at: null });
+    expect(d.exited[0]).toMatchObject({ ticker: 'AAPL', shares: 0, value_delta_usd: -500 });
+    for (const k of spec.components.schemas.Holdings.required) expect(d).toHaveProperty(k);
+    for (const row of [...d.holdings, ...d.exited]) {
+      for (const k of spec.components.schemas.Position.required) expect(row).toHaveProperty(k);
+      expect(Object.keys(row).sort()).toEqual(Object.keys(spec.components.schemas.Position.properties).sort()); // nothing undocumented
+    }
+
+    expect((await v1('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20')).body.error.code).toBe('not_yet_available');
+    expect((await v1('/v1/filers/warren-buffett/holdings/2019Q1')).status).toBe(404);
+    expect((await v1('/v1/filers/warren-buffett/holdings/Q1')).body.error.code).toBe('bad_request');
+    expect((await v1('/v1/filers/nobody/holdings/2025Q1')).status).toBe(404);
+    for (const p of ['/v1/me', '/v1/filers', '/v1/filers/{filer}/holdings/{quarter}']) expect(spec.paths[p].get.responses['200'].content).toBeDefined();
   });
 });

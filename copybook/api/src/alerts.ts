@@ -332,8 +332,11 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
   const later = fresh.filter((f) => !f.moves);
   if (later.length) await env.DB.put('alerts:pending-moves', JSON.stringify([...JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]'), ...later]));
   const sent = await deliver(env, fresh, [], now);
+  // A curated filer filed: refresh the data now, so pages, history and moves follow within ~15 minutes.
+  const filed = todo.filter((e) => handled.includes(e.accession));
+  const refresh = filed.length && rawPeriods ? await dispatchRefresh(env, 'curated', `filing by ${ciks[filed[0].cik][0].slug}`, now, filed[0].accession) : undefined;
   if (fresh.length) await logLatency(env, fresh, Date.now());
-  return { status: 'checked', filings: fresh.map((f) => `${f.slug} ${f.quarter}${f.moves ? '' : ' (no moves)'}`), ...sent, ...(errors.length ? { errors } : {}) };
+  return { status: 'checked', filings: fresh.map((f) => `${f.slug} ${f.quarter}${f.moves ? '' : ' (no moves)'}`), ...sent, ...(refresh ? { refresh } : {}), ...(errors.length ? { errors } : {}) };
 }
 
 /**
@@ -357,6 +360,10 @@ interface IndexRow {
   name: string;
   featured?: boolean;
   type?: string | null;
+  status?: string;
+  total_value?: number;
+  position_count?: number;
+  history_quarters?: string[];
   form?: string;
   accession?: string;
   report_date?: string;
@@ -384,6 +391,26 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   }
   const cikJson = JSON.stringify(ciks);
   if ((await env.DB.get('alerts:ciks')) !== cikJson) await env.DB.put('alerts:ciks', cikJson);
+  // The /v1/filers list, written only when it changes.
+  const filerJson = JSON.stringify(
+    rows.filter((m) => m.slug && m.cik).map((m) => ({
+      slug: m.slug,
+      cik: m.cik.padStart(10, '0'),
+      name: m.name,
+      manager: m.manager,
+      featured: !!m.featured,
+      type: m.type ?? null,
+      status: m.status ?? null,
+      latest_quarter: m.quarter ?? null,
+      latest_report_date: m.report_date ?? null,
+      latest_filing_date: m.filing_date ?? null,
+      latest_accession: m.accession ?? null,
+      total_value_usd: m.total_value ?? null,
+      position_count: m.position_count ?? null,
+      history_quarters: m.history_quarters ?? [],
+    })),
+  );
+  if ((await env.DB.get('v1:filers')) !== filerJson) await env.DB.put('v1:filers', filerJson);
 
   const raw = await env.DB.get('alerts:periods');
   const periods = JSON.parse(raw ?? '{}') as Record<string, string>;
@@ -468,6 +495,51 @@ export async function runEvents(env: Env, now: number): Promise<Record<string, u
   return { status: 'checked', new: fresh.length, alertable: send.length, ...(await deliver(env, [], send, now)) };
 }
 
+// ---------------------------------------------------------------------------------------------
+// Triggering the gust data refresh (GitHub skips scheduled runs under load)
+
+const WORKFLOW_API = 'https://api.github.com/repos/refcell/gust/actions/workflows/copybook-data.yml';
+const DISPATCH_GAP_MS = 20 * 60_000;
+
+/**
+ * Dispatches copybook-data.yml at most once per 20 minutes. A `curated` refresh (a curated filer
+ * just filed) that can't go now is kept in KV dispatch:pending and retried every minute. Skips when
+ * a run is already queued: the workflow's concurrency group would collapse it anyway. A scheduled
+ * `full` refresh also skips while one is running.
+ */
+export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reason: string, now: number, accession?: string): Promise<string> {
+  const token = env.GITHUB_DISPATCH_TOKEN;
+  if (!token) return 'no token';
+  const pend = async () => {
+    if (scope === 'curated' && !(await env.DB.get('dispatch:pending'))) await env.DB.put('dispatch:pending', JSON.stringify({ reason, accession }));
+  };
+  if (now - Number((await env.DB.get('dispatch:last')) ?? 0) < DISPATCH_GAP_MS) {
+    await pend();
+    return 'spaced';
+  }
+  const gh = (path: string, init: RequestInit = {}) =>
+    fetch(`${WORKFLOW_API}${path}`, { ...init, headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json', 'x-github-api-version': '2022-11-28', 'user-agent': 'Copybook-api' } });
+  for (const status of scope === 'full' ? ['queued', 'in_progress'] : ['queued']) {
+    const r = await gh(`/runs?status=${status}&per_page=1`);
+    if (r.ok && ((await r.json()) as { total_count?: number }).total_count) {
+      await pend();
+      return `skipped: run ${status}`;
+    }
+  }
+  const inputs = { scope, reason, ...(accession ? { accession } : {}) };
+  let res = await gh('/dispatches', { method: 'POST', body: JSON.stringify({ ref: 'main', inputs }) });
+  // Before the workflow declares its inputs, GitHub rejects them: a plain (full) dispatch still refreshes.
+  if (res.status === 422) res = await gh('/dispatches', { method: 'POST', body: JSON.stringify({ ref: 'main' }) });
+  if (res.status !== 204) {
+    console.log(`dispatch ${res.status}: ${await res.text()}`);
+    await pend();
+    return `error ${res.status}`;
+  }
+  await env.DB.put('dispatch:last', String(now));
+  if (scope === 'curated') await env.DB.delete('dispatch:pending');
+  return 'dispatched';
+}
+
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
 export async function runScheduled(env: Env, scheduledTime: number): Promise<Record<string, unknown>> {
   const t = new Date(scheduledTime);
@@ -484,5 +556,14 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
   if (t.getUTCMinutes() === 47) await step('events', () => runEvents(env, scheduledTime));
   if (t.getUTCMinutes() === 32 && t.getUTCHours() === 3) await step('digest', () => runDigest(env, scheduledTime - 3600_000));
   await step('poll', () => runPoll(env, scheduledTime));
+  // Every 3 hours, 10 minutes after gust's own cron: a full refresh only if that run didn't start.
+  if (t.getUTCMinutes() === 33 && t.getUTCHours() % 3 === 0) await step('dispatch', () => dispatchRefresh(env, 'full', 'scheduled by copybook-api', scheduledTime));
+  else if (env.GITHUB_DISPATCH_TOKEN) {
+    const pending = await env.DB.get('dispatch:pending');
+    if (pending) {
+      const p = JSON.parse(pending) as { reason: string; accession?: string };
+      await step('dispatch', () => dispatchRefresh(env, 'curated', p.reason, scheduledTime, p.accession));
+    }
+  }
   return out;
 }

@@ -66,7 +66,9 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
       if (!rows.length) continue;
       const parts = rows.map((r) => {
         const name = (r.ticker || r.display_name || r.issuer || r.cusip) + (r.put_call ? ` ${r.put_call.toLowerCase()}s` : '');
-        const pct = r.pct_of_book ? ` (${(Math.abs(r.pct_of_book) * 100).toFixed(1)}% of book)` : '';
+        // The data run is renaming the trade size to delta_pct_of_book (pct_of_book becomes the position's weight).
+        const d = r.delta_pct_of_book ?? r.pct_of_book;
+        const pct = d ? ` (${(Math.abs(d) * 100).toFixed(1)}% of book)` : '';
         return `${name} ${usd(r.value_delta)}${pct}${flag(r.ticker, f)}`;
       });
       lines.push(`  ${label}: ${parts.join(', ')}`);

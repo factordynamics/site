@@ -3,6 +3,7 @@ import { fetchHistory, historyCsv, shard, SHARD_KEY, SLUG } from './data';
 import { verifyGithubOidc } from './oidc';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
 import { handleV1 } from './v1';
+import './v1data';
 
 export { KeyMeter } from './keys';
 import { loginMail, sendMail } from './email';
@@ -240,8 +241,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const keys = await listKeys(env, m.customer);
       const out = [];
       for (const k of keys) {
-        const usage = await meter(env, k.id).usage(30);
-        out.push({ id: k.id, name: k.name, prefix: k.prefix, created: k.created, requests_today: usage[0]?.requests ?? 0, usage });
+        const u = await meter(env, k.id).usage(30);
+        out.push({ id: k.id, name: k.name, prefix: k.prefix, created: k.created, last_used_at: u.last_used_at, requests_today: u.days[0]?.requests ?? 0, usage: u.days });
       }
       return json({ ok: true, keys: out, max: MAX_KEYS }, 200, h);
     }

@@ -13,6 +13,7 @@ export const ERRORS = {
   rate_limited: 'Too many requests for this key; see the RateLimit headers.',
   not_found: 'No such resource.',
   bad_request: 'A parameter is missing or invalid.',
+  not_yet_available: 'This option is documented but not served yet.',
   server_error: 'Something went wrong on our side.',
 } as const;
 export type ErrorCode = keyof typeof ERRORS;
@@ -40,7 +41,10 @@ export const ROUTES: [string, RegExp, Handler][] = [
   [
     'GET',
     /^\/v1\/me$/,
-    async ({ env, key }) => v1json({ data: { key: { id: key.id, name: key.name, prefix: key.prefix, created: key.created }, usage: await meter(env, key.id).usage(30) } }),
+    async ({ env, key }) => {
+      const u = await meter(env, key.id).usage(30);
+      return v1json({ data: { key: { id: key.id, name: key.name, prefix: key.prefix, created: key.created, last_used_at: u.last_used_at }, usage: u.days } });
+    },
   ],
 ];
 

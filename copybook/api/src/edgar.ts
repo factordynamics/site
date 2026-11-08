@@ -66,7 +66,10 @@ export interface MoveRow {
   prev_shares: number;
   value: number;
   value_delta: number;
-  pct_of_book: number | null;
+  /** The trade as a signed fraction of this filing's book (0-1). */
+  delta_pct_of_book: number | null;
+  /** Older data-run rows used this name for the trade size. */
+  pct_of_book?: number | null;
 }
 
 export interface Moves {
@@ -166,7 +169,7 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     prev_shares,
     value,
     value_delta: Math.round(delta),
-    pct_of_book: total ? delta / total : null,
+    delta_pct_of_book: total ? delta / total : null,
   });
   for (const c of cur) {
     const value = c.value * scale;

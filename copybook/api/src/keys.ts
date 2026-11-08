@@ -81,7 +81,13 @@ export async function authKey(env: Env, header: string | null): Promise<KeyAuth>
 
 export interface Meter {
   hit(): Promise<MeterResult>;
-  usage(days: number): Promise<{ day: string; requests: number }[]>;
+  usage(days: number): Promise<Usage>;
+}
+
+export interface Usage {
+  /** Time of the key's latest allowed request, to the minute (ISO, UTC), or null if never used. */
+  last_used_at: string | null;
+  days: { day: string; requests: number }[];
 }
 
 export interface MeterResult {
@@ -111,6 +117,8 @@ export class MeterLogic implements Meter {
     const used = (await this.storage.get<number>(`day:${day}`)) ?? 0;
     const allowed = this.win.n < LIMITS.minute && used < LIMITS.day;
     if (allowed) {
+      // Last use is stored once per minute window, so it costs no extra write on busy keys.
+      if (this.win.n === 0) await this.storage.put('last', t);
       this.win.n++;
       await this.storage.put(`day:${day}`, used + 1);
     }
@@ -122,13 +130,14 @@ export class MeterLogic implements Meter {
     };
   }
 
-  async usage(days: number): Promise<{ day: string; requests: number }[]> {
+  async usage(days: number): Promise<Usage> {
     const out = [];
     for (let i = 0; i < days; i++) {
       const day = new Date(this.now() - i * 86400_000).toISOString().slice(0, 10);
       out.push({ day, requests: (await this.storage.get<number>(`day:${day}`)) ?? 0 });
     }
-    return out;
+    const last = await this.storage.get<number>('last');
+    return { last_used_at: last ? new Date(last).toISOString() : null, days: out };
   }
 }
 
@@ -154,7 +163,7 @@ export function meter(env: Env, keyId: string): Meter {
   const stub = env.METER.get(env.METER.idFromName(keyId));
   return {
     hit: async () => (await stub.fetch('https://meter/hit')).json() as Promise<MeterResult>,
-    usage: async (days) => (await stub.fetch(`https://meter/usage?days=${days}`)).json() as Promise<{ day: string; requests: number }[]>,
+    usage: async (days) => (await stub.fetch(`https://meter/usage?days=${days}`)).json() as Promise<Usage>,
   };
 }
 

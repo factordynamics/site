@@ -38,6 +38,8 @@ export interface Env {
   /** HMAC key for login and session tokens. */
   SESSION_SECRET: string;
   RESEND_API_KEY?: string;
+  /** Fine-grained GitHub PAT (refcell/gust only, Actions: read and write) to dispatch the data refresh. */
+  GITHUB_DISPATCH_TOKEN?: string;
   /** Durable Object namespace: one KeyMeter per API key (rate limits and usage). */
   METER: import('./keys').MeterNamespace;
 }
