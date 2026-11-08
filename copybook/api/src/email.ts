@@ -71,6 +71,16 @@ export function loginMail(env: Env, to: string, token: string, welcome: boolean)
   };
 }
 
+/** A Copy Fund seat invitation, with the seat's own sign-in link. */
+export function seatInviteMail(env: Env, to: string, owner: string, token: string): Mail {
+  const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
+  return {
+    to,
+    subject: 'You have a Copy Fund seat on Copybook',
+    text: `${owner} added you to their team's Copy Fund plan on Copybook. Your seat shares the team's followed funds, watchlist, book and peer list, and has its own alert settings, delivery channels and API keys.\n\nSign in (link works for 7 days; later, request a new link with this address at ${env.SITE_URL}account/):\n${link}${FOOTER}`,
+  };
+}
+
 function usd(v: number, sign = true): string {
   const a = Math.abs(v);
   const s = a >= 1e9 ? `$${(a / 1e9).toFixed(1)}B` : a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : `$${Math.round(a / 1e3)}K`;
@@ -479,7 +489,7 @@ export interface FeedItem {
 
 /** Feed entries for this delivery, one per filing; ids are stable so a follow-up gets its own entry. */
 export function feedItems(env: Env, filings: Alert13F[], events: AlertEvent[], now: number): FeedItem[] {
-  const none: Follows = { investors: [], stocks: [], owned: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 0, cluster_buys: true, any_13d: true };
+  const none: Follows = { investors: [], stocks: [], owned: [], peers: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 0, cluster_buys: true, any_13d: true };
   return [
     ...filings.map((a) => ({ id: `${a.accession}${a.followup ? ':moves' : ''}`, title: filingHeadline(a), text: filingBlock(env, a, none), url: filingUrl(env, a), published: a.accepted ?? new Date(now).toISOString() })),
     ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, title: eventHeadline(e), text: eventLine(env, e, none), url: e.slug ? `${env.SITE_URL}investors/${e.slug}` : e.url, published: e.accepted ?? new Date(now).toISOString() })),

@@ -1,6 +1,7 @@
 import { holdtermLoginMail, loginMail, sendMail } from './email';
 import { isActive, type Env, type Member } from './env';
 import { stripe } from './stripe';
+import { mirrorSeats } from './seats';
 import { signToken } from './tokens';
 
 export const LOGIN_TTL = 7 * 24 * 3600;
@@ -85,11 +86,13 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     if (!m.welcomed) await claim(env, customer, 'welcome', false);
   }
   await putMember(env, m);
+  await mirrorSeats(env, m);
   return m;
 }
 
 export function publicView(m: Member) {
-  return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, alerts: m.alerts };
+  // A Fund seat: billing belongs to the owner, so the site hides the portal for seats.
+  return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, alerts: m.alerts, seat: Boolean(m.seat_of) };
 }
 
 export async function listMembers(env: Env): Promise<Member[]> {
@@ -111,6 +114,8 @@ export interface Follows {
   investors: string[];
   stocks: string[];
   owned: string[];
+  /** Funds the member benchmarks against (any 13F filer's slug); shared across a Fund team. */
+  peers: string[];
   onboarded: boolean;
   /** Also alert on Schedule 13G/13G-A filings (mostly routine passive-stake updates). */
   include_13g: boolean;
@@ -128,28 +133,38 @@ export interface Follows {
 
 export const FOLLOW_DEFAULTS = { include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true };
 
+/** What a Fund team shares: the seats read and write the owner's lists; alert settings stay per seat. */
+const SHARED = ['investors', 'stocks', 'owned', 'peers', 'onboarded'] as const;
+const sharedOf = (f: Follows) => Object.fromEntries(SHARED.map((k) => [k, f[k]])) as Pick<Follows, (typeof SHARED)[number]>;
+
 export async function getFollows(env: Env, m: Member): Promise<Follows> {
+  if (m.seat_of) return { ...(await ownFollows(env, m)), ...sharedOf(await ownFollows(env, { ...m, customer: m.seat_of, seat_of: undefined, alerts: [] })) };
+  return ownFollows(env, m);
+}
+
+async function ownFollows(env: Env, m: Member): Promise<Follows> {
   const raw = await env.DB.get(`follows:${m.customer}`);
-  if (raw) return { ...FOLLOW_DEFAULTS, ...(JSON.parse(raw) as Partial<Follows>) } as Follows;
+  if (raw) return { peers: [], ...FOLLOW_DEFAULTS, ...(JSON.parse(raw) as Partial<Follows>) } as Follows;
   // First read: seed from the follows the site kept in member.alerts before /follows existed.
-  const seeded: Follows = { investors: Array.isArray(m.alerts) ? m.alerts : [], stocks: [], owned: [], onboarded: false, ...FOLLOW_DEFAULTS };
+  const seeded: Follows = { investors: Array.isArray(m.alerts) ? m.alerts : [], stocks: [], owned: [], peers: [], onboarded: false, ...FOLLOW_DEFAULTS };
   await env.DB.put(`follows:${m.customer}`, JSON.stringify(seeded));
   return seeded;
 }
 
 export async function putFollows(env: Env, m: Member, f: Follows): Promise<void> {
   await env.DB.put(`follows:${m.customer}`, JSON.stringify(f));
-  // Followed investors are the alert targets whenever alerts is a list (not "all" or "off").
-  if (Array.isArray(m.alerts)) await putMember(env, { ...m, alerts: f.investors });
+  // Followed investors are the alert targets whenever alerts is a list (not "all" or "off"). A seat's
+  // investors are the owner's, read at alert time, so its own record is left alone.
+  if (Array.isArray(m.alerts) && !m.seat_of) await putMember(env, { ...m, alerts: f.investors });
 }
 
 export const MAX_FOLLOWS = 500;
-export type FollowList = 'investors' | 'stocks' | 'owned';
+export type FollowList = 'investors' | 'stocks' | 'owned' | 'peers';
 export type FollowOp = { get: true } | { set: Partial<Follows> } | { add: { list: FollowList; value: string } } | { remove: { list: FollowList; value: string } };
 
 /** One change to a member's follows. Owned stocks are always on the watchlist. */
 export function applyFollowOp(cur: Follows, op: FollowOp): Follows | string {
-  const next: Follows = { ...cur, investors: [...cur.investors], stocks: [...cur.stocks], owned: [...cur.owned] };
+  const next: Follows = { ...cur, investors: [...cur.investors], stocks: [...cur.stocks], owned: [...cur.owned], peers: [...(cur.peers ?? [])] };
   if ('get' in op) return next;
   if ('set' in op) Object.assign(next, op.set);
   else if ('add' in op) {
@@ -161,7 +176,7 @@ export function applyFollowOp(cur: Follows, op: FollowOp): Follows | string {
     if (list === 'stocks') next.owned = next.owned.filter((x) => x !== value);
   }
   next.stocks = [...new Set([...next.stocks, ...next.owned])];
-  for (const k of ['investors', 'stocks', 'owned'] as const) if (next[k].length > MAX_FOLLOWS) return `at most ${MAX_FOLLOWS} ${k}`;
+  for (const k of ['investors', 'stocks', 'owned', 'peers'] as const) if (next[k].length > MAX_FOLLOWS) return `at most ${MAX_FOLLOWS} ${k}`;
   return next;
 }
 
@@ -177,6 +192,21 @@ export interface FollowsNamespace {
  * through to KV for the alert jobs.
  */
 export async function changeFollows(env: Env, m: Member, op: FollowOp): Promise<{ ok: true; follows: Follows; member: Member } | { ok: false; error: string }> {
+  if (!m.seat_of) return viaObject(env, m, op);
+  // A Fund seat: list changes go to the owner's object (shared by the team), settings to the seat's own.
+  const owner = await getMember(env, m.seat_of);
+  if (!owner) return { ok: false, error: 'this seat is no longer part of a team' };
+  const isShared = (k: string) => (SHARED as readonly string[]).includes(k);
+  const listOp: FollowOp = 'set' in op ? { set: Object.fromEntries(Object.entries(op.set).filter(([k]) => isShared(k))) } : 'get' in op ? op : op;
+  const ownOp: FollowOp = 'set' in op ? { set: Object.fromEntries(Object.entries(op.set).filter(([k]) => !isShared(k))) } : { get: true };
+  const team = await viaObject(env, owner, 'set' in listOp && !Object.keys(listOp.set).length ? { get: true } : listOp);
+  if (!team.ok) return team;
+  const own = await viaObject(env, m, 'set' in ownOp && !Object.keys(ownOp.set).length ? { get: true } : ownOp);
+  if (!own.ok) return own;
+  return { ok: true, follows: { ...own.follows, ...sharedOf(team.follows) }, member: m };
+}
+
+async function viaObject(env: Env, m: Member, op: FollowOp): Promise<{ ok: true; follows: Follows; member: Member } | { ok: false; error: string }> {
   const stub = env.FOLLOWS.get(env.FOLLOWS.idFromName(m.customer));
   return (await stub.fetch('https://follows/apply', { method: 'POST', body: JSON.stringify({ member: m, op }) })).json();
 }
@@ -217,12 +247,12 @@ export class MemberFollows {
   }
 
   private async apply(m: Member, op: FollowOp) {
-    const cur = (await this.state.storage.get<Follows>('follows')) ?? (await getFollows(this.env, m));
+    const cur = (await this.state.storage.get<Follows>('follows')) ?? (await ownFollows(this.env, m));
     const next = applyFollowOp({ ...FOLLOW_DEFAULTS, ...cur }, op);
     if (typeof next === 'string') return { ok: false, error: next };
     if ('get' in op) return { ok: true, follows: next, member: m };
     // Saving follows without ever choosing an alert scope means "alert me on these funds".
-    const member = m.alerts === 'all' && !m.alerts_chosen && next.investors.length ? { ...m, alerts: next.investors } : m;
+    const member = m.alerts === 'all' && !m.alerts_chosen && !m.seat_of && next.investors.length ? { ...m, alerts: next.investors } : m;
     await this.state.storage.put('follows', next);
     await putFollows(this.env, member, next);
     return { ok: true, follows: next, member: Array.isArray(member.alerts) ? { ...member, alerts: next.investors } : member };

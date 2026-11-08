@@ -70,6 +70,8 @@ export interface Member {
   /** Cancelled in the portal: active until period_end (or cancel_at), then it ends. */
   cancel_at_period_end?: boolean;
   cancel_at?: number | null;
+  /** A Copy Fund seat: the owner's Stripe customer id. Billing, seats and shared lists are the owner's. */
+  seat_of?: string;
   /** Set once the member picks an alert scope themselves (POST /alerts). */
   alerts_chosen?: boolean;
   /** A one-time line for the next email, e.g. "followed" after moving "all" to followed funds. */

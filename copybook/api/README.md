@@ -24,6 +24,10 @@ All responses are JSON. Authenticated routes take `Authorization: Bearer <sessio
 | POST | `/handoff` | → `{login}`: a 2-minute sign-in token to carry a session across origins (exchange with `POST /session {login}`) |
 | GET | `/follows` | → `{follows: {investors, stocks, owned, onboarded}}`; first read seeds `investors` from a list-form `alerts` |
 | PUT | `/follows` | partial `{investors?, stocks?, owned?, onboarded?}` → `{follows}`; slugs / tickers `^[A-Z][A-Z0-9.-]{0,9}$`, ≤500 each; owned are always added to stocks; when `alerts` is a list, it mirrors `investors` |
+| POST, DELETE | `/follows/{slug}`, `/follows/{investors\|stocks\|owned\|peers}/{id}` | one item, serialized per member (Durable Object); `peers` are filer slugs |
+| GET | `/seats` | Copy Fund owner → `{max: 5, active, seats: [{email, invited_at}]}`; 403 `fund_required` or `seat` |
+| POST | `/seats` | `{email}` → 201; emails the seat its own sign-in link. 409 `seat_exists`, `seat_limit`, `email_taken` |
+| DELETE | `/seats/{email}` | removes the seat and its sign-in |
 | GET | `/me` | → `{member: {email, status, active, plan, period_end, alerts}}` |
 | POST | `/portal` | → `{url}` of a Stripe customer portal session |
 | POST | `/alerts` | `{alerts: "all" \| "off" \| ["warren-buffett", ...]}` → `{member}` |
@@ -54,6 +58,10 @@ jq -r .webhook_secret /tmp/stripe.json | npx wrangler secret put STRIPE_WEBHOOK_
 Live: `https://copybook-api.factordynamics.workers.dev` (Cloudflare account of abigger87@gmail.com, KV `copybook-api-DB`). Payment Links, portal configuration and webhook were created by `stripe-setup.mjs` in live mode.
 
 `stripe-setup.mjs` is idempotent (it finds its objects by metadata and price lookup keys) and works for test and live keys. It recreates the webhook endpoint each run so it can print a fresh signing secret.
+
+**Fund seats.** A seat is its own member (`cus:seat_...`, `seat_of` = owner) with its own sign-in, API keys, channels and alert settings. Followed investors, watchlist, owned book and peers are the owner's, shared by every seat. A seat's status follows the owner's subscription; `/portal` and `/seats` are owner-only.
+
+**Invoiced annual Fund** (after a `/fund-request`): `STRIPE_SECRET_KEY=... node scripts/fund-invoice.mjs --email ... --name ... --fund ... [--coupon CODE] [--dry-run]` creates a `fund_yearly` subscription with `collection_method=send_invoice`, net 30, and sends the invoice now. The subscription is active at once, so the webhook creates the member and emails a sign-in link.
 
 Email goes through Resend from `copybook@factordynamics.com` (domain verified in Resend; DNS in Squarespace).
 

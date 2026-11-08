@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker, { handleRequest } from '../src/index';
 import type { Env, KV, R2 } from '../src/env';
 import { MeterLogic } from '../src/keys';
-import { MemberFollows } from '../src/members';
+import { getFollows, MemberFollows } from '../src/members';
 import { resolveFollowedFilers, runDigest } from '../src/alerts';
 import { alertMail } from '../src/email';
 import { hmacHex } from '../src/tokens';
@@ -416,13 +416,13 @@ describe('copybook api', () => {
 
     expect((await call('/follows')).status).toBe(401);
     await call('/alerts', { body: { alerts: ['warren-buffett'] }, token: t });
-    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
+    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], peers: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
 
     for (const bad of [{ investors: ['Not A Slug'] }, { stocks: ['$AAPL'] }, { owned: 'AAPL' }, { onboarded: 'yes' }, { digest: 1 }, { insider_min_usd: -1 }, { insider_min_usd: '100k' }, { cluster_buys: 'no' }, { stocks: Array.from({ length: 501 }, (_, i) => `T${i}`) }]) {
       expect((await put(bad)).status).toBe(400);
     }
     const r = await (await put({ stocks: ['aapl', 'BRK.B'], owned: ['googl'], onboarded: true, include_13g: true })).json();
-    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], onboarded: true, include_13g: true, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
+    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], peers: [], onboarded: true, include_13g: true, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
 
     // Any 13F filer can be followed, not only curated funds; a slug that is no filer is refused.
     const unknown = await put({ investors: ['warren-buffett', 'no-such-filer-1234'] });
@@ -700,13 +700,13 @@ describe('copybook api', () => {
     // From EDGAR 0001193125-26-352200 vs 0001193125-26-226661.
     const moves = { bought_usd: 19.2e9, sold_usd: 4.1e9, new: [row('DHI', 3564, 0, 580504, 580504, 0.0000019)], added: [row('GOOGL', 78791167, 54249798, 28157599351, 8770349040, 0.0293)], trimmed: [row('BAC', 1, 2, 1, -1.7e9, -0.006), row('COF', 5, 12, 5, -832.6e6, -0.003)], exited: [row('STZ', 0, 1, 0, -94.9e6, -0.0003)] };
     const a = { slug: 'warren-buffett', slugs: ['warren-buffett'], manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', accession: '0001193125-26-352200', sec_url: 'https://www.sec.gov/x', accepted: '2026-08-14T20:05:04Z', moves, tickers: [] };
-    const m = alertMail(env, 'x@example.com', [a], [], { investors: [], stocks: [], owned: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true });
+    const m = alertMail(env, 'x@example.com', [a], [], { investors: [], stocks: [], owned: [], peers: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true });
     expect(m.subject).toBe('Buffett Q2: NEW DHI · EXIT STZ · GOOGL +$8.8B');
     expect(m.text).toContain('Bought $19.2B, sold $4.1B this quarter.');
     expect(m.text).toContain('Added: GOOGL +$8.8B (+45% shares, 2.9% of book)');
     expect(m.text).toContain('New: DHI +$581K (<0.1% of book)');
     // The trader owns GOOGL; the retail critic owns COF and DHI and watches BAC: tagged in text and HTML.
-    const f = { investors: [], stocks: ['GOOGL', 'COF', 'DHI', 'BAC'], owned: ['GOOGL', 'COF', 'DHI'], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true };
+    const f = { investors: [], stocks: ['GOOGL', 'COF', 'DHI', 'BAC'], owned: ['GOOGL', 'COF', 'DHI'], peers: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true };
     const tagged = alertMail(env, 'x@example.com', [a], [], f);
     for (const t of ['GOOGL', 'COF', 'DHI']) {
       expect(tagged.text).toMatch(new RegExp(`${t} [+-]\\$[^[]*\\[you own\\]`));
@@ -1156,6 +1156,55 @@ describe('copybook api', () => {
     ghQueued = 1;
     expect(await dispatchRefresh(env, 'curated', 'later', t0 + 60 * 60_000)).toBe('skipped: run queued');
     expect(await env.DB.get('dispatch:pending')).not.toBeNull();
+  });
+
+  it('Copy Fund seats: invites with their own sign-in, a shared book and peers, per-seat alert settings, billing stays with the owner', async () => {
+    stripeObjects['checkout/sessions/cs_test_fund'] = { id: 'cs_test_fund', status: 'complete', created: now(), subscription: 'sub_fund', customer_details: { email: 'pm@fund.example' } };
+    stripeObjects['subscriptions/sub_fund'] = sub('sub_fund', 'cus_fund', 'active', 'year', 'fund_yearly');
+    const owner = (await (await call('/session', { body: { checkout_session: 'cs_test_fund' } })).json()).token;
+    await call('/follows/warren-buffett', { method: 'POST', token: owner });
+    await call('/follows/owned/NVDA', { method: 'POST', token: owner });
+    sent = [];
+
+    expect((await call('/seats', { body: { email: 'pm@fund.example' }, token: owner })).status).toBe(409);
+    const inv = await call('/seats', { body: { email: 'Analyst@Fund.example' }, token: owner });
+    expect(inv.status).toBe(201);
+    expect((await inv.json()).seats).toEqual([{ email: 'analyst@fund.example', invited_at: expect.any(String) }]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: ['analyst@fund.example'], subject: 'You have a Copy Fund seat on Copybook' });
+    const login = decodeURIComponent(sent[0].text.match(/\?login=([^\s]+)/)![1]);
+    const seat = (await (await call('/session', { body: { login } })).json()).token;
+    expect((await (await call('/me', { token: seat })).json()).member).toMatchObject({ email: 'analyst@fund.example', plan: 'fund', active: true, seat: true });
+
+    // The book, follows and peers are the team's; alert settings are the seat's own.
+    expect((await (await call('/follows', { token: seat })).json()).follows).toMatchObject({ investors: ['warren-buffett'], owned: ['NVDA'], peers: [] });
+    await call('/follows/peers/whale-rock-capital-management-llc-7322', { method: 'POST', token: seat });
+    const put = (token: string, b: unknown) => handleRequest(new Request('https://api.test/follows', { method: 'PUT', body: JSON.stringify(b), headers: { authorization: `Bearer ${token}` } }), env);
+    expect((await (await put(seat, { digest: true, owned: ['NVDA', 'AAPL'] })).json()).follows).toMatchObject({ digest: true, owned: ['NVDA', 'AAPL'] });
+    const mine = (await (await call('/follows', { token: owner })).json()).follows;
+    expect(mine).toMatchObject({ investors: ['warren-buffett'], owned: ['NVDA', 'AAPL'], peers: ['whale-rock-capital-management-llc-7322'], digest: false });
+    expect((await (await call('/follows', { token: seat })).json()).follows).toMatchObject({ owned: ['NVDA', 'AAPL'], digest: true });
+    // Alert runs read the seat's follows the same way: the team's lists, the seat's settings.
+    const seatMember = JSON.parse((await env.DB.get(`cus:${await env.DB.get('email:analyst@fund.example')}`))!);
+    expect(await getFollows(env, seatMember)).toMatchObject({ investors: ['warren-buffett'], owned: ['NVDA', 'AAPL'], peers: ['whale-rock-capital-management-llc-7322'], digest: true });
+
+    // Billing and seats belong to the owner; a seat has its own API keys.
+    expect((await call('/portal', { method: 'POST', token: seat })).status).toBe(403);
+    expect((await call('/seats', { token: seat })).status).toBe(403);
+    expect((await call('/keys', { body: { name: 'seat key' }, token: seat })).status).toBe(201);
+
+    // Five seats at most.
+    for (const n of [2, 3, 4, 5]) expect((await call('/seats', { body: { email: `s${n}@fund.example` }, token: owner })).status).toBe(201);
+    expect((await call('/seats', { body: { email: 's6@fund.example' }, token: owner })).status).toBe(409);
+
+    // A removed seat is gone; when the Fund ends, every remaining seat ends with it.
+    const s5 = await env.DB.get('email:s5@fund.example');
+    expect((await call('/seats/s5%40fund.example', { method: 'DELETE', token: owner })).status).toBe(200);
+    expect(await env.DB.get('email:s5@fund.example')).toBeNull();
+    expect(await env.DB.get(`cus:${s5}`)).toBeNull();
+    await webhook({ type: 'customer.subscription.deleted', data: { object: { ...sub('sub_fund', 'cus_fund', 'canceled', 'year', 'fund_yearly') } } });
+    expect((await (await call('/me', { token: seat })).json()).member).toMatchObject({ active: false, status: 'canceled' });
+    expect((await call('/follows', { token: seat })).status).toBe(402);
   });
 
   it('/v1 every filer: the all-filer list, books from the public shard then the full R2 book, ranges, stock holders', async () => {

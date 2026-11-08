@@ -11,6 +11,7 @@ import { holdtermLoginMail, leadAckMail, loginMail, sendMail } from './email';
 import { isActive, isCopy, isPro, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
+import { inviteSeat, listSeats, removeSeat, seatsView } from './seats';
 import { stripe, verifyStripeSignature } from './stripe';
 import { signToken, verifyToken } from './tokens';
 
@@ -301,6 +302,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'GET' && path === '/me') return json({ ok: true, member: publicView(m) }, 200, h);
 
   if (req.method === 'POST' && path === '/portal') {
+    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
     const ht = m.plan === 'holdterm';
     const s = await stripe(env, 'POST', 'billing_portal/sessions', {
       customer: m.customer,
@@ -314,6 +316,26 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // Holdterm Alerts: alert settings only. History, CSV, keys and everything else are Copy features.
   if (m.plan === 'holdterm' && path !== '/alerts' && path !== '/follows' && !path.startsWith('/follows/')) {
     return json({ ok: false, error: 'Not part of Holdterm Alerts', code: 'holdterm_plan' }, 402, h);
+  }
+
+  // Copy Fund seats: the owner invites teammates by email; each gets their own sign-in link.
+  if (path === '/seats' || path.startsWith('/seats/')) {
+    if (m.seat_of) return json({ ok: false, error: "Seats are managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    if (m.plan !== 'fund') return json({ ok: false, error: 'Seats are part of Copy Fund', code: 'fund_required' }, 403, h);
+    if (req.method === 'GET' && path === '/seats') return json({ ok: true, ...seatsView(m, await listSeats(env, m.customer)) }, 200, h);
+    if (req.method === 'POST' && path === '/seats') {
+      const email = String((await body(req)).email ?? '').trim().toLowerCase();
+      if (!EMAIL.test(email)) return json({ ok: false, error: 'invalid email', code: 'bad_request' }, 400, h);
+      const r = await inviteSeat(env, m, email);
+      if (!r.ok) return json({ ok: false, error: r.error, code: r.code }, r.status, h);
+      return json({ ok: true, ...seatsView(m, await listSeats(env, m.customer)) }, 201, h);
+    }
+    const del = path.match(/^\/seats\/([^/]+)$/);
+    if (req.method === 'DELETE' && del) {
+      if (!(await removeSeat(env, m, decodeURIComponent(del[1])))) return json({ ok: false, error: 'no such seat' }, 404, h);
+      return json({ ok: true, ...seatsView(m, await listSeats(env, m.customer)) }, 200, h);
+    }
+    return json({ ok: false, error: 'not found' }, 404, h);
   }
 
   // Where alerts go besides email: Discord, Slack, Telegram and a private feed (Copy); a signed webhook (Pro).
@@ -347,11 +369,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // One follow at a time, for the Follow buttons: POST adds, DELETE removes. Concurrent clicks never
   // overwrite each other. /follows/{slug} is an investor; /follows/{investors|stocks|owned}/{id}.
-  const one = path.match(/^\/follows\/(?:(investors|stocks|owned)\/)?([^/]+)$/);
+  const one = path.match(/^\/follows\/(?:(investors|stocks|owned|peers)\/)?([^/]+)$/);
   if (one && (req.method === 'POST' || req.method === 'DELETE')) {
     const list = (one[1] ?? 'investors') as FollowList;
-    const value = list === 'investors' ? decodeURIComponent(one[2]) : decodeURIComponent(one[2]).toUpperCase();
-    if (!(list === 'investors' ? SLUG : TICKER).test(value)) return json({ ok: false, error: list === 'investors' ? 'not a manager slug' : 'not a ticker like BRK.B', code: 'bad_request' }, 400, h);
+    const bySlug = list === 'investors' || list === 'peers';
+    const value = bySlug ? decodeURIComponent(one[2]) : decodeURIComponent(one[2]).toUpperCase();
+    if (!(bySlug ? SLUG : TICKER).test(value)) return json({ ok: false, error: bySlug ? 'not a filer slug' : 'not a ticker like BRK.B', code: 'bad_request' }, 400, h);
     if (req.method === 'POST' && list === 'investors') {
       const unknown = await resolveFollowedFilers(env, [value]);
       if (unknown.length) return json({ ok: false, error: `not a 13F filer on Copybook: ${value}`, code: 'unknown_investor' }, 400, h);
@@ -375,11 +398,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const investors = list(b.investors, SLUG, false);
     const stocks = list(b.stocks, TICKER, true);
     const owned = list(b.owned, TICKER, true);
+    const peers = list(b.peers, SLUG, false);
     const flags = ['onboarded', 'include_13g', 'digest', 'insider_buys', 'cluster_buys', 'any_13d'] as const;
     const minUsd = b.insider_min_usd;
     const badMin = minUsd !== undefined && !(typeof minUsd === 'number' && Number.isFinite(minUsd) && minUsd >= 0 && minUsd <= 1e10);
-    if (investors === null || stocks === null || owned === null || badMin || flags.some((k) => b[k] !== undefined && typeof b[k] !== 'boolean')) {
-      return json({ ok: false, error: `investors: manager slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded, include_13g, digest, insider_buys, cluster_buys, any_13d: boolean; insider_min_usd: USD from 0` }, 400, h);
+    if (investors === null || stocks === null || owned === null || peers === null || badMin || flags.some((k) => b[k] !== undefined && typeof b[k] !== 'boolean')) {
+      return json({ ok: false, error: `investors, peers: filer slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded, include_13g, digest, insider_buys, cluster_buys, any_13d: boolean; insider_min_usd: USD from 0` }, 400, h);
     }
     // Any 13F filer can be followed: non-curated ones are looked up and added to the minute poll.
     if (investors?.length) {
@@ -388,7 +412,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     }
     // Only the fields sent change, so a settings save never undoes a Follow click made meanwhile.
     const set: Partial<Follows> = Object.fromEntries(
-      Object.entries({ investors, stocks, owned, ...Object.fromEntries(flags.map((k) => [k, b[k]])), insider_min_usd: minUsd }).filter(([, v]) => v !== undefined),
+      Object.entries({ investors, stocks, owned, peers, ...Object.fromEntries(flags.map((k) => [k, b[k]])), insider_min_usd: minUsd }).filter(([, v]) => v !== undefined),
     );
     const r = await changeFollows(env, m, { set });
     return r.ok ? json({ ok: true, follows: r.follows }, 200, h) : json({ ok: false, error: r.error }, 400, h);
