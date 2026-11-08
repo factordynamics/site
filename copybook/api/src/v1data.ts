@@ -134,14 +134,14 @@ async function resolveAny(env: Env, id: string): Promise<Filer | null> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const rowsOf = (d: { columns: string[]; rows: unknown[][] }): any[] => d.rows.map((r) => Object.fromEntries(d.columns.map((c, i) => [c, r[i]])));
+export const rowsOf = (d: { columns: string[]; rows: unknown[][] }): any[] => d.rows.map((r) => Object.fromEntries(d.columns.map((c, i) => [c, r[i]])));
 
 /**
  * A non-curated filer's book for a quarter: the full book in R2 (fb/), else the public shard when it
  * is that quarter (top 500 positions by value), else the baseline snapshotted when a member followed it.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function filerBook(env: Env, cik: string, quarter: string): Promise<any | null> {
+export async function filerBook(env: Env, cik: string, quarter: string): Promise<any | null> {
   const full = await env.HIST.get(`fb/${quarter}/${cik}.json`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (full) return { ...((await new Response(full.body).json()) as any), truncated: false };

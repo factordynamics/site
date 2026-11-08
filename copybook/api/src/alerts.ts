@@ -1,4 +1,5 @@
 import { addToFeed, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
+import { refreshBooks } from './book';
 import { alertMail, digestMail, holdtermAlertMail, sendMail } from './email';
 import { companyFilings, computeMoves, fetch13F, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, type Env, type Member } from './env';
@@ -769,7 +770,10 @@ export async function runEvents(env: Env, now: number): Promise<Record<string, u
 export async function runWatchMap(env: Env): Promise<Record<string, unknown>> {
   const want = new Set<string>();
   const followed = new Set<string>();
-  for (const m of await listMembers(env)) {
+  const members = await listMembers(env);
+  // Books imported from a 13F filer follow its newest quarter.
+  const books = await refreshBooks(env, members.filter((m) => isActive(m))).catch(() => 0);
+  for (const m of members) {
     if (!isActive(m) || m.alerts === 'off') continue;
     const f = await getFollows(env, m);
     for (const t of f.stocks) want.add(t);
@@ -797,7 +801,7 @@ export async function runWatchMap(env: Env): Promise<Record<string, unknown>> {
   }
   const json = JSON.stringify(map);
   if ((await env.DB.get('alerts:watch')) !== json) await env.DB.put('alerts:watch', json);
-  return { status: 'ok', tickers: want.size, issuers: Object.keys(map).length };
+  return { status: 'ok', tickers: want.size, issuers: Object.keys(map).length, books };
 }
 
 const EVENT_PAGES = 2;

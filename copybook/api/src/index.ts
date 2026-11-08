@@ -11,6 +11,7 @@ import { holdtermLoginMail, leadAckMail, loginMail, sendMail } from './email';
 import { isActive, isCopy, isPro, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
+import { importBook } from './book';
 import { inviteSeat, listSeats, removeSeat, seatsView } from './seats';
 import { stripe, verifyStripeSignature } from './stripe';
 import { signToken, verifyToken } from './tokens';
@@ -420,6 +421,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     );
     const r = await changeFollows(env, m, { set });
     return r.ok ? json({ ok: true, follows: r.follows }, 200, h) : json({ ok: false, error: r.error }, 400, h);
+  }
+
+  // Import owned stocks: a pasted list, a CSV, or a 13F filer's book by CIK (kept current each quarter).
+  if (req.method === 'POST' && path === '/book/import') {
+    const r = await importBook(env, m, await body(req));
+    return r.ok ? json(r, 200, h) : json(r, r.status, h);
   }
 
   // Copy Pro API keys, managed from the account page. The secret is returned once, at creation.

@@ -1314,6 +1314,42 @@ describe('copybook api', () => {
     expect(lines[1]).toMatch(/^Warren Buffett,warren-buffett,0001067983,2026Q2,2026-06-30,2026-08-14,A2,AAPL,APPLE INC,037833100/);
   });
 
+  it('book import: pasted list, broker CSV, and a 13F filer by CIK that follows its newest quarter', async () => {
+    stripeObjects['checkout/sessions/cs_test_bk'] = { id: 'cs_test_bk', status: 'complete', created: now(), subscription: 'sub_bk', customer_details: { email: 'bk@example.com' } };
+    stripeObjects['subscriptions/sub_bk'] = sub('sub_bk', 'cus_bk', 'active');
+    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_bk' } })).json()).token;
+    const imp = async (b: unknown) => (await call('/book/import', { body: b, token: t })).json();
+
+    let r = await imp({ text: '$aapl, BRK-B\nmsft  googl 12345' });
+    expect(r).toMatchObject({ ok: true, imported: 4, skipped: ['12345'] });
+    expect(r.follows.owned).toEqual(['AAPL', 'BRK.B', 'MSFT', 'GOOGL']);
+    // A broker CSV: the Symbol column, not the first; quoted names with commas; a totals line.
+    r = await imp({ csv: 'Account,Symbol,Description,Quantity\n"X-1",NVDA,"NVIDIA, Corp",10\n"X-1",cof,"Capital One",5\nTotal,,,\n' });
+    expect(r).toMatchObject({ ok: true, imported: 2 });
+    expect(r.follows.owned).toEqual(['NVDA', 'COF']);
+    expect(r.follows.stocks).toEqual(['NVDA', 'COF']); // replace: the old book left the watchlist too
+    await call('/follows/stocks/TSLA', { method: 'POST', token: t });
+
+    // A 13F filer's book: tickers largest first, options left out; hand-added owned names survive a refresh.
+    const cols = ['ticker', 'issuer', 'title', 'cusip', 'put_call', 'shares', 'value', 'display_name', 'sector'];
+    shards['0002045724.json'] = { ok: true, name: 'Situational Awareness LP', quarter: '2026Q2', columns: cols, rows: [['BE', 'BLOOM', 'COM', '093712107', null, 1, 500, null, null], ['NVDA', 'NVIDIA', 'COM', '67066G104', null, 1, 900, null, null], ['TSM', 'TSMC', 'ADR', '874039100', 'Call', 1, 2000, null, null]] };
+    r = await imp({ cik: '2045724' });
+    expect(r).toMatchObject({ ok: true, imported: 2, source: { cik: '0002045724', quarter: '2026Q2' } });
+    expect(r.follows.owned).toEqual(['NVDA', 'BE']);
+    expect(r.follows.stocks).toEqual(['NVDA', 'TSLA', 'BE']);
+    await call('/follows/owned/AMD', { method: 'POST', token: t });
+
+    shards['0002045724.json'] = { ...(shards['0002045724.json'] as object), quarter: '2026Q3', rows: [['NVDA', 'NVIDIA', 'COM', '67066G104', null, 1, 900, null, null], ['INTC', 'INTEL', 'COM', '458140100', null, 1, 100, null, null]] };
+    await cron(52);
+    const f = (await (await call('/follows', { token: t })).json()).follows;
+    expect(f.owned).toEqual(['NVDA', 'AMD', 'INTC']);
+    expect(f.stocks).toEqual(['NVDA', 'TSLA', 'AMD', 'INTC']);
+    expect(f.book).toMatchObject({ cik: '0002045724', quarter: '2026Q3', tickers: ['NVDA', 'INTC'] });
+
+    expect((await call('/book/import', { body: { cik: '0009999999' }, token: t })).status).toBe(404);
+    expect((await call('/book/import', { body: { text: '!!! ???' }, token: t })).status).toBe(400);
+  });
+
   it('/v1 restatement lineage: versions[] oldest first with status, every amendment attached, ?version= serves the book as originally filed', async () => {
     index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR/A', accession: 'R', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-09-02', total_value: 3000, position_count: 1, history_quarters: ['2026Q2'] }] };
     await cron(17);

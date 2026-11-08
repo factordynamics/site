@@ -116,6 +116,8 @@ export interface Follows {
   owned: string[];
   /** Funds the member benchmarks against (any 13F filer's slug); shared across a Fund team. */
   peers: string[];
+  /** Owned stocks imported from a 13F filer's book, refreshed when it files a new quarter. */
+  book?: { cik: string; name: string; quarter: string; tickers: string[] } | null;
   onboarded: boolean;
   /** Also alert on Schedule 13G/13G-A filings (mostly routine passive-stake updates). */
   include_13g: boolean;
@@ -134,7 +136,7 @@ export interface Follows {
 export const FOLLOW_DEFAULTS = { include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true };
 
 /** What a Fund team shares: the seats read and write the owner's lists; alert settings stay per seat. */
-const SHARED = ['investors', 'stocks', 'owned', 'peers', 'onboarded'] as const;
+const SHARED = ['investors', 'stocks', 'owned', 'peers', 'book', 'onboarded'] as const;
 const sharedOf = (f: Follows) => Object.fromEntries(SHARED.map((k) => [k, f[k]])) as Pick<Follows, (typeof SHARED)[number]>;
 
 export async function getFollows(env: Env, m: Member): Promise<Follows> {
