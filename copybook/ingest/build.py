@@ -46,7 +46,7 @@ HISTORY_QUARTERS = int(os.environ.get("COPYBOOK_HISTORY_QUARTERS", "8"))
 if os.environ.get("COPYBOOK_LATEST_ONLY") == "1":
     HISTORY_QUARTERS = 2  # latest plus prior quarter for changes
 LITE_COUNT = 2000
-TOP_ROWS = 50  # preview rows per quarter in {slug}-history.json; full books are in h/
+TOP_ROWS = 50  # preview rows per quarter in h/{slug}/index.json (R2); full books are in h/
 HIST = DATA / "h"
 AMEND_PATH = DATA / "amendments.json"
 NOTICE_PATH = DATA / "notices.json"
@@ -688,23 +688,23 @@ def write_history(m: dict) -> None:
         path = folder / name
         if not path.exists() or path.read_text() != text:
             path.write_text(text)
-        index.append(meta | {"holdings_url": f"h/{m['slug']}/{name}", "top_holdings": q["holdings"][:TOP_ROWS]})
+        url = f"h/{m['slug']}/{name}"
+        index.append(meta | {"holdings_url": url, "csv_url": url[:-5] + ".csv", "top_holdings": q["holdings"][:TOP_ROWS]})
+    keep.add("index.json")
     for old in folder.glob("*.json"):
         if old.name not in keep:
             old.unlink()
-    (DATA / f"{m['slug']}-history.json").write_text(
-        json.dumps(
-            {
-                "slug": m["slug"],
-                "manager": m["manager"],
-                "cik": m["cik"],
-                "history_quarters": m.get("history_quarters") or [],
-                "history": index,
-            },
-            separators=(",", ":"),
-        )
-        + "\n"
-    )
+    head = {
+        "slug": m["slug"],
+        "manager": m["manager"],
+        "cik": m["cik"],
+        "history_quarters": m.get("history_quarters") or [],
+    }
+    # Paid: the index with each quarter's preview rows goes to R2 (served by the Copy API's /history).
+    (folder / "index.json").write_text(json.dumps(head | {"history": index}, separators=(",", ":")) + "\n")
+    # Public: quarter metadata only, so Pages gives away no past holdings.
+    public = [{k: v for k, v in q.items() if k != "top_holdings"} for q in index]
+    (DATA / f"{m['slug']}-history.json").write_text(json.dumps(head | {"history": public}, separators=(",", ":")) + "\n")
 
 
 def write_status(payload: dict) -> None:

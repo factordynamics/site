@@ -66,12 +66,13 @@ SEC User-Agent: `Copybook factordynamics.com copybook@factordynamics.com`, under
   bucket (GitHub OIDC auth, audience `copybook-api`). They are not published on Pages; the gust workflow
   keeps them in the Actions cache between runs.
   Each quarter has `prev_quarter`, change fields on every row (vs the previous quarter in the history) and
-  `exited` (positions sold out since `prev_quarter`). `h/{slug}/index.json` is the full history index for the API.
+  `exited` (positions sold out since `prev_quarter`).
 - `h/{slug}/{quarter}.csv`: the same book as RFC 4180 CSV (CRLF), columns
   `manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight,`
   `change,prev_shares,share_change,value_delta_usd,pct_of_book`; exited positions follow with shares 0.
-- `{slug}-history.json`: index of those quarters: metadata, `holdings_url` and `csv_url` (relative to `data/`) and a
-  50-row `top_holdings` preview. It has no `holdings` key, so nothing reads a partial book by mistake.
+- `{slug}-history.json` (public): quarter metadata only, with `holdings_url` and `csv_url` (relative to `data/`).
+  No holdings of past quarters are public. `h/{slug}/index.json` (R2, served by the Copy API's `/history/{slug}`)
+  is the same index plus a 50-row `top_holdings` preview per quarter.
 - `alerts.json`: `rule`, `new_filings` from the last run, `recent` (rolling, keyed by slug and report_date)
   and `periods` (latest report_date recorded per slug; only moves forward). A filing is new only when it is an
   original 13F-HR for a later period than `periods[slug]`, filed within 7 days. Entries carry `report_date`,

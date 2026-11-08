@@ -97,7 +97,7 @@ def quarter_csv(q: dict) -> str:
 
 
 def write_csvs() -> int:
-    """h/{slug}/{quarter}.csv next to each quarter file, and csv_url in {slug}-history.json."""
+    """h/{slug}/{quarter}.csv next to each quarter file, and csv_url in both history indexes."""
     n = 0
     for path in sorted((DATA / "h").glob("*/*Q?.json")):
         text = quarter_csv(json.loads(path.read_text()))
@@ -109,7 +109,7 @@ def write_csvs() -> int:
     for path in (DATA / "h").glob("*/*.csv"):
         if not path.with_suffix(".json").exists():
             path.unlink()
-    for path in sorted(DATA.glob("*-history.json")):
+    for path in sorted(DATA.glob("*-history.json")) + sorted((DATA / "h").glob("*/index.json")):
         idx = json.loads(path.read_text())
         changed = False
         for q in idx.get("history") or []:
@@ -119,10 +119,6 @@ def write_csvs() -> int:
                 changed = True
         if changed:
             path.write_text(json.dumps(idx, separators=(",", ":")) + "\n")
-        # Full index (every quarter's preview rows) for the Copy API's /history route in R2.
-        folder = DATA / "h" / idx["slug"]
-        if folder.is_dir():
-            (folder / "index.json").write_text(json.dumps(idx, separators=(",", ":")) + "\n")
     return n
 
 
