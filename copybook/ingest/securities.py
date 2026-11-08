@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ingest.edgar import fetch_submissions, get
+from ingest.parse import real_cusip
 from ingest.figi import collect_cusips, load_cache as load_figi
 
 HERE = Path(__file__).resolve().parent
@@ -228,7 +229,7 @@ def build(data_dir: Path, budget_s: float | None = None) -> dict[str, dict]:
     figi = load_figi()
     over = load_overrides()
     by_cusip, by_ticker = over.get("by_cusip") or {}, over.get("by_ticker") or {}
-    order = collect_cusips(data_dir)  # largest aggregate value first
+    order = [c for c in collect_cusips(data_dir) if real_cusip(c)]  # largest aggregate value first
     raws = raw_issuers(data_dir)
     sec = sec_tickers(tmp)
 

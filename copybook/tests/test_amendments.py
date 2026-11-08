@@ -34,7 +34,12 @@ class AmendmentTest(unittest.TestCase):
         q = merge_quarter(base, [add])
         self.assertEqual([(r["cusip"], r["value"]) for r in q["holdings"]], [("X", 300), ("Y", 150), ("Z", 50)])
         self.assertEqual((q["total_value"], q["position_count"], q["amendments"]), (500, 3, ["a"]))
-        self.assertAlmostEqual(q["holdings"][0]["weight"], 0.6)
+        # One weight definition: share positions only; the put is notional, outside the denominator.
+        x, y, z = q["holdings"]
+        self.assertEqual((x["pct_of_book"], x["weight"], z["pct_of_book"], z["notional_pct_of_book"]),
+                         (0.666667, 0.666667, None, 0.111111))
+        # Z was first disclosed by the amendment; Y existed in the original and keeps it as its source.
+        self.assertEqual((z.get("late_disclosure"), y.get("late_disclosure")), (True, None))
 
 
 if __name__ == "__main__":

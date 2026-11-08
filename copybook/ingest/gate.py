@@ -3,8 +3,9 @@
 
 Compares the curated books ({slug}.json for every manager in index.json) in the data
 directory with the same files at the git revision that is live (HEAD of the Pages repo).
-Fails when the share of value with a ticker drops by more than 0.5 percentage points, or
-when any CUSIP among the 1,000 largest by value had a ticker and no longer has one.
+Fails when the share of value with a ticker drops by more than 0.5 percentage points, when
+any CUSIP among the 1,000 largest by value had a ticker and no longer has one, or when a
+book's pct_of_book over its share (SH equity) rows does not sum to 1 within 0.001.
 
 Usage: python gate.py <data dir> [git revision, default HEAD]
 """
@@ -77,6 +78,16 @@ def main() -> int:
     print(f"gate: value with a ticker {cov_b:.2%} live -> {cov_a:.2%} new ({len(before)} -> {len(after)} books); "
           f"{len(lost)} of the top {TOP_N} CUSIPs lost their ticker")
     failed = False
+    off = []
+    for slug, b in after.items():
+        eq = [h for h in b.get("holdings") or [] if not h.get("put_call") and h.get("shares_type", "SH") != "PRN"]
+        if eq and "pct_of_book" in eq[0] and "delta_pct_of_book" in eq[0]:  # the equity-weight definition
+            total = sum(h.get("pct_of_book") or 0 for h in eq)
+            if abs(total - 1) > 0.001:
+                off.append(f"{slug} {total:.4f}")
+    if off:
+        print(f"::error::pct_of_book does not sum to 1 over equity rows: {', '.join(off[:20])}; not publishing.")
+        failed = True
     if cov_a < cov_b - MAX_DROP:
         print(f"::error::Ticker coverage fell {100 * (cov_b - cov_a):.2f} points (limit {100 * MAX_DROP:.1f}); not publishing.")
         failed = True

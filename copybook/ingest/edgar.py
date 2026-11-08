@@ -54,6 +54,11 @@ def get(url: str, retries: int = 5) -> bytes:
     raise RuntimeError(f"GET failed {url}: {last_err}")
 
 
+def iso_utc(raw: str) -> str:
+    """EDGAR's '2025-08-14T20:10:02.000Z' as '2025-08-14T20:10:02Z'; '' when missing."""
+    return raw[:19] + "Z" if raw and len(raw) >= 19 else ""
+
+
 @dataclass
 class FilingMeta:
     cik: str
@@ -62,6 +67,7 @@ class FilingMeta:
     filing_date: str
     report_date: str
     primary_document: str
+    accepted_at: str = ""  # EDGAR acceptance time, ISO UTC ("2025-08-14T20:10:02Z")
 
 
 def fetch_submissions(cik: str) -> dict:
@@ -81,6 +87,7 @@ def list_13f(submissions: dict, forms_wanted: set[str] = HOLDINGS_FORMS) -> list
     filing_dates = recent.get("filingDate", [])
     report_dates = recent.get("reportDate", [])
     primaries = recent.get("primaryDocument", [""] * len(forms))
+    accepted = recent.get("acceptanceDateTime", [""] * len(forms))
     out: list[FilingMeta] = []
     for i, form in enumerate(forms):
         if str(form) not in forms_wanted:
@@ -96,6 +103,7 @@ def list_13f(submissions: dict, forms_wanted: set[str] = HOLDINGS_FORMS) -> list
                 filing_date=filing_dates[i],
                 report_date=report_date,
                 primary_document=primaries[i] if i < len(primaries) else "",
+                accepted_at=iso_utc(accepted[i] if i < len(accepted) else ""),
             )
         )
     out.sort(key=lambda m: (m.report_date, m.filing_date, 0 if m.form == "13F-HR" else 1), reverse=True)
@@ -131,11 +139,19 @@ def quarter_groups(metas: list[FilingMeta], limit: int) -> list[list[FilingMeta]
     return [groups[d] for d in sorted(groups, reverse=True)[:limit]]
 
 
+def amendment_cover(cik: str, accession: str) -> dict:
+    """Amendment cover page: {type: 'RESTATEMENT' | 'NEW HOLDINGS' | '', no, confidential_treatment_expired}."""
+    doc = fetch_primary_doc(cik, accession) or ""
+    tag = lambda n: (m.group(1) if (m := re.search(rf"<(?:\w+:)?{n}>\s*([^<]+?)\s*<", doc, re.I)) else "")
+    no = tag("amendmentNo")
+    conf = tag("confDeniedExpired").lower()
+    return {"type": tag("amendmentType").upper(), "no": int(no) if no.isdigit() else None,
+            "confidential_treatment_expired": True if conf in ("true", "y") else False if conf in ("false", "n") else None}
+
+
 def amendment_type(cik: str, accession: str) -> str:
     """'RESTATEMENT', 'NEW HOLDINGS', or '' when the cover page does not say."""
-    doc = fetch_primary_doc(cik, accession) or ""
-    m = re.search(r"<(?:\w+:)?amendmentType>\s*([^<]+?)\s*<", doc, re.I)
-    return m.group(1).upper() if m else ""
+    return amendment_cover(cik, accession)["type"]
 
 
 def list_notices(submissions: dict) -> list[FilingMeta]:

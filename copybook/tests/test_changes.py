@@ -1,6 +1,7 @@
 import unittest
 
-from ingest.build import with_changes
+from ingest import build
+from ingest.build import baseline, with_changes
 from ingest.enrich import quarter_csv
 
 
@@ -32,10 +33,66 @@ class ChangesTest(unittest.TestCase):
                   "total_value": 250}
         prev = {"holdings": [row("A", 8, 90), row("B", 9, 80), row("C", 7, 60), row("E", 4, 40)],
                 "total_value": 270}
-        got = {r["cusip"]: (r["value_delta"], r["pct_of_book"]) for r in with_changes(latest, prev)}
+        got = {r["cusip"]: (r["value_delta"], r["delta_pct_of_book"]) for r in with_changes(latest, prev)}
         # A: +2 sh at $10 = +20 (not 100-90); B: -4 sh at $10 = -40 (not 50-80); C: price only = 0.
         self.assertEqual(got, {"A": (20, 0.08), "B": (-40, -0.16), "C": (0, 0.0), "D": (30, 0.12),
                                "E": (-40, -0.16)})
+
+    def test_split_confirmation_reads_the_first_cover_after_the_quarter(self):
+        # APH 2:1 in Q3 2026: the Q2 10-Q cover (Jul 28) is still pre-split; the Q3 cover (Oct 27) shows it.
+        from unittest import mock
+        from ingest import splits
+        series = [("2026-04-28", 1230234445.0), ("2026-07-28", 1232983457.0), ("2026-10-27", 2469261188.0)]
+        with mock.patch.object(splits, "_shares_outstanding", return_value=series):
+            self.assertAlmostEqual(splits.xbrl_ratio("820313", "2026Q2", "2026Q3"), 2.007, places=3)
+
+    def test_split_adjusts_the_prior_quarter_before_comparing(self):
+        # CRWD-style 4:1 split: 100 -> 400 shares is unchanged, 100 -> 500 is +100, not +400.
+        build.SPLITS.clear()
+        build.SPLITS.update({"S": {"2026Q3": 4}})
+        try:
+            latest = {"quarter": "2026Q3", "holdings": [row("S", 400, 400), row("S", 20, 20, "CALL")]}
+            prev = {"quarter": "2026Q2", "holdings": [row("S", 100, 380), row("S", 5, 19, "CALL")]}
+            got = {(r["put_call"], r["change"], r["prev_shares"], r["share_change"], r["value_delta"])
+                   for r in with_changes(latest, prev)}
+            self.assertEqual(got, {(None, "unchanged", 400, 0, 0), ("CALL", "unchanged", 20, 0, 0)})
+            latest["holdings"][0] = row("S", 500, 500)
+            r = with_changes(latest, prev)[0]
+            self.assertEqual((r["change"], r["share_change"], r["value_delta"], r["prev_shares_as_filed"],
+                              r["split"]["ratio"]), ("added", 100, 100, 100, 4))
+        finally:
+            build.SPLITS.clear()
+
+    def test_prior_quarter_is_taken_as_known_when_this_quarter_was_filed(self):
+        # Berkshire 2025Q1: LEN disclosed by an amendment accepted after the Q2 original.
+        late = row("L", 10, 10) | {"first_disclosed_at": "2025-08-14T20:10:02Z", "late_disclosure": True}
+        q1 = {"quarter": "2025Q1", "holdings": [row("A", 5, 5) | {"first_disclosed_at": "2025-05-15T20:06:43Z"}, late]}
+        q2 = {"quarter": "2025Q2", "accepted_at": "2025-08-14T20:05:04Z",
+              "holdings": [row("A", 5, 5), row("L", 10, 10)]}
+        got = {r["cusip"]: r["change"] for r in with_changes(q2, q1)}
+        self.assertEqual(got, {"A": "unchanged", "L": "new"})  # not public yet when Q2 was filed
+        q0 = {"quarter": "2024Q4", "holdings": [row("A", 5, 5)]}
+        got = {r["cusip"]: (r["change"], r["value_delta"]) for r in with_changes(q1, q0)}
+        self.assertEqual(got, {"A": ("unchanged", 0), "L": ("disclosed_later", 0)})  # not "new" in Q1
+
+    def test_principal_amount_notes_are_never_shares(self):
+        note = lambda amt, v: row("N", 0, v) | {"shares_type": "PRN", "principal_amount": amt}
+        r = with_changes({"holdings": [note(2000, 210)]}, {"holdings": [note(1000, 100)]})[0]
+        self.assertEqual((r["change"], r["share_change"], r["prev_shares"], r["prev_principal_amount"],
+                          r["value_delta"]), ("added", None, 0, 1000, 105))
+
+    def test_successor_quarter_compares_with_both_filers_prior_books(self):
+        # Ackman: Q2 reported by Pershing Square Inc.; Q1 was split between the two filers.
+        m = {"slug": "s", "history": [
+            {"quarter": "2026Q2", "report_date": "2026-06-30", "status": "notice", "holdings": [row("H", 27, 27)]},
+            {"quarter": "2026Q1", "report_date": "2026-03-31", "status": "filed", "holdings": [row("H", 18, 18)]},
+        ]}
+        build.BASELINE_EXTRA["s"] = {"2026-03-31": {"cik": "p", "holdings": [row("H", 9, 9)]}}
+        try:
+            r = with_changes(m["history"][0], baseline(m, 0))[0]
+            self.assertEqual((r["change"], r["prev_shares"], r["value_delta"]), ("unchanged", 27, 0))
+        finally:
+            build.BASELINE_EXTRA.clear()
 
     def test_no_prior_filing_is_unknown_not_new(self):
         self.assertEqual({r["change"] for r in with_changes({"holdings": [row("A", 1, 1)]}, None)}, {None})
@@ -46,19 +103,29 @@ class QuarterCsvTest(unittest.TestCase):
         q = {"manager": "M", "slug": "m", "cik": "1", "quarter": "2026Q2", "report_date": "2026-06-30",
              "filing_date": "2026-08-14", "accession": "a",
              "holdings": [{"ticker": None, "issuer": 'A, "B"', "cusip": "c", "title": "COM",
-                           "put_call": None, "shares": 10.0, "value": 2500.0, "weight": 0.5,
+                           "put_call": None, "shares": 10.0, "value": 2500.0, "weight": 0.5, "pct_of_book": 0.5,
                            "change": "added", "prev_shares": 4, "share_change": 6, "value_delta": 1500,
-                           "pct_of_book": 0.3}],
-             "exited": [{"ticker": "X", "issuer": "X", "cusip": "x", "title": "COM", "put_call": "Put",
-                         "shares": 0, "value": 0, "weight": 0.0, "change": "exited", "prev_shares": 3,
-                         "share_change": -3, "value_delta": -90, "pct_of_book": -0.018}]}
+                           "delta_pct_of_book": 0.3, "shares_type": "SH", "split": {"ratio": 2},
+                           "prev_shares_as_filed": 2, "source_accession": "a",
+                           "first_disclosed_at": "2026-08-14T20:05:04Z", "discretion": "SOLE",
+                           "other_managers": ["1", "2"], "vote_sole": 10, "vote_shared": 0, "vote_none": 0}],
+             "exited": [{"ticker": "X", "issuer": "X", "cusip": "x", "title": "NOTE", "put_call": None,
+                         "shares": 0, "value": 0, "weight": 0.0, "change": "exited", "prev_shares": 0,
+                         "share_change": None, "value_delta": -90, "delta_pct_of_book": -0.018,
+                         "shares_type": "PRN"}]}
+        lines = quarter_csv(q).split("\r\n")
+        self.assertEqual(lines[0].split(",")[:20], [
+            "manager", "slug", "cik", "quarter", "report_date", "filing_date", "accession", "ticker", "issuer",
+            "cusip", "title", "put_call", "shares", "value_usd", "weight",
+            "change", "prev_shares", "share_change", "value_delta_usd", "delta_pct_of_book"])
         self.assertEqual(
-            quarter_csv(q),
-            "manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,"
-            "put_call,shares,value_usd,weight,change,prev_shares,share_change,value_delta_usd,pct_of_book\r\n"
-            'M,m,1,2026Q2,2026-06-30,2026-08-14,a,,"A, ""B""",c,COM,,10,2500,0.5,added,4,6,1500,0.3\r\n'
-            "M,m,1,2026Q2,2026-06-30,2026-08-14,a,X,X,x,COM,Put,0,0,0,exited,3,-3,-90,-0.018\r\n",
+            lines[1],
+            'M,m,1,2026Q2,2026-06-30,2026-08-14,a,,"A, ""B""",c,COM,,10,2500,0.5,added,4,6,1500,0.3,'
+            "0.5,SH,,2,2,a,2026-08-14T20:05:04Z,,SOLE,1 2,10,0,0",
         )
+        # A note's share change is blank, never a share count.
+        self.assertEqual(lines[2].split(",")[15:22], ["exited", "0", "", "-90", "-0.018", "", "PRN"])
+        self.assertEqual(lines[3], "")
 
 
 if __name__ == "__main__":

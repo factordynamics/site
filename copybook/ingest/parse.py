@@ -21,6 +21,10 @@ class HoldingRow:
     shares_type: str
     put_call: str | None
     discretion: str
+    other_manager: str = ""
+    vote_sole: float = 0.0
+    vote_shared: float = 0.0
+    vote_none: float = 0.0
 
 
 @dataclass
@@ -32,6 +36,13 @@ class AggregatedHolding:
     shares: float
     put_call: str | None
     ticker: str | None = None
+    shares_type: str = "SH"  # "PRN": `shares` is a principal amount (notes), never a share count
+    discretion: set = field(default_factory=set)
+    other_managers: set = field(default_factory=set)
+    vote_sole: float = 0.0
+    vote_shared: float = 0.0
+    vote_none: float = 0.0
+    lines: int = 0
 
 
 def parse_info_table(xml_text: str) -> list[HoldingRow]:
@@ -71,12 +82,35 @@ def parse_info_table(xml_text: str) -> list[HoldingRow]:
                 cusip=cusip.upper(),
                 value=value,
                 shares=shares,
-                shares_type=fields.get("sshprnamttype", "SH"),
+                shares_type=fields.get("sshprnamttype", "SH").upper(),
                 put_call=put_call,
-                discretion=fields.get("investmentdiscretion", ""),
+                discretion=fields.get("investmentdiscretion", "").upper(),
+                other_manager=fields.get("othermanager", ""),
+                vote_sole=_num(fields.get("sole")),
+                vote_shared=_num(fields.get("shared")),
+                vote_none=_num(fields.get("none")),
             )
         )
     return rows
+
+
+def real_cusip(c: str | None) -> bool:
+    """A usable 9-character CUSIP. Filers put placeholders such as 000000000 (or 10 zeros)
+    on private funds and unlisted securities; their 000000 issuer code matches nothing."""
+    c = (c or "").strip().upper()
+    return len(c) == 9 and c.isalnum() and c[:6] != "000000"
+
+
+def _num(raw: str | None) -> float:
+    try:
+        return float((raw or "0").replace(",", ""))
+    except ValueError:
+        return 0.0
+
+
+def other_managers(raw: str) -> set[str]:
+    """otherManager is a list of sequence numbers: '1', '1,2', '1 2' or '01'."""
+    return {p.lstrip("0") or "0" for p in raw.replace(",", " ").replace(";", " ").split() if p.strip()}
 
 
 def looks_like_thousands(total_value: float, table_value_total: float | None) -> bool:
@@ -137,17 +171,26 @@ def aggregate_holdings(rows: list[HoldingRow]) -> list[AggregatedHolding]:
         key = (row.cusip, row.put_call or "")
         existing = buckets.get(key)
         if existing is None:
-            buckets[key] = AggregatedHolding(
+            existing = buckets[key] = AggregatedHolding(
                 issuer=row.issuer,
                 title=row.title,
                 cusip=row.cusip,
-                value=row.value,
-                shares=row.shares,
+                value=0.0,
+                shares=0.0,
                 put_call=row.put_call,
+                shares_type="PRN" if row.shares_type == "PRN" else "SH",
             )
-        else:
-            existing.value += row.value
-            existing.shares += row.shares
+        elif row.shares_type == "PRN" and existing.shares_type != "PRN":
+            existing.shares_type = "PRN"  # mixed lines: never treat the sum as shares
+        existing.value += row.value
+        existing.shares += row.shares
+        existing.lines += 1
+        if row.discretion:
+            existing.discretion.add(row.discretion)
+        existing.other_managers |= other_managers(row.other_manager)
+        existing.vote_sole += row.vote_sole
+        existing.vote_shared += row.vote_shared
+        existing.vote_none += row.vote_none
     out = list(buckets.values())
     out.sort(key=lambda h: h.value, reverse=True)
     return out

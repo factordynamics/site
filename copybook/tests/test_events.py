@@ -1,6 +1,6 @@
 import unittest
 
-from ingest.events import clean_ticker, parse_form4, parse_schedule
+from ingest.events import affiliate, clean_ticker, enrich, parse_form4, parse_schedule
 
 FORM4 = """<ownershipDocument><issuer><issuerCik>0000000002</issuerCik><issuerName>LENNAR CORP</issuerName>
 <issuerTradingSymbol>len</issuerTradingSymbol></issuer>
@@ -46,6 +46,8 @@ class Form4Test(unittest.TestCase):
         # 5000 (Sub A) + 700 (Sub B) + 20000 (Sub C, held without a trade), not the last row's 700.
         self.assertEqual(ev["shares_after"], 25700)
         self.assertEqual(ev["event_date"], "2026-10-02")
+        # Before the filing: 25,700 after, minus 1,000 bought, plus 300 sold.
+        self.assertEqual(ev["prev_shares_after"], 25_000)
 
     def test_filings_about_the_managers_own_insiders_are_dropped(self):
         self.assertIsNone(parse_form4(FORM4, "315090"))
@@ -53,6 +55,33 @@ class Form4Test(unittest.TestCase):
     def test_placeholder_symbols_are_not_tickers(self):
         self.assertEqual([clean_ticker(t) for t in ("N/A", "NONE", "brk.b", "", "LEN, LEN.B")],
                          [None, None, "BRK.B", None, "LEN"])
+
+
+class EnrichTest(unittest.TestCase):
+    SECS = {"526057104": {"ticker": "LEN", "name": "Lennar", "sector": "Consumer Discretionary"},
+            "526057302": {"ticker": "LEN.B", "name": "Lennar", "sector": "Consumer Discretionary"},
+            "000000004": {"ticker": "AGX", "name": "Argan", "sector": "Industrials"}}
+
+    def run_enrich(self, ev, book, manager="Berkshire Hathaway Inc"):
+        by_ticker = {r["ticker"]: (c, r) for c, r in self.SECS.items()}
+        return enrich(ev, book, self.SECS, by_ticker, manager)
+
+    def test_class_a_13g_is_compared_with_class_a_only(self):
+        book = {"a": {"cusip": "526057104", "shares": 13_111_741, "put_call": None},
+                "b": {"cusip": "526057302", "shares": 298_117, "put_call": None}}
+        ev = {"filed_cusip": "526057104", "shares_after": 26_034_436}
+        self.assertTrue(self.run_enrich(ev, book))
+        self.assertEqual((ev["ticker"], ev["shares_in_13f"], ev["change_vs_13f"]), ("LEN", 13_111_741, 12_922_695))
+
+    def test_placeholder_cusips_and_own_funds_are_dropped(self):
+        # Third Point seeding its own private fund: CUSIP 0000000000, no ticker.
+        ev = {"filed_cusip": "0000000000", "issuer": "Third Point Private Capital Income Fund"}
+        self.assertFalse(self.run_enrich(ev, {}, "Third Point LLC"))
+        self.assertIsNone(ev["ticker"])
+        ev = {"filed_cusip": "000000000", "issuer": "Unlisted Trust"}
+        self.assertFalse(self.run_enrich(ev, {}, "Other Capital LP"))
+        self.assertTrue(affiliate("Brookfield Corp /ON/", "Brookfield Real Estate Income Trust Inc."))
+        self.assertFalse(affiliate("Third Point LLC", "Thirdhaven Corp"))
 
 
 class ScheduleTest(unittest.TestCase):

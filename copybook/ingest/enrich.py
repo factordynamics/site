@@ -73,8 +73,14 @@ CSV_FIELDS = (
     "manager", "slug", "cik", "quarter", "report_date", "filing_date", "accession", "ticker",
     "issuer", "cusip", "title", "put_call", "shares", "value_usd", "weight",
     # Change vs the prior quarter in this history; exited positions are listed with shares 0.
-    "change", "prev_shares", "share_change", "value_delta_usd", "pct_of_book",
+    "change", "prev_shares", "share_change", "value_delta_usd", "delta_pct_of_book",
+    # Row detail: weight == pct_of_book (share positions only; options and PRN notes are blank).
+    "pct_of_book", "shares_type", "principal_amount", "split_ratio", "prev_shares_as_filed",
+    "source_accession", "first_disclosed_at", "late_disclosure",
+    "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none",
 )
+ROW_FIELDS = ("change", "prev_shares", "share_change", "value_delta", "delta_pct_of_book", "pct_of_book",
+              "shares_type", "principal_amount")
 
 
 def num(v):
@@ -91,8 +97,12 @@ def quarter_csv(q: dict) -> str:
         w.writerow(meta + [
             h.get("ticker") or "", h.get("issuer") or "", h.get("cusip") or "", h.get("title") or "",
             h.get("put_call") or "", num(h.get("shares") or 0), num(h.get("value") or 0), h.get("weight") or 0,
-        ] + ["" if h.get(k) is None else num(h[k])
-             for k in ("change", "prev_shares", "share_change", "value_delta", "pct_of_book")])
+        ] + ["" if h.get(k) is None else num(h[k]) for k in ROW_FIELDS] + [
+            (h.get("split") or {}).get("ratio") or "", "" if h.get("prev_shares_as_filed") is None else num(h["prev_shares_as_filed"]),
+            h.get("source_accession") or "", h.get("first_disclosed_at") or "", "true" if h.get("late_disclosure") else "",
+            h.get("discretion") or "", " ".join(h.get("other_managers") or []),
+            *("" if h.get(k) is None else num(h[k]) for k in ("vote_sole", "vote_shared", "vote_none")),
+        ])
     return buf.getvalue()
 
 

@@ -28,9 +28,10 @@ from ingest.universe import parse_index, slugify
 
 DATA = WEB / "data"
 OUT = DATA / "f"
+FB = DATA / "fb"  # full books per quarter; see datasets.py
 LIMIT = int(os.environ.get("COPYBOOK_BULK_LIMIT", "0") or "0")
 BUDGET = float(os.environ.get("COPYBOOK_BULK_BUDGET_S", "0") or "0")
-MAX_ROWS = 500  # shard cap by value; position_count keeps the full count
+MAX_ROWS = 500  # public shard cap by value; the full book is in fb/ (paid, R2)
 SHARD_KEYS = (
     "ok", "cik", "name", "form", "accession", "filing_date", "report_date", "quarter",
     "sec_url", "position_count", "total_value", "values_in_thousands", "indexed_date", "error",
@@ -44,25 +45,50 @@ def numeric_cik(cik: str) -> bool:
     return cik.isdigit() and len(cik) == 10
 
 
-def slim(rec: dict) -> dict:
+def slim(rec: dict, max_rows: int | None = MAX_ROWS) -> dict:
     out = {k: rec[k] for k in SHARD_KEYS if k in rec}
     if rec.get("ok"):
         rows = rec.get("holdings") or rec.get("rows") or []
         if rows and isinstance(rows[0], list):
             rows = [dict(zip(rec.get("columns") or COLUMNS, r)) for r in rows]
-        out["truncated"] = len(rows) > MAX_ROWS
+        out["truncated"] = max_rows is not None and len(rows) > max_rows
         out["columns"] = list(COLUMNS)
         out["rows"] = [
             [int(h[k]) if k in ("value", "shares") else h[k] for k in COLUMNS]
-            for h in rows[:MAX_ROWS]
+            for h in rows[:max_rows]
         ]
     return out
 
 
-def write_shard(dest: Path, rec: dict) -> None:
+def full_path(rec: dict) -> Path:
+    return FB / rec["quarter"] / f"{rec['cik']}.json"
+
+
+def write_json(dest: Path, body: dict) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".tmp")
-    tmp.write_text(json.dumps(slim(rec), separators=(",", ":")) + "\n")
+    tmp.write_text(json.dumps(body, separators=(",", ":")) + "\n")
     tmp.replace(dest)
+
+
+def write_shard(dest: Path, rec: dict) -> None:
+    """Public shard (top MAX_ROWS) plus the full book in fb/{quarter}/ (paid; R2 only)."""
+    write_json(dest, slim(rec))
+    if rec.get("ok") and rec.get("quarter"):
+        write_json(full_path(rec), slim(rec, None) | {"source": "SEC EDGAR"})
+
+
+def has_full_book(rec: dict) -> bool:
+    """A shard with every position, or one whose full book is already in fb/ (copied there if needed)."""
+    if not rec.get("ok") or not rec.get("quarter"):
+        return True
+    path = full_path(rec)
+    if path.exists():
+        return True
+    if rec.get("truncated"):
+        return False
+    write_json(path, rec | {"source": "SEC EDGAR"})
+    return True
 
 
 def ingest_one(cik: str) -> dict:
@@ -145,7 +171,7 @@ def main() -> int:
             checked = rec.get("indexed_date") or rec.get("filing_date") or ""
             # Shards built from a 13F-HR/A before amendment handling are refetched once.
             stale_amend = rec.get("form") == "13F-HR/A" and "filing_key" not in rec
-            if (f.get("filing_date") or "") <= checked and not stale_amend:
+            if (f.get("filing_date") or "") <= checked and not stale_amend and has_full_book(rec):
                 continue
         todo.append(f)
 
@@ -170,7 +196,7 @@ def main() -> int:
         if dest.exists():  # another worker may have fetched it since this run started
             try:
                 rec = json.loads(dest.read_text())
-                fresh = not (rec.get("form") == "13F-HR/A" and "filing_key" not in rec)
+                fresh = not (rec.get("form") == "13F-HR/A" and "filing_key" not in rec) and has_full_book(rec)
                 if fresh and (f.get("filing_date") or "") <= (rec.get("indexed_date") or rec.get("filing_date") or ""):
                     f["ok"], f["position_count"], f["quarter"] = bool(rec.get("ok")), rec.get("position_count"), rec.get("quarter")
                     continue

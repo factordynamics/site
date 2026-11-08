@@ -27,7 +27,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ingest.edgar import ARCHIVE_BASE, fetch_submissions, get
+from ingest.edgar import ARCHIVE_BASE, fetch_submissions, get, iso_utc
+from ingest.parse import real_cusip
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
@@ -36,7 +37,7 @@ BUDGET_S = float(os.environ.get("COPYBOOK_EVENTS_BUDGET_S", "900"))
 MAX_PER_MANAGER = 100  # newest filings parsed per manager per window
 STREAM_DAYS = 30
 LOOKBACK_DAYS = 200  # window start when a manager has no recent 13F
-PARSER = 3  # bump to reparse every cached filing after a parser change
+PARSER = 5  # bump to reparse every cached filing after a parser change
 
 FORM4 = {"4", "4/A"}
 SCHEDULE = {"SCHEDULE 13D", "SCHEDULE 13D/A", "SCHEDULE 13G", "SCHEDULE 13G/A"}
@@ -98,8 +99,14 @@ def _mdy(s: str | None) -> str | None:
     return f"{m.group(3)}-{m.group(1)}-{m.group(2)}" if m else s[:10]
 
 
-def holdings_after(xml: str) -> float | None:
-    """Total common shares owned after the filing, across every holding entity.
+def class_key(title: str | None) -> str:
+    """'Class B Common Stock' -> 'B'; plain 'Common Stock' -> ''."""
+    m = re.search(r"\bCL(?:ASS)?\.?\s*([A-Z])\b", (title or "").upper())
+    return m.group(1) if m else ""
+
+
+def holdings_after(xml: str, cls: str | None = None) -> float | None:
+    """Shares owned after the filing, across every holding entity (one class when cls is given).
 
     Each row reports what one owner line (direct, or indirect through a named
     subsidiary) holds afterwards, so take the last figure per line and add them up.
@@ -107,6 +114,8 @@ def holdings_after(xml: str) -> float | None:
     last: dict[tuple, float] = {}
     for table in ("nonDerivativeTransaction", "nonDerivativeHolding"):
         for b in _blocks(xml, table):
+            if cls is not None and class_key(_value(b, "securityTitle")) != cls:
+                continue
             v = _num(_value(b, "sharesOwnedFollowingTransaction"))
             if v is None:
                 continue
@@ -157,21 +166,45 @@ def parse_form4(xml: str, cik: str) -> dict | None:
     else:
         action = "other"
     after = holdings_after(xml)
+    moved = sum((t["shares"] or 0) * (1 if t["acquired"] else -1) for t in common if t["acquired"] is not None)
     dates = sorted(t["date"] for t in txs if t["date"])
+    # Per share class: holdings and trades are never added across classes.
+    titles = {class_key(t["security"]): t["security"] for t in common}
+    for b in _blocks(xml, "nonDerivativeHolding"):
+        titles.setdefault(class_key(_value(b, "securityTitle")), _value(b, "securityTitle"))
+    classes = []
+    for key, title in sorted(titles.items()):
+        sub = [t for t in common if class_key(t["security"]) == key]
+        tr = [t for t in sub if t["code"] in ("P", "S") and t["shares"]]
+        b_, s_ = sum(t["shares"] for t in tr if t["code"] == "P"), sum(t["shares"] for t in tr if t["code"] == "S")
+        v_ = sum(t["shares"] * t["price"] for t in tr if t["price"] is not None)
+        a_ = holdings_after(xml, key)
+        m_ = sum((t["shares"] or 0) * (1 if t["acquired"] else -1) for t in sub if t["acquired"] is not None)
+        classes.append({
+            "class": key or None, "security": title, "cusip": None, "ticker": None,
+            "shares_after": a_, "prev_shares_after": a_ - m_ if a_ is not None else None,
+            "net_shares": (b_ - s_) if tr else None, "bought_shares": b_ or None, "sold_shares": s_ or None,
+            "value_usd": round(v_, 2) if tr and v_ else None,
+            "avg_price": round(v_ / (b_ + s_), 4) if tr and v_ and (b_ + s_) else None,
+        })
     return {
         "kind": "form4",
         "issuer": _tag(xml, "issuerName"),
         "issuer_cik": (_tag(xml, "issuerCik") or "").zfill(10) or None,
         "ticker": clean_ticker(_tag(xml, "issuerTradingSymbol")),
+        "filed_ticker": clean_ticker(_tag(xml, "issuerTradingSymbol")),
         "cusip": None,
+        "filed_cusip": None,
         "event_date": dates[-1] if dates else _tag(xml, "periodOfReport"),
         "action": action,
         "shares": net if trades else None,
         "value_usd": round(value, 2) if trades and value else None,
         "avg_price": round(value / (bought + sold), 4) if trades and value and (bought + sold) else None,
         "shares_after": after,
+        "prev_shares_after": after - moved if after is not None else None,
         "percent_of_class": None,
         "ten_percent_owner": "true" in [v.lower() for v in _tags(xml, "isTenPercentOwner")],
+        "classes": classes,
         "transactions": txs,
     }
 
@@ -198,7 +231,9 @@ def parse_schedule(xml: str, cik: str) -> dict | None:
         "issuer": _tag(xml, "issuerName"),
         "issuer_cik": issuer_cik if issuer_cik.strip("0") else None,
         "ticker": None,
+        "filed_ticker": None,
         "cusip": (_tag(xml, "issuerCusipNumber") or "").upper() or None,
+        "filed_cusip": (_tag(xml, "issuerCusipNumber") or "").upper() or None,
         "event_date": _mdy(_tag(xml, "dateOfEvent") or _tag(xml, "eventDateRequiresFilingThisStatement")),
         "action": action,
         "shares": None,
@@ -230,6 +265,7 @@ def candidate_filings(submissions: dict, since: str, limit: int | None = MAX_PER
                 "accession": r["accessionNumber"][i],
                 "filing_date": r["filingDate"][i],
                 "primary": r.get("primaryDocument", [""] * (i + 1))[i] or "",
+                "accepted_at": iso_utc((r.get("acceptanceDateTime") or [""] * (i + 1))[i] or ""),
             }
         )
     out.sort(key=lambda f: (f["filing_date"], f["accession"]), reverse=True)
@@ -253,27 +289,100 @@ def load_securities() -> tuple[dict, dict]:
     return by_cusip, by_ticker
 
 
-def enrich(ev: dict, book: dict[str, dict], by_cusip: dict, by_ticker: dict) -> None:
-    """Fill ticker, clean name and sector, and compare with the latest 13F position."""
-    row = by_cusip.get(ev.get("cusip") or "")
-    if row is None and ev.get("cusip"):
-        # 13D/G cover pages give the issuer CUSIP; 13F lines may use any 9-char class CUSIP.
-        row = next((r for c, r in by_cusip.items() if c[:6] == ev["cusip"][:6] and r.get("ticker")), None)
-    if row is None and ev.get("ticker") in by_ticker:
-        ev["cusip"], row = by_ticker[ev["ticker"]]
+SUFFIXES = {"LLC", "LP", "L.P.", "INC", "INC.", "CORP", "CORPORATION", "CO", "LTD", "PLC", "SA", "AG", "NV",
+            "GROUP", "HOLDINGS", "THE", "&", "AND", "MANAGEMENT", "LLP", "L.L.C."}
+
+
+def affiliate(manager_name: str | None, issuer: str | None) -> bool:
+    """The issuer is the filer's own fund or vehicle (e.g. Third Point seeding Third Point
+    Private Capital): its name starts with the filer's own distinctive name."""
+    words = [w for w in re.split(r"[\s,]+", (manager_name or "").upper()) if w and w not in SUFFIXES]
+    if not words or not issuer:
+        return False
+    key = words[0] if len(words[0]) >= 6 or len(words) == 1 else " ".join(words[:2])
+    return re.sub(r"[\s,]+", " ", issuer.upper()).startswith(key + " ")
+
+
+_CIK_TICKER: dict[str, str] | None = None
+
+
+def ticker_by_cik(cik: str | None) -> str | None:
+    """SEC company_tickers.json: issuer CIK -> its first listed ticker."""
+    global _CIK_TICKER
+    if not cik:
+        return None
+    if _CIK_TICKER is None:
+        _CIK_TICKER = {}
+        try:
+            for r in json.loads(get("https://www.sec.gov/files/company_tickers.json")).values():
+                _CIK_TICKER.setdefault(str(r["cik_str"]).zfill(10), r["ticker"].upper())
+        except Exception as e:  # noqa: BLE001 - fall back to CUSIP matching
+            print(f"events: company_tickers unavailable: {e}", file=sys.stderr)
+    return _CIK_TICKER.get(cik.zfill(10))
+
+
+def enrich(ev: dict, book: dict[str, dict], by_cusip: dict, by_ticker: dict, manager_name: str | None = None) -> bool:
+    """Resolve the subject security, compare with the latest 13F; False drops the event.
+
+    The subject is resolved by issuer CIK first, then by CUSIP. Placeholder CUSIPs
+    (000000000 on private funds) never match. 13F shares are compared for the same
+    class (CUSIP) only, so a Class A 13G is not compared with Class A + Class B.
+    Events about the filer's own funds, or about securities with no CUSIP and no
+    ticker (private vehicles), are dropped.
+    """
+    cusip = (ev.get("filed_cusip") or "").upper()
+    cusip = cusip if real_cusip(cusip) else None
+    ticker = ev.get("filed_ticker") or ticker_by_cik(ev.get("issuer_cik"))
+    row = by_cusip.get(cusip) if cusip else None
+    if row is None and ticker and ticker in by_ticker:
+        c0, row = by_ticker[ticker]
+        cusip = cusip or c0
+    if row is None and cusip:
+        # Name and sector only: another class of the same issuer (never its share count).
+        row = next((r for c, r in by_cusip.items() if c[:6] == cusip[:6] and r.get("ticker")), None)
     row = row or {}
-    ev["ticker"] = ev.get("ticker") or row.get("ticker")
+    ev["cusip"] = cusip
+    ev["ticker"] = ticker or (row.get("ticker") if cusip and cusip in by_cusip else None)
     ev["display_name"] = row.get("name") or (ev.get("issuer") or "").title() or None
     ev["sector"] = row.get("sector")
-    held = None
-    if ev.get("cusip"):
-        held = [h for h in book.values() if h["cusip"][:6] == ev["cusip"][:6] and not h.get("put_call")]
-    if not held and ev.get("ticker"):
-        held = [h for h in book.values() if h.get("ticker") == ev["ticker"] and not h.get("put_call")]
-    shares_13f = sum(h.get("shares") or 0 for h in held) if held else 0
-    ev["shares_in_13f"] = shares_13f
+    if affiliate(manager_name, ev.get("issuer")) or (not ev["ticker"] and not cusip):
+        return False
+    def in_13f(c):
+        held = [h for h in book.values() if c and h.get("cusip") == c and not h.get("put_call")]
+        return sum(h.get("shares") or 0 for h in held), bool(held)
+
+    compare = cusip or (by_ticker.get(ev["ticker"]) or (None,))[0]
+    classes = ev.get("classes") or []
+    if classes:  # Form 4: each class compared with the same class in the 13F
+        for c in classes:
+            c["cusip"], c["ticker"] = class_cusip(compare, ev["ticker"], c["class"], by_cusip)
+            n, held = in_13f(c["cusip"])
+            c["shares_in_13f"] = n
+            c["change_vs_13f"] = c["shares_after"] - n if c["shares_after"] is not None and held else None
+        if len(classes) > 1:  # issuer-level figures would mix classes; use classes[]
+            ev["compare_cusip"], ev["shares_in_13f"], ev["change_vs_13f"] = None, None, None
+            return True
+        compare = classes[0]["cusip"] or compare
+    n, held = in_13f(compare)
+    ev["compare_cusip"] = compare
+    ev["shares_in_13f"] = n
     after = ev.get("shares_after")
-    ev["change_vs_13f"] = after - shares_13f if after is not None and shares_13f else None
+    ev["change_vs_13f"] = after - n if after is not None and held else None
+    return True
+
+
+def class_cusip(primary: str | None, ticker: str | None, cls: str | None, by_cusip: dict) -> tuple[str | None, str | None]:
+    """The CUSIP and ticker of one share class: 'B' -> the issuer's .B/-B listing (LEN.B)."""
+    if not primary:
+        return None, None
+    same = {c: r for c, r in by_cusip.items() if c[:6] == primary[:6] and r.get("ticker")}
+    if cls:
+        hit = next(((c, r["ticker"]) for c, r in same.items() if re.search(rf"[.\-/ ]{cls}$", r["ticker"])), None)
+        if hit:
+            return hit
+        if cls != "A":
+            return None, None
+    return primary, (by_cusip.get(primary) or {}).get("ticker") or ticker
 
 
 def manager_events(m: dict, submissions: dict, previous: dict, deadline: float) -> tuple[list[dict], str]:
@@ -297,7 +406,7 @@ def manager_events(m: dict, submissions: dict, previous: dict, deadline: float) 
         if parsed.get("skip"):
             events.append({"id": key, "skip": True, "filing_date": f["filing_date"]})
             continue
-        ev = {k: v for k, v in parsed.items() if k not in ("id", "slug", "manager", "form", "filing_date", "url")}
+        ev = {k: v for k, v in parsed.items() if k not in ("id", "slug", "manager", "form", "filing_date", "url", "accepted_at")}
         events.append(
             {
                 "id": key,
@@ -305,6 +414,7 @@ def manager_events(m: dict, submissions: dict, previous: dict, deadline: float) 
                 "manager": m.get("manager"),
                 "form": f["form"],
                 "filing_date": f["filing_date"],
+                "accepted_at": f.get("accepted_at") or None,
                 "url": f"{ARCHIVE_BASE}/Archives/edgar/data/{int(m['cik'])}/{key.replace('-', '')}/{key}-index.html",
                 **ev,
             }
@@ -340,9 +450,7 @@ def main() -> int:
         if book_path.exists():
             for h in json.loads(book_path.read_text()).get("holdings") or []:
                 book[f"{h.get('cusip')}:{h.get('put_call')}"] = h
-        events = [e for e in rows if not e.get("skip")]
-        for ev in events:
-            enrich(ev, book, by_cusip, by_ticker)
+        events = [e for e in rows if not e.get("skip") and enrich(e, book, by_cusip, by_ticker, m.get("name"))]
         payload = {
             "slug": slug,
             "manager": m.get("manager"),

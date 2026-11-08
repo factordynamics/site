@@ -23,9 +23,10 @@ WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 HIST = WEB / "data" / "h"
 API = os.environ.get("COPYBOOK_API", "https://copybook-api.factordynamics.workers.dev").rstrip("/")
 MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-manifest.json"))
-KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4]\.(json|csv)|index\.json)$")
-# Keys the Worker may not accept yet: a failure warns instead of failing the run.
-OPTIONAL = re.compile(r"/index\.json$")
+KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$")
+# Keys the Worker may not accept yet: a failure warns instead of failing the run,
+# and the rest of that kind are skipped until the next run.
+OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$")
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
 USER_AGENT = "Copybook-ingest/1.0 (+https://copybook.factordynamics.com)"
@@ -84,9 +85,13 @@ def main() -> int:
     token = Token()
     files = sorted(p for p in HIST.glob("*/*") if p.suffix in (".json", ".csv"))
     sent = 0
+    refused: set[str] = set()
     for i, path in enumerate(files):
         key = path.relative_to(HIST.parent).as_posix()
         if not KEY.match(key):
+            continue
+        kind = OPTIONAL.search(key)
+        if kind and kind.group() in refused:
             continue
         body = path.read_bytes()
         digest = hashlib.sha256(body).hexdigest()
@@ -95,9 +100,10 @@ def main() -> int:
         try:
             put(key, body, token)
         except RuntimeError as exc:
-            if not OPTIONAL.search(key):
+            if not kind:
                 raise
-            print(f"::warning::{exc}", flush=True)
+            refused.add(kind.group())
+            print(f"::warning::{exc} (skipping the other *{kind.group().lstrip('/')} keys this run)", flush=True)
             continue
         manifest[key] = digest
         sent += 1

@@ -116,7 +116,9 @@ def move_lines(mv: dict | None) -> list[str]:
             name = r.get("ticker") or r.get("display_name") or r.get("issuer") or r.get("cusip")
             if r.get("put_call"):
                 name = f"{name} {r['put_call'].lower()}s"
-            pct = r.get("pct_of_book")
+            elif r.get("shares_type") == "PRN":
+                name = f"{name} notes"
+            pct = r.get("delta_pct_of_book")
             parts.append(f"{name} {_usd(r['value_delta'])}" + (f" ({abs(pct) * 100:.1f}% of book)" if pct else ""))
         out.append(f"{label}: " + ", ".join(parts))
     return out
