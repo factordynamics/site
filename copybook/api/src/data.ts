@@ -7,14 +7,19 @@ export const MAX_ALERT_AGE_DAYS = 3;
 
 export const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/;
 
-const CSV_FIELDS = ['manager', 'slug', 'cik', 'quarter', 'report_date', 'filing_date', 'accession', 'ticker', 'issuer', 'cusip', 'title', 'put_call', 'shares', 'value_usd', 'weight'];
+const CSV_FIELDS = [
+  'manager', 'slug', 'cik', 'quarter', 'report_date', 'filing_date', 'accession', 'ticker', 'issuer', 'cusip', 'title', 'put_call', 'shares', 'value_usd', 'weight',
+  // Change vs the prior quarter; exited positions come last with shares 0.
+  'change', 'prev_shares', 'share_change', 'value_delta_usd', 'pct_of_book',
+];
+const CHANGE_FIELDS = ['change', 'prev_shares', 'share_change', 'value_delta', 'pct_of_book'];
 
 function cell(v: unknown): string {
   const s = v === null || v === undefined ? '' : String(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export const SHARD_KEY = /^h\/[a-z0-9][a-z0-9-]{0,120}\/\d{4}Q[1-4]\.(json|csv)$/;
+export const SHARD_KEY = /^h\/[a-z0-9][a-z0-9-]{0,120}\/(\d{4}Q[1-4]\.(json|csv)|index\.json)$/;
 
 /**
  * A per-quarter history file from the private R2 bucket. Until the bucket holds
@@ -67,10 +72,13 @@ export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
         w = writable.getWriter();
         continue;
       }
-      const holdings = q.holdings ?? (q.holdings_url ? ((await new Response(await mustShard(env, q.holdings_url)).json()) as { holdings?: unknown[] }).holdings : []);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = ((holdings ?? []) as any[]).map(
-        (p) => [h.manager, h.slug, h.cik, q.quarter, q.report_date, q.filing_date, q.accession, p.ticker ?? '', p.issuer ?? '', p.cusip ?? '', p.title ?? '', p.put_call ?? '', p.shares ?? 0, p.value ?? 0, p.weight ?? 0].map(cell).join(',') + '\r\n',
+      const shard: { holdings?: any[]; exited?: any[] } = q.holdings ? q : q.holdings_url ? await new Response(await mustShard(env, q.holdings_url)).json() : {};
+      const rows = [...(shard.holdings ?? []), ...(shard.exited ?? [])].map(
+        (p) =>
+          [h.manager, h.slug, h.cik, q.quarter, q.report_date, q.filing_date, q.accession, p.ticker ?? '', p.issuer ?? '', p.cusip ?? '', p.title ?? '', p.put_call ?? '', p.shares ?? 0, p.value ?? 0, p.weight ?? 0, ...CHANGE_FIELDS.map((k) => p[k])]
+            .map(cell)
+            .join(',') + '\r\n',
       );
       if (rows.length) await w.write(enc.encode(rows.join('')));
     }
@@ -82,7 +90,10 @@ export function historyCsv(env: Env, h: any): ReadableStream<Uint8Array> {
   return readable;
 }
 
+/** The full history index (every quarter's top holdings) is private in R2; the public file is the fallback. */
 export async function fetchHistory(env: Env, slug: string): Promise<unknown | null> {
+  const obj = SLUG.test(slug) ? await env.HIST.get(`h/${slug}/index.json`) : null;
+  if (obj) return new Response(obj.body).json();
   const res = await fetch(`${env.DATA_URL}${slug}-history.json`, { cf: { cacheTtl: 900 } } as RequestInit);
   if (!res.ok) return null;
   return res.json();

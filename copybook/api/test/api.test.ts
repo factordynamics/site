@@ -51,7 +51,7 @@ beforeEach(() => {
   hist = new MemR2();
   env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x' };
   // 2026Q1 lives only in the private bucket; 2026Q2 still falls back to the public copy.
-  hist.m.set('h/warren-buffett/2026Q1.csv', new TextEncoder().encode('manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1\r\n'));
+  hist.m.set('h/warren-buffett/2026Q1.csv', new TextEncoder().encode('manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight,change,prev_shares,share_change,value_delta_usd,pct_of_book\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1,new,,5,100,0.1\r\n'));
   sent = [];
   stripeObjects = {};
   index = { managers: [] };
@@ -79,7 +79,11 @@ beforeEach(() => {
       });
     }
     if (url === `${SITE}data/h/warren-buffett/2026Q2.json`) {
-      return Response.json({ quarter: '2026Q2', holdings: [{ issuer: 'APPLE INC', ticker: 'AAPL', cusip: '037833100', title: 'COM', shares: 10, value: 2000, weight: 0.5, put_call: null }] });
+      return Response.json({
+        quarter: '2026Q2',
+        holdings: [{ issuer: 'APPLE INC', ticker: 'AAPL', cusip: '037833100', title: 'COM', shares: 10, value: 2000, weight: 0.5, put_call: null, change: 'added', prev_shares: 4, share_change: 6, value_delta: 1200, pct_of_book: 0.3 }],
+        exited: [{ issuer: 'BANK OF AMERICA', ticker: 'BAC', cusip: '060505104', title: 'COM', shares: 0, value: 0, weight: 0, put_call: null, change: 'exited', prev_shares: 5, share_change: -5, value_delta: -100, pct_of_book: -0.025 }],
+      });
     }
     return new Response('not found', { status: 404 });
   });
@@ -130,14 +134,20 @@ describe('copybook api', () => {
     expect(session.member).toMatchObject({ email: 'buyer@example.com', active: true, plan: 'yearly' });
 
     expect((await call('/history/warren-buffett')).status).toBe(401);
-    const hist = await (await call('/history/warren-buffett', { token: session.token })).json();
-    expect(hist.history_quarters).toEqual(['2026Q2', '2026Q1']);
+    const history = await (await call('/history/warren-buffett', { token: session.token })).json();
+    expect(history.history_quarters).toEqual(['2026Q2', '2026Q1']);
+    // Once the private index is in R2 it wins over the public file.
+    hist.m.set('h/warren-buffett/index.json', new TextEncoder().encode(JSON.stringify({ slug: 'warren-buffett', history_quarters: ['2026Q2'], history: [] })));
+    expect((await (await call('/history/warren-buffett', { token: session.token })).json()).history_quarters).toEqual(['2026Q2']);
+    hist.m.delete('h/warren-buffett/index.json');
 
     const csv = await (await call('/csv/warren-buffett.csv', { token: session.token })).text();
     const lines = csv.trim().split('\r\n');
-    expect(lines).toHaveLength(3);
-    expect(lines[1]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q2,2026-06-30,2026-08-14,A2,AAPL,APPLE INC,037833100,COM,,10,2000,0.5');
-    expect(lines[2]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1');
+    expect(lines).toHaveLength(4);
+    expect(lines[0].split(',')).toHaveLength(20);
+    expect(lines[1]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q2,2026-06-30,2026-08-14,A2,AAPL,APPLE INC,037833100,COM,,10,2000,0.5,added,4,6,1200,0.3');
+    expect(lines[2]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q2,2026-06-30,2026-08-14,A2,BAC,BANK OF AMERICA,060505104,COM,,0,0,0,exited,5,-5,-100,-0.025');
+    expect(lines[3]).toBe('Warren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1,new,,5,100,0.1');
     expect(csv.match(/^manager,/gm)).toHaveLength(1);
 
     // The session token is never accepted from a URL.
@@ -271,6 +281,8 @@ describe('copybook api', () => {
     expect(await put('h/bill-ackman/2026Q2.json', await jwt({ aud: 'https://github.com/refcell' }))).toBe(401);
     expect(await put('h/bill-ackman/2026Q2.json', await jwt({ exp: now() - 10 }))).toBe(401);
     expect(await put('index.json', await jwt({}))).toBe(400);
+    expect(await put('h/bill-ackman/index.jsonx', await jwt({}))).toBe(400);
+    expect(await put('h/bill-ackman/index.json', await jwt({}))).toBe(200);
     expect(hist.m.has('h/bill-ackman/2026Q2.json')).toBe(false);
     expect(await put('h/bill-ackman/2026Q2.json', await jwt({}))).toBe(200);
     expect(new TextDecoder().decode(hist.m.get('h/bill-ackman/2026Q2.json'))).toBe('{"holdings":[]}');
