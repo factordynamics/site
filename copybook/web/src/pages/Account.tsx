@@ -2,6 +2,7 @@ import { loadFilers, loadIndex, useAsync, useTitle } from '../lib/data'
 import { Link } from 'react-router-dom'
 import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
+import { Channels } from '../components/Channels'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -9,7 +10,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, renewalTerms, trialTerms } from '../config'
-import { fetchMe, getToken, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
+import { ApiError, fetchMe, getToken, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean } | { kind: 'out'; error?: string } | { kind: 'off' }
 
@@ -189,6 +190,7 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
         </section>
       </div>
 
+      {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
       {member.active && <ApiKeys member={member} />}
 
       {member.active && status === 'ready' && follows.onboarded && !editing && (
@@ -326,13 +328,24 @@ function NotOpen() {
 /** Insider and 13D alerts on the stocks a member owns or watches ({api}/follows fields). */
 function InsiderSettings() {
   const { follows } = useFollows()
-  const [min, setMin] = useState(String(follows.insider_min_usd))
+  const fmt = (n: number) => n.toLocaleString('en-US')
+  const [min, setMin] = useState(fmt(follows.insider_min_usd))
+  const [minErr, setMinErr] = useState('')
   const [err, setErr] = useState('')
-  useEffect(() => setMin(String(follows.insider_min_usd)), [follows.insider_min_usd])
+  useEffect(() => setMin(fmt(follows.insider_min_usd)), [follows.insider_min_usd])
+  // "100,000", "$100000" and "0" are fine; letters, negatives and decimals are not.
+  const commitMin = () => {
+    const t = min.trim().replace(/^\$\s*/, '').replace(/,/g, '')
+    if (!/^\d+$/.test(t)) return setMinErr('Enter a whole dollar amount of 0 or more, like 100,000.')
+    setMinErr('')
+    const n = Number(t)
+    setMin(fmt(n))
+    if (n !== follows.insider_min_usd) save({ insider_min_usd: n })
+  }
   const save = (patch: Parameters<typeof saveFollows>[0]) =>
     saveFollows(patch).then(
       () => setErr(''),
-      (e) => setErr(e instanceof Error && e.message ? e.message : 'That didn’t save. Please try again.'),
+      (e) => setErr(e instanceof ApiError && e.detail ? e.detail : 'That didn’t save. Please try again.'),
     )
   const box = (k: 'insider_buys' | 'cluster_buys' | 'any_13d', l: string, d: string, extra?: ReactNode) => (
     <div key={k} className="flex items-start gap-3">
@@ -362,14 +375,21 @@ function InsiderSettings() {
                 id="f-insider-min"
                 inputMode="numeric"
                 value={min}
-                onChange={(e) => setMin(e.target.value.replace(/[^0-9]/g, ''))}
-                onBlur={() => Number(min) !== follows.insider_min_usd && save({ insider_min_usd: Number(min) || 0 })}
+                aria-invalid={Boolean(minErr)}
+                aria-describedby={minErr ? 'f-insider-min-err' : undefined}
+                onChange={(e) => setMin(e.target.value)}
+                onBlur={commitMin}
                 onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-                className="num h-8 w-32 rounded-lg bg-paper pl-6 pr-2 shadow-[0_0_0_1px_var(--color-line-2)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]"
+                className={`num h-8 w-32 rounded-lg bg-paper pl-6 pr-2 outline-none focus:shadow-[0_0_0_2px_var(--color-accent)] ${minErr ? 'shadow-[0_0_0_1.5px_var(--color-down)]' : 'shadow-[0_0_0_1px_var(--color-line-2)]'}`}
               />
             </span>
           </span>
         ),
+      )}
+      {minErr && (
+        <p id="f-insider-min-err" role="alert" className="-mt-1 pl-7 text-[13px] text-down">
+          {minErr}
+        </p>
       )}
       {box('cluster_buys', 'Cluster buys', 'Three or more insiders of one company buying within 30 days. At most one alert per company every 30 days.')}
       {box('any_13d', 'Any filer’s 13D or 13G', 'A new Schedule 13D or 13G by anyone, not only the funds you follow.')}

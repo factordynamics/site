@@ -31,6 +31,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'An email minutes after they file', d: `We check EDGAR every minute. Alerts, moves and history cover the ${curated} managers we track closely, and the list is growing.` },
       { t: 'The moves inside the email', d: 'New, added, trimmed and exited positions, with dollars and share of the book.' },
       { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
+      { t: 'Telegram, Discord, Slack and RSS delivery', d: 'Each alert in your chat or reader as it happens, as well as by email.' },
       { t: 'Insider buys and any filer’s 13D', d: 'On stocks you own or watch: open-market insider buys over a threshold you set, cluster buys by 3+ insiders, and a new 13D or 13G by anyone.' },
       { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, usually within minutes: holdings per share class, % of the class before → after, threshold crossings and the 13D’s Item 4.' },
       { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and 8 quarters of history with CSV.' },
@@ -45,11 +46,12 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
       { t: 'Filer and holdings endpoints', d: `Holdings for any quarter on file, as JSON: 8 quarters today, back to 2013 coming this month. ${curated} managers today; all ${filers} filers coming.` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
+      { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
     ],
     soon: [
       { t: 'History and events endpoints', d: 'Changes across quarters, Form 4 and 13D/G as JSON.' },
       { t: 'Point-in-time history', d: 'Each position dated by when it was disclosed, so backtests don’t see the future.' },
-      { t: 'Bulk exports and signed webhooks', d: 'Whole-quarter files, and a signed POST to your endpoint when a filing lands.' },
+      { t: 'Bulk exports', d: 'Whole-quarter files for every filer we cover.' },
       { t: 'My book and peer overlap', d: 'Crowding in your names, and overlap with the funds you benchmark against.' },
     ],
   },
@@ -61,7 +63,6 @@ const tiers = (filers: string, curated: number): Tier[] => [
     soon: [
       { t: '5 seats', d: 'Invite your team; each seat gets its own alerts.' },
       { t: 'Shared book and peer lists', d: 'One list of holdings and peers the whole team works from.' },
-      { t: 'Alerts in Slack', d: 'Filings and moves in your channel.' },
     ],
   },
 ]
@@ -80,14 +81,17 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Filing alerts, moves inside', false, true, true, true],
   ['Form 4 and 13D moves between 13Fs', false, true, true, true],
   ['Every move and full flow', false, true, true, true],
+  ['Slack, Discord, Telegram and RSS delivery', false, true, true, true],
+  ['Insider buys and any filer’s 13D on your stocks', false, true, true, true],
   ['8 quarters of history and CSV', false, true, true, true],
   ['API keys, filer and holdings endpoints', false, false, true, true],
   ['History and events endpoints', false, false, 'soon', 'soon'],
   ['Point-in-time history', false, false, 'soon', 'soon'],
-  ['Bulk exports and signed webhooks', false, false, 'soon', 'soon'],
+  ['Signed webhooks', false, false, true, true],
+  ['Bulk exports', false, false, 'soon', 'soon'],
   ['My book and peer overlap', false, false, 'soon', 'soon'],
   ['Seats', '1', '1', '1', '5 (coming)'],
-  ['Shared book and Slack', false, false, false, 'soon'],
+  ['Shared book and peer lists', false, false, false, 'soon'],
   ['Invoice billing, W-9', false, false, false, true],
 ]
 
@@ -274,7 +278,7 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                'Pro: everything in Copy, API keys, the filer and holdings endpoints, and filing acceptance times. History and events endpoints, point-in-time history, bulk exports, signed webhooks, My book and peer overlap are coming this month and turn on as each ships, at no extra cost. Fund is sold by request with invoice billing; its seats, shared book and Slack are coming this month, and you’re invoiced when seats go live.',
+                'Pro: everything in Copy, API keys, the filer and holdings endpoints, filing acceptance times and signed webhooks. History and events endpoints, point-in-time history, bulk exports, My book and peer overlap are coming this month and turn on as each ships, at no extra cost. Fund is sold by request with invoice billing; its seats, shared book and peer lists are coming this month, and you’re invoiced when seats go live.',
               ],
               [
                 'How does the free trial work?',

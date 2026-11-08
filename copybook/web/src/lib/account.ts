@@ -35,9 +35,14 @@ export const signOut = () => localStorage.removeItem(KEY)
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number) {
+  /** The API's error code and readable message, when the response carried them. */
+  code?: string
+  detail?: string
+  constructor(status: number, body?: { code?: string; error?: string } | null) {
     super(`api ${status}`)
     this.status = status
+    this.code = body?.code
+    this.detail = body?.error
   }
 }
 
@@ -55,7 +60,7 @@ export async function call<T>(path: string, init: { method?: string; body?: unkn
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
   })
   if (res.status === 401 && init.auth) signOut()
-  if (!res.ok) throw new ApiError(res.status)
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null))
   return res.json() as Promise<T>
 }
 

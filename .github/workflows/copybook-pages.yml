@@ -68,6 +68,8 @@ jobs:
       - run: node scripts/cards.mjs dist "${VITE_DATA_BASE}"
       - run: node scripts/postbuild.mjs "${VITE_DATA_BASE}index.json"
       - run: node scripts/sitemap.mjs dist "${VITE_DATA_BASE}index.json"
+      # Share tags: one description per page, twitter matching og. Fails the deploy otherwise.
+      - run: node scripts/checkmeta.mjs dist
       # Skip the deploy (without failing) until Pages is enabled in the repo settings.
       - id: pages
         env:

@@ -21,6 +21,7 @@ export function Onboarding({ onDone }: { onDone?: (member?: Member) => void }) {
   const { follows } = useFollows()
   const [investors, setInvestors] = useState<string[]>(follows.investors)
   const [owned, setOwned] = useState<string[]>(follows.owned)
+  const [watched, setWatched] = useState<string[]>(follows.stocks.filter((t) => !follows.owned.includes(t)))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
   const [group, setGroup] = useState<(typeof GROUPS)[number][0]>('Value')
@@ -32,7 +33,7 @@ export function Onboarding({ onDone }: { onDone?: (member?: Member) => void }) {
     setBusy(true)
     setError(false)
     try {
-      await saveFollows(skip ? { onboarded: true } : { investors, owned, onboarded: true })
+      await saveFollows(skip ? { onboarded: true } : { investors, owned, stocks: [...new Set([...watched, ...owned])], onboarded: true })
       // The API moves a member who never picked an alert scope to followed funds when follows are saved.
       onDone?.(await fetchMe().catch(() => undefined))
     } catch {
@@ -97,9 +98,15 @@ export function Onboarding({ onDone }: { onDone?: (member?: Member) => void }) {
       <p className="mt-1.5 text-[15px] text-ink-2">We’ll email you when a fund buys or sells them, and tag them in every alert. Only you see this list.</p>
       <TickerPicker value={owned} onChange={setOwned} />
 
+      <h2 className="mt-10 text-[22px] font-semibold tracking-[-0.03em]">Any smaller companies you watch?</h2>
+      <p className="mt-1.5 text-[15px] text-ink-2">
+        Insider and 13D alerts work best on smaller companies you watch, where an insider buy or an activist stake moves the stock far more than in a mega cap.
+      </p>
+      <TickerPicker value={watched} onChange={(v) => setWatched(v.filter((t) => !owned.includes(t)))} id="watch-input" label="Add a ticker you watch" placeholder="Add a ticker to watch, e.g. ALAB" />
+
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <Button onClick={() => finish()} disabled={busy}>
-          {busy ? 'Saving…' : `Save${investors.length || owned.length ? ` · ${investors.length} ${investors.length === 1 ? 'investor' : 'investors'}, ${owned.length} ${owned.length === 1 ? 'stock' : 'stocks'}` : ''}`}
+          {busy ? 'Saving…' : `Save${investors.length || owned.length || watched.length ? ` · ${investors.length} ${investors.length === 1 ? 'investor' : 'investors'}, ${owned.length + watched.length} ${owned.length + watched.length === 1 ? 'stock' : 'stocks'}` : ''}`}
         </Button>
         <Button variant="ghost" onClick={() => finish(true)} disabled={busy}>
           Skip for now
@@ -115,7 +122,7 @@ export function Onboarding({ onDone }: { onDone?: (member?: Member) => void }) {
 }
 
 /** Ticker input with suggestions from the stock index; shows chosen tickers as removable chips. */
-export function TickerPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+export function TickerPicker({ value, onChange, id = 'owned-input', label = 'Add a ticker you own', placeholder = 'Add a ticker, e.g. NVDA' }: { value: string[]; onChange: (v: string[]) => void; id?: string; label?: string; placeholder?: string }) {
   const idx = useAsync(loadStockIndex, [])
   const [q, setQ] = useState('')
   const hits = useMemo(() => {
@@ -134,11 +141,11 @@ export function TickerPicker({ value, onChange }: { value: string[]; onChange: (
   return (
     <div className="mt-4">
       <div className="relative max-w-md">
-        <label htmlFor="owned-input" className="sr-only">
-          Add a ticker you own
+        <label htmlFor={id} className="sr-only">
+          {label}
         </label>
         <input
-          id="owned-input"
+          id={id}
           value={q}
           autoComplete="off"
           onChange={(e) => setQ(e.target.value)}
@@ -148,7 +155,7 @@ export function TickerPicker({ value, onChange }: { value: string[]; onChange: (
               add(hits[0].t)
             }
           }}
-          placeholder="Add a ticker, e.g. NVDA"
+          placeholder={placeholder}
           className="h-11 w-full rounded-full bg-paper px-4 text-[15px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
         />
         {hits.length > 0 && (

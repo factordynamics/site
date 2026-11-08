@@ -13,11 +13,12 @@ const SITE = process.env.VITE_SITE || 'https://copybook.factordynamics.com/'
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
 function page(path, title, desc, extra = '') {
   let html = shell
-    .replace(/<title>.*?<\/title>/, `<title>${esc(title)}</title>`)
-    .replace(/(<meta name="description" content=")[^"]*/, `$1${esc(desc)}`)
-    .replace(/(<meta property="og:title" content=")[^"]*/, `$1${esc(title)}`)
-    .replace(/(<meta property="og:description" content=")[^"]*/, `$1${esc(desc)}`)
-    .replace('<meta property="og:type"', `<link rel="canonical" href="${SITE}${path}" />${extra}\n    <meta property="og:type"`)
+    // Function replacers only: a replacement string reads "$1.7B" in a description as the $1 backreference.
+    .replace(/<title>.*?<\/title>/, () => `<title>${esc(title)}</title>`)
+    .replace(/(<meta name="description" content=")[^"]*/, (_, p) => p + esc(desc))
+    .replace(/(<meta property="og:title" content=")[^"]*/, (_, p) => p + esc(title))
+    .replace(/(<meta property="og:description" content=")[^"]*/, (_, p) => p + esc(desc))
+    .replace('<meta property="og:type"', () => `<link rel="canonical" href="${SITE}${path}" />${extra}\n    <meta property="og:type"`)
   const dir = join(dist, path)
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'index.html'), html)

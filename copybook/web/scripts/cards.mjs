@@ -112,12 +112,14 @@ for (let i = 0; i < recent.length; i += 16) {
     const desc = `${c.manager} filed a ${qLabel(c.quarter)} 13F on ${dLabel(c.filing_date)}: ${top.join(', ')}. Bought ${money(c.bought_usd)}, sold ${money(c.sold_usd)}, from the SEC filing.`
     const img = `${SITE}og/f/${c.accession}.png`
     const html = shell
-      .replace(/<title>.*?<\/title>/, `<title>${esc(title)}</title>`)
-      .replace(/(<meta name="description" content=")[^"]*/, `$1${esc(desc)}`)
-      .replace(/(<meta property="og:title" content=")[^"]*/, `$1${esc(title)}`)
-      .replace(/(<meta property="og:description" content=")[^"]*/, `$1${esc(desc)}`)
-      .replaceAll(`${SITE}og.png`, img)
-      .replace('<meta property="og:type"', `<link rel="canonical" href="${SITE}f/${c.accession}/" />\n    <meta name="twitter:title" content="${esc(title)}" />\n    <meta name="twitter:description" content="${esc(desc)}" />\n    <meta property="og:type"`)
+      // Function replacers only: descriptions hold dollar amounts like "$1.7B", which a replacement
+      // string would read as the $1 backreference.
+      .replace(/<title>.*?<\/title>/, () => `<title>${esc(title)}</title>`)
+      .replace(/(<meta name="description" content=")[^"]*/, (_, p) => p + esc(desc))
+      .replace(/(<meta property="og:title" content=")[^"]*/, (_, p) => p + esc(title))
+      .replace(/(<meta property="og:description" content=")[^"]*/, (_, p) => p + esc(desc))
+      .replaceAll(`${SITE}og.png`, () => img)
+      .replace('<meta property="og:type"', () => `<link rel="canonical" href="${SITE}f/${c.accession}/" />\n    <meta name="twitter:title" content="${esc(title)}" />\n    <meta name="twitter:description" content="${esc(desc)}" />\n    <meta property="og:type"`)
     mkdirSync(join(out, 'f', c.accession), { recursive: true })
     writeFileSync(join(out, 'f', c.accession, 'index.html'), html)
     list.push({ accession: c.accession, slug: c.slug, quarter: c.quarter, filing_date: c.filing_date })
