@@ -30,7 +30,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'An email minutes after they file', d: `We check EDGAR every minute. Alerts, moves and history cover the ${curated} managers we track closely, and the list is growing.` },
       { t: 'The moves inside the email', d: 'New, added, trimmed and exited positions, with dollars and share of the book.' },
       { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
-      { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, within a few hours.' },
+      { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, usually within minutes: holdings per share class, % of the class before → after, threshold crossings and the 13D’s Item 4.' },
       { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and 8 quarters of history with CSV.' },
     ],
   },
@@ -256,11 +256,11 @@ export function Pricing() {
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [
                 'How fast are filing alerts?',
-                'We poll EDGAR’s latest-filings feed every minute, so a 13F alert usually arrives within a couple of minutes of the filing appearing there. For the very largest books, the first email is just as fast and the moves follow in a second email after our next data refresh, usually within a few hours. Form 4 and 13D alerts arrive within a few hours of filing. Funds have 45 days after quarter end to file a 13F, so the positions in it are always a few weeks old.',
+                'We poll EDGAR’s latest-filings feed every minute, so a 13F alert usually arrives within a couple of minutes of the filing appearing there. For the very largest books, the first email is just as fast and the moves follow in a second email after our next data refresh, usually within a few hours. Form 4 and 13D/G alerts for the funds we track closely and the filers you follow usually arrive within minutes of filing. Funds have 45 days after quarter end to file a 13F, so the positions in it are always a few weeks old.',
               ],
               [
                 'What’s in an alert?',
-                'The fund, the quarter and a link to the filing, then its top five new, added, trimmed and exited positions with dollars and share of the book. Moves in stocks you own or watch are tagged. Schedule 13G filings are optional, and you can choose one daily digest after EDGAR closes instead of an email per filing.',
+                'The fund, the quarter and a link to the filing, then its top five new, added, trimmed and exited positions with dollars and share of the book. Moves in stocks you own or watch are tagged. Form 4 and 13D/G emails show the holding per share class, the amendment number, % of the class before → after with whether it moved by buying, selling or dilution, any 5% or 10% threshold crossed, and the 13D’s Item 4 purpose. Schedule 13G filings are optional, and you can choose one daily digest after EDGAR closes instead of an email per filing.',
               ],
               [
                 'Where does the data come from?',

@@ -25,7 +25,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
       <ul>
         <li>New 13F filings: the alert service checks EDGAR’s latest-filings feed every minute.</li>
         <li>Holdings data: rebuilt every 3 hours. GitHub’s scheduler can delay or occasionally skip a run.</li>
-        <li>Form 4 and Schedule 13D/G: picked up with each refresh, and alerted hourly.</li>
+        <li>Form 4 and Schedule 13D/G: alerts for the funds we track closely and the filers you follow usually go out within minutes of filing; pages pick them up with each refresh.</li>
       </ul>
     ),
   },

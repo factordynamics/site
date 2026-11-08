@@ -83,7 +83,7 @@ export function ManagerPage() {
         </div>
         {f && (
           <div className="flex flex-wrap gap-2">
-            {!f.filer && <FollowButton kind="investor" id={f.slug} name={f.manager} />}
+            <FollowButton kind="investor" id={f.slug} name={f.manager} />
             <Button href={f.sec_url} variant="outline" size="sm">
               View filing on SEC
             </Button>
@@ -336,11 +336,11 @@ function FilerPanel({ f }: { f: ManagerFile }) {
         ))}
       </dl>
       <div className="mt-5 rounded-xl bg-accent-soft px-4 py-3.5 text-[13.5px] leading-relaxed text-accent-2">
-        <p className="font-medium">Tracking a fund over time?</p>
+        <p className="font-medium">Get an email when this filer files</p>
         <p className="mt-0.5 opacity-90">
-          Quarter-over-quarter buys and sells, 8 quarters of history and filing alerts cover the investors we follow closely.{' '}
-          <Link to="/investors/" className="font-medium underline underline-offset-2">
-            See them
+          Follow it with Copy and its next 13F lands in your inbox minutes after EDGAR accepts it, with the top holdings. Buys and sells show here once we have two quarters of its filings on file.{' '}
+          <Link to="/pricing/" className="font-medium underline underline-offset-2">
+            See Copy
           </Link>
         </p>
       </div>

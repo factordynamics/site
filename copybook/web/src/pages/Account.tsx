@@ -1,4 +1,4 @@
-import { loadIndex, useAsync, useTitle } from '../lib/data'
+import { loadFilers, loadIndex, useAsync, useTitle } from '../lib/data'
 import { Link } from 'react-router-dom'
 import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
@@ -69,7 +69,11 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
   const trial = member.status === 'trialing'
   const alertMode = member.alerts === 'off' ? 'off' : Array.isArray(member.alerts) ? 'follows' : 'all'
   const idx = useAsync(loadIndex, [])
-  const names = new Map((idx.data?.managers ?? []).map((m) => [m.slug, m.manager]))
+  // Any 13F filer can be followed; names outside the curated set come from filers.json, loaded only when needed.
+  const curatedNames = new Map((idx.data?.managers ?? []).map((m) => [m.slug, m.manager]))
+  const needFilers = Boolean(idx.data) && follows.investors.some((s) => !curatedNames.has(s))
+  const filerNames = useAsync(() => (needFilers ? loadFilers() : Promise.resolve([])), [needFilers])
+  const names = new Map([...(filerNames.data ?? []).map((f) => [f.slug, f.name] as const), ...curatedNames])
   const onboard = member.active && status === 'ready' && (!follows.onboarded || editing)
   return (
     <>
@@ -133,7 +137,7 @@ function SignedIn({ member, welcome, onOut, onChange }: { member: Member; welcom
         </section>
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[15px] font-semibold">Filing alerts</h2>
-          <p className="mt-1 text-[14px] text-ink-2">An email with the moves inside, usually within a couple of minutes of a new 13F on EDGAR. Form 4 and 13D filings by funds you follow arrive within a few hours.</p>
+          <p className="mt-1 text-[14px] text-ink-2">An email with the moves inside, usually within a couple of minutes of a new 13F on EDGAR. Form 4 and 13D filings by funds you follow usually arrive within minutes.</p>
           <fieldset className="mt-4 space-y-2.5 text-[14px]">
             <legend className="sr-only">Send alerts for</legend>
             {(

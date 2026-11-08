@@ -99,7 +99,7 @@ export function Onboarding({ onDone }: { onDone?: (member?: Member) => void }) {
 
       <div className="mt-8 flex flex-wrap items-center gap-3">
         <Button onClick={() => finish()} disabled={busy}>
-          {busy ? 'Saving…' : `Save${investors.length || owned.length ? ` · ${investors.length} investors, ${owned.length} stocks` : ''}`}
+          {busy ? 'Saving…' : `Save${investors.length || owned.length ? ` · ${investors.length} ${investors.length === 1 ? 'investor' : 'investors'}, ${owned.length} ${owned.length === 1 ? 'stock' : 'stocks'}` : ''}`}
         </Button>
         <Button variant="ghost" onClick={() => finish(true)} disabled={busy}>
           Skip for now
