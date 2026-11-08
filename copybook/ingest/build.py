@@ -87,7 +87,8 @@ def cached_quarters() -> dict[str, dict]:
         except ValueError:
             continue
         if q.get("accession") and not q.get("truncated"):
-            for k in ("slug", "manager", "cik"):
+            # Drop what write_history derives (prior-quarter fields, exits): a cached quarter is the filing only.
+            for k in ("slug", "manager", "cik", "prev_quarter", "prev_combined_with", "exited"):
                 q.pop(k, None)
             out[q.get("filing_key") or q["accession"]] = q
     return out
@@ -739,10 +740,12 @@ def write_json(payload: dict) -> None:
     for m in payload["managers"]:
         if not m.get("ok"):
             continue
+        # Index rows are fund metadata only: no per-position arrays (paid data, and the Worker parses this file).
         entry = {
             k: v
             for k, v in m.items()
-            if k not in {"holdings", "history"}
+            if k not in {"holdings", "history", "exited", "top_holdings", "moves", "filings"}
+            and not (isinstance(v, list) and v and isinstance(v[0], dict) and "cusip" in v[0])
         }
         if m.get("ok"):
             entry["top"] = m["holdings"][:8]
@@ -759,7 +762,7 @@ def write_json(payload: dict) -> None:
                 "managers": slim_managers,
                 "copycat_top": payload["copycat"]["holdings"][:20],
             },
-            indent=2,
+            separators=(",", ":"),
         )
         + "\n"
     )
