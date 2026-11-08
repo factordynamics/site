@@ -11,6 +11,8 @@ export type StockHolder = {
   quarter: string
   filing_date?: string
   featured: boolean
+  /** Position's rank in the fund's share book, 1 = largest (null for exits). */
+  rank?: number | null
   shares: number
   value: number
   weight: number

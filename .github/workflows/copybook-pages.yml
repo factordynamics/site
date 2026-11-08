@@ -2,7 +2,10 @@ name: Copybook Pages
 
 # Builds copybook/web for https://copybook.factordynamics.com/ and deploys it with GitHub Pages.
 # Data stays in refcell/gust (refreshed by its copybook-data.yml) and is read cross-origin.
-# The schedule rebuilds the sitemap and per-investor pages after each data refresh.
+# The schedule rebuilds the sitemap and per-investor pages after each data refresh. In the November
+# filing wave it also runs 7 minutes after each curated refresh (refcell/gust copybook-data.yml runs
+# at :08/:28/:48) so a new 13F gets its filing card within about half an hour, and skips the build when
+# the published data hasn't changed since the live deploy.
 on:
   push:
     branches: [main]
@@ -11,6 +14,7 @@ on:
       - ".github/workflows/copybook-pages.yml"
   schedule:
     - cron: "40 */3 * * *"
+    - cron: "15,35,55 * 9-17 11 *"
   workflow_dispatch:
 
 permissions:
@@ -28,7 +32,23 @@ env:
   VITE_DATA_BASE: https://refcell.github.io/gust/copybook/data/
 
 jobs:
+  # Filing-wave runs only: compare the data's generated_at with the one the live site was built from.
+  fresh:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.cmp.outputs.skip }}
+    steps:
+      - id: cmp
+        run: |
+          if [ "${{ github.event.schedule }}" != "15,35,55 * 9-17 11 *" ]; then exit 0; fi
+          data=$(curl -fsS "${VITE_DATA_BASE}index.json?t=$(date +%s)" | jq -r .generated_at || true)
+          live=$(curl -fsS "${VITE_SITE}d/coverage.json?t=$(date +%s)" | jq -r .generated_at || true)
+          echo "data ${data}, live ${live}"
+          if [ -n "$data" ] && [ "$data" = "$live" ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+
   build:
+    needs: fresh
+    if: needs.fresh.outputs.skip != 'true'
     runs-on: ubuntu-latest
     outputs:
       pages: ${{ steps.pages.outputs.enabled }}
