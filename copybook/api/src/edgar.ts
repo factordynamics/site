@@ -198,3 +198,62 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     changed: rows,
   };
 }
+
+/** Filing-level point-in-time facts from EDGAR, for one accession. Immutable once filed. */
+export interface FilingMeta {
+  accession: string;
+  form: string;
+  filed_on: string; // EDGAR filing date, YYYY-MM-DD (ET)
+  accepted_at: string; // EDGAR acceptance datetime, ISO 8601 UTC
+  amendment_type: 'NEW HOLDINGS' | 'RESTATEMENT' | null;
+  amendment_no: number | null;
+  /** True when the amendment discloses holdings whose confidential treatment was denied or expired. */
+  confidential_treatment_expired: boolean | null;
+}
+
+/** EDGAR timestamps are US Eastern wall time: DST from the 2nd Sunday of March to the 1st Sunday of November, at 02:00. */
+export function easternToUtc(stamp: string): string {
+  const [y, mo, d, h, mi, s] = [stamp.slice(0, 4), stamp.slice(4, 6), stamp.slice(6, 8), stamp.slice(8, 10), stamp.slice(10, 12), stamp.slice(12, 14)].map(Number);
+  const sunday = (month: number, nth: number) => {
+    const first = new Date(Date.UTC(y, month, 1)).getUTCDay();
+    return 1 + ((7 - first) % 7) + (nth - 1) * 7;
+  };
+  const local = Date.UTC(y, mo - 1, d, h, mi, s);
+  const dstStart = Date.UTC(y, 2, sunday(2, 2), 2);
+  const dstEnd = Date.UTC(y, 10, sunday(10, 1), 2);
+  const offsetHours = local >= dstStart && local < dstEnd ? 4 : 5;
+  return new Date(local + offsetHours * 3600_000).toISOString();
+}
+
+/** Parses EDGAR's -index-headers.html and, for amendments, primary_doc.xml. */
+export function parseFilingMeta(accession: string, headers: string, primary: string | null): FilingMeta | null {
+  const h = (k: string) => headers.match(new RegExp(`<${k}>([^<\\s]+)`))?.[1] ?? null;
+  const acc = h('ACCEPTANCE-DATETIME');
+  const fd = h('FILING-DATE');
+  const form = headers.match(/<TYPE>([^<\n]+)/)?.[1]?.trim();
+  if (!acc || !fd || !form) return null;
+  const p = (k: string) => (primary ? tag(primary, k) : '');
+  const type = p('amendmentType').toUpperCase();
+  return {
+    accession,
+    form,
+    filed_on: `${fd.slice(0, 4)}-${fd.slice(4, 6)}-${fd.slice(6, 8)}`,
+    accepted_at: easternToUtc(acc),
+    amendment_type: type === 'NEW HOLDINGS' || type === 'RESTATEMENT' ? type : null,
+    amendment_no: p('amendmentNo') ? Number(p('amendmentNo')) : null,
+    confidential_treatment_expired: primary && form.endsWith('/A') ? p('confDeniedExpired') === 'true' : null,
+  };
+}
+
+export async function fetchFilingMeta(cik: string, accession: string): Promise<FilingMeta | null> {
+  const base = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replace(/-/g, '')}/`;
+  const res = await sec(`${base}${accession}-index-headers.html`);
+  if (!res.ok) return null;
+  const headers = await res.text();
+  let primary: string | null = null;
+  if (/<TYPE>[^<\n]*\/A/.test(headers)) {
+    const r = await sec(`${base}primary_doc.xml`);
+    primary = r.ok ? await r.text() : null;
+  }
+  return parseFilingMeta(accession, headers, primary);
+}

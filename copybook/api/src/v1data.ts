@@ -1,4 +1,5 @@
 import type { Env } from './env';
+import { fetchFilingMeta, type FilingMeta } from './edgar';
 import { ROUTES, v1error, v1json } from './v1';
 
 /**
@@ -45,11 +46,11 @@ function position(h: any) {
     cusip: h.cusip,
     ticker: h.ticker ?? null,
     issuer: h.issuer,
-    name: h.display_name ?? null,
     title_of_class: h.title ?? null,
     put_call: h.put_call ?? null,
     sector: h.sector ?? null,
     shares: h.shares,
+    shares_type: h.shares_type ?? h.sh_prn ?? null,
     value_usd: h.value,
     weight: h.weight,
     change: h.change ?? null,
@@ -62,9 +63,22 @@ function position(h: any) {
   };
 }
 
+/** Acceptance time and amendment type per accession, from EDGAR once, then KV (filings never change). */
+async function filingMeta(env: Env, cik: string, accession: string): Promise<FilingMeta | null> {
+  const key = `filing:${accession}`;
+  const cached = await env.DB.get(key);
+  if (cached) return JSON.parse(cached) as FilingMeta;
+  const m = await fetchFilingMeta(cik, accession);
+  if (m) await env.DB.put(key, JSON.stringify(m));
+  return m;
+}
+
+const cikOf = (secUrl: string | undefined, fallback: string) => secUrl?.match(/\/edgar\/data\/(\d+)\//)?.[1] ?? fallback;
+
 ROUTES.push(
   ['GET', /^\/v1\/filers$/, async ({ env }) => {
-    const data = await filers(env);
+    // `type` is omitted until the data run classifies filers.
+    const data = (await filers(env)).map(({ type, ...f }) => (type ? { ...f, type } : f));
     return v1json({ data, count: data.length });
   }],
   ['GET', /^\/v1\/filers\/([^/]+)\/holdings\/([^/]+)$/, async ({ env, url }, [id, quarter]) => {
@@ -78,12 +92,33 @@ ROUTES.push(
     if (!obj) return v1error('not_found', 404, `No ${quarter} 13F for ${f.slug}; see history_quarters in /v1/filers.`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const q: any = await new Response(obj.body).json();
+    const cik = cikOf(q.sec_url, f.cik);
+    const main = await filingMeta(env, cik, q.accession);
+    const amendments = [];
+    for (const a of (q.amendments ?? []) as string[]) {
+      const m = await filingMeta(env, cik, a);
+      amendments.push({
+        accession: a,
+        filed_on: m?.filed_on ?? null,
+        accepted_at: m?.accepted_at ?? null,
+        amendment_type: m?.amendment_type ?? null,
+        amendment_no: m?.amendment_no ?? null,
+        confidential_treatment_expired: m?.confidential_treatment_expired ?? null,
+      });
+    }
     return v1json({
       data: {
         filer: { slug: f.slug, cik: f.cik, name: f.name, manager: f.manager },
         quarter: q.quarter,
         report_date: q.report_date,
-        filing: { accession: q.accession, form: q.form, filing_date: q.filing_date, sec_url: q.sec_url, amendments: q.amendments ?? [] },
+        filing: {
+          accession: q.accession,
+          form: q.form,
+          filing_date: q.filing_date,
+          accepted_at: main?.accepted_at ?? null,
+          sec_url: q.sec_url,
+          amendments: amendments.sort((a, b) => (a.accepted_at ?? '').localeCompare(b.accepted_at ?? '')),
+        },
         prev_quarter: q.prev_quarter ?? null,
         total_value_usd: q.total_value,
         position_count: q.position_count ?? (q.holdings ?? []).length,

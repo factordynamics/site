@@ -664,6 +664,11 @@ describe('copybook api', () => {
       holdings: [{ cusip: '670346105', ticker: 'NUE', issuer: 'NUCOR CORP', display_name: 'Nucor', title: 'COM', put_call: null, sector: 'Materials', shares: 10, value: 1000, weight: 1, change: 'new', prev_shares: 0, share_change: 10, value_delta: 1000, pct_of_book: 1 }],
       exited: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', title: 'COM', put_call: null, shares: 0, value: 0, weight: 0, change: 'exited', prev_shares: 5, share_change: -5, value_delta: -500 }],
     })));
+    // EDGAR index headers (acceptance in ET) and the amendment's cover page.
+    const dir = (a: string) => `Archives/edgar/data/1067983/${a.replace(/-/g, '')}/`;
+    secFiles[`${dir('0000950123-25-005701')}0000950123-25-005701-index-headers.html`] = '<ACCEPTANCE-DATETIME>20250515160512\n<TYPE>13F-HR\n<FILING-DATE>20250515\n';
+    secFiles[`${dir('0000950123-25-008361')}0000950123-25-008361-index-headers.html`] = '<ACCEPTANCE-DATETIME>20250814161002\n<TYPE>13F-HR/A\n<FILING-DATE>20250814\n';
+    secFiles[`${dir('0000950123-25-008361')}primary_doc.xml`] = '<isAmendment>true</isAmendment><amendmentNo>1</amendmentNo><amendmentType>NEW HOLDINGS</amendmentType><confDeniedExpired>true</confDeniedExpired>';
     stripeObjects['checkout/sessions/cs_test_v'] = { id: 'cs_test_v', status: 'complete', created: now(), subscription: 'sub_v', customer_details: { email: 'v@example.com' } };
     stripeObjects['subscriptions/sub_v'] = sub('sub_v', 'cus_v', 'active', 'month', 'pro_monthly');
     const t = (await (await call('/session', { body: { checkout_session: 'cs_test_v' } })).json()).token;
@@ -683,8 +688,15 @@ describe('copybook api', () => {
     expect(bySlug.status).toBe(200);
     expect(byCik.body).toEqual(bySlug.body);
     const d = bySlug.body.data;
-    expect(d.filing.amendments).toEqual(['0000950123-25-008361']);
-    expect(d.holdings[0]).toMatchObject({ ticker: 'NUE', value_usd: 1000, weight: 1, change: 'new', value_delta_usd: 1000, source_accession: null, first_disclosed_at: null });
+    // Both are EDT (UTC-4): 16:05:12 and 16:10:02 ET.
+    expect(d.filing.accepted_at).toBe('2025-05-15T20:05:12.000Z');
+    expect(d.filing.amendments).toEqual([{ accession: '0000950123-25-008361', filed_on: '2025-08-14', accepted_at: '2025-08-14T20:10:02.000Z', amendment_type: 'NEW HOLDINGS', amendment_no: 1, confidential_treatment_expired: true }]);
+    for (const k of spec.components.schemas.Holdings.properties.filing.required) expect(d.filing).toHaveProperty(k);
+    expect(fl.body.data[0]).not.toHaveProperty('type'); // omitted until classified
+    // Cached after the first read: EDGAR is not asked again.
+    delete secFiles[`${dir('0000950123-25-008361')}0000950123-25-008361-index-headers.html`];
+    expect((await v1('/v1/filers/warren-buffett/holdings/2025Q1')).body.data.filing.amendments[0].amendment_type).toBe('NEW HOLDINGS');
+    expect(d.holdings[0]).toMatchObject({ ticker: 'NUE', issuer: 'NUCOR CORP', shares_type: null, value_usd: 1000, weight: 1, change: 'new', value_delta_usd: 1000, source_accession: null, first_disclosed_at: null });
     expect(d.exited[0]).toMatchObject({ ticker: 'AAPL', shares: 0, value_delta_usd: -500 });
     for (const k of spec.components.schemas.Holdings.required) expect(d).toHaveProperty(k);
     for (const row of [...d.holdings, ...d.exited]) {
@@ -697,5 +709,14 @@ describe('copybook api', () => {
     expect((await v1('/v1/filers/warren-buffett/holdings/Q1')).body.error.code).toBe('bad_request');
     expect((await v1('/v1/filers/nobody/holdings/2025Q1')).status).toBe(404);
     for (const p of ['/v1/me', '/v1/filers', '/v1/filers/{filer}/holdings/{quarter}']) expect(spec.paths[p].get.responses['200'].content).toBeDefined();
+  });
+
+  it('EDGAR Eastern timestamps convert to UTC on both sides of the DST switches', async () => {
+    const { easternToUtc } = await import('../src/edgar');
+    expect(easternToUtc('20260106120000')).toBe('2026-01-06T17:00:00.000Z'); // EST
+    expect(easternToUtc('20260308015959')).toBe('2026-03-08T06:59:59.000Z'); // just before DST starts
+    expect(easternToUtc('20260308030000')).toBe('2026-03-08T07:00:00.000Z'); // just after
+    expect(easternToUtc('20261031235900')).toBe('2026-11-01T03:59:00.000Z'); // EDT
+    expect(easternToUtc('20261102000000')).toBe('2026-11-02T05:00:00.000Z'); // EST again
   });
 });
