@@ -1,0 +1,87 @@
+# Holdterm's universe screen: every 13F-HR filer in SEC's quarterly Form 13F data sets
+# (https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets), filtered by the rule below.
+# Nobody is hand-picked; the only manual input is the type exclusion list in roster-exclusions.json.
+# Usage: python3 -I scripts/screen.py DIR_Q DIR_PRIOR_Q DIR_TWO_YEARS_AGO PERIOD PRIOR_PERIOD OLD_PERIOD > scripts/universe.json
+#   e.g. 01jun2026-31aug2026 01mar2026-31may2026 01jun2024-31aug2024 30-JUN-2026 31-MAR-2026 30-JUN-2024
+import collections, csv, json, os, re, sys
+
+csv.field_size_limit(10**9)
+RULE = dict(min_value=1e9, min_positions=5, max_positions=100, min_top10=0.5, max_top1=0.6, max_etf=0.1, max_turnover=0.25, min_years=2)
+# A filer whose 13F moved to a new entity: the new CIK inherits the old one's history, and in a quarter
+# where both filed, their books are summed.
+PRED = {'0002026053': '0001336528'}  # Pershing Square Inc. <- Pershing Square Capital Management
+ETF = re.compile(r'\b(ETF|ISHARES|SPDR|VANGUARD|INVESCO QQQ|SELECT SECTOR|PROSHARES|DIREXION|WISDOMTREE|INDEX|TR UNIT)\b', re.I)
+TYPE = re.compile(r'\b(bank|banco|bancorp|securities|insurance|assurance|life|pension|retirement|teachers|university|regents|college|endowment|foundation|trust co|trust company|national association|sovereign|investment board|wealth|family office|capital markets)\b', re.I)
+HERE = os.path.dirname(os.path.abspath(__file__))
+EXCLUDED = json.load(open(os.path.join(HERE, 'roster-exclusions.json')))
+dq, dp, do, pq, pp, po = sys.argv[1:7]
+
+
+def rows(d, f):
+    with open(os.path.join(d, f), newline='', errors='ignore') as fh:
+        yield from csv.DictReader(fh, delimiter='\t')
+
+
+def filers(d, period):
+    out = collections.defaultdict(list)
+    for r in rows(d, 'SUBMISSION.tsv'):
+        if r['SUBMISSIONTYPE'] == '13F-HR' and r['PERIODOFREPORT'] == period:
+            out[r['CIK']].append(r['ACCESSION_NUMBER'])
+    return out
+
+
+def books(d, accs):
+    a2c = {a: c for c, al in accs.items() for a in al}
+    b = collections.defaultdict(lambda: collections.defaultdict(lambda: [0.0, 0.0, '']))
+    for r in rows(d, 'INFOTABLE.tsv'):
+        c = a2c.get(r['ACCESSION_NUMBER'])
+        if not c or r.get('PUTCALL') or r.get('SSHPRNAMTTYPE') == 'PRN':
+            continue
+        try:
+            v, s = float(r['VALUE'] or 0), float(r['SSHPRNAMT'] or 0)
+        except ValueError:
+            continue
+        h = b[c][r['CUSIP'][:9]]
+        h[0] += v; h[1] += s; h[2] = r['NAMEOFISSUER'] + ' ' + r['TITLEOFCLASS']
+    return b
+
+
+q, p, o = filers(dq, pq), filers(dp, pp), filers(do, po)
+names = {r['ACCESSION_NUMBER']: r['FILINGMANAGER_NAME'].strip() for r in rows(dq, 'COVERPAGE.tsv')}
+B, P = books(dq, q), books(dp, p)
+med = lambda xs: sorted(xs)[len(xs) // 2]
+px = collections.defaultdict(list)
+for bk in B.values():
+    for k, h in bk.items():
+        if h[1] > 0: px[k].append(h[0] / h[1])
+price = {k: med(v) for k, v in px.items()}
+for bb in (B, P):  # some filers still report values in thousands
+    for bk in bb.values():
+        r = [(h[0] / h[1]) / price[k] for k, h in bk.items() if h[1] > 0 and price.get(k)]
+        if r and med(r) < 0.01:
+            for h in bk.values(): h[0] *= 1000
+for new, old in PRED.items():
+    if old in o: o[new] = o[old]
+    if old in p:
+        p.setdefault(new, [])
+        for k, h in P[old].items():
+            x = P[new][k]; x[0] += h[0]; x[1] += h[1]; x[2] = h[2]
+
+out = []
+for c, bk in B.items():
+    live = {k: h for k, h in bk.items() if h[0] > 0}
+    tot = sum(h[0] for h in live.values())
+    if c not in o or c not in p or tot < RULE['min_value'] or not RULE['min_positions'] <= len(live) <= RULE['max_positions']:
+        continue
+    name = names.get(q[c][-1], '')
+    w = sorted((h[0] / tot for h in live.values()), reverse=True)
+    etf = sum(h[0] for h in live.values() if ETF.search(h[2])) / tot
+    traded = sum(abs(live.get(k, [0, 0])[1] - P[c].get(k, [0, 0])[1]) * (price.get(k) or 0) for k in set(live) | set(P[c]))
+    row = dict(cik=c, name=name, value=round(tot), positions=len(live), top10=round(sum(w[:10]), 4), top1=round(w[0], 4), etf=round(etf, 4), turnover=round(traded / 2 / tot, 4))
+    fails = [k for k, bad in [('top10', row['top10'] < RULE['min_top10']), ('top1', row['top1'] > RULE['max_top1']), ('etf', etf > RULE['max_etf']), ('turnover', row['turnover'] > RULE['max_turnover']), ('type', bool(TYPE.search(name)) or c in EXCLUDED)] if bad]
+    if c in EXCLUDED: row['excluded'] = EXCLUDED[c]
+    row['fails'] = fails
+    out.append(row)
+out.sort(key=lambda r: -r['value'])
+json.dump(dict(period=pq, source='SEC Form 13F data sets', rule=RULE, screened=len(out), funds=[r for r in out if not r['fails']], near_misses=[r for r in out if len(r['fails']) == 1 and r['fails'] != ['type']]), sys.stdout, indent=1)
+print()

@@ -1,0 +1,5055 @@
+{
+ "period": "30-JUN-2026",
+ "source": "SEC Form 13F data sets",
+ "rule": {
+  "min_value": 1000000000.0,
+  "min_positions": 5,
+  "max_positions": 100,
+  "min_top10": 0.5,
+  "max_top1": 0.6,
+  "max_etf": 0.1,
+  "max_turnover": 0.25,
+  "min_years": 2
+ },
+ "screened": 599,
+ "funds": [
+  {
+   "cik": "0001067983",
+   "name": "Berkshire Hathaway Inc",
+   "value": 299253556246,
+   "positions": 29,
+   "top10": 0.8847,
+   "top1": 0.2204,
+   "etf": 0.0,
+   "turnover": 0.0388,
+   "fails": []
+  },
+  {
+   "cik": "0001508097",
+   "name": "Sanders Capital, LLC",
+   "value": 99830442199,
+   "positions": 47,
+   "top10": 0.6017,
+   "top1": 0.1251,
+   "etf": 0.0218,
+   "turnover": 0.1249,
+   "fails": []
+  },
+  {
+   "cik": "0001647251",
+   "name": "TCI FUND MANAGEMENT LTD",
+   "value": 52769884406,
+   "positions": 11,
+   "top10": 0.9863,
+   "top1": 0.3359,
+   "etf": 0.0,
+   "turnover": 0.0294,
+   "fails": []
+  },
+  {
+   "cik": "0001135730",
+   "name": "COATUE MANAGEMENT LLC",
+   "value": 48629053706,
+   "positions": 66,
+   "top10": 0.6186,
+   "top1": 0.0876,
+   "etf": 0.0,
+   "turnover": 0.1783,
+   "fails": []
+  },
+  {
+   "cik": "0000945631",
+   "name": "EAGLE CAPITAL MANAGEMENT LLC",
+   "value": 32747808496,
+   "positions": 56,
+   "top10": 0.5865,
+   "top1": 0.0828,
+   "etf": 0.0019,
+   "turnover": 0.173,
+   "fails": []
+  },
+  {
+   "cik": "0001167483",
+   "name": "TIGER GLOBAL MANAGEMENT LLC",
+   "value": 23981506027,
+   "positions": 46,
+   "top10": 0.6706,
+   "top1": 0.0972,
+   "etf": 0.0,
+   "turnover": 0.1776,
+   "fails": []
+  },
+  {
+   "cik": "0002026053",
+   "name": "PERSHING SQUARE INC.",
+   "value": 19465692772,
+   "positions": 14,
+   "top10": 0.9357,
+   "top1": 0.1272,
+   "etf": 0.0,
+   "turnover": 0.1621,
+   "fails": []
+  },
+  {
+   "cik": "0001759760",
+   "name": "H&H International Investment, LLC",
+   "value": 19100584155,
+   "positions": 18,
+   "top10": 0.9884,
+   "top1": 0.4105,
+   "etf": 0.0,
+   "turnover": 0.09,
+   "fails": []
+  },
+  {
+   "cik": "0001908450",
+   "name": "Newlands Management Operations LLC",
+   "value": 16567453751,
+   "positions": 16,
+   "top10": 0.992,
+   "top1": 0.3286,
+   "etf": 0.0,
+   "turnover": 0.0112,
+   "fails": []
+  },
+  {
+   "cik": "0001904893",
+   "name": "PineStone Asset Management Inc.",
+   "value": 16190525118,
+   "positions": 44,
+   "top10": 0.6314,
+   "top1": 0.1463,
+   "etf": 0.0,
+   "turnover": 0.0936,
+   "fails": []
+  },
+  {
+   "cik": "0001483866",
+   "name": "Independent Franchise Partners LLP",
+   "value": 15242398239,
+   "positions": 26,
+   "top10": 0.6371,
+   "top1": 0.0824,
+   "etf": 0.0,
+   "turnover": 0.0539,
+   "fails": []
+  },
+  {
+   "cik": "0001791786",
+   "name": "Elliott Investment Management L.P.",
+   "value": 14292858303,
+   "positions": 17,
+   "top10": 0.9557,
+   "top1": 0.2794,
+   "etf": 0.0,
+   "turnover": 0.0713,
+   "fails": []
+  },
+  {
+   "cik": "0001517857",
+   "name": "Soroban Capital Partners LP",
+   "value": 14155407971,
+   "positions": 23,
+   "top10": 0.7485,
+   "top1": 0.1197,
+   "etf": 0.0,
+   "turnover": 0.089,
+   "fails": []
+  },
+  {
+   "cik": "0001481669",
+   "name": "EdgePoint Investment Group Inc.",
+   "value": 13234611131,
+   "positions": 39,
+   "top10": 0.6784,
+   "top1": 0.094,
+   "etf": 0.0,
+   "turnover": 0.1438,
+   "fails": []
+  },
+  {
+   "cik": "0001387322",
+   "name": "Whale Rock Capital Management LLC",
+   "value": 12456319060,
+   "positions": 35,
+   "top10": 0.5927,
+   "top1": 0.1089,
+   "etf": 0.0,
+   "turnover": 0.2336,
+   "fails": []
+  },
+  {
+   "cik": "0001503174",
+   "name": "SRS Investment Management, LLC",
+   "value": 10681555928,
+   "positions": 32,
+   "top10": 0.7346,
+   "top1": 0.2412,
+   "etf": 0.0,
+   "turnover": 0.1188,
+   "fails": []
+  },
+  {
+   "cik": "0000928196",
+   "name": "Harding Loevner LP",
+   "value": 10635583518,
+   "positions": 82,
+   "top10": 0.5187,
+   "top1": 0.1268,
+   "etf": 0.0027,
+   "turnover": 0.1688,
+   "fails": []
+  },
+  {
+   "cik": "0001375534",
+   "name": "GENERATION INVESTMENT MANAGEMENT LLP",
+   "value": 10289660825,
+   "positions": 28,
+   "top10": 0.7444,
+   "top1": 0.1252,
+   "etf": 0.0,
+   "turnover": 0.1042,
+   "fails": []
+  },
+  {
+   "cik": "0001798849",
+   "name": "Durable Capital Partners LP",
+   "value": 10282381271,
+   "positions": 36,
+   "top10": 0.5908,
+   "top1": 0.107,
+   "etf": 0.0,
+   "turnover": 0.2423,
+   "fails": []
+  },
+  {
+   "cik": "0001290668",
+   "name": "Sustainable Growth Advisers, LP",
+   "value": 10190707647,
+   "positions": 47,
+   "top10": 0.5402,
+   "top1": 0.0927,
+   "etf": 0.0,
+   "turnover": 0.1529,
+   "fails": []
+  },
+  {
+   "cik": "0001599383",
+   "name": "WINDACRE PARTNERSHIP LLC",
+   "value": 10114756543,
+   "positions": 11,
+   "top10": 0.9468,
+   "top1": 0.2887,
+   "etf": 0.0,
+   "turnover": 0.1065,
+   "fails": []
+  },
+  {
+   "cik": "0001541617",
+   "name": "Altimeter Capital Management, LP",
+   "value": 9829676383,
+   "positions": 20,
+   "top10": 0.8328,
+   "top1": 0.1916,
+   "etf": 0.0,
+   "turnover": 0.2024,
+   "fails": []
+  },
+  {
+   "cik": "0000860643",
+   "name": "GARDNER RUSSO & QUINN LLC",
+   "value": 8925889600,
+   "positions": 85,
+   "top10": 0.7998,
+   "top1": 0.1207,
+   "etf": 0.0,
+   "turnover": 0.0273,
+   "fails": []
+  },
+  {
+   "cik": "0000846222",
+   "name": "GREENHAVEN ASSOCIATES INC",
+   "value": 8660705519,
+   "positions": 28,
+   "top10": 0.7912,
+   "top1": 0.1182,
+   "etf": 0.0058,
+   "turnover": 0.1173,
+   "fails": []
+  },
+  {
+   "cik": "0001510481",
+   "name": "Sarasin & Partners LLP",
+   "value": 8536628024,
+   "positions": 94,
+   "top10": 0.5419,
+   "top1": 0.0993,
+   "etf": 0.0113,
+   "turnover": 0.1008,
+   "fails": []
+  },
+  {
+   "cik": "0000921669",
+   "name": "ICAHN CARL C",
+   "value": 8264090525,
+   "positions": 12,
+   "top10": 0.9858,
+   "top1": 0.5395,
+   "etf": 0.0,
+   "turnover": 0.0411,
+   "fails": []
+  },
+  {
+   "cik": "0001377581",
+   "name": "First Pacific Advisors, LP",
+   "value": 7965350969,
+   "positions": 72,
+   "top10": 0.516,
+   "top1": 0.0797,
+   "etf": 0.0039,
+   "turnover": 0.087,
+   "fails": []
+  },
+  {
+   "cik": "0001542302",
+   "name": "LYRICAL ASSET MANAGEMENT LP",
+   "value": 7884153824,
+   "positions": 41,
+   "top10": 0.5155,
+   "top1": 0.0953,
+   "etf": 0.0,
+   "turnover": 0.0552,
+   "fails": []
+  },
+  {
+   "cik": "0001050464",
+   "name": "PECONIC PARTNERS LLC",
+   "value": 7522069334,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.4519,
+   "etf": 0.0,
+   "turnover": 0.0568,
+   "fails": []
+  },
+  {
+   "cik": "0001656456",
+   "name": "APPALOOSA LP",
+   "value": 7471257999,
+   "positions": 25,
+   "top10": 0.8161,
+   "top1": 0.1595,
+   "etf": 0.0655,
+   "turnover": 0.2427,
+   "fails": []
+  },
+  {
+   "cik": "0001720792",
+   "name": "Ruane, Cunniff & Goldfarb L.P.",
+   "value": 6427481573,
+   "positions": 54,
+   "top10": 0.6658,
+   "top1": 0.1109,
+   "etf": 0.0003,
+   "turnover": 0.0776,
+   "fails": []
+  },
+  {
+   "cik": "0001426092",
+   "name": "Longview Partners (Guernsey) LTD",
+   "value": 6157423346,
+   "positions": 23,
+   "top10": 0.5007,
+   "top1": 0.0603,
+   "etf": 0.0,
+   "turnover": 0.1907,
+   "fails": []
+  },
+  {
+   "cik": "0001214639",
+   "name": "DSM CAPITAL PARTNERS LLC",
+   "value": 5838436459,
+   "positions": 70,
+   "top10": 0.677,
+   "top1": 0.1612,
+   "etf": 0.0001,
+   "turnover": 0.1792,
+   "fails": []
+  },
+  {
+   "cik": "0001113000",
+   "name": "KENSICO CAPITAL MANAGEMENT CORP",
+   "value": 5831500201,
+   "positions": 25,
+   "top10": 0.8612,
+   "top1": 0.2812,
+   "etf": 0.0,
+   "turnover": 0.0625,
+   "fails": []
+  },
+  {
+   "cik": "0001595849",
+   "name": "Sessa Capital IM, L.P.",
+   "value": 5782340754,
+   "positions": 26,
+   "top10": 0.8665,
+   "top1": 0.2561,
+   "etf": 0.0,
+   "turnover": 0.1347,
+   "fails": []
+  },
+  {
+   "cik": "0001418814",
+   "name": "ValueAct Holdings, L.P.",
+   "value": 5634931372,
+   "positions": 18,
+   "top10": 0.8674,
+   "top1": 0.141,
+   "etf": 0.0,
+   "turnover": 0.1272,
+   "fails": []
+  },
+  {
+   "cik": "0001985479",
+   "name": "Linonia Partnership LP",
+   "value": 5598714938,
+   "positions": 12,
+   "top10": 0.9918,
+   "top1": 0.1679,
+   "etf": 0.0,
+   "turnover": 0.2101,
+   "fails": []
+  },
+  {
+   "cik": "0001541448",
+   "name": "Veritas Asset Management LLP",
+   "value": 5559377741,
+   "positions": 21,
+   "top10": 0.7726,
+   "top1": 0.0978,
+   "etf": 0.0,
+   "turnover": 0.2186,
+   "fails": []
+  },
+  {
+   "cik": "0001358706",
+   "name": "ABRAMS CAPITAL MANAGEMENT, L.P.",
+   "value": 5479746142,
+   "positions": 11,
+   "top10": 0.9996,
+   "top1": 0.4715,
+   "etf": 0.0,
+   "turnover": 0.0161,
+   "fails": []
+  },
+  {
+   "cik": "0001061768",
+   "name": "BAUPOST GROUP LLC/MA",
+   "value": 5415853000,
+   "positions": 23,
+   "top10": 0.749,
+   "top1": 0.1648,
+   "etf": 0.0,
+   "turnover": 0.1503,
+   "fails": []
+  },
+  {
+   "cik": "0000020286",
+   "name": "CINCINNATI FINANCIAL CORP",
+   "value": 5232201412,
+   "positions": 56,
+   "top10": 0.5449,
+   "top1": 0.1547,
+   "etf": 0.0,
+   "turnover": 0.0625,
+   "fails": []
+  },
+  {
+   "cik": "0001675884",
+   "name": "Skye Global Management LP",
+   "value": 5140840134,
+   "positions": 30,
+   "top10": 0.8498,
+   "top1": 0.4484,
+   "etf": 0.0,
+   "turnover": 0.0588,
+   "fails": []
+  },
+  {
+   "cik": "0001112520",
+   "name": "AKRE CAPITAL MANAGEMENT LLC",
+   "value": 5106870308,
+   "positions": 19,
+   "top10": 0.8785,
+   "top1": 0.2001,
+   "etf": 0.0,
+   "turnover": 0.1093,
+   "fails": []
+  },
+  {
+   "cik": "0001732811",
+   "name": "MFN Partners Management, LP",
+   "value": 4834204582,
+   "positions": 9,
+   "top10": 1.0,
+   "top1": 0.4191,
+   "etf": 0.0,
+   "turnover": 0.0487,
+   "fails": []
+  },
+  {
+   "cik": "0001505183",
+   "name": "Stockbridge Partners LLC",
+   "value": 4753238742,
+   "positions": 17,
+   "top10": 0.8629,
+   "top1": 0.2083,
+   "etf": 0.0,
+   "turnover": 0.1651,
+   "fails": []
+  },
+  {
+   "cik": "0001427008",
+   "name": "Smead Capital Management, Inc.",
+   "value": 4661978555,
+   "positions": 32,
+   "top10": 0.5419,
+   "top1": 0.0711,
+   "etf": 0.0003,
+   "turnover": 0.0731,
+   "fails": []
+  },
+  {
+   "cik": "0001732768",
+   "name": "Lingotto Investment Management LLP",
+   "value": 4646449358,
+   "positions": 31,
+   "top10": 0.8054,
+   "top1": 0.1473,
+   "etf": 0.0,
+   "turnover": 0.2326,
+   "fails": []
+  },
+  {
+   "cik": "0001553733",
+   "name": "Brave Warrior Advisors, LLC",
+   "value": 4588428223,
+   "positions": 40,
+   "top10": 0.7444,
+   "top1": 0.1194,
+   "etf": 0.0,
+   "turnover": 0.116,
+   "fails": []
+  },
+  {
+   "cik": "0001574947",
+   "name": "COMGEST GLOBAL INVESTORS S.A.S.",
+   "value": 4545431078,
+   "positions": 55,
+   "top10": 0.6483,
+   "top1": 0.1062,
+   "etf": 0.0,
+   "turnover": 0.1266,
+   "fails": []
+  },
+  {
+   "cik": "0001376879",
+   "name": "AKO CAPITAL LLP",
+   "value": 4292009000,
+   "positions": 22,
+   "top10": 0.7584,
+   "top1": 0.1519,
+   "etf": 0.0,
+   "turnover": 0.2057,
+   "fails": []
+  },
+  {
+   "cik": "0000914976",
+   "name": "MARSHFIELD ASSOCIATES",
+   "value": 4264844791,
+   "positions": 17,
+   "top10": 0.7969,
+   "top1": 0.1487,
+   "etf": 0.0,
+   "turnover": 0.1833,
+   "fails": []
+  },
+  {
+   "cik": "0001631014",
+   "name": "ALTAROCK PARTNERS LP",
+   "value": 4239761490,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.3221,
+   "etf": 0.0,
+   "turnover": 0.1357,
+   "fails": []
+  },
+  {
+   "cik": "0001345471",
+   "name": "TRIAN FUND MANAGEMENT, L.P.",
+   "value": 4230905202,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.3561,
+   "etf": 0.0,
+   "turnover": 0.0657,
+   "fails": []
+  },
+  {
+   "cik": "0001625244",
+   "name": "C WorldWide Group Holding A/S",
+   "value": 4146911000,
+   "positions": 97,
+   "top10": 0.6156,
+   "top1": 0.0899,
+   "etf": 0.0,
+   "turnover": 0.1714,
+   "fails": []
+  },
+  {
+   "cik": "0001349434",
+   "name": "LOCUST WOOD CAPITAL ADVISERS, LLC",
+   "value": 4131027013,
+   "positions": 31,
+   "top10": 0.5682,
+   "top1": 0.0816,
+   "etf": 0.0,
+   "turnover": 0.1464,
+   "fails": []
+  },
+  {
+   "cik": "0001106129",
+   "name": "JENSEN INVESTMENT MANAGEMENT INC",
+   "value": 4125081649,
+   "positions": 83,
+   "top10": 0.5509,
+   "top1": 0.0691,
+   "etf": 0.0036,
+   "turnover": 0.2457,
+   "fails": []
+  },
+  {
+   "cik": "0001051359",
+   "name": "PAR CAPITAL MANAGEMENT INC",
+   "value": 4030610106,
+   "positions": 45,
+   "top10": 0.8417,
+   "top1": 0.1808,
+   "etf": 0.0,
+   "turnover": 0.0878,
+   "fails": []
+  },
+  {
+   "cik": "0001945894",
+   "name": "Davis Asset Management, L.P.",
+   "value": 3948828268,
+   "positions": 85,
+   "top10": 0.5832,
+   "top1": 0.0939,
+   "etf": 0.0,
+   "turnover": 0.0281,
+   "fails": []
+  },
+  {
+   "cik": "0001837343",
+   "name": "Hill City Capital, LP",
+   "value": 3914727103,
+   "positions": 28,
+   "top10": 0.8085,
+   "top1": 0.229,
+   "etf": 0.0,
+   "turnover": 0.0513,
+   "fails": []
+  },
+  {
+   "cik": "0001489933",
+   "name": "DME Capital Management, LP",
+   "value": 3908853490,
+   "positions": 46,
+   "top10": 0.5284,
+   "top1": 0.1939,
+   "etf": 0.0079,
+   "turnover": 0.1491,
+   "fails": []
+  },
+  {
+   "cik": "0001055966",
+   "name": "MARSICO CAPITAL MANAGEMENT LLC",
+   "value": 3831661414,
+   "positions": 69,
+   "top10": 0.5069,
+   "top1": 0.0672,
+   "etf": 0.0,
+   "turnover": 0.2104,
+   "fails": []
+  },
+  {
+   "cik": "0001619844",
+   "name": "Hyperion Asset Management Ltd",
+   "value": 3773883260,
+   "positions": 20,
+   "top10": 0.7648,
+   "top1": 0.1369,
+   "etf": 0.0,
+   "turnover": 0.1609,
+   "fails": []
+  },
+  {
+   "cik": "0001590531",
+   "name": "Foxhaven Asset Management, LP",
+   "value": 3730265358,
+   "positions": 16,
+   "top10": 0.8513,
+   "top1": 0.1394,
+   "etf": 0.0,
+   "turnover": 0.1335,
+   "fails": []
+  },
+  {
+   "cik": "0001842702",
+   "name": "Navera Investment Management Ltd.",
+   "value": 3727432771,
+   "positions": 56,
+   "top10": 0.6431,
+   "top1": 0.0853,
+   "etf": 0.0,
+   "turnover": 0.1534,
+   "fails": []
+  },
+  {
+   "cik": "0001709323",
+   "name": "Himalaya Capital Management LLC",
+   "value": 3702921099,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.2455,
+   "etf": 0.0,
+   "turnover": 0.134,
+   "fails": []
+  },
+  {
+   "cik": "0001849753",
+   "name": "Voyager Global Management LP",
+   "value": 3632948350,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.2809,
+   "etf": 0.0,
+   "turnover": 0.1481,
+   "fails": []
+  },
+  {
+   "cik": "0001601407",
+   "name": "Troy Asset Management Ltd",
+   "value": 3585782780,
+   "positions": 29,
+   "top10": 0.8264,
+   "top1": 0.1562,
+   "etf": 0.0,
+   "turnover": 0.0816,
+   "fails": []
+  },
+  {
+   "cik": "0000898382",
+   "name": "COOPERMAN LEON G",
+   "value": 3547427123,
+   "positions": 39,
+   "top10": 0.6842,
+   "top1": 0.2037,
+   "etf": 0.0129,
+   "turnover": 0.1066,
+   "fails": []
+  },
+  {
+   "cik": "0001328785",
+   "name": "Senvest Management, LLC",
+   "value": 3409633050,
+   "positions": 55,
+   "top10": 0.5193,
+   "top1": 0.1394,
+   "etf": 0.0,
+   "turnover": 0.1341,
+   "fails": []
+  },
+  {
+   "cik": "0001543170",
+   "name": "SPRUCE HOUSE INVESTMENT MANAGEMENT LLC",
+   "value": 3399366557,
+   "positions": 11,
+   "top10": 0.9959,
+   "top1": 0.2713,
+   "etf": 0.0,
+   "turnover": 0.1269,
+   "fails": []
+  },
+  {
+   "cik": "0001839497",
+   "name": "Helikon Investments Ltd",
+   "value": 3347488196,
+   "positions": 18,
+   "top10": 0.8288,
+   "top1": 0.134,
+   "etf": 0.0,
+   "turnover": 0.1704,
+   "fails": []
+  },
+  {
+   "cik": "0001556785",
+   "name": "Vulcan Value Partners, LLC",
+   "value": 3285170410,
+   "positions": 36,
+   "top10": 0.7658,
+   "top1": 0.1128,
+   "etf": 0.0005,
+   "turnover": 0.2019,
+   "fails": []
+  },
+  {
+   "cik": "0001535472",
+   "name": "Corvex Management LP",
+   "value": 3218112524,
+   "positions": 24,
+   "top10": 0.7851,
+   "top1": 0.1547,
+   "etf": 0.0,
+   "turnover": 0.1683,
+   "fails": []
+  },
+  {
+   "cik": "0001697868",
+   "name": "Valley Forge Capital Management, LP",
+   "value": 3116388059,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.2577,
+   "etf": 0.0,
+   "turnover": 0.0761,
+   "fails": []
+  },
+  {
+   "cik": "0001854794",
+   "name": "Patient Capital Management, LLC",
+   "value": 3009562209,
+   "positions": 39,
+   "top10": 0.5207,
+   "top1": 0.067,
+   "etf": 0.0003,
+   "turnover": 0.0709,
+   "fails": []
+  },
+  {
+   "cik": "0001641864",
+   "name": "Giverny Capital Inc.",
+   "value": 2974321189,
+   "positions": 51,
+   "top10": 0.515,
+   "top1": 0.0719,
+   "etf": 0.0095,
+   "turnover": 0.1041,
+   "fails": []
+  },
+  {
+   "cik": "0001426398",
+   "name": "Focused Investors LLC",
+   "value": 2962405258,
+   "positions": 23,
+   "top10": 0.6203,
+   "top1": 0.0833,
+   "etf": 0.0,
+   "turnover": 0.0905,
+   "fails": []
+  },
+  {
+   "cik": "0001352924",
+   "name": "Caledonia (Private) Investments Pty Ltd",
+   "value": 2929421086,
+   "positions": 17,
+   "top10": 0.9902,
+   "top1": 0.2818,
+   "etf": 0.0,
+   "turnover": 0.0708,
+   "fails": []
+  },
+  {
+   "cik": "0001006364",
+   "name": "Hardman Johnston Global Advisors LLC",
+   "value": 2850046269,
+   "positions": 77,
+   "top10": 0.6721,
+   "top1": 0.1507,
+   "etf": 0.0056,
+   "turnover": 0.1152,
+   "fails": []
+  },
+  {
+   "cik": "0001356513",
+   "name": "Westwood Global Investments, LLC",
+   "value": 2847130241,
+   "positions": 11,
+   "top10": 0.9979,
+   "top1": 0.2156,
+   "etf": 0.0,
+   "turnover": 0.1659,
+   "fails": []
+  },
+  {
+   "cik": "0001547007",
+   "name": "Dorsal Capital Management, LP",
+   "value": 2779014988,
+   "positions": 22,
+   "top10": 0.7002,
+   "top1": 0.1136,
+   "etf": 0.0,
+   "turnover": 0.2286,
+   "fails": []
+  },
+  {
+   "cik": "0001510677",
+   "name": "Consulta Ltd",
+   "value": 2771738728,
+   "positions": 15,
+   "top10": 0.8286,
+   "top1": 0.1084,
+   "etf": 0.0,
+   "turnover": 0.2258,
+   "fails": []
+  },
+  {
+   "cik": "0001731152",
+   "name": "James Hambro & Partners LLP",
+   "value": 2764895024,
+   "positions": 68,
+   "top10": 0.6428,
+   "top1": 0.0896,
+   "etf": 0.01,
+   "turnover": 0.0695,
+   "fails": []
+  },
+  {
+   "cik": "0001167388",
+   "name": "ALTRINSIC GLOBAL ADVISORS LLC",
+   "value": 2723606476,
+   "positions": 55,
+   "top10": 0.7665,
+   "top1": 0.1449,
+   "etf": 0.0,
+   "turnover": 0.0576,
+   "fails": []
+  },
+  {
+   "cik": "0001034541",
+   "name": "TIMUCUAN ASSET MANAGEMENT INC/FL",
+   "value": 2717579008,
+   "positions": 27,
+   "top10": 0.7018,
+   "top1": 0.0997,
+   "etf": 0.0,
+   "turnover": 0.0962,
+   "fails": []
+  },
+  {
+   "cik": "0001484150",
+   "name": "Lindsell Train Ltd",
+   "value": 2628784112,
+   "positions": 28,
+   "top10": 0.9069,
+   "top1": 0.1749,
+   "etf": 0.0,
+   "turnover": 0.1315,
+   "fails": []
+  },
+  {
+   "cik": "0001823138",
+   "name": "Two Seas Capital LP",
+   "value": 2620184081,
+   "positions": 37,
+   "top10": 0.6785,
+   "top1": 0.1145,
+   "etf": 0.0,
+   "turnover": 0.1816,
+   "fails": []
+  },
+  {
+   "cik": "0001594320",
+   "name": "Coronation Fund Managers Ltd.",
+   "value": 2618622607,
+   "positions": 48,
+   "top10": 0.6941,
+   "top1": 0.1323,
+   "etf": 0.0,
+   "turnover": 0.1272,
+   "fails": []
+  },
+  {
+   "cik": "0001670104",
+   "name": "BLS Capital Fondsmaeglerselskab A/S",
+   "value": 2595990836,
+   "positions": 11,
+   "top10": 0.9549,
+   "top1": 0.1706,
+   "etf": 0.0,
+   "turnover": 0.0397,
+   "fails": []
+  },
+  {
+   "cik": "0001427119",
+   "name": "Meritage Group LP",
+   "value": 2595162623,
+   "positions": 12,
+   "top10": 0.9537,
+   "top1": 0.1838,
+   "etf": 0.0,
+   "turnover": 0.1014,
+   "fails": []
+  },
+  {
+   "cik": "0001035674",
+   "name": "PAULSON & CO. INC.",
+   "value": 2575691752,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.2794,
+   "etf": 0.0,
+   "turnover": 0.0577,
+   "fails": []
+  },
+  {
+   "cik": "0001114928",
+   "name": "CAPITAL COUNSEL LLC/NY",
+   "value": 2558372365,
+   "positions": 58,
+   "top10": 0.8305,
+   "top1": 0.1247,
+   "etf": 0.0011,
+   "turnover": 0.0326,
+   "fails": []
+  },
+  {
+   "cik": "0001701717",
+   "name": "First Beijing Investment Ltd",
+   "value": 2443833590,
+   "positions": 11,
+   "top10": 0.9998,
+   "top1": 0.305,
+   "etf": 0.0,
+   "turnover": 0.1221,
+   "fails": []
+  },
+  {
+   "cik": "0001608485",
+   "name": "LANSDOWNE PARTNERS (UK) LLP",
+   "value": 2430717155,
+   "positions": 26,
+   "top10": 0.9252,
+   "top1": 0.29,
+   "etf": 0.0,
+   "turnover": 0.1444,
+   "fails": []
+  },
+  {
+   "cik": "0001512171",
+   "name": "Route One Investment Company, L.P.",
+   "value": 2415684555,
+   "positions": 19,
+   "top10": 0.7982,
+   "top1": 0.1078,
+   "etf": 0.0,
+   "turnover": 0.0728,
+   "fails": []
+  },
+  {
+   "cik": "0001664713",
+   "name": "Intermede Investment Partners Ltd",
+   "value": 2375721000,
+   "positions": 30,
+   "top10": 0.5437,
+   "top1": 0.0886,
+   "etf": 0.0,
+   "turnover": 0.1017,
+   "fails": []
+  },
+  {
+   "cik": "0001550660",
+   "name": "OAKTOP CAPITAL MANAGEMENT II, L.P.",
+   "value": 2350079924,
+   "positions": 14,
+   "top10": 0.9836,
+   "top1": 0.392,
+   "etf": 0.0,
+   "turnover": 0.1939,
+   "fails": []
+  },
+  {
+   "cik": "0001796409",
+   "name": "Heard Capital LLC",
+   "value": 2336468543,
+   "positions": 21,
+   "top10": 0.8178,
+   "top1": 0.1405,
+   "etf": 0.0,
+   "turnover": 0.1429,
+   "fails": []
+  },
+  {
+   "cik": "0001879898",
+   "name": "Atlas FRM LLC",
+   "value": 2334985907,
+   "positions": 25,
+   "top10": 0.7812,
+   "top1": 0.1606,
+   "etf": 0.0,
+   "turnover": 0.2097,
+   "fails": []
+  },
+  {
+   "cik": "0001044797",
+   "name": "NEW SOUTH CAPITAL MANAGEMENT INC",
+   "value": 2280932798,
+   "positions": 48,
+   "top10": 0.5931,
+   "top1": 0.1103,
+   "etf": 0.0065,
+   "turnover": 0.0979,
+   "fails": []
+  },
+  {
+   "cik": "0001854440",
+   "name": "DARLINGTON PARTNERS CAPITAL MANAGEMENT, LP",
+   "value": 2265315317,
+   "positions": 10,
+   "top10": 1.0,
+   "top1": 0.1611,
+   "etf": 0.0,
+   "turnover": 0.0341,
+   "fails": []
+  },
+  {
+   "cik": "0001730525",
+   "name": "Maj Invest Holding A/S",
+   "value": 2199343000,
+   "positions": 38,
+   "top10": 0.6579,
+   "top1": 0.0882,
+   "etf": 0.0,
+   "turnover": 0.1305,
+   "fails": []
+  },
+  {
+   "cik": "0001728201",
+   "name": "Aequim Alternative Investments LP",
+   "value": 2194821778,
+   "positions": 51,
+   "top10": 0.7787,
+   "top1": 0.2159,
+   "etf": 0.0069,
+   "turnover": 0.1688,
+   "fails": []
+  },
+  {
+   "cik": "0001961415",
+   "name": "Maren Capital LLC",
+   "value": 2157294917,
+   "positions": 17,
+   "top10": 0.8598,
+   "top1": 0.1278,
+   "etf": 0.0003,
+   "turnover": 0.0336,
+   "fails": []
+  },
+  {
+   "cik": "0001691982",
+   "name": "Bowie Capital Management, LLC",
+   "value": 2021471828,
+   "positions": 30,
+   "top10": 0.5875,
+   "top1": 0.0828,
+   "etf": 0.0021,
+   "turnover": 0.2029,
+   "fails": []
+  },
+  {
+   "cik": "0001730145",
+   "name": "Voss Capital, LP",
+   "value": 2000638409,
+   "positions": 35,
+   "top10": 0.6646,
+   "top1": 0.1197,
+   "etf": 0.0,
+   "turnover": 0.1765,
+   "fails": []
+  },
+  {
+   "cik": "0001452208",
+   "name": "CACTI ASSET MANAGEMENT LLC",
+   "value": 1994057366,
+   "positions": 76,
+   "top10": 0.6828,
+   "top1": 0.1587,
+   "etf": 0.0165,
+   "turnover": 0.0511,
+   "fails": []
+  },
+  {
+   "cik": "0001698060",
+   "name": "Gobi Capital LLC",
+   "value": 1964818184,
+   "positions": 10,
+   "top10": 1.0,
+   "top1": 0.2015,
+   "etf": 0.0,
+   "turnover": 0.0283,
+   "fails": []
+  },
+  {
+   "cik": "0001538653",
+   "name": "Prescott General Partners LLC",
+   "value": 1956935192,
+   "positions": 10,
+   "top10": 1.0,
+   "top1": 0.4675,
+   "etf": 0.0,
+   "turnover": 0.0,
+   "fails": []
+  },
+  {
+   "cik": "0001592579",
+   "name": "Trinity Street Asset Management LLP",
+   "value": 1941846350,
+   "positions": 23,
+   "top10": 0.8456,
+   "top1": 0.2289,
+   "etf": 0.0,
+   "turnover": 0.1084,
+   "fails": []
+  },
+  {
+   "cik": "0001536006",
+   "name": "Progeny 3, Inc.",
+   "value": 1938092199,
+   "positions": 29,
+   "top10": 0.6056,
+   "top1": 0.1244,
+   "etf": 0.0903,
+   "turnover": 0.0474,
+   "fails": []
+  },
+  {
+   "cik": "0001822531",
+   "name": "Sourcerock Group LLC",
+   "value": 1923201519,
+   "positions": 36,
+   "top10": 0.7385,
+   "top1": 0.1584,
+   "etf": 0.0,
+   "turnover": 0.1584,
+   "fails": []
+  },
+  {
+   "cik": "0001277742",
+   "name": "MHR FUND MANAGEMENT LLC",
+   "value": 1919354327,
+   "positions": 11,
+   "top10": 0.9997,
+   "top1": 0.4756,
+   "etf": 0.0,
+   "turnover": 0.0038,
+   "fails": []
+  },
+  {
+   "cik": "0001106191",
+   "name": "GMT Capital Corp",
+   "value": 1919082081,
+   "positions": 68,
+   "top10": 0.7291,
+   "top1": 0.2249,
+   "etf": 0.0,
+   "turnover": 0.2007,
+   "fails": []
+  },
+  {
+   "cik": "0000807985",
+   "name": "SOUTHEASTERN ASSET MANAGEMENT INC/TN/",
+   "value": 1917151885,
+   "positions": 47,
+   "top10": 0.6274,
+   "top1": 0.1054,
+   "etf": 0.0,
+   "turnover": 0.153,
+   "fails": []
+  },
+  {
+   "cik": "0001278387",
+   "name": "BROADWOOD CAPITAL INC",
+   "value": 1913155086,
+   "positions": 6,
+   "top10": 1.0,
+   "top1": 0.4073,
+   "etf": 0.0746,
+   "turnover": 0.0012,
+   "fails": []
+  },
+  {
+   "cik": "0001654344",
+   "name": "Spyglass Capital Management LLC",
+   "value": 1847373136,
+   "positions": 25,
+   "top10": 0.515,
+   "top1": 0.0679,
+   "etf": 0.0,
+   "turnover": 0.2028,
+   "fails": []
+  },
+  {
+   "cik": "0001477872",
+   "name": "Saratoga Research & Investment Management",
+   "value": 1827574709,
+   "positions": 46,
+   "top10": 0.6407,
+   "top1": 0.0975,
+   "etf": 0.0118,
+   "turnover": 0.0776,
+   "fails": []
+  },
+  {
+   "cik": "0001528593",
+   "name": "Black Creek Investment Management Inc.",
+   "value": 1781555565,
+   "positions": 27,
+   "top10": 0.8212,
+   "top1": 0.1802,
+   "etf": 0.0,
+   "turnover": 0.2467,
+   "fails": []
+  },
+  {
+   "cik": "0001596510",
+   "name": "PARK PRESIDIO CAPITAL LLC",
+   "value": 1766138887,
+   "positions": 14,
+   "top10": 0.8323,
+   "top1": 0.1235,
+   "etf": 0.0224,
+   "turnover": 0.06,
+   "fails": []
+  },
+  {
+   "cik": "0001782124",
+   "name": "DENDUR CAPITAL LP",
+   "value": 1709171376,
+   "positions": 23,
+   "top10": 0.7124,
+   "top1": 0.1234,
+   "etf": 0.0,
+   "turnover": 0.245,
+   "fails": []
+  },
+  {
+   "cik": "0002009023",
+   "name": "L1 Capital International Pty Ltd",
+   "value": 1707595834,
+   "positions": 21,
+   "top10": 0.7014,
+   "top1": 0.1111,
+   "etf": 0.0,
+   "turnover": 0.1239,
+   "fails": []
+  },
+  {
+   "cik": "0001825564",
+   "name": "BROWNING WEST LP",
+   "value": 1690104325,
+   "positions": 6,
+   "top10": 1.0,
+   "top1": 0.3053,
+   "etf": 0.0,
+   "turnover": 0.0171,
+   "fails": []
+  },
+  {
+   "cik": "0001511881",
+   "name": "Theleme Partners LLP",
+   "value": 1683453074,
+   "positions": 9,
+   "top10": 1.0,
+   "top1": 0.3352,
+   "etf": 0.0,
+   "turnover": 0.1188,
+   "fails": []
+  },
+  {
+   "cik": "0001765774",
+   "name": "No Street GP LP",
+   "value": 1664367794,
+   "positions": 32,
+   "top10": 0.5688,
+   "top1": 0.0824,
+   "etf": 0.0,
+   "turnover": 0.1404,
+   "fails": []
+  },
+  {
+   "cik": "0001708139",
+   "name": "Milestone Resources Group Ltd",
+   "value": 1637249000,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.2787,
+   "etf": 0.0,
+   "turnover": 0.0738,
+   "fails": []
+  },
+  {
+   "cik": "0001662906",
+   "name": "Atalan Capital Partners, LP",
+   "value": 1630164711,
+   "positions": 9,
+   "top10": 1.0,
+   "top1": 0.3392,
+   "etf": 0.0,
+   "turnover": 0.215,
+   "fails": []
+  },
+  {
+   "cik": "0001032814",
+   "name": "CHECK CAPITAL MANAGEMENT INC/CA",
+   "value": 1626545566,
+   "positions": 52,
+   "top10": 0.8853,
+   "top1": 0.2573,
+   "etf": 0.001,
+   "turnover": 0.0501,
+   "fails": []
+  },
+  {
+   "cik": "0001592413",
+   "name": "Strategy Capital LLC",
+   "value": 1622734177,
+   "positions": 11,
+   "top10": 0.9757,
+   "top1": 0.1672,
+   "etf": 0.0,
+   "turnover": 0.0147,
+   "fails": []
+  },
+  {
+   "cik": "0001633969",
+   "name": "Cryder Capital Partners LLP",
+   "value": 1586818459,
+   "positions": 10,
+   "top10": 1.0,
+   "top1": 0.135,
+   "etf": 0.0,
+   "turnover": 0.046,
+   "fails": []
+  },
+  {
+   "cik": "0001671657",
+   "name": "Dorsey Asset Management, LLC",
+   "value": 1561408466,
+   "positions": 11,
+   "top10": 0.9449,
+   "top1": 0.1661,
+   "etf": 0.0,
+   "turnover": 0.1533,
+   "fails": []
+  },
+  {
+   "cik": "0001724246",
+   "name": "HoldCo Asset Management, LP",
+   "value": 1557832106,
+   "positions": 29,
+   "top10": 0.8867,
+   "top1": 0.1376,
+   "etf": 0.0,
+   "turnover": 0.0167,
+   "fails": []
+  },
+  {
+   "cik": "0001290162",
+   "name": "QVT Financial LP",
+   "value": 1542274959,
+   "positions": 70,
+   "top10": 0.812,
+   "top1": 0.5444,
+   "etf": 0.074,
+   "turnover": 0.0811,
+   "fails": []
+  },
+  {
+   "cik": "0001776023",
+   "name": "Stony Point Capital LLC",
+   "value": 1531129730,
+   "positions": 29,
+   "top10": 0.636,
+   "top1": 0.0924,
+   "etf": 0.0,
+   "turnover": 0.084,
+   "fails": []
+  },
+  {
+   "cik": "0001713390",
+   "name": "Kontiki Capital Management (HK) Ltd.",
+   "value": 1524856302,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.342,
+   "etf": 0.0,
+   "turnover": 0.0615,
+   "fails": []
+  },
+  {
+   "cik": "0001741675",
+   "name": "Callodine Capital Management, LP",
+   "value": 1520121869,
+   "positions": 62,
+   "top10": 0.5026,
+   "top1": 0.0981,
+   "etf": 0.0,
+   "turnover": 0.1374,
+   "fails": []
+  },
+  {
+   "cik": "0001904897",
+   "name": "Styrax Capital, LP",
+   "value": 1516775950,
+   "positions": 18,
+   "top10": 0.8208,
+   "top1": 0.1571,
+   "etf": 0.0,
+   "turnover": 0.2217,
+   "fails": []
+  },
+  {
+   "cik": "0000883965",
+   "name": "WEITZ INVESTMENT MANAGEMENT, INC.",
+   "value": 1444222377,
+   "positions": 50,
+   "top10": 0.5495,
+   "top1": 0.0941,
+   "etf": 0.0,
+   "turnover": 0.0625,
+   "fails": []
+  },
+  {
+   "cik": "0001732008",
+   "name": "GUARDCAP ASSET MANAGEMENT Ltd",
+   "value": 1406504868,
+   "positions": 18,
+   "top10": 0.8388,
+   "top1": 0.1224,
+   "etf": 0.0,
+   "turnover": 0.132,
+   "fails": []
+  },
+  {
+   "cik": "0001922318",
+   "name": "Pale Fire Capital SE",
+   "value": 1405914921,
+   "positions": 71,
+   "top10": 0.8266,
+   "top1": 0.1742,
+   "etf": 0.0,
+   "turnover": 0.1264,
+   "fails": []
+  },
+  {
+   "cik": "0001786767",
+   "name": "Impactive Capital LP",
+   "value": 1401398145,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.3002,
+   "etf": 0.0221,
+   "turnover": 0.1088,
+   "fails": []
+  },
+  {
+   "cik": "0001894571",
+   "name": "Pertento Partners LLP",
+   "value": 1391362842,
+   "positions": 14,
+   "top10": 0.8368,
+   "top1": 0.1582,
+   "etf": 0.0,
+   "turnover": 0.1897,
+   "fails": []
+  },
+  {
+   "cik": "0001426327",
+   "name": "Scheer, Rowlett & Associates Investment Management Ltd.",
+   "value": 1391197687,
+   "positions": 30,
+   "top10": 0.655,
+   "top1": 0.1483,
+   "etf": 0.0,
+   "turnover": 0.082,
+   "fails": []
+  },
+  {
+   "cik": "0001929389",
+   "name": "Irenic Capital Management LP",
+   "value": 1389133819,
+   "positions": 43,
+   "top10": 0.6185,
+   "top1": 0.0959,
+   "etf": 0.0018,
+   "turnover": 0.206,
+   "fails": []
+  },
+  {
+   "cik": "0001740837",
+   "name": "AltraVue Capital, LLC",
+   "value": 1387159483,
+   "positions": 26,
+   "top10": 0.6256,
+   "top1": 0.1176,
+   "etf": 0.0,
+   "turnover": 0.0726,
+   "fails": []
+  },
+  {
+   "cik": "0001742418",
+   "name": "Dundas Partners LLP",
+   "value": 1382659113,
+   "positions": 31,
+   "top10": 0.6245,
+   "top1": 0.1321,
+   "etf": 0.0175,
+   "turnover": 0.0625,
+   "fails": []
+  },
+  {
+   "cik": "0001574886",
+   "name": "Teewinot Capital Advisers, L.L.C.",
+   "value": 1382340576,
+   "positions": 31,
+   "top10": 0.684,
+   "top1": 0.1145,
+   "etf": 0.0,
+   "turnover": 0.1545,
+   "fails": []
+  },
+  {
+   "cik": "0001033225",
+   "name": "MCDONALD CAPITAL INVESTORS INC/CA",
+   "value": 1369429397,
+   "positions": 20,
+   "top10": 0.7632,
+   "top1": 0.1287,
+   "etf": 0.0,
+   "turnover": 0.0453,
+   "fails": []
+  },
+  {
+   "cik": "0001827734",
+   "name": "FERNBRIDGE CAPITAL MANAGEMENT LP",
+   "value": 1366220202,
+   "positions": 16,
+   "top10": 0.8376,
+   "top1": 0.2211,
+   "etf": 0.0,
+   "turnover": 0.1237,
+   "fails": []
+  },
+  {
+   "cik": "0001661762",
+   "name": "Oak Grove Capital LLC",
+   "value": 1361274144,
+   "positions": 97,
+   "top10": 0.6047,
+   "top1": 0.2246,
+   "etf": 0.0308,
+   "turnover": 0.2158,
+   "fails": []
+  },
+  {
+   "cik": "0001966180",
+   "name": "Talbot Financial, LLC",
+   "value": 1358790662,
+   "positions": 71,
+   "top10": 0.5215,
+   "top1": 0.0918,
+   "etf": 0.0,
+   "turnover": 0.0241,
+   "fails": []
+  },
+  {
+   "cik": "0002033334",
+   "name": "North of South Capital LLP",
+   "value": 1358655904,
+   "positions": 28,
+   "top10": 0.9047,
+   "top1": 0.1857,
+   "etf": 0.008,
+   "turnover": 0.1372,
+   "fails": []
+  },
+  {
+   "cik": "0001104329",
+   "name": "CROSSLINK CAPITAL INC",
+   "value": 1353840537,
+   "positions": 22,
+   "top10": 0.8437,
+   "top1": 0.3961,
+   "etf": 0.0,
+   "turnover": 0.2364,
+   "fails": []
+  },
+  {
+   "cik": "0001507683",
+   "name": "RWWM, INC.",
+   "value": 1353388287,
+   "positions": 40,
+   "top10": 0.849,
+   "top1": 0.1574,
+   "etf": 0.064,
+   "turnover": 0.0874,
+   "fails": []
+  },
+  {
+   "cik": "0001732539",
+   "name": "Optimus Prime Fund Management Co., Ltd.",
+   "value": 1351348237,
+   "positions": 26,
+   "top10": 0.867,
+   "top1": 0.2683,
+   "etf": 0.0,
+   "turnover": 0.109,
+   "fails": []
+  },
+  {
+   "cik": "0001532262",
+   "name": "Greenbrier Partners Capital Management, LLC",
+   "value": 1334818578,
+   "positions": 11,
+   "top10": 0.9906,
+   "top1": 0.216,
+   "etf": 0.0,
+   "turnover": 0.0539,
+   "fails": []
+  },
+  {
+   "cik": "0001078635",
+   "name": "WINDWARD CAPITAL MANAGEMENT CO /CA",
+   "value": 1320620198,
+   "positions": 73,
+   "top10": 0.577,
+   "top1": 0.1665,
+   "etf": 0.0012,
+   "turnover": 0.0154,
+   "fails": []
+  },
+  {
+   "cik": "0000732905",
+   "name": "Tweedy, Browne Co LLC",
+   "value": 1319974933,
+   "positions": 91,
+   "top10": 0.6924,
+   "top1": 0.1711,
+   "etf": 0.0,
+   "turnover": 0.0815,
+   "fails": []
+  },
+  {
+   "cik": "0001104366",
+   "name": "MCDANIEL TERRY & CO",
+   "value": 1279918811,
+   "positions": 81,
+   "top10": 0.5665,
+   "top1": 0.1021,
+   "etf": 0.0031,
+   "turnover": 0.0419,
+   "fails": []
+  },
+  {
+   "cik": "0001764000",
+   "name": "Wilkinson Global Asset Management LLC",
+   "value": 1258896980,
+   "positions": 62,
+   "top10": 0.5555,
+   "top1": 0.0714,
+   "etf": 0.0128,
+   "turnover": 0.1521,
+   "fails": []
+  },
+  {
+   "cik": "0001006407",
+   "name": "FISHMAN JAY A LTD/MI",
+   "value": 1256448433,
+   "positions": 79,
+   "top10": 0.6805,
+   "top1": 0.2032,
+   "etf": 0.0105,
+   "turnover": 0.0233,
+   "fails": []
+  },
+  {
+   "cik": "0001448793",
+   "name": "Prime Capital Management Co Ltd",
+   "value": 1252088438,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.2532,
+   "etf": 0.0,
+   "turnover": 0.0,
+   "fails": []
+  },
+  {
+   "cik": "0001097278",
+   "name": "ADVENT CAPITAL MANAGEMENT /DE/",
+   "value": 1247776807,
+   "positions": 54,
+   "top10": 0.7444,
+   "top1": 0.1473,
+   "etf": 0.0241,
+   "turnover": 0.1948,
+   "fails": []
+  },
+  {
+   "cik": "0001334429",
+   "name": "BIGLARI CAPITAL CORP.",
+   "value": 1194657336,
+   "positions": 12,
+   "top10": 1.0,
+   "top1": 0.525,
+   "etf": 0.0,
+   "turnover": 0.0207,
+   "fails": []
+  },
+  {
+   "cik": "0001877963",
+   "name": "Khrom Capital Management LLC",
+   "value": 1193528657,
+   "positions": 15,
+   "top10": 0.9131,
+   "top1": 0.1491,
+   "etf": 0.0,
+   "turnover": 0.2398,
+   "fails": []
+  },
+  {
+   "cik": "0001562855",
+   "name": "Clarkston Capital Partners, LLC",
+   "value": 1184061869,
+   "positions": 96,
+   "top10": 0.5174,
+   "top1": 0.0899,
+   "etf": 0.0091,
+   "turnover": 0.1562,
+   "fails": []
+  },
+  {
+   "cik": "0001844873",
+   "name": "WAYCROSS PARTNERS, LLC",
+   "value": 1173807955,
+   "positions": 72,
+   "top10": 0.5253,
+   "top1": 0.0774,
+   "etf": 0.0013,
+   "turnover": 0.0899,
+   "fails": []
+  },
+  {
+   "cik": "0001409751",
+   "name": "Coliseum Capital Management, LLC",
+   "value": 1162253900,
+   "positions": 11,
+   "top10": 0.9856,
+   "top1": 0.2104,
+   "etf": 0.0,
+   "turnover": 0.1954,
+   "fails": []
+  },
+  {
+   "cik": "0001350780",
+   "name": "Private Capital Advisors, Inc.",
+   "value": 1141144780,
+   "positions": 75,
+   "top10": 0.7459,
+   "top1": 0.4324,
+   "etf": 0.032,
+   "turnover": 0.1349,
+   "fails": []
+  },
+  {
+   "cik": "0001828180",
+   "name": "High Ground Investment Management LLP",
+   "value": 1138693084,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.2309,
+   "etf": 0.0,
+   "turnover": 0.2238,
+   "fails": []
+  },
+  {
+   "cik": "0001584801",
+   "name": "YCG, LLC",
+   "value": 1136308300,
+   "positions": 41,
+   "top10": 0.5517,
+   "top1": 0.0705,
+   "etf": 0.0017,
+   "turnover": 0.089,
+   "fails": []
+  },
+  {
+   "cik": "0001313756",
+   "name": "Owl Creek Asset Management, L.P.",
+   "value": 1127933505,
+   "positions": 31,
+   "top10": 0.8055,
+   "top1": 0.4939,
+   "etf": 0.0,
+   "turnover": 0.1702,
+   "fails": []
+  },
+  {
+   "cik": "0001348145",
+   "name": "VR Advisory Services Ltd",
+   "value": 1127357376,
+   "positions": 43,
+   "top10": 0.6431,
+   "top1": 0.1303,
+   "etf": 0.0004,
+   "turnover": 0.1664,
+   "fails": []
+  },
+  {
+   "cik": "0001108893",
+   "name": "PENN DAVIS MCFARLAND INC",
+   "value": 1122642843,
+   "positions": 79,
+   "top10": 0.5544,
+   "top1": 0.1348,
+   "etf": 0.0042,
+   "turnover": 0.0334,
+   "fails": []
+  },
+  {
+   "cik": "0001697597",
+   "name": "Hudson Way Capital Management LLC",
+   "value": 1121622378,
+   "positions": 18,
+   "top10": 0.723,
+   "top1": 0.1382,
+   "etf": 0.0,
+   "turnover": 0.1842,
+   "fails": []
+  },
+  {
+   "cik": "0001454502",
+   "name": "Triple Frond Partners LLC",
+   "value": 1120470000,
+   "positions": 13,
+   "top10": 0.9232,
+   "top1": 0.2111,
+   "etf": 0.0,
+   "turnover": 0.0876,
+   "fails": []
+  },
+  {
+   "cik": "0001078841",
+   "name": "BRUNI J V & CO /CO",
+   "value": 1095344961,
+   "positions": 33,
+   "top10": 0.5914,
+   "top1": 0.0961,
+   "etf": 0.0,
+   "turnover": 0.0916,
+   "fails": []
+  },
+  {
+   "cik": "0000104889",
+   "name": "Graham Holdings Co",
+   "value": 1083092000,
+   "positions": 6,
+   "top10": 1.0,
+   "top1": 0.3204,
+   "etf": 0.0,
+   "turnover": 0.0078,
+   "fails": []
+  },
+  {
+   "cik": "0001172779",
+   "name": "DOCK STREET ASSET MANAGEMENT INC",
+   "value": 1081389339,
+   "positions": 64,
+   "top10": 0.7084,
+   "top1": 0.1868,
+   "etf": 0.0234,
+   "turnover": 0.031,
+   "fails": []
+  },
+  {
+   "cik": "0001966595",
+   "name": "JIA INVESTMENT ALLIANCE PTE. LTD.",
+   "value": 1073549791,
+   "positions": 23,
+   "top10": 0.6835,
+   "top1": 0.1232,
+   "etf": 0.0,
+   "turnover": 0.0745,
+   "fails": []
+  },
+  {
+   "cik": "0001730478",
+   "name": "Ironvine Capital Partners, LLC",
+   "value": 1072889788,
+   "positions": 56,
+   "top10": 0.5122,
+   "top1": 0.0727,
+   "etf": 0.001,
+   "turnover": 0.103,
+   "fails": []
+  },
+  {
+   "cik": "0002011335",
+   "name": "J. Stern & Co. LLP",
+   "value": 1059332027,
+   "positions": 51,
+   "top10": 0.6838,
+   "top1": 0.1152,
+   "etf": 0.0,
+   "turnover": 0.0815,
+   "fails": []
+  },
+  {
+   "cik": "0001056827",
+   "name": "ARMSTRONG HENRY H ASSOCIATES INC",
+   "value": 1032548059,
+   "positions": 64,
+   "top10": 0.8766,
+   "top1": 0.2248,
+   "etf": 0.0068,
+   "turnover": 0.0106,
+   "fails": []
+  },
+  {
+   "cik": "0001076964",
+   "name": "Provident Investment Management, Inc.",
+   "value": 1029212048,
+   "positions": 89,
+   "top10": 0.5804,
+   "top1": 0.0764,
+   "etf": 0.0093,
+   "turnover": 0.1769,
+   "fails": []
+  },
+  {
+   "cik": "0001665590",
+   "name": "Engine Capital Management, LP",
+   "value": 1027592293,
+   "positions": 29,
+   "top10": 0.7347,
+   "top1": 0.1913,
+   "etf": 0.0124,
+   "turnover": 0.1837,
+   "fails": []
+  },
+  {
+   "cik": "0001058231",
+   "name": "MORGUARD LINCLUDEN GLOBAL INVESTMENTS Ltd",
+   "value": 1018711000,
+   "positions": 68,
+   "top10": 0.5325,
+   "top1": 0.0921,
+   "etf": 0.0,
+   "turnover": 0.1274,
+   "fails": []
+  }
+ ],
+ "near_misses": [
+  {
+   "cik": "0001704268",
+   "name": "Mubadala Investment Co PJSC",
+   "value": 34771171317,
+   "positions": 72,
+   "top10": 0.988,
+   "top1": 0.947,
+   "etf": 0.0141,
+   "turnover": 0.0371,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001663865",
+   "name": "Orbis Allan Gray Ltd",
+   "value": 29098622771,
+   "positions": 97,
+   "top10": 0.3987,
+   "top1": 0.0619,
+   "etf": 0.0063,
+   "turnover": 0.1412,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000900973",
+   "name": "Winslow Capital Management, LLC",
+   "value": 29059630524,
+   "positions": 66,
+   "top10": 0.4966,
+   "top1": 0.1074,
+   "etf": 0.0009,
+   "turnover": 0.2358,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001020066",
+   "name": "SANDS CAPITAL MANAGEMENT, LLC",
+   "value": 26928187141,
+   "positions": 71,
+   "top10": 0.4762,
+   "top1": 0.1045,
+   "etf": 0.0001,
+   "turnover": 0.1741,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001230239",
+   "name": "ALKEON CAPITAL MANAGEMENT LLC",
+   "value": 25928630301,
+   "positions": 79,
+   "top10": 0.4733,
+   "top1": 0.0651,
+   "etf": 0.0588,
+   "turnover": 0.1761,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001484429",
+   "name": "Alecta Tjanstepension Omsesidigt",
+   "value": 23772263607,
+   "positions": 91,
+   "top10": 0.4528,
+   "top1": 0.0827,
+   "etf": 0.0,
+   "turnover": 0.0984,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001575677",
+   "name": "FLOSSBACH VON STORCH SE",
+   "value": 22110288971,
+   "positions": 98,
+   "top10": 0.4943,
+   "top1": 0.0713,
+   "etf": 0.0,
+   "turnover": 0.0906,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001065521",
+   "name": "SOFTBANK GROUP CORP.",
+   "value": 18174540337,
+   "positions": 30,
+   "top10": 0.9675,
+   "top1": 0.6681,
+   "etf": 0.0,
+   "turnover": 0.0324,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0000909661",
+   "name": "FARALLON CAPITAL MANAGEMENT, L.L.C.",
+   "value": 16944708845,
+   "positions": 82,
+   "top10": 0.5616,
+   "top1": 0.1498,
+   "etf": 0.0,
+   "turnover": 0.2508,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001963565",
+   "name": "Value Aligned Research Advisors, LLC",
+   "value": 16732067771,
+   "positions": 59,
+   "top10": 0.5631,
+   "top1": 0.101,
+   "etf": 0.0,
+   "turnover": 0.2558,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001061165",
+   "name": "LONE PINE CAPITAL LLC",
+   "value": 16357760275,
+   "positions": 34,
+   "top10": 0.5387,
+   "top1": 0.0719,
+   "etf": 0.0,
+   "turnover": 0.471,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000889232",
+   "name": "INVESTOR AB",
+   "value": 14403406346,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.6792,
+   "etf": 0.0,
+   "turnover": 0.0003,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001569205",
+   "name": "Fundsmith LLP",
+   "value": 13648923682,
+   "positions": 41,
+   "top10": 0.5245,
+   "top1": 0.0702,
+   "etf": 0.0,
+   "turnover": 0.3258,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001774552",
+   "name": "WealthNavi Inc.",
+   "value": 12762862000,
+   "positions": 11,
+   "top10": 0.9946,
+   "top1": 0.372,
+   "etf": 1.0,
+   "turnover": 0.0136,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0000060086",
+   "name": "Loews Corp",
+   "value": 12522601997,
+   "positions": 28,
+   "top10": 0.9848,
+   "top1": 0.9643,
+   "etf": 0.0,
+   "turnover": 0.0134,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001425851",
+   "name": "Pentwater Capital Management LP",
+   "value": 12520509341,
+   "positions": 59,
+   "top10": 0.7433,
+   "top1": 0.2207,
+   "etf": 0.0024,
+   "turnover": 0.3368,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001525234",
+   "name": "Jericho Capital Asset Management L.P.",
+   "value": 12098624849,
+   "positions": 29,
+   "top10": 0.533,
+   "top1": 0.0728,
+   "etf": 0.0,
+   "turnover": 0.2966,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001493215",
+   "name": "RTW INVESTMENTS, LP",
+   "value": 11712926784,
+   "positions": 84,
+   "top10": 0.4772,
+   "top1": 0.0914,
+   "etf": 0.0,
+   "turnover": 0.0996,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001777813",
+   "name": "Atreides Management, LP",
+   "value": 11148289162,
+   "positions": 46,
+   "top10": 0.763,
+   "top1": 0.4189,
+   "etf": 0.0,
+   "turnover": 0.4022,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001687509",
+   "name": "Rubric Capital Management LP",
+   "value": 10898968932,
+   "positions": 86,
+   "top10": 0.4644,
+   "top1": 0.127,
+   "etf": 0.0,
+   "turnover": 0.1561,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001581811",
+   "name": "Egerton Capital (UK) LLP",
+   "value": 10351358177,
+   "positions": 23,
+   "top10": 0.7602,
+   "top1": 0.1413,
+   "etf": 0.0,
+   "turnover": 0.2516,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001527166",
+   "name": "Carlyle Group Inc.",
+   "value": 10000861951,
+   "positions": 19,
+   "top10": 0.9994,
+   "top1": 0.7378,
+   "etf": 0.0,
+   "turnover": 0.0013,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001162777",
+   "name": "Partners Value Investments L.P.",
+   "value": 9796108271,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.7887,
+   "etf": 0.0,
+   "turnover": 0.0026,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0000860561",
+   "name": "EDGEWOOD MANAGEMENT LLC",
+   "value": 9694506515,
+   "positions": 90,
+   "top10": 0.6338,
+   "top1": 0.0946,
+   "etf": 0.0026,
+   "turnover": 0.458,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001802900",
+   "name": "Mirova US LLC",
+   "value": 9300232966,
+   "positions": 45,
+   "top10": 0.4891,
+   "top1": 0.0927,
+   "etf": 0.0,
+   "turnover": 0.0722,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001768375",
+   "name": "Aspex Management (HK) Ltd",
+   "value": 8872977000,
+   "positions": 25,
+   "top10": 0.8026,
+   "top1": 0.1565,
+   "etf": 0.0,
+   "turnover": 0.2819,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000024386",
+   "name": "COOKE & BIELER LP",
+   "value": 8646740264,
+   "positions": 100,
+   "top10": 0.2629,
+   "top1": 0.0389,
+   "etf": 0.0,
+   "turnover": 0.0972,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000905567",
+   "name": "YACKTMAN ASSET MANAGEMENT LP",
+   "value": 8089240584,
+   "positions": 74,
+   "top10": 0.4816,
+   "top1": 0.0804,
+   "etf": 0.0169,
+   "turnover": 0.0638,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001731509",
+   "name": "SB INVESTMENT ADVISERS (UK) LTD",
+   "value": 7662358625,
+   "positions": 9,
+   "top10": 1.0,
+   "top1": 0.6564,
+   "etf": 0.0,
+   "turnover": 0.009,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001351950",
+   "name": "Findlay Park Partners LLP",
+   "value": 7407454503,
+   "positions": 49,
+   "top10": 0.3298,
+   "top1": 0.0374,
+   "etf": 0.0,
+   "turnover": 0.1376,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001559706",
+   "name": "Slate Path Capital LP",
+   "value": 7224088306,
+   "positions": 40,
+   "top10": 0.5528,
+   "top1": 0.0867,
+   "etf": 0.0,
+   "turnover": 0.5429,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001508822",
+   "name": "ACR Alpine Capital Research, LLC",
+   "value": 7044021643,
+   "positions": 38,
+   "top10": 0.7037,
+   "top1": 0.1921,
+   "etf": 0.1952,
+   "turnover": 0.1125,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0000764532",
+   "name": "FIDUCIARY MANAGEMENT INC /WI/",
+   "value": 7030555164,
+   "positions": 56,
+   "top10": 0.3343,
+   "top1": 0.0528,
+   "etf": 0.0003,
+   "turnover": 0.2406,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000733986",
+   "name": "CAMBRIDGE ASSOCIATES LLC /MA/ /ADV",
+   "value": 6929193459,
+   "positions": 56,
+   "top10": 0.8417,
+   "top1": 0.273,
+   "etf": 0.9911,
+   "turnover": 0.0358,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001856083",
+   "name": "Deep Track Capital, LP",
+   "value": 6788059447,
+   "positions": 66,
+   "top10": 0.4009,
+   "top1": 0.075,
+   "etf": 0.0,
+   "turnover": 0.1926,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001876496",
+   "name": "Border to Coast Pensions Partnership Ltd",
+   "value": 6784779000,
+   "positions": 90,
+   "top10": 0.4287,
+   "top1": 0.0662,
+   "etf": 0.051,
+   "turnover": 0.0524,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000276101",
+   "name": "BRISTOL JOHN W & CO INC /NY/",
+   "value": 6761661939,
+   "positions": 62,
+   "top10": 0.4115,
+   "top1": 0.0552,
+   "etf": 0.0,
+   "turnover": 0.0525,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000740913",
+   "name": "REAVES W H & CO INC",
+   "value": 6591412591,
+   "positions": 94,
+   "top10": 0.455,
+   "top1": 0.0861,
+   "etf": 0.0,
+   "turnover": 0.0831,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001475940",
+   "name": "MONTRUSCO BOLTON INVESTMENTS INC.",
+   "value": 6455206652,
+   "positions": 80,
+   "top10": 0.494,
+   "top1": 0.0818,
+   "etf": 0.0,
+   "turnover": 0.1776,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001388814",
+   "name": "Energy Income Partners, LLC",
+   "value": 6359395239,
+   "positions": 88,
+   "top10": 0.4094,
+   "top1": 0.08,
+   "etf": 0.0,
+   "turnover": 0.0565,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001840025",
+   "name": "WIT, LLC",
+   "value": 6261278653,
+   "positions": 24,
+   "top10": 0.9223,
+   "top1": 0.3683,
+   "etf": 0.9958,
+   "turnover": 0.0814,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0002016939",
+   "name": "Evergreen Quality Fund GP, Ltd.",
+   "value": 6201786110,
+   "positions": 43,
+   "top10": 0.7237,
+   "top1": 0.1482,
+   "etf": 0.0191,
+   "turnover": 0.5744,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001731012",
+   "name": "Alphinity Investment Management Pty Ltd",
+   "value": 6006238569,
+   "positions": 27,
+   "top10": 0.6095,
+   "top1": 0.0888,
+   "etf": 0.0,
+   "turnover": 0.2624,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001050442",
+   "name": "DISCIPLINED GROWTH INVESTORS INC /MN",
+   "value": 5906555724,
+   "positions": 58,
+   "top10": 0.4943,
+   "top1": 0.0734,
+   "etf": 0.0,
+   "turnover": 0.1171,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001537530",
+   "name": "SCGE MANAGEMENT, L.P.",
+   "value": 5896728454,
+   "positions": 21,
+   "top10": 0.8711,
+   "top1": 0.492,
+   "etf": 0.0,
+   "turnover": 0.3784,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001050477",
+   "name": "SNYDER CAPITAL MANAGEMENT L P",
+   "value": 5788149315,
+   "positions": 69,
+   "top10": 0.3654,
+   "top1": 0.0548,
+   "etf": 0.0,
+   "turnover": 0.052,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001509842",
+   "name": "PointState Capital LP",
+   "value": 5651291796,
+   "positions": 41,
+   "top10": 0.5121,
+   "top1": 0.0603,
+   "etf": 0.0,
+   "turnover": 0.4197,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000814375",
+   "name": "DONALD SMITH & CO., INC.",
+   "value": 5649457865,
+   "positions": 66,
+   "top10": 0.4251,
+   "top1": 0.0752,
+   "etf": 0.0,
+   "turnover": 0.0992,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0002029723",
+   "name": "American Family Investments, Inc.",
+   "value": 5541261803,
+   "positions": 13,
+   "top10": 0.9804,
+   "top1": 0.471,
+   "etf": 0.9732,
+   "turnover": 0.1683,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001424799",
+   "name": "NEPC LLC",
+   "value": 5358884459,
+   "positions": 53,
+   "top10": 0.7508,
+   "top1": 0.1207,
+   "etf": 0.9904,
+   "turnover": 0.0289,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001948391",
+   "name": "Japan Science & Technology Agency",
+   "value": 5287588898,
+   "positions": 12,
+   "top10": 0.951,
+   "top1": 0.1761,
+   "etf": 0.8977,
+   "turnover": 0.0428,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001294571",
+   "name": "Millburn Ridgefield LLC /DE/",
+   "value": 5282097961,
+   "positions": 39,
+   "top10": 0.736,
+   "top1": 0.1277,
+   "etf": 1.0,
+   "turnover": 0.0286,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001685771",
+   "name": "EQUITY INVESTMENT CORP",
+   "value": 5241498303,
+   "positions": 76,
+   "top10": 0.3082,
+   "top1": 0.0372,
+   "etf": 0.0202,
+   "turnover": 0.0962,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001658363",
+   "name": "Maple Rock Capital Partners Inc.",
+   "value": 5100027142,
+   "positions": 51,
+   "top10": 0.5301,
+   "top1": 0.1701,
+   "etf": 0.0,
+   "turnover": 0.2588,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001780365",
+   "name": "WT Asset Management Ltd",
+   "value": 5042405706,
+   "positions": 24,
+   "top10": 0.8029,
+   "top1": 0.1114,
+   "etf": 0.0,
+   "turnover": 0.7323,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001138995",
+   "name": "GLENVIEW CAPITAL MANAGEMENT, LLC",
+   "value": 5006125679,
+   "positions": 42,
+   "top10": 0.6407,
+   "top1": 0.1291,
+   "etf": 0.0,
+   "turnover": 0.2971,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000884566",
+   "name": "Fenimore Asset Management Inc",
+   "value": 4830092225,
+   "positions": 92,
+   "top10": 0.3967,
+   "top1": 0.0547,
+   "etf": 0.0019,
+   "turnover": 0.054,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001582090",
+   "name": "Sachem Head Capital Management LP",
+   "value": 4819684910,
+   "positions": 19,
+   "top10": 0.7445,
+   "top1": 0.1092,
+   "etf": 0.0,
+   "turnover": 0.376,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001569064",
+   "name": "MONTANOVA CAPITAL, LLC",
+   "value": 4758667056,
+   "positions": 95,
+   "top10": 0.4461,
+   "top1": 0.1077,
+   "etf": 0.0198,
+   "turnover": 0.1454,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001040273",
+   "name": "Third Point LLC",
+   "value": 4643126288,
+   "positions": 40,
+   "top10": 0.6056,
+   "top1": 0.1148,
+   "etf": 0.0,
+   "turnover": 0.3183,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001269094",
+   "name": "FOLKETRYGDFONDET",
+   "value": 4635477693,
+   "positions": 11,
+   "top10": 0.9997,
+   "top1": 0.6166,
+   "etf": 0.0,
+   "turnover": 0.0172,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001868537",
+   "name": "FUNDSMITH INVESTMENT SERVICES LTD.",
+   "value": 4518917743,
+   "positions": 27,
+   "top10": 0.5524,
+   "top1": 0.074,
+   "etf": 0.0,
+   "turnover": 0.3369,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001535839",
+   "name": "Donor Advised Charitable Giving, Inc.",
+   "value": 4494049046,
+   "positions": 32,
+   "top10": 0.9961,
+   "top1": 0.9868,
+   "etf": 0.0076,
+   "turnover": 0.0009,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001805589",
+   "name": "59 North Capital Management, LP",
+   "value": 4493586476,
+   "positions": 19,
+   "top10": 0.7454,
+   "top1": 0.1126,
+   "etf": 0.0,
+   "turnover": 0.2937,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001277403",
+   "name": "Hamlin Capital Management, LLC",
+   "value": 4447595172,
+   "positions": 30,
+   "top10": 0.4623,
+   "top1": 0.0616,
+   "etf": 0.0002,
+   "turnover": 0.0398,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001018724",
+   "name": "AMAZON COM INC",
+   "value": 4423057466,
+   "positions": 6,
+   "top10": 1.0,
+   "top1": 0.6212,
+   "etf": 0.0,
+   "turnover": 0.1389,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001319998",
+   "name": "Southpoint Capital Advisors LP",
+   "value": 4395933780,
+   "positions": 33,
+   "top10": 0.6042,
+   "top1": 0.1123,
+   "etf": 0.0,
+   "turnover": 0.3325,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001080298",
+   "name": "REINHART PARTNERS, LLC.",
+   "value": 4379854648,
+   "positions": 72,
+   "top10": 0.3997,
+   "top1": 0.0735,
+   "etf": 0.0004,
+   "turnover": 0.1111,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001974915",
+   "name": "Vestal Point Capital, LP",
+   "value": 4279457817,
+   "positions": 68,
+   "top10": 0.5029,
+   "top1": 0.0806,
+   "etf": 0.0,
+   "turnover": 0.3806,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001510669",
+   "name": "Contour Asset Management LLC",
+   "value": 4224379229,
+   "positions": 27,
+   "top10": 0.6212,
+   "top1": 0.1484,
+   "etf": 0.0,
+   "turnover": 0.4818,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001911448",
+   "name": "Kinetic Partners Management, LP",
+   "value": 4189073931,
+   "positions": 47,
+   "top10": 0.6656,
+   "top1": 0.2906,
+   "etf": 0.0,
+   "turnover": 0.382,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001789082",
+   "name": "Crake Asset Management LLP",
+   "value": 4179222179,
+   "positions": 23,
+   "top10": 0.8135,
+   "top1": 0.1396,
+   "etf": 0.0313,
+   "turnover": 0.2568,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001518235",
+   "name": "Cardinal Capital Management, Inc.",
+   "value": 4133626448,
+   "positions": 70,
+   "top10": 0.4143,
+   "top1": 0.0458,
+   "etf": 0.0,
+   "turnover": 0.0805,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000059558",
+   "name": "LINCOLN NATIONAL CORP",
+   "value": 3907391966,
+   "positions": 20,
+   "top10": 0.6859,
+   "top1": 0.0898,
+   "etf": 1.0,
+   "turnover": 0.0656,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001576350",
+   "name": "GTCR LLC",
+   "value": 3906824589,
+   "positions": 5,
+   "top10": 1.0,
+   "top1": 0.8036,
+   "etf": 0.0,
+   "turnover": 0.0289,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001816616",
+   "name": "NZS Capital, LLC",
+   "value": 3855480459,
+   "positions": 61,
+   "top10": 0.4254,
+   "top1": 0.0771,
+   "etf": 0.0,
+   "turnover": 0.14,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001756558",
+   "name": "XN LP",
+   "value": 3799416410,
+   "positions": 27,
+   "top10": 0.6502,
+   "top1": 0.1349,
+   "etf": 0.0,
+   "turnover": 0.2958,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000949509",
+   "name": "OAKTREE CAPITAL MANAGEMENT LP",
+   "value": 3778630287,
+   "positions": 51,
+   "top10": 0.6655,
+   "top1": 0.1387,
+   "etf": 0.0,
+   "turnover": 0.2622,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001839209",
+   "name": "Darwin Global Management, Ltd.",
+   "value": 3760253505,
+   "positions": 5,
+   "top10": 1.0,
+   "top1": 0.5445,
+   "etf": 0.0,
+   "turnover": 0.3603,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001356249",
+   "name": "Fund Evaluation Group, LLC",
+   "value": 3703319517,
+   "positions": 80,
+   "top10": 0.8266,
+   "top1": 0.2946,
+   "etf": 0.9995,
+   "turnover": 0.1041,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001672512",
+   "name": "Matson Money. Inc.",
+   "value": 3590250059,
+   "positions": 9,
+   "top10": 1.0,
+   "top1": 0.2265,
+   "etf": 1.0,
+   "turnover": 0.0169,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001963326",
+   "name": "RPOA Advisors, Inc.",
+   "value": 3511076634,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.4475,
+   "etf": 0.9999,
+   "turnover": 0.1544,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001353312",
+   "name": "TREMBLANT CAPITAL GROUP",
+   "value": 3481888067,
+   "positions": 58,
+   "top10": 0.3711,
+   "top1": 0.0452,
+   "etf": 0.0,
+   "turnover": 0.2026,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001765388",
+   "name": "Metropolis Capital Ltd",
+   "value": 3448472551,
+   "positions": 16,
+   "top10": 0.8761,
+   "top1": 0.1399,
+   "etf": 0.0,
+   "turnover": 0.2896,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001767686",
+   "name": "Yarbrough Capital, LLC",
+   "value": 3342107375,
+   "positions": 88,
+   "top10": 0.738,
+   "top1": 0.1953,
+   "etf": 0.2237,
+   "turnover": 0.0186,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001555623",
+   "name": "Trivest Advisors Ltd",
+   "value": 3181046146,
+   "positions": 15,
+   "top10": 0.976,
+   "top1": 0.2238,
+   "etf": 0.0045,
+   "turnover": 0.3508,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001331875",
+   "name": "Fidelity National Financial, Inc.",
+   "value": 3164773420,
+   "positions": 30,
+   "top10": 0.9004,
+   "top1": 0.7953,
+   "etf": 0.0,
+   "turnover": 0.0523,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001323414",
+   "name": "Pacific Heights Asset Management LLC",
+   "value": 3158133000,
+   "positions": 77,
+   "top10": 0.4206,
+   "top1": 0.0818,
+   "etf": 0.0,
+   "turnover": 0.0167,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001801547",
+   "name": "Blue Whale Capital LLP",
+   "value": 3151355143,
+   "positions": 27,
+   "top10": 0.7266,
+   "top1": 0.1398,
+   "etf": 0.0,
+   "turnover": 0.2589,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001103139",
+   "name": "ADVENTIST HEALTH SYSTEM SUNBELT HEALTHCARE CORP",
+   "value": 3119290941,
+   "positions": 16,
+   "top10": 0.955,
+   "top1": 0.2894,
+   "etf": 0.9899,
+   "turnover": 0.1618,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001524408",
+   "name": "Van Berkom & Associates Inc.",
+   "value": 3103420000,
+   "positions": 67,
+   "top10": 0.3049,
+   "top1": 0.0332,
+   "etf": 0.0005,
+   "turnover": 0.1271,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001960830",
+   "name": "SurgoCap Partners LP",
+   "value": 3093472161,
+   "positions": 13,
+   "top10": 0.9223,
+   "top1": 0.1402,
+   "etf": 0.0,
+   "turnover": 0.2599,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001609074",
+   "name": "HAWK RIDGE CAPITAL MANAGEMENT LP",
+   "value": 3058059031,
+   "positions": 43,
+   "top10": 0.6139,
+   "top1": 0.1107,
+   "etf": 0.0,
+   "turnover": 0.3546,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001799802",
+   "name": "Comprehensive Financial Management LLC",
+   "value": 3046884292,
+   "positions": 39,
+   "top10": 0.9615,
+   "top1": 0.368,
+   "etf": 0.2117,
+   "turnover": 0.0149,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001312908",
+   "name": "Gates Capital Management, Inc.",
+   "value": 3045560272,
+   "positions": 31,
+   "top10": 0.4783,
+   "top1": 0.0521,
+   "etf": 0.0,
+   "turnover": 0.1638,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001650135",
+   "name": "Hosking Partners LLP",
+   "value": 3008231980,
+   "positions": 98,
+   "top10": 0.3476,
+   "top1": 0.0738,
+   "etf": 0.0,
+   "turnover": 0.0668,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001817646",
+   "name": "L1 Capital Pty Ltd",
+   "value": 2974961210,
+   "positions": 24,
+   "top10": 0.8273,
+   "top1": 0.1507,
+   "etf": 0.0,
+   "turnover": 0.3555,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001568788",
+   "name": "Palestra Capital Management LLC",
+   "value": 2949370243,
+   "positions": 21,
+   "top10": 0.7257,
+   "top1": 0.1263,
+   "etf": 0.0,
+   "turnover": 0.3484,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001360710",
+   "name": "Hirtle & Co., LLC",
+   "value": 2859041806,
+   "positions": 99,
+   "top10": 0.8622,
+   "top1": 0.2575,
+   "etf": 0.9708,
+   "turnover": 0.0331,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001602189",
+   "name": "Dragoneer Investment Group, LLC",
+   "value": 2834424427,
+   "positions": 12,
+   "top10": 0.9845,
+   "top1": 0.4822,
+   "etf": 0.0,
+   "turnover": 0.8698,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001646695",
+   "name": "Steele Capital Management, Inc.",
+   "value": 2717532623,
+   "positions": 85,
+   "top10": 0.5834,
+   "top1": 0.1041,
+   "etf": 0.8098,
+   "turnover": 0.0165,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001948899",
+   "name": "Avala Global LP",
+   "value": 2712022670,
+   "positions": 30,
+   "top10": 0.5333,
+   "top1": 0.0838,
+   "etf": 0.0,
+   "turnover": 0.4692,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001808928",
+   "name": "Cartenna Capital, LP",
+   "value": 2701590820,
+   "positions": 35,
+   "top10": 0.5048,
+   "top1": 0.0689,
+   "etf": 0.0,
+   "turnover": 0.6803,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000074260",
+   "name": "OLD REPUBLIC INTERNATIONAL CORP",
+   "value": 2667863000,
+   "positions": 54,
+   "top10": 0.3003,
+   "top1": 0.034,
+   "etf": 0.0,
+   "turnover": 0.0157,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001803149",
+   "name": "Mizuho Markets Cayman LP",
+   "value": 2665079434,
+   "positions": 89,
+   "top10": 0.7417,
+   "top1": 0.2125,
+   "etf": 0.0887,
+   "turnover": 0.5252,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000915191",
+   "name": "FAIRFAX FINANCIAL HOLDINGS LTD/ CAN",
+   "value": 2638451995,
+   "positions": 32,
+   "top10": 0.9075,
+   "top1": 0.2155,
+   "etf": 0.0,
+   "turnover": 0.3011,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001635007",
+   "name": "Mason Investment Advisory Services, Inc.",
+   "value": 2629255698,
+   "positions": 84,
+   "top10": 0.9499,
+   "top1": 0.3398,
+   "etf": 0.967,
+   "turnover": 0.0226,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001817534",
+   "name": "Anomaly Capital Management, LP",
+   "value": 2619055035,
+   "positions": 24,
+   "top10": 0.7765,
+   "top1": 0.1309,
+   "etf": 0.0,
+   "turnover": 0.3307,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001867831",
+   "name": "North Reef Capital Management LP",
+   "value": 2608060624,
+   "positions": 43,
+   "top10": 0.73,
+   "top1": 0.1477,
+   "etf": 0.0,
+   "turnover": 0.2616,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001484148",
+   "name": "TURTLE CREEK ASSET MANAGEMENT INC.",
+   "value": 2560015861,
+   "positions": 38,
+   "top10": 0.5368,
+   "top1": 0.069,
+   "etf": 0.0,
+   "turnover": 0.3855,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001861026",
+   "name": "Marathon Asset Management Ltd",
+   "value": 2461778316,
+   "positions": 74,
+   "top10": 0.3756,
+   "top1": 0.0513,
+   "etf": 0.0,
+   "turnover": 0.118,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001602716",
+   "name": "Long Focus Capital Management, LLC",
+   "value": 2452257154,
+   "positions": 76,
+   "top10": 0.4189,
+   "top1": 0.0713,
+   "etf": 0.0,
+   "turnover": 0.175,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000872162",
+   "name": "BLACKHILL CAPITAL INC",
+   "value": 2410018127,
+   "positions": 47,
+   "top10": 0.9493,
+   "top1": 0.7432,
+   "etf": 0.0003,
+   "turnover": 0.004,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001512173",
+   "name": "MAPLELANE CAPITAL, LLC",
+   "value": 2386725963,
+   "positions": 48,
+   "top10": 0.5456,
+   "top1": 0.0772,
+   "etf": 0.0,
+   "turnover": 0.6015,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001944889",
+   "name": "Forest Avenue Capital Management LP",
+   "value": 2380993836,
+   "positions": 24,
+   "top10": 0.6207,
+   "top1": 0.1022,
+   "etf": 0.0,
+   "turnover": 0.3138,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001700272",
+   "name": "Azora Capital LP",
+   "value": 2373566834,
+   "positions": 47,
+   "top10": 0.5269,
+   "top1": 0.1004,
+   "etf": 0.0441,
+   "turnover": 0.4468,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001840735",
+   "name": "GREENOAKS LLC",
+   "value": 2356875969,
+   "positions": 10,
+   "top10": 1.0,
+   "top1": 0.5961,
+   "etf": 0.0,
+   "turnover": 0.3746,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001657111",
+   "name": "NS Partners Ltd",
+   "value": 2330909507,
+   "positions": 77,
+   "top10": 0.472,
+   "top1": 0.0839,
+   "etf": 0.0,
+   "turnover": 0.1439,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001801265",
+   "name": "Madison Avenue Partners, LP",
+   "value": 2323000202,
+   "positions": 25,
+   "top10": 0.7708,
+   "top1": 0.1211,
+   "etf": 0.0,
+   "turnover": 0.5631,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001223779",
+   "name": "TEXAS PERMANENT SCHOOL FUND CORP",
+   "value": 2255890135,
+   "positions": 15,
+   "top10": 0.9995,
+   "top1": 0.3287,
+   "etf": 0.3898,
+   "turnover": 0.1327,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001665605",
+   "name": "3EDGE Asset Management, LP",
+   "value": 2241809264,
+   "positions": 94,
+   "top10": 0.6062,
+   "top1": 0.1923,
+   "etf": 0.9041,
+   "turnover": 0.2319,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001329375",
+   "name": "CUSHING ASSET MANAGEMENT, LP dba NXG INVESTMENT MANAGEMENT",
+   "value": 2234777893,
+   "positions": 73,
+   "top10": 0.4828,
+   "top1": 0.0737,
+   "etf": 0.0,
+   "turnover": 0.107,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001320168",
+   "name": "AMERICAN CAPITAL MANAGEMENT INC",
+   "value": 2230305912,
+   "positions": 80,
+   "top10": 0.4386,
+   "top1": 0.0876,
+   "etf": 0.0037,
+   "turnover": 0.0935,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001591505",
+   "name": "Swan Global Investments, LLC",
+   "value": 2190702024,
+   "positions": 86,
+   "top10": 0.8094,
+   "top1": 0.3657,
+   "etf": 0.6737,
+   "turnover": 0.0459,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001848138",
+   "name": "Greenwoods Asset Management Hong Kong Ltd.",
+   "value": 2185501549,
+   "positions": 21,
+   "top10": 0.9531,
+   "top1": 0.296,
+   "etf": 0.0,
+   "turnover": 0.5761,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001454138",
+   "name": "Stairway Partners, LLC",
+   "value": 2122285239,
+   "positions": 18,
+   "top10": 0.9114,
+   "top1": 0.1521,
+   "etf": 1.0,
+   "turnover": 0.0672,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001525907",
+   "name": "Cerberus Capital Management, L.P.",
+   "value": 2094323943,
+   "positions": 11,
+   "top10": 0.9998,
+   "top1": 0.9808,
+   "etf": 0.0,
+   "turnover": 0.0023,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001622346",
+   "name": "SHANDA ASSET MANAGEMENT HOLDINGS Ltd",
+   "value": 2091075824,
+   "positions": 6,
+   "top10": 1.0,
+   "top1": 0.581,
+   "etf": 0.581,
+   "turnover": 0.2139,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001317588",
+   "name": "ABRAMS BISON INVESTMENTS, LLC",
+   "value": 2048596332,
+   "positions": 11,
+   "top10": 0.9968,
+   "top1": 0.2638,
+   "etf": 0.0,
+   "turnover": 0.2757,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001752759",
+   "name": "DNCA FINANCE",
+   "value": 2032544378,
+   "positions": 92,
+   "top10": 0.4973,
+   "top1": 0.1253,
+   "etf": 0.0,
+   "turnover": 0.142,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001707975",
+   "name": "Jordan Park Group LLC",
+   "value": 1972097489,
+   "positions": 68,
+   "top10": 0.7983,
+   "top1": 0.3018,
+   "etf": 0.9537,
+   "turnover": 0.1089,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0000820743",
+   "name": "CRAMER ROSENTHAL MCGLYNN LLC",
+   "value": 1969663134,
+   "positions": 95,
+   "top10": 0.3141,
+   "top1": 0.0425,
+   "etf": 0.0,
+   "turnover": 0.2264,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001357867",
+   "name": "Evensky & Katz LLC",
+   "value": 1936263000,
+   "positions": 72,
+   "top10": 0.7178,
+   "top1": 0.1354,
+   "etf": 0.9716,
+   "turnover": 0.0148,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001424381",
+   "name": "LAKEWOOD CAPITAL MANAGEMENT, LP",
+   "value": 1928430343,
+   "positions": 62,
+   "top10": 0.4323,
+   "top1": 0.0612,
+   "etf": 0.0049,
+   "turnover": 0.185,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001676292",
+   "name": "Hill Path Capital LP",
+   "value": 1917411807,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.6774,
+   "etf": 0.0,
+   "turnover": 0.0065,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0000869367",
+   "name": "ROFFMAN MILLER ASSOCIATES INC /PA/",
+   "value": 1911775999,
+   "positions": 87,
+   "top10": 0.4322,
+   "top1": 0.0703,
+   "etf": 0.0148,
+   "turnover": 0.0437,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001998597",
+   "name": "JANA Partners Management, LP",
+   "value": 1902301416,
+   "positions": 10,
+   "top10": 1.0,
+   "top1": 0.2546,
+   "etf": 0.1346,
+   "turnover": 0.0544,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001626220",
+   "name": "Greenhouse Funds LLLP",
+   "value": 1899483774,
+   "positions": 29,
+   "top10": 0.5765,
+   "top1": 0.0856,
+   "etf": 0.0404,
+   "turnover": 0.2681,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001743937",
+   "name": "TOMS Capital Investment Management LP",
+   "value": 1893895452,
+   "positions": 16,
+   "top10": 0.8428,
+   "top1": 0.2238,
+   "etf": 0.0,
+   "turnover": 0.8923,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001496228",
+   "name": "SRB CORP",
+   "value": 1859294349,
+   "positions": 23,
+   "top10": 0.7033,
+   "top1": 0.123,
+   "etf": 0.3265,
+   "turnover": 0.1161,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0002011081",
+   "name": "Nationale-Nederlanden Powszechne Towarzystwo Emerytalne S.A.",
+   "value": 1825929162,
+   "positions": 43,
+   "top10": 0.6091,
+   "top1": 0.1094,
+   "etf": 0.0,
+   "turnover": 0.3061,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001602198",
+   "name": "Capital Impact Advisors, LLC",
+   "value": 1783322397,
+   "positions": 29,
+   "top10": 0.5851,
+   "top1": 0.1155,
+   "etf": 0.0,
+   "turnover": 0.4452,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001726808",
+   "name": "STEPHENS GROUP ASSET MANAGEMENT, LLC",
+   "value": 1769326547,
+   "positions": 26,
+   "top10": 0.8216,
+   "top1": 0.1366,
+   "etf": 0.978,
+   "turnover": 0.0741,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001369702",
+   "name": "AMI ASSET MANAGEMENT CORP",
+   "value": 1736767939,
+   "positions": 99,
+   "top10": 0.4808,
+   "top1": 0.073,
+   "etf": 0.0076,
+   "turnover": 0.1304,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001278951",
+   "name": "GOLDENTREE ASSET MANAGEMENT LP",
+   "value": 1711058668,
+   "positions": 29,
+   "top10": 0.6555,
+   "top1": 0.1849,
+   "etf": 0.0,
+   "turnover": 0.4587,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001584691",
+   "name": "Global Alpha Capital Management Ltd.",
+   "value": 1669050115,
+   "positions": 48,
+   "top10": 0.4443,
+   "top1": 0.0888,
+   "etf": 0.0,
+   "turnover": 0.1652,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001535695",
+   "name": "Angeles Investment Advisors, LLC",
+   "value": 1664941483,
+   "positions": 31,
+   "top10": 0.9323,
+   "top1": 0.5526,
+   "etf": 0.9853,
+   "turnover": 0.127,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001679688",
+   "name": "DigitalBridge Group, Inc.",
+   "value": 1662848047,
+   "positions": 57,
+   "top10": 0.4373,
+   "top1": 0.0681,
+   "etf": 0.0,
+   "turnover": 0.2472,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001034546",
+   "name": "CITY OF LONDON INVESTMENT MANAGEMENT CO LTD",
+   "value": 1661390600,
+   "positions": 80,
+   "top10": 0.6896,
+   "top1": 0.1231,
+   "etf": 0.2244,
+   "turnover": 0.08,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001002152",
+   "name": "COMPASS CAPITAL MANAGEMENT, INC",
+   "value": 1658554673,
+   "positions": 91,
+   "top10": 0.3822,
+   "top1": 0.0524,
+   "etf": 0.012,
+   "turnover": 0.103,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001706013",
+   "name": "Ally Invest Advisors Inc.",
+   "value": 1656131193,
+   "positions": 75,
+   "top10": 0.8429,
+   "top1": 0.2322,
+   "etf": 0.9973,
+   "turnover": 0.0099,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0000040417",
+   "name": "GENERAL AMERICAN INVESTORS CO INC",
+   "value": 1649661047,
+   "positions": 69,
+   "top10": 0.4511,
+   "top1": 0.0663,
+   "etf": 0.0032,
+   "turnover": 0.0477,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001177244",
+   "name": "SHAPIRO CAPITAL MANAGEMENT LLC",
+   "value": 1649639467,
+   "positions": 50,
+   "top10": 0.4425,
+   "top1": 0.0645,
+   "etf": 0.0097,
+   "turnover": 0.1953,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001748729",
+   "name": "Triodos Investment Management BV",
+   "value": 1642145295,
+   "positions": 50,
+   "top10": 0.4633,
+   "top1": 0.0624,
+   "etf": 0.0,
+   "turnover": 0.078,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001599814",
+   "name": "Kopernik Global Investors, LLC",
+   "value": 1631835671,
+   "positions": 26,
+   "top10": 0.7574,
+   "top1": 0.1499,
+   "etf": 0.0,
+   "turnover": 0.3845,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001545812",
+   "name": "CORDA Investment Management, LLC.",
+   "value": 1629967141,
+   "positions": 85,
+   "top10": 0.3926,
+   "top1": 0.0491,
+   "etf": 0.0269,
+   "turnover": 0.0353,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001845915",
+   "name": "Pine Ridge Advisers LLC",
+   "value": 1621326001,
+   "positions": 40,
+   "top10": 0.7826,
+   "top1": 0.3775,
+   "etf": 0.8329,
+   "turnover": 0.0511,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001452689",
+   "name": "Valiant Capital Management, L.P.",
+   "value": 1606067847,
+   "positions": 25,
+   "top10": 0.7636,
+   "top1": 0.1615,
+   "etf": 0.3379,
+   "turnover": 0.0778,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001476993",
+   "name": "Investure, LLC",
+   "value": 1600323418,
+   "positions": 17,
+   "top10": 0.9077,
+   "top1": 0.2649,
+   "etf": 0.7076,
+   "turnover": 0.2274,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001964389",
+   "name": "PPSC Investment Service Corp",
+   "value": 1584927143,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.434,
+   "etf": 1.0,
+   "turnover": 0.0106,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001319691",
+   "name": "Ranger Investment Management, L.P.",
+   "value": 1580750166,
+   "positions": 83,
+   "top10": 0.3015,
+   "top1": 0.0515,
+   "etf": 0.0,
+   "turnover": 0.1483,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001103887",
+   "name": "NWI MANAGEMENT LP",
+   "value": 1564383000,
+   "positions": 49,
+   "top10": 0.7187,
+   "top1": 0.1323,
+   "etf": 0.071,
+   "turnover": 0.6819,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001910344",
+   "name": "P/E Global LLC",
+   "value": 1558508443,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.406,
+   "etf": 1.0,
+   "turnover": 0.0435,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001400240",
+   "name": "Flagship Pioneering, LLC",
+   "value": 1539910719,
+   "positions": 5,
+   "top10": 1.0,
+   "top1": 0.6866,
+   "etf": 0.0,
+   "turnover": 0.0,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001426771",
+   "name": "Alaska Permanent Capital Management, LLC",
+   "value": 1530439080,
+   "positions": 41,
+   "top10": 0.8238,
+   "top1": 0.2018,
+   "etf": 0.8313,
+   "turnover": 0.0247,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001555254",
+   "name": "Carrhae Capital LLP",
+   "value": 1517496827,
+   "positions": 23,
+   "top10": 0.7171,
+   "top1": 0.1305,
+   "etf": 0.0,
+   "turnover": 0.3671,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0000922940",
+   "name": "M.D. Sass, LLC",
+   "value": 1510006952,
+   "positions": 38,
+   "top10": 0.5388,
+   "top1": 0.0712,
+   "etf": 0.0139,
+   "turnover": 0.2657,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001736465",
+   "name": "RUSH ISLAND MANAGEMENT, LP",
+   "value": 1508992494,
+   "positions": 22,
+   "top10": 0.6717,
+   "top1": 0.091,
+   "etf": 0.0,
+   "turnover": 0.3792,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001469877",
+   "name": "NEXPOINT ASSET MANAGEMENT, L.P.",
+   "value": 1495842784,
+   "positions": 67,
+   "top10": 0.5041,
+   "top1": 0.0978,
+   "etf": 0.0,
+   "turnover": 0.5931,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001694284",
+   "name": "Tandem Investment Advisors, Inc.",
+   "value": 1492997705,
+   "positions": 68,
+   "top10": 0.4459,
+   "top1": 0.0617,
+   "etf": 0.0,
+   "turnover": 0.2105,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001056831",
+   "name": "FAIRHOLME CAPITAL MANAGEMENT LLC",
+   "value": 1489888626,
+   "positions": 13,
+   "top10": 0.9976,
+   "top1": 0.7643,
+   "etf": 0.0,
+   "turnover": 0.0349,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001851813",
+   "name": "Hackensack Meridian Health, Inc.",
+   "value": 1481127543,
+   "positions": 7,
+   "top10": 1.0,
+   "top1": 0.3567,
+   "etf": 1.0,
+   "turnover": 0.1465,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001044936",
+   "name": "NEUMEIER POMA INVESTMENT COUNSEL LLC",
+   "value": 1460653419,
+   "positions": 42,
+   "top10": 0.3713,
+   "top1": 0.0418,
+   "etf": 0.0103,
+   "turnover": 0.1612,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001974312",
+   "name": "TORNO CAPITAL, LLC",
+   "value": 1450258876,
+   "positions": 28,
+   "top10": 0.9975,
+   "top1": 0.3346,
+   "etf": 0.0,
+   "turnover": 0.5407,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001406484",
+   "name": "Harvey Partners, LLC",
+   "value": 1442183845,
+   "positions": 47,
+   "top10": 0.3896,
+   "top1": 0.0543,
+   "etf": 0.0078,
+   "turnover": 0.1735,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001680964",
+   "name": "SOMA EQUITY PARTNERS LP",
+   "value": 1435589399,
+   "positions": 24,
+   "top10": 0.555,
+   "top1": 0.0739,
+   "etf": 0.0,
+   "turnover": 0.4859,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001490429",
+   "name": "First Long Island Investors, LLC",
+   "value": 1410440356,
+   "positions": 73,
+   "top10": 0.4197,
+   "top1": 0.0557,
+   "etf": 0.001,
+   "turnover": 0.0945,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001964563",
+   "name": "MADRONE ADVISORS, LLC",
+   "value": 1394822657,
+   "positions": 6,
+   "top10": 1.0,
+   "top1": 0.6992,
+   "etf": 0.0289,
+   "turnover": 0.0357,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001420816",
+   "name": "Telemark Asset Management, LLC",
+   "value": 1384075474,
+   "positions": 57,
+   "top10": 0.4293,
+   "top1": 0.0867,
+   "etf": 0.0,
+   "turnover": 0.0579,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000874791",
+   "name": "CAMPBELL NEWMAN ASSET MANAGEMENT INC",
+   "value": 1347500560,
+   "positions": 99,
+   "top10": 0.4517,
+   "top1": 0.0686,
+   "etf": 0.0007,
+   "turnover": 0.1222,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001013538",
+   "name": "EDGAR LOMAX CO/VA",
+   "value": 1337881128,
+   "positions": 58,
+   "top10": 0.4132,
+   "top1": 0.0572,
+   "etf": 0.0041,
+   "turnover": 0.0455,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001724517",
+   "name": "Ovata Capital Management Ltd",
+   "value": 1332409062,
+   "positions": 43,
+   "top10": 0.6465,
+   "top1": 0.2681,
+   "etf": 0.0384,
+   "turnover": 0.6391,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001423686",
+   "name": "CADIAN CAPITAL MANAGEMENT, LP",
+   "value": 1321381479,
+   "positions": 28,
+   "top10": 0.6416,
+   "top1": 0.1193,
+   "etf": 0.0,
+   "turnover": 0.3042,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001353651",
+   "name": "Leith Wheeler Investment Counsel Ltd.",
+   "value": 1316163080,
+   "positions": 85,
+   "top10": 0.5692,
+   "top1": 0.328,
+   "etf": 0.3506,
+   "turnover": 0.0754,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001570253",
+   "name": "QV Investors Inc.",
+   "value": 1299266000,
+   "positions": 68,
+   "top10": 0.4246,
+   "top1": 0.0548,
+   "etf": 0.0,
+   "turnover": 0.1019,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0000931097",
+   "name": "CCM INVESTMENT ADVISERS LLC",
+   "value": 1292386683,
+   "positions": 88,
+   "top10": 0.343,
+   "top1": 0.0502,
+   "etf": 0.0021,
+   "turnover": 0.0926,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001308685",
+   "name": "Stack Financial Management, Inc",
+   "value": 1281385473,
+   "positions": 54,
+   "top10": 0.4645,
+   "top1": 0.0897,
+   "etf": 0.0738,
+   "turnover": 0.05,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001511098",
+   "name": "Baskin Financial Services Inc.",
+   "value": 1270188000,
+   "positions": 54,
+   "top10": 0.4961,
+   "top1": 0.0762,
+   "etf": 0.0213,
+   "turnover": 0.0358,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001546587",
+   "name": "Hartford Funds Management Co LLC",
+   "value": 1250084688,
+   "positions": 98,
+   "top10": 0.8722,
+   "top1": 0.3702,
+   "etf": 0.7339,
+   "turnover": 0.0358,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0002009275",
+   "name": "a16z Perennial Management, L.P.",
+   "value": 1236476277,
+   "positions": 61,
+   "top10": 0.7849,
+   "top1": 0.1743,
+   "etf": 0.2759,
+   "turnover": 0.1924,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001820788",
+   "name": "140 Summer Partners LP",
+   "value": 1234510974,
+   "positions": 20,
+   "top10": 0.7182,
+   "top1": 0.1635,
+   "etf": 0.0,
+   "turnover": 0.2666,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001912187",
+   "name": "RDST Capital LLC",
+   "value": 1207617797,
+   "positions": 18,
+   "top10": 0.7099,
+   "top1": 0.087,
+   "etf": 0.0,
+   "turnover": 0.3523,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001972835",
+   "name": "Consolidated Portfolio Review Corp",
+   "value": 1200645375,
+   "positions": 34,
+   "top10": 0.8489,
+   "top1": 0.4113,
+   "etf": 0.8624,
+   "turnover": 0.0212,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001764725",
+   "name": "Blue Grotto Capital, LLC",
+   "value": 1197990133,
+   "positions": 29,
+   "top10": 0.5834,
+   "top1": 0.0843,
+   "etf": 0.0,
+   "turnover": 0.3559,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001470766",
+   "name": "HSG Holding Ltd",
+   "value": 1197079348,
+   "positions": 20,
+   "top10": 0.972,
+   "top1": 0.7231,
+   "etf": 0.0,
+   "turnover": 0.0303,
+   "fails": [
+    "top1"
+   ]
+  },
+  {
+   "cik": "0001475150",
+   "name": "Randolph Co Inc",
+   "value": 1187244589,
+   "positions": 47,
+   "top10": 0.5075,
+   "top1": 0.0787,
+   "etf": 0.2184,
+   "turnover": 0.1164,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001544554",
+   "name": "GRS Advisors, LLC",
+   "value": 1184355738,
+   "positions": 27,
+   "top10": 0.597,
+   "top1": 0.0797,
+   "etf": 0.0,
+   "turnover": 0.4573,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001559832",
+   "name": "Estate Counselors, LLC",
+   "value": 1163066075,
+   "positions": 91,
+   "top10": 0.7816,
+   "top1": 0.3283,
+   "etf": 0.9258,
+   "turnover": 0.169,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001321220",
+   "name": "Stadion Money Management, LLC",
+   "value": 1160036481,
+   "positions": 27,
+   "top10": 0.7727,
+   "top1": 0.2361,
+   "etf": 0.9548,
+   "turnover": 0.07,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001556168",
+   "name": "Consolidated Investment Group LLC",
+   "value": 1150615757,
+   "positions": 77,
+   "top10": 0.6676,
+   "top1": 0.2288,
+   "etf": 0.4285,
+   "turnover": 0.0356,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001811513",
+   "name": "Symetra Investment Management Co",
+   "value": 1144074000,
+   "positions": 6,
+   "top10": 1.0,
+   "top1": 0.3771,
+   "etf": 0.928,
+   "turnover": 0.195,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001652062",
+   "name": "Tairen Capital Ltd",
+   "value": 1132050564,
+   "positions": 44,
+   "top10": 0.7365,
+   "top1": 0.191,
+   "etf": 0.0,
+   "turnover": 0.7562,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001167711",
+   "name": "MASON STREET ADVISORS, LLC",
+   "value": 1109891435,
+   "positions": 15,
+   "top10": 0.9059,
+   "top1": 0.2721,
+   "etf": 0.9338,
+   "turnover": 0.073,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001835943",
+   "name": "AIGH Capital Management LLC",
+   "value": 1104543514,
+   "positions": 42,
+   "top10": 0.7384,
+   "top1": 0.3067,
+   "etf": 0.0,
+   "turnover": 0.3619,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001842149",
+   "name": "Heron Bay Capital Management",
+   "value": 1103565207,
+   "positions": 97,
+   "top10": 0.4757,
+   "top1": 0.0635,
+   "etf": 0.0088,
+   "turnover": 0.0941,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001533950",
+   "name": "Zweig-DiMenna Associates LLC",
+   "value": 1102243171,
+   "positions": 70,
+   "top10": 0.3926,
+   "top1": 0.0673,
+   "etf": 0.0,
+   "turnover": 0.1891,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001755911",
+   "name": "Taikang Asset Management (Hong Kong) Co Ltd",
+   "value": 1098968980,
+   "positions": 77,
+   "top10": 0.4054,
+   "top1": 0.0616,
+   "etf": 0.0719,
+   "turnover": 0.1588,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001407382",
+   "name": "Miller Investment Management, LP",
+   "value": 1094644404,
+   "positions": 83,
+   "top10": 0.7462,
+   "top1": 0.2031,
+   "etf": 0.7753,
+   "turnover": 0.0194,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001535172",
+   "name": "Berkshire Money Management, Inc.",
+   "value": 1094443345,
+   "positions": 56,
+   "top10": 0.7168,
+   "top1": 0.2294,
+   "etf": 0.7414,
+   "turnover": 0.0401,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0002022949",
+   "name": "COMMON FUND FOR NONPROFIT ORGANIZATIONS",
+   "value": 1088101614,
+   "positions": 29,
+   "top10": 0.9433,
+   "top1": 0.3818,
+   "etf": 0.8066,
+   "turnover": 0.0522,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001621855",
+   "name": "Alta Park Capital, LP",
+   "value": 1077920952,
+   "positions": 26,
+   "top10": 0.6026,
+   "top1": 0.11,
+   "etf": 0.0,
+   "turnover": 0.3361,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001943395",
+   "name": "Hook Mill Capital Partners, LP",
+   "value": 1077449706,
+   "positions": 37,
+   "top10": 0.5697,
+   "top1": 0.0709,
+   "etf": 0.0,
+   "turnover": 0.4161,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001316926",
+   "name": "Polaris Capital Management, LLC",
+   "value": 1061425993,
+   "positions": 84,
+   "top10": 0.4774,
+   "top1": 0.0819,
+   "etf": 0.0,
+   "turnover": 0.24,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001910966",
+   "name": "Planning Center, Inc.",
+   "value": 1059698023,
+   "positions": 84,
+   "top10": 0.788,
+   "top1": 0.1763,
+   "etf": 0.9583,
+   "turnover": 0.0137,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001599882",
+   "name": "Rhenman & Partners Asset Management AB",
+   "value": 1059428235,
+   "positions": 99,
+   "top10": 0.2508,
+   "top1": 0.0367,
+   "etf": 0.0,
+   "turnover": 0.2407,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001734398",
+   "name": "RED CEDAR INVESTMENT MANAGEMENT, LLC",
+   "value": 1055842983,
+   "positions": 90,
+   "top10": 0.5687,
+   "top1": 0.1628,
+   "etf": 0.7365,
+   "turnover": 0.0466,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001759115",
+   "name": "Broad Bay Capital Management, LP",
+   "value": 1055230230,
+   "positions": 23,
+   "top10": 0.6702,
+   "top1": 0.1015,
+   "etf": 0.0,
+   "turnover": 0.4179,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001317253",
+   "name": "Minneapolis Portfolio Management Group, LLC",
+   "value": 1055127694,
+   "positions": 34,
+   "top10": 0.4515,
+   "top1": 0.0549,
+   "etf": 0.0,
+   "turnover": 0.092,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001660531",
+   "name": "FengHe Fund Management Pte. Ltd.",
+   "value": 1054232681,
+   "positions": 18,
+   "top10": 0.9138,
+   "top1": 0.2454,
+   "etf": 0.0,
+   "turnover": 0.5948,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001712901",
+   "name": "Melqart Asset Management (UK) Ltd",
+   "value": 1050837703,
+   "positions": 40,
+   "top10": 0.5984,
+   "top1": 0.1163,
+   "etf": 0.0,
+   "turnover": 0.4832,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001905809",
+   "name": "Passaic Partners LLC",
+   "value": 1045666823,
+   "positions": 16,
+   "top10": 0.9016,
+   "top1": 0.3436,
+   "etf": 0.9926,
+   "turnover": 0.0838,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001869199",
+   "name": "Philosophy Capital Management LLC",
+   "value": 1040895386,
+   "positions": 35,
+   "top10": 0.4776,
+   "top1": 0.0797,
+   "etf": 0.0,
+   "turnover": 0.2477,
+   "fails": [
+    "top10"
+   ]
+  },
+  {
+   "cik": "0001785988",
+   "name": "Wolf Hill Capital Management, LP",
+   "value": 1033303687,
+   "positions": 26,
+   "top10": 0.769,
+   "top1": 0.177,
+   "etf": 0.0,
+   "turnover": 0.2775,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001688382",
+   "name": "Fort Baker Capital Management LP",
+   "value": 1024505904,
+   "positions": 99,
+   "top10": 0.5763,
+   "top1": 0.1157,
+   "etf": 0.0,
+   "turnover": 0.3179,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001753271",
+   "name": "Portfolio Strategies, Inc.",
+   "value": 1019490046,
+   "positions": 81,
+   "top10": 0.8067,
+   "top1": 0.1297,
+   "etf": 0.7928,
+   "turnover": 0.1769,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001594167",
+   "name": "JABODON PT CO",
+   "value": 1019184000,
+   "positions": 8,
+   "top10": 1.0,
+   "top1": 0.3019,
+   "etf": 1.0,
+   "turnover": 0.0169,
+   "fails": [
+    "etf"
+   ]
+  },
+  {
+   "cik": "0001745907",
+   "name": "CloudAlpha Capital Management Limited/Hong Kong",
+   "value": 1012871326,
+   "positions": 24,
+   "top10": 0.7769,
+   "top1": 0.1294,
+   "etf": 0.0,
+   "turnover": 0.951,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001353394",
+   "name": "Gladstone Capital Management LLP",
+   "value": 1010783119,
+   "positions": 40,
+   "top10": 0.8865,
+   "top1": 0.1779,
+   "etf": 0.0,
+   "turnover": 0.3395,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001599731",
+   "name": "Atika Capital Management LLC",
+   "value": 1007771146,
+   "positions": 62,
+   "top10": 0.5625,
+   "top1": 0.2213,
+   "etf": 0.0,
+   "turnover": 0.2773,
+   "fails": [
+    "turnover"
+   ]
+  },
+  {
+   "cik": "0001419999",
+   "name": "MAR VISTA INVESTMENT PARTNERS LLC",
+   "value": 1004830381,
+   "positions": 33,
+   "top10": 0.4962,
+   "top1": 0.0698,
+   "etf": 0.0,
+   "turnover": 0.1118,
+   "fails": [
+    "top10"
+   ]
+  }
+ ]
+}
