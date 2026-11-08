@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Peers } from '../components/Peers'
+import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
-import { isPro, useMember } from '../lib/account'
+import { ApiError, isPro, useMember } from '../lib/account'
 import { quarterLabel, dateLabel, money, useAsync, useTitle } from '../lib/data'
-import { addStocks, useFollows } from '../lib/follows'
+import { addStocks, importBook, useFollows } from '../lib/follows'
 import { loadStock, resolveTicker, stockPath, tickerText, type Stock, type StockHolder } from '../lib/stocks'
 
 // My book (Copy Pro and Fund): crowding and filing-season activity in the names a member owns or
@@ -320,11 +321,19 @@ function Import() {
     const raw = (col >= 0 ? rows.slice(1).map((r) => r[col] ?? '') : lines.length > 1 ? rows.map((r) => r[0]) : lines.join(' ').split(/[\s,;]+/)).map((t) => tickerText(t.replace(/"/g, ''))).filter((t) => /^[A-Z][A-Z0-9.]{0,6}$/.test(t) && t !== 'TICKER' && t !== 'SYMBOL')
     if (!raw.length) return setState({ msg: 'No tickers found. Paste one per line, or separated by commas.', ok: false })
     setState({ busy: true })
+    if (owned) {
+      // Owned names go through the API's importer, which also skips broker totals and cash lines.
+      const r = await importBook({ ...(lines.length > 1 ? { csv: text } : { text }), mode: 'merge' }).catch((e) => (e instanceof ApiError ? e : null))
+      if (!r || r instanceof ApiError) return setState({ msg: r?.detail ?? 'That didn’t save. Please try again.', ok: false })
+      setText('')
+      const sk = (r.skipped ?? []).filter((x) => x.trim())
+      return setState({ msg: `Added ${r.imported} ${r.imported === 1 ? 'name' : 'names'} you own${sk.length ? `. Skipped: ${sk.slice(0, 8).join(', ')}${sk.length > 8 ? '…' : ''}` : ''}.`, ok: true })
+    }
     const resolved = await Promise.all([...new Set(raw)].map(async (t) => [t, (await resolveTicker(t).catch(() => null)) ?? t] as const))
     const failed = await addStocks([...new Set(resolved.map(([, t]) => t))], owned).catch(() => null)
     if (failed === null) return setState({ msg: 'That didn’t save. Please try again.', ok: false })
     setText('')
-    setState({ msg: `Added ${resolved.length - failed.length} of ${resolved.length}${failed.length ? `. Not recognised: ${failed.join(', ')}` : ''}.`, ok: !failed.length })
+    setState({ msg: `Added ${resolved.length - failed.length} ${resolved.length - failed.length === 1 ? 'name' : 'names'} you watch${failed.length ? `. Not recognised: ${failed.join(', ')}` : ''}.`, ok: !failed.length })
   }
   return (
     <div className="mt-3">
@@ -356,9 +365,75 @@ function Import() {
           {state.msg}
         </p>
       )}
-      <p className="mt-3 text-[12.5px] text-ink-3">
-        Remove a name with Following on its stock page. Importing a fund’s 13F by CIK is coming.
-      </p>
+      <p className="mt-3 text-[12.5px] text-ink-3">Remove a name with Following on its stock page.</p>
+      <LinkFund />
+    </div>
+  )
+}
+
+// Link a 13F filer's book (usually the member's own fund) as the owned list, by CIK.
+function LinkFund() {
+  const { follows } = useFollows()
+  const [q, setQ] = useState('')
+  const [state, setState] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
+  const hits = useSearch(q)
+    .flatMap((h) => (h.kind === 'manager' ? [{ cik: h.m.cik, name: h.m.manager }] : h.kind === 'filer' ? [{ cik: h.f.cik, name: h.f.name }] : []))
+    .slice(0, 5)
+  const link = async (cik: string) => {
+    setQ('')
+    setState({ busy: true })
+    const r = await importBook({ cik: cik.replace(/^0+/, '') }).catch((e) => (e instanceof ApiError ? e : null))
+    if (!r || r instanceof ApiError) return setState({ msg: r?.status === 404 ? 'That filer has no 13F holdings on file yet.' : (r?.detail ?? 'That didn’t save. Please try again.'), ok: false })
+    // The linked-book line above confirms it, from the server's answer.
+    setState({})
+  }
+  const b = follows.book
+  return (
+    <div className="mt-5 border-t border-line pt-4">
+      <h3 className="text-[14px] font-semibold">Or link your fund’s 13F</h3>
+      {b ? (
+        <p className="mt-1 text-[13px] text-ink-2">
+          Linked to <span className="font-medium text-ink">{b.name}</span>’s {quarterLabel(b.quarter)} 13F, {b.tickers.length} names. Your owned list follows it each time it files; names you add by hand stay.
+        </p>
+      ) : (
+        <p className="mt-1 text-[13px] text-ink-2">Your owned names become its latest 13F book, largest first, and update each time it files. Names you add by hand stay.</p>
+      )}
+      <div className="relative mt-3">
+        <label htmlFor="link-fund" className="sr-only">
+          Find your fund
+        </label>
+        <input
+          id="link-fund"
+          value={q}
+          disabled={state.busy}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && hits[0]) link(hits[0].cik)
+            if (e.key === 'Escape') setQ('')
+          }}
+          placeholder={b ? 'Link a different fund' : 'Find your fund by name'}
+          autoComplete="off"
+          className="h-10 w-full rounded-full bg-paper px-4 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)] disabled:opacity-60"
+        />
+        {q && hits.length > 0 && (
+          <ul className="absolute inset-x-0 top-12 z-20 overflow-hidden rounded-[14px] bg-card py-1 shadow-[0_12px_32px_rgba(0,0,0,0.12)]" role="listbox" aria-label="Funds">
+            {hits.map((h) => (
+              <li key={h.cik} role="option" aria-selected="false">
+                <button type="button" onClick={() => link(h.cik)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[14px] hover:bg-paper">
+                  <span className="truncate">{h.name}</span>
+                  <span className="num shrink-0 text-[12px] text-ink-3">CIK {h.cik.replace(/^0+/, '')}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {state.busy && <p className="mt-2 text-[13px] text-ink-3">Linking…</p>}
+      {state.msg && (
+        <p role={state.ok ? 'status' : 'alert'} className={`mt-2 text-[13px] ${state.ok ? 'text-up' : 'text-down'}`}>
+          {state.msg}
+        </p>
+      )}
     </div>
   )
 }

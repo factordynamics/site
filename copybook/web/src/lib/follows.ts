@@ -9,6 +9,8 @@ export type Follows = {
   owned: string[]
   /** Funds a Pro or Fund member benchmarks against (peer overlap). */
   peers: string[]
+  /** A 13F filer's book linked as the owned list; it refreshes when that filer files again. */
+  book?: LinkedBook | null
   onboarded: boolean
   include_13g: boolean
   digest: boolean
@@ -18,6 +20,7 @@ export type Follows = {
   cluster_buys: boolean
   any_13d: boolean
 }
+export type LinkedBook = { cik: string; name: string; quarter: string; tickers: string[] }
 /** A follow or unfollow in flight, or one the read-back didn't confirm (key "investors:slug" or "stocks:TICKER"). */
 export type Pending = Record<string, { want: boolean; state: 'saving' | 'error' }>
 type State = { status: 'idle' | 'loading' | 'ready' | 'guest'; follows: Follows; pending: Pending }
@@ -113,5 +116,14 @@ export function addStocks(tickers: string[], owned: boolean) {
       }
     }
     return failed
+  })
+}
+
+/** Import owned names ({api}/book/import): pasted text, a broker CSV, or a 13F filer's book by CIK. */
+export function importBook(body: { text?: string; csv?: string; cik?: string; mode?: 'replace' | 'merge' }) {
+  return enqueue(async () => {
+    const r = await call<{ follows: Follows; imported: number | string[]; skipped?: string[]; source?: { cik: string; name: string; quarter: string } | null }>('/book/import', { method: 'POST', body, auth: true })
+    set({ ...state, status: 'ready', follows: { ...EMPTY, ...r.follows } })
+    return { ...r, imported: typeof r.imported === 'number' ? r.imported : r.imported.length }
   })
 }
