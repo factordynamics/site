@@ -119,16 +119,30 @@ writeFileSync(join(out, 'd', 'stocks.json'), JSON.stringify({ generated_at: inde
 // Form 4 and 13D/G filings since each fund's latest 13F (data/events/{slug}.json), attached to
 // the stock they're about so its page can show holdings newer than the 13F.
 const byCusip = {}
-for (const s of stocks.values()) for (const c of s.classes.values()) if (byTicker[c.ticker]) byCusip[c.cusip] = byTicker[c.ticker]
+const byIssuer = {} // first 6 CUSIP digits -> stock pages with a class of that issuer
+for (const s of stocks.values())
+  for (const c of s.classes.values()) {
+    if (!byTicker[c.ticker]) continue
+    byCusip[c.cusip] = byTicker[c.ticker]
+    ;(byIssuer[c.cusip.slice(0, 6)] ??= new Set()).add(byTicker[c.ticker])
+  }
+const bookOf = new Map(books.map((b) => [b.slug, b.holdings]))
 const since = {}
 for (let i = 0; i < books.length; i += 16) {
   const part = await Promise.all(books.slice(i, i + 16).map((b) => read(`events/${b.slug}.json`).catch(() => null)))
   for (const ev of part) {
     if (!ev?.events) continue
     for (const e of ev.events) {
-      const t = (e.ticker && byTicker[e.ticker]) || (e.cusip && byCusip[e.cusip])
-      if (!t) continue
-      ;(since[t] ??= []).push({ ...e, manager: ev.manager, slug: ev.slug, quarter: ev.latest_13f_quarter })
+      // Every class's page gets the filing (a Form 4 can trade Class A and B); the page keeps its own class's lines.
+      const pages = new Set([(e.ticker && byTicker[e.ticker]) || (e.cusip && byCusip[e.cusip]), ...(e.cusip ? byIssuer[e.cusip.slice(0, 6)] ?? [] : [])].filter(Boolean))
+      if (!pages.size) continue
+      // The fund's 13F share lines for this issuer, one per CUSIP, so comparisons never mix classes.
+      const class_book = e.cusip
+        ? (bookOf.get(ev.slug) ?? []).filter((h) => !h.put_call && h.cusip.slice(0, 6) === e.cusip.slice(0, 6)).map(({ cusip, ticker, title, shares }) => ({ cusip, ticker, title, shares }))
+        : undefined
+      const { transactions, ...rest } = e
+      const row = { ...rest, transactions: (transactions ?? []).map(({ date, security, code, code_label, shares, price, acquired, derivative, shares_after }) => ({ date, security, code, code_label, shares, price, acquired, derivative, shares_after })), class_book, manager: ev.manager, slug: ev.slug, quarter: ev.latest_13f_quarter }
+      for (const t of pages) (since[t] ??= []).push(row)
     }
   }
 }

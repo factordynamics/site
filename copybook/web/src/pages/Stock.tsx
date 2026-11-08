@@ -46,17 +46,24 @@ export function StockPage() {
 
   // Holdings filed since each fund's 13F, one roll-up per fund.
   const since = useMemo(() => {
-    const per = new Map<string, { who: { slug: string; manager: string }; p: Position }>()
     const groups = new Map<string, NonNullable<typeof d>['since']>()
     for (const e of d?.since ?? []) groups.set(e.slug, [...(groups.get(e.slug) ?? []), e])
+    // Only this page's classes: a Form 4 that trades Class A and B gives a line per class.
+    const mine = new Set(d?.classes.map((c) => c.cusip))
+    const tickers = new Set(d?.classes.map((c) => c.ticker))
+    const rows: { key: string; who: { slug: string; manager: string }; p: Position }[] = []
     for (const [slug, evs] of groups) {
-      const p = rollUp(evs!)[0]
-      if (p) per.set(slug, { who: { slug, manager: evs![0].manager }, p })
+      for (const p of rollUp(evs!)) {
+        if (p.cusip ? !mine.has(p.cusip) : !(p.ticker && tickers.has(p.ticker))) continue
+        rows.push({ key: `${slug}|${p.key}`, who: { slug, manager: evs![0].manager }, p })
+      }
     }
-    return per
+    return rows
   }, [d])
   const featuredSlugs = useMemo(() => new Set([...(d?.holders ?? []), ...(d?.exited ?? [])].filter((h) => h.featured).map((h) => h.slug)), [d])
-  const sinceRows = [...since.values()].filter((x) => scope === 'all' || featuredSlugs.has(x.who.slug))
+  const sinceRows = since.filter((x) => scope === 'all' || featuredSlugs.has(x.who.slug))
+  // The holder table's shares sum every class, so a newer holding sits under them only on single-class pages.
+  const newer = new Map(d && d.classes.length === 1 ? since.filter((x) => x.p.cusip === d.classes[0].cusip && x.p.to != null).map((x) => [x.who.slug, x.p]) : [])
   const paid = Boolean(member?.active)
 
   if (s.error)
@@ -133,13 +140,13 @@ export function StockPage() {
       {sinceRows.length > 0 && (
         <Panel className="mt-4" title="Since the latest 13Fs" sub="Holdings filed after each fund’s 13F, on Form 4 and Schedule 13D/G">
           <ul className="divide-y divide-line">
-            {(paid ? sinceRows : sinceRows.slice(0, 2)).map(({ who, p }) => (
-              <PositionLine key={who.slug} p={p} who={who} />
+            {(paid ? sinceRows : sinceRows.slice(0, 2)).map(({ key, who, p }) => (
+              <PositionLine key={key} p={p} who={who} />
             ))}
           </ul>
           {!paid && sinceRows.length > 2 && (
             <p className="mt-3 flex items-center gap-2 text-[13px] text-accent-2">
-              <Lock /> {sinceRows.length - 2} more funds filed on {d?.ticker} since their 13F.{' '}
+              <Lock /> {sinceRows.length - 2} more {sinceRows.length - 2 === 1 ? 'holding' : 'holdings'} filed on {d?.ticker} since the 13Fs.{' '}
               <Link to="/pricing/" className="font-medium underline underline-offset-2">
                 See them with Copy
               </Link>
@@ -200,9 +207,9 @@ export function StockPage() {
                   </td>
                   <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">
                     {sharesFmt(h.shares)}
-                    {since.get(h.slug)?.p.to != null && since.get(h.slug)!.p.to !== h.shares && (
+                    {newer.get(h.slug) && newer.get(h.slug)!.to !== h.shares && (
                       <span className="block whitespace-nowrap text-[11.5px] text-ink-3">
-                        {sharesFmt(since.get(h.slug)!.p.to)} as of {dateLabel(since.get(h.slug)!.p.asOf)}
+                        {sharesFmt(newer.get(h.slug)!.to)} as of {dateLabel(newer.get(h.slug)!.asOf)}
                       </span>
                     )}
                   </td>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMember } from '../lib/account'
-import { DATA, dateLabel, displayName, money, pct, quarterLabel, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
+import { DATA, dateLabel, displayName, shareClass as shareClassOf, money, pct, quarterLabel, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
 import { stockPath } from '../lib/stocks'
 import { Badge, Lock, Panel } from './ui'
 
@@ -84,6 +84,16 @@ export function FundNotice({ f }: { f: WithStatus }) {
 }
 
 // data/events/{slug}.json from ingest: Form 4 and Schedule 13D/G filings since the latest 13F.
+export type BookLine = { cusip: string; ticker?: string | null; title?: string; shares: number }
+
+/** "Class A Common Stock" -> "Class A"; "" when the security names no class. */
+const classOf = (security?: string) => {
+  const m = /\bclass\s+([A-Z])\b/i.exec(security || '')
+  return m ? `Class ${m[1].toUpperCase()}` : ''
+}
+/** The 13F line for this event's own CUSIP: comparisons never mix share classes. */
+const ownLine = (e: Ev) => (e.cusip ? e.class_book?.find((b) => b.cusip === e.cusip) : undefined)
+
 export type Ev = {
   id: string
   form: string
@@ -103,6 +113,8 @@ export type Ev = {
   change_vs_13f?: number | null
   shares_in_13f?: number | null
   issuer_cik?: string | null
+  /** The fund's 13F share lines for this issuer, one per CUSIP/class (set by the page or the build). */
+  class_book?: BookLine[]
   cusip?: string | null
   amendment_no?: number | null
   // The previous Schedule 13D/G on this issuer (from ingest, or the next older row in this feed).
@@ -113,7 +125,7 @@ export type Ev = {
   /** Item 4, Purpose of Transaction: a short excerpt. */
   item4?: string | null
   footnotes?: { id: string; text: string }[] | null
-  transactions?: { date?: string; code: string; code_label?: string; shares?: number | null; price?: number | null; acquired?: boolean; derivative?: boolean; footnote_ids?: string[] }[]
+  transactions?: { date?: string; security?: string; shares_after?: number | null; code: string; code_label?: string; shares?: number | null; price?: number | null; acquired?: boolean; derivative?: boolean; footnote_ids?: string[] }[]
 }
 const ACTION: Record<Ev['action'], { label: string; tone: 'up' | 'down' | 'neutral' | 'accent' }> = {
   buy: { label: 'Bought', tone: 'up' },
@@ -149,8 +161,9 @@ function stakeLine(e: Ev) {
     if (e.prev_shares_after != null) {
       const d = e.shares_after - e.prev_shares_after
       parts.push(d ? `${signed(d)} shares to ${sharesFmt(e.shares_after)}` : `${sharesFmt(e.shares_after)} shares, unchanged`)
-    } else if (e.change_vs_13f != null) {
-      parts.push(e.change_vs_13f ? `${sharesFmt(e.shares_after)} shares, ${signed(e.change_vs_13f)} vs the 13F` : `${sharesFmt(e.shares_after)} shares, as in the 13F`)
+    } else if (e.class_book && e.cusip) {
+      const d = e.shares_after - (ownLine(e)?.shares ?? 0)
+      parts.push(d ? `${sharesFmt(e.shares_after)} shares, ${signed(d)} vs the 13F` : `${sharesFmt(e.shares_after)} shares, as in the 13F`)
     } else parts.push(`${sharesFmt(e.shares_after)} shares reported`)
   }
   if (e.prev_shares_after != null && e.shares_after === e.prev_shares_after && now != null && was != null && Math.abs(now - was) >= 0.0005)
@@ -160,19 +173,30 @@ function stakeLine(e: Ev) {
 }
 
 /** Form 4 without open-market trades (gifts, conversions, awards): name what happened. */
+function heldAfter(e: Ev) {
+  const last = new Map<string, number>()
+  for (const t of e.transactions ?? []) if (!t.derivative && t.shares_after != null) last.set(classOf(t.security), t.shares_after)
+  if (last.size > 1) return `${[...last].map(([c, n]) => `${sharesFmt(n)} ${c || 'common'}`).join(' and ')} held after`
+  return e.shares_after != null ? `${sharesFmt(e.shares_after)} held after` : null
+}
+
 function form4Line(e: Ev) {
-  if (e.shares) return [`${sharesFmt(Math.abs(e.shares))} shares`, e.avg_price ? `avg $${e.avg_price.toFixed(2)}` : null, e.shares_after != null ? `${sharesFmt(e.shares_after)} held after` : null].filter(Boolean).join(' · ')
+  if (e.shares) return [`${sharesFmt(Math.abs(e.shares))} shares`, e.avg_price ? `avg $${e.avg_price.toFixed(2)}` : null, heldAfter(e)].filter(Boolean).join(' · ')
   const tx = (e.transactions ?? []).filter((t) => t.shares)
   const what = tx.map((t) => {
     const how = t.code_label && t.code_label !== 'other' ? `, ${t.code_label}` : ''
     return `${t.acquired ? 'Acquired' : 'Disposed of'} ${sharesFmt(t.shares)}${t.derivative ? ' derivative' : ''} (code ${t.code}${how})`
   })
-  return [...new Set(what)].slice(0, 2).concat(e.shares_after != null ? [`${sharesFmt(e.shares_after)} held after`] : []).join(' · ')
+  const after = heldAfter(e)
+  return [...new Set(what)].slice(0, 2).concat(after ? [after] : []).join(' · ')
 }
 
 /** Between-quarter moves: Form 4 trades and 13D/G stake filings since the latest 13F. Hidden until ingest publishes the feed. */
 export type Position = {
   key: string
+  /** The class's CUSIP when matched to a 13F line, and its class label from the filing. */
+  cusip?: string
+  label: string
   ticker?: string | null
   name: string
   /** Shares in the latest 13F, and the newest reported holding after it. */
@@ -193,46 +217,97 @@ export type Position = {
 }
 
 /** One line per issuer: the 13F position, the newest holding filed since, and the Form 4 trades in between. */
+/**
+ * One line per position and share class: the 13F line with the same CUSIP, the newest holding filed
+ * since, and the Form 4 trades in between. Form 4 rows are split by the class they name, so a filing
+ * that buys Class A and Class B gives two lines; 13D/G stakes belong to the event's own CUSIP.
+ */
 export function rollUp(events: Ev[]): Position[] {
   const by = new Map<string, Position>()
-  for (const e of [...events].reverse()) {
-    const key = e.ticker || e.issuer_cik || e.issuer
+  const line = (e: Ev, label: string) => {
+    const book = e.class_book
+    const h = label ? book?.find((b) => shareClassOf(b.title) === label) ?? (book && book.length === 1 && !shareClassOf(book[0].title) ? book[0] : undefined) : ownLine(e) ?? (book?.length === 1 ? book[0] : undefined)
+    const key = h ? h.cusip : `${e.cusip?.slice(0, 6) || e.ticker || e.issuer}|${label}`
     let p = by.get(key)
     if (!p) {
-      p = { key, ticker: e.ticker, name: e.display_name || e.issuer, boughtShares: 0, boughtUsd: 0, soldShares: 0, soldUsd: 0, filings: 0 }
+      p = {
+        key,
+        cusip: h?.cusip,
+        label: label || shareClassOf(h?.title),
+        ticker: h?.ticker ?? (label ? null : e.ticker),
+        name: e.display_name || e.issuer,
+        // Known 13F book: a class it didn't hold started at 0. Unknown book: no baseline.
+        from: book ? (h?.shares ?? 0) : undefined,
+        boughtShares: 0,
+        boughtUsd: 0,
+        soldShares: 0,
+        soldUsd: 0,
+        filings: 0,
+      }
       by.set(key, p)
     }
-    p.filings++
-    p.ticker ||= e.ticker
-    if (e.shares_in_13f != null) p.from = e.shares_in_13f
-    // Form 4 holdings are exact; a 13D/G counts the whole group, so it only stands in when there's no Form 4.
-    if (e.shares_after != null && (e.kind === 'form4' || p.source !== 'Form 4')) {
-      p.to = e.shares_after
-      p.asOf = e.event_date || e.filing_date
-      p.source = e.kind === 'form4' ? 'Form 4' : `Schedule ${e.form.replace('SCHEDULE ', '')}`
-    }
-    if (e.kind !== 'form4') {
-      if (p.stake) p.prevStake = p.stake
-      p.stake = e
-    }
-    for (const t of e.transactions ?? []) {
-      if (t.derivative || !t.shares || !t.price || (t.code !== 'P' && t.code !== 'S')) continue
-      if (t.code === 'P') {
-        p.boughtShares += t.shares
-        p.boughtUsd += t.shares * t.price
-      } else {
-        p.soldShares += t.shares
-        p.soldUsd += t.shares * t.price
+    return p
+  }
+  for (const e of [...events].reverse()) {
+    const touched = new Set<Position>()
+    const rows = (e.transactions ?? []).filter((t) => !t.derivative && t.shares)
+    for (const t of rows) {
+      const p = line(e, classOf(t.security))
+      touched.add(p)
+      if (t.shares_after != null) {
+        p.to = t.shares_after
+        p.asOf = t.date || e.event_date || e.filing_date
+        p.source = 'Form 4'
       }
-      const d = t.date
-      if (d) {
-        if (!p.first || d < p.first) p.first = d
-        if (!p.last || d > p.last) p.last = d
+      if (t.price && (t.code === 'P' || t.code === 'S')) {
+        if (t.code === 'P') {
+          p.boughtShares += t.shares!
+          p.boughtUsd += t.shares! * t.price
+        } else {
+          p.soldShares += t.shares!
+          p.soldUsd += t.shares! * t.price
+        }
+        if (t.date) {
+          if (!p.first || t.date < p.first) p.first = t.date
+          if (!p.last || t.date > p.last) p.last = t.date
+        }
       }
+    }
+    if (!rows.length || e.kind !== 'form4') {
+      const p = line(e, '')
+      touched.add(p)
+      // A 13D/G counts the whole filing group, so it only stands in when there's no Form 4.
+      if (e.shares_after != null && (e.kind === 'form4' || p.source !== 'Form 4')) {
+        p.to = e.shares_after
+        p.asOf = e.event_date || e.filing_date
+        p.source = e.kind === 'form4' ? 'Form 4' : `Schedule ${e.form.replace('SCHEDULE ', '')}`
+      }
+      if (e.kind !== 'form4') {
+        if (p.stake) p.prevStake = p.stake
+        p.stake = e
+      }
+    }
+    for (const p of touched) {
+      p.filings++
+      p.ticker ||= p.label ? null : e.ticker
     }
   }
+  const list = [...by.values()]
+  // Name the class wherever an issuer shows up in more than one class.
+  const issuer = (p: Position) => p.key.slice(0, 6)
+  const multi = new Set(list.filter((p, _, all) => all.some((q) => q !== p && issuer(q) === issuer(p))).map(issuer))
+  for (const p of list) if (p.label && multi.has(issuer(p)) && !p.name.includes(p.label)) p.name = `${p.name} ${p.label}`
   const size = (p: Position) => Math.max(p.boughtUsd, p.soldUsd) || Math.abs((p.to ?? 0) - (p.from ?? 0))
-  return [...by.values()].sort((a, b) => size(b) - size(a))
+  return list.sort((a, b) => size(b) - size(a))
+}
+
+/** The fund's 13F share lines for each event's issuer, by the first 6 CUSIP digits. */
+export function withBook(events: Ev[], holdings: { cusip: string; ticker?: string | null; title?: string; shares: number; put_call?: string | null }[]): Ev[] {
+  return events.map((e) =>
+    e.class_book || !e.cusip
+      ? e
+      : { ...e, class_book: holdings.filter((h) => !h.put_call && h.cusip.slice(0, 6) === e.cusip!.slice(0, 6)).map(({ cusip, ticker, title, shares }) => ({ cusip, ticker, title, shares })) },
+  )
 }
 
 const shortDate = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -285,12 +360,13 @@ export function PositionLine({ p, who }: { p: Position; who?: { slug: string; ma
           {p.to != null ? (
             <>
               <span className="num text-ink-2">
-                {p.from != null && p.from !== p.to ? `${sharesFmt(p.from)} → ` : ''}
+                {p.from ? (p.from !== p.to ? `${sharesFmt(p.from)} → ` : '') : ''}
                 {sharesFmt(p.to)} shares
               </span>
               {delta != null && Math.abs(delta) >= 0.001 && <span className={`num ${delta > 0 ? 'text-up' : 'text-down'}`}> ({delta > 0 ? '+' : '−'}{pct(Math.abs(delta), 0)})</span>}
               {p.asOf && ` as of ${dateLabel(p.asOf)}, per ${p.source}`}
               {p.from === p.to && ', unchanged since the 13F'}
+              {p.from === 0 && ', a new position since the 13F'}
             </>
           ) : null}
           {trades.length > 0 && `${p.to != null ? ' · ' : ''}${trades.join(' · ')} on Form 4`}
@@ -350,11 +426,11 @@ function EventRow({ e }: { e: Ev }) {
 export const loadEvents = (slug: string) => fetch(`${DATA}events/${slug}.json`).then((x) => (x.ok ? (x.json() as Promise<{ events?: Ev[] }>) : null))
 
 /** Between-quarter moves: Form 4 trades and 13D/G stake filings since the latest 13F, rolled up per position. */
-export function SinceLast13F({ slug, quarter }: { slug: string; quarter?: string }) {
+export function SinceLast13F({ slug, quarter, holdings }: { slug: string; quarter?: string; holdings: ManagerFile['holdings'] }) {
   const r = useAsync(() => loadEvents(slug), [slug])
   const member = useMember()
   const [all, setAll] = useState(false)
-  const events = useMemo(() => withPrevious((r.data?.events ?? []).filter((e) => !('skip' in e))), [r.data])
+  const events = useMemo(() => withBook(withPrevious((r.data?.events ?? []).filter((e) => !('skip' in e))), holdings), [r.data, holdings])
   const positions = useMemo(() => rollUp(events), [events])
   if (!events.length) return null
   const paid = Boolean(member?.active)
