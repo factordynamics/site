@@ -4,12 +4,13 @@ import { Link } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
 import { attributed } from '../lib/attribution'
-import { useAsync, useTitle } from '../lib/data'
+import { gapLabel, loadLatency } from '../lib/account'
+import { quarterLabel, useAsync, useTitle } from '../lib/data'
 import { aboutCount, loadCoverage } from '../lib/stocks'
 import { checkoutEnabled, DATA_TERMS, plans, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
-type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[] }
+type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean }
 
 const tiers = (filers: string, curated: number): Tier[] => [
   {
@@ -36,11 +37,12 @@ const tiers = (filers: string, curated: number): Tier[] => [
   },
   {
     id: 'pro',
+    proof: true,
     who: 'For quants, analysts and small funds. 1 seat.',
     lead: 'Everything in Copy, plus',
     now: [
       { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
-      { t: 'Filer and holdings endpoints', d: 'Every filer, and any filer’s holdings for any quarter on file, as JSON.' },
+      { t: 'Filer and holdings endpoints', d: `Holdings for any quarter on file, as JSON: 8 quarters today, back to 2013 coming this month. ${curated} managers today; all ${filers} filers coming.` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
     ],
     soon: [
@@ -96,6 +98,9 @@ export function Pricing() {
   const filers = aboutCount(cov.data?.filers ?? 8900)
   const curated = cov.data?.curated ?? 199
   const TIERS = tiers(filers, curated)
+  // A receipt from the live latency log: the newest 13F alert, once any have gone out this season.
+  const lat = useAsync(loadLatency, [])
+  const receipt = lat.data?.count ? (lat.data.alerts.find((a) => a.form.startsWith('13F')) ?? null) : null
   const COMPARE = compare(filers)
   return (
     <div className="container-x pt-12 md:pt-16">
@@ -105,6 +110,15 @@ export function Pricing() {
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
           Reading a portfolio is free. Copy follows the investors and stocks you care about. Pro and Fund add the data feed and the tools research teams need. Every paid plan starts with {TRIAL_DAYS} days free.
         </p>
+        {receipt && (
+          <p className="mt-4 text-[13.5px] text-ink-3">
+            {receipt.manager}’s {receipt.quarter ? `${quarterLabel(receipt.quarter)} ` : ''}alert went out {gapLabel(receipt.gap_seconds)} after EDGAR acceptance
+            {lat.data?.median_seconds != null && ` · median this season ${gapLabel(lat.data.median_seconds)}`} ·{' '}
+            <Link to="/methodology/#latency" className="font-medium text-accent hover:text-accent-2">
+              every alert
+            </Link>
+          </p>
+        )}
         <div className="mt-8 inline-flex rounded-full bg-ink/[0.05] p-1 text-[14px]" role="tablist" aria-label="Billing period">
           {(['monthly', 'yearly'] as const).map((c) => (
             <button key={c} role="tab" aria-selected={cycle === c} onClick={() => setCycle(c)} className={`rounded-full px-4 py-1.5 ${cycle === c ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
@@ -186,6 +200,19 @@ export function Pricing() {
                     <h3 className="mb-2.5 mt-6 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[#8a5a0b]">Coming this month</h3>
                     <FeatureList items={tier.soon} soon />
                   </>
+                )}
+                {tier.proof && (
+                  <div className="mt-6 border-t border-line pt-4 text-[12.5px] leading-snug text-ink-2">
+                    <p>Independent audit, Nov 8: values and acceptance times match SEC EDGAR on all 204,332 positions in the latest 13Fs of the {curated} managers (unit-corrected filings flagged).</p>
+                    <p className="mt-2 flex flex-wrap gap-x-3 font-medium">
+                      <Link to="/api/" className="text-accent hover:text-accent-2">
+                        API docs
+                      </Link>
+                      <a href={`${import.meta.env.BASE_URL}api/sample-holdings.json`} className="text-accent hover:text-accent-2">
+                        Sample response
+                      </a>
+                    </p>
+                  </div>
                 )}
               </div>
             </article>

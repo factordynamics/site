@@ -1,0 +1,100 @@
+{
+  "schema_version": "2026-11-08",
+  "data": {
+    "filer": {
+      "slug": "warren-buffett",
+      "cik": "0001067983",
+      "name": "Berkshire Hathaway Inc",
+      "manager": "Warren Buffett"
+    },
+    "quarter": "2026Q2",
+    "report_date": "2026-06-30",
+    "filing": {
+      "accession": "0001193125-26-352200",
+      "form": "13F-HR",
+      "filing_date": "2026-08-14",
+      "accepted_at": "2026-08-14T20:05:04Z",
+      "sec_url": "https://www.sec.gov/Archives/edgar/data/1067983/000119312526352200/0001193125-26-352200-index.html",
+      "amendments": []
+    },
+    "prev_quarter": "2026Q1",
+    "total_value_usd": 299253556246,
+    "position_count": 29,
+    "holdings": [
+      {
+        "cusip": "037833100",
+        "ticker": "AAPL",
+        "issuer": "APPLE INC",
+        "title_of_class": "COM",
+        "put_call": null,
+        "sector": "Information Technology",
+        "shares": 227917808,
+        "shares_type": null,
+        "value_usd": 65950296923,
+        "weight": 0.220383,
+        "change": "unchanged",
+        "prev_shares": 227917808,
+        "share_change": 0,
+        "value_delta_usd": 0,
+        "source_accession": null,
+        "first_disclosed_at": null
+      },
+      {
+        "cusip": "025816109",
+        "ticker": "AXP",
+        "issuer": "AMERICAN EXPRESS CO",
+        "title_of_class": "COM",
+        "put_call": null,
+        "sector": "Financials",
+        "shares": 151610700,
+        "shares_type": null,
+        "value_usd": 51282319275,
+        "weight": 0.171367,
+        "change": "unchanged",
+        "prev_shares": 151610700,
+        "share_change": 0,
+        "value_delta_usd": 0,
+        "source_accession": null,
+        "first_disclosed_at": null
+      },
+      {
+        "cusip": "02079K305",
+        "ticker": "GOOGL",
+        "issuer": "ALPHABET INC",
+        "title_of_class": "CAP STK CL A",
+        "put_call": null,
+        "sector": "Communication Services",
+        "shares": 78791167,
+        "shares_type": null,
+        "value_usd": 28157599351,
+        "weight": 0.094093,
+        "change": "added",
+        "prev_shares": 54249798,
+        "share_change": 24541369,
+        "value_delta_usd": 8770349040,
+        "source_accession": null,
+        "first_disclosed_at": null
+      }
+    ],
+    "exited": [
+      {
+        "cusip": "21036P108",
+        "ticker": "STZ",
+        "issuer": "CONSTELLATION BRANDS INC",
+        "title_of_class": "CL A",
+        "put_call": null,
+        "sector": "Consumer Staples",
+        "shares": 0,
+        "shares_type": null,
+        "value_usd": 0,
+        "weight": 0.0,
+        "change": "exited",
+        "prev_shares": 632890,
+        "share_change": -632890,
+        "value_delta_usd": -94933500,
+        "source_accession": null,
+        "first_disclosed_at": null
+      }
+    ]
+  }
+}

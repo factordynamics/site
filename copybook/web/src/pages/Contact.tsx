@@ -18,8 +18,9 @@ export function Contact() {
   useTitle('Contact · Copybook')
   const [params] = useSearchParams()
   const [topic, setTopic] = useState<Topic>((TOPICS.find(([k]) => k === params.get('topic'))?.[0] as Topic) ?? 'fund')
-  const [form, setForm] = useState({ name: '', email: '', fund: '', seats: '5', invoice: true, message: '' })
+  const [form, setForm] = useState({ name: '', email: '', fund: '', seats: '5', invoice: true, message: '', website: '' })
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [err, setErr] = useState('')
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const fund = topic === 'fund'
 
@@ -32,11 +33,16 @@ export function Contact() {
         email: form.email.trim(),
         message: form.message.trim() || undefined,
         page: '/contact/',
+        website: form.website || undefined,
         ...(fund ? { fund: form.fund.trim(), seats: Number(form.seats) || undefined, invoice: form.invoice, plan_interval: 'yearly' } : {}),
       }
       const r = await fetch(`${api}/fund-request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      setState(r.ok ? 'sent' : 'error')
+      if (r.ok) return setState('sent')
+      const j = (await r.json().catch(() => null)) as { error?: string; code?: string } | null
+      setErr(r.status === 429 || j?.code === 'rate_limited' ? 'Too many requests from here in the last hour. Please try again later.' : j?.code === 'bad_request' && j.error ? `Please check the form: ${j.error}` : '')
+      setState('error')
     } catch {
+      setErr('')
       setState('error')
     }
   }
@@ -130,6 +136,8 @@ export function Contact() {
                   Pay by invoice (yearly)
                 </label>
               )}
+              {/* Honeypot: people never see or fill it; the API drops requests that do. */}
+              <input type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" value={form.website} onChange={set('website')} className="absolute left-[-10000px] size-px opacity-0" />
               <label className="block text-[13px] font-medium text-ink-2">
                 {topic === 'delete' ? 'The email on your account, if different, and anything we should know' : 'Note'}
                 <textarea value={form.message} onChange={set('message')} rows={4} className={`${field} mt-1.5 h-auto py-2.5`} />
@@ -140,7 +148,7 @@ export function Contact() {
                 </Button>
                 {state === 'error' && (
                   <p role="alert" className="text-[13.5px] text-down">
-                    That didn’t send. Please try again in a moment.
+                    {err || 'That didn’t send. Please try again in a moment.'}
                   </p>
                 )}
               </div>

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Panel } from '../components/ui'
+import { gapLabel, loadLatency } from '../lib/account'
 import { DATA, dateLabel, quarterLabel, useAsync, useTitle } from '../lib/data'
 
 // data/changelog.json from ingest: append-only, newest first; id is a stable anchor.
@@ -34,8 +35,14 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'Amendments',
     body: (
       <>
-        <p>Each quarter starts from the fund’s original 13F-HR. A 13F-HR/A marked RESTATEMENT replaces it. An amendment marked NEW HOLDINGS, usually positions the fund first kept confidential, is added on top and never replaces the original.</p>
-        <p>Restatements of the funds we follow closely are recorded in the changelog below.</p>
+        <p>Each quarter starts from the fund’s original 13F-HR. A 13F-HR/A marked RESTATEMENT replaces the whole book. A 13F-HR/A marked NEW HOLDINGS, usually positions the fund first kept confidential, adds rows to the book and never replaces it.</p>
+        <p>
+          <strong className="font-medium text-ink">Point in time.</strong> A position disclosed by a later amendment counts from that amendment’s EDGAR acceptance time, not from the original quarter. It isn’t shown as new, added or exited in the original quarter’s changes, because nobody could have seen it then. Each position is being stamped with the filing that first disclosed it (<code>source_accession</code>) and that filing’s acceptance time (<code>first_disclosed_at</code>); the fields are null in the API until that data is published, and the changelog below records when it is.
+        </p>
+        <p>
+          <strong className="font-medium text-ink">What you get by default.</strong> Pages, CSVs and the API without <code>as_of</code> return the book as it is known today: the latest RESTATEMENT if there is one, otherwise the original, plus every NEW HOLDINGS row accepted since. The API’s <code>as_of</code> parameter, which will return the book exactly as it was public at a given instant, is documented and coming; today it returns 501 <code>not_yet_available</code>.
+        </p>
+        <p>Earlier versions of a restated quarter are kept. Restatements by the managers we track closely are recorded in the changelog below.</p>
       </>
     ),
   },
@@ -54,6 +61,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
           <li>A stock line priced above $20,000 a share, other than Berkshire Hathaway Class A, is divided by 1,000.</li>
           <li>A line priced 300 to 3,000 times away from the median price other 13F filers report for the same CUSIP and quarter is rescaled by 1,000. This needs at least 3 other filers.</li>
         </ul>
+        <p>The whole-filing rule depends only on the filing itself, so it never changes. A single-line fix depends on what other filers reported, so it can be revised as more 13Fs for that quarter arrive. Every revision is logged in the changelog below, and corrected filings are flagged in the data (<code>unit_fix</code>).</p>
       </>
     ),
   },
@@ -62,8 +70,9 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'Options and notes',
     body: (
       <>
-        <p>Calls and puts are shown at their filed value, which is the notional value of the underlying shares, not the price of the options. They’re listed apart from shares and never added to share totals, portfolio weights or holder counts.</p>
-        <p>Notes and other debt, identified by their title, are left out of stock holder counts.</p>
+        <p>Calls and puts are shown at their filed value, which is the notional value of the underlying shares, not the price of the options. They’re listed apart from shares and never added to share totals or holder counts.</p>
+        <p>Notes and other debt, identified by their title, are left out of stock holder counts. Rows reported as a principal amount (<code>PRN</code>, such as convertible notes) keep their filed value but are never counted as shares; the API marks them with <code>shares_type</code> once that field is published.</p>
+        <p>Lines filed with a value of zero are kept as filed, never dropped.</p>
       </>
     ),
   },
@@ -97,8 +106,43 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'CSV exports',
     body: (
       <p>
-        Each CSV row is one line of the 13F as filed, with the ticker, sector and the change since the fund’s previous filing (shares and dollars, valued as above). Positions the fund exited are listed last. Values follow the unit rules on this page.
+        Each CSV row is one position: every line of the 13F with the same CUSIP and the same put/call is added together, because funds often split one holding across several lines (Berkshire’s Q2 2026 13F has 89 lines and 29 positions). Each row has the ticker, sector and the change since the fund’s previous filing, in shares and dollars, valued as above. Positions the fund exited are listed last. Values follow the unit rules on this page.
       </p>
+    ),
+  },
+  {
+    id: 'definitions',
+    title: 'Definitions',
+    body: (
+      <dl className="space-y-3 [&_dt]:font-medium [&_dt]:text-ink">
+        <div>
+          <dt>Quarter</dt>
+          <dd>The report period the 13F covers, not the date it was filed. Q3 2026 is the book as of September 30, 2026, filed up to 45 days later.</dd>
+        </div>
+        <div>
+          <dt>Total value (<code>total_value_usd</code>)</dt>
+          <dd>The sum of every line in the filing after unit fixes: shares, options at their notional value and notes at their filed value.</dd>
+        </div>
+        <div>
+          <dt>Weight</dt>
+          <dd>A position’s value divided by the filing’s total value, so today the denominator includes options at notional. A “% of equity book” weight with share rows only in the denominator is coming; when it lands every page switches to it and this entry will say so.</dd>
+        </div>
+        <div>
+          <dt>New, added, trimmed, unchanged, exited</dt>
+          <dd>
+            Compared with the fund’s previous 13F, by shares of the same CUSIP: <em>new</em> had none before; <em>added</em> and <em>trimmed</em> hold more or fewer shares; <em>unchanged</em> holds the same shares, whatever the price did; <em>exited</em> held shares before and none now. With no earlier
+            13F on file, the change is empty.
+          </dd>
+        </div>
+        <div>
+          <dt>Dollar change</dt>
+          <dd>The change in shares times the newer filing’s own value per share. A new position counts its full value; an exited one counts minus its value in the previous filing, since it has no current value. A price move alone is zero.</dd>
+        </div>
+        <div>
+          <dt>Ticker</dt>
+          <dd>Empty when the CUSIP has no single US listing (many foreign shares, units and warrants) or no mapping yet. The CUSIP and issuer are always shown.</dd>
+        </div>
+      </dl>
     ),
   },
   {
@@ -116,6 +160,10 @@ export function Methodology() {
   useTitle('Methodology · Copybook')
   const log = useAsync(() => fetch(`${DATA}changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ updated_at?: string; entries: Entry[] }>) : null)), [])
   const entries = log.data?.entries ?? []
+  // Shown only once live alerts have gone out this season; replays are excluded by the API.
+  const lat = useAsync(loadLatency, [])
+  const latency = lat.data && lat.data.count > 0 ? lat.data : null
+  const time = (t: string) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: 'America/New_York' })
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">
@@ -124,10 +172,10 @@ export function Methodology() {
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">The rules we apply between EDGAR and this site, and a log of every change to them and to the data.</p>
       </header>
 
-      <div className="mt-12 grid gap-10 lg:grid-cols-[13rem_minmax(0,1fr)]">
+      <div className="mt-12 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[13rem_minmax(0,1fr)]">
         <nav aria-label="On this page" className="hidden lg:block">
           <ul className="sticky top-24 space-y-1.5 text-[14px]">
-            {[...SECTIONS, { id: 'changelog', title: 'Changelog' }].map((s) => (
+            {[...SECTIONS, ...(latency ? [{ id: 'latency', title: 'Alert latency' }] : []), { id: 'changelog', title: 'Changelog' }].map((s) => (
               <li key={s.id}>
                 <a href={`#${s.id}`} className="text-ink-2 hover:text-ink">
                   {s.title}
@@ -143,6 +191,58 @@ export function Methodology() {
               <div className="prose-cb mt-3 space-y-3 text-[15.5px] leading-relaxed text-ink-2 [&_li]:pl-1 [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5">{s.body}</div>
             </section>
           ))}
+
+          {latency && (
+            <section id="latency" className="scroll-mt-24">
+              <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert latency</h2>
+              <p className="mt-2 text-[14px] text-ink-3">
+                Every live alert this filing season ({quarterLabel(latency.season)}): when EDGAR accepted the filing, when our email went out, and the gap. Times are New York time. Updated live.
+              </p>
+              <div className="mt-4 grid grid-cols-3 gap-4 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)]">
+                {(
+                  [
+                    ['Median', latency.median_seconds],
+                    ['95th percentile', latency.p95_seconds],
+                    ['Alerts this season', null],
+                  ] as const
+                ).map(([k, v]) => (
+                  <div key={k}>
+                    <p className="text-[12.5px] text-ink-3">{k}</p>
+                    <p className="num mt-1 text-[24px] font-semibold tracking-[-0.02em]">{k === 'Alerts this season' ? latency.count.toLocaleString('en-US') : v == null ? '—' : gapLabel(v)}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" tabIndex={0} role="region" aria-label="Alert latency by filing">
+                <table className="w-full text-[13.5px]">
+                  <thead>
+                    <tr className="border-b border-line text-left text-[12px] text-ink-3">
+                      <th className="px-5 py-2.5 font-medium">Filer</th>
+                      <th className="px-3 py-2.5 font-medium">Form</th>
+                      <th className="px-3 py-2.5 font-medium">EDGAR accepted</th>
+                      <th className="px-3 py-2.5 font-medium">Alert sent</th>
+                      <th className="px-5 py-2.5 text-right font-medium">Gap</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {latency.alerts.slice(0, 50).map((a) => (
+                      <tr key={a.accession + a.sent_at} className="border-b border-line last:border-0">
+                        <td className="px-5 py-2.5">
+                          <Link to={`/investors/${a.slug}/`} className="font-medium hover:text-accent">
+                            {a.manager}
+                          </Link>
+                          {a.quarter && <span className="ml-1.5 text-[11.5px] text-ink-3">{quarterLabel(a.quarter)}</span>}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2.5 text-ink-2">{a.form}</td>
+                        <td className="num whitespace-nowrap px-3 py-2.5 text-ink-2">{time(a.accepted_at)}</td>
+                        <td className="num whitespace-nowrap px-3 py-2.5 text-ink-2">{time(a.sent_at)}</td>
+                        <td className="num px-5 py-2.5 text-right font-medium">{gapLabel(a.gap_seconds)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           <section id="changelog" className="scroll-mt-24">
             <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Changelog</h2>

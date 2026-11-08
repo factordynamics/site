@@ -95,3 +95,15 @@ export function useMemberState() {
 
 /** Signed-in member, or null. */
 export const useMember = () => useMemberState() ?? null
+
+/** Public alert latency for the filing season ({api}/latency): EDGAR acceptance to email sent. Empty until live alerts go out. */
+export type Latency = {
+  season: string
+  median_seconds: number | null
+  p95_seconds: number | null
+  count: number
+  alerts: { slug: string; manager: string; quarter: string | null; form: string; accession: string; accepted_at: string; sent_at: string; gap_seconds: number }[]
+}
+export const loadLatency = () => fetch(`${api}/latency`).then((r) => (r.ok ? (r.json() as Promise<Latency>) : null)).catch(() => null)
+/** 100 -> "1m40s", 42 -> "42s". */
+export const gapLabel = (s: number) => (s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, '0')}s` : `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`)

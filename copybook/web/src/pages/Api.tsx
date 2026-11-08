@@ -9,6 +9,13 @@ type Param = NonNullable<Op['parameters']>[number]
 type Spec = { info: { title: string; version: string; description?: string }; servers?: { url: string }[]; paths: Record<string, Record<string, Op>>; components?: { parameters?: Record<string, Param> } }
 
 const SPEC = `${api}/v1/openapi.json`
+const SAMPLE = `${import.meta.env.BASE_URL}api/sample-holdings.json`
+const CURATED = 199
+
+// Newest first. Breaking changes are announced here at least 90 days ahead.
+const CHANGES: [string, string][] = [
+  ['2026-11-08', 'v1 published: /v1/me, /v1/filers and /v1/filers/{filer}/holdings/{quarter}. The as_of parameter is documented and returns 501 not_yet_available until point-in-time data is served.'],
+]
 
 /** The info.description packs limits and error codes into one paragraph; split it for display. */
 function parseInfo(d = '') {
@@ -49,14 +56,27 @@ export function ApiDocs() {
           <Button href={SPEC} variant="outline">
             OpenAPI spec
           </Button>
+          <Button href={SAMPLE} variant="outline">
+            Sample response
+          </Button>
         </div>
+        <p className="mt-4 text-[14px] text-ink-3">
+          Coverage: the {CURATED} managers we track closely today; every 13F filer (about 8,900) is coming to the API this month. Use is covered by our{' '}
+          <Link to="/terms/" className="font-medium text-accent hover:text-accent-2">
+            terms
+          </Link>
+          .
+        </p>
       </header>
 
-      <div className="mt-12 grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <div className="mt-12 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel title="Quick start" sub={s ? `Version ${s.info.version}` : undefined}>
           <pre className="overflow-x-auto rounded-xl bg-night p-4 font-mono text-[13px] leading-relaxed text-white/90">
             <code>{`curl ${base}/v1/me \\\n  -H "Authorization: Bearer cbk_live_..."`}</code>
           </pre>
+          <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[13.5px] leading-relaxed text-accent-2">
+            <strong className="font-medium">Send a User-Agent header</strong> that names your app, such as <code className="font-mono text-[12.5px]">my-research/1.0</code>. Requests with a library’s default agent, like Python urllib’s, are blocked. curl, requests and httpx work as they are.
+          </p>
           {s ? (
             <ul className="mt-5 space-y-2 text-[14px] leading-relaxed text-ink-2">
               {info.sentences.map((x) => (
@@ -89,7 +109,7 @@ export function ApiDocs() {
         <h2 id="endpoints" className="text-[22px] font-semibold tracking-[-0.02em]">
           Endpoints
         </h2>
-        <p className="mt-1 text-[14px] text-ink-3">Read live from the spec. Holdings, history, events and bulk export endpoints are rolling out this month and appear here as each ships.</p>
+        <p className="mt-1 text-[14px] text-ink-3">Read live from the spec. History, events and bulk export endpoints are rolling out this month and appear here as each ships.</p>
         <div className="mt-4 space-y-4">
           {!s && !spec.error && <Skeleton className="h-32 w-full" />}
           {ops.map(({ path, method, op }) => (
@@ -136,6 +156,28 @@ export function ApiDocs() {
           ))}
         </div>
       </section>
+
+      <div className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
+        <Panel title="Versioning" sub="How the API changes">
+          <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-ink-2">
+            <li>All endpoints live under /v1. Every response carries <code className="font-mono text-[12.5px]">schema_version</code>, the date of the spec it follows.</li>
+            <li>Additive changes, such as new fields, endpoints or optional parameters, ship at any time. Ignore fields you don’t know.</li>
+            <li>Breaking changes are announced in the changelog at least 90 days before they take effect.</li>
+          </ul>
+        </Panel>
+        <section id="changelog" className="scroll-mt-24">
+          <Panel title="API changelog" sub="Newest first">
+            <ol className="divide-y divide-line text-[14px]">
+              {CHANGES.map(([d, t]) => (
+                <li key={d + t} className="flex gap-4 py-2.5 first:pt-0">
+                  <span className="num w-24 shrink-0 text-ink-3">{d}</span>
+                  <span className="text-ink-2">{t}</span>
+                </li>
+              ))}
+            </ol>
+          </Panel>
+        </section>
+      </div>
 
       <p className="mt-10 text-[14px] text-ink-3">
         The API is included with <Link to="/pricing/" className="font-medium text-accent hover:text-accent-2">Copy Pro and Copy Fund</Link>. How the data is built is on the{' '}
