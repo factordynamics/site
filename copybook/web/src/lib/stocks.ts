@@ -73,7 +73,7 @@ export type Flow = {
   funds_total: number
   featured_filed: number
   featured_total: number
-  recent: { slug: string; manager: string; firm: string; filing_date?: string; featured: boolean; changes: Record<string, number> | null }[]
+  recent: { slug: string; manager: string; firm: string; filing_date?: string; accession?: string; featured: boolean; changes: Record<string, number> | null }[]
   featured: FlowScope
   all: FlowScope
   generated_at: string
@@ -123,3 +123,9 @@ export const loadFilerHolders = (t: string) =>
     quarters: d.quarters,
     rows: d.rows.map(([slug, name, quarter, shares, value, weight, tier]): FilerHolder => ({ slug, name: displayName(name), quarter, shares, value, weight, tier })),
   }))
+
+/** Public filing cards built this deploy (scripts/cards.mjs): slug -> latest card accession. */
+export const loadCards = () =>
+  getJSON<{ cards: { accession: string; slug: string }[] }>(`${D}f/index.json`)
+    .then((d) => new Map(d.cards.map((c) => [c.slug, c.accession])))
+    .catch(() => new Map<string, string>())

@@ -34,6 +34,11 @@ try {
   // No stock index in this build.
 }
 try {
+  for (const c of JSON.parse(readFileSync(join(dir, 'd', 'f', 'index.json'), 'utf8')).cards) urls.push([`f/${c.accession}/`, c.filing_date])
+} catch {
+  // No filing cards in this build.
+}
+try {
   const fsrc = src.replace(/index\.json$/, 'filers.json')
   const filers = (fsrc.startsWith('http') ? await (await fetch(fsrc)).json() : JSON.parse(readFileSync(fsrc, 'utf8'))).filers
   const curated = new Set(managers.map((m) => m.cik.replace(/^0+/, '')))

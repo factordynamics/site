@@ -222,7 +222,7 @@ const period = (q) => {
     moved_on: live.length - filedQ.length,
     featured_moved_on: live.filter((b) => b.featured).length - filedQ.filter((b) => b.featured).length,
     recent: filedQ
-      .map((b) => ({ slug: b.slug, manager: b.manager, firm: b.name, filing_date: b.filing_date, featured: Boolean(b.featured), changes: b.changes ?? null }))
+      .map((b) => ({ slug: b.slug, manager: b.manager, firm: b.name, filing_date: b.filing_date, accession: b.accession, featured: Boolean(b.featured), changes: b.changes ?? null }))
       .sort((a, b) => (b.filing_date ?? '').localeCompare(a.filing_date ?? ''))
       .slice(0, 40),
     featured: flowFor(filedQ.filter((b) => b.featured)),

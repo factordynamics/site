@@ -7,7 +7,7 @@ import { useMember } from '../lib/account'
 import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
-import { stockPath } from '../lib/stocks'
+import { loadCards, stockPath } from '../lib/stocks'
 import { CuratedRedirect, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
@@ -37,6 +37,8 @@ export function ManagerPage() {
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
   }, [f])
   const paid = Boolean(member?.active)
+  const cards = useAsync(loadCards, [])
+  const card = f && cards.data?.get(f.slug)
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
@@ -87,6 +89,11 @@ export function ManagerPage() {
             <Button href={f.sec_url} variant="outline" size="sm">
               View filing on SEC
             </Button>
+            {card && (
+              <Button to={`/f/${card}/`} variant="outline" size="sm">
+                Share this 13F
+              </Button>
+            )}
             {Boolean(f.history_quarters?.length) && (
               <Button to={`/investors/${f.slug}/history/`} variant="outline" size="sm">
                 13F history

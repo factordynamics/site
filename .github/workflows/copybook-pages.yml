@@ -45,6 +45,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node scripts/stocks.mjs dist "${VITE_DATA_BASE}"
+      - run: node scripts/cards.mjs dist "${VITE_DATA_BASE}"
       - run: node scripts/postbuild.mjs "${VITE_DATA_BASE}index.json"
       - run: node scripts/sitemap.mjs dist "${VITE_DATA_BASE}index.json"
       # Skip the deploy (without failing) until Pages is enabled in the repo settings.

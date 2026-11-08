@@ -2,7 +2,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { dateLabel, money, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { useMember } from '../lib/account'
-import { loadFlow, stockPath, type FlowPeriod, type FlowRow, type FlowScope } from '../lib/stocks'
+import { loadCards, loadFlow, stockPath, type FlowPeriod, type FlowRow, type FlowScope } from '../lib/stocks'
 
 type Tab = 'bought' | 'sold' | 'most_buyers' | 'new_multi'
 const TABS: [Tab, string][] = [
@@ -15,6 +15,7 @@ const FREE_ROWS = 5
 
 export function Flow() {
   const f = useAsync(loadFlow, [])
+  const cards = useAsync(loadCards, [])
   const member = useMember()
   const paid = Boolean(member?.active)
   // Lens, period and ranking live in the URL so a view can be shared: ?funds=all&q=2026Q2&tab=sold.
@@ -143,8 +144,8 @@ export function Flow() {
                 .filter((r) => scope === 'all' || r.featured)
                 .slice(0, 12)
                 .map((r) => (
-                  <li key={r.slug}>
-                    <Link to={`/investors/${r.slug}/`} className="flex items-center gap-3 py-2.5 hover:text-accent">
+                  <li key={r.slug} className="flex items-center gap-2">
+                    <Link to={`/investors/${r.slug}/`} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 hover:text-accent">
                       <Monogram name={r.manager} size={28} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13.5px] font-medium">{r.manager}</span>
@@ -154,6 +155,11 @@ export function Flow() {
                         </span>
                       </span>
                     </Link>
+                    {r.accession && cards.data?.get(r.slug) === r.accession && (
+                      <Link to={`/f/${r.accession}/`} className="shrink-0 rounded-full px-2.5 py-1 text-[12.5px] font-medium text-accent hover:bg-accent-soft" aria-label={`Share ${r.manager}’s ${quarterLabel(d.quarter)} 13F`}>
+                        Share
+                      </Link>
+                    )}
                   </li>
                 ))}
             </ul>

@@ -18,6 +18,7 @@ import { ApiDocs } from './pages/Api'
 import { Contact } from './pages/Contact'
 import { Legal } from './pages/Legal'
 import { NotFound } from './pages/NotFound'
+import { FilingCard } from './pages/Filing'
 import { captureAttribution } from './lib/attribution'
 import { getToken, startSession } from './lib/account'
 import { analytics } from './config'
@@ -63,6 +64,7 @@ handoff.then(() =>
             <Route path="account" element={<Account />} />
             <Route path="about" element={<About />} />
             <Route path="methodology" element={<Methodology />} />
+            <Route path="f/:accession" element={<FilingCard />} />
             <Route path="latency" element={<Navigate to="/methodology/#latency" replace />} />
             <Route path="api" element={<ApiDocs />} />
             <Route path="contact" element={<Contact />} />
