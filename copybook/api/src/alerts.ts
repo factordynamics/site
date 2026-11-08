@@ -205,8 +205,9 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
         if (!book) continue;
         const r = computeMoves(f.holdings, book);
         moves = r.moves;
-        const shown = [...moves.new, ...moves.added, ...moves.trimmed, ...moves.exited];
-        await lookupTickers(env, r.changed.length <= 60 ? r.changed : shown);
+        // Held positions already carry tickers from last quarter's book; look up only the new ones
+        // shown in the email (each lookup scans the securities map, ~0.5 ms of CPU).
+        await lookupTickers(env, moves.new);
         tickers = [...new Set(r.changed.map((x) => x.ticker).filter((t): t is string => !!t))];
         break;
       }

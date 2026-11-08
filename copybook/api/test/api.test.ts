@@ -386,7 +386,7 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0]).sort()).toEqual(['follows@example.com', 'nobody@example.com', 'watcher@example.com']);
     expect((await (await call('/health')).json()).alert_latency).toHaveLength(2);
     const loeb = sent.find((m) => m.to[0] === 'nobody@example.com')!;
-    expect(loeb.text).toContain('Position changes appear on Copybook after the next data refresh');
+    expect(loeb.text).toContain('A second email with its position changes follows');
     expect(loeb.text).not.toContain('warren-buffett');
     const mail = sent.find((m) => m.to[0] === 'follows@example.com')!;
     expect(mail.subject).toBe('Copybook: Warren Buffett filed Q3 2026 13F (2 new, 1 exited)');

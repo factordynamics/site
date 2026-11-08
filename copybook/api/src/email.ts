@@ -76,7 +76,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
     const yours = [owned && `${owned} ${owned === 1 ? 'is a stock' : 'are stocks'} you own`, watched && `${watched} ${watched === 1 ? 'is' : 'are'} on your watchlist`].filter(Boolean);
     if (yours.length) lines.push(`  Of the positions that changed, ${yours.join(' and ')}.`);
   } else {
-    lines.push('  Position changes appear on Copybook after the next data refresh (within 3 hours).');
+    lines.push('  Too many positions to diff on filing. A second email with its position changes follows after the next data refresh, usually within a few hours.');
   }
   lines.push(`  Copybook: ${env.SITE_URL}investors/${a.slug}`, `  SEC: ${a.sec_url}`);
   return lines.join('\n');
