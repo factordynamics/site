@@ -6,7 +6,7 @@ import { handleV1 } from './v1';
 import './v1data';
 
 export { KeyMeter } from './keys';
-import { loginMail, sendMail } from './email';
+import { leadAckMail, loginMail, sendMail } from './email';
 import { isActive, isPro, type Env, type Member } from './env';
 import { type Follows, getFollows, getMember, LOGIN_TTL, putFollows, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 import { stripe, verifyStripeSignature } from './stripe';
@@ -77,6 +77,53 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
 }
 
 const MAX_FOLLOWS = 500;
+
+interface LatencyRow {
+  slug: string;
+  manager?: string;
+  quarter?: string;
+  form?: string;
+  kind?: string;
+  accession: string;
+  accepted: string;
+  sent: string;
+  seconds: number;
+  replay?: boolean;
+}
+
+/** The quarter whose filings are coming in at `t`: Q3 filings arrive Oct-Dec, and so on. */
+function seasonOf(t: number): { season: string; from: number } {
+  const d = new Date(t);
+  const y = d.getUTCFullYear();
+  const q = Math.floor(d.getUTCMonth() / 3); // 0-3, the calendar quarter now
+  return { season: q === 0 ? `${y - 1}Q4` : `${y}Q${q}`, from: Date.UTC(y, q * 3, 1) };
+}
+
+/** Season median and p95 of acceptance-to-send seconds, plus each live alert, newest first. */
+export function latencyReport(log: LatencyRow[], now: number) {
+  const { season, from } = seasonOf(now);
+  const rows = log.filter((l) => !l.replay && Date.parse(l.sent) >= from);
+  const sorted = rows.map((l) => l.seconds).sort((a, b) => a - b);
+  const q = (p: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null);
+  const FORM: Record<string, string> = { '13f': '13F-HR', form4: '4', '13d': 'SC 13D', '13g': 'SC 13G' };
+  return {
+    ok: true,
+    season,
+    median_seconds: q(0.5),
+    p95_seconds: q(0.95),
+    count: sorted.length,
+    alerts: rows.map((l) => ({
+      slug: l.slug,
+      manager: l.manager ?? null,
+      quarter: l.quarter ?? null,
+      form: l.form ?? FORM[l.kind ?? '13f'] ?? null,
+      accession: l.accession,
+      accepted_at: l.accepted,
+      sent_at: l.sent,
+      gap_seconds: l.seconds,
+    })),
+  };
+}
 const TICKER = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 const DOWNLOAD_TTL = 60; // KV's minimum expiry
 const HANDOFF_TTL = 120;
@@ -111,7 +158,54 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const sorted = live.map((l) => l.seconds).sort((a, b) => a - b);
     const q = (p: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null);
     const summary = { count: sorted.length, p50: q(0.5), p90: q(0.9), max: sorted.length ? sorted[sorted.length - 1] : null };
-    return json({ ok: true, alert_latency_summary: summary, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length }, 200, h);
+    const leads = Number((await env.DB.get('leads:count')) ?? 0);
+    return json({ ok: true, alert_latency_summary: summary, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, fund_requests: leads }, 200, h);
+  }
+
+  // Public alert latency for the methodology page: this filing season's live alerts, replays excluded.
+  if (req.method === 'GET' && path === '/latency') {
+    const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
+    return json(latencyReport(log, Date.now()), 200, { ...h, 'cache-control': 'public, max-age=60' });
+  }
+
+  // Fund-plan, support and data-deletion requests from the contact and pricing pages. No sign-in;
+  // a filled `website` field (hidden from people) marks a bot and is dropped without saying so.
+  if (req.method === 'POST' && path === '/fund-request') {
+    const b = await body(req);
+    const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+    const topic = b.topic === undefined ? 'fund' : b.topic;
+    const email = String(b.email ?? '').trim().toLowerCase();
+    const seats = b.seats === undefined || b.seats === null || b.seats === '' ? null : Number(b.seats);
+    if (!['fund', 'support', 'delete'].includes(String(topic))) return json({ ok: false, error: 'topic must be fund, support or delete', code: 'bad_request' }, 400, h);
+    if (!EMAIL.test(email)) return json({ ok: false, error: 'invalid email', code: 'bad_request' }, 400, h);
+    if (seats !== null && !(Number.isInteger(seats) && seats >= 1 && seats <= 1000)) return json({ ok: false, error: 'seats must be a whole number from 1 to 1000', code: 'bad_request' }, 400, h);
+    if (b.invoice !== undefined && typeof b.invoice !== 'boolean') return json({ ok: false, error: 'invoice must be true or false', code: 'bad_request' }, 400, h);
+    if (str(b.website, 200)) return json({ ok: true }, 200, h);
+    // At most 5 requests an hour per IP and 3 per email address.
+    const ip = req.headers.get('cf-connecting-ip') ?? 'unknown';
+    for (const [k, max] of [[`rl:lead-ip:${ip}`, 5], [`rl:lead:${email}`, 3]] as const) {
+      const n = Number((await env.DB.get(k)) ?? 0);
+      if (n >= max) return json({ ok: false, error: 'too many requests, try again in an hour', code: 'rate_limited' }, 429, { ...h, 'retry-after': '3600' });
+      await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
+    }
+    const at = new Date().toISOString();
+    const lead = {
+      topic,
+      name: str(b.name, 200),
+      email,
+      fund: str(b.fund, 200),
+      seats,
+      invoice: typeof b.invoice === 'boolean' ? b.invoice : null,
+      plan_interval: b.plan_interval === 'yearly' || b.plan_interval === 'monthly' ? b.plan_interval : null,
+      message: str(b.message ?? b.note, 4000),
+      page: str(b.page, 200),
+      received_at: at,
+    };
+    const id = `${at}-${crypto.randomUUID().slice(0, 8)}`;
+    await env.DB.put(`lead:${id}`, JSON.stringify(lead));
+    await env.DB.put('leads:count', String(Number((await env.DB.get('leads:count')) ?? 0) + 1));
+    const mail = await sendMail(env, [leadAckMail(env, lead)]);
+    return json({ ok: true, id, acknowledgement: mail === '200' ? 'sent' : 'not sent' }, 200, h);
   }
 
   // The data workflow uploads per-quarter history here, authenticated by its GitHub OIDC token.

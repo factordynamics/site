@@ -717,6 +717,39 @@ describe('copybook api', () => {
     expect(sent[0].text).toContain('bought 1,000 shares of SIRI');
   });
 
+  it('fund requests: public, validated, honeypot, rate-limited, stored and acknowledged; /latency reports the season without replays', async () => {
+    const post = (b: unknown, ip = '1.2.3.4') => handleRequest(new Request('https://api.test/fund-request', { method: 'POST', body: JSON.stringify(b), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': ip } }), env);
+    const ok = { topic: 'fund', name: 'Pat', email: 'Pat@Fund.example', fund: 'Pat Capital', seats: 5, invoice: true, plan_interval: 'yearly', message: 'Annual please', page: '/pricing/' };
+    for (const bad of [{ ...ok, email: 'nope' }, { ...ok, topic: 'sales' }, { ...ok, seats: 0 }, { ...ok, seats: 2.5 }, { ...ok, invoice: 'yes' }]) expect((await post(bad)).status).toBe(400);
+    const r = await post(ok);
+    expect(r.status).toBe(200);
+    const leads = (await env.DB.list({ prefix: 'lead:' })).keys;
+    expect(leads).toHaveLength(1);
+    expect(JSON.parse((await env.DB.get(leads[0].name))!)).toMatchObject({ topic: 'fund', email: 'pat@fund.example', seats: 5, invoice: true, plan_interval: 'yearly', message: 'Annual please' });
+    expect(sent.map((m) => m.to[0])).toEqual(['pat@fund.example']);
+    expect(sent[0].text).toContain('annual invoice quote');
+    // A bot filling the hidden field gets a quiet 200 and nothing is stored or sent.
+    sent = [];
+    expect((await post({ ...ok, email: 'bot@x.example', website: 'http://spam' })).status).toBe(200);
+    expect((await env.DB.list({ prefix: 'lead:' })).keys).toHaveLength(1);
+    expect(sent).toHaveLength(0);
+    // Three per address an hour.
+    await post(ok, '5.5.5.5');
+    await post(ok, '6.6.6.6');
+    expect((await post(ok, '7.7.7.7')).status).toBe(429);
+    expect((await (await call('/health')).json()).fund_requests).toBe(3);
+
+    const t = Date.now();
+    const row = (acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q3', kind: '13f', accession: acc, accepted: new Date(t - seconds * 1000).toISOString(), sent: new Date(t).toISOString(), seconds, ...extra });
+    // Newest first, as logged; one replay; one from last season.
+    await env.DB.put('alerts:latency', JSON.stringify([row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' })]));
+    const lat = await (await call('/latency')).json();
+    expect(lat).toMatchObject({ count: 3, median_seconds: 60, p95_seconds: 100 });
+    expect(lat.alerts.map((a: { accession: string }) => a.accession)).toEqual(['A1', 'A2', 'A3']);
+    expect(lat.alerts[1]).toMatchObject({ form: '4', gap_seconds: 100, manager: 'Warren Buffett' });
+    expect(lat.alerts[0].form).toBe('13F-HR');
+  });
+
   it('deadline-day coverage: pages back through a burst, finds a missed filing in its filer feed; replays never count in /health; new members default to follows', async () => {
     const row = (slug: string, cik: string, featured = true) => ({ ok: true, slug, cik, manager: slug, name: slug, featured, form: '13F-HR', accession: `${slug}-q2`, report_date: '2026-06-30', filing_date: '2026-08-14' });
     index = { managers: [row('warren-buffett', '0001067983'), row('dan-loeb', '0001040273')] };

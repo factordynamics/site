@@ -478,13 +478,14 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
  * Acceptance-to-send latency per alerted filing, newest first, for /health. Accessions listed in
  * KV alerts:replays (test sends of old filings) are marked and never counted.
  */
-async function logLatency(env: Env, filings: { slug: string; accession: string; accepted?: string; kind?: string }[], sentAt: number): Promise<void> {
+async function logLatency(env: Env, filings: { slug: string; accession: string; accepted?: string; kind?: string; manager?: string; quarter?: string; form?: string }[], sentAt: number): Promise<void> {
   const replays = new Set(JSON.parse((await env.DB.get('alerts:replays')) ?? '[]') as string[]);
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
   const add = filings
     .filter((f) => f.accepted)
-    .map((f) => ({ slug: f.slug, kind: f.kind ?? '13f', accession: f.accession, accepted: f.accepted, sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}) }));
-  await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 300)));
+    .map((f) => ({ slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', accession: f.accession, accepted: f.accepted, sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}) }));
+  // A filing season's worth: the public /latency page reports the whole season.
+  await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 2000)));
 }
 
 interface IndexRow {
@@ -808,7 +809,7 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
   await env.DB.put('events:handled', JSON.stringify(handled.slice(-1000)));
   if (pending.length) await env.DB.put('events:pending', JSON.stringify([...(JSON.parse((await env.DB.get('events:pending')) ?? '[]') as string[]), ...pending].slice(-200)));
   const sent = await deliver(env, [], fresh, now);
-  if (fresh.length) await logLatency(env, fresh.map((e) => ({ slug: e.slug || e.subject_tickers?.join(',') || '', kind: e.kind, accession: e.id, accepted: e.accepted })), Date.now());
+  if (fresh.length) await logLatency(env, fresh.map((e) => ({ slug: e.slug || e.subject_tickers?.join(',') || '', manager: e.manager, form: e.form, kind: e.kind, accession: e.id, accepted: e.accepted })), Date.now());
   return { status: 'checked', events: fresh.map((e) => `${e.kind} ${e.slug || e.manager} ${e.ticker ?? e.issuer ?? ''}${e.details_pending ? ' (pending)' : ''}`), ...sent, ...(errors.length ? { errors } : {}) };
 }
 

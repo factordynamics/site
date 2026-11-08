@@ -31,6 +31,29 @@ export async function sendMail(env: Env, mails: Mail[]): Promise<string> {
 
 const FOOTER = '\n\nSource: SEC EDGAR filings (13F-HR, Form 4, Schedules 13D and 13G), as filed. Not investment advice.\nCopybook by Factor Dynamics.';
 
+/** The reply to a fund-plan, support or data-deletion request from the site. */
+export function leadAckMail(env: Env, l: { topic: unknown; name: string | null; email: string; fund: string | null; seats: number | null; invoice: boolean | null; plan_interval: string | null; message: string | null }): Mail {
+  const hi = l.name ? `Hi ${l.name},` : 'Hi,';
+  const what =
+    l.topic === 'delete'
+      ? 'We received your request to delete your Copybook data. We will confirm by email once it is done, within 30 days.'
+      : l.topic === 'support'
+        ? 'We received your message and will reply to this address, usually within one business day.'
+        : `Thanks for your interest in Copy Fund${l.fund ? ` for ${l.fund}` : ''}. We will reply to this address within one business day${l.invoice ? ' with an annual invoice quote' : ' with how to get started'}.`;
+  const got = [
+    l.fund && `Fund: ${l.fund}`,
+    l.seats && `Seats: ${l.seats}`,
+    l.invoice !== null && l.topic === 'fund' && `Invoice billing: ${l.invoice ? 'yes' : 'no'}`,
+    l.plan_interval && `Billing: ${l.plan_interval}`,
+    l.message && `Your note: ${l.message.length > 600 ? `${l.message.slice(0, 600)}…` : l.message}`,
+  ].filter(Boolean);
+  return {
+    to: l.email,
+    subject: l.topic === 'delete' ? 'Your Copybook data deletion request' : l.topic === 'support' ? 'We got your message' : 'Your Copy Fund request',
+    text: `${hi}\n\n${what}${got.length ? `\n\nWhat you sent:\n${got.join('\n')}` : ''}\n\nCopybook: ${env.SITE_URL}${FOOTER}`,
+  };
+}
+
 export function loginMail(env: Env, to: string, token: string, welcome: boolean): Mail {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
   const intro = welcome
