@@ -213,8 +213,7 @@ export function Pricing() {
                 )}
                 {tier.proof && (
                   <div className="mt-6 border-t border-line pt-4 text-[12.5px] leading-snug text-ink-2">
-                    <p>Checked Nov 8: values and acceptance times match SEC EDGAR on all 204,332 positions in the latest 13Fs of the {curated} managers we track closely (unit-corrected filings flagged).</p>
-                    <p className="mt-2 flex flex-wrap gap-x-3 font-medium">
+                    <p className="flex flex-wrap gap-x-3 font-medium">
                       <Link to="/api/" className="text-accent hover:text-accent-2">
                         API docs
                       </Link>
