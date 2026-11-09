@@ -19,8 +19,16 @@ export interface Mail {
 }
 
 /** Sends through Resend's batch API (100 per request). Returns a short status for logs. */
+/** Who may get a sample or preview (a template with illustrative figures): our inbox and the test inboxes only. */
+export const previewInbox = (to: string) => to === 'hello@factordynamics.com' || to.startsWith('copybook-test-');
+const SAMPLE = /^\[(sample|preview|draft)\]/i;
+
 export async function sendMail(env: Env, mails: Mail[]): Promise<string> {
-  if (!mails.length) return 'none';
+  // A sample never reaches a member's real address.
+  const blocked = mails.filter((m) => SAMPLE.test(m.subject) && !previewInbox(m.to));
+  if (blocked.length) console.log(`sample not sent to a member: ${blocked.map((m) => m.subject).join(' | ')}`);
+  mails = mails.filter((m) => !blocked.includes(m));
+  if (!mails.length) return blocked.length ? 'blocked' : 'none';
   if (!env.RESEND_API_KEY) {
     console.log(`email skipped (no RESEND_API_KEY): ${mails.map((m) => m.subject).join(' | ')}`);
     return 'skipped';

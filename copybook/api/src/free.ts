@@ -4,7 +4,7 @@
  * never a real-time alert. Every paid route treats them as inactive. Plus the one unsubscribe link
  * that every marketing and lifecycle email carries.
  */
-import { FOOTER, sendMail, type Mail } from './email';
+import { FOOTER, previewInbox, sendMail, type Mail } from './email';
 import { apiBase, type Env, type Member } from './env';
 import { checkMove, displayCase, UNUSUAL } from './edgar';
 import { changeFollows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
@@ -486,6 +486,8 @@ export async function mergeFreeSignup(env: Env, email: string): Promise<Record<s
 export async function previewWeekly(env: Env, email: string, now: number, dry = false): Promise<Record<string, unknown>> {
   const m = await memberByEmail(env, email);
   if (!m || m.status !== 'free') return { ok: false, error: 'no free member with that email' };
+  // A preview goes to our inbox or a test inbox only; for a member's address, read it with dry.
+  if (!dry && !previewInbox(email)) return { ok: false, error: 'previews send only to hello@ or copybook-test- addresses; use dry: true' };
   const moves = await weeklyMoves(env, now);
   const weekOf = new Date(now - 6 * 86400_000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
   const f = await changeFollows(env, m, { get: true });

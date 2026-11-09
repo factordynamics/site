@@ -25,6 +25,8 @@ const billable = (m: Member) => lifecycle(m) && !m.test;
 const lifecycle = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !m.comped && !!PRICES[m.plan];
 const day = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
+/** Yearly's saving as the pricing page words it (about 3 months free on Copy, 2 on Pro and Fund): no other figure. */
+const monthsFree = (p: { month: number; year: number }) => `about ${Math.round(12 - p.year / p.month)} months free`;
 
 /** What one member got (email, digest or chat), for the trial and season emails: KV stats:{customer}. */
 export interface MemberStats {
@@ -137,7 +139,6 @@ const FOUNDING: Record<string, string> = { pro: 'Your founding price stays at $3
 /** Day 11 of 14: the member's own numbers this trial, what ends with it, and one button to keep it (yearly preselected). */
 export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: number, owned: number, keep: string, unsub: string, daysLeft = 3): Mail {
   const p = PRICES[m.plan];
-  const save = p.month * 12 - p.year;
   const plural = (n: number, w: string) => `${n.toLocaleString('en-US')} ${w}${n === 1 ? '' : 's'}`;
   const got = s.n
     ? [
@@ -154,7 +155,7 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
     ...(m.plan === 'fund' ? ["your team's seats, shared book and peers"] : []),
   ];
   const yearly = m.interval === 'yearly';
-  const cta = yearly ? `Keep ${p.name} (${money(p.year)}/year)` : `Keep ${p.name} yearly: ${money(p.year)}/year, save ${money(save)}`;
+  const cta = yearly ? `Keep ${p.name} (${money(p.year)}/year)` : `Keep ${p.name} yearly: ${money(p.year)}/year, ${monthsFree(p)}`;
   const charge = yearly ? `${money(p.year)}/year` : `${money(p.month)}/month`;
   const founding = FOUNDING[m.plan] ? ` ${FOUNDING[m.plan]}` : '';
   const ends = day(m.trial_end!);
@@ -258,7 +259,6 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
  */
 export function seasonRecapMail(m: Member, st: MemberStats, sent: number, funds: number, median: number | null, season: string, keep: string, unsub: string): Mail {
   const p = PRICES[m.plan];
-  const save = p.month * 12 - p.year;
   const secs = (n: number) => (n < 120 ? `${n} seconds` : `${Math.round(n / 60)} minutes`);
   const got = [
     `${sent} alert${sent === 1 ? '' : 's'} on the ${funds} fund${funds === 1 ? '' : 's'} you follow`,
@@ -266,13 +266,13 @@ export function seasonRecapMail(m: Member, st: MemberStats, sent: number, funds:
     ...(st.owned.length ? [`Moves in names you own: ${st.owned.slice(0, 6).join(', ')}${st.owned.length > 6 ? ` and ${st.owned.length - 6} more` : ''}`] : []),
     ...(median != null ? [`Median time from EDGAR acceptance to inbox this season: ${secs(median)}`] : []),
   ];
-  const cta = `Switch to yearly: ${money(p.year)}/year, save ${money(save)}`;
+  const cta = `Switch to yearly: ${money(p.year)}/year, ${monthsFree(p)}`;
   const founding = FOUNDING[m.plan] ?? '';
   return {
     to: m.email,
-    subject: `Your ${season} filing season on Copybook, and ${money(save)} off with yearly`,
-    text: `The ${season} 13F filing season is in. Copybook sent you ${sent} alert${sent === 1 ? '' : 's'}.${median != null ? ` Our median time from EDGAR acceptance to your inbox this season was ${secs(median)}.` : ''}\n\nYour season:\n${got.map((g) => `  - ${g}`).join('\n')}\n\nYou're on ${p.name} monthly: ${money(p.month * 12)} a year. Yearly is ${money(p.year)}, so switching saves ${money(save)}.${founding ? ` ${founding}` : ''}\n\n${cta} (you see the amount and confirm on the next page): ${keep}\n\nUnsubscribe from tips and reminders: ${unsub}${FOOTER}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>The ${esc(season)} 13F filing season is in.</p><p style="margin-bottom:4px"><b>Your season</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>You're on ${esc(p.name)} monthly: ${money(p.month * 12)} a year. Yearly is <b>${money(p.year)}</b>, so switching saves ${money(save)}.</p><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding)}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">You see the amount and confirm on the next page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and reminders</a></p></div>`,
+    subject: `Your ${season} filing season on Copybook, and ${monthsFree(p)} with yearly`,
+    text: `The ${season} 13F filing season is in. Copybook sent you ${sent} alert${sent === 1 ? '' : 's'}.${median != null ? ` Our median time from EDGAR acceptance to your inbox this season was ${secs(median)}.` : ''}\n\nYour season:\n${got.map((g) => `  - ${g}`).join('\n')}\n\nYou're on ${p.name} monthly: ${money(p.month * 12)} a year. Yearly is ${money(p.year)}: ${monthsFree(p)}.${founding ? ` ${founding}` : ''}\n\n${cta} (you see the amount and confirm on the next page): ${keep}\n\nUnsubscribe from tips and reminders: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>The ${esc(season)} 13F filing season is in.</p><p style="margin-bottom:4px"><b>Your season</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>You're on ${esc(p.name)} monthly: ${money(p.month * 12)} a year. Yearly is <b>${money(p.year)}</b>: ${monthsFree(p)}.</p><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding)}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">You see the amount and confirm on the next page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and reminders</a></p></div>`,
     unsubscribe: unsub,
   };
 }

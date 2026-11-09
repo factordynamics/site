@@ -993,6 +993,12 @@ describe('copybook api', () => {
     sent = [];
     expect((await (await call('/channels/test', { method: 'POST', token })).json()).results).toEqual({ email: '200' });
     expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['pz@example.com', 'Copybook test: your alerts will arrive here']]);
+    // A sample (illustrative figures) only ever reaches our inbox or a test inbox, never a member's address.
+    const { sendMail } = await import('../src/email');
+    sent = [];
+    expect(await sendMail(env, [{ to: 'pz@example.com', subject: '[Sample] Your Copy trial ends November 11', text: 'x' }])).toBe('blocked');
+    await sendMail(env, [{ to: 'pz@example.com', subject: '[sample] x', text: 'x' }, { to: 'copybook-test-pro-1@fldubai.com', subject: '[Sample] x', text: 'x' }, { to: 'hello@factordynamics.com', subject: '[Preview] x', text: 'x' }]);
+    expect(sent.map((m) => m.to[0])).toEqual(['copybook-test-pro-1@fldubai.com', 'hello@factordynamics.com']);
     sent = [];
     const r = pauseResumesAt(Date.now());
     const until = new Date(r.at * 1000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
@@ -2745,7 +2751,7 @@ describe('copybook api', () => {
     expect(sent[0].text).toContain('1 name you own moved in them: DHI.');
     expect(sent[0].text).toContain('Your fastest alert reached you 48 seconds after EDGAR accepted the filing (Warren Buffett 13F).');
     expect(sent[0].text).toContain('alerts for the 2 funds you follow and the 2 names you own');
-    const keep = sent[0].text.match(/Keep Copy yearly: \$79\/year, save \$29: (\S+)/)![1];
+    const keep = sent[0].text.match(/Keep Copy yearly: \$79\/year, about 3 months free: (\S+)/)![1];
     expect(sent[0].text).toContain('Or stay monthly at $9/month');
     expect(sent[0].html).toContain(`href="${keep}"`);
     expect(sent[0].text).not.toContain('founding'); // Copy has no founding price
@@ -2775,13 +2781,13 @@ describe('copybook api', () => {
     await env.DB.put('alerts:latency', JSON.stringify([{ seconds: 50, sent: '2026-11-14T21:00:00Z' }, { seconds: 70, sent: '2026-11-14T21:01:00Z' }, { seconds: 90, sent: '2026-11-14T21:02:00Z' }, { seconds: 4000, sent: '2026-11-14T21:03:00Z', replay: true }]));
     await cron(12, Date.UTC(2026, 10, 18, 15, 12));
     expect(sent.map((m) => m.to[0])).toEqual(['promo@example.com']);
-    expect(sent[0].subject).toBe('Your Q3 2026 filing season on Copybook, and $78 off with yearly');
+    expect(sent[0].subject).toBe('Your Q3 2026 filing season on Copybook, and about 2 months free with yearly'); // the pricing page's words, no dollar figure
     expect(sent[0].text).toContain('Copybook sent you 41 alerts. Our median time from EDGAR acceptance to your inbox this season was 70 seconds.');
     expect(sent[0].text).toContain('Copy Pro monthly: $468 a year. Yearly is $390');
     // One button to the same portal confirm page as the trial's day 11, with the founding price.
-    expect(sent[0].text).toMatch(/Switch to yearly: \$390\/year, save \$78 \(you see the amount and confirm on the next page\): https:\/\/\S+\/keep\?t=/);
+    expect(sent[0].text).toMatch(/Switch to yearly: \$390\/year, about 2 months free \(you see the amount and confirm on the next page\): https:\/\/\S+\/keep\?t=/);
     expect(sent[0].text).toContain('Your founding price stays at $39/month or $390/year');
-    expect(sent[0].html).toContain('Switch to yearly: $390/year, save $78</a>');
+    expect(sent[0].html).toContain('Switch to yearly: $390/year, about 2 months free</a>');
     sent = [];
     await cron(12, Date.UTC(2026, 10, 19, 15, 12));
     expect(sent).toHaveLength(0);
