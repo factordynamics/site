@@ -280,7 +280,7 @@ export async function publishLatency(env: Env, now: number): Promise<string> {
 
 const TICKER = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 /** How long a member or /v1 request may spend reading EDGAR before it answers from the cache (`pending` lists the rest). */
-export const EDGAR_READ_MS = 2000;
+const EDGAR_READ_MS = 2000;
 const REQUEST_MS = 3000;
 const DOWNLOAD_TTL = 60; // KV's minimum expiry
 const HANDOFF_TTL = 120;
