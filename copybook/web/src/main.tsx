@@ -24,6 +24,7 @@ import { NotFound } from './pages/NotFound'
 import { FilingCard } from './pages/Filing'
 import { Upgrade } from './pages/Upgrade'
 import { Speed } from './pages/Speed'
+import { Recap } from './pages/Recap'
 import { captureAttribution } from './lib/attribution'
 import { getToken, startSession } from './lib/account'
 import { analytics } from './config'
@@ -65,6 +66,7 @@ handoff.then(() =>
             <Route path="stocks/:ticker" element={<StockPage />} />
             <Route path="flow" element={<Flow />} />
             <Route path="season" element={<Season />} />
+            <Route path="season/:quarter" element={<Recap />} />
             <Route path="for-funds" element={<ForFunds />} />
             <Route path="for-quants" element={<ForQuants />} />
             <Route path="consensus" element={<Consensus />} />

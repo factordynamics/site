@@ -5,7 +5,7 @@ import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../c
 import { useMember } from '../lib/account'
 import { dateLabel, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { isEdgarDay } from '../lib/calendar.mjs'
-import { loadCardSet, loadSeason, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
+import { loadCardSet, loadSeason, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
 
 // /season/: the 13F filing season as it happens. Built from d/season.json, which every Pages build
 // writes (every 20 minutes during the filing wave).
@@ -92,6 +92,11 @@ export function Season() {
           <p className="mt-1 text-[15px] font-medium">{d ? dueLabel(d.deadline) : '\u00a0'}</p>
           <p className="num mt-4 text-[40px] font-semibold leading-none tracking-[-0.03em]">{d ? (passed ? 'Closed' : left(due - now)) : '—'}</p>
           <p className="mt-2 text-[13px] text-white/60">{passed ? 'Late filers and amendments still arrive; they appear here as they do.' : 'left to file'}</p>
+          {d && (
+            <Link to={recapPath(d.quarter)} className={`mt-4 inline-flex items-center gap-1 text-[13.5px] font-medium ${passed ? 'rounded-full bg-white px-3.5 py-1.5 text-ink hover:bg-white/90' : 'text-white/85 hover:text-white'}`}>
+              {passed ? `Read the ${Q} recap` : `${Q} recap so far`} <Arrow className="size-3" />
+            </Link>
+          )}
         </div>
       </header>
 

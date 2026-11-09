@@ -45,6 +45,11 @@ page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Co
   try {
     season = JSON.parse(readFileSync(join(dist, 'og', 'season.json'), 'utf8'))
   } catch {}
+  // The season recap, with its own title and share card (scripts/cards.mjs).
+  try {
+    const r = JSON.parse(readFileSync(join(dist, 'og', `season-${index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort().at(-1).toLowerCase()}.json`), 'utf8'))
+    page(r.path, r.title, r.desc, '', r.url)
+  } catch {}
   // The season tracker's title names the quarter now filing, for search during filing week.
   const qs = index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort()
   const q = qs.at(-1)?.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1') ?? 'Quarterly'

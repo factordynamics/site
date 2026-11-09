@@ -199,3 +199,51 @@ ${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572
   writeFileSync(join(out, 'og', 'season.json'), JSON.stringify({ url: `${SITE}og/season.png?v=${v}`, superinvestors_filed: s.featured.filed, days_left: passed ? 0 : daysLeft, mode: bought ? 'most_bought' : 'expected' }))
   console.log(`season card: ${s.featured.filed} of ${s.featured.total} filed, ${passed ? 'deadline passed' : `${daysLeft} EDGAR days left`}, ${list.length} ${bought ? 'most bought' : 'expected next'} (v=${v})`)
 }
+
+// The season recap's share card (/season/{yyyy}q{n}/): top 3 bought and sold by the superinvestors.
+{
+  const s = JSON.parse(readFileSync(join(out, 'd', 'season.json'), 'utf8'))
+  const r = JSON.parse(readFileSync(join(out, 'd', 'recap', `${s.quarter}.json`), 'utf8'))
+  const q = qLabel(r.quarter)
+  const col = (rows, x0, title, fg) =>
+    `<text x="${x0}" y="300" font-family="Geist" font-weight="700" font-size="17" letter-spacing="1.6" fill="${fg}">${title}</text>` +
+    (rows.length
+      ? rows
+          .map((f, i) => {
+            const y = 352 + i * 56
+            return `<text x="${x0}" y="${y}" font-family="Geist Mono" font-weight="600" font-size="27" fill="#0c0e13">${x(f.ticker)}</text>
+<text x="${x0 + 118}" y="${y}" font-family="Geist" font-size="21" fill="#5f6572">${x(cut(f.name, 16))}</text>
+<text x="${x0 + 490}" y="${y}" text-anchor="end" font-family="Geist" font-weight="600" font-size="24" fill="${fg}">${f.net_value >= 0 ? '+' : '−'}${money(f.net_value)}</text>`
+          })
+          .join('\n')
+      : `<text x="${x0}" y="352" font-family="Geist" font-size="22" fill="#8a8f99">Nothing yet</text>`)
+  const card = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<rect width="1200" height="630" fill="#fbfaf7"/>
+<g transform="translate(72 58) scale(1.75)"><rect x="1.5" y="5" width="14" height="17.5" rx="3.2" fill="#0c0e13"/><rect x="8" y="1.5" width="14.5" height="17.5" rx="3.2" fill="#2b44d6" stroke="#fbfaf7" stroke-width="1.4"/><rect x="11" y="6" width="8.5" height="1.8" rx=".9" fill="#fff"/><rect x="11" y="9.6" width="6" height="1.8" rx=".9" fill="#fff" opacity=".85"/><rect x="11" y="13.2" width="3.6" height="1.8" rx=".9" fill="#fff" opacity=".7"/></g>
+<text x="124" y="94" font-family="Geist" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Copybook</text>
+<text x="1128" y="92" text-anchor="end" font-family="Geist" font-weight="500" font-size="22" fill="#5f6572">${x(`${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'filed so far'}`)}</text>
+<text x="72" y="196" font-family="Geist" font-weight="600" font-size="54" letter-spacing="-2" fill="#0c0e13">${x(`${q} 13F recap`)}</text>
+<text x="72" y="238" font-family="Geist" font-size="24" fill="#5f6572">What the superinvestors bought and sold${r.final ? '' : ', so far'}</text>
+<path d="M72 262H1128" stroke="#e6e3dc"/>
+${col(r.most_bought.slice(0, 3), 72, 'MOST BOUGHT', '#126b3c')}
+${col(r.most_sold.slice(0, 3), 638, 'MOST SOLD', '#b4322a')}
+<path d="M600 284V500" stroke="#e6e3dc"/>
+<path d="M72 556H1128" stroke="#e6e3dc"/>
+<text x="72" y="596" font-family="Geist" font-weight="500" font-size="22" fill="#393e49">${x(`${r.opened_count} new positions · ${r.exited_count} full exits · from SEC EDGAR`)}</text>
+<text x="1128" y="596" text-anchor="end" font-family="Geist" font-weight="600" font-size="22" fill="#2b44d6">copybook.factordynamics.com</text>
+</svg>`
+  const v = createHash('sha1').update(card).digest('hex').slice(0, 10)
+  const slug = r.quarter.toLowerCase()
+  writeFileSync(join(out, 'og', `season-${slug}.png`), new Resvg(card, { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng())
+  const top = r.most_bought.slice(0, 3).map((f) => f.ticker)
+  writeFileSync(
+    join(out, 'og', `season-${slug}.json`),
+    JSON.stringify({
+      path: `season/${slug}/`,
+      url: `${SITE}og/season-${slug}.png?v=${v}`,
+      title: `${q} 13F recap: what the superinvestors bought and sold · Copybook`,
+      desc: `${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'have filed'} ${q} 13Fs.${top.length ? ` Most bought: ${top.join(', ')}.` : ''} New positions, full exits, the biggest moves and who filed late, from SEC EDGAR.`,
+    }),
+  )
+  console.log(`recap card: ${q}${r.final ? ' final' : ' so far'} (v=${v})`)
+}

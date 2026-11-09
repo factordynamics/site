@@ -136,6 +136,36 @@ export const loadSeason = (v?: number) =>
     return { ...s, latest: s.latest.map((x) => ({ ...named(x), firm: displayName(x.firm) })), featured_flow: fix(s.featured_flow), all_flow: fix(s.all_flow) }
   })
 
+export type RecapMove = { ticker: string; name: string; etf?: boolean; slug: string; manager: string; change: 'new' | 'added' | 'trimmed' | 'exited'; delta_value: number; weight: number | null }
+export type Recap = {
+  quarter: string
+  deadline: string
+  final: boolean
+  superinvestors: { filed: number; total: number }
+  bought_usd: number
+  sold_usd: number
+  opened_count: number
+  exited_count: number
+  most_bought: SeasonRow[]
+  most_sold: SeasonRow[]
+  most_buyers: SeasonRow[]
+  opened: RecapMove[]
+  exited: RecapMove[]
+  biggest: RecapMove[]
+  filing: { slug: string; manager: string; via?: string; filed: boolean; filing_date: string | null; accepted_at: string | null; accession: string | null; late: boolean; expected_date: string | null }[]
+  not_filing: { slug: string; manager: string; last: string | null }[]
+  splits: { ticker: string; name: string; ratio: string }[]
+  generated_at: string
+}
+/** A season recap (d/recap/{2026Q3}.json), rebuilt every build so late filers flow in. */
+export const loadRecap = (q: string, v?: number) =>
+  getJSON<Recap>(`${D}recap/${q}.json${fresh(v)}`).then((r) => {
+    const rows = (x: SeasonRow[]) => x.map((f) => ({ ...f, buyers: f.buyers.map(named), sellers: f.sellers.map(named) }))
+    return { ...r, most_bought: rows(r.most_bought), most_sold: rows(r.most_sold), most_buyers: rows(r.most_buyers) }
+  })
+/** "2026Q3" -> "2026q3", the recap's URL segment. */
+export const recapPath = (q: string) => `/season/${q.toLowerCase()}/`
+
 /** The 13F season under way: the deadline of the quarter that ended last, shown from 3 weeks before it to 4 days after. */
 export function seasonNow(now = new Date()) {
   const y = now.getUTCFullYear()

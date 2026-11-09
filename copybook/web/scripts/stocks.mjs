@@ -370,6 +370,8 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
   }
   const expected = []
   const notFiling = []
+  // The quarter's original 13F-HR acceptance (an amendment may head the quarter now).
+  const origAccepted = (x) => (x?.filings ?? []).filter((f) => f.form === '13F-HR' && f.accepted_at).sort((a, z) => a.accepted_at.localeCompare(z.accepted_at))[0]?.accepted_at ?? (x?.form === '13F-HR' ? x.accepted_at : null)
   // Every superinvestor, including those whose 13F is filed by another entity (Ackman by Pershing
   // Square Inc.): their timing comes from the entity that files. 13F-NT quarters (holdings reported
   // elsewhere) and amendments say nothing about when the 13F-HR goes in, so they are skipped.
@@ -418,7 +420,7 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
       time_et,
       ...(time_range ? { time_range } : {}),
       history: hist,
-      ...(filedNow ? { filed: { filing_date: books_.filing_date, accession: books_.accession } } : {}),
+      ...(filedNow ? { filed: { filing_date: books_.filing_date, accession: books_.accession, accepted_at: origAccepted(h?.history?.find((x) => x.quarter === Q)) ?? books_.accepted_at ?? null } } : {}),
     })
   }
   expected.sort((a, b) => (a.expected_date ?? '9').localeCompare(b.expected_date ?? '9') || a.time_et - b.time_et)
@@ -441,6 +443,55 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
     generated_at: index.generated_at,
   }
   writeFileSync(join(out, 'd', 'season.json'), JSON.stringify(seasonOut))
+
+  // The season recap (/season/{yyyy}q{n}/): what the superinvestors bought, sold, opened and exited,
+  // their biggest single moves, and who filed late or not at all. Rebuilt every build, so late filers
+  // flow in after the deadline. Names that look like an unadjusted split are left out, as on /season/.
+  {
+    const supers = books.filter((b) => b.featured && qn(b.quarter) === q && b.prev_quarter)
+    const slugs = new Set(supers.map((b) => b.slug))
+    const moves = []
+    for (const st of stocks.values()) {
+      if (!st.classes.size || st.splits?.[Q]?.adjusted === false) continue
+      const ticker = [...st.classes.values()].sort((a, b) => b.value - a.value)[0].ticker
+      const etf = st.sector === 'Funds & ETFs'
+      for (const h of st.holders) {
+        if (!slugs.has(h.slug) || !h.change || h.change === 'unchanged' || !h.delta_value) continue
+        moves.push({ ticker, name: st.name, ...(etf ? { etf: true } : {}), slug: h.slug, manager: displayName(h.manager), change: h.change, delta_value: Math.round(h.delta_value), weight: h.weight ?? null })
+      }
+    }
+    const stock = moves.filter((m) => !m.etf)
+    const by = (f, cmp, n = 50) => stock.filter(f).sort(cmp).slice(0, n)
+    const dueMs = due.getTime()
+    const status = expected.map((x) => {
+      const at = x.filed?.accepted_at ?? null
+      return { slug: x.slug, manager: displayName(x.manager), ...(x.via ? { via: x.via } : {}), filed: Boolean(x.filed), filing_date: x.filed?.filing_date ?? null, accepted_at: at, accession: x.filed?.accession ?? null, late: Boolean(at && Date.parse(at) > dueMs), expected_date: x.expected_date }
+    })
+    const recap = {
+      quarter: Q,
+      deadline: due.toISOString(),
+      final: Date.now() > dueMs,
+      superinvestors: seasonOut.featured,
+      bought_usd: stock.filter((m) => m.delta_value > 0).reduce((a, m) => a + m.delta_value, 0),
+      sold_usd: stock.filter((m) => m.delta_value < 0).reduce((a, m) => a + m.delta_value, 0),
+      opened_count: stock.filter((m) => m.change === 'new').length,
+      exited_count: stock.filter((m) => m.change === 'exited').length,
+      // Rankings by name come from the same flow as /season/ and /flow/ (ETFs and index funds left out).
+      most_bought: seasonOut.featured_flow.bought.filter((r) => !r.etf).slice(0, 25),
+      most_sold: seasonOut.featured_flow.sold.filter((r) => !r.etf).slice(0, 25),
+      most_buyers: seasonOut.featured_flow.most_buyers.filter((r) => !r.etf).slice(0, 25),
+      opened: by((m) => m.change === 'new', (a, b) => b.delta_value - a.delta_value),
+      exited: by((m) => m.change === 'exited', (a, b) => a.delta_value - b.delta_value),
+      biggest: by(() => true, (a, b) => Math.abs(b.delta_value) - Math.abs(a.delta_value)),
+      filing: status,
+      not_filing: notFiling,
+      splits: sp.splits,
+      generated_at: index.generated_at,
+    }
+    mkdirSync(join(out, 'd', 'recap'), { recursive: true })
+    writeFileSync(join(out, 'd', 'recap', `${Q}.json`), JSON.stringify(recap))
+    console.log(`recap ${Q}: ${recap.superinvestors.filed} of ${recap.superinvestors.total} superinvestors, ${moves.length} moves${recap.final ? ', final' : ''}`)
+  }
   console.log(`season ${Q}: ${seasonOut.curated.filed} of ${seasonOut.curated.total} curated, ${seasonOut.filers.filed} of ${seasonOut.filers.total} filers, due ${seasonOut.deadline}`)
 }
 // FLOW_FULL=<path outside dist>: the untrimmed lists, same shape, for the API's GET /flow.
