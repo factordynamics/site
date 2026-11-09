@@ -1,33 +1,37 @@
-import { StrictMode } from 'react'
+import { lazy, StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
 import { Layout } from './components/Layout'
 import { Home } from './pages/Home'
-import { Investors } from './pages/Investors'
 import { ManagerPage } from './pages/Manager'
-import { History } from './pages/History'
 import { StockPage } from './pages/Stock'
-import { Flow } from './pages/Flow'
-import { Consensus } from './pages/Consensus'
-import { Pricing } from './pages/Pricing'
-import { Account } from './pages/Account'
-import { Book } from './pages/Book'
 import { Season } from './pages/Season'
-import { ForFunds, ForQuants } from './pages/Personas'
-import { About } from './pages/About'
-import { Methodology } from './pages/Methodology'
-import { ApiDocs } from './pages/Api'
-import { Contact } from './pages/Contact'
-import { Legal } from './pages/Legal'
-import { NotFound } from './pages/NotFound'
-import { FilingCard } from './pages/Filing'
-import { Upgrade } from './pages/Upgrade'
-import { Speed } from './pages/Speed'
 import { Recap } from './pages/Recap'
 import { captureAttribution, captureRef } from './lib/attribution'
 import { getToken, startSession } from './lib/account'
 import { analytics } from './config'
+
+// Pages people land on from search (home, investors, stocks, the season) ship in the main bundle;
+// the rest load on first visit.
+const Investors = lazy(() => import('./pages/Investors').then((m) => ({ default: m.Investors })))
+const History = lazy(() => import('./pages/History').then((m) => ({ default: m.History })))
+const Flow = lazy(() => import('./pages/Flow').then((m) => ({ default: m.Flow })))
+const Consensus = lazy(() => import('./pages/Consensus').then((m) => ({ default: m.Consensus })))
+const Pricing = lazy(() => import('./pages/Pricing').then((m) => ({ default: m.Pricing })))
+const Account = lazy(() => import('./pages/Account').then((m) => ({ default: m.Account })))
+const Book = lazy(() => import('./pages/Book').then((m) => ({ default: m.Book })))
+const ForFunds = lazy(() => import('./pages/Personas').then((m) => ({ default: m.ForFunds })))
+const ForQuants = lazy(() => import('./pages/Personas').then((m) => ({ default: m.ForQuants })))
+const About = lazy(() => import('./pages/About').then((m) => ({ default: m.About })))
+const Methodology = lazy(() => import('./pages/Methodology').then((m) => ({ default: m.Methodology })))
+const ApiDocs = lazy(() => import('./pages/Api').then((m) => ({ default: m.ApiDocs })))
+const Contact = lazy(() => import('./pages/Contact').then((m) => ({ default: m.Contact })))
+const Legal = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Legal })))
+const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })))
+const FilingCard = lazy(() => import('./pages/Filing').then((m) => ({ default: m.FilingCard })))
+const Upgrade = lazy(() => import('./pages/Upgrade').then((m) => ({ default: m.Upgrade })))
+const Speed = lazy(() => import('./pages/Speed').then((m) => ({ default: m.Speed })))
 
 // The old refcell.github.io/gust/copybook/ pages redirect here. They pass a 2-minute sign-in token
 // (from POST {api}/handoff, never the session itself) and the campaign touch in the hash, since
@@ -54,7 +58,14 @@ if (analytics.cloudflare) {
   document.head.appendChild(s)
 }
 
-handoff.then(() =>
+// First paint waits briefly for the two preloaded web fonts (index.html), so headlines don't reflow when they
+// swap in: that reflow was most of the home page's layout shift. Never more than 600 ms.
+const fontsReady = Promise.race([
+  Promise.all([document.fonts?.load('600 1em "Geist Variable"'), document.fonts?.load('italic 400 1em "Newsreader Variable"')]),
+  new Promise((r) => setTimeout(r, 600)),
+]).catch(() => null)
+
+Promise.all([handoff, fontsReady]).then(() =>
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>

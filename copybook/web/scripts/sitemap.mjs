@@ -12,6 +12,7 @@ const src = process.argv[3] || join(dir, 'data', 'index.json')
 const index = src.startsWith('http') ? await getJson(src) : JSON.parse(readFileSync(src, 'utf8'))
 const managers = index.managers.filter((m) => m.ok)
 const newest = managers.map((m) => m.filing_date).filter(Boolean).sort().pop()
+const quarter = managers.map((m) => m.quarter).filter(Boolean).sort().pop()
 
 const urls = [
   ['', newest],
@@ -28,7 +29,8 @@ const urls = [
   ['security/'],
   ['flow/', newest],
   ['season/', newest],
-  [`season/${String(newest ?? '').toLowerCase()}/`, newest],
+  // The recap of the quarter now filing, and its % of book view (its own card and description).
+  ...(quarter ? [[`season/${quarter.toLowerCase()}/`, newest], [`season/${quarter.toLowerCase()}/pct/`, newest]] : []),
   ['for-funds/'],
   ['for-quants/'],
   ...managers.map((m) => [`investors/${m.slug}/`, m.filing_date]),

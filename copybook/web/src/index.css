@@ -1,12 +1,33 @@
 @import "tailwindcss";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
-@import "@fontsource-variable/newsreader/opsz-italic.css";
+@import "@fontsource-variable/newsreader/wght-italic.css";
+
+/* Fallbacks sized to the web fonts' widths (measured on the hero headline), so text that paints before
+   Geist or Newsreader arrives wraps the same and nothing below it moves when they swap in. */
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial"), local("Helvetica"), local("Roboto");
+  font-weight: 100 500;
+  size-adjust: 90.7%;
+}
+@font-face {
+  font-family: "Geist Fallback";
+  src: local("Arial Bold"), local("Arial"), local("Helvetica Bold"), local("Roboto Bold");
+  font-weight: 501 900;
+  size-adjust: 84.3%;
+}
+@font-face {
+  font-family: "Newsreader Fallback";
+  font-style: italic;
+  src: local("Georgia Italic"), local("Georgia"), local("Times New Roman Italic");
+  size-adjust: 78.6%;
+}
 
 @theme {
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Geist Variable", "Geist Fallback", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  --font-serif: "Newsreader Variable", Georgia, serif;
+  --font-serif: "Newsreader Variable", "Newsreader Fallback", Georgia, serif;
 
   /* Paper and ink, one cobalt accent. */
   --color-paper: #fbfaf7;
@@ -98,7 +119,8 @@
     animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 }
+/* Movement only, no fade: text that starts transparent doesn't count as painted, which delays LCP. */
 @keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
+  from { transform: translateY(6px); }
+  to { transform: none; }
 }

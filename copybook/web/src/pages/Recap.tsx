@@ -221,9 +221,12 @@ function Bars({ rows, paid, what, sold = false }: { rows: SeasonRow[]; paid: boo
               {r.ticker}
             </Link>
             <span className="min-w-0">
+              {/* On a phone the fund gets its own line, so a long company name can't push it out. */}
               <span className="block truncate text-ink-2" title={r.name}>
-                {r.name} <span className="text-ink-3">· {who(sold ? r.sellers : r.buyers, sold ? r.n_sellers : r.n_buyers)}</span>
+                {r.name}
+                <span className="hidden text-ink-3 sm:inline"> · {who(sold ? r.sellers : r.buyers, sold ? r.n_sellers : r.n_buyers)}</span>
               </span>
+              <span className="block truncate text-[12.5px] text-ink-3 sm:hidden">{who(sold ? r.sellers : r.buyers, sold ? r.n_sellers : r.n_buyers)}</span>
               <span className="mt-1 block h-1.5 rounded-full bg-ink/[0.05]">
                 <span className={`block h-full rounded-full ${sold ? 'bg-down' : 'bg-up'}`} style={{ width: `${(Math.abs(r.net_value) / max) * 100}%` }} />
               </span>
@@ -254,9 +257,12 @@ function PctBars({ rows, paid, what, sold = false }: { rows: PctRow[]; paid: boo
               {r.ticker}
             </Link>
             <span className="min-w-0">
+              {/* On a phone the fund gets its own line, so a long company name can't push it out. */}
               <span className="block truncate text-ink-2" title={r.name}>
-                {r.name} <span className="text-ink-3">· {who(sold ? r.sellers : r.buyers, sold ? r.n_sellers : r.n_buyers)}</span>
+                {r.name}
+                <span className="hidden text-ink-3 sm:inline"> · {who(sold ? r.sellers : r.buyers, sold ? r.n_sellers : r.n_buyers)}</span>
               </span>
+              <span className="block truncate text-[12.5px] text-ink-3 sm:hidden">{who(sold ? r.sellers : r.buyers, sold ? r.n_sellers : r.n_buyers)}</span>
               <span className="mt-1 block h-1.5 rounded-full bg-ink/[0.05]">
                 <span className={`block h-full rounded-full ${sold ? 'bg-down' : 'bg-up'}`} style={{ width: `${(Math.abs(r.pct) / max) * 100}%` }} />
               </span>

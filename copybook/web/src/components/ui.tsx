@@ -121,7 +121,8 @@ export function Stat({ label, value, sub }: { label: string; value: ReactNode; s
     <div>
       <p className="text-[13px] text-ink-3">{label}</p>
       <p className="num mt-1 text-[24px] font-semibold tracking-[-0.03em]">{value}</p>
-      {sub && <p className="mt-0.5 text-[12px] text-ink-3">{sub}</p>}
+      {/* The sub line is always there, so the card keeps its height while data loads. */}
+      <p className="mt-0.5 text-[12px] text-ink-3">{sub ?? '\u00a0'}</p>
     </div>
   )
 }

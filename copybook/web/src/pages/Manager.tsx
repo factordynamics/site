@@ -9,7 +9,7 @@ import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
-import { loadCards, stockPath } from '../lib/stocks'
+import { loadCards, recapPath, seasonNow, stockPath } from '../lib/stocks'
 import { CuratedRedirect, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
@@ -79,12 +79,20 @@ export function ManagerPage() {
           {f ? <Monogram name={f.manager} size={64} /> : <Skeleton className="size-16 rounded-full" />}
           <div>
             <h1 className="text-[34px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-[44px]">{f?.manager ?? '\u00a0'}</h1>
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-[15px] text-ink-2">
+            <p className="mt-1 flex min-h-6 flex-wrap items-center gap-2 text-[15px] text-ink-2">
               {f && f.name !== f.manager && <span>{f.name}</span>}
               {f && <Badge tone={stale ? 'warn' : 'neutral'}>{stale ? shownLabel : `${quarterLabel(f.quarter)} 13F`}</Badge>}
             </p>
           </div>
         </div>
+        {!f && (
+          // The buttons' footprint while the filing loads, so the page below doesn't jump when they appear.
+          <div className="flex flex-wrap gap-2" aria-hidden="true">
+            {['w-24', 'w-36', 'w-28', 'w-28', 'w-24'].map((w, i) => (
+              <Skeleton key={i} className={`h-8 ${w} rounded-full`} />
+            ))}
+          </div>
+        )}
         {f && (
           <div className="flex flex-wrap gap-2">
             <FollowButton kind="investor" id={f.slug} name={f.manager} />
@@ -119,8 +127,6 @@ export function ManagerPage() {
         <Stat label="Top 10 weight" value={f ? pct(book.top10, 0) : '—'} sub="Share of portfolio" />
         <Stat label="Largest position" value={book.top1 ? book.top1.ticker || shortName(book.top1.issuer) : '—'} sub={book.top1 ? `${pct(book.top1.weight)} of portfolio` : undefined} />
       </div>
-
-      {f && !f.filer && <SinceLast13F slug={f.slug} quarter={f.quarter} holdings={f.holdings} />}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <Panel
@@ -209,9 +215,17 @@ export function ManagerPage() {
           ) : (
             <LockedChanges top={book.rows.slice(0, 6).map((h) => h.ticker || shortName(h.issuer))} />
           )}
+          <p className="mt-5 border-t border-line pt-4 text-[13.5px]">
+            <Link to={recapPath(seasonNow().quarter)} className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
+              {quarterLabel(seasonNow().quarter)} 13F recap: what all the superinvestors bought <Arrow className="size-3" />
+            </Link>
+          </p>
         </Panel>
         )}
       </div>
+
+      {/* After the quarter's changes it continues, and below the fold its late arrival moves nothing on screen. */}
+      {f && !f.filer && <SinceLast13F slug={f.slug} quarter={f.quarter} holdings={f.holdings} />}
 
 
       <section className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
@@ -349,6 +363,11 @@ function FilerPanel({ f, member }: { f: ManagerFile; member: boolean }) {
           </div>
         ))}
       </dl>
+      <p className="mt-4 text-[13.5px]">
+        <Link to={recapPath(seasonNow().quarter)} className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
+          {quarterLabel(seasonNow().quarter)} 13F recap: what all the superinvestors bought <Arrow className="size-3" />
+        </Link>
+      </p>
       {/* Members already have Follow in the header; only visitors see the offer. */}
       <div className="mt-5 rounded-xl bg-accent-soft px-4 py-3.5 text-[13.5px] leading-relaxed text-accent-2">
         <p className="font-medium">{member ? 'Follow it for its next 13F' : 'Get an email when this filer files'}</p>

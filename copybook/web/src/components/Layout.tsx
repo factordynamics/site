@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { getToken } from '../lib/account'
 import { quarterLabel } from '../lib/data'
@@ -98,7 +98,10 @@ export function Layout() {
         )}
       </header>
       <main id="main" className="flex-1">
-        <Outlet />
+        {/* Lazy pages: the footer stays below the fold while their code loads. */}
+        <Suspense fallback={<div className="min-h-screen" />}>
+          <Outlet />
+        </Suspense>
       </main>
       <Footer />
     </div>

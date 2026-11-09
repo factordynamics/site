@@ -21,18 +21,20 @@ function score(q: string, ...fields: string[]) {
   return best
 }
 
-export function useSearch(query: string) {
-  const [managers, setManagers] = useState<Manager[]>([])
+/** `active`: the box is open or has a query. The fund index (190 KB) loads then, not with every page. */
+export function useSearch(query: string, active = true) {
+  const [loaded, setManagers] = useState<Manager[] | null>(null)
   const [filers, setFilers] = useState<Filer[] | null>(null)
   const [stocks, setStocks] = useState<StockRef[] | null>(null)
   useEffect(() => {
-    loadIndex().then((d) => setManagers(d.managers)).catch(() => null)
-  }, [])
+    if ((active || query) && !loaded) loadIndex().then((d) => setManagers(d.managers)).catch(() => setManagers([]))
+  }, [active, query, loaded])
   useEffect(() => {
     if (query && !filers) loadFilers().then(setFilers).catch(() => setFilers([]))
     if (query && !stocks) loadStockIndex().then((d) => setStocks(d.stocks)).catch(() => setStocks([]))
   }, [query, filers, stocks])
   return useMemo<Hit[]>(() => {
+    const managers = loaded ?? []
     const q = norm(query)
     if (!q) return managers.filter((m) => m.featured).slice(0, 6).map((m) => ({ kind: 'manager', m }))
     const ms = managers
@@ -68,14 +70,14 @@ export function useSearch(query: string) {
     const fh = fs.map(({ f }) => ({ kind: 'filer' as const, f }))
     if (exactTicker || (tickerish && !ms.length && !fh.length)) return [...sh, ...mh, ...fh]
     return [...mh, ...sh.filter((h) => !etf(h.s)), ...fh, ...sh.filter((h) => etf(h.s))]
-  }, [query, managers, filers, stocks])
+  }, [query, loaded, filers, stocks])
 }
 
 export function SearchBox({ size = 'md', autoFocus = false, placeholder = 'Search investors or tickers' }: { size?: 'md' | 'lg'; autoFocus?: boolean; placeholder?: string }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [sel, setSel] = useState(0)
-  const hits = useSearch(q)
+  const hits = useSearch(q, open)
   const nav = useNavigate()
   const wrap = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)

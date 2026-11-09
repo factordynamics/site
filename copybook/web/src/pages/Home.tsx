@@ -1,5 +1,5 @@
 import { Signup } from '../components/Signup'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { loadSeason, seasonNow } from '../lib/stocks'
 import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/charts'
@@ -35,7 +35,7 @@ function Hero({ managers }: { managers?: Manager[] }) {
     <section className="relative overflow-hidden">
       <div className="grid-bg pointer-events-none absolute inset-0 -top-16" aria-hidden="true" />
       <div className="container-x relative pb-16 pt-10 md:pt-16">
-        <div className="relative z-20 grid items-end gap-12 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="relative z-20 grid grid-cols-1 items-end gap-12 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rise max-w-3xl">
           <SeasonPill />
           <h1 className="mt-6 text-[42px] font-semibold leading-[1.02] tracking-[-0.045em] sm:text-[54px] lg:text-[64px]">
@@ -206,13 +206,29 @@ function ProofStrip({ total, filers, updated }: { total?: number; filers?: numbe
   )
 }
 
+/** True once the element is within a screen of the viewport: below-the-fold sections load their data then. */
+function useNear<T extends Element>() {
+  const ref = useRef<T>(null)
+  const [near, setNear] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || near) return
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && setNear(true), { rootMargin: '100% 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [near])
+  return [ref, near] as const
+}
+
 function ConsensusSection({ featured }: { featured?: Manager[] }) {
-  const book = useAsync(() => (featured ? loadSuperBook(featured) : Promise.resolve(null)), [featured?.length])
+  // Every featured fund's book (about 40 files): fetched when the reader nears this section, not on page load.
+  const [ref, near] = useNear<HTMLElement>()
+  const book = useAsync(() => (featured && near ? loadSuperBook(featured) : Promise.resolve(null)), [featured?.length, near])
   const rows = book.data?.rows.slice(0, 8) ?? []
   const max = rows[0]?.holders.length ?? 1
   const mix = book.data ? foldSlices(sectorMix(book.data.rows), 8) : []
   return (
-    <section className="container-x mt-24 md:mt-32">
+    <section ref={ref} className="container-x mt-24 md:mt-32">
       <div className="grid gap-12 lg:grid-cols-[0.9fr_1.4fr] lg:gap-16">
         <div>
           <p className="text-[13px] font-medium text-accent">Consensus</p>

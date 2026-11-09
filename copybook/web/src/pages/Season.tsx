@@ -4,9 +4,9 @@ import { REF_NOTE, Share, shareUrl, useRefCode } from '../components/Share'
 import { Signup } from '../components/Signup'
 import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { useMember } from '../lib/account'
-import { dateLabel, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { dateFmt, dateLabel, money, NUM, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { isEdgarDay } from '../lib/calendar.mjs'
-import { loadCardSet, loadSeason, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
+import { loadCardSet, loadRecap, loadSeason, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
 
 // /season/: the 13F filing season as it happens. Built from d/season.json, which every Pages build
 // writes (every 20 minutes during the filing wave).
@@ -71,6 +71,8 @@ export function Season() {
   const shown = paid ? rows : rows.slice(0, FREE)
   const due = d ? new Date(d.deadline).getTime() : 0
   const passed = d && now > due
+  // After the deadline the post names the recap's top three.
+  const recap = useAsync(() => (d && passed ? loadRecap(d.quarter) : Promise.resolve(null)), [d?.quarter, passed])
 
   return (
     <div className="container-x pt-12 md:pt-16">
@@ -87,7 +89,7 @@ export function Season() {
           <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
             Every manager with $100M or more in 13F securities, mostly US-listed stocks, must file its {Q || 'quarter-end'} holdings with the SEC within 45 days. The funds we track closely are read minutes after EDGAR accepts them; this page refreshes about every 20 minutes.
           </p>
-          <Share className="mt-5" text={`${Q || 'The'} 13F filing season, live: who has filed and what the superinvestors bought`} />
+          <Share className="mt-5" text={d ? postText(d, Boolean(passed), recap.data?.most_bought, now) : undefined} />
         </div>
         <div className="rounded-[var(--radius-card)] bg-night p-6 text-white shadow-[var(--shadow-card)]">
           <p className="text-[13px] text-white/60">{passed ? 'Deadline passed' : 'Filing deadline'}</p>
@@ -224,8 +226,28 @@ function usual(x: Expected) {
   if (x.pattern === 'none') return `No fixed day; last filed ${x.days_before === 0 ? 'on deadline day' : dayPhrase(x.days_before)}, ${when} (${at})`
   return `${x.pattern === 'usually' ? 'Usually' : 'Most often'} ${dayPhrase(x.days_before)}, ${when} (${at})`
 }
+// The Post on X text, with the live numbers: who filed, who's next, what they bought.
+function postText(d: SeasonData, passed: boolean, recapTop: { ticker: string | null }[] | undefined, now: number) {
+  const q = `Q${d.quarter.slice(-1)}`
+  const tickers = (rows: { ticker: string | null }[] = []) =>
+    rows
+      .flatMap((r) => (r.ticker ? [`$${r.ticker}`] : []))
+      .slice(0, 3)
+      .join(', ')
+  const filed = `${d.featured.filed} of ${d.featured.total} superinvestors filed`
+  if (passed) {
+    const top = tickers(recapTop ?? d.featured_flow.bought.filter((r) => !r.etf))
+    return `${q} 13F season is closed: ${filed}.${top ? ` Most bought: ${top}.` : ''}`
+  }
+  const today = dateFmt({ timeZone: 'America/New_York' }, 'en-CA').format(new Date(now))
+  const next = (d.expected ?? [])
+    .filter((x) => !x.filed && !x.placeholder && x.pattern !== 'none' && x.expected_date && x.expected_date >= today)
+    .sort((a, b) => Number(b.slug === 'warren-buffett') - Number(a.slug === 'warren-buffett') || a.expected_date!.localeCompare(b.expected_date!) || a.time_et - b.time_et)[0]
+  const top = tickers((d.featured.filed ? d.featured_flow : d.all_flow).bought.filter((r) => !r.etf))
+  return [`${q} 13F season: ${filed}`, next && `${next.manager} expected ${new Date(`${next.expected_date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' })} ~${clock(next.time_et)} ET`, top && `Most bought so far: ${top}`].filter(Boolean).join(' · ')
+}
 const clock = (m: number) => `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'am' : 'pm'}`
-const dayLabel = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+const dayLabel = (iso: string) => dateFmt({ weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`))
 
 function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<string>; now: number }) {
   const [copied, setCopied] = useState(false)
@@ -234,7 +256,7 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
   useEffect(() => {
     if (location.hash === '#expected') document.getElementById('expected')?.scrollIntoView()
   }, [])
-  const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+  const today = dateFmt({ timeZone: 'America/New_York' }, 'en-CA').format(new Date(now))
   const waiting = list.filter((x) => !x.filed)
   const done = list.filter((x) => x.filed)
   // Group the ones still to file by expected day; a filer whose last 13F was an empty placeholder is
@@ -281,7 +303,7 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
                       <Monogram name={x.manager} size={26} />
                       <span className="min-w-0">
                         <span className="block truncate text-[14px] font-medium">{x.manager}</span>
-                        <span className="block text-[12.5px] leading-snug text-ink-3" title={x.history.map((h) => `${quarterLabel(h.quarter)}: ${new Date(h.accepted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}`).join('\n')}>
+                        <span className="block text-[12.5px] leading-snug text-ink-3" title={x.history.map((h) => `${quarterLabel(h.quarter)}: ${dateFmt({ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(new Date(h.accepted_at))}`).join('\n')}>
                           {x.via && <span className="text-ink-2">Files as {x.via.replace(/,?\s+(Inc|LLC|L\.?P|Ltd)\.?$/i, '')}. </span>}
                           {x.placeholder ? `Filed an empty 13F for ${quarterLabel(x.placeholder.quarter)}; showing ${quarterLabel(x.placeholder.showing)}, the latest full book` : usual(x)}
                         </span>
@@ -343,7 +365,7 @@ function DayBars({ d, now }: { d: SeasonData; now: number }) {
   for (let t = new Date(`${d.by_day[0]?.date ?? due}T12:00:00Z`); t.toISOString().slice(0, 10) <= due; t.setUTCDate(t.getUTCDate() + 1)) if (isEdgarDay(t.toISOString().slice(0, 10))) days.push(t.toISOString().slice(0, 10))
   const max = Math.max(1, ...days.map((x) => counts.get(x) ?? 0))
   // EDGAR's day is New York's: in UTC, Sunday evening is already Monday.
-  const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+  const today = dateFmt({ timeZone: 'America/New_York' }, 'en-CA').format(new Date(now))
   const latest = d.by_day.at(-1)?.date
   return (
     <div>
@@ -352,7 +374,7 @@ function DayBars({ d, now }: { d: SeasonData; now: number }) {
           const c = counts.get(x) ?? 0
           const future = x > today || (x === today && !c)
           return (
-            <div key={x} className="group relative flex h-full flex-1 items-end" title={`${dateLabel(x)}: ${c.toLocaleString('en-US')} filed`}>
+            <div key={x} className="group relative flex h-full flex-1 items-end" title={`${dateLabel(x)}: ${NUM.format(c)} filed`}>
               {future ? (
                 <div className={`w-full rounded-t-[3px] border border-dashed ${x === due ? 'h-full border-accent/60 bg-accent-soft/60' : 'h-3 border-line-2'}`} />
               ) : (

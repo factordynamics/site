@@ -25,6 +25,25 @@ function page(path, title, desc, extra = '', image = null) {
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'index.html'), html)
 }
+// Structured data for search: one JSON-LD block per page (`<` escaped so a name can't close the script).
+const ld = (o) => `\n    <script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', ...o }).replace(/</g, '\\u003c')}</script>`
+const ORG = { '@type': 'Organization', name: 'Copybook', url: SITE, logo: `${SITE}apple-touch-icon.png` }
+const EDGAR = { '@type': 'CreativeWork', name: 'SEC EDGAR Form 13F filings', url: 'https://www.sec.gov/edgar/search/' }
+const crumbs = (...items) => ({ '@type': 'BreadcrumbList', itemListElement: items.map(([name, path], i) => ({ '@type': 'ListItem', position: i + 1, name, item: `${SITE}${path}` })) })
+const usd = (v) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`)
+const qLabel = (q) => (q ? q.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1') : 'latest')
+const dayLabel = (iso) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+const num = (v) => Number(v ?? 0).toLocaleString('en-US')
+const readDist = (...p) => {
+  try {
+    return JSON.parse(readFileSync(join(dist, ...p), 'utf8'))
+  } catch {
+    return null
+  }
+}
+const seasonData = readDist('d', 'season.json')
+const built = seasonData?.generated_at ?? index.generated_at ?? new Date().toISOString()
+
 function redirect(file, to) {
   writeFileSync(
     join(dist, file),
@@ -32,6 +51,12 @@ function redirect(file, to) {
   )
 }
 
+page(
+  '',
+  'Copybook: see what the world’s best investors own',
+  'Portfolios of the world’s great investors, read straight from their SEC 13F filings. Top positions, sector mix and where they agree.',
+  ld({ '@graph': [ORG, { '@type': 'WebSite', name: 'Copybook', url: SITE, description: 'Superinvestor and hedge fund portfolios from SEC 13F filings.', publisher: { '@type': 'Organization', name: 'Copybook' } }] }),
+)
 const tc = (s) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\b(Llc|Lp|Llp|Plc|Etf|Ag|Sa|Nv|Se|Ii|Iii|Usa)\b/g, (w) => w.toUpperCase()))
 page('investors/', 'Investors · Copybook', 'Latest 13F portfolios of legendary value investors, hedge-fund founders, activists and the largest institutions.')
 page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.')
@@ -57,13 +82,20 @@ page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Co
     const rq = index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort().at(-1).toLowerCase()
     for (const k of [rq, `${rq}-pct`]) {
       const r = JSON.parse(readFileSync(join(dist, 'og', `season-${k}.json`), 'utf8'))
-      page(r.path, r.title, r.desc, '', r.url)
+      page(r.path, r.title, r.desc, ld({ '@type': 'Article', headline: r.title.replace(/ · Copybook$/, ''), description: r.desc, image: r.url, url: `${SITE}${r.path}`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}${r.path}` }), r.url)
     }
   } catch {}
   // The season tracker's title names the quarter now filing, for search during filing week.
   const qs = index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort()
   const q = qs.at(-1)?.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1') ?? 'Quarterly'
-  page('season/', `${q} 13F filing season tracker: who has filed and what they bought · Copybook`, `Live through the 13F deadline: how many superinvestors and filers have filed ${q} 13Fs, the latest filings, and the most bought and sold stocks so far. From SEC EDGAR.`, '', season?.url)
+  // The tracker's title and description carry this build's counts (rebuilt every 20 minutes in filing week).
+  const sd = seasonData
+  const sq = sd ? qLabel(sd.quarter) : q
+  const title = sd ? `${sq} 13F filing season: ${sd.featured.filed} of ${sd.featured.total} superinvestors filed · live tracker` : `${q} 13F filing season tracker: who has filed and what they bought · Copybook`
+  const desc = sd
+    ? `Live through the ${dayLabel(sd.deadline)} deadline: ${num(sd.filers.filed)} of about ${num(sd.filers.total)} 13F filers and ${sd.featured.filed} of ${sd.featured.total} superinvestors have filed ${sq} 13Fs. Who filed, who is next, and the most bought and sold stocks so far, from SEC EDGAR.`
+    : `Live through the 13F deadline: how many superinvestors and filers have filed ${q} 13Fs, the latest filings, and the most bought and sold stocks so far. From SEC EDGAR.`
+  page('season/', title, desc, ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url)
 }
 page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F alerts · Copy Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack minutes after EDGAR. Five seats, invoiced annually.')
 page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Copy Pro', 'Every 13F filer’s latest holdings as JSON, with EDGAR accession and acceptance time on every filing. Point-in-time amendments, audited against EDGAR, from $39/month.')
@@ -81,7 +113,21 @@ for (const m of index.managers) {
   if (!m.ok) continue
   const who = tc(m.manager)
   const firm = tc(m.name)
-  page(`investors/${m.slug}/`, `${who} portfolio · Copybook`, `${who}${firm !== who ? ` (${firm})` : ''}: latest 13F holdings, top positions and sector mix, straight from the SEC filing.`)
+  // Live numbers in the title and description: the quarter, book size, position count and top holdings.
+  const total = m.long_value ?? m.equity_value ?? m.total_value
+  const count = m.position_count ?? m.long_positions
+  const top = (m.top ?? [])
+    .filter((h) => !h.put_call)
+    .slice(0, 3)
+    .map((h) => `${h.display_name ?? tc(h.issuer)} ${((h.weight ?? 0) * 100).toFixed(1)}%`)
+  const title = total ? `${who} 13F portfolio, ${qLabel(m.quarter)}: ${usd(total)} in ${num(count)} positions` : `${who} portfolio · Copybook`
+  const desc = `${firm !== who ? `${who} (${firm})` : who}: the ${qLabel(m.quarter)} 13F${m.filing_date ? `, filed ${dayLabel(m.filing_date)}` : ''}${total ? `, ${usd(total)} across ${num(count)} positions` : ''}.${top.length ? ` Top holdings: ${top.join(', ')}.` : ''} Buys, sells and sector mix, straight from the SEC filing.`
+  page(
+    `investors/${m.slug}/`,
+    title,
+    desc,
+    ld({ '@graph': [{ '@type': 'Dataset', name: `${who} 13F holdings, ${qLabel(m.quarter)}`, description: desc, url: `${SITE}investors/${m.slug}/`, creator: ORG, isBasedOn: m.sec_url ?? EDGAR.url, dateModified: m.filing_date ?? built, temporalCoverage: m.report_date ?? undefined, about: { '@type': 'Organization', name: firm }, isAccessibleForFree: true }, crumbs(['Investors', 'investors/'], [who, `investors/${m.slug}/`])] }),
+  )
   page(`investors/${m.slug}/history/`, `${who} 13F history · Copybook`, `${who}: eight quarters of 13F holdings, buys and sells across quarters, with CSV export.`)
   redirect(`managers/${m.slug}.html`, `investors/${m.slug}/`)
   n++
@@ -93,7 +139,6 @@ try {
   const filersSrc = src.replace(/index\.json$/, 'filers.json')
   const filers = (filersSrc.startsWith('http') ? await getJson(filersSrc) : JSON.parse(readFileSync(filersSrc, 'utf8'))).filers
   const curated = new Map(index.managers.filter((m) => m.ok).map((m) => [m.cik.replace(/^0+/, ''), m.slug]))
-  const usd = (v) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`)
   for (const f of filers) {
     if (!f.ok || !f.slug) continue
     const to = curated.get(f.cik.replace(/^0+/, ''))
@@ -112,7 +157,8 @@ try {
       `investors/${f.slug}/`,
       `${who} 13F holdings · Copybook`,
       `${who}: ${q} 13F portfolio, ${f.position_count?.toLocaleString('en-US') ?? ''} positions${f.total_value ? ` worth ${usd(f.total_value)}` : ''}, with top holdings and sector mix, straight from the SEC filing.`,
-      `\n    <meta name="cb-filer" content="${f.slug}:${f.cik}" />`,
+      `\n    <meta name="cb-filer" content="${f.slug}:${f.cik}" />` +
+        ld({ '@type': 'Dataset', name: `${who} 13F holdings, ${q}`, description: `${who}: ${q} 13F portfolio from SEC EDGAR.`, url: `${SITE}investors/${f.slug}/`, creator: ORG, isBasedOn: EDGAR.url, dateModified: f.filing_date ?? built, about: { '@type': 'Organization', name: who }, isAccessibleForFree: true }),
     )
     fn++
   }
@@ -125,9 +171,24 @@ page('flow/', 'Smart money flow · Copybook', 'What the best investors bought an
 let st = 0
 try {
   const stocks = JSON.parse(readFileSync(join(dist, 'd', 'stocks.json'), 'utf8')).stocks
+  const seasonQ = qLabel(seasonData?.quarter ?? index.managers.map((m) => m.quarter).filter(Boolean).sort().at(-1))
   for (const s of stocks) {
     if (s.h < 2) continue
-    page(`stocks/${s.t}/`, `${s.t} ${s.n}: who owns it · Copybook`, `${s.n} (${s.t}): which of the investors we track hold it, who bought and sold it in the latest 13F filings, and how the holder count changed.`)
+    // "Who owns CRWD? 2,626 13F filers, 48 hedge funds": the counts the page opens with (d/h, scripts/stocks.mjs).
+    const h = readDist('d', 'h', `${s.t}.json`)
+    const all = h?.index?.holders ?? h?.current
+    const hedge = h?.hedge?.current ?? 0
+    const smart = h?.smart?.current ?? 0
+    const title = all ? `Who owns ${s.t}? ${num(all)} 13F filers${hedge ? `, ${num(hedge)} hedge funds` : ''} · ${seasonQ}` : `${s.t} ${s.n}: who owns it · Copybook`
+    const desc = all
+      ? `${s.n} (${s.t}) is held by ${num(all)} 13F filers, including ${num(hedge)} hedge funds, ${num(smart)} hedge funds and long-only managers, and ${num(s.h)} of the funds we track closely.${h?.index ? ` In their latest 13Fs, ${num(h.index.new)} opened a position and ${num(h.index.exited)} sold out.` : ''} Largest holders and who bought and sold, from SEC EDGAR.`
+      : `${s.n} (${s.t}): which of the investors we track hold it, who bought and sold it in the latest 13F filings, and how the holder count changed.`
+    page(
+      `stocks/${s.t}/`,
+      title,
+      desc,
+      ld({ '@graph': [{ '@type': 'Dataset', name: `${s.n} (${s.t}) 13F holders`, description: desc, url: `${SITE}stocks/${s.t}/`, creator: ORG, isBasedOn: EDGAR.url, dateModified: h?.generated_at ?? built, about: { '@type': 'Corporation', name: s.n, tickerSymbol: s.t }, variableMeasured: ['13F holders', 'hedge fund holders', 'shares held', 'value held'], isAccessibleForFree: true }, crumbs(['Stocks', 'consensus/'], [s.t, `stocks/${s.t}/`])] }),
+    )
     st++
   }
 } catch {

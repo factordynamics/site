@@ -350,10 +350,20 @@ export function quarterLabel(q?: string) {
   const m = /^(\d{4})Q(\d)$/.exec(q)
   return m ? `Q${m[2]} ${m[1]}` : q
 }
+// Building an Intl formatter costs about 0.2 ms, and toLocaleDateString builds one per call; the season
+// page formats hundreds of dates per render, so formatters are built once per set of options.
+const FMT = new Map<string, Intl.DateTimeFormat>()
+export function dateFmt(opts: Intl.DateTimeFormatOptions, locale = 'en-US') {
+  const k = locale + JSON.stringify(opts)
+  let f = FMT.get(k)
+  if (!f) FMT.set(k, (f = new Intl.DateTimeFormat(locale, opts)))
+  return f
+}
+export const NUM = new Intl.NumberFormat('en-US')
+
 export function dateLabel(d?: string) {
   if (!d) return ''
-  const t = new Date(`${d.slice(0, 10)}T12:00:00Z`)
-  return t.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return dateFmt({ month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${d.slice(0, 10)}T12:00:00Z`))
 }
 
 

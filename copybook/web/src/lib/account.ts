@@ -26,6 +26,8 @@ export type Member = {
   pause_offer?: { until: string | number; quarter?: string; deadline?: string | number } | null
   /** While paused (unix seconds): access is off, follows and settings are kept. */
   paused_until?: number | null
+  /** The weekly "Your names this week" digest is sending; only then do pause screens promise it. */
+  digest_live?: boolean
   /** Free accounts: saved names and the Friday email's "In your names" block (facts only for names a superinvestor moved this week). */
   free_names?: { names: string[]; limit: number; facts?: { ticker: string; text: string; url: string }[]; hook?: string | null; more?: number } | null
 }
@@ -63,6 +65,11 @@ export class ApiError extends Error {
   }
 }
 
+// Set when the API answers 429 or 5xx, or can't be reached: pages then say the account is temporarily
+// unavailable instead of treating the member as signed out. Nothing retries on its own.
+let down = false
+export const apiDown = () => down
+
 export async function call<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = {}
   if (init.body !== undefined) headers['Content-Type'] = 'application/json'
@@ -75,7 +82,11 @@ export async function call<T>(path: string, init: { method?: string; body?: unkn
     method: init.method ?? (init.body !== undefined ? 'POST' : 'GET'),
     headers,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+  }).catch((e) => {
+    down = true
+    throw e
   })
+  down = res.status === 429 || res.status >= 500
   if (res.status === 401 && init.auth) signOut()
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null))
   return res.json() as Promise<T>
@@ -98,7 +109,7 @@ export const fetchMe = () =>
   (meInFlight ??= call<{ member: Member }>('/me', { auth: true })
     .then((r) => r.member)
     .finally(() => (meInFlight = null)))
-export type CancelReason = 'price' | 'value' | 'feature' | 'alerts' | 'temporary' | 'other'
+export type CancelReason = 'seasonal' | 'price' | 'value' | 'feature' | 'alerts' | 'temporary' | 'other'
 export const pausePlan = (reason?: CancelReason) => call<{ ok: boolean; paused_until: number }>('/pause', { body: reason ? { reason } : {}, auth: true })
 export const resumePlan = () => call<{ ok: boolean }>('/pause', { method: 'DELETE', auth: true })
 export const sendCancelReason = (reason: CancelReason, note?: string) => call<{ ok: boolean }>('/cancel-reason', { body: { reason, ...(note ? { note } : {}) }, auth: true })
@@ -134,11 +145,13 @@ export type IssuerEvent = {
   pct_change?: number | null
   /** An option exercise (M/X) and a sale on the same date. */
   exercise_and_sale?: boolean
+  /** Form 4: codes other than P/S on the traded class (J: a distribution, as DASH's founders' sales). */
+  has_other_codes?: string[]
   accepted_at: string
   accession: string
   url: string
   /** Form 4: every transaction line as filed (P, S, M, F, G, A, ...), derivative lines flagged. */
-  transactions?: { code: string; date: string | null; shares: number; price: number | null; acquired_disposed: 'A' | 'D' | null; derivative: boolean }[] | null
+  transactions?: { code: string; date: string | null; shares: number; price: number | null; acquired_disposed: 'A' | 'D' | null; derivative: boolean; security?: string }[] | null
 }
 /** One row of GET /stocks/{T}/holders (Pro and Fund): every 13F filer holding the issuer in its latest full book. */
 export type ApiHolder = {

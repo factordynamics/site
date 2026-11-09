@@ -7,10 +7,10 @@ import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
-import { issuerLatest } from './Book'
+import { issuerLatest } from '../lib/insiders'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
 import { dateLabel, displayName, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
-import { loadFilerHolders, loadStock, resolveTicker, stockPath, type StockHolder } from '../lib/stocks'
+import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
   new: { label: 'New', tone: 'up' },
@@ -169,12 +169,13 @@ export function StockPage() {
       </nav>
 
       <header className="mt-6 flex flex-wrap items-start justify-between gap-6">
-        <div className="min-w-0">
+        {/* Full width on a phone, so the buttons sit under the name whether or not it has loaded. */}
+        <div className="min-w-0 basis-full sm:basis-auto">
           <p className="font-mono text-[15px] font-medium text-accent">
             {d ? d.classes.map((x) => x.ticker).join(' · ') : ticker.toUpperCase()}
           </p>
           <h1 className="mt-1 text-[34px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-[44px]">{d?.name ?? '\u00a0'}</h1>
-          <p className="mt-2 flex flex-wrap items-center gap-2 text-[15px] text-ink-2">
+          <p className="mt-2 flex min-h-6 flex-wrap items-center gap-2 text-[15px] text-ink-2">
             {d?.sector && <Badge>{d.sector}</Badge>}
             {d && d.classes.length > 1 && <span className="text-[13.5px] text-ink-3">Share classes combined</span>}
             {d?.splits &&
@@ -185,12 +186,11 @@ export function StockPage() {
               ))}
           </p>
         </div>
-        {d && (
-          <div className="flex flex-col items-start gap-3 sm:items-end">
-            <FollowButton kind="stock" id={d.ticker} name={d.ticker} size="md" />
-            <Share text={`Who owns $${d.ticker}: the superinvestors and funds holding ${d.name}, from 13F filings`} />
-          </div>
-        )}
+        {/* Rendered before the data arrives (a placeholder for Follow), so nothing below moves when it does. */}
+        <div className="flex flex-col items-start gap-3 sm:items-end">
+          {d ? <FollowButton kind="stock" id={d.ticker} name={d.ticker} size="md" /> : <Skeleton className="h-10 w-28 rounded-full" />}
+          <Share text={`Who owns $${d?.ticker ?? ticker.toUpperCase()}: the superinvestors and funds holding ${d?.name ?? 'it'}, from 13F filings`} />
+        </div>
       </header>
 
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
@@ -235,7 +235,10 @@ export function StockPage() {
             ? d.quarters.length > 1
               ? `Mid-season: ${holders.filter((h) => h.quarter === d.quarters[0]).length} of ${holders.length} funds shown have filed ${quarterLabel(d.quarters[0])}; the rest are still on ${d.quarters.slice(1).map(quarterLabel).join(' or ')}. Each row is labelled with its quarter, compared with that fund’s filing before.`
               : `From each fund’s ${quarterLabel(d.quarters[0])} 13F, compared with its filing before.`
-            : ''}
+            : ''}{' '}
+          <Link to={recapPath(seasonNow().quarter)} className="font-medium text-accent hover:text-accent-2">
+            {quarterLabel(seasonNow().quarter)} recap
+          </Link>
         </p>
         <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Investors">
           {(

@@ -4,12 +4,14 @@ import { FailingBanner } from '../components/Channels'
 import { Peers } from '../components/Peers'
 import { UpgradePro } from '../components/UpgradePro'
 import { FreeNames } from '../components/FreeNames'
+import { Paused } from '../components/Paused'
 import { TRIAL_DAYS } from '../config'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
-import { ApiError, isFree, isPro, loadEvents, useMember, type IssuerEvent, type IssuerFeed, type Member } from '../lib/account'
+import { ApiError, apiDown, getToken, isFree, isPro, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
 import { quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
+import { accNo, cap, issuerLatest, pctChange, type Latest } from '../lib/insiders'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
 
 // My book (Copy Pro and Fund): crowding and filing-season activity in the names a member owns or
@@ -242,6 +244,40 @@ export function Book() {
     })
   }, [ready, status, names.length])
 
+  // Signed in, but the API is over its limit or down: say so rather than offering a plan they have.
+  if (!member && getToken() && apiDown())
+    return (
+      <div className="container-x pt-12 md:pt-16">
+        <Header eyebrow="My book" />
+        <p role="alert" className="mt-8 max-w-2xl rounded-[var(--radius-card)] bg-card p-6 text-[15px] text-ink-2 shadow-[var(--shadow-card)]">
+          My book is temporarily unavailable: our account server isn’t answering right now. Your names are saved. Please reload this page later.
+        </p>
+      </div>
+    )
+  // Paused: the names stay, read-only, under the resume button; the rest comes back on resume.
+  if (member?.paused_until)
+    return (
+      <div className="container-x pt-12 md:pt-16">
+        <Header eyebrow="My book · Paused" sub="Your names are kept while your plan is paused. Holders, this season’s moves and insider trades come back when you resume." />
+        <section className="mt-8 max-w-3xl rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
+          <Paused until={member.paused_until} digest={Boolean(member.digest_live)} onChange={() => location.reload()} />
+          <h2 className="mt-6 border-t border-line pt-5 text-[15px] font-semibold">Your names ({names.length})</h2>
+          {names.length ? (
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {names.map((t) => (
+                <li key={t}>
+                  <Link to={stockPath(t)} className="inline-flex h-9 items-center rounded-full bg-paper px-3.5 font-mono text-[13px] font-semibold shadow-[0_0_0_1px_var(--color-line)] hover:text-accent">
+                    {t}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-[14px] text-ink-3">No names saved yet.</p>
+          )}
+        </section>
+      </div>
+    )
   // Copy members get My book lite: their own names against the superinvestors and tracked funds.
   if (!pro && member?.active && member.plan !== 'holdterm') return <LiteBook member={member} />
   // Free accounts keep 5 names, each with one public fact; the rest of My book is Copy.
@@ -275,7 +311,7 @@ export function Book() {
 
   const csv = () => {
     // Every column names whose figures it holds: all 13F filers or the funds we track closely.
-    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'new_all', 'exited_all', 'holders_smart', 'holders_smart_older_filings', 'top10_smart', 'over_5pct_smart', `filed_${season}_smart`, 'holders_hedge', 'holders_hedge_older_filings', 'top10_hedge', 'over_5pct_hedge', `filed_${season}_hedge`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'insider_form', 'insider_action', 'insider_value_usd', 'insider_pct_change', 'insider_trade_date', 'insider_filed_date', 'insider_accession', 'insider_name', 'insider_title', 'insider_exercise_and_sale', 'insider_none', 'holder_form', 'holder_action', 'holder_pct_of_class', 'holder_filed_date', 'holder_accession', 'holder_filer', 'holder_line', 'lens']
+    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'new_all', 'exited_all', 'holders_smart', 'holders_smart_older_filings', 'top10_smart', 'over_5pct_smart', `filed_${season}_smart`, 'holders_hedge', 'holders_hedge_older_filings', 'top10_hedge', 'over_5pct_hedge', `filed_${season}_hedge`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'insider_form', 'insider_action', 'insider_value_usd', 'insider_pct_change', 'insider_trade_date', 'insider_filed_date', 'insider_accession', 'insider_name', 'insider_title', 'insider_exercise_and_sale', 'insider_distribution_sale', 'insider_none', 'holder_form', 'holder_action', 'holder_pct_of_class', 'holder_filed_date', 'holder_accession', 'holder_filer', 'holder_line', 'lens']
     const q = (v: unknown) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))
     const body = rows.map((r) =>
       [
@@ -289,8 +325,9 @@ export function Book() {
         r.split && !r.split.adjusted ? '' : r.bought, r.split && !r.split.adjusted ? '' : r.sold, r.split && !r.split.adjusted ? '' : Math.round(r.net),
         r.split ? `${r.split.ratio} ${r.split.adjusted ? 'adjusted' : 'not counted'}` : '',
         // The two lines of the page's Form 4/13D cell, exactly: the insider trade, then the 13D/G.
-        r.insider?.form ?? '', r.insider?.action ?? '', r.insider?.value != null ? Math.round(Math.abs(r.insider.value)) : '', r.insider?.pct != null ? (r.insider.pct * 100).toFixed(2) : '',
-        r.insider?.tradeDate ?? '', r.insider?.date ?? '', dashed(r.insider?.accession), r.insider?.who ?? '', r.insider?.title ?? '', r.insider ? (r.insider.exSale ? 'true' : 'false') : '', r.insider ? '' : (r.empty ?? ''),
+        // "Form 4", not "4": pandas and Excel would read a bare 4 as a number.
+        r.insider ? `Form ${r.insider.form}` : '', r.insider?.action ?? '', r.insider?.value != null ? Math.round(Math.abs(r.insider.value)) : '', r.insider?.pct != null ? (r.insider.pct * 100).toFixed(2) : '',
+        r.insider?.tradeDate ?? '', r.insider?.date ?? '', dashed(r.insider?.accession), r.insider?.who ?? '', r.insider?.title ?? '', r.insider ? (r.insider.exSale ? 'true' : 'false') : '', r.insider ? (r.insider.distribution ? 'true' : 'false') : '', r.insider ? '' : (r.empty ?? ''),
         r.holder?.form.replace(/^SCHEDULE /i, '') ?? '', r.holder?.action ?? '', r.holder?.ofClass ?? '', r.holder?.date ?? '', dashed(r.holder?.accession), r.holder?.who ?? '', r.holder?.line ?? '',
         LENSES.find(([k]) => k === lens)![1],
       ].map(q).join(','),
@@ -718,29 +755,7 @@ function LiteBook({ member }: { member: Member }) {
   )
 }
 
-// The latest fund Form 4 or 13D/G on a name, in a line: "Warren Buffett bought $26.9M (+0.7%)".
-type Latest = {
-  form: string
-  date: string
-  manager: string
-  line: string
-  url: string
-  /** For the CSV: bought, sold, traded, 13D or 13G; the dollar size and % change in the holder's shares where known. */
-  action: string
-  value: number | null
-  pct: number | null
-  accession: string
-  /** For the CSV: the trade's own date, the person or fund, their title, and an option exercise sold the same day. */
-  tradeDate: string | null
-  who: string
-  title: string | null
-  exSale: boolean
-  /** 13D/G: the percent of the class after the filing. */
-  ofClass: number | null
-}
 type StockEv = NonNullable<Stock['since']>[number]
-const pctChange = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(x) < 0.1 ? (Math.abs(x) * 100).toFixed(1) : Math.round(Math.abs(x) * 100)}%`
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 // Action and amount first, then who: "Sold $5.5M · Hai Ling, CFO", so a narrow cell drops the name, not the number.
 function evLatest(e: StockEv): Latest {
   const who = displayName(e.manager)
@@ -771,64 +786,8 @@ function evLatest(e: StockEv): Latest {
   return { form: e.form, date: e.filing_date, manager: who, line: `${what} · ${who}`, url: e.url, action, value: e.kind === 'form4' ? (e.value_usd ?? null) : null, pct, accession: accNo(e.url), tradeDate: e.event_date ?? null, who, title: null, exSale: false, ofClass: e.kind === 'form4' ? null : (e.percent_of_class ?? null) }
 }
 
-// Insider names arrive surname-first ("Jain Ajit"); people read first-last. Entities stay as filed.
-const ENTITY = /\b(inc|llc|l\.?p|corp|co|ltd|plc|trust|fund|funds|capital|management|partners|group|holdings|hathaway|advisors|bank|n\.?a|sa|ag|se)\b\.?/i
-function personName(raw: string) {
-  const name = displayName(raw)
-  const parts = name.split(/\s+/)
-  return ENTITY.test(name) || parts.length < 2 || parts.length > 4 ? name : [...parts.slice(1), parts[0]].join(' ')
-}
-const VERB: Partial<Record<IssuerEvent['action'], string>> = { buy: 'bought', sell: 'sold', mixed: 'traded', grant: 'granted', option_exercise: 'exercised options on', tax_withholding: 'withheld for tax', gift: 'gifted', conversion: 'converted' }
-/** An option exercise (M) and an open-market sale (S) on the same day in one Form 4. */
-const exerciseAndSale = (e: IssuerEvent) => {
-  const tx = (e.transactions ?? []).filter((t) => !t.derivative)
-  return tx.some((m) => m.code === 'M' && tx.some((x) => x.code === 'S' && x.date === m.date))
-}
-const exSaleOf = (e: IssuerEvent) => e.exercise_and_sale ?? exerciseAndSale(e)
-export function issuerLatest(e: IssuerEvent): Latest {
-  const lead = e.filer_name.replace(/ and (\d+) others?$/i, '')
-  const more = e.filer_name.slice(lead.length)
-  const who = (e.role ? personName(lead) : displayName(lead)) + more
-  const role = e.role ? `, ${e.role.split(',')[0].trim()}` : ''
-  const sched = /13G/i.test(e.form) ? '13G' : '13D'
-  let what: string
-  let pct: number | null = null
-  const f4 = /^4/.test(e.form)
-  if (f4) {
-    const verb = VERB[e.action] ?? 'filed a Form 4 on'
-    const open = e.action === 'buy' || e.action === 'sell' || e.action === 'mixed'
-    const size = open && e.value_usd ? money(Math.abs(e.value_usd)) : e.shares ? `${sharesFmt(Math.abs(e.shares))} shares` : ''
-    // The API's pct_change counts only P and S against the holding just before them (gifts between
-    // the owner's accounts don't move it); older rows fall back to the holding lines.
-    const chg = e.pct_change !== undefined ? (e.pct_change == null ? null : e.pct_change / 100) : e.prev_shares_after && e.shares_after != null ? e.shares_after / e.prev_shares_after - 1 : null
-    if (open && chg != null && Number.isFinite(chg) && chg !== 0) pct = chg
-    what = `${cap(verb)}${size ? ` ${size}` : ''}${pct != null ? ` (${pctChange(pct)})` : ''}${e.action === 'sell' && exSaleOf(e) ? ', exercise + sale' : ''}`
-  } else {
-    const p = e.percent_of_class
-    what = e.action === 'new_stake' ? `New ${p != null ? `${p}% ` : ''}stake` : p != null ? `→ ${p}%` : 'Amended'
-  }
-  const action = f4 ? (e.action === 'buy' ? 'bought' : e.action === 'sell' ? 'sold' : (VERB[e.action] ?? 'other')) : sched
-  // EDGAR dates filings in New York time; a 6:30 pm ET acceptance is the next day in UTC.
-  return {
-    form: e.form,
-    date: e.filed_date ?? new Date(e.accepted_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
-    manager: who,
-    line: `${what} · ${who}${role}`,
-    url: e.url,
-    action,
-    value: f4 && (e.action === 'buy' || e.action === 'sell' || e.action === 'mixed') ? e.value_usd : null,
-    pct,
-    accession: accNo(e.accession),
-    tradeDate: e.trade_date ?? e.event_date ?? null,
-    who,
-    title: e.role ? e.role.split(',')[0].trim() : null,
-    exSale: f4 && e.action === 'sell' && exSaleOf(e),
-    ofClass: f4 ? null : e.percent_of_class,
-  }
-}
 // EDGAR's own form (0001017918-26-000058), so spreadsheets read it as text, not 1.017918e+14.
 const dashed = (a?: string) => (a && /^\d{18}$/.test(a) ? `${a.slice(0, 10)}-${a.slice(10, 12)}-${a.slice(12)}` : (a ?? ''))
-const accNo = (s: string) => s.match(/\d{10}-?\d{2}-?\d{6}/)?.[0].replace(/-/g, '') ?? s
 // GET /events?window=quarter returns every event since the quarter start, up to 150 per ticker.
 const EVENTS_PER_TICKER = 150
 const QSTART = ['01-01', '04-01', '07-01', '10-01']
@@ -860,7 +819,9 @@ function newest(stock: Stock | null, issuer: IssuerFeed | undefined, min: number
   const own = (issuer ?? []).filter((e) => !seen.has(accNo(e.accession)) && !passive13G(e.form, e.filer_name) && (!/^4/.test(e.form) || trade(e.action, e.value_usd)))
   // One window on every row: filings since the 13F period end (Jun 30 while Q3 is filing).
   const from = (issuer?.window ?? '').slice(0, 10) || windowStart(season)
-  const all = [...fund, ...own.map((e) => ({ acc: accNo(e.accession), l: issuerLatest(e) }))].filter((x) => !from || (x.l.tradeDate ?? x.l.date) >= from)
+  // Form 4s count from their trade date; a 13D/G from its filing date (its event date can be the quarter end, as
+  // Capital Research's and Baron's 13Gs are), the same rule as the API's window.
+  const all = [...fund, ...own.map((e) => ({ acc: accNo(e.accession), l: issuerLatest(e) }))].filter((x) => !from || ((/^4/.test(x.l.form) ? x.l.tradeDate : null) ?? x.l.date) >= from)
   // Two lines, so a CEO's buy is never hidden behind a later 13G: the largest open-market trade in the
   // window (buys beat sells on a tie), and the latest 13D/G.
   const trades = all.filter((x) => /^4/.test(x.l.form))
@@ -875,12 +836,14 @@ function newest(stock: Stock | null, issuer: IssuerFeed | undefined, min: number
   return { latest: insider ?? holder, insider, holder, empty: insider ? '' : empty, more }
 }
 
+// The cell's dates are all inside the window (since the last quarter end), so they go without the year.
+const dayMonth = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 /** The Form 4/13D cell: the insider line (or what its absence means) and the latest 13D/G under it. */
 function EventsCell({ r, w }: { r: { ticker: string; insider?: Latest | null; holder?: Latest | null; empty?: string; more?: number }; w: string }) {
   if (r.empty === 'loading') return <Skeleton className="h-4 w-28" />
   const line = (l: Latest) => (
     <span className="block max-w-[14rem]">
-      <span className="font-medium">{l.form.replace(/^SCHEDULE /i, '')}</span> · {dateLabel(l.date)}
+      <span className="font-medium">{l.form.replace(/^SCHEDULE /i, '')}</span> · {l.tradeDate && /^4/.test(l.form) ? `Traded ${dayMonth(l.tradeDate)} · filed ${dayMonth(l.date)}` : `Filed ${dayMonth(l.date)}`}
       <a href={l.url} className={`block ${w} text-ink-2 hover:text-accent`} title={`${l.line}. Open the filing on EDGAR`}>
         {l.line}
       </a>

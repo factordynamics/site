@@ -8,6 +8,7 @@ import { FundSetup } from '../components/FundSetup'
 import { UpgradePro } from '../components/UpgradePro'
 import { FreeNames } from '../components/FreeNames'
 import { CopySetup } from '../components/CopySetup'
+import { dayLabel, Paused } from '../components/Paused'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
@@ -16,9 +17,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
-import { ApiError, downloadFile, fetchMe, getToken, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, resumePlan, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { ApiError, apiDown, downloadFile, fetchMe, getToken, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
-type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string } | { kind: 'out'; error?: string } | { kind: 'off' }
+type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
 export function Account() {
   const [params] = useSearchParams()
@@ -37,6 +38,8 @@ export function Account() {
     const upgraded = params.get('upgraded') ?? undefined
     // Back from the day-11 trial email's switch to yearly.
     const kept = params.get('kept') ?? undefined
+    // The resume email's link (signed in, ?resumed=1), or Resume now on this page.
+    const resumed = params.get('resumed') === '1'
     const run = async () => {
       try {
         let member: Member
@@ -50,8 +53,10 @@ export function Account() {
         }
         resetFollows()
         // The Pro quickstart takes focus after a Pro checkout; a Fund checkout starts at the Fund setup list.
-        setState({ kind: 'in', member, welcome, upgraded, kept, focus: pro || (welcome && member.plan === 'pro') || (upgraded === 'pro' && member.plan === 'pro') })
+        setState({ kind: 'in', member, welcome, upgraded, kept, resumed, focus: pro || (welcome && member.plan === 'pro') || (upgraded === 'pro' && member.plan === 'pro') })
       } catch {
+        // The API is over its limit or down: say so, and keep the link in the address bar so a reload retries it.
+        if (apiDown()) return setState({ kind: 'down' })
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
       }
       if (sid || login || upgraded || kept) nav('/account/', { replace: true })
@@ -69,7 +74,13 @@ export function Account() {
           <Skeleton className="mt-8 h-40 w-full" />
         </div>
       )}
-      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} upgraded={state.upgraded} kept={state.kept} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState({ kind: 'in', member, welcome: false })} />}
+      {state.kind === 'down' && (
+        <section role="alert" className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
+          <h1 className="text-[24px] font-semibold tracking-[-0.03em]">Your account is temporarily unavailable.</h1>
+          <p className="mt-2 text-[15px] text-ink-2">Our account server isn’t answering right now. Your plan, follows and saved names are safe. Please reload this page later; nothing here needs redoing.</p>
+        </section>
+      )}
+      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} upgraded={state.upgraded} kept={state.kept} resumed={state.resumed} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState((s) => ({ kind: 'in', member, welcome: false, resumed: s.kind === 'in' && Boolean(s.member.paused_until) && !member.paused_until }))} />}
       {state.kind === 'out' && <SignedOut error={state.error} />}
       {state.kind === 'off' && <NotOpen />}
       <p className="mt-10 text-[13px] leading-relaxed text-ink-3">{DATA_TERMS}</p>
@@ -77,7 +88,7 @@ export function Account() {
   )
 }
 
-function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onChange }: { member: Member; welcome: boolean; upgraded?: string; kept?: string; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
+function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = false, onOut, onChange }: { member: Member; welcome: boolean; upgraded?: string; kept?: string; resumed?: boolean; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
   const [busy, setBusy] = useState(false)
   const { status, follows } = useFollows()
   const [editing, setEditing] = useState(false)
@@ -85,7 +96,8 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
   const paused = Boolean(member.paused_until)
   const endRaw = cancelling && member.cancel_at ? member.cancel_at : member.status === 'trialing' && member.trial_end ? member.trial_end : member.period_end
   const end = endRaw ? new Date(typeof endRaw === 'number' ? endRaw * 1000 : endRaw) : null
-  const endLabel = end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  // Member-facing dates are on New York's calendar, like EDGAR's.
+  const endLabel = end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })
   const trial = member.status === 'trialing'
   const alertMode = member.alerts === 'off' ? 'off' : Array.isArray(member.alerts) ? 'follows' : 'all'
   const idx = useAsync(loadIndex, [])
@@ -111,6 +123,17 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
               {member.plan === upgraded
                 ? 'Same billing date and interval; Stripe is emailing the prorated invoice.'
                 : 'Stripe is still confirming the change. Refresh in a minute; you won’t be charged twice.'}
+            </p>
+          </>
+        ) : resumed && member.active && !member.paused_until ? (
+          <>
+            <span className="inline-flex size-11 items-center justify-center rounded-full bg-up text-white">
+              <Check />
+            </span>
+            <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">You’ve resumed.</h1>
+            <p className="mt-3 text-[17px] text-ink-2">
+              Real-time alerts are back on
+              {end ? ` · next charge ${end.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' })} ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })}` : ''}.
             </p>
           </>
         ) : welcome ? (
@@ -173,7 +196,7 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
           ) : (
             <>
           {paused ? (
-            <Paused until={member.paused_until!} onChange={onChange} />
+            <Paused until={member.paused_until!} digest={Boolean(member.digest_live)} onChange={onChange} />
           ) : (
             <>
           {cancelling && (
@@ -198,7 +221,7 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
             {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
           </p>
-          {!cancelling && member.interval === 'monthly' && !trial && <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">Monthly plans can pause between seasons; your names digest keeps coming.</p>}
+          {!cancelling && member.interval === 'monthly' && !trial && <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">Monthly plans can pause between seasons{member.digest_live ? '; your names digest keeps coming' : ''}.</p>}
           {!cancelling && <Leave member={member} onChange={onChange} />}
             </>
           )}
@@ -207,12 +230,16 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
         </section>
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[15px] font-semibold">Filing alerts</h2>
-          <p className="mt-1 text-[14px] text-ink-2">An email with the moves inside, usually within a couple of minutes of a new 13F on EDGAR. Form 4 and 13D filings by funds you follow usually arrive within minutes.{' '}
-            <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
-              Live speed
-            </Link>
-          </p>
-          <fieldset className="mt-4 space-y-2.5 text-[14px]">
+          {paused ? (
+            <p className="mt-1 text-[14px] font-medium text-[#7a4b06]">Real-time alerts are off while paused. Your choices below come back when you resume.</p>
+          ) : (
+            <p className="mt-1 text-[14px] text-ink-2">An email with the moves inside, usually within a couple of minutes of a new 13F on EDGAR. Form 4 and 13D filings by funds you follow usually arrive within minutes.{' '}
+              <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
+                Live speed
+              </Link>
+            </p>
+          )}
+          <fieldset disabled={paused} className={`mt-4 space-y-2.5 text-[14px] ${paused ? 'opacity-50' : ''}`}>
             <legend className="sr-only">Send alerts for</legend>
             {(
               [
@@ -241,7 +268,7 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
             ))}
           </fieldset>
           {status === 'ready' && (
-            <fieldset className="mt-5 space-y-2.5 border-t border-line pt-4 text-[14px]">
+            <fieldset disabled={paused} className={`mt-5 space-y-2.5 border-t border-line pt-4 text-[14px] ${paused ? 'opacity-50' : ''}`}>
               <legend className="sr-only">Alert options</legend>
               {(
                 [
@@ -259,7 +286,11 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
               ))}
             </fieldset>
           )}
-          {status === 'ready' && <InsiderSettings />}
+          {status === 'ready' && (
+            <fieldset disabled={paused} className={paused ? 'opacity-50' : ''}>
+              <InsiderSettings />
+            </fieldset>
+          )}
         </section>
       </div>
 
@@ -580,42 +611,8 @@ function InsiderSettings() {
   )
 }
 
-const dayLabel = (v: string | number) => new Date(typeof v === 'number' ? v * 1000 : v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? 'UTC' : undefined })
-
-/** Paused (Stripe pause_collection): no charges or alerts until the date; follows and settings stay. */
-function Paused({ until, onChange }: { until: number; onChange: (m: Member) => void }) {
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState('')
-  return (
-    <div className="mt-4">
-      <p className="rounded-xl bg-[#fdf3e1] px-3.5 py-2.5 text-[14px] text-[#7a4b06]">
-        <span className="font-medium">Paused until {dayLabel(until)}</span> · No charges and no real-time alerts until then. The weekly digest of your names keeps coming, and your follows and settings are kept.
-      </p>
-      <Button
-        variant="dark"
-        className="mt-4"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true)
-          setErr('')
-          try {
-            await resumePlan()
-            onChange(await fetchMe())
-          } catch (e) {
-            setErr(e instanceof ApiError && e.detail ? e.detail : 'That didn’t go through. Please try again.')
-          }
-          setBusy(false)
-        }}
-      >
-        {busy ? 'Resuming…' : 'Resume now'} <Arrow />
-      </Button>
-      {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
-    </div>
-  )
-}
-
 const REASONS: [CancelReason, string][] = [
-  ['temporary', 'I only need it during filing season'],
+  ['seasonal', 'Seasonal: nothing happens between filings'],
   ['price', 'It costs too much'],
   ['value', 'I’m not using it enough'],
   ['feature', 'It’s missing something I need'],
@@ -692,7 +689,7 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
           Keep my plan
         </button>
       </div>
-      {offer && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Pausing stops charges and real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. The weekly digest of your names keeps coming, your follows and settings stay, and we’ll email you before it resumes.</p>}
+      {offer && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Pausing stops charges and real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. {member.digest_live ? ' The weekly digest of your names keeps coming, your' : ' Your'} follows and settings stay, and we’ll email you before it resumes.</p>}
       {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
     </div>
   )
