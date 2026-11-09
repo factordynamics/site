@@ -116,17 +116,21 @@ export type IssuerEvent = {
   accepted_at: string
   accession: string
   url: string
+  /** Form 4: every transaction line as filed (P, S, M, F, G, A, ...), derivative lines flagged. */
+  transactions?: { code: string; date: string | null; shares: number; price: number | null; acquired_disposed: 'A' | 'D' | null; derivative: boolean }[] | null
 }
+/** One ticker's issuer feed; `window` is where it is complete back to (the quarter start, e.g. Jul 1), null when it isn't. */
+export type IssuerFeed = IssuerEvent[] & { window?: string | null }
 /** GET /events for up to 50 tickers. A cold call lists what it couldn't load yet in `pending`; ask again for those. */
 export async function loadEvents(tickers: string[]) {
-  const out = new Map<string, IssuerEvent[]>()
+  const out = new Map<string, IssuerFeed>()
   let todo = [...new Set(tickers)]
   for (let i = 0; todo.length && i < 4; i++) {
     if (i) await new Promise((r) => setTimeout(r, 1000))
     const batches = Array.from({ length: Math.ceil(todo.length / 50) }, (_, j) => todo.slice(j * 50, j * 50 + 50))
-    const res = await Promise.all(batches.map((b) => call<{ tickers: Record<string, { events: IssuerEvent[] }>; pending?: string[] }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&limit=10`, { auth: true })))
+    const res = await Promise.all(batches.map((b) => call<{ tickers: Record<string, { events: IssuerEvent[]; window?: string | null }>; pending?: string[] }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&limit=10`, { auth: true })))
     const pending = new Set(res.flatMap((r) => r.pending ?? []))
-    for (const r of res) for (const [t, v] of Object.entries(r.tickers ?? {})) if (!pending.has(t) || v.events.length) out.set(t, v.events)
+    for (const r of res) for (const [t, v] of Object.entries(r.tickers ?? {})) if (!pending.has(t) || v.events.length) out.set(t, Object.assign(v.events, { window: v.window ?? null }))
     todo = todo.filter((t) => pending.has(t))
   }
   return out
