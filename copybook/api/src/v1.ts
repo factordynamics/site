@@ -10,6 +10,18 @@ export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
   {
+    id: '2026-11-09-weight-equity-only',
+    date: '2026-11-09',
+    schema_version: SCHEMA_VERSION,
+    breaking: true,
+    status: 'announced',
+    changes: [
+      'Breaking, effective Mon Feb 8, 2027 (90 days\' notice): Position.`weight` becomes the equity-only weight (value_usd over the summed value of SH rows without put/call; null for options and PRN rows). Until then `weight` keeps its current meaning: value_usd over the book\'s total, all rows, options included.',
+      'Use `weight_equity` for the equity-only weight (stable, available now) or `weight_incl_options` for the current definition (new today, an explicit alias of today\'s `weight`, kept after the switch).',
+      'Holdings responses carry `Deprecation: @1794182400` and `Sunset: Mon, 08 Feb 2027 00:00:00 GMT`, with `Link: <…/v1/changelog>; rel="deprecation"`.',
+    ],
+  },
+  {
     id: '2026-11-09-spec-alignment',
     date: '2026-11-09',
     schema_version: SCHEMA_VERSION,
@@ -101,7 +113,7 @@ export const CHANGELOG: { id: string; date: string; schema_version: string; brea
       'Position: weight_equity (share of the equity book: SH rows without put/call), value_scale, value_as_filed, value_adjusted, zero_value, passed through from the data run when it publishes them.',
       'filing.filer_cik: the CIK that filed (e.g. Pershing Square for Ackman).',
       'GET /v1/changelog (no key needed). Versioning policy in the spec.',
-      '`weight` becomes the equity-only definition as soon as the data run publishes it (SH rows without put/call over their summed value; null for options and PRN rows). No 90-day notice: the API is pre-launch, and the notice policy starts at public launch. weight_equity carries the same value and stays for one release as an alias.',
+      'weight_equity: the equity-only weight (SH rows without put/call over their summed value; null for options and PRN rows). `weight` keeps its meaning until Feb 8, 2027; see 2026-11-09-weight-equity-only.',
     ],
   },
   {
@@ -152,6 +164,7 @@ export const ERRORS = {
 export type ErrorCode = keyof typeof ERRORS;
 
 const base = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'private, no-store' };
+const WEIGHT_DEPRECATION = (url: URL) => ({ deprecation: '@1794182400', sunset: 'Mon, 08 Feb 2027 00:00:00 GMT', link: `<${url.origin}${url.pathname.slice(0, url.pathname.indexOf('/v1/') + 3)}/changelog>; rel="deprecation"`, 'access-control-expose-headers': 'deprecation, sunset, link, retry-after' });
 
 export function v1json(data: Record<string, unknown>, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify({ schema_version: SCHEMA_VERSION, ...build, ...data }), { status, headers: { ...base, ...headers } });
@@ -223,6 +236,8 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     if (req.method !== method) return v1error('bad_request', 405, `Use ${method}.`, limits);
     const res = await handler({ env, req, url, key: auth.key }, m.slice(1));
     for (const [k, v] of Object.entries(limits)) res.headers.set(k, v);
+    // `weight` in positions turns equity-only on Feb 8, 2027 (RFC 9745 Deprecation, RFC 8594 Sunset).
+    if (/\/holdings/.test(path) && res.status === 200) for (const [k, v] of Object.entries(WEIGHT_DEPRECATION(url))) res.headers.set(k, v);
     return res;
   }
   return v1error('not_found', 404, undefined, limits);

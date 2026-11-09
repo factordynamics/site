@@ -53,11 +53,14 @@ async function resolve(env: Env, id: string): Promise<FilerRow | null> {
 const isEquity = (h: any) => !h.put_call && (h.shares_type ?? h.sh_prn ?? 'SH') !== 'PRN';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function position(h: any, equityTotal: number) {
-  // Once the data run publishes its equity-book weight (ingest item W: pct_of_book next to the
-  // renamed trade size delta_pct_of_book), `weight` is that definition; before, the all-rows weight.
+function position(h: any, equityTotal: number, allTotal: number) {
+  // The equity-book weight: the data run's pct_of_book once it publishes it (ingest item W, next to the renamed
+  // trade size delta_pct_of_book), else computed here over SH rows without put/call.
   const w = 'delta_pct_of_book' in h;
   const eqw = w ? (h.pct_of_book ?? null) : isEquity(h) && equityTotal > 0 && h.value ? h.value / equityTotal : isEquity(h) ? 0 : null;
+  // `weight` keeps its meaning until Feb 8, 2027 (90 days' notice, /v1/changelog): value over the book's total, all
+  // rows, options included. The data run's per-row weight is that definition until it switches to pct_of_book.
+  const allw = !w && h.weight != null ? h.weight : allTotal > 0 && h.value != null ? h.value / allTotal : null;
   return {
     cusip: h.cusip,
     ticker: h.ticker ?? null,
@@ -68,9 +71,8 @@ function position(h: any, equityTotal: number) {
     shares: h.shares,
     shares_type: h.shares_type ?? h.sh_prn ?? null,
     value_usd: h.value,
-    // A filer whose book carries no weight (any non-curated shard) gets the equity-only one.
-    weight: w || h.weight == null ? eqw : h.weight,
-    // Alias of the equity-only weight, kept for one release after `weight` switches.
+    weight: allw,
+    weight_incl_options: allw,
     weight_equity: eqw,
     value_scale: h.value_scale ?? null,
     value_as_filed: h.value_as_filed ?? null,
@@ -297,6 +299,7 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
   const out: Record<string, unknown> = {};
   if (stamp) STAMP.set(out, stamp);
   const equityTotal = holdings.filter(isEquity).reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
+  const allTotal = q.total_value ?? holdings.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
   const main = q.accession ? await filingMeta(env, cik, q.accession) : null;
   const merged = ((q.amendments ?? []) as unknown[]).map((a) => (typeof a === 'string' ? a : (a as { accession?: string })?.accession)).filter(Boolean) as string[];
   const versions = await versionsFor(env, cik, q.report_date ?? quarterEnd(quarter), q.accession ?? null, merged);
@@ -323,8 +326,8 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
     position_count: q.position_count ?? holdings.length,
     // A public shard holds the top 500 positions by value until the full book is in R2.
     truncated: Boolean(q.truncated ?? (q.position_count != null && q.position_count > holdings.length)),
-    holdings: holdings.map((h: unknown) => position(h, equityTotal)),
-    exited: (q.exited ?? []).map((h: unknown) => position(h, equityTotal)),
+    holdings: holdings.map((h: unknown) => position(h, equityTotal, allTotal)),
+    exited: (q.exited ?? []).map((h: unknown) => position(h, equityTotal, allTotal)),
   });
 }
 
@@ -372,7 +375,7 @@ async function versionBook(env: Env, book: Record<string, unknown>, version: str
       position_count: rows.length,
       truncated: false,
       // As filed in that one filing: no changes against the prior quarter.
-      holdings: rows.map((h: unknown) => position(h, equityTotal)),
+      holdings: rows.map((h: unknown) => position(h, equityTotal, rows.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0))),
       exited: [],
     },
   });

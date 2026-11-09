@@ -3003,8 +3003,8 @@ describe('copybook api', () => {
     expect(d.holdings[0]).toMatchObject({ weight_equity: 1, zero_value: false });
     expect(d.exited[0]).toMatchObject({ zero_value: false });
     expect(d.filing.filer_cik).toBe('0001067983');
-    // Once the data run publishes its equity-book weight (with delta_pct_of_book), weight is that,
-    // at once; weight_equity is the alias. An option row gets null.
+    // `weight` keeps its all-rows meaning (options included) until Feb 8, 2027, even once the data run publishes
+    // its equity-book weight; weight_equity is equity-only (an option row gets null), weight_incl_options the alias.
     hist.m.set('h/warren-buffett/2025Q2.json', new TextEncoder().encode(JSON.stringify({
       quarter: '2025Q2', report_date: '2025-06-30', accession: '0000950123-25-005701', form: '13F-HR', filing_date: '2025-08-14', sec_url: 'https://www.sec.gov/x', prev_quarter: '2025Q1', total_value: 1500,
       holdings: [
@@ -3013,7 +3013,11 @@ describe('copybook api', () => {
       ],
     })));
     const w = (await v1('/v1/filers/warren-buffett/holdings/2025Q2')).body.data.holdings;
-    expect(w.map((r: { weight: number | null; weight_equity: number | null }) => [r.weight, r.weight_equity])).toEqual([[1, 1], [null, null]]);
+    const r3 = (x: number | null) => (x == null ? x : Math.round(x * 1000) / 1000);
+    expect(w.map((r: { weight: number | null; weight_incl_options: number | null; weight_equity: number | null }) => [r3(r.weight), r3(r.weight_incl_options), r.weight_equity])).toEqual([[0.667, 0.667, 1], [0.333, 0.333, null]]);
+    // Announced with 90 days' notice: the holdings response says when weight changes.
+    const wh = (await handleRequest(new Request('https://api.test/v1/filers/warren-buffett/holdings/2025Q2', { headers: { authorization: `Bearer ${key}` } }), env)).headers;
+    expect([wh.get('deprecation'), wh.get('sunset'), wh.get('link')]).toEqual(['@1794182400', 'Mon, 08 Feb 2027 00:00:00 GMT', '<https://api.test/v1/changelog>; rel="deprecation"']);
     for (const k of spec.components.schemas.Error.required) expect((await v1('/v1/filers/warren-buffett/holdings/2025Q9')).body).toHaveProperty(k);
     expect((await handleRequest(new Request('https://api.test/v1/changelog'), env)).status).toBe(200); // no key needed
     expect((await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '1999-01-01' } }), env)).status).toBe(400);

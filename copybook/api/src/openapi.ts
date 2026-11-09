@@ -16,7 +16,7 @@ const BUILD = { schema_version: SCHEMA_VERSION, data_built_at: '2026-11-08T21:29
 
 const POSITION_EXAMPLE = {
   cusip: '02079K305', ticker: 'GOOGL', issuer: 'ALPHABET INC', title_of_class: 'CAP STK CL A', put_call: null, sector: 'Communication Services',
-  shares: 54000000, shares_type: 'SH', value_usd: 9512640000, weight: 0.0367, weight_equity: 0.0367, value_scale: null, value_as_filed: null, value_adjusted: null, zero_value: false,
+  shares: 54000000, shares_type: 'SH', value_usd: 9512640000, weight: 0.0367, weight_incl_options: 0.0367, weight_equity: 0.0367, value_scale: null, value_as_filed: null, value_adjusted: null, zero_value: false,
   change: 'added', prev_shares: 4200000, share_change: 49800000, value_delta_usd: 8770349040, source_accession: null, first_disclosed_at: null,
 };
 
@@ -50,9 +50,9 @@ export function openapi() {
 
 **Send a User-Agent.** Requests with Python urllib's default User-Agent (\`Python-urllib/3.x\`) are refused by Cloudflare before they reach the API, with HTTP 403 and "error code: 1010" (not a JSON error). Set any descriptive User-Agent, e.g. \`urllib.request.Request(url, headers={"User-Agent": "myfund-research/1.0", "Authorization": "Bearer ..."})\`. requests, httpx, curl and Go's net/http work as they are.
 
-**Versioning policy.** \`schema_version\` is a date and changes only on a breaking change. Not breaking (no new version, listed in /v1/changelog): new endpoints, new optional query parameters, new response fields, new values in enums documented as growing (\`type\`, \`status\`), new error codes for new situations. Breaking: removing or renaming a field, changing a field's type, unit or meaning, removing an endpoint or parameter, changing an existing error code. From public launch, breaking changes are announced in /v1/changelog and by email to key owners at least 90 days before they take effect (before launch they ship directly and are logged in /v1/changelog); during that window the old shape stays available to clients that pin it by sending \`Copybook-Schema-Version: <date>\` (an unknown version returns 400 bad_request). Data corrections (a restated filing, a better CUSIP-to-ticker map) are not schema changes; they show up as a new \`build_id\`.
+**Versioning policy.** \`schema_version\` is a date and changes only on a breaking change. Not breaking (no new version, listed in /v1/changelog): new endpoints, new optional query parameters, new response fields, new values in enums documented as growing (\`type\`, \`status\`), new error codes for new situations. Breaking: removing or renaming a field, changing a field's type, unit or meaning, removing an endpoint or parameter, changing an existing error code. Breaking changes are announced in /v1/changelog and by email to key owners at least 90 days before they take effect, and responses affected carry \`Deprecation\` and \`Sunset\` headers; during that window the old shape stays available to clients that pin it by sending \`Copybook-Schema-Version: <date>\` (an unknown version returns 400 bad_request). Data corrections (a restated filing, a better CUSIP-to-ticker map) are not schema changes; they show up as a new \`build_id\`.
 
-**Weight.** \`weight\` is the share of the equity book: value_usd over the summed value of SH rows without put/call, as a 0-1 fraction; null for options and PRN rows. It takes that definition as soon as the data run publishes it per row; until then it is value_usd over the filing's total reported value, all rows. \`weight_equity\` always carries the equity-only value and is an alias of \`weight\` for one release after the switch.
+**Weight.** \`weight\` is value_usd over the filing's total reported value, all rows, options included, as a 0-1 fraction. **On Mon Feb 8, 2027 it becomes the equity-only weight** (announced Nov 9, 2026 with 90 days' notice; holdings responses carry \`Deprecation\` and \`Sunset\` headers until then). \`weight_equity\` is the equity-only weight now and after (value_usd over the summed value of SH rows without put/call; null for options and PRN rows). \`weight_incl_options\` is today's definition, an explicit alias of \`weight\` that stays after the switch.
 
 **Non-curated filers.** Holdings of filers outside the curated set carry \`change\`, \`prev_shares\`, \`share_change\` and \`value_delta_usd\` only once a prior quarter is on file for them (the data run back-fills one for every filer a member follows, peers and linked books included); until then those fields are null. \`shares_type\` is null until the data run publishes it for them.
 
@@ -104,7 +104,7 @@ export function openapi() {
         Position: {
           type: 'object',
           description: 'One position: info-table rows summed per (CUSIP, put/call).',
-          required: ['cusip', 'ticker', 'issuer', 'title_of_class', 'put_call', 'sector', 'shares', 'shares_type', 'value_usd', 'weight', 'weight_equity', 'value_scale', 'value_as_filed', 'value_adjusted', 'zero_value', 'change', 'prev_shares', 'share_change', 'value_delta_usd', 'source_accession', 'first_disclosed_at'],
+          required: ['cusip', 'ticker', 'issuer', 'title_of_class', 'put_call', 'sector', 'shares', 'shares_type', 'value_usd', 'weight', 'weight_incl_options', 'weight_equity', 'value_scale', 'value_as_filed', 'value_adjusted', 'zero_value', 'change', 'prev_shares', 'share_change', 'value_delta_usd', 'source_accession', 'first_disclosed_at'],
           properties: {
             cusip: { type: 'string', pattern: '^[0-9A-Z]{9}$' },
             ticker: { type: ['string', 'null'], description: 'Mapped from CUSIP; null when unknown' },
@@ -115,8 +115,9 @@ export function openapi() {
             shares: { type: 'number', description: 'sshPrnamt as filed: shares (SH) or principal amount (PRN). 0 for exited rows.' },
             shares_type: { type: ['string', 'null'], enum: ['SH', 'PRN', null], description: 'sshPrnamtType as filed: SH (shares) or PRN (principal amount, e.g. convertible notes). Null until the data run publishes it; until then a PRN row is counted in weight like any other.' },
             value_usd: { type: 'integer', description: 'Reported value, whole USD. 0 for exited rows.' },
-            weight: { type: ['number', 'null'], minimum: 0, maximum: 1, description: 'Share of the equity book, 0-1: value_usd over the summed value of SH rows without put/call; null for options and PRN rows. Until the data run publishes the equity-only weight, the older definition applies: value_usd / filing total_value_usd over all rows. See /v1/changelog.' },
-            weight_equity: { type: ['number', 'null'], minimum: 0, maximum: 1, description: 'Equity-only weight, the same value `weight` carries once switched; an alias kept for one release. Null for options and PRN rows. Until shares_type is published, a PRN row without it counts as equity.' },
+            weight: { type: ['number', 'null'], minimum: 0, maximum: 1, description: 'value_usd / the filing\'s total value over all rows, options included, 0-1. Deprecated meaning: on Mon Feb 8, 2027 this becomes the equity-only weight (weight_equity). Use weight_incl_options to keep this definition. See /v1/changelog 2026-11-09-weight-equity-only.' },
+            weight_incl_options: { type: ['number', 'null'], minimum: 0, maximum: 1, description: 'value_usd / the filing\'s total value over all rows, options included, 0-1: today\'s `weight`, kept after Feb 8, 2027.' },
+            weight_equity: { type: ['number', 'null'], minimum: 0, maximum: 1, description: 'Equity-only weight, 0-1: value_usd over the summed value of SH rows without put/call; null for options and PRN rows. Stable; `weight` takes this meaning on Feb 8, 2027. Until shares_type is published, a PRN row without it counts as equity.' },
             value_scale: { type: ['number', 'null'], description: 'Factor applied to the value as filed to get whole USD (1000 for filers that reported in thousands). Null until announced in /v1/changelog (the data run publishes it per row).' },
             value_as_filed: { type: ['number', 'null'], description: 'The value column exactly as filed, before value_scale. Null until announced in /v1/changelog.' },
             value_adjusted: { type: ['boolean', 'null'], description: 'True when value_usd differs from value_as_filed x 1 (a unit fix was applied). Null until announced in /v1/changelog.' },
