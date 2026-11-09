@@ -163,7 +163,9 @@ const TICKER_KEY = new Map<string, string>()
  * (one trust issues many funds) and preferreds or notes keep their full CUSIP. */
 export function issuerKey(h: KeyLine & { put_call?: string | null }) {
   if (!h.cusip) return h.ticker || h.issuer
-  if (isWarrant(h) || isFundLike({ sector: h.sector, issuer: h.issuer, title: h.title ?? '' }) || isSenior(h)) return h.cusip
+  // Issue numbers 90 and 95 are option CUSIPs (calls and puts); untickered lines filed under one are not the stock.
+  const optionCusip = !h.ticker && /^(90|95)$/.test(h.cusip.slice(6, 8))
+  if (optionCusip || isWarrant(h) || isFundLike({ sector: h.sector, issuer: h.issuer, title: h.title ?? '' }) || isSenior(h)) return h.cusip
   const base = OVERRIDE[h.cusip]?.same_as ?? h.cusip.slice(0, 6)
   if (!h.ticker) return base
   const k = TICKER_KEY.get(h.ticker)
