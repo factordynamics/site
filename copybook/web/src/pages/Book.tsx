@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { FailingBanner } from '../components/Channels'
 import { Peers } from '../components/Peers'
 import { UpgradePro } from '../components/UpgradePro'
+import { FreeNames } from '../components/FreeNames'
 import { TRIAL_DAYS } from '../config'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
@@ -195,6 +196,14 @@ export function Book() {
 
   // Copy members get My book lite: their own names against the superinvestors and tracked funds.
   if (!pro && member?.active && member.plan !== 'holdterm') return <LiteBook member={member} />
+  // Free accounts keep 5 names, each with one public fact; the rest of My book is Copy.
+  if (isFree(member))
+    return (
+      <div className="container-x pt-12 md:pt-16">
+        <Header eyebrow="My book · Free" sub="Save up to 5 stocks you own and see what the superinvestors did in them. Copy shows every fund holding them, their weights, insider trades and alerts." />
+        <FreeNames className="mt-10 max-w-3xl" />
+      </div>
+    )
   if (!pro)
     return (
       <div className="container-x pt-12 md:pt-16">

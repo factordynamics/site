@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getToken } from '../lib/account'
+import { ApiError, getToken } from '../lib/account'
 import { isPaywall, setFollow, useFollows } from '../lib/follows'
 
 type Props = { kind: 'investor' | 'stock'; id: string; name: string; size?: 'sm' | 'md'; className?: string }
@@ -16,6 +16,9 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
   const on = list.includes(id)
   const saving = p?.state === 'saving'
   const owned = kind === 'stock' && follows.owned.includes(id)
+  // A free account (GET /follows carries its 5-name limit) keeps stocks as "my names", not follows.
+  const free = status === 'ready' && follows.limit != null
+  const [freeMsg, setFreeMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -38,6 +41,41 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
 
   // A signed-in reader who still hits the paywall is on the free Friday email (or lapsed).
   const signedIn = Boolean(getToken())
+  if (free && kind === 'stock') {
+    const ps = pending[`owned:${id}`]
+    const busy = ps?.state === 'saving'
+    const hb = size === 'sm' ? 'h-8 px-3.5 text-[13px]' : 'h-10 px-4.5 text-sm'
+    return (
+      <div className={`relative inline-flex ${className}`}>
+        <button
+          type="button"
+          disabled={busy}
+          aria-pressed={owned}
+          onClick={() =>
+            setFollow('owned', id, !owned).then(
+              () => setFreeMsg(null),
+              (e) => setFreeMsg(e instanceof ApiError && e.code === 'free_limit' ? (e.detail ?? `Free accounts can save up to ${follows.limit} names. Copy has no limit.`) : 'That didn’t save. Please try again.'),
+            )
+          }
+          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium transition-[background,box-shadow,color] duration-150 active:scale-[0.98] disabled:opacity-60 ${hb} ${
+            owned ? 'bg-accent-soft text-accent-2 shadow-[0_0_0_1px_rgb(43_68_214/0.25)] hover:bg-[#dfe4fb]' : 'bg-accent text-white hover:bg-accent-2'
+          }`}
+        >
+          {busy ? <Spinner /> : owned ? <CheckIcon /> : <PlusIcon />}
+          {busy ? 'Saving…' : owned ? 'In my names' : `Add to my names (free, ${follows.limit} max)`}
+        </button>
+        {freeMsg && (
+          <span role="status" className="absolute right-0 top-full z-10 mt-1.5 w-[280px] rounded-lg bg-card px-3 py-2 text-[12.5px] text-ink-2 shadow-[0_0_0_1px_var(--color-line),0_6px_16px_-6px_rgb(12_14_19/0.2)]">
+            {freeMsg}{' '}
+            <Link to="/pricing/" className="font-medium text-accent hover:text-accent-2">
+              Start 14-day trial
+            </Link>
+          </span>
+        )}
+      </div>
+    )
+  }
+
   const h = size === 'sm' ? 'h-8 px-3.5 text-[13px]' : 'h-10 px-4.5 text-sm'
   return (
     <div ref={wrap} className={`relative inline-flex ${className}`}>

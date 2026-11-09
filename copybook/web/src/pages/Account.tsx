@@ -6,6 +6,7 @@ import { Channels, FailingBanner } from '../components/Channels'
 import { Team } from '../components/Team'
 import { FundSetup } from '../components/FundSetup'
 import { UpgradePro } from '../components/UpgradePro'
+import { FreeNames } from '../components/FreeNames'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
@@ -328,7 +329,8 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">You’re on the free Friday email.</h1>
         <p className="mt-3 text-[17px] text-ink-2">Every Friday evening: the week’s five biggest buys and sells by the investors we track, from SEC filings. Sent to {member.email}.</p>
       </header>
-      <section className="mt-10 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
+      <FreeNames className="mt-10" />
+      <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between">
           <h2 className="text-[15px] font-semibold">What Copy adds</h2>
         </div>

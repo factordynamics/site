@@ -21,6 +21,8 @@ export type Follows = {
   insider_min_usd: number
   cluster_buys: boolean
   any_13d: boolean
+  /** Free accounts only: how many owned names they may keep (5). */
+  limit?: number
 }
 export type LinkedBook = { cik: string; name: string; quarter: string; tickers: string[] }
 /** A follow or unfollow in flight, or one the read-back didn't confirm (key "investors:slug" or "stocks:TICKER"). */
@@ -80,7 +82,7 @@ export function saveFollows(patch: Partial<Follows>) {
 }
 
 /** Follow or unfollow one investor or stock. Shown as saving until /follows confirms it, else as an error to retry. */
-export function setFollow(kind: 'investors' | 'stocks' | 'peers', id: string, want: boolean) {
+export function setFollow(kind: 'investors' | 'stocks' | 'peers' | 'owned', id: string, want: boolean) {
   const key = `${kind}:${id}`
   set({ ...state, pending: { ...state.pending, [key]: { want, state: 'saving' } } })
   return enqueue(async () => {
