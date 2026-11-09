@@ -20,6 +20,8 @@ import { runSeasonal } from '../src/revenue';
 import { signToken } from '../src/tokens';
 import { pauseResumesAt, deadlineMs } from '../src/seasons';
 import form4Csgp from './fixtures/form4-csgp-florance-buy.txt?raw';
+import form4Googl from './fixtures/form4-googl-walker.txt?raw';
+import { withTrade, type StockEvent } from '../src/stockevents';
 import { cleanItem4, parseSchedule13 } from '../src/edgar';
 
 class MemKV implements KV {
@@ -925,6 +927,34 @@ describe('copybook api', () => {
     expect(r.tickers.CSGP.window).toBe(quarterStart(Date.now()).replace(/\.\d{3}Z$/, 'Z'));
   });
 
+  it('GET /events: the window is on the trade date, % change is from P/S lines only (GOOGL: a Jun 29 sale filed Jul 1, gifts into his own trust)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-09T03:00:00Z')); // the Jul 1 window
+    try {
+      await hist.put('pre/sec-tickers.json', '{"GOOGL":"0001652044"}');
+      secFiles['company:0001652044:4'] = `<feed><entry><category term="4"/><id>urn:tag:sec.gov,2008:accession-number=0001193125-26-292904</id><updated>2026-07-01T16:30:00-04:00</updated></entry></feed>`;
+      secFiles['Archives/edgar/data/1652044/000119312526292904/0001193125-26-292904.txt'] = form4Googl;
+      stripeObjects['checkout/sessions/cs_test_gg'] = { id: 'cs_test_gg', status: 'complete', created: now(), subscription: 'sub_gg', customer_details: { email: 'gg@example.com' } };
+      stripeObjects['subscriptions/sub_gg'] = sub('sub_gg', 'cus_gg', 'active');
+      const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_gg' } })).json()) as { token: string };
+      const all = (await (await call('/events?tickers=GOOGL', { token })).json()).tickers.GOOGL.events;
+      // Eight S lines in his trust on Jun 29 (8,998 shares), then 8,998 and 1,624 shares gifted from direct into the same trust:
+      // -8,998 of the 103,053 Class C shares held before is -8.73%, not the +30% the trust line alone shows.
+      expect(all[0]).toMatchObject({ filer_name: 'WALKER JOHN KENT', action: 'sell', trade_date: '2026-06-29', filed_date: '2026-07-01', pct_change: -8.73, exercise_and_sale: false });
+      // The sale was before the window (Jul 1), though filed on it: window=quarter leaves it out.
+      expect((await (await call('/events?tickers=GOOGL&window=quarter', { token })).json()).tickers.GOOGL.events).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+    // An option exercise and a same-day sale (MA's CFO): flagged, and the % is the sale against the holding just before it.
+    const l = (code: string, shares: number, ad: 'A' | 'D', derivative = false) => ({ code, security: derivative ? 'Option' : 'Common Stock', date: '2026-08-03', shares, price: 500, acquired_disposed: ad, ownership: 'direct' as const, nature: null, shares_after: null, derivative });
+    const ex = withTrade({ form: '4', event_date: '2026-08-03', accepted_at: '2026-08-05T20:00:00Z', ownership: [{ security: 'Common Stock', ownership: 'direct', nature: null, shares_after: 5000, bought: 0, sold: 1000 }], transactions: [l('M', 1000, 'D', true), l('M', 1000, 'A'), l('S', 1000, 'D')] } as unknown as StockEvent);
+    expect([ex.exercise_and_sale, ex.pct_change, ex.trade_date]).toEqual([true, -16.67, '2026-08-03']); // 1,000 of the 6,000 held once exercised
+    // Exercised one day, sold another: not flagged.
+    const apart = withTrade({ form: '4', event_date: '2026-08-03', accepted_at: '2026-08-05T20:00:00Z', ownership: [], transactions: [l('M', 1000, 'A'), { ...l('S', 1000, 'D'), date: '2026-08-04' }] } as unknown as StockEvent);
+    expect(apart.exercise_and_sale).toBe(false);
+  });
+
   it("GET /events: a ticker's own insiders' Form 4s and anyone's 13D/G, parsed once; the issuer's own Form 4s on other companies are left out", async () => {
     await hist.put('pre/sec-tickers.json', '{"BRK.A":"0001067983","BRK.B":"0001067983","CVI":"0001376139","SIRI":"0000908937"}');
     const entry = (form: string, a: string, at: string) => `<entry><category term="${form}"/><id>urn:tag:sec.gov,2008:accession-number=${a}</id><updated>${at}</updated></entry>`;
@@ -974,6 +1004,8 @@ describe('copybook api', () => {
         transactions: [{ code: 'S', security: 'Class B Common Stock', date: '2026-09-28', shares: 39700, price: 503.0926, acquired_disposed: 'D', ownership: 'indirect', nature: 'By Jain Foundation Inc. (Non-Profit Corporation)', shares_after: 67608, derivative: false }],
         totals: { sold: { shares: 39700, value_usd: 19972776 } },
         open_market: true,
+        // The foundation's 39,700 of the 107,625 shares held before.
+        trade_date: '2026-09-28', filed_date: '2026-09-29', pct_change: -36.89, exercise_and_sale: false,
         url: 'https://www.sec.gov/Archives/edgar/data/1067983/000172845126000004/0001728451-26-000004-index.htm',
       },
     ]);

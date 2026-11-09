@@ -511,7 +511,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const { quarterStart } = await import('./seasons');
     const since = quarterStart(Date.now());
     const r = await stockEvents(env, tickers, Math.floor(limit), {
-      keep: (e) => (!quarter || e.accepted_at >= since) && (!openOnly || !e.form.startsWith('4') || !!e.open_market),
+      // The window is on when the trade happened (a Jun 29 sale filed Jul 1 is before a Jul 1 window), not when it was filed.
+      keep: (e) => (!quarter || (e.trade_date ?? e.filed_date ?? e.accepted_at) >= since.slice(0, 10)) && (!openOnly || !e.form.startsWith('4') || !!e.open_market),
     });
     for (const t of Object.values(r.tickers)) t.events = t.events.map(({ classes: _, ...e }) => e);
     return json({ ok: true, ...r }, 200, { ...h, 'cache-control': 'no-store' });

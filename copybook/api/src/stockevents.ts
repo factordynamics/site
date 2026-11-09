@@ -40,6 +40,19 @@ export interface StockEvent {
   open_market: boolean | null;
   /** Form 4 holdings per class, as /v1/events serves them. */
   classes?: Form4Class[] | null;
+  /** The first transaction date (Form 4) or event date (13D/G): what window=quarter filters on. Filing can be days later. */
+  trade_date?: string | null;
+  /** The ET date EDGAR accepted the filing. */
+  filed_date?: string;
+  /**
+   * Form 4 with open-market trades: (P − S shares) ÷ the owner's holding of the traded security just before
+   * those trades (after-filing holding minus P plus S), across all their direct and indirect lines, in percent.
+   * Gifts and transfers between the owner's own accounts move nothing; exercised shares count as held. Null
+   * without P or S, or with no prior holding.
+   */
+  pct_change?: number | null;
+  /** Form 4: an option exercise (M or X) and a sale (S) on the same date, e.g. a CFO exercising and selling. */
+  exercise_and_sale?: boolean;
   accepted_at: string;
   accession: string;
   url: string;
@@ -171,9 +184,33 @@ async function schedule13Event(ticker: string, cik: string, e: FeedEntry, siblin
   };
 }
 
+const etDate = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+
+/** trade_date, filed_date, pct_change and exercise_and_sale, from the cached transaction lines (no re-parse). */
+export function withTrade(e: StockEvent): StockEvent {
+  const lines = (e.transactions ?? []).filter((l) => !l.derivative);
+  const dates = lines.map((l) => l.date).filter((d): d is string => !!d).sort();
+  const trade_date = e.form.startsWith('4') ? (dates[0] ?? e.event_date) : e.event_date;
+  let pct_change: number | null = null;
+  const traded = new Set(lines.filter((l) => l.code === 'P' || l.code === 'S').map((l) => l.security));
+  if (e.form.startsWith('4') && traded.size) {
+    const of = (l: { security: string }) => traded.has(l.security);
+    const ps = lines.filter((l) => of(l) && (l.code === 'P' || l.code === 'S')).reduce((s, l) => s + (l.code === 'P' ? l.shares : -l.shares), 0);
+    const after = (e.ownership ?? []).filter(of).reduce((s, o) => s + o.shares_after, 0);
+    // The holding just before the open-market trades, with every other line counted first: shares exercised to
+    // sell are in it (a sale is never below -100%), and gifts between the owner's own accounts move nothing.
+    const before = after - ps;
+    pct_change = before > 0 ? Math.round((ps / before) * 10000) / 100 : null;
+  }
+  const all = e.transactions ?? [];
+  const exercise_and_sale = all.some((m) => (m.code === 'M' || m.code === 'X') && m.date && all.some((x) => x.code === 'S' && !x.derivative && x.date === m.date));
+  return { ...e, trade_date: trade_date ?? null, filed_date: etDate(e.accepted_at), pct_change, exercise_and_sale };
+}
+
 const events = (c: Cached) =>
   Object.values(c.seen)
     .filter((v): v is StockEvent => !!v)
+    .map(withTrade)
     .sort((a, b) => b.accepted_at.localeCompare(a.accepted_at));
 
 /** Re-reads the issuer's feeds and parses new filings newest first until the window is in. False when the budget ran out. */
