@@ -548,7 +548,12 @@ export async function testChannels(env: Env, m: Member, c: Channels): Promise<{ 
     await env.DB.put(key, JSON.stringify([{ id: `test:${now}`, title: 'Copybook test', text, url: env.SITE_URL, published: now, sent: now, test: true }, ...items].slice(0, 50)));
     out.feed = 'ok';
   }
-  const messages = Object.fromEntries(Object.entries(out).map(([d, st]) => [d, d === 'feed' ? 'Test item added to your feed' : testMessage(d as Dest, st)]));
+  // Email is the only channel ("Keep email"): the test is an email.
+  if (!Object.keys(out).length && m.email) {
+    const st = await sendMail(env, [{ to: m.email, subject: 'Copybook test: your alerts will arrive here', text: `This is a test. When a fund you follow files, or someone trades a stock you own or watch, the alert arrives at this address within minutes.\n\nChange where alerts go: ${env.SITE_URL}account/\n\nSEC EDGAR filings, as filed. Not investment advice.` }]);
+    out.email = st;
+  }
+  const messages = Object.fromEntries(Object.entries(out).map(([d, st]) => [d, d === 'feed' ? 'Test item added to your feed' : d === 'email' ? (st === '200' ? `Test email sent to ${m.email}` : `The test email could not be sent (${st})`) : testMessage(d as Dest, st)]));
   return { results: out, messages };
 }
 

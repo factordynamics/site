@@ -8,7 +8,7 @@ import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
-import { apiBase, isActive, isCopy, isPro, linkBase, type Env, type Member } from './env';
+import { ACTIVE, apiBase, isActive, isCopy, isPaused, isPro, linkBase, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
@@ -634,7 +634,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     }
   }
 
-  if (!isActive(m)) return json({ ok: false, error: 'Copy subscription required', member: publicView(m) }, 402, h);
+  // A paused member keeps read-only access to their names and channels (writes and alerts wait for the resume).
+  const pausedRead = isPaused(m) && ACTIVE.has(m.status) && req.method === 'GET' && (path === '/follows' || path === '/channels');
+  if (!isActive(m) && !pausedRead) return json({ ok: false, error: 'Copy subscription required', member: publicView(m) }, 402, h);
   // Holdterm Alerts: alert settings only. History, CSV, keys and everything else are Copy features.
   if (m.plan === 'holdterm' && path !== '/alerts' && path !== '/follows' && !path.startsWith('/follows/')) {
     return json({ ok: false, error: 'Not part of Holdterm Alerts', code: 'holdterm_plan' }, 402, h);

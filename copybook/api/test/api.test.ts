@@ -985,6 +985,11 @@ describe('copybook api', () => {
     stripeObjects['subscriptions/sub_pz'] = sub('sub_pz', 'cus_pz', 'active');
     const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_pz' } })).json()) as { token: string };
     await call('/follows/owned/SIRI', { method: 'POST', token });
+    // Email only ("Keep email"): the channel test sends a test email.
+    sent = [];
+    expect((await (await call('/channels/test', { method: 'POST', token })).json()).results).toEqual({ email: '200' });
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['pz@example.com', 'Copybook test: your alerts will arrive here']]);
+    sent = [];
     const r = pauseResumesAt(Date.now());
     const until = new Date(r.at * 1000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     expect(until).toBe(new Date((r.at - 5 * 3600) * 1000).toISOString().slice(0, 10));
@@ -1033,6 +1038,13 @@ describe('copybook api', () => {
     const me = (await (await call('/me', { token })).json()).member;
     expect([me.status, me.active, me.paused_until, me.pause_offer]).toEqual(['active', false, r.at, null]);
     expect((await call('/history/warren-buffett', { token })).status).toBe(402);
+    // Their names and channels stay readable (My book shows them); changing them waits for the resume.
+    expect((await (await call('/follows', { token })).json()).follows.owned).toEqual(['SIRI']);
+    expect((await call('/channels', { token })).status).toBe(200);
+    expect((await call('/follows/owned/DHI', { method: 'POST', token })).status).toBe(402);
+    // A member whose only channel is email gets a test email.
+    sent = [];
+    expect((await call('/channels/test', { method: 'POST', token })).status).toBe(402); // paused: no sends
     expect((await call('/pause', { body: {}, token })).status).toBe(409);
     expect(JSON.parse((await env.DB.get('follows:cus_pz'))!).owned).toEqual(['SIRI']);
 
