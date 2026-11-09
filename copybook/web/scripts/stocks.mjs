@@ -690,7 +690,11 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
     const sf = join(out, 'd', 'stocks', `${t}.json`)
     try {
       const s = JSON.parse(readFileSync(sf, 'utf8'))
-      s.title_counts = { filers: hlc?.holders ?? current.get(t) ?? 0, hedge: lenses.hedge.get(t)?.current ?? 0, quarter: titleQuarter }
+      // The title leads with the superinvestors, so it names the quarter only once most of them have filed it
+      // (GOOGL with 2 of 26 filed, or AAPL with 0 of 8, stays on "latest 13Fs").
+      const sup = (s.holders ?? []).filter((h) => h.featured)
+      const quarter = titleQuarter && (!sup.length || sup.filter((h) => h.quarter === titleQuarter).length > sup.length / 2) ? titleQuarter : null
+      s.title_counts = { filers: hlc?.holders ?? current.get(t) ?? 0, hedge: lenses.hedge.get(t)?.current ?? 0, quarter }
       writeFileSync(sf, JSON.stringify(s))
     } catch {}
   }

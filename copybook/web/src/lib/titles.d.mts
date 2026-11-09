@@ -4,3 +4,4 @@ export function investorTitle(x: { who: string; quarter?: string | null; value?:
 export function seasonTitle(x: { quarter: string; filed: number; total: number }): string
 export function recapTitle(x: { quarter: string; filed: number; total: number; names?: string[]; final?: boolean }): string
 export function recapFilers(x: { filed: number; names?: string[]; final?: boolean }): string | null
+export function dueLead(x: { quarter: string; deadline: string | Date; names: string[] }): string | null

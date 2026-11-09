@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getJson } from './getjson.mjs'
 import { API, API_JSON_URL } from '../api.config.mjs'
-import { investorTitle, seasonTitle, stockTitle } from '../src/lib/titles.mjs'
+import { dueLead, investorTitle, seasonTitle, stockTitle } from '../src/lib/titles.mjs'
 
 const dist = new URL('../dist/', import.meta.url).pathname
 const src = process.argv[2] || 'https://refcell.github.io/gust/copybook/data/index.json'
@@ -250,8 +250,11 @@ try {
     const sup = sf?.holders?.filter((x) => x.featured).length ?? 0
     const tc2 = sf?.title_counts
     const title = tc2?.filers ? stockTitle({ ticker: s.t, superinvestors: sup, hedge: tc2.hedge, filers: tc2.filers, quarter: tc2.quarter }) : `${s.t} ${s.n}: who owns it · Copybook`
+    // No superinvestor has filed this season's quarter and none has Form 4 or 13D/G news: lead with who files next.
+    const supH = (sf?.holders ?? []).filter((x) => x.featured).sort((a, b) => b.value - a.value)
+    const due = seasonData && supH.length && !supH.some((x) => x.quarter === seasonData.quarter) && !(sf?.since ?? []).length ? dueLead({ quarter: seasonData.quarter, deadline: seasonData.deadline, names: supH.map((x) => x.manager) }) : null
     const desc = all
-      ? `${s.n} (${s.t}): ${sup ? `${num(sup)} of the superinvestors we follow hold it, ` : ''}with ${num(hedge)} hedge funds and ${num(all)} 13F filers in all.${h?.index ? ` In their latest 13Fs, ${num(h.index.new)} opened a position and ${num(h.index.exited)} sold out.` : ''} Largest holders and who bought and sold, from SEC EDGAR.`
+      ? `${due ? `${due}${due.endsWith('…') ? '' : '.'} ` : ''}${s.n} (${s.t}): ${sup ? `${num(sup)} of the superinvestors we follow ${sup === 1 ? 'holds' : 'hold'} it, ` : ''}with ${num(hedge)} hedge funds and ${num(all)} 13F filers in all.${h?.index ? ` Across all ${num(all)} filers' latest 13Fs, ${num(h.index.new)} opened a position and ${num(h.index.exited)} sold out.` : ''} Largest holders and who bought and sold, from SEC EDGAR.`
       : `${s.n} (${s.t}): which of the investors we track hold it, who bought and sold it in the latest 13F filings, and how the holder count changed.`
     page(
       `stocks/${s.t}/`,

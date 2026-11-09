@@ -36,3 +36,13 @@ export function recapFilers({ filed, names = [], final = false }) {
   if (final || !(filed > 0 && filed < 10) || !names.length) return null
   return names.length <= 3 ? names.join(names.length === 2 ? ' and ' : ', ').replace(/, ([^,]+)$/, ' and $1') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
 }
+
+/** "Q3 13Fs due by Mon Nov 16 from Buffett, Dalio, Nygren…": the lead on a stock page whose superinvestors
+ *  haven't filed the season's quarter yet and have no Form 4 or 13D/G news. `names` are full names,
+ *  largest holder first; `deadline` is the EDGAR deadline as an ISO instant. */
+export function dueLead({ quarter, deadline, names }) {
+  if (!names.length || !deadline) return null
+  const day = new Date(deadline).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' }).replace(',', '')
+  const last = names.map((n) => n.trim().split(/\s+/).at(-1))
+  return `${qLabel(quarter).split(' ')[0]} 13Fs due by ${day} from ${last.slice(0, 3).join(', ')}${last.length > 3 ? '…' : ''}`
+}

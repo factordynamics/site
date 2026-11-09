@@ -10,7 +10,7 @@ import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
 import { dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
-import { stockTitle } from '../lib/titles.mjs'
+import { dueLead, stockTitle } from '../lib/titles.mjs'
 import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
@@ -168,6 +168,9 @@ export function StockPage() {
   const sq = seasonNow().quarter
   const filedSq = filers ? (filers.quarters[sq] ?? 0) : 0
   const num = (n: number) => n.toLocaleString('en-US')
+  // No superinvestor here has filed the season's quarter, and none has Form 4 or 13D/G news: lead with who files next.
+  const supHolders = (d?.holders ?? []).filter((h) => h.featured).sort((a, b) => b.value - a.value)
+  const due = d && supHolders.length && !supHolders.some((h) => h.quarter === sq) && !(d.since ?? []).length ? dueLead({ quarter: sq, deadline: seasonNow().deadline, names: supHolders.map((h) => h.manager) }) : null
   const countLabel = (f: { cur: number; older: number }) => `${num(f.cur)}${f.older ? ` (+${num(f.older)} older)` : ''}`
   return (
     <div className="container-x pt-10 md:pt-14">
@@ -203,6 +206,12 @@ export function StockPage() {
           <Share text={`Who owns $${d?.ticker ?? ticker.toUpperCase()}: the superinvestors and funds holding ${d?.name ?? 'it'}, from 13F filings`} />
         </div>
       </header>
+
+      {due && (
+        <Link to="/season/#expected" className="mt-6 flex items-center gap-2 rounded-xl bg-accent-soft px-4 py-2.5 text-[14px] font-medium text-accent-2 hover:bg-[#dfe4fb]">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-hidden /> {due} <Arrow className="ml-auto size-3 shrink-0" />
+        </Link>
+      )}
 
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
         {wide ? (
@@ -243,7 +252,9 @@ export function StockPage() {
                 : `From each filer’s ${quarterLabel(sq)} 13F.`
               : ''
             : d
-            ? d.quarters.length > 1
+            ? d.quarters.length > 1 && holders.length && holders.every((h) => h.quarter === d.quarters[0])
+              ? `All ${holders.length} ${holders.length === 1 ? 'has' : 'have'} filed ${quarterLabel(d.quarters[0])}, each compared with its filing before.`
+              : d.quarters.length > 1
               ? `Mid-season: ${holders.filter((h) => h.quarter === d.quarters[0]).length} of ${holders.length} funds shown have filed ${quarterLabel(d.quarters[0])}; the rest are still on ${d.quarters.slice(1).map(quarterLabel).join(' or ')}. Each row is labelled with its quarter, compared with that fund’s filing before.`
               : `From each fund’s ${quarterLabel(d.quarters[0])} 13F, compared with its filing before.`
             : ''}{' '}
@@ -331,6 +342,18 @@ export function StockPage() {
             <p className="text-[14px] text-ink-2">No buying or selling in the latest filings.</p>
           )}
           {d && moves.length > 0 && !bigMoves.length && <p className="mt-3 text-[12.5px] text-ink-3">All small moves: under $1M or 0.1% of each fund’s book.</p>}
+          {/* Every move the header counts stays on screen: the small ones are named here even while folded. */}
+          {d && bigMoves.length > 0 && moves.length > bigMoves.length && !allMoves && (
+            <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">
+              Small moves (under $1M or 0.1% of the fund’s book):{' '}
+              {moves
+                .filter((h) => !bigMoves.includes(h))
+                .slice(0, 6)
+                .map((h) => `${h.manager} ${CHANGE[h.change ?? ""]?.label.toLowerCase() ?? h.change} ${h.delta_value >= 0 ? '+' : '−'}${money(Math.abs(h.delta_value))}`)
+                .join(' · ')}
+              {moves.length - bigMoves.length > 6 && ` · ${moves.length - bigMoves.length - 6} more`}
+            </p>
+          )}
           {d && bigMoves.length > 0 && moves.length > bigMoves.length && (
             <button onClick={() => setAllMoves((x) => !x)} className="mt-3 text-[13px] font-medium text-accent hover:text-accent-2">
               {allMoves ? 'Hide small moves' : `Show all ${moves.length} moves (${moves.length - bigMoves.length} under $1M or 0.1% of the fund’s book)`}
