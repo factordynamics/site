@@ -5,6 +5,7 @@ import { ApiKeys } from '../components/ApiKeys'
 import { Channels, FailingBanner } from '../components/Channels'
 import { Team } from '../components/Team'
 import { FundSetup } from '../components/FundSetup'
+import { UpgradePro } from '../components/UpgradePro'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
@@ -15,7 +16,7 @@ import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/u
 import { api, checkout, DATA_TERMS, renewalTerms, trialTerms } from '../config'
 import { ApiError, downloadFile, fetchMe, getToken, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
 
-type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' }
+type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string } | { kind: 'out'; error?: string } | { kind: 'off' }
 
 export function Account() {
   const [params] = useSearchParams()
@@ -30,6 +31,8 @@ export function Account() {
     // Back from Stripe (checkout=success, or a checkout session id) or a plan=pro link.
     const welcome = params.get('checkout') === 'success' || Boolean(sid?.startsWith('cs_'))
     const pro = params.get('plan') === 'pro'
+    // Back from the billing portal's plan change: /me flips when Stripe's webhook lands, usually within seconds.
+    const upgraded = params.get('upgraded') ?? undefined
     const run = async () => {
       try {
         let member: Member
@@ -37,13 +40,17 @@ export function Account() {
         else if (login) member = await startSession({ login })
         else if (getToken()) member = await fetchMe()
         else return setState({ kind: 'out' })
+        for (let i = 0; upgraded && member.plan !== upgraded && i < 8; i++) {
+          await new Promise((r) => setTimeout(r, 2000))
+          member = await fetchMe()
+        }
         resetFollows()
         // The Pro quickstart takes focus after a Pro checkout; a Fund checkout starts at the Fund setup list.
-        setState({ kind: 'in', member, welcome, focus: pro || (welcome && member.plan === 'pro') })
+        setState({ kind: 'in', member, welcome, upgraded, focus: pro || (welcome && member.plan === 'pro') || (upgraded === 'pro' && member.plan === 'pro') })
       } catch {
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
       }
-      if (sid || login) nav('/account/', { replace: true })
+      if (sid || login || upgraded) nav('/account/', { replace: true })
     }
     run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -58,7 +65,7 @@ export function Account() {
           <Skeleton className="mt-8 h-40 w-full" />
         </div>
       )}
-      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState({ kind: 'in', member, welcome: false })} />}
+      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} upgraded={state.upgraded} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState({ kind: 'in', member, welcome: false })} />}
       {state.kind === 'out' && <SignedOut error={state.error} />}
       {state.kind === 'off' && <NotOpen />}
       <p className="mt-10 text-[13px] leading-relaxed text-ink-3">{DATA_TERMS}</p>
@@ -66,7 +73,7 @@ export function Account() {
   )
 }
 
-function SignedIn({ member, welcome, focus = false, onOut, onChange }: { member: Member; welcome: boolean; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
+function SignedIn({ member, welcome, upgraded, focus = false, onOut, onChange }: { member: Member; welcome: boolean; upgraded?: string; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
   const [busy, setBusy] = useState(false)
   const { status, follows } = useFollows()
   const [editing, setEditing] = useState(false)
@@ -86,7 +93,21 @@ function SignedIn({ member, welcome, focus = false, onOut, onChange }: { member:
   return (
     <>
       <header>
-        {welcome ? (
+        {upgraded ? (
+          <>
+            <span className={`inline-flex size-11 items-center justify-center rounded-full text-white ${member.plan === upgraded ? 'bg-up' : 'bg-ink-3'}`}>
+              <Check />
+            </span>
+            <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">
+              {member.plan === upgraded ? `You’re on Copy ${upgraded === 'fund' ? 'Fund' : 'Pro'}.` : 'Confirming your upgrade.'}
+            </h1>
+            <p className="mt-3 text-[17px] text-ink-2">
+              {member.plan === upgraded
+                ? 'Same billing date and interval; Stripe is emailing the prorated invoice.'
+                : 'Stripe is still confirming the change. Refresh in a minute; you won’t be charged twice.'}
+            </p>
+          </>
+        ) : welcome ? (
           <>
             <span className="inline-flex size-11 items-center justify-center rounded-full bg-up text-white">
               <Check />
@@ -217,6 +238,7 @@ function SignedIn({ member, welcome, focus = false, onOut, onChange }: { member:
         </section>
       </div>
 
+      {member.active && member.plan === 'copy' && !member.seat && !member.cancel_at_period_end && <UpgradePro member={member} className="mt-5" />}
       {member.active && member.plan === 'fund' && !member.seat && <Team />}
       {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
       {member.active && <ApiKeys member={member} focus={focus} />}

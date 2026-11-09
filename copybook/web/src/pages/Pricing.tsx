@@ -4,10 +4,10 @@ import { Link } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
 import { attributed } from '../lib/attribution'
-import { gapLabel, loadLatency } from '../lib/account'
+import { gapLabel, loadLatency, upgradeTo, useMember } from '../lib/account'
 import { quarterLabel, useAsync, useTitle } from '../lib/data'
 import { aboutCount, loadCoverage } from '../lib/stocks'
-import { checkoutEnabled, DATA_TERMS, plans, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
+import { BOOK_LITE, BOOK_PRO, checkout, checkoutEnabled, DATA_TERMS, plans, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
 type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean }
@@ -35,6 +35,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'Insider buys and any filer’s 13D', d: 'On stocks you own or watch: open-market insider buys over a threshold you set, cluster buys by 3+ insiders, and a new 13D or 13G by anyone.' },
       { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, usually within minutes: holdings per share class, % of the class before → after, threshold crossings and the 13D’s Item 4.' },
       { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and 8 quarters of history with CSV.' },
+      BOOK_LITE,
     ],
   },
   {
@@ -47,7 +48,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, with its latest holdings as JSON; 8 quarters of history for the ${curated} we track closely, back to 2013 coming this month.` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
-      { t: 'My book', d: 'Your owned and watched stocks in one table: how many funds hold each, who bought and sold this season, and the latest Form 4 or 13D. CSV export.' },
+      BOOK_PRO,
       { t: 'Peer overlap', d: 'Up to 12 funds you benchmark against: how much their books overlap, the names they share, and what they did in yours.' },
     ],
     soon: [
@@ -93,7 +94,8 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Point-in-time history', false, false, 'soon', 'soon'],
   ['Signed webhooks', false, false, true, true],
   ['Bulk exports', false, false, 'soon', 'soon'],
-  ['My book', false, false, true, true],
+  ['My book lite: superinvestors in your names', false, true, true, true],
+  ['Full My book: every 13F filer, crowding, peers, 13F linking, CSV', false, false, true, true],
   ['Peer overlap', false, false, true, true],
   ['Seats', '1', '1', '1', '5'],
   ['Shared book and peer lists', false, false, false, true],
@@ -103,6 +105,10 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
 export function Pricing() {
   const [cycle, setCycle] = useState<'yearly' | 'monthly'>('yearly')
   const live = checkoutEnabled()
+  // Members move up through /upgrade (prorated, same interval); a second checkout would double-bill.
+  const member = useMember()
+  const RANK: Record<string, number> = { copy: 1, pro: 2, fund: 3 }
+  const mine = member?.active && member.plan !== 'holdterm' ? member.plan : null
   useTitle('Pricing · Copybook')
   const cov = useAsync(loadCoverage, [])
   const filers = aboutCount(cov.data?.filers ?? 8900)
@@ -169,6 +175,14 @@ export function Pricing() {
                   <Button to="/investors/" variant="outline" className="w-full">
                     Browse investors
                   </Button>
+                ) : mine && !member?.seat && RANK[tier.id] <= RANK[mine] ? (
+                  <Button to="/account/" variant="outline" className="w-full">
+                    {tier.id === mine ? 'Your plan' : 'Included in your plan'}
+                  </Button>
+                ) : mine && !member?.seat && tier.id === 'pro' ? (
+                  <Button onClick={() => upgradeTo('pro').catch(() => checkout.portal && (window.location.href = checkout.portal))} variant="primary" className="w-full">
+                    Upgrade to Pro
+                  </Button>
                 ) : tier.id === 'fund' ? (
                   // Funds mostly buy by invoice; the card trial stays as a quiet second path.
                   <Button to="/contact/?topic=fund" variant="dark" className="w-full">
@@ -195,6 +209,8 @@ export function Pricing() {
                         </a>
                       )}
                     </>
+                  ) : plan && mine && !member?.seat && tier.id === 'pro' && mine === 'copy' ? (
+                    `Switches your Copy plan to Pro on the same ${member?.interval === 'monthly' ? 'monthly' : 'yearly'} billing, at the founding price, prorated for the rest of this period. You confirm the amount before anything changes.`
                   ) : plan ? (
                     trialTerms(tier.id)
                   ) : (
@@ -286,7 +302,7 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                'Pro: everything in Copy, API keys, the filer and holdings endpoints, filing acceptance times, signed webhooks, My book and peer overlap. History and events endpoints, point-in-time history and bulk exports are coming this month and turn on as each ships, at no extra cost. Fund adds 5 seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.',
+                'Pro: everything in Copy, API keys, the filer and holdings endpoints, filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. History and events endpoints, point-in-time history and bulk exports are coming this month and turn on as each ships, at no extra cost. Fund adds 5 seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.',
               ],
               [
                 'How does the free trial work?',

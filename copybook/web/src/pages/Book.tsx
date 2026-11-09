@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { FailingBanner } from '../components/Channels'
 import { Peers } from '../components/Peers'
+import { UpgradePro } from '../components/UpgradePro'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
-import { ApiError, isPro, useMember, type Member } from '../lib/account'
-import { quarterLabel, dateLabel, displayName, money, pct, useAsync, useTitle } from '../lib/data'
+import { ApiError, isPro, upgradeTo, useMember, type Member } from '../lib/account'
+import { quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
-import { loadFilerHolders, loadStock, resolveTicker, stockPath, tickerText, type Stock, type StockHolder } from '../lib/stocks'
+import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
 
 // My book (Copy Pro and Fund): crowding and filing-season activity in the names a member owns or
 // watches, from the curated stock files the site already builds (d/stocks/{TICKER}.json).
@@ -28,7 +29,7 @@ type Row = {
   bought: number
   sold: number
   net: number
-  latest: { form: string; date: string; manager: string } | null
+  latest: Latest | null
   split: { ratio: string; adjusted: boolean } | null
   /** Counts are across every 13F filer; changes are the tracked funds'. */
   all: boolean
@@ -53,7 +54,7 @@ const COLS: [Key, string, string][] = [
   ['over5', 'Over 5%', 'right'],
   ['filed', 'Filed this season', 'right'],
   ['net', 'Net trades', 'right'],
-  ['latest', 'Latest 4 / 13D', 'left'],
+  ['latest', 'Latest fund 4 / 13D', 'left'],
 ]
 
 // all: crowding across every 13F filer (d/h/{TICKER}.json); changes stay with the tracked funds.
@@ -83,7 +84,7 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
     sold: traded.filter((x) => x.change === 'trimmed' || x.change === 'exited').length,
     net: traded.reduce((a, x) => a + (x.change && x.change !== 'unchanged' ? x.delta_value : 0), 0),
     split,
-    latest: ev ? { form: ev.form, date: ev.filing_date, manager: displayName(ev.manager) } : null,
+    latest: ev ? evLatest(ev) : null,
   }
   const t = { holders: base.holders, prev: base.prev, top10: base.top10, over5: base.over5, filed: base.filed }
   // Until ingest's holder index covers small and mid caps, it can miss funds we track that do hold
@@ -349,7 +350,7 @@ export function Book() {
                                 {r.latest ? (
                                   <span className="block max-w-[14rem]">
                                     <span className="font-medium">{r.latest.form.replace(/^SCHEDULE /i, '')}</span> · {dateLabel(r.latest.date)}
-                                    <span className="block max-w-[9rem] truncate text-ink-3" title={r.latest.manager}>{r.latest.manager}</span>
+                                    <a href={r.latest.url} className="block max-w-[10rem] truncate text-ink-2 hover:text-accent" title={`${r.latest.line}. Open the filing on EDGAR`}>{r.latest.line}</a>
                                   </span>
                                 ) : (
                                   <span className="text-ink-3">None since the 13Fs</span>
@@ -414,13 +415,13 @@ export function Book() {
   )
 }
 
-function Header({ right, eyebrow = 'My book · Copy Pro and Copy Fund' }: { right?: React.ReactNode; eyebrow?: string }) {
+function Header({ right, eyebrow = 'My book · Copy Pro and Copy Fund', sub = 'Crowding, this season’s buying and selling, and the latest insider and 13D filings in the stocks you own or watch.' }: { right?: React.ReactNode; eyebrow?: string; sub?: string }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="max-w-2xl">
         <p className="text-[13px] font-medium text-accent">{eyebrow}</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Who owns what you own.</h1>
-        <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Crowding, this season’s buying and selling, and the latest insider and 13D filings in the stocks you own or watch.</p>
+        <p className="mt-4 text-[17px] leading-relaxed text-ink-2">{sub}</p>
       </div>
       {right}
     </header>
@@ -465,7 +466,7 @@ function LiteBook({ member }: { member: Member }) {
             bought: moves.filter((x) => x.change === 'new' || x.change === 'added').length,
             sold: moves.filter((x) => x.change === 'trimmed' || x.change === 'exited').length,
             net: moves.reduce((a, x) => a + x.delta_value, 0),
-            latest: ev ? { form: ev.form, date: ev.filing_date, manager: displayName(ev.manager) } : null,
+            latest: ev ? evLatest(ev) : null,
           }
         })
         .sort((a, b) => b.held.length - a.held.length || (b.stock?.holders.length ?? 0) - (a.stock?.holders.length ?? 0) || a.ticker.localeCompare(b.ticker)),
@@ -476,47 +477,11 @@ function LiteBook({ member }: { member: Member }) {
     .sort((a, b) => Math.abs(b.x.delta_value) - Math.abs(a.x.delta_value))
     .slice(0, 10)
   const lensName = lens === 'super' ? 'superinvestors' : 'funds we track closely'
-  const pro = (
-    <section id="pro" className="mt-6 scroll-mt-24 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:p-6" aria-labelledby="pro-title">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="max-w-2xl">
-          <h2 id="pro-title" className="flex items-center gap-2 text-[15px] font-semibold">
-            <Lock /> More in Copy Pro
-          </h2>
-          <p className="mt-1 text-[14px] text-ink-2">Your names against every 13F filer, not just the funds we follow, and the tools to work with them.</p>
-        </div>
-        <Button to="/pricing/">
-          Upgrade to Pro <Arrow />
-        </Button>
-      </div>
-      <ul className="mt-4 grid gap-x-6 gap-y-2.5 text-[13.5px] sm:grid-cols-2 lg:grid-cols-3">
-        {(
-          [
-            ['All 13F filers', 'Holder counts across all 8,900+ filers, not only the funds we track'],
-            ['Crowding', 'How many filers hold each name in their top 10, and at over 5% of their book'],
-            ['Peer overlap', 'Up to 12 benchmark funds: shared names and what each did in yours'],
-            ['Link your 13F', 'Your fund’s own 13F as the owned book, updated each time it files'],
-            ['CSV export', 'The whole table, with every column, in one file'],
-            ['API', 'Holdings, Form 4 and 13D/G as JSON, for every filer'],
-          ] as const
-        ).map(([t, d]) => (
-          <li key={t} className="flex gap-2.5">
-            <span className="mt-0.5 shrink-0 text-ink-3">
-              <Lock />
-            </span>
-            <span>
-              <span className="font-medium">{t}</span>
-              <span className="block text-[12.5px] text-ink-3">{d}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
+  const pro = <UpgradePro member={member} className="mt-6" />
 
   return (
     <div className="container-x pt-12 md:pt-16">
-      <Header eyebrow="My book · Copy" />
+      <Header eyebrow="My book · Copy" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and their latest Form 4 and 13D filings." />
       <FailingBanner initial={member.channels_failing} />
 
       {status === 'ready' && names.length === 0 ? (
@@ -541,9 +506,10 @@ function LiteBook({ member }: { member: Member }) {
                 <button
                   type="button"
                   aria-describedby="pro-title"
+                  title="Part of Copy Pro"
                   onClick={() => {
                     setProNote(true)
-                    document.getElementById('pro')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                    upgradeTo('pro').catch(() => null)
                   }}
                   className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-ink-3 hover:text-ink-2"
                 >
@@ -551,7 +517,7 @@ function LiteBook({ member }: { member: Member }) {
                 </button>
               </div>
             </div>
-            {proNote && <p className="border-b border-line bg-accent-soft px-5 py-2.5 text-[13px] text-accent-2 md:px-6">Counts across every 13F filer are part of Copy Pro. See below.</p>}
+            {proNote && <p className="border-b border-line bg-accent-soft px-5 py-2.5 text-[13px] text-accent-2 md:px-6">Counts across every 13F filer are part of Copy Pro. Opening the upgrade…</p>}
             <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Your names">
               <table className="w-full min-w-[860px] text-[13.5px]">
                 <thead>
@@ -560,7 +526,7 @@ function LiteBook({ member }: { member: Member }) {
                     <th className="px-3 py-2.5 text-right font-medium">{lens === 'super' ? 'Superinvestors' : 'Funds'}</th>
                     <th className="px-3 py-2.5 font-medium">Largest holders, weight in their book</th>
                     <th className="px-3 py-2.5 font-medium">{season ? quarterLabel(season) : 'This season'}</th>
-                    <th className="px-3 py-2.5 pr-5 font-medium md:pr-6">Latest Form 4 / 13D</th>
+                    <th className="px-3 py-2.5 pr-5 font-medium md:pr-6">Latest fund Form 4 / 13D</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -625,9 +591,9 @@ function LiteBook({ member }: { member: Member }) {
                             {r.latest ? (
                               <span className="block max-w-[14rem]">
                                 <span className="font-medium">{r.latest.form.replace(/^SCHEDULE /i, '')}</span> · {dateLabel(r.latest.date)}
-                                <span className="block max-w-[11rem] truncate text-ink-3" title={r.latest.manager}>
-                                  {r.latest.manager}
-                                </span>
+                                <a href={r.latest.url} className="block max-w-[14rem] text-ink-2 hover:text-accent" title="Open the filing on EDGAR">
+                                  {r.latest.line}
+                                </a>
                               </span>
                             ) : (
                               <span className="text-ink-3">None since the 13Fs</span>
@@ -677,33 +643,79 @@ function LiteBook({ member }: { member: Member }) {
   )
 }
 
+// The latest fund Form 4 or 13D/G on a name, in a line: "Warren Buffett bought $26.9M (+0.7%)".
+type Latest = { form: string; date: string; manager: string; line: string; url: string }
+type StockEv = NonNullable<Stock['since']>[number]
+const pctChange = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(x) < 0.1 ? (Math.abs(x) * 100).toFixed(1) : Math.round(Math.abs(x) * 100)}%`
+function evLatest(e: StockEv): Latest {
+  const who = displayName(e.manager)
+  let line: string
+  if (e.kind === 'form4') {
+    const verb = e.action === 'buy' ? 'bought' : e.action === 'sell' ? 'sold' : 'traded'
+    const size = e.value_usd ? money(Math.abs(e.value_usd)) : e.shares ? `${sharesFmt(Math.abs(e.shares))} shares` : ''
+    const prev = e.prev_shares_after
+    const chg = prev && e.shares_after != null ? e.shares_after / prev - 1 : null
+    line = `${who} ${verb}${size ? ` ${size}` : ''}${chg != null && Number.isFinite(chg) ? ` (${pctChange(chg)})` : ''}`
+  } else {
+    const p = e.percent_of_class
+    line =
+      e.action === 'new_stake'
+        ? `${who}: new ${p != null ? `${p}% ` : ''}stake`
+        : e.action === 'below_threshold'
+          ? `${who}: below 5%`
+          : `${who}: ${e.prev_percent_of_class != null ? `${e.prev_percent_of_class}% ` : ''}→ ${p != null ? `${p}%` : 'amended'}`
+  }
+  return { form: e.form, date: e.filing_date, manager: who, line, url: e.url }
+}
+
 const signed = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`
 
 function Import({ link = true }: { link?: boolean }) {
   const [text, setText] = useState('')
   const [owned, setOwned] = useState(true)
   const [state, setState] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
+  const { follows } = useFollows()
   const go = async () => {
     // A CSV's Ticker or Symbol column, else the first column of each line, or every token on a single line: "$NVDA, AAPL BRK-B".
     const lines = text.split(/\r?\n/).filter((l) => l.trim())
     const rows = lines.map((l) => l.split(/[,;\t]/).map((c) => c.replace(/"/g, '').trim()))
     const col = rows[0]?.findIndex((c) => /^(ticker|symbol)$/i.test(c)) ?? -1
-    const raw = (col >= 0 ? rows.slice(1).map((r) => r[col] ?? '') : lines.length > 1 ? rows.map((r) => r[0]) : lines.join(' ').split(/[\s,;]+/)).map((t) => tickerText(t.replace(/"/g, ''))).filter((t) => /^[A-Z][A-Z0-9.]{0,6}$/.test(t) && t !== 'TICKER' && t !== 'SYMBOL')
-    if (!raw.length) return setState({ msg: 'No tickers found. Paste one per line, or separated by commas.', ok: false })
+    // Cells with spaces in them are a broker's totals and cash lines, not tickers.
+    const cells = (col >= 0 ? rows.slice(1).map((r) => r[col] ?? '') : lines.length > 1 ? rows.map((r) => r[0]) : lines.join(' ').split(/[\s,;]+/))
+      .map((t) => t.replace(/"/g, '').trim())
+      .filter((t) => t && !/\s/.test(t) && !/^(ticker|symbol)$/i.test(t))
+    if (!cells.length) return setState({ msg: 'No tickers found. Paste one per line, or separated by commas.', ok: false })
     setState({ busy: true })
-    if (owned) {
-      // Owned names go through the API's importer, which also skips broker totals and cash lines.
-      const r = await importBook({ ...(lines.length > 1 ? { csv: text } : { text }), mode: 'merge' }).catch((e) => (e instanceof ApiError ? e : null))
-      if (!r || r instanceof ApiError) return setState({ msg: r?.detail ?? 'That didn’t save. Please try again.', ok: false })
-      setText('')
-      const sk = (r.skipped ?? []).filter((x) => x.trim())
-      return setState({ msg: `Added ${r.imported} ${r.imported === 1 ? 'name' : 'names'} you own${sk.length ? `. Skipped: ${sk.slice(0, 8).join(', ')}${sk.length > 8 ? '…' : ''}` : ''}.`, ok: true })
+    const looked = await Promise.all([...new Set(cells)].map(async (c) => [c, /^\$?[A-Za-z][A-Za-z0-9.\-/]{0,7}$/.test(c) ? await resolveTicker(c).catch(() => null) : null] as const))
+    const unknown = looked.filter(([, t]) => !t).map(([c]) => c)
+    const known = [...new Set(looked.flatMap(([, t]) => (t ? [t] : [])))]
+    const have = new Set(owned ? follows.owned : [...follows.owned, ...follows.stocks])
+    const already = known.filter((t) => have.has(t))
+    const fresh = known.filter((t) => !have.has(t))
+    let skipped: string[] = []
+    if (fresh.length) {
+      if (owned) {
+        // Owned names go through the API's importer, which keeps them apart from a linked 13F.
+        const r = await importBook({ text: fresh.join(' '), mode: 'merge' }).catch((e) => (e instanceof ApiError ? e : null))
+        if (!r || r instanceof ApiError) return setState({ msg: r?.detail ?? 'That didn’t save. Please try again.', ok: false })
+        skipped = (r.skipped ?? []).filter((x) => x.trim())
+      } else {
+        const failed = await addStocks(fresh, false).catch(() => null)
+        if (failed === null) return setState({ msg: 'That didn’t save. Please try again.', ok: false })
+        skipped = failed
+      }
     }
-    const resolved = await Promise.all([...new Set(raw)].map(async (t) => [t, (await resolveTicker(t).catch(() => null)) ?? t] as const))
-    const failed = await addStocks([...new Set(resolved.map(([, t]) => t))], owned).catch(() => null)
-    if (failed === null) return setState({ msg: 'That didn’t save. Please try again.', ok: false })
+    const added = fresh.filter((t) => !skipped.includes(t))
     setText('')
-    setState({ msg: `Added ${resolved.length - failed.length} ${resolved.length - failed.length === 1 ? 'name' : 'names'} you watch${failed.length ? `. Not recognised: ${failed.join(', ')}` : ''}.`, ok: !failed.length })
+    const parts = [
+      added.length ? `Added ${added.length} (${added.join(', ')})` : 'Nothing new added',
+      ...(['owned', 'watched'] as const).map((k) => {
+        const xs = already.filter((t) => follows.owned.includes(t) === (k === 'owned'))
+        return xs.length ? `already ${k}: ${xs.join(', ')}` : ''
+      }),
+      unknown.length || skipped.length ? `not recognized: ${[...unknown, ...skipped].slice(0, 10).join(', ')}${unknown.length + skipped.length > 10 ? '…' : ''}` : '',
+    ].filter(Boolean)
+    setState({ msg: `${parts.join(' · ')}.`, ok: !unknown.length && !skipped.length })
   }
   return (
     <div className="mt-3">

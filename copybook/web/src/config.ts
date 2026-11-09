@@ -44,3 +44,7 @@ export const checkoutEnabled = () => Boolean(checkout.monthly || checkout.yearly
 export const TRIAL_DAYS = 14
 export const TRIAL_TERMS = trialTerms('copy')
 export const DATA_TERMS = 'SEC EDGAR 13F filings as filed. Not investment advice.'
+
+// My book by plan. One wording on pricing, /account/ and the My book upgrade panel.
+export const BOOK_LITE = { t: 'My book lite', d: 'Who among the superinvestors holds your names, their season moves, and the latest Form 4 or 13D.' }
+export const BOOK_PRO = { t: 'Full My book', d: 'Your names against every 13F filer, crowding, peers, 13F linking, CSV and API.' }

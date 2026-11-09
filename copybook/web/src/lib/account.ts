@@ -85,6 +85,21 @@ export const isPro = (m?: Member | null) => Boolean(m?.active && (m.plan === 'pr
 export const fetchMe = () => call<{ member: Member }>('/me', { auth: true }).then((r) => r.member)
 export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email } })
 export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
+/**
+ * Move an existing subscription to a higher plan: POST {api}/upgrade returns a billing-portal page that
+ * confirms the swap, prorated, on the member's own interval and the founding price. A new checkout
+ * would start a second subscription, so until /upgrade is deployed this falls back to the portal.
+ */
+export async function upgradeTo(plan: 'pro' | 'fund') {
+  try {
+    window.location.href = (await call<{ url: string }>('/upgrade', { body: { plan }, auth: true })).url
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'already_on_plan') return window.location.reload()
+    // Stripe refused (say, a plan set to cancel): the caller shows why.
+    if (e instanceof ApiError && (e.code === 'upgrade_unavailable' || e.code === 'seat')) throw e
+    await openPortal()
+  }
+}
 export const setAlerts = (alerts: Member['alerts']) => call<{ member: Member }>('/alerts', { body: { alerts }, auth: true }).then((r) => r.member)
 /** Download an authenticated CSV route ({api}/stocks/{T}/holders.csv, {api}/follows.csv) as a file. */
 export async function downloadFile(path: string, filename: string) {

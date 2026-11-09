@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { call, isPro, openPortal, type Member } from '../lib/account'
+import { call, isPro, upgradeTo, type Member } from '../lib/account'
 import { api, checkout } from '../config'
 import { Button } from './ui'
 
@@ -91,7 +91,7 @@ export function ApiKeys({ member, focus = false }: { member: Member; focus?: boo
           <Button
             size="sm"
             onClick={() =>
-              openPortal().catch(() => {
+              upgradeTo('pro').catch(() => {
                 if (checkout.portal) window.location.href = checkout.portal
               })
             }

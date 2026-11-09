@@ -5,7 +5,7 @@ import { FollowButton } from '../components/FollowButton'
 import { Arrow, Badge, Button, Monogram, Panel, Skeleton } from '../components/ui'
 import { BASE, dateLabel, getJSON, loadManager, money, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { useFollows } from '../lib/follows'
-import { stockPath, tickerText } from '../lib/stocks'
+import { loadStockIndex, stockPath, tickerText } from '../lib/stocks'
 
 // A public card for one 13F (scripts/cards.mjs): the top five moves, made to be shared. Free, no account.
 type Card = {
@@ -36,12 +36,17 @@ export function FilingCard() {
   // Signed-in members: tag the names they own or watch, and list their other names this 13F moved.
   // Client-side only; the static page and its share tags stay the same for everyone.
   const { follows } = useFollows()
+  // Share classes count as one name, as in My book: watching GOOGL tags GOOG too (BRK.A/B, LEN/LEN.B).
+  const idx = useAsync(() => (follows.stocks.length || follows.owned.length ? loadStockIndex() : Promise.resolve(null)), [follows.stocks.length + follows.owned.length > 0])
   const tag = useMemo(() => {
+    const classes = new Map<string, string[]>()
+    for (const st of idx.data?.stocks ?? []) for (const t of [st.t, ...st.a]) classes.set(t, [st.t, ...st.a])
     const m = new Map<string, 'Owned' | 'Watched'>()
-    for (const t of follows.stocks) m.set(tickerText(t), 'Watched')
-    for (const t of follows.owned) m.set(tickerText(t), 'Owned')
+    const put = (t: string, v: 'Owned' | 'Watched') => (classes.get(tickerText(t)) ?? [tickerText(t)]).forEach((x) => m.set(x, v))
+    for (const t of follows.stocks) put(t, 'Watched')
+    for (const t of follows.owned) put(t, 'Owned')
     return m
-  }, [follows.owned, follows.stocks])
+  }, [follows.owned, follows.stocks, idx.data])
   const book = useAsync(() => (d && tag.size ? loadManager(d.slug).catch(() => null) : Promise.resolve(null)), [d?.slug, tag.size > 0])
   const yours = useMemo(() => {
     const f = book.data
