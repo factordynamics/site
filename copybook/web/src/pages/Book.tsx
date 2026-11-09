@@ -4,8 +4,8 @@ import { FailingBanner } from '../components/Channels'
 import { Peers } from '../components/Peers'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
-import { ApiError, isPro, useMember } from '../lib/account'
-import { quarterLabel, dateLabel, displayName, money, useAsync, useTitle } from '../lib/data'
+import { ApiError, isPro, useMember, type Member } from '../lib/account'
+import { quarterLabel, dateLabel, displayName, money, pct, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, tickerText, type Stock, type StockHolder } from '../lib/stocks'
 
@@ -171,6 +171,8 @@ export function Book() {
     })
   }, [ready, status, names.length])
 
+  // Copy members get My book lite: their own names against the superinvestors and tracked funds.
+  if (!pro && member?.active && member.plan !== 'holdterm') return <LiteBook member={member} />
   if (!pro)
     return (
       <div className="container-x pt-12 md:pt-16">
@@ -412,11 +414,11 @@ export function Book() {
   )
 }
 
-function Header({ right }: { right?: React.ReactNode }) {
+function Header({ right, eyebrow = 'My book · Copy Pro and Copy Fund' }: { right?: React.ReactNode; eyebrow?: string }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="max-w-2xl">
-        <p className="text-[13px] font-medium text-accent">My book · Copy Pro and Copy Fund</p>
+        <p className="text-[13px] font-medium text-accent">{eyebrow}</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Who owns what you own.</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Crowding, this season’s buying and selling, and the latest insider and 13D filings in the stocks you own or watch.</p>
       </div>
@@ -425,9 +427,259 @@ function Header({ right }: { right?: React.ReactNode }) {
   )
 }
 
+// My book lite (Copy): the member's own names against the superinvestors and the funds we track
+// closely, from the public stock files. All-filer counts, peers, 13F linking, CSV and the API are Pro.
+type LiteLens = 'super' | 'tracked'
+function LiteBook({ member }: { member: Member }) {
+  const { status, follows } = useFollows()
+  const [params, setParams] = useSearchParams()
+  const lens: LiteLens = params.get('funds') === 'tracked' ? 'tracked' : 'super'
+  const [proNote, setProNote] = useState(false)
+  const linkedOnly = useMemo(() => {
+    const manual = new Set(follows.owned_manual ?? [])
+    return new Set((follows.book?.tickers ?? []).filter((t) => !manual.has(t)))
+  }, [follows.book, follows.owned_manual])
+  // Hand-added names only: a linked 13F book is a Pro feature.
+  const names = useMemo(() => [...new Set([...follows.owned, ...follows.stocks])].filter((t) => !linkedOnly.has(t)), [follows.owned, follows.stocks, linkedOnly])
+  const data = useAsync(() => (names.length ? Promise.all(names.map((t) => loadStock(t).catch(() => null))) : Promise.resolve([])), [names.join(',')])
+  const season = useMemo(() => (data.data ?? []).flatMap((x) => x?.quarters ?? []).sort().at(-1) ?? '', [data.data])
+  const rows = useMemo(
+    () =>
+      names
+        .map((t, i) => {
+          const st = data.data?.[i] ?? null
+          const inLens = (x: StockHolder) => lens === 'tracked' || x.featured
+          const held = (st?.holders ?? []).filter(inLens).sort((a, b) => b.weight - a.weight)
+          const split = st?.splits?.[season] ?? null
+          const moves = split && !split.adjusted ? [] : [...(st?.holders ?? []), ...(st?.exited ?? [])].filter((x) => inLens(x) && x.quarter === season && x.change && x.change !== 'unchanged')
+          const ev = st?.since?.[0]
+          return {
+            ticker: t,
+            name: st?.name ?? '',
+            owned: follows.owned.includes(t),
+            stock: st,
+            held,
+            others: lens === 'super' ? (st?.holders.length ?? 0) - held.length : 0,
+            split,
+            moves,
+            bought: moves.filter((x) => x.change === 'new' || x.change === 'added').length,
+            sold: moves.filter((x) => x.change === 'trimmed' || x.change === 'exited').length,
+            net: moves.reduce((a, x) => a + x.delta_value, 0),
+            latest: ev ? { form: ev.form, date: ev.filing_date, manager: displayName(ev.manager) } : null,
+          }
+        })
+        .sort((a, b) => b.held.length - a.held.length || (b.stock?.holders.length ?? 0) - (a.stock?.holders.length ?? 0) || a.ticker.localeCompare(b.ticker)),
+    [names, data.data, lens, season, follows.owned],
+  )
+  const moves = rows
+    .flatMap((r) => r.moves.map((x) => ({ r, x })))
+    .sort((a, b) => Math.abs(b.x.delta_value) - Math.abs(a.x.delta_value))
+    .slice(0, 10)
+  const lensName = lens === 'super' ? 'superinvestors' : 'funds we track closely'
+  const pro = (
+    <section id="pro" className="mt-6 scroll-mt-24 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:p-6" aria-labelledby="pro-title">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-2xl">
+          <h2 id="pro-title" className="flex items-center gap-2 text-[15px] font-semibold">
+            <Lock /> More in Copy Pro
+          </h2>
+          <p className="mt-1 text-[14px] text-ink-2">Your names against every 13F filer, not just the funds we follow, and the tools to work with them.</p>
+        </div>
+        <Button to="/pricing/">
+          Upgrade to Pro <Arrow />
+        </Button>
+      </div>
+      <ul className="mt-4 grid gap-x-6 gap-y-2.5 text-[13.5px] sm:grid-cols-2 lg:grid-cols-3">
+        {(
+          [
+            ['All 13F filers', 'Holder counts across all 8,900+ filers, not only the funds we track'],
+            ['Crowding', 'How many filers hold each name in their top 10, and at over 5% of their book'],
+            ['Peer overlap', 'Up to 12 benchmark funds: shared names and what each did in yours'],
+            ['Link your 13F', 'Your fund’s own 13F as the owned book, updated each time it files'],
+            ['CSV export', 'The whole table, with every column, in one file'],
+            ['API', 'Holdings, Form 4 and 13D/G as JSON, for every filer'],
+          ] as const
+        ).map(([t, d]) => (
+          <li key={t} className="flex gap-2.5">
+            <span className="mt-0.5 shrink-0 text-ink-3">
+              <Lock />
+            </span>
+            <span>
+              <span className="font-medium">{t}</span>
+              <span className="block text-[12.5px] text-ink-3">{d}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+
+  return (
+    <div className="container-x pt-12 md:pt-16">
+      <Header eyebrow="My book · Copy" />
+      <FailingBanner initial={member.channels_failing} />
+
+      {status === 'ready' && names.length === 0 ? (
+        <Panel className="mt-8" title="Add the names you own or watch">
+          <p className="text-[14px] text-ink-2">Paste tickers below, or press Follow on any stock page.</p>
+          <Import link={false} />
+        </Panel>
+      ) : (
+        <>
+          <section className="mt-8 rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
+              <div className="max-w-2xl">
+                <h2 className="text-[15px] font-semibold">Your names</h2>
+                <p className="text-[13px] text-ink-3">Who among the {lensName} holds each name, at what weight of their book, and what they did {season ? `in ${quarterLabel(season)}` : 'this season'}. From each fund’s latest 13F.</p>
+              </div>
+              <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which funds">
+                {(['super', 'tracked'] as const).map((l) => (
+                  <button key={l} type="button" role="tab" aria-selected={lens === l} onClick={() => setParams(l === 'super' ? {} : { funds: l }, { replace: true })} className={`rounded-full px-3 py-1.5 ${lens === l ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                    {l === 'super' ? 'Superinvestors' : 'Funds we track closely'}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  aria-describedby="pro-title"
+                  onClick={() => {
+                    setProNote(true)
+                    document.getElementById('pro')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-ink-3 hover:text-ink-2"
+                >
+                  <Lock /> All 13F filers
+                </button>
+              </div>
+            </div>
+            {proNote && <p className="border-b border-line bg-accent-soft px-5 py-2.5 text-[13px] text-accent-2 md:px-6">Counts across every 13F filer are part of Copy Pro. See below.</p>}
+            <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Your names">
+              <table className="w-full min-w-[860px] text-[13.5px]">
+                <thead>
+                  <tr className="border-b border-line text-left text-[12.5px] text-ink-3">
+                    <th className="px-3 py-2.5 pl-5 font-medium md:pl-6">Name</th>
+                    <th className="px-3 py-2.5 text-right font-medium">{lens === 'super' ? 'Superinvestors' : 'Funds'}</th>
+                    <th className="px-3 py-2.5 font-medium">Largest holders, weight in their book</th>
+                    <th className="px-3 py-2.5 font-medium">{season ? quarterLabel(season) : 'This season'}</th>
+                    <th className="px-3 py-2.5 pr-5 font-medium md:pr-6">Latest Form 4 / 13D</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {!data.data
+                    ? Array.from({ length: Math.min(6, names.length || 4) }, (_, i) => (
+                        <tr key={i} className="border-b border-line last:border-0">
+                          <td colSpan={5} className="px-5 py-3 md:px-6">
+                            <Skeleton className="h-5 w-full" />
+                          </td>
+                        </tr>
+                      ))
+                    : rows.map((r) => (
+                        <tr key={r.ticker} className="border-b border-line align-top last:border-0 hover:bg-ink/[0.025]">
+                          <td className="px-3 py-3 pl-5 md:pl-6">
+                            <span className="flex items-center gap-2">
+                              <Link to={stockPath(r.ticker)} className="font-mono text-[13px] font-semibold hover:text-accent">
+                                {r.ticker}
+                              </Link>
+                              <span className="max-w-[8rem] truncate text-ink-2" title={r.name}>
+                                {r.name}
+                              </span>
+                              {r.owned ? <Badge tone="accent">Owned</Badge> : <Badge>Watched</Badge>}
+                            </span>
+                          </td>
+                          <td className="num whitespace-nowrap px-3 py-3 text-right font-medium">
+                            {r.held.length}
+                            {r.others > 0 && <span className="block text-[12px] font-normal text-ink-3">+{r.others} tracked</span>}
+                          </td>
+                          <td className="px-3 py-3">
+                            {r.held.length ? (
+                              <span className="flex flex-wrap gap-x-3 gap-y-1">
+                                {r.held.slice(0, 3).map((x) => (
+                                  <Link key={x.slug} to={`/investors/${x.slug}/`} className="whitespace-nowrap hover:text-accent">
+                                    {displayName(x.manager)} <span className="num text-ink-3">{x.weight > 0 && x.weight < 0.0005 ? '<0.1%' : pct(x.weight)}</span>
+                                  </Link>
+                                ))}
+                                {r.held.length > 3 && (
+                                  <Link to={stockPath(r.ticker)} className="text-ink-3 hover:text-accent">
+                                    +{r.held.length - 3} more
+                                  </Link>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-ink-3">{r.stock ? `None of the ${lensName}` : 'Not held by the funds we track'}</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3">
+                            {r.split && !r.split.adjusted ? (
+                              <span className="text-[12.5px] text-[#8a5a0b]">Possible {r.split.ratio} split, not counted</span>
+                            ) : r.moves.length ? (
+                              <>
+                                <span className={`num font-medium ${r.net > 0 ? 'text-up' : r.net < 0 ? 'text-down' : 'text-ink-3'}`}>{signed(r.net)}</span>
+                                <span className="block text-[12px] text-ink-3">
+                                  {r.bought} bought · {r.sold} sold
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-ink-3">No moves yet</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-3 pr-5 text-[12.5px] md:pr-6">
+                            {r.latest ? (
+                              <span className="block max-w-[14rem]">
+                                <span className="font-medium">{r.latest.form.replace(/^SCHEDULE /i, '')}</span> · {dateLabel(r.latest.date)}
+                                <span className="block max-w-[11rem] truncate text-ink-3" title={r.latest.manager}>
+                                  {r.latest.manager}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-ink-3">None since the 13Fs</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+            <Panel title={season ? `What the ${lensName} did in your names, ${quarterLabel(season)}` : `What the ${lensName} did in your names`} sub="Largest moves by the funds that have filed this season, valued at quarter-end">
+              {!data.data ? (
+                <Skeleton className="h-48 w-full" />
+              ) : moves.length ? (
+                <ul className="divide-y divide-line">
+                  {moves.map(({ r, x }) => (
+                    <li key={r.ticker + x.slug} className="flex items-center justify-between gap-3 py-2.5 text-[13.5px]">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Badge tone={x.delta_value >= 0 ? 'up' : 'down'}>{x.change}</Badge>
+                        <Link to={stockPath(r.ticker)} className="font-mono text-[13px] font-semibold hover:text-accent">
+                          {r.ticker}
+                        </Link>
+                        <Link to={`/investors/${x.slug}/`} className="truncate text-ink-2 hover:text-accent">
+                          {displayName(x.manager)}
+                        </Link>
+                      </span>
+                      <span className={`num shrink-0 font-medium ${x.delta_value >= 0 ? 'text-up' : 'text-down'}`}>{signed(x.delta_value)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[14px] text-ink-2">None of the {lensName} that have filed {season ? quarterLabel(season) : 'this season'} traded your names yet.</p>
+              )}
+            </Panel>
+            <Panel title="Add names" sub="Paste tickers, or a broker CSV with a Ticker or Symbol column">
+              <Import link={false} />
+            </Panel>
+          </div>
+          {pro}
+          <p className="mt-6 text-[13px] leading-relaxed text-ink-3">From each fund’s latest 13F as filed with the SEC, and Form 4 and Schedule 13D/G filings since. Weight is the position’s share of that fund’s 13F stock holdings. Your list is private to you and never used in aggregates. Not investment advice.</p>
+        </>
+      )}
+    </div>
+  )
+}
+
 const signed = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`
 
-function Import() {
+function Import({ link = true }: { link?: boolean }) {
   const [text, setText] = useState('')
   const [owned, setOwned] = useState(true)
   const [state, setState] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
@@ -484,7 +736,7 @@ function Import() {
         </p>
       )}
       <p className="mt-3 text-[12.5px] text-ink-3">Remove a name with Following on its stock page.</p>
-      <LinkFund />
+      {link && <LinkFund />}
     </div>
   )
 }
