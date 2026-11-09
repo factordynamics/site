@@ -14,6 +14,6 @@ export const checkout = {
   portal: 'https://billing.stripe.com/p/login/7sYeVd1dkguecW6gDIgjC01',
 }
 // Shared alerts API (Holdterm members are plan "holdterm": alerts and follows only).
-export const api = 'https://gene.tail70ba3.ts.net/copybook'
+export const api = 'https://solid-amanda-dir-fiction.trycloudflare.com/copybook'
 
 export const price = { monthly: 3, yearly: 29, trialDays: 7 }
