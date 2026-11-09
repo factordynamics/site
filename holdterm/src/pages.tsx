@@ -72,7 +72,7 @@ function useFirms(): Map<string, string> {
   return useMemo(() => new Map((ix.data?.managers ?? []).map((m) => [m.slug, m.firm])), [ix.data])
 }
 const firmOf = (firms: Map<string, string>, slug: string, fallback: string) => firms.get(fundSlug(slug)) ?? firmName(slug, fallback)
-function FundLink({ slug, name }: { slug: string; name: string }) {
+function FundLink({ slug, name }: { slug: string; name: ReactNode }) {
   return inRoster(slug) ? <A to={fundPath(fundSlug(slug))}>{name}</A> : <span>{name}</span>
 }
 
@@ -109,7 +109,9 @@ function Who({ list, max = 3, tagQ }: { list: { slug: string; manager: string; q
       {list.slice(0, max).map((w, i) => (
         <span key={w.slug}>
           {i > 0 && <span className="dim">, </span>}
-          <A to={fundPath(w.slug)}>{w.manager}</A>
+          <A to={fundPath(w.slug)} title={shortFirm(w.manager) !== w.manager ? w.manager : undefined}>
+            {shortFirm(w.manager)}
+          </A>
           {tagQ && w.quarter === tagQ && (
             <>
               {' '}
@@ -186,7 +188,7 @@ function ActionTag({ e }: { e: Event }) {
 const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => [
   { key: 'filed', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, sort: (e) => e.filing_date, width: '84px' },
   { key: 'form', label: 'form', hideSm: true, render: (e) => <span className="form">{e.kind === 'form4' ? 'F4' : e.kind.toUpperCase()}</span>, sort: (e) => e.kind },
-  ...(withWho ? [{ key: 'who', label: 'filer', render: (e: Event) => <span className="trunc narrow-sm"><FundLink slug={e.slug} name={firmOf(firms, e.slug, e.manager)} /></span>, sort: (e: Event) => e.manager } as Col<Event>] : []),
+  ...(withWho ? [{ key: 'who', label: 'filer', render: (e: Event) => <FundLink slug={e.slug} name={<Firm name={firmOf(firms, e.slug, e.manager)} />} />, sort: (e: Event) => e.manager } as Col<Event>] : []),
   {
     key: 'iss',
     label: 'issuer',
@@ -881,7 +883,8 @@ export function Flows() {
       <div className="head">
         <div>
           <h1>Buys and sells</h1>
-          <p className="lede">What the investors bought and sold, from each 13F against the fund’s prior quarter.</p>
+          <p className="lede">What the investors bought and sold, each 13F compared with the fund’s quarter before.</p>
+          <FlowsSummary rows={rows} funds={fundsN} q={q} />
         </div>
       </div>
       <div className="filters" role="group" aria-label="quarter">
@@ -942,6 +945,65 @@ export function Flows() {
   )
 }
 
+/** A stock in running text: "Alphabet (GOOGL)". */
+const aggName = (r: Agg) => `${r.name.replace(/\s+(class|cl\.?)\s+[a-z]\b.*$/i, '')}${r.ticker ? ` (${r.label ?? r.ticker})` : ''}`
+function FlowsSummary({ rows, funds, q }: { rows: Agg[]; funds: number; q: string }) {
+  const most = (f: (r: Agg) => number) => [...rows].sort((a, b) => f(b) - f(a))[0]
+  const buyers = most((r) => r.buyers.length)
+  const sellers = most((r) => r.sellers.length)
+  const netBuy = most((r) => r.net)
+  const netSell = most((r) => -r.net)
+  const fresh = most((r) => r.newBuyers)
+  if (!buyers) return null
+  return (
+    <p className="summary">
+      Across {num(funds)} funds’ {q === 'latest' ? 'latest 13Fs' : `${quarterLabel(q)} 13Fs`}, the stock the most investors bought was {aggName(buyers)}, by {num(buyers.buyers.length)}
+      {netBuy && netBuy.net > 0 && netBuy !== buyers ? `, and the most money went into ${aggName(netBuy)}, ${signedUsd(netBuy.net)} net` : netBuy && netBuy.net > 0 ? `, for ${signedUsd(netBuy.net)} net` : ''}.{' '}
+      {fresh && fresh.newBuyers > 1 && <>{num(fresh.newBuyers)} investors opened a new position in {aggName(fresh)}. </>}
+      {sellers && sellers.sellers.length > 0 && (
+        <>
+          The stock the most investors sold was {aggName(sellers)}, by {num(sellers.sellers.length)}
+          {netSell && netSell.net < 0 && netSell !== sellers ? `, and the most money came out of ${aggName(netSell)}, ${signedUsd(netSell.net)} net` : ''}.
+        </>
+      )}
+    </p>
+  )
+}
+function ConsensusSummary({ rows, total, n, mix }: { rows: Agg[]; total: number; n: number; mix: { sector: string; weight: number }[] }) {
+  const stocks = rows.filter((r) => !r.fund)
+  const wide = [...stocks].sort((a, b) => b.holders.length - a.holders.length || b.value - a.value)[0]
+  const big = [...stocks].sort((a, b) => b.value - a.value)
+  const top10 = big.slice(0, 10).reduce((t, r) => t + r.value, 0) / (total || 1)
+  if (!wide) return null
+  return (
+    <p className="summary">
+      Together they hold {usd(total)} in {num(rows.length)} stocks and funds. The most widely owned is {aggName(wide)}, held by {num(wide.holders.length)} of {num(n)} investors
+      {big[0] && big[0] !== wide ? `, and the most money is in ${aggName(big[0])}, ${usd(big[0].value)}` : ''}. The ten largest make up {pct(top10, 0)} of the total
+      {mix[0] ? `, and the largest sector is ${mix[0].sector.toLowerCase()} at ${pct(mix[0].weight, 0)}` : ''}.
+    </p>
+  )
+}
+function FilingsSummary({ list, firms }: { list: Event[]; firms: Map<string, string> }) {
+  const stakes = list.filter((e) => e.kind !== 'form4')
+  const f4 = list.filter((e) => e.kind === 'form4')
+  const newStakes = stakes.filter((e) => e.action === 'new_stake')
+  const buys = f4.filter((e) => e.action === 'buy')
+  const sells = f4.filter((e) => e.action === 'sell')
+  const latestNew = newStakes[0]
+  return (
+    <p className="summary">
+      The investors filed {plural(stakes.length, 'stake report')} on Schedule 13D or 13G, {num(newStakes.length)} of them new 5%+ stakes, and {plural(f4.length, 'Form 4')}, with {num(buys.length)} open-market {buys.length === 1 ? 'buy' : 'buys'} and {num(sells.length)} {sells.length === 1 ? 'sale' : 'sales'}.
+      {latestNew && (
+        <>
+          {' '}
+          The latest new stake: {shortFirm(firmOf(firms, latestNew.slug, latestNew.manager))} in {issuerName(latestNew.display_name || latestNew.issuer)}
+          {latestNew.percent_of_class != null ? `, ${latestNew.percent_of_class.toFixed(1)}% of the company` : ''}, filed {day(latestNew.filing_date)}.
+        </>
+      )}
+    </p>
+  )
+}
+
 // ---------- consensus ----------
 type GTab = 'owners' | 'value' | 'conviction'
 export function Consensus() {
@@ -961,9 +1023,8 @@ export function Consensus() {
       <div className="head">
         <div>
           <h1>Most owned stocks</h1>
-          <p className="lede">
-            The stocks in all {n} investors’ latest 13Fs, combined: {usd(agg.total)} in stocks, with options and fund units left out.
-          </p>
+          <p className="lede">Every stock and fund in all {n} investors’ latest 13Fs, combined, with options and notes left out.</p>
+          <ConsensusSummary rows={agg.rows} total={agg.total} n={n} mix={mix} />
         </div>
       </div>
       <Panel title="By sector" right={<span className="dim hide-sm">Choose a sector to filter</span>}>
@@ -1035,7 +1096,8 @@ export function Filings() {
       <div className="head">
         <div>
           <h1>Stakes and insider filings</h1>
-          <p className="lede">Schedule 13D and 13G stakes and Form 4 trades filed by the investors between 13Fs, over the last {ev.data.window_days} days.</p>
+          <p className="lede">Schedule 13D and 13G stakes and Form 4 trades the investors filed between 13Fs, over the last {ev.data.window_days} days.</p>
+          <FilingsSummary list={scoped} firms={firms} />
         </div>
       </div>
       <Tabs<ETab>
@@ -1146,7 +1208,7 @@ export function Stock({ ticker }: { ticker: string }) {
   const tickers = new Set(d.classes.map((c) => c.ticker))
   const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && !ownVehicle(e))
   const holderCols: Col<StockHolder>[] = [
-    { key: 'm', label: 'fund', link: true, render: (h) => <span className={`trunc narrow-sm${inRoster(h.slug) ? ' strong' : ''}`}>{name(h)}</span>, sort: (h) => name(h) },
+    { key: 'm', label: 'fund', link: true, render: (h) => <Firm name={name(h)} strong={inRoster(h.slug)} />, sort: (h) => name(h) },
     { key: 'w', label: '% of book', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight },
     { key: 'c', label: 'activity', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} />, sort: (h) => h.delta_value ?? 0 },
     { key: 'sh', label: 'shares', num: true, hideSm: true, render: (h) => num(h.shares), sort: (h) => h.shares },
@@ -1502,25 +1564,29 @@ function StockFollows({ f, setF }: { f: Follows | null; setF: (f: Follows) => vo
 // Four short points on the home page for new visitors (dismissed for good with "Got it"), and the same points
 // at length on /guide. Decided before the first paint, like the upsell, so nothing shifts.
 const GUIDE_KEY = 'holdterm-guide-dismissed'
-const GUIDE: { icon: ReactNode; t: string; p: string }[] = [
+const GUIDE: { icon: ReactNode; t: string; p: string; short: string }[] = [
   {
     icon: <path d="M6 3.5h8l4 4V20a.5.5 0 0 1-.5.5h-11A.5.5 0 0 1 6 20V3.5Zm8 0V8h4M9 12h6M9 15.5h6" />,
     t: 'What a 13F is',
+    short: 'A quarterly list of US stocks that every manager with $100M or more must file with the SEC.',
     p: 'Every manager with more than $100 million in US stocks must tell the SEC what it owns, once a quarter, on Form 13F. Holdterm reads those filings for investors who hold few stocks for years.',
   },
   {
     icon: <path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 4v4.5l3 2" />,
     t: 'How current it is',
+    short: 'A snapshot of the last day of the quarter, filed up to 45 days later. Not today’s portfolio.',
     p: 'A 13F shows holdings on the last day of the quarter and can arrive up to 45 days later. Treat it as a snapshot, not today’s portfolio. Stake (13D/G) and insider (Form 4) filings come within days.',
   },
   {
     icon: <path d="M4 18.5h16M6.5 15.5v-4M11 15.5v-9M15.5 15.5V9M20 15.5v-6" />,
     t: 'How to read a fund',
+    short: 'Added, Trimmed, New and Sold out compare share counts, so a price move is never a trade.',
     p: 'Holdings are sorted by share of the fund. “Added”, “Trimmed”, “New” and “Sold out” compare share counts with the previous quarter, so a price move alone never counts as buying or selling.',
   },
   {
     icon: <path d="M12 4.5 4.5 8v4c0 4.2 3.2 7.2 7.5 8 4.3-.8 7.5-3.8 7.5-8V8L12 4.5Zm-3 8 2 2 4-4" />,
     t: 'What it leaves out',
+    short: 'No shorts, cash or foreign shares. Read it as evidence, not advice.',
     p: 'Short positions, cash, foreign-listed shares and most bonds are not in a 13F. Options and notes appear separately. A sale can be risk management, not a change of mind: read it as evidence, not advice.',
   },
 ]
@@ -1552,10 +1618,7 @@ function FirstVisit() {
   return (
     <section className="guide" aria-labelledby="guide-h">
       <div className="guide-head">
-        <div>
-          <h2 id="guide-h">New to 13F filings? Here’s how to read this site</h2>
-          <p className="guide-sub">Four things worth knowing before you look at the numbers.</p>
-        </div>
+        <h2 id="guide-h">New to 13F filings? Four things worth knowing</h2>
         <div className="guide-actions">
           <A to="/guide" className="btn ghost">
             Read the full guide
@@ -1565,12 +1628,14 @@ function FirstVisit() {
           </button>
         </div>
       </div>
-      <ol className="guide-cards">
+      <ol className="guide-strip">
         {GUIDE.map((g) => (
           <li key={g.t}>
             <GuideIcon>{g.icon}</GuideIcon>
-            <h3>{g.t}</h3>
-            <p>{g.p}</p>
+            <div>
+              <h3>{g.t}</h3>
+              <p>{g.short}</p>
+            </div>
           </li>
         ))}
       </ol>

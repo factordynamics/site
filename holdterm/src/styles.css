@@ -779,6 +779,14 @@ table.grid {
   border-radius: 50%;
   flex: none;
 }
+/* Lists of funds in a cell wrap rather than widening the table. */
+.who {
+  display: inline-block;
+  white-space: normal;
+  max-width: 340px;
+  min-width: 180px;
+  line-height: 1.35;
+}
 .who a {
   color: var(--fg);
 }
@@ -1447,12 +1455,16 @@ pre.email {
   .narrow-sm {
     max-width: 128px;
   }
+  .firm {
+    max-width: 132px;
+    min-width: 0;
+  }
   /* Long firm and company names truncate on phones instead of widening the table. */
   .trunc.wide-name {
     max-width: 172px;
   }
   .noticker {
-    max-width: 118px;
+    max-width: 96px;
   }
   .fund-stats .stat:nth-child(3),
   .fund-stats .stat:nth-child(4) {
@@ -1529,7 +1541,7 @@ pre.email {
   }
   .grid th,
   .grid td {
-    padding-right: 10px;
+    padding-right: 8px;
   }
   .head {
     flex-direction: column;
@@ -1541,6 +1553,10 @@ pre.email {
   .summary {
     font-size: 15px;
     margin-top: -2px;
+  }
+  /* Phones: the summary says what the one-line intro says, with numbers; show only the summary. */
+  .head .lede:has(+ .summary) {
+    display: none;
   }
   .hb-row {
     grid-template-columns: minmax(0, 1.2fr) minmax(30px, 1fr) 66px;
@@ -1611,7 +1627,7 @@ pre.email a {
 /* ---------- first-visit guide (home) and /guide ---------- */
 .guide {
   margin-bottom: 20px;
-  padding: 22px 24px 24px;
+  padding: 14px 18px 16px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -1623,10 +1639,11 @@ pre.email a {
   align-items: flex-start;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 .guide-head h2 {
-  font-size: 18px;
+  align-self: center;
+  font-size: 16px;
   font-weight: 650;
   letter-spacing: -0.015em;
 }
@@ -1676,6 +1693,42 @@ pre.email a {
 }
 .guide-mini {
   display: none;
+}
+/* Home: four one-line points, so the filings stay near the top. */
+.guide-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.guide-strip li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--raise);
+}
+.guide-strip .guide-icon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+}
+.guide-strip h3 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.guide-strip p {
+  margin: 0;
+  color: var(--fg2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.guide-head .btn {
+  padding: 6px 12px;
 }
 /* The /guide article: a reading column with real type, not a table. */
 .page.article {
@@ -1775,6 +1828,9 @@ pre.email a {
   margin: 0;
 }
 @media (max-width: 1180px) {
+  .guide-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .guide-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1787,7 +1843,7 @@ pre.email a {
     box-shadow: none;
   }
   .guide-head,
-  .guide > .guide-cards {
+  .guide > .guide-strip {
     display: none;
   }
   .promo-guide .upsell,
