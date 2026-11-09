@@ -233,6 +233,8 @@ export function Home() {
     .filter((b) => b.quarter === lead)
     .flatMap((b) => trades(b).map((h) => ({ b, h })))
     .sort((x, y) => Math.abs(y.h.value_delta!) - Math.abs(x.h.value_delta!))
+    // At most four per fund (enough for a fund's sell-outs), so one early filer can't fill the list.
+    .filter((x, _, all) => all.filter((y) => y.b.slug === x.b.slug).indexOf(x) < 4)
     .slice(0, 15)
   const due = ms.filter((m) => m.quarter !== s.q)
   const daysLeft = Math.ceil((Date.parse(s.due) - Date.now()) / 86_400_000)

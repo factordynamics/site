@@ -60,7 +60,14 @@ export function Tick({ t, name, label }: { t: string | null; name?: string; labe
   if (!t) return <span className="dim" title={name}>—</span>
   return (
     <A to={stockHref(t)} className="tk" title={label && label !== t ? `${name}: share classes ${label} combined` : name}>
-      {label ?? t}
+      {label && label !== t ? (
+        <>
+          <span className="hide-sm">{label}</span>
+          <span className="show-sm">{t}+</span>
+        </>
+      ) : (
+        t
+      )}
     </A>
   )
 }

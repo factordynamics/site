@@ -52,7 +52,7 @@ export function firmName(slug: string, edgarName: string): string {
   for (let i = 0; i < 3; i++) n = n.replace(SUFFIX, '').replace(/[\s,&]+$/, '')
   // EDGAR all-caps: title case, but keep vowel-less tokens (YCG, RWWM, MHR, JV) as acronyms.
   if (!/[a-z]/.test(n)) n = n.toLowerCase().replace(/\b[a-z][a-z']*/g, (w) => (/[aeiou]/.test(w) && w.length > 1 ? w[0].toUpperCase() + w.slice(1) : w.toUpperCase()))
-  else n = n.replace(/\b([A-Z][a-z]{1,3})\b/g, (w) => (/[aeiou]/.test(w.slice(1)) ? w : w.toUpperCase()))
+  else n = n.replace(/\b([A-Z][a-z]{1,3})\b/g, (w) => (/[aeiou]/i.test(w) ? w : w.toUpperCase()))
   return n.replace(/\bMc([a-z])/g, (_, c) => `Mc${c.toUpperCase()}`).replace(/\bIi\b/g, 'II').replace(/\bIii\b/g, 'III')
 }
 export const pmName = (slug: string) => FUNDS[slug]?.pm ?? null
