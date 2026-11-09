@@ -5,7 +5,7 @@ import { Peers } from '../components/Peers'
 import { UpgradePro } from '../components/UpgradePro'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
-import { ApiError, isPro, upgradeTo, useMember, type Member } from '../lib/account'
+import { ApiError, isPro, loadEvents, upgradeTo, useMember, type IssuerEvent, type Member } from '../lib/account'
 import { quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
@@ -54,7 +54,7 @@ const COLS: [Key, string, string][] = [
   ['over5', 'Over 5%', 'right'],
   ['filed', 'Filed this season', 'right'],
   ['net', 'Net trades', 'right'],
-  ['latest', 'Latest fund 4 / 13D', 'left'],
+  ['latest', 'Latest 4 / 13D', 'left'],
 ]
 
 // all: crowding across every 13F filer (d/h/{TICKER}.json); changes stay with the tracked funds.
@@ -135,6 +135,7 @@ export function Book() {
   const [params, setParams] = useSearchParams()
   const lens: 'all' | 'tracked' = params.get('funds') === 'tracked' ? 'tracked' : 'all'
   const setLens = (l: 'all' | 'tracked') => setParams(l === 'all' ? {} : { funds: l }, { replace: true })
+  const events = useAsync(() => (names.length ? loadEvents(names) : Promise.resolve(new Map<string, IssuerEvent[]>())), [names.join(',')])
   const agg = useAsync(() => (pro && names.length && lens === 'all' ? Promise.all(names.map((t) => loadFilerHolders(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(','), lens])
   const ready = Boolean(data.data && (lens === 'tracked' || agg.data))
   // Names that came from a linked 13F, as opposed to ones added by hand.
@@ -150,14 +151,14 @@ export function Book() {
     return qs.sort().at(-1) ?? ''
   }, [data.data])
   const rows = useMemo(() => {
-    const r = names.map((t, i) => rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, lens === 'all' ? (agg.data?.[i] ?? null) : null))
+    const r = names.map((t, i) => ({ ...rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, lens === 'all' ? (agg.data?.[i] ?? null) : null), latest: newest(data.data?.[i] ?? null, events.data?.get(t)) }))
     const dir = sort.desc ? -1 : 1
     return r.sort((a, b) => {
       const x = sortVal(a, sort.k)
       const y = sortVal(b, sort.k)
       return (x < y ? -1 : x > y ? 1 : 0) * dir || a.ticker.localeCompare(b.ticker)
     })
-  }, [names, follows.owned, data.data, agg.data, lens, season, sort])
+  }, [names, follows.owned, data.data, agg.data, events.data, lens, season, sort])
 
   // What the funds that have filed this season did in these names, largest first.
   const moves = useMemo(
@@ -367,7 +368,7 @@ export function Book() {
                                     <a href={r.latest.url} className="block max-w-[10rem] truncate text-ink-2 hover:text-accent" title={`${r.latest.line}. Open the filing on EDGAR`}>{r.latest.line}</a>
                                   </span>
                                 ) : (
-                                  <span className="text-ink-3">None since the 13Fs</span>
+                                  <span className="text-ink-3">None on file</span>
                                 )}
                               </td>
                             </>
@@ -458,6 +459,7 @@ function LiteBook({ member }: { member: Member }) {
   const names = useMemo(() => [...new Set([...follows.owned, ...follows.stocks])].filter((t) => !linkedOnly.has(t)), [follows.owned, follows.stocks, linkedOnly])
   const data = useAsync(() => (names.length ? Promise.all(names.map((t) => loadStock(t).catch(() => null))) : Promise.resolve([])), [names.join(',')])
   const season = useMemo(() => (data.data ?? []).flatMap((x) => x?.quarters ?? []).sort().at(-1) ?? '', [data.data])
+  const events = useAsync(() => (names.length ? loadEvents(names) : Promise.resolve(new Map<string, IssuerEvent[]>())), [names.join(',')])
   const rows = useMemo(
     () =>
       names
@@ -467,7 +469,6 @@ function LiteBook({ member }: { member: Member }) {
           const held = (st?.holders ?? []).filter(inLens).sort((a, b) => b.weight - a.weight)
           const split = st?.splits?.[season] ?? null
           const moves = split && !split.adjusted ? [] : [...(st?.holders ?? []), ...(st?.exited ?? [])].filter((x) => inLens(x) && x.quarter === season && x.change && x.change !== 'unchanged')
-          const ev = st?.since?.[0]
           return {
             ticker: t,
             name: st?.name ?? '',
@@ -480,11 +481,11 @@ function LiteBook({ member }: { member: Member }) {
             bought: moves.filter((x) => x.change === 'new' || x.change === 'added').length,
             sold: moves.filter((x) => x.change === 'trimmed' || x.change === 'exited').length,
             net: moves.reduce((a, x) => a + x.delta_value, 0),
-            latest: ev ? evLatest(ev) : null,
+            latest: newest(st, events.data?.get(t)),
           }
         })
         .sort((a, b) => b.held.length - a.held.length || (b.stock?.holders.length ?? 0) - (a.stock?.holders.length ?? 0) || a.ticker.localeCompare(b.ticker)),
-    [names, data.data, lens, season, follows.owned],
+    [names, data.data, events.data, lens, season, follows.owned],
   )
   const moves = rows
     .flatMap((r) => r.moves.map((x) => ({ r, x })))
@@ -540,7 +541,7 @@ function LiteBook({ member }: { member: Member }) {
                     <th className="px-3 py-2.5 text-right font-medium">{lens === 'super' ? 'Superinvestors' : 'Funds'}</th>
                     <th className="px-3 py-2.5 font-medium">Largest holders, weight in their book</th>
                     <th className="px-3 py-2.5 font-medium">{season ? quarterLabel(season) : 'This season'}</th>
-                    <th className="px-3 py-2.5 pr-5 font-medium md:pr-6">Latest fund Form 4 / 13D</th>
+                    <th className="px-3 py-2.5 pr-5 font-medium md:pr-6">Latest Form 4 / 13D</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -610,7 +611,7 @@ function LiteBook({ member }: { member: Member }) {
                                 </a>
                               </span>
                             ) : (
-                              <span className="text-ink-3">None since the 13Fs</span>
+                              <span className="text-ink-3">None on file</span>
                             )}
                           </td>
                         </tr>
@@ -677,9 +678,46 @@ function evLatest(e: StockEv): Latest {
         ? `${who}: new ${p != null ? `${p}% ` : ''}stake`
         : e.action === 'below_threshold'
           ? `${who}: below 5%`
-          : `${who}: ${e.prev_percent_of_class != null ? `${e.prev_percent_of_class}% ` : ''}→ ${p != null ? `${p}%` : 'amended'}`
+          : e.prev_percent_of_class != null && p != null
+            ? `${who}: ${e.prev_percent_of_class}% → ${p}%`
+            : `${who}${p != null ? ` → ${p}%` : ': amended'}`
   }
   return { form: e.form, date: e.filing_date, manager: who, line, url: e.url }
+}
+
+// Insider names arrive surname-first ("Jain Ajit"); people read first-last. Entities stay as filed.
+const ENTITY = /\b(inc|llc|l\.?p|corp|co|ltd|plc|trust|fund|funds|capital|management|partners|group|holdings|hathaway|advisors|bank|n\.?a|sa|ag|se)\b\.?/i
+function personName(raw: string) {
+  const name = displayName(raw)
+  const parts = name.split(/\s+/)
+  return ENTITY.test(name) || parts.length < 2 || parts.length > 4 ? name : [...parts.slice(1), parts[0]].join(' ')
+}
+const VERB: Partial<Record<IssuerEvent['action'], string>> = { buy: 'bought', sell: 'sold', mixed: 'traded', grant: 'was granted', option_exercise: 'exercised options on', tax_withholding: 'withheld for tax', gift: 'gifted', conversion: 'converted' }
+function issuerLatest(e: IssuerEvent): Latest {
+  const lead = e.filer_name.replace(/ and (\d+) others?$/i, '')
+  const more = e.filer_name.slice(lead.length)
+  const who = (e.role ? personName(lead) : displayName(lead)) + more
+  const role = e.role ? ` (${e.role.split(',')[0].trim()})` : ''
+  let line: string
+  if (/^4/.test(e.form)) {
+    const verb = VERB[e.action] ?? 'filed a Form 4 on'
+    const open = e.action === 'buy' || e.action === 'sell' || e.action === 'mixed'
+    const size = open && e.value_usd ? money(Math.abs(e.value_usd)) : e.shares ? `${sharesFmt(Math.abs(e.shares))} shares` : ''
+    const chg = e.prev_shares_after && e.shares_after != null ? e.shares_after / e.prev_shares_after - 1 : null
+    line = `${who}${role} ${verb}${size ? ` ${size}` : ''}${open && chg != null && Number.isFinite(chg) && chg !== 0 ? ` (${pctChange(chg)})` : ''}`
+  } else {
+    const p = e.percent_of_class
+    line = e.action === 'new_stake' ? `${who}: new ${p != null ? `${p}% ` : ''}stake` : `${who}${p != null ? ` → ${p}%` : ': amended'}`
+  }
+  return { form: e.form, date: e.accepted_at.slice(0, 10), manager: who, line, url: e.url }
+}
+const accNo = (s: string) => s.match(/\d{10}-?\d{2}-?\d{6}/)?.[0].replace(/-/g, '') ?? s
+/** The newest of a fund's Form 4/13D since its 13F (named as we name the fund) and the issuer's own feed. */
+function newest(stock: Stock | null, issuer: IssuerEvent[] | undefined): Latest | null {
+  const fund = (stock?.since ?? []).map((e) => ({ acc: accNo(e.url), l: evLatest(e) }))
+  const seen = new Set(fund.map((x) => x.acc))
+  const all = [...fund, ...(issuer ?? []).filter((e) => !seen.has(accNo(e.accession))).map((e) => ({ acc: accNo(e.accession), l: issuerLatest(e) }))]
+  return all.sort((a, b) => b.l.date.localeCompare(a.l.date))[0]?.l ?? null
 }
 
 const signed = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`

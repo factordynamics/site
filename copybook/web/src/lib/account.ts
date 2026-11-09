@@ -100,6 +100,39 @@ export async function upgradeTo(plan: 'pro' | 'fund') {
     await openPortal()
   }
 }
+/** An issuer's own EDGAR feed: Form 4s by its insiders and Schedule 13D/G by any filer on it. */
+export type IssuerEvent = {
+  ticker: string
+  form: string
+  filer_name: string
+  role: string | null
+  action: 'buy' | 'sell' | 'mixed' | 'grant' | 'option_exercise' | 'tax_withholding' | 'gift' | 'conversion' | 'other' | 'new_stake' | 'stake_update'
+  shares: number | null
+  price: number | null
+  value_usd: number | null
+  shares_after: number | null
+  prev_shares_after: number | null
+  percent_of_class: number | null
+  event_date: string | null
+  accepted_at: string
+  accession: string
+  url: string
+}
+/** GET /events for up to 50 tickers. A cold call lists what it couldn't load yet in `pending`; ask again for those. */
+export async function loadEvents(tickers: string[]) {
+  const out = new Map<string, IssuerEvent[]>()
+  let todo = [...new Set(tickers)]
+  for (let i = 0; todo.length && i < 4; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 1000))
+    const batches = Array.from({ length: Math.ceil(todo.length / 50) }, (_, j) => todo.slice(j * 50, j * 50 + 50))
+    const res = await Promise.all(batches.map((b) => call<{ tickers: Record<string, { events: IssuerEvent[] }>; pending?: string[] }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&limit=3`, { auth: true })))
+    const pending = new Set(res.flatMap((r) => r.pending ?? []))
+    for (const r of res) for (const [t, v] of Object.entries(r.tickers ?? {})) if (!pending.has(t) || v.events.length) out.set(t, v.events)
+    todo = todo.filter((t) => pending.has(t))
+  }
+  return out
+}
+
 export const setAlerts = (alerts: Member['alerts']) => call<{ member: Member }>('/alerts', { body: { alerts }, auth: true }).then((r) => r.member)
 /** Download an authenticated CSV route ({api}/stocks/{T}/holders.csv, {api}/follows.csv) as a file. */
 export async function downloadFile(path: string, filename: string) {
