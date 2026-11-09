@@ -1210,6 +1210,12 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' }) : orig(u, init)));
     const r = await worker.fetch(new Request('https://copybook-api.factordynamics.workers.dev/resume?t=abc', { method: 'POST' }), { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env);
     expect([r.status, r.headers.get('location')]).toEqual([308, 'https://abc-def.trycloudflare.com/copybook/resume?t=abc']);
+    // Failed over to this host (api.json names it, read again after the minute's cache): served here, no 308 to itself.
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://copybook-api.factordynamics.workers.dev' }) : orig(u, init)));
+    const later = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
+    const own = await worker.fetch(new Request('https://copybook-api.factordynamics.workers.dev/health'), { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env);
+    later.mockRestore();
+    expect([own.status, (await own.json()).ok]).toEqual([200, true]);
     vi.stubGlobal('fetch', orig);
     expect((await worker.fetch(new Request('https://api.test/health'), env)).status).not.toBe(308);
   });

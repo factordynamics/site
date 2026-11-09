@@ -984,32 +984,39 @@ export default {
     // already sent (resume, unsubscribe, why, keep), goes to the same path on the live host. 308 keeps method and body.
     // It follows the API's current public base (the runner's api.json, read at most once a minute), else MOVED_TO,
     // so this hostname is the stable one for links in email and feed readers while the self-hosted base moves.
+    // Failed over to this host (api.json names it): serve here, never a 308 to itself. MOVED_TO stays set, so this
+    // copy keeps its identity (Cloudflare, the primary poller) through a failover and back.
     if (env.MOVED_TO) {
       const u = new URL(req.url);
-      return movedBase(env).then((b) => new Response(null, { status: 308, headers: { location: `${b}${u.pathname}${u.search}`, 'access-control-allow-origin': '*', 'cache-control': 'no-store' } }));
+      return movedBase(env).then((b) => (new URL(b).origin === u.origin ? serve(req, env) : new Response(null, { status: 308, headers: { location: `${b}${u.pathname}${u.search}`, 'access-control-allow-origin': '*', 'cache-control': 'no-store' } })));
     }
-    const handled = handleRequest(req, env).catch((err) => {
-      console.log(String(err?.stack ?? err));
-      return json({ ok: false, error: 'server error' }, 500, cors(allowedOrigin(req.headers.get('origin'), env)));
-    });
-    // Every member and /v1 read answers within 3 s: past that the caller gets a 503 to retry, never a hung page.
-    // Writes (sign-in, checkout, pause: they call Stripe or the mailer) are never cut off mid-way, and downloads and
-    // whole books stream for longer.
-    const path = new URL(req.url).pathname;
-    // The operator can time a slow route past the budget (x-copybook-operator: HEALTH_TOKEN).
-    const op = !!env.HEALTH_TOKEN && req.headers.get('x-copybook-operator') === env.HEALTH_TOKEN;
-    if (op || req.method !== 'GET' || /^\/(csv\/|feed\/|v1\/bulk|v1\/filers\/[^/]+\/holdings)/.test(path)) return handled;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    // Retry-After is exposed to pages (CORS hides response headers from scripts otherwise).
-    const retry = { 'retry-after': '5', 'access-control-expose-headers': 'retry-after' };
-    const busy = () => (path === '/v1' || path.startsWith('/v1/') ? v1error('busy', 503, undefined, retry) : json({ ok: false, error: 'busy: try again in a few seconds', code: 'busy' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), ...retry }));
-    const late = new Promise<Response>((r) => (timer = setTimeout(() => r(busy()), REQUEST_MS)));
-    return Promise.race([handled, late]).finally(() => clearTimeout(timer));
+    return serve(req, env);
   },
   async scheduled(event: { scheduledTime?: number }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil(runScheduled(env, event.scheduledTime ?? Date.now()).then((r) => console.log(`cron: ${JSON.stringify(r)}`)));
   },
 };
+
+/** Every request this copy answers itself, within the read budget. */
+function serve(req: Request, env: Env): Promise<Response> {
+  const handled = handleRequest(req, env).catch((err) => {
+    console.log(String(err?.stack ?? err));
+    return json({ ok: false, error: 'server error' }, 500, cors(allowedOrigin(req.headers.get('origin'), env)));
+  });
+  // Every member and /v1 read answers within 3 s: past that the caller gets a 503 to retry, never a hung page.
+  // Writes (sign-in, checkout, pause: they call Stripe or the mailer) are never cut off mid-way, and downloads and
+  // whole books stream for longer.
+  const path = new URL(req.url).pathname;
+  // The operator can time a slow route past the budget (x-copybook-operator: HEALTH_TOKEN).
+  const op = !!env.HEALTH_TOKEN && req.headers.get('x-copybook-operator') === env.HEALTH_TOKEN;
+  if (op || req.method !== 'GET' || /^\/(csv\/|feed\/|v1\/bulk|v1\/filers\/[^/]+\/holdings)/.test(path)) return handled;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Retry-After is exposed to pages (CORS hides response headers from scripts otherwise).
+  const retry = { 'retry-after': '5', 'access-control-expose-headers': 'retry-after' };
+  const busy = () => (path === '/v1' || path.startsWith('/v1/') ? v1error('busy', 503, undefined, retry) : json({ ok: false, error: 'busy: try again in a few seconds', code: 'busy' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), ...retry }));
+  const late = new Promise<Response>((r) => (timer = setTimeout(() => r(busy()), REQUEST_MS)));
+  return Promise.race([handled, late]).finally(() => clearTimeout(timer));
+}
 
 let moved: { at: number; base: string } | null = null;
 async function movedBase(env: Env): Promise<string> {
