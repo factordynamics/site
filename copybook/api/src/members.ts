@@ -1,7 +1,8 @@
 import { holdtermLoginMail, loginMail, sendMail } from './email';
 import { isActive, type Env, type Member } from './env';
 import { stripe } from './stripe';
-import { maybeCancelMail } from './revenue';
+import { carryFreeSignup } from './free';
+import { countTransition, maybeCancelMail, maybeWinback } from './revenue';
 import { mirrorSeats } from './seats';
 import { signToken } from './tokens';
 
@@ -13,7 +14,7 @@ export async function getMember(env: Env, customer: string): Promise<Member | nu
   if (!raw) return null;
   const m = JSON.parse(raw) as Member & { plan: string };
   // Records from before Copy Pro kept the billing interval in `plan`.
-  if (m.plan !== 'copy' && m.plan !== 'pro' && m.plan !== 'fund' && m.plan !== 'holdterm') return { ...m, interval: m.plan as Member['interval'], plan: 'copy' };
+  if (m.plan !== 'copy' && m.plan !== 'pro' && m.plan !== 'fund' && m.plan !== 'holdterm' && m.plan !== 'free') return { ...m, interval: m.plan as Member['interval'], plan: 'copy' };
   return m;
 }
 
@@ -88,17 +89,21 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
   };
   // A stale event (older subscription) must not overwrite a newer active one.
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
+  // A free signup subscribing: the paid member keeps where they came from.
+  if (!prev) Object.assign(m, await carryFreeSignup(env, m), { created_at: m.created_at ?? new Date().toISOString() });
   // Checkout fires several events at once (session completed, subscription created, the return to
   // /session); only the one that claims the welcome sends it.
   if (isActive(m) && !m.welcomed && m.email && (await claim(env, customer, 'welcome', true))) {
     const token = await signToken(env.SESSION_SECRET, 'login', customer, LOGIN_TTL);
     // Only a delivered welcome counts; otherwise the claim is released and the next event retries it.
     // Holdterm's welcome comes from Holdterm, never Copybook.
-    const welcome = m.plan === 'holdterm' ? holdtermLoginMail(env, m.email, token, true) : loginMail(env, m.email, token, true);
+    const welcome = m.plan === 'holdterm' ? holdtermLoginMail(env, m.email, token, true) : loginMail(env, m.email, token, true, m);
     m.welcomed = (await sendMail(env, [welcome])) === '200';
     if (!m.welcomed) await claim(env, customer, 'welcome', false);
   }
   await maybeCancelMail(env, prev, m);
+  await maybeWinback(env, prev, m);
+  await countTransition(env, prev, m);
   await putMember(env, m);
   await mirrorSeats(env, m);
   return m;

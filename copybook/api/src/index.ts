@@ -12,7 +12,7 @@ import { isActive, isCopy, isPro, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
-import { businessSummary, handleWhy } from './revenue';
+import { businessSummary, handleKeepResume, handleWhy } from './revenue';
 import { inviteSeat, listSeats, removeSeat, seatsView } from './seats';
 import { stripe, verifyStripeSignature } from './stripe';
 import { hmacHex, signToken, verifyToken } from './tokens';
@@ -174,6 +174,20 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, ...business }, 200, h);
   }
 
+  // Free accounts: the weekly email, no card. Rate-limited per IP and email; `website` is a honeypot.
+  if (req.method === 'POST' && path === '/signup') {
+    const { handleSignup } = await import('./free');
+    const r = await handleSignup(env, await body(req), req.headers.get('cf-connecting-ip') ?? 'unknown');
+    return json(r.body, r.status, { ...h, ...(r.headers ?? {}) });
+  }
+  // The one unsubscribe link in every weekly and lifecycle email (GET confirms; POST, incl. one-click, applies).
+  if ((req.method === 'GET' || req.method === 'POST') && path === '/unsubscribe') {
+    const { handleUnsubscribe } = await import('./free');
+    return handleUnsubscribe(env, req, url);
+  }
+  // Trial-ending button (keep, yearly) and the trial-ended note's monthly restart.
+  if (req.method === 'GET' && (path === '/keep' || path === '/resume')) return handleKeepResume(env, path, url);
+
   // The one-click cancellation reason from the follow-up email (and an optional note).
   if ((req.method === 'GET' || req.method === 'POST') && path === '/why') return handleWhy(env, req, url);
 
@@ -298,7 +312,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const email = String(b.email ?? '').trim().toLowerCase();
     if (!EMAIL.test(email)) return json({ ok: false, error: 'invalid email' }, 400, h);
     const m = await memberByEmail(env, email);
-    if (isActive(m) && !(await env.DB.get(`rl:${email}`))) {
+    if (m && (m.status === 'free' || isActive(m)) && !(await env.DB.get(`rl:${email}`))) {
       await env.DB.put(`rl:${email}`, '1', { expirationTtl: 60 });
       const token = await signToken(env.SESSION_SECRET, 'login', m.customer, LOGIN_TTL);
       // A Holdterm member only ever hears from Holdterm; a sign-in started on Holdterm gets a Holdterm link.

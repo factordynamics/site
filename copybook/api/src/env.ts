@@ -68,7 +68,7 @@ export interface Member {
   email: string;
   status: string;
   /** Which product: Copy, or Copy Pro (everything in Copy plus API keys, /v1, webhooks, bulk export). */
-  plan: 'copy' | 'pro' | 'fund' | 'holdterm';
+  plan: 'copy' | 'pro' | 'fund' | 'holdterm' | 'free';
   interval: 'monthly' | 'yearly' | 'unknown';
   /** Unix seconds when a 14-day trial ends, while trialing. */
   trial_end?: number | null;
@@ -92,6 +92,19 @@ export interface Member {
   alerts_chosen?: boolean;
   /** A one-time line for the next email, e.g. "followed" after moving "all" to followed funds. */
   alerts_note?: 'followed';
+  /** Where the member came from (the signup box's placement, or utm_source), carried from a free signup onto the paid member. */
+  source?: string | null;
+  utm?: Record<string, string>;
+  /** First seen (free signup or first subscription), ISO. */
+  created_at?: string;
+  /** Unsubscribed from the weekly email and lifecycle email (alerts and receipts still come). */
+  marketing_off?: boolean;
+  /** A free signup that later subscribed: the paid member's customer id. */
+  converted_to?: string;
+  /** The trial-ended note offering monthly, sent for this subscription. */
+  winback_sent?: string;
+  /** Referral: the code that brought this member, and the referrer's customer id. */
+  referred_by?: string | null;
 }
 
 export const ACTIVE = new Set(['active', 'trialing', 'past_due']);

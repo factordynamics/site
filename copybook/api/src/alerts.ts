@@ -292,7 +292,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     const m = await scoped(env, raw, f);
     const mine = forMember(m, f, filings, events, meta);
     if (!mine.filings.length && !mine.events.length) continue;
-    await countAlerts(env, m.customer, mine.filings.length + mine.events.length);
+    await countAlerts(env, m.customer, mine.filings, mine.events, f.owned, now, !!only);
     // Chat, feed and webhook get every alert as it happens, whatever the email schedule.
     const ch = await getChannels(env, m.customer);
     if (ch.discord || ch.slack || ch.telegram) chats.push(...Object.entries(await sendChats(env, m.customer, ch, mine.filings, mine.events, f, now, posted)).map(([k, v]) => `${k} ${v}`));
@@ -1301,7 +1301,7 @@ export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reaso
 
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
 interface Job {
-  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue';
+  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly';
   at: number;
 }
 
@@ -1337,6 +1337,8 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
   if (m === 52) due.push({ name: 'watch', at: scheduledTime });
   // Trial reminders and the season recap, once a day mid-morning in New York.
   if (m === 12 && h === 15) due.push({ name: 'revenue', at: scheduledTime });
+  // The free weekly: Fridays after EDGAR's day ends (22:00 ET), 03:42 UTC Saturday.
+  if (m === 42 && h === 3 && t.getUTCDay() === 6) due.push({ name: 'weekly', at: scheduledTime });
   const rawQueue = await env.DB.get('jobs:due');
   const queue = [...(JSON.parse(rawQueue ?? '[]') as Job[]), ...due].filter((j, i, all) => all.findIndex((x) => x.name === j.name) === i);
   if (!busy && queue.length) {
@@ -1347,6 +1349,7 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
       digest: () => runDigest(env, job.at),
       watch: () => runWatchMap(env),
       revenue: () => runRevenue(env, scheduledTime),
+      weekly: () => import('./free').then((x) => x.runWeekly(env, job.at)),
     };
     await step(job.name, run[job.name]);
   }

@@ -1,6 +1,9 @@
+import type { Alert13F, AlertEvent } from './alerts';
 import { FOOTER, sendMail, type Mail } from './email';
 import { isActive, type Env, type Member } from './env';
+import { unsubscribeUrl } from './free';
 import { getFollows, getMember, listMembers, putMember } from './members';
+import { stripe } from './stripe';
 import { signToken, verifyToken } from './tokens';
 
 /**
@@ -19,11 +22,45 @@ const billable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !m.comped
 const day = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 
-/** Alerts delivered to one member (email, digest or chat), for the trial and season emails. */
-export async function countAlerts(env: Env, customer: string, n: number): Promise<void> {
+/** What one member got (email, digest or chat), for the trial and season emails: KV stats:{customer}. */
+export interface MemberStats {
+  /** Alerts delivered. */
+  n: number;
+  /** Filings covered (accessions, the latest 300). */
+  acc: string[];
+  /** Names the member owns that moved in those filings. */
+  owned: string[];
+  /** Fastest EDGAR acceptance to delivery, seconds (live alerts only, not replays or late ones). */
+  fastest: number | null;
+  fastest_what?: string;
+}
+
+export async function memberStats(env: Env, customer: string): Promise<MemberStats> {
+  const raw = await env.DB.get(`stats:${customer}`);
+  if (raw) return JSON.parse(raw) as MemberStats;
+  // Before stats:, only a count was kept.
+  return { n: Number((await env.DB.get(`sent:${customer}`)) ?? 0), acc: [], owned: [], fastest: null };
+}
+
+export async function countAlerts(env: Env, customer: string, filings: Alert13F[], events: AlertEvent[], owned: string[], now: number, replay: boolean): Promise<void> {
+  const n = filings.length + events.length;
   if (!n) return;
-  const k = `sent:${customer}`;
-  await env.DB.put(k, String(Number((await env.DB.get(k)) ?? 0) + n));
+  const s = await memberStats(env, customer);
+  s.n += n;
+  s.acc = [...new Set([...s.acc, ...filings.map((a) => a.accession), ...events.map((e) => e.id.replace(/^cluster:\d+:/, ''))])].slice(-300);
+  const mine = new Set(owned);
+  const moved = [...filings.flatMap((a) => a.tickers ?? []), ...events.flatMap((e) => [e.ticker, ...(e.subject_tickers ?? [])])].filter((t): t is string => !!t && mine.has(t));
+  s.owned = [...new Set([...s.owned, ...moved])].slice(0, 100);
+  if (!replay) {
+    for (const x of [...filings.map((a) => ({ at: a.accepted, f: a.followup, what: `${a.manager} 13F` })), ...events.map((e) => ({ at: e.accepted ?? e.accepted_at, f: e.followup || e.late, what: `${e.manager} ${e.form}${e.ticker ? ` on ${e.ticker}` : ''}` }))]) {
+      const sec = x.at && !x.f ? Math.round((now - Date.parse(x.at)) / 1000) : NaN;
+      if (sec >= 0 && (s.fastest === null || sec < s.fastest)) {
+        s.fastest = sec;
+        s.fastest_what = x.what;
+      }
+    }
+  }
+  await env.DB.put(`stats:${customer}`, JSON.stringify(s));
 }
 
 /** Alert emails handed to the mailer, per hour, for the last 48 hours (KV stats:sent). */
@@ -37,19 +74,167 @@ export async function logSent(env: Env, n: number, now: number): Promise<void> {
   await env.DB.put('stats:sent', JSON.stringify(log));
 }
 
-async function alertsSent(env: Env, customer: string): Promise<number> {
-  return Number((await env.DB.get(`sent:${customer}`)) ?? 0);
+const etDay = (t: number) => new Date(t - 5 * 3600_000).toISOString().slice(0, 10);
+export type FunnelKind = 'signups' | 'trials' | 'trial_to_paid' | 'paid_direct' | 'cancellations';
+
+/**
+ * Funnel counts by ET day (KV funnel:{day}, kept 400 days): each kind by source, and the plan mix
+ * (plan_interval) of trials and new paid members. `once` dedupes a transition that several Stripe
+ * events report (checkout completed, subscription updated) so it counts once.
+ */
+export async function bump(env: Env, kind: FunnelKind, m: Member, once?: string, now = Date.now()): Promise<void> {
+  if (once) {
+    const k = `fseen:${once}:${kind}`;
+    if (await env.DB.get(k)) return;
+    await env.DB.put(k, '1', { expirationTtl: 400 * 86400 });
+  }
+  const key = `funnel:${etDay(now)}`;
+  const d = JSON.parse((await env.DB.get(key)) ?? '{}') as Record<string, Record<string, number>>;
+  const src = m.source ?? m.utm?.utm_source ?? 'direct';
+  (d[kind] ??= {})[src] = (d[kind][src] ?? 0) + 1;
+  if (kind !== 'signups') {
+    const mix = `${kind}:${m.plan}_${m.interval}`;
+    (d.plan_mix ??= {})[mix] = (d.plan_mix[mix] ?? 0) + 1;
+  }
+  await env.DB.put(key, JSON.stringify(d), { expirationTtl: 400 * 86400 });
 }
 
-export function trialEndingMail(env: Env, m: Member, sent: number, funds: number, stocks: number): Mail {
+/** Counts the member's lifecycle step from Stripe's subscription change. Comped and test members don't count. */
+export async function countTransition(env: Env, prev: Member | null, m: Member): Promise<void> {
+  if (!billable(m)) return;
+  const was = prev?.subscription === m.subscription ? prev.status : null;
+  if (m.status === 'trialing' && was !== 'trialing') await bump(env, 'trials', m, m.subscription);
+  if (m.status === 'active' && was === 'trialing') await bump(env, 'trial_to_paid', m, m.subscription);
+  if (m.status === 'active' && was !== 'trialing' && was !== 'active' && was !== 'past_due') await bump(env, 'paid_direct', m, m.subscription);
+  const cancelled = (m.cancel_at_period_end && !(prev?.subscription === m.subscription && prev.cancel_at_period_end)) || (m.status === 'canceled' && was !== null && was !== 'canceled' && !prev?.cancel_at_period_end);
+  if (cancelled) await bump(env, 'cancellations', m, m.subscription);
+}
+
+/** The funnel for the last `days` ET days: per day, and totals by source. */
+export async function funnel(env: Env, now: number, days: number) {
+  const by_day: Record<string, Record<string, Record<string, number>>> = {};
+  const total: Record<string, Record<string, number>> = {};
+  for (let i = 0; i < days; i++) {
+    const day = etDay(now - i * 86400_000);
+    const raw = await env.DB.get(`funnel:${day}`);
+    if (!raw) continue;
+    const d = JSON.parse(raw) as Record<string, Record<string, number>>;
+    by_day[day] = d;
+    for (const [kind, xs] of Object.entries(d)) for (const [k, n] of Object.entries(xs)) (total[kind] ??= {})[k] = (total[kind][k] ?? 0) + n;
+  }
+  const sum = (kind: string) => Object.values(total[kind] ?? {}).reduce((a, n) => a + n, 0);
+  return { days, signups: sum('signups'), trials: sum('trials'), trial_to_paid: sum('trial_to_paid'), paid_direct: sum('paid_direct'), cancellations: sum('cancellations'), by_source: Object.fromEntries(Object.entries(total).filter(([k]) => k !== 'plan_mix')), plan_mix: total.plan_mix ?? {}, by_day };
+}
+
+const secs = (n: number) => (n < 120 ? `${n} seconds` : `${Math.round(n / 60)} minutes`);
+const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const FOUNDING: Record<string, string> = { pro: 'Your founding price stays at $39/month or $390/year for as long as you stay subscribed.', fund: 'Your founding price stays at $1,990/year for as long as you stay subscribed.' };
+
+/** Day 11 of 14: the member's own numbers this trial, what ends with it, and one button to keep it (yearly preselected). */
+export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: number, owned: number, keep: string, unsub: string, daysLeft = 3): Mail {
   const p = PRICES[m.plan];
-  const price = m.interval === 'yearly' ? `${money(p.year)}/year` : `${money(p.month)}/month`;
-  const got = [`${sent} alert${sent === 1 ? '' : 's'} sent to you`, `${funds} fund${funds === 1 ? '' : 's'} followed`, stocks && `${stocks} stock${stocks === 1 ? '' : 's'} on your watchlist`].filter(Boolean).join(', ');
+  const save = p.month * 12 - p.year;
+  const plural = (n: number, w: string) => `${n.toLocaleString('en-US')} ${w}${n === 1 ? '' : 's'}`;
+  const got = s.n
+    ? [
+        `Copybook sent you ${plural(s.n, 'alert')}${s.acc.length ? ` covering ${plural(s.acc.length, 'filing')}` : ''}.`,
+        s.owned.length ? `${plural(s.owned.length, 'name')} you own moved in them: ${s.owned.slice(0, 6).join(', ')}${s.owned.length > 6 ? ', …' : ''}.` : '',
+        s.fastest !== null ? `Your fastest alert reached you ${secs(s.fastest)} after EDGAR accepted the filing${s.fastest_what ? ` (${s.fastest_what})` : ''}.` : '',
+      ].filter(Boolean)
+    : [`You haven't had an alert yet. Follow a fund or add the names you own and the next filing reaches you within minutes: ${env.SITE_URL}investors/`];
+  const lose = [
+    `${[funds && `alerts for the ${plural(funds, 'fund')} you follow`, owned && `${funds ? '' : 'alerts on '}the ${plural(owned, 'name')} you own`].filter(Boolean).join(' and ') || 'filing alerts'}, minutes after each filing`,
+    '8 quarters of 13F history and CSV export',
+    'Slack, Discord, Telegram and RSS delivery',
+    ...(m.plan === 'pro' || m.plan === 'fund' ? ['your API keys, /v1 and webhooks'] : []),
+    ...(m.plan === 'fund' ? ["your team's seats, shared book and peers"] : []),
+  ];
+  const yearly = m.interval === 'yearly';
+  const cta = yearly ? `Keep ${p.name} (${money(p.year)}/year)` : `Keep ${p.name} yearly: ${money(p.year)}/year, save ${money(save)}`;
+  const charge = yearly ? `${money(p.year)}/year` : `${money(p.month)}/month`;
+  const founding = FOUNDING[m.plan] ? ` ${FOUNDING[m.plan]}` : '';
+  const ends = day(m.trial_end!);
   return {
     to: m.email,
-    subject: `Your ${p.name} trial ends ${day(m.trial_end!)}`,
-    text: `Your ${p.name} trial ends on ${day(m.trial_end!)}. After that your card is charged ${price}${m.interval === 'monthly' ? ` (or ${money(p.year)}/year if you switch to yearly)` : ''}.\n\nDuring your trial so far: ${got}.\n\nNothing to do if you'd like to keep it. To change plan or cancel before you're charged: ${env.SITE_URL}account/ (Manage billing).${FOOTER}`,
+    subject: `Your ${p.name} trial ends in ${daysLeft === 1 ? '1 day' : `${daysLeft} days`}`,
+    text: `Your ${p.name} trial ends on ${ends}.\n\nThis trial so far:\n${got.map((g) => `  ${g}`).join('\n')}\n\nIf it ends, you lose:\n${lose.map((l) => `  - ${l}`).join('\n')}\n\n${cta}: ${keep}\n${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}.\n`}${founding ? `${founding.trim()}\n` : ''}\nTo cancel before you're charged: ${env.SITE_URL}account/ (Manage billing).\n\nUnsubscribe from tips and reminders: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your ${p.name} trial ends on <b>${ends}</b>.</p><p style="margin-bottom:4px"><b>This trial so far</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p style="margin-bottom:4px"><b>If it ends, you lose</b></p><ul style="margin-top:0;padding-left:20px">${lose.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding.trim())}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}. `}To cancel before you're charged, use Manage billing in <a href="${env.SITE_URL}account/" style="color:#1d4ed8">your account</a>.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and reminders</a></p></div>`,
+    unsubscribe: unsub,
   };
+}
+
+/** The trial ended cancelled: one short note offering the monthly plan instead. */
+export function winbackMail(env: Env, m: Member, resume: string, unsub: string): Mail {
+  const p = PRICES[m.plan];
+  return {
+    to: m.email,
+    subject: `Your ${p.name} trial ended. Monthly is ${money(p.month)}`,
+    text: `Your ${p.name} trial has ended and you weren't charged.\n\nIf a year up front was the problem, ${p.name} is ${money(p.month)} a month, cancel any time, with your follows and settings as you left them:\n${resume}\n\nYour account: ${env.SITE_URL}account/\nUnsubscribe: ${unsub}${FOOTER}`,
+    unsubscribe: unsub,
+  };
+}
+
+const API = (env: Env) => env.API_URL ?? 'https://copybook-api.factordynamics.workers.dev/';
+
+/** Sends the day-14 note once per subscription when a trial runs out cancelled (not a mid-trial cancel). */
+export async function maybeWinback(env: Env, prev: Member | null, m: Member, now = Date.now()): Promise<void> {
+  if (!prev || prev.status !== 'trialing' || m.status !== 'canceled' || !billable(m) || m.marketing_off || !m.email || m.winback_sent === m.subscription) return;
+  if (!prev.trial_end || now < prev.trial_end * 1000 - 3600_000) return;
+  const resume = `${API(env)}resume?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, 30 * 86400, { s: m.plan }))}`;
+  if ((await sendMail(env, [winbackMail(env, m, resume, await unsubscribeUrl(env, m.customer))])) === '200') m.winback_sent = m.subscription;
+}
+
+/**
+ * The email buttons: GET /keep switches a trial to the yearly price on a portal confirm page (the
+ * member sees the amount first); GET /resume starts a new monthly subscription at Checkout, no trial.
+ */
+export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url: URL): Promise<Response> {
+  const go = (to: string) => Response.redirect(to, 303);
+  const account = `${env.SITE_URL}account/`;
+  const p = await verifyToken(env.SESSION_SECRET, url.searchParams.get('t') ?? '', path === '/keep' ? 'keep' : 'resume');
+  const m = p && (await getMember(env, p.c));
+  if (!m || !PRICES[m.plan]) return go(account);
+  try {
+    if (path === '/keep') {
+      if (!isActive(m) || m.interval === 'yearly') return go(account);
+      const sub = await stripe(env, 'GET', `subscriptions/${m.subscription}`);
+      const item = sub.items?.data?.[0];
+      const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': `${m.plan}_yearly`, active: true })).data?.[0];
+      if (!item?.id || !price?.id) return go(account);
+      const s = await stripe(env, 'POST', 'billing_portal/sessions', {
+        customer: m.customer,
+        configuration: env.PORTAL_CONFIGURATION || undefined,
+        return_url: account,
+        'flow_data[type]': 'subscription_update_confirm',
+        'flow_data[subscription_update_confirm][subscription]': m.subscription,
+        'flow_data[subscription_update_confirm][items][0][id]': item.id,
+        'flow_data[subscription_update_confirm][items][0][price]': price.id,
+        'flow_data[subscription_update_confirm][items][0][quantity]': 1,
+        'flow_data[after_completion][type]': 'redirect',
+        'flow_data[after_completion][redirect][return_url]': `${account}?kept=yearly`,
+      });
+      return go(s.url);
+    }
+    const plan = p!.s ?? m.plan;
+    const customer = m.customer;
+    // Already back on a plan: nothing to start.
+    if (isActive(m)) return go(account);
+    const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': `${plan}_monthly`, active: true })).data?.[0];
+    if (!price?.id) return go(`${env.SITE_URL}pricing/`);
+    const cs = await stripe(env, 'POST', 'checkout/sessions', {
+      mode: 'subscription',
+      customer,
+      'line_items[0][price]': price.id,
+      'line_items[0][quantity]': 1,
+      success_url: `${account}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${env.SITE_URL}pricing/`,
+      'metadata[copybook]': 'resume',
+    });
+    return go(cs.url);
+  } catch (e) {
+    console.log(`${path}: ${e}`);
+    return go(account);
+  }
 }
 
 export function seasonRecapMail(env: Env, m: Member, sent: number, funds: number, median: number | null, season: string): Mail {
@@ -115,7 +300,7 @@ export async function handleWhy(env: Env, req: Request, url: URL): Promise<Respo
 
 /** Daily: trial reminders 3 days out, and once per season the recap for monthly members. */
 export async function runRevenue(env: Env, now: number): Promise<Record<string, unknown>> {
-  const members = (await listMembers(env)).filter((m) => billable(m) && isActive(m) && m.email);
+  const members = (await listMembers(env)).filter((m) => billable(m) && isActive(m) && m.email && !m.marketing_off);
   const mails: Mail[] = [];
   const marks: Member[] = [];
   // The season recap goes out after the 13F deadline week (Q3 2026: from Nov 18).
@@ -130,11 +315,12 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
     const left = (m.trial_end ?? 0) * 1000 - now;
     if (m.status === 'trialing' && left > 0 && left <= 3 * 86400_000 && m.trial_reminded !== m.trial_end) {
       const f = await getFollows(env, m);
-      mails.push(trialEndingMail(env, m, await alertsSent(env, m.customer), f.investors.length, f.stocks.length));
+      const keep = `${API(env)}keep?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'keep', m.customer, 14 * 86400))}`;
+      mails.push(trialEndingMail(env, m, await memberStats(env, m.customer), f.investors.length, f.owned.length, keep, await unsubscribeUrl(env, m.customer), Math.max(1, Math.ceil(left / 86400_000))));
       marks.push({ ...m, trial_reminded: m.trial_end });
-    } else if (recap && m.status === 'active' && m.interval === 'monthly' && m.recap_sent !== recap) {
+    } else if (recap && m.status === 'active' && m.interval === 'monthly' && m.recap_sent !== recap && !m.marketing_off) {
       const f = await getFollows(env, m);
-      mails.push(seasonRecapMail(env, m, await alertsSent(env, m.customer), f.investors.length, median, recap));
+      mails.push({ ...seasonRecapMail(env, m, (await memberStats(env, m.customer)).n, f.investors.length, median, recap), unsubscribe: await unsubscribeUrl(env, m.customer) });
       marks.push({ ...m, recap_sent: recap });
     }
   }
@@ -193,5 +379,7 @@ export async function businessSummary(env: Env, now: number) {
     comped,
     cancel_reasons: reasons,
     alert_emails_24h: sent,
+    funnel_7d: await funnel(env, now, 7).then(({ by_day: _, ...f }) => f),
+    funnel_30d: await funnel(env, now, 30),
   };
 }

@@ -14,6 +14,8 @@ export interface Mail {
   from?: string;
   /** Where replies go, when not CONTACT_EMAIL (a request notice replies to the requester). */
   replyTo?: string;
+  /** Marketing and lifecycle email: the one-click unsubscribe URL (List-Unsubscribe). */
+  unsubscribe?: string;
 }
 
 /** Sends through Resend's batch API (100 per request). Returns a short status for logs. */
@@ -25,7 +27,7 @@ export async function sendMail(env: Env, mails: Mail[]): Promise<string> {
   }
   const statuses: string[] = [];
   for (let i = 0; i < mails.length; i += 100) {
-    const batch = mails.slice(i, i + 100).map((m) => ({ from: m.from ?? env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...((m.replyTo ?? env.CONTACT_EMAIL) ? { reply_to: m.replyTo ?? env.CONTACT_EMAIL } : {}), ...(m.html ? { html: m.html } : {}) }));
+    const batch = mails.slice(i, i + 100).map((m) => ({ from: m.from ?? env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...((m.replyTo ?? env.CONTACT_EMAIL) ? { reply_to: m.replyTo ?? env.CONTACT_EMAIL } : {}), ...(m.html ? { html: m.html } : {}), ...(m.unsubscribe ? { headers: { 'List-Unsubscribe': `<${m.unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}) }));
     const res = await fetch('https://api.resend.com/emails/batch', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -95,16 +97,21 @@ export function channelFailMail(env: Env, to: string, label: string, reason: str
   };
 }
 
-export function loginMail(env: Env, to: string, token: string, welcome: boolean): Mail {
+export function loginMail(env: Env, to: string, token: string, welcome: boolean, m?: Member): Mail {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
-  const intro = welcome
-    ? 'Thanks for subscribing to Copy. Your plan includes 8 quarters of 13F history (every position each quarter), CSV export, and email alerts: a manager you follow files a 13F and you get its new, added, trimmed and exited positions, usually within minutes, plus their Form 4 and Schedule 13D filings between quarters. Alerts start once you follow funds or add stocks you own on Copybook; you can switch to every curated fund in alert settings.'
-    : 'Here is your Copybook sign-in link.';
-  return {
-    to,
-    subject: welcome ? 'Welcome to Copybook Copy' : 'Your Copybook sign-in link',
-    text: `${intro}\n\nSign in (link works for 7 days):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}`,
-  };
+  if (!welcome) {
+    return { to, subject: 'Your Copybook sign-in link', text: `Here is your Copybook sign-in link.\n\nSign in (link works for 7 days):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}` };
+  }
+  const name = m?.plan === 'pro' ? 'Copy Pro' : m?.plan === 'fund' ? 'Copy Fund' : 'Copy';
+  const trial = m?.trial_end ? ` Your free trial runs until ${new Date(m.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}; cancel before then from your account and you're not charged.` : '';
+  const steps: [string, string, string][] = [
+    ['Follow the funds you care about', 'Each 13F, Form 4 and 13D they file reaches you minutes after EDGAR accepts it.', `${env.SITE_URL}investors/`],
+    ['Add the names you own', "Paste tickers or a CSV in My book: any superinvestor's move in them is flagged [you own].", `${env.SITE_URL}my-book/`],
+    ['Connect a channel', 'Slack, Discord, Telegram or a private RSS feed, next to email. Under Alerts in your account.', `${env.SITE_URL}account/`],
+  ];
+  const text = `Welcome to ${name}.${trial}\n\nFirst, sign in (link works for 7 days):\n${link}\n\nThen three steps, two minutes:\n${steps.map(([t, d, u], i) => `${i + 1}. ${t}: ${u}\n   ${d}`).join('\n')}\n\nYour plan also includes 8 quarters of 13F history and CSV export on every investor page.${FOOTER}`;
+  const html = `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Welcome to ${name}.${esc(trial)}</p><p><a href="${link}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600">Sign in to Copybook</a></p><p>Then three steps, two minutes:</p><ol style="padding-left:20px">${steps.map(([t, d, u]) => `<li style="margin:0 0 10px"><a href="${u}" style="color:#1d4ed8;font-weight:600">${t}</a><br><span style="color:#374151">${esc(d)}</span></li>`).join('')}</ol><p style="color:#374151">Your plan also includes 8 quarters of 13F history and CSV export on every investor page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.</p></div>`;
+  return { to, subject: `Welcome to ${name}: three steps to your first alert`, text, html };
 }
 
 /** A Copy Fund seat invitation, with the seat's own sign-in link. */

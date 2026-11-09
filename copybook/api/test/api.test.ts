@@ -626,6 +626,85 @@ describe('copybook api', () => {
     expect(sent[0].subject).toMatch(/^Copybook daily digest for \d{4}-\d{2}-\d{2}: 1 Form 4\/13D\/G$/);
   });
 
+  it('free signup: no card, a weekly of the top moves with card links and one unsubscribe, never alerts; source carried to the trial; trial emails and funnel counts', async () => {
+    const signup = (b: Record<string, unknown>, ip = '1.1.1.1') => handleRequest(new Request('https://api.test/signup', { method: 'POST', body: JSON.stringify(b), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': ip } }), env);
+    expect((await signup({ email: 'nope' })).status).toBe(400);
+    expect(await (await signup({ email: 'bot@reader.test', website: 'http://spam' })).json()).toEqual({ ok: true });
+    expect(await env.DB.get('email:bot@reader.test')).toBeNull();
+    const r = await signup({ email: 'Reader@Reader.test', source: 'home', utm_campaign: 'q3' });
+    expect(r.status).toBe(201);
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['reader@reader.test', "You're on the Copybook weekly"]]);
+    const s = await (await call('/session', { body: { login: loginTokenFrom(sent[0].text) } })).json();
+    expect(s.member).toMatchObject({ plan: 'free', active: false });
+    expect((await call('/history/warren-buffett', { token: s.token })).status).toBe(402);
+    // 3 an hour per address: a repeat sends the sign-in link again, the 4th is refused.
+    await signup({ email: 'reader@reader.test' }, '2.2.2.2');
+    await signup({ email: 'reader@reader.test' }, '3.3.3.3');
+    expect((await signup({ email: 'reader@reader.test' }, '4.4.4.4')).status).toBe(429);
+    await putMember('paid', 'paid@reader.test', 'active', 'all'); // paying members never get the weekly
+
+    // Friday evening ET (03:42 UTC Saturday): the week's biggest buys and sells, 13F rows link the card when there is one.
+    sent = [];
+    const row = (ticker: string, value_delta: number, extra = {}) => ({ ticker, display_name: ticker, issuer: ticker, cusip: 'x', put_call: null, shares: 1, prev_shares: 0, value: Math.abs(value_delta), value_delta, delta_pct_of_book: null, ...extra });
+    const store = JSON.stringify({
+      filings: [{ slug: 'warren-buffett', slugs: ['warren-buffett'], manager: 'Warren Buffett', name: 'Berkshire', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-12', accession: '0000950123-26-011111', sec_url: 'x', tickers: [], moves: { bought_usd: 0, sold_usd: 0, new: [row('DHI', 2e9)], added: [row('GOOGL', 8.8e9), row('PUTX', 9e9, { put_call: 'Put' })], trimmed: [row('BAC', -1.7e9)], exited: [row('STZ', -1e9)] } }],
+      events: [{ id: 'f4', slug: 'bill-ackman', manager: 'Bill Ackman', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', url: 'u', issuer: 'X', display_name: 'X', ticker: 'HHH', shares: 1, value_usd: 5e7, avg_price: 1, shares_after: 1, percent_of_class: null }],
+    });
+    await env.DB.put('digest:2026-11-12', store);
+    const sat = Date.UTC(2026, 10, 14, 3, 42);
+    await cron(42, sat);
+    expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
+    const w = sent[0];
+    expect(w.subject).toBe('The week in superinvestor filings: Warren Buffett added GOOGL');
+    expect(w.text).toContain(`Warren Buffett: added GOOGL, +$8.8B (13F Q3 2026)\n    ${SITE}f/0000950123-26-011111/`);
+    expect(w.text).toContain(`Bill Ackman: bought HHH, +$50.0M (Form 4)\n    ${SITE}investors/bill-ackman/`);
+    expect(w.text.indexOf('BAC')).toBeLessThan(w.text.indexOf('STZ'));
+    expect(w.text).not.toContain('PUTX');
+    const unsub = w.text.match(/Unsubscribe: (\S+)/)![1];
+    expect((w as unknown as { headers: Record<string, string> }).headers['List-Unsubscribe']).toBe(`<${unsub}>`);
+    sent = [];
+    await cron(42, sat + 1000);
+    expect(sent).toHaveLength(0); // once a week
+    const u = unsub.replace('https://copybook-api.factordynamics.workers.dev/', 'https://api.test/');
+    expect(await (await handleRequest(new Request(u), env)).text()).toContain('Unsubscribe reader@reader.test from the Copybook weekly?');
+    await handleRequest(new Request(u, { method: 'POST' }), env);
+    await env.DB.put('digest:2026-11-19', store);
+    await cron(42, sat + 7 * 86400_000);
+    expect(sent).toHaveLength(0);
+
+    // The reader starts a trial: the paid member keeps the source, gets the three-step welcome; the funnel counts each step once.
+    stripeObjects['checkout/sessions/cs_test_rd'] = { id: 'cs_test_rd', status: 'complete', created: now(), subscription: 'sub_rd', customer_details: { email: 'reader@reader.test' } };
+    stripeObjects['subscriptions/sub_rd'] = { ...sub('sub_rd', 'cus_rd', 'trialing'), trial_end: now() + 14 * 86400 };
+    await call('/session', { body: { checkout_session: 'cs_test_rd' } });
+    await webhook({ type: 'customer.subscription.created', data: { object: stripeObjects['subscriptions/sub_rd'] } });
+    expect(JSON.parse((await env.DB.get('cus:cus_rd'))!)).toMatchObject({ source: 'home', utm: { utm_campaign: 'q3' }, plan: 'copy' });
+    expect(sent.map((m) => m.subject)).toEqual(['Welcome to Copy: three steps to your first alert']);
+    expect(sent[0].text).toContain(`${SITE}my-book/`);
+    await webhook({ type: 'customer.subscription.updated', data: { object: sub('sub_rd', 'cus_rd', 'active') } });
+    await webhook({ type: 'customer.subscription.updated', data: { object: sub('sub_rd', 'cus_rd', 'active') } });
+    const f = (await (await privateHealth()).json()).business.funnel_7d;
+    expect(f).toMatchObject({ signups: 1, trials: 1, trial_to_paid: 1, cancellations: 0, by_source: { signups: { home: 1 }, trials: { home: 1 } }, plan_mix: { 'trials:copy_monthly': 1, 'trial_to_paid:copy_monthly': 1 } });
+
+    // A trial that runs out cancelled: one short note offering monthly, whose link opens a monthly Checkout.
+    sent = [];
+    await env.DB.put('cus:wb', JSON.stringify({ customer: 'wb', email: 'wb@reader.test', status: 'trialing', plan: 'copy', interval: 'yearly', trial_end: now() - 60, period_end: 0, subscription: 'sub_wb', alerts: [], welcomed: true, cancel_at_period_end: true }));
+    await webhook({ type: 'customer.subscription.deleted', data: { object: sub('sub_wb', 'wb', 'canceled', 'year') } });
+    await webhook({ type: 'customer.subscription.deleted', data: { object: sub('sub_wb', 'wb', 'canceled', 'year') } });
+    expect(sent.map((m) => m.subject)).toEqual(['Your Copy trial ended. Monthly is $9']);
+    let checkout = '';
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (x: string, init?: RequestInit) => {
+      if (String(x).startsWith('https://api.stripe.com/v1/prices?')) return Response.json({ data: [{ id: `price_${new URL(String(x)).searchParams.get('lookup_keys[]')}` }] });
+      if (String(x) === 'https://api.stripe.com/v1/checkout/sessions') return (checkout = decodeURIComponent(String(init?.body))), Response.json({ url: 'https://checkout.stripe.com/c/pay/cs_x' });
+      return orig(x, init);
+    });
+    const resume = sent[0].text.match(/(https:\/\/copybook-api\S+\/resume\?t=\S+)/)![1].replace('https://copybook-api.factordynamics.workers.dev/', 'https://api.test/');
+    const go = await handleRequest(new Request(resume), env);
+    expect(go.headers.get('location')).toBe('https://checkout.stripe.com/c/pay/cs_x');
+    expect(checkout).toContain('customer=wb');
+    expect(checkout).toContain('line_items[0][price]=price_copy_monthly');
+  });
+
   it("GET /events: a ticker's own insiders' Form 4s and anyone's 13D/G, parsed once; the issuer's own Form 4s on other companies are left out", async () => {
     await hist.put('pre/sec-tickers.json', '{"BRK.A":"0001067983","BRK.B":"0001067983","CVI":"0001376139","SIRI":"0000908937"}');
     const entry = (form: string, a: string, at: string) => `<entry><category term="${form}"/><id>urn:tag:sec.gov,2008:accession-number=${a}</id><updated>${at}</updated></entry>`;
@@ -1828,8 +1907,8 @@ describe('copybook api', () => {
     const at = Date.UTC(2026, 10, 10, 15, 12);
     const trialEnd = Math.floor(at / 1000) + 2.5 * 86400;
     await put('trial', { status: 'trialing', trial_end: trialEnd });
-    await putFollows('trial', { investors: ['warren-buffett', 'bill-ackman'], stocks: ['AAPL'] });
-    await env.DB.put('sent:trial', '7');
+    await putFollows('trial', { investors: ['warren-buffett', 'bill-ackman'], stocks: ['AAPL'], owned: ['NVDA', 'DHI'] });
+    await env.DB.put('stats:trial', JSON.stringify({ n: 7, acc: ['a1', 'a2', 'a3', 'a4', 'a5'], owned: ['DHI'], fastest: 48, fastest_what: 'Warren Buffett 13F' }));
     await put('later', { status: 'trialing', trial_end: trialEnd + 2 * 86400 }); // 4.5 days out: not yet
     await put('ht', { status: 'trialing', trial_end: trialEnd, plan: 'holdterm' }); // Holdterm: never a Copybook email
     await put('seat_x', { status: 'trialing', trial_end: trialEnd, plan: 'fund', seat_of: 'cus_owner' }); // seats don't pay
@@ -1839,15 +1918,39 @@ describe('copybook api', () => {
 
     await cron(12, at);
     expect(sent.map((m) => m.to[0])).toEqual(['trial@example.com']);
-    expect(sent[0].subject).toBe('Your Copy trial ends November 12');
-    expect(sent[0].text).toContain('charged $9/month (or $79/year if you switch to yearly)');
-    expect(sent[0].text).toContain('During your trial so far: 7 alerts sent to you, 2 funds followed, 1 stock on your watchlist.');
+    // Day 11 of 14: their own numbers, what ends, one button to keep it on yearly.
+    expect(sent[0].subject).toBe('Your Copy trial ends in 3 days');
+    expect(sent[0].text).toContain('Copybook sent you 7 alerts covering 5 filings.');
+    expect(sent[0].text).toContain('1 name you own moved in them: DHI.');
+    expect(sent[0].text).toContain('Your fastest alert reached you 48 seconds after EDGAR accepted the filing (Warren Buffett 13F).');
+    expect(sent[0].text).toContain('alerts for the 2 funds you follow and the 2 names you own');
+    const keep = sent[0].text.match(/Keep Copy yearly: \$79\/year, save \$29: (\S+)/)![1];
+    expect(sent[0].text).toContain('Or stay monthly at $9/month');
+    expect(sent[0].html).toContain(`href="${keep}"`);
+    expect(sent[0].text).not.toContain('founding'); // Copy has no founding price
+    // One unsubscribe, also as the List-Unsubscribe header.
+    const unsub = sent[0].text.match(/Unsubscribe from tips and reminders: (\S+)/)![1];
+    expect((sent[0] as unknown as { headers: Record<string, string> }).headers['List-Unsubscribe']).toBe(`<${unsub}>`);
+    // The button opens a portal page that swaps the trial's item to the yearly price.
+    let portal = '';
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u).startsWith('https://api.stripe.com/v1/prices?')) return Response.json({ data: [{ id: `price_${new URL(String(u)).searchParams.get('lookup_keys[]')}` }] });
+      if (String(u).includes('billing_portal/sessions')) portal = decodeURIComponent(String(init?.body));
+      return orig(u, init);
+    });
+    stripeObjects['subscriptions/sub_trial'] = { ...sub('sub_trial', 'trial', 'trialing'), items: { data: [{ id: 'si_trial', price: { lookup_key: 'copy_monthly', recurring: { interval: 'month' } } }] } };
+    const kept = await handleRequest(new Request(keep.replace('https://copybook-api.factordynamics.workers.dev/', 'https://api.test/')), env);
+    expect(kept.status).toBe(303);
+    expect(portal).toContain('[items][0][id]=si_trial');
+    expect(portal).toContain('[items][0][price]=price_copy_yearly');
+    vi.stubGlobal('fetch', orig);
     sent = [];
     await cron(12, at + 86400_000);
     expect(sent).toHaveLength(0); // once per trial
 
     // After filing week: monthly payers get the recap with the yearly price; yearly and Holdterm don't.
-    await env.DB.put('sent:promo', '41');
+    await env.DB.put('sent:promo', '41'); // a count from before stats: still reads
     await env.DB.put('alerts:latency', JSON.stringify([{ seconds: 50, sent: '2026-11-14T21:00:00Z' }, { seconds: 70, sent: '2026-11-14T21:01:00Z' }, { seconds: 90, sent: '2026-11-14T21:02:00Z' }, { seconds: 4000, sent: '2026-11-14T21:03:00Z', replay: true }]));
     await cron(12, Date.UTC(2026, 10, 18, 15, 12));
     expect(sent.map((m) => m.to[0])).toEqual(['promo@example.com']);
