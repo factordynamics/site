@@ -970,7 +970,9 @@ export default {
     // Writes (sign-in, checkout, pause: they call Stripe or the mailer) are never cut off mid-way, and downloads and
     // whole books stream for longer.
     const path = new URL(req.url).pathname;
-    if (req.method !== 'GET' || /^\/(csv\/|feed\/|v1\/bulk|v1\/filers\/[^/]+\/holdings)/.test(path)) return handled;
+    // The operator can time a slow route past the budget (x-copybook-operator: HEALTH_TOKEN).
+    const op = !!env.HEALTH_TOKEN && req.headers.get('x-copybook-operator') === env.HEALTH_TOKEN;
+    if (op || req.method !== 'GET' || /^\/(csv\/|feed\/|v1\/bulk|v1\/filers\/[^/]+\/holdings)/.test(path)) return handled;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const busy = () => (path === '/v1' || path.startsWith('/v1/') ? v1error('busy', 503, undefined, { 'retry-after': '5' }) : json({ ok: false, error: 'busy: try again in a few seconds', code: 'busy' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': '5' }));
     const late = new Promise<Response>((r) => (timer = setTimeout(() => r(busy()), REQUEST_MS)));

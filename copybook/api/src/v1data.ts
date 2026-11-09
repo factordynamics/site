@@ -501,7 +501,9 @@ async function filerTypes(env: Env): Promise<Map<string, string>> {
  * the data run), else the older single-period s/{issuer6}.json. Largest first. Curated funds' rows carry
  * their 13F's accession and EDGAR acceptance when cached; weight comes from the row, else a curated fund's total.
  */
-export async function holdersOf(env: Env, code: string): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; rows: HolderRow[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
+export async function holdersOf(env: Env, code: string, timing: string[] = []): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; rows: HolderRow[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
+  let t = Date.now();
+  const mark = (name: string) => (timing.push(`${name};dur=${Date.now() - t}`), (t = Date.now()));
   const hl = await env.HIST.get(`hl/${code}.json`);
   const obj = hl ?? (await env.HIST.get(`s/${code}.json`));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -513,8 +515,11 @@ export async function holdersOf(env: Env, code: string): Promise<{ issuer: strin
     if (!res.ok) return null;
     d = await res.json();
   }
+  mark('read');
   const cur = new Map((await filers(env)).map((f) => [f.cik, f]));
+  mark('filers');
   const types = await filerTypes(env);
+  mark('types');
   const rows = rowsOf({ columns: d.columns, rows: d.rows ?? d.holders ?? [] }).map((h): HolderRow => {
     const cik = pad(String(h.cik));
     const c = cur.get(cik);
@@ -542,6 +547,7 @@ export async function holdersOf(env: Env, code: string): Promise<{ issuer: strin
   const metas = await Promise.all(accs.map(async (a) => [a, (JSON.parse((await env.DB.get(`filing:${a}`)) ?? 'null') as FilingMeta | null)?.accepted_at ?? null] as const));
   const at = new Map(metas);
   for (const r of rows) if (r.accession && !r.accepted_at) r.accepted_at = noMs(at.get(r.accession) ?? null);
+  mark('rows');
   rows.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0));
   return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, rows, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj), source: obj ? (hl ? 'hl' : 's') : 'public' };
 }
@@ -627,15 +633,17 @@ ROUTES.push(
     if ((quarter && !QUARTER.test(quarter)) || !keep || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0) {
       return v1error('bad_request', 400, `quarter like 2026Q2; type: ${FILER_TYPES.join(', ')} (comma-separated); cohort: all or curated; current_only: true or false; limit 1-1000; offset from 0.`);
     }
+    const t0 = Date.now();
     const is = await issuerCode(env, decodeURIComponent(id));
     if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
-    const h = await holdersOf(env, is.code);
+    const timing = [`issuer;dur=${Date.now() - t0}`];
+    const h = await holdersOf(env, is.code, timing);
     if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
     // Each filer's latest full book: periods differ by filer (a fund that filed its Q3 13F shows Q3).
     const rows = h.rows.filter((r) => keep(r) && (!quarter || r.period === quarter));
     const sp = splitHolders(rows, p.get('include_options') === 'true');
     const data = { issuer: h.issuer, ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited };
-    return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null });
+    return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { 'server-timing': timing.join(', ') });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, url }) => {
     // Persistent per-quarter exports of every filer's book, uploaded by the data run.
