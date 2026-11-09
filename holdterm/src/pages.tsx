@@ -200,7 +200,7 @@ function ActionTag({ e }: { e: Event }) {
 }
 const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => [
   { key: 'filed', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, sort: (e) => e.filing_date, width: '84px' },
-  { key: 'form', label: 'form', hideSm: true, render: (e) => <span className="form">{e.kind === 'form4' ? 'F4' : e.kind.toUpperCase()}</span>, sort: (e) => e.kind },
+  { key: 'form', label: 'form', hideSm: true, render: (e) => <span className="form">{FORM[e.kind]}</span>, sort: (e) => e.kind },
   ...(withWho ? [{ key: 'who', label: 'filer', render: (e: Event) => <FundLink slug={e.slug} name={<Firm name={firmOf(firms, e.slug, e.manager)} />} />, sort: (e: Event) => e.manager } as Col<Event>] : []),
   {
     key: 'iss',
@@ -290,9 +290,9 @@ function Upsell() {
   )
 }
 
-/** Phones have room above the filings for one promo per visit: the guide on a first visit, the alerts offer
- * after that (or whichever is still open). Chosen once per visit, so dismissing one never reveals the other. */
-function phonePromo(): 'guide' | 'upsell' | '' {
+/** One promo above the filings per visit: the guide on a first visit, the alerts offer after that (or whichever
+ * is still open). Chosen once per visit, so dismissing one never reveals the other. */
+function pickPromo(): 'guide' | 'upsell' | '' {
   try {
     let first = sessionStorage.getItem('holdterm-first-visit')
     if (first == null) {
@@ -314,7 +314,7 @@ function phonePromo(): 'guide' | 'upsell' | '' {
   }
 }
 export function Home() {
-  const [promo] = useState(phonePromo)
+  const [promo] = useState(pickPromo)
   return (
     <div className={promo ? `promo-${promo}` : undefined}>
       <Upsell />
@@ -1219,7 +1219,8 @@ export function Stock({ ticker }: { ticker: string }) {
   const topHolder = [...holders].sort((a, b) => b.weight - a.weight)[0]
   const movers = [...holders, ...exited].filter((h) => h.change && h.change !== 'unchanged').sort((a, b) => Math.abs(b.delta_value ?? 0) - Math.abs(a.delta_value ?? 0))
   const tickers = new Set(d.classes.map((c) => c.ticker))
-  const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && !ownVehicle(e))
+  // Filings by the investors Holdterm follows, as on /filings.
+  const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && inRoster(e.slug) && !ownVehicle(e))
   const holderCols: Col<StockHolder>[] = [
     { key: 'm', label: 'fund', link: true, render: (h) => <Firm name={name(h)} strong={inRoster(h.slug)} />, sort: (h) => name(h) },
     { key: 'w', label: '% of book', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight },
@@ -1233,14 +1234,23 @@ export function Stock({ ticker }: { ticker: string }) {
     <div className="page">
       <div className="head">
         <div>
-          <h1>
-            <span className="tkh">{[...new Set(d.classes.map((c) => c.ticker))].join('+')}</span> {issuerName(d.name)}
-          </h1>
+          <h1>{issuerName(d.name)}</h1>
+          <div className="chips">
+            {[...new Set(d.classes.map((c) => c.ticker))].map((t) => (
+              <span key={t} className="ticker-chip">
+                {t}
+              </span>
+            ))}
+            <span className="sector-chip">
+              <Sector s={d.sector} full />
+            </span>
+          </div>
+          <p className="activity-line">{ev.data ? <ActivityLine events={events} days={ev.data.window_days} name={(e) => firmOf(firms, e.slug, e.manager)} open={() => (setTab('filings'), document.querySelector('.tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))} /> : '\u00a0'}</p>
           <div className="meta">
-            <Sector s={d.sector} full />
             {d.classes.map((c) => (
               <span key={c.cusip}>
-                {c.ticker} CUSIP {c.cusip}
+                CUSIP {c.cusip}
+                {d.classes.length > 1 ? ` (${c.ticker})` : ''}
               </span>
             ))}
           </div>
@@ -1250,13 +1260,17 @@ export function Stock({ ticker }: { ticker: string }) {
       <p className="summary">
         {holders.length ? (
           <>
-            {num(holders.length)} of the investors Holdterm follows {holders.length === 1 ? 'owns' : 'own'} {issuerName(d.name)}, {usd(value)} in all, in their latest 13Fs.{' '}
-            {topHolder && (
+            {holders.length === 1 ? (
               <>
-                {name(topHolder)} has the most of its portfolio in it, {pct(topHolder.weight, 1)}.{' '}
+                {name(topHolder)} is the only investor Holdterm follows that owns {issuerName(d.name)}: {usd(value)}, or {pct(topHolder.weight, 1)} of its portfolio, in its latest 13F.{' '}
+              </>
+            ) : (
+              <>
+                {num(holders.length)} of the investors Holdterm follows own {issuerName(d.name)}, {usd(value)} in all, in their latest 13Fs. {name(topHolder)} has the most of its portfolio in it, {pct(topHolder.weight, 1)}.{' '}
               </>
             )}
-            {movers.length > 0 && <>Last quarter {listing([nNew > 0 && `${plural(nNew, 'investor')} started a position`, cnt('added') > 0 && `${num(cnt('added'))} added`, cnt('trimmed') > 0 && `${num(cnt('trimmed'))} trimmed`, exited.length > 0 && `${num(exited.length)} sold out`])}.</>}
+            {movers.length === 1 && <>Over the last quarter, {name(movers[0])} {({ new: 'opened a position', added: 'added to its position', trimmed: 'trimmed its position', exited: 'sold out' } as Record<string, string>)[movers[0].change ?? ''] ?? 'changed its position'}.</>}
+            {movers.length > 1 && <>Over the last quarter, {listing([nNew > 0 && `${plural(nNew, 'investor')} started a position`, cnt('added') > 0 && `${num(cnt('added'))} added`, cnt('trimmed') > 0 && `${num(cnt('trimmed'))} trimmed`, exited.length > 0 && `${num(exited.length)} sold out`])}.</>}
           </>
         ) : (
           <>None of the investors Holdterm follows reports {issuerName(d.name)} in its latest 13F.</>
@@ -1305,6 +1319,37 @@ export function Stock({ ticker }: { ticker: string }) {
         {tab === 'filings' && <Grid rows={events} cols={eventCols(firms)} empty="no Form 4 or 13D/G by tracked funds in the last 30 days" />}
       </Panel>
     </div>
+  )
+}
+
+const FORM: Record<Event['kind'], string> = { '13d': '13D', '13g': '13G', form4: 'Form 4' }
+/** The newest 13D/G or Form 4 on a stock in one sentence, with a count of the rest. */
+function ActivityLine({ events, days, name, open }: { events: Event[]; days: number; name: (e: Event) => string; open: () => void }) {
+  const e = events[0]
+  if (!e) return <span className="dim">No 13D, 13G or Form 4 filings by these investors in the last {days} days.</span>
+  const p = e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 1 : 0)}%` : null
+  const what: Record<string, string> = {
+    new_stake: p ? `new stake of ${p}` : 'new stake above 5%',
+    stake_update: p ? `stake now ${p}` : 'stake updated',
+    below_threshold: 'stake now below 5%',
+    buy: e.value_usd ? `bought ${usd(e.value_usd)} on the open market` : 'bought on the open market',
+    sell: e.value_usd ? `sold ${usd(e.value_usd)} on the open market` : 'sold on the open market',
+    mixed: 'bought and sold on the open market',
+    other: 'no open-market trade',
+  }
+  return (
+    <>
+      <span className={`dot-live ${e.action === 'sell' || e.action === 'below_threshold' ? 'neg' : e.action === 'buy' || e.action === 'new_stake' ? 'pos' : ''}`} aria-hidden />
+      Latest filing: <strong>{shortFirm(name(e))}</strong>, {FORM[e.kind]} on {day(e.filing_date)}: {what[e.action] ?? 'filed'}.
+      {events.length > 1 && (
+        <>
+          {' '}
+          <button type="button" className="linkbtn" onClick={open}>
+            {plural(events.length - 1, 'more filing')} in the last {days} days
+          </button>
+        </>
+      )}
+    </>
   )
 }
 
