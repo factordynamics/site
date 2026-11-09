@@ -55,7 +55,7 @@ async function couponFor(env: Env, plan: string): Promise<string> {
   try {
     await stripe(env, 'GET', `coupons/${id}`);
   } catch {
-    await stripe(env, 'POST', 'coupons', { id, amount_off: MONTH[plan], currency: 'usd', duration: 'once', name: `Referral: one month of ${NAME[plan]} ($${MONTH[plan] / 100}) off`, 'metadata[copybook]': 'referral' }).catch(() => null);
+    await stripe(env, 'POST', 'coupons', { id, amount_off: MONTH[plan], currency: 'usd', duration: 'once', name: `Referral: ${NAME[plan]} 1 month off ($${MONTH[plan] / 100})`, 'metadata[copybook]': 'referral' }).catch(() => null);
   }
   return id;
 }
