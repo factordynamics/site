@@ -18,7 +18,7 @@ import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
 import { ApiStatus, Updating } from '../components/ApiStatus'
-import { ApiError, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { ApiError, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
@@ -685,6 +685,36 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
   const [busy, setBusy] = useState<'pause' | 'cancel' | null>(null)
   const [err, setErr] = useState('')
   const offer = member.pause_offer
+  // Trialing monthly members: the pause starts when the trial ends, so nothing is charged until it's over.
+  const afterTrial = Boolean(offer?.starts && Date.parse(String(offer.starts)) > Date.now())
+  const scheduled = member.pause_after_trial
+  if (scheduled)
+    return (
+      <div className="mt-4 rounded-xl bg-paper p-4 text-[13.5px] leading-relaxed text-ink-2 shadow-[0_0_0_1px_var(--color-line)]">
+        <p>
+          Pause scheduled: everything stays on until your trial ends on {dayLabel(scheduled.from)}, then nothing is charged until {dayLabel(scheduled.until)}, when real-time alerts resume.
+        </p>
+        <button
+          type="button"
+          disabled={busy !== null}
+          onClick={async () => {
+            setBusy('pause')
+            setErr('')
+            try {
+              await resumePlan()
+              onChange(await fetchMe())
+            } catch {
+              setErr('That didn’t go through. Please try again.')
+            }
+            setBusy(null)
+          }}
+          className="mt-2 min-h-9 font-medium text-accent hover:text-accent-2"
+        >
+          {busy === 'pause' ? 'Cancelling…' : 'Cancel the scheduled pause'}
+        </button>
+        {err && <p role="alert" className="mt-1 text-[13px] text-down">{err}</p>}
+      </div>
+    )
   if (!open)
     return (
       <button type="button" onClick={() => setOpen(true)} className="mt-3 min-h-9 text-[13px] text-ink-3 underline underline-offset-2 hover:text-ink-2">
@@ -724,7 +754,7 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
               }
             }}
           >
-            {busy === 'pause' ? 'Pausing…' : `Pause until ${dayLabel(offer.until)}`}
+            {busy === 'pause' ? 'Pausing…' : afterTrial ? `Pause after your trial: no charge until ${dayLabel(offer.until)}` : `Pause until ${dayLabel(offer.until)}`}
           </Button>
         )}
         <Button
@@ -746,7 +776,8 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
           Keep my plan
         </button>
       </div>
-      {offer && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Pausing stops charges and real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. {member.digest_live ? ' The weekly digest of your names keeps coming, your' : ' Your'} follows and settings stay, and we’ll email you before it resumes.</p>}
+      {offer && afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">{offer.note ?? `Your trial runs to ${dayLabel(offer.starts!)} as normal; then nothing is charged until ${dayLabel(offer.until)}, when real-time alerts resume.`} Your follows and settings stay.</p>}
+      {offer && !afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Pausing stops charges and real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. {member.digest_live ? ' The weekly digest of your names keeps coming, your' : ' Your'} follows and settings stay, and we’ll email you before it resumes.</p>}
       {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
     </div>
   )

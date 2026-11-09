@@ -49,7 +49,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ],
       ['What we don’t do', 'We don’t sell or rent your data, share it with advertisers, or use advertising cookies. Your follows and owned stocks are never shown to other members or used in public aggregates.'],
       ['In your browser', 'Your browser’s local storage keeps your sign-in session; the last copy of your account, follows and recent insider filings, so your pages still load when our server is slow; and, for 30 days, the campaign link you arrived from, so a purchase can be attributed to it. Signing out clears everything but the campaign link. Nothing else is stored there.'],
-      ['Where it’s kept', `${HOSTING.api} ${HOSTING.files}`],
+      ['Where it’s kept', `${HOSTING.api} ${HOSTING.sync} ${HOSTING.files}`],
       [
         'Who processes it',
         <>
@@ -73,7 +73,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
     title: 'Security',
     lead: 'Where Copybook keeps data and how it’s protected.',
     sections: [
-      ['Where data lives', `${HOSTING.api} ${HOSTING.files}`],
+      ['Where data lives', `${HOSTING.api} ${HOSTING.sync} ${HOSTING.files}`],
       ['Encryption', HOSTING.encryption],
       ['Who can see member data', HOSTING.access],
       ['Where the machine is', HOSTING.physical],
