@@ -485,7 +485,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // Import owned stocks: a pasted list, a CSV, or a 13F filer's book by CIK (kept current each quarter).
   if (req.method === 'POST' && path === '/book/import') {
-    const r = await importBook(env, m, await body(req));
+    const b = await body(req);
+    // Linking a 13F filer's book is Pro and Fund; a pasted list or CSV is open to every Copy member.
+    if (b.cik !== undefined && b.cik !== null && !isPro(m)) return json({ ok: false, error: 'Linking a 13F as your book is part of Copy Pro and Copy Fund', code: 'pro_required' }, 403, h);
+    const r = await importBook(env, m, b);
     return r.ok ? json(r, 200, h) : json(r, r.status, h);
   }
 

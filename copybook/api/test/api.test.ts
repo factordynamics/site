@@ -1621,6 +1621,14 @@ describe('copybook api', () => {
     expect(r.follows.stocks).toEqual(['NVDA', 'COF']); // replace: the old book left the watchlist too
     await call('/follows/stocks/TSLA', { method: 'POST', token: t });
 
+    // Linking a 13F is Pro and Fund: a Copy member gets 403 pro_required and nothing changes.
+    const copyLink = await call('/book/import', { body: { cik: '2045724' }, token: t });
+    expect(copyLink.status).toBe(403);
+    expect((await copyLink.json()).code).toBe('pro_required');
+    expect((await (await call('/follows', { token: t })).json()).follows.book ?? null).toBeNull();
+    stripeObjects['subscriptions/sub_bk'] = sub('sub_bk', 'cus_bk', 'active', 'month', 'pro_monthly');
+    await webhook({ type: 'customer.subscription.updated', data: { object: stripeObjects['subscriptions/sub_bk'] } });
+
     // A 13F filer's book: tickers largest first, options left out. Linking it (the default mode, as the
     // site sends it) keeps the hand-added names: the PM lost CRWD, APH and others this way.
     const cols = ['ticker', 'issuer', 'title', 'cusip', 'put_call', 'shares', 'value', 'display_name', 'sector'];
