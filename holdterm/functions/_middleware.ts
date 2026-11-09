@@ -29,7 +29,7 @@ async function stockExists(t: string, origin: string) {
   const up = 'https://copybook.factordynamics.com/d/'
   const r = await fetch(`${up}stocks/${encodeURIComponent(t)}.json`, { method: 'HEAD', cf: { cacheTtl: 600, cacheEverything: true } } as RequestInit)
   if (r.ok) return true
-  const ix = await fetch(`${origin}/d/stocks.json`)
+  const ix = await fetch(`${up}stocks.json`, { cf: { cacheTtl: 600, cacheEverything: true } } as RequestInit)
   if (!ix.ok) return true // can't tell: let the page decide
   const { stocks } = (await ix.json()) as { stocks: { t: string; a: string[] }[] }
   return stocks.some((x) => x.a.includes(t))

@@ -15,16 +15,10 @@ const sitemap = (): Plugin => ({
   },
 })
 
-// Holdterm: static SPA on Cloudflare Pages (project "holdterm"). Data is read in the browser from
-// /data and /d, which Pages Functions (functions/) proxy from Copybook's public SEC EDGAR files.
-const proxy = {
-  '/data': { target: 'https://refcell.github.io', changeOrigin: true, rewrite: (p: string) => p.replace(/^\/data/, '/gust/copybook/data') },
-  '/d/': { target: 'https://copybook.factordynamics.com', changeOrigin: true },
-}
+// Holdterm: static SPA on Cloudflare Pages (project "holdterm"). Data is read in the browser straight from
+// Copybook's static hosts; Pages Functions (functions/_middleware.ts) only set per-route meta and 404s.
 export default defineConfig({
   base: '/',
   plugins: [react(), sitemap()],
-  server: { proxy },
-  preview: { proxy },
   build: { target: 'es2022' },
 })

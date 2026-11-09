@@ -220,9 +220,19 @@ function normalise(hs: Holding[]) {
   }
   return hs
 }
+// The data is Copybook's public SEC EDGAR data, read straight from its static hosts (GitHub Pages, CORS open,
+// 10-minute cache), so a page view costs no Cloudflare Function calls. Holdterm keeps only its roster, and the
+// same data checks as scripts/roster.mjs run on every load: a book whose total disagrees with its 13F cover page,
+// or that is mostly notes and bonds, is not shown until the data is fixed.
+export const failsData = (b: { total_value?: number | null; cover_total?: number | null; prn_value?: number | null }) => {
+  const total = b.total_value ?? 0
+  const cover = b.cover_total ?? 0
+  return (cover > 0 && (total > 1.5 * cover || total < cover / 1.5)) || (total > 0 && (b.prn_value ?? 0) / total > 0.25)
+}
 let ixP: Promise<Index> | null = null
 export const loadIndex = () =>
   (ixP ??= get<Index>(DATA + 'index.json').then((ix) => {
+    ix.managers = ix.managers.filter((m) => inRoster(m.slug) && !failsData(m as never))
     ix.managers.forEach(name)
     return ix
   }))
@@ -272,7 +282,10 @@ const books = new Map<string, Promise<Book>>()
 export const loadBook = (slug: string) => {
   let p = books.get(slug)
   if (!p) {
-    p = get<Book>(`${DATA}${slug}.json`).then((b) => (normalise(b.holdings), longBook(correct(name(b) as Book))))
+    p = (inRoster(slug) ? get<Book>(`${DATA}${slug}.json`) : Promise.reject(new Error(`404 ${slug}`))).then((b) => {
+      if (failsData(b as never)) throw new Error(`held: ${slug} fails the data checks`)
+      return (normalise(b.holdings), longBook(correct(name(b) as Book)))
+    })
     books.set(slug, p)
   }
   return p
@@ -284,7 +297,7 @@ export const loadHistory = (slug: string) =>
     // Skip a quarter whose upstream row already cites the second filing.
     return { history: d.history.map((r) => (add[r.quarter] && !JSON.stringify(r).includes(c?.history_source?.[r.quarter] ?? '\u0000') ? { ...r, total_value: r.total_value + add[r.quarter], equity_value: r.equity_value == null ? undefined : r.equity_value + add[r.quarter] } : r)) }
   })
-export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector, e.cusip)))), d))
+export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => ((d.events = d.events.filter((e) => inRoster(e.slug))), d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector, e.cusip)))), d))
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
 export const loadInsiders = () => get<{ updated_at: string; rows: Insider[] } | Insider[]>(DATA + 'insiders.json').then((d) => (Array.isArray(d) ? d : d.rows ?? [])).catch(() => null)
 /** Tickers Holdterm fills from src/tickers.json, each with every CUSIP of its issuer group (classes, and a

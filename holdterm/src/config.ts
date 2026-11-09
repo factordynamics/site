@@ -1,8 +1,8 @@
-// Public SEC EDGAR data published by Copybook's ingest, served same-origin and edge-cached by
-// functions/data and functions/d (vite.config.ts proxies them in dev and preview). Holdterm only reads it.
-export const DATA = '/data/'
+// Public SEC EDGAR data published by Copybook's ingest, read straight from its static hosts (GitHub Pages,
+// CORS open). Holdterm only reads it; src/data.ts keeps the roster and runs the data checks.
+export const DATA = 'https://refcell.github.io/gust/copybook/data/'
 // Stock pages derived from the same 13F books (d/stocks/{TICKER}.json, d/stocks.json).
-export const DERIVED = '/d/'
+export const DERIVED = 'https://copybook.factordynamics.com/d/'
 export const SITE = 'https://holdterm.factordynamics.com'
 
 // Paid email alerts: Stripe Payment Links and the alerts API. While a link is empty the

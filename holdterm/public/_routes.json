@@ -1,0 +1,16 @@
+{
+ "version": 1,
+ "description": "Functions run only for HTML routes (per-route meta tags and real 404s). Assets are static; data is read from Copybook's static hosts.",
+ "include": [
+  "/*"
+ ],
+ "exclude": [
+  "/assets/*",
+  "/favicon.svg",
+  "/og.png",
+  "/robots.txt",
+  "/sitemap.xml",
+  "/data/*",
+  "/d/*"
+ ]
+}
