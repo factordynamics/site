@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Peers } from '../components/Peers'
 import { useSearch } from '../components/Search'
@@ -134,6 +134,19 @@ export function Book() {
   )
   const fundsFiled = new Set(rows.flatMap((r) => [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])].filter((x) => x.quarter === season).map((x) => x.slug))).size
   const fundsAll = new Set(rows.flatMap((r) => [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])].map((x) => x.slug))).size
+
+  // Deep links from the Fund setup list (#book-import, #link-fund, #peers): scroll once the table is in.
+  const jumped = useRef(false)
+  useEffect(() => {
+    const id = location.hash.slice(1)
+    if (!id || jumped.current || !(ready || (status === 'ready' && !names.length))) return
+    jumped.current = true
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id)
+      el?.scrollIntoView({ block: el.tagName === 'SECTION' ? 'start' : 'center' })
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) el.focus({ preventScroll: true })
+    })
+  }, [ready, status, names.length])
 
   if (!pro)
     return (

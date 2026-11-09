@@ -32,6 +32,7 @@ export function Team() {
     try {
       const r = await call<Seats>('/seats', { body: { email: email.trim() }, auth: true })
       setS(r)
+      window.dispatchEvent(new Event('copybook:setup'))
       setMsg({ text: `Invited ${email.trim()}. They’ll get an email with their own sign-in link.`, ok: true })
       setEmail('')
     } catch (e) {
@@ -45,6 +46,7 @@ export function Team() {
     setMsg(null)
     try {
       setS(await call<Seats>(`/seats/${encodeURIComponent(who)}`, { method: 'DELETE', auth: true }))
+      window.dispatchEvent(new Event('copybook:setup'))
     } catch {
       setMsg({ text: `${who} wasn’t removed. Please try again.`, ok: false })
     }

@@ -4,6 +4,7 @@ import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
 import { Channels } from '../components/Channels'
 import { Team } from '../components/Team'
+import { FundSetup } from '../components/FundSetup'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
@@ -37,7 +38,8 @@ export function Account() {
         else if (getToken()) member = await fetchMe()
         else return setState({ kind: 'out' })
         resetFollows()
-        setState({ kind: 'in', member, welcome, focus: welcome || pro })
+        // The Pro quickstart takes focus after a Pro checkout; a Fund checkout starts at the Fund setup list.
+        setState({ kind: 'in', member, welcome, focus: pro || (welcome && member.plan === 'pro') })
       } catch {
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
       }
@@ -101,6 +103,8 @@ function SignedIn({ member, welcome, focus = false, onOut, onChange }: { member:
           </>
         )}
       </header>
+
+      {member.active && member.plan === 'fund' && <FundSetup member={member} welcome={welcome} />}
 
       {onboard && (
         <div className="mt-10">

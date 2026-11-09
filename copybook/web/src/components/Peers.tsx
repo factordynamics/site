@@ -72,7 +72,7 @@ export function Peers({ names, shared }: { names: string[]; shared?: boolean }) 
   const failed = Object.entries(pending).flatMap(([k, v]) => (k.startsWith('peers:') && v.state === 'error' ? [{ slug: k.slice(6), want: v.want }] : []))
 
   return (
-    <section className="mt-10" aria-labelledby="peers-title">
+    <section id="peers" className="mt-10 scroll-mt-24" aria-labelledby="peers-title">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="max-w-2xl">
           <h2 id="peers-title" className="flex items-center gap-2 text-[22px] font-semibold tracking-[-0.02em]">

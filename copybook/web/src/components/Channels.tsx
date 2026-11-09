@@ -36,6 +36,7 @@ export function Channels() {
     try {
       const r = await call<{ channels: Channels }>('/channels', { method: 'PUT', body, auth: true })
       setC(r.channels)
+      window.dispatchEvent(new Event('copybook:setup'))
       setMsg({ k, text: 'Saved.', ok: true })
       return true
     } catch (e) {
