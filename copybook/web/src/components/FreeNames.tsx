@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { TRIAL_DAYS } from '../config'
 import { ApiError, useMember } from '../lib/account'
-import { money, quarterLabel, useAsync } from '../lib/data'
+import { money, pricingTo, quarterLabel, useAsync } from '../lib/data'
 import { setFollow, useFollows } from '../lib/follows'
 import { loadStock, resolveTicker, stockPath, type Stock } from '../lib/stocks'
 import { Arrow, Button, Lock, Skeleton } from './ui'
@@ -116,7 +116,7 @@ export function FreeNames({ className = '' }: { className?: string }) {
                   <a href={told.get(t)!.url} className="hover:text-accent">
                     {told.get(t)!.text.replace(/, which you own$/, '')}
                   </a>
-                ) : data.loading && !data.data ? (
+                ) : data.loading ? (
                   <Skeleton className="h-4 w-2/3" />
                 ) : (
                   fact(data.data?.[i] ?? null, t)
@@ -155,13 +155,13 @@ export function FreeNames({ className = '' }: { className?: string }) {
         <p role="status" className="-mt-1 px-5 pb-4 text-[13px] text-ink-2 md:px-6">
           {msg.t}{' '}
           {msg.trial && (
-            <Link to="/pricing/" className="font-medium text-accent hover:text-accent-2">
-              Start {TRIAL_DAYS}-day trial
+            <Link to={pricingTo()} className="font-medium text-accent hover:text-accent-2">
+              Start {TRIAL_DAYS}-day free trial
             </Link>
           )}
         </p>
       )}
-      <Link to="/pricing/" className="flex items-center gap-3 rounded-b-[var(--radius-card)] border-t border-line bg-ink/[0.025] px-5 py-3.5 text-[13.5px] text-ink-2 hover:text-ink md:px-6">
+      <Link to={pricingTo()} className="flex items-center gap-3 rounded-b-[var(--radius-card)] border-t border-line bg-ink/[0.025] px-5 py-3.5 text-[13.5px] text-ink-2 hover:text-ink md:px-6">
         <Lock />
         <span className="min-w-0 flex-1">
           {fn?.hook ? (
@@ -174,7 +174,7 @@ export function FreeNames({ className = '' }: { className?: string }) {
           )}
         </span>
         <span className="inline-flex shrink-0 items-center gap-1 font-medium text-accent">
-          Start {TRIAL_DAYS}-day trial <Arrow className="size-3" />
+          Start {TRIAL_DAYS}-day free trial <Arrow className="size-3" />
         </span>
       </Link>
     </section>

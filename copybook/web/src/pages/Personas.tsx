@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Arrow, Button, Check, Panel } from '../components/ui'
-import { api, FUND_WHY, plans, TRIAL_DAYS, trialTerms } from '../config'
+import { FUND_WHY, plans, TRIAL_DAYS, trialTerms } from '../config'
 import { attributed, referredCheckout } from '../lib/attribution'
-import { gapLabel, loadLatency } from '../lib/account'
+import { gapLabel, loadLatency, useApiBase } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
 import { HOSTING } from '../lib/hosting'
 import { loadCoverage } from '../lib/stocks'
@@ -198,10 +198,11 @@ export function ForQuants() {
   const trial = attributed(plans.pro.links.yearly || plans.pro.links.monthly)
   const cta = (
     <Button href={trial} onClick={referredCheckout('pro', plans.pro.links.yearly ? 'yearly' : 'monthly', trial)} size="md">
-      Start {TRIAL_DAYS}-day Pro trial <Arrow />
+      Start {TRIAL_DAYS}-day free trial <Arrow />
     </Button>
   )
-  const curl = `curl ${api}/v1/filers/warren-buffett/holdings/latest \\
+  const base = useApiBase()
+  const curl = `curl ${base}/v1/filers/warren-buffett/holdings/latest \\
   -H "Authorization: Bearer cbk_live_..." \\
   -H "User-Agent: my-research/1.0"`
   return (
@@ -221,6 +222,7 @@ export function ForQuants() {
           <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-night p-4 font-mono text-[12.5px] leading-relaxed text-white/90 sm:whitespace-pre sm:break-normal">
             <code>{curl}</code>
           </pre>
+          <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. A dedicated api.copybook.factordynamics.com hostname is planned.</p>
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[14px]">
             <Link to="/api/" className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
               API docs <Arrow className="size-3" />

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { call, isPro, type Member } from '../lib/account'
-import { api } from '../config'
+import { call, isPro, useApiBase, type Member } from '../lib/account'
 import { Button } from './ui'
 
 // API keys: GET/POST /keys, DELETE /keys/{id} (session auth; Copy members get 403 pro_required).
@@ -186,7 +185,8 @@ function Quickstart({ apiKey }: { apiKey?: string }) {
   const [tab, setTab] = useState<'curl' | 'python'>('curl')
   const [copied, setCopied] = useState(false)
   const k = apiKey ?? 'YOUR_API_KEY'
-  const url = `${api}/v1/filers/warren-buffett/holdings/latest`
+  const base = useApiBase()
+  const url = `${base}/v1/filers/warren-buffett/holdings/latest`
   const code =
     tab === 'curl'
       ? `curl ${url} \\
@@ -226,7 +226,7 @@ function Quickstart({ apiKey }: { apiKey?: string }) {
         <a href={`${import.meta.env.BASE_URL}api/sample-holdings.json`} className="font-medium text-accent hover:text-accent-2">
           Sample response
         </a>
-        <a href={`${api}/v1/openapi.json`} className="font-medium text-accent hover:text-accent-2">
+        <a href={`${base}/v1/openapi.json`} className="font-medium text-accent hover:text-accent-2">
           OpenAPI spec
         </a>
       </p>

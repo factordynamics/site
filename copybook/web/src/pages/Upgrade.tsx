@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { Arrow, Button, Check, Skeleton } from '../components/ui'
 import { BOOK_PRO, plans, TRIAL_DAYS } from '../config'
 import { ApiError, isFree, openPortal, PLAN_NAME, upgradeTo, useMemberState, type Member } from '../lib/account'
@@ -31,6 +31,8 @@ export function Upgrade() {
   const target: 'pro' | 'fund' = params.get('plan') === 'fund' ? 'fund' : 'pro'
   useTitle(`Upgrade to ${PLAN_NAME[target]} · Copybook`)
   const member = useMemberState()
+  // Copy is the entry plan: there's nothing to switch to, so its trial starts on the pricing page.
+  if (params.get('plan') === 'copy') return <Navigate to="/pricing/#copy" replace />
   return (
     <div className="container-x max-w-3xl pt-12 md:pt-16">
       <p className="text-[13px] font-medium text-accent">Upgrade</p>
@@ -58,7 +60,7 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
       />
     ) : (
       <Paths
-        left={['New to Copybook', `Start Copy Pro free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" className="mt-3 w-full">Start {TRIAL_DAYS}-day trial</Button>]}
+        left={['New to Copybook', `Start Copy Pro free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" className="mt-3 w-full">Start {TRIAL_DAYS}-day free trial</Button>]}
         right={['Already on Copy', 'Sign in with the email on your plan to switch it to Pro, prorated.', <Button to="/account/" variant="outline" className="mt-3 w-full">Sign in to switch</Button>]}
       />
     )
@@ -92,12 +94,12 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
         {target === 'fund' ? (
           <Paths
             left={['Pay by invoice', 'Annual invoice, net 30, with a W-9. We set up the plan when you reply.', <Button to="/contact/?topic=fund" className="mt-3 w-full">Request an invoice (net 30, W-9)</Button>]}
-            right={['Pay by card', `Start Copy Fund free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" variant="outline" className="mt-3 w-full">Start {TRIAL_DAYS}-day trial</Button>]}
+            right={['Pay by card', `Start Copy Fund free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" variant="outline" className="mt-3 w-full">Start {TRIAL_DAYS}-day free trial</Button>]}
           />
         ) : (
           <div className="mt-6">
             <Button to="/pricing/">
-              Start {TRIAL_DAYS}-day trial <Arrow />
+              Start {TRIAL_DAYS}-day free trial <Arrow />
             </Button>
           </div>
         )}

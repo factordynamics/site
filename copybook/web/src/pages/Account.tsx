@@ -87,6 +87,13 @@ export function Account() {
         <section role="alert" className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h1 className="text-[24px] font-semibold tracking-[-0.03em]">Your account is temporarily unavailable.</h1>
           <p className="mt-2 text-[15px] text-ink-2">Our account server isn’t answering right now. Your plan, follows and saved names are safe. Please reload this page later; nothing here needs redoing.</p>
+          {/* A failing account server never removes the way to a plan or to billing. */}
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Button to="/pricing/">Start {TRIAL_DAYS}-day free trial</Button>
+            <Button href={checkout.portal} variant="outline">
+              Manage billing on Stripe
+            </Button>
+          </div>
         </section>
       )}
       {state.kind === 'in' && <Updating show={Boolean(state.stale)} className="mb-4" />}
@@ -467,7 +474,7 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
         </ul>
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Button to="/pricing/">
-            Start {TRIAL_DAYS}-day trial <Arrow />
+            Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
           <span className="text-[13px] text-ink-3">Copy is free for {TRIAL_DAYS} days, then ${plans.copy.yearly}/year or ${plans.copy.monthly}/month.</span>
         </div>
@@ -516,7 +523,7 @@ export function SignedOut({ error, eyebrow = 'Account' }: { error?: string; eyeb
       <section className="mt-8 max-w-lg rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
         {sent ? (
           <p role="status" className="text-[15px]">
-            If that address has Copy, a sign-in link is on its way.
+            Check your inbox: if that address has a Copybook account, a sign-in link is on its way.
           </p>
         ) : (
           <form

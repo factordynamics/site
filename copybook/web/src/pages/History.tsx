@@ -480,7 +480,7 @@ function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; 
               </Button>
             ) : (
               <Button to="/pricing/">
-                {kind === 'free' ? `Start ${TRIAL_DAYS}-day trial` : 'Get Copy'} <Arrow />
+                {kind === 'free' ? `Start ${TRIAL_DAYS}-day free trial` : 'Start 14-day free trial'} <Arrow />
               </Button>
             )}
             {kind !== 'free' && (

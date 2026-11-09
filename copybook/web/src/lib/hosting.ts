@@ -10,15 +10,15 @@ export const HOSTING = {
   files: 'Filing alerts are sent by a Cloudflare Workers job that checks EDGAR every minute, with that machine as its backup. Paid history files and the public alert-latency log are stored in Cloudflare R2. The website and public 13F data are static files served by GitHub Pages. Payments are handled entirely by Stripe.',
   encryption: 'All traffic to the site and the API uses TLS. The machine’s disk is fully encrypted (LUKS); that protects a powered-off or stolen disk, not a running system. Data in Cloudflare R2 and in Stripe is encrypted at rest by those providers.',
   access: 'Only the operator and the operator’s own automation tools, which run on that machine, can access member data. There is no public SSH.',
-  backups: 'Hourly local snapshots of the API’s data. An encrypted off-site backup is being set up.',
+  backups: 'Nightly encrypted off-site backup to Cloudflare R2, kept 30 days, with weekly restore tests. Hourly local snapshots.',
   logging: 'API requests are logged without member identity. Per-member access logging is not yet in place.',
-  availability: 'There is no uptime SLA. Alerts are polled from Cloudflare, with the API machine as backup, so they keep going out when the machine is down.',
+  availability: 'There is no uptime SLA. Alerts are polled from Cloudflare, with the API machine as backup, so they keep going out when the machine is down. The tunnel to the machine is supervised: restarted on failure, health-checked every minute, and the operator is alerted after 2 minutes down.',
   soc2: 'We don’t have SOC 2. A security questionnaire is available on request.',
 }
 
 /** Every company that processes data for Copybook, and what for. */
 export const SUBPROCESSORS: [string, string][] = [
-  ['Cloudflare', 'Workers runs the minute-by-minute EDGAR checks and alert sending; R2 stores paid history files, the alert-latency log and the account sync between servers; Cloudflare Tunnel relays traffic to the API machine; Web Analytics counts page views without cookies.'],
+  ['Cloudflare', 'Workers runs the minute-by-minute EDGAR checks and alert sending; R2 stores paid history files, the alert-latency log, the account sync between servers and the encrypted nightly backup; Cloudflare Tunnel relays traffic to the API machine; Web Analytics counts page views without cookies.'],
   ['GitHub', 'GitHub Pages serves the website and the public 13F data files.'],
   ['Stripe', 'Payments, invoices and the billing portal. Card details go straight to Stripe.'],
   ['Tailscale', 'A backup route to the API machine.'],

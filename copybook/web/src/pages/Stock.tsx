@@ -9,7 +9,7 @@ import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
-import { dateLabel, displayName, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
+import { dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { stockTitle } from '../lib/titles.mjs'
 import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
 
@@ -279,7 +279,7 @@ export function StockPage() {
           {!paid && sinceRows.length > 2 && (
             <p className="mt-3 flex items-center gap-2 text-[13px] text-accent-2">
               <Lock /> {sinceRows.length - 2} more {sinceRows.length - 2 === 1 ? 'holding' : 'holdings'} filed on {d?.ticker} since the 13Fs.{' '}
-              <Link to="/pricing/" className="font-medium underline underline-offset-2">
+              <Link to={pricingTo()} className="font-medium underline underline-offset-2">
                 See them with Copy
               </Link>
             </p>

@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { getToken } from '../lib/account'
+import { getToken, useMemberState } from '../lib/account'
 import { quarterLabel } from '../lib/data'
 import { seasonNow } from '../lib/stocks'
 import { SearchBox } from './Search'
@@ -17,8 +17,10 @@ const NAV = [
 
 export function Layout() {
   const { pathname } = useLocation()
-  // Re-read on every route change, so it updates after checkout or sign-out.
-  const signedIn = Boolean(getToken())
+  // Re-read on every route change, so it updates after checkout or sign-out. A session whose /me failed with
+  // nothing cached (member null) gets the signed-out header, so the trial is always one click away.
+  const member = useMemberState()
+  const signedIn = Boolean(getToken()) && member !== null
   const sn = seasonNow()
   // During a 13F season the tracker sits after Flow.
   const base = sn.live ? [...NAV.slice(0, 2), { to: '/season/', label: `${quarterLabel(sn.quarter).split(' ')[0]} season` }, ...NAV.slice(2)] : NAV
@@ -66,7 +68,7 @@ export function Layout() {
               </div>
             )}
             <Button to={signedIn ? '/account/' : '/pricing/'} size="sm" variant="dark" className="hidden sm:inline-flex">
-              {signedIn ? 'Account' : 'Try Copy free'}
+              {signedIn ? 'Account' : 'Start 14-day free trial'}
             </Button>
             <button
               type="button"
@@ -92,7 +94,7 @@ export function Layout() {
               ))}
             </nav>
             <Button to={signedIn ? '/account/' : '/pricing/'} variant="dark" className="mt-4 w-full">
-              {signedIn ? 'Account' : 'Try Copy free'}
+              {signedIn ? 'Account' : 'Start 14-day free trial'}
             </Button>
           </div>
         )}

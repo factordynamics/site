@@ -52,6 +52,8 @@ export type Manager = {
   prev_total_value?: number | null
   changes?: { new: number; added: number; trimmed: number; exited: number; unchanged: number } | null
   featured?: boolean
+  /** Filer type from ingest: hedge_fund, active, bank, index, wealth, pension or other. */
+  type?: string
   top?: Holding[]
   /** A page built from the all-filer shard (data/f/{cik}.json): latest quarter only. */
   filer?: boolean
@@ -407,4 +409,10 @@ export function useTitle(title?: string) {
   useEffect(() => {
     if (title) document.title = title
   }, [title])
+}
+
+/** /pricing/ with ?from= the stock or investor page it's linked from, so pricing opens on what the visitor just saw. */
+export function pricingTo() {
+  const m = window.location.pathname.match(/^\/(?:stocks|investors)\/([^/]+)\/?/)
+  return m ? `/pricing/?from=${m[1]}` : '/pricing/'
 }

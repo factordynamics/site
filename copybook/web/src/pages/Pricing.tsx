@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
 import { Fragment, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
 import { attributed, referredCheckout, refCode } from '../lib/attribution'
 import { gapLabel, loadLatency, useMember } from '../lib/account'
-import { quarterLabel, useAsync, useTitle } from '../lib/data'
-import { loadCoverage } from '../lib/stocks'
-import { BOOK_LITE, BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
+import { money, quarterLabel, useAsync, useTitle } from '../lib/data'
+import { loadCoverage, loadStock } from '../lib/stocks'
+import { loadEvents } from '../components/FundNotes'
+import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
 type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean; why?: string }
@@ -21,6 +22,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'Stock pages', d: 'Who holds a ticker, and who bought or sold it.' },
       { t: 'Top buys and sells', d: 'The four biggest moves per fund, and the top of each season’s flow.' },
       { t: 'Search and consensus', d: 'Find any fund or ticker; see where great investors agree.' },
+      { t: 'Free account', d: 'Save 5 names and get the Friday email of the week’s top moves.' },
     ],
   },
   {
@@ -28,14 +30,14 @@ const tiers = (filers: string, curated: number): Tier[] => [
     who: 'For individual investors who follow the best funds.',
     lead: 'Everything in Free, plus',
     now: [
+      { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, usually within minutes: holdings per share class, % of the class before → after, threshold crossings and the 13D’s Item 4.' },
+      { t: 'My book', d: 'Your names, who owns them among the superinvestors, and alerts when that changes.' },
       { t: 'An email minutes after they file', d: `We check EDGAR every minute. Alerts, moves and history cover the ${curated} managers we track closely, and the list is growing.` },
       { t: 'The moves inside the email', d: 'New, added, trimmed and exited positions, with dollars and share of the book.' },
       { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
       { t: 'Telegram, Discord, Slack and RSS delivery', d: 'Each alert in your chat or reader as it happens, as well as by email.' },
       { t: 'Insider buys and any filer’s 13D', d: 'On stocks you own or watch: open-market insider buys over a threshold you set, cluster buys by 3+ insiders, and a new 13D or 13G by anyone.' },
-      { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, usually within minutes: holdings per share class, % of the class before → after, threshold crossings and the 13D’s Item 4.' },
       { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and 8 quarters of history with CSV.' },
-      BOOK_LITE,
     ],
   },
   {
@@ -85,9 +87,10 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   [`Latest 13F of ${filers} filers`, true, true, true, true],
   ['Stock pages and search', true, true, true, true],
   ['Top 4 buys and sells per fund', true, true, true, true],
+  ['Free account: save 5 names, Friday email', true, true, true, true],
   ['Follow investors and stocks', false, true, true, true],
   ['Filing alerts, moves inside', false, true, true, true],
-  ['Form 4 and 13D moves between 13Fs', false, true, true, true],
+  ['Form 4 and 13D moves between 13Fs', 'Top 2 per fund', true, true, true],
   ['Every move and full flow', false, true, true, true],
   ['Slack, Discord, Telegram and RSS delivery', false, true, true, true],
   ['Insider buys and any filer’s 13D on your stocks', false, true, true, true],
@@ -108,6 +111,22 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Invoice billing, W-9', false, false, false, true],
 ]
 
+/** "Warren Buffett buy $26.9M of SIRI between 13Fs": the top between-13F move on the stock or investor page the
+ *  visitor came from (/pricing/?from=SIRI or ?from=warren-buffett), from the same static files those pages read. */
+type Move = { manager: string; ticker?: string | null; display_name?: string | null; issuer: string; kind: string; action: string; value_usd?: number | null; percent_of_class?: number | null }
+async function fromFact(from: string | null): Promise<string | null> {
+  if (!from || !/^[A-Za-z0-9.-]{1,60}$/.test(from)) return null
+  const moves: Move[] = /^[A-Z0-9.-]{1,10}$/.test(from)
+    ? ((await loadStock(from).catch(() => null))?.since ?? [])
+    : (((await loadEvents(from).catch(() => null))?.events ?? []).filter((e) => !('skip' in e)) as unknown as Move[]).map((e) => ({ ...e, manager: (e as { manager?: string }).manager ?? '' }))
+  const trades = moves.filter((m) => m.kind === 'form4' && (m.action === 'buy' || m.action === 'sell') && (m.value_usd ?? 0) > 0)
+  const top = trades.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0))[0]
+  const what = (m: Move) => m.ticker || m.display_name || m.issuer
+  if (top?.manager) return `${top.manager} ${top.action === 'buy' ? 'buy' : 'sell'} ${money(top.value_usd!)} of ${what(top)} between 13Fs`
+  const stake = moves.find((m) => (m.kind === '13d' || m.kind === '13g') && m.manager && m.percent_of_class != null)
+  return stake ? `${stake.manager} report a ${stake.percent_of_class!.toFixed(1)}% stake in ${what(stake)} between 13Fs` : null
+}
+
 export function Pricing() {
   const [cycle, setCycle] = useState<'yearly' | 'monthly'>('yearly')
   const live = checkoutEnabled()
@@ -126,28 +145,29 @@ export function Pricing() {
   const COMPARE = compare(filers)
   // A friend's referral link: Copy and Pro show the first charge with the free month taken off.
   const referred = Boolean(refCode() && !mine && live)
+  const [params] = useSearchParams()
+  const hook = useAsync(() => fromFact(params.get('from')), [params.get('from')])
+  const copy = plans.copy
+  const monthsFree = Math.round(12 - copy.yearly / copy.monthly)
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="mx-auto max-w-2xl text-center">
         <p className="text-[13px] font-medium text-accent">Pricing</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Know what they bought the day they file.</h1>
-        <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
-          Reading a portfolio is free. Copy follows the investors and stocks you care about. Pro and Fund add the data feed and the tools research teams need. Every paid plan starts with {TRIAL_DAYS} days free.
+        <h1 className="mt-3 text-[32px] font-semibold leading-[1.08] tracking-[-0.04em] sm:text-[38px] md:text-h1">See what they bought between 13Fs, minutes after they file.</h1>
+        {hook.data && (
+          <p className="mx-auto mt-4 max-w-xl rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">
+            You just saw {hook.data}. Copy emails moves like this within minutes.
+          </p>
+        )}
+        <p className="mt-4 text-[16px] leading-relaxed text-ink-2 sm:text-[17px]">
+          Reading a portfolio is free. Copy follows the investors and stocks you care about. Every paid plan starts with {TRIAL_DAYS} days free.
         </p>
-        {receipt && (
+        {receipt && (lat.data?.count ?? 0) >= 10 && (
           <p className="mt-4 text-[13.5px] text-ink-3">
             {receipt.manager}’s {receipt.quarter ? `${quarterLabel(receipt.quarter)} ` : ''}alert went out {gapLabel(receipt.gap_seconds)} after EDGAR acceptance
             {lat.data?.median_seconds != null && ` · median this season ${gapLabel(lat.data.median_seconds)}`} ·{' '}
             <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
               every alert timed
-            </Link>
-          </p>
-        )}
-        {!receipt && (
-          <p className="mt-4 text-[13.5px] text-ink-3">
-            We check EDGAR every minute and will time every live alert in public. No live alerts timed yet this season:{' '}
-            <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
-              the speed log
             </Link>
           </p>
         )}
@@ -158,17 +178,17 @@ export function Pricing() {
             </p>
           </div>
         )}
-        <div className="mt-8 seg rounded-full bg-ink/[0.05] p-1 text-[14px]" role="tablist" aria-label="Billing period">
+        <div className="mt-6 seg rounded-full sm:mt-8 bg-ink/[0.05] p-1 text-[14px]" role="tablist" aria-label="Billing period">
           {(['monthly', 'yearly'] as const).map((c) => (
             <button key={c} role="tab" aria-selected={cycle === c} onClick={() => setCycle(c)} className={`rounded-full px-4 py-1.5 ${cycle === c ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
               {c === 'monthly' ? 'Monthly' : 'Yearly'}
-              {c === 'yearly' && <span className="ml-1.5 text-[12px] font-medium text-up">2+ months free</span>}
+              {c === 'yearly' && <span className="ml-1.5 text-[12px] font-medium text-up">${copy.yearly}/yr: about {monthsFree} months free</span>}
             </button>
           ))}
         </div>
       </header>
 
-      <div className="mx-auto mt-10 grid max-w-[1240px] gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mx-auto mt-6 grid max-w-[1240px] gap-4 sm:mt-10 md:grid-cols-2 xl:grid-cols-4">
         {TIERS.map((tier) => {
           const dark = tier.id === 'copy'
           const plan = tier.id === 'free' ? null : plans[tier.id]
@@ -178,7 +198,9 @@ export function Pricing() {
           return (
             <article
               key={tier.id}
-              className={`relative flex flex-col overflow-hidden rounded-[18px] p-6 md:p-7 ${dark ? 'bg-night text-white shadow-[var(--shadow-frame)]' : 'bg-card shadow-[var(--shadow-card)]'}`}
+              id={tier.id}
+              // On phones Copy comes first, so its price is on the first screen.
+              className={`relative flex flex-col overflow-hidden rounded-[18px] p-6 md:p-7 ${dark ? 'order-first md:order-none' : ''} ${dark ? 'bg-night text-white shadow-[var(--shadow-frame)]' : 'bg-card shadow-[var(--shadow-card)]'}`}
             >
               {dark && <div className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-accent/40 blur-[80px]" aria-hidden="true" />}
               <div className="relative flex items-center justify-between gap-3">
@@ -245,7 +267,10 @@ export function Pricing() {
                   ) : plan && referred ? (
                     referredTerms(tier.id, cycle)
                   ) : plan ? (
-                    trialTerms(tier.id)
+                    <>
+                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>{TRIAL_DAYS} days free · card required · cancel before day {TRIAL_DAYS + 1}</span>
+                      {trialTerms(tier.id)}
+                    </>
                   ) : (
                     'Free forever. Upgrade when you want alerts and history.'
                   )}
@@ -336,7 +361,7 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                'Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (as originally filed), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Point-in-time history (as_of), Parquet files and history back to 2013 are in progress, with no date yet; each turns on in the API changelog when it returns data, at no extra cost. Fund adds 5 seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.',
+                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (as originally filed), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for all filers in My book by Nov 20, point-in-time history (as_of) by Nov 30, history back to 2013 by Dec 31, and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.`,
               ],
               [
                 'How does the free trial work?',
@@ -346,7 +371,7 @@ export function Pricing() {
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [
                 'How fast are filing alerts?',
-                'We poll EDGAR’s latest-filings feed every minute, so a 13F alert usually arrives within a couple of minutes of the filing appearing there. For the very largest books, the first email is just as fast and the moves follow in a second email after our next data refresh, usually within a few hours. Form 4 and 13D/G alerts for the funds we track closely and the filers you follow usually arrive within minutes of filing. Funds have 45 days after quarter end to file a 13F, so the positions in it are always a few weeks old.',
+                'We poll EDGAR’s latest-filings feed every minute, so a 13F alert usually arrives within a couple of minutes of the filing appearing there. For the very largest books, the first email is just as fast and the moves follow in a second email after our next data refresh, usually within a few hours. Form 4 and 13D/G alerts for the funds we track closely and the filers you follow usually arrive within minutes of filing. Funds have 45 days after quarter end to file a 13F, so the positions in it are always a few weeks old. We time every live alert from EDGAR acceptance to delivery and publish the log on the speed page; no live alerts have been timed yet this season.',
               ],
               [
                 'What’s in an alert?',

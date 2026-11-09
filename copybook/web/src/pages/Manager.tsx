@@ -9,9 +9,9 @@ import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
-import { loadCards, recapPath, seasonNow, stockPath } from '../lib/stocks'
-import { investorTitle } from '../lib/titles.mjs'
-import { CuratedRedirect, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitRatio, useAsync, type ManagerFile } from '../lib/data'
+import { loadCards, loadRecap, recapPath, seasonNow, stockPath } from '../lib/stocks'
+import { investorTitle, recapTitle } from '../lib/titles.mjs'
+import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitRatio, useAsync, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -213,8 +213,8 @@ export function ManagerPage() {
                   <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
                     <Lock /> {changes.length - 4} more buys and sells, plus 8 quarters of history, with Copy
                   </p>
-                  <Button to="/pricing/" size="sm">
-                    Get Copy
+                  <Button to={pricingTo()} size="sm">
+                    Start 14-day free trial
                   </Button>
                 </div>
               )}
@@ -228,7 +228,7 @@ export function ManagerPage() {
           )}
           <p className="mt-5 border-t border-line pt-4 text-[13.5px]">
             <Link to={recapPath(seasonNow().quarter)} className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
-              {quarterLabel(seasonNow().quarter)} 13F recap: what all the superinvestors bought <Arrow className="size-3" />
+              <RecapLabel /> <Arrow className="size-3" />
             </Link>
           </p>
         </Panel>
@@ -387,7 +387,7 @@ function FilerPanel({ f, member }: { f: ManagerFile; member: boolean }) {
       </dl>
       <p className="mt-4 text-[13.5px]">
         <Link to={recapPath(seasonNow().quarter)} className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
-          {quarterLabel(seasonNow().quarter)} 13F recap: what all the superinvestors bought <Arrow className="size-3" />
+          <RecapLabel /> <Arrow className="size-3" />
         </Link>
       </p>
       {/* Members already have Follow in the header; only visitors see the offer. */}
@@ -398,7 +398,7 @@ function FilerPanel({ f, member }: { f: ManagerFile; member: boolean }) {
           {!member && (
             <>
               {' '}
-              <Link to="/pricing/" className="font-medium underline underline-offset-2">
+              <Link to={pricingTo()} className="font-medium underline underline-offset-2">
                 See Copy
               </Link>
             </>
@@ -428,8 +428,8 @@ function LockedChanges({ top }: { top: string[] }) {
         </span>
         <p className="mt-3 text-[15px] font-semibold">See every buy and sell</p>
         <p className="mt-1 max-w-xs text-[13px] text-ink-2">New positions, exits and size changes against the prior quarter come with Copy.</p>
-        <Button to="/pricing/" size="sm" className="mt-4">
-          Get Copy
+        <Button to={pricingTo()} size="sm" className="mt-4">
+          Start 14-day free trial
         </Button>
       </div>
     </div>
@@ -438,3 +438,13 @@ function LockedChanges({ top }: { top: string[] }) {
 
 // Used by the consensus page for a compact sector strip.
 export { StackBar }
+
+/** The recap link's text: the recap page's own live title ("Q3 2026 so far: what … bought and sold · 2 of 40
+ *  superinvestors filed"), so a link never promises all the superinvestors before they've filed. */
+function RecapLabel() {
+  const q = seasonNow().quarter
+  const r = useAsync(() => loadRecap(q), [q])
+  const d = r.data
+  if (!d) return <>{quarterLabel(q)} 13F season so far</>
+  return <>{recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: d.filing.filter((f) => f.filed).map((f) => displayName(f.manager)), final: d.final }).replace(/ · Copybook$/, '')}</>
+}

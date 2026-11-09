@@ -10,7 +10,7 @@ import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, edgeFade, Lock, Panel, Skeleton, Stat } from '../components/ui'
 import { ApiStatus, Updating } from '../components/ApiStatus'
 import { ApiError, apiDown, getToken, needsReauth, isFree, isPro, lastEvents, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
-import { quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle } from '../lib/data'
+import { DATA, getJSON, quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle, type Manager } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
 import { accNo, cap, issuerLatest, pctChange, whenLabel, type Latest } from '../lib/insiders'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
@@ -323,7 +323,7 @@ export function Book() {
             <p className="mt-3 max-w-md text-[16px] font-semibold">{isFree(member) ? 'This is a Copy feature.' : 'My book is part of Copy.'}</p>
             <p className="mt-1.5 max-w-md text-[14px] text-ink-2">See which superinvestors hold the stocks you own or watch, what they did this filing season, and the latest Form 4 and 13D on each. Copy Pro adds every 13F filer, crowding, peers and CSV.</p>
             <Button to="/pricing/" className="mt-5">
-              {isFree(member) ? `Start ${TRIAL_DAYS}-day trial` : 'Compare plans'} <Arrow />
+              {isFree(member) ? `Start ${TRIAL_DAYS}-day free trial` : 'Compare plans'} <Arrow />
             </Button>
           </div>
         </section>
@@ -585,11 +585,21 @@ function Header({ right, eyebrow = 'My book · Copy Pro and Copy Fund', sub = 'C
 
 // My book lite (Copy): the member's own names against the superinvestors and the funds we track
 // closely, from the public stock files. All-filer counts, peers, 13F linking, CSV and the API are Pro.
-type LiteLens = 'super' | 'tracked'
+// Default: the superinvestors plus the tracked hedge funds and long-only (active) managers; banks, index
+// funds, brokers and wealth managers trade for clients, so their moves sit behind "All tracked".
+type LiteLens = 'smart' | 'super' | 'tracked'
+const LITE_LENSES: [LiteLens, string][] = [
+  ['smart', 'Super + HF + long-only'],
+  ['super', 'Superinvestors'],
+  ['tracked', 'All tracked'],
+]
+const SMART_TYPES = new Set(['hedge_fund', 'active'])
 function LiteBook({ member }: { member: Member }) {
   const { status, follows } = useFollows()
   const [params, setParams] = useSearchParams()
-  const lens: LiteLens = params.get('funds') === 'tracked' ? 'tracked' : 'super'
+  const asked = params.get('funds')
+  const lens: LiteLens = asked === 'tracked' || asked === 'super' ? asked : 'smart'
+  const types = useAsync(() => getJSON<{ managers: Manager[] }>(`${DATA}index.json`).then((d) => new Map(d.managers.map((m) => [m.slug, m.type ?? '']))), [])
   const linkedOnly = useMemo(() => {
     const manual = new Set(follows.owned_manual ?? [])
     return new Set((follows.book?.tickers ?? []).filter((t) => !manual.has(t)))
@@ -604,7 +614,7 @@ function LiteBook({ member }: { member: Member }) {
       names
         .map((t, i) => {
           const st = data.data?.[i] ?? null
-          const inLens = (x: StockHolder) => lens === 'tracked' || x.featured
+          const inLens = (x: StockHolder) => lens === 'tracked' || x.featured || (lens === 'smart' && SMART_TYPES.has(types.data?.get(x.slug) ?? ''))
           const held = (st?.holders ?? []).filter(inLens).sort((a, b) => b.weight - a.weight)
           const split = st?.splits?.[season] ?? null
           const moves = split && !split.adjusted ? [] : [...(st?.holders ?? []), ...(st?.exited ?? [])].filter((x) => inLens(x) && x.quarter === season && x.change && x.change !== 'unchanged')
@@ -614,7 +624,7 @@ function LiteBook({ member }: { member: Member }) {
             owned: follows.owned.includes(t),
             stock: st,
             held,
-            others: lens === 'super' ? (st?.holders.length ?? 0) - held.length : 0,
+            others: lens !== 'tracked' ? (st?.holders.length ?? 0) - held.length : 0,
             split,
             moves,
             bought: moves.filter((x) => x.change === 'new' || x.change === 'added').length,
@@ -627,13 +637,13 @@ function LiteBook({ member }: { member: Member }) {
           }
         })
         .sort((a, b) => b.held.length - a.held.length || (b.stock?.holders.length ?? 0) - (a.stock?.holders.length ?? 0) || a.ticker.localeCompare(b.ticker)),
-    [names, data.data, events.data, events.loading, events.failed, lens, season, follows.owned, follows.insider_min_usd],
+    [names, data.data, events.data, events.loading, events.failed, lens, season, follows.owned, follows.insider_min_usd, types.data],
   )
   const moves = rows
     .flatMap((r) => r.moves.map((x) => ({ r, x })))
     .sort((a, b) => Math.abs(b.x.delta_value) - Math.abs(a.x.delta_value))
     .slice(0, 10)
-  const lensName = lens === 'super' ? 'superinvestors' : 'funds we track closely'
+  const lensName = lens === 'super' ? 'superinvestors' : lens === 'smart' ? 'superinvestors, hedge funds and long-only managers we track' : 'funds we track closely, banks and index funds included'
   const pro = <UpgradePro member={member} className="mt-6" />
 
   return (
@@ -657,9 +667,9 @@ function LiteBook({ member }: { member: Member }) {
                 <p className="text-[13px] text-ink-3">Who among the {lensName} holds each name, at what weight of their book, and what they did {season ? `in ${quarterLabel(season)}` : 'this season'}. From each fund’s latest 13F.</p>
               </div>
               <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which funds">
-                {(['super', 'tracked'] as const).map((l) => (
-                  <button key={l} type="button" role="tab" aria-selected={lens === l} onClick={() => setParams(l === 'super' ? {} : { funds: l }, { replace: true })} className={`rounded-full px-3 py-1.5 ${lens === l ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
-                    {l === 'super' ? 'Superinvestors' : 'Funds we track closely'}
+                {LITE_LENSES.map(([l, label]) => (
+                  <button key={l} type="button" role="tab" aria-selected={lens === l} onClick={() => setParams(l === 'smart' ? {} : { funds: l }, { replace: true })} className={`rounded-full px-3 py-1.5 ${lens === l ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                    {label}
                   </button>
                 ))}
                 <Link to="/upgrade/?plan=pro" aria-describedby="pro-title" title="Part of Copy Pro" className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-ink-3 hover:text-ink-2">
@@ -826,6 +836,16 @@ function useEvents(names: string[], on: boolean) {
 }
 
 type StockEv = NonNullable<Stock['since']>[number]
+/** A 13D/G amendment without its starting % gets it from the same filer's next older 13D/G on the stock, so
+ *  the cell reads "70.8% → 64.1%" rather than "→ 64.1%". */
+function withPrevPct(since: StockEv[]): StockEv[] {
+  const older = [...since].sort((a, b) => b.filing_date.localeCompare(a.filing_date))
+  return since.map((e) => {
+    if (e.kind === 'form4' || e.prev_percent_of_class != null || e.percent_of_class == null) return e
+    const prev = older.find((o) => o !== e && o.kind !== 'form4' && o.slug === e.slug && o.filing_date < e.filing_date && o.percent_of_class != null)
+    return prev ? { ...e, prev_percent_of_class: prev.percent_of_class } : e
+  })
+}
 // Action and amount first, then who: "Sold $5.5M · Hai Ling, CFO", so a narrow cell drops the name, not the number.
 function evLatest(e: StockEv): Latest {
   const who = displayName(e.manager)
@@ -884,7 +904,7 @@ function newest(stock: Stock | null, issuer: IssuerFeed | undefined, min: number
   // The static `since` block (the funds' own Form 4s and 13D/Gs, as on the stock page) fills the cell at
   // once; the issuer feed, when it arrives, adds company insiders and any filer's 13D/G.
   const trade = (action: string, value?: number | null) => (action === 'buy' || action === 'sell' || action === 'mixed') && (value == null || Math.abs(value) >= min)
-  const fund = (stock?.since ?? []).filter((e) => (e.kind !== 'form4' || trade(e.action, e.value_usd)) && !passive13G(e.form, e.manager)).map((e) => ({ acc: accNo(e.url), l: evLatest(e) }))
+  const fund = withPrevPct(stock?.since ?? []).filter((e) => (e.kind !== 'form4' || trade(e.action, e.value_usd)) && !passive13G(e.form, e.manager)).map((e) => ({ acc: accNo(e.url), l: evLatest(e) }))
   const seen = new Set((stock?.since ?? []).map((e) => accNo(e.url)))
   const own = (issuer ?? []).filter((e) => !seen.has(accNo(e.accession)) && !passive13G(e.form, e.filer_name) && (!/^4/.test(e.form) || trade(e.action, e.value_usd)))
   // One window on every row: filings since the 13F period end (Jun 30 while Q3 is filing).

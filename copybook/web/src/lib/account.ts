@@ -128,6 +128,15 @@ const setDown = (v: boolean) => {
 }
 /** Re-renders when the API starts or stops answering 429/5xx (the status banner). */
 export const useApiDown = () => useSyncExternalStore((f) => (downSubs.add(f), () => downSubs.delete(f)), apiDown)
+/** The API base for display (docs, curl examples), re-rendered once api.json has answered. */
+export function useApiBase() {
+  const [b, setB] = useState(api)
+  useEffect(() => {
+    apiReady.then(setB)
+  }, [])
+  return b
+}
+
 /** fetch against the current API base. A network-level failure (a rotated tunnel URL) re-reads api.json
  *  once, and the request is retried if the base moved. */
 async function apiFetch(path: string, init?: RequestInit) {
@@ -227,8 +236,9 @@ export const readMe = () => {
   return c ? Promise.resolve(c) : fetchMe()
 }
 export type CancelReason = 'seasonal' | 'price' | 'value' | 'feature' | 'alerts' | 'temporary' | 'other'
-export const pausePlan = (reason?: CancelReason) => call<{ ok: boolean; paused_until: number }>('/pause', { body: reason ? { reason } : {}, auth: true })
-export const resumePlan = () => call<{ ok: boolean }>('/pause', { method: 'DELETE', auth: true })
+// A pause or resume changes /me: the tab's cached copy is dropped so the next read asks the API.
+export const pausePlan = (reason?: CancelReason) => call<{ ok: boolean; paused_until: number }>('/pause', { body: reason ? { reason } : {}, auth: true }).finally(forgetMe)
+export const resumePlan = () => call<{ ok: boolean }>('/pause', { method: 'DELETE', auth: true }).finally(forgetMe)
 export const sendCancelReason = (reason: CancelReason, note?: string) => call<{ ok: boolean }>('/cancel-reason', { body: { reason, ...(note ? { note } : {}) }, auth: true })
 /** Throws when the sign-in email can't be queued (a 5xx or no answer in 15 s), so the form can say so. */
 export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email }, timeout: 15_000 })

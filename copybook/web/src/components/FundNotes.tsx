@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMember } from '../lib/account'
-import { DATA, dateLabel, displayName, shareClass as shareClassOf, money, pct, quarterLabel, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
+import { DATA, pricingTo, dateLabel, displayName, shareClass as shareClassOf, money, pct, quarterLabel, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
 import { stockPath } from '../lib/stocks'
 import { Badge, Lock, Panel } from './ui'
 
@@ -537,7 +537,7 @@ export function SinceLast13F({ slug, quarter, holdings }: { slug: string; quarte
           <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
             <Lock /> {positions.length - FREE_EVENTS} more {positions.length - FREE_EVENTS === 1 ? 'position' : 'positions'} changed since the 13F, with Copy
           </p>
-          <Link to="/pricing/" className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
+          <Link to={pricingTo()} className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
             Start 14-day free trial
           </Link>
         </div>

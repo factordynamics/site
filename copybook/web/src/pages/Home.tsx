@@ -448,7 +448,7 @@ function CTABand() {
           </div>
           <div className="flex flex-col items-start gap-3 md:items-end">
             <Button to="/pricing/" size="lg" className="w-full md:w-auto">
-              Get Copy for $9/month
+              Start 14-day free trial
             </Button>
             <p className="text-[13px] text-white/60">Or $79 a year. The latest quarter stays free.</p>
           </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { pricingTo } from '../lib/data'
 import { ApiError, getToken } from '../lib/account'
 import { isPaywall, setFollow, useFollows } from '../lib/follows'
 
@@ -67,7 +68,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
         {freeMsg && (
           <span role="status" className="absolute right-0 top-full z-10 mt-1.5 w-[280px] rounded-lg bg-card px-3 py-2 text-[12.5px] text-ink-2 shadow-[0_0_0_1px_var(--color-line),0_6px_16px_-6px_rgb(12_14_19/0.2)]">
             {freeMsg}{' '}
-            <Link to="/pricing/" className="font-medium text-accent hover:text-accent-2">
+            <Link to={pricingTo()} className="font-medium text-accent hover:text-accent-2">
               Start 14-day trial
             </Link>
           </span>
@@ -109,7 +110,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
               : 'Get an email when a fund you track buys or sells it, and see who holds it each filing season.'}
           </p>
           <div className="mt-3.5 flex items-center gap-2">
-            <Link to="/pricing/" className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
+            <Link to={pricingTo()} className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
               Start 14-day free trial
             </Link>
             {!signedIn && (

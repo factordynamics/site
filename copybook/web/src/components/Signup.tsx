@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { pricingTo } from '../lib/data'
 import { signupLive, TRIAL_DAYS } from '../config'
-import { ApiError, call, getToken } from '../lib/account'
+import { ApiError, call, getToken, useMemberState } from '../lib/account'
 import { utmTags } from '../lib/attribution'
 import { Arrow, Button, Check } from './ui'
 
@@ -12,7 +13,9 @@ export function Signup({ source, className = '' }: { source: string; className?:
   const [email, setEmail] = useState('')
   const [website, setWebsite] = useState('')
   const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'member' | 'error'; msg?: string }>({ s: 'idle' })
-  if (!signupLive || getToken()) return null
+  // Hidden for members; shown again when a session's /me failed with nothing cached (member null).
+  const member = useMemberState()
+  if (!signupLive || (getToken() && member !== null)) return null
   const id = `signup-${source}`
   return (
     <section className={`rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:p-6 ${className}`} aria-labelledby={`${id}-title`}>
@@ -22,8 +25,8 @@ export function Signup({ source, className = '' }: { source: string; className?:
             Get the Friday top moves free
           </h2>
           <p className="mt-1 text-[13.5px] text-ink-2">The week’s five biggest buys and sells by the investors we track, from SEC filings. Or start Copy and get each filing minutes after it lands on EDGAR.</p>
-          <Button to="/pricing/" className="mt-4">
-            Start {TRIAL_DAYS}-day trial <Arrow />
+          <Button to={pricingTo()} className="mt-4">
+            Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
         </div>
         {state.s === 'done' || state.s === 'member' ? (
@@ -108,8 +111,8 @@ export function CopyFeature({ what, className = '' }: { what?: string; className
     <span role="status" className={`inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-2 ${className}`}>
       <span>{what ? `${what} is a Copy feature` : 'This is a Copy feature'}</span>
       <span aria-hidden="true">·</span>
-      <Link to="/pricing/" className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
-        Start {TRIAL_DAYS}-day trial <Arrow className="size-3" />
+      <Link to={pricingTo()} className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
+        Start {TRIAL_DAYS}-day free trial <Arrow className="size-3" />
       </Link>
     </span>
   )

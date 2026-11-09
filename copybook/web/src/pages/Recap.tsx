@@ -195,7 +195,7 @@ export function Recap() {
             <p className="mt-1.5 text-[14.5px] text-white/70">Copy emails you each superinvestor’s moves minutes after EDGAR accepts the 13F, with every list on this page in full.</p>
           </div>
           <Button to="/pricing/" size="lg">
-            Start {TRIAL_DAYS}-day trial <Arrow />
+            Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
         </section>
       )}
@@ -212,7 +212,7 @@ function More({ n, what }: { n: number; what: string }) {
     <Link to="/pricing/" className="mt-3 flex items-center gap-2 rounded-xl bg-ink/[0.03] px-3 py-2.5 text-[13px] text-ink-2 hover:text-ink">
       <Lock />
       <span>
-        {n} more {what} with Copy · <span className="font-medium text-accent">Start {TRIAL_DAYS}-day trial</span>
+        {n} more {what} with Copy · <span className="font-medium text-accent">Start {TRIAL_DAYS}-day free trial</span>
       </span>
     </Link>
   )

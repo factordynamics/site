@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Badge, Button, Panel, Skeleton } from '../components/ui'
-import { api } from '../config'
 import { ApiStatus } from '../components/ApiStatus'
-import { probe } from '../lib/account'
+import { probe, useApiBase } from '../lib/account'
 import { useAsync, useTitle } from '../lib/data'
 import { loadCoverage } from '../lib/stocks'
 
@@ -36,7 +35,8 @@ export function ApiDocs() {
   const spec = useAsync(() => fetch(SPEC).then((r) => (r.ok ? (r.json() as Promise<Spec>) : Promise.reject(new Error(String(r.status))))), [])
   const log = useAsync(loadChangelog, [])
   const s = spec.data
-  const base = s?.servers?.[0]?.url ?? api
+  // The live base from api.json, not the spec's servers entry, which names whichever host built it.
+  const base = useApiBase()
   const info = parseInfo(s?.info.description)
   // Parameters are often $refs into components.parameters; resolve them so the table has names.
   const resolve = (x: Param | { $ref?: string }): Param | null => {
@@ -80,6 +80,7 @@ export function ApiDocs() {
           <pre className="overflow-x-auto rounded-xl bg-night p-4 font-mono text-[13px] leading-relaxed text-white/90">
             <code>{`curl ${base}/v1/me \\\n  -H "Authorization: Bearer cbk_live_..."`}</code>
           </pre>
+          <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. A dedicated api.copybook.factordynamics.com hostname is planned.</p>
           <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[13.5px] leading-relaxed text-accent-2">
             <strong className="font-medium">Send a descriptive User-Agent</strong> that names your app, such as <code className="font-mono text-[12.5px]">my-research/1.0</code>. Full books for the largest filers (T. Rowe Price, Millennium) can take 15–25 s; use the bulk files for whole-universe pulls.
           </p>
