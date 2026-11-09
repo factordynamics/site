@@ -1,10 +1,11 @@
 import { Signup } from '../components/Signup'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { FollowButton } from '../components/FollowButton'
 import { Arrow, Badge, Button, Monogram, Panel, Skeleton } from '../components/ui'
-import { BASE, dateLabel, getJSON, money, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
-import { stockPath } from '../lib/stocks'
+import { BASE, dateLabel, getJSON, loadManager, money, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
+import { useFollows } from '../lib/follows'
+import { stockPath, tickerText } from '../lib/stocks'
 
 // A public card for one 13F (scripts/cards.mjs): the top five moves, made to be shared. Free, no account.
 type Card = {
@@ -32,6 +33,25 @@ export function FilingCard() {
   const { accession = '' } = useParams()
   const c = useAsync(() => getJSON<Card>(`${BASE}d/f/${encodeURIComponent(accession)}.json`), [accession])
   const d = c.data
+  // Signed-in members: tag the names they own or watch, and list their other names this 13F moved.
+  // Client-side only; the static page and its share tags stay the same for everyone.
+  const { follows } = useFollows()
+  const tag = useMemo(() => {
+    const m = new Map<string, 'Owned' | 'Watched'>()
+    for (const t of follows.stocks) m.set(tickerText(t), 'Watched')
+    for (const t of follows.owned) m.set(tickerText(t), 'Owned')
+    return m
+  }, [follows.owned, follows.stocks])
+  const book = useAsync(() => (d && tag.size ? loadManager(d.slug).catch(() => null) : Promise.resolve(null)), [d?.slug, tag.size > 0])
+  const yours = useMemo(() => {
+    const f = book.data
+    if (!d || !f || f.quarter !== d.quarter) return []
+    const top = new Set(d.moves.map((m) => m.ticker && tickerText(m.ticker)))
+    return f.holdings
+      .filter((h) => h.ticker && !h.put_call && tag.has(tickerText(h.ticker)) && !top.has(tickerText(h.ticker)) && h.change && h.change !== 'unchanged')
+      .map((h) => ({ h, delta: (h as { value_delta?: number }).value_delta ?? (h.shares ? (h.shares - (h.prev_shares ?? 0)) * (h.value / h.shares) : -(h.prev_value ?? 0)) }))
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+  }, [book.data, d, tag])
   useTitle(d ? `${d.manager}’s ${quarterLabel(d.quarter)} 13F: top moves · Copybook` : undefined)
 
   if (c.error)
@@ -92,6 +112,11 @@ export function FilingCard() {
                           </Link>
                         ) : null}
                         <span className={`${m.ticker ? 'ml-2 ' : ''}text-[14px] text-ink-2`}>{m.name}</span>
+                        {m.ticker && tag.get(tickerText(m.ticker)) && (
+                          <Badge tone={tag.get(tickerText(m.ticker)) === 'Owned' ? 'accent' : 'neutral'} className="ml-2 whitespace-nowrap align-[1px]">
+                            {tag.get(tickerText(m.ticker))}
+                          </Badge>
+                        )}
                         <span className="block text-[12.5px] text-ink-3">
                           {m.change === 'exited' ? `Sold all ${sharesFmt(m.prev_shares)} shares` : m.change === 'new' ? `${sharesFmt(m.shares)} shares, a new position` : `${sharesFmt(m.prev_shares)} → ${sharesFmt(m.shares)} shares${r != null ? ` (${r > 0 ? '+' : '−'}${Math.round(Math.abs(r) * 100)}%)` : ''}`}
                         </span>
@@ -108,6 +133,39 @@ export function FilingCard() {
                   )
                 })}
               </ol>
+
+              {yours.length > 0 && (
+                <section className="mt-5 rounded-xl bg-paper px-4 py-3.5" aria-labelledby="yours-title">
+                  <h2 id="yours-title" className="text-[13px] font-medium text-ink-3">
+                    Also in your names
+                  </h2>
+                  <ul className="mt-2 grid gap-x-8 gap-y-2 sm:grid-cols-2">
+                    {yours.slice(0, 8).map(({ h, delta }) => {
+                      const t = tag.get(tickerText(h.ticker!))
+                      return (
+                        <li key={h.cusip} className="flex items-center gap-2 text-[13.5px]">
+                          <Link to={stockPath(h.ticker!)} className="w-12 shrink-0 font-mono font-semibold hover:text-accent">
+                            {h.ticker}
+                          </Link>
+                          <span className="min-w-0 flex-1 truncate text-ink-2">{h.change === 'new' ? 'New' : h.change![0].toUpperCase() + h.change!.slice(1)}</span>
+                          <span className={`num w-[4.75rem] shrink-0 text-right font-medium ${delta >= 0 ? 'text-up' : 'text-down'}`}>
+                            {delta >= 0 ? '+' : '−'}
+                            {money(Math.abs(delta))}
+                          </span>
+                          <Badge tone={t === 'Owned' ? 'accent' : 'neutral'} className="w-[4.5rem] justify-center">
+                            {t}
+                          </Badge>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                  {yours.length > 8 && (
+                    <Link to={`/investors/${d.slug}/`} className="mt-2 inline-block text-[13px] text-accent hover:text-accent-2">
+                      {yours.length - 8} more of your names on {d.manager}’s page
+                    </Link>
+                  )}
+                </section>
+              )}
 
               <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-line pt-5 text-[13.5px] sm:grid-cols-4">
                 {(
