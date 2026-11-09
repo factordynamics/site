@@ -1,6 +1,6 @@
 // The Copybook API's base URL: the one setting to change when the API moves (no trailing slash).
 // Read by the Vite build (as VITE_API), scripts/cards.mjs and the Pages workflow; VITE_API overrides it.
-export const API = process.env.VITE_API || 'https://gene.tail70ba3.ts.net/copybook'
+export const API = process.env.VITE_API || 'https://solid-amanda-dir-fiction.trycloudflare.com/copybook'
 // The API's latency summary as a public R2 object (same shape as GET /latency plus generated_at, rewritten
 // each minute it changes): pages read it instead of the API, so a visitor costs no Worker request.
 // The current API base, published by the API host as a public R2 object ({"api": "https://…"}). The site
