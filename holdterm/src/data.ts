@@ -3,6 +3,7 @@ import { firmName, issuerName, pmName, FUNDS } from './names'
 import ROSTER from './roster.json'
 import TICKERS from './tickers.json'
 import CORRECTIONS from './corrections.json'
+import ETFS from './etfs.json'
 
 export type Change = 'new' | 'added' | 'trimmed' | 'exited' | 'unchanged' | null
 export type Holding = {
@@ -162,6 +163,10 @@ function normalise(hs: Holding[]) {
     const s = by.get(h.cusip.slice(0, 6))
     if (s) h.sector = s.sector
     h.display_name = issuerName(h.display_name || h.issuer)
+    if (isFundLike(h)) {
+      h.sector = 'Funds & ETFs'
+      h.display_name = etfName(h)
+    }
   }
   return hs
 }
@@ -276,6 +281,14 @@ export type Agg = {
 /** ETFs, index and T-bill funds: shown in holdings, but kept out of "largest positions" and trade lists. */
 export const isFundLike = (h: Pick<Holding, 'sector' | 'issuer' | 'title'>) =>
   h.sector === 'Funds & ETFs' || /\b(ETF|ETFS|EXCHANGE TRADED|ISHARES|SPDR|VANGUARD|INVESCO QQQ|PROSHARES|WISDOMTREE|DIREXION|INDEX|TREASURY|T-BILL|SELECT SECTOR|S&P ?500|TR UNIT)\b/i.test(`${h.issuer} ${h.title}`)
+const ETF_NAMES = ETFS as unknown as Record<string, string>
+/** A 13F names the sponsor's trust ("ISHARES TR"); show the fund instead (src/etfs.json), else brand + class title. */
+function etfName(h: Holding) {
+  if (h.ticker && ETF_NAMES[h.ticker]) return ETF_NAMES[h.ticker]
+  const brand = issuerName(h.issuer.replace(/\s+(ETF\s+)?(TR|TRUST|FD T|FDS?|EXCH TRADED FD TR.*|EXCHANGE TRADED FD.*|SER(IES)? TR.*|INC)\b.*$/i, '')).replace(/^Ishares\b/, 'iShares')
+  const cls = h.title.replace(/\bETF\b/i, '').trim().toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase())
+  return `${brand} ${cls} ETF`.replace(/\s+/g, ' ')
+}
 /** Rolls the latest books up by company: share classes of one issuer (same 6-character CUSIP prefix,
  * e.g. GOOGL and GOOG) count as one stock, shown under its most-held ticker. Options are excluded. */
 export function aggregate(books: Book[]): { rows: Agg[]; total: number } {
