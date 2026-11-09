@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getJson } from './getjson.mjs'
+import { displayName } from '../src/lib/names.mjs'
 import { API, API_JSON_URL } from '../api.config.mjs'
 import { dueLead, investorTitle, seasonTitle, stockTitle } from '../src/lib/titles.mjs'
 
@@ -69,7 +70,7 @@ page(
   'Portfolios of the world’s great investors, read straight from their SEC 13F filings. Top positions, sector mix and where they agree.',
   ld({ '@graph': [ORG, { '@type': 'WebSite', name: 'Copybook', url: SITE, description: 'Superinvestor and hedge fund portfolios from SEC 13F filings.', publisher: { '@type': 'Organization', name: 'Copybook' } }] }),
 )
-const tc = (s) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/\b(Llc|Lp|Llp|Plc|Etf|Ag|Sa|Nv|Se|Ii|Iii|Usa)\b/g, (w) => w.toUpperCase()))
+const tc = displayName
 page('investors/', 'Investors · Copybook', 'Latest 13F portfolios of legendary value investors, hedge-fund founders, activists and the largest institutions.')
 page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.')
 page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, full history, filing alerts and CSV export.')
@@ -234,6 +235,19 @@ try {
 }
 console.log(`wrote ${fn} filer pages`)
 page('flow/', 'Smart money flow · Copybook', 'What the best investors bought and sold this 13F season: most bought, most sold, and new positions opened by two or more funds.')
+const holderRow = (x) => [link(`investors/${x.slug}/`, displayName(x.manager)), ht(qLabel(x.quarter)), ht(num(x.shares)), usd(x.value), ht(CHANGE[x.change] ?? '')]
+// "Warren Buffett bought $26.9M (Form 4, Nov 3, 2026)", newest first, linked to the filing.
+const sinceLines = (since) =>
+  since
+    .slice()
+    .sort((a, b) => b.filing_date.localeCompare(a.filing_date))
+    .slice(0, 5)
+    .map((e) => {
+      const who = displayName(e.manager)
+      const what = e.kind === 'form4' ? `${e.action === 'buy' ? 'bought' : e.action === 'sell' ? 'sold' : 'traded'}${e.value_usd ? ` ${usd(Math.abs(e.value_usd))}` : ''}` : e.percent_of_class != null ? `reported a ${e.percent_of_class}% stake` : 'filed a stake update'
+      const form = e.kind === 'form4' ? 'Form 4' : String(e.form).replace(/^SCHEDULE /i, '')
+      return `${ht(who)} ${ht(what)} (<a href="${ht(e.url)}">${ht(form)}</a>, ${ht(dayLabel(e.filing_date))})`
+    })
 // Stock pages (scripts/stocks.mjs runs first): prerender tickers held by 2+ funds; the rest render from 404.html.
 let st = 0
 try {
@@ -265,14 +279,18 @@ try {
       pre(
         `${s.n} (${s.t}): who owns it`,
         desc,
+        // What the page leads with: Form 4 and 13D/G filings since the 13Fs, then the superinvestors, then the funds we track.
+        (sf?.since ?? []).length ? `<h2>Since the latest 13Fs</h2><ul>${sinceLines(sf.since).map((l) => `<li>${l}</li>`).join('')}</ul>` : '',
+        supH.length ? `<h2>Superinvestors holding it</h2>` : '',
+        table(['Investor', '13F', 'Shares', 'Value', 'Change'], supH.slice(0, 10).map(holderRow)),
         `<h2>Largest holders among the funds we track</h2>`,
         table(
           ['Investor', '13F', 'Shares', 'Value', 'Change'],
           (sf?.holders ?? [])
-            .slice()
+            .filter((x) => !x.featured)
             .sort((x, y) => y.value - x.value)
             .slice(0, 10)
-            .map((x) => [link(`investors/${x.slug}/`, x.manager), ht(qLabel(x.quarter)), ht(num(x.shares)), usd(x.value), ht(CHANGE[x.change] ?? '')]),
+            .map(holderRow),
         ),
         h?.rows?.length ? `<h2>Largest 13F filers holding it</h2>` : '',
         table(['Filer', '13F', 'Value'], (h?.rows ?? []).slice(0, 10).map(([slug, name, quarter, , value]) => [link(`investors/${slug}/`, tc(name)), ht(qLabel(quarter)), usd(value)])),
@@ -295,5 +313,16 @@ redirect('about.html', 'about/')
 // redirect, so this only covers links opened in a browser: GET, JavaScript on.
 const apiBridge = `<script>(function(){var p=location.pathname;if(!/^\\/api\\/./.test(p))return;document.documentElement.style.visibility='hidden';var ok=/^https:\\/\\/([a-z0-9-]+\\.)+(trycloudflare\\.com|ts\\.net|factordynamics\\.com|workers\\.dev)(\\/[^\\s?#]*)?$/i,go=function(b){location.replace(b.replace(/\\/$/,'')+p.slice(4)+location.search+location.hash)};fetch(${JSON.stringify(API_JSON_URL)}+'?m='+Math.floor(Date.now()/6e4)).then(function(r){return r.json()}).then(function(j){var b=j&&(j.api_base||j.api);go(ok.test(b)?b:${JSON.stringify(API)})},function(){go(${JSON.stringify(API)})})})()</script>`
 writeFileSync(join(dist, '404.html'), shell.replace('<head>', () => `<head>\n    ${apiBridge}`))
+// The home page: its h1 and intro for crawlers and link previews, like every other page.
+writeFileSync(
+  join(dist, 'index.html'),
+  shell.replace('<div id="root"></div>', () =>
+    `<div id="root"><div id="pre">${pre(
+      'See what the world’s best investors own, straight from the filing.',
+      'Copybook turns SEC 13F filings into clear portfolios: top positions, sector mix and conviction, for the managers worth following.',
+      `<p>${link('season/', 'This 13F season')} · ${link('flow/', 'Smart money flow')} · ${link('investors/', 'Investors')} · ${link('consensus/', 'Consensus')} · ${link('pricing/', 'Pricing')}</p>`,
+    )}</div></div>`,
+  ),
+)
 writeFileSync(join(dist, '.nojekyll'), '')
 console.log(`wrote ${n} investor pages`)

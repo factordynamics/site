@@ -253,7 +253,11 @@ export function StockPage() {
               : ''
             : d
             ? d.quarters.length > 1 && holders.length && holders.every((h) => h.quarter === d.quarters[0])
-              ? `All ${holders.length} ${holders.length === 1 ? 'has' : 'have'} filed ${quarterLabel(d.quarters[0])}, each compared with its filing before.`
+              ? holders.length <= 2
+                ? `${holders.map((h) => h.manager).join(' and ')} ${holders.length === 1 ? 'has' : 'have'} filed ${quarterLabel(d.quarters[0])}, compared with ${holders.length === 1 ? 'its' : 'their'} filing before.`
+                : `All ${holders.length} have filed ${quarterLabel(d.quarters[0])}, each compared with its filing before.`
+              : d.quarters.length > 1 && holders.filter((h) => h.quarter === d.quarters[0]).length > 0 && holders.filter((h) => h.quarter === d.quarters[0]).length <= 2
+              ? `Mid-season: ${holders.filter((h) => h.quarter === d.quarters[0]).map((h) => h.manager).join(' and ')} ${holders.filter((h) => h.quarter === d.quarters[0]).length === 1 ? 'has' : 'have'} filed ${quarterLabel(d.quarters[0])}; the rest are still on ${d.quarters.slice(1).map(quarterLabel).join(' or ')}. Each row is labelled with its quarter.`
               : d.quarters.length > 1
               ? `Mid-season: ${holders.filter((h) => h.quarter === d.quarters[0]).length} of ${holders.length} funds shown have filed ${quarterLabel(d.quarters[0])}; the rest are still on ${d.quarters.slice(1).map(quarterLabel).join(' or ')}. Each row is labelled with its quarter, compared with that fund’s filing before.`
               : `From each fund’s ${quarterLabel(d.quarters[0])} 13F, compared with its filing before.`

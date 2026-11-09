@@ -48,7 +48,8 @@ export function FreeNames({ className = '' }: { className?: string }) {
   const { status, follows } = useFollows()
   const fn = useMember()?.free_names
   const told = new Map((fn?.facts ?? []).map((f) => [f.ticker, f]))
-  const names = follows.owned
+  // The names /me already carries (cached) show at once, with their static facts, while /follows answers.
+  const names = status === 'ready' && follows.owned.length ? follows.owned : (fn?.names ?? follows.owned)
   const data = useAsync(() => Promise.all(names.map((t) => loadStock(t).catch(() => null))), [names.join(',')])
   const [text, setText] = useState('')
   const [msg, setMsg] = useState<{ t: string; trial?: boolean } | null>(null)
@@ -99,7 +100,7 @@ export function FreeNames({ className = '' }: { className?: string }) {
           {names.length} of {LIMIT}
         </span>
       </header>
-      {status !== 'ready' ? (
+      {status !== 'ready' && !names.length ? (
         <div className="space-y-2 px-5 py-4 md:px-6">
           <Skeleton className="h-5 w-full" />
           <Skeleton className="h-5 w-2/3" />

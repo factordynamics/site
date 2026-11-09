@@ -220,7 +220,7 @@ export function Pricing() {
                 <p className={`relative min-h-[1.5em] text-[13.5px] font-semibold ${dark ? 'text-[#7fe0a6]' : 'text-[#126b3c]'}`}>{referredDeal(tier.id, cycle)}</p>
               ) : (
                 <p className={`relative min-h-[1.5em] text-[12.5px] ${dark ? 'text-white/60' : 'text-ink-3'}`}>
-                  {plan ? (cycle === 'yearly' ? `About $${Math.round(plan.yearly / 12)} a month · save ${save}%` : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card, no account'}
+                  {plan ? (cycle === 'yearly' ? `About $${Math.round(plan.yearly / 12)} a month · save ${save}%` : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
                 </p>
               )}
               <div className="relative mt-5">

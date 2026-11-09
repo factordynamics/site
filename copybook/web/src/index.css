@@ -115,7 +115,7 @@
    it doesn't overflow or is scrolled to its end, and the fade goes. */
 @utility seg-fade {
   @media (width < 40rem) {
-    mask-image: linear-gradient(to right, #000 78%, transparent);
+    mask-image: linear-gradient(to right, #000 65%, transparent 98%);
     &[data-end] {
       mask-image: none;
     }
