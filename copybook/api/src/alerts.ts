@@ -1,6 +1,7 @@
 import { addToFeed, flushChannelLatency, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
 import { countAlerts, logSent, runRevenue } from './revenue';
+import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
 import { companyFilings, computeMoves, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, type Env, type Member } from './env';
@@ -948,10 +949,20 @@ export async function runWatchMap(env: Env): Promise<Record<string, unknown>> {
   const members = await listMembers(env);
   // Books imported from a 13F filer follow its newest quarter.
   const books = await refreshBooks(env, members.filter((m) => isActive(m))).catch(() => 0);
+  // Every owned and watched name, free members' included, for the issuer-events precompute.
+  const names = new Set<string>();
   for (const m of members) {
-    if (!isActive(m) || m.alerts === 'off') continue;
+    if (m.status === 'free') for (const t of (await getFollows(env, m)).owned) names.add(t);
+    if (!isActive(m)) continue;
+    if (m.alerts === 'off') {
+      for (const t of (await getFollows(env, m)).stocks) names.add(t);
+      continue;
+    }
     const f = await getFollows(env, m);
-    for (const t of f.stocks) want.add(t);
+    for (const t of f.stocks) {
+      want.add(t);
+      names.add(t);
+    }
     // Peers count as followed filers here (their CIKs reach the data run for a prior quarter, and they
     // get baselines); their alerts still go only to members who follow them as investors.
     for (const s of [...f.investors, ...(f.peers ?? []), ...(Array.isArray(m.alerts) ? m.alerts : [])]) followed.add(s);
@@ -959,6 +970,8 @@ export async function runWatchMap(env: Env): Promise<Record<string, unknown>> {
   }
   // Follows saved before any filer could be followed get their CIKs here.
   await resolveFollowedFilers(env, [...followed]).catch(() => []);
+  const nameList = JSON.stringify([...names].sort());
+  if ((await env.DB.get('issuers:tickers')) !== nameList) await env.DB.put('issuers:tickers', nameList);
   const curatedCiks = new Set(Object.keys((await cikMap(env)) ?? {}));
   await env.DB.put('followed:book-ciks', JSON.stringify([...bookCiks].filter((c) => !curatedCiks.has(c)).sort()));
   await pruneExtra(env, followed);
@@ -1307,7 +1320,7 @@ export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reaso
 
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
 interface Job {
-  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly';
+  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers';
   at: number;
 }
 
@@ -1345,6 +1358,8 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
   if (m === 12 && h === 15) due.push({ name: 'revenue', at: scheduledTime });
   // The free weekly: Fridays after EDGAR's day ends (22:00 ET), 03:42 UTC Saturday.
   if (m === 42 && h === 3 && t.getUTCDay() === 6) due.push({ name: 'weekly', at: scheduledTime });
+  // Owned and watched names' insider and 13D/G events: every 10 minutes (each name hourly, 10 minutes in filing week).
+  if (m % 10 === 9) due.push({ name: 'issuers', at: scheduledTime });
   const rawQueue = await env.DB.get('jobs:due');
   const queue = [...(JSON.parse(rawQueue ?? '[]') as Job[]), ...due].filter((j, i, all) => all.findIndex((x) => x.name === j.name) === i);
   if (!busy && queue.length) {
@@ -1356,6 +1371,8 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
       watch: () => runWatchMap(env),
       revenue: () => runRevenue(env, scheduledTime),
       weekly: () => import('./free').then((x) => x.runWeekly(env, job.at)),
+      // A quiet minute's leftover SEC requests, keeping 4 for the mailer and GitHub.
+      issuers: () => import('./stockevents').then((x) => x.precomputeIssuers(env, scheduledTime, inFilingWeek(scheduledTime), Math.min(16, secBudget.left - 4))),
     };
     await step(job.name, run[job.name]);
   }

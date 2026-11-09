@@ -598,7 +598,7 @@ ROUTES.push(
             prev: null,
             classes: e.classes ?? null,
             purpose: null,
-            insider: f4 ? { name: e.filer_name, roles: (e.role ?? '').split(', ').filter(Boolean), ownership: e.ownership } : null,
+            insider: f4 ? { name: e.filer_name, roles: (e.role ?? '').split(', ').filter(Boolean), ownership: e.ownership, open_market: e.open_market, codes: e.codes, totals: e.totals, transactions: e.transactions } : null,
             details_pending: false,
             sec_url: e.url,
           });

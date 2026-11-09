@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13D" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <schemaVersion>X0202</schemaVersion>
+<headerData>
+    <submissionType>SCHEDULE 13D/A</submissionType>
+    <filerInfo>
+      <filer>
+        <filerCredentials>
+          <cik>0000315090</cik>
+          <ccc>XXXXXXXX</ccc>
+        </filerCredentials>
+      </filer>
+      <liveTestFlag>LIVE</liveTestFlag>
+
+
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPageHeader>
+      <amendmentNo>81</amendmentNo>
+      <securitiesClassTitle>Class A Common Stock, Par Value $5.00 per share</securitiesClassTitle>
+      <dateOfEvent>07/14/2026</dateOfEvent>
+      <previouslyFiledFlag>false</previouslyFiledFlag>
+      <issuerInfo>
+        <issuerCIK>0001067983</issuerCIK>
+        <issuerCusips>
+          <issuerCusipNumber>084670108</issuerCusipNumber>
+        </issuerCusips>
+        <issuerName>Berkshire Hathaway Inc.</issuerName>
+        <address>
+          <street1 xmlns="http://www.sec.gov/edgar/common">3555 Farnam Street</street1>
+          <city xmlns="http://www.sec.gov/edgar/common">Omaha</city>
+          <stateOrCountry xmlns="http://www.sec.gov/edgar/common">NE</stateOrCountry>
+          <zipCode xmlns="http://www.sec.gov/edgar/common">68131</zipCode>
+        </address>
+      </issuerInfo>
+      <authorizedPersons>
+        <notificationInfo>
+          <personName>Warren E. Buffett</personName>
+          <personPhoneNum>402-346-1400</personPhoneNum>
+          <personAddress>
+            <street1 xmlns="http://www.sec.gov/edgar/common">3555 Farnam Street</street1>
+            <city xmlns="http://www.sec.gov/edgar/common">Omaha</city>
+            <stateOrCountry xmlns="http://www.sec.gov/edgar/common">NE</stateOrCountry>
+            <zipCode xmlns="http://www.sec.gov/edgar/common">68131</zipCode>
+          </personAddress>
+        </notificationInfo>
+      </authorizedPersons>
+    </coverPageHeader>
+    <reportingPersons>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0000315090</reportingPersonCIK>
+        <reportingPersonNoCIK>N</reportingPersonNoCIK>
+        <reportingPersonName>Warren E. Buffett</reportingPersonName>
+        <fundType>PF</fundType>
+        <legalProceedings>N</legalProceedings>
+        <citizenshipOrOrganization>X1</citizenshipOrOrganization>
+        <soleVotingPower>188290</soleVotingPower>
+        <sharedVotingPower>0.00</sharedVotingPower>
+        <soleDispositivePower>188290</soleDispositivePower>
+        <sharedDispositivePower>0.00</sharedDispositivePower>
+        <aggregateAmountOwned>188290</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>38.2</percentOfClass>
+        <typeOfReportingPerson>IN</typeOfReportingPerson>
+        <commentContent>This Schedule 13D amendment relates to the following classes of securities: Class A Common Stock, Par Value $5.00 per share with CUSIP No. 084670108 and Class B Common Stock, Par Value $0.0033 per share with CUSIP No. 084670702. Due to the new EDGAR filing requirements, cover pages are limited to one class of security. The cover page of this Schedule 13D filing relates to the Class A Common Stock, and this comment and the notes below shall serve as full disclosure of the beneficial ownership of all classes of securities of the Issuer.
+
+Sole Voting Power and Sole Dispositive Power shown in Boxes 7 and 9 consists of 188,290 shares of Class A Common Stock held directly by Mr. Buffett. Mr. Buffett also has sole voting power and sole dispositive power over 1,162 shares of Class B Common Stock held directly by Mr. Buffett.
+
+Aggregate amount beneficially owned in Box 11 consists of the Class A Common Stock reported in Boxes 7 and 9. The aggregate amount of Class B Common Stock beneficially owned by Mr. Buffett consists of 1,162 shares of Class B Common Stock, which represents less than 0.01% of the outstanding shares of Class B Common Stock.</commentContent>
+      </reportingPersonInfo>
+    </reportingPersons>
+    <items1To7>
+      <item1>
+        <securityTitle>Class A Common Stock, Par Value $5.00 per share</securityTitle>
+        <issuerName>Berkshire Hathaway Inc.</issuerName>
+        <issuerPrincipalAddress>
+          <street1 xmlns="http://www.sec.gov/edgar/common">3555 Farnam Street</street1>
+          <city xmlns="http://www.sec.gov/edgar/common">Omaha</city>
+          <stateOrCountry xmlns="http://www.sec.gov/edgar/common">NE</stateOrCountry>
+          <zipCode xmlns="http://www.sec.gov/edgar/common">68131</zipCode>
+        </issuerPrincipalAddress>
+        <commentText>Item 5 of this Schedule 13D is amended to add the information set forth below. Except as specifically set forth herein, this Schedule 13D amendment does not modify any of the information previously reported by Mr. Buffett in this Schedule 13D.</commentText>
+      </item1>
+      <item5>
+        <percentageOfClassSecurities>Mr. Buffett owns, and has the sole power to vote and to dispose of 188,290 shares of Class A Common Stock and 1,162 shares of Class B Common Stock, representing approximately 38.2% of the outstanding shares of Class A Common Stock, less than 0.01% of the outstanding shares of Class B Common Stock, 29.7% of the aggregate voting power of the outstanding shares of both classes and 13.2% of the economic interest of the outstanding shares of both classes.</percentageOfClassSecurities>
+        <numberOfShares>Information disclosed in Item 5(a).</numberOfShares>
+        <transactionDesc>On July 14, 2026, Mr. Buffett converted 8,000 shares of Class A Common Stock into 12,000,000 shares of Class B Common Stock. Also on July 14, 2026, Mr. Buffett donated 9,000,000 shares of Class B Common Stock to the Susan Thompson Buffett Foundation and 1,000,000 shares of Class B Common Stock to each of the Sherwood Foundation, the Howard G. Buffett Foundation and the NoVo Foundation.</transactionDesc>
+      </item5>
+    </items1To7>
+    <signatureInfo>
+      <signaturePerson>
+        <signatureReportingPerson>Warren E. Buffett</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Warren E. Buffett</signature>
+          <title>Warren E. Buffett</title>
+          <date>07/15/2026</date>
+        </signatureDetails>
+      </signaturePerson>
+    </signatureInfo>
+  </formData>
+</edgarSubmission>

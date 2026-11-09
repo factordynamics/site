@@ -331,6 +331,24 @@ export interface Form4 {
   last_transaction_date: string | null;
   /** Non-derivative transaction codes in filing order, once each (P, S, A, M, F, G, ...). */
   codes: string[];
+  /** Per transaction code (non-derivative lines): shares and shares x price (0 where no price is filed, as for gifts and grants). */
+  by_code: Record<string, { shares: number; value_usd: number }>;
+  /** Every transaction line as filed, non-derivative first, then derivative (options, convertibles). */
+  lines: Form4Line[];
+}
+
+export interface Form4Line {
+  code: string;
+  security: string;
+  date: string | null;
+  shares: number;
+  /** Null when the filing gives no price (or 0, as gifts do). */
+  price: number | null;
+  acquired_disposed: 'A' | 'D' | null;
+  ownership: 'direct' | 'indirect';
+  nature: string | null;
+  shares_after: number | null;
+  derivative: boolean;
 }
 
 /**
@@ -404,6 +422,32 @@ export function parseForm4(xml: string): Form4 | null {
     event_date: dates[0] ?? (val(xml, 'periodOfReport') || null),
     last_transaction_date: dates[dates.length - 1] ?? (val(xml, 'periodOfReport') || null),
     codes: [...new Set(all(xml, 'nonDerivativeTransaction').map((b) => val(b, 'transactionCode')).filter(Boolean))],
+    lines: [...all(xml, 'nonDerivativeTransaction').map((b) => [b, false] as const), ...all(xml, 'derivativeTransaction').map((b) => [b, true] as const)].map(([b, derivative]) => {
+      const price = Number(val(b, 'transactionPricePerShare')) || 0;
+      const ad = val(b, 'transactionAcquiredDisposedCode');
+      const after = val(b, 'sharesOwnedFollowingTransaction');
+      return {
+        code: val(b, 'transactionCode'),
+        security: val(b, 'securityTitle').trim(),
+        date: val(b, 'transactionDate').slice(0, 10) || null,
+        shares: Number(val(b, 'transactionShares')) || 0,
+        price: price || null,
+        acquired_disposed: ad === 'A' || ad === 'D' ? ad : null,
+        ownership: val(b, 'directOrIndirectOwnership') === 'I' ? ('indirect' as const) : ('direct' as const),
+        nature: val(b, 'natureOfOwnership').trim() || null,
+        shares_after: after === '' ? null : Number(after),
+        derivative,
+      };
+    }),
+    by_code: all(xml, 'nonDerivativeTransaction').reduce<Record<string, { shares: number; value_usd: number }>>((acc, b) => {
+      const code = val(b, 'transactionCode');
+      if (!code) return acc;
+      const sh = Number(val(b, 'transactionShares')) || 0;
+      const c = (acc[code] ??= { shares: 0, value_usd: 0 });
+      c.shares += sh;
+      c.value_usd = Math.round(c.value_usd + sh * (Number(val(b, 'transactionPricePerShare')) || 0));
+      return acc;
+    }, {}),
   };
 }
 

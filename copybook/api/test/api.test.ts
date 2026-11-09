@@ -12,6 +12,8 @@ import sc13dCvi from './fixtures/sc13da-cvi.xml?raw';
 import cvi41 from './fixtures/cvi-13da-41-primary.xml?raw';
 import form4Jain from './fixtures/form4-brk-jain.txt?raw';
 import sc13gSiri from './fixtures/sc13ga-siri-vanguard.xml?raw';
+import form4BuffettGift from './fixtures/form4-brk-buffett-gift.txt?raw';
+import sc13dBrkA from './fixtures/sc13da-brk-class-a.xml?raw';
 import { cleanItem4, parseSchedule13 } from '../src/edgar';
 
 class MemKV implements KV {
@@ -727,7 +729,11 @@ describe('copybook api', () => {
     await hist.put('pre/sec-tickers.json', '{"BRK.A":"0001067983","BRK.B":"0001067983","CVI":"0001376139","SIRI":"0000908937"}');
     const entry = (form: string, a: string, at: string) => `<entry><category term="${form}"/><id>urn:tag:sec.gov,2008:accession-number=${a}</id><updated>${at}</updated></entry>`;
     // Berkshire's feed lists Berkshire's own Form 4 on Lennar (newest) and Ajit Jain's sale of BRK.B.
-    secFiles['company:0001067983:4'] = `<feed>${entry('4', '0001193125-26-445930', '2026-11-03T21:30:04-05:00')}${entry('4', '0001728451-26-000004', '2026-09-29T17:16:08-04:00')}</feed>`;
+    secFiles['company:0001067983:4'] = `<feed>${entry('4', '0001193125-26-445930', '2026-11-03T21:30:04-05:00')}${entry('4', '0001728451-26-000004', '2026-09-29T17:16:08-04:00')}${entry('4', '0001193125-26-304843', '2026-07-15T16:05:00-04:00')}</feed>`;
+    secFiles['Archives/edgar/data/1067983/000119312526304843/0001193125-26-304843.txt'] = form4BuffettGift;
+    // Buffett's 13D/A on Berkshire Class A belongs to BRK.A, not BRK.B.
+    secFiles['company:0001067983:SCHEDULE 13'] = `<feed>${entry('SCHEDULE 13D/A', '0001193125-26-304838', '2026-07-15T16:04:00-04:00')}</feed>`;
+    secFiles['Archives/edgar/data/1067983/000119312526304838/primary_doc.xml'] = sc13dBrkA;
     secFiles['Archives/edgar/data/1067983/000119312526445930/0001193125-26-445930.txt'] = form4Len;
     secFiles['Archives/edgar/data/1067983/000172845126000004/0001728451-26-000004.txt'] = form4Jain;
     secFiles['company:0001376139:SCHEDULE 13'] = `<feed>${entry('SCHEDULE 13D/A', '0000921669-26-000412', '2026-11-05T16:14:03-05:00')}</feed>`;
@@ -744,11 +750,17 @@ describe('copybook api', () => {
     stripeObjects['checkout/sessions/cs_test_ev'] = { id: 'cs_test_ev', status: 'complete', created: now(), subscription: 'sub_ev', customer_details: { email: 'ev@example.com' } };
     stripeObjects['subscriptions/sub_ev'] = sub('sub_ev', 'cus_ev', 'active');
     const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_ev' } })).json()) as { token: string };
-    const r = await (await call('/events?tickers=brk.b,CVI,ZZZZ,SIRI', { token })).json();
+    const r = await (await call('/events?tickers=brk.b,CVI,ZZZZ,SIRI,BRK.A', { token })).json();
+    expect(r.tickers['BRK.A'].events.filter((e: { form: string }) => e.form.startsWith('SCHEDULE')).map((e: { shares_after: number; percent_of_class: number }) => [e.shares_after, e.percent_of_class])).toEqual([[188290, 38.2]]);
+    // Buffett's Jul 14 Form 4: converted 12M Class A-equivalent shares to B, then gave all 12M away. A gift, not a conversion; no price filed, so no value.
+    const gift = r.tickers['BRK.B'].events.find((e: { accession: string }) => e.accession === '0001193125-26-304843');
+    expect(gift).toMatchObject({ action: 'gift', shares: 12_000_000, value_usd: null, open_market: false, codes: ['C', 'G'], totals: { converted: { shares: 12_000_000, value_usd: null }, gifted: { shares: 12_000_000, value_usd: null } } });
+    expect(gift.transactions.filter((l: { derivative: boolean }) => !l.derivative).map((l: { code: string; acquired_disposed: string }) => `${l.code}${l.acquired_disposed}`)).toEqual(['CA', 'GD', 'GD', 'GD', 'GD']);
     expect(r.tickers.SIRI.events).toEqual([expect.objectContaining({ form: 'SCHEDULE 13G/A', filer_name: 'The Vanguard Group', action: 'stake_update', shares_after: 0, percent_of_class: 0, event_date: '2026-03-13' })]);
     expect(r.unknown).toEqual(['ZZZZ']);
     expect(r.pending).toEqual([]);
-    expect(r.tickers['BRK.B'].events).toEqual([
+    expect(r.tickers['BRK.B'].events.filter((e: { form: string }) => e.form.startsWith('SCHEDULE'))).toEqual([]);
+    expect(r.tickers['BRK.B'].events.filter((e: { accession: string }) => e.accession !== '0001193125-26-304843')).toEqual([
       {
         ticker: 'BRK.B', form: '4', filer_name: 'Jain Ajit', filer_cik: '0001728451', issuer: 'BERKSHIRE HATHAWAY INC', role: 'Vice Chairman, Director', action: 'sell',
         shares: 39700, price: 503.09, value_usd: 19972776, shares_after: 67925, prev_shares_after: 107625, percent_of_class: null,
@@ -758,6 +770,10 @@ describe('copybook api', () => {
           { security: 'Class B Common Stock', ownership: 'indirect', nature: 'By Jain Foundation Inc. (Non-Profit Corporation)', shares_after: 67608, bought: 0, sold: 39700 },
           { security: 'Class B Common Stock', ownership: 'direct', nature: null, shares_after: 317, bought: 0, sold: 0 },
         ],
+        codes: ['S'],
+        transactions: [{ code: 'S', security: 'Class B Common Stock', date: '2026-09-28', shares: 39700, price: 503.0926, acquired_disposed: 'D', ownership: 'indirect', nature: 'By Jain Foundation Inc. (Non-Profit Corporation)', shares_after: 67608, derivative: false }],
+        totals: { sold: { shares: 39700, value_usd: 19972776 } },
+        open_market: true,
         url: 'https://www.sec.gov/Archives/edgar/data/1067983/000172845126000004/0001728451-26-000004-index.htm',
       },
     ]);
@@ -778,14 +794,25 @@ describe('copybook api', () => {
     const pv = ((await (await call('/session', { body: { checkout_session: 'cs_test_pv' } })).json()) as { token: string }).token;
     const { key } = await (await call('/keys', { body: { name: 'q' }, token: pv })).json();
     const v1 = await (await handleRequest(new Request('https://api.test/v1/events?tickers=BRK.B,CVI&form=form4', { headers: { authorization: `Bearer ${key}` } }), env)).json();
-    expect(v1.data).toEqual([
+    expect(v1.data.map((d: { accession: string }) => d.accession)).toEqual(['0001728451-26-000004', '0001193125-26-304843']);
+    expect(v1.data[1].insider).toMatchObject({ codes: ['C', 'G'], open_market: false, totals: { gifted: { shares: 12_000_000, value_usd: null } } });
+    expect(v1.data.slice(0, 1)).toEqual([
       expect.objectContaining({
         accession: '0001728451-26-000004', kind: 'form4', source: 'issuer', action: 'sell', event_date: '2026-09-28', last_transaction_date: '2026-09-28', filing_date: '2026-09-29', accepted_at: '2026-09-29T21:16:08Z',
         filer: { slug: null, cik: '0001728451', name: 'Jain Ajit' }, issuer: expect.objectContaining({ ticker: 'BRK.B', cik: '0001067983' }),
         insider: expect.objectContaining({ roles: ['Vice Chairman', 'Director'], ownership: expect.arrayContaining([expect.objectContaining({ ownership: 'indirect', shares_after: 67608, sold: 39700 })]) }),
       }),
     ]);
-    expect(v1.coverage['BRK.B']).toMatchObject({ issuer_cik: '0001067983', form4_from: '2026-09-29T21:16:08Z' });
+    // Precomputed: a name someone owns is refreshed on schedule, without anyone opening it.
+    await putMember('own', 'own@example.com', 'active', []);
+    await putFollows('own', { owned: ['CVI'], stocks: ['CVI'] });
+    hist.m.delete('tev/CVI.json');
+    await cron(52);
+    expect(JSON.parse((await env.DB.get('issuers:tickers'))!)).toContain('CVI');
+    await cron(59);
+    expect(JSON.parse(new TextDecoder().decode(hist.m.get('tev/CVI.json')!)).seen['0000921669-26-000412']).toMatchObject({ percent_of_class: 64.1 });
+    expect(Number(JSON.parse((await env.DB.get('issuers:checked'))!).CVI)).toBeGreaterThan(Date.now() - 60_000);
+    expect(v1.coverage['BRK.B']).toMatchObject({ issuer_cik: '0001067983', form4_from: '2026-07-15T20:05:00Z' });
     expect(v1.pending).toEqual([]);
   });
 

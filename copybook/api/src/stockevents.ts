@@ -3,7 +3,7 @@
  * filer made on it, per ticker, for My book. Read from the issuer's EDGAR company feed; each filing
  * is parsed once and kept in R2 (tev/{TICKER}.json), so a refresh only fetches what's new.
  */
-import { companyFilings, type FeedEntry, fetchSchedule13, fetchSubmission, type Form4Class, parseForm4, secBudget } from './edgar';
+import { companyFilings, type FeedEntry, fetchSchedule13, fetchSubmission, type Form4Class, type Form4Line, parseForm4, secBudget } from './edgar';
 import type { Env } from './env';
 
 export interface StockEvent {
@@ -29,6 +29,14 @@ export interface StockEvent {
   last_transaction_date: string | null;
   /** Form 4: each ownership line, e.g. direct 317 and indirect "By Jain Foundation Inc." 67,608, with its open-market trades. */
   ownership: { security: string; ownership: 'direct' | 'indirect'; nature: string | null; shares_after: number; bought: number; sold: number }[] | null;
+  /** Form 4: every non-derivative transaction code in the filing, in filing order (P, S, G, F, M, A, C, ...). */
+  codes: string[] | null;
+  /** Form 4: every transaction line as filed (code, shares, price, acquired/disposed, direct/indirect, date), derivative lines flagged. */
+  transactions: Form4Line[] | null;
+  /** Form 4: non-derivative shares and value per kind. value_usd is null where the filing gives no price (gifts, grants, conversions). */
+  totals: Partial<Record<Kind, { shares: number; value_usd: number | null }>> | null;
+  /** Form 4: an open-market purchase or sale (P or S) is in it. Gifts, grants, withholding, exercises and conversions alone are not trades. */
+  open_market: boolean | null;
   /** Form 4 holdings per class, as /v1/events serves them. */
   classes?: Form4Class[] | null;
   accepted_at: string;
@@ -36,7 +44,12 @@ export interface StockEvent {
   url: string;
 }
 
-const VERSION = 2;
+/** v3: Form 4 transaction lines and totals, 13D/G share classes, the issuer-only Form 4 window. */
+const VERSION = 3;
+type Kind = 'bought' | 'sold' | 'gifted' | 'granted' | 'withheld' | 'exercised' | 'converted' | 'other';
+const KIND: Record<string, Kind> = { P: 'bought', S: 'sold', G: 'gifted', A: 'granted', F: 'withheld', M: 'exercised', X: 'exercised', C: 'converted' };
+/** The action a Form 4 without open-market trades shows: its largest kind of transaction, a conversion only when that's all it is. */
+const ACTION: Record<Kind, string> = { bought: 'buy', sold: 'sell', gifted: 'gift', granted: 'grant', withheld: 'tax_withholding', exercised: 'option_exercise', converted: 'conversion', other: 'other' };
 
 interface Cached {
   v?: number;
@@ -44,16 +57,21 @@ interface Cached {
   checked_at: number;
   /** How far back each feed was read: the oldest filing examined (ISO), per form family. */
   from?: { form4: string | null; schedule13: string | null };
-  /** Parsed filings from the latest feeds: the event, or 0 when it's about another issuer (this CIK as an owner). */
+  /** Parsed filings from the latest feeds: the event, or 0 when it's about another issuer (this CIK as an owner) or another share class. */
   seen: Record<string, StockEvent | 0>;
+  /** Every ticker the issuer trades as (BRK.A and BRK.B), for placing a 13D/G on its class. */
+  tickers?: string[];
 }
 
 const FRESH_MS = 20 * 60_000;
-/** Matched events kept per ticker; the request's `limit` (default 5) picks from these. */
-const KEEP = 10;
+/**
+ * Kept per ticker: the latest 20 Form 4s where the company is the issuer (its own Form 4s as an owner of
+ * other companies don't count, so the feed is read 40 deep) and the latest 10 Schedule 13D/Gs on it.
+ */
+const KEEP_F4 = 20;
+const KEEP_13 = 10;
 /** SEC requests one /events call may spend refreshing; tickers left over come back in `pending`. */
 const BUDGET = 36;
-const CODES: Record<string, string> = { A: 'grant', M: 'option_exercise', F: 'tax_withholding', G: 'gift', C: 'conversion' };
 
 const ENTITY = /\b(L\.?P\.?|LLC|INC|CORP|CO|LTD|PLC|TRUST|FUND|PARTNERS|CAPITAL|HOLDINGS?|MANAGEMENT|GROUP|ADVISORS|INVESTMENTS?|FOUNDATION|BANK)\b/i;
 const noMs = (iso: string) => iso.replace(/\.\d{3}Z$/, 'Z');
@@ -70,6 +88,15 @@ async function form4Event(ticker: string, cik: string, e: FeedEntry): Promise<St
   const sum = (k: 'shares_after' | 'shares_before') => (f.classes.some((c) => c[k] !== null) ? f.classes.reduce((s, c) => s + (c[k] ?? 0), 0) : null);
   const after = sum('shares_after');
   const before = sum('shares_before');
+  const totals: NonNullable<StockEvent['totals']> = {};
+  for (const l of f.lines.filter((x) => !x.derivative && x.code)) {
+    const t = (totals[KIND[l.code] ?? 'other'] ??= { shares: 0, value_usd: null });
+    t.shares += l.shares;
+    if (l.price) t.value_usd = Math.round((t.value_usd ?? 0) + l.shares * l.price);
+  }
+  // No open-market trade: the largest other kind leads (Buffett's C then G is a gift); a conversion only when alone.
+  const kinds = (Object.entries(totals) as [Kind, { shares: number; value_usd: number | null }][]).sort((a, b) => b[1].shares - a[1].shares);
+  const lead = kinds.find(([k]) => k !== 'converted') ?? kinds[0];
   return {
     ticker,
     form: e.form,
@@ -77,17 +104,21 @@ async function form4Event(ticker: string, cik: string, e: FeedEntry): Promise<St
     filer_cik: who?.cik ?? f.owners[0]?.cik ?? null,
     issuer: f.issuer,
     role: who?.roles.map((r) => (/^see remarks$/i.test(r) ? 'Officer' : r)).join(', ') || null,
-    action: f.action !== 'other' ? f.action : (CODES[f.codes[0]] ?? 'other'),
-    // Open-market shares; for a gift, grant or withholding, how far the balance moved.
-    shares: traded || (before !== null && after !== null && after !== before ? Math.abs(after - before) : null),
+    action: f.action !== 'other' ? f.action : lead ? ACTION[lead[0]] : 'other',
+    // Open-market shares; otherwise the leading kind's shares (a gift's, a grant's).
+    shares: traded || lead?.[1].shares || null,
     price: traded && value ? Math.round((value / traded) * 100) / 100 : null,
-    value_usd: value || null,
+    value_usd: value || (lead?.[1].value_usd ?? null),
     shares_after: after,
     prev_shares_after: before,
     percent_of_class: null,
     event_date: f.event_date,
     last_transaction_date: f.last_transaction_date,
     ownership: f.classes.flatMap((c) => (c.holdings ?? []).map((x) => ({ security: c.security, ...x }))),
+    codes: f.codes,
+    transactions: f.lines,
+    totals,
+    open_market: f.codes.includes('P') || f.codes.includes('S'),
     classes: f.classes,
     accepted_at: noMs(e.accepted),
     accession: e.accession,
@@ -95,10 +126,14 @@ async function form4Event(ticker: string, cik: string, e: FeedEntry): Promise<St
   };
 }
 
-async function schedule13Event(ticker: string, cik: string, e: FeedEntry): Promise<StockEvent | 0 | null> {
+async function schedule13Event(ticker: string, cik: string, e: FeedEntry, siblings: string[]): Promise<StockEvent | 0 | null> {
   const s = await fetchSchedule13(cik, e.accession);
   if (!s) return null;
   if (s.issuer_cik !== cik) return 0;
+  // An issuer with several listed classes: a 13D/G on "Class A Common Stock" belongs to BRK.A, not BRK.B.
+  const cls = s.security?.match(/\bclass\s+([A-Z])\b/i)?.[1]?.toUpperCase();
+  const home = cls && siblings.length > 1 ? siblings.find((t) => t.endsWith(`.${cls}`)) : undefined;
+  if (home && home !== ticker) return 0;
   const more = s.persons.length - 1;
   // Lead with the person behind the entities (CARL C ICAHN, not ICAHN ENTERPRISES HOLDINGS L.P.) when one filed.
   const lead = s.persons.find((p) => !ENTITY.test(p.name)) ?? s.persons[0];
@@ -119,6 +154,10 @@ async function schedule13Event(ticker: string, cik: string, e: FeedEntry): Promi
     event_date: s.event_date,
     last_transaction_date: null,
     ownership: null,
+    codes: null,
+    transactions: null,
+    totals: null,
+    open_market: null,
     classes: null,
     accepted_at: noMs(e.accepted),
     accession: e.accession,
@@ -134,19 +173,23 @@ const events = (c: Cached) =>
 /** Re-reads the issuer's feeds and parses new filings newest first until KEEP match. False when the budget ran out. */
 async function refresh(ticker: string, c: Cached): Promise<boolean> {
   if (secBudget.left < 2) return false;
-  const [f4, s13] = await Promise.all([companyFilings(c.cik, '4', 20), companyFilings(c.cik, 'SCHEDULE 13', 10)]);
+  const [f4, s13] = await Promise.all([companyFilings(c.cik, '4', 40), companyFilings(c.cik, 'SCHEDULE 13', 20)]);
   const feed = [...f4.filter((e) => /^4(\/A)?$/.test(e.form)), ...s13].sort((a, b) => b.accepted.localeCompare(a.accepted));
   const seen: Cached['seen'] = {};
-  for (const e of feed) if (e.accession in c.seen) seen[e.accession] = c.seen[e.accession];
+  const isF4 = (form: string) => form.startsWith('4');
+  const kept = (f4only: boolean) => feed.filter((e) => isF4(e.form) === f4only && seen[e.accession]).length;
+  const room = (e: FeedEntry) => (isF4(e.form) ? kept(true) < KEEP_F4 : kept(false) < KEEP_13);
+  // Newest first, until each family has its quota: older filings beyond it are dropped from the cache.
+  for (const e of feed) if (e.accession in c.seen && (c.seen[e.accession] === 0 || room(e))) seen[e.accession] = c.seen[e.accession];
   let complete = true;
   for (let i = 0; i < feed.length; i += 5) {
-    if (Object.values(seen).filter(Boolean).length >= KEEP) break;
-    const todo = feed.slice(i, i + 5).filter((e) => !(e.accession in seen));
+    if (kept(true) >= KEEP_F4 && kept(false) >= KEEP_13) break;
+    const todo = feed.slice(i, i + 5).filter((e) => !(e.accession in seen) && room(e));
     if (todo.length > secBudget.left) {
       complete = false;
       break;
     }
-    const parsed = await Promise.all(todo.map((e) => (e.form.startsWith('4') ? form4Event(ticker, c.cik, e) : schedule13Event(ticker, c.cik, e)).catch(() => null)));
+    const parsed = await Promise.all(todo.map((e) => (isF4(e.form) ? form4Event(ticker, c.cik, e) : schedule13Event(ticker, c.cik, e, c.tickers ?? [ticker])).catch(() => null)));
     todo.forEach((e, j) => {
       if (parsed[j] !== null) seen[e.accession] = parsed[j];
       else complete = false; // unreadable now: tried again next refresh
@@ -159,38 +202,50 @@ async function refresh(ticker: string, c: Cached): Promise<boolean> {
   return complete;
 }
 
-/** Ticker -> issuer CIK from the precomputed SEC map (a string search, no 200 KB parse). */
-async function issuerCiks(env: Env, tickers: string[]): Promise<Record<string, string>> {
+/** Ticker -> issuer CIK and every ticker that CIK trades as, from the precomputed SEC map (string searches, no 200 KB parse). */
+async function issuerCiks(env: Env, tickers: string[]): Promise<Record<string, { cik: string; tickers: string[] }>> {
   const obj = await env.HIST.get('pre/sec-tickers.json');
   if (!obj) return {};
   const text = await new Response(obj.body).text();
-  const out: Record<string, string> = {};
+  const out: Record<string, { cik: string; tickers: string[] }> = {};
   for (const t of tickers) {
     const at = text.indexOf(`"${t}":"`);
-    if (at >= 0) out[t] = text.slice(at + t.length + 4, at + t.length + 14);
+    if (at < 0) continue;
+    const cik = text.slice(at + t.length + 4, at + t.length + 14);
+    out[t] = { cik, tickers: [...text.matchAll(new RegExp(`"([A-Z0-9.]+)":"${cik}"`, 'g'))].map((m) => m[1]) };
   }
   return out;
 }
 
-export async function stockEvents(env: Env, tickers: string[], limit: number) {
-  secBudget.left = BUDGET;
+/**
+ * Tickers' events, refreshing those older than `freshMs` with at most `budget` SEC requests (a request
+ * spends its own; the scheduled precompute passes what the minute left). The rest come back in `pending`.
+ */
+export async function stockEvents(env: Env, tickers: string[], limit: number, opts: { budget?: number; freshMs?: number } = {}) {
+  secBudget.left = opts.budget ?? BUDGET;
+  const fresh = opts.freshMs ?? FRESH_MS;
   const cache = new Map<string, Cached>();
   await Promise.all(
     tickers.map(async (t) => {
       const o = await env.HIST.get(`tev/${t}.json`);
       const c = o ? (JSON.parse(await new Response(o.body).text()) as Cached) : null;
       // Parsed by an older version (fewer fields): read again.
+      // An older version's cache: its Form 4s are read again (new fields); v2's 13D/G rows are still current.
       if (c) cache.set(t, c.v === VERSION ? c : { v: VERSION, cik: c.cik, checked_at: 0, seen: {} });
     }),
   );
-  const missing = tickers.filter((t) => !cache.has(t));
+  const missing = tickers.filter((t) => !cache.get(t)?.tickers);
   const ciks = missing.length ? await issuerCiks(env, missing) : {};
-  for (const t of missing) if (ciks[t]) cache.set(t, { v: VERSION, cik: ciks[t], checked_at: 0, seen: {} });
+  for (const t of missing) {
+    const c = cache.get(t);
+    if (c) c.tickers = ciks[t]?.tickers ?? [t];
+    else if (ciks[t]) cache.set(t, { v: VERSION, cik: ciks[t].cik, checked_at: 0, seen: {}, tickers: ciks[t].tickers });
+  }
 
   const pending: string[] = [];
   const unknown = tickers.filter((t) => !cache.has(t));
   // Stalest first, so tickers never loaded beat ones that are merely 20 minutes old.
-  const stale = tickers.filter((t) => cache.has(t) && Date.now() - cache.get(t)!.checked_at > FRESH_MS).sort((a, b) => cache.get(a)!.checked_at - cache.get(b)!.checked_at);
+  const stale = tickers.filter((t) => cache.has(t) && Date.now() - cache.get(t)!.checked_at > fresh).sort((a, b) => cache.get(a)!.checked_at - cache.get(b)!.checked_at);
   for (const t of stale) {
     const c = cache.get(t)!;
     const before = JSON.stringify(c);
@@ -201,4 +256,27 @@ export async function stockEvents(env: Env, tickers: string[], limit: number) {
   const data: Record<string, { cik: string; checked_at: string | null; from: Cached['from'] | null; events: StockEvent[] }> = {};
   for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, from: c.from ?? null, events: events(c).slice(0, limit) };
   return { tickers: data, pending, unknown };
+}
+
+/**
+ * Scheduled: keeps every owned and watched name's insider and 13D/G events current, so the Friday
+ * email, My book and /v1 never depend on someone having opened the stock. Refreshes the stalest names
+ * (KV issuers:checked) older than an hour (10 minutes in filing week), with the SEC requests the minute left.
+ */
+export async function precomputeIssuers(env: Env, now: number, season: boolean, budget: number): Promise<Record<string, unknown>> {
+  const list = JSON.parse((await env.DB.get('issuers:tickers')) ?? '[]') as string[];
+  const checked = JSON.parse((await env.DB.get('issuers:checked')) ?? '{}') as Record<string, number>;
+  const ttl = season ? 10 * 60_000 : 60 * 60_000;
+  const due = list.filter((t) => now - (checked[t] ?? 0) > ttl).sort((a, b) => (checked[a] ?? 0) - (checked[b] ?? 0));
+  if (!due.length || budget < 4) return { names: list.length, due: due.length };
+  const batch = due.slice(0, 6);
+  const r = await stockEvents(env, batch, 1, { budget, freshMs: ttl });
+  for (const t of batch) {
+    const at = r.tickers[t]?.checked_at;
+    if (at) checked[t] = Date.parse(at);
+    else if (r.unknown.includes(t)) checked[t] = now; // no SEC CIK: nothing to read
+  }
+  for (const t of Object.keys(checked)) if (!list.includes(t)) delete checked[t];
+  await env.DB.put('issuers:checked', JSON.stringify(checked));
+  return { names: list.length, due: due.length, refreshed: batch.filter((t) => !r.pending.includes(t)).length, pending: r.pending.length };
 }
