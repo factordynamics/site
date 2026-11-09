@@ -46,6 +46,10 @@ export function Speed() {
   const season = d?.season ?? seasonNow().quarter
   const loading = lat.loading && !d
   const empty = !loading && !d?.count
+  // Once /latency tags each alert curated or any_filer, show the split.
+  const cov = (d?.alerts ?? []) as (Alert & { coverage?: 'curated' | 'any_filer' })[]
+  const tagged = cov.filter((a) => a.coverage)
+  const coverage = tagged.length ? ` Of the latest ${tagged.length}: ${tagged.filter((a) => a.coverage === 'curated').length} for funds we track closely, ${tagged.filter((a) => a.coverage === 'any_filer').length} for other filers.` : ''
   const stat = (m: Record<string, LatencyStat> | undefined, k: string): LatencyStat => m?.[k] ?? { count: 0, median_seconds: null, p90_seconds: null }
 
   return (
@@ -163,7 +167,7 @@ export function Speed() {
             <span className="font-medium text-ink">Counted:</span> live alerts only. Replays, backfills and test messages are left out, and slow alerts stay in.
           </li>
           <li>
-            <span className="font-medium text-ink">Coverage:</span> 13F alerts for the managers we track closely, and Form 4 and 13D/G alerts on the names members follow. How the data is built is on the{' '}
+            <span className="font-medium text-ink">Coverage:</span> 13F alerts for the managers we track closely and for any other filer a member follows (peers and linked 13Fs included), and Form 4 and 13D/G alerts on the names members follow. All of them are timed.{coverage} How the data is built is on the{' '}
             <Link to="/methodology/" className="font-medium text-accent hover:text-accent-2">
               methodology page
             </Link>

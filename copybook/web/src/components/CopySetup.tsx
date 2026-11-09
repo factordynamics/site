@@ -1,0 +1,148 @@
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { call } from '../lib/account'
+import { useFollows } from '../lib/follows'
+import { Button, Check } from './ui'
+
+// First-run setup for Copy, the same three steps as the day-0 email plus a test: follow funds, add
+// the names you own, pick where alerts go, and send a test. Follows and channels are read live from
+// the API (Channels announces changes with 'copybook:setup'); a test that went through, or choosing
+// email only, is remembered in this browser. Shown after checkout and until done; dismissible.
+const HIDE = 'copybook.copySetupHidden'
+export const TESTED = 'copybook.testOk'
+const EMAIL = 'copybook.keepEmail'
+const FUNDS = 3
+
+type Ch = { discord: string | null; slack: string | null; telegram: unknown; webhook: unknown; feed: unknown; tested_at?: string | null }
+
+export function CopySetup({ welcome }: { welcome?: boolean }) {
+  const { follows, status } = useFollows()
+  const [ch, setCh] = useState<Ch | null>(null)
+  const [hidden, setHidden] = useState(() => !welcome && localStorage.getItem(HIDE) === '1')
+  const [keepEmail, setKeepEmail] = useState(() => localStorage.getItem(EMAIL) === '1')
+  const [tested, setTested] = useState(() => localStorage.getItem(TESTED) === '1')
+  const [test, setTest] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
+
+  const load = useCallback(() => {
+    call<{ channels: Ch }>('/channels', { auth: true }).then((r) => setCh(r.channels), () => setCh(null))
+    setTested(localStorage.getItem(TESTED) === '1')
+  }, [])
+  useEffect(() => {
+    load()
+    window.addEventListener('copybook:setup', load)
+    return () => window.removeEventListener('copybook:setup', load)
+  }, [load])
+
+  const connected = Boolean(ch && (ch.discord || ch.slack || ch.telegram || ch.webhook || ch.feed))
+  const testDone = tested || Boolean(ch?.tested_at) || (keepEmail && !connected)
+  const sendTest = async () => {
+    setTest({ busy: true })
+    try {
+      const r = await call<{ results: Record<string, string>; messages?: Record<string, string> }>('/channels/test', { method: 'POST', auth: true })
+      const ok = Object.values(r.results).some((v) => /^2\d\d$|^ok$/.test(v))
+      if (ok) localStorage.setItem(TESTED, '1')
+      setTested(ok)
+      setTest({ ok, msg: Object.entries(r.messages ?? r.results).map(([k, v]) => `${k[0].toUpperCase()}${k.slice(1)}: ${v}`).join(' · ') })
+    } catch {
+      setTest({ ok: false, msg: 'The test didn’t go out. Please try again.' })
+    }
+  }
+
+  type Act = { label: string; to?: string; href?: string; onClick?: () => void; disabled?: boolean }
+  const n = follows.investors.length
+  const names = follows.owned.length + follows.stocks.filter((t) => !follows.owned.includes(t)).length
+  const steps: { done: boolean; title: string; body: ReactNode; act: Act; alt?: Act }[] = [
+    {
+      done: n >= FUNDS,
+      title: `Follow ${FUNDS} funds`,
+      body: n >= FUNDS ? `Following ${n}. Each 13F, Form 4 and 13D they file reaches you minutes after EDGAR accepts it.` : `${n} of ${FUNDS} followed. Each 13F, Form 4 and 13D they file reaches you minutes after EDGAR accepts it.`,
+      act: { label: n ? 'Follow more' : 'Pick funds', to: '/investors/' },
+    },
+    {
+      done: names > 0,
+      title: 'Add your names to My book',
+      body: names ? `${names} ${names === 1 ? 'name' : 'names'}: any superinvestor move in them is flagged on filing cards and in My book.` : 'Paste the tickers you own or watch, or a broker CSV. Any superinvestor move in them gets flagged.',
+      act: { label: names ? 'Open My book' : 'Add names', to: '/my-book/#book-import' },
+    },
+    {
+      done: connected || keepEmail,
+      title: 'Connect a channel (or keep email)',
+      body: connected ? 'Alerts reach your chat or feed as well as your inbox.' : keepEmail ? 'Email only. You can add Slack, Discord, Telegram or a feed any time below.' : 'Slack, Discord, Telegram or a private RSS feed, next to email.',
+      act: { label: connected ? 'Channels' : 'Connect', href: '#channels' },
+      alt:
+        connected || keepEmail
+          ? undefined
+          : {
+              label: 'Keep email',
+              onClick: () => {
+                localStorage.setItem(EMAIL, '1')
+                setKeepEmail(true)
+              },
+            },
+    },
+    {
+      done: testDone,
+      title: 'Send a test',
+      body: testDone && !connected ? 'Email needs no test. Alerts come from copybook@factordynamics.com; add it to your contacts so they never land in spam.' : testDone ? 'A test went through. Your next alert arrives the same way.' : connected ? 'One short message to each place you connected, to check it works.' : 'Connect a channel first, then check it here.',
+      act: { label: test.busy ? 'Sending…' : 'Send a test', onClick: sendTest, disabled: !connected || test.busy },
+    },
+  ]
+  const left = steps.filter((s) => !s.done).length
+  const next = steps.findIndex((s) => !s.done)
+  if (status !== 'ready' || hidden || (!left && !welcome)) return null
+
+  return (
+    <section className="mt-10 rounded-[18px] bg-card p-5 shadow-[var(--shadow-card)] md:p-8" aria-labelledby="copy-setup-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[13px] font-medium text-accent">Set up Copy · {left ? `${steps.length - left} of ${steps.length} done` : 'all set'}</p>
+          <h2 id="copy-setup-title" className="mt-2 text-[24px] font-semibold tracking-[-0.03em] md:text-[26px]">
+            {left ? 'Two minutes to your first alert.' : 'You’re set. Your next alert is on its way.'}
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            localStorage.setItem(HIDE, '1')
+            setHidden(true)
+          }}
+          className="-m-2 p-2 text-[13px] text-ink-3 hover:text-ink"
+        >
+          Hide
+        </button>
+      </div>
+      <ol className="mt-6 divide-y divide-line">
+        {steps.map((s, i) => (
+          <li key={s.title} className="flex flex-wrap items-center gap-x-4 gap-y-3 py-4 first:pt-0 last:pb-0">
+            <span
+              className={`num inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${s.done ? 'bg-up text-white' : i === next ? 'bg-accent text-white' : 'border-2 border-ink-3/70 bg-card text-ink-2'}`}
+              aria-label={s.done ? 'Done' : `Step ${i + 1}`}
+            >
+              {s.done ? <Check className="size-3.5" /> : i + 1}
+            </span>
+            <span className="min-w-0 flex-1 basis-56">
+              <span className={`block text-[15px] font-medium ${s.done ? 'text-ink-2' : ''}`}>{s.title}</span>
+              <span className="mt-0.5 block text-[13.5px] text-ink-2">{s.body}</span>
+              {i === 3 && test.msg && (
+                <span role="status" className={`mt-1 block text-[13px] ${test.ok ? 'text-up' : 'text-down'}`}>
+                  {test.msg}
+                </span>
+              )}
+            </span>
+            {!(s.done && i === 3) && (
+              <span className="flex shrink-0 flex-wrap gap-2">
+                {s.alt && (
+                  <Button size="sm" variant="ghost" onClick={s.alt.onClick} to={s.alt.to} href={s.alt.href}>
+                    {s.alt.label}
+                  </Button>
+                )}
+                <Button size="sm" variant={i === next ? 'primary' : 'outline'} to={s.act.to} href={s.act.href} onClick={s.act.onClick} disabled={s.act.disabled}>
+                  {s.act.label}
+                </Button>
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}

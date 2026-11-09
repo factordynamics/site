@@ -62,6 +62,7 @@ export function Channels() {
     try {
       await call('/channels/feed', { method: make ? 'POST' : 'DELETE', auth: true })
       setC((await call<{ channels: Channels }>('/channels', { auth: true })).channels)
+      window.dispatchEvent(new Event('copybook:setup'))
     } catch (e) {
       setMsg({ k: 'feed', text: why(e), ok: false })
     }
@@ -72,11 +73,13 @@ export function Channels() {
       // The API's messages are written for members ("Discord rejected this webhook…"); status codes are the fallback.
       const r = await call<{ results: Record<string, string>; messages?: Record<string, string> }>('/channels/test', { method: 'POST', auth: true })
       setTest(Object.fromEntries(Object.entries(r.results).map(([k, v]) => [k, r.messages?.[k] ?? (/^2\d\d$|^ok$/.test(v) ? 'delivered' : `failed (${v})`)])))
+      // The Copy setup list's last step: a test that reached at least one destination.
+      if (Object.values(r.results).some((v) => /^2\d\d$|^ok$/.test(v))) localStorage.setItem('copybook.testOk', '1')
     } catch (e) {
       setTest({ error: why(e) })
     }
     // A test that goes through clears that destination's failing flag.
-    call<{ channels: Channels }>('/channels', { auth: true }).then((r) => (setC(r.channels), announce(r.channels)), () => null)
+    call<{ channels: Channels }>('/channels', { auth: true }).then((r) => (setC(r.channels), announce(r.channels), window.dispatchEvent(new Event('copybook:setup'))), () => null)
   }
 
   const note = (k: string) =>

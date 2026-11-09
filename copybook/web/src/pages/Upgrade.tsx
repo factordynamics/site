@@ -71,7 +71,17 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
   if (member.seat)
     return (
       <Note>
-        Your seat is part of your team’s Copy Fund plan. {member.owner ? <>Ask {member.owner} (plan owner) to change it.</> : 'Ask your team’s plan owner to change it.'}
+        Your seat is part of your team’s Copy Fund plan. {member.owner ? (
+          <>
+            Ask{' '}
+            <a href={`mailto:${member.owner}?subject=${encodeURIComponent('Copybook plan change')}`} className="font-medium text-accent hover:text-accent-2">
+              {member.owner}
+            </a>{' '}
+            (plan owner) to change it.
+          </>
+        ) : (
+          'Ask your team’s plan owner to change it.'
+        )}
       </Note>
     )
   if (isFree(member))

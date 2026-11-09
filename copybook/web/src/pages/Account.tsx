@@ -7,6 +7,7 @@ import { Team } from '../components/Team'
 import { FundSetup } from '../components/FundSetup'
 import { UpgradePro } from '../components/UpgradePro'
 import { FreeNames } from '../components/FreeNames'
+import { CopySetup } from '../components/CopySetup'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { stockPath } from '../lib/stocks'
@@ -138,6 +139,7 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
       {member.active && <FailingBanner initial={member.channels_failing} onAccount />}
 
       {member.active && member.plan === 'fund' && <FundSetup member={member} welcome={welcome} />}
+      {member.active && member.plan === 'copy' && !member.seat && <CopySetup welcome={welcome} />}
 
       {onboard && (
         <div className="mt-10">
