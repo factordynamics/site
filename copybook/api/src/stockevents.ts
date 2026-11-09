@@ -282,7 +282,10 @@ async function issuerCiks(env: Env, tickers: string[]): Promise<Record<string, {
  * Tickers' events, refreshing those older than `freshMs` with at most `budget` SEC requests (a request
  * spends its own; the scheduled precompute passes what the minute left). The rest come back in `pending`.
  */
-export async function stockEvents(env: Env, tickers: string[], limit: number, opts: { budget?: number; freshMs?: number; keep?: (e: StockEvent) => boolean } = {}) {
+export async function stockEvents(env: Env, tickers: string[], limit: number, opts: { budget?: number; freshMs?: number; keep?: (e: StockEvent) => boolean; deadlineMs?: number } = {}) {
+  // A request reads EDGAR only until its deadline: the rest is served from the cache and listed in `pending`
+  // (the cron refreshes owned and watched names on its own).
+  const until = opts.deadlineMs ? Date.now() + opts.deadlineMs : Infinity;
   secBudget.left = opts.budget ?? BUDGET;
   const fresh = opts.freshMs ?? FRESH_MS;
   const cache = new Map<string, Cached>();
@@ -308,9 +311,20 @@ export async function stockEvents(env: Env, tickers: string[], limit: number, op
   // Stalest first, so tickers never loaded beat ones that are merely 20 minutes old.
   const stale = tickers.filter((t) => cache.has(t) && Date.now() - cache.get(t)!.checked_at > fresh).sort((a, b) => cache.get(a)!.checked_at - cache.get(b)!.checked_at);
   for (const t of stale) {
-    const c = cache.get(t)!;
+    const left = until - Date.now();
+    if (left <= 0) {
+      pending.push(t);
+      continue;
+    }
+    // Under a deadline, refreshed on a copy: a read cut off mid-way can't change what this response serves.
+    const c = left === Infinity ? cache.get(t)! : (structuredClone(cache.get(t)!) as Cached);
     const before = JSON.stringify(c);
-    const done = await refresh(t, c).catch(() => false);
+    const done = await (left === Infinity ? refresh(t, c) : Promise.race([refresh(t, c), new Promise<'late'>((r) => setTimeout(() => r('late'), left))])).catch(() => false);
+    if (done === 'late') {
+      pending.push(t);
+      continue;
+    }
+    cache.set(t, c);
     if (!done) pending.push(t);
     if (JSON.stringify(c) !== before) await env.HIST.put(`tev/${t}.json`, JSON.stringify(c));
   }

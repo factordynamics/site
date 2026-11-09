@@ -265,7 +265,11 @@ let publishedLatency = '';
  */
 export async function publishLatency(env: Env, now: number): Promise<string> {
   if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || !env.PUBLIC_BUCKET) return 'not configured';
-  const body = JSON.stringify({ ...(await buildLatency(env, now)), generated_at: new Date(Math.floor(now / 60_000) * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z') });
+  // The poller line for /speed/ ("Poller last ran 40 s ago · Cloudflare"): the host running this minute wrote it. With
+  // two hosts it changes every minute, so latency.json is rewritten every quiet minute.
+  const fo = await import('./failover');
+  const poller = fo.syncOn(env) ? { poller_host: fo.isCloudflare(env) ? 'cloudflare' : 'gene', poller_last_run: new Date(Math.floor(now / 60_000) * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z') } : {};
+  const body = JSON.stringify({ ...(await buildLatency(env, now)), ...poller, generated_at: new Date(Math.floor(now / 60_000) * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z') });
   const same = body.replace(/"generated_at":"[^"]*"/, '');
   if (same === publishedLatency && new Date(now).getUTCMinutes() % 30 !== 0) return 'unchanged';
   const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/r2/buckets/${env.PUBLIC_BUCKET}/objects/latency.json`, { method: 'PUT', headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json', 'cache-control': 'public, max-age=60' }, body });
@@ -275,6 +279,9 @@ export async function publishLatency(env: Env, now: number): Promise<string> {
 }
 
 const TICKER = /^[A-Z][A-Z0-9.\-]{0,9}$/;
+/** How long a member or /v1 request may spend reading EDGAR before it answers from the cache (`pending` lists the rest). */
+export const EDGAR_READ_MS = 2000;
+const REQUEST_MS = 3000;
 const DOWNLOAD_TTL = 60; // KV's minimum expiry
 const HANDOFF_TTL = 120;
 
@@ -314,7 +321,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const business = priv ? { business: { ...(await businessSummary(env, Date.now())), fund_requests: leads } } : {};
     // Filings the missed-filing detector found unsent 10+ minutes after acceptance and put back in front of the polls.
     const missed_recovered = { count: Number((await env.DB.get('missed:count')) ?? 0), recent: (JSON.parse((await env.DB.get('missed:log')) ?? '[]') as unknown[]).slice(0, 10) };
-    return json({ ok: true, alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, ...business }, 200, h);
+    const { pollerStatus } = await import('./failover');
+    return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, ...business }, 200, h);
   }
 
   // A new subscription's Checkout, with a referral month applied server-side (typed promo codes are off on this account).
@@ -639,6 +647,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const { quarterStart } = await import('./seasons');
     const since = quarterStart(Date.now());
     const r = await stockEvents(env, tickers, Math.floor(limit), {
+      deadlineMs: EDGAR_READ_MS,
       // Form 4s by when the trade happened (a Jun 29 sale filed Jul 1 is before a Jul 1 window); 13D/Gs by when
       // they were filed (their event date is the threshold crossing: FICO's Capital Research 13G, Jun 30, filed Aug 12).
       keep: (e) => (!quarter || (e.form.startsWith('4') ? (e.trade_date ?? e.filed_date ?? e.accepted_at) : (e.filed_date ?? e.accepted_at)) >= since.slice(0, 10)) && (!openOnly || !e.form.startsWith('4') || !!e.open_market),
@@ -953,10 +962,17 @@ export default {
       const u = new URL(req.url);
       return Promise.resolve(new Response(null, { status: 308, headers: { location: `${env.MOVED_TO.replace(/\/+$/, '')}${u.pathname}${u.search}`, 'access-control-allow-origin': '*' } }));
     }
-    return handleRequest(req, env).catch((err) => {
+    const handled = handleRequest(req, env).catch((err) => {
       console.log(String(err?.stack ?? err));
       return json({ ok: false, error: 'server error' }, 500, cors(allowedOrigin(req.headers.get('origin'), env)));
     });
+    // Every member and /v1 answer within 3 s: past that the caller gets a 503 to retry, never a hung page.
+    // Uploads, Stripe webhooks, downloads and whole books stream or write for longer and are exempt.
+    const path = new URL(req.url).pathname;
+    if (/^\/(ingest|webhook|csv\/|v1\/bulk|v1\/filers\/[^/]+\/holdings)/.test(path)) return handled;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<Response>((r) => (timer = setTimeout(() => r(json({ ok: false, error: 'busy: try again in a few seconds', code: 'timeout' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': '5' })), REQUEST_MS)));
+    return Promise.race([handled, late]).finally(() => clearTimeout(timer));
   },
   async scheduled(event: { scheduledTime?: number }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil(runScheduled(env, event.scheduledTime ?? Date.now()).then((r) => console.log(`cron: ${JSON.stringify(r)}`)));

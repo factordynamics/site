@@ -13,10 +13,11 @@ id = "830e2b3035554fa2865bc523dfcbf2fb"
 binding = "HIST"
 bucket_name = "copybook-history"
 
-# No cron here: the API runs on gene (Andreas's runner, Tailscale Funnel), whose service runs the minute job.
-# Keep this empty, or this fallback copy would send every alert a second time from stale state. See HOSTING.md.
+# The minute EDGAR poll runs here (primary poller). gene serves members and /v1 and is the backup poller: it polls
+# only when this cron has been silent for 10 minutes. KV syncs both ways through R2 and every send is claimed
+# once (SYNC = "on", src/failover.ts). See HOSTING.md.
 [triggers]
-crons = []
+crons = ["* * * * *"]
 
 [vars]
 CF_ACCOUNT_ID = "967e13dd88bb23b24662e62cbb6fd84f"
@@ -31,7 +32,9 @@ HOLDTERM_PORTAL_CONFIGURATION = "bpc_1UZeGADSKGGzRqYZ2TuZE74Y"
 EMAIL_FROM = "Copybook <copybook@factordynamics.com>"
 # Our inbox (forwards to the owner): reply-to on every email, and where fund/support/delete requests go.
 CONTACT_EMAIL = "hello@factordynamics.com"
-API_URL = "https://copybook-api.factordynamics.workers.dev/"
+# Links in email (resume, unsubscribe, feeds, CSV) go straight to gene, which serves members.
+API_URL = "https://gene.tail70ba3.ts.net/copybook/"
+SYNC = "on"
 # bpc_... printed by scripts/stripe-setup.mjs (portal_configuration).
 # GitHub Actions OIDC workflow_ref allowed to PUT /ingest/.
 INGEST_WORKFLOW = "refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main"

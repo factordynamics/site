@@ -12,7 +12,8 @@ export const secBudget = { left: Infinity };
 const sec = (url: string) => {
   if (secBudget.left <= 0) return Promise.reject(new Error('subrequest budget spent'));
   secBudget.left--;
-  return fetch(url, { headers: { 'user-agent': SEC_UA, accept: '*/*' } });
+  // A hung EDGAR connection never holds a request or the minute cron: 15 s, then it counts as a failed read.
+  return fetch(url, { headers: { 'user-agent': SEC_UA, accept: '*/*' }, signal: AbortSignal.timeout(15_000) });
 };
 
 /** Biggest infotable we parse in the Worker; bigger books wait for the data run's moves. */

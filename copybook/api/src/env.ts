@@ -57,6 +57,8 @@ export interface Env {
   GITHUB_DISPATCH_TOKEN?: string;
   /** Set (as a secret) only on a retired copy of the API: every request is redirected to this base. */
   MOVED_TO?: string;
+  /** "on": Cloudflare (poller) and gene (members) sync KV through R2 and share the poll (failover.ts). */
+  SYNC?: string;
   /** Cloudflare API token: Account Analytics read (the daily request-budget check) and R2 write to PUBLIC_BUCKET (latency.json). */
   CF_API_TOKEN?: string;
   /** Public R2 bucket the cron writes static JSON to (latency.json), and its public base URL. */

@@ -739,7 +739,14 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
   const fresh: Alert13F[] = [];
   const done: FeedEntry[] = [];
   let deferred = 0;
+  const { claimSend } = await import('./failover');
   for (const e of todo) {
+    // The other poller (Cloudflare or gene) claimed this filing first: it sends it, this side only records it.
+    if (!(await claimSend(env, e.accession, now))) {
+      handled.push(e.accession);
+      done.push(e);
+      continue;
+    }
     // Each filing needs up to 3 SEC requests; what doesn't fit this minute's budget (keeping some
     // for the Form 4 and 13D/G poll) waits for the next minute.
     if (secBudget.left < SEC_PER_FILING + EVENT_POLL_RESERVE) {
@@ -1266,9 +1273,14 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
 
   const fresh: AlertEvent[] = [];
   const pending: string[] = [];
+  const { claimSend } = await import('./failover');
   for (const [accession, es] of todo) {
     // A Form 4 takes 2 SEC requests, a 13D/G up to 5 with its previous filing: the rest wait a minute.
     if (secBudget.left < 5) break;
+    if (!(await claimSend(env, `ev/${accession}`, now))) {
+      handled.push(accession);
+      continue;
+    }
     const form = es[0].form;
     const kind = kindOf(form);
     const filer = es.find((e) => (e.role === 'Reporting' || e.role === 'Filed by') && ciks[e.cik]);
@@ -1428,6 +1440,13 @@ interface Job {
 }
 
 export async function runScheduled(env: Env, scheduledTime: number): Promise<Record<string, unknown>> {
+  // Two hosts (Cloudflare polls, gene serves members): state synced both ways, one poller at a time (failover.ts).
+  const fo = await import('./failover');
+  if (fo.syncOn(env)) return fo.syncedMinute(env, scheduledTime, (e) => runMinute(e, scheduledTime));
+  return runMinute(env, scheduledTime);
+}
+
+async function runMinute(env: Env, scheduledTime: number): Promise<Record<string, unknown>> {
   const t = new Date(scheduledTime);
   const out: Record<string, unknown> = {};
   const step = async (name: string, fn: () => Promise<unknown>) => {

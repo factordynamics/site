@@ -677,6 +677,104 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('two pollers: Cloudflare polls, gene backs it up; member changes and handled filings sync both ways; a filing both see is sent once', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const row = (slug: string, cik: string, name: string) => ({ ok: true, slug, cik, manager: slug, name, featured: true, form: '13F-HR', accession: `${slug}-q2`, report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' });
+    index = { managers: [row('dan-loeb', '0001040273', 'Third Point'), row('bill-ackman', '0001336528', 'Pershing Square')] };
+    await cron(17);
+    await putMember('n', 'member@example.com', 'active', ['dan-loeb']);
+    await putFollows('n', { investors: ['dan-loeb'] });
+    // gene serves members (its KV is the test's); Cloudflare's copy polls, with its own KV (empty here) and the real R2.
+    const r2 = new MemR2();
+    const gene = { ...env, SYNC: 'on', CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct' };
+    const cf = { ...env, DB: new MemKV(), HIST: r2, MOVED_TO: 'https://gene.test/copybook/', SYNC: 'on', CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct' };
+    let geneBlind = false; // gene can't reach Cloudflare's R2 (its link, or Cloudflare's API)
+    let geneRace = false; // gene read Cloudflare's heartbeat and changes just before Cloudflare's minute wrote them
+    const base = globalThis.fetch;
+    const text = (k: string) => (r2.m.has(k) ? new TextDecoder().decode(r2.m.get(k)) : null);
+    vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
+      const url = String(input);
+      const rest = url.match(/^https:\/\/api\.cloudflare\.com\/client\/v4\/accounts\/acct\/r2\/buckets\/copybook-history\/objects\/(.+)$/);
+      if (rest) {
+        const k = decodeURIComponent(rest[1]);
+        if (init?.method === 'PUT') return void r2.m.set(k, new TextEncoder().encode(String(init.body))), new Response('{}');
+        if (geneBlind && (k === 'sync/alive-cloudflare.json' || k === 'sync/cloudflare.json')) return new Response('down', { status: 500 });
+        if (geneRace && k === 'sync/alive-cloudflare.json') return new Response(JSON.stringify({ last_run_at: new Date(min(-30)).toISOString() }));
+        if (geneRace && k === 'sync/cloudflare.json') return new Response(JSON.stringify({ at: 0, keys: {} }));
+        return text(k) === null ? new Response('{}', { status: 404 }) : new Response(text(k));
+      }
+      if (url === 'https://api.cloudflare.com/client/v4/user/tokens/verify') return Response.json({ result: { id: 'tok' } });
+      const s3 = url.match(/^https:\/\/acct\.r2\.cloudflarestorage\.com\/copybook-history\/(.+)$/);
+      if (s3) {
+        const k = decodeURIComponent(s3[1]);
+        if (init?.method === 'PUT') {
+          if (new Headers(init.headers).get('if-none-match') === '*' && r2.m.has(k)) return new Response('<Error><Code>PreconditionFailed</Code></Error>', { status: 412 });
+          return void r2.m.set(k, new TextEncoder().encode(String(init.body))), new Response('');
+        }
+        return text(k) === null ? new Response('', { status: 404 }) : new Response(text(k));
+      }
+      return base(input, init);
+    });
+    const { runScheduled } = await import('../src/alerts');
+    const run = (e: Env, at: number) => runScheduled(e, at);
+    const t0 = Date.parse(`${today}T14:20:00Z`);
+    const min = (m: number) => t0 + m * 60_000;
+    const toMember = () => sent.filter((m) => m.to[0] === 'member@example.com');
+    const filing = (cik: string, acc: string, name: string) => {
+      const dir = `Archives/edgar/data/${Number(cik)}/${acc.replace(/-/g, '')}/`;
+      secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: 'table.xml', size: '900000' }] } });
+      secFiles[`${dir}primary_doc.xml`] = '<periodOfReport>09-30-2026</periodOfReport>';
+      return `<entry><title>13F-HR - ${name} (${cik}) (Filer)</title><updated>${today}T00:05:00-05:00</updated><category scheme="https://www.sec.gov/" label="form type" term="13F-HR"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
+    };
+
+    // No Cloudflare heartbeat yet: gene polls and publishes its whole state. Cloudflare's first minute imports it
+    // and waits a minute; from then on Cloudflare polls and gene only syncs.
+    expect(await run(gene, min(0))).toMatchObject({ poller: 'gene polls (cloudflare silent)' });
+    expect(await run(cf, min(1))).toMatchObject({ poller: 'resuming: polls from next minute' });
+    expect(JSON.parse((await cf.DB.get('cus:n'))!).email).toBe('member@example.com');
+    await run(cf, min(2));
+    expect(await run(gene, min(2))).toMatchObject({ poller: 'backup (cloudflare polls)' });
+    expect((await (await handleRequest(new Request('https://api.test/health'), gene)).json())).toMatchObject({ poller_host: 'cloudflare', poller_last_run: new Date(min(2)).toISOString().replace('.000', ''), api_host: 'gene' });
+
+    // A member follows Ackman on gene: Cloudflare's cron has it a minute later.
+    await putFollows('n', { investors: ['dan-loeb', 'bill-ackman'] });
+    await run(gene, min(3));
+    await run(cf, min(3));
+    expect(JSON.parse((await cf.DB.get('follows:n'))!).investors).toEqual(['dan-loeb', 'bill-ackman']);
+
+    // gene can't reach Cloudflare's R2: it stays the backup (it can't tell whether Cloudflare polls).
+    geneBlind = true;
+    expect(await run(gene, min(3))).toMatchObject({ poller: 'backup (cloudflare heartbeat unreadable)' });
+    geneBlind = false;
+
+    // Pershing Square files and both pollers see it in the same minute: Cloudflare sends it; gene, whose read of
+    // Cloudflare's heartbeat and changes raced Cloudflare's writes, polls too and finds the filing unhandled. The
+    // claim Cloudflare took first stands: exactly one email, and gene records the filing as handled.
+    const ackman = '0000950123-26-055555';
+    secFiles.feed = `<feed>${filing('0001336528', ackman, 'PERSHING SQUARE')}</feed>`;
+    await run(cf, min(4));
+    expect(toMember()).toHaveLength(1);
+    geneRace = true;
+    expect(await run(gene, min(4))).toMatchObject({ poller: 'gene polls (cloudflare silent)' });
+    geneRace = false;
+    expect(toMember()).toHaveLength(1);
+    expect(JSON.parse((await gene.DB.get('alerts:handled'))!)).toContain(ackman);
+
+    // Cloudflare goes quiet. Ten minutes on, gene polls and sends Third Point's filing; when Cloudflare is back it
+    // applies gene's handled filings first and never sends it again.
+    const loeb = '0000950123-26-044444';
+    secFiles.feed = `<feed>${filing('0001040273', loeb, 'THIRD POINT')}${filing('0001336528', ackman, 'PERSHING SQUARE')}</feed>`;
+    expect(await run(gene, min(10))).toMatchObject({ poller: 'backup (cloudflare polls)' });
+    expect(await run(gene, min(15))).toMatchObject({ poller: 'gene polls (cloudflare silent)' });
+    expect(toMember()).toHaveLength(2);
+    expect(await run(cf, min(16))).toMatchObject({ poller: 'resuming: polls from next minute' });
+    expect(await run(gene, min(17))).toMatchObject({ poller: 'backup (cloudflare polls)' });
+    await run(cf, min(17));
+    await run(cf, min(18));
+    expect(toMember().map((m) => m.subject)).toHaveLength(2);
+    expect(JSON.parse((await cf.DB.get('alerts:handled'))!)).toEqual(expect.arrayContaining([ackman, loeb]));
+  });
+
   it('between-quarter alerts: Form 4 buys/sells and 13D by default, 13G opt-in, fresh only, digest members get one email at night', async () => {
     const today = new Date().toISOString().slice(0, 10);
     const old = new Date(Date.now() - 5 * 86400_000).toISOString().slice(0, 10);
