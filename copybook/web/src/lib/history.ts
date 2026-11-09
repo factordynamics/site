@@ -19,21 +19,40 @@ export type Quarter = HistoryQuarter & { holdings: Holding[]; partial: boolean }
 /** Every quarter, newest first, each with its full book. */
 export async function loadHistory(slug: string) {
   const idx = await getJSON<HistoryIndex>(`${DATA}${slug}-history.json`)
-  const quarters = await Promise.all(
-    idx.history.map(async (q): Promise<Quarter> => {
-      let rows: Holding[] | undefined
-      try {
-        rows = (await call<{ holdings: Holding[] }>(`/holdings/${slug}/${q.quarter}`, { auth: true })).holdings
-      } catch (e) {
-        // A missing quarter falls back to the public preview; sign-in and plan errors reach the paywall.
-        if (!(e instanceof ApiError) || e.status !== 404) throw e
-      }
-      const partial = !rows && (q.top_holdings?.length ?? 0) < (q.position_count ?? 0)
-      return { ...q, holdings: (rows ?? q.top_holdings ?? []).filter((h) => h.value > 0).map(cleanHolding), partial }
-    }),
-  )
+  const quarters = await Promise.all(idx.history.map((q) => loadQuarter(slug, q)))
   quarters.sort((a, b) => b.quarter.localeCompare(a.quarter))
   return { manager: idx.manager, cik: idx.cik, quarters }
+}
+
+async function loadQuarter(slug: string, q: HistoryQuarter): Promise<Quarter> {
+  let rows: Holding[] | undefined
+  try {
+    rows = (await call<{ holdings: Holding[] }>(`/holdings/${slug}/${q.quarter}`, { auth: true })).holdings
+  } catch (e) {
+    // A missing quarter falls back to the public preview; sign-in and plan errors reach the paywall.
+    if (!(e instanceof ApiError) || e.status !== 404) throw e
+  }
+  const partial = !rows && (q.top_holdings?.length ?? 0) < (q.position_count ?? 0)
+  return { ...q, holdings: (rows ?? q.top_holdings ?? []).filter((h) => h.value > 0).map(cleanHolding), partial }
+}
+
+/**
+ * One fund's book for an earlier quarter, shaped like its latest file: each holding carries its change
+ * against the quarter before, and exits are rows with no shares. Null when that quarter isn't on file.
+ */
+export async function loadQuarterBook(slug: string, quarter: string) {
+  const idx = await getJSON<HistoryIndex>(`${DATA}${slug}-history.json`).catch(() => null)
+  const at = idx?.history.find((q) => q.quarter === quarter)
+  if (!idx || !at) return null
+  const before = idx.history.filter((q) => q.quarter < quarter).sort((a, b) => b.quarter.localeCompare(a.quarter))[0]
+  const [cur, prev] = await Promise.all([loadQuarter(slug, at), before ? loadQuarter(slug, before) : null])
+  const moves = new Map((prev ? diff(cur, prev) : []).map((m) => [m.key, m]))
+  const total = cur.holdings.reduce((s, h) => s + h.value, 0) || 1
+  const holdings: Holding[] = [
+    ...cur.holdings.map((h) => ({ ...h, weight: h.weight ?? h.value / total, change: moves.get(holdingKey(h))?.change ?? (prev ? ('unchanged' as const) : null) })),
+    ...[...moves.values()].filter((m) => m.change === 'exited').map((m) => ({ ...m.h, shares: 0, value: 0, weight: 0, change: 'exited' as const })),
+  ]
+  return { quarter, prev_quarter: prev?.quarter ?? null, holdings }
 }
 
 export const holdingKey = (h: Holding) => `${h.cusip}|${h.put_call || ''}`

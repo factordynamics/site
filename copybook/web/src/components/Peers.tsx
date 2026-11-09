@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { loadManager, pct, quarterLabel, useAsync, type Holding, type ManagerFile } from '../lib/data'
 import { setFollow, useFollows } from '../lib/follows'
+import { loadQuarterBook } from '../lib/history'
 import { loadStockIndex, stockPath, tickerText } from '../lib/stocks'
 import { useSearch } from './Search'
 import { Badge, Monogram, Panel, Skeleton } from './ui'
@@ -12,12 +13,32 @@ const MAX = 12
 const live = (h: Holding) => h.shares > 0 && !h.put_call
 // The CUSIP's first six characters name the issuer, so share classes (GOOG, GOOGL) count as one stock.
 const issuer = (h: Holding) => h.cusip.slice(0, 6)
+const prevQ = (q: string) => (q.endsWith('Q1') ? `${+q.slice(0, 4) - 1}Q4` : `${q.slice(0, 5)}${+q.slice(5) - 1}`)
 
 export function Peers({ names, shared }: { names: string[]; shared?: boolean }) {
   const { follows, pending } = useFollows()
   const peers = follows.peers
   const files = useAsync(() => Promise.all(peers.map((s) => loadManager(s).catch(() => null))), [peers.join(',')])
-  const books = useMemo(() => (files.data ?? []).filter((f): f is ManagerFile => f !== null), [files.data])
+  const loaded = useMemo(() => (files.data ?? []).filter((f): f is ManagerFile => f !== null), [files.data])
+
+  // Same quarter only: in filing week some peers are on the new quarter and some on the last one.
+  // Compare everyone on the newest quarter they have all filed, loading earlier books from the API.
+  // A peer more than a quarter behind (a stale or late filer) is left out rather than dragging the rest back.
+  const [same, setSame] = useState(false)
+  const mixed = new Set(loaded.map((b) => b.quarter)).size > 1
+  const newest = loaded.map((b) => b.quarter ?? '').sort().at(-1) ?? ''
+  const current = loaded.filter((b) => b.quarter && (b.quarter === newest || b.quarter === prevQ(newest)))
+  const target = current.map((b) => b.quarter!).sort()[0] ?? ''
+  const aligned = useAsync(
+    () =>
+      same && mixed
+        ? Promise.all(current.map((b) => (b.quarter === target ? Promise.resolve(b) : loadQuarterBook(b.slug, target).then((r) => (r ? { ...b, ...r } : null), () => null))))
+        : Promise.resolve(null),
+    [same, mixed, target, current.map((b) => b.slug).join(',')],
+  )
+  const books = useMemo(() => (same && mixed ? (aligned.data ?? []).filter((f): f is ManagerFile => f !== null) : loaded), [same, mixed, aligned.data, loaded])
+  const leftOut = same && mixed && aligned.data ? loaded.filter((b) => !books.some((x) => x.slug === b.slug)) : []
+  const held = same && mixed ? current.filter((b) => b.quarter !== target) : []
   const idx = useAsync(loadStockIndex, [])
   // Your tickers plus their other share classes from the stock index (BRK.B also matches BRK.A).
   const mine = useMemo(() => {
@@ -81,10 +102,19 @@ export function Peers({ names, shared }: { names: string[]; shared?: boolean }) 
           </h2>
           <p className="mt-1 text-[14px] text-ink-2">Pick up to {MAX} funds you benchmark against. See how much of their books they share, the names they hold in common, and what they did in yours.</p>
         </div>
+        {mixed && (
+          <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which quarter">
+            {([false, true] as const).map((v) => (
+              <button key={String(v)} type="button" role="tab" aria-selected={same === v} onClick={() => setSame(v)} className={`rounded-full px-3 py-1.5 ${same === v ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                {v ? 'Same quarter only' : 'Each fund’s latest'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mt-4 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:p-6">
-        <PeerPicker peers={peers} names={new Map(books.map((b) => [b.slug, b.manager]))} />
+        <PeerPicker peers={peers} names={new Map(loaded.map((b) => [b.slug, b.manager]))} />
         {failed.length > 0 && (
           <p className="mt-3 text-[13px] text-down" role="alert">
             {failed.length === 1 ? 'That change' : `${failed.length} changes`} didn’t save.{' '}
@@ -95,11 +125,25 @@ export function Peers({ names, shared }: { names: string[]; shared?: boolean }) 
         )}
       </div>
 
-      {peers.length > 0 && !files.data && <Skeleton className="mt-5 h-64 w-full" />}
+      {mixed && books.length > 0 && (
+        <p className="mt-3 text-[13px] text-ink-2">
+          {same ? (
+            <>
+              All compared on <span className="font-medium text-ink">{quarterLabel(target)}</span>, the latest quarter every peer has filed.
+              {held.length > 0 && ` ${held.map((b) => b.manager).join(' and ')} ${held.length === 1 ? 'has' : 'have'} filed ${quarterLabel(newest)}; ${held.length === 1 ? 'that book is' : 'those books are'} set aside until the rest file.`}
+              {leftOut.length > 0 && ` Left out: ${leftOut.map((b) => `${b.manager} (${b.quarter ? `latest 13F ${quarterLabel(b.quarter)}` : 'no 13F'}${b.quarter === target || b.quarter === newest ? `, ${quarterLabel(target)} not on file` : ''})`).join(', ')}.`}
+            </>
+          ) : (
+            <>Your peers are on different quarters ({[...new Set(loaded.map((b) => b.quarter).filter(Boolean))].sort().reverse().map((q) => quarterLabel(q)).join(', ')}). Switch to “Same quarter only” to compare like with like.</>
+          )}
+        </p>
+      )}
+
+      {peers.length > 0 && (!files.data || (same && mixed && !aligned.data)) && <Skeleton className="mt-5 h-64 w-full" />}
 
       {books.length > 0 && (
         <>
-          <Panel className="mt-5" title="What your peers did in your names" sub="From each fund’s latest 13F; the quarter is on each row">
+          <Panel className="mt-5" title="What your peers did in your names" sub={same && mixed ? `Every peer’s ${quarterLabel(target)} 13F, against the quarter before` : 'From each fund’s latest 13F; the quarter is on each row'}>
             {count === 0 ? (
               <p className="text-[14px] text-ink-2">Add the stocks you own or watch above to see which peers hold them.</p>
             ) : (
