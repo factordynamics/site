@@ -1,3 +1,4 @@
+import { readFollows } from './followsShape.mjs'
 import { useSyncExternalStore } from 'react'
 import { ApiError, call, getToken } from './account'
 
@@ -30,6 +31,9 @@ export type Pending = Record<string, { want: boolean; state: 'saving' | 'error' 
 type State = { status: 'idle' | 'loading' | 'ready' | 'guest'; follows: Follows; pending: Pending }
 
 const EMPTY: Follows = { investors: [], stocks: [], owned: [], peers: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true }
+// A free account's limit comes at the top level of GET /follows; readFollows carries it into the follows.
+type Res = { follows: Follows; limit?: number }
+const shape = (r: Res): Follows => readFollows(r, EMPTY, state?.follows?.limit) as Follows
 let state: State = { status: 'idle', follows: EMPTY, pending: {} }
 const subs = new Set<() => void>()
 const set = (s: State) => {
@@ -41,8 +45,8 @@ function load() {
   if (state.status !== 'idle') return
   if (!getToken()) return set({ status: 'guest', follows: EMPTY, pending: {} })
   set({ ...state, status: 'loading' })
-  call<{ follows: Follows }>('/follows', { auth: true }).then(
-    (r) => set({ status: 'ready', follows: { ...EMPTY, ...r.follows }, pending: {} }),
+  call<Res>('/follows', { auth: true }).then(
+    (r) => set({ status: 'ready', follows: shape(r), pending: {} }),
     () => set({ status: 'guest', follows: EMPTY, pending: {} }),
   )
 }
@@ -70,7 +74,7 @@ const enqueue = <T>(job: () => Promise<T>): Promise<T> => {
   queue = run.catch(() => null)
   return run
 }
-const readBack = async () => ({ ...EMPTY, ...(await call<{ follows: Follows }>('/follows', { auth: true })).follows })
+const readBack = async () => shape(await call<Res>('/follows', { auth: true }))
 const withoutKey = (k: string) => Object.fromEntries(Object.entries(state.pending).filter(([x]) => x !== k))
 
 /** Partial update (settings, onboarding), queued behind any follow in flight, then confirmed from the server. */
@@ -90,8 +94,8 @@ export function setFollow(kind: 'investors' | 'stocks' | 'peers' | 'owned', id: 
       // One item per request ({api}/follows/{slug}, /follows/stocks/{TICKER}); the server serializes
       // writes and answers with the full follows, which the button renders from.
       const path = kind === 'investors' ? `/follows/${encodeURIComponent(id)}` : `/follows/${kind}/${encodeURIComponent(id)}`
-      const r = await call<{ follows: Follows }>(path, { method: want ? 'POST' : 'DELETE', auth: true })
-      const f = { ...EMPTY, ...r.follows }
+      const r = await call<Res>(path, { method: want ? 'POST' : 'DELETE', auth: true })
+      const f = shape(r)
       const ok = f[kind].includes(id) === want
       set({ status: 'ready', follows: f, pending: ok ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error' } } })
       if (!ok) throw new Error('not_confirmed')
@@ -112,8 +116,8 @@ export function addStocks(tickers: string[], owned: boolean) {
     const failed: string[] = []
     for (const t of tickers) {
       try {
-        const r = await call<{ follows: Follows }>(`/follows/${owned ? 'owned' : 'stocks'}/${encodeURIComponent(t)}`, { method: 'POST', auth: true })
-        set({ ...state, status: 'ready', follows: { ...EMPTY, ...r.follows } })
+        const r = await call<Res>(`/follows/${owned ? 'owned' : 'stocks'}/${encodeURIComponent(t)}`, { method: 'POST', auth: true })
+        set({ ...state, status: 'ready', follows: shape(r) })
       } catch (e) {
         if (isPaywall(e)) throw e
         failed.push(t)
@@ -127,7 +131,7 @@ export function addStocks(tickers: string[], owned: boolean) {
 export function importBook(body: { text?: string; csv?: string; cik?: string; mode?: 'replace' | 'merge' }) {
   return enqueue(async () => {
     const r = await call<{ follows: Follows; imported: number | string[]; skipped?: string[]; source?: { cik: string; name: string; quarter: string } | null }>('/book/import', { method: 'POST', body, auth: true })
-    set({ ...state, status: 'ready', follows: { ...EMPTY, ...r.follows } })
+    set({ ...state, status: 'ready', follows: shape(r) })
     return { ...r, imported: typeof r.imported === 'number' ? r.imported : r.imported.length }
   })
 }

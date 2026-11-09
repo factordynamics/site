@@ -234,8 +234,10 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
   const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
   const waiting = list.filter((x) => !x.filed)
   const done = list.filter((x) => x.filed)
-  // Group the ones still to file by expected day.
-  const days = [...new Set(waiting.map((x) => x.expected_date ?? ''))]
+  // Group the ones still to file by expected day; a filer whose last 13F was an empty placeholder is
+  // listed apart, never as later than usual.
+  const dayOf = (x: Expected) => (x.placeholder ? 'empty' : (x.expected_date ?? ''))
+  const days = [...new Set(waiting.map(dayOf))].sort((a, b) => (a === 'empty' ? 1 : b === 'empty' ? -1 : 0))
   return (
     <section id="expected" className="mt-5 scroll-mt-24 rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" aria-labelledby="expected-title">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
@@ -260,13 +262,13 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
       <div className="divide-y divide-line">
         {days.map((day) => (
           <div key={day} className="grid grid-cols-1 gap-x-6 gap-y-1 px-5 py-3 md:grid-cols-[9rem_minmax(0,1fr)] md:px-6">
-            <p className={`pt-2 text-[13px] font-medium ${day && day < today ? 'text-[#8a5a0b]' : day === today ? 'text-accent' : 'text-ink-2'}`}>
-              {!day ? 'No fixed day' : day === today ? 'Today' : dayLabel(day)}
-              {day && day < today && <span className="block text-[12px] font-normal">later than usual</span>}
+            <p className={`pt-2 text-[13px] font-medium ${day === 'empty' ? 'text-ink-2' : day && day < today ? 'text-[#8a5a0b]' : day === today ? 'text-accent' : 'text-ink-2'}`}>
+              {day === 'empty' ? 'Last 13F was empty' : !day ? 'No fixed day' : day === today ? 'Today' : dayLabel(day)}
+              {day && day !== 'empty' && day < today && <span className="block text-[12px] font-normal">later than usual</span>}
             </p>
             <ul className="grid min-w-0 grid-cols-1 gap-x-6 sm:grid-cols-2">
               {waiting
-                .filter((x) => (x.expected_date ?? '') === day)
+                .filter((x) => dayOf(x) === day)
                 .map((x) => (
                   <li key={x.slug} className="min-w-0">
                     <Link to={`/investors/${x.slug}/`} className="flex items-start gap-2.5 rounded-lg py-1.5 hover:text-accent">
@@ -275,7 +277,7 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
                         <span className="block truncate text-[14px] font-medium">{x.manager}</span>
                         <span className="block text-[12.5px] leading-snug text-ink-3" title={x.history.map((h) => `${quarterLabel(h.quarter)}: ${new Date(h.accepted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}`).join('\n')}>
                           {x.via && <span className="text-ink-2">Files as {x.via.replace(/,?\s+(Inc|LLC|L\.?P|Ltd)\.?$/i, '')}. </span>}
-                          {usual(x)}
+                          {x.placeholder ? `Filed an empty 13F for ${quarterLabel(x.placeholder.quarter)}; showing ${quarterLabel(x.placeholder.showing)}, the latest full book` : usual(x)}
                         </span>
                       </span>
                     </Link>

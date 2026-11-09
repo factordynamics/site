@@ -1,10 +1,10 @@
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Signup } from '../components/Signup'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton } from '../components/ui'
 import { TRIAL_DAYS } from '../config'
 import { useMember } from '../lib/account'
 import { dateLabel, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
-import { loadRecap, stockPath, type RecapMove, type SeasonRow } from '../lib/stocks'
+import { loadRecap, stockPath, type PctRow, type RecapMove, type SeasonRow } from '../lib/stocks'
 
 // /season/2026q3/: the season recap, from d/recap/{Q}.json (scripts/stocks.mjs). Before the deadline it
 // reads as "so far"; after it, as final, with late filers still flowing in on each build.
@@ -22,6 +22,9 @@ export function Recap() {
   const tick = useTick(120_000, true)
   const r = useAsync(() => (valid ? loadRecap(q, tick ? Date.now() : undefined) : Promise.reject(new Error('bad quarter'))), [q, tick])
   const member = useMember()
+  // Rank by dollars or by % of book (a small fund's conviction counts as much as a big book's dollars).
+  const [params, setParams] = useSearchParams()
+  const by: 'usd' | 'pct' = params.get('by') === 'pct' ? 'pct' : 'usd'
   const paid = Boolean(member?.active)
   const d = r.data
   const Q = quarterLabel(q)
@@ -77,12 +80,27 @@ export function Recap() {
         <Skeleton className="mt-6 h-96 w-full" />
       ) : (
         <>
-          <div className="mt-6 grid gap-5 lg:grid-cols-2">
-            <Panel title="Most bought" sub="Net dollars added by superinvestors, ETFs and index funds left out">
-              <Bars rows={d.most_bought} paid={paid} what="most bought" />
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-[15px] font-semibold">Most bought and sold</h2>
+            <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Rank by">
+              {(
+                [
+                  ['usd', 'Dollars'],
+                  ['pct', '% of book'],
+                ] as const
+              ).map(([k, l]) => (
+                <button key={k} type="button" role="tab" aria-selected={by === k} onClick={() => setParams(k === 'usd' ? {} : { by: k }, { replace: true })} className={`min-h-9 rounded-full px-3.5 ${by === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-3 grid gap-5 lg:grid-cols-2">
+            <Panel title="Most bought" sub={by === 'pct' ? 'Each superinvestor’s buy as a share of its book, summed; ETFs left out' : 'Net dollars added by superinvestors, ETFs and index funds left out'}>
+              {by === 'pct' ? <PctBars rows={d.most_bought_pct ?? []} paid={paid} what="most bought" /> : <Bars rows={d.most_bought} paid={paid} what="most bought" />}
             </Panel>
-            <Panel title="Most sold" sub="Net dollars sold by superinvestors, ETFs and index funds left out">
-              <Bars rows={d.most_sold} paid={paid} what="most sold" sold />
+            <Panel title="Most sold" sub={by === 'pct' ? 'Each superinvestor’s sale as a share of its book, summed; ETFs left out' : 'Net dollars sold by superinvestors, ETFs and index funds left out'}>
+              {by === 'pct' ? <PctBars rows={d.most_sold_pct ?? []} paid={paid} what="most sold" sold /> : <Bars rows={d.most_sold} paid={paid} what="most sold" sold />}
             </Panel>
           </div>
 
@@ -191,13 +209,49 @@ function Bars({ rows, paid, what, sold = false }: { rows: SeasonRow[]; paid: boo
             </Link>
             <span className="min-w-0">
               <span className="block truncate text-ink-2" title={r.name}>
-                {r.name}
+                {r.name} <span className="text-ink-3">· {who(sold ? r.sellers : r.buyers, sold ? r.n_sellers : r.n_buyers)}</span>
               </span>
               <span className="mt-1 block h-1.5 rounded-full bg-ink/[0.05]">
                 <span className={`block h-full rounded-full ${sold ? 'bg-down' : 'bg-up'}`} style={{ width: `${(Math.abs(r.net_value) / max) * 100}%` }} />
               </span>
             </span>
             <span className={`num text-right font-medium ${sold ? 'text-down' : 'text-up'}`}>{signed(r.net_value)}</span>
+          </li>
+        ))}
+      </ol>
+      {!paid && <More n={rows.length - shown.length} what={what} />}
+    </>
+  )
+}
+
+/** "Richard Pzena", or "3 superinvestors" when more than one did it. */
+const who = (people: { manager: string }[], n?: number) => ((n ?? people.length) > 1 ? `${n ?? people.length} superinvestors` : (people[0]?.manager ?? ''))
+
+function PctBars({ rows, paid, what, sold = false }: { rows: PctRow[]; paid: boolean; what: string; sold?: boolean }) {
+  const shown = paid ? rows : rows.slice(0, FREE)
+  const max = Math.max(1e-9, ...shown.map((r) => Math.abs(r.pct)))
+  if (!rows.length) return <p className="text-[14px] text-ink-3">Nothing yet.</p>
+  return (
+    <>
+      <ol className="space-y-2.5">
+        {shown.map((r, i) => (
+          <li key={r.ticker} className="grid grid-cols-[1.5rem_4.5rem_minmax(0,1fr)_4.5rem] items-center gap-2 text-[13.5px]">
+            <span className="num text-ink-3">{i + 1}</span>
+            <Link to={stockPath(r.ticker)} className="font-mono text-[13px] font-semibold hover:text-accent">
+              {r.ticker}
+            </Link>
+            <span className="min-w-0">
+              <span className="block truncate text-ink-2" title={r.name}>
+                {r.name} <span className="text-ink-3">· {who(sold ? r.sellers : r.buyers, sold ? r.n_sellers : r.n_buyers)}</span>
+              </span>
+              <span className="mt-1 block h-1.5 rounded-full bg-ink/[0.05]">
+                <span className={`block h-full rounded-full ${sold ? 'bg-down' : 'bg-up'}`} style={{ width: `${(Math.abs(r.pct) / max) * 100}%` }} />
+              </span>
+            </span>
+            <span className={`num text-right font-medium ${sold ? 'text-down' : 'text-up'}`}>
+              {r.pct >= 0 ? '+' : '−'}
+              {(Math.abs(r.pct) * 100).toFixed(1)}%
+            </span>
           </li>
         ))}
       </ol>
@@ -274,12 +328,14 @@ function Moves({ rows, paid, what, wide = false }: { rows: RecapMove[]; paid: bo
 }
 
 /** Still to file, grouped by the day each usually files; overdue and patternless ones apart. */
-function Waiting({ rows, final }: { rows: { slug: string; manager: string; expected_date: string | null }[]; final: boolean }) {
+function Waiting({ rows, final }: { rows: { slug: string; manager: string; expected_date: string | null; placeholder?: { quarter: string } }[]; final: boolean }) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
-  const key = (x: (typeof rows)[number]) => (final ? 'none' : !x.expected_date ? 'nofixed' : x.expected_date < today ? 'late' : x.expected_date)
-  const groups = [...new Set(rows.map(key))].sort((a, b) => (a === 'late' ? -1 : b === 'late' ? 1 : a === 'nofixed' ? 1 : b === 'nofixed' ? -1 : a.localeCompare(b)))
+  // A filer whose last 13F was an empty placeholder did file: listed apart, never as late or missing.
+  const key = (x: (typeof rows)[number]) => (x.placeholder ? 'empty' : final ? 'none' : !x.expected_date ? 'nofixed' : x.expected_date < today ? 'late' : x.expected_date)
+  const rank = (k: string) => (k === 'late' ? 0 : k === 'nofixed' ? 2 : k === 'empty' ? 3 : 1)
+  const groups = [...new Set(rows.map(key))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
   const label = (k: string) =>
-    k === 'none' ? 'No 13F yet' : k === 'late' ? 'Later than usual' : k === 'nofixed' ? 'No fixed day' : `Usually ${new Date(`${k}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}`
+    k === 'empty' ? `Last 13F was empty` : k === 'none' ? 'No 13F yet' : k === 'late' ? 'Later than usual' : k === 'nofixed' ? 'No fixed day' : `Usually ${new Date(`${k}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}`
   if (!rows.length) return <p className="mt-2 text-[13.5px] text-ink-3">Everyone has filed.</p>
   return (
     <dl className="mt-2 divide-y divide-line">

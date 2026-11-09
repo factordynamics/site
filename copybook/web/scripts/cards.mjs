@@ -205,18 +205,32 @@ ${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572
   const s = JSON.parse(readFileSync(join(out, 'd', 'season.json'), 'utf8'))
   const r = JSON.parse(readFileSync(join(out, 'd', 'recap', `${s.quarter}.json`), 'utf8'))
   const q = qLabel(r.quarter)
+  // Who did it, not the company name: "Pzena", or "+3 funds" when several did.
+  const FIRMS = new Set(['Tweedy Browne', 'Ruane Cunniff'])
+  const short = (n) => (FIRMS.has(n) || n.split(' ').length !== 2 ? n : n.split(' ')[1])
+  const who = (people, n) => (n > 1 ? `${n} superinvestors` : short(displayName(people[0]?.manager ?? '')))
+  // rows: [ticker, who, value]
   const col = (rows, x0, title, fg) =>
     `<text x="${x0}" y="300" font-family="Geist" font-weight="700" font-size="17" letter-spacing="1.6" fill="${fg}">${title}</text>` +
     (rows.length
       ? rows
-          .map((f, i) => {
+          .map(([t, w, v], i) => {
             const y = 352 + i * 56
-            return `<text x="${x0}" y="${y}" font-family="Geist Mono" font-weight="600" font-size="27" fill="#0c0e13">${x(f.ticker)}</text>
-<text x="${x0 + 118}" y="${y}" font-family="Geist" font-size="21" fill="#5f6572">${x(cut(f.name, 16))}</text>
-<text x="${x0 + 490}" y="${y}" text-anchor="end" font-family="Geist" font-weight="600" font-size="24" fill="${fg}">${f.net_value >= 0 ? '+' : '−'}${money(f.net_value)}</text>`
+            return `<text x="${x0}" y="${y}" font-family="Geist Mono" font-weight="600" font-size="27" fill="#0c0e13">${x(t)}</text>
+<text x="${x0 + 118}" y="${y}" font-family="Geist" font-size="21" fill="#5f6572">${x(cut(w, 18))}</text>
+<text x="${x0 + 490}" y="${y}" text-anchor="end" font-family="Geist" font-weight="600" font-size="24" fill="${fg}">${x(v)}</text>`
           })
           .join('\n')
       : `<text x="${x0}" y="352" font-family="Geist" font-size="22" fill="#8a8f99">Nothing yet</text>`)
+  const usd = (f, sold) => [f.ticker, who(sold ? f.sellers : f.buyers, sold ? f.n_sellers : f.n_buyers), `${f.net_value >= 0 ? '+' : '−'}${money(f.net_value)}`]
+  const pct = (f) => [f.ticker, who(f.buyers, f.n_buyers), `+${(f.pct * 100).toFixed(1)}% of book`]
+  // After the deadline the card leads with breadth: what the most superinvestors bought.
+  const left = r.final
+    ? col(r.most_buyers.slice(0, 3).map((f) => [f.ticker, short(cut(f.name, 18)), `${f.n_buyers} bought`]), 72, 'BOUGHT BY THE MOST', '#126b3c')
+    : col(r.most_bought.slice(0, 3).map((f) => usd(f, false)), 72, 'MOST BOUGHT', '#126b3c')
+  const right = r.final
+    ? col((r.most_bought_pct ?? []).slice(0, 3).map(pct), 638, 'BIGGEST BETS, % OF BOOK', '#2b44d6')
+    : col(r.most_sold.slice(0, 3).map((f) => usd(f, true)), 638, 'MOST SOLD', '#b4322a')
   const card = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
 <rect width="1200" height="630" fill="#fbfaf7"/>
 <g transform="translate(72 58) scale(1.75)"><rect x="1.5" y="5" width="14" height="17.5" rx="3.2" fill="#0c0e13"/><rect x="8" y="1.5" width="14.5" height="17.5" rx="3.2" fill="#2b44d6" stroke="#fbfaf7" stroke-width="1.4"/><rect x="11" y="6" width="8.5" height="1.8" rx=".9" fill="#fff"/><rect x="11" y="9.6" width="6" height="1.8" rx=".9" fill="#fff" opacity=".85"/><rect x="11" y="13.2" width="3.6" height="1.8" rx=".9" fill="#fff" opacity=".7"/></g>
@@ -225,12 +239,12 @@ ${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572
 <text x="72" y="196" font-family="Geist" font-weight="600" font-size="54" letter-spacing="-2" fill="#0c0e13">${x(`${q} 13F recap`)}</text>
 <text x="72" y="238" font-family="Geist" font-size="24" fill="#5f6572">What the superinvestors bought and sold${r.final ? '' : ', so far'}</text>
 <path d="M72 262H1128" stroke="#e6e3dc"/>
-${col(r.most_bought.slice(0, 3), 72, 'MOST BOUGHT', '#126b3c')}
-${col(r.most_sold.slice(0, 3), 638, 'MOST SOLD', '#b4322a')}
+${left}
+${right}
 <path d="M600 284V500" stroke="#e6e3dc"/>
 <path d="M72 556H1128" stroke="#e6e3dc"/>
-<text x="72" y="596" font-family="Geist" font-weight="500" font-size="22" fill="#393e49">${x(`${r.opened_count} new positions · ${r.exited_count} full exits · from SEC EDGAR`)}</text>
-<text x="1128" y="596" text-anchor="end" font-family="Geist" font-weight="600" font-size="22" fill="#2b44d6">copybook.factordynamics.com</text>
+<text x="72" y="596" font-family="Geist" font-weight="500" font-size="22" fill="#393e49">${x(`${r.opened_count} new · ${r.exited_count} exits`)}</text>
+<text x="1128" y="596" text-anchor="end" font-family="Geist" font-weight="600" font-size="22" fill="#2b44d6">${x(`copybook.factordynamics.com/season/${r.quarter.toLowerCase()}`)}</text>
 </svg>`
   const v = createHash('sha1').update(card).digest('hex').slice(0, 10)
   const slug = r.quarter.toLowerCase()
@@ -246,4 +260,46 @@ ${col(r.most_sold.slice(0, 3), 638, 'MOST SOLD', '#b4322a')}
     }),
   )
   console.log(`recap card: ${q}${r.final ? ' final' : ' so far'} (v=${v})`)
+}
+
+// /speed/'s share card: this season's median and 90th percentile from EDGAR acceptance to delivery, or
+// "Waiting for the first live alert" until there is one. Rebuilt on every build from the public /latency.
+{
+  const API = process.env.VITE_API || 'https://copybook-api.factordynamics.workers.dev'
+  const l = await fetch(`${API}/latency`).then((r) => (r.ok ? r.json() : null), () => null)
+  const secs = (s) => (s == null ? '—' : s < 90 ? `${Math.round(s)}s` : `${(s / 60).toFixed(s < 600 ? 1 : 0)} min`)
+  const n = l?.count ?? 0
+  const body = !l
+    ? `<text x="72" y="380" font-family="Geist" font-weight="600" font-size="44" letter-spacing="-1" fill="#0c0e13">Every alert timed, EDGAR to inbox</text>`
+    : n
+      ? [
+          ['MEDIAN', secs(l.median_seconds), '#2b44d6'],
+          ['90TH PERCENTILE', secs(l.p90_seconds), '#0c0e13'],
+          ['ALERTS TIMED', n.toLocaleString('en-US'), '#0c0e13'],
+        ]
+          .map(([k, v, fg], i) => {
+            const x0 = 72 + i * 372
+            return `<text x="${x0}" y="318" font-family="Geist" font-weight="700" font-size="17" letter-spacing="1.6" fill="#5f6572">${k}</text>
+<text x="${x0}" y="410" font-family="Geist" font-weight="600" font-size="88" letter-spacing="-3" fill="${fg}">${x(v)}</text>`
+          })
+          .join('\n')
+      : `<text x="72" y="360" font-family="Geist" font-weight="600" font-size="48" letter-spacing="-1.4" fill="#0c0e13">Waiting for the first live alert</text>
+<text x="72" y="412" font-family="Geist" font-size="24" fill="#5f6572">Every 13F, Form 4 and 13D/G alert is timed from SEC acceptance to delivery.</text>`
+  const card = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<rect width="1200" height="630" fill="#fbfaf7"/>
+<g transform="translate(72 58) scale(1.75)"><rect x="1.5" y="5" width="14" height="17.5" rx="3.2" fill="#0c0e13"/><rect x="8" y="1.5" width="14.5" height="17.5" rx="3.2" fill="#2b44d6" stroke="#fbfaf7" stroke-width="1.4"/><rect x="11" y="6" width="8.5" height="1.8" rx=".9" fill="#fff"/><rect x="11" y="9.6" width="6" height="1.8" rx=".9" fill="#fff" opacity=".85"/><rect x="11" y="13.2" width="3.6" height="1.8" rx=".9" fill="#fff" opacity=".7"/></g>
+<text x="124" y="94" font-family="Geist" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Copybook</text>
+<text x="1128" y="92" text-anchor="end" font-family="Geist" font-weight="500" font-size="22" fill="#5f6572">${x(l?.season ? `${qLabel(l.season)} filing season` : 'Alert speed')}</text>
+<text x="72" y="196" font-family="Geist" font-weight="600" font-size="54" letter-spacing="-2" fill="#0c0e13">How fast alerts arrive</text>
+<text x="72" y="238" font-family="Geist" font-size="24" fill="#5f6572">From EDGAR acceptance to delivery, live alerts only</text>
+<path d="M72 262H1128" stroke="#e6e3dc"/>
+${body}
+<path d="M72 556H1128" stroke="#e6e3dc"/>
+<text x="72" y="596" font-family="Geist" font-weight="500" font-size="22" fill="#393e49">13F · Form 4 · 13D/G</text>
+<text x="1128" y="596" text-anchor="end" font-family="Geist" font-weight="600" font-size="22" fill="#2b44d6">copybook.factordynamics.com/speed</text>
+</svg>`
+  const v = createHash('sha1').update(card).digest('hex').slice(0, 10)
+  writeFileSync(join(out, 'og', 'speed.png'), new Resvg(card, { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng())
+  writeFileSync(join(out, 'og', 'speed.json'), JSON.stringify({ url: `${SITE}og/speed.png?v=${v}`, count: n, median_seconds: l?.median_seconds ?? null, p90_seconds: l?.p90_seconds ?? null }))
+  console.log(`speed card: ${l ? (n ? `${n} alerts, median ${secs(l.median_seconds)}` : 'waiting for the first live alert') : 'latency unavailable'} (v=${v})`)
 }

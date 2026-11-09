@@ -1,21 +1,30 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { TRIAL_DAYS } from '../config'
-import { ApiError } from '../lib/account'
+import { ApiError, useMember } from '../lib/account'
 import { money, quarterLabel, useAsync } from '../lib/data'
 import { setFollow, useFollows } from '../lib/follows'
 import { loadStock, resolveTicker, stockPath, type Stock } from '../lib/stocks'
 import { Arrow, Button, Lock, Skeleton } from './ui'
 
 // "My names" for free accounts: up to 5 owned names (the API's free_names cap), each with one public
-// fact from the stock page (the largest superinvestor move this season, or how many hold it). Everything
-// else about them (all holders, weights, insider trades, alerts) is Copy, behind one trial button.
+// fact. The Friday email's fact comes first (/me free_names.facts, this week's superinvestor moves),
+// then the stock page's strongest: a superinvestor's Form 4 or 13D since its last 13F, else its largest
+// 13F move. The email's locked hook names the biggest thing Copy adds; everything else is Copy too.
 
 const LIMIT = 5
 
 /** One fact a stock page already shows to anyone. */
 function fact(s: Stock | null, ticker: string) {
   if (!s) return 'Not in the 13F data yet'
+  // A superinvestor's own Form 4 trade or 13D since its last 13F outranks a quarter-old 13F move.
+  const ev = (s.since ?? []).filter((e) => (e.kind === 'form4' && (e.action === 'buy' || e.action === 'sell') && e.value_usd) || (e.kind === '13d' && e.percent_of_class))
+  const e = ev.sort((a, b) => (b.value_usd ?? Infinity) - (a.value_usd ?? Infinity))[0]
+  if (e) {
+    const when = new Date(`${e.filing_date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+    if (e.kind === 'form4') return `${e.manager} ${e.action === 'buy' ? 'bought' : 'sold'} ${money(e.value_usd ?? 0)} of ${ticker} (Form 4, ${when})`
+    return `${e.manager} holds ${e.percent_of_class}% of ${ticker} (13D, ${when})`
+  }
   // The newest quarter in which a superinvestor moved (most haven't filed the season under way yet),
   // and its biggest move; a quarter that looks like an unadjusted split has no trades to show.
   const moved = (q: string) => [...s.holders, ...s.exited].filter((h) => h.featured && h.quarter === q && h.change && h.change !== 'unchanged' && h.delta_value)
@@ -37,6 +46,8 @@ function fact(s: Stock | null, ticker: string) {
 
 export function FreeNames({ className = '' }: { className?: string }) {
   const { status, follows } = useFollows()
+  const fn = useMember()?.free_names
+  const told = new Map((fn?.facts ?? []).map((f) => [f.ticker, f]))
   const names = follows.owned
   const data = useAsync(() => Promise.all(names.map((t) => loadStock(t).catch(() => null))), [names.join(',')])
   const [text, setText] = useState('')
@@ -101,7 +112,15 @@ export function FreeNames({ className = '' }: { className?: string }) {
                 {t}
               </Link>
               <span className="min-w-0 flex-1 text-[13.5px]">
-                {data.loading && !data.data ? <Skeleton className="h-4 w-2/3" /> : fact(data.data?.[i] ?? null, t)}
+                {told.has(t) ? (
+                  <a href={told.get(t)!.url} className="hover:text-accent">
+                    {told.get(t)!.text.replace(/, which you own$/, '')}
+                  </a>
+                ) : data.loading && !data.data ? (
+                  <Skeleton className="h-4 w-2/3" />
+                ) : (
+                  fact(data.data?.[i] ?? null, t)
+                )}
               </span>
               <button type="button" onClick={() => setFollow('owned', t, false).catch(() => null)} className="shrink-0 text-[12.5px] text-ink-3 hover:text-down" aria-label={`Remove ${t}`}>
                 Remove
@@ -144,7 +163,16 @@ export function FreeNames({ className = '' }: { className?: string }) {
       )}
       <Link to="/pricing/" className="flex items-center gap-3 rounded-b-[var(--radius-card)] border-t border-line bg-ink/[0.025] px-5 py-3.5 text-[13.5px] text-ink-2 hover:text-ink md:px-6">
         <Lock />
-        <span className="min-w-0 flex-1">Every fund holding your names, their weights, insider trades and an alert when anyone moves: Copy</span>
+        <span className="min-w-0 flex-1">
+          {fn?.hook ? (
+            <>
+              <span className="font-medium text-ink">{fn.hook}, with Copy</span>
+              {fn.more ? ` · +${fn.more} more in your names` : ''}
+            </>
+          ) : (
+            'Every fund holding your names, their weights, insider trades and an alert when anyone moves: Copy'
+          )}
+        </span>
         <span className="inline-flex shrink-0 items-center gap-1 font-medium text-accent">
           Start {TRIAL_DAYS}-day trial <Arrow className="size-3" />
         </span>

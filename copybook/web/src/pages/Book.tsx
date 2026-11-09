@@ -37,14 +37,20 @@ type Row = {
   /** Insider Form 4s since the quarter end that aren't open-market trades above the threshold. */
   more?: number
   split: { ratio: string; adjusted: boolean } | null
-  /** Counts are across every 13F filer; changes are the tracked funds'. */
+  /** Counts are across every 13F filer, or its hedge funds and active managers; changes marked * are the tracked funds'. */
   all: boolean
+  /** New, exited and the change in holders come from the full-book holder index (exact, no *). */
+  exact: boolean
   /** All-filer counts asked for, but the filer index misses many of the funds we track: counts are a lower bound. */
   incomplete: boolean
   /** All 13F filers holding it whose latest filing is older than the previous quarter. */
   older: number
   /** The tracked funds' figures, kept for the CSV whatever the lens. */
-  t: { holders: number; prev: number; top10: number; over5: number; filed: number }
+  t: { holders: number; prev: number; top10: number; over5: number; filed: number; added: number; exited: number }
+  /** Hedge funds and active managers, when loaded. */
+  s: { holders: number; older: number; top10: number; over5: number; filed: number } | null
+  /** Every filer's new and exited holders, from the full-book index. */
+  ix: { new: number; exited: number } | null
   /** The all-filer figures, when loaded. */
   a: { holders: number; older: number; top10: number; over5: number; filed: number; incomplete: boolean } | null
 }
@@ -63,10 +69,17 @@ const COLS: [Key, string, string][] = [
   ['latest', 'Latest 4 / 13D', 'left'],
 ]
 
-// all: crowding across every 13F filer (d/h/{TICKER}.json); changes stay with the tracked funds.
+// smart: hedge funds and active managers (default); all: every 13F filer; tracked: the funds we track
+// closely. smart and all read d/h/{TICKER}.json: ingest's full-book counts and crowding from the shards.
 type Agg = Awaited<ReturnType<typeof loadFilerHolders>>
+type Lens = 'smart' | 'all' | 'tracked'
+const LENSES: [Lens, string][] = [
+  ['smart', 'Hedge funds and active managers'],
+  ['all', 'All 13F filers'],
+  ['tracked', 'Funds we track'],
+]
 
-function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: string, all: Agg | null = null): Row {
+function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: string, all: Agg | null = null, lens: Lens = 'all'): Row {
   const h: StockHolder[] = stock?.holders ?? []
   const ex: StockHolder[] = stock?.exited ?? []
   // Share changes in a quarter that looks like a split aren't trades: kept out of the counts and net.
@@ -92,7 +105,7 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
     split,
     latest: ev ? evLatest(ev) : null,
   }
-  const t = { holders: base.holders, prev: base.prev, top10: base.top10, over5: base.over5, filed: base.filed }
+  const t = { holders: base.holders, prev: base.prev, top10: base.top10, over5: base.over5, filed: base.filed, added: base.added, exited: base.exited }
   // Until ingest's holder index covers small and mid caps, it can miss funds we track that do hold
   // the stock (it was built from each filer's largest positions). Then the tracked counts are shown.
   // When it misses a quarter or more of them, the row shows the tracked counts; a smaller gap is
@@ -113,22 +126,35 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
         incomplete: all.current < h.length || missing > Math.max(2, h.length * 0.25),
       }
     : null
-  const useAll = Boolean(a)
+  // Ingest's holder index counts every filer's latest full book, so it is exact (its publish gate keeps
+  // it at or above the tracked funds): no lower bound, and new and exited across every filer.
+  const ix = all?.index
+  const a2 = a && ix ? { ...a, holders: ix.holders, older: ix.older, filed: ix.quarters[season] ?? 0, incomplete: false } : a
+  const sm = all?.smart
+  const view =
+    lens === 'smart' && sm
+      ? { holders: sm.current, prev: NaN, older: sm.older, top10: sm.top10, over5: sm.over5, filed: sm.quarters[season] ?? 0, filedOf: sm.current, incomplete: false, exact: false }
+      : lens === 'all' && a2
+        ? { holders: a2.holders, prev: ix ? a2.holders - ix.new + ix.exited : NaN, older: a2.older, top10: a2.top10, over5: a2.over5, filed: a2.filed, filedOf: a2.holders, incomplete: a2.incomplete, exact: Boolean(ix), ...(ix ? { added: ix.new, exited: ix.exited } : {}) }
+        : null
   return {
     ticker,
     name: stock?.name ?? '',
     ...base,
     t,
-    a,
-    all: useAll,
-    incomplete: Boolean(a?.incomplete),
-    older: useAll ? a!.older : 0,
-    ...(useAll ? { holders: a!.holders, prev: NaN, top10: a!.top10, over5: a!.over5, filed: a!.filed, filedOf: a!.holders } : {}),
+    a: a2,
+    s: sm ? { holders: sm.current, older: sm.older, top10: sm.top10, over5: sm.over5, filed: sm.quarters[season] ?? 0 } : null,
+    ix: ix ? { new: ix.new, exited: ix.exited } : null,
+    all: Boolean(view),
+    incomplete: false,
+    older: 0,
+    exact: false,
+    ...(view ?? {}),
   }
 }
 
 const sortVal = (r: Row, k: Key) =>
-  k === 'ticker' ? r.ticker : k === 'change' ? (r.all ? 0 : r.holders - r.prev) : k === 'filed' ? r.filed : k === 'latest' ? (r.latest?.date ?? '') : (r[k] as number)
+  k === 'ticker' ? r.ticker : k === 'change' ? (Number.isNaN(r.prev) ? 0 : r.holders - r.prev) : k === 'filed' ? r.filed : k === 'latest' ? (r.latest?.date ?? '') : (r[k] as number)
 
 export function Book() {
   useTitle('My book · Copybook')
@@ -137,13 +163,15 @@ export function Book() {
   const { status, follows } = useFollows()
   const names = useMemo(() => [...new Set([...follows.owned, ...follows.stocks])], [follows.owned, follows.stocks])
   const data = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadStock(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(',')])
-  // Lens: every 13F filer (default) or the funds we track closely, in the URL so a view can be shared.
+  // Lens: hedge funds and active managers (default), every 13F filer, or the funds we track closely,
+  // in the URL so a view can be shared.
   const [params, setParams] = useSearchParams()
-  const lens: 'all' | 'tracked' = params.get('funds') === 'tracked' ? 'tracked' : 'all'
-  const setLens = (l: 'all' | 'tracked') => setParams(l === 'all' ? {} : { funds: l }, { replace: true })
+  const lens: Lens = params.get('funds') === 'tracked' ? 'tracked' : params.get('funds') === 'all' ? 'all' : 'smart'
+  const setLens = (l: Lens) => setParams(l === 'smart' ? {} : { funds: l }, { replace: true })
   const events = useAsync(() => (names.length ? loadEvents(names) : Promise.resolve(new Map<string, IssuerEvent[]>())), [names.join(',')])
-  const agg = useAsync(() => (pro && names.length && lens === 'all' ? Promise.all(names.map((t) => loadFilerHolders(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(','), lens])
-  const ready = Boolean(data.data && (lens === 'tracked' || agg.data))
+  // The CSV keeps the all-filer figures whatever the lens, so d/h is loaded once for every lens.
+  const agg = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadFilerHolders(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(',')])
+  const ready = Boolean(data.data && agg.data)
   // Names that came from a linked 13F, as opposed to ones added by hand.
   const linked = useMemo(() => {
     const manual = new Set(follows.owned_manual ?? [])
@@ -159,7 +187,7 @@ export function Book() {
   const rows = useMemo(() => {
     const r = names.map((t, i) => {
       const n = newest(data.data?.[i] ?? null, events.data?.get(t), follows.insider_min_usd, season, events.loading)
-      return { ...rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, lens === 'all' ? (agg.data?.[i] ?? null) : null), latest: n.latest, empty: n.empty, more: n.more }
+      return { ...rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, agg.data?.[i] ?? null, lens), latest: n.latest, empty: n.empty, more: n.more }
     })
     const dir = sort.desc ? -1 : 1
     return r.sort((a, b) => {
@@ -169,15 +197,21 @@ export function Book() {
     })
   }, [names, follows.owned, follows.insider_min_usd, data.data, agg.data, events.data, events.loading, lens, season, sort])
 
-  // What the funds that have filed this season did in these names, largest first.
-  const moves = useMemo(
-    () =>
-      rows
-        .flatMap((r) => (r.split && !r.split.adjusted ? [] : [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])]).filter((x) => x.quarter === season && x.change && x.change !== 'unchanged' && x.delta_value).map((x) => ({ r, x })))
-        .sort((a, b) => Math.abs(b.x.delta_value) - Math.abs(a.x.delta_value))
-        .slice(0, 12),
-    [rows, season],
-  )
+  // What the funds that have filed this season did in these names, largest first. Under the smart-money
+  // lens: each hedge fund's and active manager's ten largest buys and sells (from its 13F shard).
+  const moves = useMemo(() => {
+    const ok = (r: Row) => !(r.split && !r.split.adjusted)
+    const list =
+      lens === 'smart'
+        ? rows.flatMap((r) => {
+            const sm = ok(r) ? agg.data?.[names.indexOf(r.ticker)]?.smart?.moves : null
+            return (sm ?? []).filter((m) => m.quarter === season && m.change !== 'unchanged' && m.delta_value).map((m) => ({ r, x: { slug: m.slug, manager: m.name, change: m.change, delta_value: m.delta_value } }))
+          })
+        : rows.flatMap((r) => (ok(r) ? [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])] : []).filter((x) => x.quarter === season && x.change && x.change !== 'unchanged' && x.delta_value).map((x) => ({ r, x: { slug: x.slug, manager: x.manager, change: x.change!, delta_value: x.delta_value } })))
+    return list.sort((a, b) => Math.abs(b.x.delta_value) - Math.abs(a.x.delta_value)).slice(0, 12)
+  }, [rows, season, lens, agg.data, names])
+  // Every name has the full-book holder index: new and exited are exact across every filer.
+  const exactAll = ready && rows.length > 0 && rows.every((r) => !r.stock || r.exact || lens !== 'all')
   const fundsFiled = new Set(rows.flatMap((r) => [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])].filter((x) => x.quarter === season).map((x) => x.slug))).size
   const fundsAll = new Set(rows.flatMap((r) => [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])].map((x) => x.slug))).size
 
@@ -227,14 +261,16 @@ export function Book() {
 
   const csv = () => {
     // Every column names whose figures it holds: all 13F filers or the funds we track closely.
-    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'latest_form', 'latest_date', 'latest_filer']
+    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'new_all', 'exited_all', 'holders_smart', 'holders_smart_older_filings', 'top10_smart', 'over_5pct_smart', `filed_${season}_smart`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'latest_form', 'latest_date', 'latest_filer']
     const q = (v: unknown) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))
     const body = rows.map((r) =>
       [
         r.ticker, r.name, r.owned ? 'owned' : 'watched',
         // Incomplete rows leave the exact columns blank and fill only the _min (lower bound) ones, so a sum never undercounts silently.
         ...(r.a ? [r.a.incomplete ? '' : r.a.holders, r.a.holders, r.a.older, r.a.incomplete ? 'true' : 'false', r.a.incomplete ? '' : r.a.top10, r.a.top10, r.a.incomplete ? '' : r.a.over5, r.a.over5, r.a.incomplete ? '' : r.a.filed, r.a.filed] : ['', '', '', '', '', '', '', '', '', '']),
-        r.t.holders, r.t.prev, r.featured, r.added, r.exited, r.t.top10, r.t.over5, r.t.filed,
+        r.ix?.new ?? '', r.ix?.exited ?? '',
+        ...(r.s ? [r.s.holders, r.s.older, r.s.top10, r.s.over5, r.s.filed] : ['', '', '', '', '']),
+        r.t.holders, r.t.prev, r.featured, r.t.added, r.t.exited, r.t.top10, r.t.over5, r.t.filed,
         r.split && !r.split.adjusted ? '' : r.bought, r.split && !r.split.adjusted ? '' : r.sold, r.split && !r.split.adjusted ? '' : Math.round(r.net),
         r.split ? `${r.split.ratio} ${r.split.adjusted ? 'adjusted' : 'not counted'}` : '',
         r.latest?.form ?? '', r.latest?.date ?? '', r.latest?.manager ?? '',
@@ -269,12 +305,12 @@ export function Book() {
         <>
           <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
             <Stat label="Names in your book" value={names.length} sub={`${follows.owned.length} owned, ${names.length - follows.owned.length} watched`} />
-            {lens === 'all' ? (
+            {lens !== 'tracked' ? (
               <>
                 <Stat
                   label={season ? `Filed ${quarterLabel(season)} so far` : 'Filed so far'}
                   value={ready ? `${Math.round((rows.reduce((a, r) => a + r.filed, 0) / Math.max(1, rows.reduce((a, r) => a + r.filedOf, 0))) * 100)}%` : '—'}
-                  sub="of the 13F holders of your names"
+                  sub={lens === 'smart' ? 'of the hedge funds and active managers holding your names' : 'of the 13F holders of your names'}
                 />
                 {(() => {
                   const top = ready ? [...rows].sort((a, b) => b.top10 / Math.max(1, b.holders) - a.top10 / Math.max(1, a.holders))[0] : null
@@ -290,7 +326,7 @@ export function Book() {
             <Stat
               label="Their net trades this season"
               value={data.data ? <span className={moves.length ? (rows.reduce((a, r) => a + r.net, 0) >= 0 ? 'text-up' : 'text-down') : ''}>{signed(rows.reduce((a, r) => a + r.net, 0))}</span> : '—'}
-              sub={lens === 'all' ? 'by the funds we track closely, at quarter-end value' : 'in your names, at quarter-end value'}
+              sub={lens !== 'tracked' ? 'by the funds we track closely, at quarter-end value' : 'in your names, at quarter-end value'}
             />
           </div>
 
@@ -299,16 +335,18 @@ export function Book() {
               <div className="max-w-2xl">
                 <h2 className="text-[15px] font-semibold">Your names</h2>
                 <p className="text-[13px] text-ink-3">
-                  {lens === 'all'
-                    ? 'Funds, top 10, over 5% and filed count every 13F filer whose latest filing is for this quarter or last; older filings are shown apart. Columns marked * (new, exited, bought, sold, net) cover the funds we track closely until every filer’s prior quarter is on file. Where the all-filer index is incomplete for a name, its row shows a lower bound (≥): every filer the index lists plus the funds we track closely that it misses, with top 10 and over 5% counted over both.'
-                    : 'Among the funds we track closely, from each one’s latest 13F.'}{' '}
+                  {lens === 'smart'
+                    ? 'Funds, top 10, over 5% and filed count the hedge funds and active managers among all 13F filers (types from EDGAR filings), whose latest filing is for this quarter or last; older filings are shown apart. Columns marked * (new, exited, bought, sold, net) cover the funds we track closely.'
+                    : lens === 'all'
+                      ? `Funds, ${exactAll ? 'vs last, new, exited, ' : ''}top 10, over 5% and filed count every 13F filer, from each one’s latest full 13F for this quarter or last; older filings are shown apart. Columns marked * (${exactAll ? '' : 'new, exited, '}bought, sold, net) cover the funds we track closely.`
+                      : 'Among the funds we track closely, from each one’s latest 13F.'}{' '}
                   Click a column to sort.
                 </p>
               </div>
               <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which funds">
-                {(['all', 'tracked'] as const).map((l) => (
+                {LENSES.map(([l, label]) => (
                   <button key={l} type="button" role="tab" aria-selected={lens === l} onClick={() => setLens(l)} className={`rounded-full px-3 py-1.5 ${lens === l ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
-                    {l === 'all' ? 'All 13F filers' : 'Funds we track closely'}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -321,7 +359,7 @@ export function Book() {
                       <th key={k} aria-sort={sort.k === k ? (sort.desc ? 'descending' : 'ascending') : 'none'} className={`whitespace-nowrap px-3 py-2.5 font-medium first:pl-5 last:pr-5 md:first:pl-6 md:last:pr-6 ${align === 'right' ? 'text-right' : 'text-left'}`}>
                         <button type="button" onClick={() => setSort((s) => ({ k, desc: s.k === k ? !s.desc : k !== 'ticker' }))} className="inline-flex items-center gap-1 hover:text-ink">
                           {k === 'filed' && season ? `Filed ${quarterLabel(season).split(' ')[0]}` : l}
-                          {lens === 'all' && (k === 'added' || k === 'exited' || k === 'net') && '*'}
+                          {lens !== 'tracked' && (k === 'net' || ((k === 'added' || k === 'exited') && !(lens === 'all' && exactAll))) && '*'}
                           <span aria-hidden="true" className={sort.k === k ? 'text-ink' : 'opacity-0'}>
                             {sort.desc ? '↓' : '↑'}
                           </span>
@@ -366,7 +404,7 @@ export function Book() {
                                   </span>
                                 )}
                               </td>
-                              <td className={`num px-3 py-2.5 text-right ${d > 0 ? 'text-up' : d < 0 ? 'text-down' : 'text-ink-3'}`} title={r.all ? 'Needs every filer’s prior quarter' : undefined}>{r.all ? '—' : d > 0 ? `+${d}` : d < 0 ? `−${-d}` : '0'}</td>
+                              <td className={`num px-3 py-2.5 text-right ${d > 0 ? 'text-up' : d < 0 ? 'text-down' : 'text-ink-3'}`} title={Number.isNaN(d) ? 'Needs every filer’s prior quarter' : r.exact ? 'Holders gained minus lost since each filer’s previous 13F' : undefined}>{Number.isNaN(d) ? '—' : d > 0 ? `+${d}` : d < 0 ? `−${-d}` : '0'}</td>
                               <td className="num px-3 py-2.5 text-right">{r.added || <span className="text-ink-3">0</span>}</td>
                               <td className="num px-3 py-2.5 text-right">{r.exited || <span className="text-ink-3">0</span>}</td>
                               <td className="num px-3 py-2.5 text-right">{r.top10 ? r.top10.toLocaleString('en-US') : <span className="text-ink-3">0</span>}</td>
@@ -420,7 +458,7 @@ export function Book() {
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <Panel
               title={season ? `What they did in your names, ${quarterLabel(season)}` : 'What they did in your names'}
-              sub={lens === 'all' ? 'Largest moves by the funds we track closely that have filed this season, valued at quarter-end. Other filers’ moves appear once their prior quarter is on file.' : 'Largest moves by funds that have filed this season, valued at quarter-end'}
+              sub={lens === 'smart' ? 'Largest moves this season by hedge funds and active managers (each one’s ten largest buys and sells), valued at quarter-end' : lens === 'all' ? 'Largest moves by the funds we track closely that have filed this season, valued at quarter-end. Other filers’ moves appear once their prior quarter is on file.' : 'Largest moves by funds that have filed this season, valued at quarter-end'}
             >
               {!data.data ? (
                 <Skeleton className="h-48 w-full" />
@@ -450,7 +488,7 @@ export function Book() {
             </Panel>
           </div>
           <p className="mt-6 text-[13px] leading-relaxed text-ink-3">
-            {lens === 'all' ? 'Holder counts cover every 13F filer’s latest filing; new, exited and trades cover the funds we track closely' : 'Counts cover the funds we track closely, from each one’s latest 13F'}; “super” counts the superinvestors among them. “In a top 10” means one of the fund’s ten largest share positions. Your book is private to you and never used in aggregates. Hedge-fund-only counts and % of shares outstanding arrive with the next data release.
+            {lens === 'smart' ? 'Holder counts cover the hedge funds and active managers among every 13F filer; new, exited and trades cover the funds we track closely' : lens === 'all' ? `Holder counts${exactAll ? ', new and exited' : ''} cover every 13F filer’s latest full filing; ${exactAll ? '' : 'new, exited and '}trades cover the funds we track closely` : 'Counts cover the funds we track closely, from each one’s latest 13F'}; “super” counts the superinvestors among them. “In a top 10” means one of the fund’s ten largest share positions. Latest 4 / 13D shows open-market Form 4 trades from your insider threshold and Schedule 13D/Gs; passive index 13Gs (BlackRock, Vanguard, State Street and the like) are hidden. Your book is private to you and never used in aggregates. % of shares outstanding arrives with a later data release.
           </p>
         </>
       )}
@@ -675,7 +713,7 @@ function LiteBook({ member }: { member: Member }) {
             </Panel>
           </div>
           {pro}
-          <p className="mt-6 text-[13px] leading-relaxed text-ink-3">From each fund’s latest 13F as filed with the SEC, and Form 4 and Schedule 13D/G filings since. Weight is the position’s share of that fund’s 13F stock holdings. Your list is private to you and never used in aggregates. Not investment advice.</p>
+          <p className="mt-6 text-[13px] leading-relaxed text-ink-3">From each fund’s latest 13F as filed with the SEC, and Form 4 and Schedule 13D/G filings since (passive index 13Gs, such as BlackRock’s and Vanguard’s, are hidden). Weight is the position’s share of that fund’s 13F stock holdings. Your list is private to you and never used in aggregates. Not investment advice.</p>
         </>
       )}
     </div>
@@ -742,13 +780,18 @@ const QEND = ['03-31', '06-30', '09-30', '12-31']
 /** The latest meaningful filing on a name: open-market buys and sells at or above the member's insider
  *  threshold (Form 4 by a fund or a company insider), and any 13D/G. Grants, option exercises, tax
  *  withholding and gifts are left out. `empty` says what an empty cell means. */
+// Passive index managers file a 13G on almost every large company they hold; those say nothing about
+// conviction, so the column leaves them out (active 13Gs, such as Capital Research's, stay).
+const PASSIVE = /\b(blackrock|vanguard|state street|ssga|geode|northern trust|dimensional fund|charles schwab|schwab asset|invesco)\b/i
+const passive13G = (form: string, filer: string | null | undefined) => /13G/i.test(form) && PASSIVE.test(filer ?? '')
+
 function newest(stock: Stock | null, issuer: IssuerEvent[] | undefined, min: number, season: string, loading: boolean): { latest: Latest | null; empty: string; more: number } {
   // Until the issuer feed is in, every cell waits: a fund's event shown first could be replaced by a newer insider one.
   if (loading) return { latest: null, empty: 'loading', more: 0 }
   const trade = (action: string, value?: number | null) => (action === 'buy' || action === 'sell' || action === 'mixed') && (value == null || Math.abs(value) >= min)
-  const fund = (stock?.since ?? []).filter((e) => e.kind !== 'form4' || trade(e.action, e.value_usd)).map((e) => ({ acc: accNo(e.url), l: evLatest(e) }))
+  const fund = (stock?.since ?? []).filter((e) => (e.kind !== 'form4' || trade(e.action, e.value_usd)) && !passive13G(e.form, e.manager)).map((e) => ({ acc: accNo(e.url), l: evLatest(e) }))
   const seen = new Set((stock?.since ?? []).map((e) => accNo(e.url)))
-  const own = (issuer ?? []).filter((e) => !seen.has(accNo(e.accession)) && (!/^4/.test(e.form) || trade(e.action, e.value_usd)))
+  const own = (issuer ?? []).filter((e) => !seen.has(accNo(e.accession)) && !passive13G(e.form, e.filer_name) && (!/^4/.test(e.form) || trade(e.action, e.value_usd)))
   const all = [...fund, ...own.map((e) => ({ acc: accNo(e.accession), l: issuerLatest(e) }))]
   const latest = all.sort((a, b) => b.l.date.localeCompare(a.l.date))[0]?.l ?? null
   const qEnd = season ? `${season.slice(0, 4)}-${QEND[Number(season.slice(5)) - 1]}` : ''

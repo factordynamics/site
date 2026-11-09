@@ -105,6 +105,8 @@ export type Expected = {
   time_range?: [number, number]
   history: { quarter: string; accepted_at: string; days_before: number }[]
   filed?: { filing_date?: string; accession?: string }
+  /** The latest 13F had an empty (placeholder) table: which quarter, and the full book shown instead. */
+  placeholder?: { quarter: string; showing: string }
 }
 export type Season = {
   quarter: string
@@ -136,6 +138,7 @@ export const loadSeason = (v?: number) =>
     return { ...s, latest: s.latest.map((x) => ({ ...named(x), firm: displayName(x.firm) })), featured_flow: fix(s.featured_flow), all_flow: fix(s.all_flow) }
   })
 
+export type PctRow = { ticker: string; name: string; pct: number; n_buyers: number; n_sellers: number; buyers: { slug: string; manager: string; pct: number }[]; sellers: { slug: string; manager: string; pct: number }[] }
 export type RecapMove = { ticker: string; name: string; etf?: boolean; slug: string; manager: string; change: 'new' | 'added' | 'trimmed' | 'exited'; delta_value: number; weight: number | null }
 export type Recap = {
   quarter: string
@@ -149,10 +152,13 @@ export type Recap = {
   most_bought: SeasonRow[]
   most_sold: SeasonRow[]
   most_buyers: SeasonRow[]
+  /** Each superinvestor's trade as a share of its 13F book, summed per stock. */
+  most_bought_pct?: PctRow[]
+  most_sold_pct?: PctRow[]
   opened: RecapMove[]
   exited: RecapMove[]
   biggest: RecapMove[]
-  filing: { slug: string; manager: string; via?: string; filed: boolean; filing_date: string | null; accepted_at: string | null; accession: string | null; late: boolean; expected_date: string | null }[]
+  filing: { slug: string; manager: string; via?: string; placeholder?: { quarter: string; showing: string }; filed: boolean; filing_date: string | null; accepted_at: string | null; accession: string | null; late: boolean; expected_date: string | null }[]
   not_filing: { slug: string; manager: string; last: string | null }[]
   splits: { ticker: string; name: string; ratio: string }[]
   generated_at: string
@@ -180,7 +186,7 @@ export function seasonNow(now = new Date()) {
   return { quarter: `${qEnd.getUTCFullYear()}Q${q}`, deadline: due, live }
 }
 
-export type SplitLog = { ticker: string; name: string; quarter: string; ratio: string; treatment: 'adjusted' | 'excluded'; holders: number; share_ratio: number; price_ratio: number; xbrl_shares_ratio: number | null; source: string }
+export type SplitLog = { ticker: string; name: string; quarter: string; ratio: string; treatment: 'adjusted' | 'excluded' | 'not treated'; holders: number; share_ratio: number; price_ratio: number; xbrl_shares_ratio: number | null; source: string }
 export const loadSplitLog = () => getJSON<{ splits: SplitLog[] }>(`${D}splits.json`).then((d) => d.splits)
 
 export const loadStockIndex = () => getJSON<{ funds: number; stocks: StockRef[] }>(`${D}stocks.json`)
@@ -220,19 +226,37 @@ export const loadCoverage = () => getJSON<{ filers: number; curated: number }>(`
 /** 8,964 -> "8,900+": never overstate coverage. */
 export const aboutCount = (n: number) => (n >= 1000 ? `${(Math.floor(n / 100) * 100).toLocaleString('en-US')}+` : n.toLocaleString('en-US'))
 
-/** Every 13F filer's latest position in a stock (scripts/stocks.mjs, d/h/{TICKER}.json): the 200 largest, plus counts. */
-export type FilerHolder = { slug: string; name: string; quarter: string; shares: number; value: number; weight: number; tier: 0 | 1 | 2 }
+/** Every 13F filer's latest position in a stock (scripts/stocks.mjs, d/h/{TICKER}.json): the 500 largest, plus counts. */
+export type FilerHolder = { slug: string; name: string; quarter: string; shares: number; value: number; weight: number; tier: 0 | 1 | 2; smart: boolean }
+/** Ingest's full-book holder index (hl/): every filer's latest 13F, current holders (this quarter or last) and older ones apart. */
+export type HolderIndex = { holders: number; older: number; quarters: Record<string, number>; new: number; added: number; trimmed: number; exited: number; unchanged: number; no_prior: number }
+/** Hedge funds and active managers (filer_types.json smart_money), from the shards; moves are each fund's ten largest buys and sells. */
+export type SmartCounts = { current: number; older: number; top10: number; over5: number; quarters: Record<string, number>; moves: { slug: string; name: string; quarter: string; change: Change; delta_value: number }[] }
+type HRaw = {
+  filers: number
+  current?: number
+  tracked?: number
+  quarters: Record<string, number>
+  top10?: number
+  over5?: number
+  index?: HolderIndex
+  smart?: Omit<SmartCounts, 'moves'> & { moves: [string, string, string, Change, number][] }
+  rows: [string, string, string, number, number, number, 0 | 1 | 2, (0 | 1)?][]
+}
 export const loadFilerHolders = (t: string) =>
-  getJSON<{ filers: number; current?: number; tracked?: number; quarters: Record<string, number>; top10?: number; over5?: number; rows: [string, string, string, number, number, number, 0 | 1 | 2][] }>(`${D}h/${encodeURIComponent(t)}.json`).then((d) => ({
-    filers: d.filers,
+  getJSON<HRaw>(`${D}h/${encodeURIComponent(t)}.json`).then((d) => ({
+    /** Every filer holding it: exact from ingest's full-book index when present (the shards undercount large books). */
+    filers: d.index ? d.index.holders + d.index.older : d.filers,
     /** Filers whose latest 13F is for the newest or previous quarter; the rest are on older filings. */
     current: d.current ?? d.filers,
     /** Funds we track closely that the filer index lists for this stock. */
     tracked: d.tracked ?? null,
-    quarters: d.quarters,
+    quarters: d.index?.quarters ?? d.quarters,
     top10: d.top10 ?? null,
     over5: d.over5 ?? null,
-    rows: d.rows.map(([slug, name, quarter, shares, value, weight, tier]): FilerHolder => ({ slug, name: displayName(name), quarter, shares, value, weight, tier })),
+    index: d.index ?? null,
+    smart: d.smart ? { ...d.smart, moves: d.smart.moves.map(([slug, name, quarter, change, delta_value]) => ({ slug, name: displayName(name), quarter, change, delta_value })) } : null,
+    rows: d.rows.map(([slug, name, quarter, shares, value, weight, tier, smart]): FilerHolder => ({ slug, name: displayName(name), quarter, shares, value, weight, tier, smart: smart === 1 })),
   }))
 
 /** Public filing cards built this deploy (scripts/cards.mjs): slug -> latest card accession. */

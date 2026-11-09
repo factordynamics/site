@@ -198,13 +198,13 @@ export function Methodology() {
           <section id="splits" className="scroll-mt-24">
             <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Stock splits</h2>
             <div className="mt-3 space-y-3 text-[15.5px] leading-relaxed text-ink-2">
-              <p>A split changes every holder’s share count without anyone trading. Each flagged name gets one of two treatments, shown on its stock page and in My book:</p>
+              <p>A split changes every holder’s share count without anyone trading. The data pipeline’s split list is the source of truth; every candidate below gets one of two treatments:</p>
               <ul className="list-disc space-y-1.5 pl-5">
                 <li>
-                  <span className="font-medium text-ink">Adjusted.</span> Confirmed by the data pipeline from holders’ share counts and, where it’s available, SEC XBRL shares outstanding, or, until it is, by our holder check when the evidence is strong: at least 10 holders, a median share ratio within 5% of the factor and a median price ratio within 10% of its inverse. Earlier quarters’ shares are multiplied by the ratio, so buying and selling are counted as usual. Fund pages and alerts are adjusted only once the pipeline confirms the split.
+                  <span className="font-medium text-ink">Adjusted.</span> Confirmed by the data pipeline: at least 5 holders at the exact ratio, the median holder at that ratio, the price moving by about its inverse, and SEC XBRL shares outstanding not contradicting it. The pipeline matches by CUSIP, so a split that came with a new CUSIP (DD’s 1-for-3) is adjusted by our holder check instead, on strong evidence only: at least 10 holders, a median share ratio within 5% of the factor and a median price ratio within 10% of its inverse. Earlier quarters’ shares are multiplied by the ratio, so buying and selling are counted as usual.
                 </li>
                 <li>
-                  <span className="font-medium text-ink">Not counted.</span> Weaker evidence: among at least 5 holders the median share ratio is within 25% of a clean factor (2, 3, 4, 5 or 10, or the inverse) and the median price per share moved the other way by about the same factor. Those share changes are left out of Flow, the season rankings and My book’s net trades. ETFs are exempt.
+                  <span className="font-medium text-ink">Not treated.</span> A weaker pattern in our holder check (the median share ratio within 25% of a clean factor among at least 5 holders) that the pipeline doesn’t list as a split. The share changes count as trades; the row stays here as evidence. ETFs are exempt.
                 </li>
               </ul>
             </div>
@@ -235,7 +235,7 @@ export function Methodology() {
                             <span className="text-ink-3">{x.ratio}</span>
                           </td>
                           <td className="px-3 py-2 text-ink-2">{quarterLabel(x.quarter)}</td>
-                          <td className={`px-3 py-2 ${x.treatment === 'adjusted' ? 'text-ink-2' : 'text-[#8a5a0b]'}`}>{x.treatment === 'adjusted' ? 'Adjusted' : 'Not counted'}
+                          <td className={`px-3 py-2 ${x.treatment === 'excluded' ? 'text-[#8a5a0b]' : 'text-ink-2'}`}>{x.treatment === 'adjusted' ? 'Adjusted' : x.treatment === 'excluded' ? 'Not counted' : 'Not treated'}
                             <span className="block text-[12px] text-ink-3">{x.source.startsWith('Ingest') ? 'Pipeline' : 'Holder check'}</span>
                           </td>
                           <td className="num px-3 py-2 text-right">{x.holders}</td>

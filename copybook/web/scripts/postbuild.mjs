@@ -37,7 +37,14 @@ page('investors/', 'Investors · Copybook', 'Latest 13F portfolios of legendary 
 page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.')
 page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, full history, filing alerts and CSV export.')
 page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
-page('speed/', 'Alert speed: EDGAR to inbox, every alert timed · Copybook', 'How fast Copybook alerts arrive: the median and 90th percentile from SEC EDGAR acceptance to delivery for 13F, Form 4 and 13D/G filings, and every live alert this season.')
+{
+  // /speed/'s share card (scripts/cards.mjs): the season's median and p90, or the waiting state.
+  let sp = null
+  try {
+    sp = JSON.parse(readFileSync(join(dist, 'og', 'speed.json'), 'utf8'))
+  } catch {}
+  page('speed/', 'Alert speed: EDGAR to inbox, every alert timed · Copybook', 'How fast Copybook alerts arrive: the median and 90th percentile from SEC EDGAR acceptance to delivery for 13F, Form 4 and 13D/G filings, and every live alert this season.', '', sp?.url)
+}
 page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Copy Fund, prorated, on the same billing interval.')
 {
   // The season tracker's share card (scripts/cards.mjs), with its cache-busting URL.
@@ -123,7 +130,7 @@ console.log(`wrote ${st} stock pages`)
 redirect('copycat.html', 'consensus/')
 redirect('pricing.html', 'pricing/')
 mkdirSync(join(dist, 'latency'), { recursive: true })
-redirect('latency/index.html', 'methodology/#latency')
+redirect('latency/index.html', 'speed/')
 redirect('about.html', 'about/')
 writeFileSync(join(dist, '404.html'), shell)
 writeFileSync(join(dist, '.nojekyll'), '')

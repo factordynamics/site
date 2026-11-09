@@ -25,7 +25,7 @@ export function StockPage() {
   // The lens lives in the URL (?funds=all) so a view can be shared; superinvestors by default.
   const [params, setParams] = useSearchParams()
   const lens = params.get('funds')
-  const view: 'featured' | 'all' | 'filers' = lens === 'all' || lens === 'filers' ? lens : 'featured'
+  const view: 'featured' | 'all' | 'smart' | 'filers' = lens === 'all' || lens === 'filers' || lens === 'smart' ? lens : 'featured'
   const setView = (k: typeof view) => setParams(k === 'featured' ? {} : { funds: k }, { replace: true })
   // Curated data (moves, exits, options) follows the closest curated lens; "All 13F filers" widens the holder list.
   const scope: 'featured' | 'all' = view === 'featured' ? 'featured' : 'all'
@@ -41,9 +41,16 @@ export function StockPage() {
   }, [s.error, ticker, nav])
 
   const tracked = useMemo(() => (d?.holders ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
-  const fh = useAsync(() => (view === 'filers' && d ? loadFilerHolders(d.ticker) : Promise.resolve(null)), [view, d?.ticker])
-  const filers = view === 'filers' ? fh.data : null
-  const filersLoading = view === 'filers' && !fh.data && !fh.error
+  const wide = view === 'filers' || view === 'smart'
+  const fh = useAsync(() => (wide && d ? loadFilerHolders(d.ticker) : Promise.resolve(null)), [wide, d?.ticker])
+  // Hedge funds and active managers: the same filer list, cut to those types.
+  const filers = useMemo(() => {
+    const x = wide ? fh.data : null
+    if (!x || view !== 'smart') return x
+    return { ...x, filers: x.smart ? x.smart.current + x.smart.older : 0, quarters: x.smart?.quarters ?? {}, rows: x.rows.filter((r) => r.smart) }
+  }, [wide, view, fh.data])
+  const filersLoading = wide && !fh.data && !fh.error
+  const who = view === 'smart' ? 'hedge funds and active managers' : '13F filers'
   // Every filer's latest position; a fund we track closely keeps its row, with its change since the filing before.
   const holders = useMemo(() => {
     if (!filers) return tracked
@@ -142,9 +149,9 @@ export function StockPage() {
       </header>
 
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
-        {view === 'filers' ? (
+        {wide ? (
           <>
-            <Stat label="13F filers holding it" value={filers ? filers.filers.toLocaleString('en-US') : '—'} sub={filers && filers.filers > filers.rows.length ? `The ${filers.rows.length} largest are listed below` : 'Latest 13F of each filer'} />
+            <Stat label={view === 'smart' ? 'Hedge funds and active managers holding it' : '13F filers holding it'} value={filers ? filers.filers.toLocaleString('en-US') : '—'} sub={filers && filers.filers > filers.rows.length ? `The ${filers.rows.length} largest are listed below` : 'Latest 13F of each filer'} />
             <Stat
               label={fq ? `Filed ${quarterLabel(fq[0][0])} so far` : 'Filed so far'}
               value={fq ? fq[0][1].toLocaleString('en-US') : '—'}
@@ -173,10 +180,10 @@ export function StockPage() {
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-ink-3">
-          {view === 'filers'
+          {wide
             ? fq && filers
               ? fq.length > 1
-                ? `Mid-season: ${fq[0][1].toLocaleString('en-US')} of ${filers.filers.toLocaleString('en-US')} 13F filers holding it have filed ${quarterLabel(fq[0][0])}; the rest are on ${fq.slice(1).map(([q]) => quarterLabel(q)).join(' or ')}. Each row is labelled with its quarter.`
+                ? `Mid-season: ${fq[0][1].toLocaleString('en-US')} of ${filers.filers.toLocaleString('en-US')} ${who} holding it have filed ${quarterLabel(fq[0][0])}; the rest are on ${fq.slice(1).map(([q]) => quarterLabel(q)).join(' or ')}. Each row is labelled with its quarter.`
                 : `From each filer’s ${quarterLabel(fq[0][0])} 13F.`
               : ''
             : d
@@ -190,6 +197,7 @@ export function StockPage() {
             [
               ['featured', 'Superinvestors'],
               ['all', 'Funds we track'],
+              ['smart', 'Hedge funds & active'],
               ['filers', 'All 13F filers'],
             ] as const
           ).map(([k, l]) => (
@@ -222,7 +230,7 @@ export function StockPage() {
         <Panel
           title="Who bought and sold"
           sub={
-            view === 'filers'
+            wide
               ? 'Among the funds we track closely, since each one’s previous filing. Buys and sells for every filer come once their prior quarters are on file.'
               : 'Change in shares since each fund’s previous filing, at quarter-end value'
           }
@@ -267,8 +275,8 @@ export function StockPage() {
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold">Every holder</h2>
             <p className="text-[13px] text-ink-3">
-              {filers && filers.filers > holders.length ? `The ${holders.length} largest of ${filers.filers.toLocaleString('en-US')} 13F filers` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
-              {view === 'filers' && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
+              {filers && filers.filers > holders.length ? `The ${holders.length} largest of ${filers.filers.toLocaleString('en-US')} ${who}` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
+              {wide && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
             </p>
           </div>
           {paid && d && <CsvButton variant="outline" label="Holders CSV" download={() => downloadFile(`/stocks/${encodeURIComponent(d.ticker)}/holders.csv`, `copybook-${d.ticker}-holders.csv`)} />}

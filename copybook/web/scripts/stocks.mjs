@@ -106,13 +106,16 @@ for (const st of stocks.values())
       if (c.ticker === [...st.classes.values()].sort((a, b) => b.value - a.value)[0].ticker) st.name = ETF_NAMES[c.ticker]
     }
 
-// Stock splits. Ingest confirms splits (data/splits.json) and multiplies earlier share counts by the
-// ratio, so those are "adjusted" and counted normally. Until it covers every case, a stock it hasn't
-// confirmed is flagged "excluded" (left out of the rankings and net trades) only when, among at least
-// 5 holders in both quarters, the median share ratio is within 25% of a clean factor k (2, 3, 4, 5, 10
-// or the inverse) and the median implied price ratio (now / prior) is within 25% of 1/k. ETFs are exempt.
-// Every flagged name, with its evidence, goes to d/splits.json for /methodology/.
-const confirmed = (await read('splits.json').catch(() => null))?.splits ?? []
+// Stock splits. Ingest's data/splits.json is the source of truth: it confirms splits and multiplies
+// earlier share counts by the ratio, so those are "adjusted" and counted normally, and a candidate it
+// checked and turned down is not a split. One case it can't see stays ours: a split whose CUSIP changed
+// (DD's 1:3), so a stock ingest never checked is adjusted here only on strong evidence (10+ holders in
+// both quarters, median share ratio within 5% of a clean factor k, median price ratio within 10% of 1/k).
+// Weaker patterns are logged but treated as trades ("not treated"). ETFs are exempt. Every candidate,
+// with its evidence, goes to d/splits.json for /methodology/.
+const splitsJson = await read('splits.json').catch(() => null)
+const confirmed = splitsJson?.splits ?? []
+const checked = splitsJson?.checked ?? {}
 const splitLog = []
 const FACTORS = [2, 3, 4, 5, 10].flatMap((k) => [k, 1 / k])
 const med = (xs) => {
@@ -131,7 +134,7 @@ for (const st of stocks.values()) {
   const byQ = new Map()
   for (const h of st.holders) if (h.shares > 0 && h.prev_shares > 0 && h.value > 0 && h.prev_value > 0) (byQ.get(h.quarter) ?? byQ.set(h.quarter, []).get(h.quarter)).push({ s: h.shares / h.prev_shares, p: h.value / h.shares / (h.prev_value / h.prev_shares) })
   for (const [q, r] of byQ) {
-    if (r.length < 5 || st.splits?.[q]) continue
+    if (r.length < 5 || st.splits?.[q] || [...cusips].some((c) => checked[`${c}:${q}`])) continue
     const ms = med(r.map((x) => x.s))
     const mp = med(r.map((x) => x.p))
     // The closest clean factor that both medians agree on.
@@ -149,8 +152,8 @@ for (const st of stocks.values()) {
         h.delta_value = r0((h.shares - h.prev_shares) * price)
         h.change = h.shares === 0 ? 'exited' : h.shares > h.prev_shares ? 'added' : h.shares < h.prev_shares ? 'trimmed' : 'unchanged'
       }
-    ;(st.splits ??= {})[q] = { ratio: ratioLabel(k), adjusted: strong }
-    splitLog.push({ ticker, name: st.name, quarter: q, ratio: ratioLabel(k), treatment: strong ? 'adjusted' : 'excluded', holders: r.length, share_ratio: +ms.toFixed(3), price_ratio: +mp.toFixed(3), xbrl_shares_ratio: null, source: 'Copybook holder check' })
+    if (strong) (st.splits ??= {})[q] = { ratio: ratioLabel(k), adjusted: true }
+    splitLog.push({ ticker, name: st.name, quarter: q, ratio: ratioLabel(k), treatment: strong ? 'adjusted' : 'not treated', holders: r.length, share_ratio: +ms.toFixed(3), price_ratio: +mp.toFixed(3), xbrl_shares_ratio: null, source: strong ? 'Copybook holder check (CUSIP changed; not in ingest’s splits.json)' : 'Copybook holder check; not in ingest’s splits.json, so counted as trades' })
   }
 }
 mkdirSync(join(out, 'd'), { recursive: true })
@@ -408,19 +411,26 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
     const wide = recent.length === 2 && spread(recent) > 30
     const time_et = spread(mins) <= 30 ? median(mins) : wide ? recent[0] : median(recent)
     const time_range = spread(mins) > 30 && wide ? [Math.min(...recent), Math.max(...recent)] : null
-    const books_ = books.find((b) => b.slug === m.slug) ?? books.find((b) => b.slug === src)
-    const filedNow = books_ && qn(books_.quarter) === q
+    // Filed this quarter: from the filing entity's own history when another entity files (Ackman via
+    // Pershing Square Inc.), so a stale book under the person's name doesn't hide the new filing.
+    const books_ = via ? null : books.find((b) => b.slug === m.slug)
+    const viaNow = via ? h?.history?.find((x) => x.quarter === Q && x.form !== '13F-NT') : null
+    const filedNow = Boolean(viaNow || (books_ && qn(books_.quarter) === q))
+    // A latest 13F with an empty (placeholder) table: the filer did file, so it isn't late or missing;
+    // the page says which quarter it left empty and which full book it shows.
+    const empty = m.status === 'empty_latest' ? (m.skipped_quarters ?? []).filter((x) => x.reason === 'empty').sort((a, z) => z.quarter.localeCompare(a.quarter))[0] : null
     expected.push({
       slug: m.slug,
       manager: m.manager,
       ...(via ? { via: displayName(via.name ?? '') } : {}),
+      ...(empty ? { placeholder: { quarter: empty.quarter, showing: m.quarter } } : {}),
       pattern,
       expected_date: pattern === 'none' ? null : shiftBack(due.toISOString().slice(0, 10), days),
       days_before: pattern === 'none' ? Math.max(0, hist[0].days_before) : days,
       time_et,
       ...(time_range ? { time_range } : {}),
       history: hist,
-      ...(filedNow ? { filed: { filing_date: books_.filing_date, accession: books_.accession, accepted_at: origAccepted(h?.history?.find((x) => x.quarter === Q)) ?? books_.accepted_at ?? null } } : {}),
+      ...(filedNow ? { filed: { filing_date: (viaNow ?? books_).filing_date, accession: (viaNow ?? books_).accession, accepted_at: origAccepted(h?.history?.find((x) => x.quarter === Q)) ?? (viaNow ?? books_).accepted_at ?? null } } : {}),
     })
   }
   expected.sort((a, b) => (a.expected_date ?? '9').localeCompare(b.expected_date ?? '9') || a.time_et - b.time_et)
@@ -430,7 +440,8 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
     not_filing: notFiling,
     deadline: due.toISOString(),
     curated: { filed: active.filter((m) => qn(m.quarter) === q).length, total: active.length },
-    featured: { filed: active.filter((m) => m.featured && qn(m.quarter) === q).length, total: active.filter((m) => m.featured).length },
+    // Every superinvestor on the expected list, so filed + still to file always equals the total.
+    featured: { filed: expected.filter((x) => x.filed).length, total: expected.length },
     filers: { filed: filedAll.length, total: fl.filter((f) => qn(f.quarter) >= q - 1).length },
     by_day: Object.entries(days).sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count })),
     latest: books
@@ -461,11 +472,24 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
       }
     }
     const stock = moves.filter((m) => !m.etf)
+    // By % of book: each superinvestor's trade as a share of its 13F book, summed per stock, so a
+    // small fund's conviction counts as much as a big book's dollars.
+    const bookOf = new Map(supers.map((b) => [b.slug, b.equity_value || b.total_value || 0]))
+    const byStock = new Map()
+    for (const m of stock) {
+      const tot = bookOf.get(m.slug)
+      if (!tot) continue
+      const r = byStock.get(m.ticker) ?? { ticker: m.ticker, name: m.name, pct: 0, buyers: [], sellers: [] }
+      r.pct += m.delta_value / tot
+      ;(m.delta_value > 0 ? r.buyers : r.sellers).push({ slug: m.slug, manager: m.manager, pct: m.delta_value / tot })
+      byStock.set(m.ticker, r)
+    }
+    const pctRows = [...byStock.values()].map((r) => ({ ...r, pct: Number(r.pct.toFixed(5)), n_buyers: r.buyers.length, n_sellers: r.sellers.length, buyers: r.buyers.sort((a, b) => b.pct - a.pct).slice(0, 5), sellers: r.sellers.sort((a, b) => a.pct - b.pct).slice(0, 5) }))
     const by = (f, cmp, n = 50) => stock.filter(f).sort(cmp).slice(0, n)
     const dueMs = due.getTime()
     const status = expected.map((x) => {
       const at = x.filed?.accepted_at ?? null
-      return { slug: x.slug, manager: displayName(x.manager), ...(x.via ? { via: x.via } : {}), filed: Boolean(x.filed), filing_date: x.filed?.filing_date ?? null, accepted_at: at, accession: x.filed?.accession ?? null, late: Boolean(at && Date.parse(at) > dueMs), expected_date: x.expected_date }
+      return { slug: x.slug, manager: displayName(x.manager), ...(x.via ? { via: x.via } : {}), ...(x.placeholder ? { placeholder: x.placeholder } : {}), filed: Boolean(x.filed), filing_date: x.filed?.filing_date ?? null, accepted_at: at, accession: x.filed?.accession ?? null, late: Boolean(at && Date.parse(at) > dueMs), expected_date: x.expected_date }
     })
     const recap = {
       quarter: Q,
@@ -480,6 +504,8 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
       most_bought: seasonOut.featured_flow.bought.filter((r) => !r.etf).slice(0, 25),
       most_sold: seasonOut.featured_flow.sold.filter((r) => !r.etf).slice(0, 25),
       most_buyers: seasonOut.featured_flow.most_buyers.filter((r) => !r.etf).slice(0, 25),
+      most_bought_pct: pctRows.filter((r) => r.pct > 0).sort((a, b) => b.pct - a.pct).slice(0, 25),
+      most_sold_pct: pctRows.filter((r) => r.pct < 0).sort((a, b) => a.pct - b.pct).slice(0, 25),
       opened: by((m) => m.change === 'new', (a, b) => b.delta_value - a.delta_value),
       exited: by((m) => m.change === 'exited', (a, b) => a.delta_value - b.delta_value),
       biggest: by(() => true, (a, b) => Math.abs(b.delta_value) - Math.abs(a.delta_value)),
@@ -503,10 +529,18 @@ if (process.env.FLOW_FULL) {
 console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flow.quarter}: ${filed.length} funds filed (${flow.featured_filed} featured), ${periods.map((p) => `${p.quarter} ${p.funds_filed} funds`).join(', ')}`)
 
 // Every 13F filer's latest holdings (data/f/{cik}.json shards), per stock page: the 500 largest
-// holders, written to d/h/{TICKER}.json for the "All 13F filers" lens. Loaded only when a reader picks it.
+// holders, written to d/h/{TICKER}.json for the "All 13F filers" and "Hedge funds" lenses. Loaded only
+// when a reader picks one. Holder counts and changes come from ingest's holder index (hl/{issuer6}.json,
+// every filer's latest full book), which the shards undercount; crowding (top 10, over 5%) and the
+// "smart money" figures (hedge funds and active managers, filer_types.json) come from the shards.
 {
   const fl = await read('filers.json').catch(() => null)
   const filers = (fl?.filers ?? []).filter((f) => f.ok)
+  const ft = await read('filer_types.json').catch(() => null)
+  const SMART = new Set(ft?.smart_money ?? ['hedge_fund', 'active'])
+  const isSmart = (cik, own) => SMART.has(own ?? ft?.filers?.[cik]?.type)
+  const hf = new Map() // page -> smart-money {current, older, top10, over5, quarters, moves}
+  const hfOf = (t) => hf.get(t) ?? hf.set(t, { current: 0, older: 0, top10: 0, over5: 0, quarters: {}, moves: [] }).get(t)
   const curatedByCik = new Map(index.managers.filter((m) => m.ok).map((m) => [m.cik, m]))
   const pageOf = (h) => (h.cusip && byCusip[h.cusip]) || (h.ticker && byTicker[h.ticker]) || null
   const per = new Map() // page ticker -> rows
@@ -532,6 +566,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       const total = d.equity_value || d.total_value - optionValue || d.total_value || 1
       const cur = curatedByCik.get(f.cik)
       const who = cur ? { slug: cur.slug, name: cur.manager, flag: cur.featured ? 2 : 1 } : { slug: f.slug, name: f.name, flag: 0 }
+      const hedge = isSmart(f.cik, d.type ?? f.type ?? cur?.type)
       const mine = new Map() // page -> [shares, value]; classes of one issuer roll up like the curated rows
       for (const r of d.rows) {
         if (r[col.put_call]) continue
@@ -550,6 +585,24 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
         ranked.slice(0, 10).forEach(([t]) => top10.set(t, (top10.get(t) ?? 0) + 1))
         for (const [t, [, value]] of ranked) if (value / total > 0.05) over5.set(t, (over5.get(t) ?? 0) + 1)
       }
+      if (hedge) {
+        ranked.forEach(([t, [, value]], i) => {
+          const x = hfOf(t)
+          if (!fresh) return void x.older++
+          x.current++
+          x.quarters[d.quarter] = (x.quarters[d.quarter] ?? 0) + 1
+          if (i < 10) x.top10++
+          if (value / total > 0.05) x.over5++
+        })
+        // The fund's ten largest buys and sells against its prior quarter (the shard keeps those).
+        const mc = Object.fromEntries((d.moves?.columns ?? []).map((c, j) => [c, j]))
+        if (fresh && d.prev_quarter)
+          for (const m of [...(d.moves?.bought ?? []), ...(d.moves?.sold ?? [])]) {
+            if (m[mc.put_call]) continue
+            const t = pageOf({ cusip: m[mc.cusip], ticker: m[mc.ticker] })
+            if (t) hfOf(t).moves.push([who.slug, who.name, d.quarter, m[mc.change], Math.round(m[mc.value_delta] || 0)])
+          }
+      }
       for (const [t] of ranked) {
         if (fresh) current.set(t, (current.get(t) ?? 0) + 1)
         // Funds we track closely that the filer index lists for this stock, to spot an incomplete index.
@@ -558,7 +611,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       for (const [t, [shares, value]] of mine) {
         if (shares <= 0) continue
         const rows = per.get(t) ?? []
-        rows.push([who.slug, who.name, d.quarter, shares, Math.round(value), Number((value / total).toPrecision(4)), who.flag])
+        rows.push([who.slug, who.name, d.quarter, shares, Math.round(value), Number((value / total).toPrecision(4)), who.flag, hedge ? 1 : 0])
         per.set(t, rows)
         const q = quarters.get(t) ?? {}
         q[d.quarter] = (q[d.quarter] ?? 0) + 1
@@ -566,18 +619,56 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       }
     }
   }
+  // Ingest's holder index: counts over every filer's latest full book. A page whose issuer it covers
+  // gets exact holder counts and all-filer changes; ingest's publish gate keeps them >= the tracked funds.
+  const hlIdx = (await read('hl/index.json').catch(() => null))?.tickers ?? {}
+  const issuers = new Map() // issuer6 -> pages
+  for (const t of per.keys()) {
+    const code = hlIdx[t]
+    if (code) (issuers.get(code) ?? issuers.set(code, []).get(code)).push(t)
+  }
+  const hlOf = new Map()
+  const codes = [...issuers.keys()]
+  for (let i = 0; i < codes.length; i += 48) {
+    const part = await Promise.all(codes.slice(i, i + 48).map((c) => read(`hl/${c}.json`).then((d) => [c, d], () => null)))
+    for (const x of part) if (x?.[1]?.counts) for (const t of issuers.get(x[0])) hlOf.set(t, x[1])
+  }
   mkdirSync(join(out, 'd', 'h'), { recursive: true })
   let files = 0
   let rowsOut = 0
+  let exact = 0
   for (const [t, rows] of per) {
     rows.sort((a, b) => b[4] - a[4])
     const top = rows.slice(0, 500)
     rowsOut += top.length
+    const h = hlOf.get(t)
+    let hlc = null
+    if (h) {
+      const bp = h.counts.by_period ?? {}
+      const cur = Object.entries(bp).filter(([q]) => qn(q) >= newest - 1).reduce((a, [, n]) => a + n, 0)
+      const { new: nw, added, trimmed, exited, unchanged, no_prior } = h.counts
+      hlc = { holders: cur, older: h.counts.holders - cur, quarters: bp, new: nw, added, trimmed, exited, unchanged, no_prior }
+      exact++
+    }
+    const x = hf.get(t)
     writeFileSync(
       join(out, 'd', 'h', `${t}.json`),
-      JSON.stringify({ ticker: t, filers: rows.length, current: current.get(t) ?? 0, tracked: tracked.get(t) ?? 0, quarters: quarters.get(t), top10: top10.get(t) ?? 0, over5: over5.get(t) ?? 0, columns: ['slug', 'name', 'quarter', 'shares', 'value', 'weight', 'tier'], rows: top, generated_at: fl?.generated_at ?? index.generated_at }),
+      JSON.stringify({
+        ticker: t,
+        filers: rows.length,
+        current: current.get(t) ?? 0,
+        tracked: tracked.get(t) ?? 0,
+        quarters: quarters.get(t),
+        top10: top10.get(t) ?? 0,
+        over5: over5.get(t) ?? 0,
+        ...(hlc ? { index: hlc } : {}),
+        smart: x ? { current: x.current, older: x.older, top10: x.top10, over5: x.over5, quarters: x.quarters, moves: x.moves.sort((a, b) => Math.abs(b[4]) - Math.abs(a[4])).slice(0, 25) } : { current: 0, older: 0, top10: 0, over5: 0, quarters: {}, moves: [] },
+        columns: ['slug', 'name', 'quarter', 'shares', 'value', 'weight', 'tier', 'smart'],
+        rows: top,
+        generated_at: fl?.generated_at ?? index.generated_at,
+      }),
     )
     files++
   }
-  console.log(`all-filer holders: ${read_ok} filers, ${files} stocks, ${rowsOut} rows (500 largest per stock)`)
+  console.log(`all-filer holders: ${read_ok} filers, ${files} stocks (${exact} with full-book counts), ${rowsOut} rows (500 largest per stock); smart money holds ${hf.size} stocks`)
 }

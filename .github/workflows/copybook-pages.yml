@@ -63,6 +63,7 @@ jobs:
           cache: npm
           cache-dependency-path: copybook/web/package-lock.json
       - run: npm ci
+      - run: npm test
       - run: npm run build
       - run: node scripts/stocks.mjs dist "${VITE_DATA_BASE}"
         env:

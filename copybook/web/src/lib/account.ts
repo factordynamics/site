@@ -22,6 +22,8 @@ export type Member = {
   owner?: string | null
   /** Paying members' referral link and counts; null for seats, Holdterm and free members. */
   referral?: { code: string; url: string; signups: number; paid: number; months_earned: number } | null
+  /** Free accounts: saved names and the Friday email's "In your names" block (facts only for names a superinvestor moved this week). */
+  free_names?: { names: string[]; limit: number; facts?: { ticker: string; text: string; url: string }[]; hook?: string | null; more?: number } | null
 }
 
 const KEY = 'copybook-session'
