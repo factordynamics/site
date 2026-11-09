@@ -5,7 +5,7 @@ import { Peers } from '../components/Peers'
 import { UpgradePro } from '../components/UpgradePro'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
-import { ApiError, isPro, loadEvents, upgradeTo, useMember, type IssuerEvent, type Member } from '../lib/account'
+import { ApiError, isPro, loadEvents, useMember, type IssuerEvent, type Member } from '../lib/account'
 import { quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
@@ -450,7 +450,6 @@ function LiteBook({ member }: { member: Member }) {
   const { status, follows } = useFollows()
   const [params, setParams] = useSearchParams()
   const lens: LiteLens = params.get('funds') === 'tracked' ? 'tracked' : 'super'
-  const [proNote, setProNote] = useState(false)
   const linkedOnly = useMemo(() => {
     const manual = new Set(follows.owned_manual ?? [])
     return new Set((follows.book?.tickers ?? []).filter((t) => !manual.has(t)))
@@ -518,21 +517,11 @@ function LiteBook({ member }: { member: Member }) {
                     {l === 'super' ? 'Superinvestors' : 'Funds we track closely'}
                   </button>
                 ))}
-                <button
-                  type="button"
-                  aria-describedby="pro-title"
-                  title="Part of Copy Pro"
-                  onClick={() => {
-                    setProNote(true)
-                    upgradeTo('pro').catch(() => null)
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-ink-3 hover:text-ink-2"
-                >
+                <Link to="/upgrade/?plan=pro" aria-describedby="pro-title" title="Part of Copy Pro" className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-ink-3 hover:text-ink-2">
                   <Lock /> All 13F filers
-                </button>
+                </Link>
               </div>
             </div>
-            {proNote && <p className="border-b border-line bg-accent-soft px-5 py-2.5 text-[13px] text-accent-2 md:px-6">Counts across every 13F filer are part of Copy Pro. Opening the upgrade…</p>}
             <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Your names">
               <table className="w-full min-w-[860px] text-[13.5px]">
                 <thead>
@@ -800,7 +789,18 @@ function Import({ link = true }: { link?: boolean }) {
         </p>
       )}
       <p className="mt-3 text-[12.5px] text-ink-3">Remove a name with Following on its stock page.</p>
-      {link && <LinkFund />}
+      {link ? (
+        <LinkFund />
+      ) : (
+        <Link to="/upgrade/?plan=pro" className="mt-4 flex items-start gap-2.5 border-t border-line pt-4 text-[13px] text-ink-2 hover:text-accent-2">
+          <span className="mt-0.5 shrink-0 text-ink-3">
+            <Lock />
+          </span>
+          <span>
+            <span className="font-medium text-ink">Link your fund’s 13F as your book</span> · Copy Pro
+          </span>
+        </Link>
+      )}
     </div>
   )
 }

@@ -3,9 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Signup } from '../components/Signup'
 import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { useMember } from '../lib/account'
-import { dateLabel, money, quarterLabel, useAsync, useTitle } from '../lib/data'
+import { dateLabel, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { isEdgarDay } from '../lib/calendar.mjs'
-import { loadCardSet, loadSeason, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
+import { loadCardSet, loadSeason, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
 
 // /season/: the 13F filing season as it happens. Built from d/season.json, which every Pages build
 // writes (every 20 minutes during the filing wave).
@@ -37,7 +37,9 @@ function left(ms: number) {
 }
 
 export function Season() {
-  const s = useAsync(loadSeason, [])
+  // Re-read every two minutes while the season is live, so an open tab follows each build.
+  const tick = useTick(120_000, seasonNow().live)
+  const s = useAsync(loadSeason, [tick])
   const cards = useAsync(loadCardSet, [])
   const member = useMember()
   const paid = Boolean(member?.active)

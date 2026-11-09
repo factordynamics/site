@@ -210,14 +210,22 @@ function TeamChannels({ t }: { t: NonNullable<Channels['team']> }) {
           {items.map(([k, label, v]) => (
             <li key={k}>
               <span className="flex flex-wrap items-center gap-2">
-                <span className="w-28 shrink-0 text-[13px] text-ink-2">{label}</span>
-                <span title={v!} className="min-w-0 flex-1 basis-40 truncate rounded-lg bg-card px-3 py-2 font-mono text-[12.5px] text-ink-2 shadow-[0_0_0_1px_var(--color-line)]">{v}</span>
-                <span className={`inline-flex items-center gap-1.5 text-[12.5px] ${t.failing?.[k] ? 'text-down' : 'text-up'}`}>
-                  <span className={`size-1.5 rounded-full ${t.failing?.[k] ? 'bg-down' : 'bg-up'}`} aria-hidden="true" />
-                  {t.failing?.[k] ? `Not delivering since ${sinceLabel(t.failing[k]!.since)}: ${t.failing[k]!.reason}` : 'Delivering'}
+                <span className="w-32 shrink-0 text-[13px] text-ink-2">
+                  {label}
+                  <span className={`flex items-center gap-1.5 text-[12px] ${t.failing?.[k] ? 'text-down' : 'text-up'}`}>
+                    <span className={`size-1.5 shrink-0 rounded-full ${t.failing?.[k] ? 'bg-down' : 'bg-up'}`} aria-hidden="true" />
+                    {t.failing?.[k] ? 'Not delivering' : 'Delivering'}
+                  </span>
                 </span>
+                <span title={v!} className="min-w-0 flex-1 basis-40 truncate rounded-lg bg-card px-3 py-2 font-mono text-[12.5px] text-ink-2 shadow-[0_0_0_1px_var(--color-line)]">{v}</span>
+                {k === 'webhook' && t.webhook?.url && <CopyButton value={t.webhook.url} />}
               </span>
-              {k === 'webhook' && t.webhook?.secret && <Copyable label="Signing secret" value={t.webhook.secret} />}
+              {t.failing?.[k] && (
+                <span className="mt-1 block pl-[8.5rem] text-[12px] text-down">
+                  Since {sinceLabel(t.failing[k]!.since)}: {t.failing[k]!.reason}
+                </span>
+              )}
+              {k === 'webhook' && t.webhook?.secret && <Copyable label="Signing secret" value={t.webhook.secret} wide />}
             </li>
           ))}
         </ul>
@@ -343,8 +351,8 @@ function Webhook({ c, onSave, note }: { c: Channels; onSave: (b: Put) => Promise
       {!c.webhook_available ? (
         <p className="text-[13.5px] text-ink-2">
           Signed webhooks are part of Copy Pro and Copy Fund.{' '}
-          <Link to="/pricing/" className="font-medium text-accent hover:text-accent-2">
-            Compare plans
+          <Link to="/upgrade/?plan=pro" className="font-medium text-accent hover:text-accent-2">
+            Upgrade to Pro
           </Link>
         </p>
       ) : c.webhook && !edit ? (
@@ -385,24 +393,30 @@ function Webhook({ c, onSave, note }: { c: Channels; onSave: (b: Put) => Promise
   )
 }
 
-function Copyable({ label, value }: { label: string; value: string }) {
+function CopyButton({ value }: { value: string }) {
   const [done, setDone] = useState(false)
   return (
+    <button
+      type="button"
+      onClick={() =>
+        navigator.clipboard.writeText(value).then(() => {
+          setDone(true)
+          setTimeout(() => setDone(false), 1500)
+        })
+      }
+      className="shrink-0 text-[12.5px] font-medium text-accent hover:text-accent-2"
+    >
+      {done ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
+
+function Copyable({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
+  return (
     <div className="mt-2 flex min-w-0 items-center gap-2">
-      <span className="w-24 shrink-0 text-[12.5px] text-ink-3">{label}</span>
+      <span className={`${wide ? 'w-32' : 'w-24'} shrink-0 text-[12.5px] text-ink-3`}>{label}</span>
       <code title={value} className="min-w-0 flex-1 truncate rounded-lg bg-paper px-3 py-1.5 font-mono text-[12px] text-ink-2 shadow-[0_0_0_1px_var(--color-line)]">{value}</code>
-      <button
-        type="button"
-        onClick={() =>
-          navigator.clipboard.writeText(value).then(() => {
-            setDone(true)
-            setTimeout(() => setDone(false), 1500)
-          })
-        }
-        className="shrink-0 text-[12.5px] font-medium text-accent hover:text-accent-2"
-      >
-        {done ? 'Copied' : 'Copy'}
-      </button>
+      <CopyButton value={value} />
     </div>
   )
 }

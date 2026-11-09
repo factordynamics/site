@@ -4,10 +4,10 @@ import { Link } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
 import { attributed } from '../lib/attribution'
-import { gapLabel, loadLatency, upgradeTo, useMember } from '../lib/account'
+import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { quarterLabel, useAsync, useTitle } from '../lib/data'
 import { aboutCount, loadCoverage } from '../lib/stocks'
-import { BOOK_LITE, BOOK_PRO, checkout, checkoutEnabled, DATA_TERMS, plans, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
+import { BOOK_LITE, BOOK_PRO, checkoutEnabled, DATA_TERMS, plans, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
 type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean }
@@ -180,8 +180,12 @@ export function Pricing() {
                     {tier.id === mine ? 'Your plan' : 'Included in your plan'}
                   </Button>
                 ) : mine && !member?.seat && tier.id === 'pro' ? (
-                  <Button onClick={() => upgradeTo('pro').catch(() => checkout.portal && (window.location.href = checkout.portal))} variant="primary" className="w-full">
+                  <Button to="/upgrade/?plan=pro" variant="primary" className="w-full">
                     Upgrade to Pro
+                  </Button>
+                ) : mine && !member?.seat && tier.id === 'fund' ? (
+                  <Button to="/upgrade/?plan=fund" variant="dark" className="w-full">
+                    Upgrade to Fund
                   </Button>
                 ) : tier.id === 'fund' ? (
                   // Funds mostly buy by invoice; the card trial stays as a quiet second path.

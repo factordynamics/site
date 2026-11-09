@@ -22,6 +22,7 @@ import { Contact } from './pages/Contact'
 import { Legal } from './pages/Legal'
 import { NotFound } from './pages/NotFound'
 import { FilingCard } from './pages/Filing'
+import { Upgrade } from './pages/Upgrade'
 import { captureAttribution } from './lib/attribution'
 import { getToken, startSession } from './lib/account'
 import { analytics } from './config'
@@ -69,6 +70,7 @@ handoff.then(() =>
             <Route path="pricing" element={<Pricing />} />
             <Route path="account" element={<Account />} />
             <Route path="my-book" element={<Book />} />
+            <Route path="upgrade" element={<Upgrade />} />
             <Route path="about" element={<About />} />
             <Route path="methodology" element={<Methodology />} />
             <Route path="f/:accession" element={<FilingCard />} />

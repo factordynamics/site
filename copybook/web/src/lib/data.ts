@@ -293,6 +293,22 @@ export function sectorMix(holdings: { cusip: string; value: number; sector?: str
     .sort((a, b) => (a.name === 'Other' ? 1 : b.name === 'Other' ? -1 : b.value - a.value))
 }
 
+/** A counter that ticks every `ms` while `on` and the tab is visible, and on returning to the tab: for re-polling. */
+export function useTick(ms: number, on: boolean) {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    if (!on) return
+    const bump = () => document.visibilityState === 'visible' && setN((x) => x + 1)
+    const id = setInterval(bump, ms)
+    document.addEventListener('visibilitychange', bump)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', bump)
+    }
+  }, [ms, on])
+  return n
+}
+
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [state, set] = useState<{ data?: T; error?: Error; loading: boolean }>({ loading: true })
   useEffect(() => {

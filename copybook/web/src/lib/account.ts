@@ -88,17 +88,10 @@ export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST
 /**
  * Move an existing subscription to a higher plan: POST {api}/upgrade returns a billing-portal page that
  * confirms the swap, prorated, on the member's own interval and the founding price. A new checkout
- * would start a second subscription, so until /upgrade is deployed this falls back to the portal.
+ * would start a second subscription. Errors are thrown: /upgrade/ shows them or falls back to the portal.
  */
 export async function upgradeTo(plan: 'pro' | 'fund') {
-  try {
-    window.location.href = (await call<{ url: string }>('/upgrade', { body: { plan }, auth: true })).url
-  } catch (e) {
-    if (e instanceof ApiError && e.code === 'already_on_plan') return window.location.reload()
-    // Stripe refused (say, a plan set to cancel): the caller shows why.
-    if (e instanceof ApiError && (e.code === 'upgrade_unavailable' || e.code === 'seat')) throw e
-    await openPortal()
-  }
+  window.location.href = (await call<{ url: string }>('/upgrade', { body: { plan }, auth: true })).url
 }
 /** An issuer's own EDGAR feed: Form 4s by its insiders and Schedule 13D/G by any filer on it. */
 export type IssuerEvent = {

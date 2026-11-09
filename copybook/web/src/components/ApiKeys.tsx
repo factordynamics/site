@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { call, isPro, upgradeTo, type Member } from '../lib/account'
-import { api, checkout } from '../config'
+import { call, isPro, type Member } from '../lib/account'
+import { api } from '../config'
 import { Button } from './ui'
 
 // API keys: GET/POST /keys, DELETE /keys/{id} (session auth; Copy members get 403 pro_required).
@@ -88,14 +88,7 @@ export function ApiKeys({ member, focus = false }: { member: Member; focus?: boo
       {!pro ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent-soft px-4 py-3">
           <p className="text-[13.5px] text-accent-2">API access is part of Copy Pro. Upgrading is prorated from your current plan.</p>
-          <Button
-            size="sm"
-            onClick={() =>
-              upgradeTo('pro').catch(() => {
-                if (checkout.portal) window.location.href = checkout.portal
-              })
-            }
-          >
+          <Button size="sm" to="/upgrade/?plan=pro">
             Upgrade to Pro
           </Button>
         </div>

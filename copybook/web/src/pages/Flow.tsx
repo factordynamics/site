@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { SplitNote } from './Season'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
-import { dateLabel, money, quarterLabel, useAsync, useTitle } from '../lib/data'
+import { dateLabel, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { useMember } from '../lib/account'
 import { loadCards, loadFlow, seasonNow, stockPath, type FlowPeriod, type FlowRow, type FlowScope } from '../lib/stocks'
 
@@ -19,7 +19,8 @@ const FREE_ROWS = 5
 export function Flow() {
   const member = useMember()
   const paid = Boolean(member?.active)
-  const f = useAsync(() => loadFlow(paid), [paid])
+  const tick = useTick(120_000, seasonNow().live)
+  const f = useAsync(() => loadFlow(paid), [paid, tick])
   const cards = useAsync(loadCards, [])
   const [limit, setLimit] = useState(40)
   // Lens, period and ranking live in the URL so a view can be shared: ?funds=all&q=2026Q2&tab=sold.

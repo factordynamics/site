@@ -6,7 +6,7 @@ import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/ch
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { SearchBox } from '../components/Search'
 import { Arrow, AvatarStack, Button, Check, Monogram, Panel, Skeleton, Ticker } from '../components/ui'
-import { useTitle, dateLabel, loadIndex, loadManager, loadSuperBook, money, pct, quarterLabel, sectorMix, useAsync, type Manager } from '../lib/data'
+import { useTitle, dateLabel, loadIndex, loadManager, loadSuperBook, money, pct, quarterLabel, sectorMix, useAsync, useTick, type Manager } from '../lib/data'
 
 const DEMO = ['warren-buffett', 'bill-ackman', 'stanley-druckenmiller', 'david-tepper']
 
@@ -443,7 +443,8 @@ function CTABand() {
 // During a 13F season the hero's pill points at the live tracker; otherwise at Berkshire's latest book.
 function SeasonPill() {
   const sn = seasonNow()
-  const d = useAsync(() => (sn.live ? loadSeason() : Promise.resolve(null)), [sn.live])
+  const tick = useTick(120_000, sn.live)
+  const d = useAsync(() => (sn.live ? loadSeason() : Promise.resolve(null)), [sn.live, tick])
   const days = Math.ceil((sn.deadline.getTime() - Date.now()) / 864e5)
   const cls = 'inline-flex max-w-full items-center gap-2 rounded-full bg-card py-1 pl-1 pr-3 text-[13px] text-ink-2 shadow-[var(--shadow-card)] hover:text-ink'
   if (!sn.live)
