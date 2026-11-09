@@ -13,6 +13,7 @@ export function Signup({ source, className = '' }: { source: string; className?:
   const [email, setEmail] = useState('')
   const [website, setWebsite] = useState('')
   const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'member' | 'error'; msg?: string }>({ s: 'idle' })
+  const [slow, setSlow] = useState(false)
   // Hidden only for paying members. Free, cancelled and signed-out readers, and a session whose /me failed,
   // keep the trial button; a free member already gets the Friday email, so the form says so instead.
   const member = useMemberState()
@@ -61,12 +62,23 @@ export function Signup({ source, className = '' }: { source: string; className?:
               const v = email.trim()
               if (!/^\S+@\S+\.\S+$/.test(v)) return setState({ s: 'error', msg: 'Check the email address and try again.' })
               setState({ s: 'sending' })
+              // A slow signup still says what's happening after a second.
+              const t = setTimeout(() => setSlow(true), 1000)
               try {
                 const r = await call<{ ok: boolean; created?: boolean }>('/signup', { body: { email: v, source, website, ...utmTags() } })
                 setState({ s: r.created || website ? 'done' : 'member' })
+                // A trial started next from this browser checks out with the same email, so it lands on this account.
+                try {
+                  localStorage.setItem('copybook-signup-email', v)
+                } catch {
+                  /* storage blocked */
+                }
               } catch (err) {
                 const rate = err instanceof ApiError && err.status === 429
                 setState({ s: 'error', msg: rate ? 'Too many tries. Please try again in an hour.' : err instanceof ApiError && err.status === 400 && err.detail ? err.detail : 'That didn’t go through. Please try again.' })
+              } finally {
+                clearTimeout(t)
+                setSlow(false)
               }
             }}
           >
@@ -91,6 +103,11 @@ export function Signup({ source, className = '' }: { source: string; className?:
                 {state.s === 'sending' ? 'Signing up…' : 'Get it free'}
               </Button>
             </div>
+            {state.s === 'sending' && slow && (
+              <p role="status" className="mt-2 text-[12.5px] text-ink-3">
+                Creating your account and sending your welcome email…
+              </p>
+            )}
             {/* Honeypot: people never see or fill it; the API drops signups that do. */}
             <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
               <label htmlFor={`${id}-website`}>Website</label>

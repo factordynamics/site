@@ -43,7 +43,10 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
       const ok = Object.values(r.results).some((v) => /^2\d\d$|^ok$|^sent$/.test(v))
       if (ok) localStorage.setItem(TESTED, '1')
       setTested(ok)
-      setTest({ ok, msg: Object.entries(r.messages ?? r.results).map(([k, v]) => `${k[0].toUpperCase()}${k.slice(1)}: ${v}`).join(' · ') })
+      // One line per channel the API actually tested, never a success for one it didn't.
+      const label = (k: string) => `${k[0].toUpperCase()}${k.slice(1)}`
+      const line = ([k, v]: [string, string]) => `${label(k)}: ${r.messages?.[k] ?? (/^2\d\d$|^ok$|^sent$/.test(v) ? (k === 'feed' ? 'added' : 'sent') : `failed (${v})`)}`
+      setTest({ ok, msg: Object.entries(r.results).map(line).join(' · ') || 'Nothing to test yet: connect a channel or keep email first.' })
     } catch {
       setTest({ ok: false, msg: 'The test didn’t go out. Please try again.' })
     }
@@ -84,7 +87,7 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
     {
       done: testDone,
       title: 'Send a test',
-      body: testDone ? 'A test went through. Your next alert arrives the same way.' : connected ? 'One short message to each place you connected, to check it works.' : keepEmail ? 'One test email to your inbox. Alerts come from copybook@factordynamics.com; add it to your contacts so they never land in spam.' : 'Connect a channel or keep email first, then check it here.',
+      body: test.msg ? test.msg : testDone ? 'Tested earlier. Send another test any time; each channel reports its own result.' : connected ? 'One short message to each place you connected, to check it works.' : keepEmail ? 'One test email to your inbox. Alerts come from copybook@factordynamics.com; add it to your contacts so they never land in spam.' : 'Connect a channel or keep email first, then check it here.',
       act: { label: test.busy ? 'Sending…' : 'Send a test', onClick: sendTest, disabled: !(connected || keepEmail) || test.busy },
     },
   ]

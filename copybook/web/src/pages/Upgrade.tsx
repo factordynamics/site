@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { Arrow, Button, Check, Skeleton } from '../components/ui'
-import { BOOK_PRO, plans, TRIAL_DAYS } from '../config'
+import { BOOK_PRO, FUND_SEATS, plans, TRIAL_DAYS } from '../config'
 import { ApiError, isFree, openPortal, PLAN_NAME, upgradeTo, useMemberState, type Member } from '../lib/account'
 import { useTitle } from '../lib/data'
 
@@ -17,8 +17,8 @@ const ADDS: Record<'pro' | 'fund', [string, string][]> = {
     ['Peer overlap', 'Compare your book with the funds you benchmark against, quarter by quarter.'],
   ],
   fund: [
-    ['Up to 10 seats', 'Your team shares one book, one set of follows and one team channel, where each alert posts once.'],
-    ['Seat admin', 'Add and remove seats, and revoke a seat’s sessions.'],
+    [`${FUND_SEATS} seats`, 'Your team shares one book, one set of follows and one team channel, where each alert posts once.'],
+    ['Seat admin', 'Add and remove seats from your account page.'],
     ['Everything in Copy Pro', 'Full My book across every 13F filer, peers, 13F linking, CSV and the API.'],
     ['Annual invoice', 'Net 30 with a W-9, if your fund pays that way.'],
   ],

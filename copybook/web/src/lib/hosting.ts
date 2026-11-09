@@ -9,7 +9,9 @@ export const HOSTING = {
   /** Everything else: alerts, files, payments. */
   files: 'Filing alerts are sent by a Cloudflare Workers job that checks EDGAR every minute, with that machine as its backup. Paid history files and the public alert-latency log are stored in Cloudflare R2. The website and public 13F data are static files served by GitHub Pages. Payments are handled entirely by Stripe.',
   encryption: 'All traffic to the site and the API uses TLS. The machine’s disk is fully encrypted (LUKS); that protects a powered-off or stolen disk, not a running system. Data in Cloudflare R2 and in Stripe is encrypted at rest by those providers.',
-  access: 'Only the operator and the operator’s own automation tools, which run on that machine, can access member data. There is no public SSH.',
+  access: 'Only the operator can access member data. The operator also uses AI coding agents for maintenance on that machine; they can technically read member data, and anything they read may be processed by the AI model providers behind them. We don’t send member data to them deliberately, and when maintenance touches member records, emails are masked. There is no public SSH.',
+  physical: 'The machine is at the operator’s residence, not on a UPS or a second internet link. If our API host goes down, filing alerts continue from a second host (Cloudflare). Member access can be moved to a standby within about 30 minutes, or rebuilt from encrypted backups on new hardware within a few hours. Not yet rehearsed: rehearsals are scheduled this week, and this line will show measured times.',
+  deletion: 'Deleted data stays in encrypted backups for up to 30 days, then is gone. Backups are encrypted with a key held by the operator, not stored on the machine.',
   backups: 'Nightly encrypted off-site backup to Cloudflare R2, kept 30 days, with weekly restore tests. Hourly local snapshots.',
   logging: 'API requests are logged without member identity. Per-member access logging is not yet in place.',
   availability: 'There is no uptime SLA. Alerts are polled from Cloudflare, with the API machine as backup, so they keep going out when the machine is down. The tunnel to the machine is supervised: restarted on failure, health-checked every minute, and the operator is alerted after 2 minutes down.',
@@ -24,11 +26,13 @@ export const SUBPROCESSORS: [string, string][] = [
   ['Tailscale', 'A backup route to the API machine.'],
   ['Resend', 'Delivers alert, digest and sign-in emails.'],
   ['OpenFIGI', 'Maps CUSIPs to tickers. It receives only security identifiers, never member data.'],
+  ['AI coding agent service and its model providers', 'Maintenance only: the agents the operator uses on the API machine can read what is on it, including member data, though none is sent to them deliberately.'],
 ]
 
 /** What happens to alerts and member pages when part of the system is down (HOSTING.md, "What happens when"). */
 export const OUTAGES: [string, string][] = [
   ['The API machine restarts, hangs or goes offline', 'Alerts are unaffected: they’re checked and sent from Cloudflare. Member pages and the API come back when the machine does; a restart takes about 10 seconds, and a hung server is restarted automatically within about 4 minutes.'],
   ['Cloudflare’s EDGAR checks stop', 'The API machine starts checking EDGAR 10 minutes after Cloudflare’s last run and hands back within a minute of Cloudflare’s return. Alerts are about 10 minutes late, and never sent twice.'],
+  ['The API machine is down for longer', 'Member access can be moved to a standby within about 30 minutes, or rebuilt from encrypted backups on new hardware within a few hours. Not yet rehearsed: rehearsals are scheduled this week, and these times will be replaced with measured ones.'],
   ['Both are down', 'Nothing is sent. Filings found afterwards still go out, marked late, or in the digest under “Earlier filings you may have missed”.'],
 ]

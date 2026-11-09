@@ -100,7 +100,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'Moves and changes',
     body: (
       <>
-        <p>A quarter-over-quarter move is the change in shares between a fund’s two filings, valued at the newer filing’s own value per share. A price move alone is never counted as buying or selling, except in the split cases still being fixed (IESC’s split, and Amundi’s mixed pre- and post-split CRWD lines), which can show a split as a buy.</p>
+        <p>A quarter-over-quarter move is the change in shares between a fund’s two filings, valued at the newer filing’s own value per share. A price move alone is never counted as buying or selling, except in the one split case still being fixed (Amundi’s mixed pre- and post-split CRWD lines), which can show a split as a buy.</p>
         <p>
           <strong className="font-medium text-ink">CUSIP changes.</strong> When an issuer’s CUSIP is reissued, as Exxon’s 30231G102 became 30233Q108 between Q2 and Q3 2026, a fund’s new row is compared with its previous row under the old CUSIP, so a position it kept reads as added, trimmed or unchanged rather than new. Those rows are labelled “CUSIP change” with both CUSIPs, and the API carries the old one as <code>prev_cusip</code>. Reissues are linked by the data pipeline, which lists every pair it links.
         </p>
@@ -138,7 +138,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
         </div>
         <div>
           <dt>Weight</dt>
-          <dd>A position’s value divided by the total value of the filer’s share (SH) positions, on every page, file and alert. Put and call options (at notional) and principal-amount notes (PRN) are left out of the denominator and shown apart. The API’s <code>weight</code> is being aligned to the same definition; <code>weight_equity</code> already is.</dd>
+          <dd>A position’s value divided by the total value of the filer’s share (SH) positions, on every page, file and alert. Put and call options (at notional) and principal-amount notes (PRN) are left out of the denominator and shown apart. In the API, <code>weight_equity</code> is the stable equity-only field. <code>weight</code> keeps its current meaning (a share of every row, options at notional) until Feb 8, 2027, when it switches to equity-only; <code>weight_incl_options</code> is the explicit name for the current meaning.</dd>
         </div>
         <div>
           <dt>New, added, trimmed, unchanged, exited</dt>
@@ -149,7 +149,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
         </div>
         <div>
           <dt>Dollar change</dt>
-          <dd>The change in shares times the newer filing’s own value per share. A new position counts its full value; an exited one counts minus its value in the previous filing, since it has no current value. A price move alone is zero, except in the split cases noted under Moves and changes.</dd>
+          <dd>The change in shares times the newer filing’s own value per share. A new position counts its full value; an exited one counts minus its value in the previous filing, since it has no current value. A price move alone is zero, except in the split case noted under Moves and changes.</dd>
         </div>
         <div>
           <dt>Ticker</dt>

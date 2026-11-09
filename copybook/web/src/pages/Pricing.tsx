@@ -8,7 +8,7 @@ import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { money, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { loadCoverage, loadStock } from '../lib/stocks'
 import { loadEvents } from '../components/FundNotes'
-import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
+import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_SEATS_NEXT, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
 type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean; why?: string }
@@ -63,16 +63,19 @@ const tiers = (filers: string, curated: number): Tier[] => [
   },
   {
     id: 'fund',
-    who: `For a PM and analysts working one book. Up to ${FUND_SEATS} seats, one invoice.`,
+    who: `For a PM and analysts working one book. ${FUND_SEATS} seats, one invoice.`,
     lead: 'Everything in Pro, plus',
     now: [
-      { t: `Up to ${FUND_SEATS} seats`, d: 'Invite your team by email; each seat signs in on its own and keeps its own alerts and channels.' },
+      { t: `${FUND_SEATS} seats`, d: 'Invite your team by email; each seat signs in on its own and keeps its own alerts and channels.' },
       { t: 'Shared book and peer lists', d: 'One set of follows, watchlist, owned book and peers the whole team works from.' },
       { t: 'One team channel', d: 'Each alert posts once to your team’s Slack channel, whoever follows it.' },
-      { t: 'Seat admin', d: 'Add and remove seats, and revoke a seat’s sessions.' },
+      { t: 'Seat admin', d: 'Add and remove seats from your account page.' },
       { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 on request.' },
     ],
-    soon: [],
+    soon: [
+      { t: `Up to ${FUND_SEATS_NEXT} seats`, d: 'At the same founding price.' },
+      { t: 'Revoke a seat’s sessions', d: 'Sign a departing colleague out everywhere at once.' },
+    ],
     why: FUND_WHY,
   },
 ]
@@ -104,10 +107,11 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Full My book: every 13F filer (holders, crowding, peers), 13F linking, CSV', false, false, true, true],
   ['New, exited and net trades for all filers in My book (tracked funds today)', false, false, 'by Nov 20', 'by Nov 20'],
   ['Peer overlap', false, false, true, true],
-  ['Seats', '1', '1', '1', `Up to ${FUND_SEATS}`],
+  ['Seats', '1', '1', '1', `${FUND_SEATS} (${FUND_SEATS_NEXT} soon)`],
   ['Shared book and peer lists', false, false, false, true],
   ['One team Slack channel: each alert posts once', false, false, false, true],
-  ['Seat admin: add, remove and revoke sessions', false, false, false, true],
+  ['Seat admin: add and remove seats', false, false, false, true],
+  ['Revoke a seat’s sessions', false, false, false, 'soon'],
   ['Invoice billing, W-9', false, false, false, true],
 ]
 
@@ -371,7 +375,7 @@ export function Pricing() {
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [
                 'How fast are filing alerts?',
-                'We poll EDGAR’s latest-filings feed every minute, so a 13F alert usually arrives within a couple of minutes of the filing appearing there. For the very largest books, the first email is just as fast and the moves follow in a second email after our next data refresh, usually within a few hours. Form 4 and 13D/G alerts for the funds we track closely and the filers you follow usually arrive within minutes of filing. Funds have 45 days after quarter end to file a 13F, so the positions in it are always a few weeks old. We time every live alert from EDGAR acceptance to delivery and publish the log on the speed page; no live alerts have been timed yet this season.',
+                'We poll EDGAR every minute for 13F, Form 4 and 13D/G filings; measured timings appear on the speed page as alerts go out, and none have been timed yet this season. For the very largest books, the moves follow in a second email after our next data refresh, usually within a few hours. Funds have 45 days after quarter end to file a 13F, so the positions in it are always a few weeks old.',
               ],
               [
                 'What’s in an alert?',

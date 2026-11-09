@@ -54,7 +54,8 @@ export function attributed(link: string) {
   // A signed-in free or cancelled member checks out with their account's email, so the plan lands on the same account.
   try {
     const last = JSON.parse(localStorage.getItem('copybook-me-last') ?? 'null') as { member?: { email?: string; active?: boolean } } | null
-    if (last?.member?.email && !last.member.active && localStorage.getItem('copybook-session')) u.searchParams.set('prefilled_email', last.member.email)
+    const email = last?.member?.email && !last.member.active && localStorage.getItem('copybook-session') ? last.member.email : localStorage.getItem('copybook-signup-email')
+    if (email) u.searchParams.set('prefilled_email', email)
   } catch {
     /* storage blocked */
   }

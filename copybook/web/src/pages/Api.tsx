@@ -172,7 +172,8 @@ export function ApiDocs() {
           <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-ink-2">
             <li>All endpoints live under /v1. Every response carries <code className="font-mono text-[12.5px]">schema_version</code>, the date of the spec it follows.</li>
             <li>Additive changes, such as new fields, endpoints or optional parameters, ship at any time. Ignore fields you don’t know.</li>
-            <li>Breaking changes are announced in the changelog at least 90 days before they take effect.</li>
+            <li>Breaking changes are announced in the changelog at least 90 days before they take effect, for every paying key.</li>
+            <li><code className="font-mono text-[12.5px]">weight</code> keeps its current meaning until Feb 8, 2027. <code className="font-mono text-[12.5px]">weight_equity</code> is the stable equity-only field, and <code className="font-mono text-[12.5px]">weight_incl_options</code> the explicit name for today’s meaning.</li>
           </ul>
         </Panel>
         <section id="changelog" className="scroll-mt-24">

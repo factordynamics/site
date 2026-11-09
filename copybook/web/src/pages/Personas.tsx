@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Arrow, Button, Check, Panel } from '../components/ui'
-import { FUND_WHY, plans, TRIAL_DAYS, trialTerms } from '../config'
+import { FUND_SEATS, FUND_WHY, plans, TRIAL_DAYS, trialTerms } from '../config'
 import { attributed, referredCheckout } from '../lib/attribution'
 import { gapLabel, loadLatency, useApiBase } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
@@ -117,7 +117,7 @@ export function ForFunds() {
       <Hero
         kicker="Copy Fund · for investment teams"
         title="Know who owns what you own."
-        sub="Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. Up to 10 seats, shared lists, one team channel in Slack, and an annual invoice."
+        sub={`Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. ${FUND_SEATS} seats, shared lists, one team channel in Slack, and an annual invoice.`}
         cta={cta}
         note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 on request."
       />
@@ -137,7 +137,7 @@ export function ForFunds() {
         items={[
           ['My book', 'Paste tickers, upload a broker CSV or link your fund’s own 13F. Every name shows how many funds hold it, how many have it in their top 10, and who bought and sold this season.'],
           ['Peer overlap', 'Pick up to 12 funds you benchmark against. See how much of their books overlap, the names they share, and what each did in yours.'],
-          ['Up to 10 seats, shared lists', 'Each colleague signs in with their own email and keeps their own alert settings. Follows, the watchlist, the owned book and peers are shared.'],
+          [`${FUND_SEATS} seats, shared lists`, 'Each colleague signs in with their own email and keeps their own alert settings. Follows, the watchlist, the owned book and peers are shared.'],
           ['One team channel', 'Every filing from the funds you follow posts once to your team’s Slack channel as it hits EDGAR, whoever follows the fund, with new, added, trimmed and exited positions inside.'],
           ['Insider and 13D alerts', 'Open-market insider buys over your threshold, cluster buys, and any filer’s new 13D on the stocks you own or watch.'],
           ['Invoice and W-9', 'Annual plan invoiced net 30, with a W-9 on request. Or start on a card with a 14-day trial.'],
@@ -161,6 +161,7 @@ export function ForFunds() {
             <li>{HOSTING.api}</li>
             <li>{HOSTING.encryption}</li>
             <li>{HOSTING.access}</li>
+            <li>{HOSTING.physical}</li>
             <li>{HOSTING.backups} {HOSTING.logging}</li>
           </ul>
         </Panel>
