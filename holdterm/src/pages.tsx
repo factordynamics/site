@@ -573,8 +573,8 @@ export function Fund({ slug }: { slug: string }) {
       </Panel>
       <div className="duo wide">
         <Panel title="13F book by quarter" right={<span className="dim">reported value · change vs prior quarter</span>}>
-          {book.options_value > 0 && <div className="dim small">as filed, including options notional</div>}
-          {hist.length > 1 ? <ValueHistory title={`${book.firm} 13F book by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.total_value }))} /> : <div className="dim empty">one quarter on file</div>}
+          {book.options_value > 0 && hist.some((r) => r.long_value == null) && <div className="dim small">as filed, including options notional</div>}
+          {hist.length > 1 ? <ValueHistory title={`${book.firm} 13F book by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.long_value ?? r.total_value }))} /> : <div className="dim empty">one quarter on file</div>}
         </Panel>
         <Panel title="sector mix">
           <SectorRows items={live} />

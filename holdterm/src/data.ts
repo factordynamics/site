@@ -83,7 +83,7 @@ export type Event = {
   percent_of_class: number | null
   change_vs_13f: number | null
 }
-export type HistoryRow = { quarter: string; report_date: string; filing_date: string; total_value: number; position_count: number; status: string; sec_url: string }
+export type HistoryRow = { quarter: string; report_date: string; filing_date: string; total_value: number; long_value?: number; position_count: number; status: string; sec_url: string }
 export type StockHolder = {
   slug: string
   manager: string
