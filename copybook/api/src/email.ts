@@ -100,7 +100,7 @@ export function channelFailMail(env: Env, to: string, label: string, reason: str
 export function loginMail(env: Env, to: string, token: string, welcome: boolean, m?: Member): Mail {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
   if (!welcome) {
-    return { to, subject: 'Your Copybook sign-in link', text: `Here is your Copybook sign-in link.\n\nSign in (link works for 7 days):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}` };
+    return { to, subject: 'Your Copybook sign-in link', text: `Here is your Copybook sign-in link.\n\nSign in (this link works once, for 15 minutes):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}` };
   }
   const name = m?.plan === 'pro' ? 'Copy Pro' : m?.plan === 'fund' ? 'Copy Fund' : 'Copy';
   const trial = m?.trial_end ? ` Your free trial runs until ${new Date(m.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}; cancel before then from your account and you're not charged.` : '';
@@ -109,7 +109,7 @@ export function loginMail(env: Env, to: string, token: string, welcome: boolean,
     ['Add the names you own', "Paste tickers or a CSV in My book: any superinvestor's move in them is flagged [you own].", `${env.SITE_URL}my-book/`],
     ['Connect a channel', 'Slack, Discord, Telegram or a private RSS feed, next to email. Under Alerts in your account.', `${env.SITE_URL}account/`],
   ];
-  const text = `Welcome to ${name}.${trial}\n\nFirst, sign in (link works for 7 days):\n${link}\n\nThen three steps, two minutes:\n${steps.map(([t, d, u], i) => `${i + 1}. ${t}: ${u}\n   ${d}`).join('\n')}\n\nYour plan also includes 8 quarters of 13F history and CSV export on every investor page.${FOOTER}`;
+  const text = `Welcome to ${name}.${trial}\n\nFirst, sign in (this link works once, for 7 days):\n${link}\n\nThen three steps, two minutes:\n${steps.map(([t, d, u], i) => `${i + 1}. ${t}: ${u}\n   ${d}`).join('\n')}\n\nYour plan also includes 8 quarters of 13F history and CSV export on every investor page.${FOOTER}`;
   const html = `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Welcome to ${name}.${esc(trial)}</p><p><a href="${link}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600">Sign in to Copybook</a></p><p>Then three steps, two minutes:</p><ol style="padding-left:20px">${steps.map(([t, d, u]) => `<li style="margin:0 0 10px"><a href="${u}" style="color:#1d4ed8;font-weight:600">${t}</a><br><span style="color:#374151">${esc(d)}</span></li>`).join('')}</ol><p style="color:#374151">Your plan also includes 8 quarters of 13F history and CSV export on every investor page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.</p></div>`;
   return { to, subject: `Welcome to ${name}: three steps to your first alert`, text, html };
 }
@@ -120,7 +120,7 @@ export function seatInviteMail(env: Env, to: string, owner: string, token: strin
   return {
     to,
     subject: 'You have a Copy Fund seat on Copybook',
-    text: `${owner} added you to their team's Copy Fund plan on Copybook. Your seat shares the team's followed funds, watchlist, book and peer list, and has its own alert settings, delivery channels and API keys.\n\nSign in (link works for 7 days; later, request a new link with this address at ${env.SITE_URL}account/):\n${link}${FOOTER}`,
+    text: `${owner} added you to their team's Copy Fund plan on Copybook. Your seat shares the team's followed funds, watchlist, book and peer list, and has its own alert settings, delivery channels and API keys.\n\nSign in (this link works once, for 7 days; later, request a new link with this address at ${env.SITE_URL}account/):\n${link}${FOOTER}`,
   };
 }
 
@@ -472,7 +472,7 @@ export function holdtermLoginMail(env: Env, to: string, token: string, welcome: 
   const intro = welcome
     ? 'HOLDTERM ALERTS: ACTIVE\n\nYou will get an email when an investor you follow files a 13F, 13D, 13G or Form 4, and when one is filed on a stock you follow. Follow nobody and you get every featured investor.'
     : 'HOLDTERM SIGN-IN';
-  const text = `${intro}\n\nSign in (link works for 7 days):\n${link}${htFooter(env)}`;
+  const text = `${intro}\n\nSign in (${welcome ? 'this link works once, for 7 days' : 'this link works once, for 15 minutes'}):\n${link}${htFooter(env)}`;
   return { to, from: HOLDTERM_FROM, subject: welcome ? 'Holdterm alerts are on' : 'Your Holdterm sign-in link', text, html: pre(text) };
 }
 

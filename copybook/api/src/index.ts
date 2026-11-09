@@ -9,7 +9,7 @@ import { handleV1, v1error } from './v1';
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
 import { apiBase, isActive, isCopy, isPro, linkBase, type Env, type Member } from './env';
-import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
+import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
 import { businessSummary, handleKeepResume, handleWhy } from './revenue';
@@ -514,7 +514,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const m = await memberByEmail(env, email);
     if (m && (m.status === 'free' || isActive(m)) && !(await env.DB.get(`rl:${email}`))) {
       await env.DB.put(`rl:${email}`, '1', { expirationTtl: 60 });
-      const token = await signToken(env.SESSION_SECRET, 'login', m.customer, LOGIN_TTL);
+      const token = await signToken(env.SESSION_SECRET, 'login', m.customer, LOGIN_REQUEST_TTL);
       // A Holdterm member only ever hears from Holdterm; a sign-in started on Holdterm gets a Holdterm link.
       const holdterm = m.plan === 'holdterm' || b.brand === 'holdterm' || /holdterm/.test(origin ?? '');
       await sendMail(env, [holdterm ? holdtermLoginMail(env, m.email, token, false) : loginMail(env, m.email, token, false)]);
@@ -528,7 +528,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (typeof b.login === 'string') {
       const p = await verifyToken(env.SESSION_SECRET, b.login, 'login');
       const m = p && (await getMember(env, p.c));
-      return m ? json(await issueSession(env, m), 200, h) : json({ ok: false, error: 'link expired or invalid' }, 401, h);
+      if (!p || !m) return json({ ok: false, error: 'link expired or invalid' }, 401, h);
+      // Once: the link's nonce is marked used until the link would have expired anyway.
+      if (p.n) {
+        if (await env.DB.get(`used:${p.n}`)) return json({ ok: false, error: 'This sign-in link was already used. Ask for a new one.', code: 'link_used' }, 401, h);
+        await env.DB.put(`used:${p.n}`, '1', { expirationTtl: Math.max(60, Math.ceil(p.x - Date.now() / 1000)) });
+      }
+      return json(await issueSession(env, m), 200, h);
     }
     if (typeof b.checkout_session === 'string' && /^cs_(test|live)_[A-Za-z0-9]+$/.test(b.checkout_session)) {
       let cs;

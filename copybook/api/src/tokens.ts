@@ -33,6 +33,8 @@ export async function hmacHex(secret: string, data: string): Promise<string> {
 }
 
 export async function signToken(secret: string, kind: TokenKind, customer: string, ttlSeconds: number, extra: { s?: string; n?: string } = {}, now = Date.now() / 1000): Promise<string> {
+  // Every sign-in link carries a nonce, so it can be exchanged for a session once (see POST /session).
+  if (kind === 'login' && !extra.n) extra = { ...extra, n: b64url(crypto.getRandomValues(new Uint8Array(12))) };
   const body = b64url(enc.encode(JSON.stringify({ k: kind, c: customer, x: Math.floor(now + ttlSeconds), ...extra })));
   const sig = new Uint8Array(await crypto.subtle.sign('HMAC', await hmacKey(secret), enc.encode(body)));
   return `${body}.${b64url(sig)}`;

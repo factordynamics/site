@@ -7,7 +7,10 @@ import { noteReferral } from './referrals';
 import { mirrorSeats } from './seats';
 import { signToken } from './tokens';
 
+/** Sign-in links sent unasked (welcome, the weekly, seat invites): a week, once. */
 export const LOGIN_TTL = 7 * 24 * 3600;
+/** A sign-in link the member asked for (POST /login): 15 minutes, once. */
+export const LOGIN_REQUEST_TTL = 15 * 60;
 export const SESSION_TTL = 30 * 24 * 3600;
 
 /**

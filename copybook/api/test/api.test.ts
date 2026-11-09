@@ -273,6 +273,14 @@ describe('copybook api', () => {
 
     const session = await (await call('/session', { body: { login: loginTokenFrom(sent[0].text) } })).json();
     expect(session.member).toMatchObject({ email: 'buyer@example.com', active: true, plan: 'copy', interval: 'yearly' });
+    // A sign-in link works once: the same link again (cleared storage, a forwarded email) is refused.
+    const again = await call('/session', { body: { login: loginTokenFrom(sent[0].text) } });
+    expect([again.status, (await again.json()).code]).toEqual([401, 'link_used']);
+    // A link the member asks for lasts 15 minutes, and says so.
+    sent = [];
+    await call('/login', { body: { email: 'buyer@example.com' } });
+    const asked = JSON.parse(atob(loginTokenFrom(sent[0].text).split('.')[0].replace(/-/g, '+').replace(/_/g, '/')));
+    expect([asked.x - Math.floor(Date.now() / 1000) <= 15 * 60, sent[0].text.includes('works once, for 15 minutes')]).toEqual([true, true]);
 
     expect((await call('/history/warren-buffett')).status).toBe(401);
     const history = await (await call('/history/warren-buffett', { token: session.token })).json();
