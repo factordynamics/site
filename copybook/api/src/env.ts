@@ -55,8 +55,11 @@ export interface Env {
   RESEND_API_KEY?: string;
   /** Fine-grained GitHub PAT (refcell/gust only, Actions: read and write) to dispatch the data refresh. */
   GITHUB_DISPATCH_TOKEN?: string;
-  /** Cloudflare API token with Account Analytics read, for the daily request-budget check. */
-  CF_ANALYTICS_TOKEN?: string;
+  /** Cloudflare API token: Account Analytics read (the daily request-budget check) and R2 write to PUBLIC_BUCKET (latency.json). */
+  CF_API_TOKEN?: string;
+  /** Public R2 bucket the cron writes static JSON to (latency.json), and its public base URL. */
+  PUBLIC_BUCKET?: string;
+  PUBLIC_URL?: string;
   CF_ACCOUNT_ID?: string;
   /** SEC requests per minute run: 40 fits the free plan's 50 subrequests; raise on Workers Paid. */
   SEC_BUDGET?: string;

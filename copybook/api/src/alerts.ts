@@ -1487,6 +1487,8 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
     await step(job.name, run[job.name]);
   }
   if (queue.length) out.deferred_jobs = queue.map((j) => j.name);
+  // The public latency.json, on every quiet minute (a busy one has spent its CPU on alerts; the next one catches up).
+  if (!busy) await step('latency_json', () => import('./index').then((x) => x.publishLatency(env, scheduledTime)));
   const next = JSON.stringify(queue);
   if (next !== (rawQueue ?? '[]')) await env.DB.put('jobs:due', next);
   // Chat and webhook retries get a slot every minute, so a deadline afternoon of back-to-back filings

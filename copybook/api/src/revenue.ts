@@ -656,14 +656,14 @@ const WARN_AT = 0.7;
 
 /**
  * The account's Workers and Pages Functions requests since 00:00 UTC (they share the daily quota), from Cloudflare's
- * GraphQL analytics (one subrequest, no Worker request). Null without CF_ANALYTICS_TOKEN or when it can't be read.
+ * GraphQL analytics (one subrequest, no Worker request). Null without CF_API_TOKEN or when it can't be read.
  */
 export async function requestsToday(env: Env, now: number): Promise<{ workers: number; pages: number; total: number } | null> {
-  if (!env.CF_ANALYTICS_TOKEN || !env.CF_ACCOUNT_ID) return null;
+  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID) return null;
   const start = `${new Date(now).toISOString().slice(0, 10)}T00:00:00Z`;
   const query = `query($a:String!,$s:Time!,$e:Time!){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests}} p:pagesFunctionsInvocationsAdaptiveGroups(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests}}}}}`;
   try {
-    const res = await fetch('https://api.cloudflare.com/client/v4/graphql', { method: 'POST', headers: { authorization: `Bearer ${env.CF_ANALYTICS_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ query, variables: { a: env.CF_ACCOUNT_ID, s: start, e: new Date(now).toISOString() } }) });
+    const res = await fetch('https://api.cloudflare.com/client/v4/graphql', { method: 'POST', headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ query, variables: { a: env.CF_ACCOUNT_ID, s: start, e: new Date(now).toISOString() } }) });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const acc = ((await res.json()) as any)?.data?.viewer?.accounts?.[0];
     if (!acc) return null;

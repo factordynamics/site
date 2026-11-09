@@ -1031,7 +1031,7 @@ describe('copybook api', () => {
   it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {
     const { runQuotaCheck } = await import('../src/revenue');
     expect(await runQuotaCheck(env, Date.now())).toEqual({ status: 'no analytics token' });
-    Object.assign(env, { CF_ANALYTICS_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct' });
+    Object.assign(env, { CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct' });
     let used = [30_000, 39_000];
     const orig = globalThis.fetch;
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
@@ -1044,7 +1044,31 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', orig);
     expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['hello@factordynamics.com', "Copybook: 126% of today's Workers requests used (126,102 of 100,000)"]]);
     expect(sent[0].text).toContain('Pages Functions 79,189');
-    Object.assign(env, { CF_ANALYTICS_TOKEN: undefined, CF_ACCOUNT_ID: undefined });
+    Object.assign(env, { CF_API_TOKEN: undefined, CF_ACCOUNT_ID: undefined });
+  });
+
+  it('latency.json: the /latency report written to the public bucket when it changes, not every minute', async () => {
+    const { publishLatency } = await import('../src/index');
+    expect(await publishLatency(env, Date.now())).toBe('not configured');
+    Object.assign(env, { CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct', PUBLIC_BUCKET: 'copybook-public' });
+    const puts: { url: string; body: string; cc: string | null }[] = [];
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u).startsWith('https://api.cloudflare.com/')) return puts.push({ url: String(u), body: String(init?.body), cc: new Headers(init?.headers).get('cache-control') }), Response.json({ success: true });
+      return orig(u, init);
+    });
+    const at = Date.parse('2026-11-12T15:07:00Z');
+    await env.DB.put('alerts:latency', JSON.stringify([{ slug: 'warren-buffett', accession: 'A1', accepted: '2026-11-12T15:00:00Z', sent: '2026-11-12T15:00:40Z', seconds: 40 }]));
+    expect(await publishLatency(env, at)).toBe('written');
+    expect(await publishLatency(env, at + 60_000)).toBe('unchanged');
+    await env.DB.put('alerts:latency', JSON.stringify([{ slug: 'bill-ackman', accession: 'A2', accepted: '2026-11-12T15:08:00Z', sent: '2026-11-12T15:08:20Z', seconds: 20 }, { slug: 'warren-buffett', accession: 'A1', accepted: '2026-11-12T15:00:00Z', sent: '2026-11-12T15:00:40Z', seconds: 40 }]));
+    expect(await publishLatency(env, at + 120_000)).toBe('written');
+    vi.stubGlobal('fetch', orig);
+    expect(puts.map((p) => [p.url, p.cc])).toEqual(Array(2).fill(['https://api.cloudflare.com/client/v4/accounts/acct/r2/buckets/copybook-public/objects/latency.json', 'public, max-age=60']));
+    // The same report /latency serves, plus when it was written.
+    const pub = JSON.parse(puts[1].body);
+    expect([pub.count, pub.recent.map((r: { accession: string }) => r.accession), pub.generated_at]).toEqual([2, ['A2', 'A1'], '2026-11-12T15:09:00Z']);
+    Object.assign(env, { CF_API_TOKEN: undefined, CF_ACCOUNT_ID: undefined, PUBLIC_BUCKET: undefined });
   });
 
   it('Holdterm alerts skip books that fail the data check and the funds Holdterm holds back', async () => {

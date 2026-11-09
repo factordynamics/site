@@ -251,6 +251,29 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     })),
   };
 }
+export async function buildLatency(env: Env, now: number) {
+  const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
+  const ch = JSON.parse((await env.DB.get('alerts:latency:ch')) ?? '[]') as ChannelDelivery[];
+  return latencyReport(log, now, ch);
+}
+
+/** The last latency.json written by this isolate, so an unchanged report isn't rewritten every minute. */
+let publishedLatency = '';
+/**
+ * Every quiet minute: the /latency report as a static public object (PUBLIC_BUCKET/latency.json through Cloudflare's
+ * R2 API, so it works from the Worker and from a self-hosted copy alike). Written only when it changed.
+ */
+export async function publishLatency(env: Env, now: number): Promise<string> {
+  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || !env.PUBLIC_BUCKET) return 'not configured';
+  const body = JSON.stringify({ ...(await buildLatency(env, now)), generated_at: new Date(Math.floor(now / 60_000) * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z') });
+  const same = body.replace(/"generated_at":"[^"]*"/, '');
+  if (same === publishedLatency && new Date(now).getUTCMinutes() % 30 !== 0) return 'unchanged';
+  const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/r2/buckets/${env.PUBLIC_BUCKET}/objects/latency.json`, { method: 'PUT', headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json', 'cache-control': 'public, max-age=60' }, body });
+  if (!res.ok) return `error ${res.status}`;
+  publishedLatency = same;
+  return 'written';
+}
+
 const TICKER = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 const DOWNLOAD_TTL = 60; // KV's minimum expiry
 const HANDOFF_TTL = 120;
@@ -323,11 +346,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // The one-click cancellation reason from the follow-up email (and an optional note).
   if ((req.method === 'GET' || req.method === 'POST') && path === '/why') return handleWhy(env, req, url);
 
-  // Public alert latency for the methodology page: this filing season's live alerts, replays excluded.
+  // Public alert latency for /speed/ and /pricing/: this filing season's live alerts, replays excluded. The cron also
+  // writes it once a minute to PUBLIC_URL/latency.json (a public R2 object), which pages read without a Worker request.
   if (req.method === 'GET' && path === '/latency') {
-    const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
-    const ch = JSON.parse((await env.DB.get('alerts:latency:ch')) ?? '[]') as ChannelDelivery[];
-    return json(latencyReport(log, Date.now(), ch), 200, { ...h, 'cache-control': 'public, max-age=60' });
+    const cache = typeof caches === 'undefined' ? null : (caches as unknown as { default: Cache }).default;
+    const key = 'https://copybook.internal/latency';
+    const hit = await cache?.match(key).catch(() => undefined);
+    if (hit) return new Response(hit.body, { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=60, s-maxage=60', ...h } });
+    const body = JSON.stringify(await buildLatency(env, Date.now()));
+    await cache?.put(key, new Response(body, { headers: { 'cache-control': 's-maxage=60' } })).catch(() => undefined);
+    return new Response(body, { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=60, s-maxage=60', ...h } });
   }
 
   // Support fixes to a member's follows (e.g. restoring lost names), through the same serialized path
@@ -534,14 +562,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // channels_failing: chat or webhook destinations that stopped (reason, since), so /account/ can flag them.
   if (req.method === 'GET' && path === '/me') {
     const { referralView } = await import('./referrals');
-    const fr = m.status === 'free' ? await changeFollows(env, m, { get: true }) : null;
-    const names = fr ? (fr.ok ? fr.follows.owned : (await getFollows(env, m)).owned) : [];
+    // Free members' saved names from the KV mirror every change writes: no Durable Object read on a page view.
+    const isFree = m.status === 'free';
+    const names = isFree ? (await getFollows(env, m)).owned : [];
     // facts / hook / more: the Friday email's "In your names" block as it stands now.
-    const free = fr ? { free_names: { names, limit: 5, ...(await (await import('./free')).freeTeaser(env, names, Date.now()).catch(() => ({ facts: [], hook: null, more: 0 }))) } } : {};
+    const free = isFree ? { free_names: { names, limit: 5, ...(await (await import('./free')).freeTeaser(env, names, Date.now()).catch(() => ({ facts: [], hook: null, more: 0 }))) } } : {};
     // A Fund seat sees who to ask about billing: the plan owner's email.
     const owner = m.seat_of ? { owner: (await getMember(env, m.seat_of))?.email ?? null } : {};
     const { pauseOffer, DIGEST_LIVE } = await import('./revenue');
-    return json({ ok: true, member: { ...publicView(m), ...owner, pause_offer: pauseOffer(m), digest_live: DIGEST_LIVE, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, h);
+    return json({ ok: true, member: { ...publicView(m), ...owner, pause_offer: pauseOffer(m), digest_live: DIGEST_LIVE, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, { ...h, 'cache-control': 'private, max-age=30', vary: 'Authorization' });
   }
 
   // Seasonal pause instead of cancelling: POST /pause {reason?} pauses billing and alerts until 14 days before the
