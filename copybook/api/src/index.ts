@@ -424,7 +424,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'GET' && path === '/me') {
     const { referralView } = await import('./referrals');
     const fr = m.status === 'free' ? await changeFollows(env, m, { get: true }) : null;
-    const free = fr ? { free_names: { names: fr.ok ? fr.follows.owned : (await getFollows(env, m)).owned, limit: 5 } } : {};
+    const names = fr ? (fr.ok ? fr.follows.owned : (await getFollows(env, m)).owned) : [];
+    // facts / hook / more: the Friday email's "In your names" block as it stands now.
+    const free = fr ? { free_names: { names, limit: 5, ...(await (await import('./free')).freeTeaser(env, names, Date.now()).catch(() => ({ facts: [], hook: null, more: 0 }))) } } : {};
     // A Fund seat sees who to ask about billing: the plan owner's email.
     const owner = m.seat_of ? { owner: (await getMember(env, m.seat_of))?.email ?? null } : {};
     return json({ ok: true, member: { ...publicView(m), ...owner, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, h);

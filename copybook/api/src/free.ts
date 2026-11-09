@@ -170,7 +170,7 @@ export async function weeklyMoves(env: Env, now: number): Promise<Week> {
     .filter((c) => c.filing_date >= sinceDay)
     .sort((a, b) => Number(featured.has(b.slug)) - Number(featured.has(a.slug)) || b.filing_date.localeCompare(a.filing_date))
     .slice(0, MAX_CARDS);
-  type Row = { ticker: string | null; value_delta: number; put_call?: string | null; name?: string };
+  type Row = { ticker: string | null; value_delta: number; put_call?: string | null; name?: string; shares?: number; prev_shares?: number };
   const read = await Promise.all(cards.map((c) => get(`${env.SITE_URL}d/f/${c.accession}.json`)));
   cards.forEach((c, i) => {
     // A card keeps its top 5 moves by size in `moves` (each with `change`); `changes` holds only counts.
@@ -178,9 +178,23 @@ export async function weeklyMoves(env: Env, now: number): Promise<Week> {
     if (!d) return;
     const manager = plainName(d.manager ?? d.firm ?? c.slug);
     if (!d.featured && !featured.has(c.slug) && PASSIVE.test(`${manager} ${d.firm ?? ''}`)) return;
+    // One row per ticker: a CUSIP or class change shows as an exit plus a new position (Fisher's XOM),
+    // so a fund's rows on one ticker are netted, and dropped when the holding is unchanged.
+    const byTicker = new Map<string, Row & { change?: string }>();
     for (const r of Array.isArray(d.moves) ? d.moves : []) {
+      if (!r.ticker || r.put_call || !['new', 'added', 'trimmed', 'exited'].includes(r.change ?? '')) continue;
+      const o = byTicker.get(r.ticker);
+      if (!o) byTicker.set(r.ticker, { ...r });
+      else {
+        const shares = (o.shares ?? 0) + (r.shares ?? 0);
+        const prev = (o.prev_shares ?? 0) + (r.prev_shares ?? 0);
+        const usd = o.value_delta + r.value_delta;
+        byTicker.set(r.ticker, { ...o, shares, prev_shares: prev, value_delta: shares === prev ? 0 : usd, change: !prev ? 'new' : !shares ? 'exited' : usd > 0 ? 'added' : 'trimmed' });
+      }
+    }
+    for (const r of byTicker.values()) {
       const what = r.change as 'new' | 'added' | 'trimmed' | 'exited';
-      if (!r.ticker || r.put_call || !r.value_delta || !['new', 'added', 'trimmed', 'exited'].includes(what) || FUND_SECURITY.test(r.name ?? '')) continue;
+      if (!r.ticker || !r.value_delta || FUND_SECURITY.test(r.name ?? '')) continue;
       all.push({ manager, slug: c.slug, ticker: r.ticker, what, usd: r.value_delta, form: `13F ${c.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')}`, url: `${env.SITE_URL}f/${c.accession}/`, featured: !!d.featured || featured.has(c.slug), accession: c.accession });
     }
   });
@@ -234,7 +248,7 @@ const stakeFact = (x: WeeklyStake) =>
 export interface InYourNames {
   names: number;
   /** One public fact per saved name: its biggest superinvestor move this week (a 13F row, Form 4 or 13D/G). */
-  facts: { text: string; url: string }[];
+  facts: { ticker: string; text: string; url: string }[];
   /** The biggest item Copy would add, named, e.g. "Capital One Financial's CEO sold $18.6M of COF". */
   hook: string | null;
   /** Everything else Copy adds in these names: open-market insider trades from $100K, other fund moves, 13D/Gs. */
@@ -263,7 +277,7 @@ const roleOf = (role: string | null) => {
  * the biggest of what Copy adds: a company insider's open-market trade from $100K (never gifts, grants,
  * withholding or exercises), or another fund's move or 13D/G in their names.
  */
-export async function inYourNames(env: Env, names: string[], week: Week, now: number): Promise<InYourNames> {
+export async function inYourNames(env: Env, names: string[], week: Week, now: number, secBudget = 8): Promise<InYourNames> {
   const facts: InYourNames['facts'] = [];
   const shown = new Set<string>();
   type Item = { text: string; size: number };
@@ -275,14 +289,14 @@ export async function inYourNames(env: Env, names: string[], week: Week, now: nu
     ].sort((a, b) => Number(b.featured) - Number(a.featured) || b.size - a.size);
     const top = cands.find((c) => c.featured);
     if (top) {
-      facts.push({ text: `${top.text}, which you own`, url: top.url });
+      facts.push({ ticker: t, text: `${top.text}, which you own`, url: top.url });
       shown.add(top.key);
     }
     for (const c of cands) if (!shown.has(c.key)) locked.push({ text: c.text, size: c.size });
   }
   // Company insiders and anyone's 13D/G, from the per-stock events the precompute keeps current.
   const { stockEvents } = await import('./stockevents');
-  const r = names.length ? await stockEvents(env, names, 50, { budget: 8, freshMs: 6 * 3600_000 }) : { tickers: {} as Record<string, { events: import('./stockevents').StockEvent[] }> };
+  const r = names.length ? await stockEvents(env, names, 50, { budget: secBudget, freshMs: 6 * 3600_000 }) : { tickers: {} as Record<string, { events: import('./stockevents').StockEvent[] }> };
   const since = new Date(now - 7 * 86400_000).toISOString();
   const fundAcc = new Set([...week.all.map((x) => x.accession), ...week.stakes.map((x) => x.accession)]);
   for (const [t, x] of Object.entries(r.tickers)) {
@@ -297,6 +311,21 @@ export async function inYourNames(env: Env, names: string[], week: Week, now: nu
   }
   locked.sort((a, b) => b.size - a.size);
   return { names: names.length, facts, hook: locked[0]?.text ?? null, more: Math.max(0, locked.length - 1) };
+}
+
+/**
+ * /me for a free member: the same "In your names" block the Friday email would send now, so /account/ and
+ * My book show the same pull. The week is cached an hour; insider rows come from the precompute (no SEC reads).
+ */
+export async function freeTeaser(env: Env, names: string[], now: number): Promise<Omit<InYourNames, 'names'>> {
+  const cached = await env.DB.get('free:week');
+  let week = cached ? (JSON.parse(cached) as Week) : null;
+  if (!week) {
+    week = await weeklyMoves(env, now);
+    await env.DB.put('free:week', JSON.stringify(week), { expirationTtl: 3600 });
+  }
+  const { facts, hook, more } = await inYourNames(env, names, week, now, 0);
+  return { facts, hook, more };
 }
 
 const LABEL: Record<WeeklyMove['what'], string> = { new: 'new position', added: 'added', trimmed: 'trimmed', exited: 'sold out', bought: 'bought', sold: 'sold' };

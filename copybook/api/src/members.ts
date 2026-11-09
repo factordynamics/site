@@ -194,7 +194,7 @@ export type FollowOp = { get: true } | { set: Partial<Follows> } | { add: { list
 /** Hand-added owned names; records from before `owned_manual` count every owned name outside the linked book. */
 export const manualOf = (f: Pick<Follows, 'owned' | 'owned_manual' | 'book'>) => f.owned_manual ?? f.owned.filter((t) => !(f.book?.tickers ?? []).includes(t));
 
-/** One change to a member's follows. Owned stocks are always on the watchlist. */
+/** One change to a member's follows. Owned stocks are always on the watchlist; removing one unwatches it too. */
 export function applyFollowOp(cur: Follows, op: FollowOp): Follows | string {
   const next: Follows = { ...cur, investors: [...cur.investors], stocks: [...cur.stocks], owned: [...cur.owned], peers: [...(cur.peers ?? [])] };
   if ('get' in op) return next;
@@ -212,7 +212,9 @@ export function applyFollowOp(cur: Follows, op: FollowOp): Follows | string {
   } else {
     const { list, value } = op.remove;
     next[list] = next[list].filter((x) => x !== value);
+    // Remove on a stock page clears both: an owned name is on the watchlist only because it's owned.
     if (list === 'stocks') next.owned = next.owned.filter((x) => x !== value);
+    if (list === 'owned') next.stocks = next.stocks.filter((x) => x !== value);
     if (list === 'stocks' || list === 'owned') manual = manual.filter((x) => x !== value);
   }
   next.owned_manual = manual;

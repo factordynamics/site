@@ -650,7 +650,8 @@ describe('copybook api', () => {
     expect([sixth.status, (await sixth.json()).limit]).toEqual([402, 5]);
     expect((await call('/follows/owned/AAPL', { method: 'POST', token: s.token })).status).toBe(200); // already saved: fine
     await call('/follows/owned/MSFT', { method: 'DELETE', token: s.token });
-    expect((await (await call('/me', { token: s.token })).json()).member.free_names).toEqual({ names: ['GOOGL', 'HHH', 'NVDA', 'AAPL'], limit: 5 });
+    expect((await (await call('/follows', { token: s.token })).json()).follows.stocks).toEqual(['GOOGL', 'HHH', 'NVDA', 'AAPL']); // the stock page stops saying Following
+    expect((await (await call('/me', { token: s.token })).json()).member.free_names).toEqual({ names: ['GOOGL', 'HHH', 'NVDA', 'AAPL'], limit: 5, facts: [], hook: null, more: 0 });
     expect((await call('/follows/stocks/TSLA', { method: 'POST', token: s.token })).status).toBe(402); // only owned names
 
     // Friday evening ET (03:42 UTC Saturday): the week's 13F cards, curated filers' Form 4s and 13D/Gs, and company insiders.
@@ -662,12 +663,18 @@ describe('copybook api', () => {
     const cardList = [
       { accession: 'ICI-13F', slug: 'icici', quarter: '2026Q3', filing_date: '2026-11-12' },
       { accession: 'VGD-13F', slug: 'vanguard-group', quarter: '2026Q3', filing_date: '2026-11-12' },
+      { accession: 'FSH-13F', slug: 'fisher', quarter: '2026Q3', filing_date: '2026-11-11' },
       { accession: '0000950123-26-011111', slug: 'warren-buffett', quarter: '2026Q3', filing_date: '2026-11-10' },
       { accession: 'OLD-13F', slug: 'bill-ackman', quarter: '2026Q2', filing_date: '2026-08-14' }, // before the week
     ];
     const cardData: Record<string, unknown> = {
       // Bigger than Buffett's moves, but a tracked fund ranks after the superinvestors, and 2 rows at most.
       'ICI-13F': { manager: 'ICICI Prudential, LLC', firm: 'ICICI Prudential Asset Management Co Ltd', featured: false, changes: { added: 4 }, moves: [row('added', 'IVV', 9.5e10, { name: 'iShares Core S&P 500 ETF' }), row('added', 'X1', 9e10), row('added', 'X2', 8e10), row('added', 'X3', 7e10), row('added', 'AAPL', 1e7)] },
+      'FSH-13F': { manager: 'Fisher Asset Management, LLC', featured: false, changes: { new: 1, exited: 1 }, moves: [
+        // A CUSIP change: one exit and one new position on XOM net to +$0.9B, added; on CVX to nothing.
+        row('new', 'XOM', 5.2e9, { shares: 50, prev_shares: 0 }), row('exited', 'XOM', -4.3e9, { shares: 0, prev_shares: 40 }),
+        row('new', 'CVX', 3e9, { shares: 30, prev_shares: 0 }), row('exited', 'CVX', -3e9, { shares: 0, prev_shares: 30 }),
+      ] },
       'VGD-13F': { manager: 'Vanguard Group', firm: 'Vanguard Group Inc', featured: false, changes: { new: 1 }, moves: [row('new', 'VVV', 9e11)] },
       '0000950123-26-011111': { manager: 'Warren Buffett', featured: true, changes: { new: 1, added: 2, trimmed: 1, exited: 1 }, moves: [row('added', 'PUTX', 9e9, { put_call: 'Put' }), row('added', 'GOOGL', 8.8e9), row('new', 'DHI', 2e9), row('trimmed', 'BAC', -1.7e9), row('exited', 'STZ', -1e9)] },
       'OLD-13F': { manager: 'Bill Ackman', featured: true, changes: { new: 1 }, moves: [row('new', 'OLDX', 5e9)] },
@@ -709,6 +716,7 @@ describe('copybook api', () => {
     expect(buys).toContain(`Warren Buffett: added GOOGL, +$8.8B (13F Q3 2026)\n    ${SITE}f/0000950123-26-011111/`);
     for (const no of ['X3', 'IVV', ', LLC', 'VVV', 'Vanguard', 'OLDX', 'PUTX', '$77.0B', 'gift', '$50.0K']) expect(w.text).not.toContain(no);
     expect(w.text.indexOf('BAC')).toBeLessThan(w.text.indexOf('STZ'));
+    expect(w.text).not.toMatch(/sold out (XOM|CVX)|CVX/); // netted: an added XOM, and CVX unchanged
     vi.stubGlobal('fetch', realFetch);
     const unsub = w.text.match(/Unsubscribe: (\S+)/)![1];
     expect((w as unknown as { headers: Record<string, string> }).headers['List-Unsubscribe']).toBe(`<${unsub}>`);
@@ -1985,6 +1993,7 @@ describe('copybook api', () => {
     f = (await (await call('/follows', { token: t })).json()).follows;
     expect(f.owned_manual).toEqual(['NVDA', 'AMD', 'CRWD']);
     expect(f.owned).toEqual(['NVDA', 'AMD', 'CRWD', 'INTC']);
+    expect(f.stocks).toEqual(['NVDA', 'TSLA', 'AMD', 'CRWD', 'INTC']);
 
     expect((await call('/book/import', { body: { cik: '0009999999' }, token: t })).status).toBe(404);
     expect((await call('/book/import', { body: { text: '!!! ???' }, token: t })).status).toBe(400);
