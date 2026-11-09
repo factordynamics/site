@@ -98,6 +98,9 @@ export interface AlertEvent {
   accepted?: string;
   /** Form 4: holdings per security class (Class A and Class B are separate CUSIPs). */
   classes?: Form4Class[];
+  /** Form 4: the first and last transaction dates. */
+  event_date?: string | null;
+  last_transaction_date?: string | null;
   footnotes?: string[];
   cusip?: string | null;
   amendment_no?: number | null;
@@ -1188,7 +1191,7 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
           if (!f4.bought_usd || !who.length) continue; // a sale, grant or exercise: not an alert
           const ins: Insider = { cik: who[0].cik, name: who[0].name, roles: [...new Set(who.flatMap((i) => i.roles))], bought_usd: f4.bought_usd, accession, accepted: es[0].accepted };
           const bought = f4.classes.reduce((s, c) => s + c.bought, 0);
-          const ev: AlertEvent = { ...base, manager: who.map((i) => i.name).join(', '), action: 'buy', issuer: f4.issuer, ticker: base.ticker ?? f4.ticker, shares: bought, value_usd: f4.bought_usd, avg_price: bought ? f4.bought_usd / bought : null, classes: f4.classes, footnotes: f4.footnotes, insider: ins };
+          const ev: AlertEvent = { ...base, manager: who.map((i) => i.name).join(', '), action: 'buy', issuer: f4.issuer, ticker: base.ticker ?? f4.ticker, shares: bought, value_usd: f4.bought_usd, avg_price: bought ? f4.bought_usd / bought : null, classes: f4.classes, footnotes: f4.footnotes, insider: ins, event_date: f4.event_date, last_transaction_date: f4.last_transaction_date };
           if (eventAlertable(ev, now)) fresh.push(ev);
           const cluster = await recordInsiderBuy(env, subject!.cik, ins, now);
           if (cluster) fresh.push({ ...ev, id: `cluster:${subject!.cik}:${accession}`, manager: `${cluster.length} insiders`, insider: undefined, cluster, value_usd: cluster.reduce((s, i) => s + i.bought_usd, 0), shares: null, avg_price: null, classes: undefined, footnotes: undefined });
@@ -1210,6 +1213,8 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
             shares_after: after,
             classes: f4.classes,
             footnotes: f4.footnotes,
+            event_date: f4.event_date,
+            last_transaction_date: f4.last_transaction_date,
           };
         }
       } else {

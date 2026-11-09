@@ -308,6 +308,8 @@ export interface Form4Class {
   value_usd: number; // |P and S shares| x price
   shares_before: number | null;
   shares_after: number | null;
+  /** Each ownership line: direct, or indirect with its nature ("By Jain Foundation Inc."), its balance after and its open-market trades. */
+  holdings?: { ownership: 'direct' | 'indirect'; nature: string | null; shares_after: number; bought: number; sold: number }[];
 }
 
 export interface Form4 {
@@ -323,8 +325,10 @@ export interface Form4 {
   classes: Form4Class[];
   action: 'buy' | 'sell' | 'mixed' | 'other';
   footnotes: string[];
-  /** periodOfReport: the (earliest) transaction date. */
+  /** The first transaction date (periodOfReport when no transaction is dated): the one event_date rule for Form 4s. */
   event_date: string | null;
+  /** The last transaction date, when the filing reports several days. */
+  last_transaction_date: string | null;
   /** Non-derivative transaction codes in filing order, once each (P, S, A, M, F, G, ...). */
   codes: string[];
 }
@@ -337,7 +341,7 @@ export interface Form4 {
 export function parseForm4(xml: string): Form4 | null {
   const issuer_cik = val(xml, 'issuerCik');
   if (!issuer_cik) return null;
-  const byClass = new Map<string, Form4Class & { lines: Map<string, { first: number; firstDelta: number; last: number }> }>();
+  const byClass = new Map<string, Form4Class & { lines: Map<string, { first: number; firstDelta: number; last: number; bought: number; sold: number }> }>();
   for (const b of [...all(xml, 'nonDerivativeTransaction'), ...all(xml, 'nonDerivativeHolding')]) {
     const security = val(b, 'securityTitle') || 'Common Stock';
     const c = byClass.get(security) ?? { security, bought: 0, sold: 0, value_usd: 0, shares_before: null, shares_after: null, lines: new Map() };
@@ -350,11 +354,13 @@ export function parseForm4(xml: string): Form4 | null {
     if (code === 'P' || code === 'S') c.value_usd += shares * price;
     const after = val(b, 'sharesOwnedFollowingTransaction');
     if (after !== '') {
-      const line = `${val(b, 'directOrIndirectOwnership')}|${val(b, 'natureOfOwnership')}`;
+      const line = `${val(b, 'directOrIndirectOwnership')}|${val(b, 'natureOfOwnership').trim()}`;
       const delta = !code ? 0 : ad === 'D' ? -shares : shares;
-      const l = c.lines.get(line);
-      if (l) l.last = Number(after);
-      else c.lines.set(line, { first: Number(after), firstDelta: delta, last: Number(after) });
+      const l = c.lines.get(line) ?? { first: Number(after), firstDelta: delta, last: Number(after), bought: 0, sold: 0 };
+      l.last = Number(after);
+      if (code === 'P') l.bought += shares;
+      if (code === 'S') l.sold += shares;
+      c.lines.set(line, l);
     }
     byClass.set(security, c);
   }
@@ -366,8 +372,13 @@ export function parseForm4(xml: string): Form4 | null {
       shares_after: ls.length ? ls.reduce((s, l) => s + l.last, 0) : null,
       // Before this filing: the first balance minus its own transaction, across lines; open-market net otherwise.
       shares_before: ls.length ? ls.reduce((s, l) => s + l.first - l.firstDelta, 0) : null,
+      holdings: [...lines].map(([k, l]) => {
+        const [di, nature] = k.split('|');
+        return { ownership: di === 'I' ? ('indirect' as const) : ('direct' as const), nature: nature || null, shares_after: l.last, bought: l.bought, sold: l.sold };
+      }),
     };
   });
+  const dates = all(xml, 'nonDerivativeTransaction').map((b) => val(b, 'transactionDate').slice(0, 10)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
   const bought = classes.some((c) => c.bought > 0);
   const sold = classes.some((c) => c.sold > 0);
   return {
@@ -390,7 +401,8 @@ export function parseForm4(xml: string): Form4 | null {
     classes,
     action: bought && sold ? 'mixed' : bought ? 'buy' : sold ? 'sell' : 'other',
     footnotes: all(xml, 'footnote').map((f) => unescape(f).replace(/\s+/g, ' ')),
-    event_date: val(xml, 'periodOfReport') || null,
+    event_date: dates[0] ?? (val(xml, 'periodOfReport') || null),
+    last_transaction_date: dates[dates.length - 1] ?? (val(xml, 'periodOfReport') || null),
     codes: [...new Set(all(xml, 'nonDerivativeTransaction').map((b) => val(b, 'transactionCode')).filter(Boolean))],
   };
 }

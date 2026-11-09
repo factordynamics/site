@@ -20,7 +20,7 @@ const MAX_FILINGS = Number(process.env.COPYBOOK_EVENTS_MAX ?? 900);
 const UA = 'Copybook copybook@factordynamics.com';
 
 type Ev = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-type Detail = { v?: number; accepted_at: string | null; amendment_no?: number | null; item4?: string | null; percent_of_class?: number | null; shares_after?: number | null; classes?: unknown; ten_percent_owner?: boolean | null };
+type Detail = { v?: number; event_date?: string | null; last_transaction_date?: string | null; accepted_at: string | null; amendment_no?: number | null; item4?: string | null; percent_of_class?: number | null; shares_after?: number | null; classes?: unknown; ten_percent_owner?: boolean | null };
 
 const get = async (url: string) => {
   const res = await fetch(url, { headers: { 'user-agent': UA } });
@@ -46,17 +46,19 @@ const filerCik = (e: Ev) => e.url?.match(/\/edgar\/data\/(\d+)\//)?.[1] ?? null;
 let fetched = 0;
 for (const e of events) {
   // v2: Item 4 is cleaned (no amendment preamble, sentence cut); re-read 13Ds cached before that.
-  if ((cache[e.id] && (cache[e.id].v === 2 || !cache[e.id].item4)) || fetched >= MAX_FILINGS) continue;
+  // v3: Form 4 transaction dates and direct/indirect holdings; re-read Form 4s cached before that.
+  const c = cache[e.id];
+  if ((c && ((c.v ?? 0) >= 3 || (e.kind !== 'form4' && (c.v === 2 || !c.item4)))) || fetched >= MAX_FILINGS) continue;
   const cik = filerCik(e);
   if (!cik) continue;
   try {
     const meta = await fetchFilingMeta(cik, e.id);
     await sleep(120);
-    const d: Detail = { v: 2, accepted_at: meta?.accepted_at ?? null, amendment_no: meta?.amendment_no ?? null };
+    const d: Detail = { v: 3, accepted_at: meta?.accepted_at ?? null, amendment_no: meta?.amendment_no ?? null };
     if (e.kind === 'form4') {
       const f4 = await fetchForm4(cik, e.id);
       await sleep(240);
-      if (f4) Object.assign(d, { classes: f4.classes, ten_percent_owner: f4.ten_percent_owner });
+      if (f4) Object.assign(d, { classes: f4.classes, ten_percent_owner: f4.ten_percent_owner, event_date: f4.event_date, last_transaction_date: f4.last_transaction_date });
     } else {
       const s = await fetchSchedule13(cik, e.id);
       await sleep(120);
@@ -75,7 +77,9 @@ const when = (e: Ev) => cache[e.id]?.accepted_at ?? `${e.filing_date}T23:59:59Z`
 const out = events
   .map((e) => {
     const d = cache[e.id] ?? { accepted_at: null };
-    return { ...e, accepted: e.accepted ?? d.accepted_at, item4: e.item4 ?? d.item4 ?? null, classes: e.classes ?? d.classes ?? null, ten_percent_owner: e.ten_percent_owner ?? d.ten_percent_owner ?? null, amendment_no: e.amendment_no ?? d.amendment_no ?? null, percent_of_class: e.percent_of_class ?? d.percent_of_class ?? null, shares_after: e.shares_after ?? d.shares_after ?? null, transactions: undefined, sector: undefined };
+    // Form 4 dates: the first transaction date is event_date (one rule with the minute poll and /events).
+    const dates = e.kind === 'form4' && d.event_date ? { event_date: d.event_date, last_transaction_date: d.last_transaction_date ?? null } : {};
+    return { ...e, ...dates, accepted: e.accepted ?? d.accepted_at, item4: e.item4 ?? d.item4 ?? null, classes: d.classes ?? e.classes ?? null, ten_percent_owner: e.ten_percent_owner ?? d.ten_percent_owner ?? null, amendment_no: e.amendment_no ?? d.amendment_no ?? null, percent_of_class: e.percent_of_class ?? d.percent_of_class ?? null, shares_after: e.shares_after ?? d.shares_after ?? null, transactions: undefined, sector: undefined };
   })
   .sort((a, b) => when(b).localeCompare(when(a)) || String(b.id).localeCompare(String(a.id)));
 for (const [i, e] of out.entries()) {

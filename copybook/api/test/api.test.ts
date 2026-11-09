@@ -732,9 +732,14 @@ describe('copybook api', () => {
     expect(r.pending).toEqual([]);
     expect(r.tickers['BRK.B'].events).toEqual([
       {
-        ticker: 'BRK.B', form: '4', filer_name: 'Jain Ajit', role: 'Vice Chairman, Director', action: 'sell',
+        ticker: 'BRK.B', form: '4', filer_name: 'Jain Ajit', filer_cik: '0001728451', issuer: 'BERKSHIRE HATHAWAY INC', role: 'Vice Chairman, Director', action: 'sell',
         shares: 39700, price: 503.09, value_usd: 19972776, shares_after: 67925, prev_shares_after: 107625, percent_of_class: null,
-        event_date: '2026-09-28', accepted_at: '2026-09-29T21:16:08Z', accession: '0001728451-26-000004',
+        event_date: '2026-09-28', last_transaction_date: '2026-09-28', accepted_at: '2026-09-29T21:16:08Z', accession: '0001728451-26-000004',
+        // The sale was the foundation's; 317 shares are held directly.
+        ownership: [
+          { security: 'Class B Common Stock', ownership: 'indirect', nature: 'By Jain Foundation Inc. (Non-Profit Corporation)', shares_after: 67608, bought: 0, sold: 39700 },
+          { security: 'Class B Common Stock', ownership: 'direct', nature: null, shares_after: 317, bought: 0, sold: 0 },
+        ],
         url: 'https://www.sec.gov/Archives/edgar/data/1067983/000172845126000004/0001728451-26-000004-index.htm',
       },
     ]);
@@ -748,6 +753,22 @@ describe('copybook api', () => {
     await call('/events?tickers=BRK.B', { token });
     expect(secCalls).toBe(first + 2);
     expect((await call('/events?tickers=', { token })).status).toBe(400);
+
+    // Pro: /v1/events?tickers= serves the same issuer-side rows next to the filers' own, with the lookback each feed covers.
+    stripeObjects['checkout/sessions/cs_test_pv'] = { id: 'cs_test_pv', status: 'complete', created: now(), subscription: 'sub_pv', customer_details: { email: 'pv@example.com' } };
+    stripeObjects['subscriptions/sub_pv'] = sub('sub_pv', 'cus_pv', 'active', 'month', 'pro_monthly');
+    const pv = ((await (await call('/session', { body: { checkout_session: 'cs_test_pv' } })).json()) as { token: string }).token;
+    const { key } = await (await call('/keys', { body: { name: 'q' }, token: pv })).json();
+    const v1 = await (await handleRequest(new Request('https://api.test/v1/events?tickers=BRK.B,CVI&form=form4', { headers: { authorization: `Bearer ${key}` } }), env)).json();
+    expect(v1.data).toEqual([
+      expect.objectContaining({
+        accession: '0001728451-26-000004', kind: 'form4', source: 'issuer', action: 'sell', event_date: '2026-09-28', last_transaction_date: '2026-09-28', filing_date: '2026-09-29', accepted_at: '2026-09-29T21:16:08Z',
+        filer: { slug: null, cik: '0001728451', name: 'Jain Ajit' }, issuer: expect.objectContaining({ ticker: 'BRK.B', cik: '0001067983' }),
+        insider: expect.objectContaining({ roles: ['Vice Chairman', 'Director'], ownership: expect.arrayContaining([expect.objectContaining({ ownership: 'indirect', shares_after: 67608, sold: 39700 })]) }),
+      }),
+    ]);
+    expect(v1.coverage['BRK.B']).toMatchObject({ issuer_cik: '0001067983', form4_from: '2026-09-29T21:16:08Z' });
+    expect(v1.pending).toEqual([]);
   });
 
   it('POST /upgrade: Copy yearly gets a portal confirm page for Pro yearly on the same subscription item; Pro and bad plans are refused', async () => {

@@ -395,7 +395,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       return json({ ok: false, error: 'tickers: 1 to 50 comma-separated tickers like BRK.B; limit: 1 to 10', code: 'bad_request' }, 400, h);
     }
     const { stockEvents } = await import('./stockevents');
-    return json({ ok: true, ...(await stockEvents(env, tickers, Math.floor(limit))) }, 200, { ...h, 'cache-control': 'no-store' });
+    const r = await stockEvents(env, tickers, Math.floor(limit));
+    for (const t of Object.values(r.tickers)) t.events = t.events.map(({ classes: _, ...e }) => e);
+    return json({ ok: true, ...r }, 200, { ...h, 'cache-control': 'no-store' });
   }
 
   // Copy -> Pro/Fund (or Pro -> Fund): a portal page that confirms swapping the one subscription item to the

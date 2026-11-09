@@ -17,6 +17,8 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
     changes: [
       'Bulk exports, partial: GET /v1/bulk lists per-quarter gzip CSVs of every filer\'s 13F book (2026Q1 to 2026Q3 today) and GET /v1/bulk/{YYYYQn}.csv.gz streams one. Parquet is coming (501 until then). The files are as-filed books, not point-in-time yet: no accepted_at, source_accession, first_disclosed_at or change columns. Only files that pass a size check are listed; stubs from a failed run are hidden until regenerated. Known issue: Marsh & McLennan 2026Q2 is double counted (a mislabeled amendment counted with its original) until the data run\'s fix lands.',
       'Webhook detected_at, like every /v1 timestamp, has no milliseconds (the test webhook included).',
+      'GET /v1/events?tickers= (and ticker=): also every Form 4 by the company\'s own insiders and every 13D/G any filer made on it (`source: "issuer"`), with `coverage` (how far back each EDGAR feed reached per ticker) and `pending`. Insider rows carry `insider.ownership`: direct and indirect lines with their balances and trades. Lookback: the issuer\'s latest 20 Form 4s and 10 Schedule 13D/Gs.',
+      'Form 4 rows: `event_date` is the first transaction date (one rule everywhere) and `last_transaction_date` the last. Rows built before this change are corrected by the next hourly build.',
     ],
   },
   {

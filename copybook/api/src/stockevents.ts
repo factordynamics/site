@@ -3,13 +3,16 @@
  * filer made on it, per ticker, for My book. Read from the issuer's EDGAR company feed; each filing
  * is parsed once and kept in R2 (tev/{TICKER}.json), so a refresh only fetches what's new.
  */
-import { companyFilings, type FeedEntry, fetchSchedule13, fetchSubmission, parseForm4, secBudget } from './edgar';
+import { companyFilings, type FeedEntry, fetchSchedule13, fetchSubmission, type Form4Class, parseForm4, secBudget } from './edgar';
 import type { Env } from './env';
 
 export interface StockEvent {
   ticker: string;
   form: string;
   filer_name: string;
+  /** The reporting owner's CIK (Form 4) or the first reporting person's (13D/G). */
+  filer_cik: string | null;
+  issuer: string;
   /** Form 4: the insider's relationship, e.g. "Vice Chairman, Director" or "10% owner". Null on 13D/G. */
   role: string | null;
   /** buy, sell, mixed (open market), grant, option_exercise, tax_withholding, gift, other; 13D/G: new_stake, stake_update. */
@@ -20,15 +23,27 @@ export interface StockEvent {
   shares_after: number | null;
   prev_shares_after: number | null;
   percent_of_class: number | null;
+  /** Form 4: the first transaction date; 13D/G: the date of the event. */
   event_date: string | null;
+  /** Form 4: the last transaction date (the same day for most filings). */
+  last_transaction_date: string | null;
+  /** Form 4: each ownership line, e.g. direct 317 and indirect "By Jain Foundation Inc." 67,608, with its open-market trades. */
+  ownership: { security: string; ownership: 'direct' | 'indirect'; nature: string | null; shares_after: number; bought: number; sold: number }[] | null;
+  /** Form 4 holdings per class, as /v1/events serves them. */
+  classes?: Form4Class[] | null;
   accepted_at: string;
   accession: string;
   url: string;
 }
 
+const VERSION = 2;
+
 interface Cached {
+  v?: number;
   cik: string;
   checked_at: number;
+  /** How far back each feed was read: the oldest filing examined (ISO), per form family. */
+  from?: { form4: string | null; schedule13: string | null };
   /** Parsed filings from the latest feeds: the event, or 0 when it's about another issuer (this CIK as an owner). */
   seen: Record<string, StockEvent | 0>;
 }
@@ -59,6 +74,8 @@ async function form4Event(ticker: string, cik: string, e: FeedEntry): Promise<St
     ticker,
     form: e.form,
     filer_name: who?.name ?? f.owners[0]?.name ?? '',
+    filer_cik: who?.cik ?? f.owners[0]?.cik ?? null,
+    issuer: f.issuer,
     role: who?.roles.map((r) => (/^see remarks$/i.test(r) ? 'Officer' : r)).join(', ') || null,
     action: f.action !== 'other' ? f.action : (CODES[f.codes[0]] ?? 'other'),
     // Open-market shares; for a gift, grant or withholding, how far the balance moved.
@@ -69,6 +86,9 @@ async function form4Event(ticker: string, cik: string, e: FeedEntry): Promise<St
     prev_shares_after: before,
     percent_of_class: null,
     event_date: f.event_date,
+    last_transaction_date: f.last_transaction_date,
+    ownership: f.classes.flatMap((c) => (c.holdings ?? []).map((x) => ({ security: c.security, ...x }))),
+    classes: f.classes,
     accepted_at: noMs(e.accepted),
     accession: e.accession,
     url: index(cik, e.accession),
@@ -86,6 +106,8 @@ async function schedule13Event(ticker: string, cik: string, e: FeedEntry): Promi
     ticker,
     form: e.form,
     filer_name: `${lead?.name ?? ''}${more > 0 ? ` and ${more} other${more > 1 ? 's' : ''}` : ''}`,
+    filer_cik: lead?.cik ? lead.cik.padStart(10, '0') : null,
+    issuer: s.issuer,
     role: null,
     action: /\/A$/.test(e.form) ? 'stake_update' : 'new_stake',
     shares: null,
@@ -95,6 +117,9 @@ async function schedule13Event(ticker: string, cik: string, e: FeedEntry): Promi
     prev_shares_after: null,
     percent_of_class: s.percent_of_class,
     event_date: s.event_date,
+    last_transaction_date: null,
+    ownership: null,
+    classes: null,
     accepted_at: noMs(e.accepted),
     accession: e.accession,
     url: index(cik, e.accession),
@@ -128,6 +153,8 @@ async function refresh(ticker: string, c: Cached): Promise<boolean> {
     });
   }
   c.seen = seen;
+  const oldest = (xs: FeedEntry[]) => xs.filter((e) => e.accession in seen).map((e) => noMs(e.accepted)).sort()[0] ?? null;
+  c.from = { form4: oldest(feed.filter((e) => e.form.startsWith('4'))), schedule13: oldest(feed.filter((e) => !e.form.startsWith('4'))) };
   if (complete) c.checked_at = Date.now();
   return complete;
 }
@@ -151,12 +178,14 @@ export async function stockEvents(env: Env, tickers: string[], limit: number) {
   await Promise.all(
     tickers.map(async (t) => {
       const o = await env.HIST.get(`tev/${t}.json`);
-      if (o) cache.set(t, JSON.parse(await new Response(o.body).text()) as Cached);
+      const c = o ? (JSON.parse(await new Response(o.body).text()) as Cached) : null;
+      // Parsed by an older version (fewer fields): read again.
+      if (c) cache.set(t, c.v === VERSION ? c : { v: VERSION, cik: c.cik, checked_at: 0, seen: {} });
     }),
   );
   const missing = tickers.filter((t) => !cache.has(t));
   const ciks = missing.length ? await issuerCiks(env, missing) : {};
-  for (const t of missing) if (ciks[t]) cache.set(t, { cik: ciks[t], checked_at: 0, seen: {} });
+  for (const t of missing) if (ciks[t]) cache.set(t, { v: VERSION, cik: ciks[t], checked_at: 0, seen: {} });
 
   const pending: string[] = [];
   const unknown = tickers.filter((t) => !cache.has(t));
@@ -169,7 +198,7 @@ export async function stockEvents(env: Env, tickers: string[], limit: number) {
     if (!done) pending.push(t);
     if (JSON.stringify(c) !== before) await env.HIST.put(`tev/${t}.json`, JSON.stringify(c));
   }
-  const data: Record<string, { cik: string; checked_at: string | null; events: StockEvent[] }> = {};
-  for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, events: events(c).slice(0, limit) };
+  const data: Record<string, { cik: string; checked_at: string | null; from: Cached['from'] | null; events: StockEvent[] }> = {};
+  for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, from: c.from ?? null, events: events(c).slice(0, limit) };
   return { tickers: data, pending, unknown };
 }

@@ -508,7 +508,10 @@ ROUTES.push(
       filerSlug = f.row.slug;
       filerCik = f.row.cik;
     }
-    const ticker = p.get('ticker')?.toUpperCase() ?? null;
+    // ticker= and tickers= (up to 20, comma-separated): also every Form 4 by the issuer's own insiders and
+    // every 13D/G any filer made on it, read from the issuer's EDGAR feeds (the same data as My book's /events).
+    const tickers = [...new Set(`${p.get('tickers') ?? ''},${p.get('ticker') ?? ''}`.toUpperCase().split(',').map((t) => t.trim().replace('-', '.')).filter(Boolean))];
+    if (tickers.length > 20 || tickers.some((t) => !/^[A-Z][A-Z0-9.]{0,9}$/.test(t))) return v1error('bad_request', 400, 'tickers: up to 20 comma-separated tickers like BRK.B.');
     const cusip = p.get('cusip')?.toUpperCase() ?? null;
     const issuerCik = p.get('issuer_cik') ? pad(p.get('issuer_cik')!) : null;
     // Every event the investor pages show, with acceptance, Item 4, classes and the previous stake read
@@ -526,17 +529,19 @@ ROUTES.push(
     // The poll's fields win where it has them; a null from the poll never blanks a value the build read.
     const over = (e: Record<string, unknown>) => ({ ...e, ...Object.fromEntries(Object.entries(polled.get(key(e as { id: string; slug: string })) ?? {}).filter(([, v]) => v !== null && v !== undefined)) });
     const all = [...base.map(over), ...ring.filter((e) => !inBase.has(key(e)))];
-    const rows = all
+    const curated = all
       .map((e) => ({
         accession: e.id,
         form: e.form,
         kind: e.kind,
         action: e.action ?? null,
-        filer: { slug: e.slug || null, cik: pad(cikOf(e.url, '0')), name: e.manager ?? null },
+        filer: { slug: e.slug || null, cik: pad(cikOf(e.url, '0')) as string | null, name: e.manager ?? null },
         issuer: { name: e.issuer ?? null, cik: e.issuer_cik ?? null, ticker: e.ticker ?? null, cusip: e.cusip ?? null, display_name: e.display_name ?? null },
         filing_date: e.filing_date,
         accepted_at: noMs(e.accepted ?? e.accepted_at),
         event_date: e.event_date ?? null,
+        last_transaction_date: e.kind === 'form4' ? (e.last_transaction_date ?? null) : null,
+        source: 'filer' as 'filer' | 'issuer',
         shares: e.shares ?? null,
         value_usd: e.value_usd ?? null,
         avg_price: e.avg_price ?? null,
@@ -550,12 +555,63 @@ ROUTES.push(
         insider: e.insider ?? null,
         details_pending: e.details_pending ?? false,
         sec_url: e.url,
-      }))
+      }));
+    let coverage: Record<string, unknown> | undefined;
+    let pending: string[] | undefined;
+    const issuerRows: typeof curated = [];
+    if (tickers.length) {
+      const { stockEvents } = await import('./stockevents');
+      // Every filing kept per ticker (not a page of it), so `coverage` describes exactly what is served.
+      const r = await stockEvents(env, tickers, 50);
+      pending = r.pending;
+      coverage = Object.fromEntries(tickers.map((t) => [t, r.tickers[t] ? { issuer_cik: r.tickers[t].cik, form4_from: r.tickers[t].from?.form4 ?? null, schedule13_from: r.tickers[t].from?.schedule13 ?? null, checked_at: r.tickers[t].checked_at } : null]));
+      const have = new Map(curated.map((e) => [e.accession, e]));
+      for (const [t, x] of Object.entries(r.tickers)) {
+        for (const e of x.events) {
+          const same = have.get(e.accession);
+          if (same) {
+            // A filer's own row for this Form 4: the dates just read from the filing win over an older build's.
+            if (same.kind === 'form4' && e.event_date) Object.assign(same, { event_date: e.event_date, last_transaction_date: e.last_transaction_date });
+            continue;
+          }
+          const f4 = e.form.startsWith('4');
+          issuerRows.push({
+            accession: e.accession,
+            form: e.form,
+            kind: f4 ? 'form4' : /13G/.test(e.form) ? '13g' : '13d',
+            action: e.action,
+            filer: { slug: null, cik: e.filer_cik, name: e.filer_name },
+            issuer: { name: e.issuer, cik: x.cik, ticker: t, cusip: null, display_name: null },
+            // The ET day EDGAR accepted it (feeds carry no filing date).
+            filing_date: new Date(Date.parse(e.accepted_at) - 5 * 3600_000).toISOString().slice(0, 10),
+            accepted_at: e.accepted_at,
+            event_date: e.event_date,
+            last_transaction_date: e.last_transaction_date,
+            source: 'issuer',
+            shares: e.shares,
+            value_usd: e.value_usd,
+            avg_price: e.price,
+            shares_after: e.shares_after,
+            percent_of_class: e.percent_of_class,
+            ten_percent_owner: f4 ? /10% owner/.test(e.role ?? '') : null,
+            amendment_no: null,
+            prev: null,
+            classes: e.classes ?? null,
+            purpose: null,
+            insider: f4 ? { name: e.filer_name, roles: (e.role ?? '').split(', ').filter(Boolean), ownership: e.ownership } : null,
+            details_pending: false,
+            sec_url: e.url,
+          });
+          have.set(e.accession, issuerRows[issuerRows.length - 1]);
+        }
+      }
+    }
+    const rows = [...curated, ...issuerRows]
       .filter(
         (e) =>
           (!kinds || kinds.includes(e.kind)) &&
           (!filerSlug || e.filer.slug === filerSlug || e.filer.cik === filerCik) &&
-          (!ticker || e.issuer.ticker === ticker) &&
+          (!tickers.length || tickers.includes(e.issuer.ticker ?? '')) &&
           (!cusip || (e.issuer.cusip ?? '').startsWith(cusip.slice(0, cusip.length >= 9 ? 9 : 6))) &&
           (!issuerCik || e.issuer.cik === issuerCik) &&
           (!from || e.filing_date >= from) &&
@@ -563,7 +619,7 @@ ROUTES.push(
       )
       .sort((a, b) => (b.accepted_at ?? `${b.filing_date}T23`).localeCompare(a.accepted_at ?? `${a.filing_date}T23`) || b.accession.localeCompare(a.accession));
     const page = rows.slice(offset, offset + limit);
-    return v1json({ data: page, count: rows.length, next_offset: offset + limit < rows.length ? offset + limit : null });
+    return v1json({ data: page, count: rows.length, next_offset: offset + limit < rows.length ? offset + limit : null, ...(coverage ? { coverage, pending } : {}) });
   }],
   ['GET', /^\/v1\/changes\/([^/]+)$/, async ({ env, url }, [quarter]) => {
     const p = url.searchParams;
