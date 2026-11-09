@@ -726,7 +726,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   const holdersJson = path.match(/^\/stocks\/([A-Za-z0-9.-]{1,10})\/holders$/);
   if (req.method === 'GET' && holdersJson) {
     if (!isPro(m)) return json({ ok: false, error: 'Every holder of a stock is part of Copy Pro and Copy Fund', code: 'pro_required' }, 403, h);
-    const { holdersOf, holderFilter, issuerCode, filerCount } = await import('./v1data');
+    const { holdersOf, holderFilter, issuerCode, splitHolders } = await import('./v1data');
     const keep = holderFilter(url.searchParams);
     const limit = Number(url.searchParams.get('limit') ?? 200);
     const offset = Number(url.searchParams.get('offset') ?? 0);
@@ -734,8 +734,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const is = await issuerCode(env, holdersJson[1]);
     const hs = is ? await holdersOf(env, is.code) : null;
     if (!is || !hs) return json({ ok: false, error: 'unknown ticker', code: 'not_found' }, 404, h);
-    const rows = hs.rows.filter(keep);
-    return json({ ok: true, issuer: hs.issuer, ticker: is.ticker ?? hs.tickers[0] ?? null, tickers: hs.tickers, counts: hs.counts, truncated: hs.truncated, count: rows.length, filers: filerCount(rows), holders: rows.slice(offset, offset + limit), next_offset: offset + limit < rows.length ? offset + limit : null }, 200, { ...h, 'cache-control': 'private, max-age=300' });
+    // Current share positions by default; calls and puts, and exits, in their own lists (include_options=true mixes options in).
+    const sp = splitHolders(hs.rows.filter(keep), url.searchParams.get('include_options') === 'true');
+    return json({ ok: true, issuer: hs.issuer, ticker: is.ticker ?? hs.tickers[0] ?? null, tickers: hs.tickers, counts: hs.counts, truncated: hs.truncated, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { ...h, 'cache-control': 'private, max-age=300' });
   }
 
   // Holders of one stock as CSV: every 13F filer (the holder index, ?type= lenses it), until it's in R2 Copybook's curated funds.

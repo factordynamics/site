@@ -444,10 +444,25 @@ export function currentQuarters(now: number): [string, string] {
   return [newest, nq === 1 ? `${ny - 1}Q4` : `${ny}Q${nq - 1}`];
 }
 
-/** A row that holds something (calls and puts rows with 0 shares and $0 are kept but count as no holder). */
-export const holds = (r: { shares: number; value_usd: number }) => (r.shares ?? 0) > 0 || (r.value_usd ?? 0) > 0;
+/** A row that holds something: an exit (0 shares, $0, equity or options) is no holder. */
+export const holds = (r: { shares: number; value_usd: number; change?: string | null }) => r.change !== 'exited' && ((r.shares ?? 0) > 0 || (r.value_usd ?? 0) > 0);
 /** Distinct filers with a nonzero position among rows. */
 export const filerCount = (rows: HolderRow[]) => new Set(rows.filter(holds).map((r) => r.filer.cik)).size;
+
+/**
+ * A holder list split the way /v1 and the member route return it: `holders` are current share (SH)
+ * positions, or shares and options mixed with include_options=true; `options` the call and put rows;
+ * `exited` the filers whose latest book left the position (0 shares). `filers` counts distinct filers
+ * with a nonzero position among `holders`, `count` the rows in it.
+ */
+export function splitHolders(rows: HolderRow[], includeOptions: boolean) {
+  const live = rows.filter(holds);
+  const holders = includeOptions ? live : live.filter((r) => !r.put_call);
+  const options = live.filter((r) => !!r.put_call);
+  const exited = rows.filter((r) => !holds(r));
+  const optionCount = (pc: string) => ({ rows: options.filter((r) => r.put_call === pc).length, filers: new Set(options.filter((r) => r.put_call === pc).map((r) => r.filer.cik)).size });
+  return { holders, options, exited, count: holders.length, filers: filerCount(holders), options_count: { calls: optionCount('Call'), puts: optionCount('Put') }, exited_count: exited.length };
+}
 
 export interface HolderRow {
   filer: { cik: string; name: string; slug: string | null; type: string | null; curated: boolean | null };
@@ -465,6 +480,20 @@ export interface HolderRow {
   weight: number | null;
   accession: string | null;
   accepted_at: string | null;
+}
+
+/** Ingest's type for every 13F filer by CIK (filer_types.json, ~9,000 CIKs), read once an hour per isolate. */
+let TYPES: { at: number; by: Map<string, string> } | null = null;
+async function filerTypes(env: Env): Promise<Map<string, string>> {
+  if (TYPES && Date.now() - TYPES.at < 3600_000) return TYPES.by;
+  try {
+    const res = await fetch(`${env.DATA_URL}filer_types.json`, { cf: { cacheTtl: 900 } } as RequestInit);
+    const d = res.ok ? ((await res.json()) as { filers?: Record<string, { type?: string }> }) : null;
+    TYPES = { at: Date.now(), by: new Map(Object.entries(d?.filers ?? {}).filter(([, v]) => v?.type).map(([k, v]) => [pad(k), v.type!])) };
+  } catch {
+    TYPES = { at: Date.now(), by: TYPES?.by ?? new Map() };
+  }
+  return TYPES.by;
 }
 
 /**
@@ -485,6 +514,7 @@ export async function holdersOf(env: Env, code: string): Promise<{ issuer: strin
     d = await res.json();
   }
   const cur = new Map((await filers(env)).map((f) => [f.cik, f]));
+  const types = await filerTypes(env);
   const rows = rowsOf({ columns: d.columns, rows: d.rows ?? d.holders ?? [] }).map((h): HolderRow => {
     const cik = pad(String(h.cik));
     const c = cur.get(cik);
@@ -492,7 +522,7 @@ export async function holdersOf(env: Env, code: string): Promise<{ issuer: strin
     const latest = c && period && c.latest_quarter === period;
     const total = latest ? c.total_value_usd : null;
     return {
-      filer: { cik, name: h.name, slug: h.slug ?? c?.slug ?? null, type: h.type ?? c?.type ?? null, curated: h.curated ?? (c ? true : null) },
+      filer: { cik, name: h.name, slug: h.slug ?? c?.slug ?? null, type: h.type ?? types.get(cik) ?? c?.type ?? null, curated: h.curated ?? (c ? true : null) },
       period,
       kind: h.kind ?? (h.put_call ? `${String(h.put_call).toLowerCase()}s` : 'equity'),
       put_call: h.put_call ?? (h.kind === 'calls' ? 'Call' : h.kind === 'puts' ? 'Put' : null),
@@ -525,7 +555,7 @@ export function holderFilter(p: URLSearchParams, now = Date.now()): ((r: HolderR
   const types = p.get('type')?.split(',').map((x) => x.trim()).filter(Boolean) ?? [];
   const cohort = p.get('cohort') ?? 'all';
   const cur = p.get('current_only') ?? 'true';
-  if (types.some((t) => !FILER_TYPES.includes(t)) || !['all', 'curated'].includes(cohort) || !['true', 'false'].includes(cur)) return null;
+  if (types.some((t) => !FILER_TYPES.includes(t)) || !['all', 'curated'].includes(cohort) || !['true', 'false'].includes(cur) || !['true', 'false', null].includes(p.get('include_options'))) return null;
   const want = new Set(types.flatMap((t) => [t, SAME_TYPE[t] ?? t]));
   const quarters = currentQuarters(now);
   return (r) => (!types.length || want.has(r.filer.type ?? '')) && (cohort === 'all' || r.filer.curated === true) && (cur === 'false' || !r.period || quarters.includes(r.period));
@@ -602,8 +632,9 @@ ROUTES.push(
     if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
     // Each filer's latest full book: periods differ by filer (a fund that filed its Q3 13F shows Q3).
     const rows = h.rows.filter((r) => keep(r) && (!quarter || r.period === quarter));
-    const data = { issuer: h.issuer, ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts, truncated: h.truncated, holders: rows.slice(offset, offset + limit) };
-    return v1json({ ...(h.stamp ?? {}), data, count: rows.length, filers: filerCount(rows), next_offset: offset + limit < rows.length ? offset + limit : null });
+    const sp = splitHolders(rows, p.get('include_options') === 'true');
+    const data = { issuer: h.issuer, ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited };
+    return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, url }) => {
     // Persistent per-quarter exports of every filer's book, uploaded by the data run.
