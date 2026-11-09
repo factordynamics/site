@@ -154,7 +154,7 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
         </div>
       )}
 
-      <div className="mt-10 grid gap-5 md:grid-cols-2">
+      <div className="mt-10 grid grid-cols-1 gap-5 md:grid-cols-2">
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-semibold">Plan</h2>
@@ -198,6 +198,7 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
             {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
           </p>
+          {!cancelling && member.interval === 'monthly' && !trial && <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">Monthly plans can pause between seasons; your names digest keeps coming.</p>}
           {!cancelling && <Leave member={member} onChange={onChange} />}
             </>
           )}
@@ -270,12 +271,12 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
 
       {(member.active || paused) && status === 'ready' && follows.onboarded && !editing && (
         <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <h2 className="flex items-center gap-2 text-[15px] font-semibold">
               Following
               {member.plan === 'fund' && <Badge tone="accent">Shared with your team</Badge>}
             </h2>
-            <span className="flex items-center gap-1">
+            <span className="flex flex-wrap items-center gap-1">
               {follows.investors.length > 0 && <CsvButton variant="outline" label="Latest 13F holdings (CSV)" download={() => downloadFile('/follows.csv', `copybook-followed-${new Date().toISOString().slice(0, 10)}.csv`)} />}
               <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
                 Edit
@@ -588,7 +589,7 @@ function Paused({ until, onChange }: { until: number; onChange: (m: Member) => v
   return (
     <div className="mt-4">
       <p className="rounded-xl bg-[#fdf3e1] px-3.5 py-2.5 text-[14px] text-[#7a4b06]">
-        Paused until {dayLabel(until)}. No charges or alerts until then; your follows, names and settings are kept.
+        <span className="font-medium">Paused until {dayLabel(until)}</span> · No charges and no real-time alerts until then. The weekly digest of your names keeps coming, and your follows and settings are kept.
       </p>
       <Button
         variant="dark"
@@ -691,7 +692,7 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
           Keep my plan
         </button>
       </div>
-      {offer && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Pausing stops charges and alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. Your follows, names and settings stay, and we’ll email you before it resumes.</p>}
+      {offer && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Pausing stops charges and real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. The weekly digest of your names keeps coming, your follows and settings stay, and we’ll email you before it resumes.</p>}
       {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
     </div>
   )

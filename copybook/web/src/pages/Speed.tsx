@@ -100,7 +100,7 @@ export function Speed() {
         </section>
       ) : (
         !loading && (
-          <div className="mt-6 grid gap-5 lg:grid-cols-2">
+          <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Panel title="By form type" sub="Median and 90th percentile this season">
               <Rows rows={FORMS.map(([k, label]) => [k, label, stat(d?.by_form, k)])} />
             </Panel>

@@ -89,7 +89,7 @@ export function FundSetup({ member, welcome }: { member: Member; welcome?: boole
             localStorage.setItem(KEY, '1')
             setHidden(true)
           }}
-          className="text-[13px] text-ink-3 hover:text-ink"
+          className="-m-2 p-2 text-[13px] text-ink-3 hover:text-ink"
         >
           Hide
         </button>

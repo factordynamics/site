@@ -200,14 +200,14 @@ function Quickstart({ apiKey }: { apiKey?: string }) {
         <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
           <div className="flex gap-1 text-[12.5px]" role="tablist" aria-label="Language">
             {(['curl', 'python'] as const).map((t) => (
-              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`rounded-full px-2.5 py-1 ${tab === t ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white'}`}>
+              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`min-h-9 rounded-full px-3 py-1 ${tab === t ? 'bg-white/15 text-white' : 'text-white/60 hover:text-white'}`}>
                 {t === 'curl' ? 'curl' : 'Python'}
               </button>
             ))}
           </div>
           <button
             type="button"
-            className="rounded-full px-2.5 py-1 text-[12.5px] text-white/70 hover:bg-white/10 hover:text-white"
+            className="min-h-9 rounded-full px-3 py-1 text-[12.5px] text-white/70 hover:bg-white/10 hover:text-white"
             onClick={() => navigator.clipboard.writeText(code).then(() => setCopied(true), () => null)}
           >
             {copied ? 'Copied' : 'Copy'}
@@ -219,7 +219,7 @@ function Quickstart({ apiKey }: { apiKey?: string }) {
       </div>
       <p className="ml-9 mt-2 text-[12.5px] text-ink-3">Send a User-Agent that names your app. Library defaults such as Python urllib’s are blocked.</p>
       <Step n={3} title="Explore the API" />
-      <p className="ml-9 mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[14px]">
+      <p className="ml-9 mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[14px] [&>a]:inline-flex [&>a]:min-h-9 [&>a]:items-center">
         <Link to="/api/" className="font-medium text-accent hover:text-accent-2">
           Endpoints and docs
         </Link>

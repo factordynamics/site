@@ -122,7 +122,7 @@ export function FreeNames({ className = '' }: { className?: string }) {
                   fact(data.data?.[i] ?? null, t)
                 )}
               </span>
-              <button type="button" onClick={() => setFollow('owned', t, false).catch(() => null)} className="shrink-0 text-[12.5px] text-ink-3 hover:text-down" aria-label={`Remove ${t}`}>
+              <button type="button" onClick={() => setFollow('owned', t, false).catch(() => null)} className="-my-2 min-h-11 shrink-0 px-1 text-[12.5px] text-ink-3 hover:text-down" aria-label={`Remove ${t}`}>
                 Remove
               </button>
             </li>
@@ -145,7 +145,7 @@ export function FreeNames({ className = '' }: { className?: string }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={full ? 'Copy keeps unlimited names' : 'Add tickers, e.g. AAPL, MSFT'}
-          className="h-10 min-w-0 flex-1 rounded-full bg-paper px-4 font-mono text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:font-sans placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
+          className="h-11 w-full min-w-0 rounded-full bg-paper px-4 font-mono sm:h-10 sm:flex-1 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:font-sans placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
         />
         <Button type="submit" variant="outline" disabled={busy}>
           {busy ? 'Adding…' : 'Add'}

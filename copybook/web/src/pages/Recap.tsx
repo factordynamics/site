@@ -60,7 +60,7 @@ export function Recap() {
         </p>
       </header>
 
-      <section className="mt-10 grid gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-5" aria-label="Season totals">
+      <section className="mt-10 grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-5" aria-label="Season totals">
         {(
           [
             ['Superinvestors filed', d ? `${d.superinvestors.filed} of ${d.superinvestors.total}` : null, d?.final ? 'deadline passed' : 'so far'],
@@ -97,7 +97,7 @@ export function Recap() {
               ))}
             </div>
           </div>
-          <div className="mt-3 grid gap-5 lg:grid-cols-2">
+          <div className="mt-3 grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Panel title="Most bought" sub={by === 'pct' ? 'Each superinvestor’s buy as a share of its book, summed; ETFs left out' : 'Net dollars added by superinvestors, ETFs and index funds left out'}>
               {by === 'pct' ? <PctBars rows={d.most_bought_pct ?? []} paid={paid} what="most bought" /> : <Bars rows={d.most_bought} paid={paid} what="most bought" />}
             </Panel>
@@ -110,7 +110,7 @@ export function Recap() {
             <Buyers rows={d.most_buyers} paid={paid} />
           </Panel>
 
-          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Panel title="New positions" sub={`${d.opened_count} opened, largest first`}>
               <Moves rows={d.opened} paid={paid} what="new positions" />
             </Panel>
@@ -124,7 +124,7 @@ export function Recap() {
           </Panel>
 
           <Panel className="mt-5" title="Who filed when" sub={d.final ? 'After the deadline, late filings still appear here as EDGAR accepts them' : 'Superinvestors still to file, by the day they usually file'}>
-            <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
               <div className="space-y-6">
                 <List
                   title={`Filed (${d.filing.filter((x) => x.filed).length})`}
@@ -311,7 +311,7 @@ function Moves({ rows, paid, what, wide = false }: { rows: RecapMove[]; paid: bo
         {shown.map((m) => (
           <li key={`${m.slug}-${m.ticker}`} className="flex items-center gap-3 py-2.5 text-[13.5px]">
             {wide && <span className={`w-16 shrink-0 text-[12px] font-medium ${m.delta_value >= 0 ? 'text-up' : 'text-down'}`}>{CHANGE[m.change]}</span>}
-            <Link to={stockPath(m.ticker)} className="w-14 shrink-0 font-mono text-[13px] font-semibold hover:text-accent">
+            <Link to={stockPath(m.ticker)} className="-my-2 w-14 shrink-0 py-2 font-mono text-[13px] font-semibold hover:text-accent">
               {m.ticker}
             </Link>
             <span className="min-w-0 flex-1 truncate">

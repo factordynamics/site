@@ -100,7 +100,7 @@ export function Season() {
         </div>
       </header>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Progress label="Superinvestors" sub={d ? `updated ${ago(now - Date.parse(d.generated_at))}` : 'legendary investors we feature'} v={d?.featured} />
         <Progress label="Funds we track closely" sub="with alerts, moves and history" v={d?.curated} />
         <Progress label="All 13F filers" sub="of the filers active last quarter" v={d?.filers} />

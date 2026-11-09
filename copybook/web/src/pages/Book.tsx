@@ -332,8 +332,9 @@ export function Book() {
                   sub={`of the ${LENS_WHO[lens]} holding your names`}
                 />
                 {(() => {
-                  const top = ready ? [...rows].sort((a, b) => b.top10 / Math.max(1, b.holders) - a.top10 / Math.max(1, a.holders))[0] : null
-                  return <Stat label="Most crowded name" value={top ? top.ticker : '—'} sub={top ? `in ${top.top10.toLocaleString('en-US')} of its ${top.holders.toLocaleString('en-US')} holders’ top 10` : 'share of holders with it in their top 10'} />
+                  // At least 10 holders in the lens, so "1 of its 2 holders" never wins.
+                  const top = ready ? ([...rows].filter((r) => r.holders >= 10).sort((a, b) => b.top10 / b.holders - a.top10 / a.holders)[0] ?? null) : null
+                  return <Stat label="Most crowded name" value={top ? top.ticker : '—'} sub={top ? `in ${top.top10.toLocaleString('en-US')} of its ${top.holders.toLocaleString('en-US')} holders’ top 10` : ready ? 'no name with 10+ holders in this lens' : 'share of holders with it in their top 10'} />
                 })()}
               </>
             ) : (
@@ -376,7 +377,7 @@ export function Book() {
                   <tr className="border-b border-line text-[12.5px] text-ink-3">
                     {COLS.map(([k, l, align]) => (
                       <th key={k} aria-sort={sort.k === k ? (sort.desc ? 'descending' : 'ascending') : 'none'} className={`whitespace-nowrap px-3 py-2.5 font-medium first:pl-5 last:pr-5 md:first:pl-6 md:last:pr-6 ${align === 'right' ? 'text-right' : 'text-left'}`}>
-                        <button type="button" onClick={() => setSort((s) => ({ k, desc: s.k === k ? !s.desc : k !== 'ticker' }))} className="inline-flex items-center gap-1 hover:text-ink">
+                        <button type="button" onClick={() => setSort((s) => ({ k, desc: s.k === k ? !s.desc : k !== 'ticker' }))} className="-my-2 inline-flex min-h-9 items-center gap-1 hover:text-ink">
                           {k === 'filed' && season ? `Filed ${quarterLabel(season).split(' ')[0]}` : k === 'holders' ? { hedge: 'Hedge funds', smart: 'HF + long-only', all: 'Filers', tracked: 'Funds' }[lens] : l}
                           {lens !== 'tracked' && (k === 'net' || ((k === 'added' || k === 'exited') && !(lens === 'all' && exactAll))) && '*'}
                           <span aria-hidden="true" className={sort.k === k ? 'text-ink' : 'opacity-0'}>

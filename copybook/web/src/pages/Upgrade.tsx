@@ -173,7 +173,7 @@ function Change({ member, target }: { member: Member; target: 'pro' | 'fund' }) 
         <div className="border-t border-line p-5 md:p-6">
           {cancelling && <p className="mb-3 text-[13.5px] text-[#8a5a0b]">Your plan is set to end. Stripe may ask you to resume it before switching.</p>}
           {target === 'fund' ? (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div className="rounded-xl bg-paper p-4">
                 <p className="text-[14px] font-semibold">Switch now</p>
                 <p className="mt-1 min-h-[2.5em] text-[13px] text-ink-2">On your card, prorated, with seats ready right away.</p>
