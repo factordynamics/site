@@ -12,8 +12,9 @@ const shell = readFileSync(join(dist, 'index.html'), 'utf8')
 const SITE = process.env.VITE_SITE || 'https://copybook.factordynamics.com/'
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
-function page(path, title, desc, extra = '') {
+function page(path, title, desc, extra = '', image = null) {
   let html = shell
+    .replaceAll(`${SITE}og.png`, () => image ?? `${SITE}og.png`)
     // Function replacers only: a replacement string reads "$1.7B" in a description as the $1 backreference.
     .replace(/<title>.*?<\/title>/, () => `<title>${esc(title)}</title>`)
     .replace(/(<meta name="description" content=")[^"]*/, (_, p) => p + esc(desc))
@@ -37,10 +38,15 @@ page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one co
 page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, full history, filing alerts and CSV export.')
 page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
 {
+  // The season tracker's share card (scripts/cards.mjs), with its cache-busting URL.
+  let season = null
+  try {
+    season = JSON.parse(readFileSync(join(dist, 'og', 'season.json'), 'utf8'))
+  } catch {}
   // The season tracker's title names the quarter now filing, for search during filing week.
   const qs = index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort()
   const q = qs.at(-1)?.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1') ?? 'Quarterly'
-  page('season/', `${q} 13F filing season tracker: who has filed and what they bought · Copybook`, `Live through the 13F deadline: how many superinvestors and filers have filed ${q} 13Fs, the latest filings, and the most bought and sold stocks so far. From SEC EDGAR.`)
+  page('season/', `${q} 13F filing season tracker: who has filed and what they bought · Copybook`, `Live through the 13F deadline: how many superinvestors and filers have filed ${q} 13Fs, the latest filings, and the most bought and sold stocks so far. From SEC EDGAR.`, '', season?.url)
 }
 page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F alerts · Copy Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack minutes after EDGAR. Five seats, invoiced annually.')
 page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Copy Pro', 'Every 13F filer’s latest holdings as JSON, with EDGAR accession and acceptance time on every filing. Point-in-time amendments, audited against EDGAR, from $39/month.')

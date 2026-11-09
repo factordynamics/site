@@ -3,10 +3,12 @@
 // 1200x630 share image) and <out>/f/{accession}/index.html with that image in its OG tags.
 // Runs in the Pages build after vite and before postbuild (copybook-pages.yml).
 // Usage: node scripts/cards.mjs <out dir> [data base URL or dir]
+import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
 import { displayName } from '../src/lib/names.mjs'
+import { isEdgarDay } from '../src/lib/calendar.mjs'
 import { getJson } from './getjson.mjs'
 
 const out = process.argv[2] || 'dist'
@@ -133,3 +135,61 @@ for (let i = 0; i < recent.length; i += 16) {
 // Investor pages and Flow link a fund's card only when it exists.
 writeFileSync(join(out, 'd', 'f', 'index.json'), JSON.stringify({ generated_at: index.generated_at, cards: list.sort((a, z) => z.filing_date.localeCompare(a.filing_date)) }))
 console.log(`filing cards: ${list.length}`)
+
+// The /season/ share card: superinvestors filed, EDGAR days left, and who files next (or, once ten
+// superinvestors have filed, what they bought most). Rebuilt every Pages build; the meta tags carry a
+// content hash (?v=) so X and Slack fetch the new image whenever the numbers change.
+{
+  const s = JSON.parse(readFileSync(join(out, 'd', 'season.json'), 'utf8'))
+  const due = new Date(s.deadline)
+  const now = new Date()
+  const et = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+  const today = et(now)
+  let daysLeft = 0
+  for (let t = new Date(`${today}T12:00:00Z`); et(due) >= t.toISOString().slice(0, 10); t.setUTCDate(t.getUTCDate() + 1)) if (isEdgarDay(t.toISOString().slice(0, 10))) daysLeft++
+  const passed = now > due
+  const clock = (m) => `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'am' : 'pm'}`
+  const day = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+  const bought = s.featured.filed >= 10
+  const list = bought
+    ? (s.featured_flow?.bought ?? []).filter((r) => !r.etf && r.net_value > 0).slice(0, 3).map((r) => [r.ticker, cut(r.name, 30), `+${money(r.net_value)} · ${r.n_buyers} ${r.n_buyers === 1 ? 'buyer' : 'buyers'}`])
+    : (s.expected ?? [])
+        .filter((x) => !x.filed && x.expected_date && x.expected_date >= today)
+        .sort((a, b) => a.expected_date.localeCompare(b.expected_date) || a.time_et - b.time_et)
+        .slice(0, 3)
+        .map((x) => [day(x.expected_date), cut(displayName(x.manager), 30), `around ${clock(x.time_et)} ET`])
+  const q = qLabel(s.quarter)
+  const rows = list
+    .map(([a, b, c], i) => {
+      const y = 430 + i * 50
+      return `<text x="72" y="${y}" font-family="${bought ? 'Geist Mono' : 'Geist'}" font-weight="600" font-size="${bought ? 27 : 24}" fill="#0c0e13">${x(a)}</text>
+<text x="${bought ? 200 : 250}" y="${y}" font-family="Geist" font-weight="500" font-size="25" fill="#0c0e13">${x(b)}</text>
+<text x="1128" y="${y}" text-anchor="end" font-family="Geist" font-weight="${bought ? 600 : 500}" font-size="23" fill="${bought ? '#126b3c' : '#5f6572'}">${x(c)}</text>`
+    })
+    .join('\n')
+  const card = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<rect width="1200" height="630" fill="#fbfaf7"/>
+<g transform="translate(72 58) scale(1.75)"><rect x="1.5" y="5" width="14" height="17.5" rx="3.2" fill="#0c0e13"/><rect x="8" y="1.5" width="14.5" height="17.5" rx="3.2" fill="#2b44d6" stroke="#fbfaf7" stroke-width="1.4"/><rect x="11" y="6" width="8.5" height="1.8" rx=".9" fill="#fff"/><rect x="11" y="9.6" width="6" height="1.8" rx=".9" fill="#fff" opacity=".85"/><rect x="11" y="13.2" width="3.6" height="1.8" rx=".9" fill="#fff" opacity=".7"/></g>
+<text x="124" y="94" font-family="Geist" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Copybook</text>
+<text x="1128" y="92" text-anchor="end" font-family="Geist" font-weight="500" font-size="22" fill="#5f6572">${x(`${q} 13F season · due ${day(et(due))}`)}</text>
+<text x="72" y="170" font-family="Geist" font-weight="500" font-size="24" fill="#5f6572">Superinvestors filed</text>
+<text x="72" y="262" font-family="Geist" font-weight="600" font-size="96" letter-spacing="-4" fill="#0c0e13">${s.featured.filed}<tspan dx="14" font-size="48" fill="#8a8f99" letter-spacing="-1">of ${s.featured.total}</tspan></text>
+<rect x="72" y="290" width="560" height="10" rx="5" fill="#ece9e2"/>
+<rect x="72" y="290" width="${Math.max(10, Math.round((560 * s.featured.filed) / Math.max(1, s.featured.total)))}" height="10" rx="5" fill="#2b44d6"/>
+<rect x="760" y="132" width="368" height="168" rx="20" fill="#0c0e13"/>
+<text x="792" y="176" font-family="Geist" font-weight="500" font-size="22" fill="#a9adb6">${passed ? 'Deadline' : 'EDGAR days left'}</text>
+<text x="792" y="262" font-family="Geist" font-weight="600" font-size="${passed ? 64 : 88}" letter-spacing="-3" fill="#ffffff">${passed ? 'Passed' : daysLeft}</text>
+<path d="M72 340H1128" stroke="#e6e3dc"/>
+<text x="72" y="380" font-family="Geist" font-weight="700" font-size="17" letter-spacing="1.6" fill="#2b44d6">${bought ? 'MOST BOUGHT BY SUPERINVESTORS' : 'EXPECTED TO FILE NEXT'}</text>
+${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572">${bought ? 'No buys yet' : 'Every superinvestor with a pattern has filed'}</text>`}
+<path d="M72 556H1128" stroke="#e6e3dc"/>
+<text x="72" y="596" font-family="Geist" font-weight="500" font-size="22" fill="#393e49">${x(`${s.curated.filed.toLocaleString('en-US')} of ${s.curated.total.toLocaleString('en-US')} tracked funds · ${s.filers.filed.toLocaleString('en-US')} filers so far`)}</text>
+<text x="1128" y="596" text-anchor="end" font-family="Geist" font-weight="600" font-size="22" fill="#2b44d6">copybook.factordynamics.com/season</text>
+</svg>`
+  const v = createHash('sha1').update(card).digest('hex').slice(0, 10)
+  mkdirSync(join(out, 'og'), { recursive: true })
+  writeFileSync(join(out, 'og', 'season.png'), new Resvg(card, { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng())
+  // postbuild.mjs puts this URL in /season/'s share tags.
+  writeFileSync(join(out, 'og', 'season.json'), JSON.stringify({ url: `${SITE}og/season.png?v=${v}`, superinvestors_filed: s.featured.filed, days_left: passed ? 0 : daysLeft, mode: bought ? 'most_bought' : 'expected' }))
+  console.log(`season card: ${s.featured.filed} of ${s.featured.total} filed, ${passed ? 'deadline passed' : `${daysLeft} EDGAR days left`}, ${list.length} ${bought ? 'most bought' : 'expected next'} (v=${v})`)
+}
