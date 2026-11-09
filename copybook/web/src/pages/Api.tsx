@@ -31,7 +31,8 @@ const METHOD_TONE: Record<string, 'up' | 'accent' | 'down' | 'neutral'> = { get:
 export function ApiDocs() {
   useTitle('API · Copybook')
   const cov = useAsync(loadCoverage, [])
-  const spec = useAsync(() => fetch(SPEC).then((r) => (r.ok ? (r.json() as Promise<Spec>) : Promise.reject(new Error(String(r.status))))), [])
+  // The build's copy of the spec (scripts/cards.mjs); the API only if the site has none.
+  const spec = useAsync(() => fetch(`${import.meta.env.BASE_URL}api/openapi.json`).then((r) => (r.ok ? r : fetch(SPEC))).then((r) => (r.ok ? (r.json() as Promise<Spec>) : Promise.reject(new Error(String(r.status))))), [])
   const s = spec.data
   const base = s?.servers?.[0]?.url ?? api
   const info = parseInfo(s?.info.description)

@@ -184,7 +184,8 @@ export function Book() {
   const asked = params.get('funds')
   const lens: Lens = LENSES.some(([k]) => k === asked) ? (asked as Lens) : byPlan
   const setLens = (l: Lens) => setParams(l === byPlan ? {} : { funds: l }, { replace: true })
-  const events = useAsync(() => (names.length ? loadEvents(names) : Promise.resolve(new Map<string, IssuerFeed>())), [names.join(',')])
+  // Copy members get My book lite, which loads its own events; this one is for Pro and Fund.
+  const events = useAsync(() => (pro && names.length ? loadEvents(names) : Promise.resolve(new Map<string, IssuerFeed>())), [pro, names.join(',')])
   // The CSV keeps the all-filer figures whatever the lens, so d/h is loaded once for every lens.
   const agg = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadFilerHolders(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(',')])
   const ready = Boolean(data.data && agg.data)

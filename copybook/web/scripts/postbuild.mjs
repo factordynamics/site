@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getJson } from './getjson.mjs'
+import { investorTitle, seasonTitle, stockTitle } from '../src/lib/titles.mjs'
 
 const dist = new URL('../dist/', import.meta.url).pathname
 const src = process.argv[2] || 'https://refcell.github.io/gust/copybook/data/index.json'
@@ -91,7 +92,7 @@ page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Co
   // The tracker's title and description carry this build's counts (rebuilt every 20 minutes in filing week).
   const sd = seasonData
   const sq = sd ? qLabel(sd.quarter) : q
-  const title = sd ? `${sq} 13F filing season: ${sd.featured.filed} of ${sd.featured.total} superinvestors filed · live tracker` : `${q} 13F filing season tracker: who has filed and what they bought · Copybook`
+  const title = sd ? seasonTitle({ quarter: sd.quarter, filed: sd.featured.filed, total: sd.featured.total }) : `${q} 13F filing season tracker: who has filed and what they bought · Copybook`
   const desc = sd
     ? `Live through the ${dayLabel(sd.deadline)} deadline: ${num(sd.filers.filed)} of about ${num(sd.filers.total)} 13F filers and ${sd.featured.filed} of ${sd.featured.total} superinvestors have filed ${sq} 13Fs. Who filed, who is next, and the most bought and sold stocks so far, from SEC EDGAR.`
     : `Live through the 13F deadline: how many superinvestors and filers have filed ${q} 13Fs, the latest filings, and the most bought and sold stocks so far. From SEC EDGAR.`
@@ -109,18 +110,39 @@ page('security/', 'Security · Copybook', 'Where Copybook keeps data and how it 
 page('about/', 'About · Copybook', 'Portfolios, as filed. How Copybook reads SEC 13F filings, and what it won’t do.')
 let n = 0
 mkdirSync(join(dist, 'managers'), { recursive: true })
+// Each tracked fund's book (from the data host), for the position counts in titles.
+const dataBase = src.replace(/index\.json$/, '')
+const books = new Map()
+{
+  const ok = index.managers.filter((m) => m.ok)
+  for (let i = 0; i < ok.length; i += 32)
+    for (const [slug, b] of await Promise.all(
+      ok.slice(i, i + 32).map(async (m) => {
+        try {
+          return [m.slug, dataBase.startsWith('http') ? await getJson(`${dataBase}${m.slug}.json`) : JSON.parse(readFileSync(`${dataBase}${m.slug}.json`, 'utf8'))]
+        } catch {
+          return [m.slug, null]
+        }
+      }),
+    ))
+      if (b) books.set(slug, b)
+}
 for (const m of index.managers) {
   if (!m.ok) continue
   const who = tc(m.manager)
   const firm = tc(m.name)
   // Live numbers in the title and description: the quarter, book size, position count and top holdings.
-  const total = m.long_value ?? m.equity_value ?? m.total_value
-  const count = m.position_count ?? m.long_positions
+  // Share positions with a value, and their total, exactly as the page counts them (options and exited
+  // zero lines apart); the index's counts include those.
+  const book = books.get(m.slug)
+  const longs = book?.holdings?.filter((x) => !x.put_call && x.value > 0)
+  const total = longs ? longs.reduce((a, x) => a + x.value, 0) : (m.long_value ?? m.equity_value ?? m.total_value)
+  const count = longs ? longs.length : (m.long_positions ?? m.position_count)
   const top = (m.top ?? [])
     .filter((h) => !h.put_call)
     .slice(0, 3)
     .map((h) => `${h.display_name ?? tc(h.issuer)} ${((h.weight ?? 0) * 100).toFixed(1)}%`)
-  const title = total ? `${who} 13F portfolio, ${qLabel(m.quarter)}: ${usd(total)} in ${num(count)} positions` : `${who} portfolio · Copybook`
+  const title = investorTitle({ who, quarter: m.quarter, value: total, positions: count })
   const desc = `${firm !== who ? `${who} (${firm})` : who}: the ${qLabel(m.quarter)} 13F${m.filing_date ? `, filed ${dayLabel(m.filing_date)}` : ''}${total ? `, ${usd(total)} across ${num(count)} positions` : ''}.${top.length ? ` Top holdings: ${top.join(', ')}.` : ''} Buys, sells and sector mix, straight from the SEC filing.`
   page(
     `investors/${m.slug}/`,
@@ -178,10 +200,13 @@ try {
     const h = readDist('d', 'h', `${s.t}.json`)
     const all = h?.index?.holders ?? h?.current
     const hedge = h?.hedge?.current ?? 0
-    const smart = h?.smart?.current ?? 0
-    const title = all ? `Who owns ${s.t}? ${num(all)} 13F filers${hedge ? `, ${num(hedge)} hedge funds` : ''} · ${seasonQ}` : `${s.t} ${s.n}: who owns it · Copybook`
+    // The page opens on the superinvestors, so the title leads with them (the same function titles the tab).
+    const sf = readDist('d', 'stocks', `${s.t}.json`)
+    const sup = sf?.holders?.filter((x) => x.featured).length ?? 0
+    const tc2 = sf?.title_counts
+    const title = tc2?.filers ? stockTitle({ ticker: s.t, superinvestors: sup, hedge: tc2.hedge, filers: tc2.filers, quarter: seasonData?.quarter }) : `${s.t} ${s.n}: who owns it · Copybook`
     const desc = all
-      ? `${s.n} (${s.t}) is held by ${num(all)} 13F filers, including ${num(hedge)} hedge funds, ${num(smart)} hedge funds and long-only managers, and ${num(s.h)} of the funds we track closely.${h?.index ? ` In their latest 13Fs, ${num(h.index.new)} opened a position and ${num(h.index.exited)} sold out.` : ''} Largest holders and who bought and sold, from SEC EDGAR.`
+      ? `${s.n} (${s.t}): ${sup ? `${num(sup)} of the superinvestors we follow hold it, ` : ''}with ${num(hedge)} hedge funds and ${num(all)} 13F filers in all.${h?.index ? ` In their latest 13Fs, ${num(h.index.new)} opened a position and ${num(h.index.exited)} sold out.` : ''} Largest holders and who bought and sold, from SEC EDGAR.`
       : `${s.n} (${s.t}): which of the investors we track hold it, who bought and sold it in the latest 13F filings, and how the holder count changed.`
     page(
       `stocks/${s.t}/`,

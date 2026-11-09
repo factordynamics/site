@@ -676,6 +676,14 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       }),
     )
     files++
+    // The page's tab title needs the same all-filer and hedge-fund counts as the prerendered title
+    // (postbuild.mjs), without loading this file: copy them into the stock file.
+    const sf = join(out, 'd', 'stocks', `${t}.json`)
+    try {
+      const s = JSON.parse(readFileSync(sf, 'utf8'))
+      s.title_counts = { filers: hlc?.holders ?? current.get(t) ?? 0, hedge: lenses.hedge.get(t)?.current ?? 0 }
+      writeFileSync(sf, JSON.stringify(s))
+    } catch {}
   }
   console.log(`all-filer holders: ${read_ok} filers, ${files} stocks (${exact} with full-book counts), ${rowsOut} rows (500 largest per stock); hedge funds and long-only hold ${lenses.smart.size} stocks, hedge funds ${lenses.hedge.size}`)
 }

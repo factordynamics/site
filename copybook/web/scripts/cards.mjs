@@ -8,8 +8,10 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
 import { displayName } from '../src/lib/names.mjs'
-import { isEdgarDay } from '../src/lib/calendar.mjs'
+import { dayName, isEdgarDay } from '../src/lib/calendar.mjs'
+import { recapTitle } from '../src/lib/titles.mjs'
 import { getJson } from './getjson.mjs'
+import { API, LATENCY_URL } from '../api.config.mjs'
 
 const out = process.argv[2] || 'dist'
 const base = process.argv[3] || process.env.VITE_DATA_BASE || 'https://refcell.github.io/gust/copybook/data/'
@@ -149,7 +151,8 @@ console.log(`filing cards: ${list.length}`)
   for (let t = new Date(`${today}T12:00:00Z`); et(due) >= t.toISOString().slice(0, 10); t.setUTCDate(t.getUTCDate() + 1)) if (isEdgarDay(t.toISOString().slice(0, 10))) daysLeft++
   const passed = now > due
   const clock = (m) => `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'am' : 'pm'}`
-  const day = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+  // A date, never "today": a card is a snapshot that gets reposted.
+  const day = (iso) => dayName(iso)
   // Most-followed first; anyone not listed ranks after, in expected order.
   const MARQUEE = ['warren-buffett', 'bill-ackman', 'stanley-druckenmiller', 'david-tepper', 'seth-klarman', 'ray-dalio', 'carl-icahn', 'li-lu', 'howard-marks', 'david-einhorn', 'bill-gates', 'dan-loeb', 'nelson-peltz', 'chase-coleman', 'terry-smith', 'chris-hohn', 'philippe-laffont']
   const rank = (slug) => (MARQUEE.includes(slug) ? MARQUEE.indexOf(slug) : MARQUEE.length)
@@ -226,6 +229,10 @@ ${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572
   const pct = (f) => [f.ticker, who(f.buyers, f.n_buyers), `+${(f.pct * 100).toFixed(1)}% of book`]
   const pctSold = (f) => [f.ticker, who(f.sellers, f.n_sellers), `−${(Math.abs(f.pct) * 100).toFixed(1)}% of book`]
   // Two cards: the page's default, and the "% of book" view (/season/{q}/pct/), so a shared link unfurls what it shows.
+  // Until about 10 superinvestors have filed, the recap names them, so it doesn't read as the whole field.
+  const filedNames = r.filing.filter((f) => f.filed).map((f) => displayName(f.manager))
+  const few = !r.final && filedNames.length > 0 && filedNames.length < 10
+  const fewWho = filedNames.length <= 3 ? filedNames.join(', ').replace(/, ([^,]+)$/, ' and $1') : `${filedNames.slice(0, 2).join(', ')} and ${filedNames.length - 2} more`
   for (const byPct of [false, true]) {
   // After the deadline the card leads with breadth: what the most superinvestors bought.
   const left = byPct
@@ -244,7 +251,7 @@ ${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572
 <text x="124" y="94" font-family="Geist" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Copybook</text>
 <text x="1128" y="92" text-anchor="end" font-family="Geist" font-weight="500" font-size="22" fill="#5f6572">${x(`${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'filed so far'}`)}</text>
 <text x="72" y="196" font-family="Geist" font-weight="600" font-size="54" letter-spacing="-2" fill="#0c0e13">${x(`${q} 13F recap`)}</text>
-<text x="72" y="238" font-family="Geist" font-size="24" fill="#5f6572">${byPct ? 'Their biggest bets, as a share of each one’s book' : 'What the superinvestors bought and sold'}${r.final ? '' : ', so far'}</text>
+<text x="72" y="238" font-family="Geist" font-size="24" fill="#5f6572">${x(byPct ? 'Their biggest bets, as a share of each one’s book' : few ? `What ${cut(fewWho, 44)} bought and sold` : 'What the superinvestors bought and sold')}${r.final ? '' : ', so far'}</text>
 <path d="M72 262H1128" stroke="#e6e3dc"/>
 ${left}
 ${right}
@@ -267,8 +274,8 @@ ${right}
     JSON.stringify({
       path: `season/${r.quarter.toLowerCase()}/${byPct ? 'pct/' : ''}`,
       url: `${SITE}og/season-${slug}.png?v=${v}`,
-      title: byPct ? `${q} 13F recap: the superinvestors' biggest bets by % of book · Copybook` : `${q} 13F recap: what the superinvestors bought and sold · Copybook`,
-      desc: `${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'have filed'} ${q} 13Fs.${ranked} New positions, full exits, the biggest moves and who filed late, from SEC EDGAR.`,
+      title: byPct ? `${q} 13F recap: the superinvestors' biggest bets by % of book · Copybook` : recapTitle({ quarter: r.quarter, filed: r.superinvestors.filed, total: r.superinvestors.total, names: filedNames, final: r.final }),
+      desc: `${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'have filed'} ${q} 13Fs${few ? ` so far: ${fewWho}` : ''}.${ranked} New positions, full exits, the biggest moves and who filed late, from SEC EDGAR.`,
     }),
   )
   console.log(`recap card${byPct ? ' (% of book)' : ''}: ${q}${r.final ? ' final' : ' so far'} (v=${v})`)
@@ -278,8 +285,20 @@ ${right}
 // /speed/'s share card: this season's median and 90th percentile from EDGAR acceptance to delivery, or
 // "Waiting for the first live alert" until there is one. Rebuilt on every build from the public /latency.
 {
-  const API = process.env.VITE_API || 'https://copybook-api.factordynamics.workers.dev'
-  const l = await fetch(`${API}/latency`).then((r) => (r.ok ? r.json() : null), () => null)
+  // The public R2 copy first (no Worker request), then the API, then the live site's copy, so an outage
+  // doesn't blank the card. The build also writes d/latency.json: pages fall back to it if R2 can't be read.
+  const json = (u) => fetch(u).then((r) => (r.ok ? r.json() : null), () => null)
+  const l = (await json(`${LATENCY_URL}?t=${Date.now()}`)) ?? (await json(`${API}/latency`)) ?? (await json(`${SITE}d/latency.json`))
+  if (l) {
+    mkdirSync(join(out, 'd'), { recursive: true })
+    writeFileSync(join(out, 'd', 'latency.json'), JSON.stringify(l))
+  }
+  // The API docs page reads the OpenAPI spec from here too, not from the API per visitor.
+  const spec = (await fetch(`${API}/v1/openapi.json`).then((r) => (r.ok ? r.text() : null), () => null)) ?? (await fetch(`${SITE}api/openapi.json`).then((r) => (r.ok ? r.text() : null), () => null))
+  if (spec) {
+    mkdirSync(join(out, 'api'), { recursive: true })
+    writeFileSync(join(out, 'api', 'openapi.json'), spec)
+  }
   const secs = (s) => (s == null ? '—' : s < 90 ? `${Math.round(s)}s` : `${(s / 60).toFixed(s < 600 ? 1 : 0)} min`)
   const n = l?.count ?? 0
   const body = !l

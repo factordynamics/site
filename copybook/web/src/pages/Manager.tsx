@@ -10,6 +10,7 @@ import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
 import { loadCards, recapPath, seasonNow, stockPath } from '../lib/stocks'
+import { investorTitle } from '../lib/titles.mjs'
 import { CuratedRedirect, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
@@ -22,7 +23,7 @@ export function ManagerPage() {
   const [view, setView] = useState<'shares' | 'options'>('shares')
   const f = m.data
   const member = useMember()
-  useTitle(f ? `${f.manager} portfolio · Copybook` : undefined)
+  useTitle(f ? investorTitle({ who: f.manager, quarter: f.quarter, value: book.total, positions: book.rows.length }) : undefined)
   const plan = mapPlan(book.rows, 20)
   const slices = foldSlices(book.sectors, 10)
 

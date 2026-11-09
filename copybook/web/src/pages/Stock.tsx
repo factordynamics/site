@@ -10,6 +10,7 @@ import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder
 import { issuerLatest } from '../lib/insiders'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
 import { dateLabel, displayName, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
+import { stockTitle } from '../lib/titles.mjs'
 import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
@@ -34,7 +35,8 @@ export function StockPage() {
   const member = useMember()
   const [n, setN] = useState(25)
   const d = s.data
-  useTitle(d ? `${d.ticker} · ${d.name}: who owns it · Copybook` : undefined)
+  // The same live-number title the build writes into the page (scripts/postbuild.mjs).
+  useTitle(d ? (d.title_counts?.filers ? stockTitle({ ticker: d.ticker, superinvestors: d.holders.filter((h) => h.featured).length, hedge: d.title_counts.hedge, filers: d.title_counts.filers, quarter: seasonNow().quarter }) : `${d.ticker} ${d.name}: who owns it · Copybook`) : undefined)
 
   // GOOG -> GOOGL, lowercase -> uppercase: send other share classes to the issuer's page.
   useEffect(() => {

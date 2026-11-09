@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { call } from '../lib/account'
+import { call, sharedGet } from '../lib/account'
 import { useFollows } from '../lib/follows'
 import { Button, Check } from './ui'
 
@@ -23,7 +23,7 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
   const [test, setTest] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
 
   const load = useCallback(() => {
-    call<{ channels: Ch }>('/channels', { auth: true }).then((r) => setCh(r.channels), () => setCh(null))
+    sharedGet<{ channels: Ch }>('/channels').then((r) => setCh(r.channels), () => setCh(null))
     setTested(localStorage.getItem(TESTED) === '1')
   }, [])
   useEffect(() => {

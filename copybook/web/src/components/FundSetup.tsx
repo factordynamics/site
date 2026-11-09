@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { call, type Member } from '../lib/account'
+import { call, type Member, sharedGet } from '../lib/account'
 import { useFollows } from '../lib/follows'
 import { Button, Check } from './ui'
 
@@ -18,7 +18,7 @@ export function FundSetup({ member, welcome }: { member: Member; welcome?: boole
   const load = useCallback(() => {
     if (owner) call<{ seats: unknown[] }>('/seats', { auth: true }).then((r) => setSeats(r.seats.length), () => setSeats(null))
     // A seat's step reflects the team channel the owner connects; an owner's channels are the team's.
-    call<{ channels: { slack: string | null; team?: { slack: string | null } | null } }>('/channels', { auth: true }).then((r) => setSlack(Boolean(owner ? r.channels.slack : r.channels.team?.slack)), () => setSlack(null))
+    sharedGet<{ channels: { slack: string | null; team?: { slack: string | null } | null } }>('/channels').then((r) => setSlack(Boolean(owner ? r.channels.slack : r.channels.team?.slack)), () => setSlack(null))
   }, [owner])
   useEffect(() => {
     load()

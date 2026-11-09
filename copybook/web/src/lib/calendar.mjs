@@ -46,3 +46,17 @@ export function isEdgarDay(day) {
   const w = new Date(`${day}T12:00:00Z`).getUTCDay()
   return w !== 0 && w !== 6 && !holidays(+day.slice(0, 4)).has(day)
 }
+
+/** "Mon Nov 16", or "today" / "tomorrow" when `today` (New York's date, YYYY-MM-DD) makes that true.
+ *  A bare weekday ("expected Mon") reads as this week's, so the date always goes with it. */
+export function dayName(iso, today) {
+  if (today && iso === today) return 'today'
+  if (today) {
+    const t = new Date(`${today}T12:00:00Z`)
+    t.setUTCDate(t.getUTCDate() + 1)
+    if (iso === t.toISOString().slice(0, 10)) return 'tomorrow'
+  }
+  const d = new Date(`${iso}T12:00:00Z`)
+  const part = (o) => d.toLocaleDateString('en-US', { ...o, timeZone: 'UTC' })
+  return `${part({ weekday: 'short' })} ${part({ month: 'short' })} ${part({ day: 'numeric' })}`
+}

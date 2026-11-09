@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ApiError, call } from '../lib/account'
+import { ApiError, call, sharedGet } from '../lib/account'
 import { Badge, Button } from './ui'
 
 // Where alerts go besides email: GET/PUT {api}/channels, POST /channels/test, POST/DELETE /channels/feed.
@@ -36,7 +36,7 @@ export function Channels() {
   const [test, setTest] = useState<Record<string, string> | null>(null)
 
   useEffect(() => {
-    call<{ channels: Channels }>('/channels', { auth: true }).then(
+    sharedGet<{ channels: Channels }>('/channels').then(
       (r) => setC(r.channels),
       () => setLoadErr(true),
     )

@@ -50,7 +50,31 @@ export function getToken(): string | null {
   }
 }
 const setToken = (token: string) => localStorage.setItem(KEY, JSON.stringify({ token, exp: Date.now() + 30 * DAY }))
-export const signOut = () => localStorage.removeItem(KEY)
+export const signOut = () => {
+  localStorage.removeItem(KEY)
+  forgetMe()
+}
+
+// /me is read on most signed-in pages. This tab keeps it for 60 seconds (for this session token only) and
+// drops it after any write through the API and before leaving for Stripe, so a page view usually costs no
+// /me request. useMemberState revalidates on focus once it's older than that.
+const ME = 'copybook-me'
+const ME_TTL = 60_000
+function cachedMe(): Member | null {
+  try {
+    const c = JSON.parse(sessionStorage.getItem(ME) ?? 'null') as { token: string; at: number; member: Member } | null
+    return c && c.token === getToken() && Date.now() - c.at < ME_TTL ? c.member : null
+  } catch {
+    return null
+  }
+}
+export function forgetMe() {
+  try {
+    sessionStorage.removeItem(ME)
+  } catch {
+    // Storage blocked: nothing cached.
+  }
+}
 
 export class ApiError extends Error {
   status: number
@@ -70,7 +94,7 @@ export class ApiError extends Error {
 let down = false
 export const apiDown = () => down
 
-export async function call<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean } = {}): Promise<T> {
+export async function call<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean; cache?: RequestCache } = {}): Promise<T> {
   const headers: Record<string, string> = {}
   if (init.body !== undefined) headers['Content-Type'] = 'application/json'
   if (init.auth) {
@@ -82,14 +106,31 @@ export async function call<T>(path: string, init: { method?: string; body?: unkn
     method: init.method ?? (init.body !== undefined ? 'POST' : 'GET'),
     headers,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    cache: init.cache,
   }).catch((e) => {
     down = true
     throw e
   })
   down = res.status === 429 || res.status >= 500
   if (res.status === 401 && init.auth) signOut()
+  if (res.ok && init.auth && (init.method ?? (init.body !== undefined ? 'POST' : 'GET')) !== 'GET') {
+    forgetMe()
+    shared.clear()
+  }
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null))
   return res.json() as Promise<T>
+}
+
+// GETs that several components on one page make (the setup checklist and the channels panel both read
+// /channels): one request, shared for 10 seconds or until the next write.
+const shared = new Map<string, { at: number; p: Promise<unknown> }>()
+export function sharedGet<T>(path: string): Promise<T> {
+  const hit = shared.get(path)
+  if (hit && Date.now() - hit.at < 10_000) return hit.p as Promise<T>
+  const p = call<T>(path, { auth: true })
+  p.catch(() => shared.delete(path))
+  shared.set(path, { at: Date.now(), p })
+  return p
 }
 
 export async function startSession(body: { checkout_session: string } | { login: string }) {
@@ -105,10 +146,24 @@ export const isPro = (m?: Member | null) => Boolean(m?.active && (m.plan === 'pr
 
 // Components that mount together (header, follow and share buttons) share one in-flight /me request.
 let meInFlight: Promise<Member> | null = null
+/** GET /me from the API (after a write, or to revalidate), past the browser's HTTP cache (/me sends
+ *  max-age=30); the result refreshes this tab's cache. */
 export const fetchMe = () =>
-  (meInFlight ??= call<{ member: Member }>('/me', { auth: true })
-    .then((r) => r.member)
+  (meInFlight ??= call<{ member: Member }>('/me', { auth: true, cache: 'no-store' })
+    .then((r) => {
+      try {
+        sessionStorage.setItem(ME, JSON.stringify({ token: getToken(), at: Date.now(), member: r.member }))
+      } catch {
+        // Storage blocked: no cache, every page asks.
+      }
+      return r.member
+    })
     .finally(() => (meInFlight = null)))
+/** /me from this tab's 60-second cache, else the API. */
+export const readMe = () => {
+  const c = cachedMe()
+  return c ? Promise.resolve(c) : fetchMe()
+}
 export type CancelReason = 'seasonal' | 'price' | 'value' | 'feature' | 'alerts' | 'temporary' | 'other'
 export const pausePlan = (reason?: CancelReason) => call<{ ok: boolean; paused_until: number }>('/pause', { body: reason ? { reason } : {}, auth: true })
 export const resumePlan = () => call<{ ok: boolean }>('/pause', { method: 'DELETE', auth: true })
@@ -171,12 +226,13 @@ export const loadHolders = (t: string, type: string | null, offset: number) =>
   call<{ count: number; filers?: number; truncated: boolean; holders: ApiHolder[]; next_offset: number | null }>(`/stocks/${encodeURIComponent(t)}/holders?cohort=all&limit=1000&offset=${offset}${type ? `&type=${type}` : ''}`, { auth: true })
 /** One ticker's issuer feed; `window` is where it is complete back to (the quarter start, e.g. Jul 1), null when it isn't. */
 export type IssuerFeed = IssuerEvent[] & { window?: string | null }
-/** GET /events for up to 50 tickers. A cold call lists what it couldn't load yet in `pending`; ask again for those. */
+/** GET /events, one request per 50 tickers. A cold call lists what it couldn't load yet in `pending`; those are
+ *  asked for once more, 2 seconds later (each request counts against the API's daily quota). */
 export async function loadEvents(tickers: string[]) {
   const out = new Map<string, IssuerFeed>()
   let todo = [...new Set(tickers)]
-  for (let i = 0; todo.length && i < 4; i++) {
-    if (i) await new Promise((r) => setTimeout(r, 1000))
+  for (let i = 0; todo.length && i < 2; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 2000))
     const batches = Array.from({ length: Math.ceil(todo.length / 50) }, (_, j) => todo.slice(j * 50, j * 50 + 50))
     const res = await Promise.all(batches.map((b) => call<{ tickers: Record<string, { events: IssuerEvent[]; window?: string | null }>; pending?: string[] }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&window=quarter`, { auth: true })))
     const pending = new Set(res.flatMap((r) => r.pending ?? []))
@@ -217,7 +273,15 @@ export function useMemberState() {
   const [member, setMember] = useState<Member | null | undefined>(() => (api && getToken() ? undefined : null))
   useEffect(() => {
     if (!api || !getToken()) return
-    fetchMe().then(setMember, () => setMember(null))
+    readMe().then(setMember, () => setMember(null))
+    // Back in the tab after the cache has expired: one fresh read.
+    const onFocus = () => document.visibilityState === 'visible' && getToken() && !cachedMe() && fetchMe().then(setMember, () => null)
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onFocus)
+    }
   }, [])
   return member
 }
@@ -241,8 +305,12 @@ export type Latency = {
   alerts: { slug: string; manager: string; quarter?: string | null; form: string; accession: string; accepted_at: string; sent_at: string; gap_seconds: number; channel?: string }[]
 }
 type RawLatency = Omit<Latency, 'alerts'> & { alerts?: Latency['alerts']; recent?: { form: string; manager: string; slug: string; accession: string; accepted_at: string; delivered_at: string; seconds: number; channel: string }[] }
+// The latency log from static files, never the API: the public R2 copy (api.config.mjs, rewritten each
+// minute), else the copy the last Pages build wrote (scripts/cards.mjs). The cache-buster changes each minute.
 export const loadLatency = () =>
-  fetch(`${api}/latency`)
+  fetch(`${import.meta.env.VITE_LATENCY_URL}?m=${Math.floor(Date.now() / 60_000)}`)
+    .then((r) => (r.ok ? r : Promise.reject(new Error(String(r.status)))))
+    .catch(() => fetch(`${import.meta.env.BASE_URL}d/latency.json`))
     .then((r) => (r.ok ? (r.json() as Promise<RawLatency>) : null))
     .then((d): Latency | null =>
       d && {

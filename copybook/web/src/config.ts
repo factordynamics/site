@@ -1,13 +1,24 @@
 // Paid plan wiring (contract: factordynamics/site copybook/api/README.md).
 // checkout.*: Stripe Payment Link URLs. portal: Stripe customer portal login page (fallback).
-// api: Copybook API base URL, e.g. https://copybook-api.<sub>.workers.dev.
+// api: Copybook API base URL (api.config.mjs).
 // While the checkout links are empty, every paid button falls back to the encrypted waitlist.
 export const checkout = {
   monthly: 'https://buy.stripe.com/aFa7sL1dk2Do5tE2MSgjC00',
   yearly: 'https://buy.stripe.com/7sYeVd1dkguecW6gDIgjC01',
   portal: 'https://billing.stripe.com/p/login/aFa7sL1dk2Do5tE2MSgjC00',
 }
-export const api = 'https://copybook-api.factordynamics.workers.dev'
+// Set at build time from api.config.mjs. A tester can point one browser at another API with
+// localStorage['copybook-api'] = 'https://…' (https only; there is deliberately no URL parameter for it,
+// since a link could then send a member's session token elsewhere).
+const apiOverride = (() => {
+  try {
+    const v = localStorage.getItem('copybook-api')
+    return v && /^https:\/\/[^\s/]+(\/[^\s]*)?$/.test(v) ? v.replace(/\/$/, '') : null
+  } catch {
+    return null
+  }
+})()
+export const api: string = apiOverride ?? import.meta.env.VITE_API
 // Free weekly email box (POST {api}/signup). On once the API route is live.
 export const signupLive = true
 

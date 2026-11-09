@@ -36,14 +36,33 @@ type Res = { follows: Follows; limit?: number }
 const shape = (r: Res): Follows => readFollows(r, EMPTY, state?.follows?.limit) as Follows
 let state: State = { status: 'idle', follows: EMPTY, pending: {} }
 const subs = new Set<() => void>()
+// Like /me (lib/account), GET /follows is kept for 60 seconds in this tab, for this session token; every
+// confirmed state (a load, or a save's server answer) refreshes it.
+const CACHE = 'copybook-follows'
 const set = (s: State) => {
   state = s
+  if (s.status === 'ready')
+    try {
+      sessionStorage.setItem(CACHE, JSON.stringify({ token: getToken(), at: Date.now(), follows: s.follows }))
+    } catch {
+      // Storage blocked: no cache.
+    }
   subs.forEach((f) => f())
+}
+function cached(): Follows | null {
+  try {
+    const c = JSON.parse(sessionStorage.getItem(CACHE) ?? 'null') as { token: string; at: number; follows: Follows } | null
+    return c && c.token === getToken() && Date.now() - c.at < 60_000 ? c.follows : null
+  } catch {
+    return null
+  }
 }
 
 function load() {
   if (state.status !== 'idle') return
   if (!getToken()) return set({ status: 'guest', follows: EMPTY, pending: {} })
+  const hit = cached()
+  if (hit) return set({ status: 'ready', follows: hit, pending: {} })
   set({ ...state, status: 'loading' })
   call<Res>('/follows', { auth: true }).then(
     (r) => set({ status: 'ready', follows: shape(r), pending: {} }),
@@ -52,6 +71,7 @@ function load() {
 }
 
 /** Reset after sign-in or sign-out so the next read refetches. */
+// The tab cache is keyed by session token, so a new sign-in never reads another session's follows.
 export const resetFollows = () => set({ status: 'idle', follows: EMPTY, pending: {} })
 
 export function useFollows() {

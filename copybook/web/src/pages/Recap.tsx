@@ -1,10 +1,12 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Share } from '../components/Share'
 import { Signup } from '../components/Signup'
+import { dayName } from '../lib/calendar.mjs'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton } from '../components/ui'
 import { TRIAL_DAYS } from '../config'
 import { useMember } from '../lib/account'
-import { dateLabel, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { dateLabel, displayName, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { recapTitle } from '../lib/titles.mjs'
 import { loadRecap, stockPath, type PctRow, type RecapMove, type SeasonRow } from '../lib/stocks'
 
 // /season/2026q3/: the season recap, from d/recap/{Q}.json (scripts/stocks.mjs). Before the deadline it
@@ -31,7 +33,7 @@ export function Recap() {
   const paid = Boolean(member?.active)
   const d = r.data
   const Q = quarterLabel(q)
-  useTitle(`${Q} 13F recap: what the superinvestors bought and sold · Copybook`)
+  useTitle(d ? (by === 'pct' ? `${Q} 13F recap: the superinvestors' biggest bets by % of book · Copybook` : recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: d.filing.filter((f) => f.filed).map((f) => displayName(f.manager)), final: d.final })) : undefined)
 
   if (r.error && !d)
     return (
@@ -354,7 +356,7 @@ function Waiting({ rows, final }: { rows: { slug: string; manager: string; expec
   const rank = (k: string) => (k === 'late' ? 0 : k === 'nofixed' ? 2 : k === 'empty' ? 3 : 1)
   const groups = [...new Set(rows.map(key))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
   const label = (k: string) =>
-    k === 'empty' ? `Last 13F was empty` : k === 'none' ? 'No 13F yet' : k === 'late' ? 'Later than usual' : k === 'nofixed' ? 'No fixed day' : `Usually ${new Date(`${k}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}`
+    k === 'empty' ? `Last 13F was empty` : k === 'none' ? 'No 13F yet' : k === 'late' ? 'Later than usual' : k === 'nofixed' ? 'No fixed day' : `Usually ${dayName(k, today)}`
   if (!rows.length) return <p className="mt-2 text-[13.5px] text-ink-3">Everyone has filed.</p>
   return (
     <dl className="mt-2 divide-y divide-line">

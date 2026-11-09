@@ -2,10 +2,12 @@ name: Copybook Pages
 
 # Builds copybook/web for https://copybook.factordynamics.com/ and deploys it with GitHub Pages.
 # Data stays in refcell/gust (refreshed by its copybook-data.yml) and is read cross-origin.
-# The schedule rebuilds the sitemap and per-investor pages after each data refresh. In the November
-# filing wave it also runs 7 minutes after each curated refresh (refcell/gust copybook-data.yml runs
-# at :08/:28/:48) so a new 13F gets its filing card within about half an hour, and skips the build when
-# the published data hasn't changed since the live deploy.
+# The schedule is what keeps the site fresh (no cross-repo dispatch token): every 10 minutes in each
+# filing season's last two and a half weeks (the 1st to the 17th of Feb, May, Aug and Nov, which covers
+# every deadline, Feb 16 2027 included), hourly otherwise. The build derives the season tracker, recap,
+# flow and stock pages (d/) from the data host, and writes titles and share cards. The 10-minute runs
+# skip the build when the published data hasn't changed since the live deploy. GitHub may start
+# scheduled runs a few minutes late.
 on:
   push:
     branches: [main]
@@ -13,8 +15,9 @@ on:
       - "copybook/web/**"
       - ".github/workflows/copybook-pages.yml"
   schedule:
-    - cron: "40 */3 * * *"
-    - cron: "15,35,55 * 9-17 11 *"
+    - cron: "*/10 * 1-17 2,5,8,11 *"
+    - cron: "5 * 18-31 * *"
+    - cron: "5 * 1-17 1,3,4,6,7,9,10,12 *"
   workflow_dispatch:
     inputs:
       force_data:
@@ -37,7 +40,7 @@ env:
   VITE_DATA_BASE: https://refcell.github.io/gust/copybook/data/
 
 jobs:
-  # Filing-wave runs only: compare the data's generated_at with the one the live site was built from.
+  # 10-minute runs only: compare the data's generated_at with the one the live site was built from.
   fresh:
     runs-on: ubuntu-latest
     outputs:
@@ -45,7 +48,7 @@ jobs:
     steps:
       - id: cmp
         run: |
-          if [ "${{ github.event.schedule }}" != "15,35,55 * 9-17 11 *" ]; then exit 0; fi
+          if [ "${{ github.event.schedule }}" != "*/10 * 1-17 2,5,8,11 *" ]; then exit 0; fi
           data=$(curl -fsS "${VITE_DATA_BASE}index.json?t=$(date +%s)" | jq -r .generated_at || true)
           live=$(curl -fsS "${VITE_SITE}d/coverage.json?t=$(date +%s)" | jq -r .generated_at || true)
           echo "data ${data}, live ${live}"

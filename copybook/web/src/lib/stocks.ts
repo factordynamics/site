@@ -33,6 +33,8 @@ export type Stock = {
   exited: StockHolder[]
   options: StockOption[]
   counts: { holders: number; prev_holders: number; new: number; added: number; trimmed: number; exited: number }
+  // All-filer and hedge-fund holder counts for the tab title (scripts/stocks.mjs).
+  title_counts?: { filers: number; hedge: number }
   quarters: string[]
   /** Splits by quarter: adjusted (ingest confirmed and multiplied earlier share counts) or excluded (looks like a split, left out of counts). */
   splits?: Record<string, { ratio: string; adjusted: boolean }>

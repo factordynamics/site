@@ -5,7 +5,9 @@ import { Signup } from '../components/Signup'
 import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { useMember } from '../lib/account'
 import { dateFmt, dateLabel, money, NUM, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
-import { isEdgarDay } from '../lib/calendar.mjs'
+import { seasonTitle } from '../lib/titles.mjs'
+import { dayName, isEdgarDay } from '../lib/calendar.mjs'
+import { cap } from '../lib/insiders'
 import { loadCardSet, loadRecap, loadSeason, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
 
 // /season/: the 13F filing season as it happens. Built from d/season.json, which every Pages build
@@ -48,7 +50,7 @@ export function Season() {
   const [params, setParams] = useSearchParams()
   const d = s.data
   const Q = d ? quarterLabel(d.quarter) : ''
-  useTitle(d ? `${Q} 13F season tracker · Copybook` : '13F season tracker · Copybook')
+  useTitle(d ? seasonTitle({ quarter: d.quarter, filed: d.featured.filed, total: d.featured.total }) : undefined)
 
   // Open on the superinvestors. Until about 10 have filed, dollar rankings are led by a few banks'
   // and index managers' flows, so the default is the names the most of them bought.
@@ -244,10 +246,9 @@ function postText(d: SeasonData, passed: boolean, recapTop: { ticker: string | n
     .filter((x) => !x.filed && !x.placeholder && x.pattern !== 'none' && x.expected_date && x.expected_date >= today)
     .sort((a, b) => Number(b.slug === 'warren-buffett') - Number(a.slug === 'warren-buffett') || a.expected_date!.localeCompare(b.expected_date!) || a.time_et - b.time_et)[0]
   const top = tickers((d.featured.filed ? d.featured_flow : d.all_flow).bought.filter((r) => !r.etf))
-  return [`${q} 13F season: ${filed}`, next && `${next.manager} expected ${new Date(`${next.expected_date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' })} ~${clock(next.time_et)} ET`, top && `Most bought so far: ${top}`].filter(Boolean).join(' · ')
+  return [`${q} 13F season: ${filed}`, next && `${next.manager} expected ${dayName(next.expected_date!, today)} ~${clock(next.time_et)} ET`, top && `Most bought so far: ${top}`].filter(Boolean).join(' · ')
 }
 const clock = (m: number) => `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'am' : 'pm'}`
-const dayLabel = (iso: string) => dateFmt({ weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`))
 
 function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<string>; now: number }) {
   const [copied, setCopied] = useState(false)
@@ -291,7 +292,7 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
         {days.map((day) => (
           <div key={day} className="grid grid-cols-1 gap-x-6 gap-y-1 px-5 py-3 md:grid-cols-[9rem_minmax(0,1fr)] md:px-6">
             <p className={`pt-2 text-[13px] font-medium ${day === 'empty' ? 'text-ink-2' : day && day < today ? 'text-[#8a5a0b]' : day === today ? 'text-accent' : 'text-ink-2'}`}>
-              {day === 'empty' ? 'Last 13F was empty' : !day ? 'No fixed day' : day === today ? 'Today' : dayLabel(day)}
+              {day === 'empty' ? 'Last 13F was empty' : !day ? 'No fixed day' : cap(dayName(day, today))}
               {day && day !== 'empty' && day < today && <span className="block text-[12px] font-normal">later than usual</span>}
             </p>
             <ul className="grid min-w-0 grid-cols-1 gap-x-6 sm:grid-cols-2">

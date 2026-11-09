@@ -17,7 +17,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
-import { ApiError, apiDown, downloadFile, fetchMe, getToken, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { ApiError, apiDown, downloadFile, fetchMe, getToken, readMe, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
@@ -45,7 +45,7 @@ export function Account() {
         let member: Member
         if (sid?.startsWith('cs_')) member = await startSession({ checkout_session: sid })
         else if (login) member = await startSession({ login })
-        else if (getToken()) member = await fetchMe()
+        else if (getToken()) member = await readMe()
         else return setState({ kind: 'out' })
         for (let i = 0; upgraded && member.plan !== upgraded && i < 8; i++) {
           await new Promise((r) => setTimeout(r, 2000))
