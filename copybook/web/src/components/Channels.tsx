@@ -56,8 +56,18 @@ export function Channels() {
   }
   const sendTest = async () => {
     setTest(null)
+    // Chats and the webhook get a test message from the API. A feed can't be pushed to, so check
+    // that its URL answers (it allows any origin) and say how many alerts it holds.
+    const feed = c?.feed
+      ? fetch(c.feed.json_url, { cache: 'no-store' }).then(
+          async (r) => (r.ok ? ((n) => (n ? `reachable, ${n} ${n === 1 ? 'alert' : 'alerts'} in it` : 'reachable; alerts appear in it as they happen'))(((await r.json()) as { items?: unknown[] }).items?.length ?? 0) : `not reachable (${r.status})`),
+          () => 'not reachable',
+        )
+      : null
+    const chats = c && (c.discord || c.slack || c.telegram || c.webhook)
     try {
-      setTest((await call<{ results: Record<string, string> }>('/channels/test', { method: 'POST', auth: true })).results)
+      const [res, f] = await Promise.all([chats ? call<{ results: Record<string, string> }>('/channels/test', { method: 'POST', auth: true }).then((r) => r.results) : {}, feed])
+      setTest({ ...res, ...(f ? { feed: f } : {}) })
     } catch (e) {
       setTest({ error: why(e) })
     }
@@ -69,7 +79,7 @@ export function Channels() {
         {msg.text}
       </p>
     )
-  const configured = c && (c.discord || c.slack || c.telegram || c.webhook)
+  const configured = c && (c.discord || c.slack || c.telegram || c.webhook || c.feed)
 
   return (
     <section id="channels" className="mt-5 scroll-mt-24 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
