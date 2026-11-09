@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useTitle } from '../lib/data'
+import { HOSTING, SUBPROCESSORS } from '../lib/hosting'
 
-const UPDATED = 'November 8, 2026'
+const UPDATED = 'November 9, 2026'
 const email = (
   <a href="mailto:hello@factordynamics.com" className="font-medium text-accent hover:text-accent-2">
     hello@factordynamics.com
@@ -47,8 +48,21 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
         </ul>,
       ],
       ['What we don’t do', 'We don’t sell or rent your data, share it with advertisers, or use advertising cookies. Your follows and owned stocks are never shown to other members or used in public aggregates.'],
-      ['In your browser', 'We keep your sign-in session and, for 30 days, the campaign link you arrived from (so a purchase can be attributed to it) in your browser’s local storage. Nothing else is stored there.'],
-      ['Who processes it', 'Cloudflare runs our API and stores account data; Stripe handles payments; our email provider delivers alerts and sign-in links. Each processes data only to provide that service.'],
+      ['In your browser', 'Your browser’s local storage keeps your sign-in session; the last copy of your account, follows and recent insider filings, so your pages still load when our server is slow; and, for 30 days, the campaign link you arrived from, so a purchase can be attributed to it. Signing out clears everything but the campaign link. Nothing else is stored there.'],
+      ['Where it’s kept', `${HOSTING.api} ${HOSTING.files}`],
+      [
+        'Who processes it',
+        <>
+          <p>These companies process data for Copybook, each only to provide its service:</p>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5">
+            {SUBPROCESSORS.map(([who, what]) => (
+              <li key={who}>
+                <span className="font-medium text-ink">{who}</span>: {what}
+              </li>
+            ))}
+          </ul>
+        </>,
+      ],
       ['Deleting your data', <>Cancel any paid plan from Manage billing, then ask us to delete your account through the {contact} (choose “Delete my data”) or by email to {email}. We delete your account record, follows and keys; Stripe keeps billing records it must keep by law.</>],
     ],
   },
@@ -56,15 +70,16 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
     title: 'Security',
     lead: 'Where Copybook keeps data and how it’s protected.',
     sections: [
-      ['Where data lives', 'The website and public 13F data are static files on GitHub Pages. Account data (members, follows, owned and watched stocks, alert settings, API keys) lives in Cloudflare Workers KV, and paid history files in Cloudflare R2, behind our API on Cloudflare Workers. Payments are handled entirely by Stripe.'],
-      ['Encryption', 'Data in Cloudflare Workers KV and R2, and in Stripe, is encrypted at rest. All traffic to the site and the API uses TLS.'],
+      ['Where data lives', `${HOSTING.api} ${HOSTING.files}`],
+      ['Encryption', HOSTING.encryption],
       ['Who can see member data', 'Only the operator, Factor Dynamics, can access member data, and only to provide support or when the law requires it.'],
       ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
       ['Your book is private', 'A list of holdings you upload or enter is private to you, or to your team on Copy Fund. It is never shared, never shown to other members, and never used in aggregates, rankings or anything we publish.'],
       ['API keys', 'A key’s secret is shown once, when you create it. Revoke a key from your account page and requests with it fail immediately.'],
       ['Deleting data', <>Remove follows, owned stocks and keys yourself on your account page at any time, or ask us to delete everything through the {contact}.</>],
       ['Breach notification', 'If a breach affects member data, we notify the affected members within 72 hours of finding it.'],
-      ['Vendor questionnaires', <>A vendor security questionnaire answer is available on request: email {email} or use the {contact}.</>],
+      ['Subprocessors', <>The companies that process data for Copybook are listed on the <Link to="/privacy/" className="font-medium text-accent hover:text-accent-2">privacy page</Link>.</>],
+      ['Certifications and questionnaires', <>{HOSTING.soc2} Email {email} or use the {contact}.</>],
       ['Reporting a problem', <>If you find a security issue, please email {email} or use the {contact} before disclosing it. We’ll respond quickly.</>],
     ],
   },

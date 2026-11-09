@@ -33,12 +33,14 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
   }, [load])
 
   const connected = Boolean(ch && (ch.discord || ch.slack || ch.telegram || ch.webhook || ch.feed))
-  const testDone = tested || Boolean(ch?.tested_at) || (keepEmail && !connected)
+  // Keeping email completes step 3 only; the test is its own step, and for email-only members it sends a
+  // test email (POST /channels/test).
+  const testDone = tested || Boolean(ch?.tested_at)
   const sendTest = async () => {
     setTest({ busy: true })
     try {
       const r = await call<{ results: Record<string, string>; messages?: Record<string, string> }>('/channels/test', { method: 'POST', auth: true })
-      const ok = Object.values(r.results).some((v) => /^2\d\d$|^ok$/.test(v))
+      const ok = Object.values(r.results).some((v) => /^2\d\d$|^ok$|^sent$/.test(v))
       if (ok) localStorage.setItem(TESTED, '1')
       setTested(ok)
       setTest({ ok, msg: Object.entries(r.messages ?? r.results).map(([k, v]) => `${k[0].toUpperCase()}${k.slice(1)}: ${v}`).join(' · ') })
@@ -82,8 +84,8 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
     {
       done: testDone,
       title: 'Send a test',
-      body: testDone && !connected ? 'Email needs no test. Alerts come from copybook@factordynamics.com; add it to your contacts so they never land in spam.' : testDone ? 'A test went through. Your next alert arrives the same way.' : connected ? 'One short message to each place you connected, to check it works.' : 'Connect a channel first, then check it here.',
-      act: { label: test.busy ? 'Sending…' : 'Send a test', onClick: sendTest, disabled: !connected || test.busy },
+      body: testDone ? 'A test went through. Your next alert arrives the same way.' : connected ? 'One short message to each place you connected, to check it works.' : keepEmail ? 'One test email to your inbox. Alerts come from copybook@factordynamics.com; add it to your contacts so they never land in spam.' : 'Connect a channel or keep email first, then check it here.',
+      act: { label: test.busy ? 'Sending…' : 'Send a test', onClick: sendTest, disabled: !(connected || keepEmail) || test.busy },
     },
   ]
   const left = steps.filter((s) => !s.done).length

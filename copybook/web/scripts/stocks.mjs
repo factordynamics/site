@@ -4,7 +4,7 @@
 // Writes <out>/d/stocks.json (search + directory index), <out>/d/stocks/{TICKER}.json and <out>/d/flow.json.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { getJson } from './getjson.mjs'
+import { getJson, pooled } from './getjson.mjs'
 import { ETF_NAMES } from './etfs.mjs'
 import { isEdgarDay } from '../src/lib/calendar.mjs'
 import { displayName } from '../src/lib/names.mjs'
@@ -561,9 +561,8 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   const current = new Map()
   const tracked = new Map()
   let read_ok = 0
-  for (let i = 0; i < filers.length; i += 48) {
-    const part = await Promise.all(filers.slice(i, i + 48).map((f) => read(`f/${f.cik}.json`).then((d) => [f, d], () => null)))
-    for (const x of part) {
+  for await (const x of pooled(filers, 48, (f) => read(`f/${f.cik}.json`).then((d) => [f, d], () => null))) {
+    {
       if (!x || !x[1]?.ok || !Array.isArray(x[1].rows)) continue
       const [f, d] = x
       // Same freshness rule as the curated set: more than two quarters behind isn't a current holder.
@@ -646,6 +645,9 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
     for (const x of part) if (x?.[1]?.counts) for (const t of issuers.get(x[0])) hlOf.set(t, x[1])
   }
   mkdirSync(join(out, 'd', 'h'), { recursive: true })
+  // Titles name the newest quarter only once most filers have filed it; until then "latest 13Fs".
+  const recent = filers.filter((f) => qn(f.quarter) >= newest - 1)
+  const titleQuarter = recent.filter((f) => qn(f.quarter) === newest).length > recent.length / 2 ? toQ(newest) : null
   let files = 0
   let rowsOut = 0
   let exact = 0
@@ -688,7 +690,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
     const sf = join(out, 'd', 'stocks', `${t}.json`)
     try {
       const s = JSON.parse(readFileSync(sf, 'utf8'))
-      s.title_counts = { filers: hlc?.holders ?? current.get(t) ?? 0, hedge: lenses.hedge.get(t)?.current ?? 0 }
+      s.title_counts = { filers: hlc?.holders ?? current.get(t) ?? 0, hedge: lenses.hedge.get(t)?.current ?? 0, quarter: titleQuarter }
       writeFileSync(sf, JSON.stringify(s))
     } catch {}
   }

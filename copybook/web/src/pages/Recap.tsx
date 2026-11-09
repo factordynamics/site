@@ -68,10 +68,16 @@ export function Recap() {
           <Share
             className="mt-5"
             url={`${location.origin}${import.meta.env.BASE_URL}season/${quarter.toLowerCase()}/${by === 'pct' ? 'pct/' : ''}`}
-            text={`${Q} 13F recap. Most bought by the superinvestors: ${(by === 'pct' ? (d.most_bought_pct ?? []) : d.most_bought)
-              .slice(0, 3)
-              .map((x) => `$${x.ticker}`)
-              .join(', ')}`}
+            text={(() => {
+              const top = (by === 'pct' ? (d.most_bought_pct ?? []) : d.most_bought)
+                .slice(0, 3)
+                .map((x) => `$${x.ticker}`)
+                .join(', ')
+              // Until the deadline, the post says "so far" and who has filed, like the title.
+              if (d.final) return `${Q} 13F recap. Most bought by the superinvestors: ${top}`
+              const who = few ? `${filedNames.length <= 3 ? filedNames.join(', ') : `${filedNames.slice(0, 2).join(', ')} and ${filedNames.length - 2} more`} · ` : ''
+              return `${Q.split(' ')[0]} 13F so far (${who}${d.superinvestors.filed} of ${d.superinvestors.total} filed): most bought ${top}`
+            })()}
           />
         )}
       </header>

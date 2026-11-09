@@ -39,15 +39,27 @@ const subs = new Set<() => void>()
 // Like /me (lib/account), GET /follows is kept for 60 seconds in this tab, for this session token; every
 // confirmed state (a load, or a save's server answer) refreshes it.
 const CACHE = 'copybook-follows'
-const set = (s: State) => {
+// The last confirmed follows for this session, of any age: a slow or failing API shows them (read-only
+// until it answers) rather than an empty book.
+const LAST = 'copybook-follows-last'
+const set = (s: State, confirmed = true) => {
   state = s
-  if (s.status === 'ready')
+  if (s.status === 'ready' && confirmed)
     try {
       sessionStorage.setItem(CACHE, JSON.stringify({ token: getToken(), at: Date.now(), follows: s.follows }))
+      localStorage.setItem(LAST, JSON.stringify({ token: getToken(), follows: s.follows }))
     } catch {
       // Storage blocked: no cache.
     }
   subs.forEach((f) => f())
+}
+function lastFollows(): Follows | null {
+  try {
+    const c = JSON.parse(localStorage.getItem(LAST) ?? 'null') as { token: string; follows: Follows } | null
+    return c && c.token === getToken() ? c.follows : null
+  } catch {
+    return null
+  }
 }
 function cached(): Follows | null {
   try {
@@ -63,10 +75,12 @@ function load() {
   if (!getToken()) return set({ status: 'guest', follows: EMPTY, pending: {} })
   const hit = cached()
   if (hit) return set({ status: 'ready', follows: hit, pending: {} })
-  set({ ...state, status: 'loading' })
-  call<Res>('/follows', { auth: true }).then(
+  const last = lastFollows()
+  if (last) set({ status: 'ready', follows: last, pending: {} }, false)
+  else set({ ...state, status: 'loading' })
+  call<Res>('/follows', { auth: true, timeout: 20_000 }).then(
     (r) => set({ status: 'ready', follows: shape(r), pending: {} }),
-    () => set({ status: 'guest', follows: EMPTY, pending: {} }),
+    () => set(last && getToken() ? { status: 'ready', follows: last, pending: {} } : { status: 'guest', follows: EMPTY, pending: {} }, false),
   )
 }
 

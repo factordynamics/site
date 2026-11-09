@@ -5,6 +5,7 @@ import { api, plans, TRIAL_DAYS, trialTerms } from '../config'
 import { attributed, referredCheckout } from '../lib/attribution'
 import { gapLabel, loadLatency } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
+import { HOSTING } from '../lib/hosting'
 import { loadCoverage } from '../lib/stocks'
 
 // Landing pages for the two buyers of the paid data plans: investment teams (Copy Fund) and quants
@@ -154,7 +155,8 @@ export function ForFunds() {
         <Panel className="h-full">
           <ul className="space-y-2.5 text-[14.5px] leading-relaxed text-ink-2">
             <li>An uploaded or linked book is private to your team. It is never shown to anyone else and never used in aggregates.</li>
-            <li>Data lives in Cloudflare KV and R2, payments in Stripe. All of it is encrypted at rest, and every connection uses TLS.</li>
+            <li>{HOSTING.api}</li>
+            <li>{HOSTING.encryption}</li>
             <li>Only the operator can access member data, and only for support or legal reasons.</li>
           </ul>
         </Panel>
@@ -163,7 +165,7 @@ export function ForFunds() {
             <li>Breaches affecting member data are notified within 72 hours.</li>
             <li>Remove names, keys and seats yourself at any time, or ask us to delete everything.</li>
             <li>
-              A vendor security questionnaire answer is available on request.{' '}
+              {HOSTING.soc2}{' '}
               <Link to="/security/" className="font-medium text-accent hover:text-accent-2">
                 Read the security page
               </Link>

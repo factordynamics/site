@@ -7,12 +7,12 @@ import { FreeNames } from '../components/FreeNames'
 import { Paused } from '../components/Paused'
 import { TRIAL_DAYS } from '../config'
 import { useSearch } from '../components/Search'
-import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
-import { ApiStatus } from '../components/ApiStatus'
-import { ApiError, apiDown, getToken, needsReauth, isFree, isPro, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
+import { Arrow, Badge, Button, edgeFade, Lock, Panel, Skeleton, Stat } from '../components/ui'
+import { ApiStatus, Updating } from '../components/ApiStatus'
+import { ApiError, apiDown, getToken, needsReauth, isFree, isPro, lastEvents, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
 import { quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
-import { accNo, cap, issuerLatest, pctChange, type Latest } from '../lib/insiders'
+import { accNo, cap, issuerLatest, pctChange, whenLabel, type Latest } from '../lib/insiders'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
 
 // My book (Copy Pro and Fund): crowding and filing-season activity in the names a member owns or
@@ -187,7 +187,7 @@ export function Book() {
   const lens: Lens = LENSES.some(([k]) => k === asked) ? (asked as Lens) : byPlan
   const setLens = (l: Lens) => setParams(l === byPlan ? {} : { funds: l }, { replace: true })
   // Copy members get My book lite, which loads its own events; this one is for Pro and Fund.
-  const events = useAsync(() => (pro && names.length ? loadEvents(names) : Promise.resolve(new Map<string, IssuerFeed>())), [pro, names.join(',')])
+  const events = useEvents(names, pro)
   // The CSV keeps the all-filer figures whatever the lens, so d/h is loaded once for every lens.
   const agg = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadFilerHolders(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(',')])
   const ready = Boolean(data.data && agg.data)
@@ -205,7 +205,7 @@ export function Book() {
   }, [data.data])
   const rows = useMemo(() => {
     const r = names.map((t, i) => {
-      const n = newest(data.data?.[i] ?? null, events.data?.get(t), follows.insider_min_usd, season, events.loading)
+      const n = newest(data.data?.[i] ?? null, events.data.get(t), follows.insider_min_usd, season, events.loading.has(t), events.failed.has(t))
       return { ...rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, agg.data?.[i] ?? null, lens), latest: n.latest, insider: n.insider, holder: n.holder, empty: n.empty, more: n.more }
     })
     const dir = sort.desc ? -1 : 1
@@ -214,7 +214,7 @@ export function Book() {
       const y = sortVal(b, sort.k)
       return (x < y ? -1 : x > y ? 1 : 0) * dir || a.ticker.localeCompare(b.ticker)
     })
-  }, [names, follows.owned, follows.insider_min_usd, data.data, agg.data, events.data, events.loading, lens, season, sort])
+  }, [names, follows.owned, follows.insider_min_usd, data.data, agg.data, events.data, events.loading, events.failed, lens, season, sort])
 
   // What the funds that have filed this season did in these names, largest first. Under the smart-money
   // lens: each hedge fund's and active manager's ten largest buys and sells (from its 13F shard).
@@ -279,7 +279,7 @@ export function Book() {
         <Header eyebrow="My book · Paused" sub="Your names are kept while your plan is paused. Holders, this season’s moves and insider trades come back when you resume." />
         <section className="mt-8 max-w-3xl rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <Paused until={member.paused_until} digest={Boolean(member.digest_live)} onChange={() => location.reload()} />
-          <h2 className="mt-6 border-t border-line pt-5 text-[15px] font-semibold">Your names ({names.length})</h2>
+          <h2 className="mt-6 border-t border-line pt-5 text-[15px] font-semibold">Your names{names.length ? ` (${names.length})` : ''}</h2>
           {names.length ? (
             <ul className="mt-3 flex flex-wrap gap-2">
               {names.map((t) => (
@@ -291,7 +291,8 @@ export function Book() {
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-[14px] text-ink-3">No names saved yet.</p>
+            // Paused accounts can't always read their follows yet; never call the kept names zero.
+            <p className="mt-2 text-[14px] text-ink-3">{status === 'ready' ? 'No names saved yet.' : 'Your saved names are kept, and show here again when you resume.'}</p>
           )}
         </section>
       </div>
@@ -310,6 +311,7 @@ export function Book() {
     return (
       <div className="container-x pt-12 md:pt-16">
         <ApiStatus className="mb-6" />
+      <Updating className="mb-4" />
       <Header eyebrow="My book · Copy" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and the latest Form 4 and 13D on each." />
         <section className="relative mt-10 overflow-hidden rounded-[var(--radius-card)] bg-card p-8 shadow-[var(--shadow-card)]">
           <div className="pointer-events-none select-none blur-[3px]" aria-hidden="true">
@@ -330,7 +332,7 @@ export function Book() {
 
   const csv = () => {
     // Every column names whose figures it holds: all 13F filers or the funds we track closely.
-    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'new_all', 'exited_all', 'holders_smart', 'holders_smart_older_filings', 'top10_smart', 'over_5pct_smart', `filed_${season}_smart`, 'holders_hedge', 'holders_hedge_older_filings', 'top10_hedge', 'over_5pct_hedge', `filed_${season}_hedge`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'insider_form', 'insider_action', 'insider_value_usd', 'insider_pct_change', 'insider_trade_date', 'insider_filed_date', 'insider_accession', 'insider_name', 'insider_title', 'insider_exercise_and_sale', 'insider_distribution_sale', 'insider_none', 'holder_form', 'holder_action', 'holder_pct_of_class', 'holder_filed_date', 'holder_accession', 'holder_filer', 'holder_line', 'lens']
+    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'new_all', 'exited_all', 'holders_smart', 'holders_smart_older_filings', 'top10_smart', 'over_5pct_smart', `filed_${season}_smart`, 'holders_hedge', 'holders_hedge_older_filings', 'top10_hedge', 'over_5pct_hedge', `filed_${season}_hedge`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'insider_form', 'insider_action', 'insider_value_usd', 'insider_pct_change', 'insider_trade_date', 'insider_filed_date', 'insider_accession', 'insider_name', 'insider_title', 'insider_exercise_and_sale', 'insider_distribution_sale', 'insider_j_shares', 'insider_shares_sold', 'insider_pct_class', 'insider_none', 'holder_form', 'holder_action', 'holder_pct_of_class', 'holder_filed_date', 'holder_accession', 'holder_filer', 'holder_line', 'lens']
     const q = (v: unknown) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))
     const body = rows.map((r) =>
       [
@@ -346,7 +348,9 @@ export function Book() {
         // The two lines of the page's Form 4/13D cell, exactly: the insider trade, then the 13D/G.
         // "Form 4", not "4": pandas and Excel would read a bare 4 as a number.
         r.insider ? `Form ${r.insider.form}` : '', r.insider?.action ?? '', r.insider?.value != null ? Math.round(Math.abs(r.insider.value)) : '', r.insider?.pct != null ? (r.insider.pct * 100).toFixed(2) : '',
-        r.insider?.tradeDate ?? '', r.insider?.date ?? '', dashed(r.insider?.accession), r.insider?.who ?? '', r.insider?.title ?? '', r.insider ? (r.insider.exSale ? 'true' : 'false') : '', r.insider ? (r.insider.distribution ? 'true' : 'false') : '', r.insider ? '' : (r.empty ?? ''),
+        r.insider?.tradeDate ?? '', r.insider?.date ?? '', dashed(r.insider?.accession), r.insider?.who ?? '', r.insider?.title ?? '', r.insider ? (r.insider.exSale ? 'true' : 'false') : '', r.insider ? (r.insider.distribution ? 'true' : 'false') : '',
+        // Shares that came in by code J on the sale days next to the shares sold, so a partial distribution sale shows.
+        r.insider?.jShares ?? '', r.insider?.soldShares ?? '', r.insider?.pctClass ?? '', r.insider ? '' : (r.empty ?? ''),
         r.holder?.form.replace(/^SCHEDULE /i, '') ?? '', r.holder?.action ?? '', r.holder?.ofClass ?? '', r.holder?.date ?? '', dashed(r.holder?.accession), r.holder?.who ?? '', r.holder?.line ?? '',
         LENSES.find(([k]) => k === lens)![1],
       ].map(q).join(','),
@@ -360,12 +364,13 @@ export function Book() {
   return (
     <div className="container-x pt-12 md:pt-16">
       <ApiStatus className="mb-6" />
+      <Updating className="mb-4" />
       <Header
         right={
           rows.length > 0 && (
             // The CSV carries the same Form 4/13D column as the page, so it waits for those filings.
-            <Button variant="outline" size="sm" onClick={csv} disabled={events.loading || !ready}>
-              {events.loading || !ready ? 'Loading filings…' : 'Export CSV'}
+            <Button variant="outline" size="sm" onClick={csv} disabled={!ready}>
+              {!ready ? 'Loading…' : 'Export CSV'}
             </Button>
           )
         }
@@ -420,7 +425,7 @@ export function Book() {
                   Click a column to sort.
                 </p>
               </div>
-              <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px] [mask-image:linear-gradient(to_right,#000_88%,transparent)] sm:[mask-image:none]" role="tablist" aria-label="Which funds">
+              <div ref={edgeFade} className="seg seg-fade rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which funds">
                 {LENSES.map(([l, label]) => (
                   <button key={l} type="button" role="tab" aria-selected={lens === l} aria-label={label} onClick={() => setLens(l)} className={`rounded-full px-3 py-1.5 ${lens === l ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                     <span className="sm:hidden">{LENS_SHORT[l]}</span>
@@ -504,7 +509,7 @@ export function Book() {
                                   </>
                                 )}</td>
                               <td className="px-3 py-2.5 pr-5 text-[12.5px] md:pr-6">
-                                <EventsCell r={r} w="max-w-[10rem]" />
+                                <EventsCell r={r} w="max-w-[10rem]" onRetry={events.retry} />
                               </td>
                             </>
                           ) : (
@@ -593,7 +598,7 @@ function LiteBook({ member }: { member: Member }) {
   const names = useMemo(() => [...new Set([...follows.owned, ...follows.stocks])].filter((t) => !linkedOnly.has(t)), [follows.owned, follows.stocks, linkedOnly])
   const data = useAsync(() => (names.length ? Promise.all(names.map((t) => loadStock(t).catch(() => null))) : Promise.resolve([])), [names.join(',')])
   const season = useMemo(() => (data.data ?? []).flatMap((x) => x?.quarters ?? []).sort().at(-1) ?? '', [data.data])
-  const events = useAsync(() => (names.length ? loadEvents(names) : Promise.resolve(new Map<string, IssuerFeed>())), [names.join(',')])
+  const events = useEvents(names, true)
   const rows = useMemo(
     () =>
       names
@@ -616,13 +621,13 @@ function LiteBook({ member }: { member: Member }) {
             sold: moves.filter((x) => x.change === 'trimmed' || x.change === 'exited').length,
             net: moves.reduce((a, x) => a + x.delta_value, 0),
             ...(() => {
-              const n = newest(st, events.data?.get(t), follows.insider_min_usd, season, events.loading)
+              const n = newest(st, events.data.get(t), follows.insider_min_usd, season, events.loading.has(t), events.failed.has(t))
               return { latest: n.latest, insider: n.insider, holder: n.holder, empty: n.empty, more: n.more }
             })(),
           }
         })
         .sort((a, b) => b.held.length - a.held.length || (b.stock?.holders.length ?? 0) - (a.stock?.holders.length ?? 0) || a.ticker.localeCompare(b.ticker)),
-    [names, data.data, events.data, events.loading, lens, season, follows.owned, follows.insider_min_usd],
+    [names, data.data, events.data, events.loading, events.failed, lens, season, follows.owned, follows.insider_min_usd],
   )
   const moves = rows
     .flatMap((r) => r.moves.map((x) => ({ r, x })))
@@ -634,6 +639,7 @@ function LiteBook({ member }: { member: Member }) {
   return (
     <div className="container-x pt-12 md:pt-16">
       <ApiStatus className="mb-6" />
+      <Updating className="mb-4" />
       <Header eyebrow="My book · Copy" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and their latest Form 4 and 13D filings." />
       <FailingBanner initial={member.channels_failing} />
 
@@ -731,7 +737,7 @@ function LiteBook({ member }: { member: Member }) {
                             )}
                           </td>
                           <td className="px-3 py-3 pr-5 text-[12.5px] md:pr-6">
-                            <EventsCell r={r} w="max-w-[14rem]" />
+                            <EventsCell r={r} w="max-w-[14rem]" onRetry={events.retry} />
                           </td>
                         </tr>
                       ))}
@@ -775,6 +781,48 @@ function LiteBook({ member }: { member: Member }) {
       )}
     </div>
   )
+}
+
+/** My book's issuer feeds, which only enrich the column (it starts from each stock's static `since`
+ *  block, so the table never waits): any feed this browser saw before renders at once, then each name asks
+ *  GET /events on its own (4 at a time, 5 s each, retried twice), filling in as answers arrive. `retry`
+ *  asks again for the names that failed. */
+function useEvents(names: string[], on: boolean) {
+  const key = names.join(',')
+  const [tick, setTick] = useState(0)
+  const [st, setSt] = useState<{ data: Map<string, IssuerFeed>; loading: Set<string>; failed: Set<string> }>({ data: new Map(), loading: new Set(names), failed: new Set() })
+  useEffect(() => {
+    if (!on || !names.length) return setSt({ data: new Map(), loading: new Set(), failed: new Set() })
+    let live = true
+    const cached = lastEvents(names)
+    const prev = st
+    const ask = tick && prev.failed.size ? names.filter((t) => prev.failed.has(t)) : names
+    // A name with a cached feed shows it while asking; only a name with nothing to show waits or fails.
+    setSt({ data: tick ? prev.data : cached, loading: new Set(ask.filter((t) => !cached.has(t))), failed: new Set() })
+    let next = 0
+    const one = async () => {
+      while (live && next < ask.length) {
+        const t = ask[next++]
+        const r = await loadEvents([t], 5000).then((m) => m.get(t) ?? Object.assign([], { window: null }), () => null)
+        if (!live) return
+        setSt((x) => {
+          const loading = new Set(x.loading)
+          loading.delete(t)
+          const failed = new Set(x.failed)
+          const data = new Map(x.data)
+          if (r) data.set(t, r)
+          else if (!data.has(t)) failed.add(t)
+          return { data, loading, failed }
+        })
+      }
+    }
+    Promise.all([one(), one(), one(), one()])
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on, key, tick])
+  return { ...st, retry: () => setTick((x) => x + 1) }
 }
 
 type StockEv = NonNullable<Stock['since']>[number]
@@ -832,9 +880,9 @@ function windowStart(season: string) {
 const windowLabel = (start: string) => (start ? new Date(Date.parse(`${start}T12:00:00Z`) - 86400_000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'the 13F')
 
 type Events = { latest: Latest | null; insider: Latest | null; holder: Latest | null; empty: string; more: number }
-function newest(stock: Stock | null, issuer: IssuerFeed | undefined, min: number, season: string, loading: boolean): Events {
-  // Until the issuer feed is in, every cell waits: a fund's event shown first could be replaced by a newer insider one.
-  if (loading) return { latest: null, insider: null, holder: null, empty: 'loading', more: 0 }
+function newest(stock: Stock | null, issuer: IssuerFeed | undefined, min: number, season: string, loading: boolean, failed = false): Events {
+  // The static `since` block (the funds' own Form 4s and 13D/Gs, as on the stock page) fills the cell at
+  // once; the issuer feed, when it arrives, adds company insiders and any filer's 13D/G.
   const trade = (action: string, value?: number | null) => (action === 'buy' || action === 'sell' || action === 'mixed') && (value == null || Math.abs(value) >= min)
   const fund = (stock?.since ?? []).filter((e) => (e.kind !== 'form4' || trade(e.action, e.value_usd)) && !passive13G(e.form, e.manager)).map((e) => ({ acc: accNo(e.url), l: evLatest(e) }))
   const seen = new Set((stock?.since ?? []).map((e) => accNo(e.url)))
@@ -854,18 +902,29 @@ function newest(stock: Stock | null, issuer: IssuerFeed | undefined, min: number
   // The window is stated only when the feed reaches back to it (the API's window, or every filing there is).
   const oldest = issuer?.at(-1)?.accepted_at.slice(0, 10) ?? ''
   const covered = issuer && (issuer.window || issuer.length < EVENTS_PER_TICKER || (from && oldest <= from))
-  const empty = !issuer ? 'Insider filings not loaded yet' : covered ? `No insider buys or sells since ${windowLabel(from)}` : `No insider buys or sells in the last ${issuer.length} Form 4s, back to ${dateLabel(oldest)}`
+  const empty = !issuer ? (loading ? 'loading' : failed ? 'failed' : 'Insider filings not loaded yet') : covered ? `No insider buys or sells since ${windowLabel(from)}` : `No insider buys or sells in the last ${issuer.length} Form 4s, back to ${dateLabel(oldest)}`
   return { latest: insider ?? holder, insider, holder, empty: insider ? '' : empty, more }
 }
 
 // The cell's dates are all inside the window (since the last quarter end), so they go without the year.
-const dayMonth = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 /** The Form 4/13D cell: the insider line (or what its absence means) and the latest 13D/G under it. */
-function EventsCell({ r, w }: { r: { ticker: string; insider?: Latest | null; holder?: Latest | null; empty?: string; more?: number }; w: string }) {
-  if (r.empty === 'loading') return <Skeleton className="h-4 w-28" />
+function EventsCell({ r, w, onRetry }: { r: { ticker: string; insider?: Latest | null; holder?: Latest | null; empty?: string; more?: number }; w: string; onRetry: () => void }) {
+  const status =
+    r.empty === 'loading' ? (
+      <span className="flex items-center gap-2 text-[12.5px] text-ink-3">
+        <Skeleton className="h-3.5 w-16" /> Checking insider filings…
+      </span>
+    ) : r.empty === 'failed' ? (
+      <span className="block max-w-[11rem] text-ink-3">
+        Insider filings didn’t load.{' '}
+        <button type="button" onClick={onRetry} className="font-medium text-accent hover:text-accent-2">
+          Retry
+        </button>
+      </span>
+    ) : null
   const line = (l: Latest) => (
     <span className="block max-w-[14rem]">
-      <span className="font-medium">{l.form.replace(/^SCHEDULE /i, '')}</span> · {l.tradeDate && /^4/.test(l.form) ? `Traded ${dayMonth(l.tradeDate)} · filed ${dayMonth(l.date)}` : `Filed ${dayMonth(l.date)}`}
+      <span className="font-medium">{l.form.replace(/^SCHEDULE /i, '')}</span> · {whenLabel(l)}
       <a href={l.url} className={`block ${w} text-ink-2 hover:text-accent`} title={`${l.line}. Open the filing on EDGAR`}>
         {l.line}
       </a>
@@ -873,7 +932,7 @@ function EventsCell({ r, w }: { r: { ticker: string; insider?: Latest | null; ho
   )
   return (
     <>
-      {r.insider ? line(r.insider) : <span className="block max-w-[11rem] text-ink-3">{r.empty}</span>}
+      {r.insider ? line(r.insider) : (status ?? <span className="block max-w-[11rem] text-ink-3">{r.empty}</span>)}
       {r.holder && <span className="mt-1.5 block">{line(r.holder)}</span>}
       {(r.more ?? 0) > 0 && <NonTrade n={r.more!} ticker={r.ticker} />}
     </>

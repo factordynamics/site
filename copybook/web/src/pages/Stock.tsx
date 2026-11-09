@@ -7,8 +7,8 @@ import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
-import { issuerLatest } from '../lib/insiders'
-import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
+import { issuerLatest, whenLabel } from '../lib/insiders'
+import { Arrow, Badge, Button, edgeFade, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
 import { dateLabel, displayName, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { stockTitle } from '../lib/titles.mjs'
 import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
@@ -36,7 +36,7 @@ export function StockPage() {
   const [n, setN] = useState(25)
   const d = s.data
   // The same live-number title the build writes into the page (scripts/postbuild.mjs).
-  useTitle(d ? (d.title_counts?.filers ? stockTitle({ ticker: d.ticker, superinvestors: d.holders.filter((h) => h.featured).length, hedge: d.title_counts.hedge, filers: d.title_counts.filers, quarter: seasonNow().quarter }) : `${d.ticker} ${d.name}: who owns it · Copybook`) : undefined)
+  useTitle(d ? (d.title_counts?.filers ? stockTitle({ ticker: d.ticker, superinvestors: d.holders.filter((h) => h.featured).length, hedge: d.title_counts.hedge, filers: d.title_counts.filers, quarter: d.title_counts.quarter }) : `${d.ticker} ${d.name}: who owns it · Copybook`) : undefined)
 
   // GOOG -> GOOGL, lowercase -> uppercase: send other share classes to the issuer's page.
   useEffect(() => {
@@ -49,11 +49,14 @@ export function StockPage() {
   const typed = view === 'smart' || view === 'hedge' ? view : null
   const fh = useAsync(() => (wide && d ? loadFilerHolders(d.ticker) : Promise.resolve(null)), [wide, d?.ticker])
   // Hedge funds and active managers: the same filer list, cut to those types.
+  // One count everywhere (title, My book, these tabs): filers whose latest 13F is for this quarter or the
+  // last, with those on older 13Fs shown apart as "+N older".
   const filers = useMemo(() => {
     const x = wide ? fh.data : null
-    if (!x || !typed) return x
+    if (!x) return x
+    if (!typed) return { ...x, cur: x.index ? x.index.holders : x.current, older: x.index ? x.index.older : Math.max(0, x.filers - x.current) }
     const b = x[typed]
-    return { ...x, filers: b ? b.current + b.older : 0, quarters: b?.quarters ?? {}, rows: x.rows.filter((r) => r[typed]) }
+    return { ...x, filers: b ? b.current + b.older : 0, cur: b?.current ?? 0, older: b?.older ?? 0, quarters: b?.quarters ?? {}, rows: x.rows.filter((r) => r[typed]) }
   }, [wide, view, fh.data])
   const filersLoading = wide && !fh.data && !fh.error
   // Pro and Fund: every holder from the API (1,000 a page), with each filer's change since its previous
@@ -160,8 +163,12 @@ export function StockPage() {
 
   const dh = c ? c.holders - c.prev_holders : 0
   const featuredCount = d?.holders.filter((h) => h.featured).length ?? 0
-  // All-filer lens: filers per report quarter, newest first.
-  const fq = filers ? Object.entries(filers.quarters).sort((a, b) => b[0].localeCompare(a[0])) : null
+  // Wider lenses: how many of the current holders have filed the season's quarter (0 until one does),
+  // not whichever quarter the lens happens to have newest.
+  const sq = seasonNow().quarter
+  const filedSq = filers ? (filers.quarters[sq] ?? 0) : 0
+  const num = (n: number) => n.toLocaleString('en-US')
+  const countLabel = (f: { cur: number; older: number }) => `${num(f.cur)}${f.older ? ` (+${num(f.older)} older)` : ''}`
   return (
     <div className="container-x pt-10 md:pt-14">
       <nav className="text-[13px] text-ink-3" aria-label="Breadcrumb">
@@ -200,12 +207,12 @@ export function StockPage() {
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
         {wide ? (
           <>
-            <Stat label={`${who.charAt(0).toUpperCase()}${who.slice(1)} holding it`} value={filers ? filers.filers.toLocaleString('en-US') : '—'} sub={filers && filers.filers > filers.rows.length ? `The ${filers.rows.length} largest are listed below` : 'Latest 13F of each filer'} />
             <Stat
-              label={fq ? `Filed ${quarterLabel(fq[0][0])} so far` : 'Filed so far'}
-              value={fq ? fq[0][1].toLocaleString('en-US') : '—'}
-              sub={fq && filers ? (fq.length > 1 ? `of ${filers.filers.toLocaleString('en-US')}; the rest are on ${fq.slice(1).map(([q]) => quarterLabel(q)).join(' or ')}` : `all ${filers.filers.toLocaleString('en-US')}`) : undefined}
+              label={`${who.charAt(0).toUpperCase()}${who.slice(1)} holding it`}
+              value={filers ? num(filers.cur) : '—'}
+              sub={filers ? [filers.older ? `+${num(filers.older)} on 13Fs older than last quarter` : null, filers.filers > filers.rows.length ? `the ${filers.rows.length} largest listed below` : null].filter(Boolean).join(' · ') || 'Latest 13F of each filer' : undefined}
             />
+            <Stat label={`Filed ${quarterLabel(sq)} so far`} value={filers ? num(filedSq) : '—'} sub={filers ? `of ${num(filers.cur)}; the rest are on earlier quarters` : undefined} />
             <Stat label="Superinvestors among them" value={d ? featuredCount : '—'} sub={d ? `${d.holders.length} of the funds we track closely` : undefined} />
             <Stat label="Largest holder" value={holders[0] ? <span className="block truncate text-[20px]">{holders[0].manager}</span> : '—'} sub={holders[0] ? `${sharesFmt(holders[0].shares)} shares · ${quarterLabel(holders[0].quarter)}` : undefined} />
           </>
@@ -230,10 +237,10 @@ export function StockPage() {
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-ink-3">
           {wide
-            ? fq && filers
-              ? fq.length > 1
-                ? `Mid-season: ${fq[0][1].toLocaleString('en-US')} of ${filers.filers.toLocaleString('en-US')} ${who} holding it have filed ${quarterLabel(fq[0][0])}; the rest are on ${fq.slice(1).map(([q]) => quarterLabel(q)).join(' or ')}. Each row is labelled with its quarter.`
-                : `From each filer’s ${quarterLabel(fq[0][0])} 13F.`
+            ? filers
+              ? filedSq < filers.cur
+                ? `Mid-season: ${num(filedSq)} of ${num(filers.cur)} ${who} holding it have filed ${quarterLabel(sq)}; the rest are on earlier 13Fs${filers.older ? `, ${num(filers.older)} of them older than last quarter (counted apart)` : ''}. Each row is labelled with its quarter.`
+                : `From each filer’s ${quarterLabel(sq)} 13F.`
               : ''
             : d
             ? d.quarters.length > 1
@@ -244,7 +251,7 @@ export function StockPage() {
             {quarterLabel(seasonNow().quarter)} recap
           </Link>
         </p>
-        <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px] [mask-image:linear-gradient(to_right,#000_88%,transparent)] sm:[mask-image:none]" role="tablist" aria-label="Investors">
+        <div ref={edgeFade} className="seg seg-fade rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Investors">
           {(
             [
               ['featured', 'Superinvestors', 'Superinvestors'],
@@ -289,7 +296,7 @@ export function StockPage() {
                   <a href={l.url} className="min-w-0 truncate hover:text-accent" title="Open the filing on EDGAR">
                     {l.line}
                   </a>
-                  <span className="shrink-0 text-[12.5px] text-ink-3">{dateLabel(l.date)}</span>
+                  <span className="shrink-0 text-[12.5px] text-ink-3">{whenLabel(l)}</span>
                 </li>
               ))}
             </ul>
@@ -349,7 +356,7 @@ export function StockPage() {
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold">Every holder</h2>
             <p className="text-[13px] text-ink-3">
-              {api ? `All ${api.count.toLocaleString('en-US')} ${who}, largest first, each compared with its previous 13F` : filers && filers.filers > holders.length ? `The ${holders.length} largest of ${filers.filers.toLocaleString('en-US')} ${who}` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
+              {api ? `All ${api.count.toLocaleString('en-US')} ${who}, largest first, each compared with its previous 13F` : filers && filers.filers > holders.length ? `The ${holders.length} largest of ${countLabel(filers)} ${who}` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
               {wide && !api && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
             </p>
           </div>

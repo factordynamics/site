@@ -17,10 +17,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
-import { ApiStatus } from '../components/ApiStatus'
-import { ApiError, apiDown, downloadFile, fetchMe, getToken, needsReauth, readMe, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { ApiStatus, Updating } from '../components/ApiStatus'
+import { ApiError, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
-type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
+type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
 export function Account() {
   const [params] = useSearchParams()
@@ -46,7 +46,12 @@ export function Account() {
         let member: Member
         if (sid?.startsWith('cs_')) member = await startSession({ checkout_session: sid })
         else if (login) member = await startSession({ login })
-        else if (getToken()) member = await readMe()
+        else if (getToken()) {
+          // The last-known account renders at once, marked updating, so a slow API isn't a blank page.
+          const last = cachedFresh() ? null : lastMe()
+          if (last) setState({ kind: 'in', member: last, welcome: false, stale: true })
+          member = await readMe()
+        }
         else return setState({ kind: 'out' })
         for (let i = 0; upgraded && member.plan !== upgraded && i < 8; i++) {
           await new Promise((r) => setTimeout(r, 2000))
@@ -57,6 +62,8 @@ export function Account() {
         setState({ kind: 'in', member, welcome, upgraded, kept, resumed, focus: pro || (welcome && member.plan === 'pro') || (upgraded === 'pro' && member.plan === 'pro') })
       } catch {
         // The API is over its limit or down: say so, and keep the link in the address bar so a reload retries it.
+        // A failing API keeps the last-known account on screen (the status banner says why).
+        if (apiDown() && getToken() && lastMe()) return setState({ kind: 'in', member: lastMe()!, welcome: false, stale: false })
         if (apiDown()) return setState({ kind: 'down' })
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
       }
@@ -82,6 +89,7 @@ export function Account() {
           <p className="mt-2 text-[15px] text-ink-2">Our account server isn’t answering right now. Your plan, follows and saved names are safe. Please reload this page later; nothing here needs redoing.</p>
         </section>
       )}
+      {state.kind === 'in' && <Updating show={Boolean(state.stale)} className="mb-4" />}
       {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} upgraded={state.upgraded} kept={state.kept} resumed={state.resumed} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState((s) => ({ kind: 'in', member, welcome: false, resumed: s.kind === 'in' && Boolean(s.member.paused_until) && !member.paused_until }))} />}
       {state.kind === 'out' && <SignedOut error={state.error} />}
       {state.kind === 'off' && <NotOpen />}
@@ -198,7 +206,30 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
           ) : (
             <>
           {paused ? (
-            <Paused until={member.paused_until!} digest={Boolean(member.digest_live)} onChange={onChange} />
+            <>
+              <Paused until={member.paused_until!} digest={Boolean(member.digest_live)} onChange={onChange} />
+              {/* Leaving doesn't need a resume first: billing (invoices, card, cancel) opens from here too. */}
+              <p className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-4 text-[14px]">
+                {(['Manage billing', 'Cancel plan'] as const).map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setBusy(true)
+                      openPortal().catch(() => {
+                        setBusy(false)
+                        if (checkout.portal) window.location.href = checkout.portal
+                      })
+                    }}
+                    className={`font-medium ${label === 'Cancel plan' ? 'text-ink-2 hover:text-down' : 'text-accent hover:text-accent-2'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <span className="text-[12.5px] text-ink-3">Both open the Stripe billing portal; a paused plan cancels without being charged again.</span>
+              </p>
+            </>
           ) : (
             <>
           {cancelling && (

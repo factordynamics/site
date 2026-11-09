@@ -72,6 +72,7 @@ page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
   page('speed/', 'Alert speed: EDGAR to inbox, every alert timed · Copybook', 'How fast Copybook alerts arrive: the median and 90th percentile from SEC EDGAR acceptance to delivery for 13F, Form 4 and 13D/G filings, and every live alert this season.', '', sp?.url)
 }
 page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Copy Fund, prorated, on the same billing interval.')
+page('resume/', 'Resume your plan · Copybook', 'Resume a paused Copybook plan.', '\n    <meta name="robots" content="noindex" />')
 {
   // The season tracker's share card (scripts/cards.mjs), with its cache-busting URL.
   let season = null
@@ -94,7 +95,7 @@ page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Co
   const sq = sd ? qLabel(sd.quarter) : q
   const title = sd ? seasonTitle({ quarter: sd.quarter, filed: sd.featured.filed, total: sd.featured.total }) : `${q} 13F filing season tracker: who has filed and what they bought · Copybook`
   const desc = sd
-    ? `Live through the ${dayLabel(sd.deadline)} deadline: ${num(sd.filers.filed)} of about ${num(sd.filers.total)} 13F filers and ${sd.featured.filed} of ${sd.featured.total} superinvestors have filed ${sq} 13Fs. Who filed, who is next, and the most bought and sold stocks so far, from SEC EDGAR.`
+    ? `Live through the ${dayLabel(sd.deadline)} deadline: ${num(sd.filers.filed)} of the ${num(sd.filers.total)} 13F filers active last quarter and ${sd.featured.filed} of ${sd.featured.total} superinvestors have filed ${sq} 13Fs. Who filed, who is next, and the most bought and sold stocks so far, from SEC EDGAR.`
     : `Live through the 13F deadline: how many superinvestors and filers have filed ${q} 13Fs, the latest filings, and the most bought and sold stocks so far. From SEC EDGAR.`
   page('season/', title, desc, ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url)
 }
@@ -204,7 +205,7 @@ try {
     const sf = readDist('d', 'stocks', `${s.t}.json`)
     const sup = sf?.holders?.filter((x) => x.featured).length ?? 0
     const tc2 = sf?.title_counts
-    const title = tc2?.filers ? stockTitle({ ticker: s.t, superinvestors: sup, hedge: tc2.hedge, filers: tc2.filers, quarter: seasonData?.quarter }) : `${s.t} ${s.n}: who owns it · Copybook`
+    const title = tc2?.filers ? stockTitle({ ticker: s.t, superinvestors: sup, hedge: tc2.hedge, filers: tc2.filers, quarter: tc2.quarter }) : `${s.t} ${s.n}: who owns it · Copybook`
     const desc = all
       ? `${s.n} (${s.t}): ${sup ? `${num(sup)} of the superinvestors we follow hold it, ` : ''}with ${num(hedge)} hedge funds and ${num(all)} 13F filers in all.${h?.index ? ` In their latest 13Fs, ${num(h.index.new)} opened a position and ${num(h.index.exited)} sold out.` : ''} Largest holders and who bought and sold, from SEC EDGAR.`
       : `${s.n} (${s.t}): which of the investors we track hold it, who bought and sold it in the latest 13F filings, and how the holder count changed.`

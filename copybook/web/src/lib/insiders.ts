@@ -22,6 +22,11 @@ export type Latest = {
   exSale: boolean
   /** A sale paired with a J distribution that leaves the holding about where it was. */
   distribution?: boolean
+  /** Shares that came in by code J on the sale days, and shares sold (S), for a partial distribution sale. */
+  jShares?: number | null
+  soldShares?: number | null
+  /** The class the % change is of, as the Form 4 names the security ("Class A Common Stock"). */
+  pctClass?: string | null
   /** 13D/G: the percent of the class after the filing. */
   ofClass: number | null
 }
@@ -52,6 +57,10 @@ export function issuerLatest(e: IssuerEvent): Latest {
   let what: string
   let pct: number | null = null
   let distribution = false
+  let mostly = false
+  let sold: number | null = null
+  let jIn: number | null = null
+  let pctClass: string | null = null
   const f4 = /^4/.test(e.form)
   if (f4) {
     const verb = VERB[e.action] ?? 'filed a Form 4 on'
@@ -63,10 +72,19 @@ export function issuerLatest(e: IssuerEvent): Latest {
     // A sale that went with a J distribution and leaves the holding about where it was (DASH's founders):
     // "distribution sale", not "0%".
     distribution = e.action === 'sell' && (e.has_other_codes ?? []).includes('J') && (chg == null || Math.abs(chg) < 0.005)
+    // When the J shares cover most of the sale but not all, it's "mostly distribution sale" (Tang's Aug 20:
+    // 80,195 of 84,526 sold came in by J that day).
+    const tx = (e.transactions ?? []).filter((t) => !t.derivative)
+    const sDays = new Set(tx.filter((t) => t.code === 'S').map((t) => t.date))
+    sold = tx.filter((t) => t.code === 'S').reduce((a, t) => a + (t.shares || 0), 0) || null
+    jIn = tx.filter((t) => t.code === 'J' && t.acquired_disposed === 'A' && sDays.has(t.date)).reduce((a, t) => a + (t.shares || 0), 0) || null
+    mostly = !distribution && e.action === 'sell' && sold != null && jIn != null && jIn / sold >= 0.5
     if (open && !distribution && chg != null && Number.isFinite(chg) && chg !== 0) pct = chg
     // On an issuer with several classes the % is of the traded class (DASH Class A), and says so.
-    const cls = (e.transactions ?? []).find((t) => !t.derivative && (t.code === 'P' || t.code === 'S'))?.security?.match(/\bclass\s+([A-Z])\b/i)?.[1]?.toUpperCase()
-    what = `${cap(verb)}${size ? ` ${size}` : ''}${pct != null ? ` (${pctChange(pct)}${cls ? ` of Class ${cls} holding` : ''})` : ''}${distribution ? ' · distribution sale' : ''}${e.action === 'sell' && exSaleOf(e) ? ', exercise + sale' : ''}`
+    const security = (e.transactions ?? []).find((t) => !t.derivative && (t.code === 'P' || t.code === 'S'))?.security ?? null
+    const cls = security?.match(/\bclass\s+([A-Z])\b/i)?.[1]?.toUpperCase()
+    if (pct != null) pctClass = cls ? `Class ${cls}` : security
+    what = `${cap(verb)}${size ? ` ${size}` : ''}${pct != null ? ` (${pctChange(pct)}${cls ? ` of Class ${cls} holding` : ''})` : ''}${distribution ? ' · distribution sale' : mostly ? ' · mostly distribution sale' : ''}${e.action === 'sell' && exSaleOf(e) ? ', exercise + sale' : ''}`
   } else {
     const p = e.percent_of_class
     what = e.action === 'new_stake' ? `New ${p != null ? `${p}% ` : ''}stake` : p != null ? `→ ${p}%` : 'Amended'
@@ -88,6 +106,13 @@ export function issuerLatest(e: IssuerEvent): Latest {
     title: e.role ? e.role.split(',')[0].trim() : null,
     exSale: f4 && e.action === 'sell' && exSaleOf(e),
     distribution: f4 && distribution,
+    jShares: jIn,
+    soldShares: sold,
+    pctClass,
     ofClass: f4 ? null : e.percent_of_class,
   }
 }
+
+const dayMonth = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+/** "Traded Jul 31 · filed Aug 4" for a Form 4 (the trade date first); "Filed Aug 14" for a 13D/G. */
+export const whenLabel = (l: Pick<Latest, 'form' | 'date' | 'tradeDate'>) => (l.tradeDate && /^4/.test(l.form) && l.tradeDate.slice(0, 10) !== l.date.slice(0, 10) ? `Traded ${dayMonth(l.tradeDate)} · filed ${dayMonth(l.date)}` : l.tradeDate && /^4/.test(l.form) ? `Traded and filed ${dayMonth(l.date)}` : `Filed ${dayMonth(l.date)}`)

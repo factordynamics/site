@@ -60,6 +60,13 @@ export const needsReauth = () => !getToken() && sessionStorage.getItem(REAUTH) =
 export const signOut = () => {
   localStorage.removeItem(KEY)
   forgetMe()
+  try {
+    localStorage.removeItem(ME_LAST)
+    localStorage.removeItem('copybook-follows-last')
+    localStorage.removeItem(EV_LAST)
+  } catch {
+    // Storage blocked.
+  }
 }
 
 // /me is read on most signed-in pages. This tab keeps it for 60 seconds (for this session token only) and
@@ -75,6 +82,19 @@ function cachedMe(): Member | null {
     return null
   }
 }
+// The last /me this browser saw for this session, of any age: pages render from it at once, marked
+// "Updating…", so a slow or failing API never means a blank page; the fresh answer replaces it.
+const ME_LAST = 'copybook-me-last'
+export function lastMe(): Member | null {
+  try {
+    const c = JSON.parse(localStorage.getItem(ME_LAST) ?? 'null') as { token: string; member: Member } | null
+    return c && c.token === getToken() ? c.member : null
+  } catch {
+    return null
+  }
+}
+/** Whether this tab holds a /me fresh enough to use without asking (60 s). */
+export const cachedFresh = () => cachedMe() != null
 export function forgetMe() {
   try {
     sessionStorage.removeItem(ME)
@@ -178,10 +198,11 @@ let meInFlight: Promise<Member> | null = null
 /** GET /me from the API (after a write, or to revalidate), past the browser's HTTP cache (/me sends
  *  max-age=30); the result refreshes this tab's cache. */
 export const fetchMe = () =>
-  (meInFlight ??= call<{ member: Member }>('/me', { auth: true, cache: 'no-store' })
+  (meInFlight ??= call<{ member: Member }>('/me', { auth: true, cache: 'no-store', timeout: 20_000 })
     .then((r) => {
       try {
         sessionStorage.setItem(ME, JSON.stringify({ token: getToken(), at: Date.now(), member: r.member }))
+        localStorage.setItem(ME_LAST, JSON.stringify({ token: getToken(), member: r.member }))
       } catch {
         // Storage blocked: no cache, every page asks.
       }
@@ -258,18 +279,51 @@ export const loadHolders = (t: string, type: string | null, offset: number) =>
 export type IssuerFeed = IssuerEvent[] & { window?: string | null }
 /** GET /events, one request per 50 tickers. A cold call lists what it couldn't load yet in `pending`; those are
  *  asked for once more, 2 seconds later (each request counts against the API's daily quota). */
-export async function loadEvents(tickers: string[]) {
+export async function loadEvents(tickers: string[], timeout = 30_000) {
   const out = new Map<string, IssuerFeed>()
   let todo = [...new Set(tickers)]
+  // One batch, tried up to 3 times (2 s then 6 s apart) when the API is slow or failing.
+  const get = async (b: string[]) => {
+    for (let k = 0; ; k++) {
+      try {
+        return await call<{ tickers: Record<string, { events: IssuerEvent[]; window?: string | null }>; pending?: string[] }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&window=quarter`, { auth: true, timeout })
+      } catch (e) {
+        if (k >= 2 || (e instanceof ApiError && e.status < 500 && e.status !== 429)) throw e
+        await new Promise((r) => setTimeout(r, k ? 6000 : 2000))
+      }
+    }
+  }
   for (let i = 0; todo.length && i < 2; i++) {
     if (i) await new Promise((r) => setTimeout(r, 2000))
     const batches = Array.from({ length: Math.ceil(todo.length / 50) }, (_, j) => todo.slice(j * 50, j * 50 + 50))
-    const res = await Promise.all(batches.map((b) => call<{ tickers: Record<string, { events: IssuerEvent[]; window?: string | null }>; pending?: string[] }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&window=quarter`, { auth: true })))
+    const res = await Promise.all(batches.map(get))
     const pending = new Set(res.flatMap((r) => r.pending ?? []))
     for (const r of res) for (const [t, v] of Object.entries(r.tickers ?? {})) if (!pending.has(t) || v.events.length) out.set(t, Object.assign(v.events, { window: v.window ?? null }))
     todo = todo.filter((t) => pending.has(t))
   }
+  try {
+    const c = readEvCache()
+    for (const [t, v] of out) c[t] = { events: [...v], window: v.window ?? null }
+    localStorage.setItem(EV_LAST, JSON.stringify({ token: getToken(), tickers: c }))
+  } catch {
+    // Storage blocked or full: no cache.
+  }
   return out
+}
+// The last /events answer per ticker for this session: My book renders from it at once and refreshes.
+const EV_LAST = 'copybook-events-last'
+function readEvCache(): Record<string, { events: IssuerEvent[]; window: string | null }> {
+  try {
+    const c = JSON.parse(localStorage.getItem(EV_LAST) ?? 'null') as { token: string; tickers: Record<string, { events: IssuerEvent[]; window: string | null }> } | null
+    return c && c.token === getToken() ? c.tickers : {}
+  } catch {
+    return {}
+  }
+}
+/** The cached feeds for whichever of these tickers have one. */
+export function lastEvents(tickers: string[]): Map<string, IssuerFeed> {
+  const c = readEvCache()
+  return new Map(tickers.filter((t) => c[t]).map((t) => [t, Object.assign([...c[t].events], { window: c[t].window })]))
 }
 
 export const setAlerts = (alerts: Member['alerts']) => call<{ member: Member }>('/alerts', { body: { alerts }, auth: true }).then((r) => r.member)
@@ -299,11 +353,33 @@ export async function downloadCsv(slug: string) {
 }
 
 /** undefined while checking, null when signed out or not a member. Calls the API only when a token exists. */
+/** True while a page shows the last-known /me and the fresh one hasn't arrived ("Updating…"). */
+let meStale = false
+const staleSubs = new Set<() => void>()
+const setStale = (v: boolean) => {
+  if (v === meStale) return
+  meStale = v
+  staleSubs.forEach((f) => f())
+}
+export const useMeUpdating = () => useSyncExternalStore((f) => (staleSubs.add(f), () => staleSubs.delete(f)), () => meStale)
+
 export function useMemberState() {
-  const [member, setMember] = useState<Member | null | undefined>(() => (api && getToken() ? undefined : null))
+  // Fresh from this tab's cache, else the last-known member (shown at once, marked updating), else loading.
+  const [member, setMember] = useState<Member | null | undefined>(() => (api && getToken() ? (cachedMe() ?? lastMe() ?? undefined) : null))
   useEffect(() => {
     if (!api || !getToken()) return
-    readMe().then(setMember, () => setMember(null))
+    if (!cachedMe() && lastMe()) setStale(true)
+    readMe().then(
+      (m) => {
+        setStale(false)
+        setMember(m)
+      },
+      // A failing API keeps the last-known member (the status banner says why); a 401 has signed out.
+      () => {
+        setStale(false)
+        setMember(getToken() ? (lastMe() ?? null) : null)
+      },
+    )
     // Back in the tab after the cache has expired: one fresh read.
     const onFocus = () => document.visibilityState === 'visible' && getToken() && !cachedMe() && fetchMe().then(setMember, () => null)
     window.addEventListener('focus', onFocus)
@@ -331,6 +407,9 @@ export type Latency = {
   /** Keyed 13F, Form 4, 13D, 13G; and email, slack, discord, telegram, webhook, feed. */
   by_form?: Record<string, LatencyStat>
   by_channel?: Record<string, LatencyStat>
+  /** When the EDGAR poller last ran (ISO) and on which host, once the latency file carries them. */
+  poller_last_run?: string | null
+  poller_host?: string | null
   /** The latest alerts, newest first (the API's `recent`, or its older `alerts`). */
   alerts: { slug: string; manager: string; quarter?: string | null; form: string; accession: string; accepted_at: string; sent_at: string; gap_seconds: number; channel?: string }[]
 }

@@ -182,3 +182,13 @@ export function AvatarStack({ names, max = 3, size = 22 }: { names: { slug: stri
     </span>
   )
 }
+
+/** Ref for a seg-fade row: marks it data-end when it doesn't overflow or is scrolled to its end, so the
+ *  right-edge fade only shows while there's more to scroll to. */
+export function edgeFade(el: HTMLElement | null) {
+  if (!el) return
+  const update = () => el.toggleAttribute('data-end', el.scrollLeft + el.clientWidth >= el.scrollWidth - 2)
+  update()
+  el.addEventListener('scroll', update, { passive: true })
+  new ResizeObserver(update).observe(el)
+}

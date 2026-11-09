@@ -6,10 +6,11 @@ const num = (v) => Number(v ?? 0).toLocaleString('en-US')
 const usd = (v) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`)
 export const qLabel = (q) => (q ? q.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1') : 'latest')
 
-/** "Who owns SIRI? 3 superinvestors, 15 hedge funds, 600 13F filers · Q3 2026": the page's default lens first. */
+/** "Who owns SIRI? 3 superinvestors, 15 hedge funds, 600 13F filers · latest 13Fs": the page's default lens
+ *  first; the quarter replaces "latest 13Fs" once most filers have filed it (scripts/stocks.mjs). */
 export function stockTitle({ ticker, superinvestors, hedge, filers, quarter }) {
   const parts = [superinvestors ? `${num(superinvestors)} superinvestor${superinvestors === 1 ? '' : 's'}` : null, hedge ? `${num(hedge)} hedge fund${hedge === 1 ? '' : 's'}` : null, filers ? `${num(filers)} 13F filers` : null].filter(Boolean)
-  return parts.length ? `Who owns ${ticker}? ${parts.join(', ')} · ${qLabel(quarter)}` : `Who owns ${ticker}? · Copybook`
+  return parts.length ? `Who owns ${ticker}? ${parts.join(', ')} · ${quarter ? qLabel(quarter) : 'latest 13Fs'}` : `Who owns ${ticker}? · Copybook`
 }
 
 /** "Warren Buffett 13F portfolio, Q2 2026: $299.3B in 29 positions" (share positions, as the page counts them). */

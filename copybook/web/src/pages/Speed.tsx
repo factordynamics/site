@@ -175,10 +175,37 @@ export function Speed() {
         </ul>
       </section>
 
+      <section className="mt-10 max-w-3xl" aria-labelledby="availability">
+        <h2 id="availability" className="text-[22px] font-semibold tracking-[-0.02em]">
+          Availability
+        </h2>
+        {d?.poller_last_run && (
+          <p className="mt-2 text-[14px] text-ink-2">
+            EDGAR poller last ran {ago(Date.now() - Date.parse(d.poller_last_run))} ago{d.poller_host ? ` · ${d.poller_host}` : ''}.
+          </p>
+        )}
+        <h3 className="mt-5 text-[15px] font-semibold">Incidents</h3>
+        <ol className="mt-2 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
+          {INCIDENTS.map(([when, what]) => (
+            <li key={when} className="py-3 text-[14px] leading-relaxed">
+              <span className="num block text-[12.5px] text-ink-3">{when}</span>
+              <span className="text-ink-2">{what}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
       <Signup source="speed" className="mt-10" />
     </div>
   )
 }
+
+// Newest first, in UTC. Every incident that made member pages or alerts unavailable or slow.
+const INCIDENTS: [string, string][] = [
+  ['Nov 9, 2026 · 05:01–about 05:30 UTC', 'Member pages and the API were slow: the API’s new host saturated its network link. No alerts were missed.'],
+  ['Nov 9, 2026 · 03:54–05:01 UTC', 'Member pages (account, My book) and the API were unavailable: the API’s hosting plan hit its daily request quota. The API moved to a dedicated server. No alerts were missed.'],
+]
+const ago = (ms: number) => (ms < 90_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : ms < 90 * 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 3_600_000)} h`)
 
 function Rows({ rows }: { rows: [string, string, LatencyStat][] }) {
   return (

@@ -109,7 +109,8 @@ export function Season() {
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Progress label="Superinvestors" sub={d ? `updated ${ago(now - Date.parse(d.generated_at))}` : 'legendary investors we feature'} v={d?.featured} />
         <Progress label="Funds we track closely" sub="with alerts, moves and history" v={d?.curated} />
-        <Progress label="All 13F filers" sub="of the filers active last quarter" v={d?.filers} />
+        {/* Narrower than the 8,968 filers with any 13F on file (pricing, /v1/filers): only those that filed last quarter or this. */}
+        <Progress label="13F filers active last quarter" sub={d ? `those that filed for ${quarterLabel(prevQuarter(d.quarter))} or ${quarterLabel(d.quarter)}` : 'those that filed last quarter or this'} v={d?.filers} />
       </div>
 
       <Panel className="mt-5" title="13Fs accepted per business day" sub={d ? `All filers, ${Q}. Each bar is one EDGAR business day (weekends and federal holidays left out); dashed slots are the days left before the deadline.` : undefined}>
@@ -338,6 +339,8 @@ const ago = (ms: number) => {
   const m = Math.max(0, Math.round(ms / 60_000))
   return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)} h ${m % 60} min ago`
 }
+
+const prevQuarter = (q: string) => (q.endsWith('Q1') ? `${Number(q.slice(0, 4)) - 1}Q4` : `${q.slice(0, 5)}${Number(q.slice(5)) - 1}`)
 
 function Progress({ label, sub, v }: { label: string; sub: string; v?: { filed: number; total: number } }) {
   const p = v && v.total ? v.filed / v.total : 0

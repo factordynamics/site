@@ -111,6 +111,16 @@
     display: none;
   }
 }
+/* With seg: on a phone, a right-edge fade says the row scrolls; useEdgeFade marks the row data-end when
+   it doesn't overflow or is scrolled to its end, and the fade goes. */
+@utility seg-fade {
+  @media (width < 40rem) {
+    mask-image: linear-gradient(to right, #000 78%, transparent);
+    &[data-end] {
+      mask-image: none;
+    }
+  }
+}
 @utility container-x {
   width: 100%;
   max-width: 1200px;
