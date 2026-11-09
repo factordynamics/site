@@ -36,9 +36,19 @@ import { firmName, fundPath, issuerName } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
 import { follows, Follow, getToken, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, UNAVAILABLE, type Follows } from './account'
 
-const title = (t: string) => {
+/** Sets the page's title and canonical. A missing page asks not to be indexed and has no canonical; a real page
+ * opened from the static 404 shell (a lowercase ticker, a link followed from a 404) drops the shell's noindex. */
+const title = (t: string, missing = false) => {
   document.title = `${t} · Holdterm`
   const url = SITE + (location.pathname.replace(/\/+$/, '') || '/')
+  const robots = document.querySelector('meta[name=robots]')
+  if (missing) {
+    if (!robots) document.head.append(Object.assign(document.createElement('meta'), { name: 'robots', content: 'noindex' }))
+    document.querySelector('link[rel=canonical]')?.remove()
+    return
+  }
+  robots?.remove()
+  if (!document.querySelector('link[rel=canonical]')) document.head.append(Object.assign(document.createElement('link'), { rel: 'canonical' }))
   document.querySelector('link[rel=canonical]')?.setAttribute('href', url)
   document.querySelector('meta[property="og:url"]')?.setAttribute('content', url)
   document.querySelector('meta[property="og:title"]')?.setAttribute('content', `${t} · Holdterm`)
@@ -1528,21 +1538,7 @@ export function Privacy() {
 }
 
 export function NotFound({ what = 'There’s no page at this address' }: { what?: string }) {
-  title('Not found')
-  // The edge normally answers unknown paths with a 404 and noindex. When it can't (static fallback), the
-  // page itself asks not to be indexed and drops its canonical.
-  useEffect(() => {
-    const m = document.createElement('meta')
-    m.name = 'robots'
-    m.content = 'noindex'
-    document.head.append(m)
-    const c = document.querySelector('link[rel=canonical]')
-    c?.remove()
-    return () => {
-      m.remove()
-      if (c) document.head.append(c)
-    }
-  }, [])
+  title('Not found', true)
   return (
     <div className="page narrow">
       <div className="head">

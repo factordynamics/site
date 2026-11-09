@@ -52,7 +52,11 @@ function route(path: string) {
     if (publicSlug(slug) !== m[1]) history.replaceState(null, '', fundPath(slug))
     return <Fund slug={slug} />
   }
-  if ((m = p.match(/^\/s\/([^/]+)$/))) return <Stock ticker={decodeURIComponent(m[1]).toUpperCase()} />
+  if ((m = p.match(/^\/s\/([^/]+)$/))) {
+    const t = decodeURIComponent(m[1]).toUpperCase()
+    if (`/s/${encodeURIComponent(t)}` !== p) history.replaceState(null, '', `/s/${encodeURIComponent(t)}`)
+    return <Stock ticker={t} />
+  }
   if (p === '/consensus') return <Consensus />
   if (p === '/flows') return <Flows />
   if (p === '/filings') return <Filings />

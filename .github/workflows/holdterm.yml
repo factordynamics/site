@@ -1,7 +1,7 @@
 name: Holdterm
 
 # Builds holdterm/ and deploys it to Cloudflare Pages (project "holdterm") when the repo has a
-# CLOUDFLARE_API_TOKEN secret. Data loads in the browser, so no scheduled rebuild is needed.
+# CLOUDFLARE_API_TOKEN secret. Data loads in the browser; a rebuild only adds pages for new tickers.
 on:
   push:
     branches: [main]
