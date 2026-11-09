@@ -5,7 +5,8 @@ import { ChangeBars } from '../components/charts'
 import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
-import { downloadFile, isPro, loadHolders, useMember, type ApiHolder } from '../lib/account'
+import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
+import { issuerLatest } from './Book'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
 import { dateLabel, displayName, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type StockHolder } from '../lib/stocks'
@@ -128,6 +129,16 @@ export function StockPage() {
   // The holder table's shares sum every class, so a newer holding sits under them only on single-class pages.
   const newer = new Map(d && d.classes.length === 1 ? since.filter((x) => x.p.cusip === d.classes[0].cusip && x.p.to != null).map((x) => [x.who.slug, x.p]) : [])
   const paid = Boolean(member?.active)
+  // Members: the company's insiders' open-market trades from $100K since the quarter start (Jul 1 while
+  // Q3 13Fs are due), largest first, from the issuer's own EDGAR feed (GET /events).
+  const ev = useAsync(() => (paid && d ? loadEvents([d.ticker]) : Promise.resolve(null)), [paid, d?.ticker])
+  const feed = d ? ev.data?.get(d.ticker) : undefined
+  const from = (feed?.window ?? '').slice(0, 10)
+  const insiders = (feed ?? [])
+    .filter((e) => /^4/.test(e.form) && (e.action === 'buy' || e.action === 'sell') && Math.abs(e.value_usd ?? 0) >= 100_000 && (!from || e.accepted_at.slice(0, 10) >= from))
+    .sort((a, b) => Math.abs(b.value_usd ?? 0) - Math.abs(a.value_usd ?? 0))
+    .slice(0, 5)
+    .map(issuerLatest)
 
   if (s.error)
     return (
@@ -248,6 +259,25 @@ export function StockPage() {
                 See them with Copy
               </Link>
             </p>
+          )}
+        </Panel>
+      )}
+
+      {paid && d && feed && (
+        <Panel className="mt-4" title="Company insiders" sub={`Open-market Form 4 trades from $100K${from ? ` since ${new Date(Date.parse(`${from}T12:00:00Z`) - 86_400_000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : ' in recent filings'}, largest first`}>
+          {insiders.length ? (
+            <ul className="divide-y divide-line">
+              {insiders.map((l) => (
+                <li key={l.accession} className="flex items-baseline justify-between gap-3 py-2.5 text-[14px]">
+                  <a href={l.url} className="min-w-0 truncate hover:text-accent" title="Open the filing on EDGAR">
+                    {l.line}
+                  </a>
+                  <span className="shrink-0 text-[12.5px] text-ink-3">{dateLabel(l.date)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[14px] text-ink-3">No open-market insider buys or sells of $100K or more in this window.</p>
           )}
         </Panel>
       )}
