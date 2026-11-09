@@ -115,6 +115,26 @@
    "ticker": "RIG",
    "name": "Transocean",
    "sector": "Energy"
+  },
+  "934423104": {
+   "ticker": "WBD",
+   "name": "Warner Bros. Discovery",
+   "sector": "Communication Services"
+  },
+  "H82027105": {
+   "ticker": "SOPH",
+   "name": "SOPHiA Genetics",
+   "sector": "Health Care"
+  },
+  "V7780T103": {
+   "ticker": "RCL",
+   "name": "Royal Caribbean Group",
+   "sector": "Consumer Discretionary"
+  },
+  "947890109": {
+   "ticker": "WBS",
+   "name": "Webster Financial",
+   "sector": "Financials"
   }
  },
  "by_ticker": {
