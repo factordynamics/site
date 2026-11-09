@@ -33,7 +33,7 @@ from ingest.splits import load as split_table_doc, ratio_between, table as split
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
-DEBT = re.compile(r"\b(NOTES?|BONDS?|DEBT|DBCV|DEB)\b|%", re.I)
+DEBT = re.compile(r"\b(NOTES?|BONDS?|DEBT|DBCV|DEB|PFD|PREF\w*|DEP)\b|%", re.I)  # also preferreds (BAC 060505682)
 CLASS = re.compile(r"\s+(Class|Series|Cl)\s+[A-Z0-9]+$", re.I)
 KINDS = ("equity", "calls", "puts")
 MIN_FILERS = 1000  # a quarter needs this many full books before stock pages use it

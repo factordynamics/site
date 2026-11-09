@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -43,6 +44,7 @@ PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is n
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
 # Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
 LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
+PREFERRED = re.compile(r"\bPFD\b|\bPREF|\bDEP(OSITARY)?\b|\bNOTE|%|\bWT\b|\bWARRANT|\bRIGHT|\*W\b|\bW EXP\b")
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
 CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied price over every filer
 FIXED = [0]
@@ -200,8 +202,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         for r in rows:
             c = (r.get("cusip") or "").upper()
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
-                    or r.get("price_outlier"):
-                continue
+                    or r.get("price_outlier") or PREFERRED.search((r.get("title") or "").upper()):
+                continue  # preferreds share the common stock's issuer code (BAC 060505682) but aren't its holders
             if r.get("suspect_units"):
                 r = r | {"value_delta": 0}
             a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0])

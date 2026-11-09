@@ -115,7 +115,9 @@ RULES: list[tuple[str, re.Pattern]] = [
                              r"AVIVA|ALLIANZ|AXA|GENERALI|ZURICH|METLIFE|PRUDENTIAL|MANULIFE|MUNICH RE|SWISS RE|"
                              r"HANNOVER RE|CHUBB|AMERICAN INTERNATIONAL GROUP|LINCOLN NATIONAL|NATIONWIDE|"
                              r"THRIVENT|MUTUAL OF|CINCINNATI FINANCIAL|MARKEL|TOKIO MARINE|MS&AD|SOMPO|"
-                             r"MITSUI SUMITOMO INSURANCE|FAIRFAX FINANCIAL|FIDELITY NATIONAL FINANCIAL|HARTFORD FINANCIAL|ASSUR)\b", re.I)),
+                             r"MITSUI SUMITOMO INSURANCE|FAIRFAX FINANCIAL|FIDELITY NATIONAL FINANCIAL|HARTFORD FINANCIAL|"
+                             r"FORSAKRING\w*|LIVFORSAKRING\w*|INTACT INVESTMENT|AG2R|MONDIALE|AEGON|TALANX|SCOR|"
+                             r"CNP ASSURANCES|ASSUR)\b", re.I)),
     ("bank", re.compile(r"\b(BANK|BANCORP|BANCSHARES|BANCORPORATION|BANQUE|BANCO|N\.?A\.?$|NATIONAL ASSOCIATION|"
                         r"SECURITIES|BROKERAGE|MUTUAL|"
                         r"MORGAN STANLEY|GOLDMAN SACHS|JPMORGAN|CITIGROUP|WELLS FARGO|UBS|BARCLAYS|HSBC|"
@@ -123,6 +125,11 @@ RULES: list[tuple[str, re.Pattern]] = [
                         r"STIFEL|LPL FINANCIAL|OPPENHEIMER & CO|AMERIPRISE|EDWARD JONES|TRUST CO(MPANY)?|SAVINGS|CREDIT UNION|"
                         r"DEKABANK|DZ BANK|LANDESBANK|SPARKASSE|JANE STREET|SUSQUEHANNA|OPTIVER|IMC|"
                         r"VIRTU|FLOW TRADERS|HUDSON RIVER TRADING|JUMP TRADING|CITADEL SECURITIES)\b", re.I)),
+    ("other", re.compile(r"\b(VENTURES?|VENTURE PARTNERS|PRIVATE EQUITY|GROWTH EQUITY|BUYOUT|ACQUISITIONS?|"
+                         r"KKR|CARLYLE|BLACKSTONE INC|TPG|WARBURG PINCUS|SILVER LAKE|THOMA BRAVO|VISTA EQUITY|"
+                         r"BAIN CAPITAL (INVESTORS|VENTURE|LIFE)|AFFINITY PARTNERS|LITTLEJOHN|GENERAL ATLANTIC|"
+                         r"SOFTBANK|INVESTOR AB|WALMART|MSD CAPITAL|HAMILTON LANE)\b", re.I)),
+    ("wealth", re.compile(r"\b(PRIVATE BANK|BROWN SHIPLEY|EVELYN PARTNERS)\b", re.I)),
     ("long_only", re.compile(r"\b(FMR|FIDELITY|T\.? ?ROWE|PRICE T ROWE|CAPITAL RESEARCH|CAPITAL WORLD|"
                              r"CAPITAL INTERNATIONAL|FRANKLIN RESOURCES|FRANKLIN TEMPLETON|FRANKLIN ADVISERS|ALLIANCEBERNSTEIN|NUVEEN|MASSACHUSETTS FINANCIAL|MFS|"
                              r"LORD,? ABBETT|WASATCH|ABERDEEN|ABRDN|GF FUND|FUND MANAGEMENT|FUND MGMT|FUNDS MANAGEMENT|"
@@ -296,6 +303,8 @@ def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int
     n, top10, opts, etf = s["positions"], s["top10"], s["options"], s["etf"]
     if etf > 0.5:
         return "wealth", "shape: mostly ETFs"
+    if n <= 5 and opts == 0 and s.get("turnover", 0) < 0.3:
+        return "other", "shape: a few long-held stakes (strategic or corporate holder)"
     if n <= 150 and top10 >= 0.4 and etf <= 0.2:
         if opts > 0.05 or s.get("turnover", 0) > 0.6:
             return "hedge_fund", "shape: concentrated, options or high turnover"
@@ -304,8 +313,11 @@ def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int
         return "hedge_fund", "shape: heavy options"
     if n > 1500 and top10 < 0.25:
         return "index", "shape: broad and diversified"
-    if etf > 0.2:
+    if etf > 0.1:
         return "wealth", "shape: ETF-heavy"
+    if s.get("aum", 0) < 1.5e9:
+        # Small diversified books are mostly advisers running client accounts, not fund managers.
+        return "wealth", "shape: small diversified book"
     return "long_only", "shape: diversified"
 
 
