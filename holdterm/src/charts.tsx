@@ -102,9 +102,9 @@ export function HBars({ rows, fmt = signedUsd, title, labelWidth = 150, inline =
             </span>
             <span className="hb-track">
               {signed && <i className="hb-zero" />}
-              <i className={`hb-fill ${r.value >= 0 ? 'pos' : 'neg'}`} style={signed ? (r.value >= 0 ? { left: '50%', width: `${w}%` } : { right: '50%', width: `${w}%` }) : { left: 0, width: `${w}%` }} />
+              <i className={`hb-fill ${!signed ? 'acc' : r.value >= 0 ? 'pos' : 'neg'}`} style={signed ? (r.value >= 0 ? { left: '50%', width: `${w}%` } : { right: '50%', width: `${w}%` }) : { left: 0, width: `${w}%` }} />
             </span>
-            <span className={`hb-val ${r.value > 0 ? 'pos' : r.value < 0 ? 'neg' : 'dim'}`}>{fmt(r.value)}</span>
+            <span className={`hb-val ${!signed ? '' : r.value > 0 ? 'pos' : r.value < 0 ? 'neg' : 'dim'}`}>{fmt(r.value)}</span>
           </>
         )
         return <li key={r.key}>{r.href ? <A to={r.href} className="hb-row">{inner}</A> : <div className="hb-row">{inner}</div>}</li>

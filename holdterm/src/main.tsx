@@ -1,25 +1,40 @@
-import '@fontsource/ibm-plex-sans/400.css'
-import '@fontsource/ibm-plex-sans/500.css'
-import '@fontsource/ibm-plex-sans/600.css'
+import '@fontsource-variable/inter/index.css'
 import '@fontsource/ibm-plex-mono/400.css'
-import '@fontsource/ibm-plex-mono/500.css'
 import './styles.css'
 import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { funds, loadIndex, loadStockIndex, searchNames, type Manager, type StockIndexRow } from './data'
 import { A, navigate, usePath } from './lib'
 import { dataSlug, fundPath, publicSlug } from './names'
+import { price as PRICE } from './config'
 import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Home, ISSUES, NotFound, Privacy, Stock, Terms } from './pages'
 
-// [path, label, g-key]
+// [path, label, g-key]; alerts is the header's button, not a nav tab.
 const NAV: [string, string, string][] = [
-  ['/', 'pulse', 'h'],
-  ['/flows', 'flows', 'f'],
-  ['/consensus', 'consensus', 'c'],
-  ['/funds', 'funds', 'm'],
-  ['/filings', '13D·F4', 'd'],
-  ['/alerts', 'alerts', 'e'],
+  ['/', 'Overview', 'h'],
+  ['/funds', 'Investors', 'm'],
+  ['/flows', 'Buys & sells', 'f'],
+  ['/consensus', 'Most owned', 'c'],
+  ['/filings', 'Stakes & insiders', 'd'],
+  ['/alerts', 'Alerts', 'e'],
 ]
+const TABS = NAV.filter((n) => n[0] !== '/alerts')
+
+// Light by default; the choice is kept. index.html applies it before the first paint.
+const THEME_KEY = 'holdterm-theme'
+function useTheme(): [string, () => void] {
+  const [t, set] = useState(() => document.documentElement.dataset.theme || 'light')
+  const toggle = () => {
+    const next = t === 'dark' ? 'light' : 'dark'
+    document.documentElement.dataset.theme = next
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', next === 'dark' ? '#151b23' : '#ffffff')
+    try {
+      localStorage.setItem(THEME_KEY, next)
+    } catch {}
+    set(next)
+  }
+  return [t, toggle]
+}
 // Old paths keep working.
 const MOVED: Record<string, string> = { '/m': '/funds', '/activity': '/flows', '/grand': '/consensus', '/insiders': '/filings' }
 
@@ -50,13 +65,22 @@ function route(path: string) {
 }
 
 /** Wordmark: a ranked-weights glyph (a 13F book, largest position first) and the name. */
-export function Mark({ size = 20 }: { size?: number }) {
+export function Mark({ size = 24 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden className="mark">
-      <rect width="20" height="20" rx="3" fill="var(--acc)" />
-      <rect x="4" y="4.5" width="12" height="2.2" fill="#0b0b0a" />
-      <rect x="4" y="8.9" width="8.5" height="2.2" fill="#0b0b0a" />
-      <rect x="4" y="13.3" width="5" height="2.2" fill="#0b0b0a" />
+      <rect width="20" height="20" rx="5" fill="var(--brand)" />
+      <rect x="4" y="4.5" width="12" height="2.2" rx="1.1" fill="#14161a" />
+      <rect x="4" y="8.9" width="8.5" height="2.2" rx="1.1" fill="#14161a" />
+      <rect x="4" y="13.3" width="5" height="2.2" rx="1.1" fill="#14161a" />
+    </svg>
+  )
+}
+
+function Glass() {
+  return (
+    <svg className="glass" viewBox="0 0 16 16" width="15" height="15" aria-hidden>
+      <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   )
 }
@@ -104,11 +128,11 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
     <div className="overlay" onClick={() => setOpen(false)}>
       <div className="palette" onClick={(e) => e.stopPropagation()}>
         <div className="prompt">
-          <span className="acc">&gt;</span>
+          <Glass />
           <input
             ref={input}
             value={q}
-            placeholder="ticker, company, fund or manager"
+            placeholder="Search a ticker, company, fund or manager"
             aria-label="search tickers, companies, funds and managers"
             onChange={(e) => {
               setQ(e.target.value)
@@ -128,12 +152,12 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
         <ul>
           {hits.map((h, i) => (
             <li key={h.to} className={i === cur ? 'cur' : ''} onMouseEnter={() => setCur(i)} onClick={() => go(h)}>
-              <span className={`kind ${h.kind}`}>{h.kind === 'stock' ? 'stock' : 'fund'}</span>
+              <span className={`kind ${h.kind}`}>{h.kind === 'stock' ? 'Stock' : 'Investor'}</span>
               <span className="lbl">{h.label}</span>
               <span className="dim sub">{h.sub}</span>
             </li>
           ))}
-          {q && !hits.length && <li className="dim">no match{/^[a-z.]{1,6}$/i.test(q.trim()) ? ` · enter tries ticker ${q.trim().toUpperCase()}` : ''}</li>}
+          {q && !hits.length && <li className="dim">No match{/^[a-z.]{1,6}$/i.test(q.trim()) ? `. Press Enter to try the ticker ${q.trim().toUpperCase()}.` : '.'}</li>}
         </ul>
       </div>
     </div>
@@ -142,23 +166,23 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
 
 function Help({ close }: { close: () => void }) {
   const rows: [string, string][] = [
-    ['/  or  ⌘K', 'search tickers and investors'],
-    ['g h', 'pulse (home)'],
-    ['g f', 'flows: buys and sells'],
-    ['g c', 'consensus'],
-    ['g m', 'funds'],
-    ['g d', '13D, 13G and Form 4'],
-    ['g e', 'email alerts'],
-    ['j / k', 'move down / up a table'],
-    ['enter', 'open the selected row'],
-    ['1-5', 'switch tabs'],
-    ['?', 'this help'],
+    ['/  or  ⌘K', 'Search tickers and investors'],
+    ['g h', 'Overview'],
+    ['g m', 'Investors'],
+    ['g f', 'Buys and sells'],
+    ['g c', 'Most owned stocks'],
+    ['g d', '13D, 13G and Form 4 filings'],
+    ['g e', 'Email alerts'],
+    ['j / k', 'Move down / up a table'],
+    ['Enter', 'Open the selected row'],
+    ['1-5', 'Switch tabs'],
+    ['?', 'This help'],
   ]
   return (
     <div className="overlay" onClick={close}>
       <div className="palette help" onClick={(e) => e.stopPropagation()}>
         <div className="prompt">
-          <span className="acc">?</span> keyboard
+          Keyboard shortcuts
         </div>
         <table className="grid">
           <tbody>
@@ -181,6 +205,7 @@ function App() {
   const path = usePath()
   const [search, setSearch] = useState(false)
   const [help, setHelp] = useState(false)
+  const [theme, toggleTheme] = useTheme()
   useEffect(() => {
     let g = 0
     const onKey = (e: KeyboardEvent) => {
@@ -208,33 +233,65 @@ function App() {
   return (
     <>
       <header className="top">
-        <A to="/" className="brand" title="holdterm home">
-          <Mark />
-          <span className="word">holdterm</span>
-        </A>
-        <nav>
-          {NAV.map(([to, label, k]) => (
-            <A key={to} to={to} className={(to === '/' ? path === '/' : section === to || (to === '/funds' && section === '/m')) ? 'on' : ''} title={`g ${k}`}>
-              {label}
+        <div className="top-in">
+          <A to="/" className="brand" title="Holdterm home">
+            <Mark />
+            <span className="word">Holdterm</span>
+          </A>
+          <nav aria-label="sections">
+            {TABS.map(([to, label]) => (
+              <A key={to} to={to} className={(to === '/' ? path === '/' : section === to || (to === '/funds' && section === '/m')) ? 'on' : ''}>
+                {label}
+              </A>
+            ))}
+          </nav>
+          <div className="top-right">
+            <button className="search-btn" onClick={() => setSearch(true)} aria-label="Search stocks and investors">
+              <Glass />
+              <span className="label">Search stocks or investors</span>
+              <kbd>/</kbd>
+            </button>
+            <button className="icon-btn" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} title={theme === 'dark' ? 'Light theme' : 'Dark theme'}>
+              {theme === 'dark' ? (
+                <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden>
+                  <circle cx="10" cy="10" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4M4.2 4.2l1.7 1.7M14.1 14.1l1.7 1.7M4.2 15.8l1.7-1.7M14.1 5.9l1.7-1.7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden>
+                  <path d="M16.5 12.3A7 7 0 0 1 7.7 3.5a7 7 0 1 0 8.8 8.8Z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+            <A to="/alerts" className={`btn ${section === '/alerts' || section === '/account' ? 'ghost' : ''}`}>
+              <span className="hide-sm">Get alerts</span>
+              <span className="show-sm">Alerts</span>
             </A>
-          ))}
-        </nav>
-        <button className="search-btn" onClick={() => setSearch(true)}>
-          <span className="dim">search</span>
-          <kbd>/</kbd>
-          <svg className="glass" viewBox="0 0 16 16" width="14" height="14" aria-label="search">
-            <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.6" />
-          </svg>
-        </button>
+          </div>
+        </div>
       </header>
       <main key={path} tabIndex={-1}>
         {route(path)}
       </main>
       <footer className="foot">
-        <span>
-          holdterm · SEC EDGAR filings as filed · no ads · not investment advice · <A to="/about">about</A> · <A to="/alerts">alerts $3/mo</A> · <A to="/account">account</A> · <A to="/terms">terms</A> · <A to="/privacy">privacy</A> · <a href={`mailto:${CONTACT}`}>{CONTACT}</a> · <a href={ISSUES}>report a data error</a>
-        </span>
+        <div className="foot-in">
+          <div>
+            <A to="/" className="brand" title="Holdterm home">
+              <Mark size={20} />
+              <span className="word">Holdterm</span>
+            </A>
+            <p className="tagline">13F, 13D/G and Form 4 filings of concentrated, long-term investors, as filed with the SEC. No ads. Not investment advice.</p>
+          </div>
+          <nav aria-label="footer">
+            <A to="/about">About</A>
+            <A to="/alerts">Alerts, ${PRICE.monthly}/mo</A>
+            <A to="/account">Account</A>
+            <A to="/terms">Terms</A>
+            <A to="/privacy">Privacy</A>
+            <a href={`mailto:${CONTACT}`}>Contact</a>
+            <a href={ISSUES}>Report a data error</a>
+          </nav>
+        </div>
       </footer>
       <Search open={search} setOpen={setSearch} />
       {help && <Help close={() => setHelp(false)} />}

@@ -7,16 +7,16 @@ import TICKERS from '../src/tickers.json'
 
 const SITE = 'https://holdterm.factordynamics.com'
 const SECTIONS: Record<string, [string, string]> = {
-  '/': ['13F filings and trades of concentrated long-term funds', 'Every 13F filing, trade, 13D/G and Form 4 from a rule-based roster of concentrated, long-term funds. SEC EDGAR data, no ads.'],
-  '/funds': ['funds', 'The roster: concentrated, long-term 13F filers chosen by a published rule, with each one’s latest 13F.'],
-  '/flows': ['flows: buys and sells', 'What the roster bought and sold, stock by stock, from each fund’s latest 13F.'],
-  '/consensus': ['consensus', 'The stocks the roster owns in common, by number of funds, dollars held and conviction.'],
+  '/': ['What long-term investors buy and sell', 'Every 13F filing, trade, 13D/G and Form 4 from a rule-based roster of concentrated, long-term funds. SEC EDGAR data, no ads.'],
+  '/funds': ['Investors', 'The roster: concentrated, long-term 13F filers chosen by a published rule, with each one’s latest 13F.'],
+  '/flows': ['Buys and sells', 'What the roster bought and sold, stock by stock, from each fund’s latest 13F.'],
+  '/consensus': ['Most owned stocks', 'The stocks the roster owns in common, by number of funds, dollars held and conviction.'],
   '/filings': ['13D, 13G and Form 4 filings', 'Schedule 13D and 13G stakes and Form 4 trades filed by roster funds between 13Fs.'],
-  '/alerts': ['email alerts', 'Email alerts when the funds you follow file a 13F, 13D, 13G or Form 4. $3 a month.'],
-  '/account': ['account', 'Manage Holdterm email alerts.'],
-  '/about': ['about', 'How Holdterm chooses its roster and reads SEC filings.'],
-  '/terms': ['terms', 'Holdterm terms of service.'],
-  '/privacy': ['privacy', 'Holdterm privacy policy.'],
+  '/alerts': ['Email alerts', 'Email alerts when the funds you follow file a 13F, 13D, 13G or Form 4. $3 a month.'],
+  '/account': ['Account', 'Manage Holdterm email alerts.'],
+  '/about': ['About', 'How Holdterm chooses its roster and reads SEC filings.'],
+  '/terms': ['Terms', 'Holdterm terms of service.'],
+  '/privacy': ['Privacy', 'Holdterm privacy policy.'],
 }
 const MOVED = new Set(['/m', '/activity', '/grand', '/insiders'])
 const roster = ROSTER as unknown as { funds: { slug: string; filer_slug: string; firm: string }[] }
@@ -49,7 +49,7 @@ async function meta(path: string, origin: string): Promise<[string, string] | nu
   if (m) {
     const t = decodeURIComponent(m[1]).toUpperCase()
     if (!(await stockExists(t, origin))) return null
-    return [`${t} fund ownership`, `Which concentrated long-term funds own ${t}, what they bought and sold, and 13D/G and Form 4 filings.`]
+    return [`${t}: which funds own it`, `Which concentrated long-term funds own ${t}, what they bought and sold, and 13D/G and Form 4 filings.`]
   }
   return null
 }
@@ -62,8 +62,8 @@ export const onRequest = async ({ request, next }: { request: Request; next: () 
   const res = await next()
   if (!(res.headers.get('content-type') ?? '').includes('text/html')) return res
   const m = await meta(path, url.origin)
-  const [t, d] = m ?? ['not found', 'No such page.']
-  const title = `${t} · holdterm`
+  const [t, d] = m ?? ['Not found', 'No such page.']
+  const title = `${t} · Holdterm`
   const fm = path.match(/^\/m\/([a-z0-9-]+)$/)
   const sm = path.match(/^\/s\/(.+)$/)
   const canonical = SITE + (fm ? fundPath(dataSlug(fm[1])) : sm ? `/s/${encodeURIComponent(decodeURIComponent(sm[1]).toUpperCase())}` : path)

@@ -18,7 +18,9 @@ export const signedUsd = (v: number | null | undefined) => (v == null ? '—' : 
 export const pct = (v: number | null | undefined, d = 2) => (v == null || !isFinite(v) ? '—' : `${(v * 100).toFixed(d)}%`)
 export const num = (v: number | null | undefined) => (v == null ? '—' : Math.round(v).toLocaleString('en-US'))
 export const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-export const date = (d: string | null | undefined) => (d ? `${d.slice(8, 10)} ${MON[Number(d.slice(5, 7)) - 1]} ${d.slice(2, 4)}` : '—')
+/** "Nov 6" this year, "Nov 6, 2025" before it. */
+export const date = (d: string | null | undefined) => (d ? (d.slice(0, 4) === String(new Date().getUTCFullYear()) ? day(d) : `${day(d)}, ${d.slice(0, 4)}`) : '—')
+export const day = (d: string) => `${MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}`
 export const daysAgo = (d: string) => Math.round((Date.now() - Date.parse(d + 'T12:00:00Z')) / 86_400_000)
 
 // ---------- routing (history API, no dependency) ----------
@@ -89,28 +91,39 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): { data?: T; e
   }, deps)
   return s
 }
-export function Loading({ what = 'loading' }: { what?: string }) {
+export function Loading({ what = 'loading', rows = 6 }: { what?: string; rows?: number }) {
   return (
-    <div className="loading">
-      <span className="dim">{what}</span>
-      <span className="cursor" />
+    <div className="loading" role="status">
+      <span className="sr">{what}</span>
+      {Array.from({ length: rows }, (_, i) => (
+        <span key={i} className="skel" aria-hidden />
+      ))}
     </div>
   )
 }
-export function Failed({ error }: { error: string }) {
-  return <div className="loading neg">ERR {error}</div>
+/** A load that failed: plain words and a retry, with the technical reason in small print. */
+export function Failed({ error, what = 'this data' }: { error: string; what?: string }) {
+  return (
+    <div className="failed" role="alert">
+      <p>
+        <strong>Couldn’t load {what}.</strong> <span className="dim">The filings are served from a static mirror, so this is usually a brief network problem.</span> <span className="dim small">({error})</span>
+      </p>
+      <button className="btn ghost" onClick={() => location.reload()}>
+        Try again
+      </button>
+    </div>
+  )
 }
 
 // ---------- layout ----------
-export function Panel({ title, right, children, className = '', keys }: { title: ReactNode; right?: ReactNode; children: ReactNode; className?: string; keys?: string }) {
+/** Sentence case for labels written in lower case ("holdings" -> "Holdings"; "% of book" is left alone). */
+export const cap = <T,>(x: T): T => (typeof x === 'string' ? ((x.charAt(0).toUpperCase() + x.slice(1)) as T) : x)
+export function Panel({ title, right, children, className = '' }: { title: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={`panel ${className}`}>
       <header>
-        <h2>{title}</h2>
-        <span className="right">
-          {right}
-          {keys && <kbd>{keys}</kbd>}
-        </span>
+        <h2>{cap(title)}</h2>
+        <span className="right">{right}</span>
       </header>
       <div className="body">{children}</div>
     </section>
@@ -119,7 +132,7 @@ export function Panel({ title, right, children, className = '', keys }: { title:
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'pos' | 'neg' }) {
   return (
     <div className="stat">
-      <div className="label">{label}</div>
+      <div className="label">{cap(label)}</div>
       <div className={`value ${tone ?? ''}`}>{value}</div>
       {sub != null && <div className="sub">{sub}</div>}
     </div>
@@ -137,17 +150,21 @@ export function Tabs<T extends string>({ value, options, onChange }: { value: T;
   }, [options, onChange])
   return (
     <div className="tabs" role="tablist">
-      {options.map(([k, label], i) => (
-        <button key={k} role="tab" aria-selected={value === k} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
-          <span className="dim">{i + 1}</span>
-          {label}
-        </button>
-      ))}
+      {options.map(([k, label]) => {
+        // "holdings 14" shows its count as a badge.
+        const m = label.match(/^(.*\S)\s+(\d[\d,]*)$/)
+        return (
+          <button key={k} role="tab" aria-selected={value === k} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
+            {cap(m ? m[1] : label)}
+            {m && <span className="count">{m[2]}</span>}
+          </button>
+        )
+      })}
     </div>
   )
 }
 
-export const CHANGE_LABEL: Record<string, string> = { new: 'NEW', added: 'ADD', trimmed: 'TRIM', exited: 'SOLD', unchanged: '' }
+export const CHANGE_LABEL: Record<string, string> = { new: 'New', added: 'Added', trimmed: 'Trimmed', exited: 'Sold out', unchanged: '' }
 export function ChangeTag({ change, share_change, prev_shares }: { change: string | null; share_change?: number | null; prev_shares?: number | null }) {
   if (!change || change === 'unchanged') return <span className="dim">·</span>
   const tone = change === 'new' || change === 'added' ? 'pos' : 'neg'
@@ -270,11 +287,11 @@ export function Grid<R>({
               >
                 {c.sort ? (
                   <button className="sorter" onClick={() => setSort(sort?.[0] === c.key ? [c.key, sort[1] === 'desc' ? 'asc' : 'desc'] : [c.key, c.num ? 'desc' : 'asc'])}>
-                    {c.label}
+                    {cap(c.label)}
                     {sort?.[0] === c.key ? <span className="arrow" aria-hidden>{sort[1] === 'desc' ? '▼' : '▲'}</span> : null}
                   </button>
                 ) : (
-                  c.label
+                  cap(c.label)
                 )}
               </th>
             ))}

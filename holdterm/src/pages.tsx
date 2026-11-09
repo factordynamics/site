@@ -30,18 +30,18 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, Bar, ChangeTag, date, Failed, Grid, Loading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
+import { A, Bar, ChangeTag, date, day, Failed, Grid, Loading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
-import { follows, Follow, getToken, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, type Follows } from './account'
+import { follows, Follow, getToken, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, UNAVAILABLE, type Follows } from './account'
 
 const title = (t: string) => {
-  document.title = `${t} · holdterm`
+  document.title = `${t} · Holdterm`
   const url = SITE + (location.pathname.replace(/\/+$/, '') || '/')
   document.querySelector('link[rel=canonical]')?.setAttribute('href', url)
   document.querySelector('meta[property="og:url"]')?.setAttribute('content', url)
-  document.querySelector('meta[property="og:title"]')?.setAttribute('content', `${t} · holdterm`)
+  document.querySelector('meta[property="og:title"]')?.setAttribute('content', `${t} · Holdterm`)
 }
 export const REPO = 'https://github.com/factordynamics/site'
 export const ISSUES = `${REPO}/issues/new?labels=holdterm&title=Holdterm%3A+`
@@ -65,12 +65,20 @@ function FundLink({ slug, name }: { slug: string; name: string }) {
 }
 
 // ---------- shared bits ----------
-function Sector({ s }: { s?: string | null }) {
+function Sector({ s, full }: { s?: string | null; full?: boolean }) {
   const k = s || 'Unclassified'
+  const short = SECTOR_SHORT[k] ?? 'Other'
   return (
     <span className="sector" title={k}>
-      <i style={{ background: SECTOR_COLOR[k] ?? '#555' }} aria-hidden />
-      {SECTOR_SHORT[k] ?? 'OTHR'}
+      <i style={{ background: SECTOR_COLOR[k] ?? '#bab0ac' }} aria-hidden />
+      {full && short !== k ? (
+        <>
+          <span className="hide-sm">{k}</span>
+          <span className="show-sm">{short}</span>
+        </>
+      ) : (
+        short
+      )}
     </span>
   )
 }
@@ -116,12 +124,12 @@ function SectorRows({ items }: { items: { sector?: string | null; value: number 
         {mix.map((m) => (
           <tr key={m.sector}>
             <td>
-              <Sector s={m.sector} /> <span className="hide-sm dim">{m.sector}</span>
+              <Sector s={m.sector} full />
             </td>
             <td className="num">{pct(m.weight, 1)}</td>
             <td className="barcell">
               <span className="bar wide" aria-hidden>
-                <span className="fill" style={{ width: `${((m.weight / max) * 100).toFixed(1)}%`, background: SECTOR_COLOR[m.sector] ?? '#555' }} />
+                <span className="fill" style={{ width: `${((m.weight / max) * 100).toFixed(1)}%`, background: SECTOR_COLOR[m.sector] ?? '#bab0ac' }} />
               </span>
             </td>
             <td className="num">{usd(m.value)}</td>
@@ -141,13 +149,13 @@ export const ownVehicle = (e: Event) => {
   return tokens(e.display_name || e.issuer).some((w) => own.has(w))
 }
 const ACTION: Record<string, [string, string]> = {
-  buy: ['BUY', 'pos'],
-  sell: ['SELL', 'neg'],
-  mixed: ['MIXED', ''],
-  other: ['NO TRADE', 'dim'],
-  new_stake: ['NEW 5%+', 'pos'],
-  stake_update: ['UPDATE', ''],
-  below_threshold: ['<5%', 'neg'],
+  buy: ['Bought', 'pos'],
+  sell: ['Sold', 'neg'],
+  mixed: ['Mixed', ''],
+  other: ['No trade', 'dim'],
+  new_stake: ['New 5%+ stake', 'pos'],
+  stake_update: ['Stake update', ''],
+  below_threshold: ['Below 5%', 'neg'],
 }
 function ActionTag({ e }: { e: Event }) {
   const [label, tone] = ACTION[e.action] ?? [e.action, '']
@@ -178,7 +186,7 @@ const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => 
     hideSm: true,
     render: (e) => (
       <a href={e.url} target="_blank" rel="noreferrer" className="dim ext" aria-label={`SEC filing ${e.id}`}>
-        sec↗
+        SEC ↗
       </a>
     ),
   },
@@ -200,7 +208,7 @@ function season(now = new Date()) {
 // ---------- home ----------
 /** Each fund's latest book for the funds that filed in a given quarter. */
 const loadQuarterBooks = (slugs: string[]) => Promise.all(slugs.map((x) => loadBook(x).catch(() => null))).then((bs) => bs.filter((b): b is Book => Boolean(b)))
-const moveLabel = (h: Holding) => (h.change === 'new' ? 'NEW' : h.change === 'exited' ? 'SOLD OUT' : h.change === 'added' ? 'ADD' : 'TRIM')
+const moveLabel = (h: Holding) => (h.change === 'new' ? 'New' : h.change === 'exited' ? 'Sold out' : h.change === 'added' ? 'Added' : 'Trimmed')
 // ---------- alerts upsell ----------
 // One closable line above the home page. Shown to signed-out visitors only; a dismissal is kept for 90 days,
 // so it comes back at most once a 13F season. It is decided before the first paint (no layout shift).
@@ -229,7 +237,7 @@ function Upsell() {
   return (
     <section className="upsell" aria-label="email alerts offer" onKeyDown={(e) => e.key === 'Escape' && close()}>
       <span className="upsell-tag" aria-hidden>
-        alerts
+        Alerts
       </span>
       <p>
         <span className="hide-sm">Get an email when the funds you follow file a 13F, 13D or Form 4. </span>
@@ -237,7 +245,7 @@ function Upsell() {
         <span className="upsell-price">{PRICE.trialDays} days free, then ${PRICE.monthly}/mo.</span>
       </p>
       <A to="/alerts" className="btn">
-        start free trial<span className="hide-sm"> →</span>
+        Start free trial<span className="hide-sm"> →</span>
       </A>
       <button type="button" className="upsell-x" aria-label="dismiss alerts offer" title="dismiss" onClick={close}>
         <span aria-hidden>×</span>
@@ -250,12 +258,18 @@ export function Home() {
   return (
     <>
       <Upsell />
+      <div className="intro">
+        <div>
+          <h1>What long-term investors are buying and selling</h1>
+          <p>13F, 13D/G and Form 4 filings from {roster.funds.length} concentrated, long-term funds, read straight from SEC EDGAR, usually within hours of filing.</p>
+        </div>
+      </div>
       <HomeBody />
     </>
   )
 }
 function HomeBody() {
-  title('13F filings and trades of concentrated long-term funds')
+  title('What long-term investors buy and sell')
   const ix = useLoad(loadIndex, [])
   const ev = useLoad(loadEvents, [])
   const firms = useFirms()
@@ -322,8 +336,8 @@ function HomeBody() {
           title="latest 13F filings"
           right={
             <span className="dim">
-              {seasonFiled.length}/{ms.length} filed {quarterLabel(s.q)} · due {date(s.due).slice(0, 6)}
-              <span className="hide-sm">{daysLeft > 0 ? `, ${daysLeft} days left` : ' (passed)'}</span>
+              {seasonFiled.length} of {ms.length} filed {quarterLabel(s.q)}
+              <span className="hide-sm"> · due {day(s.due)}{daysLeft > 0 ? `, ${daysLeft} days left` : ' (passed)'}</span>
             </span>
           }
         >
@@ -369,7 +383,7 @@ function HomeBody() {
           />
           {due.length > 0 && (
             <div className="due small">
-              <span className="dim">not filed yet ({due.length}):</span>{' '}
+              <span className="dim">Not filed yet ({due.length}):</span>{' '}
               {due
                 .sort((a, b) => b.total_value - a.total_value)
                 .slice(0, 14)
@@ -389,7 +403,7 @@ function HomeBody() {
           )}
         </Panel>
         <div className="home-side">
-          <Panel className="reserve-15" title={`largest trades · ${quarterLabel(lead)}`} right={<A to="/flows">flows →</A>}>
+          <Panel className="reserve-15" title={`Largest trades in ${quarterLabel(lead)}`} right={<A to="/flows">All buys &amp; sells →</A>}>
             {books.data ? (
               <Grid
                 rows={moves}
@@ -405,7 +419,7 @@ function HomeBody() {
               <Loading what="reading the books" />
             )}
           </Panel>
-          <Panel className="reserve-10" title="13D/G and Form 4 · 30 days" right={<A to="/filings">all →</A>}>
+          <Panel className="reserve-10" title="13D/G and Form 4, last 30 days" right={<A to="/filings">All filings →</A>}>
             {ev.data ? (
               <Grid
                 rows={events.slice(0, 10)}
@@ -422,7 +436,7 @@ function HomeBody() {
               <Loading />
             )}
           </Panel>
-          <Panel title="highest conviction" right={<span className="dim">largest % of one book</span>}>
+          <Panel title="highest conviction" right={<span className="dim">Largest share of one fund’s book</span>}>
             <Grid
               rank
               rows={conviction}
@@ -453,7 +467,7 @@ function byCompany(hs: Holding[]) {
 }
 // ---------- funds directory ----------
 export function Funds() {
-  title('funds')
+  title('Investors')
   const ix = useLoad(loadIndex, [])
   const books = useLoad(loadBooks, [])
   if (ix.error) return <Failed error={ix.error} />
@@ -468,10 +482,15 @@ export function Funds() {
   }
   return (
     <div className="page">
-      <h1>
-        funds <span className="dim">· {ms.length} of {ms.length + roster.pending.length} live: concentrated, long-term books chosen by a <A to="/about#roster">published rule</A>; the rest are loading</span>
-      </h1>
-      <Panel title="roster" right={<span className="dim hide-sm">j/k + enter</span>}>
+      <div className="head">
+        <div>
+          <h1>Investors</h1>
+          <p className="lede">
+            {ms.length} concentrated, long-term funds chosen by a <A to="/about#roster">published rule</A>, each with its latest 13F.{roster.pending.length > 0 && ` ${roster.pending.length} more are loading.`}
+          </p>
+        </div>
+      </div>
+      <Panel title="All investors" right={<span className="dim hide-sm">Sorted by 13F book size</span>}>
         <Grid
           keyboard
           rank
@@ -513,7 +532,7 @@ export function Funds() {
               render: (m) => (
                 <span>
                   {quarterLabel(m.quarter)} {isStale(m, all) && <span className="badge warn">stale</span>}
-                  <span className="dim show-sm"> · {date(m.filing_date).slice(0, 6)}</span>
+                  <span className="dim show-sm"> · {day(m.filing_date)}</span>
                 </span>
               ),
               sort: (m) => m.quarter,
@@ -528,6 +547,7 @@ export function Funds() {
 
 // ---------- one fund ----------
 type ITab = 'holdings' | 'buys' | 'sells' | 'options' | 'filings' | 'events'
+const FUND_TAB: Record<ITab, string> = { holdings: 'Holdings', buys: 'Buys this quarter', sells: 'Sells this quarter', options: 'Options', filings: '13F filings', events: '13D/G and Form 4 filings' }
 export function Fund({ slug }: { slug: string }) {
   const b = useLoad(() => loadBook(slug), [slug])
   const ix = useLoad(loadIndex, [])
@@ -565,9 +585,10 @@ export function Fund({ slug }: { slug: string }) {
           <h1>
             {book.firm} {!inRoster(slug) && <span className="badge">not on the roster</span>} {stale && <span className="badge warn">stale: latest usable 13F is {quarterLabel(book.quarter)}</span>}
           </h1>
-          <div className="dim">
-            {book.pm && <span className="fg">PM {book.pm} · </span>}
-            EDGAR filer {filer ? filer.name : book.name} · CIK {(filer?.cik ?? book.cik).replace(/^0+/, '')} ·{' '}
+          {book.pm && <p className="lede">Portfolio manager {book.pm}</p>}
+          <div className="meta">
+            <span>EDGAR filer {filer ? filer.name : book.name}</span>
+            <span>CIK {(filer?.cik ?? book.cik).replace(/^0+/, '')}</span>
             <a href={book.sec_url} target="_blank" rel="noreferrer">
               13F-HR {book.accession} ↗
             </a>
@@ -576,21 +597,21 @@ export function Fund({ slug }: { slug: string }) {
         <Follow kind="investors" id={slug} />
       </div>
       <div className="stats fund-stats">
-        <Stat label="period" value={quarterLabel(book.quarter)} sub={`filed ${date(book.filing_date)}`} />
+        <Stat label="period" value={quarterLabel(book.quarter)} sub={`Filed ${date(book.filing_date)}`} />
         <Stat
           label="13F book"
           value={usd(book.long_value)}
           sub={
             <>
-              {book.prev_long_value ? `${signedUsd(book.long_value - book.prev_long_value)} vs ${quarterLabel(book.prev_quarter ?? '')}` : 'first filing'}
+              {book.prev_long_value ? `${signedUsd(book.long_value - book.prev_long_value)} vs ${quarterLabel(book.prev_quarter ?? '')}` : 'First filing'}
               {book.options_value > 0 && <span className="dim"> · + {usd(book.options_value)} options notional</span>}
             </>
           }
         />
-        <Stat label="positions" value={live.length} sub={`${stock.filter((x) => x.change === 'new').length} new · ${stock.filter((x) => x.change === 'exited').length} sold out`} />
+        <Stat label="positions" value={live.length} sub={`${stock.filter((x) => x.change === 'new').length} new, ${stock.filter((x) => x.change === 'exited').length} sold out`} />
         <Stat label="top 10 weight" value={pct(top10, 1)} sub={<Bar value={top10} max={1} />} />
-        <Stat label="bought" value={usd(bought)} tone="pos" sub={`${buys.length} positions`} />
-        <Stat label="sold" value={usd(-sold)} tone="neg" sub={`${sells.length} positions`} />
+        <Stat label="bought" value={usd(bought)} tone="pos" sub={`Across ${buys.length} positions`} />
+        <Stat label="sold" value={usd(-sold)} tone="neg" sub={`Across ${sells.length} positions`} />
       </div>
       <Tabs<ITab>
         value={tab}
@@ -601,10 +622,10 @@ export function Fund({ slug }: { slug: string }) {
           ['sells', `sells ${sells.length}`],
           ...(opts.length ? ([['options', `options ${opts.length}`]] as [ITab, string][]) : []),
           ['filings', `13F filings ${hist.length}`],
-          ['events', `13D/G·F4 ${events.length}`],
+          ['events', `13D/G and Form 4 ${events.length}`],
         ]}
       />
-      <Panel title={tab} right={tab === 'holdings' ? <span className="dim hide-sm">reported price = value ÷ shares as filed</span> : tab === 'options' ? <span className="dim hide-sm">notional = underlying shares × price; not part of the book</span> : undefined}>
+      <Panel title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Reported price = value ÷ shares as filed</span> : tab === 'options' ? <span className="dim hide-sm">Notional = underlying shares × price; not part of the book</span> : undefined}>
         {tab === 'holdings' && <HoldingsGrid rows={live} own={(x) => ownHolding(book, x)} />}
         {tab === 'buys' && <MovesGrid rows={buys} />}
         {tab === 'sells' && <MovesGrid rows={sells} />}
@@ -636,7 +657,7 @@ export function Fund({ slug }: { slug: string }) {
                 label: <span className="sr">SEC filing</span>,
                 render: (r) => (
                   <a href={r.sec_url} target="_blank" rel="noreferrer" className="dim ext">
-                    sec↗
+                    SEC ↗
                   </a>
                 ),
               },
@@ -646,7 +667,7 @@ export function Fund({ slug }: { slug: string }) {
         {tab === 'events' && <Grid rows={events} cols={eventCols(firms, false)} empty="no Form 4 or 13D/G filed since the latest 13F period" />}
       </Panel>
       <div className="duo wide">
-        <Panel title="13F book by quarter" right={<span className="dim">reported value · change vs prior quarter</span>}>
+        <Panel title="13F book by quarter" right={<span className="dim">Reported value and change vs prior quarter</span>}>
           {book.options_value > 0 && hist.some((r) => r.equity_value == null && r.long_value == null) && <div className="dim small">as filed, including options notional</div>}
           {hist.length > 1 ? <ValueHistory title={`${book.firm} 13F book by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.equity_value ?? r.long_value ?? r.total_value }))} /> : <div className="dim empty">one quarter on file</div>}
         </Panel>
@@ -718,7 +739,7 @@ function MovesGrid({ rows }: { rows: Holding[] }) {
 // ---------- flows ----------
 type ATab = 'buyers' | 'buy$' | 'new' | 'sellers' | 'exits'
 export function Flows() {
-  title('flows: buys and sells')
+  title('Buys and sells')
   const books = useLoad(loadBooks, [])
   const [picked, setQ] = useState<string | null>(null)
   const [tab, setTab] = useState<ATab>('buyers')
@@ -745,14 +766,17 @@ export function Flows() {
   const maxNet = Math.max(...list.slice(0, 100).map((r) => Math.abs(r.net)), 1)
   return (
     <div className="page">
-      <h1>
-        flows <span className="dim">· what the roster bought and sold, from each 13F against the fund’s prior quarter</span>
-      </h1>
+      <div className="head">
+        <div>
+          <h1>Buys and sells</h1>
+          <p className="lede">What the investors bought and sold, from each 13F against the fund’s prior quarter.</p>
+        </div>
+      </div>
       <div className="filters" role="group" aria-label="quarter">
-        <span className="dim">quarter</span>
+        <span className="dim">Quarter</span>
         {['latest', ...quarters].map((x) => (
           <button key={x} className={q === x ? 'chip on' : 'chip'} aria-pressed={q === x} onClick={() => setQ(x)}>
-            {x === 'latest' ? 'each fund’s latest' : quarterLabel(x)}
+            {x === 'latest' ? 'Each fund’s latest' : quarterLabel(x)}
           </button>
         ))}
         <span className="dim">· {fundsN} funds{tagQ && ` (${mix.map(([x, n]) => `${n} ${quarterLabel(x)}`).join(' + ')})`}</span>
@@ -768,7 +792,7 @@ export function Flows() {
           ['exits', 'sold out'],
         ]}
       />
-      <Panel title={`${num(list.length)} stocks`} right={<span className="dim hide-sm">trade $ = share change × filed price; a price move alone counts as 0</span>}>
+      <Panel title={`${num(list.length)} stocks`} right={<span className="dim hide-sm">Trade size = share change × filed price; a price move alone counts as 0</span>}>
         <Grid
           keyboard
           rank
@@ -809,7 +833,7 @@ export function Flows() {
 // ---------- consensus ----------
 type GTab = 'owners' | 'value' | 'conviction'
 export function Consensus() {
-  title('consensus: the roster’s combined stock book')
+  title('Most owned stocks')
   const books = useLoad(loadBooks, [])
   const [tab, setTab] = useState<GTab>('owners')
   const [sector, setSector] = useState<string | null>(null)
@@ -822,14 +846,19 @@ export function Consensus() {
   const mix = sectorMix(agg.rows)
   return (
     <div className="page">
-      <h1>
-        consensus <span className="dim">· the stocks in all {n} roster funds’ latest 13Fs, combined · {usd(agg.total)} in stocks (options and fund units excluded)</span>
-      </h1>
-      <Panel title="by sector" right={<span className="dim hide-sm">choose a sector to filter</span>}>
-        <StackBar parts={mix.map((m) => ({ label: m.sector, value: m.value, color: SECTOR_COLOR[m.sector] ?? '#555' }))} />
+      <div className="head">
+        <div>
+          <h1>Most owned stocks</h1>
+          <p className="lede">
+            The stocks in all {n} investors’ latest 13Fs, combined: {usd(agg.total)} in stocks, with options and fund units left out.
+          </p>
+        </div>
+      </div>
+      <Panel title="By sector" right={<span className="dim hide-sm">Choose a sector to filter</span>}>
+        <StackBar parts={mix.map((m) => ({ label: m.sector, value: m.value, color: SECTOR_COLOR[m.sector] ?? '#bab0ac' }))} />
         <div className="filters" role="group" aria-label="sector filter">
           <button className={!sector ? 'chip on' : 'chip'} aria-pressed={!sector} onClick={() => setSector(null)}>
-            all sectors
+            All sectors
           </button>
           {mix.map((m) => (
             <button key={m.sector} className={sector === m.sector ? 'chip on' : 'chip'} aria-pressed={sector === m.sector} onClick={() => setSector(m.sector)}>
@@ -891,16 +920,19 @@ export function Filings() {
   const market = ins.data
   return (
     <div className="page">
-      <h1>
-        filings <span className="dim">· Schedule 13D/13G and Form 4 filed by funds since their latest 13F · last {ev.data.window_days} days</span>
-      </h1>
+      <div className="head">
+        <div>
+          <h1>Stakes and insider filings</h1>
+          <p className="lede">Schedule 13D and 13G stakes and Form 4 trades filed by the investors between 13Fs, over the last {ev.data.window_days} days.</p>
+        </div>
+      </div>
       <Tabs<ETab>
         value={tab}
         onChange={setTab}
         options={[
           ['all', 'all'],
           ['13dg', '13D / 13G'],
-          ['f4', 'Form 4'],
+          ['f4', 'Form 4 filings'],
           ['market', 'company insiders'],
         ]}
       />
@@ -908,7 +940,7 @@ export function Filings() {
         <>
           <div className="filters" role="group" aria-label="filters">
             <button className={own ? 'chip on' : 'chip'} aria-pressed={own} onClick={() => setOwn(!own)}>
-              include filings on their own funds
+              Include filings on their own funds
             </button>
           </div>
           <Panel title={`${list.length} filings`}>
@@ -927,7 +959,7 @@ export function Filings() {
               { key: 't', label: 'issuer', render: (r) => <StockCell t={r.ticker} name={issuerName(r.issuer)} /> },
               { key: 'o', label: 'insider', render: (r) => <span className="trunc">{r.owner}</span> },
               { key: 'r', label: 'role', hideSm: true, render: (r) => <span className="dim trunc">{r.relationship}</span> },
-              { key: 'c', label: 'side', render: (r) => <span className={`tag ${r.code === 'P' ? 'pos' : 'neg'}`}>{r.code === 'P' ? 'BUY' : 'SELL'}</span>, sort: (r) => r.code },
+              { key: 'c', label: 'side', render: (r) => <span className={`tag ${r.code === 'P' ? 'pos' : 'neg'}`}>{r.code === 'P' ? 'Bought' : 'Sold'}</span>, sort: (r) => r.code },
               { key: 'p', label: 'price', num: true, hideSm: true, render: (r) => price(r.price) },
               { key: 'v', label: 'value', num: true, render: (r) => <span className={r.code === 'P' ? 'pos' : 'neg'}>{usd(r.value_usd)}</span>, sort: (r) => r.value_usd },
               {
@@ -935,7 +967,7 @@ export function Filings() {
                 label: <span className="sr">SEC filing</span>,
                 render: (r) => (
                   <a href={r.url} target="_blank" rel="noreferrer" className="dim ext">
-                    sec↗
+                    SEC ↗
                   </a>
                 ),
               },
@@ -953,6 +985,7 @@ export function Filings() {
 
 // ---------- stock ----------
 type STab = 'holders' | 'activity' | 'options' | 'filings'
+const STOCK_TAB: Record<STab, string> = { holders: 'Funds that own it', activity: 'Buys and sells this quarter', options: 'Options', filings: '13D/G and Form 4 filings' }
 export function Stock({ ticker }: { ticker: string }) {
   const s = useLoad(
     () =>
@@ -974,7 +1007,7 @@ export function Stock({ ticker }: { ticker: string }) {
   }, [])
   const firms = useFirms()
   const [tab, setTab] = useState<STab>('holders')
-  title(`${ticker} fund ownership`)
+  title(`${ticker}: which funds own it`)
   if (s.error) return <NotFound what={`no tracked fund reports ${ticker} in its latest 13F`} />
   if (!s.data) return <Loading what={`loading ${ticker}`} />
   const d = s.data
@@ -999,7 +1032,6 @@ export function Stock({ ticker }: { ticker: string }) {
   const movers = [...holders, ...exited].filter((h) => h.change && h.change !== 'unchanged').sort((a, b) => Math.abs(b.delta_value ?? 0) - Math.abs(a.delta_value ?? 0))
   const tickers = new Set(d.classes.map((c) => c.ticker))
   const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && !ownVehicle(e))
-  const scopeLabel = 'roster funds'
   const holderCols: Col<StockHolder>[] = [
     { key: 'm', label: 'fund', link: true, render: (h) => <span className={`trunc narrow-sm${inRoster(h.slug) ? ' strong' : ''}`}>{name(h)}</span>, sort: (h) => name(h) },
     { key: 'w', label: '% of book', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight },
@@ -1016,19 +1048,24 @@ export function Stock({ ticker }: { ticker: string }) {
           <h1>
             <span className="tkh">{[...new Set(d.classes.map((c) => c.ticker))].join('+')}</span> {issuerName(d.name)}
           </h1>
-          <div className="dim">
-            <Sector s={d.sector} /> {d.sector ?? 'Unclassified'} · {d.classes.map((c) => `${c.ticker} CUSIP ${c.cusip}`).join(' · ')}
+          <div className="meta">
+            <Sector s={d.sector} full />
+            {d.classes.map((c) => (
+              <span key={c.cusip}>
+                {c.ticker} CUSIP {c.cusip}
+              </span>
+            ))}
           </div>
         </div>
         <Follow kind="stocks" id={d.ticker} />
       </div>
       <div className="stats">
-        <Stat label={`holders · ${scopeLabel}`} value={holders.length} sub={`${prevHolders} last quarter (${holders.length - prevHolders >= 0 ? '+' : ''}${holders.length - prevHolders})`} />
-        <Stat label={`value held · ${scopeLabel}`} value={usd(value)} />
+        <Stat label="funds holding it" value={holders.length} sub={`${prevHolders} last quarter (${holders.length - prevHolders >= 0 ? '+' : ''}${holders.length - prevHolders})`} />
+        <Stat label="value held" value={usd(value)} sub="Across those funds’ latest 13Fs" />
         <Stat label="new / added" value={`${nNew} / ${cnt('added')}`} tone={nNew + cnt('added') > 0 ? 'pos' : undefined} />
         <Stat label="trimmed / sold out" value={`${cnt('trimmed')} / ${exited.length}`} tone={cnt('trimmed') + exited.length > 0 ? 'neg' : undefined} />
       </div>
-        <Panel title={`largest positions by % of book · ${scopeLabel}`}>
+        <Panel title="Biggest bets: share of each fund’s book">
           {holders.length ? (
             <HBars title="largest holders by weight" fmt={(v) => pct(v, 1)} labelWidth={190} rows={[...holders].sort((a, b) => b.weight - a.weight).slice(0, 6).map((h) => ({ key: h.slug, href: fundHref(h), label: name(h), value: h.weight }))} />
           ) : (
@@ -1040,12 +1077,12 @@ export function Stock({ ticker }: { ticker: string }) {
         onChange={setTab}
         options={[
           ['holders', `holders ${holders.length}`],
-          ['activity', `activity ${movers.length}`],
+          ['activity', `buys and sells ${movers.length}`],
           ['options', `options ${pick(d.options).length}`],
-          ['filings', `13D/G·F4 ${events.length}`],
+          ['filings', `13D/G and Form 4 ${events.length}`],
         ]}
       />
-      <Panel title={tab}>
+      <Panel title={STOCK_TAB[tab]}>
         {tab === 'holders' && <Grid keyboard rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty="no roster fund holds it; count all tracked funds" />}
         {tab === 'activity' && (
           <Grid
@@ -1099,59 +1136,69 @@ function sampleEmail(b: Book) {
     `Manage alerts: ${SITE}/account/ · SEC EDGAR data, not investment advice.`,
   ].join('\n')
 }
+function Check() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden style={{ marginTop: 3, color: 'var(--pos)' }}>
+      <path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 export function Alerts() {
-  title('email alerts')
+  title('Email alerts')
   const [yearly, setYearly] = useState(false)
   const sample = useLoad(() => loadBook('warren-buffett'), [])
   const link = yearly ? checkout.yearly : checkout.monthly
   return (
     <div className="page">
-      <h1>
-        alerts <span className="dim">· the one thing Holdterm sells; the site stays free with no ads</span>
-      </h1>
+      <div className="head">
+        <div>
+          <h1>Email alerts</h1>
+          <p className="lede">Know within hours when the investors you follow buy or sell. It’s the one thing Holdterm sells; the site stays free, with no ads.</p>
+        </div>
+      </div>
       <div className="alerts-grid">
         <div className="alerts-side">
-        <Panel title="holdterm alerts">
+        <Panel title="Holdterm alerts">
           <div className="price">
             <span className="big">${yearly ? PRICE.yearly : PRICE.monthly}</span>
             <span className="dim">/{yearly ? 'year' : 'month'}</span>
           </div>
           <div className="filters" role="group" aria-label="billing period">
             <button className={!yearly ? 'chip on' : 'chip'} aria-pressed={!yearly} onClick={() => setYearly(false)}>
-              monthly ${PRICE.monthly}
+              Monthly ${PRICE.monthly}
             </button>
             <button className={yearly ? 'chip on' : 'chip'} aria-pressed={yearly} onClick={() => setYearly(true)}>
-              yearly ${PRICE.yearly} <span className="pos">save {Math.round((1 - PRICE.yearly / (PRICE.monthly * 12)) * 100)}%</span>
+              Yearly ${PRICE.yearly} <span className="pos">save {Math.round((1 - PRICE.yearly / (PRICE.monthly * 12)) * 100)}%</span>
             </button>
           </div>
           <a className="btn" href={link}>
-            start the {PRICE.trialDays}-day free trial →
+            Start your {PRICE.trialDays}-day free trial
           </a>
           <p className="dim small">
             {PRICE.trialDays} days free, then ${PRICE.monthly}/month or ${PRICE.yearly}/year until you cancel. Cancel any time from your account. Checkout is by Stripe and billed by Factor Dynamics, which runs Holdterm. See the <A to="/terms">terms</A> and <A to="/privacy">privacy</A>.
           </p>
           <p className="small">
-            Already subscribed? <A to="/account">sign in with your email →</A>
+            Already subscribed? <A to="/account">Sign in with your email</A>
           </p>
         </Panel>
         <Panel title="what you get">
           <ul className="list">
             <li>
-              <span className="acc">▸</span> an email within hours of a fund you follow filing its 13F, with the biggest buys, sells, new positions and sales
+              <Check /> An email within hours of a fund you follow filing its 13F, with the biggest buys, sells, new positions and sales
             </li>
             <li>
-              <span className="acc">▸</span> 13D, 13G and Form 4 filings by those funds, and by any fund in stocks you follow
+              <Check /> 13D, 13G and Form 4 filings by those funds, and by any fund in stocks you follow
             </li>
             <li>
-              <span className="acc">▸</span> follow nobody and you get every roster fund
+              <Check /> Follow nobody and you get every roster fund
             </li>
             <li>
-              <span className="acc">▸</span> plain text with a link to the SEC filing; change what you follow any time
+              <Check /> Plain text with a link to the SEC filing; change what you follow any time
             </li>
           </ul>
         </Panel>
         </div>
-        <Panel title="sample alert" right={<span className="dim">built from a real filing</span>} className="sample">
+        <Panel title="Sample alert" right={<span className="dim">Built from a real filing</span>} className="sample">
           {sample.data ? (
             <pre className="email">
               {sampleEmail(sample.data)}
@@ -1176,7 +1223,7 @@ const when = (v: number | string | null | undefined) => {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 export function Account() {
-  title('account')
+  title('Account')
   const [member, setMember, err] = useMember()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
@@ -1184,11 +1231,15 @@ export function Account() {
   const ix = useLoad(loadIndex, [])
   const [pending, setPending] = useState(() => /[?&](session_id|login)=/.test(location.search))
   const [welcome, setWelcome] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
   useEffect(() => {
-    startFromUrl().then((m) => {
-      if (m) (setMember(m), setWelcome(true))
-      setPending(false)
-    })
+    startFromUrl().then(
+      (m) => {
+        if (m) (setMember(m), setWelcome(true))
+        setPending(false)
+      },
+      (e: Error) => (setProblem(e.message), setPending(false)),
+    )
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (member?.active) follows().then(setF).catch(() => {})
@@ -1198,9 +1249,9 @@ export function Account() {
   if (!member)
     return (
       <div className="page narrow">
-        <h1>account</h1>
-        <Panel title="sign in">
-          {err && <div className="neg">{err}</div>}
+        <h1>Account</h1>
+        <Panel title="Sign in">
+          {(problem || err) && <div className="notice warn">{problem || err}</div>}
           {sent ? (
             <div>If {email} has an active plan, a sign-in link is on its way. It works for 7 days.</div>
           ) : (
@@ -1208,21 +1259,22 @@ export function Account() {
               className="prompt-form"
               onSubmit={(e) => {
                 e.preventDefault()
-                requestLogin(email).finally(() => setSent(true))
+                setProblem(null)
+                requestLogin(email).then(
+                  () => setSent(true),
+                  (e: Error) => (e.message === UNAVAILABLE ? setProblem(UNAVAILABLE) : setSent(true)),
+                )
               }}
             >
               <label htmlFor="email" className="sr">
                 email
               </label>
-              <span className="acc" aria-hidden>
-                &gt;
-              </span>
               <input id="email" type="email" required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <button className="btn">email me a link</button>
+              <button className="btn">Email me a link</button>
             </form>
           )}
           <p className="dim small">
-            No account yet? <A to="/alerts">start a {PRICE.trialDays}-day trial →</A> · <a href={checkout.portal}>manage or cancel billing on Stripe ↗</a>
+            No account yet? <A to="/alerts">Start a {PRICE.trialDays}-day free trial</A>. To manage or cancel billing, use the <a href={checkout.portal}>Stripe billing portal ↗</a>
           </p>
         </Panel>
       </div>
@@ -1233,11 +1285,12 @@ export function Account() {
   const ends = member.cancel_at_period_end || member.status === 'canceled'
   return (
     <div className="page narrow">
-      <h1>account</h1>
+      <h1>Account</h1>
+      {problem && <div className="notice warn">{problem}</div>}
       {welcome && (
-        <Panel title="you're in">
+        <Panel title="You’re in">
           <p>
-            Alerts are on. Follow nobody and you get every roster fund; or pick funds below, and use <span className="acc">+ follow</span> on any fund or stock page.
+            Alerts are on. Follow nobody and you get every roster fund; or pick funds below, and use <span className="acc">+ Follow</span> on any fund or stock page.
           </p>
         </Panel>
       )}
@@ -1247,8 +1300,8 @@ export function Account() {
         <Stat label="following" value={on.size || 'all'} sub={on.size ? (on.size === 1 ? 'fund' : 'funds') : 'every roster fund'} />
       </div>
       <div className="filters">
-        <button className="chip" onClick={() => openPortal()}>
-          manage billing ↗
+        <button className="chip" onClick={() => openPortal().catch((e: Error) => setProblem(e.message))}>
+          Manage billing ↗
         </button>
         <button
           className="chip"
@@ -1257,7 +1310,7 @@ export function Account() {
             setMember(null)
           }}
         >
-          sign out
+          Sign out
         </button>
       </div>
       {member.active && (
@@ -1319,7 +1372,7 @@ function StockFollows({ f, setF }: { f: Follows | null; setF: (f: Follows) => vo
 
 // ---------- about, terms, privacy ----------
 export function About() {
-  title('about')
+  title('About')
   const r = roster.rule as Record<string, number>
   return (
     <div className="page narrow prose">
@@ -1399,19 +1452,19 @@ export function About() {
       <Panel title="data">
         <ul className="list">
           <li>
-            <span className="acc">▸</span> Form 13F-HR as filed on SEC EDGAR. Funds file up to 45 days after quarter end, so a 13F is a snapshot, not today’s book. It covers US-listed long positions and listed options only: no shorts, cash, bonds or foreign shares.
+            <span className="dim" aria-hidden>•</span> Form 13F-HR as filed on SEC EDGAR. Funds file up to 45 days after quarter end, so a 13F is a snapshot, not today’s book. It covers US-listed long positions and listed options only: no shorts, cash, bonds or foreign shares.
           </li>
           <li>
-            <span className="acc">▸</span> Buys and sells are share changes against the fund’s previous 13F, valued at the price implied by the filing. A price move alone is not a trade.
+            <span className="dim" aria-hidden>•</span> Buys and sells are share changes against the fund’s previous 13F, valued at the price implied by the filing. A price move alone is not a trade.
           </li>
           <li>
-            <span className="acc">▸</span> Schedule 13D and 13G (5%+ ownership) and Form 4 where a tracked fund is the filer. Filings on a fund’s own vehicles are labelled “own fund” and left out of feeds by default.
+            <span className="dim" aria-hidden>•</span> Schedule 13D and 13G (5%+ ownership) and Form 4 where a tracked fund is the filer. Filings on a fund’s own vehicles are labelled “own fund” and left out of feeds by default.
           </li>
           <li>
-            <span className="acc">▸</span> No market prices: everything comes from SEC filings. Reported price is the filing’s value divided by its share count. Tickers come from CUSIP mapping, with a small sourced fallback file (src/tickers.json); a company that has left the exchange shows its former ticker with a †, and where no ticker exists we show the company name rather than guess.
+            <span className="dim" aria-hidden>•</span> No market prices: everything comes from SEC filings. Reported price is the filing’s value divided by its share count. Tickers come from CUSIP mapping, with a small sourced fallback file (src/tickers.json); a company that has left the exchange shows its former ticker with a †, and where no ticker exists we show the company name rather than guess.
           </li>
           <li>
-            <span className="acc">▸</span> Funds are named by firm. A person is shown only when they run the portfolio today.
+            <span className="dim" aria-hidden>•</span> Funds are named by firm. A person is shown only when they run the portfolio today.
           </li>
         </ul>
       </Panel>
@@ -1420,7 +1473,7 @@ export function About() {
           Email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> for anything: a wrong number, ticker or name (send the page link and we’ll check it against the SEC filing), billing, or deleting your data. You can also <a href={ISSUES}>open a GitHub issue ↗</a>. Manage or cancel a subscription in the <a href={checkout.portal}>Stripe billing portal ↗</a>.
         </p>
       </Panel>
-      <Panel title="keys">
+      <Panel title="Keyboard shortcuts">
         <p>
           <kbd>/</kbd> search · <kbd>g</kbd> then <kbd>h</kbd> <kbd>f</kbd> <kbd>c</kbd> <kbd>m</kbd> <kbd>d</kbd> <kbd>e</kbd> to jump · <kbd>j</kbd>/<kbd>k</kbd> and <kbd>enter</kbd> in tables · <kbd>1</kbd>-<kbd>5</kbd> tabs · <kbd>?</kbd> help
         </p>
@@ -1432,19 +1485,19 @@ export function About() {
   )
 }
 export function Terms() {
-  title('terms')
+  title('Terms')
   return (
     <div className="page narrow prose">
       <h1>terms</h1>
       <Panel title="the short version">
         <ul className="list">
-          <li><span className="acc">▸</span> Holdterm is operated by Factor Dynamics. By using the site or buying alerts you agree to these terms.</li>
-          <li><span className="acc">▸</span> Everything here is information drawn from public SEC filings. It is not investment, tax or legal advice, and it is not a recommendation to buy or sell anything.</li>
-          <li><span className="acc">▸</span> Filings can be late, amended or wrong, and our processing can introduce errors. The data is provided as is, without warranty. Check the linked SEC filing before relying on any number.</li>
-          <li><span className="acc">▸</span> Alerts are a subscription: ${PRICE.monthly}/month or ${PRICE.yearly}/year after a {PRICE.trialDays}-day free trial, renewing until you cancel. Cancel any time in the billing portal; you keep access to the end of the period you paid for. Payments are processed by Stripe.</li>
-          <li><span className="acc">▸</span> Alerts are sent on a best-effort basis; delivery can be delayed or missed. Our liability is limited to the fees you paid in the last 12 months.</li>
-          <li><span className="acc">▸</span> Don’t resell or bulk-redistribute Holdterm’s pages or emails. The underlying SEC filings are public.</li>
-          <li><span className="acc">▸</span> We may change these terms; material changes to paid plans are emailed to subscribers first.</li>
+          <li><span className="dim" aria-hidden>•</span> Holdterm is operated by Factor Dynamics. By using the site or buying alerts you agree to these terms.</li>
+          <li><span className="dim" aria-hidden>•</span> Everything here is information drawn from public SEC filings. It is not investment, tax or legal advice, and it is not a recommendation to buy or sell anything.</li>
+          <li><span className="dim" aria-hidden>•</span> Filings can be late, amended or wrong, and our processing can introduce errors. The data is provided as is, without warranty. Check the linked SEC filing before relying on any number.</li>
+          <li><span className="dim" aria-hidden>•</span> Alerts are a subscription: ${PRICE.monthly}/month or ${PRICE.yearly}/year after a {PRICE.trialDays}-day free trial, renewing until you cancel. Cancel any time in the billing portal; you keep access to the end of the period you paid for. Payments are processed by Stripe.</li>
+          <li><span className="dim" aria-hidden>•</span> Alerts are sent on a best-effort basis; delivery can be delayed or missed. Our liability is limited to the fees you paid in the last 12 months.</li>
+          <li><span className="dim" aria-hidden>•</span> Don’t resell or bulk-redistribute Holdterm’s pages or emails. The underlying SEC filings are public.</li>
+          <li><span className="dim" aria-hidden>•</span> We may change these terms; material changes to paid plans are emailed to subscribers first.</li>
         </ul>
       </Panel>
       <Panel title="contact">
@@ -1456,35 +1509,62 @@ export function Terms() {
   )
 }
 export function Privacy() {
-  title('privacy')
+  title('Privacy')
   return (
     <div className="page narrow prose">
       <h1>privacy</h1>
       <Panel title="what we keep">
         <ul className="list">
-          <li><span className="acc">▸</span> Browsing is anonymous: no accounts, ads, tracking pixels or third-party analytics on the public pages.</li>
-          <li><span className="acc">▸</span> If you buy alerts we keep your email, your Stripe customer and subscription ids, and the funds and stocks you follow. That is all we need to send alerts.</li>
-          <li><span className="acc">▸</span> Card details go to Stripe and never reach us. Emails are sent through Resend.</li>
-          <li><span className="acc">▸</span> Signing in stores a session token in your browser’s local storage. No other cookies.</li>
-          <li><span className="acc">▸</span> We don’t sell or share your data. Cancel in the billing portal and email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> to ask for deletion, and we delete your record.</li>
-          <li><span className="acc">▸</span> Contact: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.</li>
+          <li><span className="dim" aria-hidden>•</span> Browsing is anonymous: no accounts, ads, tracking pixels or third-party analytics on the public pages.</li>
+          <li><span className="dim" aria-hidden>•</span> If you buy alerts we keep your email, your Stripe customer and subscription ids, and the funds and stocks you follow. That is all we need to send alerts.</li>
+          <li><span className="dim" aria-hidden>•</span> Card details go to Stripe and never reach us. Emails are sent through Resend.</li>
+          <li><span className="dim" aria-hidden>•</span> Signing in stores a session token in your browser’s local storage. No other cookies.</li>
+          <li><span className="dim" aria-hidden>•</span> We don’t sell or share your data. Cancel in the billing portal and email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> to ask for deletion, and we delete your record.</li>
+          <li><span className="dim" aria-hidden>•</span> Contact: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.</li>
         </ul>
       </Panel>
     </div>
   )
 }
 
-export function NotFound({ what = 'no such page' }: { what?: string }) {
-  title('not found')
+export function NotFound({ what = 'There’s no page at this address' }: { what?: string }) {
+  title('Not found')
+  // The edge normally answers unknown paths with a 404 and noindex. When it can't (static fallback), the
+  // page itself asks not to be indexed and drops its canonical.
+  useEffect(() => {
+    const m = document.createElement('meta')
+    m.name = 'robots'
+    m.content = 'noindex'
+    document.head.append(m)
+    const c = document.querySelector('link[rel=canonical]')
+    c?.remove()
+    return () => {
+      m.remove()
+      if (c) document.head.append(c)
+    }
+  }, [])
   return (
     <div className="page narrow">
-      <h1 className="neg">404</h1>
-      <Panel title="error">
-        <p>{what}.</p>
-        <p>
-          <A to="/">home</A> · press <kbd>/</kbd> to search
-        </p>
-      </Panel>
+      <div className="head">
+        <div>
+          <h1>Page not found</h1>
+          <p className="lede">{what.charAt(0).toUpperCase() + what.slice(1)}.</p>
+        </div>
+      </div>
+      <div className="filters">
+        <A to="/" className="btn">
+          Go to the overview
+        </A>
+        <A to="/funds" className="btn ghost">
+          Browse investors
+        </A>
+        <A to="/consensus" className="btn ghost">
+          Most owned stocks
+        </A>
+      </div>
+      <p className="dim">
+        Looking for a stock or fund? Press <kbd>/</kbd> to search.
+      </p>
     </div>
   )
 }

@@ -28,21 +28,28 @@ async function call<T>(path: string, init: { method?: string; body?: unknown; au
     if (!t) throw new Error('sign in again')
     headers.Authorization = `Bearer ${t}`
   }
-  const r = await fetch(api + path, { method: init.method ?? (init.body !== undefined ? 'POST' : 'GET'), headers, body: init.body !== undefined ? JSON.stringify(init.body) : undefined })
+  const r = await fetch(api + path, { method: init.method ?? (init.body !== undefined ? 'POST' : 'GET'), headers, body: init.body !== undefined ? JSON.stringify(init.body) : undefined }).catch(() => null)
+  // Over quota (429), down (5xx) or unreachable: the rest of the site still works; say so in plain words.
+  if (!r || r.status === 429 || r.status >= 500) throw new Error(UNAVAILABLE)
   if (r.status === 401 && init.auth) signOut()
-  if (!r.ok) throw new Error(r.status === 402 ? 'plan not active' : `error ${r.status}`)
+  if (!r.ok) throw new Error(r.status === 402 ? 'Your plan is not active.' : `Something went wrong (error ${r.status}).`)
   return r.json() as Promise<T>
 }
+export const UNAVAILABLE = 'Accounts are briefly unavailable. Your plan and alert settings are safe; please try again in a few hours. Everything else on Holdterm works as usual.'
 
-/** Signs in from a Stripe checkout return (?session_id=cs_...) or an emailed link (?login=...). */
+/** Signs in from a Stripe checkout return (?session_id=cs_...) or an emailed link (?login=...). While the
+ * service is unavailable the link stays in the address bar, so reloading later finishes the sign-in. */
 export async function startFromUrl(): Promise<Member | null> {
   const p = new URLSearchParams(location.search)
   const sid = p.get('session_id')
   const login = p.get('login')
   const body = sid?.startsWith('cs_') ? { checkout_session: sid } : login ? { login } : null
   if (!body || !api) return null
+  const r = await call<{ token: string; member: Member }>('/session', { body }).catch((e: Error) => {
+    if (e.message === UNAVAILABLE) throw new Error(sid ? `Your checkout went through, but we couldn’t sign you in just now. Keep this page and reload it in a few hours, or use the sign-in link we email you.` : UNAVAILABLE)
+    return null
+  })
   history.replaceState(null, '', '/account')
-  const r = await call<{ token: string; member: Member }>('/session', { body }).catch(() => null)
   if (!r) return null
   localStorage.setItem(KEY, JSON.stringify({ token: r.token, exp: Date.now() + 30 * 86_400_000 }))
   return r.member
@@ -70,14 +77,15 @@ export function useMember(): [Member | null, (m: Member | null) => void, string 
 /** Follow toggle for an investor or stock. Signed-out visitors go to the alerts page. */
 export function Follow({ kind, id }: { kind: keyof Follows; id: string }) {
   const [f, setF] = useState<Follows | null>(null)
+  const [down, setDown] = useState(false)
   const signedIn = Boolean(api && getToken())
   useEffect(() => {
-    if (signedIn) follows().then(setF, () => {})
+    if (signedIn) follows().then(setF, () => setDown(true))
   }, [signedIn])
   if (!signedIn)
     return (
-      <A to="/alerts" className="btn ghost" title="get an email when this changes">
-        + alert me
+      <A to="/alerts" className="btn ghost" title="Get an email when this changes">
+        + Alert me
       </A>
     )
   const on = f?.[kind].includes(id) ?? false
@@ -85,9 +93,10 @@ export function Follow({ kind, id }: { kind: keyof Follows; id: string }) {
     <button
       className={`btn ${on ? '' : 'ghost'}`}
       disabled={!f}
-      onClick={() => f && setFollow(kind, id, !on).then(setF, () => {})}
+      title={down ? 'Following is briefly unavailable; try again in a few hours' : undefined}
+      onClick={() => f && setFollow(kind, id, !on).then(setF, () => setDown(true))}
     >
-      {on ? '✓ following' : '+ follow'}
+      {down ? 'Follow unavailable' : on ? '✓ Following' : '+ Follow'}
     </button>
   )
 }
