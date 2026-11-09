@@ -791,7 +791,8 @@ export function issuerLatest(e: IssuerEvent): Latest {
 // EDGAR's own form (0001017918-26-000058), so spreadsheets read it as text, not 1.017918e+14.
 const dashed = (a?: string) => (a && /^\d{18}$/.test(a) ? `${a.slice(0, 10)}-${a.slice(10, 12)}-${a.slice(12)}` : (a ?? ''))
 const accNo = (s: string) => s.match(/\d{10}-?\d{2}-?\d{6}/)?.[0].replace(/-/g, '') ?? s
-const EVENTS_PER_TICKER = 10
+// GET /events?window=quarter returns every event since the quarter start, up to 150 per ticker.
+const EVENTS_PER_TICKER = 150
 const QSTART = ['01-01', '04-01', '07-01', '10-01']
 /** The latest meaningful filing on a name: open-market buys and sells at or above the member's insider
  *  threshold (Form 4 by a fund or a company insider), and any 13D/G. Grants, option exercises, tax

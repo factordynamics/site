@@ -98,8 +98,12 @@ try {
     if (!f.ok || !f.slug) continue
     const to = curated.get(f.cik.replace(/^0+/, ''))
     if (to) {
-      mkdirSync(join(dist, 'investors', f.slug), { recursive: true })
-      redirect(`investors/${f.slug}/index.html`, `investors/${to}/`)
+      // A filer that became a curated fund under the same slug (Akre) keeps its investor page; a redirect
+      // to itself would reload forever.
+      if (to !== f.slug) {
+        mkdirSync(join(dist, 'investors', f.slug), { recursive: true })
+        redirect(`investors/${f.slug}/index.html`, `investors/${to}/`)
+      }
       continue
     }
     const who = tc(f.name)

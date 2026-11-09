@@ -66,7 +66,7 @@ export function StockPage() {
       if (r.next_offset == null) break
       off = r.next_offset
     }
-    return r ? { count: r.count, truncated: r.truncated, rows, more: r.next_offset != null } : null
+    return r ? { count: r.filers ?? r.count, truncated: r.truncated, rows, more: r.next_offset != null } : null
   }, [wide, d?.ticker, view, pages, member?.plan, member?.active])
   const smartTotal = fh.data?.smart ? fh.data.smart.current + fh.data.smart.older : 0
   const api = full.data && !full.data.truncated && (view !== 'smart' || full.data.count >= smartTotal * 0.8) ? full.data : null
@@ -77,7 +77,7 @@ export function StockPage() {
     const mine = new Map(tracked.map((h) => [h.slug, h]))
     if (api)
       return api.rows
-        .filter((r) => r.kind === 'equity' || !r.kind)
+        .filter((r) => !r.put_call && (r.kind === 'equity' || !r.kind))
         .map((r): StockHolder => {
           const m = mine.get(r.filer.slug)
           return { slug: r.filer.slug, manager: m?.manager ?? displayName(r.filer.name), firm: r.filer.name, quarter: r.period, featured: m?.featured ?? false, shares: r.shares, value: r.value_usd, weight: r.weight ?? 0, prev_shares: r.prev_shares ?? 0, prev_value: r.prev_value_usd ?? 0, delta_value: r.value_usd - (r.prev_value_usd ?? 0), change: r.change }

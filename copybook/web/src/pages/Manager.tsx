@@ -47,7 +47,7 @@ export function ManagerPage() {
     return s ? all.filter((h) => `${h.ticker ?? ''} ${h.issuer} ${h.cusip}`.toLowerCase().includes(s)) : all
   }, [book.rows, book.options, view, q])
 
-  if (m.error instanceof CuratedRedirect) return <Navigate to={`/investors/${m.error.slug}/`} replace />
+  if (m.error instanceof CuratedRedirect && m.error.slug !== slug) return <Navigate to={`/investors/${m.error.slug}/`} replace />
   if (m.error)
     return (
       <div className="container-x pt-20">
