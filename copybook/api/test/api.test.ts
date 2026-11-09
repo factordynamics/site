@@ -14,6 +14,8 @@ import form4Jain from './fixtures/form4-brk-jain.txt?raw';
 import sc13gSiri from './fixtures/sc13ga-siri-vanguard.xml?raw';
 import form4BuffettGift from './fixtures/form4-brk-buffett-gift.txt?raw';
 import sc13dBrkA from './fixtures/sc13da-brk-class-a.xml?raw';
+import { quarterStart } from '../src/seasons';
+import form4Csgp from './fixtures/form4-csgp-florance-buy.txt?raw';
 import { cleanItem4, parseSchedule13 } from '../src/edgar';
 
 class MemKV implements KV {
@@ -760,6 +762,33 @@ describe('copybook api', () => {
     expect(go.headers.get('location')).toBe('https://checkout.stripe.com/c/pay/cs_x');
     expect(checkout).toContain('customer=wb');
     expect(checkout).toContain('line_items[0][price]=price_copy_monthly');
+  });
+
+  it('GET /events: every issuer Form 4 since the quarter whose 13Fs are due began, not just the latest 20 (CSGP CEO buy behind 21 grants)', async () => {
+    await hist.put('pre/sec-tickers.json', '{"CSGP":"0001057352"}');
+    const since = Date.parse(quarterStart(Date.now()));
+    const at = (days: number) => new Date(since + days * 86400_000).toISOString();
+    const entry = (a: string, iso: string) => `<entry><category term="4"/><id>urn:tag:sec.gov,2008:accession-number=${a}</id><updated>${iso}</updated></entry>`;
+    const acc = (i: number) => `0009999999-26-${String(i).padStart(6, '0')}`;
+    // Newest first: 21 grants (the real filing with its code turned into A), Florance's real open-market buy, then a grant before the window.
+    const grants = Array.from({ length: 21 }, (_, i) => entry(acc(i), at(40 - i)));
+    secFiles['company:0001057352:4'] = `<feed>${grants.join('')}${entry('0001628280-26-052968', at(5))}${entry(acc(99), at(-30))}</feed>`;
+    for (const i of [...Array(21).keys(), 99]) secFiles[`Archives/edgar/data/1057352/${acc(i).replace(/-/g, '')}/${acc(i)}.txt`] = form4Csgp.replace('<transactionCode>P</transactionCode>', '<transactionCode>A</transactionCode>');
+    secFiles['Archives/edgar/data/1057352/000162828026052968/0001628280-26-052968.txt'] = form4Csgp;
+    stripeObjects['checkout/sessions/cs_test_cg'] = { id: 'cs_test_cg', status: 'complete', created: now(), subscription: 'sub_cg', customer_details: { email: 'cg@example.com' } };
+    stripeObjects['subscriptions/sub_cg'] = sub('sub_cg', 'cus_cg', 'active');
+    const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_cg' } })).json()) as { token: string };
+    const res = await call('/events?tickers=CSGP&limit=10', { token });
+    const r = await res.json();
+    expect([res.status, r.pending]).toEqual([200, []]);
+    const seen = JSON.parse(new TextDecoder().decode(hist.m.get('tev/CSGP.json')!)).seen;
+    expect(seen['0001628280-26-052968']).toMatchObject({
+      filer_name: 'FLORANCE ANDREW C', action: 'buy', shares: 83300, price: 29.89, value_usd: 2489837, event_date: '2026-08-04', open_market: true, codes: ['P'],
+      transactions: [expect.objectContaining({ code: 'P', shares: 83300, acquired_disposed: 'A', ownership: 'direct' })],
+    });
+    expect(Object.keys(seen)).toHaveLength(22); // the whole window, and nothing from before it
+    expect(seen[acc(99)]).toBeUndefined();
+    expect(r.tickers.CSGP.window).toBe(quarterStart(Date.now()).replace(/\.\d{3}Z$/, 'Z'));
   });
 
   it("GET /events: a ticker's own insiders' Form 4s and anyone's 13D/G, parsed once; the issuer's own Form 4s on other companies are left out", async () => {

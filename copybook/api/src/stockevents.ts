@@ -5,6 +5,7 @@
  */
 import { companyFilings, type FeedEntry, fetchSchedule13, fetchSubmission, type Form4Class, type Form4Line, parseForm4, secBudget } from './edgar';
 import type { Env } from './env';
+import { quarterStart } from './seasons';
 
 export interface StockEvent {
   ticker: string;
@@ -57,6 +58,8 @@ interface Cached {
   checked_at: number;
   /** How far back each feed was read: the oldest filing examined (ISO), per form family. */
   from?: { form4: string | null; schedule13: string | null };
+  /** Every issuer Form 4 and 13D/G accepted since this date is in (quarterStart); null when a cap cut it short. */
+  window?: string | null;
   /** Parsed filings from the latest feeds: the event, or 0 when it's about another issuer (this CIK as an owner) or another share class. */
   seen: Record<string, StockEvent | 0>;
   /** Every ticker the issuer trades as (BRK.A and BRK.B), for placing a 13D/G on its class. */
@@ -65,11 +68,14 @@ interface Cached {
 
 const FRESH_MS = 20 * 60_000;
 /**
- * Kept per ticker: the latest 20 Form 4s where the company is the issuer (its own Form 4s as an owner of
- * other companies don't count, so the feed is read 40 deep) and the latest 10 Schedule 13D/Gs on it.
+ * Kept per ticker: every Form 4 where the company is the issuer and every Schedule 13D/G on it since the
+ * start of the quarter whose 13Fs are due next (quarterStart), and at least the latest 20 and 10. The feeds
+ * are paged back 100 at a time until they pass that date, at most PAGES pages and MAX_F4 issuer Form 4s.
  */
 const KEEP_F4 = 20;
 const KEEP_13 = 10;
+const MAX_F4 = 150;
+const PAGES = 3;
 /** SEC requests one /events call may spend refreshing; tickers left over come back in `pending`. */
 const BUDGET = 36;
 
@@ -170,20 +176,30 @@ const events = (c: Cached) =>
     .filter((v): v is StockEvent => !!v)
     .sort((a, b) => b.accepted_at.localeCompare(a.accepted_at));
 
-/** Re-reads the issuer's feeds and parses new filings newest first until KEEP match. False when the budget ran out. */
-async function refresh(ticker: string, c: Cached): Promise<boolean> {
+/** Re-reads the issuer's feeds and parses new filings newest first until the window is in. False when the budget ran out. */
+async function refresh(ticker: string, c: Cached, now = Date.now()): Promise<boolean> {
   if (secBudget.left < 2) return false;
-  const [f4, s13] = await Promise.all([companyFilings(c.cik, '4', 40), companyFilings(c.cik, 'SCHEDULE 13', 20)]);
-  const feed = [...f4.filter((e) => /^4(\/A)?$/.test(e.form)), ...s13].sort((a, b) => b.accepted.localeCompare(a.accepted));
+  const since = quarterStart(now);
+  // Newest first, a page at a time, until a page ends before the window (or is the feed's last).
+  const pages = async (type: string, size: number) => {
+    const out: FeedEntry[] = [];
+    for (let p = 0; p < PAGES; p++) {
+      const page = await companyFilings(c.cik, type, size, p * size);
+      out.push(...page);
+      if (page.length < size || page[page.length - 1].accepted < since) return { feed: out, reached: true };
+    }
+    return { feed: out, reached: false };
+  };
+  const [f4, s13] = await Promise.all([pages('4', 100), pages('SCHEDULE 13', 40)]);
+  const feed = [...f4.feed.filter((e) => /^4(\/A)?$/.test(e.form)), ...s13.feed].sort((a, b) => b.accepted.localeCompare(a.accepted));
   const seen: Cached['seen'] = {};
   const isF4 = (form: string) => form.startsWith('4');
   const kept = (f4only: boolean) => feed.filter((e) => isF4(e.form) === f4only && seen[e.accession]).length;
-  const room = (e: FeedEntry) => (isF4(e.form) ? kept(true) < KEEP_F4 : kept(false) < KEEP_13);
-  // Newest first, until each family has its quota: older filings beyond it are dropped from the cache.
+  const room = (e: FeedEntry) => (isF4(e.form) ? kept(true) < MAX_F4 && (e.accepted >= since || kept(true) < KEEP_F4) : e.accepted >= since || kept(false) < KEEP_13);
+  // Newest first, until the window and each family's minimum are in: older filings beyond them are dropped from the cache.
   for (const e of feed) if (e.accession in c.seen && (c.seen[e.accession] === 0 || room(e))) seen[e.accession] = c.seen[e.accession];
   let complete = true;
   for (let i = 0; i < feed.length; i += 5) {
-    if (kept(true) >= KEEP_F4 && kept(false) >= KEEP_13) break;
     const todo = feed.slice(i, i + 5).filter((e) => !(e.accession in seen) && room(e));
     if (todo.length > secBudget.left) {
       complete = false;
@@ -198,6 +214,8 @@ async function refresh(ticker: string, c: Cached): Promise<boolean> {
   c.seen = seen;
   const oldest = (xs: FeedEntry[]) => xs.filter((e) => e.accession in seen).map((e) => noMs(e.accepted)).sort()[0] ?? null;
   c.from = { form4: oldest(feed.filter((e) => e.form.startsWith('4'))), schedule13: oldest(feed.filter((e) => !e.form.startsWith('4'))) };
+  // Complete back to the window start when both feeds were read past it and no cap cut the Form 4s.
+  c.window = complete && f4.reached && s13.reached && kept(true) < MAX_F4 ? noMs(since) : null;
   if (complete) c.checked_at = Date.now();
   return complete;
 }
@@ -253,8 +271,8 @@ export async function stockEvents(env: Env, tickers: string[], limit: number, op
     if (!done) pending.push(t);
     if (JSON.stringify(c) !== before) await env.HIST.put(`tev/${t}.json`, JSON.stringify(c));
   }
-  const data: Record<string, { cik: string; checked_at: string | null; from: Cached['from'] | null; events: StockEvent[] }> = {};
-  for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, from: c.from ?? null, events: events(c).slice(0, limit) };
+  const data: Record<string, { cik: string; checked_at: string | null; from: Cached['from'] | null; window: string | null; events: StockEvent[] }> = {};
+  for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, from: c.from ?? null, window: c.window ?? null, events: events(c).slice(0, limit) };
   return { tickers: data, pending, unknown };
 }
 

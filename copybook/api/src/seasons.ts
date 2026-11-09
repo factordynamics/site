@@ -31,3 +31,12 @@ export function inFilingWeek(now: number): boolean {
 }
 
 export const deadlineMs = endOf;
+
+/**
+ * Where issuer insider history starts: the first day of the quarter whose 13Fs are due next (Jul 1 until
+ * the Nov 16 deadline, then Oct 1), so every Form 4 and 13D/G since the latest 13F's quarter began is kept.
+ */
+export function quarterStart(now: number): string {
+  const [y, q] = nextDeadline(now).quarter.split('Q').map(Number);
+  return `${y}-${String((q - 1) * 3 + 1).padStart(2, '0')}-01T00:00:00Z`;
+}

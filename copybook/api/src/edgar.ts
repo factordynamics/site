@@ -36,8 +36,8 @@ export async function latestFilings(type: string, start = 0): Promise<FeedEntry[
 }
 
 /** One filer's latest filings of a type, from its EDGAR company feed (a few KB). */
-export async function companyFilings(cik: string, type: string, count = 3): Promise<FeedEntry[]> {
-  const res = await sec(`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=${encodeURIComponent(type)}&dateb=&owner=include&count=${count}&output=atom`);
+export async function companyFilings(cik: string, type: string, count = 3, start = 0): Promise<FeedEntry[]> {
+  const res = await sec(`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=${encodeURIComponent(type)}&dateb=&owner=include&count=${count}${start ? `&start=${start}` : ''}&output=atom`);
   if (!res.ok) throw new Error(`edgar company ${cik}: ${res.status}`);
   return parseFeed(await res.text(), cik);
 }

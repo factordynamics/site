@@ -564,7 +564,7 @@ ROUTES.push(
       // Every filing kept per ticker (not a page of it), so `coverage` describes exactly what is served.
       const r = await stockEvents(env, tickers, 50);
       pending = r.pending;
-      coverage = Object.fromEntries(tickers.map((t) => [t, r.tickers[t] ? { issuer_cik: r.tickers[t].cik, form4_from: r.tickers[t].from?.form4 ?? null, schedule13_from: r.tickers[t].from?.schedule13 ?? null, checked_at: r.tickers[t].checked_at } : null]));
+      coverage = Object.fromEntries(tickers.map((t) => [t, r.tickers[t] ? { issuer_cik: r.tickers[t].cik, from: r.tickers[t].window, form4_from: r.tickers[t].from?.form4 ?? null, schedule13_from: r.tickers[t].from?.schedule13 ?? null, checked_at: r.tickers[t].checked_at } : null]));
       const have = new Map(curated.map((e) => [e.accession, e]));
       for (const [t, x] of Object.entries(r.tickers)) {
         for (const e of x.events) {
