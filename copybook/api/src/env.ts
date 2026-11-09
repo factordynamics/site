@@ -124,6 +124,8 @@ export interface Member {
   referred_by?: string | null;
   /** Paused between filing seasons (Stripe pause_collection): unix seconds when alerts and access come back. */
   paused_until?: number | null;
+  /** A pause chosen during a monthly trial starts when the trial ends (unix); the trial keeps everything until then. */
+  paused_from?: number | null;
   /** The 3-days-before reminder, sent for this paused_until. */
   pause_reminded?: number | null;
   /** The pre-season win-back, sent for this season (the quarter whose 13Fs are due next). */
@@ -161,7 +163,12 @@ export function isCopy(m: Member | null): m is Member {
 
 /** Paused until the next season: Stripe still says active, but no alerts or paid features until paused_until. */
 export function isPaused(m: Member | null, now = Date.now()): boolean {
-  return !!m?.paused_until && m.paused_until * 1000 > now;
+  return !!m?.paused_until && m.paused_until * 1000 > now && !((m.paused_from ?? 0) * 1000 > now);
+}
+
+/** A pause that starts when the trial ends (chosen during a monthly trial). */
+export function pauseScheduled(m: Member | null, now = Date.now()): boolean {
+  return !!m?.paused_until && !!m.paused_from && m.paused_from * 1000 > now;
 }
 
 export function isActive(m: Member | null): m is Member {

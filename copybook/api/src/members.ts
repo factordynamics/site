@@ -1,5 +1,5 @@
 import { holdtermLoginMail, loginMail, sendMail } from './email';
-import { isActive, isPaused, type Env, type Member } from './env';
+import { isActive, isPaused, pauseScheduled, type Env, type Member } from './env';
 import { stripe } from './stripe';
 import { carryFreeSignup } from './free';
 import { countTransition, maybeCancelMail, maybeResumeMail, maybeWinback } from './revenue';
@@ -106,6 +106,8 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     cancel_at: Number(sub.cancel_at ?? 0) || null,
     // Paused between seasons (POST /pause): Stripe resumes it at resumes_at and sends an update that clears this.
     paused_until: sub.pause_collection ? Number(sub.pause_collection.resumes_at ?? 0) || 4102444800 : null,
+    // Paused during a trial: Stripe voids the invoices from the trial's end, so the pause starts then.
+    paused_from: sub.pause_collection && sub.status === 'trialing' ? Number(sub.trial_end ?? 0) || null : null,
     // Set at checkout (POST /checkout): the referral code and where the subscriber came from.
     referred_by: prev?.referred_by ?? (typeof sub.metadata?.ref === 'string' ? sub.metadata.ref : null),
     source: prev?.source ?? (typeof sub.metadata?.source === 'string' ? sub.metadata.source : undefined),
@@ -137,7 +139,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
 
 export function publicView(m: Member) {
   // A Fund seat: billing belongs to the owner, so the site hides the portal for seats.
-  return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, paused_until: isPaused(m) ? m.paused_until : null, alerts: m.alerts, seat: Boolean(m.seat_of) };
+  return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, paused_until: isPaused(m) ? m.paused_until : null, pause_after_trial: pauseScheduled(m) ? { from: m.paused_from, until: m.paused_until } : null, alerts: m.alerts, seat: Boolean(m.seat_of) };
 }
 
 export async function listMembers(env: Env): Promise<Member[]> {

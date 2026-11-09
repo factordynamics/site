@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { FOOTER, sendMail, type Mail } from './email';
-import { apiBase, isActive, isPaused, type Env, type Member } from './env';
+import { apiBase, isActive, isPaused, pauseScheduled, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
 import { getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
 import { DEADLINES, deadlineLabel, deadlineMs, inFilingWeek, lastDeadline, nextDeadline, pauseResumesAt } from './seasons';
@@ -226,9 +226,9 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
     // button POSTs here, so a mail scanner can't resume a plan. The POST also signs them in (a 2-minute sign-in
     // handoff, as the account page's own links), so they land on /account/ seeing "You've resumed".
     const cancelling = isActive(m) && !!m.cancel_at_period_end;
-    if (isPaused(m) || cancelling) {
+    if (isPaused(m) || pauseScheduled(m) || cancelling) {
       if (method !== 'POST') return go(`${env.SITE_URL}resume/?t=${encodeURIComponent(url.searchParams.get('t') ?? '')}`);
-      if (isPaused(m)) await endPause(env, m);
+      if (isPaused(m) || pauseScheduled(m)) await endPause(env, m);
       else await syncSubscription(env, await stripe(env, 'POST', `subscriptions/${m.subscription}`, { cancel_at_period_end: 'false' }));
       return go(`${account}?resumed=1&login=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, 120))}`);
     }
@@ -365,7 +365,7 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
   }
   for (const m of members) {
     const left = (m.trial_end ?? 0) * 1000 - now;
-    if (m.status === 'trialing' && left > 0 && left <= 3 * 86400_000 && m.trial_reminded !== m.trial_end) {
+    if (m.status === 'trialing' && !pauseScheduled(m, now) && left > 0 && left <= 3 * 86400_000 && m.trial_reminded !== m.trial_end) {
       const f = await getFollows(env, m);
       const keep = `${API(env)}keep?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'keep', m.customer, 14 * 86400))}`;
       mails.push(trialEndingMail(env, m, await memberStats(env, m.customer), f.investors.length, f.owned.length, keep, await unsubscribeUrl(env, m.customer), Math.max(1, Math.ceil(left / 86400_000))));
@@ -457,11 +457,16 @@ const pausable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !!PRICES[
 export const DIGEST_LIVE = false;
 
 export const PAUSE_NOTE = 'Monthly plans can pause until 2 weeks before the next 13F deadline.';
+export const PAUSE_AFTER_TRIAL_NOTE = 'Pause after your trial: no charge until 2 weeks before the next 13F deadline, when real-time alerts resume.';
 
-export function pauseOffer(m: Member, now = Date.now()): { until: string; quarter: string; deadline: string; deadline_label: string; note: string } | null {
-  if (!pausable(m) || m.status !== 'active' || isPaused(m, now)) return null;
-  const r = pauseResumesAt(now);
-  return { until: isoDay(r.at), quarter: r.quarter, deadline: r.deadline, deadline_label: deadlineLabel(r.deadline), note: PAUSE_NOTE };
+/** When a pause chosen now starts: today, or for a monthly trial, the trial's end (the trial keeps everything). */
+const pauseStart = (m: Member, now: number) => (m.status === 'trialing' && m.trial_end && m.trial_end * 1000 > now ? m.trial_end * 1000 : now);
+
+export function pauseOffer(m: Member, now = Date.now()): { until: string; quarter: string; deadline: string; deadline_label: string; note: string; starts: string } | null {
+  if (!pausable(m) || (m.status !== 'active' && m.status !== 'trialing') || isPaused(m, now) || pauseScheduled(m, now)) return null;
+  const from = pauseStart(m, now);
+  const r = pauseResumesAt(from);
+  return { until: isoDay(r.at), quarter: r.quarter, deadline: r.deadline, deadline_label: deadlineLabel(r.deadline), note: from > now ? PAUSE_AFTER_TRIAL_NOTE : PAUSE_NOTE, starts: isoDay(Math.floor(from / 1000)) };
 }
 
 /** Stores the one cancellation question's answer (from /account/ or the email); counted in business.cancel_reasons. */
@@ -483,12 +488,12 @@ export async function pauseMember(env: Env, m: Member, reason: string | null, no
   const offer = pauseOffer(m, now);
   if (!offer) return { status: 409, body: { ok: false, error: isPaused(m, now) ? 'Already paused' : m.status === 'trialing' ? 'Monthly plans can pause after the trial; cancel in Manage billing instead' : 'Monthly plans can pause; yearly, seat and Holdterm plans cancel in Manage billing instead', code: 'pause_unavailable' } };
   if (reason && !(await noteReason(env, m.customer, reason, 'pause', note))) return { status: 400, body: { ok: false, error: `reason: ${Object.keys(WHY).join(', ')}`, code: 'bad_request' } };
-  const at = pauseResumesAt(now).at;
+  const at = pauseResumesAt(pauseStart(m, now)).at;
   const sub = await stripe(env, 'POST', `subscriptions/${m.subscription}`, { 'pause_collection[behavior]': 'void', 'pause_collection[resumes_at]': at, cancel_at_period_end: 'false' });
   const next = await syncSubscription(env, sub);
   if (billable(next)) await bump(env, 'pauses', next, `${m.subscription}:${at}`, now);
   await sendMail(env, [pauseReceiptMail(env, next, at, await resumeUrl(env, next))]);
-  return { status: 200, body: { ok: true, paused_until: isoDay(at), deadline: offer.deadline, member: { paused_until: next.paused_until } } };
+  return { status: 200, body: { ok: true, paused_until: isoDay(at), starts: offer.starts, deadline: offer.deadline, member: { paused_until: next.paused_until, pause_after_trial: pauseScheduled(next, now) ? { from: next.paused_from, until: next.paused_until } : null } } };
 }
 
 /** Ends a pause on the same subscription and sends the confirmation with the next charge date (DELETE /pause and the email's resume link). */
@@ -500,7 +505,7 @@ export async function endPause(env: Env, m: Member): Promise<Member> {
 
 /** DELETE /pause: back now, on the same subscription and price. */
 export async function unpauseMember(env: Env, m: Member): Promise<{ status: number; body: Record<string, unknown> }> {
-  if (!isPaused(m)) return { status: 409, body: { ok: false, error: 'Not paused', code: 'not_paused' } };
+  if (!isPaused(m) && !pauseScheduled(m)) return { status: 409, body: { ok: false, error: 'Not paused', code: 'not_paused' } };
   const next = await endPause(env, m);
   return { status: 200, body: { ok: true, next_charge: next.period_end ? isoDay(next.period_end) : null } };
 }
@@ -515,10 +520,11 @@ const priceLine = (m: Member) => {
 export function pauseReceiptMail(env: Env, m: Member, at: number, resume: string): Mail {
   const until = deadlineLabel(isoDay(at));
   const p = PRICES[m.plan];
+  const after = pauseScheduled(m) ? m.paused_from! : null;
   return {
     to: m.email,
-    subject: `Paused until ${until} · no charges until then`,
-    text: `Your ${p?.name ?? 'Copybook'} plan is paused until ${until}, two weeks before the next 13F deadline (${deadlineLabel(nextDeadline(at * 1000).date)}).\n\n  - No charges until then; billing resumes on ${until}.\n  - ${priceLine(m)}\n  - Real-time alerts are off while you're paused. If a fund you follow files its 13F while you're paused, we'll email you so you can resume right away.\n  - Resume anytime, one click, same subscription: ${resume}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    subject: after ? `Your trial continues; then paused until ${until} · no charges until then` : `Paused until ${until} · no charges until then`,
+    text: `${after ? `Your ${p?.name ?? 'Copybook'} trial continues with everything on until ${day(after)}. Then your plan pauses` : `Your ${p?.name ?? 'Copybook'} plan is paused`} until ${until}, two weeks before the next 13F deadline (${deadlineLabel(nextDeadline(at * 1000).date)}).\n\n  - No charges until then; billing resumes on ${until}.\n  - ${priceLine(m)}\n  - Real-time alerts are off while you're paused. If a fund you follow files its 13F while you're paused, we'll email you so you can resume right away.\n  - Resume anytime, one click, same subscription: ${resume}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
   };
 }
 

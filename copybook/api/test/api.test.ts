@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker, { handleRequest } from '../src/index';
-import type { Env, KV, R2 } from '../src/env';
+import { isActive, isPaused, type Env, type KV, type R2 } from '../src/env';
 import { MeterLogic } from '../src/keys';
 import { getFollows, MemberFollows } from '../src/members';
 import { guardDataRun, resolveFollowedFilers, runDigest } from '../src/alerts';
@@ -1007,6 +1007,17 @@ describe('copybook api', () => {
     // Paused on Nov 9, 2026: back on Feb 2, 2027 (22:00 ET, 2 weeks before Tue Feb 16), on New York's calendar, not UTC's Feb 3.
     expect(pauseOffer(JSON.parse((await env.DB.get('cus:cus_comp'))!), Date.parse('2026-11-09T15:00:00Z'))).toMatchObject({ until: '2027-02-02', deadline: '2027-02-16', deadline_label: 'Tue Feb 16, 2027' });
     expect(pauseOffer(JSON.parse((await env.DB.get('cus:cus_yr'))!))).toBeNull();
+    // A monthly trial can pause too: from the trial's end (Nov 23) to Feb 2; the trial keeps everything until then.
+    const nov9 = Date.parse('2026-11-09T15:00:00Z');
+    const trialEnd = Date.parse('2026-11-23T15:00:00Z') / 1000;
+    expect(pauseOffer({ customer: 't', email: 't@x', status: 'trialing', plan: 'copy', interval: 'monthly', trial_end: trialEnd, period_end: trialEnd, subscription: 'sub_t', alerts: [] }, nov9)).toMatchObject({ starts: '2026-11-23', until: '2027-02-02', note: expect.stringMatching(/^Pause after your trial/) });
+    // Stripe's subscription, paused while trialing: active and signed-in features until the trial ends, then paused.
+    await env.DB.put('cus:cus_tp', JSON.stringify({ customer: 'cus_tp', email: 'tp@example.com', status: 'trialing', plan: 'copy', interval: 'monthly', subscription: 'sub_tp', alerts: [], welcomed: true }));
+    const tEnd = now() + 10 * 86400;
+    await webhook({ type: 'customer.subscription.updated', data: { object: { ...sub('sub_tp', 'cus_tp', 'trialing'), trial_end: tEnd, pause_collection: { behavior: 'void', resumes_at: tEnd + 70 * 86400 } } } });
+    const tp = JSON.parse((await env.DB.get('cus:cus_tp'))!);
+    expect([isActive(tp), isPaused(tp), isPaused(tp, (tEnd + 60) * 1000), isActive({ ...tp, status: 'active', paused_from: null })]).toEqual([true, false, true, false]);
+    expect(pauseOffer(tp)).toBeNull(); // already scheduled
     await env.DB.delete('cus:cus_comp');
     await env.DB.delete('cus:cus_yr');
     expect(r.at * 1000).toBe(deadlineMs(r.deadline) - 14 * 86400_000);
