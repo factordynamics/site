@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
-import { companyFilings, computeMoves, displayCase, implausibleMove, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { companyFilings, computeMoves, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, type Env, type Member } from './env';
 import { getFollows, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -552,6 +552,20 @@ export async function lookupTickers(env: Env, rows: { cusip: string; ticker: str
   }
 }
 
+/** Stock splits in the data run's splits.json that took effect in this quarter, by CUSIP and ticker (a share-count change that's no unit error). */
+let SPLITS: { at: number; list: { cusip: string; ticker?: string; to_quarter: string }[] } | null = null;
+export async function splitsFor(env: Env, quarter: string): Promise<Set<string>> {
+  if (!SPLITS || Date.now() - SPLITS.at > 3600_000) {
+    try {
+      const r = await fetch(`${env.DATA_URL}splits.json`);
+      SPLITS = { at: Date.now(), list: r.ok ? (((await r.json()) as { splits?: { cusip: string; ticker?: string; to_quarter: string }[] }).splits ?? []) : [] };
+    } catch {
+      SPLITS = { at: Date.now(), list: [] };
+    }
+  }
+  return new Set(SPLITS.list.filter((x) => x.to_quarter === quarter).flatMap((x) => [x.cusip, ...(x.ticker ? [x.ticker] : [])]));
+}
+
 async function priorBook(env: Env, slug: string, reportDate: string): Promise<Position[] | null> {
   const obj = await env.HIST.get(`h/${slug}/${quarterOf(reportDate)}.json`);
   if (!obj || (obj.size ?? 0) > 2_000_000) return null;
@@ -718,7 +732,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
         for (const s of slugs) {
           const book = isExtra ? await filerShardBook(env, e.cik, prev[s]) : await priorBook(env, s, prev[s]);
           if (!book) continue;
-          const r = computeMoves(f.holdings, book);
+          const r = computeMoves(f.holdings, book, undefined, await splitsFor(env, quarterOf(f.report_date)));
           moves = r.moves;
           // Held positions already carry tickers from last quarter's book; look up only the new ones
           // shown in the email (each lookup scans the securities map, ~0.5 ms of CPU).
@@ -811,6 +825,19 @@ interface IndexRow {
  * Hourly backstop from the data run's index.json, for anything the minute poll missed: same
  * forward-only periods, moves taken from alerts.json. Also refreshes the CIK map for the poll.
  */
+/**
+ * The data run's moves (alerts.json), guarded like the poll's. Its delta_pct_of_book is against this
+ * quarter's book only, so the yardstick is the larger of that and the prior book (estimated as this one
+ * less buys plus sells: Scion's put exits from a book that shrank to $99M). Exits and new positions carry
+ * both values.
+ */
+export function guardDataRun(m: Moves): Moves {
+  const cur = [...m.new, ...m.added, ...m.trimmed, ...m.exited].map((r) => (r.delta_pct_of_book && r.value_delta ? Math.abs(r.value_delta / r.delta_pct_of_book) : 0)).find((x) => x > 0) ?? 0;
+  const book = Math.max(cur, cur - m.bought_usd + m.sold_usd) || null;
+  const ok = (rows: MoveRow[]) => guardRows(rows, book, (r) => (r.change === 'exited' || !r.shares ? -r.value_delta : !r.prev_shares ? 0 : r.prev_value));
+  return { ...m, new: ok(m.new), added: ok(m.added), trimmed: ok(m.trimmed), exited: ok(m.exited) };
+}
+
 /** The data run's moves per accession (alerts.json), fetched once on first use. */
 function recentMoves(env: Env): (acc: string) => Promise<Moves | null> {
   let recent: { accession: string; moves?: Moves }[] | null = null;
@@ -821,9 +848,7 @@ function recentMoves(env: Env): (acc: string) => Promise<Moves | null> {
     }
     const m = recent.find((x) => x.accession === acc)?.moves ?? null;
     if (!m) return null;
-    // The data run's rows, guarded like the poll's: its trade size as a share of the book, and its suspect_units flag.
-    const ok = (rows: MoveRow[]) => rows.filter((r) => !implausibleMove(r, r.delta_pct_of_book != null && r.value_delta ? Math.abs(r.value_delta / r.delta_pct_of_book) : null));
-    return { ...m, new: ok(m.new), added: ok(m.added), trimmed: ok(m.trimmed), exited: ok(m.exited) };
+    return guardDataRun(m);
   };
 }
 

@@ -3,7 +3,7 @@ import worker, { handleRequest } from '../src/index';
 import type { Env, KV, R2 } from '../src/env';
 import { MeterLogic } from '../src/keys';
 import { getFollows, MemberFollows } from '../src/members';
-import { resolveFollowedFilers, runDigest } from '../src/alerts';
+import { guardDataRun, resolveFollowedFilers, runDigest } from '../src/alerts';
 import { alertMail } from '../src/email';
 import { hmacHex } from '../src/tokens';
 import form4Len from './fixtures/form4-len.xml?raw';
@@ -584,15 +584,15 @@ describe('copybook api', () => {
     expect(mail.html).toContain('Accession 0000950123-26-011111, accepted by EDGAR');
     // Total book 20,500: DHI +4,000 is 19.5%; the AAPL trim is 20 shares at $200 = -4,000; BAC exits at its prior $2,000.
     expect(mail.text).toContain('Bought $5K, sold $6K this quarter.');
-    expect(mail.text).toContain('New: DHI +$4K (19.5% of book) [you own], AAPL calls +$1K (2.4% of book)');
-    expect(mail.text).toContain('Trimmed: AAPL -$4K (sold 20% of the position, 19.5% of book)');
-    expect(mail.text).toContain('Exited: BAC -$2K (9.8% of book)');
+    expect(mail.text).toContain('New: DHI +$4K (18.2% of book) [you own], AAPL calls +$1K (2.3% of book)'); // of the larger (prior) book
+    expect(mail.text).toContain('Trimmed: AAPL -$4K (sold 20% of the position, 18.2% of book)');
+    expect(mail.text).toContain('Exited: BAC -$2K (9.1% of book)');
     expect(mail.text).toContain('Of the positions that changed, 1 is a stock you own.');
     // Buffett's filing has a public card; Loeb's doesn't yet, so it links the investor page.
     expect(mail.text).toContain('Copybook: https://refcell.github.io/gust/copybook/f/0000950123-26-011111/');
     expect(mail.html).toContain('>Filing card</a>');
     expect(loeb.text).toContain('Copybook: https://refcell.github.io/gust/copybook/investors/dan-loeb');
-    expect(sent.find((m) => m.to[0] === 'watcher@example.com')!.text).toContain('Exited: BAC -$2K (9.8% of book) [watchlist]');
+    expect(sent.find((m) => m.to[0] === 'watcher@example.com')!.text).toContain('Exited: BAC -$2K (9.1% of book) [watchlist]');
     const latency = JSON.parse((await env.DB.get('alerts:latency'))!);
     expect(latency.map((l: { slug: string }) => l.slug).sort()).toEqual(['dan-loeb', 'warren-buffett']);
 
@@ -693,8 +693,9 @@ describe('copybook api', () => {
         row('new', 'CVX', 3e9, { shares: 30, prev_shares: 0 }), row('exited', 'CVX', -3e9, { shares: 0, prev_shares: 30 }),
       ] },
       // GuardCap's real card: BKNG's shares changed units between quarters (a -$3.3B "trim" on a $1.47B book); CME is flagged by ingest.
-      'GRD-13F': { manager: 'GUARDCAP ASSET MANAGEMENT Ltd', firm: 'GUARDCAP ASSET MANAGEMENT Ltd', featured: false, total_value: 1465165097, changes: { trimmed: 3 }, moves: [
-        row('trimmed', 'BKNG', -3301994445, { shares: 1304, prev_shares: 646216, weight: 0.004557 }),
+      // Its Q2 book in R2 has BKNG at 646,216 shares for $121.6M (~$188 a share against ~$5,120 now): a unit error, dropped.
+      'GRD-13F': { manager: 'GUARDCAP ASSET MANAGEMENT Ltd', firm: 'GUARDCAP ASSET MANAGEMENT Ltd', featured: false, total_value: 1465165097, prev_quarter: '2026Q2', changes: { trimmed: 3 }, moves: [
+        row('trimmed', 'BKNG', -3301994445, { cusip: '09857L108', shares: 1304, prev_shares: 646216, weight: 0.004557 }),
         row('trimmed', 'CME', -16246874, { shares: 711166, prev_shares: 773225, weight: 0.127072, suspect_units: true }),
         row('trimmed', 'ILMN', -16097356, { shares: 679878, prev_shares: 740132, weight: 0.123969 }),
       ] },
@@ -702,6 +703,8 @@ describe('copybook api', () => {
       '0000950123-26-011111': { manager: 'Warren Buffett', featured: true, changes: { new: 1, added: 2, trimmed: 1, exited: 1 }, moves: [row('added', 'PUTX', 9e9, { put_call: 'Put' }), row('added', 'GOOGL', 8.8e9), row('new', 'DHI', 2e9), row('trimmed', 'BAC', -1.7e9), row('exited', 'STZ', -1e9)] },
       'OLD-13F': { manager: 'Bill Ackman', featured: true, changes: { new: 1 }, moves: [row('new', 'OLDX', 5e9)] },
     };
+    await env.DB.put('v1:filers', JSON.stringify([{ slug: 'guardcap', cik: '0001732008' }]));
+    await hist.put('fb/2026Q2/0001732008.json', JSON.stringify({ columns: ['ticker', 'cusip', 'put_call', 'shares', 'value'], rows: [['BKNG', '09857L108', null, 646216, 121636487]] }));
     await hist.put('pre/events.json', JSON.stringify({ events: [
       { id: 'f4', slug: 'bill-ackman', manager: 'Bill Ackman', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', accepted: inWeek(2), ticker: 'HHH', value_usd: 5e7 },
       { id: 'brk-siri', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-08', accepted: inWeek(6), ticker: 'SIRI', value_usd: 26894245 },
@@ -900,6 +903,37 @@ describe('copybook api', () => {
     expect(displayCase('GUARDCAP ASSET MANAGEMENT Ltd')).toBe('Guardcap Asset Management Ltd');
     expect(displayCase('AQR CAPITAL MANAGEMENT LLC')).toBe('AQR Capital Management LLC');
     expect(displayCase('ICICI Prudential Asset Management')).toBe('ICICI Prudential Asset Management');
+  });
+
+  it('alert moves: Scion-size option moves are sent with an unusual-size tag, never dropped; only unit errors are (GuardCap BKNG)', () => {
+    const pos = (ticker: string, cusip: string, shares: number, value: number, put_call: string | null = null) => ({ ticker, cusip, issuer: ticker, put_call, shares, value });
+    const stocks = (total: number) => [pos('JD', '47215P106', 1, total * 0.6), pos('BABA', '01609W102', 1, total * 0.4)];
+    const spy = pos('SPY', '78462F103', 2_000_000, 886_600_000, 'Put');
+    const qqq = pos('QQQ', '46090E103', 2_000_000, 738_800_000, 'Put');
+    const all = (m: ReturnType<typeof computeMoves>['moves']) => [...m.new, ...m.added, ...m.trimmed, ...m.exited];
+    // Scion Q2 2023 (0000905148-23-000689): a $1.737B book, SPY puts $886.6M = 51.0% of it. Sent, tagged.
+    const q1 = stocks(46_400_000);
+    const q2 = [spy, qqq, ...stocks(111_600_000)];
+    const m2 = computeMoves(q2, q1).moves;
+    expect(m2.new.map((r) => [r.ticker, r.put_call, r.value_delta, !!r.unusual])).toEqual([['SPY', 'Put', 886_600_000, true], ['QQQ', 'Put', 738_800_000, false]]);
+    // Scion Q3 2023 (0000905148-23-001400): the book fell to $99M; both put exits are measured against the larger, prior book.
+    const m3 = computeMoves(stocks(99_000_000), q2).moves;
+    expect(m3.exited.map((r) => [r.ticker, r.value_delta, !!r.unusual, Math.round(r.delta_pct_of_book! * 1000) / 10])).toEqual([['SPY', -886_600_000, true, -51], ['QQQ', -738_800_000, false, -42.5]]);
+    // The same exits from the data run's alerts.json, whose delta_pct_of_book is against the $99M book only.
+    const run = (r: (typeof m3.exited)[number]) => ({ ...r, delta_pct_of_book: r.value_delta / 99_000_000, unusual: undefined });
+    const g = guardDataRun({ bought_usd: 50_000_000, sold_usd: 1_660_000_000, new: [], added: [], trimmed: [], exited: m3.exited.map(run) });
+    expect(g.exited.map((r) => [r.ticker, !!r.unusual])).toEqual([['SPY', true], ['QQQ', false]]);
+    const mail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'michael-burry', slugs: ['michael-burry'], manager: 'Michael Burry', name: 'Scion Asset Management', quarter: '2023Q3', report_date: '2023-09-30', filing_date: '2023-11-14', accession: '0000905148-23-001400', sec_url: 'https://www.sec.gov/x', accepted: '2023-11-14T21:00:00Z', moves: m3, tickers: ['SPY', 'QQQ'] }], [], { investors: ['michael-burry'], stocks: [], owned: [] } as never);
+    expect(mail.text).toMatch(/SPY puts -\$886\.6M \([^)]*51\.0% of book\) · Unusual size · check the filing, QQQ puts -\$738\.8M \([^)]*\)(?! ·)/);
+    // GuardCap Q3 2026: BKNG at ~$188 a share last quarter against ~$5,120 now, on a $1.47B book: a unit error, dropped.
+    const gq2 = [pos('BKNG', '09857L108', 646216, 121_636_487), pos('ILMN', '452327109', 740132, 100_000_000), pos('REST', '000000009', 1, 1_250_000_000)];
+    const gq3 = [pos('BKNG', '09857L108', 1304, 6_676_571), pos('ILMN', '452327109', 679878, 92_000_000), pos('REST', '000000009', 1, 1_366_000_000)];
+    expect(all(computeMoves(gq3, gq2).moves).map((r) => r.ticker)).toEqual(['ILMN']);
+    // A 10-for-1 split on file is no unit error: the share-count change is kept.
+    const sq2 = [pos('SPLT', '000000007', 1000, 50_000_000), pos('REST', '000000009', 1, 1e9)];
+    const sq3 = [pos('SPLT', '000000007', 12000, 60_000_000), pos('REST', '000000009', 1, 1e9)];
+    expect(all(computeMoves(sq3, sq2).moves).map((r) => r.ticker)).toEqual([]);
+    expect(all(computeMoves(sq3, sq2, undefined, new Set(['000000007'])).moves).map((r) => r.ticker)).toEqual(['SPLT']);
   });
 
   it('GET /events: every issuer Form 4 since the quarter whose 13Fs are due began, not just the latest 20 (CSGP CEO buy behind 21 grants)', async () => {

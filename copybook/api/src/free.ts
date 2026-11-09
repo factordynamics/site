@@ -6,7 +6,7 @@
  */
 import { FOOTER, sendMail, type Mail } from './email';
 import type { Env, Member } from './env';
-import { displayCase, implausibleMove } from './edgar';
+import { checkMove, displayCase, UNUSUAL } from './edgar';
 import { changeFollows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
 import { bump } from './revenue';
 import { signToken, verifyToken } from './tokens';
@@ -107,6 +107,29 @@ export interface WeeklyMove {
   /** One of the curated superinvestors (index.json `featured`): ranked ahead of every other fund. */
   featured: boolean;
   accession: string;
+  /** A real but unusually large move (over half the book, or a share-count break): tagged in the email. */
+  unusual?: boolean;
+}
+
+/**
+ * A position's value in a filer's prior-quarter book in R2 (curated h/, else the full book fb/), for a
+ * card row whose size looks wrong: cards carry only this quarter's value. Books over 2 MB are skipped.
+ */
+async function priorValue(env: Env, slug: string, quarter: string, cusip: string | undefined, ticker: string): Promise<number | null> {
+  try {
+    let obj = await env.HIST.get(`h/${slug}/${quarter}.json`);
+    if (!obj) {
+      const cik = ((JSON.parse((await env.DB.get('v1:filers')) ?? '[]') as { slug: string; cik: string }[]).find((f) => f.slug === slug))?.cik;
+      obj = cik ? await env.HIST.get(`fb/${quarter}/${cik}.json`) : null;
+    }
+    if (!obj || (obj.size ?? 0) > 2_000_000) return null;
+    const d = (await new Response(obj.body).json()) as { holdings?: { cusip?: string; ticker?: string | null; put_call?: string | null; value: number }[]; columns?: string[]; rows?: unknown[][] };
+    const rows = d.holdings ?? (d.columns && d.rows ? d.rows.map((r) => Object.fromEntries(d.columns!.map((c, i) => [c, r[i]])) as { cusip?: string; ticker?: string | null; put_call?: string | null; value: number }) : []);
+    const hit = rows.filter((h) => !h.put_call && (cusip ? h.cusip === cusip : h.ticker === ticker));
+    return hit.length ? hit.reduce((t, h) => t + Number(h.value), 0) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** A curated filer's Schedule 13D/G on a ticker, for "In your names". */
@@ -171,36 +194,46 @@ export async function weeklyMoves(env: Env, now: number, days = 7): Promise<Week
     .filter((c) => c.filing_date >= sinceDay)
     .sort((a, b) => Number(featured.has(b.slug)) - Number(featured.has(a.slug)) || b.filing_date.localeCompare(a.filing_date))
     .slice(0, MAX_CARDS);
-  type Row = { ticker: string | null; value_delta: number; put_call?: string | null; name?: string; shares?: number; prev_shares?: number };
+  type Row = { ticker: string | null; value_delta: number; put_call?: string | null; name?: string; cusip?: string; shares?: number; prev_shares?: number; unusual?: boolean };
   const read = await Promise.all(cards.map((c) => get(`${env.SITE_URL}d/f/${c.accession}.json`)));
-  cards.forEach((c, i) => {
+  for (const [i, c] of cards.entries()) {
     // A card keeps its top 5 moves by size in `moves` (each with `change`); `changes` holds only counts.
-    const d = read[i] as { manager?: string; firm?: string; featured?: boolean; total_value?: number; moves?: (Row & { change?: string; weight?: number; suspect_units?: boolean })[] } | null;
-    if (!d) return;
+    const d = read[i] as { manager?: string; firm?: string; featured?: boolean; total_value?: number; bought_usd?: number; sold_usd?: number; prev_quarter?: string; moves?: (Row & { change?: string; weight?: number; suspect_units?: boolean })[] } | null;
+    if (!d) continue;
     const manager = plainName(d.manager ?? d.firm ?? c.slug);
-    if (!d.featured && !featured.has(c.slug) && PASSIVE.test(`${manager} ${d.firm ?? ''}`)) return;
+    if (!d.featured && !featured.has(c.slug) && PASSIVE.test(`${manager} ${d.firm ?? ''}`)) continue;
+    // The yardstick is the larger of the two books; the card has only this quarter's, so the prior one is
+    // estimated as this book less what was bought plus what was sold (Scion's put exits from a book that shrank).
+    const total = d.total_value ?? 0;
+    const book = Math.max(total, total - (d.bought_usd ?? 0) + (d.sold_usd ?? 0)) || null;
     // One row per ticker: a CUSIP or class change shows as an exit plus a new position (Fisher's XOM),
     // so a fund's rows on one ticker are netted, and dropped when the holding is unchanged.
     const byTicker = new Map<string, Row & { change?: string }>();
-    for (const r of Array.isArray(d.moves) ? d.moves : []) {
-      if (!r.ticker || r.put_call || !['new', 'added', 'trimmed', 'exited'].includes(r.change ?? '')) continue;
-      // A $ change bigger than half the book is a unit mismatch between quarters, not a trade.
-      if (implausibleMove({ ...r, value: r.weight != null && d.total_value ? r.weight * d.total_value : null }, d.total_value ?? null)) continue;
-      const o = byTicker.get(r.ticker);
-      if (!o) byTicker.set(r.ticker, { ...r });
+    for (const raw of Array.isArray(d.moves) ? d.moves : []) {
+      if (!raw.ticker || raw.put_call || !['new', 'added', 'trimmed', 'exited'].includes(raw.change ?? '')) continue;
+      const value = raw.weight != null && total ? raw.weight * total : null;
+      // New and exited rows carry both values; an add or trim that looks too big reads the prior book.
+      let prev_value: number | null = raw.change === 'new' ? 0 : raw.change === 'exited' ? -raw.value_delta : null;
+      if (prev_value == null && value != null && (Math.abs(raw.value_delta) > 1.5 * value || (book && Math.abs(raw.value_delta) > 0.5 * total)) && d.prev_quarter)
+        prev_value = await priorValue(env, c.slug, d.prev_quarter, raw.cusip, raw.ticker);
+      const chk = checkMove({ ...raw, value, prev_value }, book);
+      if (chk.verdict === 'drop') continue;
+      const r = { ...raw, value_delta: chk.value_delta, unusual: chk.verdict === 'unusual' };
+      const o = byTicker.get(r.ticker!);
+      if (!o) byTicker.set(r.ticker!, r);
       else {
         const shares = (o.shares ?? 0) + (r.shares ?? 0);
         const prev = (o.prev_shares ?? 0) + (r.prev_shares ?? 0);
         const usd = o.value_delta + r.value_delta;
-        byTicker.set(r.ticker, { ...o, shares, prev_shares: prev, value_delta: shares === prev ? 0 : usd, change: !prev ? 'new' : !shares ? 'exited' : usd > 0 ? 'added' : 'trimmed' });
+        byTicker.set(r.ticker!, { ...o, shares, prev_shares: prev, value_delta: shares === prev ? 0 : usd, change: !prev ? 'new' : !shares ? 'exited' : usd > 0 ? 'added' : 'trimmed', unusual: o.unusual || r.unusual });
       }
     }
     for (const r of byTicker.values()) {
       const what = r.change as 'new' | 'added' | 'trimmed' | 'exited';
       if (!r.ticker || !r.value_delta || FUND_SECURITY.test(r.name ?? '')) continue;
-      all.push({ manager, slug: c.slug, ticker: r.ticker, what, usd: r.value_delta, form: `13F ${c.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')}`, url: `${env.SITE_URL}f/${c.accession}/`, featured: !!d.featured || featured.has(c.slug), accession: c.accession });
+      all.push({ manager, slug: c.slug, ticker: r.ticker, what, usd: r.value_delta, form: `13F ${c.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')}`, url: `${env.SITE_URL}f/${c.accession}/`, featured: !!d.featured || featured.has(c.slug), accession: c.accession, ...(r.unusual ? { unusual: true } : {}) });
     }
-  });
+  }
 
   const pre = await env.HIST.get('pre/events.json');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -287,12 +320,12 @@ export async function inYourNames(env: Env, names: string[], week: Week, now: nu
   const locked: Item[] = [];
   for (const t of names) {
     const cands = [
-      ...week.all.filter((x) => x.ticker === t).map((x) => ({ key: `${x.accession}|${x.ticker}|${x.what}`, featured: x.featured, size: Math.abs(x.usd), text: `${x.manager} ${FACT[x.what](x)}`, url: x.url })),
-      ...week.stakes.filter((x) => x.ticker === t).map((x) => ({ key: x.accession, featured: x.featured, size: 0, text: stakeFact(x), url: x.url })),
-    ].sort((a, b) => Number(b.featured) - Number(a.featured) || b.size - a.size);
+      ...week.all.filter((x) => x.ticker === t).map((x) => ({ key: `${x.accession}|${x.ticker}|${x.what}`, featured: x.featured, unusual: !!x.unusual, size: Math.abs(x.usd), text: `${x.manager} ${FACT[x.what](x)}`, url: x.url })),
+      ...week.stakes.filter((x) => x.ticker === t).map((x) => ({ key: x.accession, featured: x.featured, unusual: false, size: 0, text: stakeFact(x), url: x.url })),
+    ].sort((a, b) => Number(b.featured) - Number(a.featured) || Number(a.unusual) - Number(b.unusual) || b.size - a.size);
     const top = cands.find((c) => c.featured);
     if (top) {
-      facts.push({ ticker: t, text: `${top.text}, which you own`, url: top.url });
+      facts.push({ ticker: t, text: `${top.text}, which you own${top.unusual ? ` (${UNUSUAL})` : ''}`, url: top.url });
       shown.add(top.key);
     }
     for (const c of cands) if (!shown.has(c.key)) locked.push({ text: c.text, size: c.size });
@@ -334,7 +367,7 @@ export async function freeTeaser(env: Env, names: string[], now: number): Promis
 const LABEL: Record<WeeklyMove['what'], string> = { new: 'new position', added: 'added', trimmed: 'trimmed', exited: 'sold out', bought: 'bought', sold: 'sold' };
 
 export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; sells: WeeklyMove[] }, weekOf: string, unsub: string, yours?: InYourNames): Mail {
-  const line = (x: WeeklyMove) => `${x.manager}: ${LABEL[x.what]} ${x.ticker}, ${x.usd > 0 ? '+' : '−'}${money(x.usd)} (${x.form})`;
+  const line = (x: WeeklyMove) => `${x.manager}: ${LABEL[x.what]} ${x.ticker}, ${x.usd > 0 ? '+' : '−'}${money(x.usd)} (${x.form})${x.unusual ? ` · ${UNUSUAL}` : ''}`;
   // The subject's fallback: the week's biggest superinvestor move, buy or sell.
   const top = [moves.buys[0], moves.sells[0]].filter((x): x is WeeklyMove => !!x).sort((a, b) => Number(b.featured) - Number(a.featured) || Math.abs(b.usd) - Math.abs(a.usd))[0];
   const pricing = `${env.SITE_URL}pricing/?utm_source=weekly&utm_medium=email`;
@@ -355,11 +388,11 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
       : `<div style="background:#f3f4f6;border-radius:10px;padding:12px 14px"><h3 style="font-size:15px;margin:0 0 6px">In your names</h3>${yours.facts.map((f) => `<p style="margin:4px 0"><a href="${f.url}" style="color:#111;text-decoration:none">${esc(f.text)}.</a></p>`).join('') || `<p style="margin:4px 0">None of your ${n(yours.names, 'name')} moved in superinvestor filings this week.</p>`}${locked ? `<p style="margin:8px 0 4px;color:#6b7280">🔒 ${esc(locked)}</p><p style="margin:8px 0 0"><a href="${pricing}" style="display:inline-block;background:#111;color:#fff;padding:8px 16px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px">${trial}</a></p>` : ''}</div>`;
   const lead = yours?.facts[0];
   const row = (x: WeeklyMove) =>
-    `<tr><td style="padding:4px 8px 4px 0">${esc(x.manager)}</td><td style="padding:4px 8px;white-space:nowrap"><b>${esc(x.ticker)}</b> ${LABEL[x.what]}</td><td style="padding:4px 8px;text-align:right;white-space:nowrap;color:${x.usd > 0 ? '#047857' : '#b91c1c'}">${x.usd > 0 ? '+' : '−'}${money(x.usd)}</td><td style="padding:4px 0 4px 8px"><a href="${x.url}" style="color:#1d4ed8">${esc(x.form)}</a></td></tr>`;
+    `<tr><td style="padding:4px 8px 4px 0">${esc(x.manager)}</td><td style="padding:4px 8px;white-space:nowrap"><b>${esc(x.ticker)}</b> ${LABEL[x.what]}</td><td style="padding:4px 8px;text-align:right;white-space:nowrap;color:${x.usd > 0 ? '#047857' : '#b91c1c'}">${x.usd > 0 ? '+' : '−'}${money(x.usd)}</td><td style="padding:4px 0 4px 8px"><a href="${x.url}" style="color:#1d4ed8">${esc(x.form)}</a>${x.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}</td></tr>`;
   const table = (title: string, xs: WeeklyMove[]) => (xs.length ? `<h3 style="font-size:15px;margin:18px 0 6px">${title}</h3><table style="border-collapse:collapse;font-size:14px">${xs.map(row).join('')}</table>` : '');
   return {
     to,
-    subject: lead ? `In your names: ${lead.text.replace(/, which you own$/, '')}` : `The week in superinvestor filings: ${top ? `${top.manager} ${LABEL[top.what]} ${top.ticker}` : 'the biggest moves'}`,
+    subject: lead ? `In your names: ${lead.text.replace(/, which you own( \(.*\))?$/, '')}` : `The week in superinvestor filings: ${top ? `${top.manager} ${LABEL[top.what]} ${top.ticker}` : 'the biggest moves'}`,
     text: `Superinvestor filings, week of ${weekOf}.\n\n${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nThese came days after the filings. Copy emails each one minutes after EDGAR accepts it, with 13F history and CSV; free for 14 days: ${pricing}\n\nUnsubscribe: ${unsub}${FOOTER}`,
     html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, week of ${esc(weekOf)}.</p>${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}<p style="margin-top:20px">These came days after the filings. <a href="${pricing}" style="color:#1d4ed8"><b>Copy</b></a> emails each one minutes after EDGAR accepts it, with 13F history and CSV. Free for 14 days.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
     unsubscribe: unsub,

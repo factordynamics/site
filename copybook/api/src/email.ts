@@ -1,5 +1,5 @@
 import type { Alert13F, AlertEvent } from './alerts';
-import { cleanItem4, type MoveRow, type Moves } from './edgar';
+import { cleanItem4, UNUSUAL, type MoveRow, type Moves } from './edgar';
 import type { Env, Member } from './env';
 import type { Follows } from './members';
 import { firmName } from '../../../holdterm/src/names';
@@ -140,6 +140,8 @@ function flag(ticker: string | null, f: Follows): string {
 const MOVE_LABELS = [['New', 'new'], ['Added', 'added'], ['Trimmed', 'trimmed'], ['Exited', 'exited']] as const;
 
 const rowName = (r: MoveRow) => (r.ticker || r.display_name || r.issuer || r.cusip) + (r.put_call ? ` ${r.put_call.toLowerCase()}s` : '');
+/** " · Unusual size · check the filing" after a large but real move. */
+const odd = (r: MoveRow) => (r.unusual ? ` · ${UNUSUAL}` : '');
 
 /** The trade as a share of this filing's book (the data run renamed it delta_pct_of_book). */
 const bookPct = (r: MoveRow) => {
@@ -178,9 +180,9 @@ export function shortName(manager: string): string {
 function headlineMoves(mv: Moves): string {
   const big = (rows: MoveRow[]) => [...rows].sort((a, b) => Math.abs(b.value_delta) - Math.abs(a.value_delta));
   return [
-    ...big(mv.new).slice(0, 1).map((r) => `NEW ${rowName(r)}`),
-    ...big(mv.exited).slice(0, 1).map((r) => `EXIT ${rowName(r)}`),
-    ...big([...mv.added, ...mv.trimmed]).map((r) => `${rowName(r)} ${usd(r.value_delta)}`),
+    ...big(mv.new).slice(0, 1).map((r) => `NEW ${rowName(r)}${odd(r)}`),
+    ...big(mv.exited).slice(0, 1).map((r) => `EXIT ${rowName(r)}${odd(r)}`),
+    ...big([...mv.added, ...mv.trimmed]).map((r) => `${rowName(r)} ${usd(r.value_delta)}${odd(r)}`),
   ]
     .slice(0, 3)
     .join(' · ');
@@ -206,7 +208,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
       const parts = rows.map((r) => {
         const pos = label === 'Trimmed' || label === 'Added' ? positionChange(label, r) : '';
         const bits = [pos && (label === 'Trimmed' ? `${pos} of the position` : pos), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean);
-        return `${rowName(r)} ${usd(r.value_delta)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}`;
+        return `${rowName(r)} ${usd(r.value_delta)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}${odd(r)}`;
       });
       lines.push(`  ${label}: ${parts.join(', ')}`);
     }
@@ -398,7 +400,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     out.push(table(['Stock', 'Shares', 'Value', '% of book'], a.reveal.rows.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, r.shares.toLocaleString('en-US'), usd(r.value, false), bookPct(r)]), [1, 2, 3]));
   } else if (mv) {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
-    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, usd(r.value_delta), esc(positionChange(label, r)), bookPct(r)]));
+    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}`, usd(r.value_delta), esc(positionChange(label, r)), bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', '% of book'], rows, [2, 4]));
   } else if (a.top?.length) {
     out.push('<p style="margin:2px 0">No earlier quarter on file for this filer, so no changes yet. Largest holdings:</p>');
@@ -490,7 +492,7 @@ function holdtermFiling(env: Env, a: Alert13F): string {
     for (const [title, rows] of [['TOP BUYS', buys], ['TOP SELLS', sells]] as const) {
       if (!rows.length) continue;
       lines.push(title);
-      for (const [label, r] of rows) lines.push(`  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad(usd(r.value_delta), 9)}  ${positionChange(label === 'ADD' ? 'Added' : label === 'TRIM' ? 'Trimmed' : label === 'NEW' ? 'New' : 'Exited', r)}`);
+      for (const [label, r] of rows) lines.push(`  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad(usd(r.value_delta), 9)}  ${positionChange(label === 'ADD' ? 'Added' : label === 'TRIM' ? 'Trimmed' : label === 'NEW' ? 'New' : 'Exited', r)}${odd(r)}`);
     }
   } else if (a.top?.length) {
     lines.push('', 'LARGEST HOLDINGS', ...a.top.slice(0, 5).map((r) => `  ${pad(rowName(r), 19)}${lpad(usd(r.value, false), 9)}`));

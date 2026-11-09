@@ -82,6 +82,12 @@ export interface MoveRow {
   delta_pct_of_book: number | null;
   /** Older data-run rows used this name for the trade size. */
   pct_of_book?: number | null;
+  /** The prior quarter's value, when known (guards the size). */
+  prev_value?: number | null;
+  /** Ingest's flag for a unit mismatch between quarters. */
+  suspect_units?: boolean;
+  /** A real but unusually large move: shown with "Unusual size · check the filing". */
+  unusual?: boolean;
 }
 
 export interface Moves {
@@ -179,17 +185,49 @@ export function quarterOf(reportDate: string): string {
 }
 
 /**
- * A move whose size can't be right, so it never reaches an email, chat post, webhook or the weekly: a
- * unit mismatch between quarters (GuardCap's BKNG "trim" of $3.3B on a $1.5B book). Dropped when the
- * data run flags it `suspect_units`, when the $ change exceeds half the filer's book, or when it exceeds
- * twice the larger of the prior and current position values (twice: the trade is priced at this quarter's
- * value per share, so a price move alone can lift it above the prior value).
+ * Whether a 13F move can be shown, for every email, chat post, webhook and the weekly:
+ * - `drop`: a unit error, never shown. Ingest flags it `suspect_units`, or the value per share is off by
+ *   5x or more against the prior quarter with no split on file (GuardCap's BKNG "trim" of $3.3B: ~$188 a
+ *   share in Q2, ~$5,120 in Q3).
+ * - `unusual`: sent with an "Unusual size · check the filing" tag. A $ change over half the larger of the
+ *   prior and current books (Scion's SPY puts, 51% of a $1.74B book, then their exit from a $99M one), or a
+ *   share-count break: over 1.5x the larger of the two positions, which can't be a trade at this quarter's
+ *   price, so its size becomes the change in reported value (value - prev_value).
+ * - `ok` otherwise. `value_delta` is the size to show.
  */
-export function implausibleMove(r: { value_delta: number; value?: number | null; prev_value?: number | null; suspect_units?: boolean }, book: number | null): boolean {
-  if (r.suspect_units) return true;
-  const d = Math.abs(r.value_delta);
-  if (book && d > 0.5 * book) return true;
-  return r.prev_value != null && d > 2 * Math.max(r.value ?? 0, r.prev_value);
+export function checkMove(
+  r: { value_delta: number; value?: number | null; prev_value?: number | null; shares?: number | null; prev_shares?: number | null; suspect_units?: boolean },
+  book: number | null,
+  split = false,
+): { verdict: 'ok' | 'unusual' | 'drop'; value_delta: number } {
+  if (r.suspect_units) return { verdict: 'drop', value_delta: r.value_delta };
+  const { value, prev_value, shares, prev_shares } = r;
+  if (!split && value && prev_value && shares && prev_shares && value > 0 && prev_value > 0 && shares > 0 && prev_shares > 0) {
+    const ratio = value / shares / (prev_value / prev_shares);
+    if (ratio >= 5 || ratio <= 1 / 5) return { verdict: 'drop', value_delta: r.value_delta };
+  }
+  let d = r.value_delta;
+  let unusual = false;
+  if (prev_value != null && value != null && Math.abs(d) > 1.5 * Math.max(value, prev_value)) {
+    d = Math.round(value - prev_value);
+    unusual = true;
+  }
+  if (book && Math.abs(d) > 0.5 * book) unusual = true;
+  return { verdict: unusual ? 'unusual' : 'ok', value_delta: d };
+}
+
+/** The tag a large but real move carries in emails, chat posts and the weekly. */
+export const UNUSUAL = 'Unusual size · check the filing';
+
+/** Applies checkMove to rows: drops unit errors, tags and resizes the rest (`unusual: true`). */
+export function guardRows<T extends MoveRow>(rows: T[], book: number | null, prevValue: (r: T) => number | null | undefined, splits?: Set<string>): T[] {
+  const out: T[] = [];
+  for (const r of rows) {
+    const c = checkMove({ ...r, prev_value: prevValue(r) ?? r.prev_value ?? null }, book, !!splits && (splits.has(r.cusip) || (!!r.ticker && splits.has(r.ticker))));
+    if (c.verdict === 'drop') continue;
+    out.push(c.verdict === 'unusual' ? { ...r, value_delta: c.value_delta, ...(c.value_delta !== r.value_delta && book ? { delta_pct_of_book: c.value_delta / book } : {}), unusual: true } : r);
+  }
+  return out;
 }
 
 /** All-caps filer names ("GUARDCAP ASSET MANAGEMENT Ltd") as "Guardcap Asset Management Ltd"; short acronyms (AQR, LLC) stay. */
@@ -202,12 +240,14 @@ export function displayCase(name: string): string {
  * New, exited, added and trimmed positions against the prior quarter, sized by the trade at this
  * filing's own value per share (a price move alone is no trade), as the data run computes them.
  */
-export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROWS): { moves: Moves; changed: MoveRow[] } {
+export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROWS, splits?: Set<string>): { moves: Moves; changed: MoveRow[] } {
   const prevTotal = prev.reduce((s, p) => s + p.value, 0);
   let total = cur.reduce((s, p) => s + p.value, 0);
   // A filer that reports in thousands by mistake: scale to dollars like the data run's unit fix.
   const scale = total > 0 && total * 200 < prevTotal ? 1000 : 1;
   total *= scale;
+  // Trade sizes are measured against the larger of the two books (an exit from a book that shrank).
+  const book = Math.max(total, prevTotal);
   const before = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p]));
   const rows: MoveRow[] = [];
   const row = (p: Position, change: string, shares: number, prev_shares: number, value: number, delta: number) => ({
@@ -221,7 +261,7 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     prev_shares,
     value,
     value_delta: Math.round(delta),
-    delta_pct_of_book: total ? delta / total : null,
+    delta_pct_of_book: book ? delta / book : null,
   });
   for (const c of cur) {
     const value = c.value * scale;
@@ -233,10 +273,9 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     else if (c.shares !== p.shares) rows.push(row(named, c.shares > p.shares ? 'added' : 'trimmed', c.shares, p.shares, value, c.shares ? ((c.shares - p.shares) * value) / c.shares : 0));
   }
   for (const p of before.values()) rows.push(row(p, 'exited', 0, p.shares, 0, -p.value));
-  // Moves whose size can't be right (units changed between quarters) are left out; the larger book is the yardstick.
+  // Unit errors are left out; unusually large moves are tagged. The larger book is the yardstick.
   const prior = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p.value]));
-  const book = Math.max(total, prevTotal);
-  for (let i = rows.length - 1; i >= 0; i--) if (implausibleMove({ ...rows[i], prev_value: prior.get(`${rows[i].cusip}|${rows[i].put_call ?? ''}`) ?? null }, book)) rows.splice(i, 1);
+  rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(`${r.cusip}|${r.put_call ?? ''}`), splits));
   const top = (c: string) =>
     rows
       .filter((r) => r.change === c)
