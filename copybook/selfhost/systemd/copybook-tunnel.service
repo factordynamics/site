@@ -1,0 +1,13 @@
+[Unit]
+Description=Copybook API second ingress: Cloudflare quick tunnel (trycloudflare.com) to the local proxy's /copybook/ route
+After=network-online.target amp-local-models.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/copybook-api/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:11435
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

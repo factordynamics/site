@@ -1,0 +1,7 @@
+[Unit]
+Description=Keep the Copybook and Holdterm front ends on a working API entry point (quick tunnel, else Funnel)
+
+[Service]
+Type=oneshot
+ExecStart=%h/copybook-api/ops/tunnel-watch.sh
+TimeoutStartSec=300

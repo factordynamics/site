@@ -1,0 +1,7 @@
+[Unit]
+Description=Copybook API nightly encrypted backup of KV and Durable Objects to R2 (copybook-history backups/)
+
+[Service]
+Type=oneshot
+ExecStart=%h/copybook-api/ops/backup.sh
+TimeoutStartSec=900

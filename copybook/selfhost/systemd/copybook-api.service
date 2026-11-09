@@ -1,0 +1,18 @@
+[Unit]
+Description=Copybook API, self-hosted (copybook-api Worker on workerd via Miniflare; public at https://gene.tail70ba3.ts.net/copybook/)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=%h/copybook-api/ops
+EnvironmentFile=%h/copybook-api/copybook-api.env
+EnvironmentFile=%h/copybook-api/secrets.env
+ExecStart=%h/.local/share/mise/installs/node/26.12.1/bin/node server.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target
