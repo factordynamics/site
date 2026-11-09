@@ -119,6 +119,21 @@ export type IssuerEvent = {
   /** Form 4: every transaction line as filed (P, S, M, F, G, A, ...), derivative lines flagged. */
   transactions?: { code: string; date: string | null; shares: number; price: number | null; acquired_disposed: 'A' | 'D' | null; derivative: boolean }[] | null
 }
+/** One row of GET /stocks/{T}/holders (Pro and Fund): every 13F filer holding the issuer in its latest full book. */
+export type ApiHolder = {
+  filer: { cik: string; name: string; slug: string; type: string | null; curated: boolean }
+  period: string
+  kind: string
+  shares: number
+  prev_shares: number | null
+  value_usd: number
+  prev_value_usd: number | null
+  change: 'new' | 'added' | 'trimmed' | 'exited' | 'unchanged' | null
+  weight: number | null
+}
+/** A page of up to 1,000 holders, largest first; `truncated` while only the public top 25 is on the server. */
+export const loadHolders = (t: string, type: string | null, offset: number) =>
+  call<{ count: number; truncated: boolean; holders: ApiHolder[]; next_offset: number | null }>(`/stocks/${encodeURIComponent(t)}/holders?cohort=all&limit=1000&offset=${offset}${type ? `&type=${type}` : ''}`, { auth: true })
 /** One ticker's issuer feed; `window` is where it is complete back to (the quarter start, e.g. Jul 1), null when it isn't. */
 export type IssuerFeed = IssuerEvent[] & { window?: string | null }
 /** GET /events for up to 50 tickers. A cold call lists what it couldn't load yet in `pending`; ask again for those. */

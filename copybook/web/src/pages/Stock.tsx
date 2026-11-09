@@ -5,9 +5,9 @@ import { ChangeBars } from '../components/charts'
 import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
-import { downloadFile, useMember } from '../lib/account'
+import { downloadFile, isPro, loadHolders, useMember, type ApiHolder } from '../lib/account'
 import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
-import { dateLabel, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
+import { dateLabel, displayName, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
@@ -50,16 +50,42 @@ export function StockPage() {
     return { ...x, filers: x.smart ? x.smart.current + x.smart.older : 0, quarters: x.smart?.quarters ?? {}, rows: x.rows.filter((r) => r.smart) }
   }, [wide, view, fh.data])
   const filersLoading = wide && !fh.data && !fh.error
+  // Pro and Fund: every holder from the API (1,000 a page), with each filer's change since its previous
+  // 13F. Used only once the list is whole: not the public top 25 (truncated), and for the smart-money
+  // tab, typed beyond the funds we track (about as many as the public index counts).
+  const [pages, setPages] = useState(1)
+  useEffect(() => setPages(1), [view, d?.ticker])
+  const full = useAsync(async () => {
+    if (!wide || !d || !isPro(member)) return null
+    const rows: ApiHolder[] = []
+    let r = null
+    for (let i = 0, off = 0; i < pages; i++) {
+      r = await loadHolders(d.ticker, view === 'smart' ? 'hedge_fund,active' : null, off)
+      rows.push(...r.holders)
+      if (r.next_offset == null) break
+      off = r.next_offset
+    }
+    return r ? { count: r.count, truncated: r.truncated, rows, more: r.next_offset != null } : null
+  }, [wide, d?.ticker, view, pages, member?.plan, member?.active])
+  const smartTotal = fh.data?.smart ? fh.data.smart.current + fh.data.smart.older : 0
+  const api = full.data && !full.data.truncated && (view !== 'smart' || full.data.count >= smartTotal * 0.8) ? full.data : null
   const who = view === 'smart' ? 'hedge funds and active managers' : '13F filers'
   // Every filer's latest position; a fund we track closely keeps its row, with its change since the filing before.
   const holders = useMemo(() => {
     if (!filers) return tracked
     const mine = new Map(tracked.map((h) => [h.slug, h]))
+    if (api)
+      return api.rows
+        .filter((r) => r.kind === 'equity' || !r.kind)
+        .map((r): StockHolder => {
+          const m = mine.get(r.filer.slug)
+          return { slug: r.filer.slug, manager: m?.manager ?? displayName(r.filer.name), firm: r.filer.name, quarter: r.period, featured: m?.featured ?? false, shares: r.shares, value: r.value_usd, weight: r.weight ?? 0, prev_shares: r.prev_shares ?? 0, prev_value: r.prev_value_usd ?? 0, delta_value: r.value_usd - (r.prev_value_usd ?? 0), change: r.change }
+        })
     return filers.rows.map(
       (r): StockHolder =>
         mine.get(r.slug) ?? { slug: r.slug, manager: r.name, firm: r.name, quarter: r.quarter, featured: r.tier === 2, shares: r.shares, value: r.value, weight: r.weight, prev_shares: 0, prev_value: 0, delta_value: 0, change: null },
     )
-  }, [filers, tracked])
+  }, [filers, tracked, api])
   const exited = useMemo(() => (d?.exited ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
   const options = useMemo(() => (d?.options ?? []).filter((o) => scope === 'all' || o.featured), [d, scope])
   const [allMoves, setAllMoves] = useState(false)
@@ -275,11 +301,11 @@ export function StockPage() {
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold">Every holder</h2>
             <p className="text-[13px] text-ink-3">
-              {filers && filers.filers > holders.length ? `The ${holders.length} largest of ${filers.filers.toLocaleString('en-US')} ${who}` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
-              {wide && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
+              {api ? `All ${api.count.toLocaleString('en-US')} ${who}, largest first, each compared with its previous 13F` : filers && filers.filers > holders.length ? `The ${holders.length} largest of ${filers.filers.toLocaleString('en-US')} ${who}` : `${holders.length.toLocaleString('en-US')} funds`} · shares only; options are listed separately below
+              {wide && !api && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
             </p>
           </div>
-          {paid && d && <CsvButton variant="outline" label="Holders CSV" download={() => downloadFile(`/stocks/${encodeURIComponent(d.ticker)}/holders.csv`, `copybook-${d.ticker}-holders.csv`)} />}
+          {paid && d && <CsvButton variant="outline" label="Holders CSV" download={() => downloadFile(`/stocks/${encodeURIComponent(d.ticker)}/holders.csv${view === 'smart' ? '?type=hedge_fund,active' : ''}`, `copybook-${d.ticker}-holders${view === 'smart' ? '-hedge-active' : ''}.csv`)} />}
         </header>
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every holder">
           <table className="w-full text-[14px]">
@@ -320,13 +346,20 @@ export function StockPage() {
             </tbody>
           </table>
         </div>
-        {holders.length > n && (
+        {(holders.length > n || api?.more) && (
           <div className="flex items-center justify-between border-t border-line px-6 py-3 text-[13px] text-ink-3">
             <span>
-              Showing {n} of {holders.length.toLocaleString('en-US')}
+              Showing {Math.min(n, holders.length).toLocaleString('en-US')} of {(api?.count ?? holders.length).toLocaleString('en-US')}
             </span>
-            <button onClick={() => setN((x) => x + 50)} className="font-medium text-accent hover:text-accent-2">
-              Show more
+            <button
+              onClick={() => {
+                if (n + 50 > holders.length && api?.more) setPages((p) => p + 1)
+                setN((x) => x + 50)
+              }}
+              disabled={full.loading}
+              className="min-h-11 font-medium text-accent hover:text-accent-2 disabled:opacity-60"
+            >
+              {full.loading ? 'Loading…' : 'Show more'}
             </button>
           </div>
         )}
