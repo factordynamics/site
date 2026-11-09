@@ -22,7 +22,10 @@ async function get(url) {
 
 const quarterEnd = (q) => `${q.slice(0, 4)}-${['03-31', '06-30', '09-30', '12-31'][Number(q[5]) - 1]}`;
 
-const [stocks, sec, filers, index] = await Promise.all([get(`${DATA}stock_holders.json`), get('https://www.sec.gov/files/company_tickers.json'), get(`${DATA}filers.json`), get(`${DATA}index.json`)]);
+const [stocks, sec, filers, index, types] = await Promise.all([get(`${DATA}stock_holders.json`), get('https://www.sec.gov/files/company_tickers.json'), get(`${DATA}filers.json`), get(`${DATA}index.json`), get(`${DATA}filer_types.json`).catch(() => ({ filers: {} }))]);
+// One source of truth for a filer's type: ingest's filer_types.json, in /v1's enum (active is long_only's old name).
+const normType = (t) => (t == null ? null : ({ active: 'long_only', broker: 'other' })[t] ?? t);
+const typeOf = (f) => normType(types.filers?.[f.cik]?.type ?? types.filers?.[String(Number(f.cik))]?.type ?? f.type ?? null);
 
 const codes = {};
 for (const s of stocks.stocks ?? []) if (s.ticker && !(s.ticker in codes)) codes[s.ticker] = s.issuer;
@@ -35,7 +38,7 @@ for (const v of Object.values(sec)) {
 const curated = new Set((index.managers ?? []).filter((m) => m.slug && m.cik).map((m) => String(m.cik).padStart(10, '0')));
 const rest = (filers.filers ?? [])
   .filter((f) => f.ok && !curated.has(f.cik))
-  .map((f) => ({ slug: f.slug, cik: f.cik, name: f.name, manager: null, featured: false, status: null, latest_quarter: f.quarter, latest_report_date: f.quarter ? quarterEnd(f.quarter) : null, latest_filing_date: f.filing_date, latest_accession: null, total_value_usd: null, position_count: f.position_count, history_quarters: f.quarter ? [f.quarter] : [], curated: false, type: f.type ?? null }));
+  .map((f) => ({ slug: f.slug, cik: f.cik, name: f.name, manager: null, featured: false, status: null, latest_quarter: f.quarter, latest_report_date: f.quarter ? quarterEnd(f.quarter) : null, latest_filing_date: f.filing_date, latest_accession: null, total_value_usd: null, position_count: f.position_count, history_quarters: f.quarter ? [f.quarter] : [], curated: false, type: typeOf(f) }));
 
 const files = {
   'pre/stock-codes.json': JSON.stringify(codes),

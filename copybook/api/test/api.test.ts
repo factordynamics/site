@@ -2445,7 +2445,7 @@ describe('copybook api', () => {
     expect(h).toMatchObject({ count: 4, filers: 4, next_offset: null, options_count: { calls: { rows: 0, filers: 0 }, puts: { rows: 1, filers: 1 } }, exited_count: 1, data: { issuer: '67066G', ticker: 'NVDA', counts: { holders: 4 }, truncated: false } });
     expect(h.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0002045724', '0000102909', '0001067983', '0001387322']);
     expect(h.data.options.map((x: { filer: { cik: string; type: string } }) => [x.filer.cik, x.filer.type])).toEqual([['0001423053', 'hedge_fund']]);
-    expect(h.data.exited).toEqual([expect.objectContaining({ kind: 'calls', put_call: 'Call', shares: 0, weight: null, change: 'exited' })]);
+    expect(h.data.exited).toEqual([expect.objectContaining({ kind: 'calls', put_call: 'CALL', shares: 0, weight: null, change: 'exited' })]); // as EDGAR writes it
     // current_only=false adds the filer whose latest 13F is a year old.
     const every = (await v1('/v1/stocks/NVDA/holders?current_only=false')).body;
     expect([every.count, every.filers, every.data.holders[4].filer.name]).toEqual([5, 5, 'Old Filer LP']);

@@ -8,7 +8,22 @@ export const SCHEMA_VERSION = '2026-11-08';
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
-export const CHANGELOG: { id?: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+export const CHANGELOG: { id: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-09-spec-alignment',
+    date: '2026-11-09',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'put_call is PUT or CALL everywhere (holdings, holders, changes), as EDGAR writes it; holders served Call/Put before.',
+      'Filer type uses the data run\'s classification for every filer, in one enum: hedge_fund, long_only, index, bank, insurance, wealth, pension, sovereign, other, or null. long_only was named active (served as long_only from today; type=active still filters it); broker is served as other.',
+      'Position.change can be disclosed_later: a position first disclosed in a later NEW HOLDINGS amendment for the period (typically expired confidential treatment).',
+      'total_value_usd is a whole number of USD everywhere (a few filers report fractions of a dollar).',
+      'Every /v1/changelog entry has a stable id.',
+      'A request that takes over 3 s returns 503 with Retry-After and the documented error envelope, code busy.',
+    ],
+  },
   {
     id: '2026-11-09-holders',
     date: '2026-11-09',
@@ -35,18 +50,20 @@ export const CHANGELOG: { id?: string; date: string; schema_version: string; bre
     ],
   },
   {
+    id: '2026-11-09-bulk-and-events',
     date: '2026-11-09',
     schema_version: SCHEMA_VERSION,
     breaking: false,
     status: 'shipped',
     changes: [
-      'Bulk exports, partial: GET /v1/bulk lists per-quarter gzip CSVs of every filer\'s 13F book (2026Q1 to 2026Q3 today) and GET /v1/bulk/{YYYYQn}.csv.gz streams one. Parquet is coming (501 until then). The files are as-filed books, not point-in-time yet: no accepted_at, source_accession, first_disclosed_at or change columns. Only files that pass a size check are listed; stubs from a failed run are hidden until regenerated. Known issue: First Eagle (Matthew McLennan) 2026Q2 is double counted (a mislabeled amendment counted with its original) until the data run\'s fix lands; see 2026-11-09-refiled-amendments.',
+      'Bulk exports, partial: GET /v1/bulk lists per-quarter gzip CSVs of every filer\'s 13F book (2026Q1 to 2026Q3 today) and GET /v1/bulk/{YYYYQn}.csv.gz streams one. Parquet is coming (501 until then). The files are as-filed books, not point-in-time yet: no accepted_at, source_accession, first_disclosed_at or change columns. Only files that pass a size check are listed; stubs from a failed run are hidden until regenerated. Built from original filings: a re-filed book such as First Eagle (Matthew McLennan) 2026Q2 shows its $59.92B original, not the $60.75B refile; see 2026-11-09-refiled-amendments.',
       'Webhook detected_at, like every /v1 timestamp, has no milliseconds (the test webhook included).',
       'GET /v1/events?tickers= (and ticker=): also every Form 4 by the company\'s own insiders and every 13D/G any filer made on it (`source: "issuer"`), with `coverage` (how far back each EDGAR feed reached per ticker) and `pending`. Insider rows carry `insider.ownership`: direct and indirect lines with their balances and trades. Lookback: the issuer\'s latest 20 Form 4s and 10 Schedule 13D/Gs.',
       'Form 4 rows: `event_date` is the first transaction date (one rule everywhere) and `last_transaction_date` the last. Rows built before this change are corrected by the next hourly build.',
     ],
   },
   {
+    id: '2026-11-08-coming',
     date: '2026-11-08',
     schema_version: SCHEMA_VERSION,
     breaking: false,
@@ -57,6 +74,7 @@ export const CHANGELOG: { id?: string; date: string; schema_version: string; bre
     ],
   },
   {
+    id: '2026-11-08-every-filer',
     date: '2026-11-08',
     schema_version: SCHEMA_VERSION,
     breaking: false,
@@ -73,6 +91,7 @@ export const CHANGELOG: { id?: string; date: string; schema_version: string; bre
     ],
   },
   {
+    id: '2026-11-08-build-stamps',
     date: '2026-11-08',
     schema_version: SCHEMA_VERSION,
     breaking: false,
@@ -86,6 +105,7 @@ export const CHANGELOG: { id?: string; date: string; schema_version: string; bre
     ],
   },
   {
+    id: '2026-11-08-launch',
     date: '2026-11-08',
     schema_version: SCHEMA_VERSION,
     breaking: false,

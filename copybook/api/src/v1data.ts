@@ -63,7 +63,7 @@ function position(h: any, equityTotal: number) {
     ticker: h.ticker ?? null,
     issuer: h.issuer,
     title_of_class: h.title ?? null,
-    put_call: h.put_call ?? null,
+    put_call: h.put_call ? String(h.put_call).toUpperCase() : null,
     sector: h.sector ?? null,
     shares: h.shares,
     shares_type: h.shares_type ?? h.sh_prn ?? null,
@@ -319,7 +319,7 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
       versions,
     },
     prev_quarter: q.prev_quarter ?? null,
-    total_value_usd: q.total_value ?? holdings.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0),
+    total_value_usd: Math.round(q.total_value ?? holdings.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0)),
     position_count: q.position_count ?? holdings.length,
     // A public shard holds the top 500 positions by value until the full book is in R2.
     truncated: Boolean(q.truncated ?? (q.position_count != null && q.position_count > holdings.length)),
@@ -368,7 +368,7 @@ async function versionBook(env: Env, book: Record<string, unknown>, version: str
       ...book,
       version: v.accession,
       filing: { ...filing, accession: v.accession, form: v.form, filing_date: v.filed_on, accepted_at: v.accepted_at, amendment_type: v.amendment_type, sec_url: `${dir}${v.accession}-index.html`, amendments: [] },
-      total_value_usd: rows.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0),
+      total_value_usd: Math.round(rows.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0)),
       position_count: rows.length,
       truncated: false,
       // As filed in that one filing: no changes against the prior quarter.
@@ -478,6 +478,8 @@ function streamFilers(body: ReadableStream<Uint8Array>, curated: unknown[]): Res
  * Filer types in the holder index (and changes/{q}.json), ingest's filer_types.json. Ingest is renaming
  * active to long_only and adding sovereign and insurance; both names match during the switch.
  */
+/** A filer type in /v1's enum: ingest's names, with active (long_only's old name) and broker (other) mapped. */
+export const normType = (t: string | null | undefined): string | null => (t == null ? null : ({ active: 'long_only', broker: 'other' } as Record<string, string>)[t] ?? t);
 export const FILER_TYPES = ['hedge_fund', 'long_only', 'active', 'smart_money', 'index', 'bank', 'insurance', 'wealth', 'pension', 'sovereign', 'other'];
 const SAME_TYPE: Record<string, string> = { active: 'long_only', long_only: 'active' };
 
@@ -508,7 +510,7 @@ export function splitHolders(rows: HolderRow[], includeOptions: boolean) {
   const options = live.filter((r) => !!r.put_call);
   const exited = rows.filter((r) => !holds(r));
   const optionCount = (pc: string) => ({ rows: options.filter((r) => r.put_call === pc).length, filers: new Set(options.filter((r) => r.put_call === pc).map((r) => r.filer.cik)).size });
-  return { holders, options, exited, count: holders.length, filers: filerCount(holders), options_count: { calls: optionCount('Call'), puts: optionCount('Put') }, exited_count: exited.length };
+  return { holders, options, exited, count: holders.length, filers: filerCount(holders), options_count: { calls: optionCount('CALL'), puts: optionCount('PUT') }, exited_count: exited.length };
 }
 
 export interface HolderRow {
@@ -576,10 +578,11 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
     const latest = c && period && c.latest_quarter === period;
     const total = latest ? c.total_value_usd : null;
     return {
-      filer: { cik, name: h.name, slug: h.slug ?? c?.slug ?? null, type: types.get(cik) ?? h.type ?? c?.type ?? null, curated: h.curated ?? (c ? true : null) },
+      filer: { cik, name: h.name, slug: h.slug ?? c?.slug ?? null, type: normType(types.get(cik) ?? h.type ?? c?.type ?? null), curated: h.curated ?? (c ? true : null) },
       period,
       kind: h.kind ?? (h.put_call ? `${String(h.put_call).toLowerCase()}s` : 'equity'),
-      put_call: h.put_call ?? (h.kind === 'calls' ? 'Call' : h.kind === 'puts' ? 'Put' : null),
+      // As EDGAR writes it: PUT or CALL.
+      put_call: h.put_call ? String(h.put_call).toUpperCase() : h.kind === 'calls' ? 'CALL' : h.kind === 'puts' ? 'PUT' : null,
       shares: h.shares,
       prev_shares: h.prev_shares ?? null,
       share_change: h.prev_shares == null ? null : h.shares - h.prev_shares,
@@ -630,7 +633,7 @@ ROUTES.push(
     const seen = new Set(curated.map((f) => f.cik));
     const rest = ((JSON.parse(text) as { filers: AllFiler[] }).filers ?? [])
       .filter((f) => f.ok && !seen.has(f.cik))
-      .map((f) => ({ slug: f.slug, cik: f.cik, name: f.name, manager: null, featured: false, status: null, latest_quarter: f.quarter, latest_report_date: f.quarter ? quarterEnd(f.quarter) : null, latest_filing_date: f.filing_date, latest_accession: null, total_value_usd: null, position_count: f.position_count, history_quarters: f.quarter ? [f.quarter] : [], curated: false, type: f.type ?? null }));
+      .map((f) => ({ slug: f.slug, cik: f.cik, name: f.name, manager: null, featured: false, status: null, latest_quarter: f.quarter, latest_report_date: f.quarter ? quarterEnd(f.quarter) : null, latest_filing_date: f.filing_date, latest_accession: null, total_value_usd: null, position_count: f.position_count, history_quarters: f.quarter ? [f.quarter] : [], curated: false, type: normType(f.type) }));
     const data = want === 'false' ? rest : [...curated, ...rest];
     return v1json({ data, count: data.length });
   }],
@@ -877,7 +880,7 @@ ROUTES.push(
       const h = await holdersOf(env, is.code);
       if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
       stamp = h.stamp;
-      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: h.display_name, put_call: r.kind === 'equity' ? null : r.kind === 'calls' ? 'Call' : r.kind === 'puts' ? 'Put' : null, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: r.prev_value_usd == null ? null : r.value_usd - r.prev_value_usd, change: r.change, accession: r.accession, accepted_at: r.accepted_at }));
+      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: h.display_name, put_call: r.put_call, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: r.prev_value_usd == null ? null : r.value_usd - r.prev_value_usd, change: r.change, accession: r.accession, accepted_at: r.accepted_at }));
       source = 'stock';
     } else {
       // Across filers: the data run's per-quarter change file (largest moves first).
@@ -886,7 +889,7 @@ ROUTES.push(
       if (!obj) return v1error('not_yet_available', 501, `Coming: cross-filer changes for ${quarter} are not published yet; /v1/changelog logs the day this ships. Meanwhile pass filer=.`);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (await new Response(obj.body).json()) as any;
-      rows = rowsOf(c).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: h.type ?? null }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ?? null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
+      rows = rowsOf(c).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: normType(h.type) }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ? String(h.put_call).toUpperCase() : null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
       source = 'all';
     }
     const curatedCiks = cohort === 'curated' ? new Set((await filers(env)).map((f) => f.cik)) : null;
