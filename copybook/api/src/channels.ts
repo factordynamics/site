@@ -17,6 +17,8 @@ export interface Channels {
   telegram?: { bot_token: string; chat_id: string };
   webhook?: { url: string; secret: string; created: string };
   feed_token?: string;
+  /** The onboarding checklist's "Keep email" choice, kept on the member so every browser shows the step done. */
+  keep_email?: boolean;
 }
 
 export type Dest = 'discord' | 'slack' | 'telegram' | 'webhook';
@@ -111,6 +113,7 @@ export function channelsView(m: Member, c: Channels, apiBase: string, failing: C
     webhook: c.webhook ? { url: c.webhook.url, secret: c.webhook.secret, created: c.webhook.created } : null,
     webhook_available: isPro(m),
     feed: c.feed_token ? feedUrls(c.feed_token, apiBase) : null,
+    keep_email: c.keep_email ?? false,
   };
 }
 
@@ -188,6 +191,11 @@ export async function updateChannels(env: Env, m: Member, b: Record<string, unkn
       // A new URL keeps the secret; ask for a new one with rotate_secret.
       c.webhook = { url, secret: c.webhook?.secret && !b.rotate_secret ? c.webhook.secret : `whsec_${randomToken(24)}`, created: c.webhook?.created ?? new Date().toISOString() };
     } else return bad('webhook: a public https URL');
+  }
+  if (b.keep_email !== undefined) {
+    if (typeof b.keep_email !== 'boolean') return bad('keep_email: true or false');
+    if (b.keep_email) c.keep_email = true;
+    else delete c.keep_email;
   }
   // A seat can't save its team's destination as its own: nothing is stored.
   if (team) {

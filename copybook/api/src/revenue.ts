@@ -293,11 +293,14 @@ export async function cancelMail(env: Env, m: Member): Promise<Mail> {
   const ends = m.status === 'canceled' ? null : (m.cancel_at ?? (m.status === 'trialing' ? m.trial_end : null) ?? m.period_end) || null;
   const name = PRICES[m.plan]?.name ?? 'Copybook';
   // The resume link opens the site's page, which changes nothing until its button posts (mail scanners follow links).
+  // Already told us why in the app (within a day): the email doesn't ask again.
+  const told = JSON.parse((await env.DB.get(`why:${m.customer}`)) ?? 'null') as { at?: string } | null;
+  const ask = !(told?.at && Date.now() - Date.parse(told.at) < 86400_000);
   const resume = ends ? `${env.SITE_URL}resume/?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, Math.max(86400, ends - Math.floor(Date.now() / 1000) + 86400)))}` : null;
   return {
     to: m.email,
     subject: ends ? `Your ${name} plan ends ${day(ends)} · Resume anytime before then` : `Your ${name} plan has ended`,
-    text: `${ends ? `Your ${name} plan is cancelled and ends on ${day(ends)}. Alerts, history and CSV keep working until then${m.status === 'trialing' ? ", and you won't be charged" : ''}.\n\nChanged your mind? Resume with one click, same plan and price, follows kept:\n${resume}` : `Your ${name} plan has ended. Your follows are kept if you come back: ${env.SITE_URL}pricing/`}\n\nOne question: what was the main reason? One click is enough:\n${Object.entries(WHY).map(([k, v]) => `  ${v}: ${base}${k}`).join('\n')}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    text: `${ends ? `Your ${name} plan is cancelled and ends on ${day(ends)}. Alerts, history and CSV keep working until then${m.status === 'trialing' ? ", and you won't be charged" : ''}.\n\nChanged your mind? Resume with one click, same plan and price, follows kept:\n${resume}` : `Your ${name} plan has ended. Your follows are kept if you come back: ${env.SITE_URL}pricing/`}${ask ? `\n\nOne question: what was the main reason? One click is enough:\n${Object.entries(WHY).map(([k, v]) => `  ${v}: ${base}${k}`).join('\n')}` : ''}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
   };
 }
 
@@ -337,16 +340,18 @@ export async function handleWhy(env: Env, req: Request, url: URL): Promise<Respo
   if (!p) return page('This link has expired. Thanks anyway.');
   const k = `why:${p.c}`;
   const cur = JSON.parse((await env.DB.get(k)) ?? 'null') as { reason: string; note?: string; at: string } | null;
+  const r = String(form ? (form.get('r') ?? '') : (url.searchParams.get('r') ?? ''));
+  // Opening the email's link (GET) records nothing (mail scanners follow links): it asks, and Send POSTs.
   if (req.method === 'POST') {
     const note = String(form?.get('note') ?? '').trim().slice(0, 2000);
-    if (cur && note) await env.DB.put(k, JSON.stringify({ ...cur, note }));
-    return page('Thank you. We read every one.');
+    if (WHY[r]) await env.DB.put(k, JSON.stringify({ reason: r, via: 'email', at: new Date().toISOString(), ...(note ? { note } : cur?.note ? { note: cur.note } : {}) }));
+    else if (cur && note) await env.DB.put(k, JSON.stringify({ ...cur, note }));
+    return page(WHY[r] ? `Thanks: “${WHY[r]}” is noted. We read every one.` : 'Thank you. We read every one.');
   }
-  const r = url.searchParams.get('r') ?? '';
   if (!WHY[r]) return page('Unknown reason.');
-  await env.DB.put(k, JSON.stringify({ reason: r, at: new Date().toISOString(), ...(cur?.note ? { note: cur.note } : {}) }));
-  const more = `<form method="post" action="why"><input type="hidden" name="t" value="${t.replace(/"/g, '&quot;')}"><p><label>Anything else we should know? (optional)<br><textarea name="note" rows="4" style="width:100%;font:inherit"></textarea></label></p><button style="font:inherit;padding:6px 14px">Send</button></form>`;
-  return page(`Thanks: “${WHY[r]}” is noted.`, more);
+  const esc = (x: string) => x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const send = `<form method="post" action="why"><input type="hidden" name="t" value="${esc(t)}"><input type="hidden" name="r" value="${esc(r)}"><p><label>Anything else we should know? (optional)<br><textarea name="note" rows="4" style="width:100%;font:inherit"></textarea></label></p><button style="font:inherit;padding:6px 14px">Send</button></form>`;
+  return page(`Your reason: “${WHY[r]}”. Send it?`, send);
 }
 
 /** Daily: trial reminders 3 days out, and once per season the recap for monthly members. */
@@ -513,7 +518,7 @@ export async function unpauseMember(env: Env, m: Member): Promise<{ status: numb
 const priceLine = (m: Member) => {
   const p = PRICES[m.plan];
   if (!p) return 'Your follows and settings are kept.';
-  return FOUNDING[m.plan] ? `Your follows and founding price are kept. ${FOUNDING[m.plan]}` : `Your follows and price (${money(p.month)} a month) are kept.`;
+  return FOUNDING[m.plan] ? `Your follows and founding price are kept. ${FOUNDING[m.plan]}` : `Your follows and price (${m.interval === 'yearly' ? `${money(p.year)} a year` : `${money(p.month)} a month`}) are kept.`;
 };
 
 /** The pause receipt: until when, no charges until then, what is kept, and the one-click resume. */
@@ -535,7 +540,7 @@ export function resumeConfirmMail(env: Env, m: Member): Mail {
   return {
     to: m.email,
     subject: `Your Copybook alerts are back on`,
-    text: `You've resumed ${p?.name ?? 'Copybook'}. Alerts, history and CSV are on again, with your follows and settings as you left them.\n\n${when ? `Your next charge is on ${when}${p ? ` (${money(p.month)}, before any discount on your account)` : ''}.` : 'Your plan renews on its usual date.'} ${priceLine(m)}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    text: `You've resumed ${p?.name ?? 'Copybook'}. Alerts, history and CSV are on again, with your follows and settings as you left them.\n\n${when ? `Your next charge is on ${when}${p ? ` (${money(m.interval === 'yearly' ? p.year : p.month)}, before any discount on your account)` : ''}.` : 'Your plan renews on its usual date.'} ${priceLine(m)}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
   };
 }
 

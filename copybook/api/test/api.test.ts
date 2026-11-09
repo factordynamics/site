@@ -1949,6 +1949,11 @@ describe('copybook api', () => {
     }
     const set = await (await req(copy, 'PUT', '/channels', { slack, discord, telegram: { bot_token: '123456789:AAbbccddeeffgghhiijjkkllmmnnoopp', chat_id: '-1001234' } })).json();
     expect(set.channels).toMatchObject({ slack: 'https://hooks.slack.com/…mnop', telegram: { chat_id: '-1001234' }, webhook: null, webhook_available: false });
+    // The checklist's "Keep email" choice is the member's, not the browser's.
+    expect(set.channels.keep_email).toBe(false);
+    expect((await req(copy, 'PUT', '/channels', { keep_email: 'yes' })).status).toBe(400);
+    await req(copy, 'PUT', '/channels', { keep_email: true });
+    expect((await (await req(copy, 'GET', '/channels')).json()).channels).toMatchObject({ keep_email: true, slack: 'https://hooks.slack.com/…mnop' });
     const feedUrls = (await (await req(copy, 'POST', '/channels/feed')).json()).channels.feed;
     expect(feedUrls.json_url).toMatch(/^https:\/\/api\.test\/feed\/[\w-]{30,}\.json$/);
     // Feed URLs live in readers: they never take the request's (possibly ephemeral) entry point.
@@ -2874,11 +2879,22 @@ describe('copybook api', () => {
     const link = sent[0].text.match(/Too expensive: (\S+)/)![1];
     expect(link).toMatch(/^https:\/\/copybook-api\.factordynamics\.workers\.dev\/why\?t=.+&r=price$/);
     const u = new URL(link);
+    // Opening the link records nothing (mail scanners follow links); Send posts the reason and the note.
     const page = await handleRequest(new Request(`https://api.test/why${u.search}`), env);
-    expect(await page.text()).toContain('“Too expensive” is noted');
+    expect(await page.text()).toContain('Your reason: “Too expensive”. Send it?');
+    expect(await env.DB.get('why:yearly')).toBeNull();
     expect((await handleRequest(new Request('https://api.test/why?t=bogus&r=price'), env)).status).toBe(200);
-    await handleRequest(new Request('https://api.test/why', { method: 'POST', body: new URLSearchParams({ t: u.searchParams.get('t')!, note: 'Need options data' }) }), env);
+    const thanks = await handleRequest(new Request('https://api.test/why', { method: 'POST', body: new URLSearchParams({ t: u.searchParams.get('t')!, r: 'price', note: 'Need options data' }) }), env);
+    expect(await thanks.text()).toContain('“Too expensive” is noted');
     expect(JSON.parse((await env.DB.get('why:yearly'))!)).toMatchObject({ reason: 'price', note: 'Need options data' });
+    // A reason already given in the app: the cancel email doesn't ask again.
+    sent = [];
+    await env.DB.put('why:told', JSON.stringify({ reason: 'seasonal', via: 'account', at: new Date().toISOString() }));
+    await env.DB.put('cus:told', JSON.stringify({ customer: 'told', email: 'told@example.com', status: 'active', plan: 'copy', interval: 'yearly', subscription: 'sub_told', alerts: [], welcomed: true }));
+    await webhook({ type: 'customer.subscription.updated', data: { object: { ...sub('sub_told', 'told', 'active', 'year'), cancel_at_period_end: true } } });
+    expect(sent.map((m) => m.to[0])).toEqual(['told@example.com']);
+    expect(sent[0].text).not.toContain('One question');
+    for (const k of ['cus:told', 'why:told', 'email:told@example.com']) await env.DB.delete(k);
 
     const pub = await (await call('/health')).json();
     expect(pub).not.toHaveProperty('business');
