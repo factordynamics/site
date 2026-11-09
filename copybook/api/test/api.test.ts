@@ -1157,8 +1157,12 @@ describe('copybook api', () => {
   });
 
   it('a retired copy (MOVED_TO) sends every request to the same path on the live host', async () => {
-    const r = await worker.fetch(new Request('https://copybook-api.factordynamics.workers.dev/resume?t=abc', { method: 'POST' }), { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/' } as Env);
-    expect([r.status, r.headers.get('location')]).toEqual([308, 'https://gene.tail70ba3.ts.net/copybook/resume?t=abc']);
+    // It follows the runner's api.json (the current tunnel), so emailed links on this hostname survive a tunnel move.
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' }) : orig(u, init)));
+    const r = await worker.fetch(new Request('https://copybook-api.factordynamics.workers.dev/resume?t=abc', { method: 'POST' }), { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env);
+    expect([r.status, r.headers.get('location')]).toEqual([308, 'https://abc-def.trycloudflare.com/copybook/resume?t=abc']);
+    vi.stubGlobal('fetch', orig);
     expect((await worker.fetch(new Request('https://api.test/health'), env)).status).not.toBe(308);
   });
 

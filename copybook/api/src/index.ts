@@ -958,9 +958,11 @@ export default {
   fetch(req: Request, env: Env): Promise<Response> {
     // A retired copy (MOVED_TO set as a secret on Cloudflare's fallback): every request, including links in emails
     // already sent (resume, unsubscribe, why, keep), goes to the same path on the live host. 308 keeps method and body.
+    // It follows the API's current public base (the runner's api.json, read at most once a minute), else MOVED_TO,
+    // so this hostname is the stable one for links in email and feed readers while the self-hosted base moves.
     if (env.MOVED_TO) {
       const u = new URL(req.url);
-      return Promise.resolve(new Response(null, { status: 308, headers: { location: `${env.MOVED_TO.replace(/\/+$/, '')}${u.pathname}${u.search}`, 'access-control-allow-origin': '*' } }));
+      return movedBase(env).then((b) => new Response(null, { status: 308, headers: { location: `${b}${u.pathname}${u.search}`, 'access-control-allow-origin': '*', 'cache-control': 'no-store' } }));
     }
     const handled = handleRequest(req, env).catch((err) => {
       console.log(String(err?.stack ?? err));
@@ -982,6 +984,21 @@ export default {
     ctx.waitUntil(runScheduled(env, event.scheduledTime ?? Date.now()).then((r) => console.log(`cron: ${JSON.stringify(r)}`)));
   },
 };
+
+let moved: { at: number; base: string } | null = null;
+async function movedBase(env: Env): Promise<string> {
+  if (moved && Date.now() - moved.at < 60_000) return moved.base;
+  let base = env.MOVED_TO!.replace(/\/+$/, '');
+  try {
+    const r = env.PUBLIC_URL ? await fetch(`${env.PUBLIC_URL}api.json`, { signal: AbortSignal.timeout(2000) }) : null;
+    const api = r?.ok ? ((await r.json()) as { api?: string }).api : undefined;
+    if (api && /^https:\/\/[a-z0-9.-]+(\/[a-z0-9-]+)?\/?$/.test(api)) base = api.replace(/\/+$/, '');
+  } catch {
+    // MOVED_TO
+  }
+  moved = { at: Date.now(), base };
+  return base;
+}
 
 /** The operator's bearer token (HEALTH_TOKEN), compared in constant time. */
 async function isOperator(env: Env, req: Request): Promise<boolean> {
