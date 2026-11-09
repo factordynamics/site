@@ -10,12 +10,22 @@ export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
   {
+    date: '2026-11-09',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Bulk exports, partial: GET /v1/bulk lists per-quarter gzip CSVs of every filer\'s 13F book (2026Q1 to 2026Q3 today) and GET /v1/bulk/{YYYYQn}.csv.gz streams one. Parquet is coming (501 until then). The files are as-filed books, not point-in-time yet: no accepted_at, source_accession, first_disclosed_at or change columns. Only files that pass a size check are listed; stubs from a failed run are hidden until regenerated. Known issue: Marsh & McLennan 2026Q2 is double counted (a mislabeled amendment counted with its original) until the data run\'s fix lands.',
+      'Webhook detected_at, like every /v1 timestamp, has no milliseconds (the test webhook included).',
+    ],
+  },
+  {
     date: '2026-11-08',
     schema_version: SCHEMA_VERSION,
     breaking: false,
     status: 'announced',
     changes: [
-      'Coming, not live yet (these return 501 not_yet_available until the data run publishes their files; each moves to a shipped entry the day it returns data): GET /v1/stocks/{ticker|cusip}/holders; GET /v1/changes/{quarter} with ticker=/cusip= and across filers (filer= is live); persistent bulk exports at GET /v1/bulk/{YYYYQn}.csv.gz|.parquet (GET /v1/bulk lists what exists, empty until then); as_of point-in-time books; filer `type` on /v1/filers (null until the data run publishes filer types) and cohort=<type> on /v1/changes.',
+      'Coming, not live yet (these return 501 not_yet_available until the data run publishes their files; each moves to a shipped entry the day it returns data): GET /v1/stocks/{ticker|cusip}/holders; GET /v1/changes/{quarter} with ticker=/cusip= and across filers (filer= is live); Parquet bulk exports (GET /v1/bulk/{YYYYQn}.parquet); point-in-time columns in the bulk files (accepted_at, source_accession, first_disclosed_at, change); as_of point-in-time books; filer `type` on /v1/filers (null until the data run publishes filer types) and cohort=<type> on /v1/changes.',
       'Timestamps (accepted_at, uploaded_at, data_built_at) are ISO 8601 UTC to the second, without milliseconds (2026-11-06T21:46:52Z).',
     ],
   },

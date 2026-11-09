@@ -320,7 +320,7 @@ export async function signature(secret: string, body: string, t = Math.floor(Dat
 
 /** The signed JSON body for one alert. */
 export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEvent[], detectedAt: number): { id: string; body: string }[] {
-  const detected_at = new Date(detectedAt).toISOString();
+  const detected_at = new Date(detectedAt).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const page = (slug: string) => (slug ? `${env.SITE_URL}investors/${slug}` : null);
   return [
     ...filings.map((a) => ({
@@ -483,7 +483,7 @@ ${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(i.url)}</lin
 /** POST /channels/test: a short message to every configured destination (and a test item in the feed), so a member can check setup. */
 export async function testChannels(env: Env, m: Member, c: Channels): Promise<{ results: Record<string, string>; messages: Record<string, string> }> {
   const text = 'Copybook test: your alerts will arrive here. SEC EDGAR filings, as filed. Not investment advice.';
-  const now = new Date().toISOString();
+  const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   const out: Record<string, string> = {};
   // A test that works clears a flag; one that shows the destination is gone sets it (the email waits for a real alert).
   const after = async (dest: Dest, status: string) => {

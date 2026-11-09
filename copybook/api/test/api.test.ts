@@ -36,7 +36,7 @@ class MemR2 implements R2 {
     const v = this.m.get(k);
     if (!v) return null;
     // Deliver in two chunks with the header line split, as R2 may.
-    return { body: new ReadableStream<Uint8Array>({ start(c) { c.enqueue(v.subarray(0, 20)); c.enqueue(v.subarray(20)); c.close(); } }) };
+    return { size: v.length, body: new ReadableStream<Uint8Array>({ start(c) { c.enqueue(v.subarray(0, 20)); c.enqueue(v.subarray(20)); c.close(); } }) };
   }
   async put(k: string, v: ReadableStream | ArrayBuffer | string | null) {
     this.m.set(k, new Uint8Array(await new Response(v).arrayBuffer()));
@@ -1196,7 +1196,7 @@ describe('copybook api', () => {
     const [, t, v1] = first.headers['copybook-signature'].match(/^t=(\d+),v1=([0-9a-f]{64})$/)!;
     expect(v1).toBe(await hmacHex(secret, `${t}.${first.body}`));
     expect(JSON.parse(first.body)).toMatchObject({ type: 'form4', accession: 'C1', filer: { slug: 'warren-buffett' }, ticker: 'SIRI' });
-    expect(JSON.parse(first.body).detected_at).toBeTruthy();
+    expect(JSON.parse(first.body).detected_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
     // Failed: retried after a minute, then delivered.
     hookStatus = 200;
     posts = [];
@@ -1703,11 +1703,16 @@ describe('copybook api', () => {
 
     // Bulk exports: listed, then streamed as uploaded.
     expect((await v1('/v1/bulk/2026Q2.csv.gz')).status).toBe(501);
-    hist.m.set('bulk/2026Q2.csv.gz', new Uint8Array([31, 139, 8, 0, 1, 2, 3]));
-    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 7, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://api.test/v1/bulk/2026Q2.csv.gz' }]);
+    const gzBytes = new Uint8Array(1_200_000);
+    gzBytes.set([31, 139, 8, 0]);
+    hist.m.set('bulk/2026Q2.csv.gz', gzBytes);
+    hist.m.set('bulk/2025Q1.csv.gz', new Uint8Array(1440)); // a stub from a failed run: hidden, and 501 like a missing file
+    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 1_200_000, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://api.test/v1/bulk/2026Q2.csv.gz' }]);
+    expect((await v1('/v1/bulk/2025Q1.csv.gz')).status).toBe(501);
     const gz = await handleRequest(new Request('https://api.test/v1/bulk/2026Q2.csv.gz', { headers: { authorization: `Bearer ${key}` } }), env);
     expect(gz.headers.get('content-disposition')).toBe('attachment; filename="copybook-13f-2026Q2.csv.gz"');
-    expect([...new Uint8Array(await gz.arrayBuffer())]).toEqual([31, 139, 8, 0, 1, 2, 3]);
+    const got = new Uint8Array(await gz.arrayBuffer());
+    expect([got.length, ...got.slice(0, 4)]).toEqual([1_200_000, 31, 139, 8, 0]);
   });
 
   it('Copy paid data: the full Flow from R2, a per-stock holder CSV, one CSV across followed funds', async () => {

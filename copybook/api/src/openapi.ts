@@ -365,9 +365,9 @@ export function openapi() {
       },
       '/v1/bulk': {
         get: {
-          summary: 'Persistent bulk exports: every filer\'s 13F book for a quarter, as gzip CSV (and Parquet where available) (coming: the list is empty today)',
-          'x-status': 'coming',
-          description: '**Coming, not live yet:** the list stays empty until the data run uploads its first export; /v1/changelog logs the day it ships.',
+          summary: 'Persistent bulk exports: every filer\'s 13F book for a quarter, as gzip CSV (partial: csv.gz live, Parquet coming)',
+          'x-status': 'partial',
+          description: '**Partial:** gzip CSVs are live for the quarters listed. Parquet is coming. The files are as-filed books, not point-in-time yet: no accepted_at, source_accession, first_disclosed_at or change columns. Only files that pass a size check are listed. Known issue: Marsh & McLennan 2026Q2 is double counted until the data run\'s mislabeled-amendment fix lands.',
           responses: {
             '200': {
               description: 'Available files, newest first',
@@ -379,9 +379,9 @@ export function openapi() {
       },
       '/v1/bulk/{file}': {
         get: {
-          summary: 'Download one bulk export (streams the file; not JSON) (coming: returns 501 today)',
-          'x-status': 'coming',
-          description: '**Coming, not live yet:** returns 501 not_yet_available until the data run uploads the file; /v1/changelog logs the day it ships.',
+          summary: 'Download one bulk export (streams the file; not JSON) (partial: .csv.gz live, .parquet returns 501)',
+          'x-status': 'partial',
+          description: '**Partial:** .csv.gz streams for every quarter GET /v1/bulk lists; .parquet, and any quarter not listed, return 501 not_yet_available.',
           parameters: [{ name: 'file', in: 'path', required: true, schema: { type: 'string', pattern: '^\\d{4}Q[1-4]\\.(csv\\.gz|parquet)$' } }],
           responses: { '200': { description: 'The file', content: { 'application/gzip': {}, 'application/vnd.apache.parquet': {} } }, '501': { description: 'not_yet_available: not published yet', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }, ...errResponses },
         },

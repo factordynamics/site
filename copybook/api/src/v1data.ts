@@ -3,6 +3,9 @@ import { lookupTickers } from './alerts';
 import { cleanItem4, fetch13F, fetchFilingMeta, filings13F, type Filed13F, type FilingMeta } from './edgar';
 import { ROUTES, v1error, v1json, v1prefix, noMs } from './v1';
 
+/** Smallest bulk file served: a real quarter is tens of MB gzipped (2026Q2: 69 MB); smaller ones are stubs from a failed run. */
+const MIN_BULK_BYTES = 1_000_000;
+
 /**
  * /v1 data endpoints. Everything is from SEC EDGAR filings as filed. Units: money in whole US
  * dollars (filings in thousands are rescaled), share counts as filed (principal amount for PRN
@@ -473,13 +476,14 @@ ROUTES.push(
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, url }) => {
     // Persistent per-quarter exports of every filer's book, uploaded by the data run.
+    // Only files that pass a size check: a full quarter of every filer is tens of MB gzipped; a stub (a failed run) is hidden until regenerated.
     const list = await env.HIST.list({ prefix: 'bulk/' });
-    const data = list.objects.map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.size, uploaded_at: noMs(o.uploaded.toISOString()), url: `${url.origin}/v1/${o.key}` }));
+    const data = list.objects.filter((o) => o.size >= MIN_BULK_BYTES).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.size, uploaded_at: noMs(o.uploaded.toISOString()), url: `${url.origin}/v1/${o.key}` }));
     return v1json({ data: data.sort((a: { file: string }, b: { file: string }) => b.file.localeCompare(a.file)) });
   }],
   ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env }, [file]) => {
     const obj = await env.HIST.get(`bulk/${file}`);
-    if (!obj) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet. /v1/changelog logs the day this ships; GET /v1/bulk lists what exists.`);
+    if (!obj || (obj.size ?? 0) < MIN_BULK_BYTES) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet${obj ? ' (the uploaded file failed its size check and waits to be regenerated)' : ''}. Parquet is coming; csv.gz is live for the quarters GET /v1/bulk lists.`);
     return new Response(obj.body, {
       headers: { 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
     });
