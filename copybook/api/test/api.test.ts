@@ -9,6 +9,8 @@ import { hmacHex } from '../src/tokens';
 import form4Len from './fixtures/form4-len.xml?raw';
 import durableQ2 from './fixtures/durable-q2-shard.json';
 import sc13dCvi from './fixtures/sc13da-cvi.xml?raw';
+import cvi41 from './fixtures/cvi-13da-41-primary.xml?raw';
+import { cleanItem4, parseSchedule13 } from '../src/edgar';
 
 class MemKV implements KV {
   m = new Map<string, string>();
@@ -1115,6 +1117,17 @@ describe('copybook api', () => {
     expect(items[0].title).toBe('Copybook test');
   });
 
+  it("Item 4 excerpts: Icahn's real CVI 13D/A #41 without the amendment preamble or defined terms, cut at a sentence end", () => {
+    const p = parseSchedule13(cvi41)!;
+    expect(p.item4).toBe(
+      'On November 3, 2026, the Issuer entered into an underwriting agreement with Barclays Capital Inc. and Jefferies LLC, as representatives of the several underwriters named therein, relating to the offering of 10,515,248 Shares at a public offering price of $47.55 per Share. The Issuer also granted the Underwriters a 30-day option to purchase up to 1,577,287 additional Shares from the Issuer. The Equity Offering closed on November 5, 2026. The Reporting Persons and their affiliates did not sell Shares as selling stockholders in the Equity Offering. …',
+    );
+    // Cleaning again changes nothing; an excerpt stored before (preamble, cut mid-sentence) loses both.
+    expect(cleanItem4(p.item4)).toBe(p.item4);
+    expect(cleanItem4('Item 4 of the Initial 13D is hereby amended and supplemented by adding the following: On November 3, 2026, the Issuer entered into an underwriting agreement (the "Underwriting Agreement") with Barclays Capital Inc. and Jefferies LLC. The Equity Offering…')).toBe('On November 3, 2026, the Issuer entered into an underwriting agreement with Barclays Capital Inc. and Jefferies LLC.');
+    expect(cleanItem4('Item 4 is amended to add the following: The Reporting Persons intend to seek board representation.')).toBe('The Reporting Persons intend to seek board representation.');
+  });
+
   it('chat retries get a slot every minute: ten busy minutes in a row still retry a failed Slack post on time', async () => {
     index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
     await cron(17);
@@ -1683,7 +1696,8 @@ describe('copybook api', () => {
     r = await v1('/v1/events?ticker=CVI');
     expect(r.body.data.map((e: { accession: string }) => e.accession)).toEqual(['0001193125-26-451979', '0001193125-26-445965']);
     expect(r.body.data[0]).toMatchObject({ accepted_at: '2026-11-06T21:46:52Z', percent_of_class: 64.1, amendment_no: 41, prev: { accession: '0001193125-26-445965', percent_of_class: 70.8 }, filer: { slug: 'carl-icahn', cik: '0000921669' } });
-    expect(r.body.data[0].purpose).toMatch(/^Item 4 of the Initial 13D/);
+    // Served without the amendment preamble.
+    expect(r.body.data[0].purpose).toBe('On November 3, 2026, the Issuer entered into an underwriting agreement');
     r = await v1('/v1/events?filer=carl-icahn');
     expect(r.body.count).toBe(3);
     expect(r.body.data[2]).toMatchObject({ kind: 'form4', classes: [{ shares_after: 1001 }] });

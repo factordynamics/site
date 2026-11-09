@@ -3,6 +3,7 @@ import { channelFailMail, chatText, feedItems, sendMail, teamDuplicateMail, type
 import { isPro, type Env, type Member } from './env';
 import { getMember, type Follows } from './members';
 import { listSeats } from './seats';
+import { cleanItem4 } from './edgar';
 import { hmacHex } from './tokens';
 
 /**
@@ -94,7 +95,7 @@ function feedUrls(token: string, apiBase: string) {
  */
 export const channelScope = (m: Member): 'team' | 'personal' => (!m.seat_of && m.plan === 'fund' ? 'team' : 'personal');
 
-const failView = (f: ChannelFailures) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, { reason: v.reason, since: v.since }]));
+export const failView = (f: ChannelFailures) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, { reason: v.reason, since: v.since }]));
 
 export function channelsView(m: Member, c: Channels, apiBase: string, failing: ChannelFailures = {}, team?: { owner: Member; c: Channels; failing: ChannelFailures }) {
   return {
@@ -360,7 +361,7 @@ export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEven
       prev_percent_of_class: e.prev_percent_of_class ?? null,
       prev_shares_after: e.prev_shares_after ?? null,
       amendment_no: e.amendment_no ?? null,
-      item4: e.item4 ?? null,
+      item4: cleanItem4(e.item4),
       insider: e.insider ?? null,
       insiders: e.cluster ?? null,
       sec_url: e.url,

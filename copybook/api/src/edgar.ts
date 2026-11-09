@@ -409,6 +409,51 @@ const excerpt = (s: string, n = 600) => {
   return t ? (t.length > n ? `${t.slice(0, n).replace(/\s\S*$/, '')}…` : t) : null;
 };
 
+/** Standard amendment openings that say nothing about the purpose ("Item 4 of the Initial 13D is hereby amended and supplemented by adding the following:"). */
+const ITEM4_PREAMBLE = [
+  /^Item\s*4\.?\s*(?:[-–—:]\s*)?(?:Purpose of (?:the )?Transactions?\.?\s*)?(?=Item\s*4\b|This\b|The\b|$)/i,
+  /^(?:This\s+)?Item\s*4\b[^.:]{0,160}?\b(?:is|are|shall be)\s+(?:hereby\s+)?(?:amended|supplemented|restated)\b[^.:]{0,160}?(?:[:.]|\bfollowing\b[:.]?)\s*/i,
+  /^(?:The\s+)?(?:Schedule\s+13D|Initial\s+13D|Original\s+13D)[^.:]{0,160}?\bhereby\s+(?:amended|supplemented)\b[^.:]{0,160}?[:.]\s*/i,
+];
+/** Defined-term asides: (the "Underwriting Agreement"), (each, a "Lock-Up"), (collectively, the "Sellers"). */
+const DEFINED = /\s*\((?:the|each|each,?\s+an?|an?|collectively,?\s+the|together,?\s+the)\s+["“][^"”]{1,60}["”]\)/g;
+
+/**
+ * The 13D's Item 4 for an alert or /v1: without the amendment boilerplate and defined-term asides,
+ * as whole sentences up to `n` characters (then " …"). Safe on text cleaned or cut before.
+ */
+export function cleanItem4(raw: string | null | undefined, n = 600): string | null {
+  if (!raw) return null;
+  let t = unescape(raw).replace(/\s+/g, ' ').trim();
+  // Already cut here at a sentence end (" …"): keep the cut. A stored excerpt cut mid-sentence: drop the partial sentence.
+  const cut = /[.;] …$/.test(t);
+  if (cut) t = t.slice(0, -2);
+  else if (/…$/.test(t)) t = t.slice(0, sentenceEnds(t).pop() ?? 0).trim();
+  for (let again = true; again; ) {
+    again = false;
+    for (const re of ITEM4_PREAMBLE) {
+      const next = t.replace(re, '');
+      if (next !== t && next.length) (t = next.trim()), (again = true);
+    }
+  }
+  t = t.replace(DEFINED, '');
+  if (!t) return null;
+  if (t.length <= n) return cut ? `${t} …` : t;
+  const end = sentenceEnds(t).filter((i) => i <= n).pop();
+  return `${end ? t.slice(0, end) : t.slice(0, n).replace(/\s\S*$/, '')} …`;
+}
+
+/** Positions just after each sentence end: a period or semicolon before a capital, quote or bracket, not after an abbreviation (Inc., Corp., No.). */
+function sentenceEnds(t: string): number[] {
+  const out: number[] = [];
+  for (const m of t.matchAll(/[.;](?=\s+[A-Z"“(\[])/g)) {
+    const before = t.slice(Math.max(0, m.index - 6), m.index);
+    if (m[0] === '.' && /(?:^|[\s(])(?:Inc|Corp|Co|Ltd|No|Nos|Mr|Ms|Mrs|Dr|Jr|Sr|St|U\.S|L\.P|N\.A|S\.A|[A-Z])$/.test(before)) continue;
+    out.push(m.index + 1);
+  }
+  return out;
+}
+
 /** A structured Schedule 13D or 13G (EDGAR XML, required since December 2024). */
 export function parseSchedule13(xml: string): Schedule13 | null {
   const form = val(xml, 'submissionType');
@@ -429,7 +474,7 @@ export function parseSchedule13(xml: string): Schedule13 | null {
     persons,
     shares: shares.length ? Math.max(...shares) : null,
     percent_of_class: pct.length ? Math.max(...pct) : null,
-    item4: excerpt(all(xml, 'transactionPurpose')[0] ?? ''),
+    item4: cleanItem4(all(xml, 'transactionPurpose')[0] ?? ''),
     item5c: excerpt(all(xml, 'transactionDesc')[0] ?? '', 300),
   };
 }

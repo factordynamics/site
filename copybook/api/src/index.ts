@@ -2,7 +2,7 @@ import { type AlertEvent, deliverTo, recentFeed, resolveFollowedFilers, runSched
 import { fetchHistory, historyCsv, holdersCsv, shard, SHARD_KEY, SLUG } from './data';
 import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } from './v1data';
 import { verifyGithubOidc } from './oidc';
-import { channelScope, channelsView, clearSeatDuplicates, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
+import { channelScope, channelsView, failView, clearSeatDuplicates, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
 import { handleV1 } from './v1';
 
@@ -354,7 +354,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
 
   // channels_failing: chat or webhook destinations that stopped (reason, since), so /account/ can flag them.
-  if (req.method === 'GET' && path === '/me') return json({ ok: true, member: { ...publicView(m), channels_failing: await getFailures(env, m.customer) } }, 200, h);
+  if (req.method === 'GET' && path === '/me') return json({ ok: true, member: { ...publicView(m), channels_failing: failView(await getFailures(env, m.customer)) } }, 200, h);
 
   if (req.method === 'POST' && path === '/portal') {
     if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);

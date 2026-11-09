@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?><edgarSubmission xmlns="http://www.sec.gov/edgar/schedule13D" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <schemaVersion>X0202</schemaVersion>
+<headerData>
+    <submissionType>SCHEDULE 13D/A</submissionType>
+    <previousAccessionNumber>0001104659-12-002044</previousAccessionNumber>
+    <filerInfo>
+      <filer>
+        <filerCredentials>
+          <cik>0000921669</cik>
+          <ccc>XXXXXXXX</ccc>
+        </filerCredentials>
+      </filer>
+      <liveTestFlag>LIVE</liveTestFlag>
+
+
+
+    </filerInfo>
+  </headerData>
+  <formData>
+    <coverPageHeader>
+      <amendmentNo>41</amendmentNo>
+      <securitiesClassTitle>Common Stock, par value $0.01</securitiesClassTitle>
+      <dateOfEvent>11/05/2026</dateOfEvent>
+      <previouslyFiledFlag>false</previouslyFiledFlag>
+      <issuerInfo>
+        <issuerCIK>0001376139</issuerCIK>
+        <issuerCusips>
+          <issuerCusipNumber>12662P108</issuerCusipNumber>
+        </issuerCusips>
+        <issuerName>CVR Energy, Inc.</issuerName>
+        <address>
+          <street1 xmlns="http://www.sec.gov/edgar/common">2277 Plaza Drive</street1>
+          <street2 xmlns="http://www.sec.gov/edgar/common">Suite 500</street2>
+          <city xmlns="http://www.sec.gov/edgar/common">Sugar Land</city>
+          <stateOrCountry xmlns="http://www.sec.gov/edgar/common">TX</stateOrCountry>
+          <zipCode xmlns="http://www.sec.gov/edgar/common">77479</zipCode>
+        </address>
+      </issuerInfo>
+      <authorizedPersons>
+        <notificationInfo>
+          <personName>Jesse Lynn, Esq.</personName>
+          <personPhoneNum>305-442-4000</personPhoneNum>
+          <personAddress>
+            <street1 xmlns="http://www.sec.gov/edgar/common">Icahn Capital LP, 16690 Collins Avenue</street1>
+            <street2 xmlns="http://www.sec.gov/edgar/common">Suite PH-1</street2>
+            <city xmlns="http://www.sec.gov/edgar/common">Sunny Isles Beach</city>
+            <stateOrCountry xmlns="http://www.sec.gov/edgar/common">FL</stateOrCountry>
+            <zipCode xmlns="http://www.sec.gov/edgar/common">33160</zipCode>
+          </personAddress>
+        </notificationInfo>
+      </authorizedPersons>
+    </coverPageHeader>
+    <reportingPersons>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0001034563</reportingPersonCIK>
+        <reportingPersonNoCIK>N</reportingPersonNoCIK>
+        <reportingPersonName>ICAHN ENTERPRISES HOLDINGS L.P.</reportingPersonName>
+        <fundType>OO</fundType>
+        <legalProceedings>Y</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>0</soleVotingPower>
+        <sharedVotingPower>71201875</sharedVotingPower>
+        <soleDispositivePower>0</soleDispositivePower>
+        <sharedDispositivePower>71201875</sharedDispositivePower>
+        <aggregateAmountOwned>71201875</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>64.1</percentOfClass>
+        <typeOfReportingPerson>PN</typeOfReportingPerson>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0001257324</reportingPersonCIK>
+        <reportingPersonNoCIK>N</reportingPersonNoCIK>
+        <reportingPersonName>ICAHN ENTERPRISES G.P. INC.</reportingPersonName>
+        <fundType>OO</fundType>
+        <legalProceedings>Y</legalProceedings>
+        <citizenshipOrOrganization>DE</citizenshipOrOrganization>
+        <soleVotingPower>0</soleVotingPower>
+        <sharedVotingPower>71201875</sharedVotingPower>
+        <soleDispositivePower>0</soleDispositivePower>
+        <sharedDispositivePower>71201875</sharedDispositivePower>
+        <aggregateAmountOwned>71201875</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>64.1</percentOfClass>
+        <typeOfReportingPerson>CO</typeOfReportingPerson>
+      </reportingPersonInfo>
+      <reportingPersonInfo>
+        <reportingPersonCIK>0000921669</reportingPersonCIK>
+        <reportingPersonNoCIK>N</reportingPersonNoCIK>
+        <reportingPersonName>CARL C ICAHN</reportingPersonName>
+        <fundType>OO</fundType>
+        <legalProceedings>Y</legalProceedings>
+        <citizenshipOrOrganization>X1</citizenshipOrOrganization>
+        <soleVotingPower>0</soleVotingPower>
+        <sharedVotingPower>71201875</sharedVotingPower>
+        <soleDispositivePower>0</soleDispositivePower>
+        <sharedDispositivePower>71201875</sharedDispositivePower>
+        <aggregateAmountOwned>71201875</aggregateAmountOwned>
+        <isAggregateExcludeShares>N</isAggregateExcludeShares>
+        <percentOfClass>64.1</percentOfClass>
+        <typeOfReportingPerson>IN</typeOfReportingPerson>
+      </reportingPersonInfo>
+    </reportingPersons>
+    <items1To7>
+      <item1>
+        <securityTitle>Common Stock, par value $0.01</securityTitle>
+        <issuerName>CVR Energy, Inc.</issuerName>
+        <issuerPrincipalAddress>
+          <street1 xmlns="http://www.sec.gov/edgar/common">2277 Plaza Drive</street1>
+          <street2 xmlns="http://www.sec.gov/edgar/common">Suite 500</street2>
+          <city xmlns="http://www.sec.gov/edgar/common">Sugar Land</city>
+          <stateOrCountry xmlns="http://www.sec.gov/edgar/common">TX</stateOrCountry>
+          <zipCode xmlns="http://www.sec.gov/edgar/common">77479</zipCode>
+        </issuerPrincipalAddress>
+        <commentText>The Schedule 13D filed with the Securities and Exchange Commission on January 13, 2012 (as previously amended, the "Initial 13D"), by the Reporting Persons with respect to the shares of Common Stock, par value $0.01 (the "Shares"), issued by CVR Energy, Inc. (the "Issuer"), is hereby further amended to furnish the additional information set forth herein. All capitalized terms contained herein but not otherwise defined shall have the meanings ascribed to such terms in the Initial 13D, as amended.</commentText>
+      </item1>
+      <item4>
+        <transactionPurpose>Item 4 of the Initial 13D is hereby amended and supplemented by adding the following:
+
+On November 3, 2026, the Issuer entered into an underwriting agreement (the "Underwriting Agreement") with Barclays Capital Inc. and Jefferies LLC, as representatives (the "Representatives") of the several underwriters named therein (the "Underwriters"), relating to the offering of 10,515,248 Shares at a public offering price of $47.55 per Share (the "Equity Offering"). The Issuer also granted the Underwriters a 30-day option to purchase up to 1,577,287 additional Shares from the Issuer. The Equity Offering closed on November 5, 2026. The Reporting Persons and their affiliates did not sell Shares as selling stockholders in the Equity Offering.
+
+In connection with the Equity Offering, on November 3, 2026, American Entertainment Properties Corp. and IEP Energy Holding LLC, each an indirect wholly owned subsidiary of Icahn Enterprises Holdings L.P., each entered into customary lock-up letter agreements with the Representatives for a period of 30 days, subject to customary exceptions (the "Lock-Up Agreements"). </transactionPurpose>
+      </item4>
+      <item5>
+        <percentageOfClassSecurities>Items 5(a)-(c) of the Initial 13D are hereby amended and supplemented as follows:
+
+The percentages set forth on the cover pages are based on 111,045,847 Shares outstanding immediately following the Equity Offering, as set forth in the Issuer's final prospectus supplement filed with the SEC pursuant to Rule 424(b) on November 5, 2026.</percentageOfClassSecurities>
+        <numberOfShares>The information set forth in Item 5(a) is incorporated into this Item 5(b).</numberOfShares>
+        <transactionDesc>None of the Reporting Persons have effected any transaction in the Shares during the past 60 days.</transactionDesc>
+      </item5>
+      <item6>
+        <contractDescription>Item 6 of the Initial 13D is hereby amended and supplemented by adding the following:
+
+The information set forth in Item 4 of this Amendment No. 41 with respect to the Equity Offering and the Lock-Up Agreements is incorporated herein by reference.
+</contractDescription>
+      </item6>
+    </items1To7>
+    <signatureInfo>
+      <signaturePerson>
+        <signatureReportingPerson>ICAHN ENTERPRISES HOLDINGS L.P.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Robert Flint</signature>
+          <title>Robert Flint, Chief Financial Officer</title>
+          <date>11/06/2026</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>ICAHN ENTERPRISES G.P. INC.</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Robert Flint</signature>
+          <title>Robert Flint, Chief Financial Officer</title>
+          <date>11/06/2026</date>
+        </signatureDetails>
+      </signaturePerson>
+      <signaturePerson>
+        <signatureReportingPerson>CARL C ICAHN</signatureReportingPerson>
+        <signatureDetails>
+          <signature>/s/ Carl C. Icahn</signature>
+          <title>Carl C. Icahn</title>
+          <date>11/06/2026</date>
+        </signatureDetails>
+      </signaturePerson>
+    </signatureInfo>
+  </formData>
+</edgarSubmission>

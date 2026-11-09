@@ -1,5 +1,5 @@
 import type { Alert13F, AlertEvent } from './alerts';
-import type { MoveRow, Moves } from './edgar';
+import { cleanItem4, type MoveRow, type Moves } from './edgar';
 import type { Env, Member } from './env';
 import type { Follows } from './members';
 import { firmName } from '../../../holdterm/src/names';
@@ -293,7 +293,7 @@ function eventLine(env: Env, e: AlertEvent, f: Follows): string {
     const inline = e.prev_percent_of_class == null && c.line;
     lines.push(`${form}: ${who} ${verb} ${what}${inline ? `, ${c.line}` : ''}`);
     if (c.line && !inline) lines.push(`  Stake: ${c.line}${c.note ? ` (${c.note})` : ''}`);
-    if (e.item4) lines.push(`  Purpose (Item 4): ${e.item4}`);
+    if (e.item4) lines.push(`  Purpose (Item 4): ${cleanItem4(e.item4)}`);
   }
   for (const fn of (e.footnotes ?? []).slice(0, 3)) lines.push(`  Footnote: ${fn.length > 240 ? `${fn.slice(0, 240)}…` : fn}`);
   const stamp = e.accepted ? `accepted by EDGAR ${acceptedUtc(e.accepted)}` : `filed ${e.filing_date}`;
@@ -432,7 +432,7 @@ function eventHtml(env: Env, e: AlertEvent, f: Follows): string {
       ];
       parts.push(table([], stake.map(([k, v]) => [`<span style="color:#6b7280">${esc(k)}</span>`, esc(v)])));
     }
-    if (e.item4) parts.push(`<p style="margin:4px 0;font-size:13px"><b>Purpose (Item 4):</b> ${esc(e.item4)}</p>`);
+    if (e.item4) parts.push(`<p style="margin:4px 0;font-size:13px"><b>Purpose (Item 4):</b> ${esc(cleanItem4(e.item4) ?? '')}</p>`);
   }
   for (const fn of (e.footnotes ?? []).slice(0, 3)) parts.push(`<p style="margin:2px 0;font-size:12px;color:#4b5563">Footnote: ${esc(fn.length > 240 ? `${fn.slice(0, 240)}…` : fn)}</p>`);
   parts.push(meta(e.slug ? `${env.SITE_URL}investors/${e.slug}` : null, e.id, e.accepted, e.url));

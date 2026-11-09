@@ -1,6 +1,6 @@
 import type { Env } from './env';
 import { lookupTickers } from './alerts';
-import { fetch13F, fetchFilingMeta, filings13F, type Filed13F, type FilingMeta } from './edgar';
+import { cleanItem4, fetch13F, fetchFilingMeta, filings13F, type Filed13F, type FilingMeta } from './edgar';
 import { ROUTES, v1error, v1json, v1prefix, noMs } from './v1';
 
 /**
@@ -542,7 +542,7 @@ ROUTES.push(
         amendment_no: e.amendment_no ?? null,
         prev: e.prev_accession || e.prev_percent_of_class != null ? { accession: e.prev_accession ?? null, form: e.prev_form ?? null, percent_of_class: e.prev_percent_of_class ?? null, shares_after: e.prev_shares_after ?? null } : null,
         classes: e.classes ?? null,
-        purpose: e.item4 ?? null,
+        purpose: cleanItem4(e.item4),
         insider: e.insider ?? null,
         details_pending: e.details_pending ?? false,
         sec_url: e.url,

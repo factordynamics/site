@@ -20,7 +20,7 @@ const MAX_FILINGS = Number(process.env.COPYBOOK_EVENTS_MAX ?? 900);
 const UA = 'Copybook copybook@factordynamics.com';
 
 type Ev = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-type Detail = { accepted_at: string | null; amendment_no?: number | null; item4?: string | null; percent_of_class?: number | null; shares_after?: number | null; classes?: unknown; ten_percent_owner?: boolean | null };
+type Detail = { v?: number; accepted_at: string | null; amendment_no?: number | null; item4?: string | null; percent_of_class?: number | null; shares_after?: number | null; classes?: unknown; ten_percent_owner?: boolean | null };
 
 const get = async (url: string) => {
   const res = await fetch(url, { headers: { 'user-agent': UA } });
@@ -45,13 +45,14 @@ const cache: Record<string, Detail> = existsSync(CACHE) ? JSON.parse(readFileSyn
 const filerCik = (e: Ev) => e.url?.match(/\/edgar\/data\/(\d+)\//)?.[1] ?? null;
 let fetched = 0;
 for (const e of events) {
-  if (cache[e.id] || fetched >= MAX_FILINGS) continue;
+  // v2: Item 4 is cleaned (no amendment preamble, sentence cut); re-read 13Ds cached before that.
+  if ((cache[e.id] && (cache[e.id].v === 2 || !cache[e.id].item4)) || fetched >= MAX_FILINGS) continue;
   const cik = filerCik(e);
   if (!cik) continue;
   try {
     const meta = await fetchFilingMeta(cik, e.id);
     await sleep(120);
-    const d: Detail = { accepted_at: meta?.accepted_at ?? null, amendment_no: meta?.amendment_no ?? null };
+    const d: Detail = { v: 2, accepted_at: meta?.accepted_at ?? null, amendment_no: meta?.amendment_no ?? null };
     if (e.kind === 'form4') {
       const f4 = await fetchForm4(cik, e.id);
       await sleep(240);
