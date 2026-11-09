@@ -101,7 +101,6 @@ export const DATA_TERMS = 'SEC EDGAR 13F filings as filed. Not investment advice
 export const BOOK_LITE = { t: 'My book lite', d: 'Who among the superinvestors holds your names, their season moves, and the latest Form 4 or 13D.' }
 /** Why a team buys Fund rather than several Pro seats (shown under Fund on /pricing/ and /for-funds/). */
 export const FUND_WHY = 'Why not separate Pro seats? Pro seats don’t share a book, peers or watchlist, so each analyst rebuilds the same list, alerts arrive once per seat in Slack instead of once, and Pro can’t be invoiced.'
-/** Copy Fund's seat cap today (the API's /seats max wins when it answers). It becomes FUND_SEATS_NEXT when payments' cap ships. */
-export const FUND_SEATS = 5
-export const FUND_SEATS_NEXT = 10
+/** Copy Fund's seat cap (the API's /seats max wins when it answers). */
+export const FUND_SEATS = 10
 export const BOOK_PRO = { t: 'Full My book', d: 'Your names against every 13F filer (holders, crowding, peers), 13F linking, CSV and API. New, exited and net trades are for tracked funds today; all filers by Nov 20.' }

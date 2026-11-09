@@ -5,20 +5,19 @@ import { Button, Check } from './ui'
 
 // First-run setup for Copy, the same three steps as the day-0 email plus a test: follow funds, add
 // the names you own, pick where alerts go, and send a test. Follows and channels are read live from
-// the API (Channels announces changes with 'copybook:setup'); a test that went through, or choosing
-// email only, is remembered in this browser. Shown after checkout and until done; dismissible.
+// the API (Channels announces changes with 'copybook:setup'); choosing email only is stored on the account
+// (channels.keep_email), and a test that went through is remembered in this browser. Shown after checkout and until done; dismissible.
 const HIDE = 'copybook.copySetupHidden'
 export const TESTED = 'copybook.testOk'
-const EMAIL = 'copybook.keepEmail'
 const FUNDS = 3
 
-type Ch = { discord: string | null; slack: string | null; telegram: unknown; webhook: unknown; feed: unknown; tested_at?: string | null }
+type Ch = { discord: string | null; slack: string | null; telegram: unknown; webhook: unknown; feed: unknown; tested_at?: string | null; keep_email?: boolean }
 
 export function CopySetup({ welcome }: { welcome?: boolean }) {
   const { follows, status } = useFollows()
   const [ch, setCh] = useState<Ch | null>(null)
   const [hidden, setHidden] = useState(() => !welcome && localStorage.getItem(HIDE) === '1')
-  const [keepEmail, setKeepEmail] = useState(() => localStorage.getItem(EMAIL) === '1')
+  const [keptEmail, setKeptEmail] = useState(false)
   const [tested, setTested] = useState(() => localStorage.getItem(TESTED) === '1')
   const [test, setTest] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
 
@@ -32,6 +31,7 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
     return () => window.removeEventListener('copybook:setup', load)
   }, [load])
 
+  const keepEmail = keptEmail || Boolean(ch?.keep_email)
   const connected = Boolean(ch && (ch.discord || ch.slack || ch.telegram || ch.webhook || ch.feed))
   // Keeping email completes step 3 only; the test is its own step, and for email-only members it sends a
   // test email (POST /channels/test).
@@ -79,8 +79,8 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
           : {
               label: 'Keep email',
               onClick: () => {
-                localStorage.setItem(EMAIL, '1')
-                setKeepEmail(true)
+                setKeptEmail(true)
+                call('/channels', { method: 'PUT', body: { keep_email: true }, auth: true }).catch(() => setKeptEmail(false))
               },
             },
     },

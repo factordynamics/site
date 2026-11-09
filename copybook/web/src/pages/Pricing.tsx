@@ -8,7 +8,7 @@ import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { money, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { loadCoverage, loadStock } from '../lib/stocks'
 import { loadEvents } from '../components/FundNotes'
-import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_SEATS_NEXT, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
+import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
 type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean; why?: string }
@@ -73,7 +73,6 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 on request.' },
     ],
     soon: [
-      { t: `Up to ${FUND_SEATS_NEXT} seats`, d: 'At the same founding price.' },
       { t: 'Revoke a seat’s sessions', d: 'Sign a departing colleague out everywhere at once.' },
     ],
     why: FUND_WHY,
@@ -107,7 +106,7 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Full My book: every 13F filer (holders, crowding, peers), 13F linking, CSV', false, false, true, true],
   ['New, exited and net trades for all filers in My book (tracked funds today)', false, false, 'by Nov 20', 'by Nov 20'],
   ['Peer overlap', false, false, true, true],
-  ['Seats', '1', '1', '1', `${FUND_SEATS} (${FUND_SEATS_NEXT} soon)`],
+  ['Seats', '1', '1', '1', `${FUND_SEATS}`],
   ['Shared book and peer lists', false, false, false, true],
   ['One team Slack channel: each alert posts once', false, false, false, true],
   ['Seat admin: add and remove seats', false, false, false, true],

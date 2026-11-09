@@ -84,7 +84,8 @@ page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
   page('speed/', 'Alert speed: EDGAR to inbox, every alert timed · Copybook', 'How fast Copybook alerts arrive: the median and 90th percentile from SEC EDGAR acceptance to delivery for 13F, Form 4 and 13D/G filings, and every live alert this season.', '', sp?.url)
 }
 page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Copy Fund, prorated, on the same billing interval.')
-page('resume/', 'Resume your plan · Copybook', 'Resume a paused Copybook plan.', '\n    <meta name="robots" content="noindex" />')
+page('resume/', 'Keep your plan · Copybook', 'Resume a paused or cancelled Copybook plan.', '\n    <meta name="robots" content="noindex" />')
+page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copybook.', '\n    <meta name="robots" content="noindex" />')
 {
   // The season tracker's share card (scripts/cards.mjs), with its cache-busting URL.
   let season = null

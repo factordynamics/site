@@ -33,6 +33,7 @@ const FilingCard = lazy(() => import('./pages/Filing').then((m) => ({ default: m
 const Upgrade = lazy(() => import('./pages/Upgrade').then((m) => ({ default: m.Upgrade })))
 const Speed = lazy(() => import('./pages/Speed').then((m) => ({ default: m.Speed })))
 const Resume = lazy(() => import('./pages/Resume').then((m) => ({ default: m.Resume })))
+const Why = lazy(() => import('./pages/Why').then((m) => ({ default: m.Why })))
 
 // The old refcell.github.io/gust/copybook/ pages redirect here. They pass a 2-minute sign-in token
 // (from POST {api}/handoff, never the session itself) and the campaign touch in the hash, since
@@ -89,6 +90,7 @@ Promise.all([handoff, fontsReady]).then(() =>
             <Route path="my-book" element={<Book />} />
             <Route path="upgrade" element={<Upgrade />} />
             <Route path="resume" element={<Resume />} />
+            <Route path="why" element={<Why />} />
             <Route path="about" element={<About />} />
             <Route path="methodology" element={<Methodology />} />
             <Route path="f/:accession" element={<FilingCard />} />
