@@ -16,6 +16,8 @@ export type Member = {
   alerts: 'all' | 'off' | string[]
   /** A Copy Fund seat: billing and the team belong to the owner. */
   seat?: boolean
+  /** Chat or webhook destinations that stopped delivering, by destination. */
+  channels_failing?: Partial<Record<'discord' | 'slack' | 'telegram' | 'webhook', { reason: string; since: string }>>
   /** The Fund owner's email, when the API sends it to a seat. */
   owner?: string | null
 }

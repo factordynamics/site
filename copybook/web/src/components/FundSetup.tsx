@@ -17,7 +17,8 @@ export function FundSetup({ member, welcome }: { member: Member; welcome?: boole
 
   const load = useCallback(() => {
     if (owner) call<{ seats: unknown[] }>('/seats', { auth: true }).then((r) => setSeats(r.seats.length), () => setSeats(null))
-    call<{ channels: { slack: string | null } }>('/channels', { auth: true }).then((r) => setSlack(Boolean(r.channels.slack)), () => setSlack(null))
+    // A seat's step reflects the team channel the owner connects; an owner's channels are the team's.
+    call<{ channels: { slack: string | null; team?: { slack: string | null } | null } }>('/channels', { auth: true }).then((r) => setSlack(Boolean(owner ? r.channels.slack : r.channels.team?.slack)), () => setSlack(null))
   }, [owner])
   useEffect(() => {
     load()
@@ -54,12 +55,19 @@ export function FundSetup({ member, welcome }: { member: Member; welcome?: boole
       body: follows.peers.length ? `${follows.peers.length} ${follows.peers.length === 1 ? 'peer' : 'peers'}. See where your book overlaps theirs.` : 'Funds you benchmark against, to see where your books overlap.',
       act: { label: follows.peers.length ? 'Edit peers' : 'Pick peers', to: '/my-book/#peers' },
     },
-    {
-      done: Boolean(slack),
-      title: 'Connect Slack',
-      body: slack ? 'Alerts post to your Slack channel as they happen.' : 'Post every alert to a team channel as it happens.',
-      act: { label: slack ? 'Slack settings' : 'Connect Slack', href: '#channels' },
-    },
+    owner
+      ? {
+          done: Boolean(slack),
+          title: 'Connect your team’s Slack',
+          body: slack ? 'Every alert for the team posts to your Slack channel as it happens.' : 'Post every alert to a team channel. You connect it once; seats see it and can add their own.',
+          act: { label: slack ? 'Slack settings' : 'Connect Slack', href: '#channels' },
+        }
+      : {
+          done: Boolean(slack),
+          title: 'Team Slack',
+          body: slack ? 'The team’s alerts post to its Slack channel, set up by the plan owner. You can add your own channel too.' : 'The plan owner connects the team’s Slack channel. You can add your own channel meanwhile.',
+          act: { label: 'See channels', href: '#channels' },
+        },
   ]
   const left = steps.filter((s) => !s.done).length
   const next = steps.findIndex((s) => !s.done)
@@ -73,7 +81,7 @@ export function FundSetup({ member, welcome }: { member: Member; welcome?: boole
           <h2 id="fund-setup-title" className="mt-2 text-[26px] font-semibold tracking-[-0.03em]">
             {owner ? 'Get your team running.' : 'Your team’s setup.'}
           </h2>
-          {!owner && <p className="mt-1.5 text-[15px] text-ink-2">The book and peers are shared with your team; Slack is yours to connect.</p>}
+          {!owner && <p className="mt-1.5 text-[15px] text-ink-2">The book, peers and Slack channel are shared with your team.</p>}
         </div>
         <button
           type="button"

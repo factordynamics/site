@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, call } from '../lib/account'
-import { Button } from './ui'
+import { Badge, Button } from './ui'
 
 // Where alerts go besides email: GET/PUT {api}/channels, POST /channels/test, POST/DELETE /channels/feed.
 // Every paid plan gets Slack, Discord, Telegram and a private feed; signed webhooks are Pro and Fund.
@@ -12,11 +12,22 @@ type Channels = {
   webhook: { url: string; secret: string; created?: number | string } | null
   webhook_available: boolean
   feed: { json_url: string; rss_url: string } | null
+  /** 'team' for a Copy Fund owner: these channels post the team's alerts. */
+  scope?: 'team' | 'personal'
+  /** Destinations that stopped delivering: retries ran out, or the destination was revoked. */
+  failing?: Failing
+  /** A seat's view of the owner's team channels, read-only. */
+  team?: { discord: string | null; slack: string | null; telegram: { chat_id: string } | null; webhook: { url: string; secret?: string } | null; failing?: Failing } | null
 }
+export type Failing = Partial<Record<'discord' | 'slack' | 'telegram' | 'webhook', { reason: string; since: string }>>
+export const CHANNEL_LABEL = { discord: 'Discord', slack: 'Slack', telegram: 'Telegram', webhook: 'The webhook' } as const
+const sinceLabel = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 type Put = Partial<{ discord: string | null; slack: string | null; telegram: { bot_token: string; chat_id: string } | null; webhook: string | null; rotate_secret: boolean }>
 
 const field = 'h-10 w-full min-w-0 rounded-xl bg-paper px-3.5 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]'
-const why = (e: unknown) => (e instanceof ApiError && e.detail ? e.detail : 'That didn’t save. Please try again.')
+const why = (e: unknown) => (e instanceof ApiError && e.code === 'already_team_channel' ? 'Already your team’s channel. Alerts reach it once; no need to add it here.' : e instanceof ApiError && e.detail ? e.detail : 'That didn’t save. Please try again.')
+// Tells the failing-channel banner (and the Fund setup list) what /channels now says.
+const announce = (c: Channels) => window.dispatchEvent(new CustomEvent('copybook:channels', { detail: c.failing ?? {} }))
 
 export function Channels() {
   const [c, setC] = useState<Channels | null>(null)
@@ -36,6 +47,7 @@ export function Channels() {
     try {
       const r = await call<{ channels: Channels }>('/channels', { method: 'PUT', body, auth: true })
       setC(r.channels)
+      announce(r.channels)
       window.dispatchEvent(new Event('copybook:setup'))
       setMsg({ k, text: 'Saved.', ok: true })
       return true
@@ -56,21 +68,15 @@ export function Channels() {
   }
   const sendTest = async () => {
     setTest(null)
-    // Chats and the webhook get a test message from the API. A feed can't be pushed to, so check
-    // that its URL answers (it allows any origin) and say how many alerts it holds.
-    const feed = c?.feed
-      ? fetch(c.feed.json_url, { cache: 'no-store' }).then(
-          async (r) => (r.ok ? ((n) => (n ? `reachable, ${n} ${n === 1 ? 'alert' : 'alerts'} in it` : 'reachable; alerts appear in it as they happen'))(((await r.json()) as { items?: unknown[] }).items?.length ?? 0) : `not reachable (${r.status})`),
-          () => 'not reachable',
-        )
-      : null
-    const chats = c && (c.discord || c.slack || c.telegram || c.webhook)
     try {
-      const [res, f] = await Promise.all([chats ? call<{ results: Record<string, string> }>('/channels/test', { method: 'POST', auth: true }).then((r) => r.results) : {}, feed])
-      setTest({ ...res, ...(f ? { feed: f } : {}) })
+      // The API's messages are written for members ("Discord rejected this webhook…"); status codes are the fallback.
+      const r = await call<{ results: Record<string, string>; messages?: Record<string, string> }>('/channels/test', { method: 'POST', auth: true })
+      setTest(Object.fromEntries(Object.entries(r.results).map(([k, v]) => [k, r.messages?.[k] ?? (/^2\d\d$|^ok$/.test(v) ? 'delivered' : `failed (${v})`)])))
     } catch (e) {
       setTest({ error: why(e) })
     }
+    // A test that goes through clears that destination's failing flag.
+    call<{ channels: Channels }>('/channels', { auth: true }).then((r) => (setC(r.channels), announce(r.channels)), () => null)
   }
 
   const note = (k: string) =>
@@ -85,8 +91,14 @@ export function Channels() {
     <section id="channels" className="mt-5 scroll-mt-24 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-semibold">Where alerts go</h2>
-          <p className="mt-1 text-[14px] text-ink-2">Email always. Add a chat, a feed or a webhook and each alert arrives there as it happens, even if you take the daily email digest.</p>
+          <h2 className="text-[15px] font-semibold">{c?.scope === 'team' ? 'Where your team’s alerts go' : c?.team ? 'Your own channels' : 'Where alerts go'}</h2>
+          <p className="mt-1 text-[14px] text-ink-2">
+            {c?.scope === 'team'
+              ? 'Email always. A chat, feed or webhook you add here is your team’s: every alert for the team’s follows posts there once, as it happens. Seats can add their own as well.'
+              : c?.team
+                ? 'Email always. Add your own chat, feed or webhook for alerts on your settings, as they happen. The team’s channels come first; the plan owner manages them.'
+                : 'Email always. Add a chat, a feed or a webhook and each alert arrives there as it happens, even if you take the daily email digest.'}
+          </p>
         </div>
         {configured && (
           <Button size="sm" variant="outline" onClick={sendTest}>
@@ -97,7 +109,7 @@ export function Channels() {
       {test && (
         <p role="status" className="mt-3 rounded-xl bg-paper px-3.5 py-2.5 text-[13px] text-ink-2">
           {Object.entries(test)
-            .map(([k, v]) => `${k[0].toUpperCase() + k.slice(1)}: ${/^2\d\d$/.test(v) ? 'delivered' : v}`)
+            .map(([k, v]) => `${k[0].toUpperCase() + k.slice(1)}: ${v}`)
             .join(' · ')}
         </p>
       )}
@@ -107,6 +119,7 @@ export function Channels() {
         <div className="mt-4 h-40 animate-pulse rounded-xl bg-ink/[0.04]" />
       ) : (
         <div className="mt-2 divide-y divide-line">
+          {c.team && <TeamChannels t={c.team} />}
           <UrlChannel
             name="Slack"
             hint={
@@ -117,7 +130,7 @@ export function Channels() {
             value={c.slack}
             placeholder="https://hooks.slack.com/services/…"
             onSave={(v) => save('slack', { slack: v })}
-            note={note('slack')}
+            note={<>{fail(c.failing, 'slack')}{note('slack')}</>}
           />
           <UrlChannel
             name="Discord"
@@ -129,9 +142,9 @@ export function Channels() {
             value={c.discord}
             placeholder="https://discord.com/api/webhooks/…"
             onSave={(v) => save('discord', { discord: v })}
-            note={note('discord')}
+            note={<>{fail(c.failing, 'discord')}{note('discord')}</>}
           />
-          <Telegram value={c.telegram} onSave={(v) => save('telegram', { telegram: v })} note={note('telegram')} />
+          <Telegram value={c.telegram} onSave={(v) => save('telegram', { telegram: v })} note={<>{fail(c.failing, 'telegram')}{note('telegram')}</>} />
           <Row name="Private feed" hint="An RSS and JSON Feed of your alerts for a reader or your own tools. The link is the password: anyone with it can read your alerts.">
             {c.feed ? (
               <>
@@ -154,14 +167,67 @@ export function Channels() {
             )}
             {note('feed')}
           </Row>
-          <Webhook c={c} onSave={(b) => save('webhook', b)} note={note('webhook')} />
+          <Webhook c={c} onSave={(b) => save('webhook', b)} note={<>{fail(c.failing, 'webhook')}{note('webhook')}</>} />
         </div>
       )}
     </section>
   )
 }
 
-function Row({ name, hint, children }: { name: string; hint: ReactNode; children: ReactNode }) {
+function fail(f: Failing | undefined, k: keyof Failing) {
+  const x = f?.[k]
+  return x ? (
+    <p role="alert" className="mt-2 rounded-lg bg-down/[0.07] px-3 py-2 text-[13px] text-down">
+      Not delivering since {sinceLabel(x.since)}: {x.reason}. Fix it or remove it; a test that goes through clears this.
+    </p>
+  ) : null
+}
+
+// A seat's read-only view of the team channels the plan owner connected.
+function TeamChannels({ t }: { t: NonNullable<Channels['team']> }) {
+  const items = (
+    [
+      ['slack', 'Slack', t.slack],
+      ['discord', 'Discord', t.discord],
+      ['telegram', 'Telegram', t.telegram ? `chat ${t.telegram.chat_id}` : null],
+      ['webhook', 'Signed webhook', t.webhook?.url ?? null],
+    ] as const
+  ).filter(([, , v]) => v)
+  return (
+    <div className="my-3 rounded-xl bg-paper px-4 shadow-[0_0_0_1px_var(--color-line)]">
+    <Row
+      name={
+        <span className="flex flex-wrap items-center gap-2">
+          Team channels <Badge>Read-only</Badge>
+        </span>
+      }
+      hint="Managed by the plan owner. Every alert for the team’s follows posts here once."
+    >
+      {items.length === 0 ? (
+        <p className="text-[13.5px] text-ink-2">The plan owner hasn’t connected a team channel yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {items.map(([k, label, v]) => (
+            <li key={k}>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="w-28 shrink-0 text-[13px] text-ink-2">{label}</span>
+                <span title={v!} className="min-w-0 flex-1 basis-40 truncate rounded-lg bg-card px-3 py-2 font-mono text-[12.5px] text-ink-2 shadow-[0_0_0_1px_var(--color-line)]">{v}</span>
+                <span className={`inline-flex items-center gap-1.5 text-[12.5px] ${t.failing?.[k] ? 'text-down' : 'text-up'}`}>
+                  <span className={`size-1.5 rounded-full ${t.failing?.[k] ? 'bg-down' : 'bg-up'}`} aria-hidden="true" />
+                  {t.failing?.[k] ? `Not delivering since ${sinceLabel(t.failing[k]!.since)}: ${t.failing[k]!.reason}` : 'Delivering'}
+                </span>
+              </span>
+              {k === 'webhook' && t.webhook?.secret && <Copyable label="Signing secret" value={t.webhook.secret} />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Row>
+    </div>
+  )
+}
+
+function Row({ name, hint, children }: { name: ReactNode; hint: ReactNode; children: ReactNode }) {
   return (
     <div className="grid gap-3 py-4 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] md:gap-6">
       <div>
@@ -340,3 +406,39 @@ function Copyable({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
+
+/** A banner while any destination is failing; it updates when /channels changes on this page. */
+export function FailingBanner({ initial, onAccount }: { initial?: Failing; onAccount?: boolean }) {
+  const [f, setF] = useState<Failing>(initial ?? {})
+  useEffect(() => setF(initial ?? {}), [initial])
+  useEffect(() => {
+    const on = (e: Event) => setF((e as CustomEvent<Failing>).detail)
+    window.addEventListener('copybook:channels', on)
+    return () => window.removeEventListener('copybook:channels', on)
+  }, [])
+  const list = (Object.entries(f) as [keyof Failing, { reason: string; since: string }][]).filter(([, x]) => x)
+  if (!list.length) return null
+  return (
+    <div role="alert" className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] bg-down/[0.07] px-5 py-3.5 text-[14px] text-down">
+      <p className="min-w-0 flex-1 basis-80">
+        {list.map(([k, x], i) => (
+          <span key={k}>
+            {i > 0 && ' '}
+            {CHANNEL_LABEL[k]} stopped delivering on {sinceLabel(x.since)}: {x.reason}.
+          </span>
+        ))}{' '}
+        Fix it or remove it. Email alerts carry on.
+      </p>
+      {onAccount ? (
+        <a href="#channels" className="shrink-0 font-medium underline underline-offset-2">
+          Go to channels
+        </a>
+      ) : (
+        <Link to="/account/#channels" className="shrink-0 font-medium underline underline-offset-2">
+          Fix it in Account
+        </Link>
+      )}
+    </div>
+  )
+}
+

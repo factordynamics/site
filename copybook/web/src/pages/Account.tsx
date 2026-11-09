@@ -2,7 +2,7 @@ import { loadFilers, loadIndex, useAsync, useTitle } from '../lib/data'
 import { Link } from 'react-router-dom'
 import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
-import { Channels } from '../components/Channels'
+import { Channels, FailingBanner } from '../components/Channels'
 import { Team } from '../components/Team'
 import { FundSetup } from '../components/FundSetup'
 import { CsvButton } from '../components/CsvButton'
@@ -103,6 +103,8 @@ function SignedIn({ member, welcome, focus = false, onOut, onChange }: { member:
           </>
         )}
       </header>
+
+      {member.active && <FailingBanner initial={member.channels_failing} onAccount />}
 
       {member.active && member.plan === 'fund' && <FundSetup member={member} welcome={welcome} />}
 
@@ -227,7 +229,7 @@ function SignedIn({ member, welcome, focus = false, onOut, onChange }: { member:
               {member.plan === 'fund' && <Badge tone="accent">Shared with your team</Badge>}
             </h2>
             <span className="flex items-center gap-1">
-              {follows.investors.length > 0 && <CsvButton variant="outline" label="All their 13Fs (CSV)" download={() => downloadFile('/follows.csv', `copybook-followed-${new Date().toISOString().slice(0, 10)}.csv`)} />}
+              {follows.investors.length > 0 && <CsvButton variant="outline" label="Latest 13F holdings (CSV)" download={() => downloadFile('/follows.csv', `copybook-followed-${new Date().toISOString().slice(0, 10)}.csv`)} />}
               <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
                 Edit
               </Button>

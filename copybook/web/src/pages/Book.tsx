@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { FailingBanner } from '../components/Channels'
 import { Peers } from '../components/Peers'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
@@ -214,6 +215,7 @@ export function Book() {
   return (
     <div className="container-x pt-12 md:pt-16">
       <Header right={rows.length > 0 && <Button variant="outline" size="sm" onClick={csv}>Export CSV</Button>} />
+      <FailingBanner initial={member?.channels_failing} />
 
       {status === 'ready' && names.length === 0 ? (
         <Panel className="mt-8" title="Add the names you own or watch">
