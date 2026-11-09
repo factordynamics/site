@@ -642,20 +642,38 @@ describe('copybook api', () => {
     await signup({ email: 'reader@reader.test' }, '3.3.3.3');
     expect((await signup({ email: 'reader@reader.test' }, '4.4.4.4')).status).toBe(429);
     await putMember('paid', 'paid@reader.test', 'active', 'all'); // paying members never get the weekly
+    // Up to 5 owned names on a free account; the 6th is refused with the limit, and /me shows them.
+    for (const t of ['GOOGL', 'HHH', 'NVDA', 'AAPL', 'MSFT']) expect((await call(`/follows/owned/${t}`, { method: 'POST', token: s.token })).status).toBe(200);
+    const sixth = await call('/follows/owned/TSLA', { method: 'POST', token: s.token });
+    expect([sixth.status, (await sixth.json()).limit]).toEqual([402, 5]);
+    expect((await call('/follows/owned/AAPL', { method: 'POST', token: s.token })).status).toBe(200); // already saved: fine
+    await call('/follows/owned/MSFT', { method: 'DELETE', token: s.token });
+    expect((await (await call('/me', { token: s.token })).json()).member.free_names).toEqual({ names: ['GOOGL', 'HHH', 'NVDA', 'AAPL'], limit: 5 });
+    expect((await call('/follows/stocks/TSLA', { method: 'POST', token: s.token })).status).toBe(402); // only owned names
 
     // Friday evening ET (03:42 UTC Saturday): the week's biggest buys and sells, 13F rows link the card when there is one.
     sent = [];
     const row = (ticker: string, value_delta: number, extra = {}) => ({ ticker, display_name: ticker, issuer: ticker, cusip: 'x', put_call: null, shares: 1, prev_shares: 0, value: Math.abs(value_delta), value_delta, delta_pct_of_book: null, ...extra });
     const store = JSON.stringify({
       filings: [{ slug: 'warren-buffett', slugs: ['warren-buffett'], manager: 'Warren Buffett', name: 'Berkshire', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-12', accession: '0000950123-26-011111', sec_url: 'x', tickers: [], moves: { bought_usd: 0, sold_usd: 0, new: [row('DHI', 2e9)], added: [row('GOOGL', 8.8e9), row('PUTX', 9e9, { put_call: 'Put' })], trimmed: [row('BAC', -1.7e9)], exited: [row('STZ', -1e9)] } }],
-      events: [{ id: 'f4', slug: 'bill-ackman', manager: 'Bill Ackman', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', url: 'u', issuer: 'X', display_name: 'X', ticker: 'HHH', shares: 1, value_usd: 5e7, avg_price: 1, shares_after: 1, percent_of_class: null }],
+      events: [
+        { id: 'f4', slug: 'bill-ackman', manager: 'Bill Ackman', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', url: 'u', issuer: 'X', display_name: 'X', ticker: 'HHH', shares: 1, value_usd: 5e7, avg_price: 1, shares_after: 1, percent_of_class: null },
+        // Counted in the locked line, never shown to a free member: an insider's buy and a fund's 13D on their names.
+        { id: 'ins1', slug: '', manager: 'HUANG JEN HSUN', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', url: 'u', issuer: 'NVIDIA', display_name: 'NVIDIA', ticker: 'NVDA', shares: 1, value_usd: 2e6, avg_price: 1, shares_after: 1, percent_of_class: null, insider: { cik: '1', name: 'HUANG JEN HSUN', roles: ['CEO'], bought_usd: 2e6, accession: 'ins1', accepted: '2026-11-12T20:00:00Z' } },
+        { id: 'd13', slug: 'bill-ackman', manager: 'Bill Ackman', form: 'SCHEDULE 13D/A', kind: '13d', action: 'stake_update', filing_date: '2026-11-12', url: 'u', issuer: 'Alphabet', display_name: 'Alphabet', ticker: 'GOOGL', shares: null, value_usd: null, avg_price: null, shares_after: 1, percent_of_class: 5.1 },
+      ],
     });
     await env.DB.put('digest:2026-11-12', store);
     const sat = Date.UTC(2026, 10, 14, 3, 42);
     await cron(42, sat);
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
     const w = sent[0];
-    expect(w.subject).toBe('The week in superinvestor filings: Warren Buffett added GOOGL');
+    expect(w.subject).toBe('In your names: Warren Buffett added $8.8B of GOOGL');
+    // "In your names" first: one public fact per saved name that moved, then the locked count and the trial.
+    expect(w.text).toContain(`In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  +1 insider trade and 1 fund move in your names, with Copy: ${SITE}pricing/?utm_source=weekly&utm_medium=email`);
+    expect(w.text.indexOf('In your names')).toBeLessThan(w.text.indexOf('Biggest buys'));
+    expect(w.text).not.toContain('HUANG');
+    expect(w.html).toContain('Try Copy free for 14 days');
     expect(w.text).toContain(`Warren Buffett: added GOOGL, +$8.8B (13F Q3 2026)\n    ${SITE}f/0000950123-26-011111/`);
     expect(w.text).toContain(`Bill Ackman: bought HHH, +$50.0M (Form 4)\n    ${SITE}investors/bill-ackman/`);
     expect(w.text.indexOf('BAC')).toBeLessThan(w.text.indexOf('STZ'));
@@ -1657,7 +1675,7 @@ describe('copybook api', () => {
     expect(sent[0]).toMatchObject({ to: ['analyst@fund.example'], subject: 'You have a Copy Fund seat on Copybook' });
     const login = decodeURIComponent(sent[0].text.match(/\?login=([^\s]+)/)![1]);
     const seat = (await (await call('/session', { body: { login } })).json()).token;
-    expect((await (await call('/me', { token: seat })).json()).member).toMatchObject({ email: 'analyst@fund.example', plan: 'fund', active: true, seat: true });
+    expect((await (await call('/me', { token: seat })).json()).member).toMatchObject({ email: 'analyst@fund.example', plan: 'fund', active: true, seat: true, owner: 'pm@fund.example' });
 
     // The book, follows and peers are the team's; alert settings are the seat's own.
     expect((await (await call('/follows', { token: seat })).json()).follows).toMatchObject({ investors: ['warren-buffett'], owned: ['NVDA'], peers: [] });

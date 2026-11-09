@@ -253,6 +253,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json(r.ok ? { ok: true, follows: r.follows } : r, r.ok ? 200 : 400, h);
   }
 
+  // Operator: this week's free email for one free member, now (Friday's issue, previewed).
+  if (req.method === 'POST' && path === '/ops/weekly-preview') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const { previewWeekly } = await import('./free');
+    return json(await previewWeekly(env, String((await body(req)).email ?? '').trim().toLowerCase(), Date.now()), 200, h);
+  }
+
   // Operator: clear Fund seats' copies of their team's destinations (one-off for duplicates saved before the 409).
   const dedupe = path.match(/^\/ops\/team-dedupe\/(cus_\w+)$/);
   if (req.method === 'POST' && dedupe) {
@@ -415,7 +422,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // channels_failing: chat or webhook destinations that stopped (reason, since), so /account/ can flag them.
   if (req.method === 'GET' && path === '/me') {
     const { referralView } = await import('./referrals');
-    return json({ ok: true, member: { ...publicView(m), channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m) } }, 200, h);
+    const fr = m.status === 'free' ? await changeFollows(env, m, { get: true }) : null;
+    const free = fr ? { free_names: { names: fr.ok ? fr.follows.owned : (await getFollows(env, m)).owned, limit: 5 } } : {};
+    // A Fund seat sees who to ask about billing: the plan owner's email.
+    const owner = m.seat_of ? { owner: (await getMember(env, m.seat_of))?.email ?? null } : {};
+    return json({ ok: true, member: { ...publicView(m), ...owner, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, h);
   }
 
   if (req.method === 'POST' && path === '/portal') {
@@ -427,6 +438,23 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       configuration: (ht ? env.HOLDTERM_PORTAL_CONFIGURATION : env.PORTAL_CONFIGURATION) || undefined,
     });
     return json({ ok: true, url: s.url }, 200, h);
+  }
+
+  // Free accounts: up to 5 owned names (for the Friday email's "In your names"), nothing else. No alerts.
+  if (m.status === 'free') {
+    const { FREE_NAMES } = await import('./free');
+    if (req.method === 'GET' && path === '/follows') {
+      const r = await changeFollows(env, m, { get: true });
+      return json({ ok: true, follows: r.ok ? r.follows : await getFollows(env, m), limit: FREE_NAMES }, 200, h);
+    }
+    const own = path.match(/^\/follows\/owned\/([^/]+)$/);
+    if (own && (req.method === 'POST' || req.method === 'DELETE')) {
+      const value = decodeURIComponent(own[1]).toUpperCase().replace('-', '.');
+      if (!TICKER.test(value)) return json({ ok: false, error: 'not a ticker like BRK.B', code: 'bad_request' }, 400, h);
+      const r = await changeFollows(env, m, req.method === 'POST' ? { add: { list: 'owned', value, max: FREE_NAMES } } : { remove: { list: 'owned', value } });
+      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, error: `Free accounts can save up to ${FREE_NAMES} names. Copy has no limit.`, code: 'free_limit', limit: FREE_NAMES }, 402, h);
+      return r.ok ? json({ ok: true, follows: r.follows, limit: FREE_NAMES }, 200, h) : json({ ok: false, error: r.error }, 400, h);
+    }
   }
 
   if (!isActive(m)) return json({ ok: false, error: 'Copy subscription required', member: publicView(m) }, 402, h);

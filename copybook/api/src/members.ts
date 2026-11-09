@@ -188,7 +188,8 @@ export async function putFollows(env: Env, m: Member, f: Follows): Promise<void>
 
 export const MAX_FOLLOWS = 500;
 export type FollowList = 'investors' | 'stocks' | 'owned' | 'peers';
-export type FollowOp = { get: true } | { set: Partial<Follows> } | { add: { list: FollowList; value: string } } | { remove: { list: FollowList; value: string } };
+/** `max` on an add caps that list (a free account's 5 owned names), checked inside the member's object so concurrent adds can't pass it. */
+export type FollowOp = { get: true } | { set: Partial<Follows> } | { add: { list: FollowList; value: string; max?: number } } | { remove: { list: FollowList; value: string } };
 
 /** Hand-added owned names; records from before `owned_manual` count every owned name outside the linked book. */
 export const manualOf = (f: Pick<Follows, 'owned' | 'owned_manual' | 'book'>) => f.owned_manual ?? f.owned.filter((t) => !(f.book?.tickers ?? []).includes(t));
@@ -204,7 +205,8 @@ export function applyFollowOp(cur: Follows, op: FollowOp): Follows | string {
     if (op.set.owned_manual) manual = op.set.owned_manual;
     else if (op.set.owned) manual = op.set.owned.filter((t) => manual.includes(t) || !(next.book?.tickers ?? []).includes(t));
   } else if ('add' in op) {
-    const { list, value } = op.add;
+    const { list, value, max } = op.add;
+    if (max !== undefined && !next[list].includes(value) && next[list].length >= max) return `limit:${max}`;
     if (!next[list].includes(value)) next[list].push(value);
     if (list === 'owned' && !manual.includes(value)) manual = [...manual, value];
   } else {
