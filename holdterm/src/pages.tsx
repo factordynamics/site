@@ -957,7 +957,7 @@ export function Stock({ ticker }: { ticker: string }) {
       <div className="head">
         <div>
           <h1>
-            <span className="tkh">{d.classes.length > 1 ? d.classes.map((c) => c.ticker).join('+') : d.ticker}</span> {issuerName(d.name)}
+            <span className="tkh">{[...new Set(d.classes.map((c) => c.ticker))].join('+')}</span> {issuerName(d.name)}
           </h1>
           <div className="dim">
             <Sector s={d.sector} /> {d.sector ?? 'Unclassified'} · {d.classes.map((c) => `${c.ticker} CUSIP ${c.cusip}`).join(' · ')}

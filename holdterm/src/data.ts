@@ -152,7 +152,9 @@ export function fillTicker<T extends { cusip?: string | null; ticker: string | n
   return h
 }
 /** The issuer key: 6-character CUSIP prefix, or the successor's when a redomiciled line (old Ferguson plc) is mapped onto it. */
-const issuerKey = (h: { cusip: string; ticker: string | null; issuer: string }) => (h.cusip ? OVERRIDE[h.cusip]?.same_as ?? h.cusip.slice(0, 6) : h.ticker || h.issuer)
+// Warrants and ETFs keep their full CUSIP: a warrant is not the stock, and one ETF trust (Invesco's 46137V) issues many funds.
+const isWarrant = (h: { title: string }) => /^\*?W\b|\bWTS?\b|WARRANT/i.test(h.title)
+const issuerKey = (h: Holding) => (!h.cusip ? h.ticker || h.issuer : isWarrant(h) || isFundLike(h) ? h.cusip : OVERRIDE[h.cusip]?.same_as ?? h.cusip.slice(0, 6))
 function name(m: Manager) {
   m.firm = firmName(m.slug, m.name)
   m.pm = pmName(m.slug)
@@ -256,7 +258,88 @@ export const loadHistory = (slug: string) =>
 export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector)))), d))
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
 export const loadInsiders = () => get<{ updated_at: string; rows: Insider[] } | Insider[]>(DATA + 'insiders.json').then((d) => (Array.isArray(d) ? d : d.rows ?? [])).catch(() => null)
-export const loadStock = (t: string) => get<StockFile>(`${DERIVED}stocks/${encodeURIComponent(t)}.json`).then((d) => ({ ...d, sector: sectorOf(d.ticker, d.sector) ?? sectorOf(d.classes[0]?.ticker, null) }))
+/** Tickers Holdterm fills from src/tickers.json, each with every CUSIP of its issuer group (classes, and a
+ * redomiciled predecessor via same_as). Copybook has no stock file, or an incomplete one, for these. */
+const LOCAL = new Map<string, { cusip: string; ticker: string }[]>()
+{
+  const groups = new Map<string, { cusip: string; ticker: string }[]>()
+  for (const [cusip, o] of Object.entries(OVERRIDE)) {
+    if (typeof o !== 'object' || !o.listed) continue
+    const k = o.same_as ?? cusip.slice(0, 6)
+    groups.set(k, [...(groups.get(k) ?? []), { cusip, ticker: o.ticker }])
+  }
+  for (const g of groups.values()) for (const c of g) LOCAL.set(c.ticker, g)
+}
+const changeOf = (shares: number, prev: number | null): Change => (prev == null ? 'new' : shares > prev ? (prev ? 'added' : 'new') : shares < prev ? (shares ? 'trimmed' : 'exited') : 'unchanged')
+/** A stock's holders: Copybook's stock file, plus roster lines whose ticker Holdterm resolves from the CUSIP
+ * (src/tickers.json), read from the same books /consensus uses, so both pages count the same funds. */
+async function loadOneStock(t: string): Promise<StockFile> {
+  const group = LOCAL.get(t)
+  const file = get<StockFile>(`${DERIVED}stocks/${encodeURIComponent(t)}.json`).catch((e) => {
+    if (!group) throw e
+    return null
+  })
+  const [up, books] = await Promise.all([file, group ? loadBooks() : null])
+  let d = up && { ...up, holders: [...up.holders], exited: [...up.exited], options: [...(up.options ?? [])], classes: [...up.classes] }
+  if (group && books) {
+    const cus = new Map(group.map((c) => [c.cusip, c.ticker]))
+    const has = new Set(d ? [...d.holders, ...d.exited, ...d.options].map((h) => h.slug) : [])
+    for (const b of books) {
+      if (has.has(b.slug)) continue
+      const lines = b.holdings.filter((h) => cus.has(h.cusip))
+      if (!lines.length) continue
+      if (!d) d = { ticker: t, name: lines[0].display_name || lines[0].issuer, sector: sectorOf(t, lines[0].sector), value: 0, classes: [], holders: [], exited: [], options: [], counts: undefined as unknown as StockFile['counts'], quarters: [] }
+      const row = (ls: Holding[]): StockHolder => {
+        const shares = ls.reduce((x, h) => x + h.shares, 0)
+        const prev = ls.some((h) => h.prev_shares != null) ? ls.reduce((x, h) => x + (h.prev_shares ?? 0), 0) : null
+        return { slug: b.slug, manager: b.firm, firm: b.firm, quarter: b.quarter, filing_date: b.filing_date, featured: false, shares, value: ls.reduce((x, h) => x + h.value, 0), weight: ls.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: ls.reduce((x, h) => x + (h.value_delta ?? 0), 0), change: ls.length === 1 ? ls[0].change : changeOf(shares, prev), put_call: ls[0].put_call ?? undefined }
+      }
+      const stock = lines.filter((h) => !h.put_call)
+      if (stock.length) {
+        const r = row(stock)
+        ;(r.change === 'exited' ? d.exited : d.holders).push(r)
+        if (r.change !== 'exited') d.value += r.value
+      }
+      for (const pc of ['PUT', 'CALL']) {
+        const o = lines.filter((h) => h.put_call?.toUpperCase() === pc)
+        if (o.length) d.options.push(row(o))
+      }
+    }
+    if (!d) throw new Error(`404 ${t}`)
+    for (const c of group) if (!d.classes.some((x) => x.cusip === c.cusip)) d.classes.push({ ticker: c.ticker, name: d.name, cusip: c.cusip })
+  }
+  if (!d) throw new Error(`404 ${t}`)
+  return { ...d, sector: sectorOf(d.ticker, d.sector) ?? sectorOf(d.classes[0]?.ticker, null) }
+}
+/** Share classes Copybook files separately (LEN and LEN.B, Z and ZG): candidates share a name or ticker root
+ * in the stock index, and merge only when their CUSIP prefix matches. Warrants and ETFs never merge. */
+const root = (t: string) => t.replace(/(\.[A-Z]|[A-Z])$/, '') || t
+const holderSum = (rows: StockHolder[]): StockHolder => {
+  if (rows.length === 1) return rows[0]
+  const shares = rows.reduce((x, h) => x + h.shares, 0)
+  const prev = rows.some((h) => h.prev_shares != null) ? rows.reduce((x, h) => x + (h.prev_shares ?? 0), 0) : null
+  return { ...rows[0], shares, value: rows.reduce((x, h) => x + h.value, 0), weight: rows.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: rows.reduce((x, h) => x + (h.delta_value ?? 0), 0), change: changeOf(shares, prev) }
+}
+export async function loadStock(t: string): Promise<StockFile> {
+  const d = await loadOneStock(t)
+  const own = new Set(d.classes.map((c) => c.ticker))
+  const prefix = d.classes[0]?.cusip.slice(0, 6)
+  if (ETF_NAMES[t]) return { ...d, name: ETF_NAMES[t] }
+  if (!prefix || d.sector === 'Funds & ETFs' || /WW$|\.WS$/.test(t)) return d
+  const ix = await loadStockIndex().catch(() => ({ stocks: [] as StockIndexRow[] }))
+  const name = ix.stocks.find((r) => r.t === t)?.n
+  const cands = ix.stocks.filter((r) => !own.has(r.t) && !/WW$|\.WS$/.test(r.t) && ((name && r.n === name) || root(r.t) === root(t) || r.t === root(t) || root(r.t) === t))
+  const sibs = (await Promise.all(cands.map((r) => loadOneStock(r.t).catch(() => null)))).filter((x): x is StockFile => Boolean(x && x.classes.every((c) => c.cusip.slice(0, 6) === prefix)))
+  if (!sibs.length) return d
+  const files = [d, ...sibs]
+  const classValue = (f: StockFile) => f.holders.reduce((x, h) => x + h.value, 0)
+  files.sort((a, b) => classValue(b) - classValue(a))
+  const by = new Map<string, StockHolder[]>()
+  for (const f of files) for (const h of [...f.holders, ...f.exited]) by.set(h.slug, [...(by.get(h.slug) ?? []), h])
+  const rows = [...by.values()].map(holderSum)
+  const holders = rows.filter((h) => h.shares > 0)
+  return { ...d, ticker: files[0].ticker, name: files[0].name, classes: files.flatMap((f) => f.classes), holders, exited: rows.filter((h) => h.shares <= 0), options: files.flatMap((f) => f.options ?? []), value: files.reduce((x, f) => x + f.value, 0) }
+}
 export const loadStockIndex = () => get<{ stocks: StockIndexRow[] }>(DERIVED + 'stocks.json')
 
 const qn = (q: string) => (q ? Number(q.slice(0, 4)) * 4 + Number(q.slice(5)) - 1 : -1)

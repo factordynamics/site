@@ -3,6 +3,7 @@
 //    previews and crawlers that don't run JS see the right page; unknown paths get a real 404 status.
 import ROSTER from '../src/roster.json'
 import { FUNDS, dataSlug, firmName, fundPath } from '../src/names'
+import TICKERS from '../src/tickers.json'
 
 const SITE = 'https://holdterm.factordynamics.com'
 const SECTIONS: Record<string, [string, string]> = {
@@ -21,7 +22,10 @@ const MOVED = new Set(['/m', '/activity', '/grand', '/insiders'])
 const roster = ROSTER as unknown as { funds: { slug: string; filer_slug: string; firm: string }[] }
 
 /** True when Copybook's derived data has a stock file for the ticker, or the ticker is another class's alias. */
+// Tickers Holdterm resolves from a roster fund's CUSIP (src/tickers.json); their pages are built from the books.
+const LOCAL = new Set(Object.values(TICKERS as unknown as Record<string, { ticker?: string; listed?: boolean }>).flatMap((o) => (o.listed && o.ticker ? [o.ticker] : [])))
 async function stockExists(t: string, origin: string) {
+  if (LOCAL.has(t)) return true
   const up = 'https://copybook.factordynamics.com/d/'
   const r = await fetch(`${up}stocks/${encodeURIComponent(t)}.json`, { method: 'HEAD', cf: { cacheTtl: 600, cacheEverything: true } } as RequestInit)
   if (r.ok) return true
