@@ -41,7 +41,7 @@ FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "val
 SECS: dict[str, dict] = {}
 PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
-HOLDERS_TOP = 200  # public rows per stock in hl/; the full list is paid
+HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
 CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied price over every filer
 FIXED = [0]
 
@@ -186,7 +186,8 @@ def write_changes(per_quarter: dict[str, list[list]]) -> None:
 def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) -> int:
     """hl/{issuer6}.json: every 13F filer holding the stock in its latest full book (never the top-500
     public shard), with the period of that book and its change against the filer's prior quarter.
-    Public: counts over all holders and the HOLDERS_TOP largest rows. hl/index.json maps tickers."""
+    Public (Pages): hl/{issuer6}.json with counts over all holders and the HOLDERS_TOP largest rows, for
+    issuers with a ticker; hl/index.json maps tickers. Paid: hlf/{issuer6}.json, every holder (R2 hl/)."""
     meta = {s["cik"]: s for s in shards}
     per: dict[str, dict[str, list]] = {}
     tick: dict[str, dict[str, float]] = {}
@@ -205,9 +206,10 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             t = r.get("ticker") or (SECS.get(c) or {}).get("ticker")
             if t:
                 tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
-    out = DATA / "hl"
+    out, full = DATA / "hl", DATA / "hlf"
     out.mkdir(exist_ok=True)
-    index, keep = {}, set()
+    full.mkdir(exist_ok=True)
+    index, keep, written = {}, set(), set()
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change"]
     for code, hs in per.items():
         rows, counts = [], {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
@@ -232,11 +234,17 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         for t in tickers:
             index.setdefault(t, code)
         name = f"{code}.json"
-        keep.add(name)
-        write(out / name, {"issuer": code, "tickers": tickers, "counts": counts, "columns": cols,
-                           "rows_total": len(rows), "rows": rows[:HOLDERS_TOP]})
+        body = {"issuer": code, "tickers": tickers, "counts": counts, "columns": cols, "rows_total": len(rows)}
+        written.add(name)
+        write(full / name, {**body, "rows": rows})
+        if tickers:
+            keep.add(name)
+            write(out / name, {**body, "rows": rows[:HOLDERS_TOP]})
     for p in out.glob("*.json"):
         if p.name not in keep and p.name != "index.json":
+            p.unlink()
+    for p in full.glob("*.json"):
+        if p.name not in written:
             p.unlink()
     write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
                                "tickers": dict(sorted(index.items()))})

@@ -56,7 +56,8 @@ def coverage(bs: dict[str, dict]) -> tuple[float, dict[str, float], dict[str, st
 
 def holder_counts(data: Path, books: dict[str, dict]) -> list[str]:
     """hl/{issuer}.json counts every filer's full book, so it can never be below the curated funds' count."""
-    if not (data / "hl").exists():
+    folder = data / "hlf" if (data / "hlf").exists() else data / "hl"  # full lists in CI, public top rows otherwise
+    if not folder.exists():
         return []
     tracked: dict[str, set] = {}
     for b in books.values():
@@ -66,7 +67,9 @@ def holder_counts(data: Path, books: dict[str, dict]) -> list[str]:
                 tracked.setdefault(c[:6], set()).add(b.get("cik"))
     bad = []
     for code, ciks in tracked.items():
-        p = data / "hl" / f"{code}.json"
+        p = folder / f"{code}.json"
+        if not p.exists() and folder.name == "hl":
+            continue  # public hl/ only has issuers with a ticker
         n = json.loads(p.read_text())["counts"]["holders"] if p.exists() else 0
         if n < len(ciks):
             bad.append(f"{code} {n} < {len(ciks)}")

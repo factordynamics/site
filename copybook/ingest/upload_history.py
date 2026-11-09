@@ -8,6 +8,7 @@
 - bulk/{quarter}.csv.gz: one export per quarter of every filer's book (export.py)
 - changes/{quarter}.json: every filer's moves per report period (moves.py)
 - v/{cik}/{accession}.json: superseded 13F books, as that one filing reported them (build.py)
+- hl/{issuer}.json: every 13F filer holding an issuer in its latest full book (moves.py hlf/)
 
 Auth is the GitHub Actions OIDC token (audience copybook-api); no stored secret.
 A manifest of SHA-256 hashes (COPYBOOK_H_MANIFEST) records what R2 already has,
@@ -35,10 +36,10 @@ API = os.environ.get("COPYBOOK_API", "https://copybook-api.factordynamics.worker
 MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-manifest.json"))
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
                  r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$"
-                 r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$")
+                 r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$")
 # Keys the Worker may not accept yet: a failure warns instead of failing the run,
 # and the rest of that kind are skipped until the next run.
-OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/")
+OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/")
 WORKERS = 8
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
@@ -110,6 +111,8 @@ def main() -> int:
             sources[p.relative_to(root).as_posix()] = p
     for p in sorted(root.glob("fq/*/*.json")):  # change rows replace the plain book for the same quarter
         sources["fb/" + p.relative_to(root / "fq").as_posix()] = p
+    for p in sorted(root.glob("hlf/*.json")):  # every holder per issuer; Pages keeps counts and the top rows
+        sources["hl/" + p.name] = p
     files = list(sources.values())
     todo = []
     for key, path in sorted(sources.items()):

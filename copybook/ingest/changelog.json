@@ -2,6 +2,56 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-09-refiled-amendments",
+   "date": "2026-11-09",
+   "kind": "correction",
+   "title": "Re-filed 13F amendments no longer double a fund's book",
+   "body": "Some filers re-file their whole 13F as a 13F-HR/A marked NEW HOLDINGS instead of RESTATEMENT. Copybook added those rows on top of the original, so the book was counted twice. A NEW HOLDINGS amendment that repeats more than half of the book's positions (CUSIP and put/call), or whose total is within 20% of the book's with at least half its positions, now replaces the book. Its entry in filings[] carries mislabeled_amendment: true, and the replaced filing stays in the trail with role superseded. Totals before and after, against the filing's own cover-page total: First Eagle (Matthew McLennan) 2026Q2 $120.67B to $60.75B (GOOG 14.63M to 7.32M shares; 371 positions marked added to 258); Mizuho Securities USA 2026Q2 $10.44B to $6.20B; JPMorgan Chase 2025Q3 $3,338B to $1,669B; HSBC 2025Q4 $372.1B to $196.2B; T. Rowe Price Investment Management 2025Q4 $252.8B to $158.4B; Mason Morfit 2024Q3 $8.31B to $4.37B. Also replaced: Brookfield 2024Q4 ($16.51B) and 2025Q1 ($75.38B), Check Capital 2026Q2 ($3.78B), Heard Capital 2025Q3 ($2.06B), Lingotto 2025Q3 ($5.41B), and UC Regents 2025Q2 ($1.18B), 2025Q3 ($1.84B) and 2025Q4 ($2.81B). The same rule applies to every 13F filer's book built from the SEC 13F data sets. The publish gate now fails a build when a fund's quarter exceeds 1.5 times its filed cover total, or 1.5 times its previous quarter after an amendment was added.",
+   "quarters": [
+    "2024Q3",
+    "2024Q4",
+    "2025Q1",
+    "2025Q2",
+    "2025Q3",
+    "2025Q4",
+    "2026Q2"
+   ]
+  },
+  {
+   "id": "2026-11-09-combined-filers",
+   "date": "2026-11-09",
+   "kind": "correction",
+   "title": "Pershing Square's quarters combine both filers",
+   "body": "In quarters where Pershing Square Capital Management and Pershing Square Inc. (CIK 2026053) both filed a 13F-HR, Bill Ackman's book is now their sum, and the history row names the other filing in combined_with: 2026Q1 $14.28B (with 0001172661-26-002339), 2025Q4 $16.24B (with 0001172661-26-001095), 2025Q3 $15.38B (with 0001172661-25-005115). Pershing Square Inc.'s own page uses the same combined prior quarter, so its 2026Q2 HHH position (27,852,064 shares) is unchanged rather than added.",
+   "quarters": [
+    "2025Q3",
+    "2025Q4",
+    "2026Q1",
+    "2026Q2"
+   ]
+  },
+  {
+   "id": "2026-11-09-holder-index",
+   "date": "2026-11-09",
+   "kind": "methodology",
+   "title": "All-filer holder counts come from every filer's full book",
+   "body": "The per-stock holder index across all 13F filers was built from public shards that keep each filer's 500 largest positions, so large filers such as BlackRock (5,694 positions) and Citadel (13,572) were missing from most stocks. data/hl/{issuer}.json now counts every filer's latest full 13F book, with the quarter of that book (period), the filer's type, and its change against its previous quarter where that is on file. KNSL now has 596 holders (was 236), and every stock's all-filer count is at least the number of tracked funds holding it, which the publish gate checks.",
+   "quarters": [
+    "2026Q2",
+    "2026Q3"
+   ]
+  },
+  {
+   "id": "2026-11-09-split-counts",
+   "date": "2026-11-09",
+   "kind": "correction",
+   "title": "APH and CRWD flow counts restated for the larger fund list",
+   "body": "The 2026-11-08 split entry gave APH as 11 bought, 9 sold and -$0.08B, but APH's 2-for-1 split was not yet in splits.json, so fund pages and alerts still showed holders as added. APH is now in splits.json, along with IESC 2-for-1 (2026Q3), and split detection requires at least 5 holders at the exact ratio, a median holder ratio of k and a price move of about 1/k. With the 355 tracked funds that have filed 2026Q3 so far, APH is 12 bought, 12 sold, -$0.25B (Solstein's exit of 825 shares is one of the sellers), and CRWD is 9 bought, 8 sold, +$0.70B.",
+   "quarters": [
+    "2026Q3"
+   ]
+  },
+  {
    "id": "2026-11-08-ticker-incident",
    "date": "2026-11-08",
    "kind": "incident",
