@@ -1126,6 +1126,9 @@ describe('copybook api', () => {
     expect(cleanItem4(p.item4)).toBe(p.item4);
     expect(cleanItem4('Item 4 of the Initial 13D is hereby amended and supplemented by adding the following: On November 3, 2026, the Issuer entered into an underwriting agreement (the "Underwriting Agreement") with Barclays Capital Inc. and Jefferies LLC. The Equity Offering…')).toBe('On November 3, 2026, the Issuer entered into an underwriting agreement with Barclays Capital Inc. and Jefferies LLC.');
     expect(cleanItem4('Item 4 is amended to add the following: The Reporting Persons intend to seek board representation.')).toBe('The Reporting Persons intend to seek board representation.');
+    expect(cleanItem4('This Amendment amends and supplements Item 4 of the Original Schedule 13D by adding the following: Revised Non-Binding Proposal On July 27, 2026, the Consortium submitted a revised proposal.')).toBe('Revised Non-Binding Proposal On July 27, 2026, the Consortium submitted a revised proposal.');
+    // A colon in the substance itself stays.
+    expect(cleanItem4('The Reporting Persons propose: a sale of the Issuer.')).toBe('The Reporting Persons propose: a sale of the Issuer.');
   });
 
   it('chat retries get a slot every minute: ten busy minutes in a row still retry a failed Slack post on time', async () => {

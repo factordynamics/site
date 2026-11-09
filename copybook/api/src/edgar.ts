@@ -414,6 +414,9 @@ const ITEM4_PREAMBLE = [
   /^Item\s*4\.?\s*(?:[-–—:]\s*)?(?:Purpose of (?:the )?Transactions?\.?\s*)?(?=Item\s*4\b|This\b|The\b|$)/i,
   /^(?:This\s+)?Item\s*4\b[^.:]{0,160}?\b(?:is|are|shall be)\s+(?:hereby\s+)?(?:amended|supplemented|restated)\b[^.:]{0,160}?(?:[:.]|\bfollowing\b[:.]?)\s*/i,
   /^(?:The\s+)?(?:Schedule\s+13D|Initial\s+13D|Original\s+13D)[^.:]{0,160}?\bhereby\s+(?:amended|supplemented)\b[^.:]{0,160}?[:.]\s*/i,
+  // Any other short opening clause that names Item 4 and amends, supplements or restates it, up to its colon
+  // ("This Amendment amends and supplements Item 4 of the Original Schedule 13D by adding the following:").
+  /^(?=[^:]{0,240}:)(?=[^:]*\bItem\s*4\b)(?=[^:]*\b(?:amend|supplement|restat)\w*)[^.:]{0,240}:\s*/i,
 ];
 /** Defined-term asides: (the "Underwriting Agreement"), (each, a "Lock-Up"), (collectively, the "Sellers"). */
 const DEFINED = /\s*\((?:the|each|each,?\s+an?|an?|collectively,?\s+the|together,?\s+the)\s+["“][^"”]{1,60}["”]\)/g;
