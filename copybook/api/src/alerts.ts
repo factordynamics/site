@@ -599,6 +599,8 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
   } catch (err) {
     errors.push(String(err));
   }
+  // Filings the missed-filing detector found unsent past their window (KV missed:queue).
+  entries.push(...(await missedQueue(env)).filter((e) => e.form.startsWith('13F-HR')));
   // Backstop for a filing the feed pages missed (a failed poll, or a deadline-day burst): a few
   // curated filers' own feeds each minute, in rotation, featured managers more often, and the
   // followed non-curated filers too.
@@ -959,6 +961,85 @@ const EVENT_PAGES = 2;
 const EVENTS_PER_MINUTE = 8;
 
 /** Form 4 and 13D/G feed pages back to `since` (newest first), at most EVENT_PAGES each. */
+// ---------------------------------------------------------------------------------------------
+// Missed-filing detector: the safety net for deadline day
+
+/** Filings a poll should have sent by now: accepted more than 10 minutes ago, within the last 90. */
+const MISSED_AFTER_MS = 10 * 60_000;
+const MISSED_WINDOW_MS = 90 * 60_000;
+/** Feed pages read per form type (100 entries each), newest first, stopping at the window's start. */
+const MISSED_PAGES: [string, number][] = [['13F-HR', 3], ['4', 6], ['SCHEDULE 13', 2]];
+
+type Missed = FeedEntry & { detected_at: string };
+
+async function missedQueue(env: Env): Promise<Missed[]> {
+  return JSON.parse((await env.DB.get('missed:queue')) ?? '[]') as Missed[];
+}
+
+/** The events poll's rule for which Form 4 and 13D/G filings concern a followed filer or a watched issuer. */
+function eventCandidate(es: FeedEntry[], ciks: CikMap, watch: Record<string, string[]>): boolean {
+  return es.some((e) => ((e.role === 'Reporting' || e.role === 'Filed by') && !!ciks[e.cik]) || (e.role === 'Subject' && e.form.startsWith('SCHEDULE 13') && !!watch[e.cik]) || (e.role === 'Issuer' && e.form === '4' && !!watch[e.cik]));
+}
+
+/**
+ * Every 10 minutes, after the polls: reads EDGAR's latest 13F-HR, 13F-HR/A, Form 4 and Schedule 13D/G
+ * filings over the last 90 minutes and compares the curated and followed filers' (and watched issuers')
+ * ones with what the polls handled. Anything accepted more than 10 minutes ago and never handled is
+ * put back in front of the polls (KV missed:queue), logged (missed:log) and counted (missed:count,
+ * missed_recovered on /health). The polls then send it as usual; a 13D/G or Form 4 more than 6 hours
+ * old goes to the digest. Sources a poll hasn't seeded yet are skipped.
+ */
+export async function runMissedDetector(env: Env, now: number): Promise<Record<string, unknown>> {
+  const curated = await cikMap(env);
+  if (!curated) return { status: 'no cik map yet' };
+  const ciks = withExtra(curated, await extraMap(env));
+  const watch = JSON.parse((await env.DB.get('alerts:watch')) ?? '{}') as Record<string, string[]>;
+  const rawPeriods = await env.DB.get('alerts:periods');
+  const rawEvents = await env.DB.get('events:handled');
+  const handled = new Set([...(JSON.parse((await env.DB.get('alerts:handled')) ?? '[]') as string[]), ...(JSON.parse(rawEvents ?? '[]') as string[])]);
+  const queue = await missedQueue(env);
+  const entries: FeedEntry[] = [];
+  const errors: string[] = [];
+  for (const [type, pages] of MISSED_PAGES) {
+    if (type === '13F-HR' ? !rawPeriods : !rawEvents) continue;
+    for (let page = 0; page < pages && secBudget.left >= 2; page++) {
+      try {
+        const es = await latestFilings(type, page * 100);
+        entries.push(...es);
+        const last = es[es.length - 1];
+        if (es.length < 100 || !last || Date.parse(last.accepted) < now - MISSED_WINDOW_MS) break;
+      } catch (err) {
+        errors.push(`${type}: ${err}`);
+        break;
+      }
+    }
+  }
+  const byAcc = new Map<string, FeedEntry[]>();
+  for (const e of entries) (byAcc.get(e.accession) ?? byAcc.set(e.accession, []).get(e.accession)!).push(e);
+  const queued = new Set(queue.map((e) => e.accession));
+  const found: Missed[] = [];
+  const log: { accession: string; form: string; cik: string; accepted: string; detected_at: string; minutes_late: number }[] = [];
+  for (const [acc, es] of byAcc) {
+    const at = Math.min(...es.map((e) => Date.parse(e.accepted)));
+    if (handled.has(acc) || queued.has(acc) || at > now - MISSED_AFTER_MS || at < now - MISSED_WINDOW_MS) continue;
+    const is13F = es[0].form.startsWith('13F-HR');
+    if (is13F ? !es.some((e) => ciks[e.cik]) : !eventCandidate(es, ciks, watch)) continue;
+    const detected_at = new Date(now).toISOString();
+    found.push(...es.map((e) => ({ ...e, detected_at })));
+    const lead = es.find((e) => ciks[e.cik]) ?? es[0];
+    log.push({ accession: acc, form: es[0].form, cik: lead.cik, accepted: new Date(at).toISOString(), detected_at, minutes_late: Math.round((now - at) / 60_000) });
+  }
+  // Drop what the polls have handled since, and anything too old to alert.
+  const keep = queue.filter((e) => !handled.has(e.accession) && now - Date.parse(e.accepted) <= MAX_ALERT_AGE_DAYS * DAY);
+  if (found.length || keep.length !== queue.length) await env.DB.put('missed:queue', JSON.stringify([...keep, ...found].slice(-300)));
+  if (log.length) {
+    for (const l of log) console.log(`missed filing requeued: ${l.form} ${l.accession} (CIK ${l.cik}), accepted ${l.accepted}, ${l.minutes_late} min ago`);
+    await env.DB.put('missed:count', String(Number((await env.DB.get('missed:count')) ?? 0) + log.length));
+    await env.DB.put('missed:log', JSON.stringify([...log, ...(JSON.parse((await env.DB.get('missed:log')) ?? '[]') as unknown[])].slice(0, 100)));
+  }
+  return { status: 'checked', read: entries.length, requeued: log.map((l) => `${l.form} ${l.accession}`), queued: keep.length + found.length, ...(errors.length ? { errors } : {}) };
+}
+
 async function eventFeed(type: string, since: number): Promise<FeedEntry[]> {
   const out: FeedEntry[] = [];
   for (let page = 0; page < EVENT_PAGES; page++) {
@@ -1013,6 +1094,7 @@ export async function runEventPoll(env: Env, now: number): Promise<Record<string
       errors.push(String(err));
     }
   }
+  entries.push(...(await missedQueue(env)).filter((e) => !e.form.startsWith('13F-HR')));
   // One filing appears once per party (Reporting/Issuer, Filed by/Subject): group by accession.
   const byAcc = new Map<string, FeedEntry[]>();
   for (const e of entries) if (Date.parse(e.accepted) >= now - MAX_ALERT_AGE_DAYS * DAY) (byAcc.get(e.accession) ?? byAcc.set(e.accession, []).get(e.accession)!).push(e);
@@ -1205,6 +1287,9 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
   secBudget.left = Number(env.SEC_BUDGET ?? 40);
   await step('poll', () => runPoll(env, scheduledTime));
   await step('events_poll', () => runEventPoll(env, scheduledTime));
+  // The missed-filing detector, every 10 minutes whatever else the minute did: it only reads feed
+  // pages with the SEC budget the polls left, and the polls send what it finds from the next minute.
+  if (t.getUTCMinutes() % 10 === 5) await step('missed', () => runMissedDetector(env, scheduledTime));
   // A minute that sent or read filings has spent its CPU on them: the hourly and daily jobs wait for
   // the next quiet minute (one per minute), and webhook retries for the next.
   const count = (x: unknown) => (Array.isArray(x) ? x.length : typeof x === 'number' ? x : 0);

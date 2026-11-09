@@ -169,7 +169,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // Member and revenue counts only with the private token; the public view is operational.
     const priv = await isOperator(env, req);
     const business = priv ? { business: { ...(await businessSummary(env, Date.now())), fund_requests: leads } } : {};
-    return json({ ok: true, alert_latency_summary: summary, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, ...business }, 200, h);
+    // Filings the missed-filing detector found unsent 10+ minutes after acceptance and put back in front of the polls.
+    const missed_recovered = { count: Number((await env.DB.get('missed:count')) ?? 0), recent: (JSON.parse((await env.DB.get('missed:log')) ?? '[]') as unknown[]).slice(0, 10) };
+    return json({ ok: true, alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, ...business }, 200, h);
   }
 
   // The one-click cancellation reason from the follow-up email (and an optional note).

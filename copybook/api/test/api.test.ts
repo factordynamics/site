@@ -1099,6 +1099,41 @@ describe('copybook api', () => {
     expect(items[0].title).toBe('Copybook test');
   });
 
+  it('missed-filing detector: a followed Form 4 pushed off the poll\'s feed page by a burst is requeued after 10 minutes, sent, logged and counted', async () => {
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    await cron(17);
+    await putMember('b', 'buffett@example.com', 'active', ['warren-buffett']);
+    await putFollows('b', { investors: ['warren-buffett'] });
+    const t14 = new Date();
+    t14.setUTCHours(t14.getUTCHours() === 3 ? 4 : t14.getUTCHours(), 14, 0, 0);
+    const at = (min: number) => cron(0, t14.getTime() + (min - 14) * 60_000);
+    await at(4); // the polls' first run seeds them
+    const iso = (min: number) => new Date(t14.getTime() + (min - 14) * 60_000).toISOString();
+    const entry = (acc: string, cik: string, name: string, when: string) => `<entry><title>4 - ${name} (${cik}) (Reporting)</title><updated>${when}</updated><category scheme="https://www.sec.gov/" label="form type" term="4"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
+    // A burst: two full pages of other filers' Form 4s in the last minutes; Berkshire's, accepted at :50 of
+    // the previous hour, is on page 3, past the two pages the minute poll reads.
+    const burst = (from: number) => `<feed>${Array.from({ length: 100 }, (_, i) => entry(`0000111111-26-${String(from + i).padStart(6, '0')}`, '0000111111', 'SOMEONE', iso(12))).join('')}</feed>`;
+    secFiles['feed:4'] = burst(0);
+    secFiles['feed@100:4'] = burst(100);
+    const missed = '0001193125-26-500001';
+    secFiles['feed@200:4'] = `<feed>${entry(missed, '0001067983', 'BERKSHIRE', iso(-10))}</feed>`;
+    sent = [];
+    await at(14);
+    expect(sent).toHaveLength(0);
+    await at(15); // the detector: 25 minutes past acceptance and unsent
+    expect(JSON.parse((await env.DB.get('missed:queue'))!).map((e: { accession: string }) => e.accession)).toEqual([missed]);
+    await at(16); // the next poll sends it
+    expect(sent.filter((m) => m.to[0] === 'buffett@example.com').map((m) => m.subject)).toEqual([expect.stringMatching(/^Buffett Form 4/)]);
+    const health = await (await call('/health')).json();
+    expect(health.missed_recovered).toMatchObject({ count: 1, recent: [{ accession: missed, form: '4', cik: '0001067983', minutes_late: 25 }] });
+    // Next pass: handled now, so the queue empties and nothing is counted twice.
+    sent = [];
+    await at(25);
+    expect(JSON.parse((await env.DB.get('missed:queue'))!)).toEqual([]);
+    expect((await (await call('/health')).json()).missed_recovered.count).toBe(1);
+    expect(sent).toHaveLength(0);
+  });
+
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
     const today = new Date().toISOString().slice(0, 10);
     index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }, { ok: true, slug: 'carl-icahn', cik: '0000921669', manager: 'Carl Icahn', name: 'Icahn Carl C', featured: true, form: '13F-HR', accession: 'q2i', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
