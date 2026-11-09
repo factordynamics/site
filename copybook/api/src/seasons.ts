@@ -32,6 +32,9 @@ export function inFilingWeek(now: number): boolean {
 
 export const deadlineMs = endOf;
 
+/** A deadline as members read it: "Tue Feb 16, 2027". */
+export const deadlineLabel = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).replace(',', '');
+
 /**
  * Where issuer insider history starts: the first day of the quarter whose 13Fs are due next (Jul 1 until
  * the Nov 16 deadline, then Oct 1), so every Form 4 and 13D/G since the latest 13F's quarter began is kept.

@@ -799,7 +799,15 @@ describe('copybook api', () => {
     const r = pauseResumesAt(Date.now());
     const until = new Date(r.at * 1000).toISOString().slice(0, 10);
     // The offer on /me: when it would end, and the deadline it ends before.
-    expect((await (await call('/me', { token })).json()).member.pause_offer).toEqual({ until, quarter: r.quarter, deadline: r.deadline });
+    expect((await (await call('/me', { token })).json()).member.pause_offer).toMatchObject({ until, quarter: r.quarter, deadline: r.deadline, note: 'Monthly plans can pause until 2 weeks before the next 13F deadline.' });
+    // A comped monthly member (the critics) can pause too; a yearly one can't, and /me and /pause agree.
+    await env.DB.put('cus:cus_comp', JSON.stringify({ customer: 'cus_comp', email: 'comp@example.com', status: 'active', plan: 'copy', interval: 'monthly', comped: true, subscription: 'sub_comp', alerts: [] }));
+    await env.DB.put('cus:cus_yr', JSON.stringify({ customer: 'cus_yr', email: 'yr@example.com', status: 'active', plan: 'copy', interval: 'yearly', subscription: 'sub_yr', alerts: [] }));
+    const { pauseOffer } = await import('../src/revenue');
+    expect(pauseOffer(JSON.parse((await env.DB.get('cus:cus_comp'))!))?.until).toBe(until);
+    expect(pauseOffer(JSON.parse((await env.DB.get('cus:cus_yr'))!))).toBeNull();
+    await env.DB.delete('cus:cus_comp');
+    await env.DB.delete('cus:cus_yr');
     expect(r.at * 1000).toBe(deadlineMs(r.deadline) - 14 * 86400_000);
     // Stripe applies pause_collection to the same subscription; a scheduled cancellation is lifted.
     stripeObjects['subscriptions/sub_pz'] = { ...sub('sub_pz', 'cus_pz', 'active'), cancel_at_period_end: true };
@@ -863,7 +871,7 @@ describe('copybook api', () => {
     const winAt = deadlineMs(r.deadline) - 10 * 86400_000;
     expect(await runSeasonal(env, winAt)).toMatchObject({ winbacks: 1 });
     expect(sent.map((m) => m.to[0])).toEqual(['gone@example.com']);
-    expect(sent[0].subject).toMatch(/13Fs are due /);
+    expect(sent[0].subject).toMatch(/13Fs are due (Mon|Tue|Wed|Thu|Fri) [A-Z][a-z]{2} \d{1,2}, 20\d\d:/);
     expect(sent[0].text).toContain('Warren Buffett bought $26.9M of SIRI (Form 4)');
     expect(sent[0].text).toMatch(/Start again: https:\/\/\S+\/resume\?t=/);
     sent = [];

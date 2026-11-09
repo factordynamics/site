@@ -1,11 +1,12 @@
 import { addToFeed, flushChannelLatency, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
-import { countAlerts, logSent, runRevenue } from './revenue';
+import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
 import { companyFilings, computeMoves, displayCase, implausibleMove, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
-import { isActive, type Env, type Member } from './env';
+import { isActive, isPaused, type Env, type Member } from './env';
 import { getFollows, listMembers, putMember, type Follows } from './members';
+import { unsubscribeUrl } from './free';
 
 /** A filing dated more than this many days ago never triggers an email, whatever the data says. */
 export const MAX_ALERT_AGE_DAYS = 3;
@@ -274,7 +275,7 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
 }
 
 /** Each member's share of these alerts: email (unless they take the digest), chat, webhook and feed. */
-async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: number, late: AlertEvent[], only?: Set<string>): Promise<{ emails: number; digest: number; mail: string; late?: number; chats?: string }> {
+async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: number, late: AlertEvent[], only?: Set<string>): Promise<{ emails: number; digest: number; mail: string; late?: number; chats?: string; paused_notes?: number }> {
   const meta = await filerMeta(env);
   filings = await withCards(env, filings);
   const mails = [];
@@ -284,7 +285,21 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   // by several members, such as a Fund team's Slack, gets each alert once.
   const posted = new Set<string>();
   let digest = 0;
+  // Paused members' followed funds that filed a 13F: one "resume now" note per member per ET day.
+  const pausedNotes: { m: Member; key: string }[] = [];
+  const news = filings.filter((x) => !x.followup && !x.reveal);
   for (const raw of await listMembers(env)) {
+    if (!only && news.length && isPaused(raw, now) && raw.status === 'active' && raw.email && raw.alerts !== 'off' && raw.plan !== 'holdterm' && !raw.marketing_off) {
+      const f = await getFollows(env, raw);
+      const funds = new Set([...(Array.isArray(raw.alerts) ? raw.alerts : []), ...f.investors]);
+      const hit = news.filter((x) => (raw.alerts === 'all' && !x.extra) || x.slugs.some((s) => funds.has(s)));
+      const key = `pausenote:${raw.customer}:${etDay(now)}`;
+      if (hit.length && !(await env.DB.get(key))) {
+        mails.push(pausedFilingMail(raw, hit, await resumeUrl(env, raw), await unsubscribeUrl(env, raw.customer)));
+        pausedNotes.push({ m: raw, key });
+      }
+      continue;
+    }
     if (!isActive(raw) || !raw.email || raw.alerts === 'off' || (only && !only.has(raw.customer))) continue;
     if (raw.plan === 'holdterm') {
       // Holdterm members get Holdterm-branded alerts, never Copybook's.
@@ -315,7 +330,8 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   await logSent(env, mails.length, now);
   await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
-  return { emails: mails.length, digest, mail, ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
+  for (const p of pausedNotes) await env.DB.put(p.key, '1', { expirationTtl: 2 * 86400 });
+  return { emails: mails.length, digest, mail, ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }
 
 type Delivered = { day: string; ids: string[] }[];

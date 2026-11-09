@@ -3,7 +3,7 @@ import { FOOTER, sendMail, type Mail } from './email';
 import { isActive, isPaused, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
 import { getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
-import { DEADLINES, deadlineMs, inFilingWeek, lastDeadline, pauseResumesAt } from './seasons';
+import { DEADLINES, deadlineLabel, deadlineMs, inFilingWeek, lastDeadline, nextDeadline, pauseResumesAt } from './seasons';
 import { stripe } from './stripe';
 import { signToken, verifyToken } from './tokens';
 
@@ -413,11 +413,19 @@ export async function businessSummary(env: Env, now: number) {
 
 const isoDay = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
 
-/** Who can pause: a paying monthly member (not a trial, a seat, a comp or Holdterm) not already paused. */
-export function pauseOffer(m: Member, now = Date.now()): { until: string; quarter: string; deadline: string } | null {
-  if (!billable(m) || m.status !== 'active' || m.interval !== 'monthly' || isPaused(m, now)) return null;
+/**
+ * Who can pause: a monthly Copy, Pro or Fund owner on their own subscription, after the trial. Comped and
+ * test members can too (critics try it); Holdterm, seats and yearly plans can't. /me's pause_offer and POST
+ * /pause both use this.
+ */
+const pausable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !!PRICES[m.plan] && !!m.subscription && m.interval === 'monthly';
+
+export const PAUSE_NOTE = 'Monthly plans can pause until 2 weeks before the next 13F deadline.';
+
+export function pauseOffer(m: Member, now = Date.now()): { until: string; quarter: string; deadline: string; deadline_label: string; note: string } | null {
+  if (!pausable(m) || m.status !== 'active' || isPaused(m, now)) return null;
   const r = pauseResumesAt(now);
-  return { until: isoDay(r.at), quarter: r.quarter, deadline: r.deadline };
+  return { until: isoDay(r.at), quarter: r.quarter, deadline: r.deadline, deadline_label: deadlineLabel(r.deadline), note: PAUSE_NOTE };
 }
 
 /** Stores the one cancellation question's answer (from /account/ or the email); counted in business.cancel_reasons. */
@@ -434,7 +442,7 @@ export async function noteReason(env: Env, customer: string, reason: string, via
  */
 export async function pauseMember(env: Env, m: Member, reason: string | null, now = Date.now()): Promise<{ status: number; body: Record<string, unknown> }> {
   const offer = pauseOffer(m, now);
-  if (!offer) return { status: 409, body: { ok: false, error: isPaused(m, now) ? 'Already paused' : 'Pausing is for monthly plans after the trial; cancel in Manage billing instead', code: 'pause_unavailable' } };
+  if (!offer) return { status: 409, body: { ok: false, error: isPaused(m, now) ? 'Already paused' : m.status === 'trialing' ? 'Monthly plans can pause after the trial; cancel in Manage billing instead' : 'Monthly plans can pause; yearly, seat and Holdterm plans cancel in Manage billing instead', code: 'pause_unavailable' } };
   if (reason && !(await noteReason(env, m.customer, reason, 'pause'))) return { status: 400, body: { ok: false, error: `reason: ${Object.keys(WHY).join(', ')}`, code: 'bad_request' } };
   const at = pauseResumesAt(now).at;
   const sub = await stripe(env, 'POST', `subscriptions/${m.subscription}`, { 'pause_collection[behavior]': 'void', 'pause_collection[resumes_at]': at, cancel_at_period_end: 'false' });
@@ -453,12 +461,13 @@ export async function unpauseMember(env: Env, m: Member): Promise<{ status: numb
 /** 3 days before a pause ends (and the paused member's pre-season note): when alerts restart, and last season in their names. */
 export function pauseReminderMail(env: Env, m: Member, highlights: string[] = []): Mail {
   const back = day(m.paused_until!);
+  const due = deadlineLabel(nextDeadline(m.paused_until! * 1000).date);
   const p = PRICES[m.plan];
   const last = highlights.length ? `Last season in your names:\n${highlights.map((h) => `  - ${h}`).join('\n')}\n\n` : '';
   return {
     to: m.email,
     subject: `Your Copybook alerts restart on ${back}, before the 13F deadline`,
-    text: `Your ${p?.name ?? 'Copybook'} pause ends on ${back}, two weeks before the next 13F deadline. Alerts, history and CSV come back that day with your follows and settings as you left them, and your plan stays at ${p ? money(p.month) : 'the same price'} a month. Billing resumes then.\n\n${last}Want to stay paused, or cancel? ${env.SITE_URL}account/ (Manage billing).${FOOTER}`,
+    text: `Your ${p?.name ?? 'Copybook'} pause ends on ${back}, two weeks before the next 13F deadline (${due}). Alerts, history and CSV come back that day with your follows and settings as you left them, and your plan stays at ${p ? money(p.month) : 'the same price'} a month. Billing resumes then.\n\n${last}Want to stay paused, or cancel? ${env.SITE_URL}account/ (Manage billing).${FOOTER}`,
   };
 }
 
@@ -476,8 +485,29 @@ async function seasonHighlights(names: string[], week: import('./free').Week): P
   return out;
 }
 
+/**
+ * A followed fund filed its 13F while the member is paused (early filers come weeks before the season):
+ * one note per filing day, with the one-click resume of the same subscription. Real-time alerts stay off.
+ */
+export function pausedFilingMail(m: Member, filings: Pick<Alert13F, 'manager' | 'quarter' | 'accepted' | 'filing_date'>[], resume: string, unsub: string): Mail {
+  const q = (x: string, year = false) => x.replace(/^(\d{4})Q(\d)$/, year ? 'Q$2 $1' : 'Q$2');
+  const at = (x: (typeof filings)[number]) => (x.accepted ? `${new Date(x.accepted).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET` : x.filing_date);
+  const back = day(m.paused_until!);
+  return {
+    to: m.email,
+    subject: `${filings[0].manager} filed its ${q(filings[0].quarter)} 13F · resume now to see the moves`,
+    text: `${filings.map((x) => `${x.manager} filed its ${q(x.quarter, true)} 13F (accepted ${at(x)}).`).join('\n')}\n\nYou're paused until ${back}, so the moves aren't in your inbox. Resume now to get them, with your follows and price as you left them (one click, same subscription; billing picks up from your next billing date):\n${resume}\n\nOr stay paused: alerts restart on ${back} and billing resumes then.\n\nUnsubscribe from tips and reminders: ${unsub}${FOOTER}`,
+    unsubscribe: unsub,
+  };
+}
+
+/** The resume button's link: ends a pause on the same subscription, or starts a new monthly one after a cancel. */
+export async function resumeUrl(env: Env, m: Member): Promise<string> {
+  return `${API(env)}resume?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, 30 * 86400))}`;
+}
+
 export function preseasonMail(env: Env, m: Member, deadline: string, quarter: string, highlights: string[], resume: string | null, unsub: string): Mail {
-  const due = new Date(`${deadline}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+  const due = deadlineLabel(deadline);
   const q = quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1');
   const p = PRICES[m.plan];
   const last = highlights.length ? `Last season in your names:\n${highlights.map((h) => `  - ${h}`).join('\n')}\n\n` : '';
@@ -512,7 +542,7 @@ export async function runSeasonal(env: Env, now: number): Promise<Record<string,
     return seasonHighlights([...new Set([...f.owned, ...f.stocks])], week);
   };
   // Paused: 3 days before alerts restart (14 days before the deadline), with last season in their names.
-  const reminders = all.filter((m) => billable(m) && m.email && m.paused_until && isPaused(m, now) && m.pause_reminded !== m.paused_until && m.paused_until * 1000 - now <= 3 * 86400_000);
+  const reminders = all.filter((m) => pausable(m) && m.email && m.paused_until && isPaused(m, now) && m.pause_reminded !== m.paused_until && m.paused_until * 1000 - now <= 3 * 86400_000);
   for (const m of reminders) {
     mails.push(pauseReminderMail(env, m, await names(m)));
     marks.push({ customer: m.customer, patch: { pause_reminded: m.paused_until } });
@@ -523,7 +553,7 @@ export async function runSeasonal(env: Env, now: number): Promise<Record<string,
   if (d) {
     const back = new Set(all.filter((m) => isActive(m) && billable(m)).map((m) => m.email));
     const who = all.filter(
-      (m) => billable(m) && m.email && !m.marketing_off && m.preseason_sent !== d.quarter && !back.has(m.email) &&
+      (m) => (billable(m) || (pausable(m) && isPaused(m, now))) && m.email && !m.marketing_off && m.preseason_sent !== d.quarter && !back.has(m.email) &&
         (isPaused(m, now) || (m.status === 'canceled' && (m.period_end ?? 0) * 1000 > now - 400 * 86400_000)),
     );
     for (const m of who) {
