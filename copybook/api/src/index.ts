@@ -85,6 +85,11 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
       console.log(`referral: ${await rewardReferrer(env, obj)}`);
       break;
     }
+    case 'invoice.payment_failed': {
+      const { paymentFailed } = await import('./revenue');
+      console.log(`dunning: ${await paymentFailed(env, obj)}`);
+      break;
+    }
   }
   return json({ ok: true }, 200, {});
 }
@@ -436,7 +441,24 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const free = fr ? { free_names: { names, limit: 5, ...(await (await import('./free')).freeTeaser(env, names, Date.now()).catch(() => ({ facts: [], hook: null, more: 0 }))) } } : {};
     // A Fund seat sees who to ask about billing: the plan owner's email.
     const owner = m.seat_of ? { owner: (await getMember(env, m.seat_of))?.email ?? null } : {};
-    return json({ ok: true, member: { ...publicView(m), ...owner, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, h);
+    const { pauseOffer } = await import('./revenue');
+    return json({ ok: true, member: { ...publicView(m), ...owner, pause_offer: pauseOffer(m), channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, h);
+  }
+
+  // Seasonal pause instead of cancelling: POST /pause {reason?} pauses billing and alerts until 14 days before the
+  // next 13F deadline; DELETE /pause ends it now. POST /cancel-reason {reason, note?} stores the one cancellation question.
+  if (path === '/pause' && (req.method === 'POST' || req.method === 'DELETE')) {
+    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    const { pauseMember, unpauseMember } = await import('./revenue');
+    const b = req.method === 'POST' ? await body(req) : {};
+    const r = req.method === 'POST' ? await pauseMember(env, m, typeof b.reason === 'string' ? b.reason : null) : await unpauseMember(env, m);
+    return json(r.body, r.status, h);
+  }
+  if (req.method === 'POST' && path === '/cancel-reason') {
+    const { noteReason, WHY } = await import('./revenue');
+    const b = await body(req);
+    const ok = await noteReason(env, m.customer, String(b.reason ?? ''), 'account', typeof b.note === 'string' ? b.note.trim() : undefined);
+    return ok ? json({ ok: true }, 200, h) : json({ ok: false, error: `reason: ${Object.keys(WHY).join(', ')}`, code: 'bad_request' }, 400, h);
   }
 
   if (req.method === 'POST' && path === '/portal') {

@@ -39,6 +39,7 @@ function mirror(owner: Member, seat: Seat, prev?: Member | null): Member {
     subscription: owner.subscription,
     cancel_at_period_end: owner.cancel_at_period_end ?? false,
     cancel_at: owner.cancel_at ?? null,
+    paused_until: owner.paused_until ?? null,
     // Seats alert on the shared follows unless they choose otherwise.
     alerts: prev?.alerts ?? [],
     alerts_chosen: prev?.alerts_chosen,

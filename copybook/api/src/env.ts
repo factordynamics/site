@@ -108,6 +108,14 @@ export interface Member {
   winback_sent?: string;
   /** Referral: the code that brought this member, and the referrer's customer id. */
   referred_by?: string | null;
+  /** Paused between filing seasons (Stripe pause_collection): unix seconds when alerts and access come back. */
+  paused_until?: number | null;
+  /** The 3-days-before reminder, sent for this paused_until. */
+  pause_reminded?: number | null;
+  /** The pre-season win-back, sent for this season (the quarter whose 13Fs are due next). */
+  preseason_sent?: string;
+  /** Failed-payment email, sent for this invoice. */
+  dunning_sent?: string;
 }
 
 export const ACTIVE = new Set(['active', 'trialing', 'past_due']);
@@ -122,6 +130,11 @@ export function isCopy(m: Member | null): m is Member {
   return isActive(m) && m.plan !== 'holdterm';
 }
 
+/** Paused until the next season: Stripe still says active, but no alerts or paid features until paused_until. */
+export function isPaused(m: Member | null, now = Date.now()): boolean {
+  return !!m?.paused_until && m.paused_until * 1000 > now;
+}
+
 export function isActive(m: Member | null): m is Member {
-  return !!m && ACTIVE.has(m.status);
+  return !!m && ACTIVE.has(m.status) && !isPaused(m);
 }

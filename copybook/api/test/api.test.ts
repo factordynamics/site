@@ -16,6 +16,9 @@ import form4BuffettGift from './fixtures/form4-brk-buffett-gift.txt?raw';
 import sc13dBrkA from './fixtures/sc13da-brk-class-a.xml?raw';
 import { quarterStart } from '../src/seasons';
 import { computeMoves, displayCase } from '../src/edgar';
+import { runSeasonal } from '../src/revenue';
+import { signToken } from '../src/tokens';
+import { pauseResumesAt, deadlineMs } from '../src/seasons';
 import form4Csgp from './fixtures/form4-csgp-florance-buy.txt?raw';
 import { cleanItem4, parseSchedule13 } from '../src/edgar';
 
@@ -732,12 +735,14 @@ describe('copybook api', () => {
     const buys = w.text.slice(w.text.indexOf('Biggest buys'), w.text.indexOf('Biggest sells'));
     expect([...buys.matchAll(/^ {2}(\S[^:]*):/gm)].map((m) => m[1])).toEqual(['Warren Buffett', 'Warren Buffett', 'Bill Ackman', 'ICICI Prudential', 'ICICI Prudential']);
     expect(buys).toContain(`Warren Buffett: added GOOGL, +$8.8B (13F Q3 2026)\n    ${SITE}f/0000950123-26-011111/`);
-    for (const no of ['X3', 'IVV', ', LLC', 'VVV', 'Vanguard', 'OLDX', 'PUTX', '$77.0B', 'gift', '$50.0K']) expect(w.text).not.toContain(no);
+    // The body only: the unsubscribe token is random base64 and can contain any of these.
+    const body = w.text.slice(0, w.text.indexOf('Unsubscribe:'));
+    for (const no of ['X3', 'IVV', ', LLC', 'VVV', 'Vanguard', 'OLDX', 'PUTX', '$77.0B', 'gift', '$50.0K']) expect(body).not.toContain(no);
     expect(w.text.indexOf('BAC')).toBeLessThan(w.text.indexOf('STZ'));
-    expect(w.text).not.toMatch(/sold out (XOM|CVX)|CVX/); // netted: an added XOM, and CVX unchanged
+    expect(body).not.toMatch(/sold out (XOM|CVX)|CVX/); // netted: an added XOM, and CVX unchanged
     // Impossible and flagged moves never show; an all-caps filer name reads normally.
     expect(w.text).toContain('Guardcap Asset Management: trimmed ILMN, −$16.1M');
-    expect(w.text).not.toMatch(/BKNG|CME|GUARDCAP/);
+    expect(body).not.toMatch(/BKNG|CME|GUARDCAP/);
     vi.stubGlobal('fetch', realFetch);
     const unsub = w.text.match(/Unsubscribe: (\S+)/)![1];
     expect((w as unknown as { headers: Record<string, string> }).headers['List-Unsubscribe']).toBe(`<${unsub}>`);
@@ -781,6 +786,96 @@ describe('copybook api', () => {
     expect(go.headers.get('location')).toBe('https://checkout.stripe.com/c/pay/cs_x');
     expect(checkout).toContain('customer=wb');
     expect(checkout).toContain('line_items[0][price]=price_copy_monthly');
+  });
+
+  it('seasonal churn defense: pause until 2 weeks before the next deadline instead of cancelling, a reminder with last season, a pre-season win-back for lapsed members, failed-payment email', async () => {
+    index = { managers: [{ slug: 'warren-buffett', featured: true }] };
+    stripeObjects['checkout/sessions/cs_test_pz'] = { id: 'cs_test_pz', status: 'complete', created: now(), subscription: 'sub_pz', customer_details: { email: 'pz@example.com' } };
+    stripeObjects['subscriptions/sub_pz'] = sub('sub_pz', 'cus_pz', 'active');
+    const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_pz' } })).json()) as { token: string };
+    await call('/follows/owned/SIRI', { method: 'POST', token });
+    const r = pauseResumesAt(Date.now());
+    const until = new Date(r.at * 1000).toISOString().slice(0, 10);
+    // The offer on /me: when it would end, and the deadline it ends before.
+    expect((await (await call('/me', { token })).json()).member.pause_offer).toEqual({ until, quarter: r.quarter, deadline: r.deadline });
+    expect(r.at * 1000).toBe(deadlineMs(r.deadline) - 14 * 86400_000);
+    // Stripe applies pause_collection to the same subscription; a scheduled cancellation is lifted.
+    stripeObjects['subscriptions/sub_pz'] = { ...sub('sub_pz', 'cus_pz', 'active'), cancel_at_period_end: true };
+    const posted: string[] = [];
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u) === 'https://api.stripe.com/v1/subscriptions/sub_pz' && init?.method === 'POST') {
+        const b = new URLSearchParams(String(init.body));
+        posted.push(String(init.body));
+        const paused = b.get('pause_collection[behavior]') ? { behavior: b.get('pause_collection[behavior]'), resumes_at: Number(b.get('pause_collection[resumes_at]')) } : null;
+        stripeObjects['subscriptions/sub_pz'] = { ...sub('sub_pz', 'cus_pz', 'active'), pause_collection: paused, cancel_at_period_end: b.get('cancel_at_period_end') === 'false' ? false : (stripeObjects['subscriptions/sub_pz'] as { cancel_at_period_end?: boolean }).cancel_at_period_end };
+        return Response.json(stripeObjects['subscriptions/sub_pz']);
+      }
+      return orig(u, init);
+    });
+    expect((await call('/pause', { body: { reason: 'nope' }, token })).status).toBe(400);
+    const p = await call('/pause', { body: { reason: 'temporary' }, token });
+    expect([p.status, (await p.json()).paused_until]).toEqual([200, until]);
+    expect(posted.at(-1)).toContain(`pause_collection%5Bresumes_at%5D=${r.at}`);
+    expect(posted.at(-1)).toContain('cancel_at_period_end=false');
+    expect(JSON.parse((await env.DB.get('why:cus_pz'))!)).toMatchObject({ reason: 'temporary', via: 'pause' });
+    // Paused: the account and follows are kept, paid features and alerts stop until then.
+    const me = (await (await call('/me', { token })).json()).member;
+    expect([me.status, me.active, me.paused_until, me.pause_offer]).toEqual(['active', false, r.at, null]);
+    expect((await call('/history/warren-buffett', { token })).status).toBe(402);
+    expect((await call('/pause', { body: {}, token })).status).toBe(409);
+    expect(JSON.parse((await env.DB.get('follows:cus_pz'))!).owned).toEqual(['SIRI']);
+
+    // 3 days before it ends: one reminder, with last season's superinvestor move in their names.
+    await hist.put('pre/events.json', JSON.stringify({ events: [{ id: 'brk-siri', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-03', accepted: '2026-11-04T02:30:04Z', ticker: 'SIRI', value_usd: 26894245 }] }));
+    sent = [];
+    const remindAt = r.at * 1000 - 2 * 86400_000;
+    expect(await runSeasonal(env, remindAt)).toMatchObject({ reminders: 1, winbacks: 0 });
+    expect(sent.map((m) => m.to[0])).toEqual(['pz@example.com']);
+    expect(sent[0].subject).toMatch(/^Your Copybook alerts restart on /);
+    expect(sent[0].text).toContain('Last season in your names:\n  - Warren Buffett bought $26.9M of SIRI (Form 4)');
+    sent = [];
+    await runSeasonal(env, remindAt + 3600_000);
+    expect(sent).toHaveLength(0); // once per pause
+
+    // An old \"start again\" link while paused ends the pause on the same subscription; no second checkout.
+    const rt = await signToken(env.SESSION_SECRET, 'resume', 'cus_pz', 3600);
+    const go = await handleRequest(new Request(`https://api.test/resume?t=${encodeURIComponent(rt)}`), env);
+    expect([go.status, go.headers.get('location')]).toEqual([303, `${SITE}account/?resumed=1`]);
+    expect(posted.at(-1)).toBe('pause_collection=');
+    // Back early from /account/: same subscription, no second one.
+    await call('/pause', { body: {}, token });
+    expect((await call('/pause', { method: 'DELETE', token })).status).toBe(200);
+    expect((await (await call('/me', { token })).json()).member).toMatchObject({ active: true, paused_until: null });
+    expect(posted.at(-1)).toBe('pause_collection=');
+    vi.stubGlobal('fetch', orig);
+
+    // One cancellation-reason answer from /account/, counted in the business summary.
+    expect((await call('/cancel-reason', { body: { reason: 'price', note: 'too much for me' }, token })).status).toBe(200);
+    expect(JSON.parse((await env.DB.get('why:cus_pz'))!)).toMatchObject({ reason: 'price', via: 'account', note: 'too much for me' });
+
+    // Pre-season: a lapsed member gets one win-back with a resume link and last season in their names; a paying member doesn't.
+    await env.DB.put('cus:cus_gone', JSON.stringify({ customer: 'cus_gone', email: 'gone@example.com', status: 'canceled', plan: 'copy', interval: 'monthly', period_end: Math.floor(r.at - 60 * 86400), subscription: 'sub_gone', alerts: [], welcomed: true }));
+    await putFollows('cus_gone', { owned: ['SIRI'] });
+    sent = [];
+    const winAt = deadlineMs(r.deadline) - 10 * 86400_000;
+    expect(await runSeasonal(env, winAt)).toMatchObject({ winbacks: 1 });
+    expect(sent.map((m) => m.to[0])).toEqual(['gone@example.com']);
+    expect(sent[0].subject).toMatch(/13Fs are due /);
+    expect(sent[0].text).toContain('Warren Buffett bought $26.9M of SIRI (Form 4)');
+    expect(sent[0].text).toMatch(/Start again: https:\/\/\S+\/resume\?t=/);
+    sent = [];
+    await runSeasonal(env, winAt + 86400_000);
+    expect(sent).toHaveLength(0); // once per season
+
+    // A failed payment: one email with Stripe's hosted page to update the card and pay, once per invoice.
+    const inv = { id: 'in_fail', customer: 'cus_pz', amount_due: 900, hosted_invoice_url: 'https://invoice.stripe.com/i/acct_x/test_fail', next_payment_attempt: now() + 3 * 86400 };
+    sent = [];
+    await webhook({ type: 'invoice.payment_failed', data: { object: inv } });
+    await webhook({ type: 'invoice.payment_failed', data: { object: inv } });
+    expect(sent.map((m) => m.subject)).toEqual(["Your Copy payment didn't go through"]);
+    expect(sent[0].text).toContain('$9.00');
+    expect(sent[0].text).toContain('https://invoice.stripe.com/i/acct_x/test_fail');
   });
 
   it('alert moves: a unit mismatch between quarters is never sent (GuardCap BKNG); real trades are', () => {
@@ -1446,13 +1541,14 @@ describe('copybook api', () => {
 
     // Chat failures. Discord asks to wait 150 s (429), Slack answers 500 every time, Telegram's bot was removed (404).
     const at47 = new Date();
-    at47.setUTCHours(at47.getUTCHours() === 3 ? 4 : at47.getUTCHours(), 47, 0, 0);
+    // Not hour 3 (the digest job's), and the hour of replays below must stay in today's ET day (it ends at 05:00 UTC) for the feed seed.
+    at47.setUTCHours([3, 4].includes(at47.getUTCHours()) ? 2 : at47.getUTCHours(), 47, 0, 0);
     const minute = (n: number) => cron(0, at47.getTime() + n * 60_000);
     chatReplies = { 'discord.com': [{ status: 429, body: { retry_after: 150, global: false } }], 'hooks.slack.com': Array(4).fill({ status: 500 }), 'api.telegram.org': [{ status: 404, body: { ok: false } }] };
     posts = [];
     sent = [];
     events = [ev('seed'), ev('C1'), ev('C2')];
-    await cron(47);
+    await minute(0); // the events job (minute 47), on the same clock as the retries below
     const stopped = () => sent.filter((m) => m.to[0] === 'chan@example.com' && /alerts stopped/.test(m.subject)).map((m) => m.subject);
     // The email alert still goes out; Telegram is flagged at once with one notice; the others wait to retry.
     expect(sent.some((m) => m.to[0] === 'chan@example.com' && /SIRI/.test(m.subject))).toBe(true);

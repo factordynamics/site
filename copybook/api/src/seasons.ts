@@ -40,3 +40,12 @@ export function quarterStart(now: number): string {
   const [y, q] = nextDeadline(now).quarter.split('Q').map(Number);
   return `${y}-${String((q - 1) * 3 + 1).padStart(2, '0')}-01T00:00:00Z`;
 }
+
+/**
+ * Where a pause between seasons ends: 14 days before the next 13F deadline that is still more than 14 days
+ * away (Nov 9, 2026 -> Feb 2, 2027, two weeks before the Feb 16 deadline). Unix seconds.
+ */
+export function pauseResumesAt(now: number): { at: number; quarter: string; deadline: string } {
+  const d = DEADLINES.find((x) => endOf(x.date) - 14 * DAY > now) ?? DEADLINES[DEADLINES.length - 1];
+  return { at: Math.floor((endOf(d.date) - 14 * DAY) / 1000), quarter: d.quarter, deadline: d.date };
+}

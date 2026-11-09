@@ -149,8 +149,8 @@ const MAX_CARDS = 30;
  * lists) and every Form 4 and 13D/G by a curated filer (pre/events.json, the hourly events build).
  * Superinvestors rank first, each fund at most 2 rows, index and broker flow left out.
  */
-export async function weeklyMoves(env: Env, now: number): Promise<Week> {
-  const since = now - 7 * 86400_000;
+export async function weeklyMoves(env: Env, now: number, days = 7): Promise<Week> {
+  const since = now - days * 86400_000;
   const sinceDay = etDay(since);
   const get = async (url: string) => {
     try {
