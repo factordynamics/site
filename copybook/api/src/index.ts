@@ -101,6 +101,8 @@ interface LatencyRow {
   sent: string;
   seconds: number;
   replay?: boolean;
+  /** Rows from before the tag are curated managers' (the poll timed only those). */
+  coverage?: 'curated' | 'any_filer';
 }
 
 /** The quarter whose filings are coming in at `t`: Q3 filings arrive Oct-Dec, and so on. */
@@ -150,12 +152,14 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     count: all.count,
     by_form: group(rows, (l) => family(formOf(l)), (l) => l.seconds),
     by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },
-    recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
+    by_coverage: group(rows, (l) => l.coverage ?? 'curated', (l) => l.seconds),
+    recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, coverage: l.coverage ?? 'curated', accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
     alerts: rows.map((l) => ({
       slug: l.slug,
       manager: l.manager ?? null,
       quarter: l.quarter ?? null,
       form: formOf(l),
+      coverage: l.coverage ?? 'curated',
       accession: l.accession,
       accepted_at: l.accepted,
       sent_at: l.sent,

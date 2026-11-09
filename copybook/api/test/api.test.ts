@@ -517,7 +517,7 @@ describe('copybook api', () => {
     expect(mail.text).not.toContain(REST);
     expect(mail.html).toMatch(/<td[^>]*><b>DHI<\/b> \[you own\]<\/td><td[^>]*>40,000,000<\/td><td[^>]*>\$6\.0B<\/td><td[^>]*>19\.0%<\/td>/);
     const lat = JSON.parse((await env.DB.get('alerts:latency'))!);
-    expect(lat[0]).toMatchObject({ accession: NEWH, form: '13F-HR/A' });
+    expect(lat[0]).toMatchObject({ accession: NEWH, form: '13F-HR/A', coverage: 'curated' });
 
     // Handled once: the next minute sends nothing.
     sent = [];
@@ -1108,6 +1108,8 @@ describe('copybook api', () => {
     expect(t).toMatch(/Trimmed: NVDA -\$8K/); // 40 shares sold at this quarter's $200
     expect(t).toMatch(/Exited: BE -\$5K/);
     expect(t).toContain('investors/situational-awareness-lp-5724');
+    // Timed for /latency like a curated manager's, tagged as any filer's.
+    expect(JSON.parse((await env.DB.get('alerts:latency'))!).find((l: { accession: string }) => l.accession === sa)).toMatchObject({ coverage: 'any_filer', slug: 'situational-awareness-lp-5724' });
     // No earlier quarter for Altimeter: its largest holdings, NVDA first.
     expect(t).toMatch(/Largest holdings:\n\s+NVIDIA CORP \$90K, SNOWFLAKE INC \$70K/);
     const handled = JSON.parse((await env.DB.get('alerts:handled'))!) as string[];
@@ -1664,7 +1666,7 @@ describe('copybook api', () => {
     const t = Date.now();
     const row = (acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q3', kind: '13f', accession: acc, accepted: new Date(t - seconds * 1000).toISOString(), sent: new Date(t).toISOString(), seconds, ...extra });
     // Newest first, as logged; one replay; one from last season.
-    await env.DB.put('alerts:latency', JSON.stringify([row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' })]));
+    await env.DB.put('alerts:latency', JSON.stringify([row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60, { coverage: 'any_filer', slug: 'whale-rock-capital-management-llc' }), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' })]));
     const d = (channel: string, acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ channel, accession: acc, form: '13F-HR', manager: 'Warren Buffett', accepted: new Date(t - seconds * 1000).toISOString(), delivered: new Date(t).toISOString(), seconds, ...extra });
     await env.DB.put('alerts:latency:ch', JSON.stringify([d('slack', 'A1', 41), d('slack', 'A3', 61), d('slack', 'A2', 101, { form: '4' }), d('discord', 'A1', 43), d('slack', 'OLD', 9, { delivered: '2025-01-02T00:00:00Z' })]));
     const lat = await (await call('/latency')).json();
@@ -1672,8 +1674,10 @@ describe('copybook api', () => {
     // Per form family and per channel (email: acceptance to the mailer; chat: to the first successful post), this season only.
     expect(lat.by_form).toEqual({ '13F': { count: 2, median_seconds: 40, p90_seconds: 60 }, 'Form 4': { count: 1, median_seconds: 100, p90_seconds: 100 } });
     expect(lat.by_channel).toEqual({ email: { count: 3, median_seconds: 60, p90_seconds: 100 }, slack: { count: 3, median_seconds: 61, p90_seconds: 101 }, discord: { count: 1, median_seconds: 43, p90_seconds: 43 } });
+    // Any filer's 13F is timed too (followed, peers, linked books), tagged apart; untagged rows are curated.
+    expect(lat.by_coverage).toEqual({ curated: { count: 2, median_seconds: 40, p90_seconds: 100 }, any_filer: { count: 1, median_seconds: 60, p90_seconds: 60 } });
     expect(lat.recent.map((r: { accession: string }) => r.accession)).toEqual(['A1', 'A2', 'A3']);
-    expect(lat.recent[1]).toEqual({ form: '4', manager: 'Warren Buffett', slug: 'warren-buffett', accession: 'A2', accepted_at: expect.any(String), delivered_at: expect.any(String), seconds: 100, channel: 'email' });
+    expect(lat.recent[1]).toEqual({ form: '4', manager: 'Warren Buffett', slug: 'warren-buffett', coverage: 'curated', accession: 'A2', accepted_at: expect.any(String), delivered_at: expect.any(String), seconds: 100, channel: 'email' });
     expect(lat.alerts.map((a: { accession: string }) => a.accession)).toEqual(['A1', 'A2', 'A3']);
     expect(lat.alerts[1]).toMatchObject({ form: '4', gap_seconds: 100, manager: 'Warren Buffett' });
     expect(lat.alerts[0].form).toBe('13F-HR');
