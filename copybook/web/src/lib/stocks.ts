@@ -88,6 +88,19 @@ export type Flow = {
 
 export type SeasonRow = Pick<FlowRow, 'ticker' | 'name' | 'net_value' | 'buy_value' | 'sell_value' | 'n_buyers' | 'n_sellers' | 'buyers' | 'sellers'> & { etf?: boolean }
 export type SeasonFlow = { funds: number; bought: SeasonRow[]; sold: SeasonRow[]; most_buyers: SeasonRow[] }
+export type Expected = {
+  slug: string
+  manager: string
+  expected_date: string
+  /** EDGAR business days before the deadline (0 = deadline day). */
+  days_before: number
+  /** Minutes after midnight, New York time. */
+  time_et: number
+  /** All four within a business day of each other. */
+  steady: boolean
+  history: { quarter: string; accepted_at: string; days_before: number }[]
+  filed?: { filing_date?: string; accession?: string }
+}
 export type Season = {
   quarter: string
   deadline: string
@@ -97,6 +110,8 @@ export type Season = {
   by_day: { date: string; count: number }[]
   latest: { slug: string; manager: string; firm: string; filing_date?: string; accession?: string; featured: boolean; total_value?: number; changes: Record<string, number> | null }[]
   splits?: { ticker: string; name: string; ratio: string }[]
+  /** Superinvestors' usual filing day and time, from their last four 13Fs. */
+  expected?: Expected[]
   featured_flow: SeasonFlow
   all_flow: SeasonFlow
   generated_at: string

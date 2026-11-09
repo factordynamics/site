@@ -5,7 +5,7 @@ import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../c
 import { useMember } from '../lib/account'
 import { dateLabel, money, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { isEdgarDay } from '../lib/calendar.mjs'
-import { loadCardSet, loadSeason, stockPath, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
+import { loadCardSet, loadSeason, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
 
 // /season/: the 13F filing season as it happens. Built from d/season.json, which every Pages build
 // writes (every 20 minutes during the filing wave).
@@ -192,6 +192,8 @@ export function Season() {
         </Panel>
       </div>
 
+      {d?.expected && d.expected.length > 0 && <ExpectedPanel list={d.expected} cards={cards.data} now={now} />}
+
       <Signup source="season" className="mt-6" />
 
       <p className="mt-6 text-[13px] leading-relaxed text-ink-3">
@@ -201,6 +203,93 @@ export function Season() {
         </Link>
       </p>
     </div>
+  )
+}
+
+// "Usually deadline day, after the close", from the filer's last four 13Fs.
+function usual(x: Expected) {
+  const day = x.days_before === 0 ? 'deadline day' : x.days_before === 1 ? 'the business day before the deadline' : x.days_before >= 10 ? `about ${Math.round(x.days_before / 5)} weeks before the deadline` : `${x.days_before} business days before the deadline`
+  const t = x.time_et
+  const when = t < 9 * 60 + 30 ? 'before the open' : t < 16 * 60 ? 'during market hours' : 'after the close'
+  return `${x.steady ? 'Usually' : 'Most often'} ${day}, ${when}`
+}
+const clock = (m: number) => `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'am' : 'pm'}`
+const dayLabel = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+
+function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<string>; now: number }) {
+  const [copied, setCopied] = useState(false)
+  // The panel renders after the data loads, so a shared #expected link scrolls here once it exists.
+  useEffect(() => {
+    if (location.hash === '#expected') document.getElementById('expected')?.scrollIntoView()
+  }, [])
+  const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+  const waiting = list.filter((x) => !x.filed)
+  const done = list.filter((x) => x.filed)
+  // Group the ones still to file by expected day.
+  const days = [...new Set(waiting.map((x) => x.expected_date))]
+  return (
+    <section id="expected" className="mt-5 scroll-mt-24 rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" aria-labelledby="expected-title">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
+        <div>
+          <h2 id="expected-title" className="text-[15px] font-semibold">
+            Expected to file
+          </h2>
+          <p className="mt-0.5 text-[13px] text-ink-3">When each superinvestor usually files, from the EDGAR acceptance times of their last four 13Fs. New York time.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard?.writeText(`${location.origin}${location.pathname}#expected`)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1600)
+          }}
+          className="inline-flex h-8 items-center rounded-full bg-card px-3.5 text-[13px] font-medium shadow-[0_0_0_1px_var(--color-line-2)] hover:shadow-[0_0_0_1px_var(--color-ink-3)]"
+        >
+          {copied ? 'Link copied' : 'Copy link'}
+        </button>
+      </header>
+      <div className="divide-y divide-line">
+        {days.map((day) => (
+          <div key={day} className="grid grid-cols-1 gap-x-6 gap-y-1 px-5 py-3 md:grid-cols-[9rem_minmax(0,1fr)] md:px-6">
+            <p className={`pt-2 text-[13px] font-medium ${day < today ? 'text-[#8a5a0b]' : day === today ? 'text-accent' : 'text-ink-2'}`}>
+              {day === today ? 'Today' : dayLabel(day)}
+              {day < today && <span className="block text-[12px] font-normal">later than usual</span>}
+            </p>
+            <ul className="grid min-w-0 grid-cols-1 gap-x-6 sm:grid-cols-2">
+              {waiting
+                .filter((x) => x.expected_date === day)
+                .map((x) => (
+                  <li key={x.slug} className="min-w-0">
+                    <Link to={`/investors/${x.slug}/`} className="flex items-start gap-2.5 rounded-lg py-1.5 hover:text-accent">
+                      <Monogram name={x.manager} size={26} />
+                      <span className="min-w-0">
+                        <span className="block truncate text-[14px] font-medium">{x.manager}</span>
+                        <span className="block text-[12.5px] leading-snug text-ink-3" title={x.history.map((h) => `${quarterLabel(h.quarter)}: ${new Date(h.accepted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}`).join('\n')}>
+                          {usual(x)} (around {clock(x.time_et)})
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      {done.length > 0 && (
+        <p className="border-t border-line px-5 py-3 text-[13px] text-ink-2 md:px-6">
+          Already filed:{' '}
+          {done.map((x, i) => (
+            <span key={x.slug}>
+              {i > 0 && ', '}
+              <Link to={x.filed?.accession && cards?.has(x.filed.accession) ? `/f/${x.filed.accession}/` : `/investors/${x.slug}/`} className="font-medium text-ink hover:text-accent">
+                {x.manager}
+              </Link>
+            </span>
+          ))}
+          .
+        </p>
+      )}
+    </section>
   )
 }
 

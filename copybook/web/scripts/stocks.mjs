@@ -330,8 +330,69 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
     const cut = (rows) => rows.slice(0, 40).map((f) => ({ ticker: f.ticker, name: f.name, ...(f.sector === 'Funds & ETFs' ? { etf: true } : {}), net_value: f.net_value, buy_value: f.buy_value, sell_value: f.sell_value, n_buyers: f.n_buyers, n_sellers: f.n_sellers, buyers: f.buyers.slice(0, 5), sellers: f.sellers.slice(0, 5) }))
     return { funds: sc.funds, bought: cut(sc.bought), sold: cut(sc.sold), most_buyers: cut(sc.most_buyers) }
   }
+  // Expected to file: each superinvestor's last four original 13Fs, as EDGAR business days before
+  // that quarter's deadline and New York time of acceptance, give a usual day and time this season.
+  const deadlineDay = (qq) => {
+    const yy = Math.floor(qq / 4)
+    const nn = (qq % 4) + 1
+    const d = new Date(Date.UTC(yy, nn * 3, 0) + 45 * 864e5)
+    while (!isEdgarDay(d.toISOString().slice(0, 10))) d.setUTCDate(d.getUTCDate() + 1)
+    return d.toISOString().slice(0, 10)
+  }
+  const nyDay = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+  const nyMinutes = (iso) => {
+    const [h, m] = new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'America/New_York', hour12: false }).split(':').map(Number)
+    return (h % 24) * 60 + m
+  }
+  // EDGAR days from a date to a later deadline (0 = deadline day); negative when filed late.
+  const edgarDaysBefore = (day, due) => {
+    let n = 0
+    const t = new Date(`${day}T12:00:00Z`)
+    if (day > due) return -1
+    while (t.toISOString().slice(0, 10) < due) {
+      t.setUTCDate(t.getUTCDate() + 1)
+      if (isEdgarDay(t.toISOString().slice(0, 10))) n++
+    }
+    return n
+  }
+  const shiftBack = (due, n) => {
+    const t = new Date(`${due}T12:00:00Z`)
+    while (n > 0) {
+      t.setUTCDate(t.getUTCDate() - 1)
+      if (isEdgarDay(t.toISOString().slice(0, 10))) n--
+    }
+    return t.toISOString().slice(0, 10)
+  }
+  const median = (xs) => {
+    const a = [...xs].sort((x, y) => x - y)
+    return a.length % 2 ? a[(a.length - 1) / 2] : Math.round((a[a.length / 2 - 1] + a[a.length / 2]) / 2)
+  }
+  const expected = []
+  for (const m of active.filter((x) => x.featured)) {
+    const h = await read(`${m.slug}-history.json`).catch(() => null)
+    const past = (h?.history ?? []).filter((x) => x.accepted_at && qn(x.quarter) < q && !/\/A$/.test(x.form ?? '')).sort((x, y) => y.quarter.localeCompare(x.quarter)).slice(0, 4)
+    if (!past.length) continue
+    const hist = past.map((x) => ({ quarter: x.quarter, accepted_at: x.accepted_at, days_before: edgarDaysBefore(nyDay(x.accepted_at), deadlineDay(qn(x.quarter))) }))
+    const days = median(hist.map((x) => Math.max(0, x.days_before)))
+    const mins = median(past.map((x) => nyMinutes(x.accepted_at)))
+    const spread = Math.max(...hist.map((x) => x.days_before)) - Math.min(...hist.map((x) => x.days_before))
+    const now = books.find((b) => b.slug === m.slug)
+    const filedNow = now && qn(now.quarter) === q
+    expected.push({
+      slug: m.slug,
+      manager: m.manager,
+      expected_date: shiftBack(due.toISOString().slice(0, 10), days),
+      days_before: days,
+      time_et: mins,
+      steady: spread <= 1,
+      history: hist,
+      ...(filedNow ? { filed: { filing_date: now.filing_date, accession: now.accession } } : {}),
+    })
+  }
+  expected.sort((a, b) => a.expected_date.localeCompare(b.expected_date) || a.time_et - b.time_et)
   const seasonOut = {
     quarter: Q,
+    expected,
     deadline: due.toISOString(),
     curated: { filed: active.filter((m) => qn(m.quarter) === q).length, total: active.length },
     featured: { filed: active.filter((m) => m.featured && qn(m.quarter) === q).length, total: active.filter((m) => m.featured).length },
