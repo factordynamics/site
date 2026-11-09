@@ -153,25 +153,40 @@ export function fillTicker<T extends { cusip?: string | null; ticker: string | n
 }
 /** The issuer key: 6-character CUSIP prefix, or the successor's when a redomiciled line (old Ferguson plc) is mapped onto it. */
 // Warrants and ETFs keep their full CUSIP: a warrant is not the stock, and one ETF trust (Invesco's 46137V) issues many funds.
-const isWarrant = (h: { title: string }) => /^\*?W\b|\bWTS?\b|WARRANT/i.test(h.title)
-const issuerKey = (h: Holding) => (!h.cusip ? h.ticker || h.issuer : isWarrant(h) || isFundLike(h) ? h.cusip : OVERRIDE[h.cusip]?.same_as ?? h.cusip.slice(0, 6))
+type KeyLine = { cusip: string; ticker: string | null; issuer: string; title?: string; sector?: string | null }
+const isWarrant = (h: KeyLine) => /^\*?W\b|\bWTS?\b|WARRANT/i.test(h.title ?? '')
+/** Preferreds, convertibles and notes are not the common stock, though they share its CUSIP prefix. */
+const isSenior = (h: KeyLine) => /\b(PFD|PREF|PREFERRED|CONV|CNV|CUM|NOTES?|BONDS?|DEBS?)\b|%/i.test(h.title ?? '')
+// A ticker seen on two CUSIP prefixes (Exxon's 30231G and 30233Q, an old CUSIP a filer still uses) is one issuer.
+const TICKER_KEY = new Map<string, string>()
+/** The issuer a line belongs to: 6-character CUSIP prefix, joined across prefixes by ticker. Warrants, ETFs
+ * (one trust issues many funds) and preferreds or notes keep their full CUSIP. */
+export function issuerKey(h: KeyLine & { put_call?: string | null }) {
+  if (!h.cusip) return h.ticker || h.issuer
+  if (isWarrant(h) || isFundLike({ sector: h.sector, issuer: h.issuer, title: h.title ?? '' }) || isSenior(h)) return h.cusip
+  const base = OVERRIDE[h.cusip]?.same_as ?? h.cusip.slice(0, 6)
+  if (!h.ticker) return base
+  const k = TICKER_KEY.get(h.ticker)
+  if (!k) TICKER_KEY.set(h.ticker, base)
+  return k ?? base
+}
 function name(m: Manager) {
   m.firm = firmName(m.slug, m.name)
   m.pm = pmName(m.slug)
-  m.top?.forEach((h) => ((fillTicker(h), (h.sector = sectorOf(h.ticker || h.former, h.sector)))))
+  m.top?.forEach((h) => ((fillTicker(h), (h.sector = sectorOf(h.ticker || h.former, h.sector, h.cusip)))))
   return m
 }
 /** One sector per issuer: share classes (same 6-character CUSIP prefix) take the sector of the largest classified line. */
 const SECTOR_BY_TICKER = SECTOR_FIX as unknown as Record<string, string>
 /** Sector override by ticker (src/sectors.json), else the data's own. */
-export const sectorOf = (ticker: string | null | undefined, s: string | null | undefined) => (ticker && SECTOR_BY_TICKER[ticker]) || s || null
+export const sectorOf = (ticker: string | null | undefined, s: string | null | undefined, cusip?: string | null) => (ticker && SECTOR_BY_TICKER[ticker]) || (cusip && SECTOR_BY_TICKER[cusip]) || s || null
 function normalise(hs: Holding[]) {
   const by = new Map<string, { sector: string; value: number }>()
   for (const h of hs) {
     fillTicker(h)
     // Delisted lines (JHG†) keep their sector through the former ticker.
     const t = h.ticker || h.former
-    const fixed = t ? SECTOR_BY_TICKER[t] : undefined
+    const fixed = (t && SECTOR_BY_TICKER[t]) || SECTOR_BY_TICKER[h.cusip]
     if (fixed) h.sector = fixed
     if (!h.sector || h.sector === 'Unclassified') continue
     const k = h.cusip.slice(0, 6)
@@ -255,7 +270,7 @@ export const loadHistory = (slug: string) =>
     // Skip a quarter whose upstream row already cites the second filing.
     return { history: d.history.map((r) => (add[r.quarter] && !JSON.stringify(r).includes(c?.history_source?.[r.quarter] ?? '\u0000') ? { ...r, total_value: r.total_value + add[r.quarter], equity_value: r.equity_value == null ? undefined : r.equity_value + add[r.quarter] } : r)) }
   })
-export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector)))), d))
+export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector, e.cusip)))), d))
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
 export const loadInsiders = () => get<{ updated_at: string; rows: Insider[] } | Insider[]>(DATA + 'insiders.json').then((d) => (Array.isArray(d) ? d : d.rows ?? [])).catch(() => null)
 /** Tickers Holdterm fills from src/tickers.json, each with every CUSIP of its issuer group (classes, and a
@@ -418,41 +433,45 @@ export function aggregate(books: Book[], rank: Book[] = books): { rows: Agg[]; t
     }
   let total = 0
   for (const b of books) {
-    for (const h of b.holdings) {
-      if (h.put_call) continue
-      const key = issuerKey(h)
+    // One position per fund and issuer: classes, managers and a CUSIP change (old line exited, new line
+    // "new") net into a single holding, so a fund is never both a buyer and a seller of one stock.
+    const pos = new Map<string, Holding[]>()
+    for (const h of b.holdings) if (!h.put_call) pos.set(issuerKey(h), [...(pos.get(issuerKey(h)) ?? []), h])
+    for (const [key, ls] of pos) {
+      const h = [...ls].sort((x, y) => y.value - x.value)[0]
       let a = m.get(key)
       if (!a) {
         a = { key, fund: isFundLike(h), ticker: h.ticker, former: h.former, name: h.display_name || issuerName(h.issuer), sector: h.sector || 'Unclassified', value: 0, holders: [], buyers: [], sellers: [], newBuyers: 0, net: 0, buy: 0, sell: 0, maxWeight: 0 }
         m.set(key, a)
         a.classes = new Set()
       }
-      if (h.ticker) {
-        a.classes!.add(h.ticker)
+      for (const l of ls) if (l.ticker) a.classes!.add(l.ticker)
+      if (a.classes!.size) {
         const cv = classValue.get(key)
         const ranked = [...a.classes!].sort((x, y) => (cv?.get(y) ?? 0) - (cv?.get(x) ?? 0))
         a.ticker = ranked[0]
         a.label = ranked.join('+')
         if (ranked.length > 1) a.name = a.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')
       }
-      const d = h.value_delta ?? 0
-      const who: Who = { slug: b.slug, manager: b.firm, weight: h.weight, change: h.change, delta: d, quarter: b.quarter }
-      if (h.value > 0) {
-        a.value += h.value
-        total += h.value
-        // A fund can list a stock on several lines (classes, managers); count it once.
-        const prev = a.holders.find((x) => x.slug === b.slug)
-        if (prev) prev.weight += h.weight
-        else a.holders.push(who)
-        a.maxWeight = Math.max(a.maxWeight, prev ? prev.weight : h.weight)
+      if (a.sector === 'Unclassified' && h.sector) a.sector = h.sector
+      const value = ls.reduce((x, l) => x + l.value, 0)
+      const weight = ls.reduce((x, l) => x + l.weight, 0)
+      const d = ls.reduce((x, l) => x + (l.value_delta ?? 0), 0)
+      const change: Change = value <= 0 ? 'exited' : ls.every((l) => l.change === 'new') ? 'new' : d > 0 ? 'added' : d < 0 ? 'trimmed' : 'unchanged'
+      const who: Who = { slug: b.slug, manager: b.firm, weight, change, delta: d, quarter: b.quarter }
+      if (value > 0) {
+        a.value += value
+        total += value
+        a.holders.push(who)
+        a.maxWeight = Math.max(a.maxWeight, weight)
       }
       if (d > 0) {
         a.buy += d
-        if (!a.buyers.some((x) => x.slug === b.slug)) a.buyers.push(who)
-        if (h.change === 'new') a.newBuyers++
+        a.buyers.push(who)
+        if (change === 'new') a.newBuyers++
       } else if (d < 0) {
         a.sell += d
-        if (!a.sellers.some((x) => x.slug === b.slug)) a.sellers.push(who)
+        a.sellers.push(who)
       }
       a.net += d
     }

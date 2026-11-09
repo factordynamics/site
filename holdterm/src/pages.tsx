@@ -15,6 +15,7 @@ import {
   loadStock,
   loadStockIndex,
   isFundLike,
+  issuerKey,
   quarterLabel,
   roster,
   SECTOR_COLOR,
@@ -272,11 +273,11 @@ function HomeBody() {
     const by = new Map<string, Holding & { label?: string }>()
     for (const h of b.holdings) {
       if (h.put_call || !h.value_delta || isFundLike(h)) continue
-      const k = h.cusip.slice(0, 6)
+      const k = issuerKey(h)
       const cur = by.get(k)
       if (!cur) by.set(k, { ...h, label: h.ticker ?? undefined })
       else {
-        const label = [cur.label, h.ticker].filter(Boolean).join('+')
+        const label = [...new Set([...(cur.label?.split('+') ?? []), h.ticker].filter(Boolean))].join('+')
         if (Math.abs(h.value) > Math.abs(cur.value)) Object.assign(cur, { ticker: h.ticker, former: h.former, display_name: h.display_name, cusip: h.cusip })
         cur.label = label
         cur.value_delta = (cur.value_delta ?? 0) + h.value_delta
@@ -302,12 +303,12 @@ function HomeBody() {
   for (const m of ms)
     for (const h of m.top ?? []) {
       if (h.put_call || isFundLike(h) || !h.cusip) continue
-      const k = h.cusip.slice(0, 6)
+      const k = issuerKey(h)
       const id = `${k}|${m.slug}`
       const cur = conv.get(id)
       if (cur) {
         cur.weight += h.weight
-        if (h.ticker) cur.label = [cur.label ?? cur.ticker, h.ticker].filter(Boolean).join('+')
+        if (h.ticker) cur.label = [...new Set([...(cur.label ?? cur.ticker ?? '').split('+'), h.ticker].filter(Boolean))].join('+')
       } else conv.set(id, { key: id, ticker: h.ticker, former: h.former, name: issuerName(h.display_name || h.issuer), slug: m.slug, firm: m.firm, weight: h.weight })
     }
   const conviction = [...conv.values()].sort((a, b) => b.weight - a.weight).slice(0, 12)
@@ -440,10 +441,10 @@ function HomeBody() {
 function byCompany(hs: Holding[]) {
   const by = new Map<string, { h: Holding; label?: string }>()
   for (const h of hs) {
-    const k = h.cusip.slice(0, 6)
+    const k = issuerKey(h)
     const cur = by.get(k)
     if (!cur) by.set(k, { h, label: h.ticker ?? undefined })
-    else if (h.ticker && cur.label !== h.ticker) cur.label = [cur.label, h.ticker].filter(Boolean).join('+')
+    else if (h.ticker && !cur.label?.split('+').includes(h.ticker)) cur.label = [cur.label, h.ticker].filter(Boolean).join('+')
   }
   return [...by.values()]
 }

@@ -211,5 +211,105 @@
   "ticker": "BTM",
   "listed": false,
   "source": "Bitcoin Depot: former ticker BTM; not in SEC company_tickers.json on 2026-11-08"
+ },
+ "G0250X149": {
+  "ticker": "AMCR",
+  "listed": true,
+  "source": "SEC company_tickers.json: AMCR = CIK 1748790 (Amcor plc)"
+ },
+ "G0450A105": {
+  "ticker": "ACGL",
+  "listed": true,
+  "source": "SEC company_tickers.json: ACGL = CIK 947484 (Arch Capital Group Ltd.)"
+ },
+ "G0692U109": {
+  "ticker": "AXS",
+  "listed": true,
+  "source": "SEC company_tickers.json: AXS = CIK 1214816 (AXIS Capital Holdings Ltd)"
+ },
+ "38259P706": {
+  "ticker": "GOOGL",
+  "listed": true,
+  "same_as": "02079K",
+  "source": "Google Inc. class A, exchanged one for one for Alphabet class A (CUSIP 02079K305) in 2015; SEC company_tickers.json: GOOGL = CIK 1652044 (Alphabet Inc.)"
+ },
+ "09253U108": {
+  "ticker": "BX",
+  "listed": true,
+  "same_as": "09260D",
+  "source": "The Blackstone Group L.P. units, converted to Blackstone Inc. (CUSIP 09260D107) in 2019; SEC company_tickers.json: BX = CIK 1393818 (Blackstone Inc.)"
+ },
+ "M2197Q107": {
+  "ticker": "CLBT",
+  "listed": true,
+  "source": "SEC company_tickers.json: CLBT = CIK 1854587 (Cellebrite DI Ltd.)"
+ },
+ "L1995B107": {
+  "ticker": "CAAP",
+  "listed": true,
+  "source": "SEC company_tickers.json: CAAP = CIK 1717393 (Corporacion America Airports S.A.)"
+ },
+ "G4124C109": {
+  "ticker": "GRAB",
+  "listed": true,
+  "source": "SEC company_tickers.json: GRAB = CIK 1855612 (Grab Holdings Ltd)"
+ },
+ "35045V100": {
+  "ticker": "GM",
+  "listed": true,
+  "same_as": "37045V",
+  "source": "Filed as 35045V100, a misprint of General Motors CUSIP 37045V100 (issuer named General Motors Co (GM)); SEC company_tickers.json: GM = CIK 1467858 (General Motors Co)"
+ },
+ "469814107": {
+  "ticker": "J",
+  "listed": true,
+  "same_as": "46982L",
+  "source": "Jacobs Engineering Group, reorganised as Jacobs Solutions Inc. (CUSIP 46982L108) in 2022; SEC company_tickers.json: J = CIK 52988 (Jacobs Solutions Inc.)"
+ },
+ "G5331N101": {
+  "ticker": "KYIV",
+  "listed": true,
+  "source": "SEC company_tickers.json: KYIV = CIK 2062440 (Kyivstar Group Ltd.)"
+ },
+ "Y64177101": {
+  "ticker": "ECO",
+  "listed": true,
+  "source": "SEC company_tickers.json: ECO = CIK 1964954 (Okeanis Eco Tankers Corp.)"
+ },
+ "H5919C104": {
+  "ticker": "ONON",
+  "listed": true,
+  "source": "SEC company_tickers.json: ONON = CIK 1858985 (On Holding AG)"
+ },
+ "G3398L118": {
+  "ticker": "PLGO",
+  "listed": true,
+  "source": "SEC company_tickers.json: PLGO = CIK 1636639 (Pelagos Insurance Capital Ltd)"
+ },
+ "G7553X106": {
+  "ticker": "KRSP",
+  "listed": true,
+  "source": "SEC company_tickers.json: KRSP = CIK 2074872 (Rice Acquisition Corp 3, class A)"
+ },
+ "G7945M107": {
+  "ticker": "STX",
+  "listed": true,
+  "same_as": "G7997R",
+  "source": "Seagate Technology plc, redomiciled as Seagate Technology Holdings plc (CUSIP G7997R103) in 2021; SEC company_tickers.json: STX = CIK 1137789 (Seagate Technology Holdings plc)"
+ },
+ "H8088L103": {
+  "ticker": "SRAD",
+  "listed": true,
+  "source": "SEC company_tickers.json: SRAD = CIK 1836470 (Sportradar Group AG)"
+ },
+ "G8807B106": {
+  "ticker": "TBPH",
+  "listed": false,
+  "source": "SEC EDGAR: Theravance Biopharma (TBPH) is no longer in the SEC ticker list"
+ },
+ "369604103": {
+  "ticker": "GE",
+  "listed": true,
+  "source": "General Electric CUSIP before the 2021 reverse split (now 369604301); same issuer, ticker GE (SEC company_tickers.json: GE = CIK 40545)"
  }
 }
