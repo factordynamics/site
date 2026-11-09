@@ -11,7 +11,7 @@ import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
 import { loadCards, recapPath, seasonNow, stockPath } from '../lib/stocks'
 import { investorTitle } from '../lib/titles.mjs'
-import { CuratedRedirect, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
+import { CuratedRedirect, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitRatio, useAsync, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -34,7 +34,8 @@ export function ManagerPage() {
       .map((h) => {
         const per = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value || 0) / h.prev_shares : 0
         const delta = h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
-        return { key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: h.change ?? '', delta }
+        const note = h.split ? `split ${splitRatio(h.split.ratio)} adjusted` : h.prev_cusip ? 'CUSIP change' : ''
+        return { key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: [h.change, note].filter(Boolean).join(' · '), delta }
       })
       .filter((x) => x.delta !== 0)
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
@@ -304,6 +305,18 @@ export function ManagerPage() {
                         </Badge>
                       ) : (
                         !h.issuer.includes('Class') && shareClass(h.title) && <Badge className="shrink-0">{shareClass(h.title)}</Badge>
+                      )}
+                      {h.prev_cusip && h.prev_cusip !== h.cusip && (
+                        <span className="shrink-0" title={`CUSIP change ${h.prev_cusip} → ${h.cusip}: last quarter's position is matched under the old CUSIP`}>
+                          <Badge>
+                            CUSIP change<span className="hidden font-mono text-[11px] lg:inline"> {h.prev_cusip} → {h.cusip}</span>
+                          </Badge>
+                        </span>
+                      )}
+                      {h.split && (
+                        <span className="shrink-0" title={`Last quarter's shares are multiplied by the ${splitRatio(h.split.ratio)} split before comparing`}>
+                          <Badge tone="warn">split {splitRatio(h.split.ratio)} adjusted</Badge>
+                        </span>
                       )}
                     </div>
                   </td>

@@ -72,7 +72,10 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
     sections: [
       ['Where data lives', `${HOSTING.api} ${HOSTING.files}`],
       ['Encryption', HOSTING.encryption],
-      ['Who can see member data', 'Only the operator, Factor Dynamics, can access member data, and only to provide support or when the law requires it.'],
+      ['Who can see member data', `${HOSTING.access} Member data is accessed only to provide support or when the law requires it.`],
+      ['Backups', HOSTING.backups],
+      ['Access logging', HOSTING.logging],
+      ['Availability', <>{HOSTING.availability} Status and incidents are on the <Link to="/speed/#availability" className="font-medium text-accent hover:text-accent-2">speed page</Link>.</>],
       ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
       ['Your book is private', 'A list of holdings you upload or enter is private to you, or to your team on Copy Fund. It is never shared, never shown to other members, and never used in aggregates, rankings or anything we publish.'],
       ['API keys', 'A key’s secret is shown once, when you create it. Revoke a key from your account page and requests with it fail immediately.'],

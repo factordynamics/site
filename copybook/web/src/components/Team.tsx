@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ApiError, call } from '../lib/account'
+import { FUND_SEATS } from '../config'
 import { Button } from './ui'
 
 // Copy Fund seats (owner only): GET/POST {api}/seats, DELETE /seats/{email}. Each seat gets its own
@@ -8,7 +9,7 @@ type Seats = { max: number; active?: number; seats: { email: string; invited_at?
 
 const ERR: Record<string, string> = {
   seat_exists: 'That address already has a seat.',
-  seat_limit: 'All 5 seats are in use. Remove one to invite someone else.',
+  seat_limit: 'All your seats are in use. Remove one to invite someone else.',
   email_taken: 'That address has its own Copybook account, so it can’t join as a seat. Ask them to cancel it first, or use another address.',
 }
 const when = (t?: number | string | null) => {
@@ -53,7 +54,7 @@ export function Team() {
   }
 
   const used = s ? s.seats.length : 0
-  const max = s?.max ?? 5
+  const max = s?.max ?? FUND_SEATS
   return (
     <section id="team" className="mt-5 scroll-mt-24 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
       <div className="flex flex-wrap items-start justify-between gap-3">

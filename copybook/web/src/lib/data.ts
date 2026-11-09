@@ -26,7 +26,14 @@ export type Holding = {
   /** As-filed issuer name, kept for tooltips. */
   filed?: string
   change?: Change | null
+  /** The CUSIP the previous quarter's row was filed under, when the issuer's CUSIP was reissued. */
+  prev_cusip?: string | null
+  /** A split between the two quarters that ingest applied to prev_shares. */
+  split?: { ratio: number; from_quarter?: string; to_quarter?: string } | null
 }
+
+/** "2:1" for a 2-for-1 split, "1:10" for a 1-for-10 reverse split. */
+export const splitRatio = (r: number) => (r >= 1 ? `${+r.toFixed(2)}:1` : `1:${+(1 / r).toFixed(2)}`)
 
 export type Manager = {
   cik: string

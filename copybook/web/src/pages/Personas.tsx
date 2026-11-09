@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Arrow, Button, Check, Panel } from '../components/ui'
-import { api, plans, TRIAL_DAYS, trialTerms } from '../config'
+import { api, FUND_WHY, plans, TRIAL_DAYS, trialTerms } from '../config'
 import { attributed, referredCheckout } from '../lib/attribution'
 import { gapLabel, loadLatency } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
@@ -117,7 +117,7 @@ export function ForFunds() {
       <Hero
         kicker="Copy Fund · for investment teams"
         title="Know who owns what you own."
-        sub="Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. Five seats, shared lists, alerts in Slack, and an annual invoice."
+        sub="Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. Up to 10 seats, shared lists, one team channel in Slack, and an annual invoice."
         cta={cta}
         note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 on request."
       />
@@ -137,12 +137,15 @@ export function ForFunds() {
         items={[
           ['My book', 'Paste tickers, upload a broker CSV or link your fund’s own 13F. Every name shows how many funds hold it, how many have it in their top 10, and who bought and sold this season.'],
           ['Peer overlap', 'Pick up to 12 funds you benchmark against. See how much of their books overlap, the names they share, and what each did in yours.'],
-          ['5 seats, shared lists', 'Each colleague signs in with their own email and keeps their own alert settings. Follows, the watchlist, the owned book and peers are shared.'],
-          ['Alerts in Slack', 'Every filing from the funds you follow, posted to your team channel as the filing hits EDGAR, with new, added, trimmed and exited positions inside.'],
+          ['Up to 10 seats, shared lists', 'Each colleague signs in with their own email and keeps their own alert settings. Follows, the watchlist, the owned book and peers are shared.'],
+          ['One team channel', 'Every filing from the funds you follow posts once to your team’s Slack channel as it hits EDGAR, whoever follows the fund, with new, added, trimmed and exited positions inside.'],
           ['Insider and 13D alerts', 'Open-market insider buys over your threshold, cluster buys, and any filer’s new 13D on the stocks you own or watch.'],
           ['Invoice and W-9', 'Annual plan invoiced net 30, with a W-9 on request. Or start on a card with a 14-day trial.'],
         ]}
       />
+      <p className="mt-6 max-w-3xl rounded-[var(--radius-card)] bg-ink/[0.04] px-5 py-4 text-[15px] leading-relaxed text-ink-2">
+        <strong className="font-semibold text-ink">{FUND_WHY.split('? ')[0]}?</strong> {FUND_WHY.split('? ')[1]}
+      </p>
 
       <Shot
         src="peers-example.webp"
@@ -157,11 +160,18 @@ export function ForFunds() {
             <li>An uploaded or linked book is private to your team. It is never shown to anyone else and never used in aggregates.</li>
             <li>{HOSTING.api}</li>
             <li>{HOSTING.encryption}</li>
-            <li>Only the operator can access member data, and only for support or legal reasons.</li>
+            <li>{HOSTING.access}</li>
+            <li>{HOSTING.backups} {HOSTING.logging}</li>
           </ul>
         </Panel>
         <Panel>
           <ul className="space-y-2.5 text-[14.5px] leading-relaxed text-ink-2">
+            <li>
+              {HOSTING.availability}{' '}
+              <Link to="/speed/#availability" className="font-medium text-accent hover:text-accent-2">
+                Status and incidents
+              </Link>
+            </li>
             <li>Breaches affecting member data are notified within 72 hours.</li>
             <li>Remove names, keys and seats yourself at any time, or ask us to delete everything.</li>
             <li>
@@ -187,7 +197,7 @@ export function ForQuants() {
   const sample = useAsync(() => fetch(`${BASE}api/sample-holdings.json`).then((r) => r.text()), [])
   const trial = attributed(plans.pro.links.yearly || plans.pro.links.monthly)
   const cta = (
-    <Button href={trial} onClick={referredCheckout('pro', plans.pro.links.yearly ? 'yearly' : 'monthly', trial, api)} size="md">
+    <Button href={trial} onClick={referredCheckout('pro', plans.pro.links.yearly ? 'yearly' : 'monthly', trial)} size="md">
       Start {TRIAL_DAYS}-day Pro trial <Arrow />
     </Button>
   )
@@ -199,12 +209,12 @@ export function ForQuants() {
       <Hero
         kicker="Copy Pro · the Copybook API"
         title="13F, Form 4 and 13D/G, as clean JSON."
-        sub="Every 13F filer’s latest holdings, aggregated by CUSIP, with the EDGAR accession and acceptance time on every filing, so you know exactly what was public and when."
+        sub="Every 13F filer’s latest holdings, aggregated by CUSIP, with the EDGAR accession and acceptance time on every filing."
         cta={cta}
         note={`${trialTerms('pro')} Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay.`}
       />
 
-      <Facts items={[[filers, '13F filers in /v1, the latest filing of each'], ['8 quarters', `of history for the ${curated} managers we track closely; back to 2013 is in progress`], ['To the second', 'EDGAR acceptance time on every filing']]} />
+      <Facts items={[[filers, '13F filers in /v1, the latest filing of each'], ['8 quarters', `of history for the ${curated} managers we track closely; back to 2013 by Dec 31`], ['To the second', 'EDGAR acceptance time on every filing']]} />
 
       <div className="mt-12 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <Panel title="One request" sub="Send your key as a Bearer token, and a User-Agent that names your app">
@@ -233,7 +243,7 @@ export function ForQuants() {
       <H2 sub="Every number traces back to a filing, with the time it became public.">Source filings, timed</H2>
       <Features
         items={[
-          ['Source filing on every row', 'Each row carries the accession of the filing that disclosed it and that filing’s acceptance time (source_accession, first_disclosed_at), and each response names the filing, its SEC URL and its amendments. Rows added by later amendments are being split out (in progress).'],
+          ['Source filing on most rows', 'Most rows carry the accession of the filing that disclosed them and that filing’s acceptance time (source_accession, first_disclosed_at), and each response names the filing, its SEC URL and its amendments. Shares a later amendment adds to a position already in the original are still dated to the original (fix in progress).'],
           ['Acceptance time to the second', 'The EDGAR acceptance timestamp, so you can date a position by when it became public, not by its quarter end.'],
           ['Amendments, listed', 'Each book lists every version EDGAR holds for its quarter (filing.versions), with acceptance times. An as_of parameter for point-in-time books is announced, not live: it returns 501 until the data is published.'],
           ['Aggregated by CUSIP', 'Lines are rolled up by CUSIP and put/call, the way funds report one position across several lines. Options are kept separate.'],
@@ -246,7 +256,7 @@ export function ForQuants() {
         <Panel title="Coverage">
           <ul className="space-y-2 text-[14px] leading-relaxed text-ink-2">
             <li>Live: the latest 13F for {filers} filers (the /v1/filers count), 8 quarters of history for the {curated} managers we track closely, holders by stock, quarter-range history, Form 4 and 13D/G events, and bulk CSV files.</li>
-            <li>Coming, no date yet: history back to 2013 (in progress), Parquet bulk files, point-in-time columns in bulk files and the as_of parameter. Each appears in the changelog when it returns data.</li>
+            <li>Coming: hedge-fund and long-only new, exited and net trades in My book by Nov 20; the as_of parameter with per-row amendment lots by Nov 30; history back to 2013 by Dec 31; Parquet bulk files, no date yet. Each appears in the changelog when it returns data.</li>
           </ul>
         </Panel>
         <Panel title="Limits">

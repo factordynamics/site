@@ -4,16 +4,19 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getJson } from './getjson.mjs'
+import { API, API_JSON_URL } from '../api.config.mjs'
 import { investorTitle, seasonTitle, stockTitle } from '../src/lib/titles.mjs'
 
 const dist = new URL('../dist/', import.meta.url).pathname
 const src = process.argv[2] || 'https://refcell.github.io/gust/copybook/data/index.json'
 const index = src.startsWith('http') ? await getJson(src) : JSON.parse(readFileSync(src, 'utf8'))
-const shell = readFileSync(join(dist, 'index.html'), 'utf8')
+// Static content for crawlers and link previews that don't run JavaScript (prerendered into #root
+// below); a browser running the app replaces it, and never shows it in the meantime.
+const shell = readFileSync(join(dist, 'index.html'), 'utf8').replace('</head>', () => `  <script>document.documentElement.classList.add('js')</script>\n    <style>.js #pre{display:none}#pre{max-width:1200px;margin:0 auto;padding:48px 20px;font:16px/1.55 system-ui,sans-serif}#pre table{border-collapse:collapse;margin:12px 0 28px}#pre td,#pre th{padding:6px 14px 6px 0;text-align:left}</style>\n  </head>`)
 const SITE = process.env.VITE_SITE || 'https://copybook.factordynamics.com/'
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
-function page(path, title, desc, extra = '', image = null) {
+function page(path, title, desc, extra = '', image = null, body = '') {
   let html = shell
     .replaceAll(`${SITE}og.png`, () => image ?? `${SITE}og.png`)
     // Function replacers only: a replacement string reads "$1.7B" in a description as the $1 backreference.
@@ -22,6 +25,7 @@ function page(path, title, desc, extra = '', image = null) {
     .replace(/(<meta property="og:title" content=")[^"]*/, (_, p) => p + esc(title))
     .replace(/(<meta property="og:description" content=")[^"]*/, (_, p) => p + esc(desc))
     .replace('<meta property="og:type"', () => `<link rel="canonical" href="${SITE}${path}" />${extra}\n    <meta property="og:type"`)
+    .replace('<div id="root"></div>', () => `<div id="root">${body ? `<div id="pre">${body}</div>` : ''}</div>`)
   const dir = join(dist, path)
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'index.html'), html)
@@ -29,6 +33,13 @@ function page(path, title, desc, extra = '', image = null) {
 // Structured data for search: one JSON-LD block per page (`<` escaped so a name can't close the script).
 const ld = (o) => `\n    <script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', ...o }).replace(/</g, '\\u003c')}</script>`
 const ORG = { '@type': 'Organization', name: 'Copybook', url: SITE, logo: `${SITE}apple-touch-icon.png` }
+// Prerendered page bodies: the h1, the summary line, and up to 10 rows, as plain HTML.
+const ht = (v) => esc(String(v ?? ''))
+const link = (path, text) => `<a href="${SITE}${path}">${ht(text)}</a>`
+const table = (cols, rows) => (rows.length ? `<table><thead><tr>${cols.map((c) => `<th>${ht(c)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '')
+const pre = (h1, summary, ...parts) => `<h1>${ht(h1)}</h1><p>${ht(summary)}</p>${parts.join('')}`
+const pct1 = (v) => `${(v * 100).toFixed(1)}%`
+const CHANGE = { new: 'New', added: 'Added', trimmed: 'Trimmed', exited: 'Exited', unchanged: 'Unchanged' }
 const EDGAR = { '@type': 'CreativeWork', name: 'SEC EDGAR Form 13F filings', url: 'https://www.sec.gov/edgar/search/' }
 const crumbs = (...items) => ({ '@type': 'BreadcrumbList', itemListElement: items.map(([name, path], i) => ({ '@type': 'ListItem', position: i + 1, name, item: `${SITE}${path}` })) })
 const usd = (v) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`)
@@ -84,7 +95,21 @@ page('resume/', 'Resume your plan · Copybook', 'Resume a paused Copybook plan.'
     const rq = index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort().at(-1).toLowerCase()
     for (const k of [rq, `${rq}-pct`]) {
       const r = JSON.parse(readFileSync(join(dist, 'og', `season-${k}.json`), 'utf8'))
-      page(r.path, r.title, r.desc, ld({ '@type': 'Article', headline: r.title.replace(/ · Copybook$/, ''), description: r.desc, image: r.url, url: `${SITE}${r.path}`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}${r.path}` }), r.url)
+      const rec = readDist('d', 'recap', `${rq.toUpperCase()}.json`)
+      const pctView = k.endsWith('-pct')
+      const rows = (list, f) => (list ?? []).slice(0, 10).map((x) => [link(`stocks/${x.ticker}/`, x.ticker), ht(x.name), f(x)])
+      const body = rec
+        ? pre(
+            r.title.replace(/ · Copybook$/, ''),
+            r.desc,
+            `<h2>Most bought</h2>`,
+            table(['Stock', 'Company', pctView ? 'Top buy, % of book' : 'Net bought'], rows(pctView ? rec.most_bought_pct : rec.most_bought, (x) => (pctView ? ht(x.pct != null ? pct1(x.pct) : '') : usd(Math.abs(x.net_value))))),
+            `<h2>Most sold</h2>`,
+            table(['Stock', 'Company', pctView ? 'Top sale, % of book' : 'Net sold'], rows(pctView ? rec.most_sold_pct : rec.most_sold, (x) => (pctView ? ht(x.pct != null ? pct1(Math.abs(x.pct)) : '') : usd(Math.abs(x.net_value))))),
+            `<p>${link('season/', 'Live season tracker')} · ${link('flow/', 'Smart money flow')} · ${link('investors/', 'All investors')}</p>`,
+          )
+        : ''
+      page(r.path, r.title, r.desc, ld({ '@type': 'Article', headline: r.title.replace(/ · Copybook$/, ''), description: r.desc, image: r.url, url: `${SITE}${r.path}`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}${r.path}` }), r.url, body)
     }
   } catch {}
   // The season tracker's title names the quarter now filing, for search during filing week.
@@ -97,10 +122,22 @@ page('resume/', 'Resume your plan · Copybook', 'Resume a paused Copybook plan.'
   const desc = sd
     ? `Live through the ${dayLabel(sd.deadline)} deadline: ${num(sd.filers.filed)} of the ${num(sd.filers.total)} 13F filers active last quarter and ${sd.featured.filed} of ${sd.featured.total} superinvestors have filed ${sq} 13Fs. Who filed, who is next, and the most bought and sold stocks so far, from SEC EDGAR.`
     : `Live through the 13F deadline: how many superinvestors and filers have filed ${q} 13Fs, the latest filings, and the most bought and sold stocks so far. From SEC EDGAR.`
-  page('season/', title, desc, ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url)
+  const flowS = sd ? (sd.featured.filed ? sd.featured_flow : sd.all_flow) : null
+  const body = sd
+    ? pre(
+        title,
+        desc,
+        `<h2>Most bought so far${sd.featured.filed ? ' by the superinvestors' : ''}</h2>`,
+        table(['Stock', 'Company', 'Net bought'], (flowS?.bought ?? []).slice(0, 10).map((r) => [link(`stocks/${r.ticker}/`, r.ticker), ht(r.name), usd(r.net_value)])),
+        `<h2>Expected next</h2>`,
+        table(['Investor', 'Usually files'], sd.expected.filter((x) => !x.filed && x.expected_date).slice(0, 10).map((x) => [link(`investors/${x.slug}/`, x.manager), ht(dayLabel(x.expected_date))])),
+        `<p>${link(`season/${sd.quarter.toLowerCase()}/`, `${sq} 13F recap`)} · ${link('flow/', 'Smart money flow')} · ${link('investors/', 'All investors')}</p>`,
+      )
+    : ''
+  page('season/', title, desc, ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url, body)
 }
 page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F alerts · Copy Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack minutes after EDGAR. Five seats, invoiced annually.')
-page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Copy Pro', 'Every 13F filer’s latest holdings as JSON, with EDGAR accession and acceptance time on every filing. Point-in-time amendments, audited against EDGAR, from $39/month.')
+page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Copy Pro', 'Every 13F filer’s latest holdings as JSON, with the EDGAR accession and acceptance time of every filing; holders by stock, Form 4 and 13D/G events and bulk CSV files. From $39/month.')
 page('my-book/', 'My book · Copybook', 'Your stocks through the eyes of every 13F filer: who holds them, who bought and sold this season, and every Form 4 and 13D.')
 page('methodology/', 'Methodology · Copybook', 'How Copybook reads SEC 13F, Form 4 and Schedule 13D/G filings: amendments, unit fixes, options, tickers, refresh cadence, and a changelog of every data correction.')
 page('api/', 'API · Copybook', 'The Copybook API: 13F, Form 4 and Schedule 13D/G data from SEC EDGAR as JSON, for Copy Pro and Copy Fund.')
@@ -144,12 +181,19 @@ for (const m of index.managers) {
     .slice(0, 3)
     .map((h) => `${h.display_name ?? tc(h.issuer)} ${((h.weight ?? 0) * 100).toFixed(1)}%`)
   const title = investorTitle({ who, quarter: m.quarter, value: total, positions: count })
+  const topRows = (longs ?? [])
+    .slice()
+    .sort((x, y) => y.value - x.value)
+    .slice(0, 10)
+    .map((x) => [x.ticker ? link(`stocks/${x.ticker}/`, x.ticker) : '', ht(x.display_name ?? tc(x.issuer)), usd(x.value), ht(total ? pct1(x.value / total) : ''), ht(CHANGE[x.change] ?? '')])
   const desc = `${firm !== who ? `${who} (${firm})` : who}: the ${qLabel(m.quarter)} 13F${m.filing_date ? `, filed ${dayLabel(m.filing_date)}` : ''}${total ? `, ${usd(total)} across ${num(count)} positions` : ''}.${top.length ? ` Top holdings: ${top.join(', ')}.` : ''} Buys, sells and sector mix, straight from the SEC filing.`
   page(
     `investors/${m.slug}/`,
     title,
     desc,
     ld({ '@graph': [{ '@type': 'Dataset', name: `${who} 13F holdings, ${qLabel(m.quarter)}`, description: desc, url: `${SITE}investors/${m.slug}/`, creator: ORG, isBasedOn: m.sec_url ?? EDGAR.url, dateModified: m.filing_date ?? built, temporalCoverage: m.report_date ?? undefined, about: { '@type': 'Organization', name: firm }, isAccessibleForFree: true }, crumbs(['Investors', 'investors/'], [who, `investors/${m.slug}/`])] }),
+    null,
+    pre(`${who}’s 13F portfolio`, desc, `<h2>Top holdings, ${qLabel(m.quarter)}</h2>`, table(['Stock', 'Company', 'Value', 'Weight', 'Change'], topRows), `<p>${link(`investors/${m.slug}/history/`, `${who}’s 13F history`)} · ${link('season/', 'This 13F season')} · ${link('investors/', 'All investors')}</p>`),
   )
   page(`investors/${m.slug}/history/`, `${who} 13F history · Copybook`, `${who}: eight quarters of 13F holdings, buys and sells across quarters, with CSV export.`)
   redirect(`managers/${m.slug}.html`, `investors/${m.slug}/`)
@@ -214,6 +258,23 @@ try {
       title,
       desc,
       ld({ '@graph': [{ '@type': 'Dataset', name: `${s.n} (${s.t}) 13F holders`, description: desc, url: `${SITE}stocks/${s.t}/`, creator: ORG, isBasedOn: EDGAR.url, dateModified: h?.generated_at ?? built, about: { '@type': 'Corporation', name: s.n, tickerSymbol: s.t }, variableMeasured: ['13F holders', 'hedge fund holders', 'shares held', 'value held'], isAccessibleForFree: true }, crumbs(['Stocks', 'consensus/'], [s.t, `stocks/${s.t}/`])] }),
+      null,
+      pre(
+        `${s.n} (${s.t}): who owns it`,
+        desc,
+        `<h2>Largest holders among the funds we track</h2>`,
+        table(
+          ['Investor', '13F', 'Shares', 'Value', 'Change'],
+          (sf?.holders ?? [])
+            .slice()
+            .sort((x, y) => y.value - x.value)
+            .slice(0, 10)
+            .map((x) => [link(`investors/${x.slug}/`, x.manager), ht(qLabel(x.quarter)), ht(num(x.shares)), usd(x.value), ht(CHANGE[x.change] ?? '')]),
+        ),
+        h?.rows?.length ? `<h2>Largest 13F filers holding it</h2>` : '',
+        table(['Filer', '13F', 'Value'], (h?.rows ?? []).slice(0, 10).map(([slug, name, quarter, , value]) => [link(`investors/${slug}/`, tc(name)), ht(qLabel(quarter)), usd(value)])),
+        `<p>${link(`season/${(seasonData?.quarter ?? '').toLowerCase()}/`, `${seasonQ} 13F recap`)} · ${link('season/', 'This 13F season')} · ${link('consensus/', 'Consensus')}</p>`,
+      ),
     )
     st++
   }
@@ -226,6 +287,10 @@ redirect('pricing.html', 'pricing/')
 mkdirSync(join(dist, 'latency'), { recursive: true })
 redirect('latency/index.html', 'speed/')
 redirect('about.html', 'about/')
-writeFileSync(join(dist, '404.html'), shell)
+// Links the API hands out as copybook.factordynamics.com/api/… (not a static file here) go on to the API's
+// current base, read from api.json, keeping the path and query. GitHub Pages can't answer with an HTTP
+// redirect, so this only covers links opened in a browser: GET, JavaScript on.
+const apiBridge = `<script>(function(){var p=location.pathname;if(!/^\\/api\\/./.test(p))return;document.documentElement.style.visibility='hidden';var ok=/^https:\\/\\/([a-z0-9-]+\\.)+(trycloudflare\\.com|ts\\.net|factordynamics\\.com|workers\\.dev)(\\/[^\\s?#]*)?$/i,go=function(b){location.replace(b.replace(/\\/$/,'')+p.slice(4)+location.search+location.hash)};fetch(${JSON.stringify(API_JSON_URL)}+'?m='+Math.floor(Date.now()/6e4)).then(function(r){return r.json()}).then(function(j){var b=j&&(j.api_base||j.api);go(ok.test(b)?b:${JSON.stringify(API)})},function(){go(${JSON.stringify(API)})})})()</script>`
+writeFileSync(join(dist, '404.html'), shell.replace('<head>', () => `<head>\n    ${apiBridge}`))
 writeFileSync(join(dist, '.nojekyll'), '')
 console.log(`wrote ${n} investor pages`)

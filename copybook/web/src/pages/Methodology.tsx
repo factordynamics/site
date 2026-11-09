@@ -16,7 +16,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     body: (
       <>
         <p>Everything on Copybook comes from SEC EDGAR: Form 13F-HR and 13F-HR/A for holdings, Form 13F-NT for funds whose holdings another manager reports, Form 4 for insider trades, and Schedule 13D and 13G for stakes of 5% or more. Each page links to the filing it was read from.</p>
-        <p>Holdings values are always the ones the fund filed. Copybook uses no market prices, never re-prices a position and never estimates returns.</p>
+        <p>Holdings values are as filed, except the unit fixes below. Copybook uses no market prices, never re-prices a position and never estimates returns.</p>
       </>
     ),
   },
@@ -41,7 +41,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
           <strong className="font-medium text-ink">Re-filed books.</strong> Some filers re-file their whole 13F as NEW HOLDINGS. An amendment that repeats more than half of the book’s CUSIPs, or whose total is within 0.8–1.25× of the book’s, replaces the book instead of adding to it, and the filing trail marks it <code>mislabeled_amendment</code>. That flag is announced for the API’s <code>filing.versions</code>, not live there yet.
         </p>
         <p>
-          <strong className="font-medium text-ink">Point in time, partly.</strong> Most rows carry the filing that first disclosed them (<code>source_accession</code>) and that filing’s EDGAR acceptance time (<code>first_disclosed_at</code>). Rows added by later amendments aren’t split out from the original quarter yet, so such a position can still count from the original filing; that split is in progress, and the changelog below will say when it lands.
+          <strong className="font-medium text-ink">Point in time, partly.</strong> Most rows carry the filing that first disclosed them (<code>source_accession</code>) and that filing’s EDGAR acceptance time (<code>first_disclosed_at</code>). Positions an amendment adds are dated to that amendment. Shares a later amendment adds to a position already in the original are still dated to the original; a fix is in progress, and the changelog below will say when it lands.
         </p>
         <p>
           <strong className="font-medium text-ink">What you get by default.</strong> Pages, CSVs and the API without <code>as_of</code> return the book as it is known today: the latest RESTATEMENT if there is one, otherwise the original, plus every NEW HOLDINGS row accepted since. The API’s <code>as_of</code> parameter, which will return the book exactly as it was public at a given instant, is announced, not live: today it returns 501 <code>not_yet_available</code>.
@@ -75,7 +75,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     body: (
       <>
         <p>Calls and puts are shown at their filed value, which is the notional value of the underlying shares, not the price of the options. They’re listed apart from shares and never added to share totals or holder counts.</p>
-        <p>Notes and other debt, identified by their title, are left out of stock holder counts. Rows reported as a principal amount (<code>PRN</code>, such as convertible notes) keep their filed value but are never counted as shares; the API marks them with <code>shares_type</code> once that field is published.</p>
+        <p>Notes and other debt, identified by their title, are left out of stock holder counts. Rows reported as a principal amount (<code>PRN</code>, such as convertible notes) keep their filed value but are never counted as shares; the API marks them with <code>shares_type</code> (<code>SH</code> or <code>PRN</code>).</p>
         <p>Lines filed with a value of zero are kept as filed. About 56 such lines are still missing from the published books; a fix is in progress.</p>
       </>
     ),
@@ -100,7 +100,13 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'Moves and changes',
     body: (
       <>
-        <p>A quarter-over-quarter move is the change in shares between a fund’s two filings, valued at the newer filing’s own value per share. A price move alone is never counted as buying or selling.</p>
+        <p>A quarter-over-quarter move is the change in shares between a fund’s two filings, valued at the newer filing’s own value per share. A price move alone is never counted as buying or selling, except in the split cases still being fixed (IESC’s split, and Amundi’s mixed pre- and post-split CRWD lines), which can show a split as a buy.</p>
+        <p>
+          <strong className="font-medium text-ink">CUSIP changes.</strong> When an issuer’s CUSIP is reissued, as Exxon’s 30231G102 became 30233Q108 between Q2 and Q3 2026, a fund’s new row is compared with its previous row under the old CUSIP, so a position it kept reads as added, trimmed or unchanged rather than new. Those rows are labelled “CUSIP change” with both CUSIPs, and the API carries the old one as <code>prev_cusip</code>. Reissues are linked by the data pipeline, which lists every pair it links.
+        </p>
+        <p>
+          <strong className="font-medium text-ink">Splits.</strong> When a stock split between a fund’s two filings, the previous quarter’s shares are multiplied by the split ratio before the comparison, and the row is labelled, for example, “split 2:1 adjusted”. The splits section below lists each one.
+        </p>
         <p>“Since the last 13F” rolls up Form 4 and Schedule 13D/G filings made after a fund’s latest 13F. The newest holding shown is the one in the most recent Form 4, which reports exact shares after each trade; a Schedule 13D/G counts the whole filing group, so it stands in only when there’s no Form 4. Dollar amounts there come from Form 4 open-market purchases and sales (codes P and S) at the prices reported.</p>
       </>
     ),
@@ -143,7 +149,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
         </div>
         <div>
           <dt>Dollar change</dt>
-          <dd>The change in shares times the newer filing’s own value per share. A new position counts its full value; an exited one counts minus its value in the previous filing, since it has no current value. A price move alone is zero.</dd>
+          <dd>The change in shares times the newer filing’s own value per share. A new position counts its full value; an exited one counts minus its value in the previous filing, since it has no current value. A price move alone is zero, except in the split cases noted under Moves and changes.</dd>
         </div>
         <div>
           <dt>Ticker</dt>
@@ -165,8 +171,8 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
 
 // Where an entry (written by the data run) runs ahead of what's served today, the current status.
 const STATUS: Record<string, string> = {
-  '2026-11-08-amendments-point-in-time': 'Status: most rows carry source_accession and first_disclosed_at, not every row. Rows added by later amendments aren’t split out from the original filing yet; that is in progress.',
-  '2026-11-09-refiled-amendments': 'Status: this covers the public pages. The API, 13F history and CSV downloads follow once their storage is rebuilt, and mislabeled_amendment is announced for the API’s filing.versions, not live yet.',
+  '2026-11-08-amendments-point-in-time': 'Status: most rows carry source_accession and first_disclosed_at, not every row. Shares a later amendment adds to a position already in the original are still dated to the original (fix in progress).',
+  '2026-11-09-refiled-amendments': 'Status: the public pages and the API’s /v1 books are corrected (checked: First Eagle 2026Q2 $60.75B, JPMorgan Chase 2025Q3 $1,669B). Member 13F history and CSV downloads are being confirmed. Bulk files are built from original filings, so they show each original book rather than the replacement. mislabeled_amendment is announced for the API’s filing.versions, not live yet.',
 }
 
 export function Methodology() {
@@ -267,7 +273,7 @@ export function Methodology() {
           <section id="latency" className="scroll-mt-24">
             <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert latency</h2>
             <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">
-              Every live alert is timed from EDGAR acceptance to delivery, and the log is public: medians and 90th percentiles by form type and channel, and the latest alerts, are on the{' '}
+              Live alerts will be timed from EDGAR acceptance to delivery once the first ones fire; none so far. The timings, and the latest alerts, will be on the{' '}
               <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
                 speed page
               </Link>

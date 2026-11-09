@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { call, type Member, sharedGet } from '../lib/account'
 import { useFollows } from '../lib/follows'
+import { FUND_SEATS } from '../config'
 import { Button, Check } from './ui'
 
 // First-run setup for Copy Fund: invite seats, bring in the book, pick peers, connect Slack.
@@ -33,7 +34,7 @@ export function FundSetup({ member, welcome }: { member: Member; welcome?: boole
           {
             done: Boolean(seats),
             title: 'Invite your team',
-            body: seats ? `${seats} of 5 seats invited. Each colleague signs in with their own email.` : 'Up to 5 colleagues, each with their own sign-in and alert settings.',
+            body: seats ? `${seats} of ${FUND_SEATS} seats invited. Each colleague signs in with their own email.` : `Up to ${FUND_SEATS} colleagues, each with their own sign-in and alert settings.`,
             act: { label: seats ? 'Manage seats' : 'Invite seats', href: '#team' },
           },
         ]

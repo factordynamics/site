@@ -67,7 +67,7 @@ export function ApiDocs() {
           </Button>
         </div>
         <p className="mt-4 text-[14px] text-ink-3">
-          Coverage: the latest 13F for {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers, and 8 quarters of history for the {cov.data?.curated ?? 348} managers we track closely. Earlier history back to 2013 is in progress. Use is covered by our{' '}
+          Coverage: the latest 13F for {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers, and 8 quarters of history for the {cov.data?.curated ?? 348} managers we track closely. Coming: the as_of parameter with per-row amendment lots by Nov 30, history back to 2013 by Dec 31, Parquet bulk files with no date yet. Use is covered by our{' '}
           <Link to="/terms/" className="font-medium text-accent hover:text-accent-2">
             terms
           </Link>

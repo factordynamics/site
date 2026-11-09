@@ -206,7 +206,7 @@ export function Book() {
   const rows = useMemo(() => {
     const r = names.map((t, i) => {
       const n = newest(data.data?.[i] ?? null, events.data.get(t), follows.insider_min_usd, season, events.loading.has(t), events.failed.has(t))
-      return { ...rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, agg.data?.[i] ?? null, lens), latest: n.latest, insider: n.insider, holder: n.holder, empty: n.empty, more: n.more }
+      return { ...rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, agg.data?.[i] ?? null, lens), latest: n.latest, insider: n.insider, holder: n.holder, empty: n.empty, more: n.more, pending: n.pending }
     })
     const dir = sort.desc ? -1 : 1
     return r.sort((a, b) => {
@@ -622,7 +622,7 @@ function LiteBook({ member }: { member: Member }) {
             net: moves.reduce((a, x) => a + x.delta_value, 0),
             ...(() => {
               const n = newest(st, events.data.get(t), follows.insider_min_usd, season, events.loading.has(t), events.failed.has(t))
-              return { latest: n.latest, insider: n.insider, holder: n.holder, empty: n.empty, more: n.more }
+              return { latest: n.latest, insider: n.insider, holder: n.holder, empty: n.empty, more: n.more, pending: n.pending }
             })(),
           }
         })
@@ -879,7 +879,7 @@ function windowStart(season: string) {
 /** "Jun 30": the day before the window starts, the 13F period end. */
 const windowLabel = (start: string) => (start ? new Date(Date.parse(`${start}T12:00:00Z`) - 86400_000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : 'the 13F')
 
-type Events = { latest: Latest | null; insider: Latest | null; holder: Latest | null; empty: string; more: number }
+type Events = { latest: Latest | null; insider: Latest | null; holder: Latest | null; empty: string; more: number; pending: 'loading' | 'failed' | null }
 function newest(stock: Stock | null, issuer: IssuerFeed | undefined, min: number, season: string, loading: boolean, failed = false): Events {
   // The static `since` block (the funds' own Form 4s and 13D/Gs, as on the stock page) fills the cell at
   // once; the issuer feed, when it arrives, adds company insiders and any filer's 13D/G.
@@ -902,21 +902,23 @@ function newest(stock: Stock | null, issuer: IssuerFeed | undefined, min: number
   // The window is stated only when the feed reaches back to it (the API's window, or every filing there is).
   const oldest = issuer?.at(-1)?.accepted_at.slice(0, 10) ?? ''
   const covered = issuer && (issuer.window || issuer.length < EVENTS_PER_TICKER || (from && oldest <= from))
-  const empty = !issuer ? (loading ? 'loading' : failed ? 'failed' : 'Insider filings not loaded yet') : covered ? `No insider buys or sells since ${windowLabel(from)}` : `No insider buys or sells in the last ${issuer.length} Form 4s, back to ${dateLabel(oldest)}`
-  return { latest: insider ?? holder, insider, holder, empty: insider ? '' : empty, more }
+  // Before the issuer feed answers, the cell already says what the static data shows: no fund trades in the window.
+  const empty = !issuer ? `No fund Form 4 trades since ${windowLabel(from)}` : covered ? `No insider buys or sells since ${windowLabel(from)}` : `No insider buys or sells in the last ${issuer.length} Form 4s, back to ${dateLabel(oldest)}`
+  return { latest: insider ?? holder, insider, holder, empty: insider ? '' : empty, more, pending: issuer ? null : loading ? 'loading' : failed ? 'failed' : null }
 }
 
 // The cell's dates are all inside the window (since the last quarter end), so they go without the year.
 /** The Form 4/13D cell: the insider line (or what its absence means) and the latest 13D/G under it. */
-function EventsCell({ r, w, onRetry }: { r: { ticker: string; insider?: Latest | null; holder?: Latest | null; empty?: string; more?: number }; w: string; onRetry: () => void }) {
+function EventsCell({ r, w, onRetry }: { r: { ticker: string; insider?: Latest | null; holder?: Latest | null; empty?: string; more?: number; pending?: 'loading' | 'failed' | null }; w: string; onRetry: () => void }) {
+  // Under the static line while the issuer feed (company insiders, any filer's 13D/G) is on its way or failed.
   const status =
-    r.empty === 'loading' ? (
-      <span className="flex items-center gap-2 text-[12.5px] text-ink-3">
-        <Skeleton className="h-3.5 w-16" /> Checking insider filings…
+    r.pending === 'loading' ? (
+      <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-ink-3">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-3" aria-hidden /> Checking company insiders…
       </span>
-    ) : r.empty === 'failed' ? (
-      <span className="block max-w-[11rem] text-ink-3">
-        Insider filings didn’t load.{' '}
+    ) : r.pending === 'failed' ? (
+      <span className="mt-0.5 block max-w-[11rem] text-[11.5px] text-ink-3">
+        Company insiders didn’t load.{' '}
         <button type="button" onClick={onRetry} className="font-medium text-accent hover:text-accent-2">
           Retry
         </button>
@@ -932,7 +934,8 @@ function EventsCell({ r, w, onRetry }: { r: { ticker: string; insider?: Latest |
   )
   return (
     <>
-      {r.insider ? line(r.insider) : (status ?? <span className="block max-w-[11rem] text-ink-3">{r.empty}</span>)}
+      {r.insider ? line(r.insider) : <span className="block max-w-[11rem] text-ink-3">{r.empty}</span>}
+      {status}
       {r.holder && <span className="mt-1.5 block">{line(r.holder)}</span>}
       {(r.more ?? 0) > 0 && <NonTrade n={r.more!} ticker={r.ticker} />}
     </>

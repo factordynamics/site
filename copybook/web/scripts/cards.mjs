@@ -115,11 +115,14 @@ for (let i = 0; i < recent.length; i += 16) {
       moves,
     }
     writeFileSync(join(out, 'd', 'f', `${c.accession}.json`), JSON.stringify(c))
-    writeFileSync(join(out, 'og', 'f', `${c.accession}.png`), new Resvg(svg(c), { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng())
+    const png = new Resvg(svg(c), { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng()
+    writeFileSync(join(out, 'og', 'f', `${c.accession}.png`), png)
     const title = `${c.manager}’s ${qLabel(c.quarter)} 13F: top moves · Copybook`
     const top = moves.slice(0, 3).map((m) => `${m.change === 'new' ? 'new' : m.change} ${m.ticker || m.name} ${m.value_delta >= 0 ? '+' : '−'}${money(m.value_delta)}`)
     const desc = `${c.manager} filed a ${qLabel(c.quarter)} 13F on ${dLabel(c.filing_date)}: ${top.join(', ')}. Bought ${money(c.bought_usd)}, sold ${money(c.sold_usd)}, from the SEC filing.`
-    const img = `${SITE}og/f/${c.accession}.png`
+    // A hash of the image bytes, so X and Slack refetch the card when a rebuild changes its numbers.
+    const img = `${SITE}og/f/${c.accession}.png?v=${createHash('sha1').update(png).digest('hex').slice(0, 10)}`
+    const alt = `${c.manager}’s ${qLabel(c.quarter)} 13F: bought ${money(c.bought_usd)}, sold ${money(c.sold_usd)}${top.length ? `; top moves ${top.join(', ')}` : ''}`
     const html = shell
       // Function replacers only: descriptions hold dollar amounts like "$1.7B", which a replacement
       // string would read as the $1 backreference.
@@ -128,7 +131,8 @@ for (let i = 0; i < recent.length; i += 16) {
       .replace(/(<meta property="og:title" content=")[^"]*/, (_, p) => p + esc(title))
       .replace(/(<meta property="og:description" content=")[^"]*/, (_, p) => p + esc(desc))
       .replaceAll(`${SITE}og.png`, () => img)
-      .replace('<meta property="og:type"', () => `<link rel="canonical" href="${SITE}f/${c.accession}/" />\n    <meta name="twitter:title" content="${esc(title)}" />\n    <meta name="twitter:description" content="${esc(desc)}" />\n    <meta property="og:type"`)
+      .replace(/(<meta property="og:image:alt" content=")[^"]*/, (_, p) => p + esc(alt))
+      .replace('<meta property="og:type"', () => `<link rel="canonical" href="${SITE}f/${c.accession}/" />\n    <meta name="twitter:image:alt" content="${esc(alt)}" />\n    <meta name="twitter:title" content="${esc(title)}" />\n    <meta name="twitter:description" content="${esc(desc)}" />\n    <meta property="og:type"`)
     mkdirSync(join(out, 'f', c.accession), { recursive: true })
     writeFileSync(join(out, 'f', c.accession, 'index.html'), html)
     list.push({ accession: c.accession, slug: c.slug, quarter: c.quarter, filing_date: c.filing_date })

@@ -3,6 +3,7 @@ import { Signup } from '../components/Signup'
 import { Badge, Panel, Skeleton } from '../components/ui'
 import { gapLabel, loadLatency, type Latency, type LatencyStat } from '../lib/account'
 import { quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { OUTAGES } from '../lib/hosting'
 import { seasonNow } from '../lib/stocks'
 
 // /speed/: the public alert latency log (the API's latency.json on R2). Every live alert this season, from EDGAR
@@ -193,6 +194,15 @@ export function Speed() {
             </li>
           ))}
         </ol>
+        <h3 className="mt-6 text-[15px] font-semibold">What happens to alerts during an outage</h3>
+        <dl className="mt-2 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
+          {OUTAGES.map(([when, what]) => (
+            <div key={when} className="py-3 text-[14px] leading-relaxed">
+              <dt className="font-medium text-ink">{when}</dt>
+              <dd className="mt-0.5 text-ink-2">{what}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       <Signup source="speed" className="mt-10" />
@@ -202,8 +212,9 @@ export function Speed() {
 
 // Newest first, in UTC. Every incident that made member pages or alerts unavailable or slow.
 const INCIDENTS: [string, string][] = [
-  ['Nov 9, 2026 · 05:01–about 05:30 UTC', 'Member pages and the API were slow: the API’s new host saturated its network link. No alerts were missed.'],
-  ['Nov 9, 2026 · 03:54–05:01 UTC', 'Member pages (account, My book) and the API were unavailable: the API’s hosting plan hit its daily request quota. The API moved to a dedicated server. No alerts were missed.'],
+  ['Nov 9, 2026 · 05:31–05:33 UTC', 'A failed deploy of the API, rolled back. No alerts were missed.'],
+  ['Nov 9, 2026 · 05:01–05:28 UTC', 'Member pages and the API were slow or unavailable: network saturation on the API machine. No alerts were missed.'],
+  ['Nov 9, 2026 · 03:54–05:01 UTC', 'Member pages (account, My book) and the API were unavailable: the API hit Cloudflare’s daily request quota. The API moved to a dedicated machine. No alerts were missed.'],
 ]
 const ago = (ms: number) => (ms < 90_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : ms < 90 * 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 3_600_000)} h`)
 

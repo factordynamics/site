@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { api } from '../config'
+import { api, apiReady, rereadApi } from '../config'
 
 export type Member = {
   email: string
@@ -128,9 +128,21 @@ const setDown = (v: boolean) => {
 }
 /** Re-renders when the API starts or stops answering 429/5xx (the status banner). */
 export const useApiDown = () => useSyncExternalStore((f) => (downSubs.add(f), () => downSubs.delete(f)), apiDown)
+/** fetch against the current API base. A network-level failure (a rotated tunnel URL) re-reads api.json
+ *  once, and the request is retried if the base moved. */
+async function apiFetch(path: string, init?: RequestInit) {
+  await apiReady
+  try {
+    return await fetch(`${api}${path}`, init)
+  } catch (e) {
+    if (e instanceof TypeError && (await rereadApi())) return fetch(`${api}${path}`, init)
+    throw e
+  }
+}
+
 /** A public GET that should also drive the status banner (the /api/ page's changelog). */
 export async function probe<T>(path: string): Promise<T> {
-  const res = await fetch(`${api}${path}`).catch((e) => {
+  const res = await apiFetch(path).catch((e) => {
     setDown(true)
     throw e
   })
@@ -147,7 +159,7 @@ export async function call<T>(path: string, init: { method?: string; body?: unkn
     if (!t) throw new ApiError(401)
     headers.Authorization = `Bearer ${t}`
   }
-  const res = await fetch(`${api}${path}`, {
+  const res = await apiFetch(path, {
     method: init.method ?? (init.body !== undefined ? 'POST' : 'GET'),
     headers,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
@@ -331,7 +343,7 @@ export const setAlerts = (alerts: Member['alerts']) => call<{ member: Member }>(
 export async function downloadFile(path: string, filename: string) {
   const t = getToken()
   if (!t) throw new ApiError(401)
-  const res = await fetch(`${api}${path}`, { headers: { Authorization: `Bearer ${t}` } })
+  const res = await apiFetch(path, { headers: { Authorization: `Bearer ${t}` } })
   if (res.status === 401) signOut()
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null))
   const url = URL.createObjectURL(await res.blob())

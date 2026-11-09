@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button, Check } from '../components/ui'
-import { api } from '../config'
+import { api, apiReady } from '../config'
 import { useTitle } from '../lib/data'
 
 // Posts to {api}/fund-request: Fund access requests, support questions and data deletion requests.
@@ -36,6 +36,7 @@ export function Contact() {
         website: form.website || undefined,
         ...(fund ? { fund: form.fund.trim(), seats: Number(form.seats) || undefined, invoice: form.invoice, plan_interval: 'yearly' } : {}),
       }
+      await apiReady
       const r = await fetch(`${api}/fund-request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       if (r.ok) return setState('sent')
       const j = (await r.json().catch(() => null)) as { error?: string; code?: string } | null
@@ -55,7 +56,7 @@ export function Contact() {
           <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">{fund ? 'Copybook for your fund.' : 'Get in touch.'}</h1>
           {fund ? (
             <>
-              <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Copy Pro for a team of up to 5: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
+              <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Copy Pro for a team of up to 10: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-ink-2">
                 {['Founding price $1,990/yr, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 on request', 'Your uploaded book stays private to your team'].map((x) => (
                   <li key={x} className="flex gap-2.5">

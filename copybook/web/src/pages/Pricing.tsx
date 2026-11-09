@@ -7,10 +7,10 @@ import { attributed, referredCheckout, refCode } from '../lib/attribution'
 import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { quarterLabel, useAsync, useTitle } from '../lib/data'
 import { loadCoverage } from '../lib/stocks'
-import { api, BOOK_LITE, BOOK_PRO, checkoutEnabled, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
+import { BOOK_LITE, BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
-type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean }
+type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean; why?: string }
 
 const tiers = (filers: string, curated: number): Tier[] => [
   {
@@ -41,35 +41,37 @@ const tiers = (filers: string, curated: number): Tier[] => [
   {
     id: 'pro',
     proof: true,
-    who: 'For quants, analysts and small funds. 1 seat.',
+    who: 'For one analyst or quant. 1 seat, card billing.',
     lead: 'Everything in Copy, plus',
     now: [
       { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
-      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, with its latest holdings as JSON; 8 quarters of history for the ${curated} we track closely, back to 2013 is in progress.` },
+      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, with its latest holdings as JSON; 8 quarters of history for the ${curated} we track closely, back to 2013 by Dec 31.` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
       { t: 'Holders, history and events endpoints', d: 'Every filer holding a stock, a filer’s books across a range of quarters, and Form 4 and 13D/G events, as JSON.' },
-      { t: 'Bulk CSV exports', d: 'One gzip CSV per quarter of every filer’s 13F book, as originally filed: no restatements, amendments or point-in-time columns yet.' },
+      { t: 'Bulk CSV exports', d: 'One gzip CSV per quarter of every filer’s 13F book, built from original filings: no restatements, amendments or point-in-time columns yet, so a re-filed book shows its original.' },
       BOOK_PRO,
       { t: 'Peer overlap', d: 'Up to 12 funds you benchmark against: how much their books overlap, the names they share, and what they did in yours.' },
     ],
     soon: [
-      { t: 'Point-in-time history', d: 'An as_of parameter and point-in-time columns in the bulk files, so a backtest sees only what was public. No date yet.' },
-      { t: 'History back to 2013', d: 'In progress; 8 quarters today.' },
+      { t: 'Point-in-time history', d: 'An as_of parameter with per-row amendment lots, so a backtest sees only what was public. By Nov 30.' },
+      { t: 'History back to 2013', d: 'By Dec 31; 8 quarters today.' },
       { t: 'Parquet bulk files', d: 'Next to the CSVs. No date yet.' },
     ],
   },
   {
     id: 'fund',
-    who: 'For investment teams. 5 seats.',
+    who: `For a PM and analysts working one book. Up to ${FUND_SEATS} seats, one invoice.`,
     lead: 'Everything in Pro, plus',
     now: [
-      { t: '5 seats', d: 'Invite your team by email; each seat signs in on its own and keeps its own alerts and channels.' },
+      { t: `Up to ${FUND_SEATS} seats`, d: 'Invite your team by email; each seat signs in on its own and keeps its own alerts and channels.' },
       { t: 'Shared book and peer lists', d: 'One set of follows, watchlist, owned book and peers the whole team works from.' },
-      { t: 'Team alerts in Slack', d: 'Every alert in your team’s channel, as it happens.' },
+      { t: 'One team channel', d: 'Each alert posts once to your team’s Slack channel, whoever follows it.' },
+      { t: 'Seat admin', d: 'Add and remove seats, and revoke a seat’s sessions.' },
       { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 on request.' },
     ],
     soon: [],
+    why: FUND_WHY,
   },
 ]
 
@@ -78,7 +80,7 @@ const FOUNDING: Partial<Record<PlanId, string>> = {
   fund: 'Founding price: subscribe before Dec 31 and keep $1,990/yr for as long as you stay subscribed.',
 }
 
-// What each plan includes. true = included, false = not, 'soon' = coming (no date), string = shown as is.
+// What each plan includes. true = included, false = not, 'soon' = coming (no date), 'by …' = coming by that date, string = shown as is.
 const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   [`Latest 13F of ${filers} filers`, true, true, true, true],
   ['Stock pages and search', true, true, true, true],
@@ -92,14 +94,17 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['8 quarters of history and CSV', false, true, true, true],
   ['API keys, filer and holdings endpoints', false, false, true, true],
   ['Holders, history and events endpoints', false, false, true, true],
-  ['Point-in-time history', false, false, 'soon', 'soon'],
+  ['Point-in-time history', false, false, 'by Nov 30', 'by Nov 30'],
   ['Signed webhooks', false, false, true, true],
   ['Bulk CSV exports (as filed)', false, false, true, true],
   ['My book lite: superinvestors in your names', false, true, true, true],
-  ['Full My book: every 13F filer, crowding, peers, 13F linking, CSV', false, false, true, true],
+  ['Full My book: every 13F filer (holders, crowding, peers), 13F linking, CSV', false, false, true, true],
+  ['New, exited and net trades for all filers in My book (tracked funds today)', false, false, 'by Nov 20', 'by Nov 20'],
   ['Peer overlap', false, false, true, true],
-  ['Seats', '1', '1', '1', '5'],
+  ['Seats', '1', '1', '1', `Up to ${FUND_SEATS}`],
   ['Shared book and peer lists', false, false, false, true],
+  ['One team Slack channel: each alert posts once', false, false, false, true],
+  ['Seat admin: add, remove and revoke sessions', false, false, false, true],
   ['Invoice billing, W-9', false, false, false, true],
 ]
 
@@ -215,7 +220,7 @@ export function Pricing() {
                     Request Fund access
                   </Button>
                 ) : live ? (
-                  <Button href={attributed(link)} onClick={referredCheckout(tier.id as 'copy' | 'pro', cycle, attributed(link), api)} variant={dark ? 'primary' : 'dark'} className="w-full">
+                  <Button href={attributed(link)} onClick={referredCheckout(tier.id as 'copy' | 'pro', cycle, attributed(link))} variant={dark ? 'primary' : 'dark'} className="w-full">
                     Start {TRIAL_DAYS}-day free trial
                   </Button>
                 ) : (
@@ -230,7 +235,7 @@ export function Pricing() {
                       </a>
                       .{' '}
                       {live && (
-                        <a href={attributed(link)} onClick={referredCheckout('fund', cycle, attributed(link), api)} className="underline underline-offset-2 hover:text-ink">
+                        <a href={attributed(link)} onClick={referredCheckout('fund', cycle, attributed(link))} className="underline underline-offset-2 hover:text-ink">
                           Or start a {TRIAL_DAYS}-day card trial
                         </a>
                       )}
@@ -253,6 +258,7 @@ export function Pricing() {
                 {tier.lead && <p className={`mb-3 text-[12.5px] font-medium ${dark ? 'text-white/70' : 'text-ink-2'}`}>{tier.lead}:</p>}
                 {tier.soon && <h3 className="mb-2.5 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-ink-3">Included now</h3>}
                 <FeatureList items={tier.now} dark={dark} />
+                {tier.why && <p className={`mt-5 rounded-lg px-3 py-2.5 text-[12.5px] leading-snug ${dark ? 'bg-white/[0.06] text-white/75' : 'bg-ink/[0.04] text-ink-2'}`}>{tier.why}</p>}
                 {tier.soon && tier.soon.length > 0 && (
                   <>
                     <h3 className="mb-2.5 mt-6 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[#8a5a0b]">Coming</h3>
@@ -305,8 +311,8 @@ export function Pricing() {
                         <span className="text-ink-3" aria-label="Not included">
                           –
                         </span>
-                      ) : c === 'soon' ? (
-                        <span className="text-[12px] font-medium text-[#8a5a0b]">Coming</span>
+                      ) : c === 'soon' || c.startsWith('by ') ? (
+                        <span className="whitespace-nowrap text-[12px] font-medium text-[#8a5a0b]">{c === 'soon' ? 'Coming' : `Coming ${c}`}</span>
                       ) : (
                         <span className="num font-medium">{c}</span>
                       )}

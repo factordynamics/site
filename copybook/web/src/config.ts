@@ -7,18 +7,52 @@ export const checkout = {
   yearly: 'https://buy.stripe.com/7sYeVd1dkguecW6gDIgjC01',
   portal: 'https://billing.stripe.com/p/login/aFa7sL1dk2Do5tE2MSgjC00',
 }
-// Set at build time from api.config.mjs. A tester can point one browser at another API with
-// localStorage['copybook-api'] = 'https://…' (https only; there is deliberately no URL parameter for it,
-// since a link could then send a member's session token elsewhere).
-const apiOverride = (() => {
+// The API base. The build value (api.config.mjs) is the fallback; at load the site reads the current base
+// from api.json on R2, which the API host rewrites when its tunnel URL changes, and remembers the last one
+// it read. Only https bases on hosts we run are accepted, since a member's session token is sent there.
+// A tester can pin one browser to another API with localStorage['copybook-api'] = 'https://…' (there is
+// deliberately no URL parameter for it, since a link could then send a session token elsewhere).
+const okBase = (v: unknown): string | null =>
+  typeof v === 'string' && /^https:\/\/([a-z0-9-]+\.)+(trycloudflare\.com|ts\.net|factordynamics\.com|workers\.dev)(\/[^\s?#]*)?$/i.test(v) ? v.replace(/\/$/, '') : null
+const stored = (k: string) => {
   try {
-    const v = localStorage.getItem('copybook-api')
-    return v && /^https:\/\/[^\s/]+(\/[^\s]*)?$/.test(v) ? v.replace(/\/$/, '') : null
+    return localStorage.getItem(k)
   } catch {
     return null
   }
+}
+const apiOverride = (() => {
+  const v = stored('copybook-api')
+  return v && /^https:\/\/[^\s/]+(\/[^\s]*)?$/.test(v) ? v.replace(/\/$/, '') : null
 })()
-export const api: string = apiOverride ?? import.meta.env.VITE_API
+/** The API base in use now. A live binding: it changes once api.json answers, so read it at request time. */
+export let api: string = apiOverride ?? okBase(stored('copybook-api-base')) ?? import.meta.env.VITE_API
+const readBase = (init?: RequestInit) =>
+  fetch(`${import.meta.env.VITE_API_JSON_URL}?m=${Math.floor(Date.now() / 60_000)}`, { ...init, signal: AbortSignal.timeout(2500) })
+    .then((r) => (r.ok ? (r.json() as Promise<{ api?: string; api_base?: string }>) : null))
+    .then((j) => {
+      const v = okBase(j?.api_base ?? j?.api)
+      if (v) {
+        api = v
+        try {
+          localStorage.setItem('copybook-api-base', v)
+        } catch {
+          /* private mode */
+        }
+      }
+      return api
+    })
+    .catch(() => api)
+/** Resolves with the current API base: api.json's within 2.5 s, else the last known or build value. */
+export const apiReady: Promise<string> = apiOverride ? Promise.resolve(api) : readBase()
+let reread = false
+/** After a network-level failure: read api.json once more, bypassing caches. True when the base changed. */
+export async function rereadApi(): Promise<boolean> {
+  if (apiOverride || reread) return false
+  reread = true
+  const before = api
+  return (await readBase({ cache: 'no-store' })) !== before
+}
 // Free weekly email box (POST {api}/signup). On once the API route is live.
 export const signupLive = true
 
@@ -65,4 +99,8 @@ export const DATA_TERMS = 'SEC EDGAR 13F filings as filed. Not investment advice
 
 // My book by plan. One wording on pricing, /account/ and the My book upgrade panel.
 export const BOOK_LITE = { t: 'My book lite', d: 'Who among the superinvestors holds your names, their season moves, and the latest Form 4 or 13D.' }
-export const BOOK_PRO = { t: 'Full My book', d: 'Your names against every 13F filer, crowding, peers, 13F linking, CSV and API.' }
+/** Why a team buys Fund rather than several Pro seats (shown under Fund on /pricing/ and /for-funds/). */
+export const FUND_WHY = 'Why not separate Pro seats? Pro seats don’t share a book, peers or watchlist, so each analyst rebuilds the same list, alerts arrive once per seat in Slack instead of once, and Pro can’t be invoiced.'
+/** Copy Fund's seat cap; the API's /seats max wins when it answers. */
+export const FUND_SEATS = 10
+export const BOOK_PRO = { t: 'Full My book', d: 'Your names against every 13F filer (holders, crowding, peers), 13F linking, CSV and API. New, exited and net trades are for tracked funds today; all filers by Nov 20.' }

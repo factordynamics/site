@@ -17,7 +17,8 @@ export function Resume() {
       {t ? (
         <>
           <p className="mt-3 text-[17px] leading-relaxed text-ink-2">Real-time alerts and billing start again today. Your follows, names and settings are just as you left them.</p>
-          <form method="POST" action={`${api}/resume?t=${encodeURIComponent(t)}`} className="mt-8">
+          {/* The action is set again on submit: the API base may have changed since render (api.json). */}
+          <form method="POST" action={`${api}/resume?t=${encodeURIComponent(t)}`} onSubmit={(e) => (e.currentTarget.action = `${api}/resume?t=${encodeURIComponent(t)}`)} className="mt-8">
             <button type="submit" className="inline-flex h-11 items-center gap-2 rounded-full bg-ink px-5 text-[15px] font-medium text-white hover:bg-ink/90">
               Resume now <Arrow />
             </button>

@@ -112,7 +112,7 @@ export function Flow() {
           <p className="border-b border-line px-5 py-2.5 text-[12.5px] text-ink-3 md:px-6">
             {tab === 'bought' && 'Net shares bought across funds, valued at quarter end.'}
             {tab === 'sold' && 'Net shares sold across funds, valued at quarter end.'}
-            {tab === 'most_buyers' && 'Stocks the most funds opened or added to.'}
+            {tab === 'most_buyers' && 'Stocks the most funds opened or added to, with the dollar value they bought.'}
             {tab === 'new_multi' && 'New positions opened by two or more funds. Spin-offs and fresh listings nobody held before are left out.'}
           </p>
           {!d ? (
@@ -219,10 +219,18 @@ function FlowItem({ r, i, tab, quarter }: { r: FlowRow; i: number; tab: Tab; qua
             {r.n_buyers ?? r.buyers.length} bought · {r.n_sellers ?? r.sellers.length} sold
           </span>
         </span>
-        <span className={`num text-right text-[14px] font-medium ${value >= 0 ? 'text-up' : 'text-down'}`}>
-          {value >= 0 ? '+' : '−'}
-          {money(Math.abs(value))}
-        </span>
+        {tab === 'most_buyers' ? (
+          // Ranked by how many funds bought; the amount is their gross buying, not a net, so it isn't signed.
+          <span className="num text-right text-[14px] font-medium" title="Dollar value of the shares these funds bought, before any selling by others">
+            {money(r.buy_value)}
+            <span className="block text-[11.5px] font-normal text-ink-3">$ bought</span>
+          </span>
+        ) : (
+          <span className={`num text-right text-[14px] font-medium ${value >= 0 ? 'text-up' : 'text-down'}`}>
+            {value >= 0 ? '+' : '−'}
+            {money(Math.abs(value))}
+          </span>
+        )}
       </Link>
     </li>
   )

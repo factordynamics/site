@@ -1,7 +1,7 @@
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type Plugin } from 'vite'
-import { API, LATENCY_URL } from './api.config.mjs'
+import { API, API_JSON_URL, LATENCY_URL } from './api.config.mjs'
 
 // Served at https://copybook.factordynamics.com/ (GitHub Pages, .github/workflows/copybook-pages.yml).
 // Data is published by copybook/ingest to refcell/gust and read cross-origin (Pages sends CORS *).
@@ -10,6 +10,7 @@ process.env.VITE_SITE ||= 'https://copybook.factordynamics.com/'
 process.env.VITE_DATA_BASE ||= 'https://refcell.github.io/gust/copybook/data/'
 process.env.VITE_API = API
 process.env.VITE_LATENCY_URL = LATENCY_URL
+process.env.VITE_API_JSON_URL = API_JSON_URL
 // Preload the Latin web fonts the first screen uses, so headlines don't reflow when they swap in (layout
 // shift), and open the connection to the data host early.
 const preload = (): Plugin => ({

@@ -1,3 +1,4 @@
+import { apiReady } from '../config'
 // Carries the landing UTMs to Stripe so on-site sales are attributed like direct links:
 // client_reference_id={source}_{content} (marketing link contract), plus the utm_* fields.
 const KEY = 'copybook-utm'
@@ -83,13 +84,13 @@ export function refCode(): string | null {
 }
 
 /** Click handler for a paid Payment Link: with a kept referral code, a checkout that carries it instead. */
-export function referredCheckout(plan: 'copy' | 'pro' | 'fund', interval: 'monthly' | 'yearly', fallback: string, api: string) {
+export function referredCheckout(plan: 'copy' | 'pro' | 'fund', interval: 'monthly' | 'yearly', fallback: string) {
   return (e: { preventDefault: () => void }) => {
     const ref = refCode()
     if (!ref) return
     e.preventDefault()
     const tags = utmTags() as Record<string, string>
-    fetch(`${api}/checkout`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan, interval, ref, source: tags.utm_source ?? 'referral' }) })
+    apiReady.then((base) => fetch(`${base}/checkout`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan, interval, ref, source: tags.utm_source ?? 'referral' }) }))
       .then((r) => (r.ok ? (r.json() as Promise<{ url: string; referral: { applied: boolean } | null }>) : Promise.reject(new Error(String(r.status)))))
       .then((r) => {
         // An unknown code, or an email that already pays: full price, and the code is spent.
