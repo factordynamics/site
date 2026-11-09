@@ -3,6 +3,7 @@ import { isActive, type Env, type Member } from './env';
 import { stripe } from './stripe';
 import { carryFreeSignup } from './free';
 import { countTransition, maybeCancelMail, maybeWinback } from './revenue';
+import { noteReferral } from './referrals';
 import { mirrorSeats } from './seats';
 import { signToken } from './tokens';
 
@@ -86,6 +87,9 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     // Set by a cancel in the billing portal: still active until period_end, then it ends.
     cancel_at_period_end: Boolean(sub.cancel_at_period_end),
     cancel_at: Number(sub.cancel_at ?? 0) || null,
+    // Set at checkout (POST /checkout): the referral code and where the subscriber came from.
+    referred_by: prev?.referred_by ?? (typeof sub.metadata?.ref === 'string' ? sub.metadata.ref : null),
+    source: prev?.source ?? (typeof sub.metadata?.source === 'string' ? sub.metadata.source : undefined),
   };
   // A stale event (older subscription) must not overwrite a newer active one.
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
@@ -104,6 +108,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
   await maybeCancelMail(env, prev, m);
   await maybeWinback(env, prev, m);
   await countTransition(env, prev, m);
+  if (m.referred_by && !prev?.referred_by) await noteReferral(env, m);
   await putMember(env, m);
   await mirrorSeats(env, m);
   return m;
@@ -246,7 +251,7 @@ async function viaObject(env: Env, m: Member, op: FollowOp): Promise<{ ok: true;
 }
 
 /** Claims (or releases) a once-per-customer action such as the welcome email; true only for the first claim. */
-async function claim(env: Env, customer: string, name: string, take: boolean): Promise<boolean> {
+export async function claim(env: Env, customer: string, name: string, take: boolean): Promise<boolean> {
   const stub = env.FOLLOWS.get(env.FOLLOWS.idFromName(customer));
   return ((await (await stub.fetch('https://follows/claim', { method: 'POST', body: JSON.stringify({ claim: name, take }) })).json()) as { first: boolean }).first;
 }

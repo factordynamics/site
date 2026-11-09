@@ -771,6 +771,58 @@ describe('copybook api', () => {
     expect(v1.pending).toEqual([]);
   });
 
+  it('referrals: a code per paying member; checkout applies a month free server-side; the referrer is credited a month once, after the first paid invoice', async () => {
+    stripeObjects['checkout/sessions/cs_test_rr'] = { id: 'cs_test_rr', status: 'complete', created: now(), subscription: 'sub_rr', customer_details: { email: 'rr@example.com' } };
+    stripeObjects['subscriptions/sub_rr'] = sub('sub_rr', 'cus_rr', 'active');
+    const rr = ((await (await call('/session', { body: { checkout_session: 'cs_test_rr' } })).json()) as { token: string }).token;
+    const ref = (await (await call('/me', { token: rr })).json()).member.referral;
+    expect(ref).toMatchObject({ code: expect.stringMatching(/^[a-z2-9]{8}$/), url: `${SITE}pricing/?ref=${ref.code}`, signups: 0, paid: 0 });
+    expect((await (await call('/me', { token: rr })).json()).member.referral.code).toBe(ref.code); // stable
+
+    const calls: { path: string; body: string }[] = [];
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      const url = String(u);
+      if (!url.startsWith('https://api.stripe.com/v1/') || (init?.method !== 'POST' && !url.includes('/prices?') && !url.includes('/coupons/'))) return orig(u, init);
+      const path = url.slice('https://api.stripe.com/v1/'.length).split('?')[0];
+      calls.push({ path, body: decodeURIComponent(String(init?.body ?? '')) });
+      if (path === 'prices') return Response.json({ data: [{ id: `price_${new URL(url).searchParams.get('lookup_keys[]')}` }] });
+      if (path.startsWith('coupons/')) return Response.json({ error: { message: 'No such coupon' } }, { status: 404 });
+      if (path === 'checkout/sessions') return Response.json({ url: 'https://checkout.stripe.com/c/pay/cs_ref' });
+      return Response.json({ id: 'ok' });
+    });
+    const co = await (await call('/checkout', { body: { plan: 'pro', interval: 'yearly', ref: ref.code.toUpperCase(), email: 'new@example.com' } })).json();
+    expect(co).toEqual({ ok: true, url: 'https://checkout.stripe.com/c/pay/cs_ref', referral: { applied: true, months_free: 1 } });
+    expect(calls.find((c) => c.path === 'coupons')!.body).toContain('amount_off=3900'); // a month of Pro, off the first year
+    const cs = calls.find((c) => c.path === 'checkout/sessions')!.body;
+    expect(cs).toContain('discounts[0][coupon]=copybook-ref-pro-1mo');
+    expect(cs).toContain(`subscription_data[metadata][ref]=${ref.code}`);
+    expect(cs).toContain('subscription_data[trial_period_days]=14');
+    expect(cs).toContain('line_items[0][price]=price_pro_yearly');
+    // A paying member's address (here the referrer's own) gets no referral month.
+    calls.length = 0;
+    expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'monthly', ref: ref.code, email: 'rr@example.com' } })).json()).referral).toEqual({ applied: false });
+    expect(calls.find((c) => c.path === 'checkout/sessions')!.body).not.toContain('discounts');
+    expect((await call('/checkout', { body: { plan: 'gold', interval: 'monthly' } })).status).toBe(400);
+
+    // The referred subscription arrives: counted as a signup for the referrer, no credit yet.
+    stripeObjects['customers/cus_nw'] = { id: 'cus_nw', email: 'new@example.com' };
+    await webhook({ type: 'customer.subscription.created', data: { object: { ...sub('sub_nw', 'cus_nw', 'trialing', 'year', 'pro_yearly'), metadata: { ref: ref.code, source: 'referral' } } } });
+    expect(JSON.parse((await env.DB.get('cus:cus_nw'))!)).toMatchObject({ referred_by: ref.code, source: 'referral' });
+    expect((await (await call('/me', { token: rr })).json()).member.referral).toMatchObject({ signups: 1, paid: 0 });
+    calls.length = 0;
+    sent = [];
+    await webhook({ type: 'invoice.paid', data: { object: { customer: 'cus_nw', amount_paid: 0 } } }); // the trial's $0 invoice
+    expect(calls).toHaveLength(0);
+    // The first paid invoice: one month of the referrer's own plan (Copy, $9) as a balance credit, once.
+    await webhook({ type: 'invoice.paid', data: { object: { customer: 'cus_nw', amount_paid: 35100 } } });
+    await webhook({ type: 'invoice.paid', data: { object: { customer: 'cus_nw', amount_paid: 35100 } } });
+    expect(calls.map((c) => [c.path, c.body.match(/amount=(-?\d+)/)?.[1]])).toEqual([['customers/cus_rr/balance_transactions', '-900']]);
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['rr@example.com', 'You earned a free month of Copy']]);
+    expect((await (await call('/me', { token: rr })).json()).member.referral).toMatchObject({ signups: 1, paid: 1, months_earned: 1 });
+    vi.stubGlobal('fetch', orig);
+  });
+
   it('POST /upgrade: Copy yearly gets a portal confirm page for Pro yearly on the same subscription item; Pro and bad plans are refused', async () => {
     const session = async (c: string, lookup: string, interval = 'month') => {
       stripeObjects[`checkout/sessions/cs_test_${c}`] = { id: `cs_test_${c}`, status: 'complete', created: now(), subscription: `sub_${c}`, customer_details: { email: `${c}@example.com` } };

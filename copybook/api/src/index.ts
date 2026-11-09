@@ -80,6 +80,11 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
     case 'customer.subscription.deleted':
       await syncSubscription(env, obj);
       break;
+    case 'invoice.paid': {
+      const { rewardReferrer } = await import('./referrals');
+      console.log(`referral: ${await rewardReferrer(env, obj)}`);
+      break;
+    }
   }
   return json({ ok: true }, 200, {});
 }
@@ -172,6 +177,18 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // Filings the missed-filing detector found unsent 10+ minutes after acceptance and put back in front of the polls.
     const missed_recovered = { count: Number((await env.DB.get('missed:count')) ?? 0), recent: (JSON.parse((await env.DB.get('missed:log')) ?? '[]') as unknown[]).slice(0, 10) };
     return json({ ok: true, alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, ...business }, 200, h);
+  }
+
+  // A new subscription's Checkout, with a referral month applied server-side (typed promo codes are off on this account).
+  if (req.method === 'POST' && path === '/checkout') {
+    const ip = req.headers.get('cf-connecting-ip') ?? 'unknown';
+    const k = `rl:checkout:${ip}`;
+    const n = Number((await env.DB.get(k)) ?? 0);
+    if (n >= 30) return json({ ok: false, error: 'too many requests, try again in an hour', code: 'rate_limited' }, 429, { ...h, 'retry-after': '3600' });
+    await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
+    const { createCheckout } = await import('./referrals');
+    const r = await createCheckout(env, await body(req));
+    return json(r.body, r.status, h);
   }
 
   // Free accounts: the weekly email, no card. Rate-limited per IP and email; `website` is a honeypot.
@@ -368,7 +385,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
 
   // channels_failing: chat or webhook destinations that stopped (reason, since), so /account/ can flag them.
-  if (req.method === 'GET' && path === '/me') return json({ ok: true, member: { ...publicView(m), channels_failing: failView(await getFailures(env, m.customer)) } }, 200, h);
+  if (req.method === 'GET' && path === '/me') {
+    const { referralView } = await import('./referrals');
+    return json({ ok: true, member: { ...publicView(m), channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m) } }, 200, h);
+  }
 
   if (req.method === 'POST' && path === '/portal') {
     if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
