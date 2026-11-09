@@ -43,6 +43,13 @@ export const checkoutEnabled = () => Boolean(checkout.monthly || checkout.yearly
 
 export const TRIAL_DAYS = 14
 export const TRIAL_TERMS = trialTerms('copy')
+// A referral takes one month of the monthly price off the first charge after the trial, on either
+// interval (the API's coupon: amount_off = a month, duration once). Monthly: that month is free.
+const usd = (n: number) => `$${n.toLocaleString('en-US')}`
+export const referredDeal = (id: string | undefined, interval: 'monthly' | 'yearly') =>
+  interval === 'monthly' ? `${TRIAL_DAYS} days free, then your first month free` : `${TRIAL_DAYS} days free, then ${usd(planOf(id).yearly - planOf(id).monthly)} for your first year`
+export const referredTerms = (id: string | undefined, interval: 'monthly' | 'yearly') =>
+  `${referredDeal(id, interval)}. After that, ${interval === 'monthly' ? `${usd(planOf(id).monthly)}/month` : `${usd(planOf(id).yearly)}/year`} until you cancel. Cancel any time from Manage billing before the trial ends and you won’t be charged.`
 export const DATA_TERMS = 'SEC EDGAR 13F filings as filed. Not investment advice.'
 
 // My book by plan. One wording on pricing, /account/ and the My book upgrade panel.

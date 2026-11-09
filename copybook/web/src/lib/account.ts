@@ -92,7 +92,12 @@ export const PLAN_NAME: Record<string, string> = { copy: 'Copy', pro: 'Copy Pro'
 export const isFree = (m?: Member | null) => Boolean(m && !m.active && (m.plan === 'free' || m.status === 'free'))
 export const isPro = (m?: Member | null) => Boolean(m?.active && (m.plan === 'pro' || m.plan === 'fund'))
 
-export const fetchMe = () => call<{ member: Member }>('/me', { auth: true }).then((r) => r.member)
+// Components that mount together (header, follow and share buttons) share one in-flight /me request.
+let meInFlight: Promise<Member> | null = null
+export const fetchMe = () =>
+  (meInFlight ??= call<{ member: Member }>('/me', { auth: true })
+    .then((r) => r.member)
+    .finally(() => (meInFlight = null)))
 export type CancelReason = 'price' | 'value' | 'feature' | 'alerts' | 'temporary' | 'other'
 export const pausePlan = (reason?: CancelReason) => call<{ ok: boolean; paused_until: number }>('/pause', { body: reason ? { reason } : {}, auth: true })
 export const resumePlan = () => call<{ ok: boolean }>('/pause', { method: 'DELETE', auth: true })

@@ -1,4 +1,5 @@
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Share } from '../components/Share'
 import { Signup } from '../components/Signup'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton } from '../components/ui'
 import { TRIAL_DAYS } from '../config'
@@ -58,6 +59,16 @@ export function Recap() {
             ? `${d.superinvestors.filed} of the ${d.superinvestors.total} superinvestors we feature ${d.final ? 'filed' : 'have filed so far'}. Each move compares a fund’s ${Q} 13F with its previous one, valued at quarter-end prices as filed with the SEC.`
             : '\u00a0'}
         </p>
+        {d && (
+          <Share
+            className="mt-5"
+            url={`${location.origin}${import.meta.env.BASE_URL}season/${quarter.toLowerCase()}/${by === 'pct' ? 'pct/' : ''}`}
+            text={`${Q} 13F recap. Most bought by the superinvestors: ${(by === 'pct' ? (d.most_bought_pct ?? []) : d.most_bought)
+              .slice(0, 3)
+              .map((x) => `$${x.ticker}`)
+              .join(', ')}`}
+          />
+        )}
       </header>
 
       <section className="mt-10 grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-5" aria-label="Season totals">

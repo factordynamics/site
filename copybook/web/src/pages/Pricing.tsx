@@ -7,7 +7,7 @@ import { attributed, referredCheckout, refCode } from '../lib/attribution'
 import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { quarterLabel, useAsync, useTitle } from '../lib/data'
 import { aboutCount, loadCoverage } from '../lib/stocks'
-import { api, BOOK_LITE, BOOK_PRO, checkoutEnabled, DATA_TERMS, plans, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
+import { api, BOOK_LITE, BOOK_PRO, checkoutEnabled, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
 type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean }
@@ -118,6 +118,8 @@ export function Pricing() {
   const lat = useAsync(loadLatency, [])
   const receipt = lat.data?.count ? (lat.data.alerts.find((a) => a.form.startsWith('13F')) ?? null) : null
   const COMPARE = compare(filers)
+  // A friend's referral link: Copy and Pro show the first charge with the free month taken off.
+  const referred = Boolean(refCode() && !mine && live)
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="mx-auto max-w-2xl text-center">
@@ -145,8 +147,8 @@ export function Pricing() {
         )}
         {refCode() && !mine && (
           <div className="mt-5">
-            <p role="status" className="inline-flex items-center gap-2 rounded-full bg-[#e3f1e8] px-4 py-1.5 text-[13.5px] font-medium text-[#126b3c]">
-              <Check className="size-3.5" /> Your first month is on us (referred by a member).
+            <p role="status" className="inline-flex items-center gap-2 rounded-full bg-[#e3f1e8] px-4 py-1.5 text-[14px] font-medium text-[#126b3c]">
+              <Check className="size-3.5" /> A member sent you a free month: after the {TRIAL_DAYS}-day trial, your first month is on us.
             </p>
           </div>
         )}
@@ -182,9 +184,13 @@ export function Pricing() {
                 <span className="num text-[40px] font-semibold tracking-[-0.04em]">${price.toLocaleString('en-US')}</span>
                 <span className={`text-[14px] ${dark ? 'text-white/60' : 'text-ink-3'}`}>{plan ? (cycle === 'yearly' ? 'per year' : 'per month') : 'forever'}</span>
               </p>
-              <p className={`relative min-h-[1.5em] text-[12.5px] ${dark ? 'text-white/60' : 'text-ink-3'}`}>
-                {plan ? (cycle === 'yearly' ? `About $${Math.round(plan.yearly / 12)} a month · save ${save}%` : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card, no account'}
-              </p>
+              {referred && plan && tier.id !== 'fund' ? (
+                <p className={`relative min-h-[1.5em] text-[13.5px] font-semibold ${dark ? 'text-[#7fe0a6]' : 'text-[#126b3c]'}`}>{referredDeal(tier.id, cycle)}</p>
+              ) : (
+                <p className={`relative min-h-[1.5em] text-[12.5px] ${dark ? 'text-white/60' : 'text-ink-3'}`}>
+                  {plan ? (cycle === 'yearly' ? `About $${Math.round(plan.yearly / 12)} a month · save ${save}%` : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card, no account'}
+                </p>
+              )}
               <div className="relative mt-5">
                 {!plan ? (
                   <Button to="/investors/" variant="outline" className="w-full">
@@ -230,6 +236,8 @@ export function Pricing() {
                     </>
                   ) : plan && mine && !member?.seat && tier.id === 'pro' && mine === 'copy' ? (
                     `Switches your Copy plan to Pro on the same ${member?.interval === 'monthly' ? 'monthly' : 'yearly'} billing, at the founding price, prorated for the rest of this period. You confirm the amount before anything changes.`
+                  ) : plan && referred ? (
+                    referredTerms(tier.id, cycle)
                   ) : plan ? (
                     trialTerms(tier.id)
                   ) : (

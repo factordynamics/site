@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { REF_NOTE, Share, shareUrl, useRefCode } from '../components/Share'
 import { Signup } from '../components/Signup'
 import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { useMember } from '../lib/account'
@@ -86,6 +87,7 @@ export function Season() {
           <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
             Every manager with $100M or more in 13F securities, mostly US-listed stocks, must file its {Q || 'quarter-end'} holdings with the SEC within 45 days. The funds we track closely are read minutes after EDGAR accepts them; this page refreshes about every 20 minutes.
           </p>
+          <Share className="mt-5" text={`${Q || 'The'} 13F filing season, live: who has filed and what the superinvestors bought`} />
         </div>
         <div className="rounded-[var(--radius-card)] bg-night p-6 text-white shadow-[var(--shadow-card)]">
           <p className="text-[13px] text-white/60">{passed ? 'Deadline passed' : 'Filing deadline'}</p>
@@ -227,6 +229,7 @@ const dayLabel = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateStrin
 
 function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<string>; now: number }) {
   const [copied, setCopied] = useState(false)
+  const code = useRefCode()
   // The panel renders after the data loads, so a shared #expected link scrolls here once it exists.
   useEffect(() => {
     if (location.hash === '#expected') document.getElementById('expected')?.scrollIntoView()
@@ -247,17 +250,20 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
           </h2>
           <p className="mt-0.5 text-[13px] text-ink-3">When each superinvestor usually files, from the EDGAR acceptance times of their last four 13Fs. New York time.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            navigator.clipboard?.writeText(`${location.origin}${location.pathname}#expected`)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1600)
-          }}
-          className="inline-flex h-8 items-center rounded-full bg-card px-3.5 text-[13px] font-medium shadow-[0_0_0_1px_var(--color-line-2)] hover:shadow-[0_0_0_1px_var(--color-ink-3)]"
-        >
-          {copied ? 'Link copied' : 'Copy link'}
-        </button>
+        <div className="flex flex-col items-start gap-1.5 sm:items-end">
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(`${shareUrl(`${location.origin}${location.pathname}`, code)}#expected`)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1600)
+            }}
+            className="inline-flex h-8 items-center rounded-full bg-card px-3.5 text-[13px] font-medium shadow-[0_0_0_1px_var(--color-line-2)] hover:shadow-[0_0_0_1px_var(--color-ink-3)]"
+          >
+            {copied ? 'Link copied' : 'Copy link'}
+          </button>
+          {code && <p className="text-[12px] text-ink-3">{REF_NOTE}</p>}
+        </div>
       </header>
       <div className="divide-y divide-line">
         {days.map((day) => (

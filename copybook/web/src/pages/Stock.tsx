@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChangeBars } from '../components/charts'
 import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
+import { Share } from '../components/Share'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
 import { issuerLatest } from './Book'
@@ -184,7 +185,12 @@ export function StockPage() {
               ))}
           </p>
         </div>
-        {d && <FollowButton kind="stock" id={d.ticker} name={d.ticker} size="md" />}
+        {d && (
+          <div className="flex flex-col items-start gap-3 sm:items-end">
+            <FollowButton kind="stock" id={d.ticker} name={d.ticker} size="md" />
+            <Share text={`Who owns $${d.ticker}: the superinvestors and funds holding ${d.name}, from 13F filings`} />
+          </div>
+        )}
       </header>
 
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">

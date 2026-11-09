@@ -1,7 +1,8 @@
-import { Signup } from '../components/Signup'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { FollowButton } from '../components/FollowButton'
+import { Share } from '../components/Share'
+import { Signup } from '../components/Signup'
 import { Arrow, Badge, Button, Monogram, Panel, Skeleton } from '../components/ui'
 import { BASE, dateLabel, getJSON, loadManager, money, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { useFollows } from '../lib/follows'
@@ -218,7 +219,6 @@ export function FilingCard() {
 }
 
 function ShareCard({ d }: { d: Card }) {
-  const [copied, setCopied] = useState(false)
   const url = cardUrl(d.accession)
   const top = d.moves
     .slice(0, 3)
@@ -228,25 +228,7 @@ function ShareCard({ d }: { d: Card }) {
   return (
     <Panel title="Share this filing" sub="The card image is attached automatically on X, LinkedIn, Slack and iMessage">
       <img src={`${BASE}og/f/${d.accession}.png`} alt={`${d.manager}’s ${quarterLabel(d.quarter)} 13F card: top moves`} width={1200} height={630} className="w-full rounded-xl shadow-[0_0_0_1px_var(--color-line)]" />
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          onClick={() =>
-            navigator.clipboard.writeText(url).then(() => {
-              setCopied(true)
-              setTimeout(() => setCopied(false), 2000)
-            })
-          }
-        >
-          {copied ? 'Link copied' : 'Copy link'}
-        </Button>
-        <Button size="sm" variant="outline" href={`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`}>
-          Post on X
-        </Button>
-        <Button size="sm" variant="outline" href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`}>
-          LinkedIn
-        </Button>
-      </div>
+      <Share className="mt-4" url={url} text={text} linkedin />
     </Panel>
   )
 }

@@ -7,6 +7,7 @@ import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat, Ticker } f
 import { useMember } from '../lib/account'
 import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
+import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
 import { loadCards, stockPath } from '../lib/stocks'
 import { CuratedRedirect, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
@@ -101,6 +102,7 @@ export function ManagerPage() {
               </Button>
             )}
             {member?.active && !f.filer && <CsvButton slug={f.slug} variant="outline" />}
+            {card ? <Share copyOnly /> : <Share text={`${f.manager}’s portfolio from the ${quarterLabel(f.quarter)} 13F`} />}
           </div>
         )}
       </header>
