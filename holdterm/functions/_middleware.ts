@@ -20,18 +20,31 @@ const SECTIONS: Record<string, [string, string]> = {
 const MOVED = new Set(['/m', '/activity', '/grand', '/insiders'])
 const roster = ROSTER as unknown as { funds: { slug: string; filer_slug: string; firm: string }[] }
 
-function meta(path: string): [string, string] | null {
+/** True when Copybook's derived data has a stock file for the ticker, or the ticker is another class's alias. */
+async function stockExists(t: string, origin: string) {
+  const up = 'https://copybook.factordynamics.com/d/'
+  const r = await fetch(`${up}stocks/${encodeURIComponent(t)}.json`, { method: 'HEAD', cf: { cacheTtl: 600, cacheEverything: true } } as RequestInit)
+  if (r.ok) return true
+  const ix = await fetch(`${origin}/d/stocks.json`)
+  if (!ix.ok) return true // can't tell: let the page decide
+  const { stocks } = (await ix.json()) as { stocks: { t: string; a: string[] }[] }
+  return stocks.some((x) => x.a.includes(t))
+}
+async function meta(path: string, origin: string): Promise<[string, string] | null> {
   if (SECTIONS[path]) return SECTIONS[path]
   let m = path.match(/^\/m\/([a-z0-9-]+)$/)
   if (m) {
     const slug = dataSlug(m[1])
     const f = roster.funds.find((x) => x.slug === slug || x.filer_slug === slug)
-    const firm = FUNDS[slug]?.firm ?? (f ? firmName(f.slug, f.firm) : m[1].replace(/-/g, ' '))
+    // Only roster funds have pages.
+    if (!f) return null
+    const firm = FUNDS[slug]?.firm ?? firmName(f.slug, f.firm)
     return [`${firm} 13F portfolio`, `${firm}: latest 13F holdings, quarterly buys and sells, and 13D/G and Form 4 filings, from SEC EDGAR.`]
   }
   m = path.match(/^\/s\/([A-Za-z0-9.%-]{1,12})$/)
   if (m) {
     const t = decodeURIComponent(m[1]).toUpperCase()
+    if (!(await stockExists(t, origin))) return null
     return [`${t} fund ownership`, `Which concentrated long-term funds own ${t}, what they bought and sold, and 13D/G and Form 4 filings.`]
   }
   return null
@@ -44,11 +57,12 @@ export const onRequest = async ({ request, next }: { request: Request; next: () 
   if (request.method !== 'GET' || /\.[a-z0-9]+$/i.test(path) || path.startsWith('/data/') || path.startsWith('/d/') || path.startsWith('/assets/') || MOVED.has(path)) return next()
   const res = await next()
   if (!(res.headers.get('content-type') ?? '').includes('text/html')) return res
-  const m = meta(path)
+  const m = await meta(path, url.origin)
   const [t, d] = m ?? ['not found', 'No such page.']
   const title = `${t} · holdterm`
   const fm = path.match(/^\/m\/([a-z0-9-]+)$/)
-  const canonical = SITE + (fm ? fundPath(dataSlug(fm[1])) : path)
+  const sm = path.match(/^\/s\/(.+)$/)
+  const canonical = SITE + (fm ? fundPath(dataSlug(fm[1])) : sm ? `/s/${encodeURIComponent(decodeURIComponent(sm[1]).toUpperCase())}` : path)
   let rw = new HTMLRewriter()
     .on('title', { element: (e) => void e.setInnerContent(title) })
     .on('meta[name="description"]', { element: (e) => void e.setAttribute('content', d) })

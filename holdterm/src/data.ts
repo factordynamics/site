@@ -4,6 +4,7 @@ import ROSTER from './roster.json'
 import TICKERS from './tickers.json'
 import CORRECTIONS from './corrections.json'
 import ETFS from './etfs.json'
+import SECTOR_FIX from './sectors.json'
 
 export type Change = 'new' | 'added' | 'trimmed' | 'exited' | 'unchanged' | null
 export type Holding = {
@@ -83,7 +84,7 @@ export type Event = {
   percent_of_class: number | null
   change_vs_13f: number | null
 }
-export type HistoryRow = { quarter: string; report_date: string; filing_date: string; total_value: number; long_value?: number; position_count: number; status: string; sec_url: string }
+export type HistoryRow = { quarter: string; report_date: string; filing_date: string; total_value: number; long_value?: number; equity_value?: number; position_count: number; status: string; sec_url: string }
 export type StockHolder = {
   slug: string
   manager: string
@@ -152,20 +153,27 @@ export function fillTicker<T extends { cusip?: string | null; ticker: string | n
 function name(m: Manager) {
   m.firm = firmName(m.slug, m.name)
   m.pm = pmName(m.slug)
-  m.top?.forEach(fillTicker)
+  m.top?.forEach((h) => ((fillTicker(h), (h.sector = sectorOf(h.ticker, h.sector)))))
   return m
 }
 /** One sector per issuer: share classes (same 6-character CUSIP prefix) take the sector of the largest classified line. */
+const SECTOR_BY_TICKER = SECTOR_FIX as unknown as Record<string, string>
+/** Sector override by ticker (src/sectors.json), else the data's own. */
+export const sectorOf = (ticker: string | null | undefined, s: string | null | undefined) => (ticker && SECTOR_BY_TICKER[ticker]) || s || null
 function normalise(hs: Holding[]) {
   const by = new Map<string, { sector: string; value: number }>()
   for (const h of hs) {
+    fillTicker(h)
+    const fixed = h.ticker ? SECTOR_BY_TICKER[h.ticker] : undefined
+    if (fixed) h.sector = fixed
     if (!h.sector || h.sector === 'Unclassified') continue
     const k = h.cusip.slice(0, 6)
     const cur = by.get(k)
-    if (!cur || h.value > cur.value) by.set(k, { sector: h.sector, value: h.value })
+    // An override wins over any other class's sector; otherwise the largest classified line does.
+    const value = fixed ? Infinity : h.value
+    if (!cur || value > cur.value) by.set(k, { sector: h.sector, value })
   }
   for (const h of hs) {
-    fillTicker(h)
     const s = by.get(h.cusip.slice(0, 6))
     if (s) h.sector = s.sector
     h.display_name = issuerName(h.display_name || h.issuer)
@@ -238,12 +246,12 @@ export const loadHistory = (slug: string) =>
     const c = FIX[slug]
     const add = c?.history_add ?? {}
     // Skip a quarter whose upstream row already cites the second filing.
-    return { history: d.history.map((r) => (add[r.quarter] && !JSON.stringify(r).includes(c?.history_source?.[r.quarter] ?? '\u0000') ? { ...r, total_value: r.total_value + add[r.quarter] } : r)) }
+    return { history: d.history.map((r) => (add[r.quarter] && !JSON.stringify(r).includes(c?.history_source?.[r.quarter] ?? '\u0000') ? { ...r, total_value: r.total_value + add[r.quarter], equity_value: r.equity_value == null ? undefined : r.equity_value + add[r.quarter] } : r)) }
   })
-export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach(fillTicker), d))
+export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker, e.sector)))), d))
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
 export const loadInsiders = () => get<{ updated_at: string; rows: Insider[] } | Insider[]>(DATA + 'insiders.json').then((d) => (Array.isArray(d) ? d : d.rows ?? [])).catch(() => null)
-export const loadStock = (t: string) => get<StockFile>(`${DERIVED}stocks/${encodeURIComponent(t)}.json`)
+export const loadStock = (t: string) => get<StockFile>(`${DERIVED}stocks/${encodeURIComponent(t)}.json`).then((d) => ({ ...d, sector: sectorOf(d.ticker, d.sector) ?? sectorOf(d.classes[0]?.ticker, null) }))
 export const loadStockIndex = () => get<{ stocks: StockIndexRow[] }>(DERIVED + 'stocks.json')
 
 const qn = (q: string) => (q ? Number(q.slice(0, 4)) * 4 + Number(q.slice(5)) - 1 : -1)
@@ -378,7 +386,7 @@ export const SECTOR_SHORT: Record<string, string> = {
   Energy: 'ENGY',
   'Consumer Staples': 'STPL',
   Materials: 'MATR',
-  'Real Estate': 'REIT',
+  'Real Estate': 'RE',
   Utilities: 'UTIL',
   'Funds & ETFs': 'ETF',
   Unclassified: 'OTHR',

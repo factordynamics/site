@@ -377,6 +377,17 @@ export function Home() {
   )
 }
 
+/** One entry per issuer (6-character CUSIP prefix), labelled with every class's ticker (GOOGL+GOOG). */
+function byCompany(hs: Holding[]) {
+  const by = new Map<string, { h: Holding; label?: string }>()
+  for (const h of hs) {
+    const k = h.cusip.slice(0, 6)
+    const cur = by.get(k)
+    if (!cur) by.set(k, { h, label: h.ticker ?? undefined })
+    else if (h.ticker && cur.label !== h.ticker) cur.label = [cur.label, h.ticker].filter(Boolean).join('+')
+  }
+  return [...by.values()]
+}
 // ---------- funds directory ----------
 export function Funds() {
   title('funds')
@@ -427,8 +438,8 @@ export function Funds() {
               hideSm: true,
               render: (m) => (
                 <span className="tks">
-                  {m.top.filter((h) => !h.put_call && !isFundLike(h)).slice(0, 5).map((h) => (
-                    <StockCell key={h.cusip} t={h.ticker} former={h.former} name={issuerName(h.display_name || h.issuer).split(' ').slice(0, 2).join(' ')} />
+                  {byCompany(m.top.filter((h) => !h.put_call && !isFundLike(h))).slice(0, 5).map(({ h, label }) => (
+                    <StockCell key={h.cusip} t={h.ticker} former={h.former} label={label} name={issuerName(h.display_name || h.issuer).split(' ').slice(0, 2).join(' ')} />
                   ))}
                 </span>
               ),
@@ -555,7 +566,7 @@ export function Fund({ slug }: { slug: string }) {
               { key: 'q', label: 'qtr', render: (r) => quarterLabel(r.quarter) },
               { key: 'rd', label: 'period end', render: (r) => date(r.report_date) },
               { key: 'fd', label: 'filed', render: (r) => date(r.filing_date) },
-              { key: 'v', label: 'book', num: true, render: (r) => usd(r.total_value) },
+              { key: 'v', label: 'book', num: true, render: (r) => usd(r.equity_value ?? r.total_value) },
               { key: 'n', label: 'positions', num: true, render: (r) => r.position_count },
               {
                 key: 's',
@@ -573,8 +584,8 @@ export function Fund({ slug }: { slug: string }) {
       </Panel>
       <div className="duo wide">
         <Panel title="13F book by quarter" right={<span className="dim">reported value · change vs prior quarter</span>}>
-          {book.options_value > 0 && hist.some((r) => r.long_value == null) && <div className="dim small">as filed, including options notional</div>}
-          {hist.length > 1 ? <ValueHistory title={`${book.firm} 13F book by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.long_value ?? r.total_value }))} /> : <div className="dim empty">one quarter on file</div>}
+          {book.options_value > 0 && hist.some((r) => r.equity_value == null && r.long_value == null) && <div className="dim small">as filed, including options notional</div>}
+          {hist.length > 1 ? <ValueHistory title={`${book.firm} 13F book by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.equity_value ?? r.long_value ?? r.total_value }))} /> : <div className="dim empty">one quarter on file</div>}
         </Panel>
         <Panel title="sector mix">
           <SectorRows items={live} />
@@ -649,7 +660,8 @@ export function Flows() {
   const [picked, setQ] = useState<string | null>(null)
   const [tab, setTab] = useState<ATab>('buyers')
   const sq = season().q
-  const q = picked ?? ((books.data ?? []).filter((b) => b.quarter === sq).length >= 3 ? sq : 'latest')
+  const nb = (books.data ?? []).length
+  const q = picked ?? (nb && (books.data ?? []).filter((b) => b.quarter === sq).length * 2 >= nb ? sq : 'latest')
   const quarters = useMemo(() => [...new Set((books.data ?? []).map((b) => b.quarter))].sort().reverse(), [books.data])
   // Flows are stock picks: ETFs, index and T-bill funds are left out.
   const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q)).rows.filter((r) => !r.fund) : []), [books.data, q])
@@ -803,11 +815,10 @@ export function Filings() {
   const ins = useLoad(loadInsiders, [])
   const firms = useFirms()
   const [tab, setTab] = useState<ETab>('all')
-  const [scope, setScope] = useState<'roster' | 'all'>('roster')
   const [own, setOwn] = useState(false)
   if (ev.error) return <Failed error={ev.error} />
   if (!ev.data) return <Loading />
-  const scoped = ev.data.events.filter((e) => (scope === 'all' || inRoster(e.slug)) && (own || !ownVehicle(e)))
+  const scoped = ev.data.events.filter((e) => inRoster(e.slug) && (own || !ownVehicle(e)))
   let list = scoped
   if (tab === '13dg') list = list.filter((e) => e.kind !== 'form4')
   if (tab === 'f4') list = list.filter((e) => e.kind === 'form4')
@@ -830,12 +841,6 @@ export function Filings() {
       {tab !== 'market' ? (
         <>
           <div className="filters" role="group" aria-label="filters">
-            <button className={scope === 'roster' ? 'chip on' : 'chip'} aria-pressed={scope === 'roster'} onClick={() => setScope('roster')}>
-              roster funds
-            </button>
-            <button className={scope === 'all' ? 'chip on' : 'chip'} aria-pressed={scope === 'all'} onClick={() => setScope('all')}>
-              all tracked funds
-            </button>
             <button className={own ? 'chip on' : 'chip'} aria-pressed={own} onClick={() => setOwn(!own)}>
               include filings on their own funds
             </button>
@@ -903,7 +908,6 @@ export function Stock({ ticker }: { ticker: string }) {
   }, [])
   const firms = useFirms()
   const [tab, setTab] = useState<STab>('holders')
-  const [scope, setScope] = useState<'roster' | 'all'>('roster')
   title(`${ticker} fund ownership`)
   if (s.error) return <NotFound what={`no tracked fund reports ${ticker} in its latest 13F`} />
   if (!s.data) return <Loading what={`loading ${ticker}`} />
@@ -918,7 +922,7 @@ export function Stock({ ticker }: { ticker: string }) {
     const delta = lines.reduce((t, x) => t + (x.value_delta ?? 0), 0)
     return { ...h, prev_shares: prev, delta_value: delta, change: h.shares > prev ? (prev ? 'added' : 'new') : h.shares < prev ? 'trimmed' : 'unchanged' }
   }
-  const pick = (l: StockHolder[]) => (scope === 'roster' ? l.filter((h) => inRoster(h.slug)) : l).map(viaBook)
+  const pick = (l: StockHolder[]) => l.filter((h) => inRoster(h.slug)).map(viaBook)
   const name = (h: StockHolder) => firmOf(firms, h.slug, h.firm || h.manager)
   const holders = pick(d.holders)
   const exited = pick(d.exited)
@@ -929,7 +933,7 @@ export function Stock({ ticker }: { ticker: string }) {
   const movers = [...holders, ...exited].filter((h) => h.change && h.change !== 'unchanged').sort((a, b) => Math.abs(b.delta_value ?? 0) - Math.abs(a.delta_value ?? 0))
   const tickers = new Set(d.classes.map((c) => c.ticker))
   const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && !ownVehicle(e))
-  const scopeLabel = scope === 'roster' ? 'roster funds' : 'all tracked funds'
+  const scopeLabel = 'roster funds'
   const holderCols: Col<StockHolder>[] = [
     { key: 'm', label: 'fund', link: true, render: (h) => <span className={`trunc narrow-sm${inRoster(h.slug) ? ' strong' : ''}`}>{name(h)}</span>, sort: (h) => name(h) },
     { key: 'w', label: '% of book', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight },
@@ -951,15 +955,6 @@ export function Stock({ ticker }: { ticker: string }) {
           </div>
         </div>
         <Follow kind="stocks" id={d.ticker} />
-      </div>
-      <div className="filters" role="group" aria-label="scope">
-        <span className="dim">counting</span>
-        <button className={scope === 'roster' ? 'chip on' : 'chip'} aria-pressed={scope === 'roster'} onClick={() => setScope('roster')}>
-          roster funds
-        </button>
-        <button className={scope === 'all' ? 'chip on' : 'chip'} aria-pressed={scope === 'all'} onClick={() => setScope('all')}>
-          all {d.holders.length} tracked funds
-        </button>
       </div>
       <div className="stats">
         <Stat label={`holders · ${scopeLabel}`} value={holders.length} sub={`${prevHolders} last quarter (${holders.length - prevHolders >= 0 ? '+' : ''}${holders.length - prevHolders})`} />

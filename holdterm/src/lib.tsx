@@ -151,7 +151,8 @@ export const CHANGE_LABEL: Record<string, string> = { new: 'NEW', added: 'ADD', 
 export function ChangeTag({ change, share_change, prev_shares }: { change: string | null; share_change?: number | null; prev_shares?: number | null }) {
   if (!change || change === 'unchanged') return <span className="dim">·</span>
   const tone = change === 'new' || change === 'added' ? 'pos' : 'neg'
-  const rel = (change === 'added' || change === 'trimmed') && share_change != null && prev_shares ? ` ${share_change > 0 ? '+' : ''}${((share_change / prev_shares) * 100).toFixed(1)}%` : ''
+  const r = (change === 'added' || change === 'trimmed') && share_change != null && prev_shares ? (share_change / prev_shares) * 100 : null
+  const rel = r == null ? '' : Math.abs(r) < 0.05 ? ` ${r > 0 ? '+' : '−'}<0.1%` : ` ${r > 0 ? '+' : ''}${r.toFixed(1)}%`
   return (
     <span className={`tag ${tone}`}>
       {CHANGE_LABEL[change]}

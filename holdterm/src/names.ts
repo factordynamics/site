@@ -1,3 +1,4 @@
+import ROSTER from './roster.json'
 // Display names. Funds lead with the firm; a person is shown only when they currently run the
 // portfolio. `aka` is search-only (people historically tied to the firm), never displayed as the PM.
 type FundName = { firm: string; pm?: string; aka?: string[] }
@@ -36,7 +37,13 @@ export const FUNDS: Record<string, FundName> = {
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 /** Fund URLs use the firm (/m/ako-capital), not the data slug, which can be a person's name. */
-const PUBLIC: Record<string, string> = Object.fromEntries(Object.entries(FUNDS).map(([slug, f]) => [slug, slugify(f.firm)]))
+// Funds in FUNDS use their firm; other roster funds use their data slug without legal suffixes or the
+// numeric tie-breaker (owl-creek-asset-management-l-p -> owl-creek-asset-management).
+const bare = (slug: string) => slug.replace(/(-(llc|l-l-c|lp|l-p|llp|l-l-p|inc|ltd|co|corp|plc|ag|sa|se|nv|n-v|gmbh|limited))+(-\d+)?$/, '').replace(/-\d+$/, '')
+const PUBLIC: Record<string, string> = Object.fromEntries([
+  ...(ROSTER as unknown as { funds: { slug: string }[]; pending: { slug: string | null }[] }).funds.concat((ROSTER as unknown as { pending: { slug: string }[] }).pending.filter((f) => f.slug)).map((f) => [f.slug, bare(f.slug)]),
+  ...Object.entries(FUNDS).map(([slug, f]) => [slug, slugify(f.firm)]),
+])
 const DATA_SLUG: Record<string, string> = Object.fromEntries(Object.entries(PUBLIC).map(([a, b]) => [b, a]))
 export const fundPath = (slug: string) => `/m/${PUBLIC[slug] ?? slug}`
 /** Data slug for a URL slug; old person-named URLs resolve too. */
@@ -59,11 +66,11 @@ export const pmName = (slug: string) => FUNDS[slug]?.pm ?? null
 
 // Issuer display names: fix EDGAR abbreviations and casing that leak through ("Cnh Indl", "Pvh",
 // "Accenture Plc Ireland").
-const WORDS: Record<string, string> = { Indl: 'Industrial', Hldgs: 'Holdings', Hldg: 'Holding', Intl: 'International', Grp: 'Group', Cos: 'Companies', Tech: 'Technologies', Svcs: 'Services', Corp: 'Corp', Pptys: 'Properties', Bancorp: 'Bancorp' }
+const WORDS: Record<string, string> = { Cgi: 'CGI', Adi: 'ADI', Indl: 'Industrial', Hldgs: 'Holdings', Hldg: 'Holding', Intl: 'International', Grp: 'Group', Cos: 'Companies', Tech: 'Technologies', Svcs: 'Services', Corp: 'Corp', Pptys: 'Properties', Bancorp: 'Bancorp' }
 const KEEP = new Set(['Ltd', 'Inc', 'St', 'Mr', 'Dr', 'Jr', 'Sr', 'Mfg', 'Bros'])
 export function issuerName(n: string | null | undefined): string {
   if (!n) return ''
-  let s = n.replace(/\s+(Plc|PLC)\s+(Ireland|Jersey|Bermuda|Jersey\s+Ltd)$/i, '').replace(/\s+(Ireland|Bermuda|Jersey|Cayman Islands)$/i, '').replace(/\s+Ltd\.?\s+Bermuda$/i, '')
+  let s = n.replace(/\s+Public(\s+(Ltd|Limited)(\s+(Co|Company))?)?\.?$/i, '').replace(/\s+(Plc|PLC)\s+(Ireland|Jersey|Bermuda|Jersey\s+Ltd)$/i, '').replace(/\s+(Ireland|Bermuda|Jersey|Cayman Islands)$/i, '').replace(/\s+Ltd\.?\s+Bermuda$/i, '')
   s = s
     .split(' ')
     .map((w) => {
