@@ -58,3 +58,46 @@ export function attributed(link: string) {
   }
   return u.toString()
 }
+
+// Referrals: a shared link (pricing/?ref=CODE) is kept for 30 days, so it survives browsing before
+// checkout. While one is kept, paid buttons start a checkout session through the API (POST /checkout),
+// which carries the code; without one, the Payment Links stay as they are.
+const REF = 'copybook-ref'
+
+export function captureRef() {
+  try {
+    const code = new URLSearchParams(location.search).get('ref')
+    if (code && /^[A-Za-z0-9_-]{2,40}$/.test(code)) localStorage.setItem(REF, JSON.stringify({ code, exp: Date.now() + 30 * DAY }))
+  } catch {
+    // Storage blocked: the referral applies only if they check out from this page.
+  }
+}
+
+export function refCode(): string | null {
+  try {
+    const r = JSON.parse(localStorage.getItem(REF) ?? 'null') as { code: string; exp: number } | null
+    return r && Date.now() < r.exp ? r.code : null
+  } catch {
+    return null
+  }
+}
+
+/** Click handler for a paid Payment Link: with a kept referral code, a checkout that carries it instead. */
+export function referredCheckout(plan: 'copy' | 'pro' | 'fund', interval: 'monthly' | 'yearly', fallback: string, api: string) {
+  return (e: { preventDefault: () => void }) => {
+    const ref = refCode()
+    if (!ref) return
+    e.preventDefault()
+    const tags = utmTags() as Record<string, string>
+    fetch(`${api}/checkout`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan, interval, ref, source: tags.utm_source ?? 'referral' }) })
+      .then((r) => (r.ok ? (r.json() as Promise<{ url: string; referral: { applied: boolean } | null }>) : Promise.reject(new Error(String(r.status)))))
+      .then((r) => {
+        // An unknown code, or an email that already pays: full price, and the code is spent.
+        if (r.referral && !r.referral.applied) localStorage.removeItem(REF)
+        window.location.href = r.url
+      })
+      .catch(() => {
+        window.location.href = fallback
+      })
+  }
+}

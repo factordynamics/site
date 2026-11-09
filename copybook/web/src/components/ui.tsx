@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { initials } from '../lib/data'
 
@@ -30,7 +30,7 @@ type BtnProps = {
   variant?: 'primary' | 'dark' | 'ghost' | 'outline'
   size?: 'sm' | 'md' | 'lg'
   className?: string
-  onClick?: () => void
+  onClick?: (e: MouseEvent<HTMLElement>) => void
   type?: 'button' | 'submit'
   disabled?: boolean
 }
@@ -47,7 +47,7 @@ export function Button({ children, to, href, variant = 'primary', size = 'md', c
   }
   const cls = `${base} ${sizes[size]} ${variants[variant]} ${className}`
   if (to) return <Link to={to} className={cls}>{children}</Link>
-  if (href) return <a href={href} className={cls}>{children}</a>
+  if (href) return <a href={href} onClick={onClick} className={cls}>{children}</a>
   return <button type={type} onClick={onClick} className={cls} disabled={disabled}>{children}</button>
 }
 

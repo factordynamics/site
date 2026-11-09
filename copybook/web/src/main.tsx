@@ -25,7 +25,7 @@ import { FilingCard } from './pages/Filing'
 import { Upgrade } from './pages/Upgrade'
 import { Speed } from './pages/Speed'
 import { Recap } from './pages/Recap'
-import { captureAttribution } from './lib/attribution'
+import { captureAttribution, captureRef } from './lib/attribution'
 import { getToken, startSession } from './lib/account'
 import { analytics } from './config'
 
@@ -44,6 +44,7 @@ if (location.hash.startsWith('#handoff=')) {
   history.replaceState(null, '', location.pathname + location.search)
 }
 captureAttribution()
+captureRef()
 if (analytics.cloudflare) {
   // Cloudflare Web Analytics: cookieless, SPA mode counts client-side navigations.
   const s = document.createElement('script')

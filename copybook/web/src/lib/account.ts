@@ -20,6 +20,8 @@ export type Member = {
   channels_failing?: Partial<Record<'discord' | 'slack' | 'telegram' | 'webhook', { reason: string; since: string }>>
   /** The Fund owner's email, when the API sends it to a seat. */
   owner?: string | null
+  /** Paying members' referral link and counts; null for seats, Holdterm and free members. */
+  referral?: { code: string; url: string; signups: number; paid: number; months_earned: number } | null
 }
 
 const KEY = 'copybook-session'

@@ -253,6 +253,7 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
       </div>
 
       {member.active && member.plan === 'copy' && !member.seat && !member.cancel_at_period_end && <UpgradePro member={member} className="mt-5" />}
+      {member.active && member.referral && <Referral r={member.referral} />}
       {member.active && member.plan === 'fund' && !member.seat && <Team />}
       {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
       {member.active && <ApiKeys member={member} focus={focus} />}
@@ -317,6 +318,54 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
         </Button>
       </div>
     </>
+  )
+}
+
+// "Give a month, get a month": the member's referral link (GET /me referral), a copy button and the counts.
+function Referral({ r }: { r: NonNullable<Member['referral']> }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]" aria-labelledby="referral-title">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="max-w-xl">
+          <h2 id="referral-title" className="text-[15px] font-semibold">
+            Give a month, get a month
+          </h2>
+          <p className="mt-1 text-[14px] text-ink-2">Anyone who starts Copy from your link gets their first month free. When they pay for the first time, a month of your plan is credited to your bill, and we email you.</p>
+        </div>
+        <dl className="flex gap-6 text-[13px]">
+          {(
+            [
+              ['Signed up', r.signups],
+              ['Paying', r.paid],
+              ['Months earned', r.months_earned],
+            ] as const
+          ).map(([k, v]) => (
+            <div key={k}>
+              <dt className="text-ink-3">{k}</dt>
+              <dd className="num mt-0.5 text-[20px] font-semibold">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="mt-4 flex min-w-0 items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-full bg-paper px-4 py-2 font-mono text-[13px] text-ink-2 shadow-[0_0_0_1px_var(--color-line)]" title={r.url}>
+          {r.url}
+        </code>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            navigator.clipboard.writeText(r.url).then(() => {
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            })
+          }
+        >
+          {copied ? 'Copied' : 'Copy link'}
+        </Button>
+      </div>
+    </section>
   )
 }
 

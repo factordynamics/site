@@ -3,11 +3,11 @@ import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Button, Check } from '../components/ui'
-import { attributed } from '../lib/attribution'
+import { attributed, referredCheckout, refCode } from '../lib/attribution'
 import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { quarterLabel, useAsync, useTitle } from '../lib/data'
 import { aboutCount, loadCoverage } from '../lib/stocks'
-import { BOOK_LITE, BOOK_PRO, checkoutEnabled, DATA_TERMS, plans, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
+import { api, BOOK_LITE, BOOK_PRO, checkoutEnabled, DATA_TERMS, plans, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
 type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean }
@@ -143,6 +143,13 @@ export function Pricing() {
             </Link>
           </p>
         )}
+        {refCode() && !mine && (
+          <div className="mt-5">
+            <p role="status" className="inline-flex items-center gap-2 rounded-full bg-[#e3f1e8] px-4 py-1.5 text-[13.5px] font-medium text-[#126b3c]">
+              <Check className="size-3.5" /> Your first month is on us (referred by a member).
+            </p>
+          </div>
+        )}
         <div className="mt-8 inline-flex rounded-full bg-ink/[0.05] p-1 text-[14px]" role="tablist" aria-label="Billing period">
           {(['monthly', 'yearly'] as const).map((c) => (
             <button key={c} role="tab" aria-selected={cycle === c} onClick={() => setCycle(c)} className={`rounded-full px-4 py-1.5 ${cycle === c ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
@@ -201,7 +208,7 @@ export function Pricing() {
                     Request Fund access
                   </Button>
                 ) : live ? (
-                  <Button href={attributed(link)} variant={dark ? 'primary' : 'dark'} className="w-full">
+                  <Button href={attributed(link)} onClick={referredCheckout(tier.id as 'copy' | 'pro', cycle, attributed(link), api)} variant={dark ? 'primary' : 'dark'} className="w-full">
                     Start {TRIAL_DAYS}-day free trial
                   </Button>
                 ) : (
@@ -216,7 +223,7 @@ export function Pricing() {
                       </a>
                       .{' '}
                       {live && (
-                        <a href={attributed(link)} className="underline underline-offset-2 hover:text-ink">
+                        <a href={attributed(link)} onClick={referredCheckout('fund', cycle, attributed(link), api)} className="underline underline-offset-2 hover:text-ink">
                           Or start a {TRIAL_DAYS}-day card trial
                         </a>
                       )}

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Arrow, Button, Check, Panel } from '../components/ui'
 import { api, plans, TRIAL_DAYS, trialTerms } from '../config'
-import { attributed } from '../lib/attribution'
+import { attributed, referredCheckout } from '../lib/attribution'
 import { gapLabel, loadLatency } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
 import { loadCoverage } from '../lib/stocks'
@@ -178,7 +178,7 @@ export function ForQuants() {
   const sample = useAsync(() => fetch(`${BASE}api/sample-holdings.json`).then((r) => r.text()), [])
   const trial = attributed(plans.pro.links.yearly || plans.pro.links.monthly)
   const cta = (
-    <Button href={trial} size="md">
+    <Button href={trial} onClick={referredCheckout('pro', plans.pro.links.yearly ? 'yearly' : 'monthly', trial, api)} size="md">
       Start {TRIAL_DAYS}-day Pro trial <Arrow />
     </Button>
   )
