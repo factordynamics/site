@@ -1188,28 +1188,32 @@ pre.email {
     display: none;
   }
   .home {
-    --trade-w: 165px;
+    --trade-w: 158px;
   }
+  .home .trunc {
+    max-width: 104px;
+  }
+  /* Phones: one compact row (short copy, button, close), so the filings table stays above the fold. */
   .upsell {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: start;
-    gap: 6px 10px;
+    gap: 8px;
+    padding: 4px 0 4px 10px;
   }
   .upsell-tag {
-    padding-top: 2px;
+    display: none;
+  }
+  .upsell p {
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+  .upsell-price {
+    white-space: normal;
   }
   .upsell .btn {
-    grid-column: 2;
-    justify-self: start;
-    padding: 8px 14px;
+    padding: 8px 10px;
   }
   .upsell-x {
-    grid-column: 3;
-    grid-row: 1;
     width: 44px;
     height: 44px;
-    margin: -8px -4px -8px 0;
   }
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));

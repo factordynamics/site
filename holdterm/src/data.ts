@@ -27,6 +27,8 @@ export type Holding = {
   share_change: number | null
   value_delta: number | null
   pct_of_book: number | null
+  /** Share counts break between this filing and the last; the trade is the change in reported value. */
+  shares_break?: boolean
 }
 export type Manager = {
   slug: string
@@ -182,9 +184,19 @@ function name(m: Manager) {
 const SECTOR_BY_TICKER = SECTOR_FIX as unknown as Record<string, string>
 /** Sector override by ticker (src/sectors.json), else the data's own. */
 export const sectorOf = (ticker: string | null | undefined, s: string | null | undefined, cusip?: string | null) => (ticker && SECTOR_BY_TICKER[ticker]) || (cusip && SECTOR_BY_TICKER[cusip]) || s || null
+/** True when a line's trade is bigger than its position could allow: share counts that break between
+ * filings (an unadjusted split, a misfiled count) make share change × price many times the position. */
+export const tradeBreak = (delta: number, value: number, prevValue: number) => Math.abs(delta) > 1.5 * Math.max(value, prevValue)
 function normalise(hs: Holding[]) {
   const by = new Map<string, { sector: string; value: number }>()
   for (const h of hs) {
+    // Such a trade is shown as the change in reported value, which is bounded by the two positions.
+    if (h.value_delta != null && !h.put_call && tradeBreak(h.value_delta, h.value, h.prev_value ?? 0)) {
+      h.value_delta = h.value - (h.prev_value ?? 0)
+      h.share_change = null
+      h.shares_break = true
+      if (h.value > 0 && (h.prev_value ?? 0) > 0) h.change = h.value_delta >= 0 ? 'added' : 'trimmed'
+    }
     fillTicker(h)
     // Delisted lines (JHG†) keep their sector through the former ticker.
     const t = h.ticker || h.former
@@ -340,6 +352,23 @@ const holderSum = (rows: StockHolder[]): StockHolder => {
   return { ...rows[0], shares, value: rows.reduce((x, h) => x + h.value, 0), weight: rows.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: rows.reduce((x, h) => x + (h.delta_value ?? 0), 0), change: changeOf(shares, prev) }
 }
 export async function loadStock(t: string): Promise<StockFile> {
+  const d = await mergeClasses(t)
+  // Copybook's per-holder Δ is share change × price; where that's bigger than the position allows, take the
+  // fund's own (bounded) figure from its book.
+  const cus = new Set(d.classes.map((c) => c.cusip))
+  const fixed = await Promise.all(
+    d.holders.map(async (h) => {
+      if (h.delta_value == null || Math.abs(h.delta_value) <= 1.5 * h.value) return h
+      const b = await loadBook(h.slug).catch(() => null)
+      const ls = b?.holdings.filter((x) => cus.has(x.cusip) && !x.put_call)
+      if (!ls?.length) return h
+      const delta = ls.reduce((x, l) => x + (l.value_delta ?? 0), 0)
+      return ls.some((l) => l.shares_break) ? { ...h, delta_value: delta, prev_shares: null, change: ls.length === 1 ? ls[0].change : h.change } : h
+    }),
+  )
+  return { ...d, holders: fixed }
+}
+async function mergeClasses(t: string): Promise<StockFile> {
   const d = await loadOneStock(t)
   const own = new Set(d.classes.map((c) => c.ticker))
   const prefix = d.classes[0]?.cusip.slice(0, 6)
@@ -365,7 +394,7 @@ const qn = (q: string) => (q ? Number(q.slice(0, 4)) * 4 + Number(q.slice(5)) - 
 
 export type RosterFund = { cik: string; slug: string; filer_slug: string; firm: string; value: number; positions: number; top10: number; turnover: number; predecessor: string | null }
 type Candidate = Omit<RosterFund, 'slug' | 'filer_slug'> & { slug: string | null; filer_slug: string | null; fails: string[] }
-export const roster = ROSTER as unknown as { generated_at: string; period: string; rule: Record<string, number>; screened: number; funds: RosterFund[]; pending: Candidate[]; near_misses: Candidate[] }
+export const roster = ROSTER as unknown as { generated_at: string; period: string; rule: Record<string, number>; screened: number; funds: RosterFund[]; pending: Candidate[]; held: (Candidate & { fails: string[] })[]; near_misses: Candidate[] }
 export const ROSTER_SLUGS = new Set(roster.funds.flatMap((f) => [f.slug, f.filer_slug]))
 export const inRoster = (slug: string) => ROSTER_SLUGS.has(slug)
 export const searchNames = (m: Manager) => [m.firm, m.pm, m.name, m.manager, ...(FUNDS[m.slug]?.aka ?? [])].filter(Boolean).join(' | ')

@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-11-09T02:14:01.139Z",
+ "generated_at": "2026-11-09T03:09:21.890Z",
  "period": "30-JUN-2026",
  "source": "SEC Form 13F data sets",
  "rule": {
@@ -1160,17 +1160,6 @@
    "predecessor": null
   },
   {
-   "cik": "0001728201",
-   "slug": "aequim-alternative-investments-lp-8201",
-   "filer_slug": "aequim-alternative-investments-lp-8201",
-   "firm": "Aequim Alternative Investments LP",
-   "value": 2194821778,
-   "positions": 51,
-   "top10": 0.7787,
-   "turnover": 0.1688,
-   "predecessor": null
-  },
-  {
    "cik": "0001961415",
    "slug": "maren-capital-llc-1415",
    "filer_slug": "maren-capital-llc-1415",
@@ -1432,17 +1421,6 @@
    "positions": 9,
    "top10": 1,
    "turnover": 0.215,
-   "predecessor": null
-  },
-  {
-   "cik": "0001032814",
-   "slug": "check-capital-management-inc-ca-2814",
-   "filer_slug": "check-capital-management-inc-ca-2814",
-   "firm": "CHECK CAPITAL MANAGEMENT INC/CA",
-   "value": 1626545566,
-   "positions": 52,
-   "top10": 0.8853,
-   "turnover": 0.0501,
    "predecessor": null
   },
   {
@@ -1787,17 +1765,6 @@
    "predecessor": null
   },
   {
-   "cik": "0001764000",
-   "slug": "wilkinson-global-asset-management-llc-4000",
-   "filer_slug": "wilkinson-global-asset-management-llc-4000",
-   "firm": "Wilkinson Global Asset Management LLC",
-   "value": 1258896980,
-   "positions": 62,
-   "top10": 0.5555,
-   "turnover": 0.1521,
-   "predecessor": null
-  },
-  {
    "cik": "0001006407",
    "slug": "fishman-jay-a-ltd-mi-6407",
    "filer_slug": "fishman-jay-a-ltd-mi-6407",
@@ -1817,28 +1784,6 @@
    "positions": 7,
    "top10": 1,
    "turnover": 0,
-   "predecessor": null
-  },
-  {
-   "cik": "0001097278",
-   "slug": "advent-capital-management-de-7278",
-   "filer_slug": "advent-capital-management-de-7278",
-   "firm": "ADVENT CAPITAL MANAGEMENT /DE/",
-   "value": 1247776807,
-   "positions": 54,
-   "top10": 0.7444,
-   "turnover": 0.1948,
-   "predecessor": null
-  },
-  {
-   "cik": "0001334429",
-   "slug": "biglari-capital-corp-4429",
-   "filer_slug": "biglari-capital-corp-4429",
-   "firm": "BIGLARI CAPITAL CORP.",
-   "value": 1194657336,
-   "positions": 12,
-   "top10": 1,
-   "turnover": 0.0207,
    "predecessor": null
   },
   {
@@ -2085,6 +2030,78 @@
   }
  ],
  "pending": [],
+ "held": [
+  {
+   "cik": "0001728201",
+   "slug": "aequim-alternative-investments-lp-8201",
+   "filer_slug": "aequim-alternative-investments-lp-8201",
+   "firm": "Aequim Alternative Investments LP",
+   "value": 2194821778,
+   "positions": 51,
+   "top10": 0.7787,
+   "turnover": 0.1688,
+   "predecessor": null,
+   "fails": [
+    "66% of the 13F is notes and bonds"
+   ]
+  },
+  {
+   "cik": "0001032814",
+   "slug": "check-capital-management-inc-ca-2814",
+   "filer_slug": "check-capital-management-inc-ca-2814",
+   "firm": "CHECK CAPITAL MANAGEMENT INC/CA",
+   "value": 1626545566,
+   "positions": 52,
+   "top10": 0.8853,
+   "turnover": 0.0501,
+   "predecessor": null,
+   "fails": [
+    "2026Q2 compares against an amendment that a later full restatement replaced"
+   ]
+  },
+  {
+   "cik": "0001764000",
+   "slug": "wilkinson-global-asset-management-llc-4000",
+   "filer_slug": "wilkinson-global-asset-management-llc-4000",
+   "firm": "Wilkinson Global Asset Management LLC",
+   "value": 1258896980,
+   "positions": 62,
+   "top10": 0.5555,
+   "turnover": 0.1521,
+   "predecessor": null,
+   "fails": [
+    "book $28.82B disagrees with its 13F cover page ($1.26B)"
+   ]
+  },
+  {
+   "cik": "0001097278",
+   "slug": "advent-capital-management-de-7278",
+   "filer_slug": "advent-capital-management-de-7278",
+   "firm": "ADVENT CAPITAL MANAGEMENT /DE/",
+   "value": 1247776807,
+   "positions": 54,
+   "top10": 0.7444,
+   "turnover": 0.1948,
+   "predecessor": null,
+   "fails": [
+    "70% of the 13F is notes and bonds"
+   ]
+  },
+  {
+   "cik": "0001334429",
+   "slug": "biglari-capital-corp-4429",
+   "filer_slug": "biglari-capital-corp-4429",
+   "firm": "BIGLARI CAPITAL CORP.",
+   "value": 1194657336,
+   "positions": 12,
+   "top10": 1,
+   "turnover": 0.0207,
+   "predecessor": null,
+   "fails": [
+    "largest position 80% with share classes combined"
+   ]
+  }
+ ],
  "near_misses": [
   {
    "cik": "0001663865",

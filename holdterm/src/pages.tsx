@@ -156,8 +156,8 @@ function ActionTag({ e }: { e: Event }) {
 }
 const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => [
   { key: 'filed', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, sort: (e) => e.filing_date, width: '84px' },
-  { key: 'form', label: 'form', render: (e) => <span className="form">{e.kind === 'form4' ? 'F4' : e.kind.toUpperCase()}</span>, sort: (e) => e.kind },
-  ...(withWho ? [{ key: 'who', label: 'filer', render: (e: Event) => <FundLink slug={e.slug} name={firmOf(firms, e.slug, e.manager)} />, sort: (e: Event) => e.manager } as Col<Event>] : []),
+  { key: 'form', label: 'form', hideSm: true, render: (e) => <span className="form">{e.kind === 'form4' ? 'F4' : e.kind.toUpperCase()}</span>, sort: (e) => e.kind },
+  ...(withWho ? [{ key: 'who', label: 'filer', render: (e: Event) => <span className="trunc narrow-sm"><FundLink slug={e.slug} name={firmOf(firms, e.slug, e.manager)} /></span>, sort: (e: Event) => e.manager } as Col<Event>] : []),
   {
     key: 'iss',
     label: 'issuer',
@@ -170,11 +170,12 @@ const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => 
   },
   { key: 'act', label: 'action', render: (e) => <ActionTag e={e} />, sort: (e) => e.action },
   { key: 'pc', label: '% class', num: true, hideSm: true, render: (e) => (e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 2 : 1)}%` : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
-  { key: 'val', label: 'value', num: true, render: (e) => (e.value_usd != null ? <span className={e.action === 'sell' ? 'neg' : e.action === 'buy' ? 'pos' : ''}>{usd(e.value_usd)}</span> : <span className="dim">—</span>), sort: (e) => e.value_usd ?? -1 },
+  { key: 'val', label: 'value', num: true, hideSm: true, render: (e) => (e.value_usd != null ? <span className={e.action === 'sell' ? 'neg' : e.action === 'buy' ? 'pos' : ''}>{usd(e.value_usd)}</span> : <span className="dim">—</span>), sort: (e) => e.value_usd ?? -1 },
   { key: 'sa', label: 'shares after', num: true, hideSm: true, render: (e) => num(e.shares_after), sort: (e) => e.shares_after ?? -1 },
   {
     key: 'sec',
     label: <span className="sr">SEC filing</span>,
+    hideSm: true,
     render: (e) => (
       <a href={e.url} target="_blank" rel="noreferrer" className="dim ext" aria-label={`SEC filing ${e.id}`}>
         sec↗
@@ -231,10 +232,12 @@ function Upsell() {
         alerts
       </span>
       <p>
-        Get an email when the funds you follow file a 13F, 13D or Form 4. <span className="upsell-price">{PRICE.trialDays} days free, then ${PRICE.monthly}/mo.</span>
+        <span className="hide-sm">Get an email when the funds you follow file a 13F, 13D or Form 4. </span>
+        <span className="show-sm">Email alerts on your funds’ filings. </span>
+        <span className="upsell-price">{PRICE.trialDays} days free, then ${PRICE.monthly}/mo.</span>
       </p>
       <A to="/alerts" className="btn">
-        start free trial →
+        start free trial<span className="hide-sm"> →</span>
       </A>
       <button type="button" className="upsell-x" aria-label="dismiss alerts offer" title="dismiss" onClick={close}>
         <span aria-hidden>×</span>
@@ -1366,13 +1369,18 @@ export function About() {
               </td>
             </tr>
             <tr>
+              <td>data checks</td>
+              <td>on each published book: its total agrees with the 13F cover page, at most 25% of it is notes and bonds, the largest position with share classes combined is within the limit, and the prior quarter is compared with its latest full restatement. A fund that fails is held back until it passes</td>
+            </tr>
+            <tr>
               <td>stability</td>
               <td>a fund already on the roster stays until it misses a test by more than {pct(r.incumbent_buffer, 0)} of the threshold (turnover above {pct(r.max_turnover * (1 + r.incumbent_buffer), 0)}, for example), so the roster doesn’t churn on noise</td>
             </tr>
           </tbody>
         </table>
         <p className="dim small">
-          {roster.funds.length + roster.pending.length} funds pass; {roster.funds.length} are live and {roster.pending.length ? `the other ${roster.pending.length} are loading` : 'none are pending'} (full list in universe.json, linked below). Closest misses:{' '}
+          {roster.funds.length + roster.pending.length + roster.held.length} funds pass the screen; {roster.funds.length} are live{roster.pending.length ? `, ${roster.pending.length} are loading` : ''}
+          {roster.held.length ? `, and ${roster.held.length} are held back by the data checks (${roster.held.map((f) => `${firmName(f.slug ?? '', f.firm)}: ${f.fails[0]}`).join('; ')})` : ''} (full list in universe.json, linked below). Closest misses:{' '}
           {roster.near_misses
             .slice(0, 8)
             .map((f) => `${firmName(f.slug ?? '', f.firm)} (${f.fails.join(', ')})`)
