@@ -56,7 +56,7 @@ class MemR2 implements R2 {
     else this.meta.delete(k);
   }
   async list({ prefix }: { prefix: string }) {
-    return { objects: [...this.m].filter(([k]) => k.startsWith(prefix)).map(([key, v]) => ({ key, size: v.length, uploaded: new Date(0) })) };
+    return { objects: [...this.m].filter(([k]) => k.startsWith(prefix)).map(([key, v]) => ({ key, size: v.length, uploaded: new Date(0), customMetadata: this.meta.get(key) })) };
   }
 }
 
