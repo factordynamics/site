@@ -19,6 +19,9 @@ export type Holding = {
   value: number
   shares: number
   put_call: string | null
+  /** SH (shares) or PRN (principal amount: a note or bond). */
+  shares_type?: string
+  principal_amount?: number | null
   weight: number
   prev_shares: number | null
   prev_value: number | null
@@ -60,6 +63,8 @@ export type Book = Manager & {
   prev_long_value: number | null
   /** Put and call notional, shown separately and never counted as buying or selling. */
   options_value: number
+  /** Notes, bonds and untickered preferreds, shown separately like options. */
+  notes_value: number
   long_count: number
 }
 export type Index = { generated_at: string; managers: Manager[] }
@@ -159,6 +164,12 @@ type KeyLine = { cusip: string; ticker: string | null; issuer: string; title?: s
 const isWarrant = (h: KeyLine) => /^\*?W\b|\bWTS?\b|WARRANT/i.test(h.title ?? '')
 /** Preferreds, convertibles and notes are not the common stock, though they share its CUSIP prefix. */
 const isSenior = (h: KeyLine) => /\b(PFD|PREF|PREFERRED|CONV|CNV|CUM|NOTES?|BONDS?|DEBS?)\b|%/i.test(h.title ?? '')
+/** A note, bond or untickered preferred: not stock. Like options it stays out of the book, its trades and the
+ * cross-fund views, and has its own section on the fund page. A tickered preferred (Itaú's ADR, ITUB) is the
+ * company's listed stock and stays in. */
+export const isNoteOrPref = (h: KeyLine & { put_call?: string | null; shares_type?: string }) => !h.put_call && (h.shares_type === 'PRN' || (!h.ticker && isSenior(h)))
+/** A stock line: not an option, note or preferred. */
+export const isStockLine = (h: KeyLine & { put_call?: string | null; shares_type?: string }) => !h.put_call && !isNoteOrPref(h)
 // A ticker seen on two CUSIP prefixes (Exxon's 30231G and 30233Q, an old CUSIP a filer still uses) is one issuer.
 const TICKER_KEY = new Map<string, string>()
 /** The issuer a line belongs to: 6-character CUSIP prefix, joined across prefixes by ticker. Warrants, ETFs
@@ -269,12 +280,13 @@ function correct(b: Book) {
   b.changes = changes
   return b
 }
-/** 13F value includes put and call notional; the book is the long stock lines only. */
+/** 13F value includes put and call notional and notes; the book is the long stock lines only. */
 function longBook(b: Book) {
-  const longs = b.holdings.filter((h) => !h.put_call)
+  const longs = b.holdings.filter(isStockLine)
   b.long_value = longs.reduce((t, h) => t + h.value, 0)
   b.long_count = longs.filter((h) => h.value > 0).length
-  b.options_value = b.total_value - b.long_value
+  b.notes_value = b.holdings.filter(isNoteOrPref).reduce((t, h) => t + h.value, 0)
+  b.options_value = b.holdings.filter((h) => h.put_call).reduce((t, h) => t + h.value, 0)
   b.prev_long_value = b.prev_total_value == null ? null : longs.reduce((t, h) => t + (h.prev_value ?? 0), 0)
   return b
 }
@@ -470,7 +482,7 @@ export function aggregate(books: Book[], rank: Book[] = books): { rows: Agg[]; t
   const classValue = new Map<string, Map<string, number>>()
   for (const b of rank)
     for (const h of b.holdings) {
-      if (h.put_call || !h.ticker || !h.cusip) continue
+      if (!isStockLine(h) || !h.ticker || !h.cusip) continue
       const key = issuerKey(h)
       const cv = classValue.get(key) ?? new Map<string, number>()
       classValue.set(key, cv.set(h.ticker, (cv.get(h.ticker) ?? 0) + h.value))
@@ -480,7 +492,7 @@ export function aggregate(books: Book[], rank: Book[] = books): { rows: Agg[]; t
     // One position per fund and issuer: classes, managers and a CUSIP change (old line exited, new line
     // "new") net into a single holding, so a fund is never both a buyer and a seller of one stock.
     const pos = new Map<string, Holding[]>()
-    for (const h of b.holdings) if (!h.put_call) pos.set(issuerKey(h), [...(pos.get(issuerKey(h)) ?? []), h])
+    for (const h of b.holdings) if (isStockLine(h)) pos.set(issuerKey(h), [...(pos.get(issuerKey(h)) ?? []), h])
     for (const [key, ls] of pos) {
       const h = [...ls].sort((x, y) => y.value - x.value)[0]
       let a = m.get(key)

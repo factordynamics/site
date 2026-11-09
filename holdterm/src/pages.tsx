@@ -16,6 +16,8 @@ import {
   loadStockIndex,
   isFundLike,
   issuerKey,
+  isNoteOrPref,
+  isStockLine,
   quarterLabel,
   roster,
   SECTOR_COLOR,
@@ -299,7 +301,7 @@ function HomeBody() {
   const trades = (b: Book) => {
     const by = new Map<string, Holding & { label?: string }>()
     for (const h of b.holdings) {
-      if (h.put_call || !h.value_delta || isFundLike(h)) continue
+      if (!isStockLine(h) || !h.value_delta || isFundLike(h)) continue
       const k = issuerKey(h)
       const cur = by.get(k)
       if (!cur) by.set(k, { ...h, label: h.ticker ?? undefined })
@@ -329,7 +331,7 @@ function HomeBody() {
   const conv = new Map<string, { key: string; ticker: string | null; label?: string; former?: string; name: string; slug: string; firm: string; weight: number }>()
   for (const m of ms)
     for (const h of m.top ?? []) {
-      if (h.put_call || isFundLike(h) || !h.cusip) continue
+      if (!isStockLine(h) || isFundLike(h) || !h.cusip) continue
       const k = issuerKey(h)
       const id = `${k}|${m.slug}`
       const cur = conv.get(id)
@@ -530,7 +532,7 @@ export function Funds() {
               hideSm: true,
               render: (m) => (
                 <span className="tks">
-                  {byCompany(m.top.filter((h) => !h.put_call && !isFundLike(h))).slice(0, 5).map(({ h, label }) => (
+                  {byCompany(m.top.filter((h) => isStockLine(h) && !isFundLike(h))).slice(0, 5).map(({ h, label }) => (
                     <StockCell key={h.cusip} t={h.ticker} former={h.former} label={label} name={issuerName(h.display_name || h.issuer).split(' ').slice(0, 2).join(' ')} />
                   ))}
                 </span>
@@ -556,8 +558,8 @@ export function Funds() {
 }
 
 // ---------- one fund ----------
-type ITab = 'holdings' | 'buys' | 'sells' | 'options' | 'filings' | 'events'
-const FUND_TAB: Record<ITab, string> = { holdings: 'Holdings', buys: 'Buys this quarter', sells: 'Sells this quarter', options: 'Options', filings: '13F filings', events: '13D/G and Form 4 filings' }
+type ITab = 'holdings' | 'buys' | 'sells' | 'options' | 'notes' | 'filings' | 'events'
+const FUND_TAB: Record<ITab, string> = { holdings: 'Holdings', buys: 'Buys this quarter', sells: 'Sells this quarter', options: 'Options', notes: 'Notes and preferreds', filings: '13F filings', events: '13D/G and Form 4 filings' }
 export function Fund({ slug }: { slug: string }) {
   const b = useLoad(() => loadBook(slug), [slug])
   const ix = useLoad(loadIndex, [])
@@ -576,10 +578,12 @@ export function Fund({ slug }: { slug: string }) {
   const book = b.data
   title(`${book.firm} 13F portfolio`)
   const filer = meta && meta.filer_slug !== slug ? ix.data?.managers.find((m) => m.slug === meta.filer_slug) : null
-  // Options are notional, not stock: they stay out of the book, its weights and the bought/sold totals.
-  const live = book.holdings.filter((x) => x.value > 0 && !x.put_call)
+  // Options (notional) and notes or preferreds are not stock: they stay out of the book, its weights and the
+  // bought/sold totals, each in its own tab.
+  const live = book.holdings.filter((x) => x.value > 0 && isStockLine(x))
   const opts = book.holdings.filter((x) => x.put_call && (x.value > 0 || x.prev_value))
-  const stock = book.holdings.filter((x) => !x.put_call)
+  const notes = book.holdings.filter((x) => isNoteOrPref(x) && (x.value > 0 || x.prev_value)).sort((a, c) => c.value - a.value || (c.prev_value ?? 0) - (a.prev_value ?? 0))
+  const stock = book.holdings.filter(isStockLine)
   const buys = stock.filter((x) => (x.value_delta ?? 0) > 0).sort((a, c) => (c.value_delta ?? 0) - (a.value_delta ?? 0))
   const sells = stock.filter((x) => (x.value_delta ?? 0) < 0).sort((a, c) => (a.value_delta ?? 0) - (c.value_delta ?? 0))
   const bought = buys.reduce((s, x) => s + (x.value_delta ?? 0), 0)
@@ -615,6 +619,7 @@ export function Fund({ slug }: { slug: string }) {
             <>
               {book.prev_long_value ? `${signedUsd(book.long_value - book.prev_long_value)} vs ${quarterLabel(book.prev_quarter ?? '')}` : 'First filing'}
               {book.options_value > 0 && <span className="dim"> · + {usd(book.options_value)} options notional</span>}
+              {book.notes_value > 0 && <span className="dim"> · + {usd(book.notes_value)} notes and preferreds</span>}
             </>
           }
         />
@@ -631,11 +636,12 @@ export function Fund({ slug }: { slug: string }) {
           ['buys', `buys ${buys.length}`],
           ['sells', `sells ${sells.length}`],
           ...(opts.length ? ([['options', `options ${opts.length}`]] as [ITab, string][]) : []),
+          ...(notes.length ? ([['notes', `notes and preferreds ${notes.length}`]] as [ITab, string][]) : []),
           ['filings', `13F filings ${hist.length}`],
           ['events', `13D/G and Form 4 ${events.length}`],
         ]}
       />
-      <Panel title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Reported price = value ÷ shares as filed</span> : tab === 'options' ? <span className="dim hide-sm">Notional = underlying shares × price; not part of the book</span> : undefined}>
+      <Panel title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Reported price = value ÷ shares as filed</span> : tab === 'options' ? <span className="dim hide-sm">Notional = underlying shares × price; not part of the book</span> : tab === 'notes' ? <span className="dim hide-sm">Debt and preferred lines as filed; not part of the stock book</span> : undefined}>
         {tab === 'holdings' && <HoldingsGrid rows={live} own={(x) => ownHolding(book, x)} />}
         {tab === 'buys' && <MovesGrid rows={buys} />}
         {tab === 'sells' && <MovesGrid rows={sells} />}
@@ -650,6 +656,20 @@ export function Fund({ slug }: { slug: string }) {
               { key: 'sh', label: 'shares', num: true, hideSm: true, render: (r) => num(r.shares) },
               { key: 'v', label: 'notional', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
               { key: 'd', label: 'Δ notional', num: true, render: (r) => <span className="dim">{signedUsd((r.value || 0) - (r.prev_value ?? 0))}</span> },
+            ]}
+          />
+        )}
+        {tab === 'notes' && (
+          <Grid
+            rows={notes}
+            href={stockHref}
+            cols={[
+              { key: 'n', label: 'issuer', render: (r) => (r.ticker ? <StockCell t={r.ticker} name={r.display_name || r.issuer} /> : <span className="trunc">{issuerName(r.display_name || r.issuer)}</span>), sort: (r) => r.display_name || r.issuer },
+              { key: 'k', label: 'instrument', render: (r) => <span className="trunc dim">{noteLabel(r)}</span>, sort: (r) => r.title },
+              { key: 'a', label: 'amount', num: true, hideSm: true, render: noteAmount, sort: (r) => r.principal_amount ?? r.shares },
+              { key: 'c', label: 'activity', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
+              { key: 'v', label: 'value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
+              { key: 'pv', label: 'last qtr', num: true, hideSm: true, render: (r) => <span className="dim">{usd(r.prev_value)}</span>, sort: (r) => r.prev_value ?? 0 },
             ]}
           />
         )}
@@ -687,6 +707,20 @@ export function Fund({ slug }: { slug: string }) {
       </div>
     </div>
   )
+}
+/** "NOTE 3.875%11/3" -> "Note, 3.875%"; "PERP PFD CNV A" -> "Preferred, convertible". */
+function noteLabel(h: Holding) {
+  const t = (h.title ?? '').toUpperCase()
+  const kind = /PFD|PREF|\bCUM\b|\bDEP\b/.test(t) ? 'Preferred' : /DEB/.test(t) ? 'Debenture' : /BOND/.test(t) ? 'Bond' : 'Note'
+  const rate = t.match(/(\d+(?:\.\d+)?)\s*%/)?.[1]
+  const conv = /CONV|CNV/.test(t) ? 'convertible' : ''
+  return [kind, conv, rate ? `${Number(rate)}%` : ''].filter(Boolean).join(', ')
+}
+/** Debt shows its principal (some filers put it in the share count); a preferred shows shares. */
+function noteAmount(h: Holding) {
+  if (noteLabel(h).startsWith('Preferred')) return `${num(h.shares)} shares`
+  const p = h.principal_amount || h.shares
+  return p ? `${usd(p)} principal` : '—'
 }
 /** Weight last quarter vs now, as two bars on one scale. */
 function WeightShift({ prev, now, max }: { prev: number; now: number; max: number }) {
@@ -1124,8 +1158,8 @@ function sampleEmail(b: Book) {
     const ch = h.change === 'new' ? 'new' : h.change === 'exited' ? 'sold out' : h.prev_shares ? `${(((h.share_change ?? 0) / h.prev_shares) * 100).toFixed(0)}% shares` : ''
     return `  ${tk} ${nm} ${d}  ${ch}`
   }
-  const buys = b.holdings.filter((h) => !h.put_call && (h.value_delta ?? 0) > 0).sort((a, c) => (c.value_delta ?? 0) - (a.value_delta ?? 0)).slice(0, 5)
-  const sells = b.holdings.filter((h) => !h.put_call && (h.value_delta ?? 0) < 0).sort((a, c) => (a.value_delta ?? 0) - (c.value_delta ?? 0)).slice(0, 5)
+  const buys = b.holdings.filter((h) => isStockLine(h) && (h.value_delta ?? 0) > 0).sort((a, c) => (c.value_delta ?? 0) - (a.value_delta ?? 0)).slice(0, 5)
+  const sells = b.holdings.filter((h) => isStockLine(h) && (h.value_delta ?? 0) < 0).sort((a, c) => (a.value_delta ?? 0) - (c.value_delta ?? 0)).slice(0, 5)
   return [
     `Subject: ${b.firm} filed its ${quarterLabel(b.quarter)} 13F`,
     `From: Holdterm <holdterm@factordynamics.com>`,
