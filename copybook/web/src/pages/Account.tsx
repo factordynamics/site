@@ -60,12 +60,12 @@ export function Account() {
         resetFollows()
         // The Pro quickstart takes focus after a Pro checkout; a Fund checkout starts at the Fund setup list.
         setState({ kind: 'in', member, welcome, upgraded, kept, resumed, focus: pro || (welcome && member.plan === 'pro') || (upgraded === 'pro' && member.plan === 'pro') })
-      } catch {
+      } catch (e) {
         // The API is over its limit or down: say so, and keep the link in the address bar so a reload retries it.
         // A failing API keeps the last-known account on screen (the status banner says why).
         if (apiDown() && getToken() && lastMe()) return setState({ kind: 'in', member: lastMe()!, welcome: false, stale: false })
         if (apiDown()) return setState({ kind: 'down' })
-        setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
+        setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? (e instanceof ApiError && e.code === 'link_used' ? 'This sign-in link was already used. Ask for a new one below.' : 'That sign-in link has expired. Enter your email for a new one.') : undefined })
       }
       if (sid || login || upgraded || kept) nav('/account/', { replace: true })
     }
@@ -511,7 +511,7 @@ export function SignedOut({ error, eyebrow = 'Account' }: { error?: string; eyeb
     <>
       <header>
         <p className="text-[13px] font-medium text-accent">{eyebrow}</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">{moved ? 'Please sign in again.' : 'Sign in to Copy.'}</h1>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">{moved ? 'Please sign in again.' : 'Sign in to Copybook.'}</h1>
         <p className="mt-3 text-[17px] text-ink-2">No password. We’ll email you a sign-in link.</p>
       </header>
       {note && <p className="mt-6 rounded-xl bg-[#f6ead2] px-4 py-3 text-[14px] text-[#7a5410]">{note}</p>}

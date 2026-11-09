@@ -84,6 +84,9 @@ export function ApiDocs() {
           <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[13.5px] leading-relaxed text-accent-2">
             <strong className="font-medium">Send a descriptive User-Agent</strong> that names your app, such as <code className="font-mono text-[12.5px]">my-research/1.0</code>. Full books for the largest filers (T. Rowe Price, Millennium) can take 15–25 s; use the bulk files for whole-universe pulls.
           </p>
+          <p className="mt-3 text-[13.5px] leading-relaxed text-ink-2">
+            <strong className="font-medium text-ink">Holders CSV</strong> (<code className="font-mono text-[12.5px]">/stocks/{'{ticker}'}/holders.csv</code>) matches <code className="font-mono text-[12.5px]">/v1</code> holders: share (SH) positions by default. Add <code className="font-mono text-[12.5px]">?include=options,exited</code> for call and put rows and exits; the <code className="font-mono text-[12.5px]">kind</code> column (equity, calls, puts) and <code className="font-mono text-[12.5px]">change</code> say which, and the <code className="font-mono text-[12.5px]">x-copybook-rows</code> response header lists what’s included. An unknown <code className="font-mono text-[12.5px]">include</code> value returns 400. A 503 busy reply carries <code className="font-mono text-[12.5px]">Retry-After</code>.
+          </p>
           {s ? (
             <ul className="mt-5 space-y-2 text-[14px] leading-relaxed text-ink-2">
               {info.sentences.map((x) => (
