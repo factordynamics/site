@@ -120,7 +120,7 @@ export async function loadEvents(tickers: string[]) {
   for (let i = 0; todo.length && i < 4; i++) {
     if (i) await new Promise((r) => setTimeout(r, 1000))
     const batches = Array.from({ length: Math.ceil(todo.length / 50) }, (_, j) => todo.slice(j * 50, j * 50 + 50))
-    const res = await Promise.all(batches.map((b) => call<{ tickers: Record<string, { events: IssuerEvent[] }>; pending?: string[] }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&limit=3`, { auth: true })))
+    const res = await Promise.all(batches.map((b) => call<{ tickers: Record<string, { events: IssuerEvent[] }>; pending?: string[] }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&limit=10`, { auth: true })))
     const pending = new Set(res.flatMap((r) => r.pending ?? []))
     for (const r of res) for (const [t, v] of Object.entries(r.tickers ?? {})) if (!pending.has(t) || v.events.length) out.set(t, v.events)
     todo = todo.filter((t) => pending.has(t))
@@ -168,13 +168,30 @@ export function useMemberState() {
 export const useMember = () => useMemberState() ?? null
 
 /** Public alert latency for the filing season ({api}/latency): EDGAR acceptance to email sent. Empty until live alerts go out. */
+export type LatencyStat = { count: number; median_seconds: number | null; p90_seconds: number | null }
 export type Latency = {
   season: string
+  since?: string
   median_seconds: number | null
+  p90_seconds?: number | null
   p95_seconds: number | null
   count: number
-  alerts: { slug: string; manager: string; quarter: string | null; form: string; accession: string; accepted_at: string; sent_at: string; gap_seconds: number }[]
+  /** Keyed 13F, Form 4, 13D, 13G; and email, slack, discord, telegram, webhook, feed. */
+  by_form?: Record<string, LatencyStat>
+  by_channel?: Record<string, LatencyStat>
+  /** The latest alerts, newest first (the API's `recent`, or its older `alerts`). */
+  alerts: { slug: string; manager: string; quarter?: string | null; form: string; accession: string; accepted_at: string; sent_at: string; gap_seconds: number; channel?: string }[]
 }
-export const loadLatency = () => fetch(`${api}/latency`).then((r) => (r.ok ? (r.json() as Promise<Latency>) : null)).catch(() => null)
+type RawLatency = Omit<Latency, 'alerts'> & { alerts?: Latency['alerts']; recent?: { form: string; manager: string; slug: string; accession: string; accepted_at: string; delivered_at: string; seconds: number; channel: string }[] }
+export const loadLatency = () =>
+  fetch(`${api}/latency`)
+    .then((r) => (r.ok ? (r.json() as Promise<RawLatency>) : null))
+    .then((d): Latency | null =>
+      d && {
+        ...d,
+        alerts: d.recent?.length ? d.recent.map((x) => ({ ...x, sent_at: x.delivered_at, gap_seconds: x.seconds })) : (d.alerts ?? []),
+      },
+    )
+    .catch(() => null)
 /** 100 -> "1m40s", 42 -> "42s". */
 export const gapLabel = (s: number) => (s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.floor(s / 60)}m${String(Math.round(s % 60)).padStart(2, '0')}s` : `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`)

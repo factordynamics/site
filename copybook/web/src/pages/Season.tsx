@@ -39,7 +39,7 @@ function left(ms: number) {
 export function Season() {
   // Re-read every two minutes while the season is live, so an open tab follows each build.
   const tick = useTick(120_000, seasonNow().live)
-  const s = useAsync(loadSeason, [tick])
+  const s = useAsync(() => loadSeason(tick ? Date.now() : undefined), [tick])
   const cards = useAsync(loadCardSet, [])
   const member = useMember()
   const paid = Boolean(member?.active)
@@ -96,7 +96,7 @@ export function Season() {
       </header>
 
       <div className="mt-8 grid gap-4 md:grid-cols-3">
-        <Progress label="Superinvestors" sub="legendary investors we feature" v={d?.featured} />
+        <Progress label="Superinvestors" sub={d ? `updated ${ago(now - Date.parse(d.generated_at))}` : 'legendary investors we feature'} v={d?.featured} />
         <Progress label="Funds we track closely" sub="with alerts, moves and history" v={d?.curated} />
         <Progress label="All 13F filers" sub="of the filers active last quarter" v={d?.filers} />
       </div>
@@ -296,6 +296,11 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
       )}
     </section>
   )
+}
+
+const ago = (ms: number) => {
+  const m = Math.max(0, Math.round(ms / 60_000))
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)} h ${m % 60} min ago`
 }
 
 function Progress({ label, sub, v }: { label: string; sub: string; v?: { filed: number; total: number } }) {

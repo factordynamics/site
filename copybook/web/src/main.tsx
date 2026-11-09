@@ -23,6 +23,7 @@ import { Legal } from './pages/Legal'
 import { NotFound } from './pages/NotFound'
 import { FilingCard } from './pages/Filing'
 import { Upgrade } from './pages/Upgrade'
+import { Speed } from './pages/Speed'
 import { captureAttribution } from './lib/attribution'
 import { getToken, startSession } from './lib/account'
 import { analytics } from './config'
@@ -74,7 +75,8 @@ handoff.then(() =>
             <Route path="about" element={<About />} />
             <Route path="methodology" element={<Methodology />} />
             <Route path="f/:accession" element={<FilingCard />} />
-            <Route path="latency" element={<Navigate to="/methodology/#latency" replace />} />
+            <Route path="speed" element={<Speed />} />
+            <Route path="latency" element={<Navigate to="/speed/" replace />} />
             <Route path="api" element={<ApiDocs />} />
             <Route path="contact" element={<Contact />} />
             <Route path="terms" element={<Legal page="terms" />} />

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Arrow, Button, Check, Skeleton } from '../components/ui'
-import { BOOK_PRO, plans } from '../config'
+import { BOOK_PRO, plans, TRIAL_DAYS } from '../config'
 import { ApiError, isFree, openPortal, PLAN_NAME, upgradeTo, useMemberState, type Member } from '../lib/account'
 import { useTitle } from '../lib/data'
 
@@ -48,18 +48,49 @@ export function Upgrade() {
 
 function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund' }) {
   const name = PLAN_NAME[target]
+  // Forwarded links reach people with no account (often a fund's ops team): the invoice path never needs a login.
+  const other =
+    target === 'fund' ? (
+      <Paths
+        left={['Pay by invoice', 'Annual invoice, net 30, with a W-9. No account needed; we set up the plan when you reply.', <Button to="/contact/?topic=fund" className="mt-3 w-full">Request an invoice (net 30, W-9)</Button>]}
+        right={['Pay by card', 'Sign in with the email on your Copy plan to switch it to Fund, prorated.', <Button to="/account/" variant="outline" className="mt-3 w-full">Sign in to switch</Button>]}
+      />
+    ) : (
+      <Paths
+        left={['New to Copybook', `Start Copy Pro free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" className="mt-3 w-full">Start {TRIAL_DAYS}-day trial</Button>]}
+        right={['Already on Copy', 'Sign in with the email on your plan to switch it to Pro, prorated.', <Button to="/account/" variant="outline" className="mt-3 w-full">Sign in to switch</Button>]}
+      />
+    )
   if (!member)
     return (
-      <Note>
-        Sign in to upgrade your plan. <LinkTo to="/account/">Sign in</LinkTo> or <LinkTo to="/pricing/">see plans</LinkTo>.
-      </Note>
+      <>
+        <Note>Switching an existing plan needs a sign-in. {target === 'fund' ? 'Paying by invoice doesn’t.' : ''}</Note>
+        {other}
+      </>
     )
-  if (member.seat) return <Note>Your seat is part of your team’s Copy Fund plan{member.owner ? `, managed by ${member.owner}` : ''}. Plan changes are made by the owner.</Note>
-  if (isFree(member))
+  if (member.seat)
     return (
       <Note>
-        You’re on the free Friday email. Start a Copy trial first, then upgrade from your account. <LinkTo to="/pricing/">See plans</LinkTo>
+        Your seat is part of your team’s Copy Fund plan. {member.owner ? <>Ask {member.owner} (plan owner) to change it.</> : 'Ask your team’s plan owner to change it.'}
       </Note>
+    )
+  if (isFree(member))
+    return (
+      <>
+        <Note>You’re on the free Friday email, so there’s no paid plan to switch yet.</Note>
+        {target === 'fund' ? (
+          <Paths
+            left={['Pay by invoice', 'Annual invoice, net 30, with a W-9. We set up the plan when you reply.', <Button to="/contact/?topic=fund" className="mt-3 w-full">Request an invoice (net 30, W-9)</Button>]}
+            right={['Pay by card', `Start Copy Fund free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" variant="outline" className="mt-3 w-full">Start {TRIAL_DAYS}-day trial</Button>]}
+          />
+        ) : (
+          <div className="mt-6">
+            <Button to="/pricing/">
+              Start {TRIAL_DAYS}-day trial <Arrow />
+            </Button>
+          </div>
+        )}
+      </>
     )
   if (!member.active)
     return (
@@ -67,10 +98,16 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
         Your plan isn’t active. <LinkTo to="/pricing/">Choose a plan</LinkTo> to start again.
       </Note>
     )
-  if ((RANK[member.plan] ?? 1) >= RANK[target])
+  if (member.plan === target)
     return (
       <Note>
-        You’re already on {PLAN_NAME[member.plan] ?? member.plan}, which includes everything in {name}. <LinkTo to="/account/">Back to your account</LinkTo>
+        You’re already on {name}. <LinkTo to="/account/">Back to your account</LinkTo>
+      </Note>
+    )
+  if ((RANK[member.plan] ?? 1) > RANK[target])
+    return (
+      <Note>
+        You’re on {PLAN_NAME[member.plan] ?? member.plan}, which includes everything in {name}. <LinkTo to="/account/">Back to your account</LinkTo>
       </Note>
     )
   return <Change member={member} target={target} />
@@ -187,6 +224,19 @@ function Line({ k, v, sub }: { k: string; v: React.ReactNode; sub?: string }) {
         <span className="num">{v}</span>
         {sub && <span className="block text-[12.5px] text-ink-3">{sub}</span>}
       </dd>
+    </div>
+  )
+}
+function Paths({ left, right }: { left: [string, string, React.ReactNode]; right: [string, string, React.ReactNode] }) {
+  return (
+    <div className="mt-6 grid max-w-2xl gap-3 md:grid-cols-2">
+      {[left, right].map(([t, d, b]) => (
+        <div key={t} className="rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)]">
+          <p className="text-[14px] font-semibold">{t}</p>
+          <p className="mt-1 min-h-[2.5em] text-[13px] text-ink-2">{d}</p>
+          {b}
+        </div>
+      ))}
     </div>
   )
 }

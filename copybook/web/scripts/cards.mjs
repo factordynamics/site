@@ -150,14 +150,19 @@ console.log(`filing cards: ${list.length}`)
   const passed = now > due
   const clock = (m) => `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'am' : 'pm'}`
   const day = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+  // Most-followed first; anyone not listed ranks after, in expected order.
+  const MARQUEE = ['warren-buffett', 'bill-ackman', 'stanley-druckenmiller', 'david-tepper', 'seth-klarman', 'ray-dalio', 'carl-icahn', 'li-lu', 'howard-marks', 'david-einhorn', 'bill-gates', 'dan-loeb', 'nelson-peltz', 'chase-coleman', 'terry-smith', 'chris-hohn', 'philippe-laffont']
+  const rank = (slug) => (MARQUEE.includes(slug) ? MARQUEE.indexOf(slug) : MARQUEE.length)
   const bought = s.featured.filed >= 10
   const list = bought
     ? (s.featured_flow?.bought ?? []).filter((r) => !r.etf && r.net_value > 0).slice(0, 3).map((r) => [r.ticker, cut(r.name, 30), `+${money(r.net_value)} · ${r.n_buyers} ${r.n_buyers === 1 ? 'buyer' : 'buyers'}`])
     : (s.expected ?? [])
+        // The names people share: the best-known superinvestors still to file, not simply the soonest.
         .filter((x) => !x.filed && x.expected_date && x.expected_date >= today)
-        .sort((a, b) => a.expected_date.localeCompare(b.expected_date) || a.time_et - b.time_et)
+        .sort((a, b) => rank(a.slug) - rank(b.slug) || a.expected_date.localeCompare(b.expected_date) || a.time_et - b.time_et)
         .slice(0, 3)
-        .map((x) => [day(x.expected_date), cut(displayName(x.manager), 30), `around ${clock(x.time_et)} ET`])
+        .sort((a, b) => a.expected_date.localeCompare(b.expected_date) || a.time_et - b.time_et)
+        .map((x) => [day(x.expected_date), cut(displayName(x.manager), 30), x.time_range ? `lately ${clock(x.time_range[0])}–${clock(x.time_range[1])} ET` : `around ${clock(x.time_et)} ET`])
   const q = qLabel(s.quarter)
   const rows = list
     .map(([a, b, c], i) => {
@@ -172,6 +177,7 @@ console.log(`filing cards: ${list.length}`)
 <g transform="translate(72 58) scale(1.75)"><rect x="1.5" y="5" width="14" height="17.5" rx="3.2" fill="#0c0e13"/><rect x="8" y="1.5" width="14.5" height="17.5" rx="3.2" fill="#2b44d6" stroke="#fbfaf7" stroke-width="1.4"/><rect x="11" y="6" width="8.5" height="1.8" rx=".9" fill="#fff"/><rect x="11" y="9.6" width="6" height="1.8" rx=".9" fill="#fff" opacity=".85"/><rect x="11" y="13.2" width="3.6" height="1.8" rx=".9" fill="#fff" opacity=".7"/></g>
 <text x="124" y="94" font-family="Geist" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Copybook</text>
 <text x="1128" y="92" text-anchor="end" font-family="Geist" font-weight="500" font-size="22" fill="#5f6572">${x(`${q} 13F season · due ${day(et(due))}`)}</text>
+<text x="1128" y="122" text-anchor="end" font-family="Geist" font-size="17" fill="#8a8f99">${x(`Updated ${new Date(s.generated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET`)}</text>
 <text x="72" y="170" font-family="Geist" font-weight="500" font-size="24" fill="#5f6572">Superinvestors filed</text>
 <text x="72" y="262" font-family="Geist" font-weight="600" font-size="96" letter-spacing="-4" fill="#0c0e13">${s.featured.filed}<tspan dx="14" font-size="48" fill="#8a8f99" letter-spacing="-1">of ${s.featured.total}</tspan></text>
 <rect x="72" y="290" width="560" height="10" rx="5" fill="#ece9e2"/>

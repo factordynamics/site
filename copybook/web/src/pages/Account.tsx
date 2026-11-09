@@ -195,7 +195,11 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
         </section>
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <h2 className="text-[15px] font-semibold">Filing alerts</h2>
-          <p className="mt-1 text-[14px] text-ink-2">An email with the moves inside, usually within a couple of minutes of a new 13F on EDGAR. Form 4 and 13D filings by funds you follow usually arrive within minutes.</p>
+          <p className="mt-1 text-[14px] text-ink-2">An email with the moves inside, usually within a couple of minutes of a new 13F on EDGAR. Form 4 and 13D filings by funds you follow usually arrive within minutes.{' '}
+            <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
+              Live speed
+            </Link>
+          </p>
           <fieldset className="mt-4 space-y-2.5 text-[14px]">
             <legend className="sr-only">Send alerts for</legend>
             {(
@@ -326,11 +330,10 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
       </header>
       <section className="mt-10 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold">Want each filing as it lands?</h2>
-          <Badge>Free</Badge>
+          <h2 className="text-[15px] font-semibold">What Copy adds</h2>
         </div>
         <ul className="mt-4 space-y-2.5 text-[14px] text-ink-2">
-          {['An email minutes after each 13F, Form 4 and 13D on EDGAR, with the moves inside', 'Follow investors and the stocks you own or watch, and see who holds them in My book', 'Every quarter of every fund’s history, with CSV export'].map((t) => (
+          {['An email minutes after each 13F, Form 4 and 13D on EDGAR, with the moves inside', 'Follow investors and the stocks you own or watch, and see who holds them in My book', '8 quarters of history for the funds we track closely, with CSV export'].map((t) => (
             <li key={t} className="flex gap-2.5">
               <Check className="mt-0.5 shrink-0 text-accent" /> {t}
             </li>

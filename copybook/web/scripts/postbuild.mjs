@@ -37,6 +37,7 @@ page('investors/', 'Investors · Copybook', 'Latest 13F portfolios of legendary 
 page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.')
 page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, full history, filing alerts and CSV export.')
 page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
+page('speed/', 'Alert speed: EDGAR to inbox, every alert timed · Copybook', 'How fast Copybook alerts arrive: the median and 90th percentile from SEC EDGAR acceptance to delivery for 13F, Form 4 and 13D/G filings, and every live alert this season.')
 page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Copy Fund, prorated, on the same billing interval.')
 {
   // The season tracker's share card (scripts/cards.mjs), with its cache-busting URL.

@@ -444,7 +444,7 @@ function CTABand() {
 function SeasonPill() {
   const sn = seasonNow()
   const tick = useTick(120_000, sn.live)
-  const d = useAsync(() => (sn.live ? loadSeason() : Promise.resolve(null)), [sn.live, tick])
+  const d = useAsync(() => (sn.live ? loadSeason(tick ? Date.now() : undefined) : Promise.resolve(null)), [sn.live, tick])
   const days = Math.ceil((sn.deadline.getTime() - Date.now()) / 864e5)
   const cls = 'inline-flex max-w-full items-center gap-2 rounded-full bg-card py-1 pl-1 pr-3 text-[13px] text-ink-2 shadow-[var(--shadow-card)] hover:text-ink'
   if (!sn.live)

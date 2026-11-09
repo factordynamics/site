@@ -115,8 +115,8 @@ export function ForFunds() {
       />
 
       <Facts items={[[`${filers}`, '13F filers covered, the latest filing of each'], median != null
-            ? [`${gapLabel(median)}`, <>median from EDGAR acceptance to alert this season, <Link to="/methodology/#latency" className="text-accent hover:text-accent-2">every alert logged</Link></>]
-            : ['As filed', 'alerts sent as filings hit EDGAR, for the funds you follow'], ['Form 4 · 13D/G', 'insider and activist filings on your names, between 13Fs']]} />
+            ? [`${gapLabel(median)}`, <>median from EDGAR acceptance to alert this season, <Link to="/speed/" className="text-accent hover:text-accent-2">every alert timed</Link></>]
+            : ['As filed', <>alerts sent as filings hit EDGAR, for the funds you follow, <Link to="/speed/" className="text-accent hover:text-accent-2">every alert timed</Link></>], ['Form 4 · 13D/G', 'insider and activist filings on your names, between 13Fs']]} />
 
       <Shot
         src="my-book-example.webp"

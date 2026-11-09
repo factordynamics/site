@@ -31,6 +31,10 @@ type Row = {
   sold: number
   net: number
   latest: Latest | null
+  /** What an empty Form 4/13D cell means, or 'loading'. */
+  empty?: string
+  /** Insider Form 4s since the quarter end that aren't open-market trades above the threshold. */
+  more?: number
   split: { ratio: string; adjusted: boolean } | null
   /** Counts are across every 13F filer; changes are the tracked funds'. */
   all: boolean
@@ -152,14 +156,17 @@ export function Book() {
     return qs.sort().at(-1) ?? ''
   }, [data.data])
   const rows = useMemo(() => {
-    const r = names.map((t, i) => ({ ...rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, lens === 'all' ? (agg.data?.[i] ?? null) : null), latest: newest(data.data?.[i] ?? null, events.data?.get(t)) }))
+    const r = names.map((t, i) => {
+      const n = newest(data.data?.[i] ?? null, events.data?.get(t), follows.insider_min_usd, season, events.loading)
+      return { ...rowFor(t, follows.owned.includes(t), data.data?.[i] ?? null, season, lens === 'all' ? (agg.data?.[i] ?? null) : null), latest: n.latest, empty: n.empty, more: n.more }
+    })
     const dir = sort.desc ? -1 : 1
     return r.sort((a, b) => {
       const x = sortVal(a, sort.k)
       const y = sortVal(b, sort.k)
       return (x < y ? -1 : x > y ? 1 : 0) * dir || a.ticker.localeCompare(b.ticker)
     })
-  }, [names, follows.owned, data.data, agg.data, events.data, lens, season, sort])
+  }, [names, follows.owned, follows.insider_min_usd, data.data, agg.data, events.data, events.loading, lens, season, sort])
 
   // What the funds that have filed this season did in these names, largest first.
   const moves = useMemo(
@@ -191,7 +198,7 @@ export function Book() {
   if (!pro)
     return (
       <div className="container-x pt-12 md:pt-16">
-        <Header />
+        <Header eyebrow="My book · Copy" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and the latest Form 4 and 13D on each." />
         <section className="relative mt-10 overflow-hidden rounded-[var(--radius-card)] bg-card p-8 shadow-[var(--shadow-card)]">
           <div className="pointer-events-none select-none blur-[3px]" aria-hidden="true">
             <Skeleton className="h-8 w-1/3" />
@@ -211,13 +218,13 @@ export function Book() {
 
   const csv = () => {
     // Every column names whose figures it holds: all 13F filers or the funds we track closely.
-    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'latest_form', 'latest_date', 'latest_filer']
+    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'latest_form', 'latest_date', 'latest_filer']
     const q = (v: unknown) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))
     const body = rows.map((r) =>
       [
         r.ticker, r.name, r.owned ? 'owned' : 'watched',
         // Incomplete rows leave the exact columns blank and fill only the _min (lower bound) ones, so a sum never undercounts silently.
-        ...(r.a ? [r.a.incomplete ? '' : r.a.holders, r.a.holders, r.a.older, r.a.incomplete ? 'true' : 'false', r.a.incomplete ? '' : r.a.top10, r.a.top10, r.a.incomplete ? '' : r.a.over5, r.a.over5, r.a.incomplete ? '' : r.a.filed] : ['', '', '', '', '', '', '', '', '']),
+        ...(r.a ? [r.a.incomplete ? '' : r.a.holders, r.a.holders, r.a.older, r.a.incomplete ? 'true' : 'false', r.a.incomplete ? '' : r.a.top10, r.a.top10, r.a.incomplete ? '' : r.a.over5, r.a.over5, r.a.incomplete ? '' : r.a.filed, r.a.filed] : ['', '', '', '', '', '', '', '', '', '']),
         r.t.holders, r.t.prev, r.featured, r.added, r.exited, r.t.top10, r.t.over5, r.t.filed,
         r.split && !r.split.adjusted ? '' : r.bought, r.split && !r.split.adjusted ? '' : r.sold, r.split && !r.split.adjusted ? '' : Math.round(r.net),
         r.split ? `${r.split.ratio} ${r.split.adjusted ? 'adjusted' : 'not counted'}` : '',
@@ -232,7 +239,16 @@ export function Book() {
 
   return (
     <div className="container-x pt-12 md:pt-16">
-      <Header right={rows.length > 0 && <Button variant="outline" size="sm" onClick={csv}>Export CSV</Button>} />
+      <Header
+        right={
+          rows.length > 0 && (
+            // The CSV carries the same Form 4/13D column as the page, so it waits for those filings.
+            <Button variant="outline" size="sm" onClick={csv} disabled={events.loading || !ready}>
+              {events.loading || !ready ? 'Loading filings…' : 'Export CSV'}
+            </Button>
+          )
+        }
+      />
       <FailingBanner initial={member?.channels_failing} />
 
       {status === 'ready' && names.length === 0 ? (
@@ -368,9 +384,12 @@ export function Book() {
                                     <span className="font-medium">{r.latest.form.replace(/^SCHEDULE /i, '')}</span> · {dateLabel(r.latest.date)}
                                     <a href={r.latest.url} className="block max-w-[10rem] truncate text-ink-2 hover:text-accent" title={`${r.latest.line}. Open the filing on EDGAR`}>{r.latest.line}</a>
                                   </span>
+                                ) : r.empty === 'loading' ? (
+                                  <Skeleton className="h-4 w-28" />
                                 ) : (
-                                  <span className="text-ink-3">None on file</span>
+                                  <span className="block max-w-[11rem] text-ink-3">{r.empty}</span>
                                 )}
+                                {r.more > 0 && <NonTrade n={r.more} ticker={r.ticker} />}
                               </td>
                             </>
                           ) : (
@@ -481,11 +500,14 @@ function LiteBook({ member }: { member: Member }) {
             bought: moves.filter((x) => x.change === 'new' || x.change === 'added').length,
             sold: moves.filter((x) => x.change === 'trimmed' || x.change === 'exited').length,
             net: moves.reduce((a, x) => a + x.delta_value, 0),
-            latest: newest(st, events.data?.get(t)),
+            ...(() => {
+              const n = newest(st, events.data?.get(t), follows.insider_min_usd, season, events.loading)
+              return { latest: n.latest, empty: n.empty, more: n.more }
+            })(),
           }
         })
         .sort((a, b) => b.held.length - a.held.length || (b.stock?.holders.length ?? 0) - (a.stock?.holders.length ?? 0) || a.ticker.localeCompare(b.ticker)),
-    [names, data.data, events.data, lens, season, follows.owned],
+    [names, data.data, events.data, events.loading, lens, season, follows.owned, follows.insider_min_usd],
   )
   const moves = rows
     .flatMap((r) => r.moves.map((x) => ({ r, x })))
@@ -600,9 +622,12 @@ function LiteBook({ member }: { member: Member }) {
                                   {r.latest.line}
                                 </a>
                               </span>
+                            ) : r.empty === 'loading' ? (
+                              <Skeleton className="h-4 w-32" />
                             ) : (
-                              <span className="text-ink-3">None on file</span>
+                              <span className="block max-w-[12rem] text-ink-3">{r.empty}</span>
                             )}
+                            {r.more > 0 && <NonTrade n={r.more} ticker={r.ticker} />}
                           </td>
                         </tr>
                       ))}
@@ -699,16 +724,39 @@ function issuerLatest(e: IssuerEvent): Latest {
     const p = e.percent_of_class
     line = e.action === 'new_stake' ? `${who}: new ${p != null ? `${p}% ` : ''}stake` : `${who}${p != null ? ` → ${p}%` : ': amended'}`
   }
-  return { form: e.form, date: e.accepted_at.slice(0, 10), manager: who, line, url: e.url }
+  // EDGAR dates filings in New York time; a 6:30 pm ET acceptance is the next day in UTC.
+  return { form: e.form, date: new Date(e.accepted_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }), manager: who, line, url: e.url }
 }
 const accNo = (s: string) => s.match(/\d{10}-?\d{2}-?\d{6}/)?.[0].replace(/-/g, '') ?? s
-/** The newest of a fund's Form 4/13D since its 13F (named as we name the fund) and the issuer's own feed. */
-function newest(stock: Stock | null, issuer: IssuerEvent[] | undefined): Latest | null {
-  const fund = (stock?.since ?? []).map((e) => ({ acc: accNo(e.url), l: evLatest(e) }))
-  const seen = new Set(fund.map((x) => x.acc))
-  const all = [...fund, ...(issuer ?? []).filter((e) => !seen.has(accNo(e.accession))).map((e) => ({ acc: accNo(e.accession), l: issuerLatest(e) }))]
-  return all.sort((a, b) => b.l.date.localeCompare(a.l.date))[0]?.l ?? null
+const EVENTS_PER_TICKER = 10
+const QEND = ['03-31', '06-30', '09-30', '12-31']
+/** The latest meaningful filing on a name: open-market buys and sells at or above the member's insider
+ *  threshold (Form 4 by a fund or a company insider), and any 13D/G. Grants, option exercises, tax
+ *  withholding and gifts are left out. `empty` says what an empty cell means. */
+function newest(stock: Stock | null, issuer: IssuerEvent[] | undefined, min: number, season: string, loading: boolean): { latest: Latest | null; empty: string; more: number } {
+  // Until the issuer feed is in, every cell waits: a fund's event shown first could be replaced by a newer insider one.
+  if (loading) return { latest: null, empty: 'loading', more: 0 }
+  const trade = (action: string, value?: number | null) => (action === 'buy' || action === 'sell' || action === 'mixed') && (value == null || Math.abs(value) >= min)
+  const fund = (stock?.since ?? []).filter((e) => e.kind !== 'form4' || trade(e.action, e.value_usd)).map((e) => ({ acc: accNo(e.url), l: evLatest(e) }))
+  const seen = new Set((stock?.since ?? []).map((e) => accNo(e.url)))
+  const own = (issuer ?? []).filter((e) => !seen.has(accNo(e.accession)) && (!/^4/.test(e.form) || trade(e.action, e.value_usd)))
+  const all = [...fund, ...own.map((e) => ({ acc: accNo(e.accession), l: issuerLatest(e) }))]
+  const latest = all.sort((a, b) => b.l.date.localeCompare(a.l.date))[0]?.l ?? null
+  const qEnd = season ? `${season.slice(0, 4)}-${QEND[Number(season.slice(5)) - 1]}` : ''
+  // Grants, exercises, tax withholding, gifts and trades under the threshold since the quarter end: counted, not shown.
+  const more = (issuer ?? []).filter((e) => /^4/.test(e.form) && !own.includes(e) && !seen.has(accNo(e.accession)) && e.accepted_at.slice(0, 10) > qEnd).length
+  if (latest) return { latest, empty: '', more }
+  // "Since the 13F" only when the issuer feed reaches back past the quarter end (or holds every filing there is).
+  const oldest = issuer?.at(-1)?.accepted_at.slice(0, 10) ?? ''
+  const covered = issuer && (issuer.length < EVENTS_PER_TICKER || (qEnd && oldest <= qEnd))
+  return { latest, empty: covered ? 'No insider buys or sells since the 13F' : 'No insider buys or sells in recent filings', more }
 }
+
+const NonTrade = ({ n, ticker }: { n: number; ticker: string }) => (
+  <Link to={stockPath(ticker)} className="mt-0.5 block text-[11.5px] text-ink-3 hover:text-ink-2" title="Grants, option exercises, tax withholding, gifts and trades under your insider threshold">
+    +{n} non-trade {n === 1 ? 'filing' : 'filings'}
+  </Link>
+)
 
 const signed = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`
 

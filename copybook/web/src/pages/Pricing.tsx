@@ -130,8 +130,16 @@ export function Pricing() {
           <p className="mt-4 text-[13.5px] text-ink-3">
             {receipt.manager}’s {receipt.quarter ? `${quarterLabel(receipt.quarter)} ` : ''}alert went out {gapLabel(receipt.gap_seconds)} after EDGAR acceptance
             {lat.data?.median_seconds != null && ` · median this season ${gapLabel(lat.data.median_seconds)}`} ·{' '}
-            <Link to="/methodology/#latency" className="font-medium text-accent hover:text-accent-2">
-              every alert
+            <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
+              every alert timed
+            </Link>
+          </p>
+        )}
+        {!receipt && (
+          <p className="mt-4 text-[13.5px] text-ink-3">
+            We check EDGAR every minute and time every alert in public:{' '}
+            <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
+              see the speed log
             </Link>
           </p>
         )}

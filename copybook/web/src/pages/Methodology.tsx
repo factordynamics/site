@@ -2,7 +2,6 @@ import { useEffect, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Panel } from '../components/ui'
 import { api } from '../config'
-import { gapLabel, loadLatency } from '../lib/account'
 import { DATA, dateLabel, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { loadSplitLog, stockPath } from '../lib/stocks'
 
@@ -162,16 +161,12 @@ export function Methodology() {
   useTitle('Methodology · Copybook')
   const log = useAsync(() => fetch(`${DATA}changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ updated_at?: string; entries: Entry[] }>) : null)), [])
   const entries = log.data?.entries ?? []
-  // Shown only once live alerts have gone out this season; replays are excluded by the API.
-  const lat = useAsync(loadLatency, [])
   const splits = useAsync(loadSplitLog, [])
-  const latency = lat.data && lat.data.count > 0 ? lat.data : null
-  // Sections that load late (latency, changelog) still honour a #hash in the URL, e.g. from /latency/.
+  // Sections that load late (splits, changelog) still honour a #hash in the URL.
   const { hash } = useLocation()
   useEffect(() => {
-    if (hash && !lat.loading && !log.loading) document.getElementById(hash.slice(1))?.scrollIntoView()
-  }, [hash, lat.loading, log.loading])
-  const time = (t: string) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZone: 'America/New_York' })
+    if (hash && !splits.loading && !log.loading) document.getElementById(hash.slice(1))?.scrollIntoView()
+  }, [hash, splits.loading, log.loading])
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="max-w-2xl">
@@ -257,73 +252,20 @@ export function Methodology() {
             <p className="mt-2 text-[13px] text-ink-3">Ratios are medians across holders that reported the stock in both quarters: shares now ÷ shares before, and price per share now ÷ before. XBRL shares is the company’s own shares-outstanding change, where reported.</p>
           </section>
 
-          {!latency && (
-            <section id="latency" className="scroll-mt-24">
-              <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert latency</h2>
-              <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">
-                For every live alert we publish when EDGAR accepted the filing, when our email went out, and the gap, with the season’s median and 95th percentile. The table appears here once this season’s first alerts go out. The raw feed is public at{' '}
-                <a href={`${api}/latency`} className="font-mono text-[14px] text-accent hover:text-accent-2">
-                  /latency
-                </a>
-                .
-              </p>
-            </section>
-          )}
-          {latency && (
-            <section id="latency" className="scroll-mt-24">
-              <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert latency</h2>
-              <p className="mt-2 text-[14px] text-ink-3">
-                Every live alert this filing season ({quarterLabel(latency.season)}): when EDGAR accepted the filing, when our email went out, and the gap. Times are New York time. Raw feed:{' '}
-                <a href={`${api}/latency`} className="font-mono text-accent hover:text-accent-2">
-                  /latency
-                </a>
-                .
-              </p>
-              <div className="mt-4 grid grid-cols-3 gap-4 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)]">
-                {(
-                  [
-                    ['Median', latency.median_seconds],
-                    ['95th percentile', latency.p95_seconds],
-                    ['Alerts this season', null],
-                  ] as const
-                ).map(([k, v]) => (
-                  <div key={k}>
-                    <p className="text-[12.5px] text-ink-3">{k}</p>
-                    <p className="num mt-1 text-[24px] font-semibold tracking-[-0.02em]">{k === 'Alerts this season' ? latency.count.toLocaleString('en-US') : v == null ? '—' : gapLabel(v)}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" tabIndex={0} role="region" aria-label="Alert latency by filing">
-                <table className="w-full text-[13.5px]">
-                  <thead>
-                    <tr className="border-b border-line text-left text-[12px] text-ink-3">
-                      <th className="px-5 py-2.5 font-medium">Filer</th>
-                      <th className="px-3 py-2.5 font-medium">Form</th>
-                      <th className="px-3 py-2.5 font-medium">EDGAR accepted</th>
-                      <th className="px-3 py-2.5 font-medium">Alert sent</th>
-                      <th className="px-5 py-2.5 text-right font-medium">Gap</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {latency.alerts.slice(0, 50).map((a) => (
-                      <tr key={a.accession + a.sent_at} className="border-b border-line last:border-0">
-                        <td className="px-5 py-2.5">
-                          <Link to={`/investors/${a.slug}/`} className="font-medium hover:text-accent">
-                            {a.manager}
-                          </Link>
-                          {a.quarter && <span className="ml-1.5 text-[11.5px] text-ink-3">{quarterLabel(a.quarter)}</span>}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 text-ink-2">{a.form}</td>
-                        <td className="num whitespace-nowrap px-3 py-2.5 text-ink-2">{time(a.accepted_at)}</td>
-                        <td className="num whitespace-nowrap px-3 py-2.5 text-ink-2">{time(a.sent_at)}</td>
-                        <td className="num px-5 py-2.5 text-right font-medium">{gapLabel(a.gap_seconds)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
+          <section id="latency" className="scroll-mt-24">
+            <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert latency</h2>
+            <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">
+              Every live alert is timed from EDGAR acceptance to delivery, and the log is public: medians and 90th percentiles by form type and channel, and the latest alerts, are on the{' '}
+              <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
+                speed page
+              </Link>
+              . The raw feed is at{' '}
+              <a href={`${api}/latency`} className="font-mono text-[14px] text-accent hover:text-accent-2">
+                /latency
+              </a>
+              .
+            </p>
+          </section>
 
           <section id="changelog" className="scroll-mt-24">
             <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Changelog</h2>

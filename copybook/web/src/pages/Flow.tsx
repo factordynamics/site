@@ -20,7 +20,7 @@ export function Flow() {
   const member = useMember()
   const paid = Boolean(member?.active)
   const tick = useTick(120_000, seasonNow().live)
-  const f = useAsync(() => loadFlow(paid), [paid, tick])
+  const f = useAsync(() => loadFlow(paid, tick ? Date.now() : undefined), [paid, tick])
   const cards = useAsync(loadCards, [])
   const [limit, setLimit] = useState(40)
   // Lens, period and ranking live in the URL so a view can be shared: ?funds=all&q=2026Q2&tab=sold.

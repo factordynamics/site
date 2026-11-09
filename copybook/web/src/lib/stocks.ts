@@ -125,9 +125,10 @@ export type Season = {
 }
 // Pages serves JSON with max-age=600, so a page could trail a 20-minute build by half an hour. Season-week
 // files carry a two-minute bucket instead: every reader gets a copy at most two minutes old.
-const fresh = () => `?v=${Math.floor(Date.now() / 120_000)}`
-export const loadSeason = () =>
-  getJSON<Season>(`${D}season.json${fresh()}`).then((s) => {
+// A re-read (the 2-minute poll or returning to the tab) passes its own stamp, so it never hits the bucket it already has.
+const fresh = (v?: number) => `?v=${v ?? Math.floor(Date.now() / 120_000)}`
+export const loadSeason = (v?: number) =>
+  getJSON<Season>(`${D}season.json${fresh(v)}`).then((s) => {
     const fix = (f: SeasonFlow): SeasonFlow => {
       const rows = (r: SeasonRow[]) => r.map((x) => ({ ...x, buyers: x.buyers.map(named), sellers: x.sellers.map(named) }))
       return { ...f, bought: rows(f.bought), sold: rows(f.sold), most_buyers: rows(f.most_buyers) }
@@ -157,8 +158,8 @@ const named = <T extends { manager: string }>(x: T) => ({ ...x, manager: display
 export const loadStock = (t: string) =>
   getJSON<Stock>(`${D}stocks/${encodeURIComponent(t)}.json`).then((s) => ({ ...s, holders: s.holders.map(named), exited: s.exited.map(named), options: s.options.map(named) }))
 /** The site's flow.json (top 40 per list), or for members the API's fuller lists, falling back to the site's. */
-export const loadFlow = (member = false) =>
-  (member ? call<Flow | { flow: Flow }>('/flow', { auth: true }).then((r) => ('flow' in r ? r.flow : r)).catch(() => getJSON<Flow>(`${D}flow.json${fresh()}`)) : getJSON<Flow>(`${D}flow.json${fresh()}`)).then((f) => {
+export const loadFlow = (member = false, v?: number) =>
+  (member ? call<Flow | { flow: Flow }>('/flow', { auth: true }).then((r) => ('flow' in r ? r.flow : r)).catch(() => getJSON<Flow>(`${D}flow.json${fresh(v)}`)) : getJSON<Flow>(`${D}flow.json${fresh(v)}`)).then((f) => {
     const scope = (s: FlowScope): FlowScope => {
       const fix = (rows: FlowRow[]) => rows.map((r) => ({ ...r, buyers: r.buyers.map(named), sellers: r.sellers.map(named) }))
       return { ...s, bought: fix(s.bought), sold: fix(s.sold), most_buyers: fix(s.most_buyers), most_sellers: fix(s.most_sellers), new_multi: fix(s.new_multi), fresh: fix(s.fresh) }

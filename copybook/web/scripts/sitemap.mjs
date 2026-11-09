@@ -20,6 +20,7 @@ const urls = [
   ['pricing/'],
   ['about/'],
   ['methodology/'],
+  ['speed/'],
   ['api/'],
   ['contact/'],
   ['terms/'],
