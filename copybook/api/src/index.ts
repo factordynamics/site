@@ -947,6 +947,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
 export default {
   fetch(req: Request, env: Env): Promise<Response> {
+    // A retired copy (MOVED_TO set as a secret on Cloudflare's fallback): every request, including links in emails
+    // already sent (resume, unsubscribe, why, keep), goes to the same path on the live host. 308 keeps method and body.
+    if (env.MOVED_TO) {
+      const u = new URL(req.url);
+      return Promise.resolve(new Response(null, { status: 308, headers: { location: `${env.MOVED_TO.replace(/\/+$/, '')}${u.pathname}${u.search}`, 'access-control-allow-origin': '*' } }));
+    }
     return handleRequest(req, env).catch((err) => {
       console.log(String(err?.stack ?? err));
       return json({ ok: false, error: 'server error' }, 500, cors(allowedOrigin(req.headers.get('origin'), env)));

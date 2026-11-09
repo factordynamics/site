@@ -60,7 +60,7 @@ export function openapi() {
 
 **Changelog.** ${CHANGELOG.flatMap((c) => c.changes.map((x) => `${c.date} (${c.status}): ${x}`)).join(' ')}`,
     },
-    servers: [{ url: 'https://copybook-api.factordynamics.workers.dev' }],
+    servers: [{ url: 'https://gene.tail70ba3.ts.net/copybook' }],
     'x-versioning': { current: SCHEMA_VERSION, pin_header: 'Copybook-Schema-Version', notice_days: 90, changelog: '/v1/changelog' },
     security: [{ apiKey: [] }],
     components: {

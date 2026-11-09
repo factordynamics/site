@@ -11,7 +11,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 const DATA = process.env.COPYBOOK_DATA_URL ?? 'https://refcell.github.io/gust/copybook/data/';
-const API = (process.env.COPYBOOK_API ?? 'https://copybook-api.factordynamics.workers.dev').replace(/\/+$/, '');
+const API = (process.env.COPYBOOK_API ?? 'https://gene.tail70ba3.ts.net/copybook').replace(/\/+$/, '');
 const UA = 'Copybook copybook@factordynamics.com';
 
 async function get(url) {

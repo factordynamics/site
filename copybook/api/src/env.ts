@@ -55,6 +55,8 @@ export interface Env {
   RESEND_API_KEY?: string;
   /** Fine-grained GitHub PAT (refcell/gust only, Actions: read and write) to dispatch the data refresh. */
   GITHUB_DISPATCH_TOKEN?: string;
+  /** Set (as a secret) only on a retired copy of the API: every request is redirected to this base. */
+  MOVED_TO?: string;
   /** Cloudflare API token: Account Analytics read (the daily request-budget check) and R2 write to PUBLIC_BUCKET (latency.json). */
   CF_API_TOKEN?: string;
   /** Public R2 bucket the cron writes static JSON to (latency.json), and its public base URL. */

@@ -13,7 +13,7 @@ import { dirname } from 'node:path';
 import { fetchFilingMeta, fetchForm4, fetchSchedule13 } from '../src/edgar';
 
 const DATA = process.env.COPYBOOK_DATA_URL ?? 'https://refcell.github.io/gust/copybook/data/';
-const API = (process.env.COPYBOOK_API ?? 'https://copybook-api.factordynamics.workers.dev').replace(/\/+$/, '');
+const API = (process.env.COPYBOOK_API ?? 'https://gene.tail70ba3.ts.net/copybook').replace(/\/+$/, '');
 const CACHE = process.env.COPYBOOK_EVENTS_CACHE ?? '.cache/events-detail.json';
 /** SEC asks for at most 10 requests a second; each filing takes 2 or 3. */
 const MAX_FILINGS = Number(process.env.COPYBOOK_EVENTS_MAX ?? 900);

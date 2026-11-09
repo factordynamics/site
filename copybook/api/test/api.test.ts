@@ -1050,6 +1050,12 @@ describe('copybook api', () => {
     Object.assign(env, { CF_API_TOKEN: undefined, CF_ACCOUNT_ID: undefined });
   });
 
+  it('a retired copy (MOVED_TO) sends every request to the same path on the live host', async () => {
+    const r = await worker.fetch(new Request('https://copybook-api.factordynamics.workers.dev/resume?t=abc', { method: 'POST' }), { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/' } as Env);
+    expect([r.status, r.headers.get('location')]).toEqual([308, 'https://gene.tail70ba3.ts.net/copybook/resume?t=abc']);
+    expect((await worker.fetch(new Request('https://api.test/health'), env)).status).not.toBe(308);
+  });
+
   it('latency.json: the /latency report written to the public bucket when it changes, not every minute', async () => {
     const { publishLatency } = await import('../src/index');
     expect(await publishLatency(env, Date.now())).toBe('not configured');

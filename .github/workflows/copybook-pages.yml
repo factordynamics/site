@@ -81,7 +81,7 @@ jobs:
         run: |
           token=$(curl -fsS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=copybook-api" | jq -r .value)
           curl -fsS -X PUT -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" \
-            --data-binary @"${RUNNER_TEMP}/flow-full.json" https://copybook-api.factordynamics.workers.dev/ingest/flow/full.json
+            --data-binary @"${RUNNER_TEMP}/flow-full.json" https://gene.tail70ba3.ts.net/copybook/ingest/flow/full.json
           echo
       - run: node scripts/cards.mjs dist "${VITE_DATA_BASE}"
       - run: node scripts/postbuild.mjs "${VITE_DATA_BASE}index.json"
