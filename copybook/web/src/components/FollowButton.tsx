@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { getToken } from '../lib/account'
 import { isPaywall, setFollow, useFollows } from '../lib/follows'
 
 type Props = { kind: 'investor' | 'stock'; id: string; name: string; size?: 'sm' | 'md'; className?: string }
@@ -35,6 +36,8 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
     })
   const click = () => (status !== 'ready' ? setOpen((o) => !o) : save(!on))
 
+  // A signed-in reader who still hits the paywall is on the free Friday email (or lapsed).
+  const signedIn = Boolean(getToken())
   const h = size === 'sm' ? 'h-8 px-3.5 text-[13px]' : 'h-10 px-4.5 text-sm'
   return (
     <div ref={wrap} className={`relative inline-flex ${className}`}>
@@ -61,7 +64,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
       )}
       {open && (
         <div role="dialog" aria-label={`Follow ${name}`} className="absolute right-0 top-full z-50 mt-2 w-[300px] rounded-2xl bg-card p-4 text-left shadow-[0_0_0_1px_rgb(12_14_19/0.08),0_18px_50px_-12px_rgb(12_14_19/0.3)]">
-          <p className="text-[14.5px] font-semibold">Follow {name} with Copy</p>
+          <p className="text-[14.5px] font-semibold">{signedIn ? 'Following is a Copy feature' : `Follow ${name} with Copy`}</p>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
             {kind === 'investor'
               ? 'Get an email minutes after they file a new 13F, with their biggest buys and sells in it.'
@@ -71,9 +74,11 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
             <Link to="/pricing/" className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
               Start 14-day free trial
             </Link>
-            <Link to="/account/" className="inline-flex h-8 items-center rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-ink/5 hover:text-ink">
-              Sign in
-            </Link>
+            {!signedIn && (
+              <Link to="/account/" className="inline-flex h-8 items-center rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-ink/5 hover:text-ink">
+                Sign in
+              </Link>
+            )}
           </div>
         </div>
       )}

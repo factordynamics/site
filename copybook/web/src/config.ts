@@ -9,7 +9,7 @@ export const checkout = {
 }
 export const api = 'https://copybook-api.factordynamics.workers.dev'
 // Free weekly email box (POST {api}/signup). On once the API route is live.
-export const signupLive = false
+export const signupLive = true
 
 // Cloudflare Web Analytics beacon token (public; empty = no analytics).
 export const analytics = { cloudflare: '' }

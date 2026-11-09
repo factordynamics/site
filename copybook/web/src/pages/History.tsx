@@ -2,12 +2,12 @@ import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ChangeBars } from '../components/charts'
 import { Arrow, Badge, Button, Check, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
-import { ApiError, openPortal, useMemberState } from '../lib/account'
+import { ApiError, isFree, openPortal, useMemberState } from '../lib/account'
 import { CsvButton } from '../components/CsvButton'
 import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle, type Holding } from '../lib/data'
 import { stockPath } from '../lib/stocks'
 import { diff, holdingKey, loadHistory, type Quarter } from '../lib/history'
-import { checkout } from '../config'
+import { checkout, TRIAL_DAYS } from '../config'
 
 export function History() {
   const { slug = '' } = useParams()
@@ -67,7 +67,7 @@ export function History() {
             <Skeleton className="h-[420px] w-full rounded-[var(--radius-card)]" />
           </div>
         )}
-        {member !== undefined && !active && <Paywall name={name} quarters={m?.history_quarters} kind={member ? 'inactive' : 'guest'} />}
+        {member !== undefined && !active && <Paywall name={name} quarters={m?.history_quarters} kind={isFree(member) ? 'free' : member ? 'inactive' : 'guest'} />}
         {active && status === 402 && <Paywall name={name} quarters={m?.history_quarters} kind="inactive" />}
         {active && status === 401 && <Paywall name={name} quarters={m?.history_quarters} kind="guest" />}
         {active && hist.error && !status && <p className="text-[15px] text-ink-2">We couldn’t load this history. Refresh to try again.</p>}
@@ -427,7 +427,7 @@ function PositionMatrix({ quarters, sel }: { quarters: Quarter[]; sel: number })
   )
 }
 
-function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; kind: 'guest' | 'inactive' }) {
+function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; kind: 'guest' | 'inactive' | 'free' }) {
   const qs = [...(quarters ?? [])].sort()
   const span = qs.length > 1 ? `${quarterLabel(qs[0])} to ${quarterLabel(qs[qs.length - 1])}` : ''
   const fake = [52, 61, 58, 70, 66, 78, 84, 92]
@@ -451,11 +451,13 @@ function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; 
             <Lock />
           </span>
           <h2 className="mt-4 text-[24px] font-semibold tracking-[-0.03em]">
-            {kind === 'inactive' ? 'Your Copy plan isn’t active.' : `Every quarter of ${name || 'this'}’s book.`}
+            {kind === 'inactive' ? 'Your Copy plan isn’t active.' : kind === 'free' ? 'This is a Copy feature.' : `Every quarter of ${name || 'this'}’s book.`}
           </h2>
           <p className="mt-2 text-[15px] leading-relaxed text-ink-2">
             {kind === 'inactive'
               ? 'Renew Copy to see quarter-by-quarter history, every buy and sell, and CSV export.'
+              : kind === 'free'
+                ? `You’re on the free Friday email. Start a ${TRIAL_DAYS}-day Copy trial to see ${name ? `${name}’s` : 'the'} book quarter by quarter, every buy and sell, and download it as CSV.`
               : `${qs.length > 1 ? `${qs.length} quarters on file, ${span}. ` : ''}See how the portfolio changed quarter by quarter, every buy and sell, and download it as CSV.`}
           </p>
           <ul className="mx-auto mt-4 inline-grid gap-1.5 text-left text-[14px] text-ink-2">
@@ -478,12 +480,14 @@ function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; 
               </Button>
             ) : (
               <Button to="/pricing/">
-                Get Copy <Arrow />
+                {kind === 'free' ? `Start ${TRIAL_DAYS}-day trial` : 'Get Copy'} <Arrow />
               </Button>
             )}
-            <Button to="/account/" variant="outline">
-              {kind === 'inactive' ? 'Account' : 'Sign in'}
-            </Button>
+            {kind !== 'free' && (
+              <Button to="/account/" variant="outline">
+                {kind === 'inactive' ? 'Account' : 'Sign in'}
+              </Button>
+            )}
           </div>
         </div>
       </div>

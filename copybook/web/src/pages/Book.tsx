@@ -3,9 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { FailingBanner } from '../components/Channels'
 import { Peers } from '../components/Peers'
 import { UpgradePro } from '../components/UpgradePro'
+import { TRIAL_DAYS } from '../config'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
-import { ApiError, isPro, loadEvents, useMember, type IssuerEvent, type Member } from '../lib/account'
+import { ApiError, isFree, isPro, loadEvents, useMember, type IssuerEvent, type Member } from '../lib/account'
 import { quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
@@ -198,10 +199,10 @@ export function Book() {
           </div>
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-card/60 p-6 text-center">
             <Lock />
-            <p className="mt-3 max-w-md text-[16px] font-semibold">My book is part of Copy Pro and Copy Fund.</p>
-            <p className="mt-1.5 max-w-md text-[14px] text-ink-2">See how crowded your names are, who’s buying and selling them this filing season, and every Form 4 and 13D, in one sortable table with CSV.</p>
+            <p className="mt-3 max-w-md text-[16px] font-semibold">{isFree(member) ? 'This is a Copy feature.' : 'My book is part of Copy.'}</p>
+            <p className="mt-1.5 max-w-md text-[14px] text-ink-2">See which superinvestors hold the stocks you own or watch, what they did this filing season, and the latest Form 4 and 13D on each. Copy Pro adds every 13F filer, crowding, peers and CSV.</p>
             <Button to="/pricing/" className="mt-5">
-              Compare plans <Arrow />
+              {isFree(member) ? `Start ${TRIAL_DAYS}-day trial` : 'Compare plans'} <Arrow />
             </Button>
           </div>
         </section>

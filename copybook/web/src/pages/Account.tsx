@@ -13,10 +13,10 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
-import { api, checkout, DATA_TERMS, renewalTerms, trialTerms } from '../config'
-import { ApiError, downloadFile, fetchMe, getToken, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
+import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
+import { ApiError, downloadFile, fetchMe, getToken, isFree, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
 
-type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string } | { kind: 'out'; error?: string } | { kind: 'off' }
+type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string } | { kind: 'out'; error?: string } | { kind: 'off' }
 
 export function Account() {
   const [params] = useSearchParams()
@@ -33,6 +33,8 @@ export function Account() {
     const pro = params.get('plan') === 'pro'
     // Back from the billing portal's plan change: /me flips when Stripe's webhook lands, usually within seconds.
     const upgraded = params.get('upgraded') ?? undefined
+    // Back from the day-11 trial email's switch to yearly.
+    const kept = params.get('kept') ?? undefined
     const run = async () => {
       try {
         let member: Member
@@ -46,11 +48,11 @@ export function Account() {
         }
         resetFollows()
         // The Pro quickstart takes focus after a Pro checkout; a Fund checkout starts at the Fund setup list.
-        setState({ kind: 'in', member, welcome, upgraded, focus: pro || (welcome && member.plan === 'pro') || (upgraded === 'pro' && member.plan === 'pro') })
+        setState({ kind: 'in', member, welcome, upgraded, kept, focus: pro || (welcome && member.plan === 'pro') || (upgraded === 'pro' && member.plan === 'pro') })
       } catch {
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? 'That sign-in link has expired. Enter your email for a new one.' : undefined })
       }
-      if (sid || login || upgraded) nav('/account/', { replace: true })
+      if (sid || login || upgraded || kept) nav('/account/', { replace: true })
     }
     run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -65,7 +67,7 @@ export function Account() {
           <Skeleton className="mt-8 h-40 w-full" />
         </div>
       )}
-      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} upgraded={state.upgraded} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState({ kind: 'in', member, welcome: false })} />}
+      {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} upgraded={state.upgraded} kept={state.kept} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState({ kind: 'in', member, welcome: false })} />}
       {state.kind === 'out' && <SignedOut error={state.error} />}
       {state.kind === 'off' && <NotOpen />}
       <p className="mt-10 text-[13px] leading-relaxed text-ink-3">{DATA_TERMS}</p>
@@ -73,7 +75,7 @@ export function Account() {
   )
 }
 
-function SignedIn({ member, welcome, upgraded, focus = false, onOut, onChange }: { member: Member; welcome: boolean; upgraded?: string; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
+function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onChange }: { member: Member; welcome: boolean; upgraded?: string; kept?: string; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
   const [busy, setBusy] = useState(false)
   const { status, follows } = useFollows()
   const [editing, setEditing] = useState(false)
@@ -90,6 +92,7 @@ function SignedIn({ member, welcome, upgraded, focus = false, onOut, onChange }:
   const filerNames = useAsync(() => (needFilers ? loadFilers() : Promise.resolve([])), [needFilers])
   const names = new Map([...(filerNames.data ?? []).map((f) => [f.slug, f.name] as const), ...curatedNames])
   const onboard = member.active && status === 'ready' && (!follows.onboarded || editing)
+  if (isFree(member)) return <Free member={member} onOut={onOut} />
   return (
     <>
       <header>
@@ -124,6 +127,12 @@ function SignedIn({ member, welcome, upgraded, focus = false, onOut, onChange }:
           </>
         )}
       </header>
+
+      {kept === 'yearly' && (
+        <p role="status" className="mt-6 flex items-center gap-2 rounded-xl bg-[#e3f1e8] px-4 py-3 text-[14px] text-[#126b3c]">
+          <Check className="size-4 shrink-0" /> You’re on yearly billing now. Stripe is emailing the confirmation.
+        </p>
+      )}
 
       {member.active && <FailingBanner initial={member.channels_failing} onAccount />}
 
@@ -291,6 +300,54 @@ function SignedIn({ member, welcome, upgraded, focus = false, onOut, onChange }:
 
       <div className="mt-8 flex flex-wrap gap-3">
         <Button to="/flow/">See this season’s flow</Button>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            signOut()
+            resetFollows()
+            onOut()
+          }}
+        >
+          Sign out
+        </Button>
+      </div>
+    </>
+  )
+}
+
+// A free account from the Friday email signup: no paid plan, so no billing, follows or alerts here.
+function Free({ member, onOut }: { member: Member; onOut: () => void }) {
+  return (
+    <>
+      <header>
+        <p className="text-[13px] font-medium text-accent">Account</p>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">You’re on the free Friday email.</h1>
+        <p className="mt-3 text-[17px] text-ink-2">Every Friday evening: the week’s five biggest buys and sells by the investors we track, from SEC filings. Sent to {member.email}.</p>
+      </header>
+      <section className="mt-10 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[15px] font-semibold">Want each filing as it lands?</h2>
+          <Badge>Free</Badge>
+        </div>
+        <ul className="mt-4 space-y-2.5 text-[14px] text-ink-2">
+          {['An email minutes after each 13F, Form 4 and 13D on EDGAR, with the moves inside', 'Follow investors and the stocks you own or watch, and see who holds them in My book', 'Every quarter of every fund’s history, with CSV export'].map((t) => (
+            <li key={t} className="flex gap-2.5">
+              <Check className="mt-0.5 shrink-0 text-accent" /> {t}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <Button to="/pricing/">
+            Start {TRIAL_DAYS}-day trial <Arrow />
+          </Button>
+          <span className="text-[13px] text-ink-3">Copy is free for {TRIAL_DAYS} days, then ${plans.copy.yearly}/year or ${plans.copy.monthly}/month.</span>
+        </div>
+      </section>
+      <p className="mt-6 text-[13px] text-ink-3">To stop the Friday email, use the unsubscribe link at the bottom of any issue.</p>
+      <div className="mt-8 flex flex-wrap gap-3">
+        <Button to="/season/" variant="outline">
+          Follow this filing season
+        </Button>
         <Button
           variant="ghost"
           onClick={() => {

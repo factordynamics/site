@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Arrow, Button, Check, Skeleton } from '../components/ui'
 import { BOOK_PRO, plans } from '../config'
-import { ApiError, openPortal, PLAN_NAME, upgradeTo, useMemberState, type Member } from '../lib/account'
+import { ApiError, isFree, openPortal, PLAN_NAME, upgradeTo, useMemberState, type Member } from '../lib/account'
 import { useTitle } from '../lib/data'
 
 // /upgrade/?plan=pro|fund: the plan change before Stripe's confirm page. It keeps the member's interval
@@ -55,6 +55,12 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
       </Note>
     )
   if (member.seat) return <Note>Your seat is part of your team’s Copy Fund plan{member.owner ? `, managed by ${member.owner}` : ''}. Plan changes are made by the owner.</Note>
+  if (isFree(member))
+    return (
+      <Note>
+        You’re on the free Friday email. Start a Copy trial first, then upgrade from your account. <LinkTo to="/pricing/">See plans</LinkTo>
+      </Note>
+    )
   if (!member.active)
     return (
       <Note>

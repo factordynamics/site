@@ -80,6 +80,8 @@ export async function startSession(body: { checkout_session: string } | { login:
 }
 
 export const PLAN_NAME: Record<string, string> = { copy: 'Copy', pro: 'Copy Pro', fund: 'Copy Fund' }
+/** A free Friday-email account (POST /signup): no paid plan, every paid route answers 402. */
+export const isFree = (m?: Member | null) => Boolean(m && !m.active && (m.plan === 'free' || m.status === 'free'))
 export const isPro = (m?: Member | null) => Boolean(m?.active && (m.plan === 'pro' || m.plan === 'fund'))
 
 export const fetchMe = () => call<{ member: Member }>('/me', { auth: true }).then((r) => r.member)
