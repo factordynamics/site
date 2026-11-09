@@ -22,6 +22,10 @@ export type Member = {
   owner?: string | null
   /** Paying members' referral link and counts; null for seats, Holdterm and free members. */
   referral?: { code: string; url: string; signups: number; paid: number; months_earned: number } | null
+  /** Paying monthly members who aren't paused: "Pause until the next season" (until is a date or unix seconds). */
+  pause_offer?: { until: string | number; quarter?: string; deadline?: string | number } | null
+  /** While paused (unix seconds): access is off, follows and settings are kept. */
+  paused_until?: number | null
   /** Free accounts: saved names and the Friday email's "In your names" block (facts only for names a superinvestor moved this week). */
   free_names?: { names: string[]; limit: number; facts?: { ticker: string; text: string; url: string }[]; hook?: string | null; more?: number } | null
 }
@@ -89,6 +93,10 @@ export const isFree = (m?: Member | null) => Boolean(m && !m.active && (m.plan =
 export const isPro = (m?: Member | null) => Boolean(m?.active && (m.plan === 'pro' || m.plan === 'fund'))
 
 export const fetchMe = () => call<{ member: Member }>('/me', { auth: true }).then((r) => r.member)
+export type CancelReason = 'price' | 'value' | 'feature' | 'alerts' | 'temporary' | 'other'
+export const pausePlan = (reason?: CancelReason) => call<{ ok: boolean; paused_until: number }>('/pause', { body: reason ? { reason } : {}, auth: true })
+export const resumePlan = () => call<{ ok: boolean }>('/pause', { method: 'DELETE', auth: true })
+export const sendCancelReason = (reason: CancelReason, note?: string) => call<{ ok: boolean }>('/cancel-reason', { body: { reason, ...(note ? { note } : {}) }, auth: true })
 export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email } })
 export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
 /**

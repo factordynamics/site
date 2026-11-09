@@ -16,7 +16,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
-import { ApiError, downloadFile, fetchMe, getToken, isFree, openPortal, PLAN_NAME, requestLogin, setAlerts, signOut, startSession, type Member } from '../lib/account'
+import { ApiError, downloadFile, fetchMe, getToken, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, resumePlan, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string } | { kind: 'out'; error?: string } | { kind: 'off' }
 
@@ -82,6 +82,7 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
   const { status, follows } = useFollows()
   const [editing, setEditing] = useState(false)
   const cancelling = Boolean(member.cancel_at_period_end)
+  const paused = Boolean(member.paused_until)
   const endRaw = cancelling && member.cancel_at ? member.cancel_at : member.status === 'trialing' && member.trial_end ? member.trial_end : member.period_end
   const end = endRaw ? new Date(typeof endRaw === 'number' ? endRaw * 1000 : endRaw) : null
   const endLabel = end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -157,18 +158,22 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-semibold">Plan</h2>
-            <Badge tone={cancelling ? 'warn' : trial ? 'accent' : member.active ? 'up' : 'warn'}>{cancelling ? 'Cancelled' : trial ? 'Free trial' : member.active ? 'Active' : member.status}</Badge>
+            <Badge tone={cancelling || paused ? 'warn' : trial ? 'accent' : member.active ? 'up' : 'warn'}>{paused ? 'Paused' : cancelling ? 'Cancelled' : trial ? 'Free trial' : member.active ? 'Active' : member.status}</Badge>
           </div>
           <p className="mt-3 text-[14px] text-ink-2">{member.email}</p>
           <p className="mt-1 text-[14px] text-ink-2">
             {PLAN_NAME[member.plan] ?? 'Copy'}
             {member.interval === 'yearly' ? ', yearly' : member.interval === 'monthly' ? ', monthly' : ''}
-            {endLabel && !cancelling && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`}
+            {endLabel && !cancelling && !paused && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`}
           </p>
           {member.seat ? (
             <p className="mt-4 rounded-xl bg-accent-soft px-3.5 py-2.5 text-[14px] text-accent-2">
               Part of {member.owner ? `${member.owner}’s` : 'your team’s'} Copy Fund plan. Billing and seats are managed by the plan owner.
             </p>
+          ) : (
+            <>
+          {paused ? (
+            <Paused until={member.paused_until!} onChange={onChange} />
           ) : (
             <>
           {cancelling && (
@@ -193,6 +198,9 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
             {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
           </p>
+          {!cancelling && <Leave member={member} onChange={onChange} />}
+            </>
+          )}
             </>
           )}
         </section>
@@ -260,7 +268,7 @@ function SignedIn({ member, welcome, upgraded, kept, focus = false, onOut, onCha
       {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
       {member.active && <ApiKeys member={member} focus={focus} />}
 
-      {member.active && status === 'ready' && follows.onboarded && !editing && (
+      {(member.active || paused) && status === 'ready' && follows.onboarded && !editing && (
         <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-[15px] font-semibold">
@@ -568,5 +576,123 @@ function InsiderSettings() {
         </p>
       )}
     </fieldset>
+  )
+}
+
+const dayLabel = (v: string | number) => new Date(typeof v === 'number' ? v * 1000 : v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? 'UTC' : undefined })
+
+/** Paused (Stripe pause_collection): no charges or alerts until the date; follows and settings stay. */
+function Paused({ until, onChange }: { until: number; onChange: (m: Member) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  return (
+    <div className="mt-4">
+      <p className="rounded-xl bg-[#fdf3e1] px-3.5 py-2.5 text-[14px] text-[#7a4b06]">
+        Paused until {dayLabel(until)}. No charges or alerts until then; your follows, names and settings are kept.
+      </p>
+      <Button
+        variant="dark"
+        className="mt-4"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          setErr('')
+          try {
+            await resumePlan()
+            onChange(await fetchMe())
+          } catch (e) {
+            setErr(e instanceof ApiError && e.detail ? e.detail : 'That didn’t go through. Please try again.')
+          }
+          setBusy(false)
+        }}
+      >
+        {busy ? 'Resuming…' : 'Resume now'} <Arrow />
+      </Button>
+      {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
+    </div>
+  )
+}
+
+const REASONS: [CancelReason, string][] = [
+  ['temporary', 'I only need it during filing season'],
+  ['price', 'It costs too much'],
+  ['value', 'I’m not using it enough'],
+  ['feature', 'It’s missing something I need'],
+  ['alerts', 'The alerts weren’t useful'],
+  ['other', 'Something else'],
+]
+
+/** Leaving: one question, then Pause until the next season (monthly members) ahead of cancelling in the portal. */
+function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => void }) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState<CancelReason | null>(null)
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState<'pause' | 'cancel' | null>(null)
+  const [err, setErr] = useState('')
+  const offer = member.pause_offer
+  if (!open)
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="mt-3 min-h-9 text-[13px] text-ink-3 underline underline-offset-2 hover:text-ink-2">
+        {offer ? 'Pause or cancel' : 'Cancel plan'}
+      </button>
+    )
+  return (
+    <div className="mt-5 rounded-xl bg-paper p-4 shadow-[0_0_0_1px_var(--color-line)]">
+      <fieldset>
+        <legend className="text-[14px] font-medium">What’s the main reason?</legend>
+        <div className="mt-2 space-y-1.5 text-[14px]">
+          {REASONS.map(([k, l]) => (
+            <label key={k} className="flex min-h-8 cursor-pointer items-center gap-2.5">
+              <input type="radio" name="leave" className="size-4 accent-[var(--color-accent)]" checked={reason === k} onChange={() => setReason(k)} />
+              {l}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      {reason && (reason === 'feature' || reason === 'other') && (
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="What would have made it worth keeping? (optional)" className="mt-3 w-full rounded-xl bg-card px-3 py-2 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]" />
+      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {offer && (
+          <Button
+            variant="dark"
+            disabled={!reason || busy !== null}
+            onClick={async () => {
+              setBusy('pause')
+              setErr('')
+              try {
+                await pausePlan(reason!)
+                onChange(await fetchMe())
+              } catch (e) {
+                setErr(e instanceof ApiError && e.detail ? e.detail : 'The pause didn’t go through. Please try again.')
+                setBusy(null)
+              }
+            }}
+          >
+            {busy === 'pause' ? 'Pausing…' : `Pause until ${dayLabel(offer.until)}`}
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          disabled={!reason || busy !== null}
+          onClick={async () => {
+            setBusy('cancel')
+            setErr('')
+            await sendCancelReason(reason!, note.trim() || undefined).catch(() => null)
+            openPortal().catch(() => {
+              setBusy(null)
+              if (checkout.portal) window.location.href = checkout.portal
+            })
+          }}
+        >
+          {busy === 'cancel' ? 'Opening…' : 'Continue to cancel'}
+        </Button>
+        <button type="button" onClick={() => setOpen(false)} className="min-h-9 px-2 text-[13px] text-ink-3 hover:text-ink-2">
+          Keep my plan
+        </button>
+      </div>
+      {offer && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Pausing stops charges and alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. Your follows, names and settings stay, and we’ll email you before it resumes.</p>}
+      {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
+    </div>
   )
 }
