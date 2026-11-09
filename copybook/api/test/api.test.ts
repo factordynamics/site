@@ -976,8 +976,10 @@ describe('copybook api', () => {
       if (String(x) === 'https://api.stripe.com/v1/checkout/sessions') return (checkout = decodeURIComponent(String(init?.body))), Response.json({ url: 'https://checkout.stripe.com/c/pay/cs_x' });
       return orig(x, init);
     });
-    const resume = sent[0].text.match(/(https:\/\/copybook-api\S+\/resume\?t=\S+)/)![1].replace('https://copybook-api.factordynamics.workers.dev/', 'https://api.test/');
-    const go = await handleRequest(new Request(resume), env);
+    // The link opens the site's /resume/ page; its button POSTs the token to the API, which starts the Checkout.
+    const resume = sent[0].text.match(/(\S+\/resume\/\?t=\S+)/)![1];
+    expect(resume.startsWith(`${env.SITE_URL}resume/?t=`)).toBe(true);
+    const go = await handleRequest(new Request(`https://api.test/resume${new URL(resume).search}`, { method: 'POST' }), env);
     expect(go.headers.get('location')).toBe('https://checkout.stripe.com/c/pay/cs_x');
     expect(checkout).toContain('customer=wb');
     expect(checkout).toContain('line_items[0][price]=price_copy_monthly');
@@ -1024,6 +1026,11 @@ describe('copybook api', () => {
     const tp = JSON.parse((await env.DB.get('cus:cus_tp'))!);
     expect([isActive(tp), isPaused(tp), isPaused(tp, (tEnd + 60) * 1000), isActive({ ...tp, status: 'active', paused_from: null })]).toEqual([true, false, true, false]);
     expect(pauseOffer(tp)).toBeNull(); // already scheduled
+    // A cancel replaces the scheduled pause: Stripe's pause is cleared, so resuming later is a plain trial.
+    stripeObjects['subscriptions/sub_tp'] = { ...sub('sub_tp', 'cus_tp', 'trialing'), trial_end: tEnd, cancel_at_period_end: true };
+    await webhook({ type: 'customer.subscription.updated', data: { object: { ...sub('sub_tp', 'cus_tp', 'trialing'), trial_end: tEnd, cancel_at_period_end: true, pause_collection: { behavior: 'void', resumes_at: tEnd + 70 * 86400 } } } });
+    const tc = JSON.parse((await env.DB.get('cus:cus_tp'))!);
+    expect([tc.cancel_at_period_end, tc.paused_until, tc.paused_from]).toEqual([true, null, null]);
     await env.DB.delete('cus:cus_comp');
     await env.DB.delete('cus:cus_yr');
     expect(r.at * 1000).toBe(deadlineMs(r.deadline) - 14 * 86400_000);
@@ -1049,7 +1056,7 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.subject)).toEqual([`Paused until ${deadlineLabel(until)} · no charges until then`]);
     expect(sent[0].text).toContain(`No charges until then; billing resumes on ${deadlineLabel(until)}.`);
     expect(sent[0].text).toContain('Your follows and price ($9 a month) are kept.');
-    expect(sent[0].text).toMatch(/Resume anytime, one click, same subscription: https:\/\/\S+\/resume\?t=/);
+    expect(sent[0].text).toContain(`Resume anytime, one click, same subscription: ${env.SITE_URL}resume/?t=`);
     expect(posted.at(-1)).toContain(`pause_collection%5Bresumes_at%5D=${r.at}`);
     expect(posted.at(-1)).toContain('cancel_at_period_end=false');
     // The seasonal reason, with its free text kept to 300 characters.
@@ -1121,7 +1128,7 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['gone@example.com']);
     expect(sent[0].subject).toMatch(/13Fs are due (Mon|Tue|Wed|Thu|Fri) [A-Z][a-z]{2} \d{1,2}, 20\d\d:/);
     expect(sent[0].text).toContain('Warren Buffett bought $26.9M of SIRI (Form 4)');
-    expect(sent[0].text).toMatch(/Start again: https:\/\/\S+\/resume\?t=/);
+    expect(sent[0].text).toContain(`Start again: ${env.SITE_URL}resume/?t=`);
     sent = [];
     await runSeasonal(env, winAt + 86400_000);
     expect(sent).toHaveLength(0); // once per season
@@ -2383,9 +2390,10 @@ describe('copybook api', () => {
     expect(posts.filter((p) => p.url === teamSlack)).toHaveLength(1);
     expect(posts.filter((p) => p.url.includes('discord.com'))).toHaveLength(1);
 
-    // Five seats at most.
-    for (const n of [2, 3, 4, 5]) expect((await call('/seats', { body: { email: `s${n}@fund.example` }, token: owner })).status).toBe(201);
-    expect((await call('/seats', { body: { email: 's6@fund.example' }, token: owner })).status).toBe(409);
+    // Ten seats at most; the 11th is refused.
+    for (const n of [2, 3, 4, 5, 6, 7, 8, 9, 10]) expect((await call('/seats', { body: { email: `s${n}@fund.example` }, token: owner })).status).toBe(201);
+    const eleventh = await call('/seats', { body: { email: 's11@fund.example' }, token: owner });
+    expect([eleventh.status, (await eleventh.json()).code]).toEqual([409, 'seat_limit']);
 
     // A removed seat is gone; when the Fund ends, every remaining seat ends with it.
     const s5 = await env.DB.get('email:s5@fund.example');

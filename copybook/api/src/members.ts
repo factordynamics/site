@@ -127,6 +127,17 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     m.welcomed = (await sendMail(env, [welcome])) === '200';
     if (!m.welcomed) await claim(env, customer, 'welcome', false);
   }
+  // A cancel replaces a pause scheduled for the trial's end: Stripe's pause goes too, so a later resume is a plain
+  // trial (the member can choose the pause again).
+  if (m.cancel_at_period_end && pauseScheduled(m)) {
+    try {
+      await stripe(env, 'POST', `subscriptions/${m.subscription}`, { pause_collection: '' });
+      m.paused_until = null;
+      m.paused_from = null;
+    } catch (e) {
+      console.log(`cancel: scheduled pause not cleared for ${customer}: ${e}`);
+    }
+  }
   await maybeCancelMail(env, prev, m);
   await maybeResumeMail(env, prev, m);
   await maybeWinback(env, prev, m);

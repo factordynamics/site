@@ -185,7 +185,7 @@ const API = (env: Env) => `${apiBase(env)}/`;
 export async function maybeWinback(env: Env, prev: Member | null, m: Member, now = Date.now()): Promise<void> {
   if (!prev || prev.status !== 'trialing' || m.status !== 'canceled' || !lifecycle(m) || m.marketing_off || !m.email || m.winback_sent === m.subscription) return;
   if (!prev.trial_end || now < prev.trial_end * 1000 - 3600_000) return;
-  const resume = `${API(env)}resume?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, 30 * 86400, { s: m.plan }))}`;
+  const resume = `${env.SITE_URL}resume/?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, 30 * 86400, { s: m.plan }))}`;
   if ((await sendMail(env, [winbackMail(env, m, resume, await unsubscribeUrl(env, m.customer))])) === '200') m.winback_sent = m.subscription;
 }
 
@@ -584,7 +584,7 @@ export function pausedFilingMail(m: Member, filings: Pick<Alert13F, 'manager' | 
 
 /** The resume button's link: ends a pause on the same subscription, or starts a new monthly one after a cancel. */
 export async function resumeUrl(env: Env, m: Member): Promise<string> {
-  return `${API(env)}resume?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, 30 * 86400))}`;
+  return `${env.SITE_URL}resume/?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, 30 * 86400))}`;
 }
 
 export function preseasonMail(env: Env, m: Member, deadline: string, quarter: string, highlights: string[], resume: string | null, unsub: string): Mail {
@@ -638,7 +638,7 @@ export async function runSeasonal(env: Env, now: number): Promise<Record<string,
         (isPaused(m, now) || (m.status === 'canceled' && (m.period_end ?? 0) * 1000 > now - 400 * 86400_000)),
     );
     for (const m of who) {
-      const resume = isPaused(m, now) ? null : `${API(env)}resume?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, 30 * 86400))}`;
+      const resume = isPaused(m, now) ? null : `${env.SITE_URL}resume/?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, 30 * 86400))}`;
       mails.push(preseasonMail(env, m, d.date, d.quarter, await names(m), resume, await unsubscribeUrl(env, m.customer)));
       marks.push({ customer: m.customer, patch: { preseason_sent: d.quarter } });
       winbacks++;

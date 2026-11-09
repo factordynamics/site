@@ -10,7 +10,7 @@ import { signToken } from './tokens';
  * shared by every seat (see getFollows and changeFollows). A seat's status mirrors the owner's
  * subscription, so a cancelled or unpaid Fund turns every seat off with it.
  */
-export const SEAT_LIMIT = 5;
+export const SEAT_LIMIT = 10;
 
 export interface Seat {
   id: string;
