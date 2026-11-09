@@ -255,6 +255,8 @@ export type Who = { slug: string; manager: string; weight: number; change: Chang
 export type Agg = {
   key: string
   ticker: string | null
+  /** An ETF, index or T-bill fund (isFundLike). */
+  fund?: boolean
   /** "GOOGL+GOOG" when several share classes are combined. */
   label?: string
   former?: string
@@ -271,6 +273,9 @@ export type Agg = {
   maxWeight: number
 }
 
+/** ETFs, index and T-bill funds: shown in holdings, but kept out of "largest positions" and trade lists. */
+export const isFundLike = (h: Pick<Holding, 'sector' | 'issuer' | 'title'>) =>
+  h.sector === 'Funds & ETFs' || /\b(ETF|ETFS|EXCHANGE TRADED|ISHARES|SPDR|VANGUARD|INVESCO QQQ|PROSHARES|WISDOMTREE|DIREXION|INDEX|TREASURY|T-BILL|SELECT SECTOR|S&P ?500|TR UNIT)\b/i.test(`${h.issuer} ${h.title}`)
 /** Rolls the latest books up by company: share classes of one issuer (same 6-character CUSIP prefix,
  * e.g. GOOGL and GOOG) count as one stock, shown under its most-held ticker. Options are excluded. */
 export function aggregate(books: Book[]): { rows: Agg[]; total: number } {
@@ -283,7 +288,7 @@ export function aggregate(books: Book[]): { rows: Agg[]; total: number } {
       const key = h.cusip ? h.cusip.slice(0, 6) : h.ticker || h.issuer
       let a = m.get(key)
       if (!a) {
-        a = { key, ticker: h.ticker, former: h.former, name: h.display_name || issuerName(h.issuer), sector: h.sector || 'Unclassified', value: 0, holders: [], buyers: [], sellers: [], newBuyers: 0, net: 0, buy: 0, sell: 0, maxWeight: 0 }
+        a = { key, fund: isFundLike(h), ticker: h.ticker, former: h.former, name: h.display_name || issuerName(h.issuer), sector: h.sector || 'Unclassified', value: 0, holders: [], buyers: [], sellers: [], newBuyers: 0, net: 0, buy: 0, sell: 0, maxWeight: 0 }
         m.set(key, a)
         classValue.set(key, new Map())
       }

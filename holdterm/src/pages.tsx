@@ -14,6 +14,7 @@ import {
   loadInsiders,
   loadStock,
   loadStockIndex,
+  isFundLike,
   quarterLabel,
   roster,
   SECTOR_COLOR,
@@ -213,7 +214,7 @@ export function Home() {
   const trades = (b: Book) => {
     const by = new Map<string, Holding & { label?: string }>()
     for (const h of b.holdings) {
-      if (h.put_call || !h.value_delta) continue
+      if (h.put_call || !h.value_delta || isFundLike(h)) continue
       const k = h.cusip.slice(0, 6)
       const cur = by.get(k)
       if (!cur) by.set(k, { ...h, label: h.ticker ?? undefined })
@@ -563,8 +564,6 @@ const ownHolding = (b: Book, h: Holding) => {
   const own = new Set([...tokens(b.firm), ...tokens(b.name)])
   return tokens(h.display_name || h.issuer).some((w) => own.has(w))
 }
-/** ETFs, index and T-bill funds: shown, but never as a fund's "largest positions". */
-const isFundLike = (h: Holding) => h.sector === 'Funds & ETFs' || /\b(ETF|ISHARES|SPDR|VANGUARD|INDEX|TREASURY|T-BILL|SELECT SECTOR)\b/i.test(`${h.issuer} ${h.title}`)
 function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => boolean }) {
   const max = Math.max(...rows.map((r) => Math.max(r.weight, r.prev_weight ?? 0)))
   return (
@@ -618,7 +617,8 @@ export function Flows() {
   const sq = season().q
   const q = picked ?? ((books.data ?? []).filter((b) => b.quarter === sq).length >= 3 ? sq : 'latest')
   const quarters = useMemo(() => [...new Set((books.data ?? []).map((b) => b.quarter))].sort().reverse(), [books.data])
-  const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q)).rows : []), [books.data, q])
+  // Flows are stock picks: ETFs, index and T-bill funds are left out.
+  const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q)).rows.filter((r) => !r.fund) : []), [books.data, q])
   if (books.error) return <Failed error={books.error} />
   if (!books.data) return <Loading what="reading every book" />
   const fundsN = q === 'latest' ? books.data.length : books.data.filter((b) => b.quarter === q).length
