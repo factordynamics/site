@@ -257,13 +257,18 @@ ${right}
   const slug = r.quarter.toLowerCase() + (byPct ? '-pct' : '')
   writeFileSync(join(out, 'og', `season-${slug}.png`), new Resvg(card, { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng())
   const top = r.most_bought.slice(0, 3).map((f) => f.ticker)
+  const tk = (xs) => (xs ?? []).slice(0, 3).map((f) => f.ticker).join(', ')
+  // The % view's description names its own ranking, the same names its card shows.
+  const ranked = byPct
+    ? `${r.most_bought_pct?.length ? ` Biggest buys by % of book: ${tk(r.most_bought_pct)}.` : ''}${r.most_sold_pct?.length ? ` Biggest sales: ${tk(r.most_sold_pct)}.` : ''}`
+    : top.length ? ` Most bought: ${top.join(', ')}.` : ''
   writeFileSync(
     join(out, 'og', `season-${slug}.json`),
     JSON.stringify({
       path: `season/${r.quarter.toLowerCase()}/${byPct ? 'pct/' : ''}`,
       url: `${SITE}og/season-${slug}.png?v=${v}`,
       title: byPct ? `${q} 13F recap: the superinvestors' biggest bets by % of book · Copybook` : `${q} 13F recap: what the superinvestors bought and sold · Copybook`,
-      desc: `${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'have filed'} ${q} 13Fs.${top.length ? ` Most bought: ${top.join(', ')}.` : ''} New positions, full exits, the biggest moves and who filed late, from SEC EDGAR.`,
+      desc: `${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'have filed'} ${q} 13Fs.${ranked} New positions, full exits, the biggest moves and who filed late, from SEC EDGAR.`,
     }),
   )
   console.log(`recap card${byPct ? ' (% of book)' : ''}: ${q}${r.final ? ' final' : ' so far'} (v=${v})`)
