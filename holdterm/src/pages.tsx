@@ -183,7 +183,20 @@ const ACTION: Record<string, [string, string]> = {
 function ActionTag({ e }: { e: Event }) {
   const [label, tone] = ACTION[e.action] ?? [e.action, '']
   const why = e.action === 'other' ? 'Form 4 with no open-market purchase or sale: a gift, award, conversion, distribution or a holdings report' : undefined
-  return <span className={`tag ${tone}`} title={why}>{label}</span>
+  // Phones get the short form of the two long labels, so the action column fits.
+  const short = { new_stake: 'New 5%+', stake_update: 'Update' }[e.action as string]
+  return (
+    <span className={`tag ${tone}`} title={why}>
+      {short ? (
+        <>
+          <span className="hide-sm">{label}</span>
+          <span className="show-sm">{short}</span>
+        </>
+      ) : (
+        label
+      )}
+    </span>
+  )
 }
 const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => [
   { key: 'filed', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, sort: (e) => e.filing_date, width: '84px' },

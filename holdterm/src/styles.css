@@ -1464,7 +1464,15 @@ pre.email {
     max-width: 172px;
   }
   .noticker {
-    max-width: 96px;
+    max-width: 84px;
+  }
+  /* Phones: slightly smaller pills and column heads, so four-column tables fit 360px. */
+  .tag {
+    font-size: 11.5px;
+    padding: 0 6px;
+  }
+  .grid th {
+    font-size: 12px;
   }
   .fund-stats .stat:nth-child(3),
   .fund-stats .stat:nth-child(4) {
@@ -1541,7 +1549,7 @@ pre.email {
   }
   .grid th,
   .grid td {
-    padding-right: 8px;
+    padding-right: 6px;
   }
   .head {
     flex-direction: column;
