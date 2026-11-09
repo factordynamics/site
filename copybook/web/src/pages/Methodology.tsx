@@ -206,10 +206,10 @@ export function Methodology() {
               <p>A split changes every holder’s share count without anyone trading. Each flagged name gets one of two treatments, shown on its stock page and in My book:</p>
               <ul className="list-disc space-y-1.5 pl-5">
                 <li>
-                  <span className="font-medium text-ink">Adjusted.</span> The split is confirmed from holders’ share counts and, where it’s available, SEC XBRL shares outstanding. Earlier quarters’ shares are multiplied by the ratio, so buying and selling are counted as usual.
+                  <span className="font-medium text-ink">Adjusted.</span> Confirmed by the data pipeline from holders’ share counts and, where it’s available, SEC XBRL shares outstanding, or, until it is, by our holder check when the evidence is strong: at least 10 holders, a median share ratio within 5% of the factor and a median price ratio within 10% of its inverse. Earlier quarters’ shares are multiplied by the ratio, so buying and selling are counted as usual. Fund pages and alerts are adjusted only once the pipeline confirms the split.
                 </li>
                 <li>
-                  <span className="font-medium text-ink">Not counted.</span> Not yet confirmed, but among at least 5 holders the median share ratio is within 25% of a clean factor (2, 3, 4, 5 or 10, or the inverse) and the median price per share moved the other way by about the same factor. Those share changes are left out of Flow, the season rankings and My book’s net trades. ETFs are exempt.
+                  <span className="font-medium text-ink">Not counted.</span> Weaker evidence: among at least 5 holders the median share ratio is within 25% of a clean factor (2, 3, 4, 5 or 10, or the inverse) and the median price per share moved the other way by about the same factor. Those share changes are left out of Flow, the season rankings and My book’s net trades. ETFs are exempt.
                 </li>
               </ul>
             </div>
@@ -240,7 +240,9 @@ export function Methodology() {
                             <span className="text-ink-3">{x.ratio}</span>
                           </td>
                           <td className="px-3 py-2 text-ink-2">{quarterLabel(x.quarter)}</td>
-                          <td className={`px-3 py-2 ${x.treatment === 'adjusted' ? 'text-ink-2' : 'text-[#8a5a0b]'}`}>{x.treatment === 'adjusted' ? 'Adjusted' : 'Not counted'}</td>
+                          <td className={`px-3 py-2 ${x.treatment === 'adjusted' ? 'text-ink-2' : 'text-[#8a5a0b]'}`}>{x.treatment === 'adjusted' ? 'Adjusted' : 'Not counted'}
+                            <span className="block text-[12px] text-ink-3">{x.source.startsWith('Ingest') ? 'Pipeline' : 'Holder check'}</span>
+                          </td>
                           <td className="num px-3 py-2 text-right">{x.holders}</td>
                           <td className="num px-3 py-2 text-right">{x.share_ratio.toFixed(2)}</td>
                           <td className="num px-3 py-2 text-right">{x.price_ratio.toFixed(2)}</td>

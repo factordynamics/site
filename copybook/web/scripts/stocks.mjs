@@ -59,7 +59,8 @@ const issuerKey = (h) => find(rawKey(h))
 const stocks = new Map()
 for (const b of books) {
   const who = { slug: b.slug, manager: b.manager, firm: b.name, quarter: b.quarter, filing_date: b.filing_date, featured: Boolean(b.featured) }
-  const total = b.total_value || 1
+  // One weight everywhere: % of the equity (SH) book, without option notional or PRN (ingest's pct_of_book).
+  const total = b.equity_value || b.total_value || 1
   const per = new Map() // issuer key -> this fund's rolled-up position
   for (const h of b.holdings) {
     const k = issuerKey(h)
@@ -125,8 +126,20 @@ for (const st of stocks.values()) {
     // The closest clean factor that both medians agree on.
     const k = FACTORS.filter((f) => Math.abs(Math.log(ms / f)) < Math.log(1.25) && Math.abs(mp * f - 1) < 0.25).sort((a, b) => Math.abs(Math.log(ms / a)) - Math.abs(Math.log(ms / b)))[0]
     if (!k || !ticker) continue
-    ;(st.splits ??= {})[q] = { ratio: ratioLabel(k), adjusted: false }
-    splitLog.push({ ticker, name: st.name, quarter: q, ratio: ratioLabel(k), treatment: 'excluded', holders: r.length, share_ratio: +ms.toFixed(3), price_ratio: +mp.toFixed(3), xbrl_shares_ratio: null, source: 'Copybook holder check' })
+    // Strong evidence (10+ holders, share ratio within 5% of k, price ratio within 10% of 1/k): adjust
+    // here the way ingest does, multiplying the earlier shares by k, so the real trades count. Weaker
+    // evidence is left out of the rankings and net trades instead.
+    const strong = r.length >= 10 && Math.abs(ms / k - 1) < 0.05 && Math.abs(mp * k - 1) < 0.1
+    if (strong)
+      for (const h of st.holders) {
+        if (h.quarter !== q || !h.change || !h.prev_shares) continue
+        h.prev_shares *= k
+        const price = h.shares ? h.value / h.shares : h.prev_value / h.prev_shares
+        h.delta_value = r0((h.shares - h.prev_shares) * price)
+        h.change = h.shares === 0 ? 'exited' : h.shares > h.prev_shares ? 'added' : h.shares < h.prev_shares ? 'trimmed' : 'unchanged'
+      }
+    ;(st.splits ??= {})[q] = { ratio: ratioLabel(k), adjusted: strong }
+    splitLog.push({ ticker, name: st.name, quarter: q, ratio: ratioLabel(k), treatment: strong ? 'adjusted' : 'excluded', holders: r.length, share_ratio: +ms.toFixed(3), price_ratio: +mp.toFixed(3), xbrl_shares_ratio: null, source: 'Copybook holder check' })
   }
 }
 mkdirSync(join(out, 'd'), { recursive: true })
@@ -357,7 +370,9 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       if (qn(d.quarter) < newest - 2) continue
       read_ok++
       const col = Object.fromEntries((d.columns ?? []).map((c, j) => [c, j]))
-      const total = d.total_value || 1
+      // Equity book: shards carry no equity_value, so take the option notional they list out of the total.
+      const optionValue = d.rows.reduce((a, r) => a + (r[col.put_call] ? r[col.value] || 0 : 0), 0)
+      const total = d.equity_value || d.total_value - optionValue || d.total_value || 1
       const cur = curatedByCik.get(f.cik)
       const who = cur ? { slug: cur.slug, name: cur.manager, flag: cur.featured ? 2 : 1 } : { slug: f.slug, name: f.name, flag: 0 }
       const mine = new Map() // page -> [shares, value]; classes of one issuer roll up like the curated rows
