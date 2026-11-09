@@ -49,13 +49,13 @@ async function referrals(env: Env, customer: string): Promise<Referral[]> {
   return JSON.parse((await env.DB.get(`refs:${customer}`)) ?? '[]') as Referral[];
 }
 
-/** A once-only coupon worth one month of the plan (the whole first month on monthly; that much off the first year). */
+/** A once-only coupon worth one month of the plan's monthly price: the whole first month on monthly, that much off the first year on yearly (Copy: $9 off $79). */
 async function couponFor(env: Env, plan: string): Promise<string> {
   const id = `copybook-ref-${plan}-1mo`;
   try {
     await stripe(env, 'GET', `coupons/${id}`);
   } catch {
-    await stripe(env, 'POST', 'coupons', { id, amount_off: MONTH[plan], currency: 'usd', duration: 'once', name: `Referral: a month of ${NAME[plan]} free`, 'metadata[copybook]': 'referral' }).catch(() => null);
+    await stripe(env, 'POST', 'coupons', { id, amount_off: MONTH[plan], currency: 'usd', duration: 'once', name: `Referral: one month of ${NAME[plan]} ($${MONTH[plan] / 100}) off`, 'metadata[copybook]': 'referral' }).catch(() => null);
   }
   return id;
 }
@@ -93,7 +93,10 @@ export async function createCheckout(env: Env, b: Record<string, unknown>): Prom
     cancel_url: `${env.SITE_URL}pricing/${ref ? `?ref=${ref}` : ''}`,
     'metadata[copybook]': ref ? 'referral' : 'checkout',
   });
-  return { status: 200, body: { ok: true, url: cs.url, referral: ref ? { applied: true, months_free: 1 } : code ? { applied: false } : null } };
+  // The first charge, after the trial, with the referral month off: what the pricing page shows next to the button.
+  const list = Number(price.unit_amount ?? 0);
+  const first = { interval, list_usd: list / 100, discount_usd: MONTH[plan] / 100, first_charge_usd: Math.max(0, list - MONTH[plan]) / 100, charged_after_trial_days: TRIAL_DAYS };
+  return { status: 200, body: { ok: true, url: cs.url, referral: ref ? { applied: true, months_free: 1, ...(list ? first : {}) } : code ? { applied: false } : null } };
 }
 
 /** Records a referred subscription under its referrer, once. */

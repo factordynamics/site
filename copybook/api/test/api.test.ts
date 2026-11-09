@@ -800,7 +800,8 @@ describe('copybook api', () => {
     const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_pz' } })).json()) as { token: string };
     await call('/follows/owned/SIRI', { method: 'POST', token });
     const r = pauseResumesAt(Date.now());
-    const until = new Date(r.at * 1000).toISOString().slice(0, 10);
+    const until = new Date(r.at * 1000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+    expect(until).toBe(new Date((r.at - 5 * 3600) * 1000).toISOString().slice(0, 10));
     // The offer on /me: when it would end, and the deadline it ends before.
     expect((await (await call('/me', { token })).json()).member.pause_offer).toMatchObject({ until, quarter: r.quarter, deadline: r.deadline, note: 'Monthly plans can pause until 2 weeks before the next 13F deadline.' });
     // A comped monthly member (the critics) can pause too; a yearly one can't, and /me and /pause agree.
@@ -808,6 +809,8 @@ describe('copybook api', () => {
     await env.DB.put('cus:cus_yr', JSON.stringify({ customer: 'cus_yr', email: 'yr@example.com', status: 'active', plan: 'copy', interval: 'yearly', subscription: 'sub_yr', alerts: [] }));
     const { pauseOffer } = await import('../src/revenue');
     expect(pauseOffer(JSON.parse((await env.DB.get('cus:cus_comp'))!))?.until).toBe(until);
+    // Paused on Nov 9, 2026: back on Feb 2, 2027 (22:00 ET, 2 weeks before Tue Feb 16), on New York's calendar, not UTC's Feb 3.
+    expect(pauseOffer(JSON.parse((await env.DB.get('cus:cus_comp'))!), Date.parse('2026-11-09T15:00:00Z'))).toMatchObject({ until: '2027-02-02', deadline: '2027-02-16', deadline_label: 'Tue Feb 16, 2027' });
     expect(pauseOffer(JSON.parse((await env.DB.get('cus:cus_yr'))!))).toBeNull();
     await env.DB.delete('cus:cus_comp');
     await env.DB.delete('cus:cus_yr');
@@ -1105,13 +1108,18 @@ describe('copybook api', () => {
       if (!url.startsWith('https://api.stripe.com/v1/') || (init?.method !== 'POST' && !url.includes('/prices?') && !url.includes('/coupons/'))) return orig(u, init);
       const path = url.slice('https://api.stripe.com/v1/'.length).split('?')[0];
       calls.push({ path, body: decodeURIComponent(String(init?.body ?? '')) });
-      if (path === 'prices') return Response.json({ data: [{ id: `price_${new URL(url).searchParams.get('lookup_keys[]')}` }] });
+      const unit: Record<string, number> = { copy_monthly: 900, copy_yearly: 7900, pro_monthly: 3900, pro_yearly: 34900 };
+      if (path === 'prices') return Response.json({ data: [{ id: `price_${new URL(url).searchParams.get('lookup_keys[]')}`, unit_amount: unit[new URL(url).searchParams.get('lookup_keys[]')!] }] });
       if (path.startsWith('coupons/')) return Response.json({ error: { message: 'No such coupon' } }, { status: 404 });
       if (path === 'checkout/sessions') return Response.json({ url: 'https://checkout.stripe.com/c/pay/cs_ref' });
       return Response.json({ id: 'ok' });
     });
     const co = await (await call('/checkout', { body: { plan: 'pro', interval: 'yearly', ref: ref.code.toUpperCase(), email: 'new@example.com' } })).json();
-    expect(co).toEqual({ ok: true, url: 'https://checkout.stripe.com/c/pay/cs_ref', referral: { applied: true, months_free: 1 } });
+    // Pro yearly: one month of Pro ($39) off the first year, charged after the trial.
+    expect(co).toEqual({ ok: true, url: 'https://checkout.stripe.com/c/pay/cs_ref', referral: { applied: true, months_free: 1, interval: 'yearly', list_usd: 349, discount_usd: 39, first_charge_usd: 310, charged_after_trial_days: 14 } });
+    // Copy: the whole first month on monthly; $9 off the first year ($70) on yearly.
+    expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'monthly', ref: ref.code, email: 'new2@example.com' } })).json()).referral.first_charge_usd).toBe(0);
+    expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'yearly', ref: ref.code, email: 'new3@example.com' } })).json()).referral.first_charge_usd).toBe(70);
     expect(calls.find((c) => c.path === 'coupons')!.body).toContain('amount_off=3900'); // a month of Pro, off the first year
     const cs = calls.find((c) => c.path === 'checkout/sessions')!.body;
     expect(cs).toContain('discounts[0][coupon]=copybook-ref-pro-1mo');

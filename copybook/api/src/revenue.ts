@@ -411,7 +411,8 @@ export async function businessSummary(env: Env, now: number) {
 // Seasonal churn defense: pause until the next season instead of cancelling, a reminder before it ends,
 // a win-back before each 13F deadline for paused and lapsed members, and failed-payment email.
 
-const isoDay = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
+/** The New York calendar day (22:00 ET on Feb 2 is Feb 2, not 03:00 UTC Feb 3). */
+const isoDay = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
 /**
  * Who can pause: a monthly Copy, Pro or Fund owner on their own subscription, after the trial. Comped and
