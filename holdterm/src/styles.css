@@ -1584,3 +1584,214 @@ pre.email a {
   color: var(--acc);
   text-decoration: underline;
 }
+
+/* ---------- first-visit guide (home) and /guide ---------- */
+.guide {
+  margin-bottom: 20px;
+  padding: 22px 24px 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+}
+.guide-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.guide-head h2 {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+.guide-sub {
+  margin: 4px 0 0;
+  color: var(--dim);
+  font-size: 14.5px;
+}
+.guide-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.guide-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.guide-cards li {
+  padding: 16px 16px 18px;
+  border-radius: 10px;
+  background: var(--raise);
+}
+.guide-cards h3 {
+  margin: 12px 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+.guide-cards p {
+  margin: 0;
+  color: var(--fg2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.guide-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+.guide-mini {
+  display: none;
+}
+/* The /guide article: a reading column with real type, not a table. */
+.article {
+  gap: 28px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.article-head h1 {
+  font-size: 36px;
+  letter-spacing: -0.025em;
+  margin: 4px 0 12px;
+}
+.article .eyebrow {
+  margin: 0;
+  color: var(--acc);
+  font-size: 13px;
+  font-weight: 600;
+}
+.article .lede {
+  font-size: 17.5px;
+  line-height: 1.6;
+  color: var(--fg2);
+  margin: 0;
+}
+.article section h2 {
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  margin: 0 0 10px;
+}
+.article section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 22px 0 10px;
+}
+.article section p {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--fg2);
+  margin: 0 0 12px;
+}
+.article .guide-cards-page {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* On the page background the cards need their own surface. */
+.guide-cards-page li {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.defs {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.defs dt {
+  font-weight: 600;
+  font-size: 16px;
+  margin-top: 12px;
+}
+.defs dd {
+  margin: 0;
+  color: var(--fg2);
+  font-size: 16px;
+  line-height: 1.7;
+}
+.pills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.pills li {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 14px;
+  align-items: baseline;
+  font-size: 15px;
+  color: var(--fg2);
+}
+.article-cta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px 24px;
+  flex-wrap: wrap;
+  padding: 22px 24px;
+  border-radius: var(--r);
+  background: var(--acc-soft);
+  border: 1px solid color-mix(in srgb, var(--acc) 22%, transparent);
+}
+.article .article-cta h2 {
+  margin-bottom: 4px;
+}
+.article .article-cta p {
+  margin: 0;
+}
+@media (max-width: 1180px) {
+  .guide-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  /* Phones: the guide is one line linking to /guide, so the filings stay near the top. */
+  .guide {
+    padding: 4px 0 4px 12px;
+    margin-bottom: 14px;
+    box-shadow: none;
+  }
+  .guide-head,
+  .guide > .guide-cards {
+    display: none;
+  }
+  .guide-mini {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .guide-mini p {
+    flex: 1;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .guide-mini .btn {
+    padding: 8px 12px;
+  }
+  .article-head h1 {
+    font-size: 28px;
+  }
+  .article .lede {
+    font-size: 16.5px;
+  }
+  .article .guide-cards-page {
+    grid-template-columns: 1fr;
+  }
+  .pills li {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

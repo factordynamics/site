@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, checkout, price as PRICE, SITE } from './config'
 import {
   aggregate,
@@ -276,6 +276,7 @@ export function Home() {
           <p>13F, 13D/G and Form 4 filings from {roster.funds.length} concentrated, long-term funds, read straight from SEC EDGAR, usually within hours of filing.</p>
         </div>
       </div>
+      <FirstVisit />
       <HomeBody />
     </>
   )
@@ -1411,6 +1412,189 @@ function StockFollows({ f, setF }: { f: Follows | null; setF: (f: Follows) => vo
         <input id="tk" placeholder="ticker" value={t} onChange={(e) => setT(e.target.value)} />
       </form>
     </div>
+  )
+}
+
+// ---------- first-visit guide ----------
+// Four short points on the home page for new visitors (dismissed for good with "Got it"), and the same points
+// at length on /guide. Decided before the first paint, like the upsell, so nothing shifts.
+const GUIDE_KEY = 'holdterm-guide-dismissed'
+const GUIDE: { icon: ReactNode; t: string; p: string }[] = [
+  {
+    icon: <path d="M6 3.5h8l4 4V20a.5.5 0 0 1-.5.5h-11A.5.5 0 0 1 6 20V3.5Zm8 0V8h4M9 12h6M9 15.5h6" />,
+    t: 'What a 13F is',
+    p: 'Every manager with more than $100 million in US stocks must tell the SEC what it owns, once a quarter, on Form 13F. Holdterm reads those filings for investors who hold few stocks for years.',
+  },
+  {
+    icon: <path d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 4v4.5l3 2" />,
+    t: 'How current it is',
+    p: 'A 13F shows holdings on the last day of the quarter and can arrive up to 45 days later. Treat it as a snapshot, not today’s portfolio. Stake (13D/G) and insider (Form 4) filings come within days.',
+  },
+  {
+    icon: <path d="M4 18.5h16M6.5 15.5v-4M11 15.5v-9M15.5 15.5V9M20 15.5v-6" />,
+    t: 'How to read a fund',
+    p: 'Holdings are sorted by share of the fund. “Added”, “Trimmed”, “New” and “Sold out” compare share counts with the previous quarter, so a price move alone never counts as buying or selling.',
+  },
+  {
+    icon: <path d="M12 4.5 4.5 8v4c0 4.2 3.2 7.2 7.5 8 4.3-.8 7.5-3.8 7.5-8V8L12 4.5Zm-3 8 2 2 4-4" />,
+    t: 'What it leaves out',
+    p: 'Short positions, cash, foreign-listed shares and most bonds are not in a 13F. Options and notes appear separately. A sale can be risk management, not a change of mind: read it as evidence, not advice.',
+  },
+]
+function GuideIcon({ children }: { children: ReactNode }) {
+  return (
+    <span className="guide-icon" aria-hidden>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        {children}
+      </svg>
+    </span>
+  )
+}
+function FirstVisit() {
+  const [open, setOpen] = useState(() => {
+    try {
+      return !localStorage.getItem(GUIDE_KEY)
+    } catch {
+      return true
+    }
+  })
+  if (!open) return null
+  const close = () => {
+    try {
+      localStorage.setItem(GUIDE_KEY, String(Date.now()))
+    } catch {}
+    setOpen(false)
+    document.querySelector<HTMLElement>('main')?.focus()
+  }
+  return (
+    <section className="guide" aria-labelledby="guide-h">
+      <div className="guide-head">
+        <div>
+          <h2 id="guide-h">New to 13F filings? Here’s how to read this site</h2>
+          <p className="guide-sub">Four things worth knowing before you look at the numbers.</p>
+        </div>
+        <div className="guide-actions">
+          <A to="/guide" className="btn ghost">
+            Read the full guide
+          </A>
+          <button type="button" className="btn" onClick={close}>
+            Got it
+          </button>
+        </div>
+      </div>
+      <ol className="guide-cards">
+        {GUIDE.map((g) => (
+          <li key={g.t}>
+            <GuideIcon>{g.icon}</GuideIcon>
+            <h3>{g.t}</h3>
+            <p>{g.p}</p>
+          </li>
+        ))}
+      </ol>
+      {/* Phones: one line, so the filings stay near the top. */}
+      <div className="guide-mini">
+        <p>
+          <strong>New to 13F filings?</strong> They’re quarterly snapshots, filed up to 45 days late.
+        </p>
+        <A to="/guide" className="btn ghost">
+          Guide
+        </A>
+        <button type="button" className="upsell-x" aria-label="Dismiss the guide" onClick={close}>
+          <span aria-hidden>×</span>
+        </button>
+      </div>
+    </section>
+  )
+}
+
+/** The pills used across the site, explained with the real components. */
+const PILLS: [ReactNode, string][] = [
+  [<span className="tag pos">New</span>, 'The fund didn’t own it last quarter.'],
+  [<span className="tag pos">Added +14.6%</span>, 'It owns 14.6% more shares than last quarter. For very large additions the multiple is shown instead, such as “Added ×19”.'],
+  [<span className="tag neg">Trimmed −25.2%</span>, 'It owns 25.2% fewer shares, but still holds some.'],
+  [<span className="tag neg">Sold out</span>, 'It owned shares last quarter and reports none now.'],
+  [<span className="tag pos">New 5%+ stake</span>, 'A 13D or 13G: the fund crossed 5% of a company, usually reported within days.'],
+  [<span className="tag pos">Bought</span>, 'A Form 4: an insider (here, a fund owning 10% or more) bought on the open market.'],
+]
+export function Guide() {
+  title('How to read Holdterm')
+  const rule = roster.rule as Record<string, number>
+  return (
+    <article className="page narrow article">
+      <header className="article-head">
+        <p className="eyebrow">Guide · 3 minute read</p>
+        <h1>How to read Holdterm</h1>
+        <p className="lede">
+          Holdterm shows what {roster.funds.length} concentrated, long-term investors own, and what they bought and sold, using only the filings they must make with the US Securities and Exchange Commission. Here is what those filings can and can’t tell you.
+        </p>
+      </header>
+      <ol className="guide-cards guide-cards-page">
+        {GUIDE.map((g) => (
+          <li key={g.t}>
+            <GuideIcon>{g.icon}</GuideIcon>
+            <h3>{g.t}</h3>
+            <p>{g.p}</p>
+          </li>
+        ))}
+      </ol>
+      <section>
+        <h2>The three kinds of filing</h2>
+        <dl className="defs">
+          <dt>Form 13F</dt>
+          <dd>A list of every US-listed stock and listed option a manager holds at the end of a quarter, with share counts and values. Due 45 days after the quarter ends: mid-February, mid-May, mid-August and mid-November. Most of Holdterm is built from these.</dd>
+          <dt>Schedule 13D and 13G</dt>
+          <dd>Filed when an investor owns more than 5% of one company’s shares. A 13D means the investor may try to influence the company; a 13G is for passive holders. They arrive within days to weeks, so they’re the quickest sign of a big new position.</dd>
+          <dt>Form 4</dt>
+          <dd>Filed within two business days when a company insider trades its shares. For a fund, that happens when it owns 10% or more of a company or has a seat on its board.</dd>
+        </dl>
+      </section>
+      <section>
+        <h2>Reading a fund page</h2>
+        <p>
+          The top of each <A to="/funds">investor’s page</A> sums up the latest 13F: the quarter it covers, the size of the stock portfolio, how many positions it holds, how much sits in the ten largest, and how much it bought and sold since the quarter before.
+        </p>
+        <p>
+          Below that, the holdings are sorted by share of the portfolio. The thin double bar shows last quarter’s weight above this quarter’s. The other tabs list the quarter’s buys and sells, options, notes and preferreds (kept out of the stock totals), past 13F filings, and recent 13D/G and Form 4 filings.
+        </p>
+        <h3>What the labels mean</h3>
+        <ul className="pills">
+          {PILLS.map(([pill, text], i) => (
+            <li key={i}>
+              <span className="pill-cell">{pill}</span>
+              <span>{text}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section>
+        <h2>How trades are valued</h2>
+        <p>
+          Holdterm uses no market prices. A trade’s size is the change in share count times the price implied by the filing (its reported value divided by its shares). If a stock rose and the fund did nothing, nothing was bought. When share counts don’t line up between quarters, for example after an unadjusted split, the trade is shown as the change in reported value instead.
+        </p>
+      </section>
+      <section>
+        <h2>Reading a stock page</h2>
+        <p>
+          Each stock page lists the roster investors that own it, ordered by how much of their portfolio it takes up, which says more about conviction than dollar size. It also shows who bought and sold it last quarter and any 5% stakes or insider trades. <A to="/consensus">Most owned</A> combines every investor’s latest 13F, and <A to="/flows">Buys and sells</A> shows the quarter’s busiest stocks.
+        </p>
+      </section>
+      <section>
+        <h2>Who is on the roster</h2>
+        <p>
+          Investors are chosen by a published rule, not by fame: at least {usd(rule.min_value, 0)} in US stocks spread over {rule.min_positions} to {rule.max_positions} positions, at least {pct(rule.min_top10, 0)} of it in the ten largest, turnover under {pct(rule.max_turnover, 0)} a quarter, and {rule.min_years} or more years of filings. The full rule, and the funds held back because their filings fail our data checks, are on the <A to="/about">About page</A>.
+        </p>
+      </section>
+      <section className="article-cta">
+        <div>
+          <h2>Know when they move</h2>
+          <p>Get an email within hours of a fund you follow filing a 13F, 13D, 13G or Form 4. {PRICE.trialDays} days free, then ${PRICE.monthly} a month.</p>
+        </div>
+        <A to="/alerts" className="btn">
+          Start free trial
+        </A>
+      </section>
+      <p className="dim small">Holdterm is information drawn from public SEC filings, not investment advice.</p>
+    </article>
   )
 }
 

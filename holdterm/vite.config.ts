@@ -17,6 +17,7 @@ const SECTIONS: Record<string, [string, string]> = {
   '/filings': ['13D, 13G and Form 4 filings', 'Schedule 13D and 13G stakes and Form 4 trades filed by roster funds between 13Fs.'],
   '/alerts': ['Email alerts', 'Email alerts when the funds you follow file a 13F, 13D, 13G or Form 4. $3 a month.'],
   '/account': ['Account', 'Manage Holdterm email alerts.'],
+  '/guide': ['How to read Holdterm', 'What 13F, 13D/G and Form 4 filings show, how current they are, and how to read a fund or stock page on Holdterm.'],
   '/about': ['About', 'How Holdterm chooses its roster and reads SEC filings.'],
   '/terms': ['Terms', 'Holdterm terms of service.'],
   '/privacy': ['Privacy', 'Holdterm privacy policy.'],

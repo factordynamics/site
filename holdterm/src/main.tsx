@@ -7,7 +7,7 @@ import { funds, loadIndex, loadStockIndex, searchNames, type Manager, type Stock
 import { A, navigate, usePath } from './lib'
 import { dataSlug, fundPath, publicSlug } from './names'
 import { price as PRICE } from './config'
-import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Home, ISSUES, NotFound, Privacy, Stock, Terms } from './pages'
+import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Guide, Home, ISSUES, NotFound, Privacy, Stock, Terms } from './pages'
 
 // [path, label, g-key]; alerts is the header's button, not a nav tab.
 const NAV: [string, string, string][] = [
@@ -63,6 +63,7 @@ function route(path: string) {
   if (p === '/alerts') return <Alerts />
   if (p === '/account') return <Account />
   if (p === '/about') return <About />
+  if (p === '/guide') return <Guide />
   if (p === '/terms') return <Terms />
   if (p === '/privacy') return <Privacy />
   return <NotFound />
@@ -287,6 +288,7 @@ function App() {
             <p className="tagline">13F, 13D/G and Form 4 filings of concentrated, long-term investors, as filed with the SEC. No ads. Not investment advice.</p>
           </div>
           <nav aria-label="footer">
+            <A to="/guide">How to read Holdterm</A>
             <A to="/about">About</A>
             <A to="/alerts">Alerts, ${PRICE.monthly}/mo</A>
             <A to="/account">Account</A>
