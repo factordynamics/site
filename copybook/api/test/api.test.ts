@@ -872,7 +872,11 @@ describe('copybook api', () => {
     // An old \"start again\" link while paused ends the pause on the same subscription; no second checkout.
     const rt = await signToken(env.SESSION_SECRET, 'resume', 'cus_pz', 3600);
     const go = await handleRequest(new Request(`https://api.test/resume?t=${encodeURIComponent(rt)}`), env);
-    expect([go.status, go.headers.get('location')]).toEqual([303, `${SITE}account/?resumed=1`]);
+    expect(go.status).toBe(303);
+    // Lands signed in: the redirect carries a sign-in token that /session exchanges.
+    const login = new URL(go.headers.get('location')!).searchParams.get('login')!;
+    expect(go.headers.get('location')!.startsWith(`${SITE}account/?resumed=1&login=`)).toBe(true);
+    expect((await call('/session', { body: { login } })).status).toBe(200);
     expect(posted.at(-1)).toBe('pause_collection=');
     // Back early from /account/: same subscription, no second one.
     await call('/pause', { body: {}, token });

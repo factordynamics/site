@@ -10,8 +10,19 @@ import { signToken } from './tokens';
 export const LOGIN_TTL = 7 * 24 * 3600;
 export const SESSION_TTL = 30 * 24 * 3600;
 
+/**
+ * The member as last written in this location, for 60 s (the Cache API sees its own writes at once; a KV read can
+ * serve a copy up to 60 s old, so /me said active:false for ~30 s after a resume). Never older than KV's own cache.
+ */
+const FRESH = (customer: string) => `https://copybook.internal/member/${customer}`;
+async function freshCopy(customer: string): Promise<string | null> {
+  if (typeof caches === 'undefined') return null;
+  const hit = await (caches as unknown as { default: Cache }).default.match(FRESH(customer)).catch(() => undefined);
+  return hit ? hit.text() : null;
+}
+
 export async function getMember(env: Env, customer: string): Promise<Member | null> {
-  const raw = await env.DB.get(`cus:${customer}`);
+  const raw = (await freshCopy(customer)) ?? (await env.DB.get(`cus:${customer}`));
   if (!raw) return null;
   const m = JSON.parse(raw) as Member & { plan: string };
   // Records from before Copy Pro kept the billing interval in `plan`.
@@ -26,6 +37,7 @@ export async function memberByEmail(env: Env, email: string): Promise<Member | n
 
 export async function putMember(env: Env, m: Member): Promise<void> {
   await env.DB.put(`cus:${m.customer}`, JSON.stringify(m));
+  if (typeof caches !== 'undefined') await (caches as unknown as { default: Cache }).default.put(FRESH(m.customer), new Response(JSON.stringify(m), { headers: { 'cache-control': 'max-age=60' } })).catch(() => undefined);
   if (m.email) await env.DB.put(`email:${m.email.toLowerCase()}`, m.customer);
 }
 

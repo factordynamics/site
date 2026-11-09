@@ -219,9 +219,11 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
     const plan = p!.s ?? m.plan;
     const customer = m.customer;
     // Paused between seasons: the button ends the pause on the same subscription (a checkout would start a second one).
+    // The link also signs them in (a 2-minute sign-in handoff, as the account page's own links), so they land on
+    // /account/ seeing "You've resumed", not the sign-in form.
     if (isPaused(m)) {
       await endPause(env, m);
-      return go(`${account}?resumed=1`);
+      return go(`${account}?resumed=1&login=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, 120))}`);
     }
     // Already back on a plan: nothing to start.
     if (isActive(m)) return go(account);
@@ -487,7 +489,7 @@ export function pauseReceiptMail(env: Env, m: Member, at: number, resume: string
   return {
     to: m.email,
     subject: `Paused until ${until} · no charges until then`,
-    text: `Your ${p?.name ?? 'Copybook'} plan is paused until ${until}, two weeks before the next 13F deadline (${deadlineLabel(nextDeadline(at * 1000).date)}).\n\n  - No charges until then; billing resumes on ${until}.\n  - ${priceLine(m)}\n  - Real-time alerts are off while you're paused. If a fund you follow files its 13F early, we email you once that day so you can resume and see the moves.\n  - Resume anytime, one click, same subscription: ${resume}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    text: `Your ${p?.name ?? 'Copybook'} plan is paused until ${until}, two weeks before the next 13F deadline (${deadlineLabel(nextDeadline(at * 1000).date)}).\n\n  - No charges until then; billing resumes on ${until}.\n  - ${priceLine(m)}\n  - Real-time alerts are off while you're paused. If a fund you follow files its 13F while you're paused, we'll email you so you can resume right away.\n  - Resume anytime, one click, same subscription: ${resume}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
   };
 }
 
