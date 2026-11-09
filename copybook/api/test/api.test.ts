@@ -317,6 +317,10 @@ describe('copybook api', () => {
     // Behind a proxy under a path (self-hosted), links use API_URL, not the request's origin.
     const proxied = (await (await handleRequest(new Request('http://127.0.0.1:8787/csv-link/warren-buffett', { method: 'POST', headers: { authorization: `Bearer ${session.token}` } }), { ...env, API_URL: 'https://host.test/copybook/' })).json()).url as string;
     expect(proxied).toMatch(/^https:\/\/host\.test\/copybook\/csv\/warren-buffett\.csv\?dl=/);
+    // A feed's self link too: readers follow feed_url, so it must keep the /copybook prefix.
+    await env.DB.put('feedtok:feedtoken-proxied-0123456789', 'cus_feedself');
+    const feed = await (await handleRequest(new Request('http://127.0.0.1:8787/feed/feedtoken-proxied-0123456789.json'), { ...env, API_URL: 'https://host.test/copybook/' })).json();
+    expect(feed.feed_url).toBe('https://host.test/copybook/feed/feedtoken-proxied-0123456789.json');
     const dlPath = link.slice('https://api.test'.length);
     expect((await call(dlPath.replace('/warren-buffett.csv', '/bill-ackman.csv'))).status).toBe(401);
     expect(await (await call(dlPath)).text()).toBe(csv);

@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { FOOTER, sendMail, type Mail } from './email';
-import { isActive, isPaused, type Env, type Member } from './env';
+import { apiBase, isActive, isPaused, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
 import { getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
 import { DEADLINES, deadlineLabel, deadlineMs, inFilingWeek, lastDeadline, nextDeadline, pauseResumesAt } from './seasons';
@@ -175,7 +175,7 @@ export function winbackMail(env: Env, m: Member, resume: string, unsub: string):
   };
 }
 
-const API = (env: Env) => env.API_URL ?? 'https://copybook-api.factordynamics.workers.dev/';
+const API = (env: Env) => `${apiBase(env)}/`;
 
 /** Sends the day-14 note once per subscription when a trial runs out cancelled (not a mid-trial cancel). */
 export async function maybeWinback(env: Env, prev: Member | null, m: Member, now = Date.now()): Promise<void> {
@@ -282,7 +282,7 @@ export const WHY: Record<string, string> = {
 
 export async function cancelMail(env: Env, m: Member): Promise<Mail> {
   const token = await signToken(env.SESSION_SECRET, 'why', m.customer, 60 * 86400);
-  const base = `${env.API_URL ?? 'https://copybook-api.factordynamics.workers.dev/'}why?t=${encodeURIComponent(token)}&r=`;
+  const base = `${API(env)}why?t=${encodeURIComponent(token)}&r=`;
   const ends = m.cancel_at ?? m.period_end;
   return {
     to: m.email,

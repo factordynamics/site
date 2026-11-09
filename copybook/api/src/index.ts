@@ -448,7 +448,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // A member's private alert feed: the token in the path is the only credential, and revocable.
   const feed = path.match(/^\/feed\/([\w-]+)\.(json|rss)$/);
-  if (req.method === 'GET' && feed) return serveFeed(env, feed[1], feed[2] as 'json' | 'rss', url.href);
+  if (req.method === 'GET' && feed) return serveFeed(env, feed[1], feed[2] as 'json' | 'rss', `${apiBase(env, url)}${url.pathname}`);
 
   // The data workflow reads which non-curated filers members follow (CIKs only), to back-fill a prior quarter.
   if (req.method === 'GET' && path === '/ingest/followed.json') {

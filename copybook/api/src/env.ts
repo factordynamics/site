@@ -128,10 +128,11 @@ export interface Member {
   dunning_sent?: string;
 }
 
-/** Public base URL for links the API hands out, without a trailing slash: API_URL when set (the API can sit under a
- * path behind a proxy, e.g. self-hosted at https://host/copybook/), else the request's origin. */
-export function apiBase(env: Env, url: URL): string {
-  return (env.API_URL ?? `${url.origin}/`).replace(/\/+$/, '');
+/** The one public base URL for every absolute link the API hands out (feeds, CSV and bulk links, email links), without
+ * a trailing slash: API_URL when set (the API can sit under a path behind a proxy, e.g. self-hosted at
+ * https://host/copybook/), else the request's origin. */
+export function apiBase(env: Env, url?: URL): string {
+  return (env.API_URL ?? (url ? `${url.origin}/` : 'https://copybook-api.factordynamics.workers.dev/')).replace(/\/+$/, '');
 }
 
 export const ACTIVE = new Set(['active', 'trialing', 'past_due']);
