@@ -19,7 +19,7 @@ const PRICES: Record<string, { name: string; month: number; year: number }> = {
   fund: { name: 'Copy Fund', month: 199, year: 1990 },
 };
 
-const billable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !m.comped && !!PRICES[m.plan];
+const billable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !m.comped && !m.test && !!PRICES[m.plan];
 const day = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 
@@ -371,7 +371,8 @@ export async function businessSummary(env: Env, now: number) {
   let comped = 0;
   for (const m of members) {
     // Synthetic records (the latency probe) have no plan and aren't members.
-    if (!isActive(m) || (!PRICES[m.plan] && m.plan !== 'holdterm')) continue;
+    // Synthetic records (the latency probe) have no plan and aren't members; launch-gate test subscriptions aren't revenue.
+    if (!isActive(m) || m.test || (!PRICES[m.plan] && m.plan !== 'holdterm')) continue;
     if (m.seat_of) {
       seats++;
       continue;

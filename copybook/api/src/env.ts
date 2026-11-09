@@ -109,6 +109,8 @@ export interface Member {
   alerts_note?: 'followed';
   /** Where the member came from (the signup box's placement, or utm_source), carried from a free signup onto the paid member. */
   source?: string | null;
+  /** A launch-gate test subscription (a 100%-off gate promotion code): left out of revenue and funnel counts. */
+  test?: string;
   utm?: Record<string, string>;
   /** First seen (free signup or first subscription), ISO. */
   created_at?: string;

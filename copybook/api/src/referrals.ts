@@ -81,12 +81,19 @@ export async function createCheckout(env: Env, b: Record<string, unknown>): Prom
   const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': `${plan}_${interval}`, active: true })).data?.[0];
   if (!price?.id) return { status: 409, body: { ok: false, error: 'plan unavailable', code: 'unavailable' } };
   const source = typeof b.source === 'string' && b.source.trim() ? b.source.trim().slice(0, 60) : ref ? 'referral' : null;
+  // A promotion code (typed codes are off on the site's Payment Links). A launch-gate code (metadata copybook=gatecheck,
+  // 100% off) also skips the card, and its subscription is tagged test: left out of revenue and funnel counts.
+  const promoCode = typeof b.promo === 'string' && b.promo.trim() ? b.promo.trim().toUpperCase().slice(0, 40) : null;
+  const promo = promoCode ? (await stripe(env, 'GET', 'promotion_codes', { code: promoCode, active: true, limit: 1 })).data?.[0] : null;
+  if (promoCode && !promo) return { status: 400, body: { ok: false, error: 'That code is not valid', code: 'invalid_promo' } };
+  const gate = promo?.metadata?.copybook === 'gatecheck';
   const cs = await stripe(env, 'POST', 'checkout/sessions', {
     mode: 'subscription',
     'line_items[0][price]': price.id,
     'line_items[0][quantity]': 1,
     'subscription_data[trial_period_days]': TRIAL_DAYS,
-    ...(ref ? { 'discounts[0][coupon]': await couponFor(env, plan), 'subscription_data[metadata][ref]': ref } : {}),
+    ...(promo ? { 'discounts[0][promotion_code]': promo.id } : ref ? { 'discounts[0][coupon]': await couponFor(env, plan), 'subscription_data[metadata][ref]': ref } : {}),
+    ...(gate ? { payment_method_collection: 'if_required', 'subscription_data[metadata][test]': 'gatecheck' } : {}),
     ...(source ? { 'subscription_data[metadata][source]': source } : {}),
     ...(email ? { customer_email: email } : {}),
     success_url: `${env.SITE_URL}account/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,

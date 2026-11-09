@@ -104,6 +104,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     // Set at checkout (POST /checkout): the referral code and where the subscriber came from.
     referred_by: prev?.referred_by ?? (typeof sub.metadata?.ref === 'string' ? sub.metadata.ref : null),
     source: prev?.source ?? (typeof sub.metadata?.source === 'string' ? sub.metadata.source : undefined),
+    ...(prev?.test || typeof sub.metadata?.test === 'string' ? { test: prev?.test ?? sub.metadata.test } : {}),
   };
   // A stale event (older subscription) must not overwrite a newer active one.
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
