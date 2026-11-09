@@ -139,3 +139,32 @@ class QuarterCsvTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MoveMathTest(unittest.TestCase):
+    """CUSIP reissues and mis-scaled filings must not turn into trades."""
+
+    def row(self, cusip, ticker, shares, value, title="COM"):
+        return {"issuer": "X", "title": title, "cusip": cusip, "ticker": ticker, "value": float(value),
+                "shares": float(shares), "put_call": None, "shares_type": "SH"}
+
+    def test_reissued_cusip_is_one_position(self):
+        prev = {"quarter": "2026Q2", "holdings": [self.row("30231G102", "XOM", 31468114, 4302320615)]}
+        cur = {"quarter": "2026Q3", "accepted_at": "2026-11-01", "holdings": [self.row("30233Q108", "XOM", 31933523, 5197180970)]}
+        rows = build.with_changes(cur, prev)
+        self.assertEqual([r["change"] for r in rows], ["added"])
+        self.assertEqual(rows[0]["prev_cusip"], "30231G102")
+        self.assertLess(rows[0]["value_delta"], 0.1e9)
+
+    def test_preferred_is_not_the_common(self):
+        prev = {"quarter": "2026Q2", "holdings": [self.row("060505682", "BAC", 5, 50, "7.25%CNV PFD L")]}
+        cur = {"quarter": "2026Q3", "holdings": [self.row("060505104", "BAC", 4, 40)]}
+        self.assertEqual(sorted(r["change"] for r in build.with_changes(cur, prev)), ["exited", "new"])
+
+    def test_mis_scaled_share_count_is_capped(self):
+        prev = {"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 646216, 121.6e6)]}
+        cur = {"quarter": "2026Q3", "holdings": [self.row("09857L108", "BKNG", 1304, 6.7e6)]}
+        r = build.with_changes(cur, prev)[0]
+        self.assertTrue(r["suspect_units"])
+        self.assertAlmostEqual(r["value_delta"], 6.7e6 - 121.6e6, delta=1)
+        self.assertNotIn("BKNG", [m["ticker"] for m in (build.moves([r]) or {}).get("trimmed", [])])

@@ -79,8 +79,9 @@ def holder_counts(data: Path, books: dict[str, dict]) -> list[str]:
 def book_totals(hist: Path) -> list[str]:
     """Quarters merged from more than one filing of the same filer that look double-counted.
 
-    The cover check needs a merge: a single filing's book is that filing (some covers are in
-    thousands or simply wrong), and a combined book (combined_with) sums another filer's filing.
+    The cover check needs a merge (amendments added, or another filer's book via combined_with,
+    whose cover counts too): a single filing's book is that filing, and some covers are in
+    thousands or simply wrong.
     A jump after an amendment fails only when the positions themselves doubled (median share
     ratio against the prior quarter), so a genuine large addition (Invesco 2025Q4) passes.
     """
@@ -94,7 +95,7 @@ def book_totals(hist: Path) -> list[str]:
                 continue
         for name, q in qs.items():
             merged = any(f.get("role") == "addition" for f in q.get("filings") or [])
-            if not merged or q.get("combined_with"):
+            if not merged and not q.get("combined_with"):
                 continue
             total, cover = q.get("total_value") or 0, q.get("cover_total") or 0
             if cover and total > 1.5 * cover:

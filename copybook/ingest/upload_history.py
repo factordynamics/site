@@ -34,6 +34,7 @@ WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 HIST = WEB / "data" / "h"
 API = os.environ.get("COPYBOOK_API", "https://copybook-api.factordynamics.workers.dev").rstrip("/")
 MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-manifest.json"))
+BUILD = json.loads((HIST.parent / "build.json").read_text()) if (HIST.parent / "build.json").exists() else {}  # names R2 objects
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
                  r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$"
                  r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$")
@@ -80,7 +81,8 @@ def put(key: str, body: bytes, token: Token) -> None:
             f"{API}/ingest/{key}",
             data=body,
             method="PUT",
-            headers={"Authorization": "Bearer " + token.get(), "Content-Type": ctype, "User-Agent": USER_AGENT},
+            headers={"Authorization": "Bearer " + token.get(), "Content-Type": ctype, "User-Agent": USER_AGENT,
+                     "x-copybook-build-id": BUILD.get("build_id") or "", "x-copybook-built-at": BUILD.get("data_built_at") or ""},
         )
         try:
             with urlopen(req, timeout=120) as resp:

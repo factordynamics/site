@@ -82,3 +82,14 @@ class AmendmentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConsolidatedRefilingTest(unittest.TestCase):
+    def test_same_total_fewer_lines_replaces(self):
+        from ingest.build import is_refiled_book
+        h = lambda c, v: {"cusip": c, "put_call": None, "value": v}
+        book = {"total_value": 100.0, "holdings": [h(f"C{i:08d}", 100 / 53) for i in range(53)]}
+        refile = {"total_value": 99.0, "holdings": [h(f"C{i:08d}", 99 / 17) for i in range(17)]}
+        addition = {"total_value": 62.0, "holdings": [h(f"C{i:08d}", 62 / 17) for i in range(17)]}
+        self.assertTrue(is_refiled_book(book, [], refile))
+        self.assertFalse(is_refiled_book(book, [], addition))

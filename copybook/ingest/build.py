@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import traceback
 import os
@@ -57,7 +58,9 @@ _SUBS: dict[str, dict] = {}
 INACTIVE_AFTER = 4  # quarters behind the expected period before a filer is retired
 _AMEND: dict[str, str] | None = None
 LITE_HOLDERS = 8
-CACHE_FORMAT = 3  # bump when stored quarters lack fields the build now needs (forces a refetch)
+CACHE_FORMAT = 4  # bump when stored quarters lack fields the build now needs (forces a refetch)
+# Curated refreshes must stay quick, so they keep quarters back to format 3; full runs refetch older ones.
+MIN_CACHE_FORMAT = CACHE_FORMAT if os.environ.get("SCOPE") == "full" else 3
 OWN_BOOKS: dict[tuple[str, str], dict] = {}  # (cik, report_date) -> a fund's own book before combining
 SPLITS: dict[str, dict[str, float]] = {}  # cusip -> to_quarter -> ratio; see splits.py
 _CUSIP_MAP: dict[str, str] | None = None
@@ -83,6 +86,21 @@ def attach_tickers(holdings: list[AggregatedHolding]) -> None:
         h.ticker = ticker_for(h.cusip)
 
 
+_SEC_TICKERS: dict[str, str] | None = None
+
+
+def security_ticker(cusip: str) -> str | None:
+    """Ticker from the CUSIP map, else data/securities.json (overrides and CINS lookups that enrich.py applies later)."""
+    global _SEC_TICKERS
+    if _SEC_TICKERS is None:
+        try:
+            _SEC_TICKERS = {c: v["ticker"] for c, v in json.loads((DATA / "securities.json").read_text()).items()
+                            if isinstance(v, dict) and v.get("ticker")}
+        except (OSError, ValueError):
+            _SEC_TICKERS = {}
+    return ticker_for(cusip) or _SEC_TICKERS.get(cusip)
+
+
 def cached_quarters() -> dict[str, dict]:
     """Previously loaded filings by accession, so unchanged quarters are not refetched."""
     out: dict[str, dict] = {}
@@ -93,7 +111,9 @@ def cached_quarters() -> dict[str, dict]:
             q = json.loads(p.read_text())
         except ValueError:
             continue
-        if q.get("accession") and not q.get("truncated") and q.get("format") == CACHE_FORMAT:
+        # A combined book (combined_with) is two filers' books summed: never reuse it as the filing itself.
+        if q.get("accession") and not q.get("truncated") and not q.get("combined_with") \
+                and (q.get("format") or 0) >= MIN_CACHE_FORMAT:
             # Drop what write_history derives (prior-quarter fields, exits): a cached quarter is the filing only.
             for k in ("slug", "manager", "cik", "prev_quarter", "prev_combined_with", "exited"):
                 q.pop(k, None)
@@ -260,7 +280,7 @@ def pick_filings(group: list, types: dict[str, str]):
     added on top and never replace it. An amendment of unknown type is only
     used when nothing else exists for the period.
     """
-    by_date = lambda m: m.filing_date
+    by_date = lambda m: (m.filing_date, getattr(m, "accepted_at", "") or "", m.accession)  # same-day amendments in order
     originals = sorted((m for m in group if m.form == "13F-HR"), key=by_date)
     amends = sorted((m for m in group if m.form != "13F-HR"), key=by_date)
     restated = [m for m in amends if types.get(m.accession) == "RESTATEMENT"]
@@ -392,7 +412,8 @@ def combine_books(own: dict, other: dict) -> dict:
     for h in own["holdings"] + other["holdings"]:
         add_row(rows, h)
     holdings = sorted(rows.values(), key=lambda h: h["value"], reverse=True)
-    return apply_weights(own | {"holdings": holdings, "combined_with": {
+    cover = (own.get("cover_total") or 0) + (other.get("cover_total") or 0)
+    return apply_weights(own | {"holdings": holdings, "cover_total": cover or None, "combined_with": {
         "cik": other.get("cik"), "accession": other.get("accession"), "name": other.get("name")}})
 
 
@@ -452,7 +473,8 @@ def is_refiled_book(base: dict, extras: list[dict], x: dict) -> bool:
     """A NEW HOLDINGS amendment that is really a full re-filing (some filers mislabel restatements).
 
     It repeats most of the book: over half the book's positions (CUSIP and put/call), or a total
-    within 20% of the book's with at least half as many positions. Adding it would double-count.
+    within 20% of the book's with at least half as many positions, or with at least 80% of its own
+    positions already in the book. Adding it would double-count.
     """
     book = merge_quarter(base, extras) if extras else base
     keys = {(h["cusip"], h.get("put_call") or "") for h in book["holdings"]}
@@ -462,7 +484,8 @@ def is_refiled_book(base: dict, extras: list[dict], x: dict) -> bool:
     if len(keys & new) > 0.5 * len(keys):
         return True
     ratio = (x.get("total_value") or 0) / (book.get("total_value") or 1)
-    return 0.8 <= ratio <= 1.25 and len(new) >= 0.5 * len(keys)
+    # Same total and nothing new (Check Capital 2026Q2 A#2 re-filed its 53 positions consolidated as 17).
+    return 0.8 <= ratio <= 1.25 and (len(new) >= 0.5 * len(keys) or len(keys & new) >= 0.8 * len(new))
 
 
 def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
@@ -491,6 +514,18 @@ def amount(h: dict) -> float:
     return (h.get("principal_amount") or 0) if h.get("shares_type") == "PRN" else (h.get("shares") or 0)
 
 
+COMMON = re.compile(r"\b(COM|COMMON|CMN|SHS|ORD|ORDINARY|CL\s?[A-C]|CLASS\s?[A-C]|CAP STK|STOCK)\b")
+
+
+def same_class(a: dict, b: dict) -> bool:
+    """Same security class across a CUSIP change: equal titles, or both common stock (never a preferred)."""
+    ta, tb = (a.get("title") or "").upper().strip(), (b.get("title") or "").upper().strip()
+    if ta == tb:
+        return True
+    pref = lambda t: "PFD" in t or "PREF" in t or "DEP" in t or "NOTE" in t or "%" in t
+    return bool(COMMON.search(ta) and COMMON.search(tb)) and not pref(ta) and not pref(tb)
+
+
 def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     """Holdings with prior-quarter fields, plus exited positions as value-0 rows.
 
@@ -517,6 +552,20 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         if not (known_by and h.get("first_disclosed_at") and h["first_disclosed_at"] > known_by)
     }
     rows = []
+    # Reissued CUSIPs (Exxon 30231G102 -> 30233Q108): a position whose CUSIP is new this quarter
+    # continues one whose CUSIP is gone when both have the same ticker, put/call, type and class.
+    renamed: dict[tuple, tuple] = {}
+    gone = {k: p for k, p in before.items() if not any((h["cusip"], h["put_call"] or "") == k for h in latest["holdings"])}
+    for h in latest["holdings"]:
+        k = (h["cusip"], h["put_call"] or "")
+        t = h.get("ticker") or security_ticker(h["cusip"])
+        if k in before or not t:
+            continue
+        for pk, p in gone.items():
+            if pk[1] == k[1] and pk not in renamed.values() and (p.get("ticker") or security_ticker(p["cusip"])) == t \
+                    and (p.get("shares_type") or "SH") == (h.get("shares_type") or "SH") and same_class(p, h):
+                renamed[k] = pk
+                break
 
     def ratio(h):
         if not (q_from and q_to) or h.get("shares_type") == "PRN":
@@ -541,7 +590,10 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         return out
 
     for h in latest["holdings"]:
-        p = before.pop((h["cusip"], h["put_call"] or ""), None)
+        k = (h["cusip"], h["put_call"] or "")
+        p = before.pop(k, None) or before.pop(renamed.get(k), None)
+        if p is not None and p["cusip"] != h["cusip"]:
+            h = h | {"prev_cusip": p["cusip"]}
         prn = h.get("shares_type") == "PRN"
         r = ratio(h)
         if h.get("late_disclosure"):
@@ -556,6 +608,17 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 ds = 0
             change = "added" if ds > 0 else "trimmed" if ds < 0 else "unchanged"
             delta = ds * h["value"] / now if now else 0
+            # Value per share moved over 5x with no split on file: one of the two filings is mis-scaled
+            # (GuardCap BKNG 646,216 sh $121.6M -> 1,304 sh $6.7M). The move is then the value change,
+            # a trim never more than the prior position, and the row is kept out of flow and alerts.
+            was = amount(p) * r
+            if not prn and now and was and h["value"] > 0 and p["value"] > 0:
+                jump = (h["value"] / now) / (p["value"] / was)
+                if jump > 5 or jump < 0.2:
+                    delta = max(h["value"] - p["value"], -p["value"])
+                    h = h | {"suspect_units": True}
+                elif abs(delta) > 1.5 * max(h["value"], p["value"]):  # no trade is worth more than that
+                    delta = h["value"] - p["value"]
         rows.append(h | extra(p, change, delta, ds, r, prn))
     for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):
         prn = p.get("shares_type") == "PRN"
@@ -585,7 +648,10 @@ def moves(rows: list[dict], limit: int = MOVE_ROWS) -> dict | None:
     keep = ("ticker", "display_name", "issuer", "cusip", "title", "put_call", "shares_type", "sector", "shares",
             "prev_shares", "share_change", "value", "prev_value", "value_delta", "delta_pct_of_book",
             "pct_of_book", "weight", "prev_weight", "split")
+    suspect = sum(1 for r in rows if r.get("suspect_units"))
+    rows = [r for r in rows if not r.get("suspect_units")]  # mis-scaled lines stay out of flow and alerts
     out: dict = {
+        "suspect_units": suspect,
         "bought_usd": round(sum(r["value_delta"] for r in rows if r["value_delta"] > 0)),
         "sold_usd": round(-sum(r["value_delta"] for r in rows if r["value_delta"] < 0)),
     }
@@ -618,7 +684,8 @@ def load_filing(cik: str, meta) -> dict | None:
     if factor > 1:
         thousands = True
     attach_tickers(holdings)
-    holdings = [h for h in holdings if h.value > 0 and h.cusip != "000000000"]
+    # $0 lines with shares or principal stay (as filed); lines with neither and placeholder CUSIPs go.
+    holdings = [h for h in holdings if (h.value > 0 or h.shares > 0) and h.cusip != "000000000"]
     total = sum(h.value for h in holdings)
     if total <= 0 or not holdings:
         return None
@@ -708,7 +775,10 @@ def ingest() -> dict:
             via, gaps, extra = notice_periods(cik, metas, notices, cache)
             for i, q in enumerate(history):  # quarters both filers filed: the fund's book is the sum
                 other = extra.get(q["report_date"])
-                if other and q.get("status") == "filed":
+                # Only a reporter's slice beside the fund's own book (Pershing Square Inc., $0.6B next to
+                # $13.7B) is the same fund; a parent's whole combination report (Fiera Capital, $27.6B next
+                # to Wilkinson's $1.3B) is not.
+                if other and q.get("status") == "filed" and other["total_value"] <= q["total_value"]:
                     OWN_BOOKS[(cik, q["report_date"])] = q
                     history[i] = combine_books(q, other) | {"total_value": q["total_value"] + other["total_value"]}
             history = sorted(history + via, key=lambda q: q["report_date"], reverse=True)[:HISTORY_QUARTERS]

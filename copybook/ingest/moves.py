@@ -35,13 +35,14 @@ TOP = 10
 MOVE_COLUMNS = ("ticker", "issuer", "cusip", "put_call", "shares", "prev_shares", "value", "value_delta", "change")
 FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type", "prev_shares", "prev_value",
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
-                "split_ratio", "value_as_filed", "price_outlier")
+                "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "prev_cusip")
 
 
 SECS: dict[str, dict] = {}
 PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
-SMART = {"hedge_fund", "active"}  # filer_types.json smart_money
+# Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
+LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
 CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied price over every filer
 FIXED = [0]
@@ -192,44 +193,61 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     meta = {s["cik"]: s for s in shards}
     per: dict[str, dict[str, list]] = {}
     tick: dict[str, dict[str, float]] = {}
+    book: dict[str, float] = {}  # cik -> value of its share positions (the weight denominator)
+    top10: dict[str, set] = {}  # cik -> issuer codes among its ten largest share positions
     for cik, rows in LATEST.items():
+        by_issuer: dict[str, float] = {}
         for r in rows:
             c = (r.get("cusip") or "").upper()
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
                     or r.get("price_outlier"):
                 continue
-            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False])
+            if r.get("suspect_units"):
+                r = r | {"value_delta": 0}
+            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0])
             a[0] += r.get("shares") or 0
             a[1] += r.get("prev_shares") or 0
             a[2] += r.get("value") or 0
             a[3] += r.get("prev_value") or 0
             a[4] = a[4] or r.get("change") is not None
+            a[5] += r.get("value_delta") or 0
+            by_issuer[c[:6]] = by_issuer.get(c[:6], 0) + (r.get("value") or 0)
             t = r.get("ticker") or (SECS.get(c) or {}).get("ticker")
             if t:
                 tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
+        book[cik] = sum(by_issuer.values())
+        top10[cik] = {k for k, v in sorted(by_issuer.items(), key=lambda kv: -kv[1])[:10] if v > 0}
     out, full = DATA / "hl", DATA / "hlf"
     out.mkdir(exist_ok=True)
     full.mkdir(exist_ok=True)
     index, keep, written = {}, set(), set()
-    cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change"]
+    cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
+            "weight"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
-                         "no_prior": 0, "by_period": {}}
-        rows, counts, smart = [], blank(), blank()  # smart: hedge_fund + active filers only
-        for cik, (sh, ps, v, pv, known) in hs.items():
+                         "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "by_period": {}}
+        rows, counts = [], blank()
+        lenses = {name: blank() for name in LENSES}
+        for cik, (sh, ps, v, pv, known, delta) in hs.items():
             change = None
             if known:
                 change = ("exited" if sh <= 0 else "new" if ps <= 0 else "added" if sh > ps + 0.5
                           else "trimmed" if sh < ps - 0.5 else "unchanged")
             q = PERIOD.get(cik) or meta[cik].get("quarter")
-            for c in (counts, smart) if (types.get(cik) or {}).get("type") in SMART else (counts,):
+            kind = (types.get(cik) or {}).get("type")
+            weight = v / book[cik] if book.get(cik) else None
+            for c in [counts] + [lenses[n] for n, kinds in LENSES.items() if kind in kinds]:
                 if sh > 0:
                     c["holders"] += 1
                     c["by_period"][q] = c["by_period"].get(q, 0) + 1
+                    c["top10"] += code in top10.get(cik, ())
+                    c["over5pct"] += bool(weight and weight > 0.05)
                 c[change or "no_prior"] += 1
+                c["net"] += round(delta) if known else 0
             m = curated.get(cik) or filers.get(cik) or {}
-            rows.append([cik, meta[cik].get("name"), m.get("slug"), (types.get(cik) or {}).get("type"), cik in curated,
-                         q, round(sh), round(ps) if known else None, round(v), round(pv) if known else None, change])
+            rows.append([cik, meta[cik].get("name"), m.get("slug"), kind, cik in curated,
+                         q, round(sh), round(ps) if known else None, round(v), round(pv) if known else None, change,
+                         round(weight, 6) if weight is not None else None])
         if not counts["holders"]:
             continue
         rows.sort(key=lambda r: -(r[8] or r[9] or 0))
@@ -237,8 +255,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         for t in tickers:
             index.setdefault(t, code)
         name = f"{code}.json"
-        body = {"issuer": code, "tickers": tickers, "counts": counts, "smart": smart, "columns": cols,
-                "rows_total": len(rows)}
+        body = {"issuer": code, "tickers": tickers, "counts": counts, **lenses, "columns": cols, "rows_total": len(rows)}
         written.add(name)
         write(full / name, {**body, "rows": rows})
         if tickers:
@@ -294,7 +311,7 @@ def main() -> int:
         meta = curated.get(cik) or filers.get(cik) or {}
         for r in rows:
             if r["change"] in ("new", "added", "trimmed", "exited") and r.get("shares_type") != "PRN" \
-                    and not r.get("price_outlier"):
+                    and not r.get("price_outlier") and not r.get("suspect_units"):
                 per_quarter.setdefault(shard["quarter"], []).append([
                     cik, meta.get("slug"), shard.get("name"), cik in curated, (types.get(cik) or {}).get("type"), r["cusip"],
                     r.get("ticker"), r.get("issuer"), r.get("put_call"), r["change"], int(round(r.get("shares") or 0)),
