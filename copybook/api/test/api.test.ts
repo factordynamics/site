@@ -317,6 +317,10 @@ describe('copybook api', () => {
     // Behind a proxy under a path (self-hosted), links use API_URL, not the request's origin.
     const proxied = (await (await handleRequest(new Request('http://127.0.0.1:8787/csv-link/warren-buffett', { method: 'POST', headers: { authorization: `Bearer ${session.token}` } }), { ...env, API_URL: 'https://host.test/copybook/' })).json()).url as string;
     expect(proxied).toMatch(/^https:\/\/host\.test\/copybook\/csv\/warren-buffett\.csv\?dl=/);
+    // A short-lived link follows the entry point the self-hosted front door reports; a base it didn't set is ignored.
+    const via = async (base: string) => (await (await handleRequest(new Request('http://127.0.0.1:8787/csv-link/warren-buffett', { method: 'POST', headers: { authorization: `Bearer ${session.token}`, 'x-copybook-public-base': base } }), { ...env, API_URL: 'https://host.test/copybook/' })).json()).url as string;
+    expect(await via('https://solid-amanda-dir-fiction.trycloudflare.com/copybook')).toMatch(/^https:\/\/solid-amanda-dir-fiction\.trycloudflare\.com\/copybook\/csv\/warren-buffett\.csv\?dl=/);
+    expect(await via('https://evil.example/copybook')).toMatch(/^https:\/\/host\.test\/copybook\/csv\//);
     // A feed's self link too: readers follow feed_url, so it must keep the /copybook prefix.
     await env.DB.put('feedtok:feedtoken-proxied-0123456789', 'cus_feedself');
     const feed = await (await handleRequest(new Request('http://127.0.0.1:8787/feed/feedtoken-proxied-0123456789.json'), { ...env, API_URL: 'https://host.test/copybook/' })).json();
@@ -1844,6 +1848,9 @@ describe('copybook api', () => {
     expect(set.channels).toMatchObject({ slack: 'https://hooks.slack.com/…mnop', telegram: { chat_id: '-1001234' }, webhook: null, webhook_available: false });
     const feedUrls = (await (await req(copy, 'POST', '/channels/feed')).json()).channels.feed;
     expect(feedUrls.json_url).toMatch(/^https:\/\/api\.test\/feed\/[\w-]{30,}\.json$/);
+    // Feed URLs live in readers: they never take the request's (possibly ephemeral) entry point.
+    const viaTunnel = await (await handleRequest(new Request('https://api.test/channels', { headers: { origin: 'https://refcell.github.io', authorization: `Bearer ${copy}`, 'x-copybook-public-base': 'https://solid-amanda-dir-fiction.trycloudflare.com/copybook' } }), env)).json();
+    expect(viaTunnel.channels.feed.json_url).toBe(feedUrls.json_url);
     const hook = await (await req(pro, 'PUT', '/channels', { webhook: 'https://hooks.example.com/cb' })).json();
     const secret = hook.channels.webhook.secret as string;
     expect(secret).toMatch(/^whsec_/);
@@ -2437,6 +2444,8 @@ describe('copybook api', () => {
     hist.m.set('bulk/2026Q2.csv.gz', gzBytes);
     hist.m.set('bulk/2025Q1.csv.gz', new Uint8Array(1440)); // a stub from a failed run: hidden, and 501 like a missing file
     expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 1_200_000, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://api.test/v1/bulk/2026Q2.csv.gz' }]);
+    const bulkVia = await (await handleRequest(new Request('https://api.test/v1/bulk', { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env)).json();
+    expect(bulkVia.data[0].url).toBe('https://gene.tail70ba3.ts.net/copybook/v1/bulk/2026Q2.csv.gz');
     expect((await v1('/v1/bulk/2025Q1.csv.gz')).status).toBe(501);
     const gz = await handleRequest(new Request('https://api.test/v1/bulk/2026Q2.csv.gz', { headers: { authorization: `Bearer ${key}` } }), env);
     expect(gz.headers.get('content-disposition')).toBe('attachment; filename="copybook-13f-2026Q2.csv.gz"');

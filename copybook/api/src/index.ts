@@ -8,7 +8,7 @@ import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
-import { apiBase, isActive, isCopy, isPro, type Env, type Member } from './env';
+import { apiBase, isActive, isCopy, isPro, linkBase, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
@@ -848,7 +848,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const n = crypto.randomUUID();
     await env.DB.put(`dl:${n}`, '1', { expirationTtl: DOWNLOAD_TTL });
     const token = await signToken(env.SESSION_SECRET, 'download', m.customer, DOWNLOAD_TTL, { s: link[1], n });
-    return json({ ok: true, url: `${apiBase(env, url)}/csv/${link[1]}.csv?dl=${token}` }, 200, h);
+    return json({ ok: true, url: `${linkBase(env, req, url)}/csv/${link[1]}.csv?dl=${token}` }, 200, h);
   }
 
   // The full Flow lists (every name, every fund behind each move); the public file has the top rows.

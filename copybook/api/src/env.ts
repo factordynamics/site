@@ -137,6 +137,14 @@ export function apiBase(env: Env, url?: URL): string {
   return (env.API_URL ?? (url ? `${url.origin}/` : 'https://copybook-api.factordynamics.workers.dev/')).replace(/\/+$/, '');
 }
 
+/** Base for short-lived links only (a CSV download link, /v1/bulk file URLs): the entry point this request came in on,
+ * from the self-hosted front door's x-copybook-public-base (it strips any client copy first). Only known public hosts
+ * count, so a client calling Cloudflare directly can't pick the base. Never for stored or emailed links: use apiBase. */
+export function linkBase(env: Env, req: Request, url: URL): string {
+  const h = req.headers.get('x-copybook-public-base');
+  return h && /^https:\/\/[a-z0-9-]+\.(trycloudflare\.com|tail70ba3\.ts\.net)\/copybook$/.test(h) ? h : apiBase(env, url);
+}
+
 export const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 
 /** Copy Pro and Copy Fund: API keys, /v1, webhooks, bulk export. */

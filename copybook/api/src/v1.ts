@@ -148,6 +148,7 @@ export function v1error(code: ErrorCode, status: number, message?: string, heade
 
 export interface V1Context {
   env: Env;
+  req: Request;
   url: URL;
   key: ApiKey;
 }
@@ -200,7 +201,7 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     const m = path.match(re);
     if (!m) continue;
     if (req.method !== method) return v1error('bad_request', 405, `Use ${method}.`, limits);
-    const res = await handler({ env, url, key: auth.key }, m.slice(1));
+    const res = await handler({ env, req, url, key: auth.key }, m.slice(1));
     for (const [k, v] of Object.entries(limits)) res.headers.set(k, v);
     return res;
   }
