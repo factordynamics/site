@@ -52,6 +52,12 @@ export type Book = Manager & {
   prev_quarter?: string | null
   prev_total_value?: number | null
   changes?: Record<string, number>
+  /** Long stock book (no option lines): the book Holdterm shows everywhere. */
+  long_value: number
+  prev_long_value: number | null
+  /** Put and call notional, shown separately and never counted as buying or selling. */
+  options_value: number
+  long_count: number
 }
 export type Index = { generated_at: string; managers: Manager[] }
 export type Event = {
@@ -209,11 +215,20 @@ function correct(b: Book) {
   b.changes = changes
   return b
 }
+/** 13F value includes put and call notional; the book is the long stock lines only. */
+function longBook(b: Book) {
+  const longs = b.holdings.filter((h) => !h.put_call)
+  b.long_value = longs.reduce((t, h) => t + h.value, 0)
+  b.long_count = longs.filter((h) => h.value > 0).length
+  b.options_value = b.total_value - b.long_value
+  b.prev_long_value = b.prev_total_value == null ? null : longs.reduce((t, h) => t + (h.prev_value ?? 0), 0)
+  return b
+}
 const books = new Map<string, Promise<Book>>()
 export const loadBook = (slug: string) => {
   let p = books.get(slug)
   if (!p) {
-    p = get<Book>(`${DATA}${slug}.json`).then((b) => (normalise(b.holdings), correct(name(b) as Book)))
+    p = get<Book>(`${DATA}${slug}.json`).then((b) => (normalise(b.holdings), longBook(correct(name(b) as Book))))
     books.set(slug, p)
   }
   return p

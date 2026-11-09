@@ -274,7 +274,7 @@ export function Home() {
               { key: 'f', label: 'filed', render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
               { key: 'm', label: 'fund', link: true, render: (m) => <span className="trunc strong">{m.firm}</span> },
               { key: 'q', label: 'qtr', hideSm: true, render: (m) => <span className={m.quarter === s.q ? 'tag acc' : 'dim'}>{quarterLabel(m.quarter)}</span> },
-              { key: 'v', label: 'book', num: true, hideSm: true, render: (m) => usd(m.total_value) },
+              { key: 'v', label: 'book', num: true, hideSm: true, render: (m) => usd(bySlug.get(m.slug)?.long_value ?? m.total_value) },
               {
                 key: 'd',
                 label: 'vs prior qtr',
@@ -282,8 +282,8 @@ export function Home() {
                 hideSm: true,
                 render: (m) => {
                   const b = bySlug.get(m.slug)
-                  if (!b?.prev_total_value) return <span className="dim">—</span>
-                  const d = b.total_value / b.prev_total_value - 1
+                  if (!b?.prev_long_value) return <span className="dim">—</span>
+                  const d = b.long_value / b.prev_long_value - 1
                   return <span className={d > 0 ? 'pos' : d < 0 ? 'neg' : ''}>{d > 0 ? '+' : ''}{pct(d, 0)}</span>
                 },
               },
@@ -381,11 +381,17 @@ export function Home() {
 export function Funds() {
   title('funds')
   const ix = useLoad(loadIndex, [])
+  const books = useLoad(loadBooks, [])
   if (ix.error) return <Failed error={ix.error} />
   if (!ix.data) return <Loading />
   const ms = funds(ix.data)
   const all = ix.data.managers.filter((m) => m.ok)
   const metric = new Map(roster.funds.map((f) => [f.slug, f]))
+  const bookOf = new Map((books.data ?? []).map((b) => [b.slug, b]))
+  const longOf = (m: Manager) => {
+    const b = bookOf.get(m.slug)
+    return b ? { v: b.long_value, n: b.long_count } : { v: m.total_value, n: m.position_count }
+  }
   return (
     <div className="page">
       <h1>
@@ -411,8 +417,8 @@ export function Funds() {
               ),
               sort: (m) => m.firm,
             },
-            { key: 'v', label: '13F book', num: true, hideSm: true, render: (m) => usd(m.total_value), sort: (m) => m.total_value },
-            { key: 'n', label: 'positions', num: true, hideSm: true, render: (m) => m.position_count, sort: (m) => m.position_count },
+            { key: 'v', label: '13F book', num: true, hideSm: true, render: (m) => usd(longOf(m).v), sort: (m) => longOf(m).v, title: 'long stock positions; options notional excluded' },
+            { key: 'n', label: 'positions', num: true, hideSm: true, render: (m) => longOf(m).n, sort: (m) => longOf(m).n },
             { key: 't', label: 'top 10', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.top10, 0), sort: (m) => metric.get(m.slug)?.top10 ?? 0, title: 'share of the book in the 10 largest positions' },
             { key: 'to', label: 'turnover', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.turnover, 0), sort: (m) => metric.get(m.slug)?.turnover ?? 0, title: 'latest quarter: (bought + sold) / 2 / average book' },
             {
@@ -447,7 +453,7 @@ export function Funds() {
 }
 
 // ---------- one fund ----------
-type ITab = 'holdings' | 'buys' | 'sells' | 'filings' | 'events'
+type ITab = 'holdings' | 'buys' | 'sells' | 'options' | 'filings' | 'events'
 export function Fund({ slug }: { slug: string }) {
   const b = useLoad(() => loadBook(slug), [slug])
   const ix = useLoad(loadIndex, [])
@@ -466,9 +472,12 @@ export function Fund({ slug }: { slug: string }) {
   const book = b.data
   title(`${book.firm} 13F portfolio`)
   const filer = meta && meta.filer_slug !== slug ? ix.data?.managers.find((m) => m.slug === meta.filer_slug) : null
-  const live = book.holdings.filter((x) => x.value > 0)
-  const buys = book.holdings.filter((x) => (x.value_delta ?? 0) > 0).sort((a, c) => (c.value_delta ?? 0) - (a.value_delta ?? 0))
-  const sells = book.holdings.filter((x) => (x.value_delta ?? 0) < 0).sort((a, c) => (a.value_delta ?? 0) - (c.value_delta ?? 0))
+  // Options are notional, not stock: they stay out of the book, its weights and the bought/sold totals.
+  const live = book.holdings.filter((x) => x.value > 0 && !x.put_call)
+  const opts = book.holdings.filter((x) => x.put_call && (x.value > 0 || x.prev_value))
+  const stock = book.holdings.filter((x) => !x.put_call)
+  const buys = stock.filter((x) => (x.value_delta ?? 0) > 0).sort((a, c) => (c.value_delta ?? 0) - (a.value_delta ?? 0))
+  const sells = stock.filter((x) => (x.value_delta ?? 0) < 0).sort((a, c) => (a.value_delta ?? 0) - (c.value_delta ?? 0))
   const bought = buys.reduce((s, x) => s + (x.value_delta ?? 0), 0)
   const sold = sells.reduce((s, x) => s + (x.value_delta ?? 0), 0)
   const top10 = [...live].sort((a, c) => c.weight - a.weight).slice(0, 10).reduce((s, x) => s + x.weight, 0)
@@ -494,8 +503,17 @@ export function Fund({ slug }: { slug: string }) {
       </div>
       <div className="stats fund-stats">
         <Stat label="period" value={quarterLabel(book.quarter)} sub={`filed ${date(book.filing_date)}`} />
-        <Stat label="13F book" value={usd(book.total_value)} sub={book.prev_total_value ? `${signedUsd(book.total_value - book.prev_total_value)} vs ${quarterLabel(book.prev_quarter ?? '')}` : 'first filing'} />
-        <Stat label="positions" value={live.length} sub={book.changes ? `${book.changes.new ?? 0} new · ${book.changes.exited ?? 0} sold out` : ''} />
+        <Stat
+          label="13F book"
+          value={usd(book.long_value)}
+          sub={
+            <>
+              {book.prev_long_value ? `${signedUsd(book.long_value - book.prev_long_value)} vs ${quarterLabel(book.prev_quarter ?? '')}` : 'first filing'}
+              {book.options_value > 0 && <span className="dim"> · + {usd(book.options_value)} options notional</span>}
+            </>
+          }
+        />
+        <Stat label="positions" value={live.length} sub={`${stock.filter((x) => x.change === 'new').length} new · ${stock.filter((x) => x.change === 'exited').length} sold out`} />
         <Stat label="top 10 weight" value={pct(top10, 1)} sub={<Bar value={top10} max={1} />} />
         <Stat label="bought" value={usd(bought)} tone="pos" sub={`${buys.length} positions`} />
         <Stat label="sold" value={usd(-sold)} tone="neg" sub={`${sells.length} positions`} />
@@ -507,14 +525,29 @@ export function Fund({ slug }: { slug: string }) {
           ['holdings', `holdings ${live.length}`],
           ['buys', `buys ${buys.length}`],
           ['sells', `sells ${sells.length}`],
+          ...(opts.length ? ([['options', `options ${opts.length}`]] as [ITab, string][]) : []),
           ['filings', `13F filings ${hist.length}`],
           ['events', `13D/G·F4 ${events.length}`],
         ]}
       />
-      <Panel title={tab} right={tab === 'holdings' ? <span className="dim hide-sm">reported price = value ÷ shares as filed</span> : undefined}>
+      <Panel title={tab} right={tab === 'holdings' ? <span className="dim hide-sm">reported price = value ÷ shares as filed</span> : tab === 'options' ? <span className="dim hide-sm">notional = underlying shares × price; not part of the book</span> : undefined}>
         {tab === 'holdings' && <HoldingsGrid rows={live} own={(x) => ownHolding(book, x)} />}
         {tab === 'buys' && <MovesGrid rows={buys} />}
         {tab === 'sells' && <MovesGrid rows={sells} />}
+        {tab === 'options' && (
+          <Grid
+            rows={[...opts].sort((a, c) => c.value - a.value)}
+            href={stockHref}
+            cols={[
+              { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
+              { key: 'n', label: 'underlying', hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
+              { key: 'pc', label: 'type', render: (r) => <span className={`tag ${r.put_call === 'CALL' ? 'pos' : 'neg'}`}>{r.put_call}</span> },
+              { key: 'sh', label: 'shares', num: true, hideSm: true, render: (r) => num(r.shares) },
+              { key: 'v', label: 'notional', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
+              { key: 'd', label: 'Δ notional', num: true, render: (r) => <span className="dim">{signedUsd((r.value || 0) - (r.prev_value ?? 0))}</span> },
+            ]}
+          />
+        )}
         {tab === 'filings' && (
           <Grid
             rows={[...hist].reverse()}
@@ -540,6 +573,7 @@ export function Fund({ slug }: { slug: string }) {
       </Panel>
       <div className="duo wide">
         <Panel title="13F book by quarter" right={<span className="dim">reported value · change vs prior quarter</span>}>
+          {book.options_value > 0 && <div className="dim small">as filed, including options notional</div>}
           {hist.length > 1 ? <ValueHistory title={`${book.firm} 13F book by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.total_value }))} /> : <div className="dim empty">one quarter on file</div>}
         </Panel>
         <Panel title="sector mix">
@@ -982,14 +1016,14 @@ function sampleEmail(b: Book) {
     const ch = h.change === 'new' ? 'new' : h.change === 'exited' ? 'sold out' : h.prev_shares ? `${(((h.share_change ?? 0) / h.prev_shares) * 100).toFixed(0)}% shares` : ''
     return `  ${tk} ${nm} ${d}  ${ch}`
   }
-  const buys = b.holdings.filter((h) => (h.value_delta ?? 0) > 0).sort((a, c) => (c.value_delta ?? 0) - (a.value_delta ?? 0)).slice(0, 5)
-  const sells = b.holdings.filter((h) => (h.value_delta ?? 0) < 0).sort((a, c) => (a.value_delta ?? 0) - (c.value_delta ?? 0)).slice(0, 5)
+  const buys = b.holdings.filter((h) => !h.put_call && (h.value_delta ?? 0) > 0).sort((a, c) => (c.value_delta ?? 0) - (a.value_delta ?? 0)).slice(0, 5)
+  const sells = b.holdings.filter((h) => !h.put_call && (h.value_delta ?? 0) < 0).sort((a, c) => (a.value_delta ?? 0) - (c.value_delta ?? 0)).slice(0, 5)
   return [
     `Subject: ${b.firm} filed its ${quarterLabel(b.quarter)} 13F`,
     `From: Holdterm <holdterm@factordynamics.com>`,
     ``,
     `${b.firm.toUpperCase()} · 13F-HR · ${quarterLabel(b.quarter)}`,
-    `filed ${b.filing_date} · book ${usd(b.total_value)} · ${b.position_count} positions`,
+    `filed ${b.filing_date} · book ${usd(b.long_value)} · ${b.long_count} positions`,
     ``,
     `TOP BUYS`,
     ...buys.map(fmt),
