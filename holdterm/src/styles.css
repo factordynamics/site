@@ -1655,7 +1655,7 @@ pre.email a {
   display: none;
 }
 /* The /guide article: a reading column with real type, not a table. */
-.article {
+.page.article {
   gap: 28px;
   max-width: 760px;
   margin: 0 auto;
