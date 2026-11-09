@@ -90,7 +90,20 @@ OVERRIDES.update({
     "0002070852": "long_only",   # Wedbush Fund Advisers
     "0002076121": "sovereign",   # Amanah Holdings Trust
     "0001780365": "long_only",   # WT Asset Management
+    "0002053305": "long_only",   # BIT Capital
+    # Proprietary traders and market makers (broker-dealers), not hedge funds
+    "0001632341": "bank", "0001719165": "bank", "0001632813": "bank", "0001721757": "bank",
+    "0001143261": "bank", "0002011874": "bank", "0001915842": "bank",
+    # PM's check of CRWD, APH and SNDK hedge-fund holders (2026-11-09)
+    "0001024896": "bank", "0001881567": "bank", "0001274419": "bank", "0001997464": "bank",  # Cantor, Clear Street, CIC, Marex
+    "0001652026": "other", "0002118292": "other",  # Fund Resources Investment Holding, Galaxy Digital
+    "0002010854": "long_only", "0001491719": "long_only", "0001861159": "long_only", "0001974438": "long_only",
+    "0001506073": "long_only", "0001506071": "long_only",  # BOCHK AM, Lombard Odier AM (USA), O'Neil, OneAscent, Wellington Shields x2
+    "0001704268": "sovereign",  # Mubadala
 })
+# The reviewed cases (also the gate's regression test) win over everything above.
+CASES = Path(__file__).with_name("type_cases.json")
+OVERRIDES.update({c: v["type"] for c, v in json.loads(CASES.read_text())["filers"].items()})
 ACTIVISTS = {"0000921669", "0001345471", "0001418814", "0001336528", "0001040273", "0001791786",
              "0001517137", "0001998597", "0001535472", "0001582090"}
 
@@ -118,13 +131,18 @@ RULES: list[tuple[str, re.Pattern]] = [
                              r"MITSUI SUMITOMO INSURANCE|FAIRFAX FINANCIAL|FIDELITY NATIONAL FINANCIAL|HARTFORD FINANCIAL|"
                              r"FORSAKRING\w*|LIVFORSAKRING\w*|INTACT INVESTMENT|AG2R|MONDIALE|AEGON|TALANX|SCOR|"
                              r"CNP ASSURANCES|ASSUR)\b", re.I)),
+    ("other", re.compile(r"\b(JANE STREET|SUSQUEHANNA|OPTIVER|IMC|VIRTU|FLOW TRADERS|HUDSON RIVER TRADING|"
+                         r"JUMP TRADING|CITADEL SECURITIES|BELVEDERE TRADING|DV TRADING|PROPRIETARY|"
+                         r"MARKETS TRADING|WALLEYE TRADING|HARTREE)\b", re.I)),  # market makers and prop traders
     ("bank", re.compile(r"\b(BANK|BANCORP|BANCSHARES|BANCORPORATION|BANQUE|BANCO|N\.?A\.?$|NATIONAL ASSOCIATION|"
                         r"SECURITIES|BROKERAGE|MUTUAL|"
                         r"MORGAN STANLEY|GOLDMAN SACHS|JPMORGAN|CITIGROUP|WELLS FARGO|UBS|BARCLAYS|HSBC|"
                         r"BNP PARIBAS|CREDIT SUISSE|MIZUHO|NOMURA|MITSUBISHI UFJ|SUMITOMO|RAYMOND JAMES|"
                         r"STIFEL|LPL FINANCIAL|OPPENHEIMER & CO|AMERIPRISE|EDWARD JONES|TRUST CO(MPANY)?|SAVINGS|CREDIT UNION|"
                         r"DEKABANK|DZ BANK|LANDESBANK|SPARKASSE|JANE STREET|SUSQUEHANNA|OPTIVER|IMC|"
-                        r"VIRTU|FLOW TRADERS|HUDSON RIVER TRADING|JUMP TRADING|CITADEL SECURITIES)\b", re.I)),
+                        r"VIRTU|FLOW TRADERS|HUDSON RIVER TRADING|JUMP TRADING|CITADEL SECURITIES|CLEAR STREET|MAREX|"
+                        r"CANTOR FITZGERALD|NEARWATER|CAPITAL MARKETS|MARKETS CAYMAN|MARKETS AMERICAS|"
+                        r"MARKET MAKING|BROKER|DEALER|STONEX|INTERACTIVE BROKERS|TRADEWEB|PERSHING LLC)\b", re.I)),
     ("other", re.compile(r"\b(VENTURES?|VENTURE PARTNERS|PRIVATE EQUITY|GROWTH EQUITY|BUYOUT|ACQUISITIONS?|"
                          r"KKR|CARLYLE|BLACKSTONE INC|TPG|WARBURG PINCUS|SILVER LAKE|THOMA BRAVO|VISTA EQUITY|"
                          r"BAIN CAPITAL (INVESTORS|VENTURE|LIFE)|AFFINITY PARTNERS|LITTLEJOHN|GENERAL ATLANTIC|"
@@ -143,7 +161,7 @@ RULES: list[tuple[str, re.Pattern]] = [
                              r"VOYA|PRINCIPAL|EATON VANCE|TIAA|TEACHERS ADVISORS|AMERICAN FUNDS|ALGER|"
                              r"BROWN ADVISORY|POLEN|SANDS CAPITAL|EDGEWOOD|FIERA|MACKENZIE|RBC GLOBAL ASSET|"
                              r"CI INVESTMENTS|BMO ASSET|NATIXIS|OSTRUM|ODDO|CARMIGNAC|COMGEST|STEWART INVESTORS|"
-                             r"FIRST SENTIER|MAGELLAN|PLATINUM INVESTMENT|NIKKO|DAIWA ASSET|MITSUBISHI UFJ ASSET|"
+                             r"FIRST SENTIER|MAGELLAN|PLATINUM INVESTMENT|O'?NEIL GLOBAL|NIKKO|DAIWA ASSET|MITSUBISHI UFJ ASSET|"
                              r"SAMSUNG ASSET|MIRAE|E FUND|CHINA ASSET|HARVEST FUND|HUAXIA)\b", re.I)),
     ("wealth", re.compile(r"\b(WEALTH|FINANCIAL PLANNING|FINANCIAL ADVISORS?|PLANNING|RETIREMENT PLANNING|"
                           r"FAMILY OFFICE|PRIVATE CLIENT|INVESTMENT COUNSEL|FINANCIAL SERVICES|"

@@ -1,0 +1,257 @@
+{
+ "filers": {
+  "0000916542": {
+   "name": "Acadian Asset Management LLC",
+   "type": "long_only"
+  },
+  "0000923093": {
+   "name": "Tudor Investment Corp. Et Al",
+   "type": "hedge_fund"
+  },
+  "0000934639": {
+   "name": "Maverick Capital Ltd",
+   "type": "hedge_fund"
+  },
+  "0000944388": {
+   "name": "1832 Asset Management L.P.",
+   "type": "long_only"
+  },
+  "0001024896": {
+   "name": "Cantor Fitzgerald, L. P.",
+   "type": "bank"
+  },
+  "0001054587": {
+   "name": "Sculptor Capital LP",
+   "type": "hedge_fund"
+  },
+  "0001113000": {
+   "name": "Kensico Capital Management Corp.",
+   "type": "hedge_fund"
+  },
+  "0001164508": {
+   "name": "Arrowstreet Capital, Limited Partnership",
+   "type": "long_only"
+  },
+  "0001165408": {
+   "name": "Adage Capital Partners GP, L.L.C.",
+   "type": "hedge_fund"
+  },
+  "0001169069": {
+   "name": "Viking Fund Management LLC",
+   "type": "long_only"
+  },
+  "0001191672": {
+   "name": "Credit Agricole S A",
+   "type": "bank"
+  },
+  "0001214639": {
+   "name": "DSM Capital Partners LLC",
+   "type": "long_only"
+  },
+  "0001218199": {
+   "name": "King Street Capital Management, L.P.",
+   "type": "hedge_fund"
+  },
+  "0001274419": {
+   "name": "Credit Industriel Et Commercial",
+   "type": "bank"
+  },
+  "0001352851": {
+   "name": "Magnetar Financial LLC",
+   "type": "hedge_fund"
+  },
+  "0001388391": {
+   "name": "Walleye Trading LLC",
+   "type": "other"
+  },
+  "0001443689": {
+   "name": "Senator Investment Group LP",
+   "type": "hedge_fund"
+  },
+  "0001446194": {
+   "name": "Susquehanna International Group, LLP",
+   "type": "other"
+  },
+  "0001491719": {
+   "name": "Lombard Odier Asset Management (USA) Corp",
+   "type": "long_only"
+  },
+  "0001506071": {
+   "name": "Wellington Shields Capital Management, LLC",
+   "type": "wealth"
+  },
+  "0001506073": {
+   "name": "Wellington Shields & Co., LLC",
+   "type": "bank"
+  },
+  "0001512857": {
+   "name": "Brevan Howard Capital Management LP",
+   "type": "hedge_fund"
+  },
+  "0001525234": {
+   "name": "Jericho Capital Asset Management L.P.",
+   "type": "hedge_fund"
+  },
+  "0001557017": {
+   "name": "Capula Management Ltd",
+   "type": "hedge_fund"
+  },
+  "0001569758": {
+   "name": "Carmignac Gestion",
+   "type": "long_only"
+  },
+  "0001581811": {
+   "name": "Egerton Capital (UK) LLP",
+   "type": "hedge_fund"
+  },
+  "0001592746": {
+   "name": "Fullerton Fund Management Co Ltd.",
+   "type": "long_only"
+  },
+  "0001595880": {
+   "name": "Junto Capital Management LP",
+   "type": "hedge_fund"
+  },
+  "0001595888": {
+   "name": "Jane Street Group, LLC",
+   "type": "other"
+  },
+  "0001597857": {
+   "name": "Hartree Partners, LP",
+   "type": "other"
+  },
+  "0001609098": {
+   "name": "Darsana Capital Partners LP",
+   "type": "hedge_fund"
+  },
+  "0001612063": {
+   "name": "WINTON GROUP Ltd",
+   "type": "hedge_fund"
+  },
+  "0001621802": {
+   "name": "Infrastructure Capital Advisors, LLC",
+   "type": "long_only"
+  },
+  "0001632341": {
+   "name": "Belvedere Trading LLC",
+   "type": "other"
+  },
+  "0001632813": {
+   "name": "CMT Capital Markets Trading GmbH",
+   "type": "other"
+  },
+  "0001642575": {
+   "name": "Squarepoint Ops LLC",
+   "type": "hedge_fund"
+  },
+  "0001650258": {
+   "name": "Avanda Investment Management Pte. Ltd.",
+   "type": "long_only"
+  },
+  "0001652026": {
+   "name": "Fund Resources Investment Holding Group Co Ltd",
+   "type": "other"
+  },
+  "0001691827": {
+   "name": "Glenview Trust Co",
+   "type": "wealth"
+  },
+  "0001700574": {
+   "name": "Holocene Advisors, LP",
+   "type": "hedge_fund"
+  },
+  "0001704268": {
+   "name": "Mubadala Investment Co PJSC",
+   "type": "sovereign"
+  },
+  "0001719165": {
+   "name": "Capital Markets Trading UK LLP",
+   "type": "other"
+  },
+  "0001721757": {
+   "name": "DV Trading LLC",
+   "type": "other"
+  },
+  "0001729829": {
+   "name": "Qube Research & Technologies Ltd",
+   "type": "hedge_fund"
+  },
+  "0001745981": {
+   "name": "Worldquant Millennium Advisors LLC",
+   "type": "hedge_fund"
+  },
+  "0001758720": {
+   "name": "Walleye Capital LLC",
+   "type": "hedge_fund"
+  },
+  "0001768744": {
+   "name": "Munro Partners",
+   "type": "long_only"
+  },
+  "0001784547": {
+   "name": "Woodline Partners LP",
+   "type": "hedge_fund"
+  },
+  "0001837309": {
+   "name": "Polar Capital Holdings Plc",
+   "type": "long_only"
+  },
+  "0001861159": {
+   "name": "O'Neil Global Advisors, Inc.",
+   "type": "long_only"
+  },
+  "0001881567": {
+   "name": "Clear Street Group Inc.",
+   "type": "bank"
+  },
+  "0001895911": {
+   "name": "Paralel Advisors LLC",
+   "type": "other"
+  },
+  "0001907528": {
+   "name": "Graham Capital Wealth Management, LLC",
+   "type": "wealth"
+  },
+  "0001915842": {
+   "name": "Nearwater Capital Markets, Ltd",
+   "type": "bank"
+  },
+  "0001974438": {
+   "name": "OneAscent Investment Solutions LLC",
+   "type": "wealth"
+  },
+  "0001997464": {
+   "name": "Marex Group Ltd",
+   "type": "bank"
+  },
+  "0002010854": {
+   "name": "BOCHK Asset Management Ltd",
+   "type": "long_only"
+  },
+  "0002027462": {
+   "name": "Kurv Investment Management LLC",
+   "type": "index"
+  },
+  "0002051323": {
+   "name": "Caxton Associates LLP",
+   "type": "hedge_fund"
+  },
+  "0002053305": {
+   "name": "BIT Capital GmbH",
+   "type": "long_only"
+  },
+  "0002070852": {
+   "name": "Wedbush Fund Advisers, LLC",
+   "type": "long_only"
+  },
+  "0002076121": {
+   "name": "Amanah Holdings Trust",
+   "type": "sovereign"
+  },
+  "0002118292": {
+   "name": "Galaxy Digital Capital Management GP LLC",
+   "type": "other"
+  }
+ },
+ "note": "Hand-checked filer types (PM review of the CRWD, APH, SNDK, NVDA, META, APP, VST, ALAB and TTMI hedge-fund holders, 2026-11-09). filer_types.py applies them first; the publish gate fails when filer_types.json disagrees with any of them."
+}

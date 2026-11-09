@@ -76,6 +76,17 @@ def holder_counts(data: Path, books: dict[str, dict]) -> list[str]:
     return bad
 
 
+def reviewed_types(data: Path) -> list[str]:
+    """Every hand-checked filer (ingest/type_cases.json) must come out with its reviewed type."""
+    path = data / "filer_types.json"
+    if not path.exists():
+        return []
+    got = json.loads(path.read_text()).get("filers") or {}
+    cases = json.loads(Path(__file__).with_name("type_cases.json").read_text())["filers"]
+    return [f"{v['name']}: {(got.get(c) or {}).get('type')} (reviewed: {v['type']})"
+            for c, v in sorted(cases.items()) if c in got and got[c].get("type") != v["type"]]
+
+
 def book_totals(hist: Path) -> list[str]:
     """Quarters merged from more than one filing of the same filer that look double-counted.
 
@@ -161,6 +172,10 @@ def main() -> int:
     if short:
         print(f"::error::All-filer holder counts below the tracked funds holding the stock: {'; '.join(short[:20])}; "
               f"not publishing.")
+        failed = True
+    wrong = reviewed_types(data)
+    if wrong:
+        print(f"::error::Filer types differ from the reviewed cases: {'; '.join(wrong[:20])}; not publishing.")
         failed = True
     doubled = book_totals(data / "h")
     if doubled:

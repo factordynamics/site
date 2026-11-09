@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 import traceback
@@ -596,6 +597,12 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
             h = h | {"prev_cusip": p["cusip"]}
         prn = h.get("shares_type") == "PRN"
         r = ratio(h)
+        # Per filer: a prior position already reported in post-split shares (its value per share is at
+        # today's level, not k times it; Amundi and 1832 on CRWD 2026Q2) is not multiplied again.
+        if r != 1.0 and p is not None and not prn and p["value"] > 0 and amount(p) > 0 and h["value"] > 0 and amount(h) > 0:
+            was, now_px = p["value"] / amount(p), h["value"] / amount(h)
+            if abs(math.log(was / now_px)) < abs(math.log(was / (now_px * r))):
+                r = 1.0
         if h.get("late_disclosure"):
             rows.append(h | extra(p, "disclosed_later", 0, None, r, prn))
             continue
