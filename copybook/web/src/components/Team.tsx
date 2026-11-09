@@ -3,9 +3,9 @@ import { ApiError, call } from '../lib/account'
 import { FUND_SEATS } from '../config'
 import { Button } from './ui'
 
-// Copy Fund seats (owner only): GET/POST {api}/seats, DELETE /seats/{email}. Each seat gets its own
+// Copy Fund seats (owner only): GET/POST {api}/seats, DELETE /seats/{email}, POST /seats/{email}/revoke. Each seat gets its own
 // sign-in link by email; follows, watchlist, owned book and peers are shared by the whole team.
-type Seats = { max: number; active?: number; seats: { email: string; invited_at?: number | string | null }[] }
+type Seats = { max: number; active?: number; revoke_available?: boolean; seats: { email: string; invited_at?: number | string | null }[] }
 
 const ERR: Record<string, string> = {
   seat_exists: 'That address already has a seat.',
@@ -53,6 +53,17 @@ export function Team() {
     }
   }
 
+  const signOut = async (who: string) => {
+    if (!confirm(`Sign ${who} out everywhere? Every session they have ends now; they can sign in again by email while they keep a seat.`)) return
+    setMsg(null)
+    try {
+      setS(await call<Seats>(`/seats/${encodeURIComponent(who)}/revoke`, { method: 'POST', auth: true }))
+      setMsg({ text: `${who} is signed out everywhere.`, ok: true })
+    } catch {
+      setMsg({ text: `${who} wasn’t signed out. Please try again.`, ok: false })
+    }
+  }
+
   const used = s ? s.seats.length : 0
   const max = s?.max ?? FUND_SEATS
   return (
@@ -81,9 +92,16 @@ export function Team() {
                   <span className="block truncate font-medium">{x.email}</span>
                   {when(x.invited_at) && <span className="block text-[12.5px] text-ink-3">Invited {when(x.invited_at)}</span>}
                 </span>
-                <Button size="sm" variant="ghost" onClick={() => remove(x.email)}>
-                  Remove
-                </Button>
+                <span className="flex shrink-0 gap-1">
+                  {s.revoke_available && (
+                    <Button size="sm" variant="ghost" onClick={() => signOut(x.email)}>
+                      Sign out everywhere
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => remove(x.email)}>
+                    Remove
+                  </Button>
+                </span>
               </li>
             ))}
           </ul>

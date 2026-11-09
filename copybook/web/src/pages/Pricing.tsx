@@ -69,11 +69,8 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: `${FUND_SEATS} seats`, d: 'Invite your team by email; each seat signs in on its own and keeps its own alerts and channels.' },
       { t: 'Shared book and peer lists', d: 'One set of follows, watchlist, owned book and peers the whole team works from.' },
       { t: 'One team channel', d: 'Each alert posts once to your team’s Slack channel, whoever follows it.' },
-      { t: 'Seat admin', d: 'Add and remove seats from your account page.' },
+      { t: 'Seat admin', d: 'Add and remove seats from your account page, and sign a departing colleague out everywhere at once.' },
       { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 on request.' },
-    ],
-    soon: [
-      { t: 'Revoke a seat’s sessions', d: 'Sign a departing colleague out everywhere at once.' },
     ],
     why: FUND_WHY,
   },
@@ -110,7 +107,7 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Shared book and peer lists', false, false, false, true],
   ['One team Slack channel: each alert posts once', false, false, false, true],
   ['Seat admin: add and remove seats', false, false, false, true],
-  ['Revoke a seat’s sessions', false, false, false, 'soon'],
+  ['Revoke a seat’s sessions', false, false, false, true],
   ['Invoice billing, W-9', false, false, false, true],
 ]
 

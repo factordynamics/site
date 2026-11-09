@@ -18,7 +18,7 @@ const ADDS: Record<'pro' | 'fund', [string, string][]> = {
   ],
   fund: [
     [`${FUND_SEATS} seats`, 'Your team shares one book, one set of follows and one team channel, where each alert posts once.'],
-    ['Seat admin', 'Add and remove seats from your account page.'],
+    ['Seat admin', 'Add and remove seats from your account page, and sign a departing colleague out everywhere at once.'],
     ['Everything in Copy Pro', 'Full My book across every 13F filer, peers, 13F linking, CSV and the API.'],
     ['Annual invoice', 'Net 30 with a W-9, if your fund pays that way.'],
   ],
