@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
 OUT = DATA / "bulk"
+MIN_BOOKS = 5000
 PART_RAW = 450_000_000  # uncompressed CSV per part; about 80 MB gzipped (one upload is capped near 100 MB)
 HEADER = ("cik", "filer_name", "quarter", "report_date", "accession", "filing_date", "cusip", "ticker", "issuer",
           "title", "put_call", "shares", "shares_type", "value")
@@ -80,7 +81,10 @@ def export(quarter: str) -> list[Path]:
 
 
 def main(argv: list[str]) -> int:
-    quarters = argv or sorted(p.name for p in (DATA / "fb").iterdir() if p.is_dir())
+    # Complete quarters only: a full SEC data set behind it (.complete) or most filers' books. Folders with a
+    # handful of live-EDGAR books (written as single filers refresh) would publish as stubs.
+    quarters = argv or sorted(p.name for p in (DATA / "fb").iterdir() if p.is_dir() and (
+        (p / ".complete").exists() or sum(1 for _ in p.glob("*.json")) >= MIN_BOOKS))
     for q in quarters:
         paths = export(q)
         print(f"export: {q}: " + ", ".join(f"{p.name} {p.stat().st_size / 1e6:.1f} MB" for p in paths), flush=True)

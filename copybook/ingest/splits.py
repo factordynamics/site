@@ -7,8 +7,10 @@ normal quarter they sit at exactly 1. For each CUSIP held by MIN_HOLDERS filers 
 both quarters:
 
 - the most common exact ratio (within 0.3%) among the candidates in RATIOS must cover
-  at least 5% of holders and at least 3, and more than 3x the holders at exactly 1;
-- the median implied price must move by about 1/k (price ratio x k within 0.33-3).
+  at least 5% of holders and at least 5, and more than 3x the holders at exactly 1;
+- the median holder's share ratio must be k itself (within 5%);
+- the median implied price must move by about 1/k (price ratio x k within 0.5-2, or up to 3
+  when SEC XBRL shares outstanding confirms k within 10%).
 
 When the issuer's CIK is known, SEC XBRL companyfacts (dei:EntityCommonStockSharesOutstanding)
 must not contradict it: a reported share count change between the two quarters has to be
@@ -36,6 +38,7 @@ WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
 PATH = DATA / "splits.json"
 MIN_HOLDERS = 5
+MIN_EXACT = 5  # holders at exactly k
 RATIOS = sorted({2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 100, 1.5, 2.5,
                  *(1 / k for k in (2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 100)), 2 / 3})
 EXACT = 0.003
@@ -57,10 +60,13 @@ def detect(pairs: list[tuple[dict, dict]]) -> dict[str, dict]:
         at_one = exact(1)
         best = max(RATIOS, key=exact)
         hits = exact(best)
-        if hits < 3 or hits < 0.05 * len(rs) or hits <= 3 * at_one:
+        if hits < MIN_EXACT or hits < 0.05 * len(rs) or hits <= 3 * at_one:
+            continue
+        # Most holders moved by k: the median holder's share ratio is k itself, not just a cluster.
+        if abs(statistics.median(r for r, _ in rs) / best - 1) > 0.05:
             continue
         price = statistics.median(p for _, p in rs)
-        if not 0.33 <= price * best <= 3:
+        if not 0.5 <= price * best <= 3:  # above 2 needs SEC XBRL confirmation (update)
             continue
         found[cusip] = {"ratio": round(best, 6), "holders": len(rs), "exact_holders": hits,
                         "unchanged_holders": at_one, "price_ratio": round(price, 4)}
@@ -92,7 +98,7 @@ def xbrl_ratio(cik: str | None, q_from: str, q_to: str) -> float | None:
         return None
     a, b = quarter_end(q_from).isoformat(), quarter_end(q_to).isoformat()
     before = [v for d, v in series if d <= a]
-    after = [v for d, v in series if b < d][:1] or [v for d, v in series if a < d <= b][-1:]
+    after = [v for d, v in series if b < d][:1]  # a cover inside the quarter may predate the split: no verdict
     if not before or not after:
         return None
     return after[0] / before[-1]
@@ -145,13 +151,23 @@ def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], iss
     known = {(s["cusip"], s["to_quarter"]): s for s in doc.get("splits") or []}
     checked = doc.setdefault("checked", {})
     for (q_from, q_to), pairs in sorted(transitions.items()):
-        for cusip, ev in detect(list(pairs.values())).items():
+        found = detect(list(pairs.values()))
+        for key in [k for k in known if k[1] == q_to and k[0] not in found]:  # re-checked under today's rule
+            print(f"splits: {known[key].get('ticker') or key[0]} {q_to} no longer meets the rule; dropped")
+            checked[f"{key[0]}:{q_to}"] = "dropped"
+            del known[key]
+        for cusip, ev in found.items():
             key = f"{cusip}:{q_to}"
             if (cusip, q_to) in known:
                 known[(cusip, q_to)].update(ev)
                 continue
             meta = issuers.get(cusip) or {}
             xr = xbrl_ratio(meta.get("issuer_cik") or issuer_cik(meta.get("ticker")), q_from, q_to)
+            if not 0.5 <= ev["price_ratio"] * ev["ratio"] <= 2 and (xr is None or abs(xr / ev["ratio"] - 1) > 0.1):
+                checked[key] = "rejected"
+                print(f"splits: {cusip} {q_to} x{ev['ratio']} rejected (price moved {ev['price_ratio'] * ev['ratio']:.2f}x "
+                      f"after the split and XBRL does not confirm)")
+                continue
             if xr is not None and abs(xr / ev["ratio"] - 1) > 0.35:
                 checked[key] = "rejected"  # shares outstanding did not move with it (rechecked each run)
                 print(f"splits: {cusip} {q_to} x{ev['ratio']} rejected (XBRL shares ratio {xr:.2f})")

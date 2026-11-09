@@ -43,7 +43,7 @@ CACHE = Path(os.environ.get("COPYBOOK_DATASET_CACHE") or (Path(os.environ.get("R
 PAGE = f"{ARCHIVE_BASE}/data-research/sec-markets-data/form-13f-data-sets"
 COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type")
 # Bump when the fb/ book layout changes: periods seeded by an older format are read again.
-FORMAT = "2"  # 2: shares_type (SH, or PRN where shares is a principal amount)
+FORMAT = "3"  # 2: shares_type (SH, or PRN where shares is a principal amount); 3: re-filed books not double-counted
 DOLLARS_FROM = "2023-01-03"  # VALUE is in $000s for filings before this date (data set readme)
 MONTHS = {m: i + 1 for i, m in enumerate("JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split())}
 csv.field_size_limit(10_000_000)
@@ -214,8 +214,31 @@ def read_period(q: str, zips: list[Path], ciks: set[str] | None = None) -> dict[
     return out
 
 
+def refiled(base_rows: dict, extra_rows: dict) -> bool:
+    """A NEW HOLDINGS amendment repeating most of the book: a mislabeled full re-filing (as build.py)."""
+    keys = {k[:2] for k in base_rows}
+    new = {k[:2] for k in extra_rows}
+    if not keys or not new:
+        return False
+    if len(keys & new) > 0.5 * len(keys):
+        return True
+    ratio = sum(r[5] for r in extra_rows.values()) / (sum(r[5] for r in base_rows.values()) or 1)
+    return 0.8 <= ratio <= 1.25 and len(new) >= 0.5 * len(keys)
+
+
 def book(q: str, base: dict, extra: list[dict], books: dict, lines: dict) -> dict:
     merged: dict[tuple, list] = {}
+    replaced: list[str] = []
+    seen: dict = {}
+    for f in extra:  # a re-filed full book becomes the base; what it repeats is dropped
+        if refiled({**books.get(base["accession"], {}), **seen}, books.get(f["accession"], {})):
+            replaced.append(base["accession"])
+            replaced.extend(e["accession"] for e in extra[:extra.index(f)] if e["accession"] not in replaced)
+            base, seen = f, {}
+        else:
+            seen.update(books.get(f["accession"], {}))
+    extra = [f for f in extra if f["accession"] not in replaced and f is not base
+             and f["filing_date"] >= base["filing_date"]]
     for f in [base, *extra]:
         rows = books.get(f["accession"], {})
         thousands = f["filing_date"] < DOLLARS_FROM
@@ -253,6 +276,8 @@ def book(q: str, base: dict, extra: list[dict], books: dict, lines: dict) -> dic
         "values_in_thousands": base["filing_date"] < DOLLARS_FROM or factor > 1,
         "unit_fix": factor,
         "amendments": [f["accession"] for f in extra],
+        "superseded": replaced,
+        "mislabeled_amendment": bool(replaced),
         "source": "SEC Form 13F data set",
         "columns": list(COLUMNS),
         "rows": [[None, r[0], r[1], r[2], r[3], round(r[4]), round(r[5]), r[6]] for r in rows],

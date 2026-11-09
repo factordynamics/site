@@ -81,18 +81,27 @@ class ChangesTest(unittest.TestCase):
         self.assertEqual((r["change"], r["share_change"], r["prev_shares"], r["prev_principal_amount"],
                           r["value_delta"]), ("added", None, 0, 1000, 105))
 
-    def test_successor_quarter_compares_with_both_filers_prior_books(self):
-        # Ackman: Q2 reported by Pershing Square Inc.; Q1 was split between the two filers.
-        m = {"slug": "s", "history": [
-            {"quarter": "2026Q2", "report_date": "2026-06-30", "status": "notice", "holdings": [row("H", 27, 27)]},
-            {"quarter": "2026Q1", "report_date": "2026-03-31", "status": "filed", "holdings": [row("H", 18, 18)]},
-        ]}
-        build.BASELINE_EXTRA["s"] = {"2026-03-31": {"cik": "p", "holdings": [row("H", 9, 9)]}}
+    def test_quarters_two_filers_both_filed_are_one_combined_book(self):
+        # Ackman: Pershing Square Capital (a) and Pershing Square Inc. (p) both filed 2026Q1 (18M + 9M HHH);
+        # from 2026Q2 Pershing Square Inc. reports the fund (27M). Neither page may show a 9M buy.
+        q = lambda qq, d, st, n, **kw: {"quarter": qq, "report_date": d, "status": st, "holdings": [row("H", n, n)],
+                                         "total_value": n, **kw}
+        own_a = q("2026Q1", "2026-03-31", "filed", 18)
+        own_p = q("2026Q1", "2026-03-31", "filed", 9, cik="p", name="P")
+        fund = {"slug": "a", "cik": "a", "ok": True, "history": [
+            q("2026Q2", "2026-06-30", "notice", 27), build.combine_books(own_a, own_p) | {"total_value": 27}]}
+        reporter = {"slug": "p", "cik": "p", "ok": True, "history": [
+            q("2026Q2", "2026-06-30", "filed", 27), own_p]}
+        build.OWN_BOOKS[("a", "2026-03-31")] = own_a
         try:
-            r = with_changes(m["history"][0], baseline(m, 0))[0]
-            self.assertEqual((r["change"], r["prev_shares"], r["value_delta"]), ("unchanged", 27, 0))
+            build.share_reporter_books({"managers": [fund, reporter]})
+            for m in (fund, reporter):
+                r = with_changes(m["history"][0], baseline(m, 0))[0]
+                self.assertEqual((m["slug"], r["change"], r["prev_shares"], r["value_delta"]),
+                                 (m["slug"], "unchanged", 27, 0))
+            self.assertEqual(reporter["history"][1]["combined_with"]["cik"], "a")
         finally:
-            build.BASELINE_EXTRA.clear()
+            build.OWN_BOOKS.clear()
 
     def test_no_prior_filing_is_unknown_not_new(self):
         self.assertEqual({r["change"] for r in with_changes({"holdings": [row("A", 1, 1)]}, None)}, {None})

@@ -35,6 +35,7 @@ def save_cache(cache: dict[str, str]) -> None:
 
 
 RETRIED = "_retried"  # CUSIPs already re-asked without the exchange filter
+CINS_TRIED = "_cins"  # foreign (CINS) numbers already asked as ID_CINS
 
 
 def pick(data: list[dict], composite_only: bool = False) -> str:
@@ -106,6 +107,31 @@ def resolve(cusips: list[str], budget_s: float | None = None) -> dict[str, str]:
             cache[c] = pick(res.get("data") or [], composite_only=True)
             retried.add(c)
         cache[RETRIED] = sorted(retried)
+        wait = INTERVAL - (time.monotonic() - t0)
+        if wait > 0:
+            time.sleep(wait)
+    # Numbers starting with a letter are CINS (non-US issuers: G Cayman/Bermuda/Ireland, H Swiss,
+    # N Dutch, L Luxembourg, Y, V, ...). OpenFIGI resolves them only as ID_CINS; their US listing
+    # or ADR ticker comes back with exchCode US.
+    cins_done = set(cache.get(CINS_TRIED) or [])
+    cins = [c for c in dict.fromkeys(cusips) if c[:1].isalpha() and cache.get(c) == "" and c not in cins_done]
+    for i in range(0, len(cins), BATCH):
+        if budget_s is not None and time.monotonic() - start > budget_s:
+            break
+        chunk = cins[i : i + BATCH]
+        t0 = time.monotonic()
+        try:
+            out = _post([{"idType": "ID_CINS", "idValue": c, "exchCode": "US"} for c in chunk])
+        except Exception as exc:
+            print(f"figi: CINS lookups stopped early: {exc}", flush=True)
+            break
+        for c, res in zip(chunk, out):
+            cache[c] = pick(res.get("data") or [])
+            cins_done.add(c)
+        cache[CINS_TRIED] = sorted(cins_done)
+        if (i // BATCH) % 20 == 0:
+            save_cache(cache)
+            print(f"figi: CINS {i + len(chunk)}/{len(cins)}", flush=True)
         wait = INTERVAL - (time.monotonic() - t0)
         if wait > 0:
             time.sleep(wait)

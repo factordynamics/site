@@ -57,8 +57,8 @@ _SUBS: dict[str, dict] = {}
 INACTIVE_AFTER = 4  # quarters behind the expected period before a filer is retired
 _AMEND: dict[str, str] | None = None
 LITE_HOLDERS = 8
-CACHE_FORMAT = 2  # bump when stored quarters lack fields the build now needs (forces a refetch)
-BASELINE_EXTRA: dict[str, dict[str, dict]] = {}  # slug -> report_date -> reporter's book (13F-NT successions)
+CACHE_FORMAT = 3  # bump when stored quarters lack fields the build now needs (forces a refetch)
+OWN_BOOKS: dict[tuple[str, str], dict] = {}  # (cik, report_date) -> a fund's own book before combining
 SPLITS: dict[str, dict[str, float]] = {}  # cusip -> to_quarter -> ratio; see splits.py
 _CUSIP_MAP: dict[str, str] | None = None
 
@@ -200,21 +200,21 @@ def notice_periods(cik: str, metas: list, notices: list, cache: dict) -> tuple[l
             if q is not None:
                 loaded.append(q | {"status": "successor", "reported_by": base["reported_by"],
                                    "notice_accession": nt.accession, "notice_note": base["notice_note"]})
-    # The reporter's own book for the fund's last own quarter before the first notice, so the
-    # first reported-by quarter is compared with both filers' books (see baseline()).
+    # The reporter's own books for quarters the fund also filed itself (Pershing Square Inc. filed
+    # beside Pershing Square Capital before reporting for it): the fund's book there is both.
     extra: dict[str, dict] = {}
     if reporter_groups and own:
-        first = min(reporter_groups)
-        prior = max((d for d in own if d < first), default=None)
-        rep, groups = reporter_groups[first]
-        if prior and groups.get(prior):
+        rep, groups = reporter_groups[min(reporter_groups)]
+        for d in sorted(own):
+            if not groups.get(d):
+                continue
             try:
-                book = load_period(rep["cik"], groups[prior], cache)
+                book = load_period(rep["cik"], groups[d], cache)
             except Exception as exc:  # noqa: BLE001 - fall back to the fund's own book
-                print(f"  baseline {rep['cik']} {prior}: {exc}", flush=True)
+                print(f"  combined {rep['cik']} {d}: {exc}", flush=True)
                 book = None
             if book:
-                extra[prior] = book | {"cik": rep["cik"], "name": rep["name"]}
+                extra[d] = book | {"cik": rep["cik"], "name": rep["name"]}
     return loaded, skipped, extra
 
 
@@ -414,20 +414,71 @@ def load_period(cik: str, group: list, cache: dict) -> dict | None:
         trail.append(row)
     key = "|".join([base.accession] + [m.accession for m in additions])
     if key in cache:
-        return fix_cached(cache[key]) | {"filings": trail}
+        q = fix_cached(cache[key])
+        return q | {"filings": mark_refiled(trail, q.get("refiled") or [])}
     loaded = load_filing(cik, base)
     if loaded is None:
         return None
     extras = []
+    refiled: list[dict] = []  # NEW HOLDINGS amendments that re-filed the whole book
     for m in additions:
         try:
             x = load_filing(cik, m)
         except Exception as exc:
             print(f"  skip amendment {m.accession}: {exc}", flush=True)
             continue
-        if x:
-            extras.append(x)
-    return merge_quarter(loaded, extras) | {"filing_key": key, "filings": trail, "format": CACHE_FORMAT}
+        if not x:
+            continue
+        if is_refiled_book(loaded, extras, x):
+            print(f"  {m.accession}: NEW HOLDINGS amendment re-files the whole book; it replaces "
+                  f"{loaded['accession']} (${loaded['total_value'] / 1e9:.2f}B -> ${x['total_value'] / 1e9:.2f}B)", flush=True)
+            refiled.append({"accession": m.accession, "replaces": [loaded["accession"], *(e["accession"] for e in extras)],
+                            "replaced_total": round(merge_quarter(loaded, extras)["total_value"]),
+                            "total": round(x["total_value"])})
+            known = {(h["cusip"], h.get("put_call") or ""): h for h in merge_quarter(loaded, extras)["holdings"]}
+            for h in x["holdings"]:  # positions the replaced book already showed were public since then
+                k = known.get((h["cusip"], h.get("put_call") or ""))
+                if k and k.get("first_disclosed_at") and k["first_disclosed_at"] < (h.get("first_disclosed_at") or "~"):
+                    h["source_accession"], h["first_disclosed_at"] = k.get("source_accession"), k["first_disclosed_at"]
+            loaded, extras = x, []
+            continue
+        extras.append(x)
+    q = merge_quarter(loaded, extras) | {"filing_key": key, "format": CACHE_FORMAT, "refiled": refiled}
+    q["cover_total"] = sum(b.get("cover_total") or 0 for b in [loaded, *extras]) or None
+    return q | {"filings": mark_refiled(trail, refiled)}
+
+
+def is_refiled_book(base: dict, extras: list[dict], x: dict) -> bool:
+    """A NEW HOLDINGS amendment that is really a full re-filing (some filers mislabel restatements).
+
+    It repeats most of the book: over half the book's positions (CUSIP and put/call), or a total
+    within 20% of the book's with at least half as many positions. Adding it would double-count.
+    """
+    book = merge_quarter(base, extras) if extras else base
+    keys = {(h["cusip"], h.get("put_call") or "") for h in book["holdings"]}
+    new = {(h["cusip"], h.get("put_call") or "") for h in x["holdings"]}
+    if not keys or not new:
+        return False
+    if len(keys & new) > 0.5 * len(keys):
+        return True
+    ratio = (x.get("total_value") or 0) / (book.get("total_value") or 1)
+    return 0.8 <= ratio <= 1.25 and len(new) >= 0.5 * len(keys)
+
+
+def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
+    """Version trail with mislabeled full re-filings as the base and what they replaced superseded."""
+    if not refiled:
+        return trail
+    last = refiled[-1]
+    replaced = {a for r in refiled for a in r["replaces"]} | {r["accession"] for r in refiled[:-1]}
+    for f in trail:
+        if f["accession"] == last["accession"]:
+            f["role"], f["mislabeled_amendment"] = "base", True
+        elif f["accession"] in replaced:
+            f["role"] = "superseded"
+            if any(f["accession"] == r["accession"] for r in refiled):
+                f["mislabeled_amendment"] = True
+    return trail
 
 
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book")
@@ -572,7 +623,9 @@ def load_filing(cik: str, meta) -> dict | None:
     if total <= 0 or not holdings:
         return None
     disclosed = meta.accepted_at or meta.filing_date
+    cover = (cover_total * (1000 if thousands and cover_total and total / cover_total > 300 else 1)) if cover_total else None
     return apply_weights({
+        "cover_total": cover,
         "format": CACHE_FORMAT,
         "form": meta.form,
         "accession": meta.accession,
@@ -653,8 +706,11 @@ def ingest() -> dict:
                     skipped.append(gap | {"reason": "unreadable"})
                     continue
             via, gaps, extra = notice_periods(cik, metas, notices, cache)
-            if extra:
-                BASELINE_EXTRA[slug] = extra
+            for i, q in enumerate(history):  # quarters both filers filed: the fund's book is the sum
+                other = extra.get(q["report_date"])
+                if other and q.get("status") == "filed":
+                    OWN_BOOKS[(cik, q["report_date"])] = q
+                    history[i] = combine_books(q, other) | {"total_value": q["total_value"] + other["total_value"]}
             history = sorted(history + via, key=lambda q: q["report_date"], reverse=True)[:HISTORY_QUARTERS]
             skipped = sorted(skipped + gaps, key=lambda q: q["report_date"], reverse=True)
             if not history:
@@ -795,11 +851,7 @@ def baseline(m: dict, i: int) -> dict | None:
     hist = m.get("history") or []
     if i + 1 >= len(hist):
         return None
-    prev, cur = hist[i + 1], hist[i]
-    extra = BASELINE_EXTRA.get(m["slug"], {}).get(prev["report_date"])
-    if extra and cur.get("status") in ("notice", "successor") and prev.get("status") == "filed":
-        return combine_books(prev, extra)
-    return prev
+    return hist[i + 1]  # quarters two filers both filed are already combined (ingest, share_reporter_books)
 
 
 def manager_json(m: dict) -> dict:
@@ -898,7 +950,8 @@ def write_history(m: dict) -> None:
     for i, q in enumerate(hist):
         name = f"{q['quarter']}.json"
         keep.add(name)
-        meta = {k: v for k, v in q.items() if k not in {"holdings", "truncated"}}
+        meta = {k: v for k, v in q.items() if k not in {"holdings", "truncated", "refiled"}}
+        meta["long_value"] = round(sum(h["value"] for h in q["holdings"] if not h.get("put_call")))
         prev = baseline(m, i)
         rows = [compact_row(h) for h in with_changes(q, prev)]
         # `holdings` stays the filed book; positions sold out since the prior quarter go in `exited`.
@@ -960,6 +1013,12 @@ def write_status(payload: dict) -> None:
         print(f"::warning::{behind} curated funds behind {quarter_label(expected)}, {len(failed)} failed; see status.json")
 
 
+try:
+    from ingest.filer_types import load as _load_types
+    FILER_TYPES = _load_types()  # from the previous full run's filer_types.py
+except Exception:  # noqa: BLE001
+    FILER_TYPES = {}
+
 # Preview rows in index.json: display fields only (row detail stays in {slug}.json and R2).
 TOP_FIELDS = ("issuer", "title", "cusip", "ticker", "display_name", "sector", "value", "shares", "shares_type",
               "put_call", "weight", "pct_of_book", "prev_shares", "prev_value", "prev_weight", "change",
@@ -978,6 +1037,13 @@ def write_json(payload: dict) -> None:
             if k not in {"holdings", "history", "exited", "top_holdings", "moves", "filings"}
             and not (isinstance(v, list) and v and isinstance(v[0], dict) and "cusip" in v[0])
         }
+        t = FILER_TYPES.get(m["cik"]) or {}
+        entry["type"], entry["activist"] = t.get("type"), bool(t.get("activist"))
+        # Long book (shares and notes) apart from option notional, so lists need not load every book.
+        hs = m.get("holdings") or []
+        entry["long_value"] = round(sum(h["value"] for h in hs if not h.get("put_call")))
+        entry["options_value"] = round(sum(h["value"] for h in hs if h.get("put_call")))
+        entry["long_positions"] = sum(1 for h in hs if not h.get("put_call"))
         if m.get("ok"):
             entry["top"] = [{k: h[k] for k in TOP_FIELDS if k in h} for h in m["holdings"][:8]]
         slim_managers.append(entry)
@@ -1172,8 +1238,28 @@ def write_versions(payload: dict) -> int:
     return n
 
 
+def share_reporter_books(payload: dict) -> None:
+    """A curated filer that later reports another curated fund's holdings (13F-NT) shows the same
+    combined book for quarters both filed, so its own changes are not the other fund's book."""
+    by_cik = {m["cik"]: m for m in payload["managers"] if m.get("ok")}
+    for m in list(by_cik.values()):
+        for q in m.get("history") or []:
+            other = by_cik.get((q.get("combined_with") or {}).get("cik") or "")
+            own = OWN_BOOKS.get((m["cik"], q["report_date"]))
+            if not other or not own:
+                continue
+            for j, rq in enumerate(other["history"]):
+                if rq["report_date"] == q["report_date"] and not rq.get("combined_with") and rq.get("status") == "filed":
+                    other["history"][j] = combine_books(rq, own | {"cik": m["cik"], "name": own.get("name") or m.get("name")}) \
+                        | {"total_value": rq["total_value"] + own["total_value"]}
+        for other in by_cik.values():
+            if other["history"] and other["history"][0].get("combined_with"):
+                other["holdings"] = other["history"][0]["holdings"]
+
+
 def main() -> int:
     payload = ingest()
+    share_reporter_books(payload)
     payload["build"] = write_build_info()
     print(f"splits: {detect_splits(payload)} known", flush=True)
     save_amend_types()

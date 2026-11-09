@@ -1,6 +1,9 @@
 import unittest
 from types import SimpleNamespace as M
 
+from unittest import mock
+
+from ingest import build
 from ingest.build import merge_quarter, pick_filings
 
 
@@ -23,6 +26,41 @@ class AmendmentTest(unittest.TestCase):
         types = {"a": "NEW HOLDINGS", "r": "RESTATEMENT", "b": "NEW HOLDINGS"}
         base, extra = pick_filings([late, rest, add, orig], types)
         self.assertEqual((base.accession, [m.accession for m in extra]), ("r", ["b"]))
+
+    def test_new_holdings_amendment_that_refiles_the_whole_book_replaces_it(self):
+        # First Eagle 2026Q2: a NEW HOLDINGS /A repeating the whole book doubled it ($59.9B + $60.8B).
+        def book(acc, rows, at):
+            hs = [{"issuer": c, "title": "COM", "cusip": c, "ticker": None, "value": v, "shares": n, "put_call": None,
+                   "shares_type": "SH", "source_accession": acc, "first_disclosed_at": at} for c, n, v in rows]
+            return {"accession": acc, "total_value": sum(h["value"] for h in hs), "holdings": hs, "line_count": len(hs)}
+        orig = book("o", [("GOOG", 7_300_000, 600), ("A", 10, 300), ("B", 5, 100)], "2026-08-14T20:00:00Z")
+        refile = book("r", [("GOOG", 7_300_000, 610), ("A", 10, 300), ("B", 5, 100), ("C", 1, 5)], "2026-09-01T20:00:00Z")
+        small = book("s", [("D", 3, 50)], "2026-10-01T20:00:00Z")  # a genuine late disclosure stays additive
+        loads = {"o": orig, "r": refile, "s": small}
+        group = [f("o", "13F-HR", "2026-08-14"), f("r", "13F-HR/A", "2026-09-01"), f("s", "13F-HR/A", "2026-10-01")]
+        for m in group:
+            m.accepted_at = ""
+        with mock.patch.object(build, "load_filing", side_effect=lambda cik, m: loads[m.accession]), \
+                mock.patch.object(build, "amend_cover", return_value={"type": "NEW HOLDINGS", "no": 1,
+                                                                    "confidential_treatment_expired": False}):
+            q = build.load_period("1", group, {})
+        by = {h["cusip"]: h for h in q["holdings"]}
+        self.assertEqual((by["GOOG"]["shares"], q["total_value"]), (7_300_000, 1065))
+        self.assertEqual((by["GOOG"]["first_disclosed_at"], by["C"]["source_accession"], by["D"]["source_accession"]),
+                         ("2026-08-14T20:00:00Z", "r", "s"))
+        roles = {t["accession"]: (t["role"], t.get("mislabeled_amendment")) for t in q["filings"]}
+        self.assertEqual(roles, {"o": ("superseded", None), "r": ("base", True), "s": ("addition", None)})
+
+    def test_data_set_books_do_not_double_count_a_refiled_amendment(self):
+        from ingest import datasets
+        row = lambda c, n, v: [c, "COM", c, None, n, v, "SH"]
+        books = {"o": {(c, "", "SH"): row(c, n, v) for c, n, v in (("A", 10, 300), ("B", 5, 100))},
+                 "r": {(c, "", "SH"): row(c, n, v) for c, n, v in (("A", 10, 300), ("B", 5, 100), ("C", 1, 5))},
+                 "s": {("D", "", "SH"): row("D", 3, 50)}}
+        meta = lambda a, d: {"accession": a, "cik": "1", "name": "X", "form": "13F-HR", "filing_date": d}
+        b = datasets.book("2026Q2", meta("o", "2026-08-14"), [meta("r", "2026-09-01"), meta("s", "2026-10-01")],
+                          books, {})
+        self.assertEqual((b["total_value"], b["accession"], b["superseded"], b["amendments"]), (455, "r", ["o"], ["s"]))
 
     def test_lone_additive_amendment_is_not_a_book(self):
         self.assertEqual(pick_filings([f("a", "13F-HR/A", "2025-08-14")], {"a": "NEW HOLDINGS"}), (None, []))

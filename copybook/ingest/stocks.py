@@ -220,7 +220,16 @@ def main() -> int:
     names = filer_names()
     splits = split_table()
     ratio = (lambda c, pc: ratio_between(splits, c, prior, period, pc)) if period else None
+    from ingest.filer_types import SMART, load as load_types
+    types = load_types()
     issuers, holders = roll_up(now, prev, names, ratio)
+    for code, hs in holders.items():  # type per holder, and how many smart-money (hedge_fund/active) holders
+        for h in hs:
+            h.append((types.get(h[0]) or {}).get("type"))
+        eq = issuers.get(code, {}).get("equity")
+        if eq is not None:
+            eq["hf_holders"] = sum(1 for h in hs if h[3] == "equity" and h[4] and h[-1] == "hedge_fund")
+            eq["smart_holders"] = sum(1 for h in hs if h[3] == "equity" and h[4] and h[-1] in SMART)
     fill_names(issuers)
     latest = latest_quarters()
     rows = sorted(
@@ -258,7 +267,7 @@ def main() -> int:
                 "issuer": code, "ticker": it["ticker"], "display_name": it["display_name"], "period": period,
                 "prev_period": prior,
                 "columns": ["cik", "name", "slug", "kind", "shares", "prev_shares", "value", "prev_value", "change",
-                            "accession"],
+                            "accession", "type"],
                 "holders": hs,
             }, separators=(",", ":")) + "\n"
             path = out / f"{code}.json"

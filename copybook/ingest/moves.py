@@ -39,6 +39,9 @@ FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "val
 
 
 SECS: dict[str, dict] = {}
+PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
+LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
+HOLDERS_TOP = 200  # public rows per stock in hl/; the full list is paid
 CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied price over every filer
 FIXED = [0]
 
@@ -132,7 +135,13 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
     pq = prev_quarter(q)
     cur = book(read(DATA / "fb" / q / f"{shard['cik']}.json") or (None if shard.get("truncated") else shard))
     prev = book(read(DATA / "fb" / pq / f"{shard['cik']}.json"))
-    if cur is None or prev is None:
+    if cur is None:  # latest book only as a truncated public shard: its newest full book stands in
+        if prev is not None:
+            LATEST[shard["cik"]] = [h | {"change": None, "prev_shares": None, "prev_value": None} for h in prev["holdings"]]
+            PERIOD[shard["cik"]] = pq
+        return None
+    if prev is None:  # holdings only: still counted as holders, with no change
+        LATEST[shard["cik"]] = [h | {"change": None, "prev_shares": None, "prev_value": None} for h in cur["holdings"]]
         return None
     rows = build.with_changes(cur, prev)
     odd = {(h["cusip"], h["put_call"] or "") for h in cur["holdings"] + prev["holdings"] if h.get("price_outlier")}
@@ -149,6 +158,7 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
                       for k in MOVE_COLUMNS]
     buys = sorted((r for r in moved if r["change"] in ("new", "added")), key=lambda r: -r["value_delta"])[:TOP]
     sells = sorted((r for r in moved if r["change"] in ("trimmed", "exited")), key=lambda r: r["value_delta"])[:TOP]
+    LATEST[shard["cik"]] = rows
     summary = {
         "prev_quarter": pq,
         "changes": counts,
@@ -173,17 +183,89 @@ def write_changes(per_quarter: dict[str, list[list]]) -> None:
             "columns": list(CHANGE_COLUMNS), "rows": rows[:CHANGES_MAX]})
 
 
+def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) -> int:
+    """hl/{issuer6}.json: every 13F filer holding the stock in its latest full book (never the top-500
+    public shard), with the period of that book and its change against the filer's prior quarter.
+    Public: counts over all holders and the HOLDERS_TOP largest rows. hl/index.json maps tickers."""
+    meta = {s["cik"]: s for s in shards}
+    per: dict[str, dict[str, list]] = {}
+    tick: dict[str, dict[str, float]] = {}
+    for cik, rows in LATEST.items():
+        for r in rows:
+            c = (r.get("cusip") or "").upper()
+            if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
+                    or r.get("price_outlier"):
+                continue
+            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False])
+            a[0] += r.get("shares") or 0
+            a[1] += r.get("prev_shares") or 0
+            a[2] += r.get("value") or 0
+            a[3] += r.get("prev_value") or 0
+            a[4] = a[4] or r.get("change") is not None
+            t = r.get("ticker") or (SECS.get(c) or {}).get("ticker")
+            if t:
+                tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
+    out = DATA / "hl"
+    out.mkdir(exist_ok=True)
+    index, keep = {}, set()
+    cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change"]
+    for code, hs in per.items():
+        rows, counts = [], {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
+                            "no_prior": 0, "by_period": {}}
+        for cik, (sh, ps, v, pv, known) in hs.items():
+            change = None
+            if known:
+                change = ("exited" if sh <= 0 else "new" if ps <= 0 else "added" if sh > ps + 0.5
+                          else "trimmed" if sh < ps - 0.5 else "unchanged")
+            q = PERIOD.get(cik) or meta[cik].get("quarter")
+            if sh > 0:
+                counts["holders"] += 1
+                counts["by_period"][q] = counts["by_period"].get(q, 0) + 1
+            counts[change or "no_prior"] += 1
+            m = curated.get(cik) or filers.get(cik) or {}
+            rows.append([cik, meta[cik].get("name"), m.get("slug"), (types.get(cik) or {}).get("type"), cik in curated,
+                         q, round(sh), round(ps) if known else None, round(v), round(pv) if known else None, change])
+        if not counts["holders"]:
+            continue
+        rows.sort(key=lambda r: -(r[8] or r[9] or 0))
+        tickers = sorted(tick.get(code, {}), key=lambda t: -tick[code][t])
+        for t in tickers:
+            index.setdefault(t, code)
+        name = f"{code}.json"
+        keep.add(name)
+        write(out / name, {"issuer": code, "tickers": tickers, "counts": counts, "columns": cols,
+                           "rows_total": len(rows), "rows": rows[:HOLDERS_TOP]})
+    for p in out.glob("*.json"):
+        if p.name not in keep and p.name != "index.json":
+            p.unlink()
+    write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
+                               "tickers": dict(sorted(index.items()))})
+    return len(keep)
+
+
 def main() -> int:
     build.SPLITS.clear()
     build.SPLITS.update(sp.table())
     SECS.update(read(DATA / "securities.json") or {})
     shards = [s for p in sorted((DATA / "f").glob("*.json")) if (s := read(p))]
+    # Filers with a full book but no public shard yet: their newest full book, for the holder index
+    # and change files only (no public shard is written for them).
+    have = {s.get("cik") for s in shards}
+    for folder in sorted((DATA / "fb").glob("*Q?"), reverse=True):
+        for p in folder.glob("*.json"):
+            if p.stem not in have:
+                b = read(p)
+                if b and b.get("ok"):
+                    have.add(p.stem)
+                    shards.append(b | {"cik": p.stem, "quarter": b.get("quarter") or folder.name, "_fb_only": True})
     qs = {s["quarter"] for s in shards if s.get("ok") and s.get("quarter")}
     load_consensus(qs | {prev_quarter(q) for q in qs})
     n = with_prev = 0
     index = read(DATA / "index.json") or {}
     curated = {m["cik"]: m for m in index.get("managers") or []}
     filers = {f["cik"]: f for f in (read(DATA / "filers.json") or {}).get("filers") or []}
+    from ingest.filer_types import load as load_types
+    types = load_types()
     per_quarter: dict[str, list[list]] = {}
     for shard in shards:
         path = DATA / "f" / f"{shard['cik']}.json"
@@ -191,7 +273,8 @@ def main() -> int:
         got = changes(shard)
         base = {k: v for k, v in shard.items() if k not in ("prev_quarter", "changes", "moves")}
         if got is None:
-            write(path, base)
+            if not shard.get("_fb_only"):
+                write(path, base)
             continue
         summary, rows = got
         with_prev += 1
@@ -201,12 +284,13 @@ def main() -> int:
             if r["change"] in ("new", "added", "trimmed", "exited") and r.get("shares_type") != "PRN" \
                     and not r.get("price_outlier"):
                 per_quarter.setdefault(shard["quarter"], []).append([
-                    cik, meta.get("slug"), shard.get("name"), cik in curated, meta.get("type"), r["cusip"],
+                    cik, meta.get("slug"), shard.get("name"), cik in curated, (types.get(cik) or {}).get("type"), r["cusip"],
                     r.get("ticker"), r.get("issuer"), r.get("put_call"), r["change"], int(round(r.get("shares") or 0)),
                     int(round(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
                     int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), shard.get("accession"),
                     shard.get("accepted_at")])
-        write(path, base | summary)
+        if not shard.get("_fb_only"):
+            write(path, base | summary)
         full = {k: v for k, v in base.items() if k not in ("rows", "columns", "truncated")} | {
             "prev_quarter": summary["prev_quarter"],
             "equity_value": build.apply_weights({"holdings": [r for r in rows if r["change"] != "exited"]}).get("equity_value"),
@@ -221,6 +305,18 @@ def main() -> int:
         # Uploaded as R2 fb/{quarter}/{cik}.json in place of the plain book (upload_history.py).
         write(DATA / "fq" / shard["quarter"] / f"{shard['cik']}.json", full)
     write_changes(per_quarter)
+    # A curated fund's own book ({slug}.json, full and point-in-time) is its latest when at least as new.
+    for cik, m in curated.items():
+        b = read(DATA / f"{m['slug']}.json")
+        if not b or not b.get("quarter"):
+            continue
+        if cik not in {s["cik"] for s in shards}:
+            shards.append({"cik": cik, "name": b.get("name") or m.get("name"), "quarter": b["quarter"], "_fb_only": True})
+        cur = next(s for s in shards if s["cik"] == cik)
+        if b["quarter"] >= (PERIOD.get(cik) or cur.get("quarter") or ""):
+            LATEST[cik] = [h | {"shares_type": h.get("shares_type") or "SH"} for h in (b.get("holdings") or []) + (b.get("exited") or [])]
+            PERIOD[cik] = b["quarter"]
+    print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
     print(f"moves: {with_prev}/{n} filers have a prior quarter on file; {FIXED[0]} lines rescaled by the "
           f"cross-filer unit check; changes for "
           + ", ".join(f"{q} {len(v)} rows" for q, v in sorted(per_quarter.items())))
