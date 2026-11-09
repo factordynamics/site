@@ -137,7 +137,7 @@ export function StockPage() {
   const feed = d ? ev.data?.get(d.ticker) : undefined
   const from = (feed?.window ?? '').slice(0, 10)
   const insiders = (feed ?? [])
-    .filter((e) => /^4/.test(e.form) && (e.action === 'buy' || e.action === 'sell') && Math.abs(e.value_usd ?? 0) >= 100_000 && (!from || e.accepted_at.slice(0, 10) >= from))
+    .filter((e) => /^4/.test(e.form) && (e.action === 'buy' || e.action === 'sell') && Math.abs(e.value_usd ?? 0) >= 100_000 && (!from || (e.trade_date ?? e.accepted_at.slice(0, 10)) >= from))
     .sort((a, b) => Math.abs(b.value_usd ?? 0) - Math.abs(a.value_usd ?? 0))
     .slice(0, 5)
     .map(issuerLatest)

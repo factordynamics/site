@@ -783,6 +783,7 @@ const exerciseAndSale = (e: IssuerEvent) => {
   const tx = (e.transactions ?? []).filter((t) => !t.derivative)
   return tx.some((m) => m.code === 'M' && tx.some((x) => x.code === 'S' && x.date === m.date))
 }
+const exSaleOf = (e: IssuerEvent) => e.exercise_and_sale ?? exerciseAndSale(e)
 export function issuerLatest(e: IssuerEvent): Latest {
   const lead = e.filer_name.replace(/ and (\d+) others?$/i, '')
   const more = e.filer_name.slice(lead.length)
@@ -796,9 +797,11 @@ export function issuerLatest(e: IssuerEvent): Latest {
     const verb = VERB[e.action] ?? 'filed a Form 4 on'
     const open = e.action === 'buy' || e.action === 'sell' || e.action === 'mixed'
     const size = open && e.value_usd ? money(Math.abs(e.value_usd)) : e.shares ? `${sharesFmt(Math.abs(e.shares))} shares` : ''
-    const chg = e.prev_shares_after && e.shares_after != null ? e.shares_after / e.prev_shares_after - 1 : null
+    // The API's pct_change counts only P and S against the holding just before them (gifts between
+    // the owner's accounts don't move it); older rows fall back to the holding lines.
+    const chg = e.pct_change !== undefined ? (e.pct_change == null ? null : e.pct_change / 100) : e.prev_shares_after && e.shares_after != null ? e.shares_after / e.prev_shares_after - 1 : null
     if (open && chg != null && Number.isFinite(chg) && chg !== 0) pct = chg
-    what = `${cap(verb)}${size ? ` ${size}` : ''}${pct != null ? ` (${pctChange(pct)})` : ''}${e.action === 'sell' && exerciseAndSale(e) ? ', exercise + sale' : ''}`
+    what = `${cap(verb)}${size ? ` ${size}` : ''}${pct != null ? ` (${pctChange(pct)})` : ''}${e.action === 'sell' && exSaleOf(e) ? ', exercise + sale' : ''}`
   } else {
     const p = e.percent_of_class
     what = e.action === 'new_stake' ? `New ${p != null ? `${p}% ` : ''}stake` : p != null ? `→ ${p}%` : 'Amended'
@@ -807,7 +810,7 @@ export function issuerLatest(e: IssuerEvent): Latest {
   // EDGAR dates filings in New York time; a 6:30 pm ET acceptance is the next day in UTC.
   return {
     form: e.form,
-    date: new Date(e.accepted_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
+    date: e.filed_date ?? new Date(e.accepted_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
     manager: who,
     line: `${what} · ${who}${role}`,
     url: e.url,
@@ -818,7 +821,7 @@ export function issuerLatest(e: IssuerEvent): Latest {
     tradeDate: e.trade_date ?? e.event_date ?? null,
     who,
     title: e.role ? e.role.split(',')[0].trim() : null,
-    exSale: f4 && e.action === 'sell' && exerciseAndSale(e),
+    exSale: f4 && e.action === 'sell' && exSaleOf(e),
     ofClass: f4 ? null : e.percent_of_class,
   }
 }
@@ -856,7 +859,7 @@ function newest(stock: Stock | null, issuer: IssuerFeed | undefined, min: number
   const own = (issuer ?? []).filter((e) => !seen.has(accNo(e.accession)) && !passive13G(e.form, e.filer_name) && (!/^4/.test(e.form) || trade(e.action, e.value_usd)))
   // One window on every row: filings since the 13F period end (Jun 30 while Q3 is filing).
   const from = (issuer?.window ?? '').slice(0, 10) || windowStart(season)
-  const all = [...fund, ...own.map((e) => ({ acc: accNo(e.accession), l: issuerLatest(e) }))].filter((x) => !from || x.l.date >= from)
+  const all = [...fund, ...own.map((e) => ({ acc: accNo(e.accession), l: issuerLatest(e) }))].filter((x) => !from || (x.l.tradeDate ?? x.l.date) >= from)
   // Two lines, so a CEO's buy is never hidden behind a later 13G: the largest open-market trade in the
   // window (buys beat sells on a tie), and the latest 13D/G.
   const trades = all.filter((x) => /^4/.test(x.l.form))

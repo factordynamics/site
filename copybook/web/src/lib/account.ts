@@ -123,6 +123,12 @@ export type IssuerEvent = {
   event_date: string | null
   /** Form 4: the open-market trade's date (the window is on it). */
   trade_date?: string | null
+  /** The EDGAR filing date (New York acceptance date). */
+  filed_date?: string | null
+  /** (P − S shares) ÷ the holding just before those trades, in percent; null without open-market trades. */
+  pct_change?: number | null
+  /** An option exercise (M/X) and a sale on the same date. */
+  exercise_and_sale?: boolean
   accepted_at: string
   accession: string
   url: string
