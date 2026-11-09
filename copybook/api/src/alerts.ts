@@ -1,4 +1,4 @@
-import { addToFeed, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
+import { addToFeed, flushChannelLatency, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
 import { countAlerts, logSent, runRevenue } from './revenue';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
@@ -312,6 +312,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   }
   const mail = await sendMail(env, mails);
   await logSent(env, mails.length, now);
+  await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   return { emails: mails.length, digest, mail, ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }

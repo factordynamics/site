@@ -1252,7 +1252,7 @@ describe('copybook api', () => {
     await putFollows('cus_hook', { investors: ['warren-buffett'] });
 
     const today = new Date().toISOString().slice(0, 10);
-    const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: null, ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: null });
+    const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: null, ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: null, accepted: new Date(Date.now() - 120_000).toISOString() });
     events = [ev('seed')];
     await cron(47);
     hookStatus = 500; // the Pro endpoint is down at first
@@ -1264,6 +1264,10 @@ describe('copybook api', () => {
     expect(JSON.parse(by('discord.com')[0].body).content).toContain('<https://www.sec.gov/C1>');
     expect(by('api.telegram.org')[0].url).toBe('https://api.telegram.org/bot123456789:AAbbccddeeffgghhiijjkkllmmnnoopp/sendMessage');
     expect(JSON.parse(by('api.telegram.org')[0].body)).toMatchObject({ chat_id: '-1001234' });
+    // Each channel's first successful post is timed for /latency; the failed webhook isn't.
+    const timed = JSON.parse((await env.DB.get('alerts:latency:ch'))!) as { channel: string; accession: string; seconds: number }[];
+    expect(timed.filter((x) => x.accession === 'C1').map((x) => x.channel).sort()).toEqual(['discord', 'feed', 'slack', 'telegram']);
+    expect(timed.every((x) => x.seconds >= 90 && x.seconds < 200)).toBe(true);
     // The webhook is signed: t=<seconds>,v1=HMAC(secret, "<t>.<body>").
     const first = by('hooks.example.com')[0];
     const [, t, v1] = first.headers['copybook-signature'].match(/^t=(\d+),v1=([0-9a-f]{64})$/)!;
@@ -1550,8 +1554,15 @@ describe('copybook api', () => {
     const row = (acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q3', kind: '13f', accession: acc, accepted: new Date(t - seconds * 1000).toISOString(), sent: new Date(t).toISOString(), seconds, ...extra });
     // Newest first, as logged; one replay; one from last season.
     await env.DB.put('alerts:latency', JSON.stringify([row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' })]));
+    const d = (channel: string, acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ channel, accession: acc, form: '13F-HR', manager: 'Warren Buffett', accepted: new Date(t - seconds * 1000).toISOString(), delivered: new Date(t).toISOString(), seconds, ...extra });
+    await env.DB.put('alerts:latency:ch', JSON.stringify([d('slack', 'A1', 41), d('slack', 'A3', 61), d('slack', 'A2', 101, { form: '4' }), d('discord', 'A1', 43), d('slack', 'OLD', 9, { delivered: '2025-01-02T00:00:00Z' })]));
     const lat = await (await call('/latency')).json();
-    expect(lat).toMatchObject({ count: 3, median_seconds: 60, p95_seconds: 100 });
+    expect(lat).toMatchObject({ count: 3, median_seconds: 60, p90_seconds: 100, p95_seconds: 100 });
+    // Per form family and per channel (email: acceptance to the mailer; chat: to the first successful post), this season only.
+    expect(lat.by_form).toEqual({ '13F': { count: 2, median_seconds: 40, p90_seconds: 60 }, 'Form 4': { count: 1, median_seconds: 100, p90_seconds: 100 } });
+    expect(lat.by_channel).toEqual({ email: { count: 3, median_seconds: 60, p90_seconds: 100 }, slack: { count: 3, median_seconds: 61, p90_seconds: 101 }, discord: { count: 1, median_seconds: 43, p90_seconds: 43 } });
+    expect(lat.recent.map((r: { accession: string }) => r.accession)).toEqual(['A1', 'A2', 'A3']);
+    expect(lat.recent[1]).toEqual({ form: '4', manager: 'Warren Buffett', slug: 'warren-buffett', accession: 'A2', accepted_at: expect.any(String), delivered_at: expect.any(String), seconds: 100, channel: 'email' });
     expect(lat.alerts.map((a: { accession: string }) => a.accession)).toEqual(['A1', 'A2', 'A3']);
     expect(lat.alerts[1]).toMatchObject({ form: '4', gap_seconds: 100, manager: 'Warren Buffett' });
     expect(lat.alerts[0].form).toBe('13F-HR');

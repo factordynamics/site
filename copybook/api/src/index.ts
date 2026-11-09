@@ -2,7 +2,7 @@ import { type AlertEvent, deliverTo, recentFeed, resolveFollowedFilers, runSched
 import { fetchHistory, historyCsv, holdersCsv, shard, SHARD_KEY, SLUG } from './data';
 import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } from './v1data';
 import { verifyGithubOidc } from './oidc';
-import { channelScope, channelsView, failView, clearSeatDuplicates, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
+import { type ChannelDelivery, channelScope, channelsView, failView, clearSeatDuplicates, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
 import { handleV1 } from './v1';
 
@@ -112,23 +112,50 @@ function seasonOf(t: number): { season: string; from: number } {
 }
 
 /** Season median and p95 of acceptance-to-send seconds, plus each live alert, newest first. */
-export function latencyReport(log: LatencyRow[], now: number) {
+/** Median and p90 of a list of seconds (nearest rank), with the count. */
+function nearest(xs: number[], p: number): number | null {
+  const sorted = [...xs].sort((a, b) => a - b);
+  return sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null;
+}
+function spread(xs: number[]) {
+  return { count: xs.length, median_seconds: nearest(xs, 0.5), p90_seconds: nearest(xs, 0.9) };
+}
+
+/**
+ * The public speed numbers for this filing season, live alerts only (replays excluded). Email is
+ * acceptance to handing the alert to the mailer; chat, webhook and feed are acceptance to the
+ * channel's first successful post (KV alerts:latency:ch).
+ */
+export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = []) {
   const { season, from } = seasonOf(now);
   const rows = log.filter((l) => !l.replay && Date.parse(l.sent) >= from);
-  const sorted = rows.map((l) => l.seconds).sort((a, b) => a - b);
-  const q = (p: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null);
+  const chRows = ch.filter((c) => Date.parse(c.delivered) >= from);
+  const all = spread(rows.map((l) => l.seconds));
   const FORM: Record<string, string> = { '13f': '13F-HR', form4: '4', '13d': 'SC 13D', '13g': 'SC 13G' };
+  const formOf = (l: LatencyRow) => l.form ?? FORM[l.kind ?? '13f'] ?? 'other';
+  // Form families as the page shows them: 13F-HR (and /A), Form 4, Schedule 13D, Schedule 13G.
+  const family = (f: string) => (/^13F/.test(f) ? '13F' : /^4/.test(f) ? 'Form 4' : /13D/.test(f) ? '13D' : /13G/.test(f) ? '13G' : 'other');
+  const group = <T,>(xs: T[], key: (x: T) => string, secs: (x: T) => number) => {
+    const g: Record<string, number[]> = {};
+    for (const x of xs) (g[key(x)] ??= []).push(secs(x));
+    return Object.fromEntries(Object.entries(g).map(([k, v]) => [k, spread(v)]));
+  };
   return {
     ok: true,
     season,
-    median_seconds: q(0.5),
-    p95_seconds: q(0.95),
-    count: sorted.length,
+    since: new Date(from).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+    median_seconds: all.median_seconds,
+    p90_seconds: all.p90_seconds,
+    p95_seconds: nearest(rows.map((l) => l.seconds), 0.95),
+    count: all.count,
+    by_form: group(rows, (l) => family(formOf(l)), (l) => l.seconds),
+    by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },
+    recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
     alerts: rows.map((l) => ({
       slug: l.slug,
       manager: l.manager ?? null,
       quarter: l.quarter ?? null,
-      form: l.form ?? FORM[l.kind ?? '13f'] ?? null,
+      form: formOf(l),
       accession: l.accession,
       accepted_at: l.accepted,
       sent_at: l.sent,
@@ -211,7 +238,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // Public alert latency for the methodology page: this filing season's live alerts, replays excluded.
   if (req.method === 'GET' && path === '/latency') {
     const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
-    return json(latencyReport(log, Date.now()), 200, { ...h, 'cache-control': 'public, max-age=60' });
+    const ch = JSON.parse((await env.DB.get('alerts:latency:ch')) ?? '[]') as ChannelDelivery[];
+    return json(latencyReport(log, Date.now(), ch), 200, { ...h, 'cache-control': 'public, max-age=60' });
   }
 
   // Support fixes to a member's follows (e.g. restoring lost names), through the same serialized path

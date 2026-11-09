@@ -263,6 +263,42 @@ const CHAT_BACKOFF_MIN = [1, 5, 15];
  * Sends one member's alerts to their chat destinations; returns a status per destination. A 429 or
  * 5xx (or no answer) is retried with backoff; a revoked or deleted destination flags it at once.
  */
+/**
+ * Acceptance-to-delivery per channel for the public /latency page: the first successful post of each
+ * alert to each channel in this fan-out (first attempts; a delivery that needed a retry isn't timed).
+ * Collected in memory and written once per fan-out by flushChannelLatency.
+ */
+export interface ChannelDelivery {
+  channel: 'slack' | 'discord' | 'telegram' | 'webhook' | 'feed';
+  accession: string;
+  form: string;
+  manager: string | null;
+  accepted: string;
+  delivered: string;
+  seconds: number;
+}
+const timed: ChannelDelivery[] = [];
+
+function noteDelivered(channel: ChannelDelivery['channel'], filings: Alert13F[], events: AlertEvent[]): void {
+  const at = Date.now();
+  const rows = [
+    ...filings.filter((a) => !a.followup).map((a) => ({ accession: a.accession, form: a.reveal ? '13F-HR/A' : '13F-HR', manager: a.manager, accepted: a.accepted })),
+    ...events.filter((e) => !e.followup && !e.late).map((e) => ({ accession: e.id, form: e.form, manager: e.manager, accepted: e.accepted ?? e.accepted_at })),
+  ];
+  for (const r of rows) {
+    if (!r.accepted || timed.some((t) => t.channel === channel && t.accession === r.accession)) continue;
+    timed.push({ channel, accession: r.accession, form: r.form, manager: r.manager || null, accepted: r.accepted, delivered: new Date(at).toISOString(), seconds: Math.round((at - Date.parse(r.accepted)) / 1000) });
+  }
+}
+
+/** Saves this fan-out's channel timings (KV alerts:latency:ch, newest first). A replay's are dropped. */
+export async function flushChannelLatency(env: Env, save: boolean): Promise<void> {
+  const add = timed.splice(0).filter((t) => t.seconds >= 0);
+  if (!save || !add.length) return;
+  const log = JSON.parse((await env.DB.get('alerts:latency:ch')) ?? '[]') as ChannelDelivery[];
+  await env.DB.put('alerts:latency:ch', JSON.stringify([...add, ...log].slice(0, 3000)));
+}
+
 export async function sendChats(env: Env, customer: string, c: Channels, filings: Alert13F[], events: AlertEvent[], f: Follows, now: number, posted = new Set<string>()): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   if (!c.discord && !c.slack && !c.telegram) return out;
@@ -285,6 +321,7 @@ export async function sendChats(env: Env, customer: string, c: Channels, filings
     const r = await sendChat(c, dest, text);
     if (!r) continue;
     out[dest] = r.status;
+    if (/^2\d\d$/.test(r.status)) noteDelivered(dest, fl, ev);
     const next = await settle(env, { customer, id, dest, body: text, attempt: 1, next_at: 0 }, r, now, CHAT_BACKOFF_MIN);
     if (next) retries.push(next);
   }
@@ -405,6 +442,7 @@ export async function sendWebhooks(env: Env, m: Member, c: Channels, filings: Al
     posted.add(`${c.webhook.url}|${p.id}`);
     const r = await sendWebhook(c, p.id, p.body);
     if (!r) continue;
+    if (/^2\d\d$/.test(r.status)) noteDelivered('webhook', filings.filter((a) => p.id.startsWith(a.accession)), events.filter((e) => p.id.startsWith(e.id)));
     const next = await settle(env, { customer: m.customer, id: p.id, body: p.body, attempt: 1, next_at: 0 }, r, now, BACKOFF_MIN);
     if (next) failed.push(next);
   }
@@ -447,6 +485,7 @@ export async function addToFeed(env: Env, m: Member, c: Channels, filings: Alert
   const items = JSON.parse((await env.DB.get(key)) ?? '[]') as FeedItem[];
   const add = feedItems(env, filings, events, now).filter((i) => !items.some((x) => x.id === i.id));
   if (add.length) await env.DB.put(key, JSON.stringify([...add, ...items].slice(0, 50)));
+  noteDelivered('feed', filings, events);
 }
 
 const xml = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[ch]!);
