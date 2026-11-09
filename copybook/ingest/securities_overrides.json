@@ -135,6 +135,11 @@
    "ticker": "WBS",
    "name": "Webster Financial",
    "sector": "Financials"
+  },
+  "881624209": {
+   "ticker": "TEVA",
+   "name": "Teva Pharmaceutical Industries",
+   "sector": "Health Care"
   }
  },
  "by_ticker": {

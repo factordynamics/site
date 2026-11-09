@@ -41,6 +41,7 @@ FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "val
 SECS: dict[str, dict] = {}
 PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
+SMART = {"hedge_fund", "active"}  # filer_types.json smart_money
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
 CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied price over every filer
 FIXED = [0]
@@ -212,18 +213,20 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     index, keep, written = {}, set(), set()
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change"]
     for code, hs in per.items():
-        rows, counts = [], {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
-                            "no_prior": 0, "by_period": {}}
+        blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
+                         "no_prior": 0, "by_period": {}}
+        rows, counts, smart = [], blank(), blank()  # smart: hedge_fund + active filers only
         for cik, (sh, ps, v, pv, known) in hs.items():
             change = None
             if known:
                 change = ("exited" if sh <= 0 else "new" if ps <= 0 else "added" if sh > ps + 0.5
                           else "trimmed" if sh < ps - 0.5 else "unchanged")
             q = PERIOD.get(cik) or meta[cik].get("quarter")
-            if sh > 0:
-                counts["holders"] += 1
-                counts["by_period"][q] = counts["by_period"].get(q, 0) + 1
-            counts[change or "no_prior"] += 1
+            for c in (counts, smart) if (types.get(cik) or {}).get("type") in SMART else (counts,):
+                if sh > 0:
+                    c["holders"] += 1
+                    c["by_period"][q] = c["by_period"].get(q, 0) + 1
+                c[change or "no_prior"] += 1
             m = curated.get(cik) or filers.get(cik) or {}
             rows.append([cik, meta[cik].get("name"), m.get("slug"), (types.get(cik) or {}).get("type"), cik in curated,
                          q, round(sh), round(ps) if known else None, round(v), round(pv) if known else None, change])
@@ -234,7 +237,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         for t in tickers:
             index.setdefault(t, code)
         name = f"{code}.json"
-        body = {"issuer": code, "tickers": tickers, "counts": counts, "columns": cols, "rows_total": len(rows)}
+        body = {"issuer": code, "tickers": tickers, "counts": counts, "smart": smart, "columns": cols,
+                "rows_total": len(rows)}
         written.add(name)
         write(full / name, {**body, "rows": rows})
         if tickers:

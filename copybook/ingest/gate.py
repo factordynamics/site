@@ -77,6 +77,13 @@ def holder_counts(data: Path, books: dict[str, dict]) -> list[str]:
 
 
 def book_totals(hist: Path) -> list[str]:
+    """Quarters merged from more than one filing of the same filer that look double-counted.
+
+    The cover check needs a merge: a single filing's book is that filing (some covers are in
+    thousands or simply wrong), and a combined book (combined_with) sums another filer's filing.
+    A jump after an amendment fails only when the positions themselves doubled (median share
+    ratio against the prior quarter), so a genuine large addition (Invesco 2025Q4) passes.
+    """
     bad = []
     for folder in sorted(hist.glob("*")) if hist.exists() else []:
         qs = {}
@@ -86,14 +93,21 @@ def book_totals(hist: Path) -> list[str]:
             except ValueError:
                 continue
         for name, q in qs.items():
+            merged = any(f.get("role") == "addition" for f in q.get("filings") or [])
+            if not merged or q.get("combined_with"):
+                continue
             total, cover = q.get("total_value") or 0, q.get("cover_total") or 0
             if cover and total > 1.5 * cover:
                 bad.append(f"{folder.name} {name} ${total / 1e9:.1f}B vs filed ${cover / 1e9:.1f}B")
                 continue
             prev = qs.get(q.get("prev_quarter") or "")
-            merged = any(f.get("role") == "addition" for f in q.get("filings") or [])
-            if merged and prev and prev.get("total_value") and total > 1.5 * prev["total_value"]:
-                bad.append(f"{folder.name} {name} ${total / 1e9:.1f}B after an amendment vs ${prev['total_value'] / 1e9:.1f}B")
+            if not (prev and prev.get("total_value") and total > 1.5 * prev["total_value"]):
+                continue
+            ratios = sorted(h["shares"] / h["prev_shares"] for h in q.get("holdings") or []
+                            if not h.get("put_call") and h.get("shares") and h.get("prev_shares"))
+            if ratios and ratios[len(ratios) // 2] > 1.6:
+                bad.append(f"{folder.name} {name} ${total / 1e9:.1f}B after an amendment vs ${prev['total_value'] / 1e9:.1f}B, "
+                           f"median position x{ratios[len(ratios) // 2]:.2f}")
     return bad
 
 
