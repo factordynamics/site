@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Arrow, Button, Check, Panel } from '../components/ui'
 import { api, plans, TRIAL_DAYS, trialTerms } from '../config'
 import { attributed } from '../lib/attribution'
+import { gapLabel, loadLatency } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
 import { loadCoverage } from '../lib/stocks'
 
@@ -26,11 +27,11 @@ function Hero({ kicker, title, sub, cta, note }: { kicker: string; title: ReactN
   )
 }
 
-function Facts({ items }: { items: [string, string][] }) {
+function Facts({ items }: { items: [string, ReactNode][] }) {
   return (
     <dl className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-3">
       {items.map(([v, l]) => (
-        <div key={l} className="bg-card p-5 md:p-6">
+        <div key={v} className="bg-card p-5 md:p-6">
           <dt className="sr-only">{l}</dt>
           <dd className="num text-[26px] font-semibold tracking-[-0.03em]">{v}</dd>
           <dd className="mt-1 text-[13.5px] text-ink-2">{l}</dd>
@@ -95,6 +96,9 @@ export function ForFunds() {
   useTitle('Copybook for investment teams · Copy Fund')
   const cov = useAsync(loadCoverage, [])
   const filers = cov.data?.filers ? cov.data.filers.toLocaleString('en-US') : '8,900+'
+  // The speed claim shows the live median once real alerts have gone out, and links to the log.
+  const lat = useAsync(loadLatency, [])
+  const median = lat.data?.count ? lat.data.median_seconds : null
   const cta = (
     <Button to="/contact/?topic=fund" size="md">
       Request Fund access <Arrow />
@@ -105,12 +109,14 @@ export function ForFunds() {
       <Hero
         kicker="Copy Fund · for investment teams"
         title="Know who owns what you own."
-        sub="Your book next to every 13F filer: who is crowding into your names, who is leaving, and how the funds you benchmark against are positioned. Five seats, shared lists, alerts in Slack, and an annual invoice."
+        sub="Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. Five seats, shared lists, alerts in Slack, and an annual invoice."
         cta={cta}
         note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 on request."
       />
 
-      <Facts items={[[`${filers}`, '13F filers covered, the latest filing of each'], ['Minutes', 'from EDGAR acceptance to your Slack, for the funds you follow'], ['Form 4 · 13D/G', 'insider and activist filings on your names, between 13Fs']]} />
+      <Facts items={[[`${filers}`, '13F filers covered, the latest filing of each'], median != null
+            ? [`${gapLabel(median)}`, <>median from EDGAR acceptance to alert this season, <Link to="/methodology/#latency" className="text-accent hover:text-accent-2">every alert logged</Link></>]
+            : ['As filed', 'alerts sent as filings hit EDGAR, for the funds you follow'], ['Form 4 · 13D/G', 'insider and activist filings on your names, between 13Fs']]} />
 
       <Shot
         src="my-book-example.webp"
@@ -124,7 +130,7 @@ export function ForFunds() {
           ['My book', 'Paste tickers, upload a broker CSV or link your fund’s own 13F. Every name shows how many funds hold it, how many have it in their top 10, and who bought and sold this season.'],
           ['Peer overlap', 'Pick up to 12 funds you benchmark against. See how much of their books overlap, the names they share, and what each did in yours.'],
           ['5 seats, shared lists', 'Each colleague signs in with their own email and keeps their own alert settings. Follows, the watchlist, the owned book and peers are shared.'],
-          ['Alerts in Slack', 'Every filing from the funds you follow, posted to your team channel minutes after EDGAR accepts it, with new, added, trimmed and exited positions inside.'],
+          ['Alerts in Slack', 'Every filing from the funds you follow, posted to your team channel as the filing hits EDGAR, with new, added, trimmed and exited positions inside.'],
           ['Insider and 13D alerts', 'Open-market insider buys over your threshold, cluster buys, and any filer’s new 13D on the stocks you own or watch.'],
           ['Invoice and W-9', 'Annual plan invoiced net 30, with a W-9 on request. Or start on a card with a 14-day trial.'],
         ]}

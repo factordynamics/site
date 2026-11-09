@@ -90,7 +90,7 @@ export function FundSetup({ member, welcome }: { member: Member; welcome?: boole
         {steps.map((s, i) => (
           <li key={s.title} className="flex flex-wrap items-center gap-x-4 gap-y-3 py-4 first:pt-0 last:pb-0">
             <span
-              className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${s.done ? 'bg-up text-white' : 'text-ink-2 shadow-[0_0_0_1px_var(--color-line-2)]'}`}
+              className={`num inline-flex size-7 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold ${s.done ? 'bg-up text-white' : i === next ? 'bg-accent text-white' : 'border-2 border-ink-3/70 bg-card text-ink-2'}`}
               aria-label={s.done ? 'Done' : `Step ${i + 1}`}
             >
               {s.done ? <Check className="size-3.5" /> : i + 1}

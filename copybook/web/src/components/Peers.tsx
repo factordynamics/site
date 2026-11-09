@@ -38,7 +38,7 @@ export function Peers({ names, shared }: { names: string[]; shared?: boolean }) 
   )
   const books = useMemo(() => (same && mixed ? (aligned.data ?? []).filter((f): f is ManagerFile => f !== null) : loaded), [same, mixed, aligned.data, loaded])
   const leftOut = same && mixed && aligned.data ? loaded.filter((b) => !books.some((x) => x.slug === b.slug)) : []
-  const held = same && mixed ? current.filter((b) => b.quarter !== target) : []
+  const setAside = same && mixed ? current.filter((b) => b.quarter !== target) : []
   const idx = useAsync(loadStockIndex, [])
   // Your tickers plus their other share classes from the stock index (BRK.B also matches BRK.A).
   const mine = useMemo(() => {
@@ -130,7 +130,7 @@ export function Peers({ names, shared }: { names: string[]; shared?: boolean }) 
           {same ? (
             <>
               All compared on <span className="font-medium text-ink">{quarterLabel(target)}</span>, the latest quarter every peer has filed.
-              {held.length > 0 && ` ${held.map((b) => b.manager).join(' and ')} ${held.length === 1 ? 'has' : 'have'} filed ${quarterLabel(newest)}; ${held.length === 1 ? 'that book is' : 'those books are'} set aside until the rest file.`}
+              {setAside.length > 0 && ` ${setAside.map((b) => b.manager).join(' and ')} ${setAside.length === 1 ? 'has' : 'have'} filed ${quarterLabel(newest)}; ${setAside.length === 1 ? 'that book is' : 'those books are'} set aside until the rest file.`}
               {leftOut.length > 0 && ` Left out: ${leftOut.map((b) => `${b.manager} (${b.quarter ? `latest 13F ${quarterLabel(b.quarter)}` : 'no 13F'}${b.quarter === target || b.quarter === newest ? `, ${quarterLabel(target)} not on file` : ''})`).join(', ')}.`}
             </>
           ) : (
@@ -168,7 +168,12 @@ export function Peers({ names, shared }: { names: string[]; shared?: boolean }) 
                               <Monogram name={b.manager} size={24} />
                               <span className="truncate">{b.manager}</span>
                             </Link>
-                            {b.quarter && <span className="ml-8 block text-[12px] text-ink-3">{quarterLabel(b.quarter)}</span>}
+                            {b.quarter && (
+                              <span className="ml-8 block text-[12px] text-ink-3">
+                                {quarterLabel(b.quarter)}
+                                {setAside.some((x) => x.slug === b.slug) && <span className="text-accent-2"> · {quarterLabel(newest)} set aside</span>}
+                              </span>
+                            )}
                           </td>
                           <td className="num px-3 py-3 text-right">
                             {new Set(held.map(issuer)).size} <span className="text-ink-3">of {count}</span>
