@@ -87,6 +87,62 @@ def reviewed_types(data: Path) -> list[str]:
             for c, v in sorted(cases.items()) if c in got and got[c].get("type") != v["type"]]
 
 
+def split_rows(data: Path, bs: dict[str, dict]) -> list[str]:
+    """Rows that carry `split` with an unadjusted prior (prev_shares must be prev_shares_as_filed x ratio),
+    and share rows in a stock with a split on file whose implied price moved by about the split ratio
+    without one: an unapplied split shown as a trade (Egerton APH +$492.5M, really +$82M)."""
+    import math
+
+    p = data / "splits.json"
+    table: dict[str, dict[str, float]] = {}
+    for s in (json.loads(p.read_text()).get("splits") if p.exists() else None) or []:
+        table.setdefault(s["cusip"], {})[s["to_quarter"]] = s["ratio"]
+    bad = []
+    for slug, b in bs.items():
+        for h in b.get("holdings") or []:
+            name = f"{slug} {h.get('ticker') or h.get('cusip')}"
+            sp = h.get("split") or {}
+            if sp.get("ratio") not in (None, 1, 1.0):
+                filed = h.get("prev_shares_as_filed")
+                if filed is None or abs((h.get("prev_shares") or 0) - filed * sp["ratio"]) > 1:
+                    bad.append(f"{name}: split x{sp['ratio']} but prev_shares {h.get('prev_shares')} (as filed {filed})")
+                continue
+            k = table.get(h.get("cusip") or "", {}).get(b.get("quarter") or "")
+            if not k or h.get("put_call") or h.get("shares_type", "SH") == "PRN" or h.get("change") not in ("added", "trimmed"):
+                continue
+            s, v, ps, pv = h.get("shares") or 0, h.get("value") or 0, h.get("prev_shares") or 0, h.get("prev_value") or 0
+            if min(s, v, ps, pv) <= 0:
+                continue
+            moved = math.log((v / s) / (pv / ps))
+            if abs(moved + math.log(k)) < min(abs(moved), math.log(1.25)):
+                bad.append(f"{name}: value per share moved {math.exp(moved):.2f}x, about 1/{k:g}, with no split applied")
+    return bad
+
+
+def blank_accepted(data: Path) -> tuple[int, int, list[str]]:
+    """hl/ holder rows (hlf/ when present: every holder) with an accession but no accepted_at:
+    (blank rows, rows with an accession, examples). Files from before the column existed are skipped."""
+    folder = data / "hlf" if (data / "hlf").exists() else data / "hl"
+    blank = total = 0
+    curated_blank: list[str] = []
+    for f in folder.glob("*.json"):
+        if f.name == "index.json":
+            continue
+        doc = json.loads(f.read_text())
+        cols = doc.get("columns") or []
+        if "accepted_at" not in cols:
+            continue
+        ai, ti, ci, ni = cols.index("accession"), cols.index("accepted_at"), cols.index("curated"), cols.index("name")
+        for r in doc.get("rows") or []:
+            if r[ai]:
+                total += 1
+                if not r[ti]:
+                    blank += 1
+                    if r[ci]:
+                        curated_blank.append(f"{r[ni]} {r[ai]}")
+    return blank, total, sorted(set(curated_blank))
+
+
 def book_totals(hist: Path) -> list[str]:
     """Quarters merged from more than one filing of the same filer that look double-counted.
 
@@ -177,6 +233,18 @@ def main() -> int:
     if wrong:
         print(f"::error::Filer types differ from the reviewed cases: {'; '.join(wrong[:20])}; not publishing.")
         failed = True
+    unsplit = split_rows(data, after)
+    if unsplit:
+        print(f"::error::Split not applied: {'; '.join(unsplit[:20])}; not publishing.")
+        failed = True
+    blank, total, curated_blank = blank_accepted(data)
+    if total:
+        print(f"gate: accepted_at blank on {blank} of {total} holder rows with an accession")
+    if curated_blank:  # curated books always know their filing's acceptance time
+        print(f"::error::accepted_at missing on curated holder rows: {'; '.join(curated_blank[:20])}; not publishing.")
+        failed = True
+    elif blank:  # other filers: accepted.py backfills under a time budget and continues next run
+        print(f"::warning::accepted_at missing on {blank} of {total} holder rows; accepted.py fills them next run")
     doubled = book_totals(data / "h")
     if doubled:
         print(f"::error::Books larger than their filings: {'; '.join(doubled[:20])}; not publishing.")

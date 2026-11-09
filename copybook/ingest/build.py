@@ -506,6 +506,8 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 
 
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book")
+# Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
+STALE = ("split", "prev_shares_as_filed", "suspect_units", "prev_cusip", "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
 
@@ -591,6 +593,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         return out
 
     for h in latest["holdings"]:
+        h = {f: v for f, v in h.items() if f not in STALE}
         k = (h["cusip"], h["put_call"] or "")
         p = before.pop(k, None) or before.pop(renamed.get(k), None)
         if p is not None and p["cusip"] != h["cusip"]:

@@ -38,6 +38,9 @@ WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
 PATH = DATA / "splits.json"
 MIN_HOLDERS = 5
+# A split on file is only dropped by a run that saw this many filers in both quarters (a full run).
+# Curated runs see a few hundred and would drop real splits (APH, MNST, SFBS 2026Q3) for lack of holders.
+FULL_PAIRS = 3000
 MIN_EXACT = 5  # holders at exactly k
 RATIOS = sorted({2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 100, 1.5, 2.5,
                  *(1 / k for k in (2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 100)), 2 / 3})
@@ -152,7 +155,11 @@ def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], iss
     checked = doc.setdefault("checked", {})
     for (q_from, q_to), pairs in sorted(transitions.items()):
         found = detect(list(pairs.values()))
-        for key in [k for k in known if k[1] == q_to and k[0] not in found]:  # re-checked under today's rule
+        stale = [k for k in known if k[1] == q_to and k[0] not in found]
+        if stale and len(pairs) < FULL_PAIRS:
+            print(f"splits: {q_to} kept {len(stale)} on file not seen in {len(pairs)} filer pairs (a full run rechecks)")
+            stale = []
+        for key in stale:  # re-checked under today's rule
             print(f"splits: {known[key].get('ticker') or key[0]} {q_to} no longer meets the rule; dropped")
             checked[f"{key[0]}:{q_to}"] = "dropped"
             del known[key]

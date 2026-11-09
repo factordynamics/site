@@ -11,9 +11,14 @@
 - hl/{issuer}.json: every 13F filer holding an issuer in its latest full book (moves.py hlf/)
 
 Auth is the GitHub Actions OIDC token (audience copybook-api); no stored secret.
-A manifest of SHA-256 hashes (COPYBOOK_H_MANIFEST) records what R2 already has,
-so each run only sends what changed, as tar bundles (PUT /ingest/bundle, up to 500 files
-each), never one request per file. Exits non-zero when a required key is refused or fails.
+The API base is read from API_JSON (field `api`) at the start of each run, because the self-hosted
+API's tunnel URL can change; COPYBOOK_API overrides it, and FALLBACK is used when neither answers.
+A manifest of SHA-256 hashes (COPYBOOK_H_MANIFEST) records what the API's store already has, under
+TARGET: a manifest written for another store is discarded, so everything is sent again once.
+Each run sends only what changed, curated h/ first, then hl/, then fb/, then the rest, as tar
+bundles (PUT /ingest/bundle) one at a time, at most 100 files or 20 MB each, never one request per
+file. A failed bundle is retried once after 30 s; a second failure stops the run (non-zero exit),
+as does a refused required key. UPLOAD_BUDGET_S stops cleanly; the next run continues.
 """
 
 from __future__ import annotations
@@ -34,7 +39,10 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 HIST = WEB / "data" / "h"
-API = os.environ.get("COPYBOOK_API", "https://copybook-api.factordynamics.workers.dev").rstrip("/")
+API_JSON = "https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/api.json"
+FALLBACK = "https://gene.tail70ba3.ts.net/copybook"  # Tailscale Funnel: slow, but stable
+TARGET = os.environ.get("COPYBOOK_UPLOAD_TARGET", "gene-2026-11-09")  # the store the manifest describes
+UPLOAD_BUDGET_S = float(os.environ.get("COPYBOOK_UPLOAD_BUDGET_S") or 3600)
 MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-manifest.json"))
 BUILD = json.loads((HIST.parent / "build.json").read_text()) if (HIST.parent / "build.json").exists() else {}  # names R2 objects
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
@@ -43,8 +51,9 @@ KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|i
 # Keys the Worker may not accept yet: a failure warns instead of failing the run,
 # and the rest of that kind are skipped until the next run.
 OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/")
-BUNDLE_ENTRIES = 500  # PUT /ingest/bundle limits: 500 entries, 90 MB
-BUNDLE_BYTES = 85_000_000
+BUNDLE_ENTRIES = 100  # the self-hosted API's rate limit: 100 entries or 20 MB per bundle, one at a time
+BUNDLE_BYTES = 20_000_000
+ORDER = ("h/", "hl/", "fb/")  # sent first, in this order
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
 USER_AGENT = "Copybook-ingest/1.0 (+https://copybook.factordynamics.com)"
@@ -75,9 +84,26 @@ class Token:
         return self.value
 
 
+def api_base() -> str:
+    if os.environ.get("COPYBOOK_API"):
+        return os.environ["COPYBOOK_API"].rstrip("/")
+    try:
+        req = Request(f"{API_JSON}?t={int(time.time())}", headers={"User-Agent": USER_AGENT})
+        with urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())["api"].rstrip("/")
+    except Exception as e:  # noqa: BLE001
+        print(f"::warning::{API_JSON} unreadable ({e}); using {FALLBACK}", flush=True)
+        return FALLBACK
+
+
 def main() -> int:
+    global API
+    API = api_base()
     manifest = json.loads(MANIFEST.read_text()) if MANIFEST.exists() else {}
+    if manifest.get("_target") != TARGET:  # written for another store: it has none of this yet
+        manifest = {"_target": TARGET}
     token = Token()
+    started = time.monotonic()
     root = HIST.parent
     sources: dict[str, Path] = {}
     for pattern in ("h/*/*.json", "h/*/*.csv", "v/*/*.json", "changes/*.json", "fb/*/*.json", "s/*.json",
@@ -95,10 +121,16 @@ def main() -> int:
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             if manifest.get(key) != digest:
                 todo.append((key, path, digest))
-    print(f"upload: {len(todo)} new or changed of {len(files)} files, in bundles of up to {BUNDLE_ENTRIES}", flush=True)
+    rank = lambda key: next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
+    todo.sort(key=lambda t: (rank(t[0]), t[0]))
+    print(f"upload: {len(todo)} new or changed of {len(files)} files to {API}, one bundle at a time of up to "
+          f"{BUNDLE_ENTRIES} files / {BUNDLE_BYTES / 1e6:.0f} MB", flush=True)
     sent = 0
     try:
         for batch in bundles(todo):
+            if time.monotonic() - started > UPLOAD_BUDGET_S:
+                print(f"::warning::upload budget reached; {len(todo) - sent} files wait for the next run", flush=True)
+                break
             written, refused = put_bundle(batch, token)
             for key, _, digest in batch:
                 if key in written:
@@ -141,8 +173,8 @@ def put_bundle(batch: list[tuple[str, Path, str]], token: Token) -> tuple[set[st
             info.size, info.mtime = len(body), 0
             tar.addfile(info, io.BytesIO(body))
     body = buf.getvalue()
-    last = ""
-    for attempt in range(5):
+    last, failures = "", 0
+    for attempt in range(3):
         req = Request(f"{API}/ingest/bundle", data=body, method="PUT", headers={
             "Authorization": "Bearer " + token.get(), "Content-Type": "application/x-tar", "User-Agent": USER_AGENT,
             "x-copybook-build-id": BUILD.get("build_id") or "", "x-copybook-built-at": BUILD.get("data_built_at") or ""})
@@ -154,16 +186,16 @@ def put_bundle(batch: list[tuple[str, Path, str]], token: Token) -> tuple[set[st
         except HTTPError as e:
             last = f"HTTP {e.code}: {e.read()[:200].decode('utf-8', 'replace')}"
             if e.code == 401 and attempt == 0:
-                token.value = ""
+                token.value = ""  # a stale token: refresh once, not counted as the retry
                 continue
             if e.code < 500 and e.code != 429:
                 break
-            wait = int(e.headers.get("retry-after") or 0) if e.code == 429 else 0
-            time.sleep(max(wait, 5 * (attempt + 1)))
-            continue
-        except URLError as e:
+        except (URLError, TimeoutError, OSError) as e:
             last = str(e)
-        time.sleep(5 * (attempt + 1))
+        failures += 1
+        if failures > 1:
+            break
+        time.sleep(30)  # one retry after 30 s, then the run stops
     raise RuntimeError(f"bundle of {len(batch)} files ({len(body) / 1e6:.1f} MB) failed: {last}")
 
 

@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from ingest import build
@@ -154,7 +155,34 @@ class MoveMathTest(unittest.TestCase):
         rows = build.with_changes(cur, prev)
         self.assertEqual([r["change"] for r in rows], ["added"])
         self.assertEqual(rows[0]["prev_cusip"], "30231G102")
-        self.assertLess(rows[0]["value_delta"], 0.1e9)
+        # Fisher's XOM: the trade is the share change at Q3's price (+465,409 sh x $162.75 = +$75.7M),
+        # not the change in reported value ($5.20B - $4.30B = +$894.9M, mostly the price move).
+        self.assertEqual(rows[0]["share_change"], 465409)
+        self.assertAlmostEqual(rows[0]["value_delta"], 465409 * 5197180970 / 31933523, delta=1)
+
+    def test_stale_split_field_is_not_kept(self):
+        prev = {"quarter": "2026Q2", "holdings": [self.row("037833100", "AAPL", 100, 20000)]}
+        stale = self.row("037833100", "AAPL", 120, 25000) | {
+            "split": {"ratio": 2.0, "from_quarter": "2026Q2", "to_quarter": "2026Q3"}, "prev_shares_as_filed": 100}
+        rows = build.with_changes({"quarter": "2026Q3", "holdings": [stale]}, prev)
+        self.assertNotIn("split", rows[0])
+        self.assertEqual((rows[0]["prev_shares"], rows[0]["change"]), (100, "added"))
+
+    def test_gate_refuses_unapplied_split(self):
+        import tempfile
+        from pathlib import Path as P
+        from ingest import gate
+        with tempfile.TemporaryDirectory() as d:
+            (P(d) / "splits.json").write_text(json.dumps({"splits": [{"cusip": "032095101", "to_quarter": "2026Q3", "ratio": 2.0}]}))
+            aph = self.row("032095101", "APH", 10708713, 902.6e6) | {"change": "added", "prev_value": 820.3e6}
+            split = {"ratio": 2.0, "from_quarter": "2026Q2", "to_quarter": "2026Q3"}
+            ok = aph | {"prev_shares": 9733376, "prev_shares_as_filed": 4866688, "split": split}
+            unadjusted = aph | {"prev_shares": 4866688, "prev_shares_as_filed": 4866688, "split": split}
+            unmarked = aph | {"prev_shares": 4866688}  # Egerton's APH as first published: +$492.5M
+            book = lambda h: {"egerton": {"quarter": "2026Q3", "holdings": [h]}}
+            self.assertEqual(gate.split_rows(P(d), book(ok)), [])
+            self.assertEqual(len(gate.split_rows(P(d), book(unadjusted))), 1)
+            self.assertEqual(len(gate.split_rows(P(d), book(unmarked))), 1)
 
     def test_preferred_is_not_the_common(self):
         prev = {"quarter": "2026Q2", "holdings": [self.row("060505682", "BAC", 5, 50, "7.25%CNV PFD L")]}

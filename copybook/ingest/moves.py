@@ -42,6 +42,14 @@ FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "val
 SECS: dict[str, dict] = {}
 PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
+FILING: dict[str, dict] = {}  # cik -> the filing behind its LATEST book (accession, filing_date, accepted_at)
+ACCEPTED: dict[str, str] = {}  # accession -> EDGAR acceptance time (accepted.py)
+
+
+def filing(b: dict) -> dict:
+    acc = b.get("accession")
+    return {"accession": acc, "filing_date": b.get("filing_date"),
+            "accepted_at": b.get("accepted_at") or ACCEPTED.get(acc or "")}
 # Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
 LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
 PREFERRED = re.compile(r"\bPFD\b|\bPREF|\bDEP(OSITARY)?\b|\bNOTE|%|\bWT\b|\bWARRANT|\bRIGHT|\*W\b|\bW EXP\b")
@@ -143,9 +151,11 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
         if prev is not None:
             LATEST[shard["cik"]] = [h | {"change": None, "prev_shares": None, "prev_value": None} for h in prev["holdings"]]
             PERIOD[shard["cik"]] = pq
+            FILING[shard["cik"]] = filing(prev)
         return None
     if prev is None:  # holdings only: still counted as holders, with no change
         LATEST[shard["cik"]] = [h | {"change": None, "prev_shares": None, "prev_value": None} for h in cur["holdings"]]
+        FILING[shard["cik"]] = filing(cur | {k: shard[k] for k in ("accession", "filing_date", "accepted_at") if shard.get(k)})
         return None
     rows = build.with_changes(cur, prev)
     odd = {(h["cusip"], h["put_call"] or "") for h in cur["holdings"] + prev["holdings"] if h.get("price_outlier")}
@@ -163,6 +173,7 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
     buys = sorted((r for r in moved if r["change"] in ("new", "added")), key=lambda r: -r["value_delta"])[:TOP]
     sells = sorted((r for r in moved if r["change"] in ("trimmed", "exited")), key=lambda r: r["value_delta"])[:TOP]
     LATEST[shard["cik"]] = rows
+    FILING[shard["cik"]] = filing(cur | {k: shard[k] for k in ("accession", "filing_date", "accepted_at") if shard.get(k)})
     summary = {
         "prev_quarter": pq,
         "changes": counts,
@@ -224,7 +235,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     full.mkdir(exist_ok=True)
     index, keep, written = {}, set(), set()
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
-            "weight"]
+            "weight", "accession", "filing_date", "accepted_at"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "by_period": {}}
@@ -247,9 +258,11 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 c[change or "no_prior"] += 1
                 c["net"] += round(delta) if known else 0
             m = curated.get(cik) or filers.get(cik) or {}
+            fl = FILING.get(cik) or filing(meta[cik])
             rows.append([cik, meta[cik].get("name"), m.get("slug"), kind, cik in curated,
                          q, round(sh), round(ps) if known else None, round(v), round(pv) if known else None, change,
-                         round(weight, 6) if weight is not None else None])
+                         round(weight, 6) if weight is not None else None,
+                         fl["accession"], fl["filing_date"], fl["accepted_at"]])
         if not counts["holders"]:
             continue
         rows.sort(key=lambda r: -(r[8] or r[9] or 0))
@@ -278,6 +291,7 @@ def main() -> int:
     build.SPLITS.clear()
     build.SPLITS.update(sp.table())
     SECS.update(read(DATA / "securities.json") or {})
+    ACCEPTED.update(read(DATA / "accepted.json") or {})
     shards = [s for p in sorted((DATA / "f").glob("*.json")) if (s := read(p))]
     # Filers with a full book but no public shard yet: their newest full book, for the holder index
     # and change files only (no public shard is written for them).
@@ -319,10 +333,11 @@ def main() -> int:
                     r.get("ticker"), r.get("issuer"), r.get("put_call"), r["change"], int(round(r.get("shares") or 0)),
                     int(round(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
                     int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), shard.get("accession"),
-                    shard.get("accepted_at")])
+                    shard.get("accepted_at") or ACCEPTED.get(shard.get("accession") or "")])
         if not shard.get("_fb_only"):
             write(path, base | summary)
         full = {k: v for k, v in base.items() if k not in ("rows", "columns", "truncated")} | {
+            "accepted_at": base.get("accepted_at") or ACCEPTED.get(base.get("accession") or ""),
             "prev_quarter": summary["prev_quarter"],
             "equity_value": build.apply_weights({"holdings": [r for r in rows if r["change"] != "exited"]}).get("equity_value"),
             "columns": list(FULL_COLUMNS),
@@ -347,6 +362,7 @@ def main() -> int:
         if b["quarter"] >= (PERIOD.get(cik) or cur.get("quarter") or ""):
             LATEST[cik] = [h | {"shares_type": h.get("shares_type") or "SH"} for h in (b.get("holdings") or []) + (b.get("exited") or [])]
             PERIOD[cik] = b["quarter"]
+            FILING[cik] = filing(b)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
     print(f"moves: {with_prev}/{n} filers have a prior quarter on file; {FIXED[0]} lines rescaled by the "
           f"cross-filer unit check; changes for "
