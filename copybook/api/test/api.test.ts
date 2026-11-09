@@ -18,7 +18,7 @@ import { quarterStart } from '../src/seasons';
 import { computeMoves, displayCase } from '../src/edgar';
 import { runSeasonal } from '../src/revenue';
 import { signToken } from '../src/tokens';
-import { pauseResumesAt, deadlineMs } from '../src/seasons';
+import { pauseResumesAt, deadlineMs, deadlineLabel } from '../src/seasons';
 import form4Csgp from './fixtures/form4-csgp-florance-buy.txt?raw';
 import form4Googl from './fixtures/form4-googl-walker.txt?raw';
 import form4Dash from './fixtures/form4-dash-tang.txt?raw';
@@ -833,11 +833,19 @@ describe('copybook api', () => {
       return orig(u, init);
     });
     expect((await call('/pause', { body: { reason: 'nope' }, token })).status).toBe(400);
-    const p = await call('/pause', { body: { reason: 'temporary' }, token });
+    sent = [];
+    const p = await call('/pause', { body: { reason: 'seasonal', note: 'x'.repeat(400) }, token });
     expect([p.status, (await p.json()).paused_until]).toEqual([200, until]);
+    // A receipt: until when, no charges, what's kept, and the one-click resume.
+    expect(sent.map((m) => m.subject)).toEqual([`Paused until ${deadlineLabel(until)} · no charges until then`]);
+    expect(sent[0].text).toContain(`No charges until then; billing resumes on ${deadlineLabel(until)}.`);
+    expect(sent[0].text).toContain('Your follows and price ($9 a month) are kept.');
+    expect(sent[0].text).toMatch(/Resume anytime, one click, same subscription: https:\/\/\S+\/resume\?t=/);
     expect(posted.at(-1)).toContain(`pause_collection%5Bresumes_at%5D=${r.at}`);
     expect(posted.at(-1)).toContain('cancel_at_period_end=false');
-    expect(JSON.parse((await env.DB.get('why:cus_pz'))!)).toMatchObject({ reason: 'temporary', via: 'pause' });
+    // The seasonal reason, with its free text kept to 300 characters.
+    const why = JSON.parse((await env.DB.get('why:cus_pz'))!);
+    expect([why.reason, why.via, why.note.length]).toEqual(['seasonal', 'pause', 300]);
     // Paused: the account and follows are kept, paid features and alerts stop until then.
     const me = (await (await call('/me', { token })).json()).member;
     expect([me.status, me.active, me.paused_until, me.pause_offer]).toEqual(['active', false, r.at, null]);
@@ -864,7 +872,14 @@ describe('copybook api', () => {
     expect(posted.at(-1)).toBe('pause_collection=');
     // Back early from /account/: same subscription, no second one.
     await call('/pause', { body: {}, token });
-    expect((await call('/pause', { method: 'DELETE', token })).status).toBe(200);
+    sent = [];
+    const back = await call('/pause', { method: 'DELETE', token });
+    expect(back.status).toBe(200);
+    // A confirmation with the next charge date.
+    const nextCharge = (await back.json()).next_charge;
+    expect(nextCharge).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(sent.map((m) => m.subject)).toEqual(['Your Copybook alerts are back on']);
+    expect(sent[0].text).toContain(`Your next charge is on ${deadlineLabel(nextCharge)}`);
     expect((await (await call('/me', { token })).json()).member).toMatchObject({ active: true, paused_until: null });
     expect(posted.at(-1)).toBe('pause_collection=');
     vi.stubGlobal('fetch', orig);

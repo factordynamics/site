@@ -220,7 +220,7 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
     const customer = m.customer;
     // Paused between seasons: the button ends the pause on the same subscription (a checkout would start a second one).
     if (isPaused(m)) {
-      await syncSubscription(env, await stripe(env, 'POST', `subscriptions/${m.subscription}`, { pause_collection: '' }));
+      await endPause(env, m);
       return go(`${account}?resumed=1`);
     }
     // Already back on a plan: nothing to start.
@@ -274,6 +274,7 @@ export const WHY: Record<string, string> = {
   feature: 'Missing a feature I need',
   alerts: 'Alerts too slow or too noisy',
   temporary: 'Only needed it for a while',
+  seasonal: 'Seasonal: nothing happens between filings',
   other: 'Something else',
 };
 
@@ -421,6 +422,9 @@ const isoDay = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-CA
  */
 const pausable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !!PRICES[m.plan] && !!m.subscription && m.interval === 'monthly';
 
+/** The paying members' "Your names this week" digest: false until it ships, so /account/ promises it only when it's true. */
+export const DIGEST_LIVE = false;
+
 export const PAUSE_NOTE = 'Monthly plans can pause until 2 weeks before the next 13F deadline.';
 
 export function pauseOffer(m: Member, now = Date.now()): { until: string; quarter: string; deadline: string; deadline_label: string; note: string } | null {
@@ -430,9 +434,12 @@ export function pauseOffer(m: Member, now = Date.now()): { until: string; quarte
 }
 
 /** Stores the one cancellation question's answer (from /account/ or the email); counted in business.cancel_reasons. */
+/** Free text that can go with any cancellation or pause reason. */
+export const NOTE_MAX = 300;
+
 export async function noteReason(env: Env, customer: string, reason: string, via: 'account' | 'pause' | 'email', note?: string): Promise<boolean> {
   if (!WHY[reason]) return false;
-  await env.DB.put(`why:${customer}`, JSON.stringify({ reason, via, at: new Date().toISOString(), ...(note ? { note: note.slice(0, 2000) } : {}) }));
+  await env.DB.put(`why:${customer}`, JSON.stringify({ reason, via, at: new Date().toISOString(), ...(note ? { note: note.slice(0, NOTE_MAX) } : {}) }));
   return true;
 }
 
@@ -441,22 +448,58 @@ export async function noteReason(env: Env, customer: string, reason: string, via
  * keeps the account, follows and price; alerts and paid features stop until then (isActive). A scheduled
  * cancellation is lifted: they chose to pause instead.
  */
-export async function pauseMember(env: Env, m: Member, reason: string | null, now = Date.now()): Promise<{ status: number; body: Record<string, unknown> }> {
+export async function pauseMember(env: Env, m: Member, reason: string | null, now = Date.now(), note?: string): Promise<{ status: number; body: Record<string, unknown> }> {
   const offer = pauseOffer(m, now);
   if (!offer) return { status: 409, body: { ok: false, error: isPaused(m, now) ? 'Already paused' : m.status === 'trialing' ? 'Monthly plans can pause after the trial; cancel in Manage billing instead' : 'Monthly plans can pause; yearly, seat and Holdterm plans cancel in Manage billing instead', code: 'pause_unavailable' } };
-  if (reason && !(await noteReason(env, m.customer, reason, 'pause'))) return { status: 400, body: { ok: false, error: `reason: ${Object.keys(WHY).join(', ')}`, code: 'bad_request' } };
+  if (reason && !(await noteReason(env, m.customer, reason, 'pause', note))) return { status: 400, body: { ok: false, error: `reason: ${Object.keys(WHY).join(', ')}`, code: 'bad_request' } };
   const at = pauseResumesAt(now).at;
   const sub = await stripe(env, 'POST', `subscriptions/${m.subscription}`, { 'pause_collection[behavior]': 'void', 'pause_collection[resumes_at]': at, cancel_at_period_end: 'false' });
   const next = await syncSubscription(env, sub);
   if (billable(next)) await bump(env, 'pauses', next, `${m.subscription}:${at}`, now);
+  await sendMail(env, [pauseReceiptMail(env, next, at, await resumeUrl(env, next))]);
   return { status: 200, body: { ok: true, paused_until: isoDay(at), deadline: offer.deadline, member: { paused_until: next.paused_until } } };
+}
+
+/** Ends a pause on the same subscription and sends the confirmation with the next charge date (DELETE /pause and the email's resume link). */
+export async function endPause(env: Env, m: Member): Promise<Member> {
+  const next = await syncSubscription(env, await stripe(env, 'POST', `subscriptions/${m.subscription}`, { pause_collection: '' }));
+  await sendMail(env, [resumeConfirmMail(env, next)]);
+  return next;
 }
 
 /** DELETE /pause: back now, on the same subscription and price. */
 export async function unpauseMember(env: Env, m: Member): Promise<{ status: number; body: Record<string, unknown> }> {
   if (!isPaused(m)) return { status: 409, body: { ok: false, error: 'Not paused', code: 'not_paused' } };
-  await syncSubscription(env, await stripe(env, 'POST', `subscriptions/${m.subscription}`, { pause_collection: '' }));
-  return { status: 200, body: { ok: true } };
+  const next = await endPause(env, m);
+  return { status: 200, body: { ok: true, next_charge: next.period_end ? isoDay(next.period_end) : null } };
+}
+
+const priceLine = (m: Member) => {
+  const p = PRICES[m.plan];
+  if (!p) return 'Your follows and settings are kept.';
+  return FOUNDING[m.plan] ? `Your follows and founding price are kept. ${FOUNDING[m.plan]}` : `Your follows and price (${money(p.month)} a month) are kept.`;
+};
+
+/** The pause receipt: until when, no charges until then, what is kept, and the one-click resume. */
+export function pauseReceiptMail(env: Env, m: Member, at: number, resume: string): Mail {
+  const until = deadlineLabel(isoDay(at));
+  const p = PRICES[m.plan];
+  return {
+    to: m.email,
+    subject: `Paused until ${until} · no charges until then`,
+    text: `Your ${p?.name ?? 'Copybook'} plan is paused until ${until}, two weeks before the next 13F deadline (${deadlineLabel(nextDeadline(at * 1000).date)}).\n\n  - No charges until then; billing resumes on ${until}.\n  - ${priceLine(m)}\n  - Real-time alerts are off while you're paused.\n  - Resume anytime, one click, same subscription: ${resume}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+  };
+}
+
+/** After a pause ends early: alerts are back, and when the next charge is. */
+export function resumeConfirmMail(env: Env, m: Member): Mail {
+  const p = PRICES[m.plan];
+  const when = m.period_end ? deadlineLabel(isoDay(m.period_end)) : null;
+  return {
+    to: m.email,
+    subject: `Your Copybook alerts are back on`,
+    text: `You've resumed ${p?.name ?? 'Copybook'}. Alerts, history and CSV are on again, with your follows and settings as you left them.\n\n${when ? `Your next charge is on ${when}${p ? ` (${money(p.month)}, before any discount on your account)` : ''}.` : 'Your plan renews on its usual date.'} ${priceLine(m)}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+  };
 }
 
 /** 3 days before a pause ends (and the paused member's pre-season note): when alerts restart, and last season in their names. */

@@ -441,8 +441,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const free = fr ? { free_names: { names, limit: 5, ...(await (await import('./free')).freeTeaser(env, names, Date.now()).catch(() => ({ facts: [], hook: null, more: 0 }))) } } : {};
     // A Fund seat sees who to ask about billing: the plan owner's email.
     const owner = m.seat_of ? { owner: (await getMember(env, m.seat_of))?.email ?? null } : {};
-    const { pauseOffer } = await import('./revenue');
-    return json({ ok: true, member: { ...publicView(m), ...owner, pause_offer: pauseOffer(m), channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, h);
+    const { pauseOffer, DIGEST_LIVE } = await import('./revenue');
+    return json({ ok: true, member: { ...publicView(m), ...owner, pause_offer: pauseOffer(m), digest_live: DIGEST_LIVE, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, h);
   }
 
   // Seasonal pause instead of cancelling: POST /pause {reason?} pauses billing and alerts until 14 days before the
@@ -451,7 +451,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
     const { pauseMember, unpauseMember } = await import('./revenue');
     const b = req.method === 'POST' ? await body(req) : {};
-    const r = req.method === 'POST' ? await pauseMember(env, m, typeof b.reason === 'string' ? b.reason : null) : await unpauseMember(env, m);
+    const r = req.method === 'POST' ? await pauseMember(env, m, typeof b.reason === 'string' ? b.reason : null, Date.now(), typeof b.note === 'string' && b.note.trim() ? b.note.trim() : undefined) : await unpauseMember(env, m);
     return json(r.body, r.status, h);
   }
   if (req.method === 'POST' && path === '/cancel-reason') {
