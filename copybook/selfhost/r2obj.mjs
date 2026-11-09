@@ -7,6 +7,8 @@ const tok = process.env.CF_API_TOKEN;
 const id = (await (await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', { headers: { authorization: `Bearer ${tok}` } })).json()).result.id;
 const aws = new AwsClient({ accessKeyId: id, secretAccessKey: createHash('sha256').update(tok).digest('hex'), service: 's3', region: 'auto', retries: 5 });
 const B = 'https://967e13dd88bb23b24662e62cbb6fd84f.r2.cloudflarestorage.com/copybook-history';
+// Masking rule (agent session logs are kept 30+ days): never print raw member data; emails in key names show as a***@domain.
+const mask = (s) => String(s).replace(/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@(?=[A-Za-z0-9-]+\.)/g, '$1***@');
 const enc = (k) => k.split('/').map(encodeURIComponent).join('/');
 const list = async (prefix) => {
   const out = []; let t = '';
@@ -22,15 +24,15 @@ const [cmd, a, b] = process.argv.slice(2);
 if (cmd === 'put') {
   const r = await aws.fetch(`${B}/${enc(a)}`, { method: 'PUT', body: await readFile(b), headers: { 'content-type': 'application/octet-stream' } });
   if (!r.ok) throw new Error(`put ${a}: ${r.status} ${await r.text()}`);
-  console.log(`put ${a}`);
+  console.log(mask(`put ${a}`));
 } else if (cmd === 'get') {
   const r = await aws.fetch(`${B}/${enc(a)}`);
   if (!r.ok) throw new Error(`get ${a}: ${r.status}`);
   await writeFile(b, Buffer.from(await r.arrayBuffer()), { mode: 0o600 });
-  console.log(`got ${a}`);
+  console.log(mask(`got ${a}`));
 } else if (cmd === 'list') {
-  for (const o of await list(a)) console.log(o.key, o.size, o.modified);
+  for (const o of await list(a)) console.log(mask(o.key), o.size, o.modified);
 } else if (cmd === 'prune') {
   const cutoff = Date.now() - Number(b) * 86400_000;
-  for (const o of await list(a)) if (Date.parse(o.modified) < cutoff) { await aws.fetch(`${B}/${enc(o.key)}`, { method: 'DELETE' }); console.log(`pruned ${o.key}`); }
+  for (const o of await list(a)) if (Date.parse(o.modified) < cutoff) { await aws.fetch(`${B}/${enc(o.key)}`, { method: 'DELETE' }); console.log(mask(`pruned ${o.key}`)); }
 } else { console.error('usage: put|get|list|prune'); process.exitCode = 2; }

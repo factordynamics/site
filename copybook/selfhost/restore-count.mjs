@@ -11,5 +11,5 @@ const count = async (prefix) => {
 const members = await count('cus:'), all = await count('');
 const first = (await kv.list({ prefix: 'cus:' })).keys[0]?.name;
 const sample = first ? await kv.get(first) : null;
-console.log(JSON.stringify({ restored_members: members, restored_keys: all, sample_member_parses: !!(sample && JSON.parse(sample).customer) }));
+console.log(JSON.stringify({ restored_members: members, restored_keys: all, sample_member_parses: (() => { try { return !!(sample && JSON.parse(sample).customer); } catch { return false; } })() }));
 await mf.dispose();

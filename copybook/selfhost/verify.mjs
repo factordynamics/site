@@ -30,12 +30,18 @@ r = await call('/login', { body: { email: 'nobody-here@example.com' } });
 ok('POST /login (unknown email, no mail sent)', r.status === 200, String(r.status));
 
 // Checkout return: a real completed Checkout Session from Stripe becomes a session.
-const cs = (await stripe('checkout/sessions?limit=1&status=complete')).data?.[0];
+// Test members only (masking rule): never mint a session for a real member's checkout.
+const TEST = [COPY, PRO, 'cus_VanPCSWpz1uvLh', 'cus_VanPmc5q1iLlqx', 'cus_VanPzdEb1bksVn'];
+const cs = (await stripe('checkout/sessions?limit=100&status=complete')).data?.find((x) => TEST.includes(x.customer));
 if (cs) {
   r = await call('/session', { body: { checkout_session: cs.id } });
   const c = await r.json();
   ok('checkout return: POST /session {checkout_session}', r.status === 200 && !!c.token, `${r.status} ${cs.id.slice(0, 14)}… plan=${c.member?.plan}`);
-} else ok('checkout return', false, 'no completed checkout session for a test customer');
+} else {
+  // No test member has a completed checkout: check the route and its Stripe lookup with an id Stripe doesn't know.
+  r = await call('/session', { body: { checkout_session: 'cs_live_a1selfhostcheckdoesnotexist' } });
+  ok('checkout return route (Stripe lookup; no test member has a completed checkout)', r.status === 404 && (await r.json()).error === 'unknown checkout session', String(r.status));
+}
 
 // History and CSV from the private bucket.
 r = await call('/history/warren-buffett', { token: s.token });

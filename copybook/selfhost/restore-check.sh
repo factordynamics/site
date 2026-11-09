@@ -14,5 +14,5 @@ key=${AGE_KEY_FILE:-$tmp/key}
 node r2obj.mjs get "backups/$day.tar.age" "$tmp/b.age" >/dev/null
 mkdir "$tmp/state"; age -d -i "$key" "$tmp/b.age" | tar -C "$tmp/state" -xzf -
 live() { sqlite3 "file:$(ls "$ROOT"/state/kv/miniflare-KVNamespaceObject/*.sqlite | grep -v metadata)?mode=ro" "select count(*) from _mf_entries where key like '$1%' and (expiration is null or expiration > $(date +%s%3N))"; }
-STATE_DIR=$tmp/state PORT=0 CRON_FLAG=/nonexistent node restore-count.mjs 2>"$tmp/err" | tail -1 > "$tmp/r.json" || { grep -vE "^\s+at " "$tmp/err" | head -20; exit 1; }
+STATE_DIR=$tmp/state PORT=0 CRON_FLAG=/nonexistent node restore-count.mjs 2>"$tmp/err" | tail -1 > "$tmp/r.json" || { grep -vE "^\s+at " "$tmp/err" | head -20 | sed -E 's/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9-]+\.)/\1***@\2/g'; exit 1; }
 echo "backup $day: $(cat "$tmp/r.json") live_members=$(live cus:) live_keys=$(live '') do_files=$(find "$tmp/state/do" -name '*.sqlite' | wc -l)"

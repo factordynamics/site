@@ -3,15 +3,21 @@
 gene (Andreas's desktop) runs the copybook-api Worker in workerd via Miniflare. These are its runtime files; the live
 copy is `~/copybook-api/ops` on gene. Alerts don't depend on gene: Cloudflare's cron is the primary poller.
 
+Masking rule: agent session logs are kept 30+ days, so these scripts print counts, booleans, opaque ids and
+`a***@domain` emails, never raw member rows; checks run only against test members. Keep it that way when editing them.
+Hourly local backups (`update.sh`) and nightly R2 backups (`backup.sh`) are both age-encrypted to `backup.pub`;
+`setup-service-user.sh` (run once with sudo) moves the service, its state and secrets to a dedicated `copybook` user.
+
 ## Option A: fail members over to the Cloudflare Worker (minutes)
 
 Cloudflare's copy already has every secret, and its KV is kept current by the sync through R2 (HOSTING.md), so members,
 sessions and follows are there up to about a minute before gene went down. Limit: the free plan's 100k requests/day.
 
-1. `wrangler secret delete MOVED_TO` on copybook-api (it otherwise 308s to gene).
-2. Publish `{"api":"https://copybook-api.factordynamics.workers.dev","at":"<iso>"}` to R2 copybook-public `api.json`
-   (Cloudflare REST, `CLOUDFLARE_API_TOKEN`). The front ends read it at load.
-3. Point Stripe webhook `we_1UZHeoDSKGGzRqYZUz48mjdU` at `https://copybook-api.factordynamics.workers.dev/webhook`
+1. Publish `{"api":"https://copybook-api.factordynamics.workers.dev","at":"<iso>"}` to R2 copybook-public `api.json`
+   (Cloudflare REST, `CLOUDFLARE_API_TOKEN`). The front ends read it at load. The Worker then serves requests itself
+   instead of redirecting (loop guard, 754c32a), within about 60 s. **Never delete `MOVED_TO`:** it is also what makes
+   the Worker the `cloudflare` host for the R2 sync and the primary poller.
+2. Point Stripe webhook `we_1UZHeoDSKGGzRqYZUz48mjdU` at `https://copybook-api.factordynamics.workers.dev/webhook`
    (same signing secret).
 
 Any Amp thread with Andreas's personal secrets can do this, including an orb.

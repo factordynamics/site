@@ -21,12 +21,18 @@ if systemctl --user is-active -q copybook-api.service; then
   fi
 fi
 
-# Hourly backup of KV and Durable Objects (members, sessions, follows; ~2 MB), last 48 kept. R2 is not backed up
-# here: Cloudflare still has the bucket and ingest can re-upload.
+# Hourly backup of KV and Durable Objects (members, sessions, follows; ~2 MB), last 48 kept, age-encrypted to
+# ../backup.pub like the nightly R2 backup: plaintext never touches the disk (tar streams straight into age), and the
+# private key is not on gene (Amp secret COPYBOOK_BACKUP_AGE_KEY). Restore: age -d -i <key> f.tar.age | tar -xzf -.
+# R2 is not backed up here: Cloudflare still has the bucket and ingest can re-upload.
 mkdir -p "$ROOT/backups"
-if [ -z "$(find "$ROOT/backups" -name 'state-*.tgz' -mmin -60 | head -1)" ]; then
-  tar -czf "$ROOT/backups/state-$(date -u +%Y%m%dT%H%MZ).tgz" -C "$ROOT/state" kv do 2>/dev/null && chmod 600 "$ROOT"/backups/*.tgz
-  ls -1t "$ROOT"/backups/state-*.tgz | tail -n +49 | xargs -r rm -f
+if [ -z "$(find "$ROOT/backups" -name 'state-*.tar.age' -mmin -60 | head -1)" ]; then
+  out="$ROOT/backups/state-$(date -u +%Y%m%dT%H%MZ).tar.age"
+  # tar exits 1 when a live SQLite file changes while read; the copy is still usable, as before.
+  if (umask 077; (tar -czf - -C "$ROOT/state" kv do 2>/dev/null; [ $? -le 1 ]) | "$ROOT/bin/age" -R "$ROOT/backup.pub" -o "$out.tmp"); then
+    mv "$out.tmp" "$out"
+  else rm -f "$out.tmp"; echo "hourly backup failed"; fi
+  ls -1t "$ROOT"/backups/state-*.tar.age | tail -n +49 | xargs -r rm -f
 fi
 
 cd "$SITE" || exit 1

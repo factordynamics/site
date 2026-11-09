@@ -58,7 +58,8 @@ const server = http.createServer(async (req, res) => {
     if (r.body) Readable.fromWeb(r.body).on('error', () => res.destroy()).pipe(res);
     else res.end();
   } catch (e) {
-    console.error(`request ${req.method} ${req.url} failed: ${e?.stack ?? e}`);
+    // Path only (query strings carry signed tokens), emails masked: agents read this journal into session logs.
+    console.error(`request ${req.method} ${String(req.url).split('?')[0].replace(/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@|%40)/g, '$1***$2')} failed: ${e?.stack ?? e}`);
     if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' }).end('{"ok":false,"error":"upstream"}');
     else res.destroy();
   }

@@ -8,6 +8,8 @@ const [dir, prefix = ''] = process.argv.slice(2);
 const tok = process.env.CLOUDFLARE_API_TOKEN;
 const aws = new AwsClient({ accessKeyId: '236933ca969ca886ba15c68941c8b23c', secretAccessKey: createHash('sha256').update(tok).digest('hex'), service: 's3', region: 'auto', retries: 5 });
 const base = 'https://967e13dd88bb23b24662e62cbb6fd84f.r2.cloudflarestorage.com/copybook-history';
+// Masking rule (agent session logs are kept 30+ days): never print raw member data; emails in key names show as a***@domain.
+const mask = (s) => String(s).replace(/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@(?=[A-Za-z0-9-]+\.)/g, '$1***@');
 const enc = (k) => k.split('/').map(encodeURIComponent).join('/');
 const keys = [];
 let token = '';
@@ -36,7 +38,7 @@ async function one({ key, etag }) {
       await writeFile(mp, JSON.stringify({ key, etag, size: buf.length, contentType: r.headers.get('content-type'), lastModified: r.headers.get('last-modified'), customMetadata: custom }));
       done++; bytes += buf.length;
       return;
-    } catch (e) { if (i === 4) { failed++; console.error(`FAIL ${key}: ${e.message}`); } else await new Promise((s) => setTimeout(s, 1000 * 2 ** i)); }
+    } catch (e) { if (i === 4) { failed++; console.error(mask(`FAIL ${key}: ${e.message}`)); } else await new Promise((s) => setTimeout(s, 1000 * 2 ** i)); }
   }
 }
 let i = 0;
