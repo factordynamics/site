@@ -26,7 +26,7 @@ export function StockPage() {
   // The lens lives in the URL (?funds=all) so a view can be shared; superinvestors by default.
   const [params, setParams] = useSearchParams()
   const lens = params.get('funds')
-  const view: 'featured' | 'all' | 'smart' | 'filers' = lens === 'all' || lens === 'filers' || lens === 'smart' ? lens : 'featured'
+  const view: 'featured' | 'all' | 'hedge' | 'smart' | 'filers' = lens === 'all' || lens === 'filers' || lens === 'smart' || lens === 'hedge' ? lens : 'featured'
   const setView = (k: typeof view) => setParams(k === 'featured' ? {} : { funds: k }, { replace: true })
   // Curated data (moves, exits, options) follows the closest curated lens; "All 13F filers" widens the holder list.
   const scope: 'featured' | 'all' = view === 'featured' ? 'featured' : 'all'
@@ -42,13 +42,15 @@ export function StockPage() {
   }, [s.error, ticker, nav])
 
   const tracked = useMemo(() => (d?.holders ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
-  const wide = view === 'filers' || view === 'smart'
+  const wide = view === 'filers' || view === 'smart' || view === 'hedge'
+  const typed = view === 'smart' || view === 'hedge' ? view : null
   const fh = useAsync(() => (wide && d ? loadFilerHolders(d.ticker) : Promise.resolve(null)), [wide, d?.ticker])
   // Hedge funds and active managers: the same filer list, cut to those types.
   const filers = useMemo(() => {
     const x = wide ? fh.data : null
-    if (!x || view !== 'smart') return x
-    return { ...x, filers: x.smart ? x.smart.current + x.smart.older : 0, quarters: x.smart?.quarters ?? {}, rows: x.rows.filter((r) => r.smart) }
+    if (!x || !typed) return x
+    const b = x[typed]
+    return { ...x, filers: b ? b.current + b.older : 0, quarters: b?.quarters ?? {}, rows: x.rows.filter((r) => r[typed]) }
   }, [wide, view, fh.data])
   const filersLoading = wide && !fh.data && !fh.error
   // Pro and Fund: every holder from the API (1,000 a page), with each filer's change since its previous
@@ -61,16 +63,16 @@ export function StockPage() {
     const rows: ApiHolder[] = []
     let r = null
     for (let i = 0, off = 0; i < pages; i++) {
-      r = await loadHolders(d.ticker, view === 'smart' ? 'hedge_fund,active' : null, off)
+      r = await loadHolders(d.ticker, view === 'smart' ? 'hedge_fund,long_only' : view === 'hedge' ? 'hedge_fund' : null, off)
       rows.push(...r.holders)
       if (r.next_offset == null) break
       off = r.next_offset
     }
     return r ? { count: r.filers ?? r.count, truncated: r.truncated, rows, more: r.next_offset != null } : null
   }, [wide, d?.ticker, view, pages, member?.plan, member?.active])
-  const smartTotal = fh.data?.smart ? fh.data.smart.current + fh.data.smart.older : 0
-  const api = full.data && !full.data.truncated && (view !== 'smart' || full.data.count >= smartTotal * 0.8) ? full.data : null
-  const who = view === 'smart' ? 'hedge funds and active managers' : '13F filers'
+  const lensTotal = typed && fh.data?.[typed] ? fh.data[typed]!.current + fh.data[typed]!.older : 0
+  const api = full.data && !full.data.truncated && (!typed || full.data.count >= lensTotal * 0.8) ? full.data : null
+  const who = view === 'smart' ? 'hedge funds and long-only managers' : view === 'hedge' ? 'hedge funds' : '13F filers'
   // Every filer's latest position; a fund we track closely keeps its row, with its change since the filing before.
   const holders = useMemo(() => {
     if (!filers) return tracked
@@ -188,7 +190,7 @@ export function StockPage() {
       <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
         {wide ? (
           <>
-            <Stat label={view === 'smart' ? 'Hedge funds and active managers holding it' : '13F filers holding it'} value={filers ? filers.filers.toLocaleString('en-US') : '—'} sub={filers && filers.filers > filers.rows.length ? `The ${filers.rows.length} largest are listed below` : 'Latest 13F of each filer'} />
+            <Stat label={`${who.charAt(0).toUpperCase()}${who.slice(1)} holding it`} value={filers ? filers.filers.toLocaleString('en-US') : '—'} sub={filers && filers.filers > filers.rows.length ? `The ${filers.rows.length} largest are listed below` : 'Latest 13F of each filer'} />
             <Stat
               label={fq ? `Filed ${quarterLabel(fq[0][0])} so far` : 'Filed so far'}
               value={fq ? fq[0][1].toLocaleString('en-US') : '—'}
@@ -234,7 +236,8 @@ export function StockPage() {
             [
               ['featured', 'Superinvestors'],
               ['all', 'Funds we track'],
-              ['smart', 'Hedge funds & active'],
+              ['hedge', 'Hedge funds'],
+              ['smart', 'Hedge funds + long-only'],
               ['filers', 'All 13F filers'],
             ] as const
           ).map(([k, l]) => (
@@ -335,7 +338,7 @@ export function StockPage() {
               {wide && !api && ' · change shows for the funds we track closely until other filers’ prior quarters are on file'}
             </p>
           </div>
-          {paid && d && <CsvButton variant="outline" label="Holders CSV" download={() => downloadFile(`/stocks/${encodeURIComponent(d.ticker)}/holders.csv${view === 'smart' ? '?type=hedge_fund,active' : ''}`, `copybook-${d.ticker}-holders${view === 'smart' ? '-hedge-active' : ''}.csv`)} />}
+          {paid && d && <CsvButton variant="outline" label="Holders CSV" download={() => downloadFile(`/stocks/${encodeURIComponent(d.ticker)}/holders.csv${typed ? `?type=${typed === 'hedge' ? 'hedge_fund' : 'hedge_fund,long_only'}` : ''}`, `copybook-${d.ticker}-holders${typed ? `-${typed === 'hedge' ? 'hedge-funds' : 'hedge-long-only'}` : ''}.csv`)} />}
         </header>
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every holder">
           <table className="w-full text-[14px]">

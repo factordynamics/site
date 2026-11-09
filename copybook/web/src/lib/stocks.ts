@@ -227,10 +227,10 @@ export const loadCoverage = () => getJSON<{ filers: number; curated: number }>(`
 export const aboutCount = (n: number) => (n >= 1000 ? `${(Math.floor(n / 100) * 100).toLocaleString('en-US')}+` : n.toLocaleString('en-US'))
 
 /** Every 13F filer's latest position in a stock (scripts/stocks.mjs, d/h/{TICKER}.json): the 500 largest, plus counts. */
-export type FilerHolder = { slug: string; name: string; quarter: string; shares: number; value: number; weight: number; tier: 0 | 1 | 2; smart: boolean }
+export type FilerHolder = { slug: string; name: string; quarter: string; shares: number; value: number; weight: number; tier: 0 | 1 | 2; smart: boolean; hedge: boolean }
 /** Ingest's full-book holder index (hl/): every filer's latest 13F, current holders (this quarter or last) and older ones apart. */
 export type HolderIndex = { holders: number; older: number; quarters: Record<string, number>; new: number; added: number; trimmed: number; exited: number; unchanged: number; no_prior: number }
-/** Hedge funds and active managers (filer_types.json smart_money), from the shards; moves are each fund's ten largest buys and sells. */
+/** A lens's counts (hedge funds, or hedge funds and long-only managers), from the shards; moves are each fund's ten largest buys and sells. */
 export type SmartCounts = { current: number; older: number; top10: number; over5: number; quarters: Record<string, number>; moves: { slug: string; name: string; quarter: string; change: Change; delta_value: number }[] }
 type HRaw = {
   filers: number
@@ -241,8 +241,10 @@ type HRaw = {
   over5?: number
   index?: HolderIndex
   smart?: Omit<SmartCounts, 'moves'> & { moves: [string, string, string, Change, number][] }
-  rows: [string, string, string, number, number, number, 0 | 1 | 2, (0 | 1)?][]
+  hedge?: Omit<SmartCounts, 'moves'> & { moves: [string, string, string, Change, number][] }
+  rows: [string, string, string, number, number, number, 0 | 1 | 2, number?][]
 }
+const lensBlock = (x: HRaw['smart']): SmartCounts | null => (x ? { ...x, moves: x.moves.map(([slug, name, quarter, change, delta_value]) => ({ slug, name: displayName(name), quarter, change, delta_value })) } : null)
 export const loadFilerHolders = (t: string) =>
   getJSON<HRaw>(`${D}h/${encodeURIComponent(t)}.json`).then((d) => ({
     /** Every filer holding it: exact from ingest's full-book index when present (the shards undercount large books). */
@@ -255,8 +257,10 @@ export const loadFilerHolders = (t: string) =>
     top10: d.top10 ?? null,
     over5: d.over5 ?? null,
     index: d.index ?? null,
-    smart: d.smart ? { ...d.smart, moves: d.smart.moves.map(([slug, name, quarter, change, delta_value]) => ({ slug, name: displayName(name), quarter, change, delta_value })) } : null,
-    rows: d.rows.map(([slug, name, quarter, shares, value, weight, tier, smart]): FilerHolder => ({ slug, name: displayName(name), quarter, shares, value, weight, tier, smart: smart === 1 })),
+    smart: lensBlock(d.smart),
+    hedge: lensBlock(d.hedge),
+    // lens bits: 1 hedge funds and long-only managers, 2 hedge funds.
+    rows: d.rows.map(([slug, name, quarter, shares, value, weight, tier, lens = 0]): FilerHolder => ({ slug, name: displayName(name), quarter, shares, value, weight, tier, smart: (lens & 1) > 0, hedge: (lens & 2) > 0 })),
   }))
 
 /** Public filing cards built this deploy (scripts/cards.mjs): slug -> latest card accession. */

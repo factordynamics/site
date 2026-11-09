@@ -52,8 +52,9 @@ type Row = {
   older: number
   /** The tracked funds' figures, kept for the CSV whatever the lens. */
   t: { holders: number; prev: number; top10: number; over5: number; filed: number; added: number; exited: number }
-  /** Hedge funds and active managers, when loaded. */
+  /** Hedge funds and long-only managers, and hedge funds alone, when loaded. */
   s: { holders: number; older: number; top10: number; over5: number; filed: number } | null
+  hf: { holders: number; older: number; top10: number; over5: number; filed: number } | null
   /** Every filer's new and exited holders, from the full-book index. */
   ix: { new: number; exited: number } | null
   /** The all-filer figures, when loaded. */
@@ -74,15 +75,19 @@ const COLS: [Key, string, string][] = [
   ['latest', 'Latest 4 / 13D', 'left'],
 ]
 
-// smart: hedge funds and active managers (default); all: every 13F filer; tracked: the funds we track
-// closely. smart and all read d/h/{TICKER}.json: ingest's full-book counts and crowding from the shards.
+// hedge: hedge funds (Fund's default); smart: hedge funds and long-only managers (Pro's default); all:
+// every 13F filer; tracked: the funds we track closely. hedge, smart and all read d/h/{TICKER}.json:
+// ingest's full-book counts, crowding and each lens's counts from the shards.
 type Agg = Awaited<ReturnType<typeof loadFilerHolders>>
-type Lens = 'smart' | 'all' | 'tracked'
+type Lens = 'hedge' | 'smart' | 'all' | 'tracked'
 const LENSES: [Lens, string][] = [
-  ['smart', 'Hedge funds and active managers'],
+  ['hedge', 'Hedge funds'],
+  ['smart', 'Hedge funds + long-only'],
   ['all', 'All 13F filers'],
   ['tracked', 'Funds we track'],
 ]
+/** The lens in a caption: "hedge funds", "hedge funds and long-only managers", ... */
+const LENS_WHO: Record<Lens, string> = { hedge: 'hedge funds', smart: 'hedge funds and long-only managers', all: '13F filers', tracked: 'funds we track closely' }
 
 function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: string, all: Agg | null = null, lens: Lens = 'all'): Row {
   const h: StockHolder[] = stock?.holders ?? []
@@ -135,9 +140,9 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
   // it at or above the tracked funds): no lower bound, and new and exited across every filer.
   const ix = all?.index
   const a2 = a && ix ? { ...a, holders: ix.holders, older: ix.older, filed: ix.quarters[season] ?? 0, incomplete: false } : a
-  const sm = all?.smart
+  const sm = lens === 'hedge' ? all?.hedge : all?.smart
   const view =
-    lens === 'smart' && sm
+    (lens === 'smart' || lens === 'hedge') && sm
       ? { holders: sm.current, prev: NaN, older: sm.older, top10: sm.top10, over5: sm.over5, filed: sm.quarters[season] ?? 0, filedOf: sm.current, incomplete: false, exact: false }
       : lens === 'all' && a2
         ? { holders: a2.holders, prev: ix ? a2.holders - ix.new + ix.exited : NaN, older: a2.older, top10: a2.top10, over5: a2.over5, filed: a2.filed, filedOf: a2.holders, incomplete: a2.incomplete, exact: Boolean(ix), ...(ix ? { added: ix.new, exited: ix.exited } : {}) }
@@ -148,7 +153,8 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
     ...base,
     t,
     a: a2,
-    s: sm ? { holders: sm.current, older: sm.older, top10: sm.top10, over5: sm.over5, filed: sm.quarters[season] ?? 0 } : null,
+    s: all?.smart ? { holders: all.smart.current, older: all.smart.older, top10: all.smart.top10, over5: all.smart.over5, filed: all.smart.quarters[season] ?? 0 } : null,
+    hf: all?.hedge ? { holders: all.hedge.current, older: all.hedge.older, top10: all.hedge.top10, over5: all.hedge.over5, filed: all.hedge.quarters[season] ?? 0 } : null,
     ix: ix ? { new: ix.new, exited: ix.exited } : null,
     all: Boolean(view),
     incomplete: false,
@@ -171,8 +177,11 @@ export function Book() {
   // Lens: hedge funds and active managers (default), every 13F filer, or the funds we track closely,
   // in the URL so a view can be shared.
   const [params, setParams] = useSearchParams()
-  const lens: Lens = params.get('funds') === 'tracked' ? 'tracked' : params.get('funds') === 'all' ? 'all' : 'smart'
-  const setLens = (l: Lens) => setParams(l === 'smart' ? {} : { funds: l }, { replace: true })
+  // Fund members (investment teams) open on hedge funds; Pro on hedge funds and long-only managers.
+  const byPlan: Lens = member?.plan === 'fund' ? 'hedge' : 'smart'
+  const asked = params.get('funds')
+  const lens: Lens = LENSES.some(([k]) => k === asked) ? (asked as Lens) : byPlan
+  const setLens = (l: Lens) => setParams(l === byPlan ? {} : { funds: l }, { replace: true })
   const events = useAsync(() => (names.length ? loadEvents(names) : Promise.resolve(new Map<string, IssuerFeed>())), [names.join(',')])
   // The CSV keeps the all-filer figures whatever the lens, so d/h is loaded once for every lens.
   const agg = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadFilerHolders(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(',')])
@@ -207,9 +216,9 @@ export function Book() {
   const moves = useMemo(() => {
     const ok = (r: Row) => !(r.split && !r.split.adjusted)
     const list =
-      lens === 'smart'
+      lens === 'smart' || lens === 'hedge'
         ? rows.flatMap((r) => {
-            const sm = ok(r) ? agg.data?.[names.indexOf(r.ticker)]?.smart?.moves : null
+            const sm = ok(r) ? agg.data?.[names.indexOf(r.ticker)]?.[lens]?.moves : null
             return (sm ?? []).filter((m) => m.quarter === season && m.change !== 'unchanged' && m.delta_value).map((m) => ({ r, x: { slug: m.slug, manager: m.name, change: m.change, delta_value: m.delta_value } }))
           })
         : rows.flatMap((r) => (ok(r) ? [...(r.stock?.holders ?? []), ...(r.stock?.exited ?? [])] : []).filter((x) => x.quarter === season && x.change && x.change !== 'unchanged' && x.delta_value).map((x) => ({ r, x: { slug: x.slug, manager: x.manager, change: x.change!, delta_value: x.delta_value } })))
@@ -266,7 +275,7 @@ export function Book() {
 
   const csv = () => {
     // Every column names whose figures it holds: all 13F filers or the funds we track closely.
-    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'new_all', 'exited_all', 'holders_smart', 'holders_smart_older_filings', 'top10_smart', 'over_5pct_smart', `filed_${season}_smart`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'latest_form', 'latest_date', 'latest_filer', 'latest_action', 'latest_value_usd', 'latest_pct_change', 'latest_accession', 'holder_form', 'holder_date', 'holder_filer', 'holder_line', 'holder_accession']
+    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'new_all', 'exited_all', 'holders_smart', 'holders_smart_older_filings', 'top10_smart', 'over_5pct_smart', `filed_${season}_smart`, 'holders_hedge', 'holders_hedge_older_filings', 'top10_hedge', 'over_5pct_hedge', `filed_${season}_hedge`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'latest_form', 'latest_date', 'latest_filer', 'latest_action', 'latest_value_usd', 'latest_pct_change', 'latest_accession', 'holder_form', 'holder_date', 'holder_filer', 'holder_line', 'holder_accession', 'lens']
     const q = (v: unknown) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))
     const body = rows.map((r) =>
       [
@@ -275,12 +284,14 @@ export function Book() {
         ...(r.a ? [r.a.incomplete ? '' : r.a.holders, r.a.holders, r.a.older, r.a.incomplete ? 'true' : 'false', r.a.incomplete ? '' : r.a.top10, r.a.top10, r.a.incomplete ? '' : r.a.over5, r.a.over5, r.a.incomplete ? '' : r.a.filed, r.a.filed] : ['', '', '', '', '', '', '', '', '', '']),
         r.ix?.new ?? '', r.ix?.exited ?? '',
         ...(r.s ? [r.s.holders, r.s.older, r.s.top10, r.s.over5, r.s.filed] : ['', '', '', '', '']),
+        ...(r.hf ? [r.hf.holders, r.hf.older, r.hf.top10, r.hf.over5, r.hf.filed] : ['', '', '', '', '']),
         r.t.holders, r.t.prev, r.featured, r.t.added, r.t.exited, r.t.top10, r.t.over5, r.t.filed,
         r.split && !r.split.adjusted ? '' : r.bought, r.split && !r.split.adjusted ? '' : r.sold, r.split && !r.split.adjusted ? '' : Math.round(r.net),
         r.split ? `${r.split.ratio} ${r.split.adjusted ? 'adjusted' : 'not counted'}` : '',
         r.latest?.form ?? '', r.latest?.date ?? '', r.latest?.manager ?? '',
         r.latest?.action ?? '', r.latest?.value != null ? Math.round(Math.abs(r.latest.value)) : '', r.latest?.pct != null ? (r.latest.pct * 100).toFixed(2) : '', dashed(r.latest?.accession),
         r.holder?.form ?? '', r.holder?.date ?? '', r.holder?.manager ?? '', r.holder?.line ?? '', dashed(r.holder?.accession),
+        LENSES.find(([k]) => k === lens)![1],
       ].map(q).join(','),
     )
     const url = URL.createObjectURL(new Blob([[head.join(','), ...body].join('\n')], { type: 'text/csv' }))
@@ -317,7 +328,7 @@ export function Book() {
                 <Stat
                   label={season ? `Filed ${quarterLabel(season)} so far` : 'Filed so far'}
                   value={ready ? `${Math.round((rows.reduce((a, r) => a + r.filed, 0) / Math.max(1, rows.reduce((a, r) => a + r.filedOf, 0))) * 100)}%` : '—'}
-                  sub={lens === 'smart' ? 'of the hedge funds and active managers holding your names' : 'of the 13F holders of your names'}
+                  sub={`of the ${LENS_WHO[lens]} holding your names`}
                 />
                 {(() => {
                   const top = ready ? [...rows].sort((a, b) => b.top10 / Math.max(1, b.holders) - a.top10 / Math.max(1, a.holders))[0] : null
@@ -331,9 +342,9 @@ export function Book() {
               </>
             )}
             <Stat
-              label="Their net trades this season"
+              label={lens === 'tracked' ? 'Their net trades this season' : 'Net trades, funds we track'}
               value={data.data ? <span className={moves.length ? (rows.reduce((a, r) => a + r.net, 0) >= 0 ? 'text-up' : 'text-down') : ''}>{signed(rows.reduce((a, r) => a + r.net, 0))}</span> : '—'}
-              sub={lens !== 'tracked' ? 'by the funds we track closely, at quarter-end value' : 'in your names, at quarter-end value'}
+              sub={lens !== 'tracked' ? 'this season in your names, at quarter-end value' : 'in your names, at quarter-end value'}
             />
           </div>
 
@@ -342,8 +353,8 @@ export function Book() {
               <div className="max-w-2xl">
                 <h2 className="text-[15px] font-semibold">Your names</h2>
                 <p className="text-[13px] text-ink-3">
-                  {lens === 'smart'
-                    ? 'Funds, top 10, over 5% and filed count the hedge funds and active managers among all 13F filers (types from EDGAR filings), whose latest filing is for this quarter or last; older filings are shown apart. Columns marked * (new, exited, bought, sold, net) cover the funds we track closely.'
+                  {lens === 'smart' || lens === 'hedge'
+                    ? `Funds, top 10, over 5% and filed count the ${LENS_WHO[lens]} among all 13F filers (types from EDGAR filings), whose latest filing is for this quarter or last; older filings are shown apart. Columns marked * (new, exited, bought, sold, net) cover the funds we track closely.`
                     : lens === 'all'
                       ? `Funds, ${exactAll ? 'vs last, new, exited, ' : ''}top 10, over 5% and filed count every 13F filer, from each one’s latest full 13F for this quarter or last; older filings are shown apart. Columns marked * (${exactAll ? '' : 'new, exited, '}bought, sold, net) cover the funds we track closely.`
                       : 'Among the funds we track closely, from each one’s latest 13F.'}{' '}
@@ -365,7 +376,7 @@ export function Book() {
                     {COLS.map(([k, l, align]) => (
                       <th key={k} aria-sort={sort.k === k ? (sort.desc ? 'descending' : 'ascending') : 'none'} className={`whitespace-nowrap px-3 py-2.5 font-medium first:pl-5 last:pr-5 md:first:pl-6 md:last:pr-6 ${align === 'right' ? 'text-right' : 'text-left'}`}>
                         <button type="button" onClick={() => setSort((s) => ({ k, desc: s.k === k ? !s.desc : k !== 'ticker' }))} className="inline-flex items-center gap-1 hover:text-ink">
-                          {k === 'filed' && season ? `Filed ${quarterLabel(season).split(' ')[0]}` : l}
+                          {k === 'filed' && season ? `Filed ${quarterLabel(season).split(' ')[0]}` : k === 'holders' ? { hedge: 'Hedge funds', smart: 'HF + long-only', all: 'Filers', tracked: 'Funds' }[lens] : l}
                           {lens !== 'tracked' && (k === 'net' || ((k === 'added' || k === 'exited') && !(lens === 'all' && exactAll))) && '*'}
                           <span aria-hidden="true" className={sort.k === k ? 'text-ink' : 'opacity-0'}>
                             {sort.desc ? '↓' : '↑'}
@@ -455,7 +466,7 @@ export function Book() {
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <Panel
               title={season ? `What they did in your names, ${quarterLabel(season)}` : 'What they did in your names'}
-              sub={lens === 'smart' ? 'Largest moves this season by hedge funds and active managers (each one’s ten largest buys and sells), valued at quarter-end' : lens === 'all' ? 'Largest moves by the funds we track closely that have filed this season, valued at quarter-end. Other filers’ moves appear once their prior quarter is on file.' : 'Largest moves by funds that have filed this season, valued at quarter-end'}
+              sub={lens === 'smart' || lens === 'hedge' ? `Largest moves this season by ${LENS_WHO[lens]} (each one’s ten largest buys and sells), valued at quarter-end` : lens === 'all' ? 'Largest moves by the funds we track closely that have filed this season, valued at quarter-end. Other filers’ moves appear once their prior quarter is on file.' : 'Largest moves by funds that have filed this season, valued at quarter-end'}
             >
               {!data.data ? (
                 <Skeleton className="h-48 w-full" />
@@ -485,7 +496,7 @@ export function Book() {
             </Panel>
           </div>
           <p className="mt-6 text-[13px] leading-relaxed text-ink-3">
-            {lens === 'smart' ? 'Holder counts cover the hedge funds and active managers among every 13F filer; new, exited and trades cover the funds we track closely' : lens === 'all' ? `Holder counts${exactAll ? ', new and exited' : ''} cover every 13F filer’s latest full filing; ${exactAll ? '' : 'new, exited and '}trades cover the funds we track closely` : 'Counts cover the funds we track closely, from each one’s latest 13F'}; “super” counts the superinvestors among them. {`“In a top 10” means one of the fund’s ten largest share positions. Latest 4 / 13D covers filings since ${windowLabel(windowStart(season))}, the latest 13F period end: open-market Form 4 trades from your insider threshold and Schedule 13D/Gs; passive index 13Gs (BlackRock, Vanguard, State Street and the like) are hidden. Your book is private to you and never used in aggregates. % of shares outstanding arrives with a later data release.`}
+            {lens === 'smart' || lens === 'hedge' ? `Holder counts cover the ${LENS_WHO[lens]} among every 13F filer; new, exited and trades cover the funds we track closely` : lens === 'all' ? `Holder counts${exactAll ? ', new and exited' : ''} cover every 13F filer’s latest full filing; ${exactAll ? '' : 'new, exited and '}trades cover the funds we track closely` : 'Counts cover the funds we track closely, from each one’s latest 13F'}; “super” counts the superinvestors among them. {`“In a top 10” means one of the fund’s ten largest share positions. Latest 4 / 13D covers filings since ${windowLabel(windowStart(season))}, the latest 13F period end: open-market Form 4 trades from your insider threshold and Schedule 13D/Gs; passive index 13Gs (BlackRock, Vanguard, State Street and the like) are hidden. Your book is private to you and never used in aggregates. % of shares outstanding arrives with a later data release.`}
           </p>
         </>
       )}

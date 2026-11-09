@@ -537,10 +537,12 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   const fl = await read('filers.json').catch(() => null)
   const filers = (fl?.filers ?? []).filter((f) => f.ok)
   const ft = await read('filer_types.json').catch(() => null)
-  const SMART = new Set(ft?.smart_money ?? ['hedge_fund', 'active'])
-  const isSmart = (cik, own) => SMART.has(own ?? ft?.filers?.[cik]?.type)
-  const hf = new Map() // page -> smart-money {current, older, top10, over5, quarters, moves}
-  const hfOf = (t) => hf.get(t) ?? hf.set(t, { current: 0, older: 0, top10: 0, over5: 0, quarters: {}, moves: [] }).get(t)
+  // Two lenses: hedge funds alone, and hedge funds plus long-only managers (ingest's smart_money;
+  // "active" until its long_only type lands).
+  const SMART = new Set([...(ft?.smart_money ?? ['hedge_fund', 'active']), 'hedge_fund', 'long_only'])
+  const typeOf = (cik, own) => own ?? ft?.filers?.[cik]?.type ?? null
+  const lenses = { smart: new Map(), hedge: new Map() } // page -> {current, older, top10, over5, quarters, moves}
+  const lensOf = (k, t) => lenses[k].get(t) ?? lenses[k].set(t, { current: 0, older: 0, top10: 0, over5: 0, quarters: {}, moves: [] }).get(t)
   const curatedByCik = new Map(index.managers.filter((m) => m.ok).map((m) => [m.cik, m]))
   const pageOf = (h) => (h.cusip && byCusip[h.cusip]) || (h.ticker && byTicker[h.ticker]) || null
   const per = new Map() // page ticker -> rows
@@ -566,7 +568,9 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       const total = d.equity_value || d.total_value - optionValue || d.total_value || 1
       const cur = curatedByCik.get(f.cik)
       const who = cur ? { slug: cur.slug, name: cur.manager, flag: cur.featured ? 2 : 1 } : { slug: f.slug, name: f.name, flag: 0 }
-      const hedge = isSmart(f.cik, d.type ?? f.type ?? cur?.type)
+      const ty = typeOf(f.cik, d.type ?? f.type ?? cur?.type)
+      const smart = SMART.has(ty)
+      const hedge = ty === 'hedge_fund'
       const mine = new Map() // page -> [shares, value]; classes of one issuer roll up like the curated rows
       for (const r of d.rows) {
         if (r[col.put_call]) continue
@@ -585,9 +589,10 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
         ranked.slice(0, 10).forEach(([t]) => top10.set(t, (top10.get(t) ?? 0) + 1))
         for (const [t, [, value]] of ranked) if (value / total > 0.05) over5.set(t, (over5.get(t) ?? 0) + 1)
       }
-      if (hedge) {
+      for (const [lens, on] of [['smart', smart], ['hedge', hedge]]) {
+        if (!on) continue
         ranked.forEach(([t, [, value]], i) => {
-          const x = hfOf(t)
+          const x = lensOf(lens, t)
           if (!fresh) return void x.older++
           x.current++
           x.quarters[d.quarter] = (x.quarters[d.quarter] ?? 0) + 1
@@ -600,7 +605,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
           for (const m of [...(d.moves?.bought ?? []), ...(d.moves?.sold ?? [])]) {
             if (m[mc.put_call]) continue
             const t = pageOf({ cusip: m[mc.cusip], ticker: m[mc.ticker] })
-            if (t) hfOf(t).moves.push([who.slug, who.name, d.quarter, m[mc.change], Math.round(m[mc.value_delta] || 0)])
+            if (t) lensOf(lens, t).moves.push([who.slug, who.name, d.quarter, m[mc.change], Math.round(m[mc.value_delta] || 0)])
           }
       }
       for (const [t] of ranked) {
@@ -611,7 +616,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       for (const [t, [shares, value]] of mine) {
         if (shares <= 0) continue
         const rows = per.get(t) ?? []
-        rows.push([who.slug, who.name, d.quarter, shares, Math.round(value), Number((value / total).toPrecision(4)), who.flag, hedge ? 1 : 0])
+        rows.push([who.slug, who.name, d.quarter, shares, Math.round(value), Number((value / total).toPrecision(4)), who.flag, (smart ? 1 : 0) | (hedge ? 2 : 0)])
         per.set(t, rows)
         const q = quarters.get(t) ?? {}
         q[d.quarter] = (q[d.quarter] ?? 0) + 1
@@ -650,7 +655,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       hlc = { holders: cur, older: h.counts.holders - cur, quarters: bp, new: nw, added, trimmed, exited, unchanged, no_prior }
       exact++
     }
-    const x = hf.get(t)
+    const block = (x) => (x ? { current: x.current, older: x.older, top10: x.top10, over5: x.over5, quarters: x.quarters, moves: x.moves.sort((a, b) => Math.abs(b[4]) - Math.abs(a[4])).slice(0, 25) } : { current: 0, older: 0, top10: 0, over5: 0, quarters: {}, moves: [] })
     writeFileSync(
       join(out, 'd', 'h', `${t}.json`),
       JSON.stringify({
@@ -662,13 +667,15 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
         top10: top10.get(t) ?? 0,
         over5: over5.get(t) ?? 0,
         ...(hlc ? { index: hlc } : {}),
-        smart: x ? { current: x.current, older: x.older, top10: x.top10, over5: x.over5, quarters: x.quarters, moves: x.moves.sort((a, b) => Math.abs(b[4]) - Math.abs(a[4])).slice(0, 25) } : { current: 0, older: 0, top10: 0, over5: 0, quarters: {}, moves: [] },
-        columns: ['slug', 'name', 'quarter', 'shares', 'value', 'weight', 'tier', 'smart'],
+        smart: block(lenses.smart.get(t)),
+        hedge: block(lenses.hedge.get(t)),
+        // lens: 1 hedge funds and long-only managers, 2 hedge funds (bits).
+        columns: ['slug', 'name', 'quarter', 'shares', 'value', 'weight', 'tier', 'lens'],
         rows: top,
         generated_at: fl?.generated_at ?? index.generated_at,
       }),
     )
     files++
   }
-  console.log(`all-filer holders: ${read_ok} filers, ${files} stocks (${exact} with full-book counts), ${rowsOut} rows (500 largest per stock); smart money holds ${hf.size} stocks`)
+  console.log(`all-filer holders: ${read_ok} filers, ${files} stocks (${exact} with full-book counts), ${rowsOut} rows (500 largest per stock); hedge funds and long-only hold ${lenses.smart.size} stocks, hedge funds ${lenses.hedge.size}`)
 }
