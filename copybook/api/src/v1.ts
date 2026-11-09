@@ -127,6 +127,7 @@ export const ERRORS = {
   bad_request: 'A parameter is missing or invalid.',
   not_yet_available: 'This option is documented but not served yet.',
   server_error: 'Something went wrong on our side.',
+  busy: 'The API is busy; retry after the Retry-After seconds.',
 } as const;
 export type ErrorCode = keyof typeof ERRORS;
 

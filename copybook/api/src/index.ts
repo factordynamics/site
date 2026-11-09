@@ -4,7 +4,7 @@ import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } fr
 import { verifyGithubOidc } from './oidc';
 import { type ChannelDelivery, channelScope, channelsView, failView, clearSeatDuplicates, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
-import { handleV1 } from './v1';
+import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
@@ -966,12 +966,14 @@ export default {
       console.log(String(err?.stack ?? err));
       return json({ ok: false, error: 'server error' }, 500, cors(allowedOrigin(req.headers.get('origin'), env)));
     });
-    // Every member and /v1 answer within 3 s: past that the caller gets a 503 to retry, never a hung page.
-    // Uploads, Stripe webhooks, downloads and whole books stream or write for longer and are exempt.
+    // Every member and /v1 read answers within 3 s: past that the caller gets a 503 to retry, never a hung page.
+    // Writes (sign-in, checkout, pause: they call Stripe or the mailer) are never cut off mid-way, and downloads and
+    // whole books stream for longer.
     const path = new URL(req.url).pathname;
-    if (/^\/(ingest|webhook|csv\/|v1\/bulk|v1\/filers\/[^/]+\/holdings)/.test(path)) return handled;
+    if (req.method !== 'GET' || /^\/(csv\/|feed\/|v1\/bulk|v1\/filers\/[^/]+\/holdings)/.test(path)) return handled;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const late = new Promise<Response>((r) => (timer = setTimeout(() => r(json({ ok: false, error: 'busy: try again in a few seconds', code: 'timeout' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': '5' })), REQUEST_MS)));
+    const busy = () => (path === '/v1' || path.startsWith('/v1/') ? v1error('busy', 503, undefined, { 'retry-after': '5' }) : json({ ok: false, error: 'busy: try again in a few seconds', code: 'busy' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': '5' }));
+    const late = new Promise<Response>((r) => (timer = setTimeout(() => r(busy()), REQUEST_MS)));
     return Promise.race([handled, late]).finally(() => clearTimeout(timer));
   },
   async scheduled(event: { scheduledTime?: number }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
