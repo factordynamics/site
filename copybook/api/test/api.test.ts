@@ -658,7 +658,7 @@ describe('copybook api', () => {
     const sat = Date.UTC(2026, 10, 14, 3, 42);
     const inWeek = (daysAgo: number) => new Date(sat - daysAgo * 86400_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
     index = { managers: [{ slug: 'warren-buffett', featured: true }, { slug: 'bill-ackman', featured: true }, { slug: 'carl-icahn', featured: true }, { slug: 'icici', featured: false }, { slug: 'vanguard-group', featured: false }] };
-    const row = (ticker: string, value_delta: number, extra = {}) => ({ ticker, name: ticker, cusip: 'x', put_call: null, shares: 1, prev_shares: 0, value_delta, ...extra });
+    const row = (change: string, ticker: string, value_delta: number, extra = {}) => ({ ticker, name: ticker, cusip: 'x', change, shares: 1, prev_shares: 0, value_delta, ...extra });
     const cardList = [
       { accession: 'ICI-13F', slug: 'icici', quarter: '2026Q3', filing_date: '2026-11-12' },
       { accession: 'VGD-13F', slug: 'vanguard-group', quarter: '2026Q3', filing_date: '2026-11-12' },
@@ -667,10 +667,10 @@ describe('copybook api', () => {
     ];
     const cardData: Record<string, unknown> = {
       // Bigger than Buffett's moves, but a tracked fund ranks after the superinvestors, and 2 rows at most.
-      'ICI-13F': { manager: 'ICICI Prudential', firm: 'ICICI Prudential Asset Management Co Ltd', featured: false, changes: { added: [row('X1', 9e10), row('X2', 8e10), row('X3', 7e10), row('AAPL', 1e7)] } },
-      'VGD-13F': { manager: 'Vanguard Group', firm: 'Vanguard Group Inc', featured: false, changes: { new: [row('VVV', 9e11)] } },
-      '0000950123-26-011111': { manager: 'Warren Buffett', featured: true, changes: { new: [row('DHI', 2e9)], added: [row('GOOGL', 8.8e9), row('PUTX', 9e9, { put_call: 'Put' })], trimmed: [row('BAC', -1.7e9)], exited: [row('STZ', -1e9)] } },
-      'OLD-13F': { manager: 'Bill Ackman', featured: true, changes: { new: [row('OLDX', 5e9)] } },
+      'ICI-13F': { manager: 'ICICI Prudential, LLC', firm: 'ICICI Prudential Asset Management Co Ltd', featured: false, changes: { added: 4 }, moves: [row('added', 'IVV', 9.5e10, { name: 'iShares Core S&P 500 ETF' }), row('added', 'X1', 9e10), row('added', 'X2', 8e10), row('added', 'X3', 7e10), row('added', 'AAPL', 1e7)] },
+      'VGD-13F': { manager: 'Vanguard Group', firm: 'Vanguard Group Inc', featured: false, changes: { new: 1 }, moves: [row('new', 'VVV', 9e11)] },
+      '0000950123-26-011111': { manager: 'Warren Buffett', featured: true, changes: { new: 1, added: 2, trimmed: 1, exited: 1 }, moves: [row('added', 'PUTX', 9e9, { put_call: 'Put' }), row('added', 'GOOGL', 8.8e9), row('new', 'DHI', 2e9), row('trimmed', 'BAC', -1.7e9), row('exited', 'STZ', -1e9)] },
+      'OLD-13F': { manager: 'Bill Ackman', featured: true, changes: { new: 1 }, moves: [row('new', 'OLDX', 5e9)] },
     };
     await hist.put('pre/events.json', JSON.stringify({ events: [
       { id: 'f4', slug: 'bill-ackman', manager: 'Bill Ackman', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', accepted: inWeek(2), ticker: 'HHH', value_usd: 5e7 },
@@ -707,7 +707,7 @@ describe('copybook api', () => {
     const buys = w.text.slice(w.text.indexOf('Biggest buys'), w.text.indexOf('Biggest sells'));
     expect([...buys.matchAll(/^ {2}(\S[^:]*):/gm)].map((m) => m[1])).toEqual(['Warren Buffett', 'Warren Buffett', 'Bill Ackman', 'ICICI Prudential', 'ICICI Prudential']);
     expect(buys).toContain(`Warren Buffett: added GOOGL, +$8.8B (13F Q3 2026)\n    ${SITE}f/0000950123-26-011111/`);
-    for (const no of ['X3', 'VVV', 'Vanguard', 'OLDX', 'PUTX', '$77.0B', 'gift', '$50.0K']) expect(w.text).not.toContain(no);
+    for (const no of ['X3', 'IVV', ', LLC', 'VVV', 'Vanguard', 'OLDX', 'PUTX', '$77.0B', 'gift', '$50.0K']) expect(w.text).not.toContain(no);
     expect(w.text.indexOf('BAC')).toBeLessThan(w.text.indexOf('STZ'));
     vi.stubGlobal('fetch', realFetch);
     const unsub = w.text.match(/Unsubscribe: (\S+)/)![1];

@@ -257,7 +257,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'POST' && path === '/ops/weekly-preview') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const { previewWeekly } = await import('./free');
-    return json(await previewWeekly(env, String((await body(req)).email ?? '').trim().toLowerCase(), Date.now()), 200, h);
+    const b = await body(req);
+    return json(await previewWeekly(env, String(b.email ?? '').trim().toLowerCase(), Date.now(), b.dry === true), 200, h);
   }
 
   // Operator: clear Fund seats' copies of their team's destinations (one-off for duplicates saved before the 409).

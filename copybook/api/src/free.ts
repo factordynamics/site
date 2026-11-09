@@ -135,6 +135,10 @@ export interface Week {
 }
 
 /** Index funds, ETF sponsors and broker-dealer flow: not what a superinvestor email is about. */
+/** ETFs and index products held in a 13F ("iShares 20 Yr Tr Bd ETF"): index flow, not a pick. */
+const FUND_SECURITY = /\b(etf|ishares|spdr|select sector|proshares|direxion|invesco qqq|vanguard|index)\b/i;
+/** "Fisher Asset Management, LLC" reads as "Fisher Asset Management". */
+const plainName = (n: string) => n.replace(/,?\s+(llc|l\.?l\.?c\.?|l\.?p\.?|ltd\.?|limited|inc\.?|co\.?)$/i, '').trim();
 const PASSIVE = /\b(vanguard|blackrock|ishares|state street|spdr|geode|dimensional|invesco|schwab|northern trust|index|etf|securities co|morgan stanley|barclays|deutsche bank|ubs|jpmorgan|goldman sachs|citigroup|bank of america|mitsubishi|mizuho|amundi|nomura|wells fargo|royal bank)\b/i;
 /** Filing cards read per weekly run (each is a subrequest): the superinvestors' first, then other funds, newest first. */
 const MAX_CARDS = 30;
@@ -166,18 +170,18 @@ export async function weeklyMoves(env: Env, now: number): Promise<Week> {
     .filter((c) => c.filing_date >= sinceDay)
     .sort((a, b) => Number(featured.has(b.slug)) - Number(featured.has(a.slug)) || b.filing_date.localeCompare(a.filing_date))
     .slice(0, MAX_CARDS);
-  type Row = { ticker: string | null; value_delta: number; put_call?: string | null };
+  type Row = { ticker: string | null; value_delta: number; put_call?: string | null; name?: string };
   const read = await Promise.all(cards.map((c) => get(`${env.SITE_URL}d/f/${c.accession}.json`)));
   cards.forEach((c, i) => {
-    const d = read[i] as { manager?: string; firm?: string; featured?: boolean; changes?: Record<string, Row[]> } | null;
+    // A card keeps its top 5 moves by size in `moves` (each with `change`); `changes` holds only counts.
+    const d = read[i] as { manager?: string; firm?: string; featured?: boolean; moves?: (Row & { change?: string })[] } | null;
     if (!d) return;
-    const manager = d.manager ?? d.firm ?? c.slug;
+    const manager = plainName(d.manager ?? d.firm ?? c.slug);
     if (!d.featured && !featured.has(c.slug) && PASSIVE.test(`${manager} ${d.firm ?? ''}`)) return;
-    for (const what of ['new', 'added', 'trimmed', 'exited'] as const) {
-      for (const r of d.changes?.[what] ?? []) {
-        if (!r.ticker || r.put_call || !r.value_delta) continue;
-        all.push({ manager, slug: c.slug, ticker: r.ticker, what, usd: r.value_delta, form: `13F ${c.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')}`, url: `${env.SITE_URL}f/${c.accession}/`, featured: !!d.featured || featured.has(c.slug), accession: c.accession });
-      }
+    for (const r of Array.isArray(d.moves) ? d.moves : []) {
+      const what = r.change as 'new' | 'added' | 'trimmed' | 'exited';
+      if (!r.ticker || r.put_call || !r.value_delta || !['new', 'added', 'trimmed', 'exited'].includes(what) || FUND_SECURITY.test(r.name ?? '')) continue;
+      all.push({ manager, slug: c.slug, ticker: r.ticker, what, usd: r.value_delta, form: `13F ${c.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')}`, url: `${env.SITE_URL}f/${c.accession}/`, featured: !!d.featured || featured.has(c.slug), accession: c.accession });
     }
   });
 
@@ -359,8 +363,8 @@ export async function carryFreeSignup(env: Env, m: Member): Promise<Member> {
   return { ...m, source: m.source ?? free.source ?? null, ...(free.utm && !m.utm ? { utm: free.utm } : {}), marketing_off: m.marketing_off ?? free.marketing_off, created_at: free.created_at };
 }
 
-/** Operator: this week's issue for one free member, sent now (a check of what Friday sends; the week isn't marked sent). */
-export async function previewWeekly(env: Env, email: string, now: number): Promise<Record<string, unknown>> {
+/** Operator: this week's issue for one free member, sent now (a check of what Friday sends; the week isn't marked sent). `dry` returns the text instead. */
+export async function previewWeekly(env: Env, email: string, now: number, dry = false): Promise<Record<string, unknown>> {
   const m = await memberByEmail(env, email);
   if (!m || m.status !== 'free') return { ok: false, error: 'no free member with that email' };
   const moves = await weeklyMoves(env, now);
@@ -368,5 +372,6 @@ export async function previewWeekly(env: Env, email: string, now: number): Promi
   const f = await changeFollows(env, m, { get: true });
   const yours = await inYourNames(env, (f.ok ? f.follows : await getFollows(env, m)).owned.slice(0, FREE_NAMES), moves, now);
   const mail = weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), yours);
+  if (dry) return { ok: true, sent: false, subject: mail.subject, in_your_names: yours, text: mail.text };
   return { ok: true, status: await sendMail(env, [mail]), subject: mail.subject, in_your_names: yours };
 }
