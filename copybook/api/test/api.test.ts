@@ -21,6 +21,7 @@ import { signToken } from '../src/tokens';
 import { pauseResumesAt, deadlineMs } from '../src/seasons';
 import form4Csgp from './fixtures/form4-csgp-florance-buy.txt?raw';
 import form4Googl from './fixtures/form4-googl-walker.txt?raw';
+import form4Dash from './fixtures/form4-dash-tang.txt?raw';
 import { withTrade, type StockEvent } from '../src/stockevents';
 import { cleanItem4, parseSchedule13 } from '../src/edgar';
 
@@ -988,6 +989,19 @@ describe('copybook api', () => {
       expect(all[0]).toMatchObject({ filer_name: 'WALKER JOHN KENT', action: 'sell', trade_date: '2026-06-29', filed_date: '2026-07-01', pct_change: -8.73, exercise_and_sale: false });
       // The sale was before the window (Jul 1), though filed on it: window=quarter leaves it out.
       expect((await (await call('/events?tickers=GOOGL&window=quarter', { token })).json()).tickers.GOOGL.events).toEqual([]);
+      // DASH's Tang (0001832614-26-000028): J distributions of 7,828 and 72,367 Class A shares, then 84,526 sold ($19.0M).
+      // From the holding before the filing, 50,579, to 46,248 after: -8.56%, not -65%; J is listed so the UI can say "after distribution".
+      await hist.put('pre/sec-tickers.json', '{"GOOGL":"0001652044","DASH":"0001792789"}');
+      secFiles['company:0001792789:4'] = `<feed><entry><category term="4"/><id>urn:tag:sec.gov,2008:accession-number=0001832614-26-000028</id><updated>2026-08-24T16:05:00-04:00</updated></entry></feed>`;
+      secFiles['Archives/edgar/data/1792789/000183261426000028/0001832614-26-000028.txt'] = form4Dash;
+      // A 13G is in the window by its filing date: its event date (here Mar 13, the threshold crossing) can be months before.
+      secFiles['company:0000908937:SCHEDULE 13'] = `<feed><entry><category term="SCHEDULE 13G/A"/><id>urn:tag:sec.gov,2008:accession-number=0000102909-26-002721</id><updated>2026-08-14T10:00:00-04:00</updated></entry></feed>`;
+      secFiles['Archives/edgar/data/908937/000010290926002721/primary_doc.xml'] = sc13gSiri;
+      await hist.put('pre/sec-tickers.json', '{"GOOGL":"0001652044","DASH":"0001792789","SIRI":"0000908937"}');
+      const g13 = (await (await call('/events?tickers=SIRI&window=quarter', { token })).json()).tickers.SIRI.events;
+      expect(g13.map((e: StockEvent) => [e.form, e.event_date, e.filed_date])).toEqual([['SCHEDULE 13G/A', '2026-03-13', '2026-08-14']]);
+      const tang = (await (await call('/events?tickers=DASH&window=quarter', { token })).json()).tickers.DASH.events[0];
+      expect([tang.filer_name, tang.action, tang.shares, Math.round(tang.value_usd / 1e5) / 10, tang.pct_change, tang.has_other_codes, tang.exercise_and_sale]).toEqual(['Tang Stanley', 'sell', 84526, 19, -8.56, ['J'], false]);
     } finally {
       vi.useRealTimers();
     }
@@ -1050,7 +1064,7 @@ describe('copybook api', () => {
         totals: { sold: { shares: 39700, value_usd: 19972776 } },
         open_market: true,
         // The foundation's 39,700 of the 107,625 shares held before.
-        trade_date: '2026-09-28', filed_date: '2026-09-29', pct_change: -36.89, exercise_and_sale: false,
+        trade_date: '2026-09-28', filed_date: '2026-09-29', pct_change: -36.89, has_other_codes: [], exercise_and_sale: false,
         url: 'https://www.sec.gov/Archives/edgar/data/1067983/000172845126000004/0001728451-26-000004-index.htm',
       },
     ]);

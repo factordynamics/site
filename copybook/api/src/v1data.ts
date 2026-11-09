@@ -729,7 +729,7 @@ ROUTES.push(
             prev: null,
             classes: e.classes ?? null,
             purpose: null,
-            insider: f4 ? { name: e.filer_name, roles: (e.role ?? '').split(', ').filter(Boolean), ownership: e.ownership, open_market: e.open_market, codes: e.codes, totals: e.totals, transactions: e.transactions, trade_date: e.trade_date ?? null, filed_date: e.filed_date ?? null, pct_change: e.pct_change ?? null, exercise_and_sale: e.exercise_and_sale ?? false } : null,
+            insider: f4 ? { name: e.filer_name, roles: (e.role ?? '').split(', ').filter(Boolean), ownership: e.ownership, open_market: e.open_market, codes: e.codes, totals: e.totals, transactions: e.transactions, trade_date: e.trade_date ?? null, filed_date: e.filed_date ?? null, pct_change: e.pct_change ?? null, has_other_codes: e.has_other_codes ?? [], exercise_and_sale: e.exercise_and_sale ?? false } : null,
             details_pending: false,
             sec_url: e.url,
           });

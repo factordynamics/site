@@ -42,6 +42,8 @@ export interface StockEvent {
   classes?: Form4Class[] | null;
   /** The first transaction date (Form 4) or event date (13D/G): what window=quarter filters on. Filing can be days later. */
   trade_date?: string | null;
+  /** Form 4: codes other than P/S on the traded class (J: "after distribution"; M: exercise; F: tax withholding). */
+  has_other_codes?: string[];
   /** The ET date EDGAR accepted the filing. */
   filed_date?: string;
   /**
@@ -192,19 +194,23 @@ export function withTrade(e: StockEvent): StockEvent {
   const dates = lines.map((l) => l.date).filter((d): d is string => !!d).sort();
   const trade_date = e.form.startsWith('4') ? (dates[0] ?? e.event_date) : e.event_date;
   let pct_change: number | null = null;
+  let has_other_codes: string[] = [];
   const traded = new Set(lines.filter((l) => l.code === 'P' || l.code === 'S').map((l) => l.security));
   if (e.form.startsWith('4') && traded.size) {
     const of = (l: { security: string }) => traded.has(l.security);
-    const ps = lines.filter((l) => of(l) && (l.code === 'P' || l.code === 'S')).reduce((s, l) => s + (l.code === 'P' ? l.shares : -l.shares), 0);
     const after = (e.ownership ?? []).filter(of).reduce((s, o) => s + o.shares_after, 0);
-    // The holding just before the open-market trades, with every other line counted first: shares exercised to
-    // sell are in it (a sale is never below -100%), and gifts between the owner's own accounts move nothing.
-    const before = after - ps;
-    pct_change = before > 0 ? Math.round((ps / before) * 10000) / 100 : null;
+    // The holding before the filing, before any line in it, on the traded class: every line moves it except
+    // gifts (G, between the owner's own accounts, as GOOGL's into his trust) and exercises (M/X: the shares
+    // exercised to sell count as held, so an exercise and same-day sale reads as the sale). DASH's Tang: J
+    // distributions of 7,828 and 72,367 shares, then 84,526 sold: 50,579 -> 46,248, -8.56%, not -65%.
+    const moved = lines.filter((l) => of(l) && !['G', 'M', 'X'].includes(l.code)).reduce((s, l) => s + (l.acquired_disposed === 'D' ? -l.shares : l.shares), 0);
+    const before = after - moved;
+    pct_change = before > 0 ? Math.round(((after - before) / before) * 10000) / 100 : null;
+    has_other_codes = [...new Set(lines.filter((l) => of(l) && !['P', 'S'].includes(l.code)).map((l) => l.code))].sort();
   }
   const all = e.transactions ?? [];
   const exercise_and_sale = all.some((m) => (m.code === 'M' || m.code === 'X') && m.date && all.some((x) => x.code === 'S' && !x.derivative && x.date === m.date));
-  return { ...e, trade_date: trade_date ?? null, filed_date: etDate(e.accepted_at), pct_change, exercise_and_sale };
+  return { ...e, trade_date: trade_date ?? null, filed_date: etDate(e.accepted_at), pct_change, has_other_codes, exercise_and_sale };
 }
 
 const events = (c: Cached) =>
