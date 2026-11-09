@@ -1,6 +1,6 @@
 import { linkBase, type Env } from './env';
 import { lookupTickers } from './alerts';
-import { cleanItem4, fetch13F, fetchFilingMeta, filings13F, type Filed13F, type FilingMeta } from './edgar';
+import { cleanItem4, easternToUtc, fetch13F, fetchFilingMeta, filings13F, SEC_UA, type Filed13F, type FilingMeta } from './edgar';
 import { ROUTES, v1error, v1json, v1prefix, noMs, stampOf, type Stamp } from './v1';
 
 /** Smallest bulk file served: a real quarter is tens of MB gzipped (2026Q2: 69 MB); smaller ones are stubs from a failed run. */
@@ -551,6 +551,98 @@ async function filerTypes(env: Env): Promise<Map<string, string>> {
 }
 
 /**
+ * EDGAR acceptance times for holder rows' accessions, every filer (not only curated): R2 data/accepted.json
+ * ({accession: ISO UTC}, '' for an accession EDGAR doesn't have), filled by gene's cron (fillAccepted) for the
+ * issuers requests queued (data/accepted-queue.json). Requests only read it, so it never slows a request.
+ */
+let ACCEPTED: { at: number; by: Record<string, string> } | null = null;
+async function acceptedMap(env: Env, fresh = false): Promise<Record<string, string>> {
+  if (!fresh && ACCEPTED && Date.now() - ACCEPTED.at < 120_000) return ACCEPTED.by;
+  try {
+    const obj = await env.HIST.get('data/accepted.json');
+    ACCEPTED = { at: Date.now(), by: obj ? ((await new Response(obj.body).json()) as Record<string, string>) : (ACCEPTED?.by ?? {}) };
+  } catch {
+    ACCEPTED = { at: Date.now(), by: ACCEPTED?.by ?? {} };
+  }
+  return ACCEPTED.by;
+}
+/** 0001234567-26-000123, whatever form a row carries (no dashes too). */
+const dashed = (a: string) => {
+  const d = a.replace(/\D/g, '');
+  return d.length === 18 ? `${d.slice(0, 10)}-${d.slice(10, 12)}-${d.slice(12)}` : a;
+};
+const QUEUE = 'data/accepted-queue.json';
+/** Issuers this isolate queued lately: one queue write per issuer per 10 minutes. */
+const queuedAt = new Map<string, number>();
+async function queueAccepted(env: Env, code: string): Promise<void> {
+  if (Date.now() - (queuedAt.get(code) ?? 0) < 600_000) return;
+  queuedAt.set(code, Date.now());
+  const obj = await env.HIST.get(QUEUE);
+  const q = obj ? ((await new Response(obj.body).json()) as string[]) : [];
+  if (!q.includes(code)) await env.HIST.put(QUEUE, JSON.stringify([...q, code].slice(-500)));
+}
+
+/**
+ * gene's cron: acceptance times from EDGAR (each filing's index headers) for the queued issuers' rows that have an
+ * accession but no accepted_at. At most `max` reads a run, about 8 a second (SEC's limit is 10).
+ */
+let filling = false;
+export async function fillAccepted(env: Env, max = 300, budgetMs = 40_000): Promise<Record<string, unknown>> {
+  if (filling) return { status: 'already running' };
+  const qObj = await env.HIST.get(QUEUE);
+  const queue = qObj ? ((await new Response(qObj.body).json()) as string[]) : [];
+  if (!queue.length) return { queued: 0 };
+  filling = true;
+  const t0 = Date.now();
+  const known = { ...(await acceptedMap(env, true)) };
+  let fetched = 0;
+  let errors = 0;
+  const left: string[] = [];
+  try {
+    for (const code of queue) {
+      const obj = (await env.HIST.get(`hl/${code}.json`)) ?? (await env.HIST.get(`s/${code}.json`));
+      if (!obj) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d: any = await new Response(obj.body).json();
+      const todo = new Map<string, string>();
+      for (const r of rowsOf({ columns: d.columns, rows: d.rows ?? d.holders ?? [] })) {
+        if (!r.accession || r.accepted_at || r.cik == null) continue;
+        const a = dashed(String(r.accession));
+        if (!(a in known)) todo.set(a, String(Number(r.cik)));
+      }
+      const work = [...todo].slice(0, Math.max(0, max - fetched));
+      // Four at a time, each at most 2 a second.
+      for (let i = 0; i < work.length && Date.now() - t0 < budgetMs; i += 4) {
+        const started = Date.now();
+        await Promise.all(work.slice(i, i + 4).map(async ([a, cik]) => {
+          try {
+            const r = await fetch(`https://www.sec.gov/Archives/edgar/data/${cik}/${a.replace(/-/g, '')}/${a}-index-headers.html`, { headers: { 'user-agent': SEC_UA }, signal: AbortSignal.timeout(10_000) });
+            fetched++;
+            if (r.status === 404) return void (known[a] = '');
+            if (!r.ok) return void errors++;
+            const m = (await r.text()).match(/<ACCEPTANCE-DATETIME>\s*(\d{14})/);
+            known[a] = m ? easternToUtc(m[1]) : '';
+          } catch {
+            errors++;
+          }
+        }));
+        await new Promise((r) => setTimeout(r, Math.max(0, 500 - (Date.now() - started))));
+      }
+      if ([...todo.keys()].some((a) => !(a in known))) left.push(code);
+    }
+    await env.HIST.put('data/accepted.json', JSON.stringify(known), { httpMetadata: { contentType: 'application/json' } });
+    ACCEPTED = { at: Date.now(), by: known };
+    // Requests may have queued more meanwhile: keep those too.
+    const now = await env.HIST.get(QUEUE);
+    const added = now ? ((await new Response(now.body).json()) as string[]).filter((c) => !queue.includes(c)) : [];
+    await env.HIST.put(QUEUE, JSON.stringify([...left, ...added]));
+    return { fetched, errors, issuers_left: left.length + added.length, known: Object.keys(known).length };
+  } finally {
+    filling = false;
+  }
+}
+
+/**
  * Every 13F filer holding one issuer in its latest full book: R2 hl/{issuer6}.json (all rows, uploaded by
  * the data run), else the older single-period s/{issuer6}.json. Largest first. Curated funds' rows carry
  * their 13F's accession and EDGAR acceptance when cached; weight comes from the row, else a curated fund's total.
@@ -597,11 +689,15 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       accepted_at: noMs(h.accepted_at) ?? null,
     };
   });
-  // Acceptance for curated rows, from the per-filing cache only (no EDGAR reads for a list this long).
+  // Acceptance for every row with an accession: gene's EDGAR-filled map (any filer), then the curated per-filing
+  // cache. What neither has is queued for gene's cron; the request never waits on EDGAR.
+  const known = await acceptedMap(env);
+  for (const r of rows) if (r.accession && !r.accepted_at) r.accepted_at = known[dashed(r.accession)] || null;
   const accs = [...new Set(rows.filter((r) => r.accession && !r.accepted_at).map((r) => r.accession!))].slice(0, 60);
   const metas = await Promise.all(accs.map(async (a) => [a, (JSON.parse((await env.DB.get(`filing:${a}`)) ?? 'null') as FilingMeta | null)?.accepted_at ?? null] as const));
   const at = new Map(metas);
   for (const r of rows) if (r.accession && !r.accepted_at) r.accepted_at = noMs(at.get(r.accession) ?? null);
+  if (obj && rows.some((r) => r.accession && !r.accepted_at && !(dashed(r.accession) in known))) await queueAccepted(env, code).catch(() => undefined);
   mark('rows');
   rows.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0));
   return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, rows, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj), source: obj ? (hl ? 'hl' : 's') : 'public' };

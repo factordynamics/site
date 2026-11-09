@@ -2548,6 +2548,28 @@ describe('copybook api', () => {
     // A curated fund's row: its latest 13F, acceptance from the filing cache, weight of its $2,000 book.
     expect(h.data.holders[2]).toMatchObject({ filer: { slug: 'warren-buffett', curated: true }, accession: 'A2', accepted_at: '2026-08-14T20:05:04Z', weight: 0.9 });
     expect(h.data.holders[3]).toMatchObject({ prev_shares: null, share_change: null, change: 'new' });
+    // Any filer's row with an accession gets EDGAR's acceptance time: the first request queues the issuer, gene's cron
+    // reads each filing's index headers (Eastern wall time to UTC), and the next request has it. No-dash accessions match.
+    await hist.put('hl/037833.json', JSON.stringify({ issuer: '037833', tickers: ['AAPL'], rows_total: 2, columns: ['cik', 'name', 'type', 'curated', 'period', 'shares', 'value', 'change', 'accession'], rows: [
+      ['0000102909', 'Vanguard Group Inc', 'index', false, '2026Q3', 50, 9000, 'added', '0000102909-26-000123'],
+      ['0002045724', 'Situational Awareness LP', 'hedge_fund', false, '2026Q3', 10, 900, 'new', '000204572426000007'],
+    ] }));
+    const aapl = async () => (await v1('/v1/stocks/AAPL/holders')).body.data.holders.map((x: { accepted_at: string | null }) => x.accepted_at);
+    expect(await aapl()).toEqual([null, null]);
+    const secReads: string[] = [];
+    const before = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      const m = String(u).match(/^https:\/\/www\.sec\.gov\/Archives\/edgar\/data\/(\d+)\/(\d{18})\/([\d-]+)-index-headers\.html$/);
+      if (!m) return before(u, init);
+      secReads.push(`${m[1]} ${m[3]}`);
+      return m[1] === '102909' ? new Response('<SEC-HEADER>\n<ACCEPTANCE-DATETIME>20261103161501\n</SEC-HEADER>') : new Response('<ACCEPTANCE-DATETIME>20260814160504');
+    });
+    const { fillAccepted } = await import('../src/v1data');
+    expect(await fillAccepted(env, 300, 10_000)).toMatchObject({ fetched: 2, errors: 0, issuers_left: 0 });
+    vi.stubGlobal('fetch', before);
+    expect(secReads.sort()).toEqual(['102909 0000102909-26-000123', '2045724 0002045724-26-000007']);
+    expect(await aapl()).toEqual(['2026-11-03T21:15:01Z', '2026-08-14T20:05:04Z']); // EST after Nov 1, EDT before
+    expect(await fillAccepted(env)).toEqual({ queued: 0 }); // nothing left to read
     const ciks = async (q: string) => (await v1(`/v1/stocks/NVDA/holders${q}`)).body.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik);
     expect(await ciks('?type=hedge_fund')).toEqual(['0002045724', '0001387322']);
     expect(await ciks('?type=hedge_fund&include_options=true')).toEqual(['0002045724', '0001423053', '0001387322']);

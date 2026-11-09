@@ -349,6 +349,8 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
   if (now - cfLast < BACKUP_AFTER_MS) {
     await env.DB.put('host:poller', JSON.stringify(cf));
     out.poller = 'backup (cloudflare polls)';
+    // While Cloudflare polls, gene's spare minute fills holder rows' EDGAR acceptance times.
+    out.accepted = await (await import('./v1data')).fillAccepted(env).catch((e) => `error: ${e}`);
     return out;
   }
   out.poller = 'gene polls (cloudflare silent)';
