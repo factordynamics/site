@@ -2356,6 +2356,12 @@ describe('copybook api', () => {
   it('/v1 every filer: the all-filer list, books from the public shard then the full R2 book, ranges, stock holders', async () => {
     index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR', accession: 'A2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 2000, position_count: 1, history_quarters: ['2026Q2'] }] };
     await cron(17);
+    // A stale cached index.json (an older build) never moves the build /v1 reports backwards.
+    const current = index;
+    index = { ...(current as Record<string, unknown>), generated_at: '2026-11-08T20:00:00Z' } as typeof index;
+    await cron(17);
+    expect(JSON.parse((await env.DB.get('v1:build'))!).data_built_at).toBe('2026-11-08T21:29:01Z');
+    index = current;
     stripeObjects['checkout/sessions/cs_test_af'] = { id: 'cs_test_af', status: 'complete', created: now(), subscription: 'sub_af', customer_details: { email: 'af@example.com' } };
     stripeObjects['subscriptions/sub_af'] = sub('sub_af', 'cus_af', 'active', 'month', 'pro_monthly');
     const t = (await (await call('/session', { body: { checkout_session: 'cs_test_af' } })).json()).token;

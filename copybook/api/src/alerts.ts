@@ -945,7 +945,11 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   const rows = idx.managers ?? [];
   // /v1 responses say when and from which build the data was made.
   const build = JSON.stringify({ data_built_at: idx.generated_at ?? null, build_id: idx.build_id ?? (idx.generated_at ? idx.generated_at.replace(/[-:]/g, '') : null) });
-  if ((await env.DB.get('v1:build')) !== build) await env.DB.put('v1:build', build);
+  // Never backwards: a stale cached index.json (an older build) never replaces the build /v1 already reports.
+  const was = JSON.parse((await env.DB.get('v1:build')) ?? '{}') as { data_built_at?: string | null };
+  const older = !!was.data_built_at && !!idx.generated_at && idx.generated_at < was.data_built_at;
+  if (older) return { status: 'older index ignored', index_built_at: idx.generated_at, serving: was.data_built_at };
+  if (JSON.stringify(was) !== build) await env.DB.put('v1:build', build);
 
   const ciks: CikMap = {};
   const byCik = (cik: string, m: IndexRow) => (ciks[cik.padStart(10, '0')] ??= []).push({ slug: m.slug, manager: m.manager, name: m.name, cik: m.cik.padStart(10, '0'), featured: m.featured, type: m.type ?? null });
