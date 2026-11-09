@@ -480,7 +480,7 @@ export function Funds() {
               label: 'fund',
               link: true,
               render: (m) => (
-                <span>
+                <span className="trunc wide-name" title={m.firm}>
                   <span className="strong">{m.firm}</span>
                   {m.pm && <span className="dim hide-sm"> · {m.pm}</span>}
                 </span>

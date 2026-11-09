@@ -279,7 +279,9 @@ async function loadOneStock(t: string): Promise<StockFile> {
     if (!group) throw e
     return null
   })
-  const [up, books] = await Promise.all([file, group ? loadBooks() : null])
+  const up = await file
+  // Read every roster book only when Copybook's file is missing or lacks one of the issuer's CUSIPs.
+  const books = group && (!up || group.some((c) => !up.classes.some((x) => x.cusip === c.cusip))) ? await loadBooks() : null
   let d = up && { ...up, holders: [...up.holders], exited: [...up.exited], options: [...(up.options ?? [])], classes: [...up.classes] }
   if (group && books) {
     const cus = new Map(group.map((c) => [c.cusip, c.ticker]))

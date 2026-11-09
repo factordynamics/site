@@ -547,6 +547,9 @@ table.grid {
   font-family: var(--mono);
   color: var(--fg);
 }
+.trunc.wide-name {
+  max-width: 440px;
+}
 .noticker {
   color: var(--fg2);
   font-size: 12.5px;
@@ -1165,6 +1168,13 @@ pre.email {
   }
   .narrow-sm {
     max-width: 128px;
+  }
+  /* Long firm and company names truncate on phones instead of widening the table. */
+  .trunc.wide-name {
+    max-width: 205px;
+  }
+  .noticker {
+    max-width: 118px;
   }
   .fund-stats .stat:nth-child(3),
   .fund-stats .stat:nth-child(4) {

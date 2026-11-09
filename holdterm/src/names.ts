@@ -33,13 +33,23 @@ export const FUNDS: Record<string, FundName> = {
   'jana-partners-management-lp': { firm: 'JANA Partners', pm: 'Barry Rosenstein' },
   'tweedy-browne': { firm: 'Tweedy, Browne' },
   'stuart-mclaughlin': { firm: 'Triple Frond Partners', pm: 'Stuart McLaughlin' },
+  // EDGAR files these under a person's surname first or with a state tag; show the firm as it styles itself.
+  'cooperman-leon-g-8382': { firm: 'Leon G. Cooperman', aka: ['Omega Advisors', 'Lee Cooperman'] },
+  'mcdaniel-terry-co-4366': { firm: 'McDaniel Terry & Co.' },
+  'fishman-jay-a-ltd-mi-6407': { firm: 'Jay A. Fishman Ltd.' },
+  'bruni-j-v-co-co-8841': { firm: 'J.V. Bruni & Co.' },
+  'j-stern-co-llp-1335': { firm: 'J. Stern & Co.' },
+  'armstrong-henry-h-associates-inc-6827': { firm: 'Henry H. Armstrong Associates' },
+  'advent-capital-management-de-7278': { firm: 'Advent Capital Management' },
 }
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 /** Fund URLs use the firm (/m/ako-capital), not the data slug, which can be a person's name. */
 // Funds in FUNDS use their firm; other roster funds use their data slug without legal suffixes or the
 // numeric tie-breaker (owl-creek-asset-management-l-p -> owl-creek-asset-management).
-const bare = (slug: string) => slug.replace(/(-(llc|l-l-c|lp|l-p|llp|l-l-p|inc|ltd|co|corp|plc|ag|sa|se|nv|n-v|gmbh|limited))+(-\d+)?$/, '').replace(/-\d+$/, '')
+// A legal suffix may carry EDGAR's state tag (inc-fl, co-ca). The tie-breaker is the CIK's last 4 digits
+// (progeny-3-inc-6006 -> progeny-3).
+const bare = (slug: string) => slug.replace(/(-(llc|l-l-c|lp|l-p|llp|l-l-p|inc|ltd|co|corp|plc|ag|sa|s-a-s|a-s|se|nv|n-v|gmbh|limited|pty|pte))+(-[a-z]{2})?(-\d{4})?$/, '').replace(/-\d{4}$/, '')
 const PUBLIC: Record<string, string> = Object.fromEntries([
   ...(ROSTER as unknown as { funds: { slug: string }[]; pending: { slug: string | null }[] }).funds.concat((ROSTER as unknown as { pending: { slug: string }[] }).pending.filter((f) => f.slug)).map((f) => [f.slug, bare(f.slug)]),
   ...Object.entries(FUNDS).map(([slug, f]) => [slug, slugify(f.firm)]),
@@ -50,7 +60,7 @@ export const fundPath = (slug: string) => `/m/${PUBLIC[slug] ?? slug}`
 export const dataSlug = (urlSlug: string) => DATA_SLUG[urlSlug] ?? urlSlug
 export const publicSlug = (slug: string) => PUBLIC[slug] ?? slug
 
-const SUFFIX = /[\s,]+(L\.?L\.?C\.?|L\.?P\.?|LLP|Inc\.?|Ltd\.?|Limited|Corp\.?|Co\.?|plc|S\.A\.|AG|N\.?V\.?|GmbH|\(UK\)|\/[A-Z]{2}\/?)$/i
+const SUFFIX = /[\s,]+(L\.?L\.?C\.?|L\.?P\.?|LLP|Inc\.?|Ltd\.?|Limited|Corp\.?|Co\.?|plc|S\.A\.S\.?|S\.A\.|A\/S|SE|AG|N\.?V\.?|GmbH|PTY|Pte\.?|\(UK\)|\/[A-Z]{2}\/?)$/i
 const titleCase = (s: string) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()))
 /** Firm name for any filer: our map first, else the EDGAR name without legal suffixes. */
 export function firmName(slug: string, edgarName: string): string {
