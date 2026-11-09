@@ -4,6 +4,7 @@ import { Signup } from '../components/Signup'
 import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { useMember } from '../lib/account'
 import { dateLabel, money, quarterLabel, useAsync, useTitle } from '../lib/data'
+import { isEdgarDay } from '../lib/calendar.mjs'
 import { loadCardSet, loadSeason, stockPath, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
 
 // /season/: the 13F filing season as it happens. Built from d/season.json, which every Pages build
@@ -46,10 +47,14 @@ export function Season() {
   const Q = d ? quarterLabel(d.quarter) : ''
   useTitle(d ? `${Q} 13F season tracker · Copybook` : '13F season tracker · Copybook')
 
-  // Superinvestors once a handful have filed; until then, every fund we track closely.
-  const auto: 'featured' | 'all' = d && d.featured.filed >= 5 ? 'featured' : 'all'
+  // Open on the superinvestors. Until about 10 have filed, dollar rankings are led by a few banks'
+  // and index managers' flows, so the default is the names the most of them bought.
+  const auto: 'featured' | 'all' = d && d.featured.filed > 0 ? 'featured' : 'all'
+  const autoTab: Tab = d && d.featured.filed < 10 ? 'most_buyers' : 'bought'
   const scope = (params.get('funds') as 'featured' | 'all' | null) ?? auto
-  const tab: Tab = (TABS.find(([k]) => k === params.get('tab'))?.[0] as Tab) ?? 'bought'
+  const tab: Tab = (TABS.find(([k]) => k === params.get('tab'))?.[0] as Tab) ?? autoTab
+  // ETFs and index funds are left out unless asked for: they're allocation, not stock picks.
+  const etfs = params.get('etfs') === '1'
   const set = (k: string, v: string | null) => {
     const n = new URLSearchParams(params)
     if (v == null) n.delete(k)
@@ -57,7 +62,9 @@ export function Season() {
     setParams(n, { replace: true })
   }
   const flow = d ? (scope === 'featured' ? d.featured_flow : d.all_flow) : undefined
-  const rows = flow?.[tab] ?? []
+  const all = flow?.[tab] ?? []
+  const rows = etfs ? all : all.filter((r) => !r.etf)
+  const hiddenEtfs = all.length - rows.length
   const shown = paid ? rows : rows.slice(0, FREE)
   const due = d ? new Date(d.deadline).getTime() : 0
   const passed = d && now > due
@@ -92,7 +99,7 @@ export function Season() {
         <Progress label="All 13F filers" sub="of the filers active last quarter" v={d?.filers} />
       </div>
 
-      <Panel className="mt-5" title="13Fs accepted per business day" sub={d ? `All filers, ${Q}. Each bar is one business day; dashed slots are the days left before the deadline.` : undefined}>
+      <Panel className="mt-5" title="13Fs accepted per business day" sub={d ? `All filers, ${Q}. Each bar is one EDGAR business day (weekends and federal holidays left out); dashed slots are the days left before the deadline.` : undefined}>
         {d ? <DayBars d={d} now={now} /> : <Skeleton className="h-44 w-full" />}
       </Panel>
 
@@ -101,7 +108,7 @@ export function Season() {
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
             <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Ranking">
               {TABS.map(([k, l]) => (
-                <button key={k} role="tab" aria-selected={tab === k} onClick={() => set('tab', k === 'bought' ? null : k)} className={`rounded-full px-3 py-1.5 ${tab === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                <button key={k} role="tab" aria-selected={tab === k} onClick={() => set('tab', k === autoTab ? null : k)} className={`rounded-full px-3 py-1.5 ${tab === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                   {l}
                 </button>
               ))}
@@ -126,6 +133,14 @@ export function Season() {
             </ol>
           )}
           {d && tab !== 'sold' && <SplitNote splits={d.splits} />}
+          {d && (hiddenEtfs > 0 || etfs) && (
+            <p className="border-t border-line px-5 py-3 text-[13px] text-ink-3 md:px-6">
+              {etfs ? 'ETFs and index funds included.' : `${hiddenEtfs} ${hiddenEtfs === 1 ? 'ETF or index fund' : 'ETFs and index funds'} left out: allocation, not stock picks.`}{' '}
+              <button type="button" onClick={() => set('etfs', etfs ? null : '1')} className="font-medium text-accent hover:text-accent-2">
+                {etfs ? 'Leave them out' : 'Show them'}
+              </button>
+            </p>
+          )}
           {d && !paid && rows.length > FREE && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-accent-soft px-5 py-4 md:px-6">
               <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
@@ -213,16 +228,17 @@ function DayBars({ d, now }: { d: SeasonData; now: number }) {
   const counts = new Map(d.by_day.map((x) => [x.date, x.count]))
   const days: string[] = []
   const due = d.deadline.slice(0, 10)
-  for (let t = new Date(`${d.by_day[0]?.date ?? due}T12:00:00Z`); t.toISOString().slice(0, 10) <= due; t.setUTCDate(t.getUTCDate() + 1)) if (t.getUTCDay() % 6) days.push(t.toISOString().slice(0, 10))
+  for (let t = new Date(`${d.by_day[0]?.date ?? due}T12:00:00Z`); t.toISOString().slice(0, 10) <= due; t.setUTCDate(t.getUTCDate() + 1)) if (isEdgarDay(t.toISOString().slice(0, 10))) days.push(t.toISOString().slice(0, 10))
   const max = Math.max(1, ...days.map((x) => counts.get(x) ?? 0))
-  const today = new Date(now).toISOString().slice(0, 10)
+  // EDGAR's day is New York's: in UTC, Sunday evening is already Monday.
+  const today = new Date(now).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
   const latest = d.by_day.at(-1)?.date
   return (
     <div>
       <div className="flex h-40 items-end gap-[3px]" role="img" aria-label={`13F filings per business day, ${d.by_day.length} days so far, deadline ${dateLabel(due)}`}>
         {days.map((x) => {
           const c = counts.get(x) ?? 0
-          const future = x > today
+          const future = x > today || (x === today && !c)
           return (
             <div key={x} className="group relative flex h-full flex-1 items-end" title={`${dateLabel(x)}: ${c.toLocaleString('en-US')} filed`}>
               {future ? (

@@ -5,6 +5,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getJson } from './getjson.mjs'
+import { ETF_NAMES } from './etfs.mjs'
+import { isEdgarDay } from '../src/lib/calendar.mjs'
 
 const out = process.argv[2] || 'dist'
 const base = process.argv[3] || process.env.VITE_DATA_BASE || 'https://refcell.github.io/gust/copybook/data/'
@@ -94,6 +96,14 @@ for (const b of books) {
     stocks.get(k).holders.push({ ...who, rank: rank.get(k) ?? null, shares: p.shares, value: r0(p.value), weight: p.value / total, prev_shares: p.prev_shares, prev_value: r0(p.prev_value), delta_value: r0(p.delta_value), change })
   }
 }
+
+// Fund names for ETFs: 13F filings carry only the trust's name ("ISHARES TR").
+for (const st of stocks.values())
+  for (const c of st.classes.values())
+    if (ETF_NAMES[c.ticker]) {
+      c.name = ETF_NAMES[c.ticker]
+      if (c.ticker === [...st.classes.values()].sort((a, b) => b.value - a.value)[0].ticker) st.name = ETF_NAMES[c.ticker]
+    }
 
 // Stock splits. Ingest confirms splits (data/splits.json) and multiplies earlier share counts by the
 // ratio, so those are "adjusted" and counted normally. Until it covers every case, a stock it hasn't
@@ -306,9 +316,9 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
   const Q = toQ(q)
   const y = Math.floor(q / 4)
   const n = (q % 4) + 1
-  // Due 45 days after quarter end, moved past a weekend, at 5:30 pm Eastern (EDT in May and August).
+  // Due 45 days after quarter end, moved past weekends and federal holidays, at 5:30 pm Eastern (EDT in May and August).
   const due = new Date(Date.UTC(y, n * 3, 0) + 45 * 864e5)
-  while (due.getUTCDay() === 0 || due.getUTCDay() === 6) due.setUTCDate(due.getUTCDate() + 1)
+  while (!isEdgarDay(due.toISOString().slice(0, 10))) due.setUTCDate(due.getUTCDate() + 1)
   due.setUTCHours(17 + (n <= 2 ? 4 : 5), 30)
   const active = live.filter((m) => qn(m.quarter) >= q - 1)
   const fl = (await read('filers.json').catch(() => null))?.filers?.filter((f) => f.ok) ?? []
@@ -317,7 +327,7 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
   for (const f of filedAll) if (f.filing_date) days[f.filing_date] = (days[f.filing_date] ?? 0) + 1
   const sp = q === season ? periods[0] : period(q)
   const top = (sc) => {
-    const cut = (rows) => rows.slice(0, 40).map((f) => ({ ticker: f.ticker, name: f.name, net_value: f.net_value, buy_value: f.buy_value, sell_value: f.sell_value, n_buyers: f.n_buyers, n_sellers: f.n_sellers, buyers: f.buyers.slice(0, 5), sellers: f.sellers.slice(0, 5) }))
+    const cut = (rows) => rows.slice(0, 40).map((f) => ({ ticker: f.ticker, name: f.name, ...(f.sector === 'Funds & ETFs' ? { etf: true } : {}), net_value: f.net_value, buy_value: f.buy_value, sell_value: f.sell_value, n_buyers: f.n_buyers, n_sellers: f.n_sellers, buyers: f.buyers.slice(0, 5), sellers: f.sellers.slice(0, 5) }))
     return { funds: sc.funds, bought: cut(sc.bought), sold: cut(sc.sold), most_buyers: cut(sc.most_buyers) }
   }
   const seasonOut = {
