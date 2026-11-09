@@ -2368,9 +2368,27 @@ describe('copybook api', () => {
     expect(sent[0].subject).toBe('Your Q3 2026 filing season on Copybook, and $78 off with yearly');
     expect(sent[0].text).toContain('Copybook sent you 41 alerts. Our median time from EDGAR acceptance to your inbox this season was 70 seconds.');
     expect(sent[0].text).toContain('Copy Pro monthly: $468 a year. Yearly is $390');
+    // One button to the same portal confirm page as the trial's day 11, with the founding price.
+    expect(sent[0].text).toMatch(/Switch to yearly: \$390\/year, save \$78 \(you see the amount and confirm on the next page\): https:\/\/\S+\/keep\?t=/);
+    expect(sent[0].text).toContain('Your founding price stays at $39/month or $390/year');
+    expect(sent[0].html).toContain('Switch to yearly: $390/year, save $78</a>');
     sent = [];
     await cron(12, Date.UTC(2026, 10, 19, 15, 12));
     expect(sent).toHaveLength(0);
+
+    // Filing week: one ops email a day to the team; none outside the season.
+    const { runOpsDigest } = await import('../src/revenue');
+    await env.DB.put('alerts:latency', JSON.stringify([{ seconds: 40, sent: '2026-11-14T21:00:00Z' }, { seconds: 70, sent: '2026-11-14T21:01:00Z' }, { seconds: 300, sent: '2026-11-14T21:02:00Z' }, { seconds: 9000, sent: '2026-11-14T21:03:00Z', replay: true }]));
+    await env.DB.put('chfail:x1', JSON.stringify({ discord: { reason: '404' } }));
+    sent = [];
+    const opsAt = Date.UTC(2026, 10, 15, 13, 12);
+    expect((await runOpsDigest(env, opsAt)).status).toBe('200');
+    await runOpsDigest(env, opsAt + 3600_000);
+    expect(sent.map((m) => m.to[0])).toEqual(['hello@factordynamics.com']);
+    expect(sent[0].text).toContain('p50 70 s, p90 300 s, from 3 alerts');
+    expect(sent[0].text).toContain('Members with a failing channel: discord 1');
+    expect((await runOpsDigest(env, Date.UTC(2026, 10, 25, 13, 12))).status).toBe('not a filing week');
+    sent = [];
 
     // A portal cancel: one email with one-click reasons; the webhook repeating sends nothing more.
     const cancel = (id: string, plan = 'copy_monthly') => webhook({ type: 'customer.subscription.updated', data: { object: { ...sub(`sub_${id}`, id, 'active', 'month', plan), cancel_at_period_end: true } } });

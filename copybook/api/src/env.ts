@@ -88,6 +88,8 @@ export interface Member {
   /** Free of charge for good (critics, a forever 100%-off coupon): no revenue email. */
   comped?: boolean;
   recap_sent?: string;
+  /** Alerts delivered up to the last season recap, so the next one counts that season only. */
+  recap_n?: number;
   why_sent?: string;
   /** A Copy Fund seat: the owner's Stripe customer id. Billing, seats and shared lists are the owner's. */
   seat_of?: string;

@@ -3,7 +3,7 @@ import { FOOTER, sendMail, type Mail } from './email';
 import { isActive, isPaused, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
 import { getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
-import { DEADLINES, deadlineMs, lastDeadline, pauseResumesAt } from './seasons';
+import { DEADLINES, deadlineMs, inFilingWeek, lastDeadline, pauseResumesAt } from './seasons';
 import { stripe } from './stripe';
 import { signToken, verifyToken } from './tokens';
 
@@ -243,14 +243,28 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
   }
 }
 
-export function seasonRecapMail(env: Env, m: Member, sent: number, funds: number, median: number | null, season: string): Mail {
+/**
+ * The day after each 13F deadline, to monthly payers: their season (alerts, the fastest one, moves in their
+ * names), then yearly's price and savings with one button to the same portal confirm page as the trial's day 11.
+ */
+export function seasonRecapMail(m: Member, st: MemberStats, sent: number, funds: number, median: number | null, season: string, keep: string, unsub: string): Mail {
   const p = PRICES[m.plan];
   const save = p.month * 12 - p.year;
-  const speed = median != null ? ` Our median time from EDGAR acceptance to your inbox this season was ${median < 120 ? `${median} seconds` : `${Math.round(median / 60)} minutes`}.` : '';
+  const secs = (n: number) => (n < 120 ? `${n} seconds` : `${Math.round(n / 60)} minutes`);
+  const got = [
+    `${sent} alert${sent === 1 ? '' : 's'} on the ${funds} fund${funds === 1 ? '' : 's'} you follow`,
+    ...(st.fastest != null ? [`Your fastest: ${secs(st.fastest)} from EDGAR acceptance${st.fastest_what ? ` (${st.fastest_what})` : ''}`] : []),
+    ...(st.owned.length ? [`Moves in names you own: ${st.owned.slice(0, 6).join(', ')}${st.owned.length > 6 ? ` and ${st.owned.length - 6} more` : ''}`] : []),
+    ...(median != null ? [`Median time from EDGAR acceptance to inbox this season: ${secs(median)}`] : []),
+  ];
+  const cta = `Switch to yearly: ${money(p.year)}/year, save ${money(save)}`;
+  const founding = FOUNDING[m.plan] ?? '';
   return {
     to: m.email,
     subject: `Your ${season} filing season on Copybook, and ${money(save)} off with yearly`,
-    text: `The ${season} 13F filing season is in. You followed ${funds} fund${funds === 1 ? '' : 's'} and Copybook sent you ${sent} alert${sent === 1 ? '' : 's'}.${speed}\n\nYou're on ${p.name} monthly: ${money(p.month * 12)} a year. Yearly is ${money(p.year)}, so switching saves ${money(save)}. To switch: ${env.SITE_URL}account/ → Manage billing → Update plan → Yearly. The change takes effect at your next renewal.${FOOTER}`,
+    text: `The ${season} 13F filing season is in. Copybook sent you ${sent} alert${sent === 1 ? '' : 's'}.${median != null ? ` Our median time from EDGAR acceptance to your inbox this season was ${secs(median)}.` : ''}\n\nYour season:\n${got.map((g) => `  - ${g}`).join('\n')}\n\nYou're on ${p.name} monthly: ${money(p.month * 12)} a year. Yearly is ${money(p.year)}, so switching saves ${money(save)}.${founding ? ` ${founding}` : ''}\n\n${cta} (you see the amount and confirm on the next page): ${keep}\n\nUnsubscribe from tips and reminders: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>The ${esc(season)} 13F filing season is in.</p><p style="margin-bottom:4px"><b>Your season</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>You're on ${esc(p.name)} monthly: ${money(p.month * 12)} a year. Yearly is <b>${money(p.year)}</b>, so switching saves ${money(save)}.</p><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding)}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">You see the amount and confirm on the next page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and reminders</a></p></div>`,
+    unsubscribe: unsub,
   };
 }
 
@@ -309,8 +323,9 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
   const members = (await listMembers(env)).filter((m) => billable(m) && isActive(m) && m.email && !m.marketing_off);
   const mails: Mail[] = [];
   const marks: Member[] = [];
-  // The season recap goes out after the 13F deadline week (Q3 2026: from Nov 18).
-  const recap = now >= Date.UTC(2026, 10, 18) ? 'Q3 2026' : null;
+  // The season recap goes out from the day after each 13F deadline, for a week (Q3 2026: from Nov 17).
+  const ld = lastDeadline(now);
+  const recap = ld && now - deadlineMs(ld.date) <= 7 * 86400_000 ? ld.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1') : null;
   let median: number | null = null;
   if (recap) {
     const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as { seconds: number; replay?: boolean; sent?: string }[];
@@ -326,8 +341,10 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
       marks.push({ ...m, trial_reminded: m.trial_end });
     } else if (recap && m.status === 'active' && m.interval === 'monthly' && m.recap_sent !== recap && !m.marketing_off) {
       const f = await getFollows(env, m);
-      mails.push({ ...seasonRecapMail(env, m, (await memberStats(env, m.customer)).n, f.investors.length, median, recap), unsubscribe: await unsubscribeUrl(env, m.customer) });
-      marks.push({ ...m, recap_sent: recap });
+      const st = await memberStats(env, m.customer);
+      const keep = `${API(env)}keep?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'keep', m.customer, 14 * 86400))}`;
+      mails.push(seasonRecapMail(m, st, st.n - (m.recap_n ?? 0), f.investors.length, median, recap, keep, await unsubscribeUrl(env, m.customer)));
+      marks.push({ ...m, recap_sent: recap, recap_n: st.n });
     }
   }
   const status = await sendMail(env, mails);
@@ -335,7 +352,7 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
     // Re-read so a webhook that landed meanwhile isn't overwritten.
     for (const mk of marks) {
       const cur = await getMember(env, mk.customer);
-      if (cur) await putMember(env, { ...cur, trial_reminded: mk.trial_reminded ?? cur.trial_reminded, recap_sent: mk.recap_sent ?? cur.recap_sent });
+      if (cur) await putMember(env, { ...cur, trial_reminded: mk.trial_reminded ?? cur.trial_reminded, recap_sent: mk.recap_sent ?? cur.recap_sent, recap_n: mk.recap_n ?? cur.recap_n });
     }
   }
   return { emails: mails.length, status };
@@ -551,4 +568,42 @@ export async function paymentFailed(env: Env, inv: any): Promise<string> {
     if (cur) await putMember(env, { ...cur, dunning_sent: inv.id });
   }
   return status === '200' ? 'sent' : `mail ${status}`;
+}
+
+/**
+ * Filing weeks only (7 days before a 13F deadline through the day after): one email a day to the team with the
+ * last 24 hours: alerts sent, live latency p50/p90, missed filings recovered, failing channels, and the funnel.
+ */
+export async function runOpsDigest(env: Env, now: number, to = 'hello@factordynamics.com'): Promise<Record<string, unknown>> {
+  if (!inFilingWeek(now)) return { status: 'not a filing week' };
+  const key = `ops:sent:${new Date(now).toISOString().slice(0, 10)}`;
+  if (await env.DB.get(key)) return { status: 'already sent' };
+  const since = now - 86400_000;
+  const hour = Math.floor(now / 3600_000);
+  const alerts = (JSON.parse((await env.DB.get('stats:sent')) ?? '[]') as [number, number][]).filter(([h]) => h > hour - 24).reduce((a, [, n]) => a + n, 0);
+  const lat = (JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as { seconds: number; replay?: boolean; sent: string }[]).filter((l) => !l.replay && Date.parse(l.sent) >= since).map((l) => l.seconds).sort((a, b) => a - b);
+  const at = (q: number) => (lat.length ? lat[Math.min(lat.length - 1, Math.ceil(q * lat.length) - 1)] : null);
+  const missed = (JSON.parse((await env.DB.get('missed:log')) ?? '[]') as { accepted?: string }[]).filter((x) => x.accepted && Date.parse(x.accepted) >= since).length;
+  const failing: Record<string, number> = {};
+  let cursor: string | undefined;
+  do {
+    const page = await env.DB.list({ prefix: 'chfail:', cursor });
+    for (const k of page.keys) for (const ch of Object.keys(JSON.parse((await env.DB.get(k.name)) ?? '{}'))) failing[ch] = (failing[ch] ?? 0) + 1;
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  const f = await funnel(env, now, 1);
+  const lines = [
+    `Alerts sent: ${alerts}`,
+    `Latency (live, EDGAR acceptance to send): p50 ${at(0.5) ?? 'n/a'} s, p90 ${at(0.9) ?? 'n/a'} s, from ${lat.length} alerts`,
+    `Missed filings recovered: ${missed} (${Number((await env.DB.get('missed:count')) ?? 0)} this season)`,
+    `Members with a failing channel: ${Object.keys(failing).length ? Object.entries(failing).map(([c, n]) => `${c} ${n}`).join(', ') : 'none'}`,
+    `Free signups: ${f.signups}`,
+    `Trials started: ${f.trials}`,
+    `Paid: ${f.trial_to_paid + f.paid_direct} (${f.trial_to_paid} from trials, ${f.paid_direct} direct)`,
+    `Cancellations: ${f.cancellations}, pauses: ${f.pauses}`,
+  ];
+  const day = new Date(now).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+  const status = await sendMail(env, [{ to, subject: `Copybook filing week, ${day}: ${alerts} alerts, p50 ${at(0.5) ?? 'n/a'} s, ${f.trials} trials, ${f.trial_to_paid + f.paid_direct} paid`, text: `Last 24 hours (funnel: today, ET):\n${lines.map((l) => `  ${l}`).join('\n')}${FOOTER}` }]);
+  if (status === '200') await env.DB.put(key, '1', { expirationTtl: 30 * 86400 });
+  return { status, lines };
 }

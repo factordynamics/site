@@ -1332,7 +1332,7 @@ export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reaso
 
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
 interface Job {
-  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal';
+  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops';
   at: number;
 }
 
@@ -1369,6 +1369,7 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
   // Trial reminders and the season recap, once a day mid-morning in New York.
   if (m === 12 && h === 15) due.push({ name: 'revenue', at: scheduledTime });
   if (m === 12 && h === 16) due.push({ name: 'seasonal', at: scheduledTime });
+  if (m === 12 && h === 13) due.push({ name: 'ops', at: scheduledTime });
   // The free weekly: Fridays after EDGAR's day ends (22:00 ET), 03:42 UTC Saturday.
   if (m === 42 && h === 3 && t.getUTCDay() === 6) due.push({ name: 'weekly', at: scheduledTime });
   // Owned and watched names' insider and 13D/G events: every 10 minutes (each name hourly, 10 minutes in filing week).
@@ -1384,6 +1385,7 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
       watch: () => runWatchMap(env),
       revenue: () => runRevenue(env, scheduledTime),
       seasonal: () => import('./revenue').then((x) => x.runSeasonal(env, job.at)),
+      ops: () => import('./revenue').then((x) => x.runOpsDigest(env, job.at)),
       weekly: () => import('./free').then((x) => x.runWeekly(env, job.at)),
       // A quiet minute's leftover SEC requests, keeping 4 for the mailer and GitHub.
       issuers: () => import('./stockevents').then((x) => x.precomputeIssuers(env, scheduledTime, inFilingWeek(scheduledTime), Math.min(16, secBudget.left - 4))),
