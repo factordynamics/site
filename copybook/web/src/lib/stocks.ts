@@ -224,9 +224,7 @@ export async function resolveTicker(t: string) {
 export const stockPath = (t: string) => `/stocks/${encodeURIComponent(t)}/`
 
 /** Coverage for copy: filers with a parsed latest 13F, and the managers we track closely. */
-export const loadCoverage = () => getJSON<{ filers: number; curated: number }>(`${D}coverage.json`).catch(() => ({ filers: 8900, curated: 199 }))
-/** 8,964 -> "8,900+": never overstate coverage. */
-export const aboutCount = (n: number) => (n >= 1000 ? `${(Math.floor(n / 100) * 100).toLocaleString('en-US')}+` : n.toLocaleString('en-US'))
+export const loadCoverage = () => getJSON<{ filers: number; curated: number; superinvestors?: number }>(`${D}coverage.json`).catch(() => ({ filers: 8968, curated: 348 }))
 
 /** Every 13F filer's latest position in a stock (scripts/stocks.mjs, d/h/{TICKER}.json): the 500 largest, plus counts. */
 export type FilerHolder = { slug: string; name: string; quarter: string; shares: number; value: number; weight: number; tier: 0 | 1 | 2; smart: boolean; hedge: boolean }

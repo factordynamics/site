@@ -330,7 +330,7 @@ function PositionMatrix({ quarters, sel }: { quarters: Quarter[]; sel: number })
       title="Position history"
       sub={`All ${rows.length.toLocaleString('en-US')} positions held in any of the last ${cols.length} quarters, by CUSIP and share class`}
       right={
-        <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Show">
+        <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Show">
           {(['weight', 'shares'] as const).map((m) => (
             <button key={m} role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={`rounded-full px-2.5 py-1 ${mode === m ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
               {m === 'weight' ? 'Weight' : 'Shares'}

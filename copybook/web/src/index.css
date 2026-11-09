@@ -96,6 +96,21 @@
 @utility num {
   font-variant-numeric: tabular-nums;
 }
+/* A segmented control (role=tablist): one row that scrolls sideways on a phone instead of wrapping its
+   labels into a tall stack. */
+@utility seg {
+  display: inline-flex;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+  & > * {
+    flex-shrink: 0;
+  }
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 @utility container-x {
   width: 100%;
   max-width: 1200px;

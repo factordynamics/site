@@ -17,7 +17,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
-import { ApiError, apiDown, downloadFile, fetchMe, getToken, readMe, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { ApiStatus } from '../components/ApiStatus'
+import { ApiError, apiDown, downloadFile, fetchMe, getToken, needsReauth, readMe, isFree, openPortal, pausePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
@@ -67,6 +68,7 @@ export function Account() {
 
   return (
     <div className="container-x max-w-3xl pt-12 md:pt-16">
+      {state.kind !== 'down' && state.kind !== 'out' && <ApiStatus className="mb-6" />}
       {state.kind === 'loading' && (
         <div className="space-y-4">
           <Skeleton className="h-10 w-2/3" />
@@ -459,17 +461,27 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
   )
 }
 
-function SignedOut({ error }: { error?: string }) {
+export function SignedOut({ error, eyebrow = 'Account' }: { error?: string; eyebrow?: string }) {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [delayed, setDelayed] = useState(false)
+  // A stored session the API no longer accepts (401): most often one from before the server move.
+  const moved = needsReauth()
+  const note = error ?? (moved ? 'Please sign in again: we moved servers. Your plan, follows and saved names are all still here.' : undefined)
   return (
     <>
       <header>
-        <p className="text-[13px] font-medium text-accent">Account</p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Sign in to Copy.</h1>
+        <p className="text-[13px] font-medium text-accent">{eyebrow}</p>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">{moved ? 'Please sign in again.' : 'Sign in to Copy.'}</h1>
         <p className="mt-3 text-[17px] text-ink-2">No password. We’ll email you a sign-in link.</p>
       </header>
-      {error && <p className="mt-6 rounded-xl bg-[#f6ead2] px-4 py-3 text-[14px] text-[#7a5410]">{error}</p>}
+      {note && <p className="mt-6 rounded-xl bg-[#f6ead2] px-4 py-3 text-[14px] text-[#7a5410]">{note}</p>}
+      {delayed && (
+        <p role="alert" className="mt-6 rounded-xl bg-[#f6ead2] px-4 py-3 text-[14px] text-[#7a5410]">
+          The sign-in email is delayed. Please try again in a minute.
+        </p>
+      )}
       <section className="mt-8 max-w-lg rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
         {sent ? (
           <p role="status" className="text-[15px]">
@@ -480,7 +492,14 @@ function SignedOut({ error }: { error?: string }) {
             className="flex flex-col gap-2 sm:flex-row"
             onSubmit={(e) => {
               e.preventDefault()
-              requestLogin(email.trim()).finally(() => setSent(true))
+              setSending(true)
+              setDelayed(false)
+              requestLogin(email.trim())
+                .then(() => setSent(true))
+                // A 4xx means the address was refused (shown as sent: we never say which addresses exist);
+                // a 5xx or no answer means the email couldn't be queued yet.
+                .catch((err) => (err instanceof ApiError && err.status < 500 && err.status !== 429 ? setSent(true) : setDelayed(true)))
+                .finally(() => setSending(false))
             }}
           >
             <label htmlFor="login-email" className="sr-only">
@@ -496,8 +515,8 @@ function SignedOut({ error }: { error?: string }) {
               placeholder="you@example.com"
               className="h-11 min-w-0 flex-1 rounded-full bg-paper px-4 text-[15px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
             />
-            <Button type="submit" className="h-11">
-              Email me a link
+            <Button type="submit" className="h-11" disabled={sending}>
+              {sending ? 'Sending…' : 'Email me a link'}
             </Button>
           </form>
         )}

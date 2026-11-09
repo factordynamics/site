@@ -65,7 +65,7 @@ export function Flow() {
 
       {d && newest && (
         <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
-          <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Report period">
+          <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Report period">
             {periods.map((p, i) => (
               <button
                 key={p.quarter}
@@ -94,7 +94,7 @@ export function Flow() {
       <div className="mt-8 grid items-start gap-6 lg:grid-cols-[1fr_320px] [&>*]:min-w-0">
         <section className="overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
-            <div className="inline-flex flex-wrap rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Ranking">
+            <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Ranking">
               {TABS.map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`rounded-full px-3 py-1.5 ${tab === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                   {l}

@@ -26,9 +26,12 @@ export function seasonTitle({ quarter, filed, total }) {
  *  "Q3 2026 so far: what Pzena and Tweedy bought and sold · 2 of 40 superinvestors filed". */
 export function recapTitle({ quarter, filed, total, names = [], final = false }) {
   const Q = qLabel(quarter)
-  if (!final && filed > 0 && filed < 10 && names.length) {
-    const who = names.length <= 3 ? names.join(names.length === 2 ? ' and ' : ', ').replace(/, ([^,]+)$/, ' and $1') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
-    return `${Q} so far: what ${who} bought and sold · ${filed} of ${total} superinvestors filed`
-  }
-  return `${Q} 13F recap: what the superinvestors bought and sold · Copybook`
+  const who = recapFilers({ filed, names, final })
+  return who ? `${Q} so far: what ${who} bought and sold · ${filed} of ${total} superinvestors filed` : `${Q} 13F recap: what the superinvestors bought and sold · Copybook`
+}
+
+/** "Richard Pzena and Tweedy Browne" while fewer than 10 superinvestors have filed, else null. */
+export function recapFilers({ filed, names = [], final = false }) {
+  if (final || !(filed > 0 && filed < 10) || !names.length) return null
+  return names.length <= 3 ? names.join(names.length === 2 ? ' and ' : ', ').replace(/, ([^,]+)$/, ' and $1') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
 }

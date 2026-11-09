@@ -103,7 +103,7 @@ export function Peers({ names, shared }: { names: string[]; shared?: boolean }) 
           <p className="mt-1 text-[14px] text-ink-2">Pick up to {MAX} funds you benchmark against. See how much of their books they share, the names they hold in common, and what they did in yours.</p>
         </div>
         {mixed && (
-          <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which quarter">
+          <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which quarter">
             {([false, true] as const).map((v) => (
               <button key={String(v)} type="button" role="tab" aria-selected={same === v} onClick={() => setSame(v)} className={`rounded-full px-3 py-1.5 ${same === v ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                 {v ? 'Same quarter only' : 'Each fund’s latest'}

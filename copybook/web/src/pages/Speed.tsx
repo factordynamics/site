@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom'
 import { Signup } from '../components/Signup'
 import { Badge, Panel, Skeleton } from '../components/ui'
-import { api } from '../config'
 import { gapLabel, loadLatency, type Latency, type LatencyStat } from '../lib/account'
 import { quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { seasonNow } from '../lib/stocks'
 
-// /speed/: the public alert latency log (GET {api}/latency). Every live alert this season, from EDGAR
+// /speed/: the public alert latency log (the API's latency.json on R2). Every live alert this season, from EDGAR
 // acceptance to delivery, with medians and 90th percentiles per form type and, once the delivery log
 // records them, per channel. Re-read every minute while open. Nothing is hand-picked.
 
@@ -58,9 +57,9 @@ export function Speed() {
         <p className="text-[13px] font-medium text-accent">Speed</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">From EDGAR to you, timed.</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
-          Every live alert this filing season: when EDGAR accepted the filing, when we delivered it, and the gap in seconds. Nothing is picked out; the raw log is public at{' '}
-          <a href={`${api}/latency`} className="font-mono text-[15px] text-accent hover:text-accent-2">
-            /latency
+          {empty ? 'No live alerts timed yet. Once they go out, every live alert this season appears here' : 'Every live alert this filing season'}: when EDGAR accepted the filing, when we delivered it, and the gap in seconds. Nothing is picked out; the raw log is public at{' '}
+          <a href={import.meta.env.VITE_LATENCY_URL} className="font-mono text-[15px] text-accent hover:text-accent-2">
+            latency.json
           </a>
           .
         </p>

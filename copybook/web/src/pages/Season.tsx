@@ -119,14 +119,14 @@ export function Season() {
       <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <section className="overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
-            <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Ranking">
+            <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Ranking">
               {TABS.map(([k, l]) => (
                 <button key={k} role="tab" aria-selected={tab === k} onClick={() => set('tab', k === autoTab ? null : k)} className={`rounded-full px-3 py-1.5 ${tab === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                   {l}
                 </button>
               ))}
             </div>
-            <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Funds">
+            <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Funds">
               {(['featured', 'all'] as const).map((k) => (
                 <button key={k} role="tab" aria-selected={scope === k} onClick={() => set('funds', k === auto ? null : k)} className={`rounded-full px-3 py-1.5 ${scope === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                   {k === 'featured' ? `Superinvestors${d ? ` (${d.featured.filed})` : ''}` : `All tracked${d ? ` (${d.curated.filed})` : ''}`}

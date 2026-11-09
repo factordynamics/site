@@ -104,7 +104,9 @@ export function StockPage() {
   )
   // Hide token moves: under 0.1% of the fund's book or $1M, whichever is larger.
   const bigMoves = useMemo(() => moves.filter((h) => Math.abs(h.delta_value) >= Math.max(1e6, h.weight > 0 ? (h.value / h.weight) * 0.001 : 0)), [moves])
-  const shownMoves = allMoves ? moves : bigMoves
+  // Small moves fold away only beside bigger ones: when every move is small, they all show, so the header's
+  // Bought and Sold counts are always visible below.
+  const shownMoves = allMoves || !bigMoves.length ? moves : bigMoves
   // Header cards follow the lens: counted from the same holders the tables list.
   const c = useMemo(() => {
     if (!d) return null
@@ -242,18 +244,19 @@ export function StockPage() {
             {quarterLabel(seasonNow().quarter)} recap
           </Link>
         </p>
-        <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Investors">
+        <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px] [mask-image:linear-gradient(to_right,#000_88%,transparent)] sm:[mask-image:none]" role="tablist" aria-label="Investors">
           {(
             [
-              ['featured', 'Superinvestors'],
-              ['all', 'Funds we track'],
-              ['hedge', 'Hedge funds'],
-              ['smart', 'Hedge funds + long-only'],
-              ['filers', 'All 13F filers'],
+              ['featured', 'Superinvestors', 'Superinvestors'],
+              ['hedge', 'Hedge funds', 'Hedge funds'],
+              ['smart', 'Hedge funds + long-only', 'HF + long-only'],
+              ['filers', 'All 13F filers', 'All'],
+              ['all', 'Funds we track', 'Tracked'],
             ] as const
-          ).map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`rounded-full px-3 py-1.5 ${view === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
-              {l}
+          ).map(([k, l, short]) => (
+            <button key={k} role="tab" aria-selected={view === k} aria-label={l} onClick={() => setView(k)} className={`rounded-full px-3 py-1.5 ${view === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+              <span className="sm:hidden">{short}</span>
+              <span className="hidden sm:inline">{l}</span>
             </button>
           ))}
         </div>
@@ -318,9 +321,10 @@ export function StockPage() {
               }))}
             />
           ) : (
-            <p className="text-[14px] text-ink-2">{moves.length ? 'Only small moves, under $1M or 0.1% of the fund’s book.' : 'No buying or selling in the latest filings.'}</p>
+            <p className="text-[14px] text-ink-2">No buying or selling in the latest filings.</p>
           )}
-          {d && moves.length > bigMoves.length && (
+          {d && moves.length > 0 && !bigMoves.length && <p className="mt-3 text-[12.5px] text-ink-3">All small moves: under $1M or 0.1% of each fund’s book.</p>}
+          {d && bigMoves.length > 0 && moves.length > bigMoves.length && (
             <button onClick={() => setAllMoves((x) => !x)} className="mt-3 text-[13px] font-medium text-accent hover:text-accent-2">
               {allMoves ? 'Hide small moves' : `Show all ${moves.length} moves (${moves.length - bigMoves.length} under $1M or 0.1% of the fund’s book)`}
             </button>

@@ -39,7 +39,7 @@ export function Investors() {
 
       <div className="sticky top-16 z-30 -mx-5 mt-10 border-b border-line bg-paper/90 px-5 py-3 backdrop-blur-xl md:-mx-8 md:px-8">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-full bg-ink/[0.05] p-1" role="tablist" aria-label="Investor set">
+          <div className="seg rounded-full bg-ink/[0.05] p-1" role="tablist" aria-label="Investor set">
             {(['featured', 'all'] as const).map((t) => (
               <button
                 key={t}

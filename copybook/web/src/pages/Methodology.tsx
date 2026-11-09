@@ -36,12 +36,15 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'Amendments',
     body: (
       <>
-        <p>Each quarter starts from the fund’s original 13F-HR. A 13F-HR/A marked RESTATEMENT replaces the whole book. A 13F-HR/A marked NEW HOLDINGS, usually positions the fund first kept confidential, adds rows to the book and never replaces it.</p>
+        <p>Each quarter starts from the fund’s original 13F-HR. A 13F-HR/A marked RESTATEMENT replaces the whole book. A 13F-HR/A marked NEW HOLDINGS, usually positions the fund first kept confidential, adds rows to the book.</p>
         <p>
-          <strong className="font-medium text-ink">Point in time.</strong> A position disclosed by a later amendment counts from that amendment’s EDGAR acceptance time, not from the original quarter. It isn’t shown as new, added or exited in the original quarter’s changes, because nobody could have seen it then. Each position is being stamped with the filing that first disclosed it (<code>source_accession</code>) and that filing’s acceptance time (<code>first_disclosed_at</code>); the fields are null in the API until that data is published, and the changelog below records when it is.
+          <strong className="font-medium text-ink">Re-filed books.</strong> Some filers re-file their whole 13F as NEW HOLDINGS. An amendment that repeats more than half of the book’s CUSIPs, or whose total is within 0.8–1.25× of the book’s, replaces the book instead of adding to it, and the filing trail marks it <code>mislabeled_amendment</code>. That flag is announced for the API’s <code>filing.versions</code>, not live there yet.
         </p>
         <p>
-          <strong className="font-medium text-ink">What you get by default.</strong> Pages, CSVs and the API without <code>as_of</code> return the book as it is known today: the latest RESTATEMENT if there is one, otherwise the original, plus every NEW HOLDINGS row accepted since. The API’s <code>as_of</code> parameter, which will return the book exactly as it was public at a given instant, is documented and coming; today it returns 501 <code>not_yet_available</code>.
+          <strong className="font-medium text-ink">Point in time, partly.</strong> Most rows carry the filing that first disclosed them (<code>source_accession</code>) and that filing’s EDGAR acceptance time (<code>first_disclosed_at</code>). Rows added by later amendments aren’t split out from the original quarter yet, so such a position can still count from the original filing; that split is in progress, and the changelog below will say when it lands.
+        </p>
+        <p>
+          <strong className="font-medium text-ink">What you get by default.</strong> Pages, CSVs and the API without <code>as_of</code> return the book as it is known today: the latest RESTATEMENT if there is one, otherwise the original, plus every NEW HOLDINGS row accepted since. The API’s <code>as_of</code> parameter, which will return the book exactly as it was public at a given instant, is announced, not live: today it returns 501 <code>not_yet_available</code>.
         </p>
         <p>Earlier versions of a restated quarter are kept. Restatements by the managers we track closely are recorded in the changelog below.</p>
       </>
@@ -62,7 +65,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
           <li>A stock line priced above $20,000 a share, other than Berkshire Hathaway Class A, is divided by 1,000.</li>
           <li>A line priced 300 to 3,000 times away from the median price other 13F filers report for the same CUSIP and quarter is rescaled by 1,000. This needs at least 3 other filers.</li>
         </ul>
-        <p>The whole-filing rule depends only on the filing itself, so it never changes. A single-line fix depends on what other filers reported, so it can be revised as more 13Fs for that quarter arrive. Every revision is logged in the changelog below, and corrected filings are flagged in the data (<code>unit_fix</code>).</p>
+        <p>The whole-filing rule depends only on the filing itself, so it never changes. A single-line fix depends on what other filers reported, so it can be revised as more 13Fs for that quarter arrive. Every revision is logged in the changelog below. Per-row fields for these fixes in the API (<code>value_scale</code>, <code>value_as_filed</code>) are announced and still empty.</p>
       </>
     ),
   },
@@ -73,7 +76,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
       <>
         <p>Calls and puts are shown at their filed value, which is the notional value of the underlying shares, not the price of the options. They’re listed apart from shares and never added to share totals or holder counts.</p>
         <p>Notes and other debt, identified by their title, are left out of stock holder counts. Rows reported as a principal amount (<code>PRN</code>, such as convertible notes) keep their filed value but are never counted as shares; the API marks them with <code>shares_type</code> once that field is published.</p>
-        <p>Lines filed with a value of zero are kept as filed, never dropped.</p>
+        <p>Lines filed with a value of zero are kept as filed. About 56 such lines are still missing from the published books; a fix is in progress.</p>
       </>
     ),
   },
@@ -108,6 +111,9 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     body: (
       <p>
         Each CSV row is one position: every line of the 13F with the same CUSIP and the same put/call is added together, because funds often split one holding across several lines (Berkshire’s Q2 2026 13F has 89 lines and 29 positions). Each row has the ticker, sector and the change since the fund’s previous filing, in shares and dollars, valued as above. Positions the fund exited are listed last. Values follow the unit rules on this page.
+        <br />
+        <br />
+        The API’s bulk files (<code>GET /v1/bulk</code>) are different for now: they’re built from each filer’s original 13F, without restatements or amendments, and without the point-in-time columns. They’ll match the pages once they share one builder, and the changelog will say so.
       </p>
     ),
   },
@@ -126,7 +132,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
         </div>
         <div>
           <dt>Weight</dt>
-          <dd>A position’s value divided by the filing’s total value, so today the denominator includes options at notional. A “% of equity book” weight with share rows only in the denominator is coming; when it lands every page switches to it and this entry will say so.</dd>
+          <dd>A position’s value divided by the total value of the filer’s share (SH) positions, on every page, file and alert. Put and call options (at notional) and principal-amount notes (PRN) are left out of the denominator and shown apart. The API’s <code>weight</code> is being aligned to the same definition; <code>weight_equity</code> already is.</dd>
         </div>
         <div>
           <dt>New, added, trimmed, unchanged, exited</dt>
@@ -156,6 +162,12 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     ),
   },
 ]
+
+// Where an entry (written by the data run) runs ahead of what's served today, the current status.
+const STATUS: Record<string, string> = {
+  '2026-11-08-amendments-point-in-time': 'Status: most rows carry source_accession and first_disclosed_at, not every row. Rows added by later amendments aren’t split out from the original filing yet; that is in progress.',
+  '2026-11-09-refiled-amendments': 'Status: this covers the public pages. The API, 13F history and CSV downloads follow once their storage is rebuilt, and mislabeled_amendment is announced for the API’s filing.versions, not live yet.',
+}
 
 export function Methodology() {
   useTitle('Methodology · Copybook')
@@ -292,6 +304,7 @@ export function Methodology() {
                       </p>
                       <h3 className="mt-1.5 text-[15.5px] font-semibold">{e.title}</h3>
                       <p className="mt-1 text-[14.5px] leading-relaxed text-ink-2">{e.body}</p>
+                      {STATUS[e.id] && <p className="mt-2 rounded-lg bg-[#fff6e5] px-3 py-2 text-[13px] leading-relaxed text-[#7a4b00]">{STATUS[e.id]}</p>}
                       {(e.funds?.length || e.accessions?.length) && (
                         <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[13px]">
                           {e.funds?.map((f) => (

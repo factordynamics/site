@@ -3,3 +3,4 @@ export function stockTitle(x: { ticker: string; superinvestors?: number; hedge?:
 export function investorTitle(x: { who: string; quarter?: string | null; value?: number | null; positions?: number }): string
 export function seasonTitle(x: { quarter: string; filed: number; total: number }): string
 export function recapTitle(x: { quarter: string; filed: number; total: number; names?: string[]; final?: boolean }): string
+export function recapFilers(x: { filed: number; names?: string[]; final?: boolean }): string | null

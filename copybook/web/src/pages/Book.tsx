@@ -8,7 +8,8 @@ import { Paused } from '../components/Paused'
 import { TRIAL_DAYS } from '../config'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton, Stat } from '../components/ui'
-import { ApiError, apiDown, getToken, isFree, isPro, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
+import { ApiStatus } from '../components/ApiStatus'
+import { ApiError, apiDown, getToken, needsReauth, isFree, isPro, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
 import { quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
 import { accNo, cap, issuerLatest, pctChange, type Latest } from '../lib/insiders'
@@ -88,6 +89,7 @@ const LENSES: [Lens, string][] = [
   ['all', 'All 13F filers'],
   ['tracked', 'Funds we track'],
 ]
+const LENS_SHORT: Record<Lens, string> = { hedge: 'Hedge funds', smart: 'HF + long-only', all: 'All', tracked: 'Tracked' }
 /** The lens in a caption: "hedge funds", "hedge funds and long-only managers", ... */
 const LENS_WHO: Record<Lens, string> = { hedge: 'hedge funds', smart: 'hedge funds and long-only managers', all: '13F filers', tracked: 'funds we track closely' }
 
@@ -255,6 +257,21 @@ export function Book() {
         </p>
       </div>
     )
+  // The API refused the stored session (401, such as one from before the server move): ask for a new
+  // sign-in rather than showing the visitor's upsell.
+  if (!member && needsReauth())
+    return (
+      <div className="container-x pt-12 md:pt-16">
+        <Header eyebrow="My book" />
+        <div role="alert" className="mt-8 max-w-2xl rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
+          <p className="text-[17px] font-semibold">Please sign in again: we moved servers.</p>
+          <p className="mt-1.5 text-[15px] text-ink-2">Your names, follows and plan are all still here. We’ll email you a sign-in link.</p>
+          <Button to="/account/" className="mt-4">
+            Sign in
+          </Button>
+        </div>
+      </div>
+    )
   // Paused: the names stay, read-only, under the resume button; the rest comes back on resume.
   if (member?.paused_until)
     return (
@@ -292,7 +309,8 @@ export function Book() {
   if (!pro)
     return (
       <div className="container-x pt-12 md:pt-16">
-        <Header eyebrow="My book · Copy" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and the latest Form 4 and 13D on each." />
+        <ApiStatus className="mb-6" />
+      <Header eyebrow="My book · Copy" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and the latest Form 4 and 13D on each." />
         <section className="relative mt-10 overflow-hidden rounded-[var(--radius-card)] bg-card p-8 shadow-[var(--shadow-card)]">
           <div className="pointer-events-none select-none blur-[3px]" aria-hidden="true">
             <Skeleton className="h-8 w-1/3" />
@@ -341,6 +359,7 @@ export function Book() {
 
   return (
     <div className="container-x pt-12 md:pt-16">
+      <ApiStatus className="mb-6" />
       <Header
         right={
           rows.length > 0 && (
@@ -401,10 +420,11 @@ export function Book() {
                   Click a column to sort.
                 </p>
               </div>
-              <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which funds">
+              <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px] [mask-image:linear-gradient(to_right,#000_88%,transparent)] sm:[mask-image:none]" role="tablist" aria-label="Which funds">
                 {LENSES.map(([l, label]) => (
-                  <button key={l} type="button" role="tab" aria-selected={lens === l} onClick={() => setLens(l)} className={`rounded-full px-3 py-1.5 ${lens === l ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
-                    {label}
+                  <button key={l} type="button" role="tab" aria-selected={lens === l} aria-label={label} onClick={() => setLens(l)} className={`rounded-full px-3 py-1.5 ${lens === l ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                    <span className="sm:hidden">{LENS_SHORT[l]}</span>
+                    <span className="hidden sm:inline">{label}</span>
                   </button>
                 ))}
               </div>
@@ -613,6 +633,7 @@ function LiteBook({ member }: { member: Member }) {
 
   return (
     <div className="container-x pt-12 md:pt-16">
+      <ApiStatus className="mb-6" />
       <Header eyebrow="My book · Copy" sub="Which superinvestors hold the stocks you own or watch, what they did this season, and their latest Form 4 and 13D filings." />
       <FailingBanner initial={member.channels_failing} />
 
@@ -629,7 +650,7 @@ function LiteBook({ member }: { member: Member }) {
                 <h2 className="text-[15px] font-semibold">Your names</h2>
                 <p className="text-[13px] text-ink-3">Who among the {lensName} holds each name, at what weight of their book, and what they did {season ? `in ${quarterLabel(season)}` : 'this season'}. From each fund’s latest 13F.</p>
               </div>
-              <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which funds">
+              <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Which funds">
                 {(['super', 'tracked'] as const).map((l) => (
                   <button key={l} type="button" role="tab" aria-selected={lens === l} onClick={() => setParams(l === 'super' ? {} : { funds: l }, { replace: true })} className={`rounded-full px-3 py-1.5 ${lens === l ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                     {l === 'super' ? 'Superinvestors' : 'Funds we track closely'}
@@ -928,7 +949,7 @@ function Import({ link = true }: { link?: boolean }) {
         className="w-full rounded-xl bg-paper px-3.5 py-2.5 font-mono text-[13px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
       />
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <span className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="radiogroup" aria-label="Add as">
+        <span className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="radiogroup" aria-label="Add as">
           {[true, false].map((o) => (
             <button key={String(o)} type="button" role="radio" aria-checked={owned === o} onClick={() => setOwned(o)} className={`rounded-full px-3 py-1 ${owned === o ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
               {o ? 'I own these' : 'I watch these'}

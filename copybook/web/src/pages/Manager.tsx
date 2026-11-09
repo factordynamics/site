@@ -118,15 +118,24 @@ export function ManagerPage() {
 
       {f && <FundNotice f={f} />}
 
-      <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
-        <Stat
-          label={book.options.length ? 'Value in shares' : 'Reported portfolio'}
-          value={f ? money(book.options.length ? book.total : f.total_value) : '—'}
-          sub={f ? (book.options.length ? `Plus ${money(book.optionsValue)} options notional` : `As of ${dateLabel(f.report_date)}`) : undefined}
-        />
-        <Stat label="Positions" value={f ? book.rows.length.toLocaleString('en-US') : '—'} sub={f ? (book.options.length ? `${book.options.length.toLocaleString('en-US')} option lines apart` : `Filed ${dateLabel(f.filing_date)}`) : undefined} />
-        <Stat label="Top 10 weight" value={f ? pct(book.top10, 0) : '—'} sub="Share of portfolio" />
-        <Stat label="Largest position" value={book.top1 ? book.top1.ticker || shortName(book.top1.issuer) : '—'} sub={book.top1 ? `${pct(book.top1.weight)} of portfolio` : undefined} />
+      {/* The newest news first: on a phone "Since the last 13F" (Form 4s and 13D/Gs filed after it) sits right
+          under the header; on wider screens it follows the summary figures. It renders nothing when empty. */}
+      <div className="flex flex-col">
+        <div className="mt-8 grid grid-cols-2 gap-6 rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:grid-cols-4 md:p-6">
+          <Stat
+            label={book.options.length ? 'Value in shares' : 'Reported portfolio'}
+            value={f ? money(book.options.length ? book.total : f.total_value) : '—'}
+            sub={f ? (book.options.length ? `Plus ${money(book.optionsValue)} options notional` : `As of ${dateLabel(f.report_date)}`) : undefined}
+          />
+          <Stat label="Positions" value={f ? book.rows.length.toLocaleString('en-US') : '—'} sub={f ? (book.options.length ? `${book.options.length.toLocaleString('en-US')} option ${book.options.length === 1 ? 'line' : 'lines'} apart` : `Filed ${dateLabel(f.filing_date)}`) : undefined} />
+          <Stat label="Top 10 weight" value={f ? pct(book.top10, 0) : '—'} sub="Share of portfolio" />
+          <Stat label="Largest position" value={book.top1 ? book.top1.ticker || shortName(book.top1.issuer) : '—'} sub={book.top1 ? `${pct(book.top1.weight)} of portfolio` : undefined} />
+        </div>
+        {f && !f.filer && (
+          <div className="order-first md:order-none">
+            <SinceLast13F slug={f.slug} quarter={f.quarter} holdings={f.holdings} />
+          </div>
+        )}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.6fr_1fr]">
@@ -134,7 +143,7 @@ export function ManagerPage() {
           title="Portfolio map"
           sub={plan.broad ? `Largest ${plan.n} positions, ${pct(plan.shown, 0)} of the portfolio. Each tile is sized by reported value.` : 'Each tile is sized by reported value'}
           right={
-            <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Color tiles by">
+            <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Color tiles by">
               {(['rank', 'sector'] as const).map((c) => (
                 <button key={c} role="tab" aria-selected={color === c} onClick={() => setColor(c)} className={`rounded-full px-2.5 py-1 ${color === c ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                   {c === 'rank' ? 'Size' : 'Sector'}
@@ -226,7 +235,6 @@ export function ManagerPage() {
       </div>
 
       {/* After the quarter's changes it continues, and below the fold its late arrival moves nothing on screen. */}
-      {f && !f.filer && <SinceLast13F slug={f.slug} quarter={f.quarter} holdings={f.holdings} />}
 
 
       <section className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
@@ -241,7 +249,7 @@ export function ManagerPage() {
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           {book.options.length > 0 && (
-            <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Holding type">
+            <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Holding type">
               {(['shares', 'options'] as const).map((v) => (
                 <button key={v} role="tab" aria-selected={view === v} onClick={() => { setView(v); setN(25) }} className={`rounded-full px-2.5 py-1 ${view === v ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                   {v === 'shares' ? 'Shares' : `Options (${book.options.length.toLocaleString('en-US')})`}

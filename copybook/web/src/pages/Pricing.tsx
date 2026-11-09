@@ -6,7 +6,7 @@ import { Button, Check } from '../components/ui'
 import { attributed, referredCheckout, refCode } from '../lib/attribution'
 import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { quarterLabel, useAsync, useTitle } from '../lib/data'
-import { aboutCount, loadCoverage } from '../lib/stocks'
+import { loadCoverage } from '../lib/stocks'
 import { api, BOOK_LITE, BOOK_PRO, checkoutEnabled, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
@@ -45,17 +45,18 @@ const tiers = (filers: string, curated: number): Tier[] => [
     lead: 'Everything in Copy, plus',
     now: [
       { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
-      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, with its latest holdings as JSON; 8 quarters of history for the ${curated} we track closely, back to 2013 coming this month.` },
+      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, with its latest holdings as JSON; 8 quarters of history for the ${curated} we track closely, back to 2013 is in progress.` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
+      { t: 'Holders, history and events endpoints', d: 'Every filer holding a stock, a filer’s books across a range of quarters, and Form 4 and 13D/G events, as JSON.' },
+      { t: 'Bulk CSV exports', d: 'One gzip CSV per quarter of every filer’s 13F book, as originally filed: no restatements, amendments or point-in-time columns yet.' },
       BOOK_PRO,
       { t: 'Peer overlap', d: 'Up to 12 funds you benchmark against: how much their books overlap, the names they share, and what they did in yours.' },
     ],
     soon: [
-      { t: 'History and events endpoints', d: 'Changes across quarters, Form 4 and 13D/G as JSON.' },
-      { t: 'Point-in-time history', d: 'Each position dated by when it was disclosed, so backtests don’t see the future.' },
-      { t: 'Stock holders endpoint', d: 'Every filer holding a stock, as JSON. Arriving this week.' },
-      { t: 'Bulk exports', d: 'Whole-quarter files for every filer we cover. Arriving this week.' },
+      { t: 'Point-in-time history', d: 'An as_of parameter and point-in-time columns in the bulk files, so a backtest sees only what was public. No date yet.' },
+      { t: 'History back to 2013', d: 'In progress; 8 quarters today.' },
+      { t: 'Parquet bulk files', d: 'Next to the CSVs. No date yet.' },
     ],
   },
   {
@@ -77,7 +78,7 @@ const FOUNDING: Partial<Record<PlanId, string>> = {
   fund: 'Founding price: subscribe before Dec 31 and keep $1,990/yr for as long as you stay subscribed.',
 }
 
-// What each plan includes. true = included, false = not, 'soon' = coming this month, string = shown as is.
+// What each plan includes. true = included, false = not, 'soon' = coming (no date), string = shown as is.
 const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   [`Latest 13F of ${filers} filers`, true, true, true, true],
   ['Stock pages and search', true, true, true, true],
@@ -90,10 +91,10 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Insider buys and any filer’s 13D on your stocks', false, true, true, true],
   ['8 quarters of history and CSV', false, true, true, true],
   ['API keys, filer and holdings endpoints', false, false, true, true],
-  ['History and events endpoints', false, false, 'soon', 'soon'],
+  ['Holders, history and events endpoints', false, false, true, true],
   ['Point-in-time history', false, false, 'soon', 'soon'],
   ['Signed webhooks', false, false, true, true],
-  ['Bulk exports', false, false, 'soon', 'soon'],
+  ['Bulk CSV exports (as filed)', false, false, true, true],
   ['My book lite: superinvestors in your names', false, true, true, true],
   ['Full My book: every 13F filer, crowding, peers, 13F linking, CSV', false, false, true, true],
   ['Peer overlap', false, false, true, true],
@@ -111,8 +112,8 @@ export function Pricing() {
   const mine = member?.active && member.plan !== 'holdterm' ? member.plan : null
   useTitle('Pricing · Copybook')
   const cov = useAsync(loadCoverage, [])
-  const filers = aboutCount(cov.data?.filers ?? 8900)
-  const curated = cov.data?.curated ?? 199
+  const filers = cov.data ? cov.data.filers.toLocaleString('en-US') : '8,900+'
+  const curated = cov.data?.curated ?? 348
   const TIERS = tiers(filers, curated)
   // A receipt from the live latency log: the newest 13F alert, once any have gone out this season.
   const lat = useAsync(loadLatency, [])
@@ -139,9 +140,9 @@ export function Pricing() {
         )}
         {!receipt && (
           <p className="mt-4 text-[13.5px] text-ink-3">
-            We check EDGAR every minute and time every alert in public:{' '}
+            We check EDGAR every minute and will time every live alert in public. No live alerts timed yet this season:{' '}
             <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
-              see the speed log
+              the speed log
             </Link>
           </p>
         )}
@@ -152,7 +153,7 @@ export function Pricing() {
             </p>
           </div>
         )}
-        <div className="mt-8 inline-flex rounded-full bg-ink/[0.05] p-1 text-[14px]" role="tablist" aria-label="Billing period">
+        <div className="mt-8 seg rounded-full bg-ink/[0.05] p-1 text-[14px]" role="tablist" aria-label="Billing period">
           {(['monthly', 'yearly'] as const).map((c) => (
             <button key={c} role="tab" aria-selected={cycle === c} onClick={() => setCycle(c)} className={`rounded-full px-4 py-1.5 ${cycle === c ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
               {c === 'monthly' ? 'Monthly' : 'Yearly'}
@@ -254,7 +255,7 @@ export function Pricing() {
                 <FeatureList items={tier.now} dark={dark} />
                 {tier.soon && tier.soon.length > 0 && (
                   <>
-                    <h3 className="mb-2.5 mt-6 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[#8a5a0b]">Coming this month</h3>
+                    <h3 className="mb-2.5 mt-6 text-[11.5px] font-semibold uppercase tracking-[0.06em] text-[#8a5a0b]">Coming</h3>
                     <FeatureList items={tier.soon} soon />
                   </>
                 )}
@@ -305,7 +306,7 @@ export function Pricing() {
                           –
                         </span>
                       ) : c === 'soon' ? (
-                        <span className="text-[12px] font-medium text-[#8a5a0b]">This month</span>
+                        <span className="text-[12px] font-medium text-[#8a5a0b]">Coming</span>
                       ) : (
                         <span className="num font-medium">{c}</span>
                       )}
@@ -329,7 +330,7 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                'Pro: everything in Copy, API keys, the filer and holdings endpoints, filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. History and events endpoints, point-in-time history and bulk exports are coming this month and turn on as each ships, at no extra cost. Fund adds 5 seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.',
+                'Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (as originally filed), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Point-in-time history (as_of), Parquet files and history back to 2013 are in progress, with no date yet; each turns on in the API changelog when it returns data, at no extra cost. Fund adds 5 seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.',
               ],
               [
                 'How does the free trial work?',

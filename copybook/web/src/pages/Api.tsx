@@ -1,22 +1,24 @@
 import { Link } from 'react-router-dom'
 import { Badge, Button, Panel, Skeleton } from '../components/ui'
 import { api } from '../config'
+import { ApiStatus } from '../components/ApiStatus'
+import { probe } from '../lib/account'
 import { useAsync, useTitle } from '../lib/data'
-import { aboutCount, loadCoverage } from '../lib/stocks'
+import { loadCoverage } from '../lib/stocks'
 
-// Renders the live OpenAPI document ({api}/v1/openapi.json), so new endpoints appear here as the API ships them.
+// Renders the build's copy of the OpenAPI document (scripts/cards.mjs fetches {api}/v1/openapi.json), so new endpoints appear here with each build.
 type Op = { summary?: string; description?: string; parameters?: { name: string; in: string; required?: boolean; description?: string; schema?: { type?: string } }[]; responses?: Record<string, { description?: string }> }
 type Param = NonNullable<Op['parameters']>[number]
 type Spec = { info: { title: string; version: string; description?: string }; servers?: { url: string }[]; paths: Record<string, Record<string, Op>>; components?: { parameters?: Record<string, Param> } }
 
-const SPEC = `${api}/v1/openapi.json`
+// The build's copy of the spec (scripts/cards.mjs), so the docs never depend on the API answering.
+const SPEC = `${import.meta.env.BASE_URL}api/openapi.json`
 const SAMPLE = `${import.meta.env.BASE_URL}api/sample-holdings.json`
 
-// Newest first. Breaking changes are announced here at least 90 days ahead.
-const CHANGES: [string, string][] = [
-  ['2026-11-08', 'Every 13F filer in /v1/filers and its holdings endpoint, not only the managers tracked closely.'],
-  ['2026-11-08', 'v1 published: /v1/me, /v1/filers and /v1/filers/{filer}/holdings/{quarter}. The as_of parameter is documented and returns 501 not_yet_available until point-in-time data is served.'],
-]
+// GET /v1/changelog, newest first; the build's copy (scripts/cards.mjs) when the API isn't answering.
+type Change = { id?: string | null; date: string; status: string; breaking: boolean; changes: string[] }
+const loadChangelog = () =>
+  probe<{ data: Change[] }>('/v1/changelog').catch(() => fetch(`${import.meta.env.BASE_URL}api/changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ data: Change[] }>) : Promise.reject(new Error(String(r.status))))))
 
 /** The info.description packs limits and error codes into one paragraph; split it for display. */
 function parseInfo(d = '') {
@@ -31,8 +33,8 @@ const METHOD_TONE: Record<string, 'up' | 'accent' | 'down' | 'neutral'> = { get:
 export function ApiDocs() {
   useTitle('API · Copybook')
   const cov = useAsync(loadCoverage, [])
-  // The build's copy of the spec (scripts/cards.mjs); the API only if the site has none.
-  const spec = useAsync(() => fetch(`${import.meta.env.BASE_URL}api/openapi.json`).then((r) => (r.ok ? r : fetch(SPEC))).then((r) => (r.ok ? (r.json() as Promise<Spec>) : Promise.reject(new Error(String(r.status))))), [])
+  const spec = useAsync(() => fetch(SPEC).then((r) => (r.ok ? (r.json() as Promise<Spec>) : Promise.reject(new Error(String(r.status))))), [])
+  const log = useAsync(loadChangelog, [])
   const s = spec.data
   const base = s?.servers?.[0]?.url ?? api
   const info = parseInfo(s?.info.description)
@@ -50,6 +52,7 @@ export function ApiDocs() {
     : []
   return (
     <div className="container-x pt-12 md:pt-16">
+      <ApiStatus className="mb-6 max-w-3xl" />
       <header className="max-w-2xl">
         <p className="text-[13px] font-medium text-accent">Copybook API · Copy Pro and Copy Fund</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">13F, Form 4 and 13D/G data, as JSON.</h1>
@@ -64,7 +67,7 @@ export function ApiDocs() {
           </Button>
         </div>
         <p className="mt-4 text-[14px] text-ink-3">
-          Coverage: every 13F filer is in /v1, with the latest 13F for {cov.data ? aboutCount(cov.data.filers) : '8,900+'} filers and 8 quarters of history for the {cov.data?.curated ?? 199} managers we track closely. Stock holders and bulk exports arrive this week. Use is covered by our{' '}
+          Coverage: the latest 13F for {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers, and 8 quarters of history for the {cov.data?.curated ?? 348} managers we track closely. Earlier history back to 2013 is in progress. Use is covered by our{' '}
           <Link to="/terms/" className="font-medium text-accent hover:text-accent-2">
             terms
           </Link>
@@ -78,7 +81,7 @@ export function ApiDocs() {
             <code>{`curl ${base}/v1/me \\\n  -H "Authorization: Bearer cbk_live_..."`}</code>
           </pre>
           <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[13.5px] leading-relaxed text-accent-2">
-            <strong className="font-medium">Send a User-Agent header</strong> that names your app, such as <code className="font-mono text-[12.5px]">my-research/1.0</code>. Requests with a library’s default agent, like Python urllib’s, are blocked. curl, requests and httpx work as they are.
+            <strong className="font-medium">Send a descriptive User-Agent</strong> that names your app, such as <code className="font-mono text-[12.5px]">my-research/1.0</code>. Full books for the largest filers (T. Rowe Price, Millennium) can take 15–25 s; use the bulk files for whole-universe pulls.
           </p>
           {s ? (
             <ul className="mt-5 space-y-2 text-[14px] leading-relaxed text-ink-2">
@@ -112,7 +115,7 @@ export function ApiDocs() {
         <h2 id="endpoints" className="text-[22px] font-semibold tracking-[-0.02em]">
           Endpoints
         </h2>
-        <p className="mt-1 text-[14px] text-ink-3">Read live from the spec. History, events and bulk export endpoints are rolling out this month and appear here as each ships.</p>
+        <p className="mt-1 text-[14px] text-ink-3">From the OpenAPI spec; a new endpoint appears here when it ships. The changelog below says what changed.</p>
         <div className="mt-4 space-y-4">
           {!s && !spec.error && <Skeleton className="h-32 w-full" />}
           {ops.map(({ path, method, op }) => (
@@ -170,14 +173,28 @@ export function ApiDocs() {
         </Panel>
         <section id="changelog" className="scroll-mt-24">
           <Panel title="API changelog" sub="Newest first">
-            <ol className="divide-y divide-line text-[14px]">
-              {CHANGES.map(([d, t]) => (
-                <li key={d + t} className="flex gap-4 py-2.5 first:pt-0">
-                  <span className="num w-24 shrink-0 text-ink-3">{d}</span>
-                  <span className="text-ink-2">{t}</span>
-                </li>
-              ))}
-            </ol>
+            {log.data ? (
+              <ol className="divide-y divide-line text-[14px]">
+                {log.data.data.map((c, i) => (
+                  <li key={c.id ?? `${c.date}-${i}`} className="py-3 first:pt-0">
+                    <p className="flex flex-wrap items-center gap-2">
+                      <span className="num text-ink-3">{c.date}</span>
+                      {c.status !== 'shipped' && <Badge tone="neutral">{c.status === 'announced' ? 'Not live yet' : c.status}</Badge>}
+                      {c.breaking && <Badge tone="down">Breaking</Badge>}
+                    </p>
+                    <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[13.5px] leading-relaxed text-ink-2">
+                      {c.changes.map((x) => (
+                        <li key={x}>{x.replace(/`/g, '')}</li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ol>
+            ) : log.error ? (
+              <p className="text-[14px] text-ink-2">The changelog didn’t load. Reload the page to try again.</p>
+            ) : (
+              <Skeleton className="h-32 w-full" />
+            )}
           </Panel>
         </section>
       </div>

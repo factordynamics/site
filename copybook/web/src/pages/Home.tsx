@@ -1,7 +1,7 @@
 import { Signup } from '../components/Signup'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { loadSeason, seasonNow } from '../lib/stocks'
+import { loadCoverage, loadSeason, seasonNow } from '../lib/stocks'
 import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { SearchBox } from '../components/Search'
@@ -13,10 +13,12 @@ const DEMO = ['warren-buffett', 'bill-ackman', 'stanley-druckenmiller', 'david-t
 export function Home() {
   const idx = useAsync(loadIndex, [])
   useTitle('Copybook: see what the world’s best investors own')
+  // One filer count everywhere: the way GET /v1/filers counts them (scripts/stocks.mjs).
+  const cov = useAsync(loadCoverage, [])
   return (
     <>
       <Hero managers={idx.data?.managers} />
-      <ProofStrip total={idx.data?.totalValue} filers={idx.data?.filerCount} updated={idx.data?.generated_at} />
+      <ProofStrip total={idx.data?.totalValue} filers={cov.data?.filers} updated={idx.data?.generated_at} />
       <ConsensusSection featured={idx.data?.featured} />
       <FeaturedSection featured={idx.data?.featured} />
       <div className="container-x mt-16 md:mt-20">
@@ -462,7 +464,7 @@ function SeasonPill() {
   const tick = useTick(120_000, sn.live)
   const d = useAsync(() => (sn.live ? loadSeason(tick ? Date.now() : undefined) : Promise.resolve(null)), [sn.live, tick])
   const days = Math.ceil((sn.deadline.getTime() - Date.now()) / 864e5)
-  const cls = 'inline-flex max-w-full items-center gap-2 rounded-full bg-card py-1 pl-1 pr-3 text-[13px] text-ink-2 shadow-[var(--shadow-card)] hover:text-ink'
+  const cls = 'inline-flex max-w-full items-center gap-2 rounded-[18px] bg-card py-1 pl-1 pr-3 sm:rounded-full text-[13px] text-ink-2 shadow-[var(--shadow-card)] hover:text-ink'
   if (!sn.live)
     return (
       <Link to="/investors/warren-buffett/" className={cls}>
@@ -474,9 +476,10 @@ function SeasonPill() {
   return (
     <Link to="/season/" className={cls}>
       <span className="rounded-full bg-accent-soft px-2 py-0.5 font-medium text-accent-2">Live</span>
-      <span className="truncate">
+      {/* Superinvestors first, the same count /season/ leads with; on a phone the line wraps rather than cutting off. */}
+      <span className="min-w-0 py-0.5 text-left leading-snug">
         {quarterLabel(sn.quarter)} 13F season
-        {d.data ? `: ${d.data.curated.filed} of ${d.data.curated.total} funds we track have filed` : ''}
+        {d.data ? `: ${d.data.featured.filed} of ${d.data.featured.total} superinvestors · ${d.data.curated.filed} of ${d.data.curated.total} funds filed` : ''}
         {days > 0 ? ` · ${days} ${days === 1 ? 'day' : 'days'} left` : ''}
       </span>
       <Arrow />

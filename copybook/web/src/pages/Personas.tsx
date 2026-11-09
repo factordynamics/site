@@ -31,10 +31,11 @@ function Facts({ items }: { items: [string, ReactNode][] }) {
   return (
     <dl className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-3">
       {items.map(([v, l]) => (
-        <div key={v} className="bg-card p-5 md:p-6">
-          <dt className="sr-only">{l}</dt>
+        // The label is the term and the figure its value; the figure shows first, so a link in the
+        // label is rendered (and focusable) once, where it's seen.
+        <div key={v} className="flex flex-col-reverse bg-card p-5 md:p-6">
+          <dt className="mt-1 text-[13.5px] text-ink-2">{l}</dt>
           <dd className="num text-[26px] font-semibold tracking-[-0.03em]">{v}</dd>
-          <dd className="mt-1 text-[13.5px] text-ink-2">{l}</dd>
         </div>
       ))}
     </dl>
@@ -44,10 +45,16 @@ function Facts({ items }: { items: [string, ReactNode][] }) {
 function Shot({ src, alt, caption }: { src: string; alt: string; caption: string }) {
   return (
     <figure className="mt-12">
-      <div className="overflow-hidden rounded-[18px] bg-paper p-2 shadow-[var(--shadow-frame)] md:p-3">
-        <img src={`${BASE}img/${src}`} alt={alt} width={1600} loading="lazy" className="block h-auto w-full rounded-[12px]" />
+      {/* On a phone the screenshot keeps a readable width and scrolls sideways; a tap opens it full size. */}
+      <div className="overflow-x-auto rounded-[18px] bg-paper p-2 shadow-[var(--shadow-frame)] md:p-3" tabIndex={0} role="region" aria-label={alt}>
+        <a href={`${BASE}img/${src}`} target="_blank" rel="noopener" className="block min-w-[760px] md:min-w-0">
+          <img src={`${BASE}img/${src}`} alt={alt} width={1600} loading="lazy" className="block h-auto w-full rounded-[12px]" />
+        </a>
       </div>
-      <figcaption className="mt-3 text-[12.5px] text-ink-3">{caption}</figcaption>
+      <figcaption className="mt-3 text-[12.5px] text-ink-3">
+        <span className="md:hidden">Scroll sideways, or tap to open full size. </span>
+        {caption}
+      </figcaption>
     </figure>
   )
 }
@@ -174,7 +181,7 @@ export function ForQuants() {
   useTitle('Copybook API for quants · Copy Pro')
   const cov = useAsync(loadCoverage, [])
   const filers = cov.data?.filers ? cov.data.filers.toLocaleString('en-US') : '8,900+'
-  const curated = cov.data?.curated ?? 199
+  const curated = cov.data?.curated ?? 348
   const sample = useAsync(() => fetch(`${BASE}api/sample-holdings.json`).then((r) => r.text()), [])
   const trial = attributed(plans.pro.links.yearly || plans.pro.links.monthly)
   const cta = (
@@ -195,19 +202,18 @@ export function ForQuants() {
         note={`${trialTerms('pro')} Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay.`}
       />
 
-      <Facts items={[[filers, '13F filers in /v1, the latest filing of each'], ['8 quarters', `of history for the ${curated} managers we track closely; back to 2013 this month`], ['To the second', 'EDGAR acceptance time on every filing']]} />
+      <Facts items={[[filers, '13F filers in /v1, the latest filing of each'], ['8 quarters', `of history for the ${curated} managers we track closely; back to 2013 is in progress`], ['To the second', 'EDGAR acceptance time on every filing']]} />
 
       <div className="mt-12 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <Panel title="One request" sub="Send your key as a Bearer token, and a User-Agent that names your app">
           <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-night p-4 font-mono text-[12.5px] leading-relaxed text-white/90 sm:whitespace-pre sm:break-normal">
             <code>{curl}</code>
           </pre>
-          <p className="mt-3 text-[13px] text-ink-3">Python urllib’s default User-Agent is blocked; curl, requests and httpx work as they are.</p>
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[14px]">
             <Link to="/api/" className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
               API docs <Arrow className="size-3" />
             </Link>
-            <a href={`${api}/v1/openapi.json`} className="font-medium text-accent hover:text-accent-2">
+            <a href={`${BASE}api/openapi.json`} className="font-medium text-accent hover:text-accent-2">
               OpenAPI spec
             </a>
             <a href={`${BASE}api/sample-holdings.json`} className="font-medium text-accent hover:text-accent-2">
@@ -222,14 +228,13 @@ export function ForQuants() {
         </Panel>
       </div>
 
-      <H2 sub="Built so a backtest sees what the market saw, and every number traces back to a filing.">Point in time, with lineage</H2>
+      <H2 sub="Every number traces back to a filing, with the time it became public.">Source filings, timed</H2>
       <Features
         items={[
-          ['Lineage on every position', 'Each position carries the accession of the filing that disclosed it and when that filing was accepted (source_accession, first_disclosed_at); each response also names the filing, its SEC URL and the amendments applied.'],
+          ['Source filing on every row', 'Each row carries the accession of the filing that disclosed it and that filing’s acceptance time (source_accession, first_disclosed_at), and each response names the filing, its SEC URL and its amendments. Rows added by later amendments are being split out (in progress).'],
           ['Acceptance time to the second', 'The EDGAR acceptance timestamp, so you can date a position by when it became public, not by its quarter end.'],
-          ['Amendments, dated', 'Positions added by a later amendment count from that amendment’s acceptance time. An as_of parameter for full point-in-time history ships this month.'],
+          ['Amendments, listed', 'Each book lists every version EDGAR holds for its quarter (filing.versions), with acceptance times. An as_of parameter for point-in-time books is announced, not live: it returns 501 until the data is published.'],
           ['Aggregated by CUSIP', 'Lines are rolled up by CUSIP and put/call, the way funds report one position across several lines. Options are kept separate.'],
-          ['Unit fixes, flagged', 'Filings that report values in thousands are corrected to dollars and flagged, as the methodology page describes.'],
           ['One click to the source', 'Every filing carries its SEC URL, so any number can be checked against the document EDGAR published.'],
         ]}
       />
@@ -238,9 +243,8 @@ export function ForQuants() {
       <div className="mt-6 grid gap-4 md:grid-cols-3 [&>*]:h-full">
         <Panel title="Coverage">
           <ul className="space-y-2 text-[14px] leading-relaxed text-ink-2">
-            <li>Latest 13F for {filers} filers, live.</li>
-            <li>8 quarters for the {curated} managers we track closely; back to 2013 this month.</li>
-            <li>Stock holders endpoint and bulk exports this week; history and Form 4 / 13D/G events endpoints this month.</li>
+            <li>Live: the latest 13F for {filers} filers (the /v1/filers count), 8 quarters of history for the {curated} managers we track closely, holders by stock, quarter-range history, Form 4 and 13D/G events, and bulk CSV files.</li>
+            <li>Coming, no date yet: history back to 2013 (in progress), Parquet bulk files, point-in-time columns in bulk files and the as_of parameter. Each appears in the changelog when it returns data.</li>
           </ul>
         </Panel>
         <Panel title="Limits">
@@ -248,6 +252,7 @@ export function ForQuants() {
             <li>Up to 10 keys, with usage on your account page.</li>
             <li>60 requests a minute and 20,000 a day per key.</li>
             <li>Signed webhooks for every alert, retried for 12 hours.</li>
+            <li>Full books for the largest filers (T. Rowe Price, Millennium) can take 15–25 s; use the bulk files for whole-universe pulls.</li>
           </ul>
         </Panel>
         <Panel title="Terms">

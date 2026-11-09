@@ -6,7 +6,7 @@ import { Arrow, Badge, Button, Lock, Panel, Skeleton } from '../components/ui'
 import { TRIAL_DAYS } from '../config'
 import { useMember } from '../lib/account'
 import { dateLabel, displayName, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
-import { recapTitle } from '../lib/titles.mjs'
+import { recapFilers, recapTitle } from '../lib/titles.mjs'
 import { loadRecap, stockPath, type PctRow, type RecapMove, type SeasonRow } from '../lib/stocks'
 
 // /season/2026q3/: the season recap, from d/recap/{Q}.json (scripts/stocks.mjs). Before the deadline it
@@ -33,7 +33,10 @@ export function Recap() {
   const paid = Boolean(member?.active)
   const d = r.data
   const Q = quarterLabel(q)
-  useTitle(d ? (by === 'pct' ? `${Q} 13F recap: the superinvestors' biggest bets by % of book · Copybook` : recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: d.filing.filter((f) => f.filed).map((f) => displayName(f.manager)), final: d.final })) : undefined)
+  const filedNames = d ? d.filing.filter((f) => f.filed).map((f) => displayName(f.manager)) : []
+  // Until about 10 have filed, the headline names them, so a few funds don't read as the whole field.
+  const few = d ? recapFilers({ filed: d.superinvestors.filed, names: filedNames, final: d.final }) : null
+  useTitle(d ? (by === 'pct' ? `${Q} 13F recap: the superinvestors' biggest bets by % of book · Copybook` : recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: filedNames, final: d.final })) : undefined)
 
   if (r.error && !d)
     return (
@@ -55,7 +58,7 @@ export function Recap() {
           {Q} · 13F recap
           {d && (d.final ? <Badge tone="up">Final · late filers still added</Badge> : <Badge tone="accent">In progress · deadline {dueLabel(d.deadline)} ET</Badge>)}
         </p>
-        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">What the superinvestors bought and sold in {Q}.</h1>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">{few ? `${Q} so far: what ${few} bought and sold.` : `What the superinvestors bought and sold in ${Q}.`}</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
           {d
             ? `${d.superinvestors.filed} of the ${d.superinvestors.total} superinvestors we feature ${d.final ? 'filed' : 'have filed so far'}. Each move compares a fund’s ${Q} 13F with its previous one, valued at quarter-end prices as filed with the SEC.`
@@ -97,7 +100,7 @@ export function Recap() {
         <>
           <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-[15px] font-semibold">Most bought and sold</h2>
-            <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Rank by">
+            <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Rank by">
               {(
                 [
                   ['usd', 'Dollars'],

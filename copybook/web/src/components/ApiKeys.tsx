@@ -180,8 +180,8 @@ function Step({ n, title, sub }: { n: number; title: string; sub?: string }) {
   )
 }
 
-// First-call examples, with the new key filled in when one was just created. A User-Agent is required:
-// the API blocks library defaults such as Python urllib's.
+// First-call examples, with the new key filled in when one was just created, and a User-Agent that
+// names the app.
 function Quickstart({ apiKey }: { apiKey?: string }) {
   const [tab, setTab] = useState<'curl' | 'python'>('curl')
   const [copied, setCopied] = useState(false)
@@ -217,7 +217,7 @@ function Quickstart({ apiKey }: { apiKey?: string }) {
           <code>{code}</code>
         </pre>
       </div>
-      <p className="ml-9 mt-2 text-[12.5px] text-ink-3">Send a User-Agent that names your app. Library defaults such as Python urllib’s are blocked.</p>
+      <p className="ml-9 mt-2 text-[12.5px] text-ink-3">Send a descriptive User-Agent that names your app.</p>
       <Step n={3} title="Explore the API" />
       <p className="ml-9 mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[14px] [&>a]:inline-flex [&>a]:min-h-9 [&>a]:items-center">
         <Link to="/api/" className="font-medium text-accent hover:text-accent-2">

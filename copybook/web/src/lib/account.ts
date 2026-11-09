@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { api } from '../config'
 
 export type Member = {
@@ -49,7 +49,14 @@ export function getToken(): string | null {
     return null
   }
 }
-const setToken = (token: string) => localStorage.setItem(KEY, JSON.stringify({ token, exp: Date.now() + 30 * DAY }))
+const setToken = (token: string) => {
+  localStorage.setItem(KEY, JSON.stringify({ token, exp: Date.now() + 30 * DAY }))
+  sessionStorage.removeItem(REAUTH)
+}
+// Set when the API rejects a stored session (401), such as a session from before the server move: the
+// account page and My book then ask the member to sign in again instead of treating them as a visitor.
+const REAUTH = 'copybook-reauth'
+export const needsReauth = () => !getToken() && sessionStorage.getItem(REAUTH) === '1'
 export const signOut = () => {
   localStorage.removeItem(KEY)
   forgetMe()
@@ -93,8 +100,26 @@ export class ApiError extends Error {
 // unavailable instead of treating the member as signed out. Nothing retries on its own.
 let down = false
 export const apiDown = () => down
+const downSubs = new Set<() => void>()
+const setDown = (v: boolean) => {
+  if (v === down) return
+  down = v
+  downSubs.forEach((f) => f())
+}
+/** Re-renders when the API starts or stops answering 429/5xx (the status banner). */
+export const useApiDown = () => useSyncExternalStore((f) => (downSubs.add(f), () => downSubs.delete(f)), apiDown)
+/** A public GET that should also drive the status banner (the /api/ page's changelog). */
+export async function probe<T>(path: string): Promise<T> {
+  const res = await fetch(`${api}${path}`).catch((e) => {
+    setDown(true)
+    throw e
+  })
+  setDown(res.status === 429 || res.status >= 500)
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null))
+  return res.json() as Promise<T>
+}
 
-export async function call<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean; cache?: RequestCache } = {}): Promise<T> {
+export async function call<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean; cache?: RequestCache; timeout?: number } = {}): Promise<T> {
   const headers: Record<string, string> = {}
   if (init.body !== undefined) headers['Content-Type'] = 'application/json'
   if (init.auth) {
@@ -107,12 +132,16 @@ export async function call<T>(path: string, init: { method?: string; body?: unkn
     headers,
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     cache: init.cache,
+    signal: init.timeout ? AbortSignal.timeout(init.timeout) : undefined,
   }).catch((e) => {
-    down = true
+    setDown(true)
     throw e
   })
-  down = res.status === 429 || res.status >= 500
-  if (res.status === 401 && init.auth) signOut()
+  setDown(res.status === 429 || res.status >= 500)
+  if (res.status === 401 && init.auth) {
+    sessionStorage.setItem(REAUTH, '1')
+    signOut()
+  }
   if (res.ok && init.auth && (init.method ?? (init.body !== undefined ? 'POST' : 'GET')) !== 'GET') {
     forgetMe()
     shared.clear()
@@ -168,7 +197,8 @@ export type CancelReason = 'seasonal' | 'price' | 'value' | 'feature' | 'alerts'
 export const pausePlan = (reason?: CancelReason) => call<{ ok: boolean; paused_until: number }>('/pause', { body: reason ? { reason } : {}, auth: true })
 export const resumePlan = () => call<{ ok: boolean }>('/pause', { method: 'DELETE', auth: true })
 export const sendCancelReason = (reason: CancelReason, note?: string) => call<{ ok: boolean }>('/cancel-reason', { body: { reason, ...(note ? { note } : {}) }, auth: true })
-export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email } })
+/** Throws when the sign-in email can't be queued (a 5xx or no answer in 15 s), so the form can say so. */
+export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email }, timeout: 15_000 })
 export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
 /**
  * Move an existing subscription to a higher plan: POST {api}/upgrade returns a billing-portal page that

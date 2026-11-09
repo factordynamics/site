@@ -20,6 +20,9 @@ const live = index.managers.filter((m) => m.ok && (m.total_value ?? 0) > 0 && ![
 const newest = Math.max(...live.map((m) => qn(m.quarter)))
 // A fund more than two quarters behind the newest filing isn't a current holder of anything.
 const current = live.filter((m) => qn(m.quarter) >= newest - 2)
+// The superinvestors /season/, Flow and the docs count: every featured manager that isn't inactive,
+// including those whose 13F another entity files (Ackman).
+const SUPER_TOTAL = index.managers.filter((x) => x.featured && x.ok !== false && x.status !== 'inactive').length
 
 const books = []
 for (let i = 0; i < current.length; i += 16) {
@@ -191,10 +194,14 @@ for (const s of stocks.values()) {
   list.push({ t: ticker, n: s.name, s: s.sector, h: holders.length, dh: holders.length - prevHolders, v: file.value, a: classes.slice(1).map((c) => c.ticker) })
 }
 list.sort((a, b) => b.h - a.h || b.v - a.v)
-// Coverage figures for copy (pricing, account): every filer with parsed holdings, and the curated set.
+// Coverage figures for copy (pricing, /api/, /for-quants/): counted the way GET /v1/filers counts them
+// (every curated manager plus every other filer with parsed holdings), so the site and the API agree.
 {
   const fl = await read('filers.json').catch(() => null)
-  writeFileSync(join(out, 'd', 'coverage.json'), JSON.stringify({ filers: fl?.holdings_ok ?? fl?.filers?.filter((f) => f.ok).length ?? 0, curated: index.managers.filter((m) => m.ok).length, generated_at: index.generated_at }))
+  const cik = (c) => String(c).replace(/^0+/, '')
+  const all = new Set([...(fl?.filers ?? []).filter((f) => f.ok).map((f) => cik(f.cik)), ...index.managers.map((m) => cik(m.cik))])
+  // Funds we track: the ones /season/ and Flow count, with a 13F for the newest quarter or the one before.
+  writeFileSync(join(out, 'd', 'coverage.json'), JSON.stringify({ filers: all.size, curated: live.filter((m) => qn(m.quarter) >= newest - 1).length, superinvestors: SUPER_TOTAL, generated_at: index.generated_at }))
 }
 writeFileSync(join(out, 'd', 'stocks.json'), JSON.stringify({ generated_at: index.generated_at, funds: books.length, stocks: list }))
 
@@ -296,7 +303,7 @@ const period = (q, full = false) => {
     funds_filed: filedQ.length,
     funds_total: books.filter((b) => qn(b.quarter) >= season - 1).length,
     featured_filed: filedQ.filter((b) => b.featured).length,
-    featured_total: books.filter((b) => b.featured && qn(b.quarter) >= season - 1).length,
+    featured_total: SUPER_TOTAL,
     // Funds already past this period (filed the next quarter), so a reader knows who's missing.
     moved_on: live.length - filedQ.length,
     featured_moved_on: live.filter((b) => b.featured).length - filedQ.filter((b) => b.featured).length,

@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
 import { displayName } from '../src/lib/names.mjs'
 import { dayName, isEdgarDay } from '../src/lib/calendar.mjs'
-import { recapTitle } from '../src/lib/titles.mjs'
+import { recapFilers, recapTitle } from '../src/lib/titles.mjs'
 import { getJson } from './getjson.mjs'
 import { API, LATENCY_URL } from '../api.config.mjs'
 
@@ -231,8 +231,8 @@ ${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572
   // Two cards: the page's default, and the "% of book" view (/season/{q}/pct/), so a shared link unfurls what it shows.
   // Until about 10 superinvestors have filed, the recap names them, so it doesn't read as the whole field.
   const filedNames = r.filing.filter((f) => f.filed).map((f) => displayName(f.manager))
-  const few = !r.final && filedNames.length > 0 && filedNames.length < 10
-  const fewWho = filedNames.length <= 3 ? filedNames.join(', ').replace(/, ([^,]+)$/, ' and $1') : `${filedNames.slice(0, 2).join(', ')} and ${filedNames.length - 2} more`
+  const fewWho = recapFilers({ filed: r.superinvestors.filed, names: filedNames, final: r.final })
+  const few = Boolean(fewWho)
   for (const byPct of [false, true]) {
   // After the deadline the card leads with breadth: what the most superinvestors bought.
   const left = byPct
@@ -298,6 +298,12 @@ ${right}
   if (spec) {
     mkdirSync(join(out, 'api'), { recursive: true })
     writeFileSync(join(out, 'api', 'openapi.json'), spec)
+  }
+  // And the changelog, which /api/ shows when the API isn't answering.
+  const changelog = (await fetch(`${API}/v1/changelog`).then((r) => (r.ok ? r.text() : null), () => null)) ?? (await fetch(`${SITE}api/changelog.json`).then((r) => (r.ok ? r.text() : null), () => null))
+  if (changelog) {
+    mkdirSync(join(out, 'api'), { recursive: true })
+    writeFileSync(join(out, 'api', 'changelog.json'), changelog)
   }
   const secs = (s) => (s == null ? '—' : s < 90 ? `${Math.round(s)}s` : `${(s / 60).toFixed(s < 600 ? 1 : 0)} min`)
   const n = l?.count ?? 0

@@ -385,53 +385,66 @@ export function PositionLine({ p, who }: { p: Position; who?: { slug: string; ma
         p.boughtUsd ? `about ${money(p.boughtUsd)} bought${span(p.first, p.last)}, average about $${(p.boughtUsd / p.boughtShares).toFixed(2)} on Form 4` : null,
         p.soldUsd ? `about ${money(p.soldUsd)} sold${p.boughtUsd ? '' : span(p.first, p.last)}, average about $${(p.soldUsd / p.soldShares).toFixed(2)} on Form 4` : null,
       ].filter(Boolean)
+  const detail = [...trades, otherLine].filter(Boolean).join(' · ')
   return (
+    // A phone gets the figure beside the name and the change on one full-width line; the Form 4 detail
+    // (prices, coverage, codes) folds behind a tap instead of wrapping into a tall block.
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 py-3 text-[14px]">
-      <span className="min-w-0">
-        <span className="flex flex-wrap items-center gap-2">
-          <Badge tone={tone}>{label}</Badge>
-          {who ? (
-            <Link to={`/investors/${who.slug}/`} className="truncate font-medium hover:text-accent">
-              {who.manager}
-            </Link>
-          ) : (
-            <>
-              {p.ticker && (
-                <Link to={stockPath(p.ticker)} className="font-mono text-[13px] font-medium hover:text-accent">
-                  {p.ticker}
-                </Link>
-              )}
-              <span className="truncate text-ink-2">{p.name}</span>
-            </>
-          )}
-        </span>
-        <span className="mt-0.5 block text-[12.5px] leading-relaxed text-ink-3">
-          {p.to != null ? (
-            <>
-              <span className="num text-ink-2">
-                {p.from ? (p.from !== p.to ? `${sharesFmt(p.from)} → ` : '') : ''}
-                {sharesFmt(p.to)} shares
-              </span>
-              {delta != null && Math.abs(delta) >= 0.001 && <span className={`num ${delta > 0 ? 'text-up' : 'text-down'}`}> ({delta > 0 ? '+' : '−'}{pct(Math.abs(delta), 0)})</span>}
-              {p.asOf && ` as of ${dateLabel(p.asOf)}, per ${p.source}`}
-              {p.from === p.to && ', unchanged since the 13F'}
-              {p.from === 0 && ', a new position since the 13F'}
-            </>
-          ) : null}
-          {trades.length > 0 && `${p.to != null ? ' · ' : ''}${trades.join(' · ')}`}
-          {otherLine && ` · ${otherLine}`}
-          {p.stake && p.stake.percent_of_class != null && ` · ${stakePct(p)}`}
-        </span>
+      <span className="flex min-w-0 items-center gap-2">
+        <Badge tone={tone}>{label}</Badge>
+        {who ? (
+          <Link to={`/investors/${who.slug}/`} className="truncate font-medium hover:text-accent">
+            {who.manager}
+          </Link>
+        ) : (
+          <>
+            {p.ticker && (
+              <Link to={stockPath(p.ticker)} className="shrink-0 font-mono text-[13px] font-medium hover:text-accent">
+                {p.ticker}
+              </Link>
+            )}
+            <span className="min-w-0 truncate text-ink-2">{p.name}</span>
+          </>
+        )}
       </span>
       {/* The dollar figure is what Form 4s priced; when they cover only part of the change it's a floor, not the total. */}
       {net ? (
-        <span className={`num text-right text-[14px] font-medium ${net > 0 ? 'text-up' : 'text-down'}`}>
+        <span className={`num text-right text-[14px] font-medium sm:row-span-2 ${net > 0 ? 'text-up' : 'text-down'}`}>
           {partial ? `≥ ${money(Math.abs(net))}` : `${net > 0 ? '+' : '−'}${money(Math.abs(net))}`}
           <span className="block text-[11.5px] font-normal text-ink-3">{partial ? `${net > 0 ? 'bought' : 'sold'} on Form 4s` : 'on Form 4s'}</span>
         </span>
       ) : (
-        <span />
+        <span className="sm:row-span-2" />
       )}
+      <span className="col-span-2 block text-[12.5px] leading-relaxed text-ink-3 sm:col-span-1">
+        {p.to != null ? (
+          <>
+            <span className="num text-ink-2">
+              {p.from ? (p.from !== p.to ? `${sharesFmt(p.from)} → ` : '') : ''}
+              {sharesFmt(p.to)} shares
+            </span>
+            {delta != null && Math.abs(delta) >= 0.001 && <span className={`num ${delta > 0 ? 'text-up' : 'text-down'}`}> ({delta > 0 ? '+' : '−'}{pct(Math.abs(delta), 0)})</span>}
+            {p.asOf && ` as of ${dateLabel(p.asOf)}`}
+            <span className="hidden sm:inline">{p.asOf && `, per ${p.source}`}</span>
+            {p.from === p.to && ', unchanged since the 13F'}
+            {p.from === 0 && ', a new position since the 13F'}
+          </>
+        ) : null}
+        {p.stake && p.stake.percent_of_class != null && ` · ${stakePct(p)}`}
+        {detail && <span className="hidden sm:inline">{` · ${detail}`}</span>}
+        {detail && (
+          <details className="group mt-1 sm:hidden">
+            <summary className="cursor-pointer list-none text-[12px] font-medium text-accent [&::-webkit-details-marker]:hidden">
+              <span className="group-open:hidden">Form 4 detail</span>
+              <span className="hidden group-open:inline">Hide detail</span>
+            </summary>
+            <span className="mt-1 block">
+              {p.asOf && `Per ${p.source}. `}
+              {detail}
+            </span>
+          </details>
+        )}
+      </span>
     </li>
   )
 }

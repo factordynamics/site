@@ -72,7 +72,7 @@ export function Consensus() {
             placeholder="Find a stock, e.g. NVDA"
             className="h-9 w-full rounded-full bg-paper px-4 text-[14px] shadow-[0_0_0_1px_var(--color-line)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)] sm:w-60"
           />
-          <div className="inline-flex rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Rank by">
+          <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[13px]" role="tablist" aria-label="Rank by">
             {([
               ['holders', 'Most held'],
               ['value', 'Most dollars'],
