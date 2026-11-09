@@ -46,9 +46,8 @@ export async function handleSignup(env: Env, b: Json, ip: string): Promise<Reply
     if (cur.status === 'free') await sendMail(env, [await freeWelcomeMail(env, cur, false)]);
     return { status: 200, body: { ok: true } };
   }
-  const id = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`free:${email}`)));
   const m: Member = {
-    customer: `free_${[...id.slice(0, 8)].map((x) => x.toString(16).padStart(2, '0')).join('')}`,
+    customer: await freeId(email),
     email,
     status: 'free',
     plan: 'free',
@@ -428,12 +427,59 @@ export async function runWeekly(env: Env, now: number): Promise<Record<string, u
   return { status, sent: mails.length, buys: moves.buys.length, sells: moves.sells.length };
 }
 
-/** A free signup who subscribes: the paid member takes their source, and the free record is marked converted. */
+/** A free signup's key: derived from the email, so one email has one free record. */
+export async function freeId(email: string): Promise<string> {
+  const id = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`free:${email.trim().toLowerCase()}`)));
+  return `free_${[...id.slice(0, 8)].map((x) => x.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * A free signup who subscribes: one account per email. The paid member takes their source, names, follows and
+ * channels; the free record becomes an alias (`converted_to`), so its sessions and sign-in links open the paid
+ * account (getMember follows it). Names union, so a re-run, or names added on either side, are kept.
+ */
 export async function carryFreeSignup(env: Env, m: Member): Promise<Member> {
-  const free = m.email ? await memberByEmail(env, m.email) : null;
+  if (!m.email) return m;
+  const raw = await env.DB.get(`cus:${await freeId(m.email)}`);
+  const free = raw ? (JSON.parse(raw) as Member) : null;
   if (!free || free.status !== 'free' || free.customer === m.customer) return m;
-  await putMember(env, { ...free, converted_to: m.customer });
-  return { ...m, source: m.source ?? free.source ?? null, ...(free.utm && !m.utm ? { utm: free.utm } : {}), marketing_off: m.marketing_off ?? free.marketing_off, created_at: free.created_at };
+  const investors = await mergeFollows(env, free.customer, m.customer);
+  if (!(await env.DB.get(`channels:${m.customer}`))) {
+    const ch = await env.DB.get(`channels:${free.customer}`);
+    if (ch) await env.DB.put(`channels:${m.customer}`, ch);
+  }
+  // Written without the email index: the paid member owns the email from here.
+  await env.DB.put(`cus:${free.customer}`, JSON.stringify({ ...free, converted_to: m.customer }));
+  return {
+    ...m,
+    ...(investors && Array.isArray(m.alerts) ? { alerts: [...new Set([...m.alerts, ...investors])] } : {}),
+    source: m.source ?? free.source ?? null,
+    ...(free.utm && !m.utm ? { utm: free.utm } : {}),
+    marketing_off: m.marketing_off ?? free.marketing_off,
+    created_at: free.created_at,
+  };
+}
+
+/** The free record's lists into the paid member's (a union). Returns the merged investors, or null with nothing to merge. */
+async function mergeFollows(env: Env, from: string, to: string): Promise<string[] | null> {
+  const a = JSON.parse((await env.DB.get(`follows:${from}`)) ?? 'null') as Record<string, unknown> | null;
+  if (!a) return null;
+  const b = JSON.parse((await env.DB.get(`follows:${to}`)) ?? '{}') as Record<string, unknown>;
+  const list = (v: unknown) => (Array.isArray(v) ? (v as string[]) : []);
+  const out: Record<string, unknown> = { ...a, ...b, onboarded: Boolean(a.onboarded || b.onboarded) };
+  for (const k of ['investors', 'stocks', 'owned', 'owned_manual', 'peers']) out[k] = [...new Set([...list(b[k]), ...list(a[k])])];
+  if (!b.book && a.book) out.book = a.book;
+  await env.DB.put(`follows:${to}`, JSON.stringify(out));
+  return out.investors as string[];
+}
+
+/** Operator: merge a free record into the paid member that already took its email (records split before the merge shipped). */
+export async function mergeFreeSignup(env: Env, email: string): Promise<Record<string, unknown>> {
+  const paid = await memberByEmail(env, email);
+  if (!paid || paid.status === 'free') return { ok: false, error: 'no paid member with that email' };
+  const merged = await carryFreeSignup(env, paid);
+  await putMember(env, merged);
+  return { ok: true, customer: merged.customer, follows: await getFollows(env, merged) };
 }
 
 /** Operator: this week's issue for one free member, sent now (a check of what Friday sends; the week isn't marked sent). `dry` returns the text instead. */

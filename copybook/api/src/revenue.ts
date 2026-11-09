@@ -19,7 +19,10 @@ const PRICES: Record<string, { name: string; month: number; year: number }> = {
   fund: { name: 'Copy Fund', month: 199, year: 1990 },
 };
 
-const billable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !m.comped && !m.test && !!PRICES[m.plan];
+/** Counted in revenue, funnel and ops metrics. Test members (gate runs) are not. */
+const billable = (m: Member) => lifecycle(m) && !m.test;
+/** Gets lifecycle email (trial, cancel, resume, pause, dunning): test members too, so a gate run sees what a member sees. */
+const lifecycle = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !m.comped && !!PRICES[m.plan];
 const day = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 
@@ -179,7 +182,7 @@ const API = (env: Env) => `${apiBase(env)}/`;
 
 /** Sends the day-14 note once per subscription when a trial runs out cancelled (not a mid-trial cancel). */
 export async function maybeWinback(env: Env, prev: Member | null, m: Member, now = Date.now()): Promise<void> {
-  if (!prev || prev.status !== 'trialing' || m.status !== 'canceled' || !billable(m) || m.marketing_off || !m.email || m.winback_sent === m.subscription) return;
+  if (!prev || prev.status !== 'trialing' || m.status !== 'canceled' || !lifecycle(m) || m.marketing_off || !m.email || m.winback_sent === m.subscription) return;
   if (!prev.trial_end || now < prev.trial_end * 1000 - 3600_000) return;
   const resume = `${API(env)}resume?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, 30 * 86400, { s: m.plan }))}`;
   if ((await sendMail(env, [winbackMail(env, m, resume, await unsubscribeUrl(env, m.customer))])) === '200') m.winback_sent = m.subscription;
@@ -189,7 +192,7 @@ export async function maybeWinback(env: Env, prev: Member | null, m: Member, now
  * The email buttons: GET /keep switches a trial to the yearly price on a portal confirm page (the
  * member sees the amount first); GET /resume starts a new monthly subscription at Checkout, no trial.
  */
-export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url: URL): Promise<Response> {
+export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url: URL, method = 'GET'): Promise<Response> {
   const go = (to: string) => Response.redirect(to, 303);
   const account = `${env.SITE_URL}account/`;
   const p = await verifyToken(env.SESSION_SECRET, url.searchParams.get('t') ?? '', path === '/keep' ? 'keep' : 'resume');
@@ -218,11 +221,15 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
     }
     const plan = p!.s ?? m.plan;
     const customer = m.customer;
-    // Paused between seasons: the button ends the pause on the same subscription (a checkout would start a second one).
-    // The link also signs them in (a 2-minute sign-in handoff, as the account page's own links), so they land on
-    // /account/ seeing "You've resumed", not the sign-in form.
-    if (isPaused(m)) {
-      await endPause(env, m);
+    // Paused between seasons, or cancelled but not ended yet: resuming keeps the same subscription (a checkout
+    // would start a second one). Opening the link (GET) changes nothing: it shows the site's /resume/ page, whose
+    // button POSTs here, so a mail scanner can't resume a plan. The POST also signs them in (a 2-minute sign-in
+    // handoff, as the account page's own links), so they land on /account/ seeing "You've resumed".
+    const cancelling = isActive(m) && !!m.cancel_at_period_end;
+    if (isPaused(m) || cancelling) {
+      if (method !== 'POST') return go(`${env.SITE_URL}resume/?t=${encodeURIComponent(url.searchParams.get('t') ?? '')}`);
+      if (isPaused(m)) await endPause(env, m);
+      else await syncSubscription(env, await stripe(env, 'POST', `subscriptions/${m.subscription}`, { cancel_at_period_end: 'false' }));
       return go(`${account}?resumed=1&login=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, 120))}`);
     }
     // Already back on a plan: nothing to start.
@@ -283,17 +290,38 @@ export const WHY: Record<string, string> = {
 export async function cancelMail(env: Env, m: Member): Promise<Mail> {
   const token = await signToken(env.SESSION_SECRET, 'why', m.customer, 60 * 86400);
   const base = `${API(env)}why?t=${encodeURIComponent(token)}&r=`;
-  const ends = m.cancel_at ?? m.period_end;
+  const ends = m.status === 'canceled' ? null : (m.cancel_at ?? (m.status === 'trialing' ? m.trial_end : null) ?? m.period_end) || null;
+  const name = PRICES[m.plan]?.name ?? 'Copybook';
+  // The resume link opens the site's page, which changes nothing until its button posts (mail scanners follow links).
+  const resume = ends ? `${env.SITE_URL}resume/?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'resume', m.customer, Math.max(86400, ends - Math.floor(Date.now() / 1000) + 86400)))}` : null;
   return {
     to: m.email,
-    subject: 'One question about your Copybook cancellation',
-    text: `Your ${PRICES[m.plan]?.name ?? 'Copybook'} plan is cancelled${ends ? ` and stays active until ${day(ends)}` : ''}. Alerts keep coming until then.\n\nWhat was the main reason? One click is enough:\n${Object.entries(WHY).map(([k, v]) => `  ${v}: ${base}${k}`).join('\n')}\n\nYou can change your mind any time before then at ${env.SITE_URL}account/.${FOOTER}`,
+    subject: ends ? `Your ${name} plan ends ${day(ends)} · Resume anytime before then` : `Your ${name} plan has ended`,
+    text: `${ends ? `Your ${name} plan is cancelled and ends on ${day(ends)}. Alerts, history and CSV keep working until then${m.status === 'trialing' ? ", and you won't be charged" : ''}.\n\nChanged your mind? Resume with one click, same plan and price, follows kept:\n${resume}` : `Your ${name} plan has ended. Your follows are kept if you come back: ${env.SITE_URL}pricing/`}\n\nOne question: what was the main reason? One click is enough:\n${Object.entries(WHY).map(([k, v]) => `  ${v}: ${base}${k}`).join('\n')}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+  };
+}
+
+/** A cancellation undone before it took effect (the resume link, or Renew in the billing portal): one confirmation. */
+export async function maybeResumeMail(env: Env, prev: Member | null, m: Member): Promise<void> {
+  if (!prev || prev.subscription !== m.subscription || !prev.cancel_at_period_end || m.cancel_at_period_end || !isActive(m) || isPaused(m)) return;
+  if (!lifecycle(m) || !m.email) return;
+  // A later cancel asks again.
+  if ((await sendMail(env, [resumedMail(env, m)])) === '200') m.why_sent = undefined;
+}
+
+function resumedMail(env: Env, m: Member): Mail {
+  const name = PRICES[m.plan]?.name ?? 'Copybook';
+  const next = m.status === 'trialing' ? m.trial_end : m.period_end;
+  return {
+    to: m.email,
+    subject: `You've resumed ${name}`,
+    text: `You've resumed ${name}. Nothing ends: alerts, history and CSV carry on, with your follows and settings as they are.\n\n${next ? `${m.status === 'trialing' ? 'Your trial ends' : 'Your plan renews'} on ${day(next)}.` : ''} ${priceLine(m)}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
   };
 }
 
 /** Sent once per subscription when a member cancels (now or at period end). */
 export async function maybeCancelMail(env: Env, prev: Member | null, m: Member): Promise<void> {
-  if (!billable(m) || !m.email || m.why_sent === m.subscription) return;
+  if (!lifecycle(m) || !m.email || m.why_sent === m.subscription) return;
   const cancelling = (m.cancel_at_period_end && !prev?.cancel_at_period_end) || (m.status === 'canceled' && !!prev && isActive(prev) && !prev.cancel_at_period_end);
   if (!cancelling) return;
   if ((await sendMail(env, [await cancelMail(env, m)])) === '200') m.why_sent = m.subscription;
@@ -323,7 +351,7 @@ export async function handleWhy(env: Env, req: Request, url: URL): Promise<Respo
 
 /** Daily: trial reminders 3 days out, and once per season the recap for monthly members. */
 export async function runRevenue(env: Env, now: number): Promise<Record<string, unknown>> {
-  const members = (await listMembers(env)).filter((m) => billable(m) && isActive(m) && m.email && !m.marketing_off);
+  const members = (await listMembers(env)).filter((m) => lifecycle(m) && isActive(m) && m.email && !m.marketing_off);
   const mails: Mail[] = [];
   const marks: Member[] = [];
   // The season recap goes out from the day after each 13F deadline, for a week (Q3 2026: from Nov 17).
@@ -628,7 +656,7 @@ export async function runSeasonal(env: Env, now: number): Promise<Record<string,
 export async function paymentFailed(env: Env, inv: any): Promise<string> {
   const customer = typeof inv.customer === 'string' ? inv.customer : inv.customer?.id;
   const m = customer ? await getMember(env, customer) : null;
-  if (!m || !billable(m) || !m.email || !(Number(inv.amount_due) > 0) || !inv.hosted_invoice_url) return 'skipped';
+  if (!m || !lifecycle(m) || !m.email || !(Number(inv.amount_due) > 0) || !inv.hosted_invoice_url) return 'skipped';
   if (m.dunning_sent === inv.id) return 'already sent';
   const p = PRICES[m.plan];
   const amount = (Number(inv.amount_due) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });

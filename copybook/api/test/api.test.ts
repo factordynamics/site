@@ -952,6 +952,10 @@ describe('copybook api', () => {
     await call('/session', { body: { checkout_session: 'cs_test_rd' } });
     await webhook({ type: 'customer.subscription.created', data: { object: stripeObjects['subscriptions/sub_rd'] } });
     expect(JSON.parse((await env.DB.get('cus:cus_rd'))!)).toMatchObject({ source: 'home', utm: { utm_campaign: 'q3' }, plan: 'copy' });
+    // One account per email: the free browser's session opens the paid member, which kept the free names.
+    expect((await (await call('/me', { token: s.token })).json()).member).toMatchObject({ email: 'reader@reader.test', plan: 'copy', active: true });
+    expect((await (await call('/follows', { token: s.token })).json()).follows.owned).toEqual(['GOOGL', 'HHH', 'NVDA', 'AAPL', 'SIRI']);
+    expect(await env.DB.get('email:reader@reader.test')).toBe('cus_rd');
     expect(sent.map((m) => m.subject)).toEqual(['Welcome to Copy: three steps to your first alert']);
     expect(sent[0].text).toContain(`${SITE}my-book/`);
     await webhook({ type: 'customer.subscription.updated', data: { object: sub('sub_rd', 'cus_rd', 'active') } });
@@ -1060,9 +1064,13 @@ describe('copybook api', () => {
     await runSeasonal(env, remindAt + 3600_000);
     expect(sent).toHaveLength(0); // once per pause
 
-    // An old \"start again\" link while paused ends the pause on the same subscription; no second checkout.
+    // An old \"start again\" link while paused: opening it changes nothing (the site's page, for mail scanners);
+    // its button POSTs, which ends the pause on the same subscription; no second checkout.
     const rt = await signToken(env.SESSION_SECRET, 'resume', 'cus_pz', 3600);
-    const go = await handleRequest(new Request(`https://api.test/resume?t=${encodeURIComponent(rt)}`), env);
+    const opened = await handleRequest(new Request(`https://api.test/resume?t=${encodeURIComponent(rt)}`), env);
+    expect(opened.headers.get('location')).toBe(`${env.SITE_URL}resume/?t=${encodeURIComponent(rt)}`);
+    expect(posted.at(-1)).not.toBe('pause_collection=');
+    const go = await handleRequest(new Request(`https://api.test/resume?t=${encodeURIComponent(rt)}`, { method: 'POST' }), env);
     expect(go.status).toBe(303);
     // Lands signed in: the redirect carries a sign-in token that /session exchanges.
     const login = new URL(go.headers.get('location')!).searchParams.get('login')!;
@@ -1975,7 +1983,7 @@ describe('copybook api', () => {
     const t404 = await (await req(copy, 'POST', '/channels/test')).json();
     expect(t404.messages).toMatchObject({ discord: 'Discord rejected this webhook (deleted or wrong URL)', slack: 'Delivered' });
     expect(Object.keys((await (await req(copy, 'GET', '/me')).json()).member.channels_failing)).toEqual(['discord']);
-    expect(sent).toHaveLength(0);
+    expect(sent.map((m) => m.subject)).toEqual(['Copybook test: your alerts will arrive here']); // the test email, no failure notice
     await req(copy, 'POST', '/channels/test');
     expect((await (await req(copy, 'GET', '/me')).json()).member.channels_failing).toEqual({});
 
@@ -1992,7 +2000,8 @@ describe('copybook api', () => {
     expect(items.map((i: { id: string }) => i.id).sort()).toEqual(['C1', 'C2', 'C3']);
     expect(items.every((i: { sent_at: string | null }) => !!i.sent_at)).toBe(true);
     await req(copy, 'PUT', '/channels', { slack: null, discord: null, telegram: null });
-    expect((await (await req(copy, 'POST', '/channels/test')).json()).results).toEqual({ feed: 'ok' });
+    // With a feed, the test still emails: every alert goes by email too.
+    expect((await (await req(copy, 'POST', '/channels/test')).json()).results).toEqual({ feed: 'ok', email: '200' });
     items = (await (await handleRequest(new Request(feed2.json_url), env)).json()).items;
     expect(items[0].title).toBe('Copybook test');
   });
@@ -2781,8 +2790,24 @@ describe('copybook api', () => {
     await cancel('ht', 'holdterm_monthly');
     // A comped subscription (forever 100% off) cancelling: no email either.
     await webhook({ type: 'customer.subscription.updated', data: { object: { ...sub('sub_promo', 'promo', 'active', 'month', 'pro_monthly'), cancel_at_period_end: true, discount: { coupon: { id: 'c', percent_off: 100, duration: 'forever' } } } } });
-    expect(sent.map((m) => m.to[0])).toEqual(['yearly@example.com']);
-    expect(sent[0].subject).toBe('One question about your Copybook cancellation');
+    // A gate-run test member counts nowhere but gets the email, as a member would.
+    await env.DB.put('cus:gate', JSON.stringify({ customer: 'gate', email: 'gate@example.com', status: 'trialing', plan: 'copy', interval: 'monthly', subscription: 'sub_gate', alerts: [], welcomed: true, test: 'gatecheck' }));
+    await webhook({ type: 'customer.subscription.updated', data: { object: { ...sub('sub_gate', 'gate', 'trialing'), trial_end: now() + 14 * 86400, cancel_at_period_end: true, metadata: { test: 'gatecheck' } } } });
+    expect(sent.map((m) => m.to[0])).toEqual(['yearly@example.com', 'gate@example.com']);
+    expect(sent[0].subject).toMatch(/^Your Copy plan ends \w+ \d+ · Resume anytime before then$/);
+    expect(sent[1].text).toContain("and you won't be charged");
+    // Resume: the link opens the site's page (GET changes nothing); its button POSTs, the cancellation is lifted,
+    // one confirmation, and a later cancel asks again.
+    const resume = sent[0].text.match(/follows kept:\n(\S+)/)![1];
+    expect(resume.startsWith(`${env.SITE_URL}resume/?t=`)).toBe(true);
+    const rq = (method: string) => handleRequest(new Request(`https://api.test/resume${new URL(resume).search}`, { method }), env);
+    expect((await rq('GET')).headers.get('location')).toBe(resume);
+    stripeObjects['subscriptions/sub_yearly'] = sub('sub_yearly', 'yearly', 'active');
+    expect((await rq('POST')).headers.get('location')).toMatch(/account\/\?resumed=1&login=/);
+    expect(sent.map((m) => m.subject).slice(2)).toEqual(["You've resumed Copy"]);
+    expect(JSON.parse((await env.DB.get('cus:yearly'))!)).toMatchObject({ cancel_at_period_end: false });
+    await cancel('yearly');
+    expect(sent.map((m) => m.subject).slice(3)).toEqual([sent[0].subject]);
     const link = sent[0].text.match(/Too expensive: (\S+)/)![1];
     expect(link).toMatch(/^https:\/\/copybook-api\.factordynamics\.workers\.dev\/why\?t=.+&r=price$/);
     const u = new URL(link);

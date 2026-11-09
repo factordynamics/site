@@ -548,8 +548,8 @@ export async function testChannels(env: Env, m: Member, c: Channels): Promise<{ 
     await env.DB.put(key, JSON.stringify([{ id: `test:${now}`, title: 'Copybook test', text, url: env.SITE_URL, published: now, sent: now, test: true }, ...items].slice(0, 50)));
     out.feed = 'ok';
   }
-  // Email is the only channel ("Keep email"): the test is an email.
-  if (!Object.keys(out).length && m.email) {
+  // Every alert also goes by email (chat, webhook and feed are extras), so the test sends one too.
+  if (m.email && m.alerts !== 'off') {
     const st = await sendMail(env, [{ to: m.email, subject: 'Copybook test: your alerts will arrive here', text: `This is a test. When a fund you follow files, or someone trades a stock you own or watch, the alert arrives at this address within minutes.\n\nChange where alerts go: ${env.SITE_URL}account/\n\nSEC EDGAR filings, as filed. Not investment advice.` }]);
     out.email = st;
   }

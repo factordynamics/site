@@ -2,7 +2,7 @@ import { holdtermLoginMail, loginMail, sendMail } from './email';
 import { isActive, isPaused, type Env, type Member } from './env';
 import { stripe } from './stripe';
 import { carryFreeSignup } from './free';
-import { countTransition, maybeCancelMail, maybeWinback } from './revenue';
+import { countTransition, maybeCancelMail, maybeResumeMail, maybeWinback } from './revenue';
 import { noteReferral } from './referrals';
 import { mirrorSeats } from './seats';
 import { signToken } from './tokens';
@@ -28,6 +28,8 @@ export async function getMember(env: Env, customer: string): Promise<Member | nu
   const raw = (await freshCopy(customer)) ?? (await env.DB.get(`cus:${customer}`));
   if (!raw) return null;
   const m = JSON.parse(raw) as Member & { plan: string };
+  // A free signup who subscribed: one account per email, the paid one. Old sessions and links open it.
+  if (m.status === 'free' && m.converted_to && m.converted_to !== customer) return (await getMember(env, m.converted_to)) ?? m;
   // Records from before Copy Pro kept the billing interval in `plan`.
   if (m.plan !== 'copy' && m.plan !== 'pro' && m.plan !== 'fund' && m.plan !== 'holdterm' && m.plan !== 'free') return { ...m, interval: m.plan as Member['interval'], plan: 'copy' };
   return m;
@@ -124,6 +126,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     if (!m.welcomed) await claim(env, customer, 'welcome', false);
   }
   await maybeCancelMail(env, prev, m);
+  await maybeResumeMail(env, prev, m);
   await maybeWinback(env, prev, m);
   await countTransition(env, prev, m);
   if (m.referred_by && !prev?.referred_by) await noteReferral(env, m);

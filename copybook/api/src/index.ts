@@ -349,7 +349,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return handleUnsubscribe(env, req, url);
   }
   // Trial-ending button (keep, yearly) and the trial-ended note's monthly restart.
-  if (req.method === 'GET' && (path === '/keep' || path === '/resume')) return handleKeepResume(env, path, url);
+  if ((req.method === 'GET' && path === '/keep') || ((req.method === 'GET' || req.method === 'POST') && path === '/resume')) return handleKeepResume(env, path as '/keep' | '/resume', url, req.method);
 
   // The one-click cancellation reason from the follow-up email (and an optional note).
   if ((req.method === 'GET' || req.method === 'POST') && path === '/why') return handleWhy(env, req, url);
@@ -375,6 +375,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!m) return json({ ok: false, error: 'no such member' }, 404, h);
     const r = await changeFollows(env, m, (await body(req)) as unknown as FollowOp);
     return json(r.ok ? { ok: true, follows: r.follows } : r, r.ok ? 200 : 400, h);
+  }
+
+  // Operator: one account per email for a free signup and paid member split before the merge shipped.
+  if (req.method === 'POST' && path === '/ops/merge-free') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const { mergeFreeSignup } = await import('./free');
+    return json(await mergeFreeSignup(env, String((await body(req)).email ?? '').trim().toLowerCase()), 200, h);
   }
 
   // Operator: this week's free email for one free member, now (Friday's issue, previewed).
