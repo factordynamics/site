@@ -545,7 +545,7 @@ table.grid {
   color: var(--acc);
 }
 .qtag {
-  margin-left: 3px;
+  margin-left: 4px;
   padding: 0 3px;
   border: 1px solid var(--acc);
   border-radius: 2px;

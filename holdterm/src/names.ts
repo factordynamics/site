@@ -66,11 +66,19 @@ export const pmName = (slug: string) => FUNDS[slug]?.pm ?? null
 
 // Issuer display names: fix EDGAR abbreviations and casing that leak through ("Cnh Indl", "Pvh",
 // "Accenture Plc Ireland").
-const WORDS: Record<string, string> = { Cgi: 'CGI', Adi: 'ADI', Indl: 'Industrial', Hldgs: 'Holdings', Hldg: 'Holding', Intl: 'International', Grp: 'Group', Cos: 'Companies', Tech: 'Technologies', Svcs: 'Services', Corp: 'Corp', Pptys: 'Properties', Bancorp: 'Bancorp' }
-const KEEP = new Set(['Ltd', 'Inc', 'St', 'Mr', 'Dr', 'Jr', 'Sr', 'Mfg', 'Bros'])
+const WORDS: Record<string, string> = { Cgi: 'CGI', Adi: 'ADI', Indl: 'Industrial', Hldgs: 'Holdings', Hldg: 'Holding', Intl: 'International', Grp: 'Group', Utd: 'United', Mtns: 'Mountains', Ins: 'Insurance', Cos: 'Companies', Tech: 'Technologies', Svcs: 'Services', Corp: 'Corp', Pptys: 'Properties', Bancorp: 'Bancorp' }
+const KEEP = new Set(['Old', 'Ltd', 'Inc', 'St', 'Mr', 'Dr', 'Jr', 'Sr', 'Mfg', 'Bros'])
 export function issuerName(n: string | null | undefined): string {
   if (!n) return ''
-  let s = n.replace(/\s+Public(\s+(Ltd|Limited)(\s+(Co|Company))?)?\.?$/i, '').replace(/\s+(Plc|PLC)\s+(Ireland|Jersey|Bermuda|Jersey\s+Ltd)$/i, '').replace(/\s+(Ireland|Bermuda|Jersey|Cayman Islands)$/i, '').replace(/\s+Ltd\.?\s+Bermuda$/i, '')
+  // EDGAR leftovers: state tags ("Inc/", "Inc./tx", "Inc \\tx\\"), "Plc New", "Pub", "Sab De Cv", "Joint Stock Co".
+  let t = n.replace(/^Joint Stock (Co|Company)\s+/i, '')
+  for (let prev = ''; prev !== t; ) {
+    prev = t
+    t = t.replace(/\s*[\\/]+[a-z]{0,3}[\\/]*$/i, '').replace(/[,\s]+(Inc\.?|Corp\.?|Plc|New|Pub|Sab De Cv|S\.A\.B\. de C\.V\.?)$/i, '')
+  }
+  // An all-caps filer name ("BITCOIN DEPOT") reads as shouting: title-case its long words.
+  if (n.includes(" ") && t === t.toUpperCase() && /[A-Z]{5,}/.test(t)) t = t.replace(/[A-Z]{4,}/g, (w) => w[0] + w.slice(1).toLowerCase())
+  let s = t.replace(/^Coca Cola\b/, 'Coca-Cola').replace(/\s+Public(\s+(Ltd|Limited)(\s+(Co|Company))?)?\.?$/i, '').replace(/\s+(Plc|PLC)\s+(Ireland|Jersey|Bermuda|Jersey\s+Ltd)$/i, '').replace(/\s+(Ireland|Bermuda|Jersey|Cayman Islands)$/i, '').replace(/\s+Ltd\.?\s+Bermuda$/i, '')
   s = s
     .split(' ')
     .map((w) => {

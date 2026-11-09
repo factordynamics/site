@@ -140,20 +140,23 @@ function get<T>(url: string): Promise<T> {
   return p
 }
 
-const OVERRIDE = TICKERS as unknown as Record<string, { ticker: string; listed: boolean }>
+const OVERRIDE = TICKERS as unknown as Record<string, { ticker: string; listed: boolean; name?: string; same_as?: string }>
 /** Fills tickers Copybook hasn't mapped from src/tickers.json (each entry cites its SEC source). */
-export function fillTicker<T extends { cusip?: string | null; ticker: string | null; former?: string }>(h: T): T {
+export function fillTicker<T extends { cusip?: string | null; ticker: string | null; former?: string; display_name?: string }>(h: T): T {
   const o = !h.ticker && h.cusip ? OVERRIDE[h.cusip] : undefined
   if (o) {
     if (o.listed) h.ticker = o.ticker
     else h.former = o.ticker
+    if (o.name) h.display_name = o.name
   }
   return h
 }
+/** The issuer key: 6-character CUSIP prefix, or the successor's when a redomiciled line (old Ferguson plc) is mapped onto it. */
+const issuerKey = (h: { cusip: string; ticker: string | null; issuer: string }) => (h.cusip ? OVERRIDE[h.cusip]?.same_as ?? h.cusip.slice(0, 6) : h.ticker || h.issuer)
 function name(m: Manager) {
   m.firm = firmName(m.slug, m.name)
   m.pm = pmName(m.slug)
-  m.top?.forEach((h) => ((fillTicker(h), (h.sector = sectorOf(h.ticker, h.sector)))))
+  m.top?.forEach((h) => ((fillTicker(h), (h.sector = sectorOf(h.ticker || h.former, h.sector)))))
   return m
 }
 /** One sector per issuer: share classes (same 6-character CUSIP prefix) take the sector of the largest classified line. */
@@ -164,7 +167,9 @@ function normalise(hs: Holding[]) {
   const by = new Map<string, { sector: string; value: number }>()
   for (const h of hs) {
     fillTicker(h)
-    const fixed = h.ticker ? SECTOR_BY_TICKER[h.ticker] : undefined
+    // Delisted lines (JHG†) keep their sector through the former ticker.
+    const t = h.ticker || h.former
+    const fixed = t ? SECTOR_BY_TICKER[t] : undefined
     if (fixed) h.sector = fixed
     if (!h.sector || h.sector === 'Unclassified') continue
     const k = h.cusip.slice(0, 6)
@@ -248,7 +253,7 @@ export const loadHistory = (slug: string) =>
     // Skip a quarter whose upstream row already cites the second filing.
     return { history: d.history.map((r) => (add[r.quarter] && !JSON.stringify(r).includes(c?.history_source?.[r.quarter] ?? '\u0000') ? { ...r, total_value: r.total_value + add[r.quarter], equity_value: r.equity_value == null ? undefined : r.equity_value + add[r.quarter] } : r)) }
   })
-export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker, e.sector)))), d))
+export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector)))), d))
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
 export const loadInsiders = () => get<{ updated_at: string; rows: Insider[] } | Insider[]>(DATA + 'insiders.json').then((d) => (Array.isArray(d) ? d : d.rows ?? [])).catch(() => null)
 export const loadStock = (t: string) => get<StockFile>(`${DERIVED}stocks/${encodeURIComponent(t)}.json`).then((d) => ({ ...d, sector: sectorOf(d.ticker, d.sector) ?? sectorOf(d.classes[0]?.ticker, null) }))
@@ -299,6 +304,7 @@ export type Agg = {
   buy: number
   sell: number
   maxWeight: number
+  classes?: Set<string>
 }
 
 /** ETFs, index and T-bill funds: shown in holdings, but kept out of "largest positions" and trade lists. */
@@ -313,25 +319,33 @@ function etfName(h: Holding) {
   return `${brand} ${cls} ETF`.replace(/\s+/g, ' ')
 }
 /** Rolls the latest books up by company: share classes of one issuer (same 6-character CUSIP prefix,
- * e.g. GOOGL and GOOG) count as one stock, shown under its most-held ticker. Options are excluded. */
-export function aggregate(books: Book[]): { rows: Agg[]; total: number } {
+ * e.g. GOOGL and GOOG) count as one stock, shown under its most-held ticker. Options are excluded.
+ * `rank` (default: `books`) decides which class is most held, so a filtered subset keeps the site-wide label. */
+export function aggregate(books: Book[], rank: Book[] = books): { rows: Agg[]; total: number } {
   const m = new Map<string, Agg>()
   const classValue = new Map<string, Map<string, number>>()
+  for (const b of rank)
+    for (const h of b.holdings) {
+      if (h.put_call || !h.ticker || !h.cusip) continue
+      const key = issuerKey(h)
+      const cv = classValue.get(key) ?? new Map<string, number>()
+      classValue.set(key, cv.set(h.ticker, (cv.get(h.ticker) ?? 0) + h.value))
+    }
   let total = 0
   for (const b of books) {
     for (const h of b.holdings) {
       if (h.put_call) continue
-      const key = h.cusip ? h.cusip.slice(0, 6) : h.ticker || h.issuer
+      const key = issuerKey(h)
       let a = m.get(key)
       if (!a) {
         a = { key, fund: isFundLike(h), ticker: h.ticker, former: h.former, name: h.display_name || issuerName(h.issuer), sector: h.sector || 'Unclassified', value: 0, holders: [], buyers: [], sellers: [], newBuyers: 0, net: 0, buy: 0, sell: 0, maxWeight: 0 }
         m.set(key, a)
-        classValue.set(key, new Map())
+        a.classes = new Set()
       }
       if (h.ticker) {
-        const cv = classValue.get(key)!
-        cv.set(h.ticker, (cv.get(h.ticker) ?? 0) + h.value)
-        const ranked = [...cv.entries()].sort((x, y) => y[1] - x[1]).map((e) => e[0])
+        a.classes!.add(h.ticker)
+        const cv = classValue.get(key)
+        const ranked = [...a.classes!].sort((x, y) => (cv?.get(y) ?? 0) - (cv?.get(x) ?? 0))
         a.ticker = ranked[0]
         a.label = ranked.join('+')
         if (ranked.length > 1) a.name = a.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')

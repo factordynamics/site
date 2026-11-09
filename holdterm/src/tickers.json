@@ -107,8 +107,10 @@
  },
  "G3421J106": {
   "ticker": "FERG",
-  "listed": false,
-  "source": "SEC EDGAR CIK 1832433 (Ferguson plc, the pre-2024 Jersey line): replaced by Ferguson Enterprises (FERG, CUSIP 31488V107); Form 15-12G"
+  "listed": true,
+  "same_as": "31488V",
+  "name": "Ferguson Enterprises",
+  "source": "SEC EDGAR CIK 1832433 (Ferguson plc, the pre-2024 Jersey line): redomiciled in 2024 as Ferguson Enterprises Inc. (FERG, CIK 2011641, CUSIP 31488V107), shares exchanged one for one; Form 15-12G"
  },
  "G61188127": {
   "ticker": "LBTYK",

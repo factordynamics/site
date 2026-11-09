@@ -152,7 +152,8 @@ export function ChangeTag({ change, share_change, prev_shares }: { change: strin
   if (!change || change === 'unchanged') return <span className="dim">·</span>
   const tone = change === 'new' || change === 'added' ? 'pos' : 'neg'
   const r = (change === 'added' || change === 'trimmed') && share_change != null && prev_shares ? (share_change / prev_shares) * 100 : null
-  const rel = r == null ? '' : Math.abs(r) < 0.05 ? ` ${r > 0 ? '+' : '−'}<0.1%` : ` ${r > 0 ? '+' : ''}${r.toFixed(1)}%`
+  // Past +999% a percentage is noise ("+76194.4%"); show the multiple of the old position instead ("×763").
+  const rel = r == null ? '' : Math.abs(r) < 0.05 ? ` ${r > 0 ? '+' : '−'}<0.1%` : r > 999 ? ` ×${Math.round(1 + r / 100).toLocaleString('en-US')}` : ` ${r > 0 ? '+' : ''}${r.toFixed(1)}%`
   return (
     <span className={`tag ${tone}`}>
       {CHANGE_LABEL[change]}

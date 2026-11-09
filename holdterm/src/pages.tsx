@@ -80,7 +80,12 @@ function Who({ list, max = 3, tagQ }: { list: { slug: string; manager: string; q
         <span key={w.slug}>
           {i > 0 && <span className="dim">, </span>}
           <A to={fundPath(w.slug)}>{w.manager}</A>
-          {tagQ && w.quarter === tagQ && <span className="qtag" title={`from the ${quarterLabel(tagQ)} 13F`}>{tagQ.slice(4)}</span>}
+          {tagQ && w.quarter === tagQ && (
+            <>
+              {' '}
+              <span className="qtag" title={`from the ${quarterLabel(tagQ)} 13F`}>{tagQ.slice(4)}</span>
+            </>
+          )}
         </span>
       ))}
       {list.length > max && <span className="dim"> +{list.length - max}</span>}
@@ -665,7 +670,7 @@ export function Flows() {
   const q = picked ?? (nb && (books.data ?? []).filter((b) => b.quarter === sq).length * 2 >= nb ? sq : 'latest')
   const quarters = useMemo(() => [...new Set((books.data ?? []).map((b) => b.quarter))].sort().reverse(), [books.data])
   // Flows are stock picks: ETFs, index and T-bill funds are left out.
-  const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q)).rows.filter((r) => !r.fund) : []), [books.data, q])
+  const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q), books.data).rows.filter((r) => !r.fund) : []), [books.data, q])
   if (books.error) return <Failed error={books.error} />
   if (!books.data) return <Loading what="reading every book" />
   const fundsN = q === 'latest' ? books.data.length : books.data.filter((b) => b.quarter === q).length
