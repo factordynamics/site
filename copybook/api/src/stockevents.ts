@@ -239,7 +239,7 @@ async function issuerCiks(env: Env, tickers: string[]): Promise<Record<string, {
  * Tickers' events, refreshing those older than `freshMs` with at most `budget` SEC requests (a request
  * spends its own; the scheduled precompute passes what the minute left). The rest come back in `pending`.
  */
-export async function stockEvents(env: Env, tickers: string[], limit: number, opts: { budget?: number; freshMs?: number } = {}) {
+export async function stockEvents(env: Env, tickers: string[], limit: number, opts: { budget?: number; freshMs?: number; keep?: (e: StockEvent) => boolean } = {}) {
   secBudget.left = opts.budget ?? BUDGET;
   const fresh = opts.freshMs ?? FRESH_MS;
   const cache = new Map<string, Cached>();
@@ -272,7 +272,7 @@ export async function stockEvents(env: Env, tickers: string[], limit: number, op
     if (JSON.stringify(c) !== before) await env.HIST.put(`tev/${t}.json`, JSON.stringify(c));
   }
   const data: Record<string, { cik: string; checked_at: string | null; from: Cached['from'] | null; window: string | null; events: StockEvent[] }> = {};
-  for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, from: c.from ?? null, window: c.window ?? null, events: events(c).slice(0, limit) };
+  for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, from: c.from ?? null, window: c.window ?? null, events: (opts.keep ? events(c).filter(opts.keep) : events(c)).slice(0, limit) };
   return { tickers: data, pending, unknown };
 }
 

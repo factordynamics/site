@@ -821,6 +821,12 @@ describe('copybook api', () => {
     });
     expect(Object.keys(seen)).toHaveLength(22); // the whole window, and nothing from before it
     expect(seen[acc(99)]).toBeUndefined();
+    // My book: the open-market trades even when 21 grants are newer, or the whole window at once.
+    const om = await (await call('/events?tickers=CSGP&open_market=1', { token })).json();
+    expect(om.tickers.CSGP.events.map((e: { accession: string }) => e.accession)).toEqual(['0001628280-26-052968']);
+    const wq = await (await call('/events?tickers=CSGP&window=quarter', { token })).json();
+    expect([wq.tickers.CSGP.events.length, wq.tickers.CSGP.window]).toEqual([22, quarterStart(Date.now()).replace(/\.\d{3}Z$/, 'Z')]);
+    expect((await call('/events?tickers=CSGP&limit=11', { token })).status).toBe(400);
     expect(r.tickers.CSGP.window).toBe(quarterStart(Date.now()).replace(/\.\d{3}Z$/, 'Z'));
   });
 
@@ -1923,32 +1929,41 @@ describe('copybook api', () => {
     await env.DB.put('filing:A2', JSON.stringify({ accession: 'A2', accepted_at: '2026-08-14T20:05:04.000Z' }));
     await hist.put('hl/67066G.json', JSON.stringify({
       issuer: '67066G', tickers: ['NVDA'], counts: { holders: 4, by_period: { '2026Q3': 1, '2026Q2': 3 } }, rows_total: 4,
-      columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change'],
+      columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call'],
       // Not in size order: the API sorts largest first.
       rows: [
         ['0001067983', 'Berkshire Hathaway Inc', 'warren-buffett', 'active', true, '2026Q2', 10, 0, 1800, 0, 'new'],
         ['0002045724', 'Situational Awareness LP', 'situational-awareness-lp-5724', 'hedge_fund', false, '2026Q3', 100, 40, 18000, 6000, 'added'],
         ['0000102909', 'Vanguard Group Inc', 'vanguard-group-inc-2909', 'index', false, '2026Q2', 50, 50, 9000, 8000, 'unchanged'],
         ['0001387322', 'Whale Rock Capital Management LLC', null, 'hedge_fund', false, '2026Q2', 5, null, 900, null, 'new'],
+        // An options row that closed (0 shares, $0) and a filer whose latest 13F is a year old.
+        ['0002012383', 'BlackRock, Inc.', null, 'index', false, '2026Q2', 0, 3, 0, 500, 'exited', 'Call'],
+        ['0000000077', 'Old Filer LP', null, 'long_only', false, '2025Q3', 7, 7, 700, 650, 'unchanged', null],
       ],
     }), { customMetadata: { build_id: 'gust-3a8c773b', built_at: '2026-11-09T02:30:00.000Z' } });
     const h = (await v1('/v1/stocks/NVDA/holders')).body;
     // The response names the upload it read, not the static data's build.
     expect([h.build_id, h.data_built_at]).toEqual(['gust-3a8c773b', '2026-11-09T02:30:00Z']);
-    expect(h).toMatchObject({ count: 4, next_offset: null, data: { issuer: '67066G', ticker: 'NVDA', counts: { holders: 4 }, truncated: false } });
-    expect(h.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0002045724', '0000102909', '0001067983', '0001387322']);
-    expect(h.data.holders[0]).toEqual({ filer: { cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', type: 'hedge_fund', curated: false }, period: '2026Q3', kind: 'equity', shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, prev_value_usd: 6000, change: 'added', weight: null, accession: null, accepted_at: null });
+    // count: position rows (shares, calls and puts apart); filers: distinct filers holding something. Current holders only by default.
+    expect(h).toMatchObject({ count: 5, filers: 4, next_offset: null, data: { issuer: '67066G', ticker: 'NVDA', counts: { holders: 4 }, truncated: false } });
+    expect(h.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0002045724', '0000102909', '0001067983', '0001387322', '0002012383']);
+    expect(h.data.holders[4]).toMatchObject({ kind: 'calls', put_call: 'Call', shares: 0, weight: null, change: 'exited' });
+    const every = (await v1('/v1/stocks/NVDA/holders?current_only=false')).body;
+    expect([every.count, every.filers, every.data.holders[4].filer.name]).toEqual([6, 5, 'Old Filer LP']);
+    expect(h.data.holders[0]).toEqual({ filer: { cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', type: 'hedge_fund', curated: false }, period: '2026Q3', kind: 'equity', put_call: null, shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, prev_value_usd: 6000, change: 'added', weight: null, accession: null, accepted_at: null });
     // A curated fund's row: its latest 13F, acceptance from the filing cache, weight of its $2,000 book.
     expect(h.data.holders[2]).toMatchObject({ filer: { slug: 'warren-buffett', curated: true }, accession: 'A2', accepted_at: '2026-08-14T20:05:04Z', weight: 0.9 });
     expect(h.data.holders[3]).toMatchObject({ prev_shares: null, share_change: null, change: 'new' });
     const ciks = async (q: string) => (await v1(`/v1/stocks/NVDA/holders${q}`)).body.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik);
     expect(await ciks('?type=hedge_fund')).toEqual(['0002045724', '0001387322']);
     expect(await ciks('?type=hedge_fund,active')).toEqual(['0002045724', '0001067983', '0001387322']);
+    // During ingest's rename, long_only and active match each other.
+    expect(await ciks('?type=long_only&current_only=false')).toEqual(['0001067983', '0000000077']);
     expect(await ciks('?cohort=curated')).toEqual(['0001067983']);
     expect(await ciks('?quarter=2026Q3')).toEqual(['0002045724']);
     const page = (await v1('/v1/stocks/67066G104/holders?limit=2&offset=1')).body;
-    expect([page.count, page.next_offset, page.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)]).toEqual([4, 3, ['0000102909', '0001067983']]);
-    for (const bad of ['?type=hedgefund', '?limit=0', '?cohort=x']) expect((await v1(`/v1/stocks/NVDA/holders${bad}`)).status).toBe(400);
+    expect([page.count, page.next_offset, page.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)]).toEqual([5, 3, ['0000102909', '0001067983']]);
+    for (const bad of ['?type=hedgefund', '?limit=0', '?cohort=x', '?current_only=yes']) expect((await v1(`/v1/stocks/NVDA/holders${bad}`)).status).toBe(400);
     expect((await v1('/v1/stocks/ZZZZ/holders')).status).toBe(404);
     // The session route for My book (Pro): the same rows, lensed.
     const sj = await (await call('/stocks/NVDA/holders?type=hedge_fund&limit=1', { token: t })).json();

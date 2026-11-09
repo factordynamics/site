@@ -288,7 +288,10 @@ async function versionHoldings(env: Env, cik: string, v: Version): Promise<any[]
   if (obj) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const b = (await new Response(obj.body).json()) as any;
-    return b.holdings ?? (b.columns ? rowsOf(b) : null);
+    const rows = b.holdings ?? (b.columns ? rowsOf(b) : null);
+    const st = stampOf(obj);
+    if (rows && st) STAMP.set(rows, st);
+    return rows;
   }
   const f = await fetch13F(cik, v.accession);
   if (!f?.holdings) return null;
@@ -313,6 +316,7 @@ async function versionBook(env: Env, book: Record<string, unknown>, version: str
   const equityTotal = rows.filter(isEquity).reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
   const dir = `https://www.sec.gov/Archives/edgar/data/${Number(filing.filer_cik)}/${v.accession.replace(/-/g, '')}/`;
   return v1json({
+    ...(STAMP.get(rows) ?? {}),
     data: {
       ...book,
       version: v.accession,
@@ -423,13 +427,34 @@ function streamFilers(body: ReadableStream<Uint8Array>, curated: unknown[]): Res
   return new Response(readable, { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'private, no-store' } });
 }
 
-/** Filer types in the holder index (and changes/{q}.json): ingest's filer_types.json. */
-export const FILER_TYPES = ['hedge_fund', 'active', 'index', 'bank', 'wealth', 'pension', 'other'];
+/**
+ * Filer types in the holder index (and changes/{q}.json), ingest's filer_types.json. Ingest is renaming
+ * active to long_only and adding sovereign and insurance; both names match during the switch.
+ */
+export const FILER_TYPES = ['hedge_fund', 'active', 'long_only', 'index', 'bank', 'wealth', 'pension', 'sovereign', 'insurance', 'other'];
+const SAME_TYPE: Record<string, string> = { active: 'long_only', long_only: 'active' };
+
+/** The page's staleness rule: a holder is current when its latest 13F is for the newest ended quarter or the one before. */
+export function currentQuarters(now: number): [string, string] {
+  const d = new Date(now);
+  const q = Math.floor(d.getUTCMonth() / 3);
+  const y = d.getUTCFullYear();
+  const newest = q === 0 ? `${y - 1}Q4` : `${y}Q${q}`;
+  const [ny, nq] = newest.split('Q').map(Number);
+  return [newest, nq === 1 ? `${ny - 1}Q4` : `${ny}Q${nq - 1}`];
+}
+
+/** A row that holds something (calls and puts rows with 0 shares and $0 are kept but count as no holder). */
+export const holds = (r: { shares: number; value_usd: number }) => (r.shares ?? 0) > 0 || (r.value_usd ?? 0) > 0;
+/** Distinct filers with a nonzero position among rows. */
+export const filerCount = (rows: HolderRow[]) => new Set(rows.filter(holds).map((r) => r.filer.cik)).size;
 
 export interface HolderRow {
   filer: { cik: string; name: string; slug: string | null; type: string | null; curated: boolean | null };
   period: string | null;
   kind: string;
+  /** Call or Put for an options row, null for shares (`kind` says the same: equity, calls, puts). */
+  put_call: string | null;
   shares: number;
   prev_shares: number | null;
   share_change: number | null;
@@ -469,14 +494,15 @@ export async function holdersOf(env: Env, code: string): Promise<{ issuer: strin
     return {
       filer: { cik, name: h.name, slug: h.slug ?? c?.slug ?? null, type: h.type ?? c?.type ?? null, curated: h.curated ?? (c ? true : null) },
       period,
-      kind: h.kind ?? 'equity',
+      kind: h.kind ?? (h.put_call ? `${String(h.put_call).toLowerCase()}s` : 'equity'),
+      put_call: h.put_call ?? (h.kind === 'calls' ? 'Call' : h.kind === 'puts' ? 'Put' : null),
       shares: h.shares,
       prev_shares: h.prev_shares ?? null,
       share_change: h.prev_shares == null ? null : h.shares - h.prev_shares,
       value_usd: h.value,
       prev_value_usd: h.prev_value ?? null,
       change: h.change ?? null,
-      weight: h.weight ?? (total && h.value != null ? Math.round((h.value / total) * 1e6) / 1e6 : null),
+      weight: !h.shares && !h.value ? null : (h.weight ?? (total && h.value != null ? Math.round((h.value / total) * 1e6) / 1e6 : null)),
       accession: h.accession ?? (latest ? c.latest_accession : null) ?? null,
       accepted_at: noMs(h.accepted_at) ?? null,
     };
@@ -490,12 +516,19 @@ export async function holdersOf(env: Env, code: string): Promise<{ issuer: strin
   return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, rows, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj), source: obj ? (hl ? 'hl' : 's') : 'public' };
 }
 
-/** type= (comma list of FILER_TYPES) and cohort= (all|curated) on a holder list; null when invalid. */
-export function holderFilter(p: URLSearchParams): ((r: HolderRow) => boolean) | null {
+/**
+ * type= (comma list of FILER_TYPES; type=hedge_fund,active is the stock page's lens), cohort= (all|curated)
+ * and current_only= (default true: the page's rule, latest 13F for the newest ended quarter or the one before)
+ * on a holder list; null when invalid.
+ */
+export function holderFilter(p: URLSearchParams, now = Date.now()): ((r: HolderRow) => boolean) | null {
   const types = p.get('type')?.split(',').map((x) => x.trim()).filter(Boolean) ?? [];
   const cohort = p.get('cohort') ?? 'all';
-  if (types.some((t) => !FILER_TYPES.includes(t)) || !['all', 'curated'].includes(cohort)) return null;
-  return (r) => (!types.length || types.includes(r.filer.type ?? '')) && (cohort === 'all' || r.filer.curated === true);
+  const cur = p.get('current_only') ?? 'true';
+  if (types.some((t) => !FILER_TYPES.includes(t)) || !['all', 'curated'].includes(cohort) || !['true', 'false'].includes(cur)) return null;
+  const want = new Set(types.flatMap((t) => [t, SAME_TYPE[t] ?? t]));
+  const quarters = currentQuarters(now);
+  return (r) => (!types.length || want.has(r.filer.type ?? '')) && (cohort === 'all' || r.filer.curated === true) && (cur === 'false' || !r.period || quarters.includes(r.period));
 }
 
 ROUTES.push(
@@ -561,7 +594,7 @@ ROUTES.push(
     const offset = Number(p.get('offset') ?? 0);
     const keep = holderFilter(p);
     if ((quarter && !QUARTER.test(quarter)) || !keep || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0) {
-      return v1error('bad_request', 400, `quarter like 2026Q2; type: ${FILER_TYPES.join(', ')} (comma-separated); cohort: all or curated; limit 1-1000; offset from 0.`);
+      return v1error('bad_request', 400, `quarter like 2026Q2; type: ${FILER_TYPES.join(', ')} (comma-separated); cohort: all or curated; current_only: true or false; limit 1-1000; offset from 0.`);
     }
     const is = await issuerCode(env, decodeURIComponent(id));
     if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
@@ -570,7 +603,7 @@ ROUTES.push(
     // Each filer's latest full book: periods differ by filer (a fund that filed its Q3 13F shows Q3).
     const rows = h.rows.filter((r) => keep(r) && (!quarter || r.period === quarter));
     const data = { issuer: h.issuer, ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts, truncated: h.truncated, holders: rows.slice(offset, offset + limit) };
-    return v1json({ ...(h.stamp ?? {}), data, count: rows.length, next_offset: offset + limit < rows.length ? offset + limit : null });
+    return v1json({ ...(h.stamp ?? {}), data, count: rows.length, filers: filerCount(rows), next_offset: offset + limit < rows.length ? offset + limit : null });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, url }) => {
     // Persistent per-quarter exports of every filer's book, uploaded by the data run.

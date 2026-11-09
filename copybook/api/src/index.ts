@@ -476,12 +476,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // My book's per-stock column: company insiders' Form 4s and anyone's 13D/G, latest first, per ticker.
   if (req.method === 'GET' && path === '/events') {
     const tickers = [...new Set((url.searchParams.get('tickers') ?? '').toUpperCase().split(',').map((t) => t.trim().replace('-', '.')).filter(Boolean))];
-    const limit = Number(url.searchParams.get('limit') ?? 5);
-    if (!tickers.length || tickers.length > 50 || !tickers.every((t) => TICKER.test(t)) || !(limit >= 1 && limit <= 10)) {
-      return json({ ok: false, error: 'tickers: 1 to 50 comma-separated tickers like BRK.B; limit: 1 to 10', code: 'bad_request' }, 400, h);
+    // window=quarter: every event since the window start (each ticker's `window`), up to 150.
+    // open_market=1: only open-market Form 4 trades (P/S) and every 13D/G, so withholding and grants don't crowd them out.
+    const quarter = url.searchParams.get('window') === 'quarter';
+    const openOnly = url.searchParams.get('open_market') === '1';
+    const max = quarter ? 150 : 10;
+    const limit = Number(url.searchParams.get('limit') ?? (quarter ? max : 5));
+    if (!tickers.length || tickers.length > 50 || !tickers.every((t) => TICKER.test(t)) || !(limit >= 1 && limit <= max) || !['quarter', null].includes(url.searchParams.get('window'))) {
+      return json({ ok: false, error: `tickers: 1 to 50 comma-separated tickers like BRK.B; limit: 1 to 10 (150 with window=quarter); window: quarter`, code: 'bad_request' }, 400, h);
     }
     const { stockEvents } = await import('./stockevents');
-    const r = await stockEvents(env, tickers, Math.floor(limit));
+    const { quarterStart } = await import('./seasons');
+    const since = quarterStart(Date.now());
+    const r = await stockEvents(env, tickers, Math.floor(limit), {
+      keep: (e) => (!quarter || e.accepted_at >= since) && (!openOnly || !e.form.startsWith('4') || !!e.open_market),
+    });
     for (const t of Object.values(r.tickers)) t.events = t.events.map(({ classes: _, ...e }) => e);
     return json({ ok: true, ...r }, 200, { ...h, 'cache-control': 'no-store' });
   }
@@ -693,16 +702,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   const holdersJson = path.match(/^\/stocks\/([A-Za-z0-9.-]{1,10})\/holders$/);
   if (req.method === 'GET' && holdersJson) {
     if (!isPro(m)) return json({ ok: false, error: 'Every holder of a stock is part of Copy Pro and Copy Fund', code: 'pro_required' }, 403, h);
-    const { holdersOf, holderFilter, issuerCode } = await import('./v1data');
+    const { holdersOf, holderFilter, issuerCode, filerCount } = await import('./v1data');
     const keep = holderFilter(url.searchParams);
     const limit = Number(url.searchParams.get('limit') ?? 200);
     const offset = Number(url.searchParams.get('offset') ?? 0);
-    if (!keep || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0) return json({ ok: false, error: 'type: hedge_fund, active, index, bank, wealth, pension, other; cohort: all or curated; limit 1-1000', code: 'bad_request' }, 400, h);
+    if (!keep || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0) return json({ ok: false, error: 'type: hedge_fund, long_only (or active), index, bank, wealth, pension, sovereign, insurance, other; cohort: all or curated; current_only: true or false; limit 1-1000', code: 'bad_request' }, 400, h);
     const is = await issuerCode(env, holdersJson[1]);
     const hs = is ? await holdersOf(env, is.code) : null;
     if (!is || !hs) return json({ ok: false, error: 'unknown ticker', code: 'not_found' }, 404, h);
     const rows = hs.rows.filter(keep);
-    return json({ ok: true, issuer: hs.issuer, ticker: is.ticker ?? hs.tickers[0] ?? null, tickers: hs.tickers, counts: hs.counts, truncated: hs.truncated, count: rows.length, holders: rows.slice(offset, offset + limit), next_offset: offset + limit < rows.length ? offset + limit : null }, 200, { ...h, 'cache-control': 'private, max-age=300' });
+    return json({ ok: true, issuer: hs.issuer, ticker: is.ticker ?? hs.tickers[0] ?? null, tickers: hs.tickers, counts: hs.counts, truncated: hs.truncated, count: rows.length, filers: filerCount(rows), holders: rows.slice(offset, offset + limit), next_offset: offset + limit < rows.length ? offset + limit : null }, 200, { ...h, 'cache-control': 'private, max-age=300' });
   }
 
   // Holders of one stock as CSV: every 13F filer (the holder index, ?type= lenses it), until it's in R2 Copybook's curated funds.
@@ -711,7 +720,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const ticker = holders[1].toUpperCase();
     const { holdersOf, holderFilter, issuerCode } = await import('./v1data');
     const keep = holderFilter(url.searchParams);
-    if (!keep) return json({ ok: false, error: 'type: hedge_fund, active, index, bank, wealth, pension, other; cohort: all or curated', code: 'bad_request' }, 400, h);
+    if (!keep) return json({ ok: false, error: 'type: hedge_fund, long_only (or active), index, bank, wealth, pension, sovereign, insurance, other; cohort: all or curated; current_only: true or false', code: 'bad_request' }, 400, h);
     const is = await issuerCode(env, ticker);
     const hs = is ? await holdersOf(env, is.code) : null;
     const full = hs && hs.source !== 'public' ? hs : null;
