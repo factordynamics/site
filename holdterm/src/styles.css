@@ -12,6 +12,8 @@
   --pos: #3fd68b;
   --neg: #ff6b6b;
   --hl: #1d1a12;
+  --th: 30px; /* table head and row heights, for reserved panel heights */
+  --tr: 29px;
   --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-family: var(--sans);
@@ -204,6 +206,8 @@ main {
   padding: 16px 18px 28px;
   max-width: 1480px;
   margin: 0 auto;
+  /* The footer starts below the fold, so it doesn't jump while a page loads. */
+  min-height: 100vh;
 }
 main:focus {
   outline: none;
@@ -1060,6 +1064,9 @@ pre.email {
 }
 
 /* ---------- home ---------- */
+.home {
+  --trade-w: 210px;
+}
 .home-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
@@ -1069,6 +1076,14 @@ pre.email {
 .home-side {
   display: grid;
   gap: 14px;
+}
+/* The trades and filings panels fill in after the page renders: reserve their full height (table head +
+ * 15 or 10 rows) so the panels below them don't jump. */
+.reserve-15 > .body {
+  min-height: calc(var(--th) + 15 * var(--tr) + 18px); /* + body padding */
+}
+.reserve-10 > .body {
+  min-height: calc(var(--th) + 10 * var(--tr) + 18px);
 }
 .move {
   white-space: nowrap;
@@ -1161,6 +1176,9 @@ pre.email {
   }
   .hide-sm {
     display: none;
+  }
+  .home {
+    --trade-w: 165px;
   }
   .upsell {
     display: grid;

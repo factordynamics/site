@@ -331,7 +331,7 @@ function HomeBody() {
               { key: 'f', label: 'filed', render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
               { key: 'm', label: 'fund', link: true, render: (m) => <span className="trunc strong">{m.firm}</span> },
               { key: 'q', label: 'qtr', hideSm: true, render: (m) => <span className={m.quarter === s.q ? 'tag acc' : 'dim'}>{quarterLabel(m.quarter)}</span> },
-              { key: 'v', label: 'book', num: true, hideSm: true, render: (m) => usd(bySlug.get(m.slug)?.long_value ?? m.total_value) },
+              { key: 'v', label: 'book', num: true, hideSm: true, width: '76px', render: (m) => usd(bySlug.get(m.slug)?.long_value ?? m.total_value) },
               {
                 key: 'd',
                 label: 'vs prior qtr',
@@ -347,6 +347,8 @@ function HomeBody() {
               {
                 key: 'mv',
                 label: 'largest trade',
+                // Fixed so the column keeps its width when the books arrive (no layout shift).
+                width: 'var(--trade-w)',
                 render: (m) => {
                   const b = bySlug.get(m.slug)
                   const h = b && biggest(b)
@@ -383,7 +385,7 @@ function HomeBody() {
           )}
         </Panel>
         <div className="home-side">
-          <Panel title={`largest trades · ${quarterLabel(lead)}`} right={<A to="/flows">flows →</A>}>
+          <Panel className="reserve-15" title={`largest trades · ${quarterLabel(lead)}`} right={<A to="/flows">flows →</A>}>
             {books.data ? (
               <Grid
                 rows={moves}
@@ -399,7 +401,7 @@ function HomeBody() {
               <Loading what="reading the books" />
             )}
           </Panel>
-          <Panel title="13D/G and Form 4 · 30 days" right={<A to="/filings">all →</A>}>
+          <Panel className="reserve-10" title="13D/G and Form 4 · 30 days" right={<A to="/filings">all →</A>}>
             {ev.data ? (
               <Grid
                 rows={events.slice(0, 10)}
