@@ -21,7 +21,7 @@ export interface R2Object {
 export interface R2 {
   get(key: string): Promise<R2Object | null>;
   put(key: string, value: ReadableStream | ArrayBuffer | ArrayBufferView | string | null, opts?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }): Promise<unknown>;
-  list(opts: { prefix: string }): Promise<{ objects: { key: string; size: number; uploaded: Date }[] }>;
+  list(opts: { prefix: string; cursor?: string; include?: 'customMetadata'[] }): Promise<{ objects: { key: string; size: number; uploaded: Date; customMetadata?: Record<string, string> }[]; truncated?: boolean; cursor?: string }>;
 }
 
 export interface Env {

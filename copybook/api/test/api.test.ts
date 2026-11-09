@@ -692,6 +692,14 @@ describe('copybook api', () => {
     const r2 = new MemR2();
     const gene = { ...env, SYNC: 'on', CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct' };
     const cf = { ...env, DB: new MemKV(), HIST: r2, MOVED_TO: 'https://gene.test/copybook/', SYNC: 'on', CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct' };
+    // Cloudflare's cron keeps its state in R2 (kv/), reading through to its KV namespace: KV writes cost the free plan's 1,000 a day.
+    const { r2kv } = await import('../src/failover');
+    const cfStore = r2kv(r2, cf.DB);
+    await cf.DB.put('legacy:k', 'from kv');
+    expect(await cfStore.get('legacy:k')).toBe('from kv'); // read through to KV until written
+    await cfStore.delete('legacy:k');
+    expect([await cfStore.get('legacy:k'), (await cfStore.list({ prefix: 'legacy:' })).keys]).toEqual([null, []]); // a tombstone: KV's value doesn't come back
+    await cf.DB.delete('legacy:k');
     let geneBlind = false; // gene can't reach Cloudflare's R2 (its link, or Cloudflare's API)
     let geneRace = false; // gene read Cloudflare's heartbeat and changes just before Cloudflare's minute wrote them
     const base = globalThis.fetch;
@@ -735,7 +743,7 @@ describe('copybook api', () => {
     // and waits a minute; from then on Cloudflare polls and gene only syncs.
     expect(await run(gene, min(0))).toMatchObject({ poller: 'gene polls (cloudflare silent)' });
     expect(await run(cf, min(1))).toMatchObject({ poller: 'resuming: polls from next minute' });
-    expect(JSON.parse((await cf.DB.get('cus:n'))!).email).toBe('member@example.com');
+    expect(JSON.parse((await cfStore.get('cus:n'))!).email).toBe('member@example.com');
     await run(cf, min(2));
     expect(await run(gene, min(2))).toMatchObject({ poller: 'backup (cloudflare polls)' });
     expect((await (await handleRequest(new Request('https://api.test/health'), gene)).json())).toMatchObject({ poller_host: 'cloudflare', poller_last_run: new Date(min(2)).toISOString().replace('.000', ''), api_host: 'gene' });
@@ -744,7 +752,7 @@ describe('copybook api', () => {
     await putFollows('n', { investors: ['dan-loeb', 'bill-ackman'] });
     await run(gene, min(3));
     await run(cf, min(3));
-    expect(JSON.parse((await cf.DB.get('follows:n'))!).investors).toEqual(['dan-loeb', 'bill-ackman']);
+    expect(JSON.parse((await cfStore.get('follows:n'))!).investors).toEqual(['dan-loeb', 'bill-ackman']);
 
     // gene can't reach Cloudflare's R2: it stays the backup (it can't tell whether Cloudflare polls).
     geneBlind = true;
@@ -776,7 +784,8 @@ describe('copybook api', () => {
     await run(cf, min(17));
     await run(cf, min(18));
     expect(toMember().map((m) => m.subject)).toHaveLength(2);
-    expect(JSON.parse((await cf.DB.get('alerts:handled'))!)).toEqual(expect.arrayContaining([ackman, loeb]));
+    expect(JSON.parse((await cfStore.get('alerts:handled'))!)).toEqual(expect.arrayContaining([ackman, loeb]));
+    expect((await cf.DB.list({ prefix: '' })).keys).toEqual([]); // not one KV write on Cloudflare
   });
 
   it('between-quarter alerts: Form 4 buys/sells and 13D by default, 13G opt-in, fresh only, digest members get one email at night', async () => {

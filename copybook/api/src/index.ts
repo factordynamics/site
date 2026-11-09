@@ -976,7 +976,9 @@ export default {
     const op = !!env.HEALTH_TOKEN && req.headers.get('x-copybook-operator') === env.HEALTH_TOKEN;
     if (op || req.method !== 'GET' || /^\/(csv\/|feed\/|v1\/bulk|v1\/filers\/[^/]+\/holdings)/.test(path)) return handled;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const busy = () => (path === '/v1' || path.startsWith('/v1/') ? v1error('busy', 503, undefined, { 'retry-after': '5' }) : json({ ok: false, error: 'busy: try again in a few seconds', code: 'busy' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': '5' }));
+    // Retry-After is exposed to pages (CORS hides response headers from scripts otherwise).
+    const retry = { 'retry-after': '5', 'access-control-expose-headers': 'retry-after' };
+    const busy = () => (path === '/v1' || path.startsWith('/v1/') ? v1error('busy', 503, undefined, retry) : json({ ok: false, error: 'busy: try again in a few seconds', code: 'busy' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), ...retry }));
     const late = new Promise<Response>((r) => (timer = setTimeout(() => r(busy()), REQUEST_MS)));
     return Promise.race([handled, late]).finally(() => clearTimeout(timer));
   },

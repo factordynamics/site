@@ -13,7 +13,7 @@
  * old. Cloudflare, after a gap of its own (5+ minutes), applies gene's changes and skips one minute before
  * polling, so whichever side polled meanwhile has its handled filings applied first. No filing goes out twice.
  */
-import type { Env, KV } from './env';
+import type { Env, KV, R2 } from './env';
 
 /** When this process started: gene's uptime on /health. */
 export const BOOT = Date.now();
@@ -31,6 +31,51 @@ const WINDOW_MS = 7 * 86_400_000;
 /** Never synced: per-host caches, rate limits and one-use tokens, the job queue, sync's own state. */
 const SKIP = ['rl:', 'dl:', 'host:', 'sync:', 'filing:', 'subs13f:', 'jobs:'];
 const synced = (k: string) => !SKIP.some((p) => k.startsWith(p));
+
+/**
+ * Cloudflare's cron store: R2 objects kv/{key} (the free plan has about 33k R2 writes a day, KV 1,000), reading
+ * through to the KV namespace for keys it hasn't written yet, so the switch needed no copy. Deletions are
+ * tombstones (so KV's old value doesn't come back); expirationTtl is kept as metadata and honoured on read.
+ */
+export function r2kv(bucket: R2, kv: KV): KV {
+  const key = (k: string) => `kv/${k}`;
+  return {
+    async get(k) {
+      const o = await bucket.get(key(k));
+      if (!o) return kv.get(k);
+      const m = o.customMetadata ?? {};
+      if (m.deleted || (m.expires && Number(m.expires) < Date.now())) return void (await o.body.cancel?.()), null;
+      return new Response(o.body).text();
+    },
+    async put(k, v, opts) {
+      await bucket.put(key(k), v, { customMetadata: opts?.expirationTtl ? { expires: String(Date.now() + opts.expirationTtl * 1000) } : {} });
+    },
+    async delete(k) {
+      await bucket.put(key(k), '', { customMetadata: { deleted: '1' } });
+    },
+    // Both stores' keys under the prefix, R2's tombstones and expired keys left out. One page: the cron lists
+    // members (cus:), channel failures and the like, hundreds of keys, not thousands.
+    async list({ prefix }) {
+      const names = new Map<string, boolean>();
+      let cursor: string | undefined;
+      do {
+        const page = await bucket.list({ prefix: key(prefix), cursor, include: ['customMetadata'] });
+        for (const o of page.objects) {
+          const m = o.customMetadata ?? {};
+          names.set(o.key.slice(3), !m.deleted && !(m.expires && Number(m.expires) < Date.now()));
+        }
+        cursor = page.truncated ? page.cursor : undefined;
+      } while (cursor);
+      let c: string | undefined;
+      do {
+        const page = await kv.list({ prefix, cursor: c });
+        for (const k of page.keys) if (!names.has(k.name)) names.set(k.name, true);
+        c = page.list_complete ? undefined : page.cursor;
+      } while (c);
+      return { keys: [...names].filter(([, live]) => live).map(([name]) => ({ name })).sort((a, b) => (a.name < b.name ? -1 : 1)), list_complete: true };
+    },
+  };
+}
 
 export const isCloudflare = (env: Env) => !!env.MOVED_TO;
 export const syncOn = (env: Env) => env.SYNC === 'on' && !!env.CF_API_TOKEN && !!env.CF_ACCOUNT_ID;
@@ -262,6 +307,7 @@ export interface PollerLine {
 export async function syncedMinute(env: Env, now: number, run: (env: Env) => Promise<Record<string, unknown>>): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = {};
   if (isCloudflare(env)) {
+    env = { ...env, DB: r2kv(env.HIST, env.DB) };
     const mine = await readIndex(env, 'cloudflare');
     out.sync_applied = await apply(env, mine);
     const raw = await r2Get(env, ALIVE);
