@@ -473,6 +473,35 @@ async function mergeFollows(env: Env, from: string, to: string): Promise<string[
   return out.investors as string[];
 }
 
+/**
+ * Operator: removes a member and everything kept for them under that email (the paid record and its free-signup
+ * alias): lists, channels, feed, keys, referral code, stats, reasons. For gate test members and data-deletion
+ * requests. Stripe's customer is separate (delete it first, so its webhook can't write the record back).
+ */
+export async function eraseMember(env: Env, email: string): Promise<{ customers: string[]; deleted: number }> {
+  const e = email.trim().toLowerCase();
+  const ids = [...new Set([await env.DB.get(`email:${e}`), await freeId(e)].filter((x): x is string => !!x))];
+  const keys = new Set<string>([`email:${e}`]);
+  for (const c of ids) {
+    const ch = JSON.parse((await env.DB.get(`channels:${c}`)) ?? '{}') as { feed_token?: string };
+    if (ch.feed_token) keys.add(`feedtok:${ch.feed_token}`);
+    for (const k of JSON.parse((await env.DB.get(`apikeys:${c}`)) ?? '[]') as { hash: string }[]) keys.add(`apikey:${k.hash}`);
+    const code = await env.DB.get(`refcode:${c}`);
+    if (code) keys.add(`ref:${code}`);
+    for (const p of ['cus:', 'follows:', 'channels:', 'chfail:', 'feed:', 'sent:', 'stats:', 'why:', 'refcode:', 'refs:', 'seats:', 'apikeys:', 'delivered:', 'pausenote:']) {
+      let cursor: string | undefined;
+      do {
+        const page = await env.DB.list({ prefix: `${p}${c}`, cursor });
+        for (const k of page.keys) if (k.name === `${p}${c}` || k.name.startsWith(`${p}${c}:`)) keys.add(k.name);
+        cursor = page.list_complete ? undefined : page.cursor;
+      } while (cursor);
+    }
+    if (typeof caches !== 'undefined') await (caches as unknown as { default: Cache }).default.delete(`https://copybook.internal/member/${c}`).catch(() => undefined);
+  }
+  for (const k of keys) await env.DB.delete(k);
+  return { customers: ids, deleted: keys.size };
+}
+
 /** Operator: merge a free record into the paid member that already took its email (records split before the merge shipped). */
 export async function mergeFreeSignup(env: Env, email: string): Promise<Record<string, unknown>> {
   const paid = await memberByEmail(env, email);

@@ -1156,6 +1156,22 @@ describe('copybook api', () => {
     await webhook({ type: 'invoice.payment_failed', data: { object: legacyInv } });
     await webhook({ type: 'invoice.paid', data: { object: legacyInv } });
     expect([await env.DB.get('cus:cus_legacy'), await env.DB.get('email:reader@substack.example'), sent.length]).toEqual([null, null, 0]);
+
+    // Erasing a member (operator, by email) removes the paid record, its free-signup alias and what they kept; others stay.
+    const { freeId } = await import('../src/free');
+    const fid = await freeId('gone@example.com');
+    await env.DB.put(`cus:${fid}`, JSON.stringify({ customer: fid, email: 'gone@example.com', status: 'free', plan: 'free', converted_to: 'cus_gone' }));
+    await env.DB.put('cus:cus_gone', JSON.stringify({ customer: 'cus_gone', email: 'gone@example.com', status: 'active', plan: 'copy', subscription: 'sub_gone', alerts: [] }));
+    await env.DB.put('email:gone@example.com', 'cus_gone');
+    for (const k of [`follows:${fid}`, 'follows:cus_gone', 'stats:cus_gone', 'delivered:cus_gone:2026-11-09', 'why:cus_gone']) await env.DB.put(k, '{}');
+    await env.DB.put('channels:cus_gone', JSON.stringify({ feed_token: 'tok_gone' }));
+    await env.DB.put('feedtok:tok_gone', 'cus_gone');
+    await env.DB.put('follows:cus_gone2', '{}'); // another member whose id starts the same: kept
+    const op = (path: string, b: unknown) => handleRequest(new Request(`https://api.test${path}`, { method: 'POST', body: JSON.stringify(b), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env);
+    expect((await op('/ops/erase-member', { email: 'Gone@Example.com' })).status).toBe(200);
+    const left = [];
+    for (const p of ['cus:', 'follows:', 'channels:', 'stats:', 'delivered:', 'why:', 'feedtok:', 'email:gone']) left.push(...(await env.DB.list({ prefix: p })).keys.map((k) => k.name).filter((n) => n.includes('gone') || n.includes(fid)));
+    expect(left).toEqual(['follows:cus_gone2']);
   });
 
   it('alert moves: a unit mismatch between quarters is never sent (GuardCap BKNG); real trades are', () => {

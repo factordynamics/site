@@ -402,6 +402,17 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, checked, not_copybook: out.length, members: out }, 200, h);
   }
 
+  // Operator: erase a member by email (gate test members, data-deletion requests). Delete the Stripe customer first.
+  if (req.method === 'POST' && path === '/ops/erase-member') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const { eraseMember } = await import('./free');
+    const email = String((await body(req)).email ?? '').trim().toLowerCase();
+    if (!email) return json({ ok: false, error: 'email' }, 400, h);
+    const r = await eraseMember(env, email);
+    console.log(`operator: erased member ${r.customers.join(',')} (${r.deleted} keys)`);
+    return json({ ok: true, ...r }, 200, h);
+  }
+
   // Operator: one account per email for a free signup and paid member split before the merge shipped.
   if (req.method === 'POST' && path === '/ops/merge-free') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
