@@ -209,6 +209,18 @@ def parse_form4(xml: str, cik: str) -> dict | None:
     }
 
 
+def stamp_codes(e: dict) -> None:
+    """Form 4 transaction codes on the event: `codes` (every code, largest share count first) and the
+    leading `code` with its `code_label`, so action "other" can read "gift" or "conversion"."""
+    size: dict[str, float] = {}
+    for t in e.get("transactions") or []:
+        if t.get("code"):
+            size[t["code"]] = size.get(t["code"], 0) + abs(t.get("shares") or 0)
+    e["codes"] = sorted(size, key=lambda c: -size[c])
+    e["code"] = e["codes"][0] if e["codes"] else None
+    e["code_label"] = CODES.get(e["code"] or "", "other") if e["code"] else None
+
+
 def parse_schedule(xml: str, cik: str) -> dict | None:
     """One Schedule 13D/13G (XML). None when it is about the manager itself."""
     issuer_cik = (_tag(xml, "issuerCIK") or _tag(xml, "issuerCik") or "").zfill(10)
@@ -451,6 +463,9 @@ def main() -> int:
             for h in json.loads(book_path.read_text()).get("holdings") or []:
                 book[f"{h.get('cusip')}:{h.get('put_call')}"] = h
         events = [e for e in rows if not e.get("skip") and enrich(e, book, by_cusip, by_ticker, m.get("name"))]
+        for e in events:
+            if e.get("kind") == "form4":
+                stamp_codes(e)
         payload = {
             "slug": slug,
             "manager": m.get("manager"),
