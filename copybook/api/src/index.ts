@@ -373,6 +373,17 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: 'Not part of Holdterm Alerts', code: 'holdterm_plan' }, 402, h);
   }
 
+  // My book's per-stock column: company insiders' Form 4s and anyone's 13D/G, latest first, per ticker.
+  if (req.method === 'GET' && path === '/events') {
+    const tickers = [...new Set((url.searchParams.get('tickers') ?? '').toUpperCase().split(',').map((t) => t.trim().replace('-', '.')).filter(Boolean))];
+    const limit = Number(url.searchParams.get('limit') ?? 5);
+    if (!tickers.length || tickers.length > 50 || !tickers.every((t) => TICKER.test(t)) || !(limit >= 1 && limit <= 10)) {
+      return json({ ok: false, error: 'tickers: 1 to 50 comma-separated tickers like BRK.B; limit: 1 to 10', code: 'bad_request' }, 400, h);
+    }
+    const { stockEvents } = await import('./stockevents');
+    return json({ ok: true, ...(await stockEvents(env, tickers, Math.floor(limit))) }, 200, { ...h, 'cache-control': 'no-store' });
+  }
+
   // Copy -> Pro/Fund (or Pro -> Fund): a portal page that confirms swapping the one subscription item to the
   // higher plan's price at the same interval, prorated. A new checkout would start a second subscription.
   if (req.method === 'POST' && path === '/upgrade') {

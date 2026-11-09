@@ -10,6 +10,8 @@ import form4Len from './fixtures/form4-len.xml?raw';
 import durableQ2 from './fixtures/durable-q2-shard.json';
 import sc13dCvi from './fixtures/sc13da-cvi.xml?raw';
 import cvi41 from './fixtures/cvi-13da-41-primary.xml?raw';
+import form4Jain from './fixtures/form4-brk-jain.txt?raw';
+import sc13gSiri from './fixtures/sc13ga-siri-vanguard.xml?raw';
 import { cleanItem4, parseSchedule13 } from '../src/edgar';
 
 class MemKV implements KV {
@@ -174,7 +176,7 @@ beforeEach(async () => {
         : url.slice('https://www.sec.gov/'.length);
       const typed = `${key}:${u.searchParams.get('type')}`;
       if (key.startsWith('feed') && u.searchParams.get('type') !== '13F-HR') return new Response(secFiles[typed] ?? '<feed></feed>');
-      if (key.startsWith('company:') || key.startsWith('feed@')) return new Response(secFiles[key] ?? '<feed></feed>');
+      if (key.startsWith('company:') || key.startsWith('feed@')) return new Response(secFiles[typed] ?? secFiles[key] ?? '<feed></feed>');
       return key in secFiles ? new Response(secFiles[key]) : new Response(key === 'feed' ? '<feed></feed>' : 'not found', { status: key === 'feed' ? 200 : 404 });
     }
     if (url === `${SITE}data/warren-buffett-history.json`) {
@@ -622,6 +624,51 @@ describe('copybook api', () => {
     await cron(32, Date.parse(`${day}T03:32:00Z`) + 86400_000);
     expect(sent.map((m) => m.to[0])).toEqual(['d@example.com']);
     expect(sent[0].subject).toMatch(/^Copybook daily digest for \d{4}-\d{2}-\d{2}: 1 Form 4\/13D\/G$/);
+  });
+
+  it("GET /events: a ticker's own insiders' Form 4s and anyone's 13D/G, parsed once; the issuer's own Form 4s on other companies are left out", async () => {
+    await hist.put('pre/sec-tickers.json', '{"BRK.A":"0001067983","BRK.B":"0001067983","CVI":"0001376139","SIRI":"0000908937"}');
+    const entry = (form: string, a: string, at: string) => `<entry><category term="${form}"/><id>urn:tag:sec.gov,2008:accession-number=${a}</id><updated>${at}</updated></entry>`;
+    // Berkshire's feed lists Berkshire's own Form 4 on Lennar (newest) and Ajit Jain's sale of BRK.B.
+    secFiles['company:0001067983:4'] = `<feed>${entry('4', '0001193125-26-445930', '2026-11-03T21:30:04-05:00')}${entry('4', '0001728451-26-000004', '2026-09-29T17:16:08-04:00')}</feed>`;
+    secFiles['Archives/edgar/data/1067983/000119312526445930/0001193125-26-445930.txt'] = form4Len;
+    secFiles['Archives/edgar/data/1067983/000172845126000004/0001728451-26-000004.txt'] = form4Jain;
+    secFiles['company:0001376139:SCHEDULE 13'] = `<feed>${entry('SCHEDULE 13D/A', '0000921669-26-000412', '2026-11-05T16:14:03-05:00')}</feed>`;
+    secFiles['Archives/edgar/data/1376139/000092166926000412/primary_doc.xml'] = cvi41;
+    // A 13G's cover page uses other tags than a 13D's.
+    secFiles['company:0000908937:SCHEDULE 13'] = `<feed>${entry('SCHEDULE 13G/A', '0000102909-26-002721', '2026-03-20T10:00:00-04:00')}</feed>`;
+    secFiles['Archives/edgar/data/908937/000010290926002721/primary_doc.xml'] = sc13gSiri;
+    let secCalls = 0;
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u).startsWith('https://www.sec.gov/')) secCalls++;
+      return orig(u, init);
+    });
+    stripeObjects['checkout/sessions/cs_test_ev'] = { id: 'cs_test_ev', status: 'complete', created: now(), subscription: 'sub_ev', customer_details: { email: 'ev@example.com' } };
+    stripeObjects['subscriptions/sub_ev'] = sub('sub_ev', 'cus_ev', 'active');
+    const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_ev' } })).json()) as { token: string };
+    const r = await (await call('/events?tickers=brk.b,CVI,ZZZZ,SIRI', { token })).json();
+    expect(r.tickers.SIRI.events).toEqual([expect.objectContaining({ form: 'SCHEDULE 13G/A', filer_name: 'The Vanguard Group', action: 'stake_update', shares_after: 0, percent_of_class: 0, event_date: '2026-03-13' })]);
+    expect(r.unknown).toEqual(['ZZZZ']);
+    expect(r.pending).toEqual([]);
+    expect(r.tickers['BRK.B'].events).toEqual([
+      {
+        ticker: 'BRK.B', form: '4', filer_name: 'Jain Ajit', role: 'Vice Chairman, Director', action: 'sell',
+        shares: 39700, price: 503.09, value_usd: 19972776, shares_after: 67925, prev_shares_after: 107625, percent_of_class: null,
+        event_date: '2026-09-28', accepted_at: '2026-09-29T21:16:08Z', accession: '0001728451-26-000004',
+        url: 'https://www.sec.gov/Archives/edgar/data/1067983/000172845126000004/0001728451-26-000004-index.htm',
+      },
+    ]);
+    expect(r.tickers.CVI.events).toEqual([expect.objectContaining({ form: 'SCHEDULE 13D/A', filer_name: 'CARL C ICAHN and 2 others', action: 'stake_update', shares_after: 71201875, percent_of_class: 64.1, event_date: '2026-11-05', accepted_at: '2026-11-05T21:14:03Z' })]);
+    // Fresh for 20 minutes: no EDGAR calls; after that only the feeds are re-read, nothing re-parsed.
+    const first = secCalls;
+    await call('/events?tickers=BRK.B,CVI', { token });
+    expect(secCalls).toBe(first);
+    const cached = JSON.parse(new TextDecoder().decode(hist.m.get('tev/BRK.B.json')));
+    await hist.put('tev/BRK.B.json', JSON.stringify({ ...cached, checked_at: Date.now() - 21 * 60_000 }));
+    await call('/events?tickers=BRK.B', { token });
+    expect(secCalls).toBe(first + 2);
+    expect((await call('/events?tickers=', { token })).status).toBe(400);
   });
 
   it('POST /upgrade: Copy yearly gets a portal confirm page for Pro yearly on the same subscription item; Pro and bad plans are refused', async () => {

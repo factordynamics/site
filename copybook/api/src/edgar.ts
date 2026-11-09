@@ -323,6 +323,10 @@ export interface Form4 {
   classes: Form4Class[];
   action: 'buy' | 'sell' | 'mixed' | 'other';
   footnotes: string[];
+  /** periodOfReport: the (earliest) transaction date. */
+  event_date: string | null;
+  /** Non-derivative transaction codes in filing order, once each (P, S, A, M, F, G, ...). */
+  codes: string[];
 }
 
 /**
@@ -386,6 +390,8 @@ export function parseForm4(xml: string): Form4 | null {
     classes,
     action: bought && sold ? 'mixed' : bought ? 'buy' : sold ? 'sell' : 'other',
     footnotes: all(xml, 'footnote').map((f) => unescape(f).replace(/\s+/g, ' ')),
+    event_date: val(xml, 'periodOfReport') || null,
+    codes: [...new Set(all(xml, 'nonDerivativeTransaction').map((b) => val(b, 'transactionCode')).filter(Boolean))],
   };
 }
 
@@ -462,10 +468,11 @@ export function parseSchedule13(xml: string): Schedule13 | null {
   const form = val(xml, 'submissionType');
   const issuer_cik = val(xml, 'issuerCIK') || val(xml, 'issuerCik');
   if (!form || !issuer_cik) return null;
-  const persons = all(xml, 'reportingPersonInfo').map((b) => ({ cik: val(b, 'reportingPersonCIK') || null, name: val(b, 'reportingPersonName') }));
-  const shares = all(xml, 'aggregateAmountOwned').map(Number).filter((n) => !Number.isNaN(n));
-  const pct = all(xml, 'percentOfClass').map(Number).filter((n) => !Number.isNaN(n));
-  const ev = val(xml, 'dateOfEvent').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  // 13D cover pages are reportingPersonInfo blocks; 13G's are coverPageHeaderReportingPersonDetails with their own tag names.
+  const persons = [...all(xml, 'reportingPersonInfo'), ...all(xml, 'coverPageHeaderReportingPersonDetails')].map((b) => ({ cik: val(b, 'reportingPersonCIK') || null, name: val(b, 'reportingPersonName') }));
+  const shares = [...all(xml, 'aggregateAmountOwned'), ...all(xml, 'reportingPersonBeneficiallyOwnedAggregateNumberOfShares')].map(Number).filter((n) => !Number.isNaN(n));
+  const pct = [...all(xml, 'percentOfClass'), ...all(xml, 'classPercent')].map(Number).filter((n) => !Number.isNaN(n));
+  const ev = (val(xml, 'dateOfEvent') || val(xml, 'eventDateRequiresFilingThisStatement')).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   return {
     form,
     amendment_no: val(xml, 'amendmentNo') ? Number(val(xml, 'amendmentNo')) : null,
@@ -493,6 +500,12 @@ export async function fetchForm4(cik: string, accession: string): Promise<Form4 
   if (!x) return null;
   const res = await sec(`${archive(cik, accession)}${x.name}`);
   return res.ok ? parseForm4(await res.text()) : null;
+}
+
+/** A filing's full submission text in one request (a Form 4's is ~10 KB and holds its ownership XML). */
+export async function fetchSubmission(cik: string, accession: string): Promise<string | null> {
+  const res = await sec(`${archive(cik, accession)}${accession}.txt`);
+  return res.ok ? res.text() : null;
 }
 
 export async function fetchSchedule13(cik: string, accession: string): Promise<Schedule13 | null> {
