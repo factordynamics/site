@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { pricingTo } from '../lib/data'
 import { signupLive, TRIAL_DAYS } from '../config'
-import { ApiError, call, getToken, useMemberState } from '../lib/account'
+import { ApiError, call, getToken, isFree, isPaying, useMemberState } from '../lib/account'
 import { utmTags } from '../lib/attribution'
 import { Arrow, Button, Check } from './ui'
 
@@ -13,9 +13,11 @@ export function Signup({ source, className = '' }: { source: string; className?:
   const [email, setEmail] = useState('')
   const [website, setWebsite] = useState('')
   const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'member' | 'error'; msg?: string }>({ s: 'idle' })
-  // Hidden for members; shown again when a session's /me failed with nothing cached (member null).
+  // Hidden only for paying members. Free, cancelled and signed-out readers, and a session whose /me failed,
+  // keep the trial button; a free member already gets the Friday email, so the form says so instead.
   const member = useMemberState()
-  if (!signupLive || (getToken() && member !== null)) return null
+  if (!signupLive || (getToken() && isPaying(member))) return null
+  const onFriday = Boolean(getToken() && isFree(member))
   const id = `signup-${source}`
   return (
     <section className={`rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] md:p-6 ${className}`} aria-labelledby={`${id}-title`}>
@@ -29,7 +31,9 @@ export function Signup({ source, className = '' }: { source: string; className?:
             Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
         </div>
-        {state.s === 'done' || state.s === 'member' ? (
+        {onFriday ? (
+          <p className="shrink-0 text-[13.5px] text-ink-2 md:w-[380px] md:pt-1">You’re on the Friday email. Copy adds each filing from the funds you follow, minutes after it lands.</p>
+        ) : state.s === 'done' || state.s === 'member' ? (
           <div role="status" className="shrink-0 md:w-[380px] md:pt-1">
             <p className="flex items-center gap-2 text-[14.5px] font-medium">
               <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-up text-white">

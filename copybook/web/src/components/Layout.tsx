@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { getToken, useMemberState } from '../lib/account'
+import { getToken, isPaying, useMemberState } from '../lib/account'
 import { quarterLabel } from '../lib/data'
 import { seasonNow } from '../lib/stocks'
 import { SearchBox } from './Search'
@@ -21,6 +21,9 @@ export function Layout() {
   // nothing cached (member null) gets the signed-out header, so the trial is always one click away.
   const member = useMemberState()
   const signedIn = Boolean(getToken()) && member !== null
+  // Only paying members (active, trialing or paused on Copy or above) lose the trial button; a free or
+  // cancelled member keeps it, with Account beside it.
+  const paying = signedIn && isPaying(member)
   const sn = seasonNow()
   // During a 13F season the tracker sits after Flow.
   const base = sn.live ? [...NAV.slice(0, 2), { to: '/season/', label: `${quarterLabel(sn.quarter).split(' ')[0]} season` }, ...NAV.slice(2)] : NAV
@@ -50,7 +53,7 @@ export function Layout() {
           <Link to="/" aria-label="Copybook home" className="shrink-0">
             <Wordmark />
           </Link>
-          <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
+          <nav className="hidden items-center gap-1 whitespace-nowrap md:flex" aria-label="Main">
             {nav.map((n) => (
               <NavLink
                 key={n.to}
@@ -63,12 +66,17 @@ export function Layout() {
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {!home && (
-              <div className="hidden w-64 lg:block">
+              <div className={`hidden lg:block ${signedIn && !paying ? 'w-44 xl:w-52' : 'w-64'}`}>
                 <SearchBox />
               </div>
             )}
-            <Button to={signedIn ? '/account/' : '/pricing/'} size="sm" variant="dark" className="hidden sm:inline-flex">
-              {signedIn ? 'Account' : 'Start 14-day free trial'}
+            {signedIn && !paying && (
+              <Link to="/account/" className="hidden h-8 items-center rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-ink/5 hover:text-ink sm:inline-flex">
+                Account
+              </Link>
+            )}
+            <Button to={paying ? '/account/' : '/pricing/'} size="sm" variant="dark" className="hidden sm:inline-flex">
+              {paying ? 'Account' : 'Try Copy free'}
             </Button>
             <button
               type="button"
@@ -93,9 +101,14 @@ export function Layout() {
                 </NavLink>
               ))}
             </nav>
-            <Button to={signedIn ? '/account/' : '/pricing/'} variant="dark" className="mt-4 w-full">
-              {signedIn ? 'Account' : 'Start 14-day free trial'}
+            <Button to={paying ? '/account/' : '/pricing/'} variant="dark" className="mt-4 w-full">
+              {paying ? 'Account' : 'Try Copy free'}
             </Button>
+            {signedIn && !paying && (
+              <Button to="/account/" variant="outline" className="mt-2 w-full">
+                Account
+              </Button>
+            )}
           </div>
         )}
       </header>

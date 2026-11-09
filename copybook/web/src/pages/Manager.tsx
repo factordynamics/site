@@ -11,7 +11,7 @@ import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
 import { loadCards, loadRecap, recapPath, seasonNow, stockPath } from '../lib/stocks'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
-import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitRatio, useAsync, type ManagerFile } from '../lib/data'
+import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -34,7 +34,7 @@ export function ManagerPage() {
       .map((h) => {
         const per = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value || 0) / h.prev_shares : 0
         const delta = h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
-        const note = h.split ? `split ${splitRatio(h.split.ratio)} adjusted` : h.prev_cusip ? 'CUSIP change' : ''
+        const note = splitApplied(h) ? `split ${splitRatio(h.split!.ratio)} adjusted` : h.prev_cusip ? 'CUSIP change' : ''
         return { key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: [h.change, note].filter(Boolean).join(' · '), delta }
       })
       .filter((x) => x.delta !== 0)
@@ -313,9 +313,9 @@ export function ManagerPage() {
                           </Badge>
                         </span>
                       )}
-                      {h.split && (
-                        <span className="shrink-0" title={`Last quarter's shares are multiplied by the ${splitRatio(h.split.ratio)} split before comparing`}>
-                          <Badge tone="warn">split {splitRatio(h.split.ratio)} adjusted</Badge>
+                      {splitApplied(h) && (
+                        <span className="shrink-0" title={`Last quarter's shares are multiplied by the ${splitRatio(h.split!.ratio)} split before comparing`}>
+                          <Badge tone="warn">split {splitRatio(h.split!.ratio)} adjusted</Badge>
                         </span>
                       )}
                     </div>

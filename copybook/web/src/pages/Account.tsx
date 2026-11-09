@@ -65,7 +65,7 @@ export function Account() {
         // A failing API keeps the last-known account on screen (the status banner says why).
         if (apiDown() && getToken() && lastMe()) return setState({ kind: 'in', member: lastMe()!, welcome: false, stale: false })
         if (apiDown()) return setState({ kind: 'down' })
-        setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? (e instanceof ApiError && e.code === 'link_used' ? 'This sign-in link was already used. Ask for a new one below.' : 'That sign-in link has expired. Enter your email for a new one.') : undefined })
+        setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? (e instanceof ApiError && e.code === 'link_used' ? 'That sign-in link was already used. Enter your email for a new one.' : 'That sign-in link has expired. Enter your email for a new one.') : undefined })
       }
       if (sid || login || upgraded || kept) nav('/account/', { replace: true })
     }
@@ -160,7 +160,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
             </span>
             <h1 className="mt-5 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Welcome to Copy.</h1>
             <p className="mt-3 text-[17px] text-ink-2">
-              {trial ? `Your free trial runs until ${endLabel}. Stripe is emailing your confirmation.` : 'Your payment went through. Stripe is emailing your receipt.'}
+              {trial ? `Your free trial runs until ${endLabel}. Check your inbox for your welcome email.` : 'Your payment went through. Stripe is emailing your receipt.'}
             </p>
           </>
         ) : (

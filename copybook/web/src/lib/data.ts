@@ -30,7 +30,12 @@ export type Holding = {
   prev_cusip?: string | null
   /** A split between the two quarters that ingest applied to prev_shares. */
   split?: { ratio: number; from_quarter?: string; to_quarter?: string } | null
+  /** The previous quarter's shares as filed, before any split factor. */
+  prev_shares_as_filed?: number | null
 }
+
+/** A split ingest actually applied to this row: the compared shares differ from the filed ones. */
+export const splitApplied = (h: Holding) => Boolean(h.split && h.prev_shares_as_filed != null && h.prev_shares != null && h.prev_shares !== h.prev_shares_as_filed)
 
 /** "2:1" for a 2-for-1 split, "1:10" for a 1-for-10 reverse split. */
 export const splitRatio = (r: number) => (r >= 1 ? `${+r.toFixed(2)}:1` : `1:${+(1 / r).toFixed(2)}`)

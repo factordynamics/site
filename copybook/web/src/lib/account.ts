@@ -212,6 +212,8 @@ export async function startSession(body: { checkout_session: string } | { login:
 export const PLAN_NAME: Record<string, string> = { copy: 'Copy', pro: 'Copy Pro', fund: 'Copy Fund' }
 /** A free Friday-email account (POST /signup): no paid plan, every paid route answers 402. */
 export const isFree = (m?: Member | null) => Boolean(m && !m.active && (m.plan === 'free' || m.status === 'free'))
+/** Active, trialing or paused on Copy or above. Every other state (signed out, free, cancelled, /me failing) sees the trial CTAs. */
+export const isPaying = (m?: Member | null) => Boolean(m && ['copy', 'pro', 'fund'].includes(m.plan) && (m.active || (m.paused_until ?? 0) * 1000 > Date.now()))
 export const isPro = (m?: Member | null) => Boolean(m?.active && (m.plan === 'pro' || m.plan === 'fund'))
 
 // Components that mount together (header, follow and share buttons) share one in-flight /me request.
