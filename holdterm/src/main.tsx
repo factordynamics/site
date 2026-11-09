@@ -228,7 +228,9 @@ function App() {
           </svg>
         </button>
       </header>
-      <main key={path}>{route(path)}</main>
+      <main key={path} tabIndex={-1}>
+        {route(path)}
+      </main>
       <footer className="foot">
         <span>
           holdterm · SEC EDGAR filings as filed · no ads · not investment advice · <A to="/about">about</A> · <A to="/alerts">alerts $3/mo</A> · <A to="/account">account</A> · <A to="/terms">terms</A> · <A to="/privacy">privacy</A> · <a href={`mailto:${CONTACT}`}>{CONTACT}</a> · <a href={ISSUES}>report a data error</a>

@@ -205,6 +205,61 @@ main {
   max-width: 1480px;
   margin: 0 auto;
 }
+main:focus {
+  outline: none;
+}
+/* Alerts upsell: one terminal-style line above the home page, closable. */
+.upsell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 8px 8px 8px 12px;
+  background: var(--hl);
+  border: 1px solid var(--acc-dim);
+  border-left: 3px solid var(--acc);
+  border-radius: 6px;
+}
+.upsell p {
+  flex: 1;
+  margin: 0;
+  color: var(--fg);
+}
+.upsell-tag {
+  font: 600 11px var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--acc);
+}
+.upsell-tag::before {
+  content: '▸ ';
+}
+.upsell-price {
+  color: var(--fg2);
+  white-space: nowrap;
+}
+.upsell .btn {
+  padding: 5px 12px;
+}
+.upsell-x {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--dim);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.upsell-x:hover,
+.upsell-x:focus-visible {
+  background: var(--raise);
+  color: var(--fg);
+}
 .foot {
   display: flex;
   justify-content: space-between;
@@ -1106,6 +1161,27 @@ pre.email {
   }
   .hide-sm {
     display: none;
+  }
+  .upsell {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: start;
+    gap: 6px 10px;
+  }
+  .upsell-tag {
+    padding-top: 2px;
+  }
+  .upsell .btn {
+    grid-column: 2;
+    justify-self: start;
+    padding: 8px 14px;
+  }
+  .upsell-x {
+    grid-column: 3;
+    grid-row: 1;
+    width: 44px;
+    height: 44px;
+    margin: -8px -4px -8px 0;
   }
   .stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));

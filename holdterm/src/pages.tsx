@@ -33,7 +33,7 @@ import { A, Bar, ChangeTag, date, Failed, Grid, Loading, num, Panel, pct, price,
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
-import { follows, Follow, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, type Follows } from './account'
+import { follows, Follow, getToken, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, type Follows } from './account'
 
 const title = (t: string) => {
   document.title = `${t} · holdterm`
@@ -199,7 +199,58 @@ function season(now = new Date()) {
 /** Each fund's latest book for the funds that filed in a given quarter. */
 const loadQuarterBooks = (slugs: string[]) => Promise.all(slugs.map((x) => loadBook(x).catch(() => null))).then((bs) => bs.filter((b): b is Book => Boolean(b)))
 const moveLabel = (h: Holding) => (h.change === 'new' ? 'NEW' : h.change === 'exited' ? 'SOLD OUT' : h.change === 'added' ? 'ADD' : 'TRIM')
+// ---------- alerts upsell ----------
+// One closable line above the home page. Shown to signed-out visitors only; a dismissal is kept for 90 days,
+// so it comes back at most once a 13F season. It is decided before the first paint (no layout shift).
+const UPSELL_KEY = 'holdterm-upsell-dismissed'
+const UPSELL_DAYS = 90
+function showUpsell() {
+  if (getToken()) return false
+  try {
+    const at = Number(localStorage.getItem(UPSELL_KEY))
+    return !at || Date.now() - at > UPSELL_DAYS * 86_400_000
+  } catch {
+    return true
+  }
+}
+function Upsell() {
+  const [open, setOpen] = useState(showUpsell)
+  if (!open) return null
+  const close = () => {
+    try {
+      localStorage.setItem(UPSELL_KEY, String(Date.now()))
+    } catch {}
+    setOpen(false)
+    // The focused close button is gone: hand focus to the page rather than dropping it on <body>.
+    document.querySelector<HTMLElement>('main')?.focus()
+  }
+  return (
+    <section className="upsell" aria-label="email alerts offer" onKeyDown={(e) => e.key === 'Escape' && close()}>
+      <span className="upsell-tag" aria-hidden>
+        alerts
+      </span>
+      <p>
+        Get an email when the funds you follow file a 13F, 13D or Form 4. <span className="upsell-price">{PRICE.trialDays} days free, then ${PRICE.monthly}/mo.</span>
+      </p>
+      <A to="/alerts" className="btn">
+        start free trial →
+      </A>
+      <button type="button" className="upsell-x" aria-label="dismiss alerts offer" title="dismiss" onClick={close}>
+        <span aria-hidden>×</span>
+      </button>
+    </section>
+  )
+}
+
 export function Home() {
+  return (
+    <>
+      <Upsell />
+      <HomeBody />
+    </>
+  )
+}
+function HomeBody() {
   title('13F filings and trades of concentrated long-term funds')
   const ix = useLoad(loadIndex, [])
   const ev = useLoad(loadEvents, [])
