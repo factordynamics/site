@@ -167,8 +167,12 @@ export const aboutCount = (n: number) => (n >= 1000 ? `${(Math.floor(n / 100) * 
 /** Every 13F filer's latest position in a stock (scripts/stocks.mjs, d/h/{TICKER}.json): the 200 largest, plus counts. */
 export type FilerHolder = { slug: string; name: string; quarter: string; shares: number; value: number; weight: number; tier: 0 | 1 | 2 }
 export const loadFilerHolders = (t: string) =>
-  getJSON<{ filers: number; quarters: Record<string, number>; top10?: number; over5?: number; rows: [string, string, string, number, number, number, 0 | 1 | 2][] }>(`${D}h/${encodeURIComponent(t)}.json`).then((d) => ({
+  getJSON<{ filers: number; current?: number; tracked?: number; quarters: Record<string, number>; top10?: number; over5?: number; rows: [string, string, string, number, number, number, 0 | 1 | 2][] }>(`${D}h/${encodeURIComponent(t)}.json`).then((d) => ({
     filers: d.filers,
+    /** Filers whose latest 13F is for the newest or previous quarter; the rest are on older filings. */
+    current: d.current ?? d.filers,
+    /** Funds we track closely that the filer index lists for this stock. */
+    tracked: d.tracked ?? null,
     quarters: d.quarters,
     top10: d.top10 ?? null,
     over5: d.over5 ?? null,

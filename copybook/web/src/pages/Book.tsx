@@ -31,6 +31,14 @@ type Row = {
   split: { ratio: string; adjusted: boolean } | null
   /** Counts are across every 13F filer; changes are the tracked funds'. */
   all: boolean
+  /** All-filer counts asked for, but the filer index misses many of the funds we track: tracked counts shown. */
+  incomplete: boolean
+  /** All 13F filers holding it whose latest filing is older than the previous quarter. */
+  older: number
+  /** The tracked funds' figures, kept for the CSV whatever the lens. */
+  t: { holders: number; prev: number; top10: number; over5: number; filed: number }
+  /** The all-filer figures, when loaded. */
+  a: { holders: number; older: number; top10: number; over5: number; filed: number; incomplete: boolean } | null
 }
 type Key = 'ticker' | 'holders' | 'change' | 'added' | 'exited' | 'top10' | 'over5' | 'filed' | 'net' | 'latest'
 
@@ -76,12 +84,26 @@ function rowFor(ticker: string, owned: boolean, stock: Stock | null, season: str
     split,
     latest: ev ? { form: ev.form, date: ev.filing_date, manager: displayName(ev.manager) } : null,
   }
+  const t = { holders: base.holders, prev: base.prev, top10: base.top10, over5: base.over5, filed: base.filed }
+  // Until ingest's holder index covers small and mid caps, it can miss funds we track that do hold
+  // the stock (it was built from each filer's largest positions). Then the tracked counts are shown.
+  // When it misses a quarter or more of them, the row shows the tracked counts; a smaller gap is
+  // added back to the filer count, since those funds are known holders.
+  const missing = all && all.tracked != null ? Math.max(0, h.length - all.tracked) : 0
+  const a = all
+    ? { holders: all.current + missing, older: all.filers - all.current, top10: all.top10 ?? 0, over5: all.over5 ?? 0, filed: all.quarters?.[season] ?? 0, incomplete: all.current < h.length || missing > Math.max(2, h.length * 0.25) }
+    : null
+  const useAll = Boolean(a && !a.incomplete)
   return {
     ticker,
     name: stock?.name ?? '',
     ...base,
-    all: Boolean(all),
-    ...(all ? { holders: all.filers, prev: NaN, top10: all.top10 ?? 0, over5: all.over5 ?? 0, filed: all.quarters?.[season] ?? 0, filedOf: all.filers } : {}),
+    t,
+    a,
+    all: useAll,
+    incomplete: Boolean(a?.incomplete),
+    older: useAll ? a!.older : 0,
+    ...(useAll ? { holders: a!.holders, prev: NaN, top10: a!.top10, over5: a!.over5, filed: a!.filed, filedOf: a!.holders } : {}),
   }
 }
 
@@ -170,9 +192,19 @@ export function Book() {
     )
 
   const csv = () => {
-    const head = ['lens', 'ticker', 'name', 'owned', 'funds_holding', 'funds_last_13f', 'superinvestors', 'new', 'exited', 'in_top10', 'over_5pct', `filed_${season}`, 'funds_total', 'bought', 'sold', 'net_usd', 'latest_form', 'latest_date', 'latest_filer']
+    // Every column names whose figures it holds: all 13F filers or the funds we track closely.
+    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'over_5pct_all', `filed_${season}_all`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'latest_form', 'latest_date', 'latest_filer']
     const q = (v: unknown) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))
-    const body = rows.map((r) => [lens === 'all' ? 'all_13f_filers' : 'funds_tracked_closely', r.ticker, r.name, r.owned ? 'owned' : 'watched', r.holders, Number.isNaN(r.prev) ? '' : r.prev, r.featured, r.added, r.exited, r.top10, r.over5, r.filed, r.filedOf, r.bought, r.sold, Math.round(r.net), r.latest?.form ?? '', r.latest?.date ?? '', r.latest?.manager ?? ''].map(q).join(','))
+    const body = rows.map((r) =>
+      [
+        r.ticker, r.name, r.owned ? 'owned' : 'watched',
+        r.a?.holders ?? '', r.a?.older ?? '', r.a ? (r.a.incomplete ? 'true' : 'false') : '', r.a?.top10 ?? '', r.a?.over5 ?? '', r.a?.filed ?? '',
+        r.t.holders, r.t.prev, r.featured, r.added, r.exited, r.t.top10, r.t.over5, r.t.filed,
+        r.split && !r.split.adjusted ? '' : r.bought, r.split && !r.split.adjusted ? '' : r.sold, r.split && !r.split.adjusted ? '' : Math.round(r.net),
+        r.split ? `${r.split.ratio} ${r.split.adjusted ? 'adjusted' : 'not counted'}` : '',
+        r.latest?.form ?? '', r.latest?.date ?? '', r.latest?.manager ?? '',
+      ].map(q).join(','),
+    )
     const url = URL.createObjectURL(new Blob([[head.join(','), ...body].join('\n')], { type: 'text/csv' }))
     const a = Object.assign(document.createElement('a'), { href: url, download: `copybook-my-book-${new Date().toISOString().slice(0, 10)}.csv` })
     a.click()
@@ -223,7 +255,7 @@ export function Book() {
                 <h2 className="text-[15px] font-semibold">Your names</h2>
                 <p className="text-[13px] text-ink-3">
                   {lens === 'all'
-                    ? 'Funds, top 10, over 5% and filed count every 13F filer’s latest filing. Columns marked * (new, exited, bought, sold, net) cover the funds we track closely until every filer’s prior quarter is on file.'
+                    ? 'Funds, top 10, over 5% and filed count every 13F filer whose latest filing is for this quarter or last; older filings are shown apart. Columns marked * (new, exited, bought, sold, net) cover the funds we track closely until every filer’s prior quarter is on file. Where the all-filer index is incomplete for a name, its row shows the funds we track closely.'
                     : 'Among the funds we track closely, from each one’s latest 13F.'}{' '}
                   Click a column to sort.
                 </p>
@@ -281,6 +313,12 @@ export function Book() {
                               <td className="num whitespace-nowrap px-3 py-2.5 text-right font-medium">
                                 {r.holders.toLocaleString('en-US')}
                                 {r.featured > 0 && <span className="block text-[12px] font-normal text-ink-3">{r.featured} super</span>}
+                                {r.older > 0 && <span className="block text-[12px] font-normal text-ink-3" title={`${r.older.toLocaleString('en-US')} more filers hold it on a 13F older than last quarter`}>+{r.older.toLocaleString('en-US')} older</span>}
+                                {r.incomplete && (
+                                  <span className="ml-auto block max-w-[6.5rem] whitespace-normal text-[11.5px] font-normal leading-tight text-[#8a5a0b]" title="The all-filer index misses some funds that hold this stock, so these are the funds we track closely">
+                                    All-filer count incomplete
+                                  </span>
+                                )}
                               </td>
                               <td className={`num px-3 py-2.5 text-right ${d > 0 ? 'text-up' : d < 0 ? 'text-down' : 'text-ink-3'}`} title={r.all ? 'Needs every filer’s prior quarter' : undefined}>{r.all ? '—' : d > 0 ? `+${d}` : d < 0 ? `−${-d}` : '0'}</td>
                               <td className="num px-3 py-2.5 text-right">{r.added || <span className="text-ink-3">0</span>}</td>
