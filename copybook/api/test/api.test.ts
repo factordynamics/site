@@ -708,6 +708,10 @@ describe('copybook api', () => {
     };
     await env.DB.put('v1:filers', JSON.stringify([{ slug: 'guardcap', cik: '0001732008' }]));
     await hist.put('fb/2026Q2/0001732008.json', JSON.stringify({ columns: ['ticker', 'cusip', 'put_call', 'shares', 'value'], rows: [['BKNG', '09857L108', null, 646216, 121636487]] }));
+    // Other filers' BKNG after its 25-for-1 split (the holder index): ~$162 a share in Q3, ~$178 in Q2.
+    await hist.put('hl/09857L.json', JSON.stringify({ issuer: '09857L', columns: ['cik', 'name', 'period', 'shares', 'prev_shares', 'value', 'prev_value'], rows: [
+      ['1', 'Geode', '2026Q3', 21592756, 21923074, 3498026472, 3902307172], ['2', 'Deutsche Bank', '2026Q3', 11111266, 9488249, 1800025092, 1688908322], ['3', 'Sanders', '2026Q3', 7419768, 7414965, 1202002416, 1319863770],
+    ] }));
     await hist.put('pre/events.json', JSON.stringify({ events: [
       { id: 'f4', slug: 'bill-ackman', manager: 'Bill Ackman', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', accepted: inWeek(2), ticker: 'HHH', value_usd: 5e7 },
       { id: 'brk-siri', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-08', accepted: inWeek(6), ticker: 'SIRI', value_usd: 26894245 },
@@ -946,15 +950,39 @@ describe('copybook api', () => {
     expect(g.exited.map((r) => [r.ticker, !!r.unusual])).toEqual([['SPY', true], ['QQQ', false]]);
     const mail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'michael-burry', slugs: ['michael-burry'], manager: 'Michael Burry', name: 'Scion Asset Management', quarter: '2023Q3', report_date: '2023-09-30', filing_date: '2023-11-14', accession: '0000905148-23-001400', sec_url: 'https://www.sec.gov/x', accepted: '2023-11-14T21:00:00Z', moves: m3, tickers: ['SPY', 'QQQ'] }], [], { investors: ['michael-burry'], stocks: [], owned: [] } as never);
     expect(mail.text).toMatch(/SPY puts -\$886\.6M \([^)]*51\.0% of book\) · Unusual size · check the filing, QQQ puts -\$738\.8M \([^)]*\)(?! ·)/);
-    // GuardCap Q3 2026: BKNG at ~$188 a share last quarter against ~$5,120 now, on a $1.47B book: a unit error, dropped.
+    // GuardCap Q3 2026: BKNG split 25-for-1 in Q2; its Q2 row is right (~$188 a share) and its Q3 row isn't (~$5,120,
+    // when other filers report ~$162). 27x off its own prior quarter is under 100x, so the cross-filer median drops it.
     const gq2 = [pos('BKNG', '09857L108', 646216, 121_636_487), pos('ILMN', '452327109', 740132, 100_000_000), pos('REST', '000000009', 1, 1_250_000_000)];
     const gq3 = [pos('BKNG', '09857L108', 1304, 6_676_571), pos('ILMN', '452327109', 679878, 92_000_000), pos('REST', '000000009', 1, 1_366_000_000)];
-    expect(all(computeMoves(gq3, gq2).moves).map((r) => r.ticker)).toEqual(['ILMN']);
+    const med = new Map([['09857L108', { cur: 162, prev: 178 }]]);
+    expect(all(computeMoves(gq3, gq2, undefined, undefined, med).moves).map((r) => r.ticker)).toEqual(['ILMN']);
+    // Without other filers to compare, 27x is sent, tagged: a real 5x rally or 80% fall must never vanish.
+    expect(all(computeMoves(gq3, gq2).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['BKNG', true], ['ILMN', false]]);
+    // A real 6x rally that other filers agree with: sent, tagged. 100x or more: a unit error, dropped either way.
+    const rq2 = [pos('RALY', '000000005', 1000, 1_000_000), pos('REST', '000000009', 1, 1e9)];
+    const rq3 = [pos('RALY', '000000005', 1500, 9_000_000), pos('REST', '000000009', 1, 1e9)];
+    expect(all(computeMoves(rq3, rq2, undefined, undefined, new Map([['000000005', { cur: 6000, prev: 1000 }]])).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['RALY', true]]);
+    const uq3 = [pos('RALY', '000000005', 10, 9_000_000), pos('REST', '000000009', 1, 1e9)];
+    expect(all(computeMoves(uq3, rq2).moves).map((r) => r.ticker)).toEqual([]);
     // A 10-for-1 split on file is no unit error: the share-count change is kept.
     const sq2 = [pos('SPLT', '000000007', 1000, 50_000_000), pos('REST', '000000009', 1, 1e9)];
     const sq3 = [pos('SPLT', '000000007', 12000, 60_000_000), pos('REST', '000000009', 1, 1e9)];
-    expect(all(computeMoves(sq3, sq2).moves).map((r) => r.ticker)).toEqual([]);
-    expect(all(computeMoves(sq3, sq2, undefined, new Set(['000000007'])).moves).map((r) => r.ticker)).toEqual(['SPLT']);
+    expect(all(computeMoves(sq3, sq2).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['SPLT', true]]); // 10x off: tagged
+    expect(all(computeMoves(sq3, sq2, undefined, new Set(['000000007'])).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['SPLT', false]]);
+  });
+
+  it('Holdterm alerts skip books that fail the data check and the funds Holdterm holds back', async () => {
+    const { bookSuspect } = await import('../src/edgar');
+    const { forHoldterm } = await import('../src/alerts');
+    const pos = (value: number, prn = false) => ({ cusip: 'X', put_call: null, issuer: 'X', shares: 1, value, ...(prn ? { prn } : {}) });
+    // Wilkinson Global: $28.8B in the table against a $1.26B cover page; a book of notes; a clean book.
+    expect(bookSuspect([pos(28.8e9)], 1.26e9)).toBe(true);
+    expect(bookSuspect([pos(1e9)], 1.6e9)).toBe(true); // under cover / 1.5
+    expect(bookSuspect([pos(6e8, true), pos(4e8)], 1e9)).toBe(true);
+    expect(bookSuspect([pos(2e8, true), pos(8e8)], 1.4e9)).toBe(false);
+    const a = (cik: string, extra = {}) => ({ slug: `s${cik}`, slugs: [`s${cik}`], manager: 'M', name: 'M', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-10', accession: `acc-${cik}`, sec_url: `https://www.sec.gov/Archives/edgar/data/${cik}/x/acc-index.html`, moves: null, tickers: [], ...extra });
+    const got = forHoldterm({ investors: ['s1764000', 's1067983', 's555'], stocks: [], owned: [] } as never, [a('1764000'), a('1067983'), a('555', { suspect_book: true })], [], {});
+    expect(got.filings.map((x) => x.slug)).toEqual(['s1067983']);
   });
 
   it('GET /events: every issuer Form 4 since the quarter whose 13Fs are due began, not just the latest 20 (CSGP CEO buy behind 21 grants)', async () => {

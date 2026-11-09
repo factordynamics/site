@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
-import { companyFilings, computeMoves, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { bookSuspect, companyFilings, computeMoves, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, type Env, type Member } from './env';
 import { getFollows, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -18,6 +18,8 @@ export function alertable(f: { form: string; filing_date: string }, now = Date.n
 
 export interface Alert13F {
   slug: string;
+  /** The book fails Holdterm's data check (information table vs cover total, or mostly notes): never in Holdterm alerts. */
+  suspect_book?: boolean;
   /** When it was sent (set in the day's store, for seeding a new feed). */
   sent_at?: string;
   /** Every curated slug this filing reports for (a parent can report for a manager). */
@@ -162,12 +164,20 @@ function stockAlerts(meta: FilerMeta, slug: string): boolean {
  * Holdterm Alerts: 13F filings from followed investors (every featured one when nobody is followed),
  * and 13D, 13G and Form 4 filings by a followed investor or on a followed stock.
  */
+/**
+ * Funds Holdterm holds back until their data is fixed (not on its live roster): Wilkinson Global (its book
+ * merges Fiera's whole 13F), Check Capital (a wrong Q2 amendment), Aequim and Advent (mostly notes), Biglari
+ * Capital (one company is 80% of the book).
+ */
+export const HOLDTERM_HOLDBACK = new Set(['0001764000', '0001032814', '0001728201', '0001097278', '0001334429', '0001334430']);
+
 export function forHoldterm(f: Follows, filings: Alert13F[], events: AlertEvent[], meta: FilerMeta): { filings: Alert13F[]; events: AlertEvent[] } {
   const inv = new Set(f.investors);
   const stocks = new Set(f.stocks);
   const followed = (slug: string) => (inv.size ? inv.has(slug) : !!meta[slug]?.featured);
+  const cikOf = (a: Alert13F) => a.sec_url.match(/\/data\/(\d+)\//)?.[1]?.padStart(10, '0') ?? '';
   return {
-    filings: filings.filter((a) => a.slugs.some(followed)),
+    filings: filings.filter((a) => a.slugs.some(followed) && !a.suspect_book && !HOLDTERM_HOLDBACK.has(cikOf(a))),
     events: events.filter((e) => (!!e.slug && followed(e.slug)) || [e.ticker, ...(e.subject_tickers ?? [])].some((t) => !!t && stocks.has(t))),
   };
 }
@@ -552,6 +562,44 @@ export async function lookupTickers(env: Env, rows: { cusip: string; ticker: str
   }
 }
 
+const prevQuarter = (q: string) => (q.endsWith('Q1') ? `${Number(q.slice(0, 4)) - 1}Q4` : `${q.slice(0, 5)}${Number(q[5]) - 1}`);
+
+/**
+ * Other filers' value per share for each CUSIP, from the holder index (R2 hl/{issuer6}.json, else the public
+ * top 25): the median for `quarter` (rows of that period) and for the quarter before (their prior values),
+ * each from at least 3 filers. Share rows only.
+ */
+export async function perShareMedians(env: Env, cusips: string[], quarter: string): Promise<Map<string, PerShare>> {
+  const out = new Map<string, PerShare>();
+  const prevQ = prevQuarter(quarter);
+  const median = (xs: number[]) => (xs.length >= 3 ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : null);
+  for (const cusip of cusips) {
+    try {
+      const code = cusip.slice(0, 6).toUpperCase();
+      const obj = await env.HIST.get(`hl/${code}.json`);
+      const res = obj ? null : await fetch(`${env.DATA_URL}hl/${code}.json`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d: any = obj ? await new Response(obj.body).json() : res?.ok ? await res.json() : null;
+      if (!d?.columns || !d.rows) continue;
+      const at = (k: string) => (d.columns as string[]).indexOf(k);
+      const [iP, iS, iPs, iV, iPv, iPc] = ['period', 'shares', 'prev_shares', 'value', 'prev_value', 'put_call'].map(at);
+      const cur: number[] = [];
+      const prev: number[] = [];
+      for (const r of d.rows as unknown[][]) {
+        if (iPc >= 0 && r[iPc]) continue;
+        const s = Number(r[iS]), v = Number(r[iV]), ps = Number(r[iPs]), pv = Number(r[iPv]);
+        if (r[iP] === quarter && s > 0 && v > 0) cur.push(v / s);
+        if (r[iP] === prevQ && s > 0 && v > 0) prev.push(v / s);
+        if (r[iP] === quarter && ps > 0 && pv > 0) prev.push(pv / ps);
+      }
+      out.set(cusip, { cur: median(cur), prev: median(prev) });
+    } catch {
+      // No cross-check for this CUSIP: the per-quarter rule still applies.
+    }
+  }
+  return out;
+}
+
 /** Stock splits in the data run's splits.json that took effect in this quarter, by CUSIP and ticker (a share-count change that's no unit error). */
 let SPLITS: { at: number; list: { cusip: string; ticker?: string; to_quarter: string }[] } | null = null;
 export async function splitsFor(env: Env, quarter: string): Promise<Set<string>> {
@@ -732,7 +780,8 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
         for (const s of slugs) {
           const book = isExtra ? await filerShardBook(env, e.cik, prev[s]) : await priorBook(env, s, prev[s]);
           if (!book) continue;
-          const r = computeMoves(f.holdings, book, undefined, await splitsFor(env, quarterOf(f.report_date)));
+          const q = quarterOf(f.report_date);
+          const r = computeMoves(f.holdings, book, undefined, await splitsFor(env, q), await perShareMedians(env, perShareSuspects(f.holdings, book).slice(0, 6), q));
           moves = r.moves;
           // Held positions already carry tickers from last quarter's book; look up only the new ones
           // shown in the email (each lookup scans the securities map, ~0.5 ms of CPU).
@@ -764,6 +813,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
         tickers,
         ...(isExtra ? { extra: true } : {}),
         ...(top ? { top } : {}),
+        ...(f.holdings && bookSuspect(f.holdings, f.cover_total ?? null) ? { suspect_book: true } : {}),
       });
     } catch (err) {
       // One bad filing never blocks the rest: it is retried next minute, the others are recorded.

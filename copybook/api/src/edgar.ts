@@ -65,6 +65,20 @@ export interface Position {
   value: number;
   ticker?: string | null;
   display_name?: string | null;
+  /** Principal amount (notes), not shares. */
+  prn?: boolean;
+}
+
+/**
+ * A book whose numbers can't be trusted, the rule Holdterm's data proxy uses: the information table's total
+ * is more than 1.5x the cover page's tableValueTotal or less than it / 1.5 (Wilkinson Global's merged in
+ * Fiera's whole 13F), or notes (PRN) are over 25% of it.
+ */
+export function bookSuspect(holdings: Position[], coverTotal: number | null): boolean {
+  const total = holdings.reduce((s, h) => s + h.value, 0);
+  if (!total) return false;
+  if (coverTotal && (total > 1.5 * coverTotal || total < coverTotal / 1.5)) return true;
+  return holdings.filter((h) => h.prn).reduce((s, h) => s + h.value, 0) > 0.25 * total;
 }
 
 export interface MoveRow {
@@ -107,7 +121,7 @@ function tag(block: string, name: string): string {
   return (block.match(re)?.[1]?.trim() ?? '').replace(/&(amp|lt|gt|quot|apos);/g, (_, e: string) => ENTITIES[e]);
 }
 
-const FIELD = /<(?:\w+:)?(nameOfIssuer|titleOfClass|cusip|value|sshPrnamt|putCall)>([^<]*)</g;
+const FIELD = /<(?:\w+:)?(nameOfIssuer|titleOfClass|cusip|value|sshPrnamt|sshPrnamtType|putCall)>([^<]*)</g;
 const unescape = (v: string) => v.trim().replace(/&(amp|lt|gt|quot|apos);/g, (_, e: string) => ENTITIES[e]);
 
 /** Info-table rows summed per (CUSIP, put/call), the same key the data run uses. One regex pass. */
@@ -123,6 +137,7 @@ export function parseInfoTable(xml: string): Position[] {
     const p = by.get(k) ?? { cusip, put_call, issuer: unescape(row.nameOfIssuer ?? ''), title: unescape(row.titleOfClass ?? ''), shares: 0, value: 0 };
     p.shares += Number(row.sshPrnamt) || 0;
     p.value += Number(row.value) || 0;
+    if (row.sshPrnamtType?.toUpperCase() === 'PRN') p.prn = true;
     by.set(k, p);
   };
   for (const m of xml.matchAll(FIELD)) {
@@ -140,6 +155,8 @@ export function parseInfoTable(xml: string): Position[] {
 export interface Filing13F {
   report_date: string; // YYYY-MM-DD
   holdings: Position[] | null; // null when the table is too big to parse here
+  /** The cover page's tableValueTotal. */
+  cover_total?: number | null;
 }
 
 /** The period and, for books small enough to parse in the Worker, the holdings of one 13F-HR. */
@@ -150,13 +167,15 @@ export async function fetch13F(cik: string, accession: string): Promise<Filing13
   const items = ((await dir.json()) as { directory?: { item?: { name: string; size: string }[] } }).directory?.item ?? [];
   const primary = await sec(`${base}primary_doc.xml`);
   if (!primary.ok) return null;
-  const period = tag(await primary.text(), 'periodOfReport').match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  const cover = await primary.text();
+  const period = tag(cover, 'periodOfReport').match(/^(\d{2})-(\d{2})-(\d{4})$/);
   if (!period) return null;
   const report_date = `${period[3]}-${period[1]}-${period[2]}`;
+  const cover_total = Number(tag(cover, 'tableValueTotal')) || null;
   const table = items.find((i) => i.name.toLowerCase().endsWith('.xml') && i.name !== 'primary_doc.xml');
-  if (!table || Number(table.size) > MAX_TABLE_BYTES) return { report_date, holdings: null };
+  if (!table || Number(table.size) > MAX_TABLE_BYTES) return { report_date, holdings: null, cover_total };
   const res = await sec(`${base}${table.name}`);
-  return { report_date, holdings: res.ok ? parseInfoTable(await res.text()) : null };
+  return { report_date, holdings: res.ok ? parseInfoTable(await res.text()) : null, cover_total };
 }
 
 /** One 13F-HR or 13F-HR/A a CIK filed. */
@@ -184,30 +203,39 @@ export function quarterOf(reportDate: string): string {
   return `${y}Q${Math.ceil(m / 3)}`;
 }
 
+/** Value per share of the same CUSIP across other filers, by quarter (median of at least 3), this quarter's and the prior one. */
+export type PerShare = { cur?: number | null; prev?: number | null };
+
 /**
  * Whether a 13F move can be shown, for every email, chat post, webhook and the weekly:
- * - `drop`: a unit error, never shown. Ingest flags it `suspect_units`, or the value per share is off by
- *   5x or more against the prior quarter with no split on file (GuardCap's BKNG "trim" of $3.3B: ~$188 a
- *   share in Q2, ~$5,120 in Q3).
- * - `unusual`: sent with an "Unusual size · check the filing" tag. A $ change over half the larger of the
- *   prior and current books (Scion's SPY puts, 51% of a $1.74B book, then their exit from a $99M one), or a
- *   share-count break: over 1.5x the larger of the two positions, which can't be a trade at this quarter's
- *   price, so its size becomes the change in reported value (value - prev_value).
+ * - `drop`: a unit error, never shown. Ingest flags it `suspect_units`; or the value per share moved 100x
+ *   or more against the prior quarter with no split on file (real unit errors are ~1000x); or either
+ *   quarter's value per share is 5x or more off the median of other filers for that CUSIP and quarter
+ *   (GuardCap's Q3 BKNG: ~$5,120 a share when every other filer reports ~$162 after the 25-for-1 split).
+ * - `unusual`: sent with an "Unusual size · check the filing" tag. A value per share 5-100x off the prior
+ *   quarter that other filers don't contradict (a real 5x rally or 80% fall); a $ change over half the
+ *   larger of the prior and current books (Scion's SPY puts); or a share-count break, over 1.5x the larger
+ *   of the two positions, whose size becomes the change in reported value (value - prev_value).
  * - `ok` otherwise. `value_delta` is the size to show.
  */
 export function checkMove(
   r: { value_delta: number; value?: number | null; prev_value?: number | null; shares?: number | null; prev_shares?: number | null; suspect_units?: boolean },
   book: number | null,
   split = false,
+  median: PerShare = {},
 ): { verdict: 'ok' | 'unusual' | 'drop'; value_delta: number } {
   if (r.suspect_units) return { verdict: 'drop', value_delta: r.value_delta };
   const { value, prev_value, shares, prev_shares } = r;
-  if (!split && value && prev_value && shares && prev_shares && value > 0 && prev_value > 0 && shares > 0 && prev_shares > 0) {
-    const ratio = value / shares / (prev_value / prev_shares);
-    if (ratio >= 5 || ratio <= 1 / 5) return { verdict: 'drop', value_delta: r.value_delta };
+  const ps = value && shares && value > 0 && shares > 0 ? value / shares : null;
+  const pps = prev_value && prev_shares && prev_value > 0 && prev_shares > 0 ? prev_value / prev_shares : null;
+  const off = (x: number | null, m: number | null | undefined, k: number) => !!x && !!m && (x / m >= k || m / x >= k);
+  if (off(ps, median.cur, 5) || off(pps, median.prev, 5)) return { verdict: 'drop', value_delta: r.value_delta };
+  let unusual = false;
+  if (!split && ps && pps) {
+    if (off(ps, pps, 100)) return { verdict: 'drop', value_delta: r.value_delta };
+    if (off(ps, pps, 5)) unusual = true;
   }
   let d = r.value_delta;
-  let unusual = false;
   if (prev_value != null && value != null && Math.abs(d) > 1.5 * Math.max(value, prev_value)) {
     d = Math.round(value - prev_value);
     unusual = true;
@@ -216,14 +244,23 @@ export function checkMove(
   return { verdict: unusual ? 'unusual' : 'ok', value_delta: d };
 }
 
+/** CUSIPs held in both books whose value per share moved 5x or more: the rows worth a cross-filer check. */
+export function perShareSuspects(cur: Position[], prev: Position[]): string[] {
+  const before = new Map(prev.filter((p) => !p.put_call && p.shares > 0 && p.value > 0).map((p) => [p.cusip, p.value / p.shares]));
+  return [...new Set(cur.filter((c) => !c.put_call && c.shares > 0 && c.value > 0 && before.has(c.cusip)).filter((c) => {
+    const x = c.value / c.shares / before.get(c.cusip)!;
+    return x >= 5 || x <= 1 / 5;
+  }).map((c) => c.cusip))];
+}
+
 /** The tag a large but real move carries in emails, chat posts and the weekly. */
 export const UNUSUAL = 'Unusual size · check the filing';
 
 /** Applies checkMove to rows: drops unit errors, tags and resizes the rest (`unusual: true`). */
-export function guardRows<T extends MoveRow>(rows: T[], book: number | null, prevValue: (r: T) => number | null | undefined, splits?: Set<string>): T[] {
+export function guardRows<T extends MoveRow>(rows: T[], book: number | null, prevValue: (r: T) => number | null | undefined, splits?: Set<string>, medians?: Map<string, PerShare>): T[] {
   const out: T[] = [];
   for (const r of rows) {
-    const c = checkMove({ ...r, prev_value: prevValue(r) ?? r.prev_value ?? null }, book, !!splits && (splits.has(r.cusip) || (!!r.ticker && splits.has(r.ticker))));
+    const c = checkMove({ ...r, prev_value: prevValue(r) ?? r.prev_value ?? null }, book, !!splits && (splits.has(r.cusip) || (!!r.ticker && splits.has(r.ticker))), r.put_call ? {} : (medians?.get(r.cusip) ?? {}));
     if (c.verdict === 'drop') continue;
     out.push(c.verdict === 'unusual' ? { ...r, value_delta: c.value_delta, ...(c.value_delta !== r.value_delta && book ? { delta_pct_of_book: c.value_delta / book } : {}), unusual: true } : r);
   }
@@ -240,7 +277,7 @@ export function displayCase(name: string): string {
  * New, exited, added and trimmed positions against the prior quarter, sized by the trade at this
  * filing's own value per share (a price move alone is no trade), as the data run computes them.
  */
-export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROWS, splits?: Set<string>): { moves: Moves; changed: MoveRow[] } {
+export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROWS, splits?: Set<string>, medians?: Map<string, PerShare>): { moves: Moves; changed: MoveRow[] } {
   const prevTotal = prev.reduce((s, p) => s + p.value, 0);
   let total = cur.reduce((s, p) => s + p.value, 0);
   // A filer that reports in thousands by mistake: scale to dollars like the data run's unit fix.
@@ -275,7 +312,7 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   for (const p of before.values()) rows.push(row(p, 'exited', 0, p.shares, 0, -p.value));
   // Unit errors are left out; unusually large moves are tagged. The larger book is the yardstick.
   const prior = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p.value]));
-  rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(`${r.cusip}|${r.put_call ?? ''}`), splits));
+  rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(`${r.cusip}|${r.put_call ?? ''}`), splits, medians));
   const top = (c: string) =>
     rows
       .filter((r) => r.change === c)

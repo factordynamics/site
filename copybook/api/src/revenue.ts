@@ -487,7 +487,7 @@ export function pauseReceiptMail(env: Env, m: Member, at: number, resume: string
   return {
     to: m.email,
     subject: `Paused until ${until} · no charges until then`,
-    text: `Your ${p?.name ?? 'Copybook'} plan is paused until ${until}, two weeks before the next 13F deadline (${deadlineLabel(nextDeadline(at * 1000).date)}).\n\n  - No charges until then; billing resumes on ${until}.\n  - ${priceLine(m)}\n  - Real-time alerts are off while you're paused.\n  - Resume anytime, one click, same subscription: ${resume}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    text: `Your ${p?.name ?? 'Copybook'} plan is paused until ${until}, two weeks before the next 13F deadline (${deadlineLabel(nextDeadline(at * 1000).date)}).\n\n  - No charges until then; billing resumes on ${until}.\n  - ${priceLine(m)}\n  - Real-time alerts are off while you're paused. If a fund you follow files its 13F early, we email you once that day so you can resume and see the moves.\n  - Resume anytime, one click, same subscription: ${resume}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
   };
 }
 

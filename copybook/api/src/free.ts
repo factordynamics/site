@@ -216,7 +216,15 @@ export async function weeklyMoves(env: Env, now: number, days = 7): Promise<Week
       let prev_value: number | null = raw.change === 'new' ? 0 : raw.change === 'exited' ? -raw.value_delta : null;
       if (prev_value == null && value != null && (Math.abs(raw.value_delta) > 1.5 * value || (book && Math.abs(raw.value_delta) > 0.5 * total)) && d.prev_quarter)
         prev_value = await priorValue(env, c.slug, d.prev_quarter, raw.cusip, raw.ticker);
-      const chk = checkMove({ ...raw, value, prev_value }, book);
+      // A value per share 5x off last quarter's: checked against other filers of the same CUSIP (GuardCap's Q3 BKNG).
+      const ps = value && raw.shares ? value / raw.shares : null;
+      const pps = prev_value && raw.prev_shares ? prev_value / raw.prev_shares : null;
+      let median = {};
+      if (ps && pps && raw.cusip && (ps / pps >= 5 || pps / ps >= 5)) {
+        const { perShareMedians } = await import('./alerts');
+        median = (await perShareMedians(env, [raw.cusip], c.quarter)).get(raw.cusip) ?? {};
+      }
+      const chk = checkMove({ ...raw, value, prev_value }, book, false, median);
       if (chk.verdict === 'drop') continue;
       const r = { ...raw, value_delta: chk.value_delta, unusual: chk.verdict === 'unusual' };
       const o = byTicker.get(r.ticker!);
