@@ -343,6 +343,8 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
     out.poller = 'backup (cloudflare heartbeat unreadable)';
     return out;
   }
+  // The data run's big files as local copies, every 10 minutes (requests read these, never a slow download).
+  if (new Date(now).getUTCMinutes() % 10 === 2 || !(await env.HIST.get('data/filers.json'))) out.local_data = await (await import('./v1data')).refreshLocalData(env);
   const cfLast = cf.last_run_at ? Date.parse(cf.last_run_at) : 0;
   if (now - cfLast < BACKUP_AFTER_MS) {
     await env.DB.put('host:poller', JSON.stringify(cf));

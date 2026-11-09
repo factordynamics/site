@@ -574,11 +574,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const isFree = m.status === 'free';
     const names = isFree ? (await getFollows(env, m)).owned : [];
     // facts / hook / more: the Friday email's "In your names" block as it stands now.
-    const free = isFree ? { free_names: { names, limit: 5, ...(await (await import('./free')).freeTeaser(env, names, Date.now()).catch(() => ({ facts: [], hook: null, more: 0 }))) } } : {};
+    // The teaser reads EDGAR and the data run's files: at most 1.5 s, else /me answers without it this time.
+    const none = { facts: [], hook: null, more: 0 };
+    const teaser = isFree ? (await import('./free')).freeTeaser(env, names, Date.now()).catch(() => none) : null;
+    const free = isFree ? { free_names: { names, limit: 5, ...(await Promise.race([teaser!, new Promise<typeof none>((r) => setTimeout(() => r(none), 1500))])) } } : {};
     // A Fund seat sees who to ask about billing: the plan owner's email.
     const owner = m.seat_of ? { owner: (await getMember(env, m.seat_of))?.email ?? null } : {};
     const { pauseOffer, DIGEST_LIVE } = await import('./revenue');
-    return json({ ok: true, member: { ...publicView(m), ...owner, pause_offer: pauseOffer(m), digest_live: DIGEST_LIVE, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, { ...h, 'cache-control': 'private, max-age=30', vary: 'Authorization' });
+    return json({ ok: true, member: { ...publicView(m), ...owner, pause_offer: pauseOffer(m), digest_live: DIGEST_LIVE, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, { ...h, 'cache-control': 'no-store' });
   }
 
   // Seasonal pause instead of cancelling: POST /pause {reason?} pauses billing and alerts until 14 days before the

@@ -451,10 +451,9 @@ export async function resolveFollowedFilers(env: Env, slugs: string[]): Promise<
   const known = new Set(Object.values(extra).flatMap((ms) => ms.map((m) => m.slug)));
   const missing = slugs.filter((s) => !curated.has(s) && !known.has(s));
   if (!missing.length) return [];
-  const res = await fetch(`${env.DATA_URL}filers.json`, { cf: { cacheTtl: 3600 } } as RequestInit);
-  if (!res.ok) throw new Error(`filers.json ${res.status}`);
-  // 1.6 MB: find each slug's flat record by string search instead of parsing the whole list.
-  const text = await res.text();
+  // 1.6 MB: find each slug's flat record by string search instead of parsing the whole list. gene's local copy first.
+  const text = await (await import('./v1data')).dataText(env, 'filers.json');
+  if (!text) throw new Error('filers.json not loaded yet');
   const unknown: string[] = [];
   for (const slug of missing) {
     const i = text.search(new RegExp(`"slug":\\s*"${slug}"`));

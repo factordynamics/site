@@ -110,9 +110,56 @@ interface AllFiler {
   type?: string | null;
 }
 
+/** The data run's files a request reads (MBs each): kept in R2 as data/{name} and refreshed by gene's cron. */
+export const LOCAL_DATA = ['filer_types.json', 'filers.json', 'index.json'];
+/** The last copy fetched per file: only a fallback when a fetch is slower than a request can wait. */
+const lastFetched = new Map<string, string>();
+/**
+ * One of the data run's files for a request: R2 data/{name} (gene's cron copy; a local read on gene), else GitHub
+ * Pages. A slow link (gene's) never makes a request wait on a multi-MB download: past 2.5 s the fetch carries on
+ * and this request gets the last copy fetched, or null.
+ */
+export async function dataText(env: Env, name: string): Promise<string | null> {
+  const obj = await env.HIST.get(`data/${name}`);
+  if (obj) return new Response(obj.body).text();
+  const load = fetch(`${env.DATA_URL}${name}`, { cf: { cacheTtl: 900 } } as RequestInit).then(async (r) => {
+    if (!r.ok) return lastFetched.get(name) ?? null;
+    const text = await r.text();
+    lastFetched.set(name, text);
+    return text;
+  });
+  return Promise.race([load.catch(() => lastFetched.get(name) ?? null), new Promise<string | null>((r) => setTimeout(() => r(lastFetched.get(name) ?? null), 2500))]);
+}
+
+/** gene's cron: refreshes the local copies of the data run's files (no request budget; a slow link is fine here). */
+let refreshing = false;
+export async function refreshLocalData(env: Env): Promise<Record<string, string>> {
+  if (refreshing) return { status: 'already running' };
+  refreshing = true;
+  const out: Record<string, string> = {};
+  try {
+    for (const name of LOCAL_DATA) {
+      try {
+        const r = await fetch(`${env.DATA_URL}${name}`, { signal: AbortSignal.timeout(240_000) });
+        if (!r.ok) {
+          out[name] = `http ${r.status}`;
+          continue;
+        }
+        const text = await r.text();
+        await env.HIST.put(`data/${name}`, text, { httpMetadata: { contentType: 'application/json' } });
+        out[name] = `${text.length} bytes`;
+      } catch (e) {
+        out[name] = `error: ${e}`;
+      }
+    }
+  } finally {
+    refreshing = false;
+  }
+  return out;
+}
+
 async function filersJson(env: Env): Promise<string | null> {
-  const res = await fetch(`${env.DATA_URL}filers.json`, { cf: { cacheTtl: 3600 } } as RequestInit);
-  return res.ok ? res.text() : null;
+  return dataText(env, 'filers.json');
 }
 
 /** A filer outside the curated list, by CIK or its all-filer slug, found without parsing all 9,000 rows. */
@@ -487,8 +534,10 @@ let TYPES: { at: number; by: Map<string, string> } | null = null;
 async function filerTypes(env: Env): Promise<Map<string, string>> {
   if (TYPES && Date.now() - TYPES.at < 3600_000) return TYPES.by;
   try {
-    const res = await fetch(`${env.DATA_URL}filer_types.json`, { cf: { cacheTtl: 900 } } as RequestInit);
-    const d = res.ok ? ((await res.json()) as { filers?: Record<string, { type?: string }> }) : null;
+    const text = await dataText(env, 'filer_types.json');
+    // Not loaded yet (a slow link): rows fall back to their own type, and the next request tries again.
+    if (!text) return TYPES?.by ?? new Map();
+    const d = JSON.parse(text) as { filers?: Record<string, { type?: string }> };
     TYPES = { at: Date.now(), by: new Map(Object.entries(d?.filers ?? {}).filter(([, v]) => v?.type).map(([k, v]) => [pad(k), v.type!])) };
   } catch {
     TYPES = { at: Date.now(), by: TYPES?.by ?? new Map() };
