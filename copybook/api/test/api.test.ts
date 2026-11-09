@@ -653,33 +653,63 @@ describe('copybook api', () => {
     expect((await (await call('/me', { token: s.token })).json()).member.free_names).toEqual({ names: ['GOOGL', 'HHH', 'NVDA', 'AAPL'], limit: 5 });
     expect((await call('/follows/stocks/TSLA', { method: 'POST', token: s.token })).status).toBe(402); // only owned names
 
-    // Friday evening ET (03:42 UTC Saturday): the week's biggest buys and sells, 13F rows link the card when there is one.
+    // Friday evening ET (03:42 UTC Saturday): the week's 13F cards, curated filers' Form 4s and 13D/Gs, and company insiders.
     sent = [];
-    const row = (ticker: string, value_delta: number, extra = {}) => ({ ticker, display_name: ticker, issuer: ticker, cusip: 'x', put_call: null, shares: 1, prev_shares: 0, value: Math.abs(value_delta), value_delta, delta_pct_of_book: null, ...extra });
-    const store = JSON.stringify({
-      filings: [{ slug: 'warren-buffett', slugs: ['warren-buffett'], manager: 'Warren Buffett', name: 'Berkshire', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-12', accession: '0000950123-26-011111', sec_url: 'x', tickers: [], moves: { bought_usd: 0, sold_usd: 0, new: [row('DHI', 2e9)], added: [row('GOOGL', 8.8e9), row('PUTX', 9e9, { put_call: 'Put' })], trimmed: [row('BAC', -1.7e9)], exited: [row('STZ', -1e9)] } }],
-      events: [
-        { id: 'f4', slug: 'bill-ackman', manager: 'Bill Ackman', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', url: 'u', issuer: 'X', display_name: 'X', ticker: 'HHH', shares: 1, value_usd: 5e7, avg_price: 1, shares_after: 1, percent_of_class: null },
-        // Counted in the locked line, never shown to a free member: an insider's buy and a fund's 13D on their names.
-        { id: 'ins1', slug: '', manager: 'HUANG JEN HSUN', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', url: 'u', issuer: 'NVIDIA', display_name: 'NVIDIA', ticker: 'NVDA', shares: 1, value_usd: 2e6, avg_price: 1, shares_after: 1, percent_of_class: null, insider: { cik: '1', name: 'HUANG JEN HSUN', roles: ['CEO'], bought_usd: 2e6, accession: 'ins1', accepted: '2026-11-12T20:00:00Z' } },
-        { id: 'd13', slug: 'bill-ackman', manager: 'Bill Ackman', form: 'SCHEDULE 13D/A', kind: '13d', action: 'stake_update', filing_date: '2026-11-12', url: 'u', issuer: 'Alphabet', display_name: 'Alphabet', ticker: 'GOOGL', shares: null, value_usd: null, avg_price: null, shares_after: 1, percent_of_class: 5.1 },
-      ],
-    });
-    await env.DB.put('digest:2026-11-12', store);
     const sat = Date.UTC(2026, 10, 14, 3, 42);
+    const inWeek = (daysAgo: number) => new Date(sat - daysAgo * 86400_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    index = { managers: [{ slug: 'warren-buffett', featured: true }, { slug: 'bill-ackman', featured: true }, { slug: 'carl-icahn', featured: true }, { slug: 'icici', featured: false }, { slug: 'vanguard-group', featured: false }] };
+    const row = (ticker: string, value_delta: number, extra = {}) => ({ ticker, name: ticker, cusip: 'x', put_call: null, shares: 1, prev_shares: 0, value_delta, ...extra });
+    const cardList = [
+      { accession: 'ICI-13F', slug: 'icici', quarter: '2026Q3', filing_date: '2026-11-12' },
+      { accession: 'VGD-13F', slug: 'vanguard-group', quarter: '2026Q3', filing_date: '2026-11-12' },
+      { accession: '0000950123-26-011111', slug: 'warren-buffett', quarter: '2026Q3', filing_date: '2026-11-10' },
+      { accession: 'OLD-13F', slug: 'bill-ackman', quarter: '2026Q2', filing_date: '2026-08-14' }, // before the week
+    ];
+    const cardData: Record<string, unknown> = {
+      // Bigger than Buffett's moves, but a tracked fund ranks after the superinvestors, and 2 rows at most.
+      'ICI-13F': { manager: 'ICICI Prudential', firm: 'ICICI Prudential Asset Management Co Ltd', featured: false, changes: { added: [row('X1', 9e10), row('X2', 8e10), row('X3', 7e10), row('AAPL', 1e7)] } },
+      'VGD-13F': { manager: 'Vanguard Group', firm: 'Vanguard Group Inc', featured: false, changes: { new: [row('VVV', 9e11)] } },
+      '0000950123-26-011111': { manager: 'Warren Buffett', featured: true, changes: { new: [row('DHI', 2e9)], added: [row('GOOGL', 8.8e9), row('PUTX', 9e9, { put_call: 'Put' })], trimmed: [row('BAC', -1.7e9)], exited: [row('STZ', -1e9)] } },
+      'OLD-13F': { manager: 'Bill Ackman', featured: true, changes: { new: [row('OLDX', 5e9)] } },
+    };
+    await hist.put('pre/events.json', JSON.stringify({ events: [
+      { id: 'f4', slug: 'bill-ackman', manager: 'Bill Ackman', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-12', accepted: inWeek(2), ticker: 'HHH', value_usd: 5e7 },
+      { id: 'brk-siri', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-08', accepted: inWeek(6), ticker: 'SIRI', value_usd: 26894245 },
+      { id: 'icahn', slug: 'carl-icahn', manager: 'Carl Icahn', form: 'SCHEDULE 13D/A', kind: '13d', action: 'stake_update', filing_date: '2026-11-12', accepted: inWeek(2), ticker: 'CVI', percent_of_class: 64.1, prev_percent_of_class: 70.8 },
+      { id: 'stale', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-10-01', accepted: inWeek(30), ticker: 'GOOGL', value_usd: 7.7e10 },
+    ] }));
+    // NVIDIA's insiders, as the precompute keeps them: the CEO's sale counts; a gift and a $50K buy never do.
+    const ev = (accession: string, extra: Record<string, unknown>) => ({ ticker: 'NVDA', form: '4', filer_name: 'HUANG JEN HSUN', filer_cik: '1', issuer: 'NVIDIA CORP', role: 'President and CEO, Director', action: 'sell', shares: 1, price: 1, value_usd: 18_600_000, shares_after: 1, prev_shares_after: 2, percent_of_class: null, event_date: '2026-11-11', last_transaction_date: null, ownership: [], codes: ['S'], transactions: [], totals: { sold: { shares: 1, value_usd: 18_600_000 } }, open_market: true, accepted_at: inWeek(3), accession, url: 'u', ...extra });
+    await hist.put('tev/NVDA.json', JSON.stringify({ v: 3, cik: '0001045810', checked_at: sat, tickers: ['NVDA'], seen: {
+      'nv-sale': ev('nv-sale', {}),
+      'nv-gift': ev('nv-gift', { action: 'gift', value_usd: null, codes: ['G'], totals: { gifted: { shares: 1, value_usd: null } }, open_market: false }),
+      'nv-small': ev('nv-small', { action: 'buy', value_usd: 50_000, totals: { bought: { shares: 1, value_usd: 50_000 } } }),
+    } }));
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u) === `${SITE}d/f/index.json`) return Response.json({ cards: cardList });
+      const card = String(u).match(/\/d\/f\/([\w-]+)\.json$/)?.[1];
+      if (card) return cardData[card] ? Response.json(cardData[card]) : new Response('no', { status: 404 });
+      return realFetch(u, init);
+    });
+    await call('/follows/owned/SIRI', { method: 'POST', token: s.token }); // 5th name
     await cron(42, sat);
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
     const w = sent[0];
     expect(w.subject).toBe('In your names: Warren Buffett added $8.8B of GOOGL');
-    // "In your names" first: one public fact per saved name that moved, then the locked count and the trial.
-    expect(w.text).toContain(`In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  +1 insider trade and 1 fund move in your names, with Copy: ${SITE}pricing/?utm_source=weekly&utm_medium=email`);
+    // "In your names" first: one public fact per saved name (superinvestors only), then the biggest locked item, named.
+    expect(w.text).toContain(
+      `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/\n  Nvidia's CEO sold $18.6M of NVDA, with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
+    );
     expect(w.text.indexOf('In your names')).toBeLessThan(w.text.indexOf('Biggest buys'));
-    expect(w.text).not.toContain('HUANG');
     expect(w.html).toContain('Try Copy free for 14 days');
-    expect(w.text).toContain(`Warren Buffett: added GOOGL, +$8.8B (13F Q3 2026)\n    ${SITE}f/0000950123-26-011111/`);
-    expect(w.text).toContain(`Bill Ackman: bought HHH, +$50.0M (Form 4)\n    ${SITE}investors/bill-ackman/`);
+    // Superinvestors first, 2 rows per fund at most; no ETFs or index flow; nothing older than the week; no options.
+    const buys = w.text.slice(w.text.indexOf('Biggest buys'), w.text.indexOf('Biggest sells'));
+    expect([...buys.matchAll(/^ {2}(\S[^:]*):/gm)].map((m) => m[1])).toEqual(['Warren Buffett', 'Warren Buffett', 'Bill Ackman', 'ICICI Prudential', 'ICICI Prudential']);
+    expect(buys).toContain(`Warren Buffett: added GOOGL, +$8.8B (13F Q3 2026)\n    ${SITE}f/0000950123-26-011111/`);
+    for (const no of ['X3', 'VVV', 'Vanguard', 'OLDX', 'PUTX', '$77.0B', 'gift', '$50.0K']) expect(w.text).not.toContain(no);
     expect(w.text.indexOf('BAC')).toBeLessThan(w.text.indexOf('STZ'));
-    expect(w.text).not.toContain('PUTX');
+    vi.stubGlobal('fetch', realFetch);
     const unsub = w.text.match(/Unsubscribe: (\S+)/)![1];
     expect((w as unknown as { headers: Record<string, string> }).headers['List-Unsubscribe']).toBe(`<${unsub}>`);
     sent = [];
@@ -688,7 +718,6 @@ describe('copybook api', () => {
     const u = unsub.replace('https://copybook-api.factordynamics.workers.dev/', 'https://api.test/');
     expect(await (await handleRequest(new Request(u), env)).text()).toContain('Unsubscribe reader@reader.test from the Copybook weekly?');
     await handleRequest(new Request(u, { method: 'POST' }), env);
-    await env.DB.put('digest:2026-11-19', store);
     await cron(42, sat + 7 * 86400_000);
     expect(sent).toHaveLength(0);
 

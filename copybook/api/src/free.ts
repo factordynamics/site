@@ -4,7 +4,6 @@
  * never a real-time alert. Every paid route treats them as inactive. Plus the one unsubscribe link
  * that every marketing and lifecycle email carries.
  */
-import type { Alert13F, AlertEvent } from './alerts';
 import { FOOTER, sendMail, type Mail } from './email';
 import type { Env, Member } from './env';
 import { changeFollows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
@@ -104,6 +103,22 @@ export interface WeeklyMove {
   usd: number;
   form: string;
   url: string;
+  /** One of the curated superinvestors (index.json `featured`): ranked ahead of every other fund. */
+  featured: boolean;
+  accession: string;
+}
+
+/** A curated filer's Schedule 13D/G on a ticker, for "In your names". */
+export interface WeeklyStake {
+  manager: string;
+  slug: string;
+  ticker: string;
+  form: string;
+  pct: number | null;
+  prev: number | null;
+  url: string;
+  featured: boolean;
+  accession: string;
 }
 
 const money = (v: number) => {
@@ -111,72 +126,95 @@ const money = (v: number) => {
   return a >= 1e9 ? `$${(a / 1e9).toFixed(1)}B` : a >= 1e6 ? `$${(a / 1e6).toFixed(1)}M` : `$${Math.round(a / 1e3)}K`;
 };
 
-/** The week's biggest buys and sells, five each, from the alert stores of the last 7 ET days. */
 export interface Week {
   buys: WeeklyMove[];
   sells: WeeklyMove[];
   /** Every fund move of the week (13F rows and curated filers' Form 4 trades), for the per-member block. */
   all: WeeklyMove[];
-  /** Curated filers' 13D/G on a ticker: fund moves too, not shown as facts. */
-  stakes: { ticker: string; accession: string }[];
-  /** Company insiders' trades the minute poll saw (buys and clusters on watched names). */
-  insiders: { ticker: string; accession: string }[];
+  stakes: WeeklyStake[];
 }
 
+/** Index funds, ETF sponsors and broker-dealer flow: not what a superinvestor email is about. */
+const PASSIVE = /\b(vanguard|blackrock|ishares|state street|spdr|geode|dimensional|invesco|schwab|northern trust|index|etf|securities co|morgan stanley|barclays|deutsche bank|ubs|jpmorgan|goldman sachs|citigroup|bank of america|mitsubishi|mizuho|amundi|nomura|wells fargo|royal bank)\b/i;
+/** Filing cards read per weekly run (each is a subrequest): the superinvestors' first, then other funds, newest first. */
+const MAX_CARDS = 30;
+
+/**
+ * The 7 days before `now`: every 13F with a public filing card (its full new, added, trimmed and exited
+ * lists) and every Form 4 and 13D/G by a curated filer (pre/events.json, the hourly events build).
+ * Superinvestors rank first, each fund at most 2 rows, index and broker flow left out.
+ */
 export async function weeklyMoves(env: Env, now: number): Promise<Week> {
-  const filings: Alert13F[] = [];
-  const events: AlertEvent[] = [];
-  const stakes: Week['stakes'] = [];
-  const insiders: Week['insiders'] = [];
-  for (let d = 0; d < 7; d++) {
-    const day = await env.DB.get(`digest:${etDay(now - d * 86400_000)}`);
-    if (!day) continue;
-    const s = JSON.parse(day) as { filings: Alert13F[]; events: AlertEvent[] };
-    filings.push(...s.filings.filter((a) => a.moves && !a.extra));
-    events.push(...s.events.filter((e) => e.kind === 'form4' && !e.extra && !e.insider && !e.cluster && e.slug));
-    for (const e of s.events) {
-      const ts = [...new Set([e.ticker, ...(e.subject_tickers ?? [])].filter((t): t is string => !!t))];
-      if (e.insider || e.cluster) insiders.push(...ts.map((ticker) => ({ ticker, accession: e.id.replace(/^cluster:\d+:/, '') })));
-      else if (e.kind !== 'form4' && e.slug && !e.extra) stakes.push(...ts.map((ticker) => ({ ticker, accession: e.id })));
+  const since = now - 7 * 86400_000;
+  const sinceDay = etDay(since);
+  const get = async (url: string) => {
+    try {
+      const r = await fetch(url);
+      return r.ok ? ((await r.json()) as Record<string, unknown>) : null;
+    } catch {
+      return null;
     }
-  }
-  let cards = new Set<string>();
-  try {
-    const res = await fetch(`${env.SITE_URL}d/f/index.json`);
-    if (res.ok) cards = new Set(((await res.json()) as { cards: { accession: string }[] }).cards.map((c) => c.accession));
-  } catch {
-    /* investor pages instead */
-  }
+  };
+  const index = (await get(`${env.DATA_URL}index.json`)) as { managers?: { slug: string; featured?: boolean }[] } | null;
+  const featured = new Set((index?.managers ?? []).filter((m) => m.featured).map((m) => m.slug));
   const investor = (slug: string) => `${env.SITE_URL}investors/${slug}/`;
   const all: WeeklyMove[] = [];
-  const seen = new Set<string>();
-  for (const a of filings) {
-    // A follow-up repeats its filing with moves: count each filing once.
-    if (seen.has(a.accession)) continue;
-    seen.add(a.accession);
-    const url = cards.has(a.accession) ? `${env.SITE_URL}f/${a.accession}/` : investor(a.slug);
+  const stakes: WeeklyStake[] = [];
+
+  type Card = { accession: string; slug: string; quarter: string; filing_date: string };
+  const cards = (((await get(`${env.SITE_URL}d/f/index.json`)) as { cards?: Card[] } | null)?.cards ?? [])
+    .filter((c) => c.filing_date >= sinceDay)
+    .sort((a, b) => Number(featured.has(b.slug)) - Number(featured.has(a.slug)) || b.filing_date.localeCompare(a.filing_date))
+    .slice(0, MAX_CARDS);
+  type Row = { ticker: string | null; value_delta: number; put_call?: string | null };
+  const read = await Promise.all(cards.map((c) => get(`${env.SITE_URL}d/f/${c.accession}.json`)));
+  cards.forEach((c, i) => {
+    const d = read[i] as { manager?: string; firm?: string; featured?: boolean; changes?: Record<string, Row[]> } | null;
+    if (!d) return;
+    const manager = d.manager ?? d.firm ?? c.slug;
+    if (!d.featured && !featured.has(c.slug) && PASSIVE.test(`${manager} ${d.firm ?? ''}`)) return;
     for (const what of ['new', 'added', 'trimmed', 'exited'] as const) {
-      for (const r of a.moves![what] ?? []) {
-        if (!r.ticker || r.put_call) continue;
-        all.push({ manager: a.manager, slug: a.slug, ticker: r.ticker, what, usd: r.value_delta, form: `13F ${a.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')}`, url });
+      for (const r of d.changes?.[what] ?? []) {
+        if (!r.ticker || r.put_call || !r.value_delta) continue;
+        all.push({ manager, slug: c.slug, ticker: r.ticker, what, usd: r.value_delta, form: `13F ${c.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')}`, url: `${env.SITE_URL}f/${c.accession}/`, featured: !!d.featured || featured.has(c.slug), accession: c.accession });
       }
     }
-  }
+  });
+
+  const pre = await env.HIST.get('pre/events.json');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const events: any[] = pre ? (((await new Response(pre.body).json()) as { events?: unknown[] }).events ?? []) : [];
   for (const e of events) {
-    if (!e.ticker || !e.value_usd || (e.action !== 'buy' && e.action !== 'sell')) continue;
-    all.push({ manager: e.manager, slug: e.slug, ticker: e.ticker, what: e.action === 'buy' ? 'bought' : 'sold', usd: e.action === 'buy' ? e.value_usd : -e.value_usd, form: 'Form 4', url: investor(e.slug) });
+    const at = Date.parse(e.accepted ?? e.accepted_at ?? `${e.filing_date}T21:00:00Z`);
+    if (!(at >= since && at <= now) || !e.slug || !e.ticker) continue;
+    const isFeatured = featured.has(e.slug);
+    if (!isFeatured && PASSIVE.test(e.manager ?? '')) continue;
+    if (e.kind === 'form4' && e.value_usd && (e.action === 'buy' || e.action === 'sell')) {
+      all.push({ manager: e.manager, slug: e.slug, ticker: e.ticker, what: e.action === 'buy' ? 'bought' : 'sold', usd: e.action === 'buy' ? e.value_usd : -e.value_usd, form: 'Form 4', url: investor(e.slug), featured: isFeatured, accession: e.id });
+    } else if (e.kind === '13d' || e.kind === '13g') {
+      stakes.push({ manager: e.manager, slug: e.slug, ticker: e.ticker, form: e.form, pct: e.percent_of_class ?? null, prev: e.prev_percent_of_class ?? null, url: investor(e.slug), featured: isFeatured, accession: e.id });
+    }
   }
-  return {
-    buys: all.filter((x) => x.usd > 0).sort((a, b) => b.usd - a.usd).slice(0, 5),
-    sells: all.filter((x) => x.usd < 0).sort((a, b) => a.usd - b.usd).slice(0, 5),
-    all,
-    stakes,
-    insiders,
+  // Superinvestors first, then size; at most 2 rows per fund in each list.
+  const rank = (xs: WeeklyMove[], sign: 1 | -1) => {
+    const per = new Map<string, number>();
+    return xs
+      .filter((x) => Math.sign(x.usd) === sign)
+      .sort((a, b) => Number(b.featured) - Number(a.featured) || Math.abs(b.usd) - Math.abs(a.usd))
+      .filter((x) => {
+        const n = per.get(x.slug) ?? 0;
+        per.set(x.slug, n + 1);
+        return n < 2;
+      })
+      .slice(0, 5);
   };
+  return { buys: rank(all, 1), sells: rank(all, -1), all, stakes };
 }
 
 /** Free accounts may save this many owned names; the Friday email leads with them. */
 export const FREE_NAMES = 5;
+/** Insider trades count toward the locked line from the alerts' default threshold up. */
+const INSIDER_MIN_USD = 100_000;
 
 const FACT: Record<WeeklyMove['what'], (x: WeeklyMove) => string> = {
   new: (x) => `opened a ${money(x.usd)} position in ${x.ticker}`,
@@ -186,51 +224,87 @@ const FACT: Record<WeeklyMove['what'], (x: WeeklyMove) => string> = {
   bought: (x) => `bought ${money(x.usd)} of ${x.ticker}`,
   sold: (x) => `sold ${money(x.usd)} of ${x.ticker}`,
 };
+const stakeFact = (x: WeeklyStake) =>
+  x.prev != null && x.pct != null ? `${x.manager}'s stake in ${x.ticker} went ${x.prev}% → ${x.pct}%` : `${x.manager} reported ${x.pct != null ? `a ${x.pct}%` : 'a'} stake in ${x.ticker} (${x.form.replace(/^SCHEDULE /, '')})`;
 
 export interface InYourNames {
   names: number;
-  /** One public fact per saved name that moved: its largest fund move this week. */
+  /** One public fact per saved name: its biggest superinvestor move this week (a 13F row, Form 4 or 13D/G). */
   facts: { text: string; url: string }[];
-  /** What Copy would show on top: the other fund moves and the insider trades in these names. */
-  more_fund: number;
-  insiders: number;
+  /** The biggest item Copy would add, named, e.g. "Capital One Financial's CEO sold $18.6M of COF". */
+  hook: string | null;
+  /** Everything else Copy adds in these names: open-market insider trades from $100K, other fund moves, 13D/Gs. */
+  more: number;
 }
 
+const short = (issuer: string) =>
+  issuer
+    .replace(/[,.]?\s+(inc|corp|corporation|co|company|ltd|plc|l\.?p\.?|llc|holdings?|group)\.?$/i, '')
+    .replace(/[,.]?\s+(inc|corp|corporation|co|company|ltd|plc)\.?$/i, '')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+const roleOf = (role: string | null) => {
+  const r = role ?? '';
+  if (/chief executive|\bceo\b/i.test(r)) return 'CEO';
+  if (/chief financial|\bcfo\b/i.test(r)) return 'CFO';
+  if (/president/i.test(r)) return 'president';
+  if (/chair/i.test(r)) return 'chair';
+  if (/10% owner/i.test(r)) return 'a 10% owner';
+  if (/director/i.test(r)) return 'a director';
+  return 'an officer';
+};
+
 /**
- * A free member's block. Facts use only what free pages show (fund 13F moves and curated filers'
- * Form 4s, each linked to its card or investor page); insider trades are counted, never shown.
- * Insider Form 4s also come from the per-stock cache (tev/, filled by My book's /events), read only.
+ * A free member's block. Facts are public (what the investor pages and filing cards show); the hook names
+ * the biggest of what Copy adds: a company insider's open-market trade from $100K (never gifts, grants,
+ * withholding or exercises), or another fund's move or 13D/G in their names.
  */
 export async function inYourNames(env: Env, names: string[], week: Week, now: number): Promise<InYourNames> {
-  const mine = new Set(names);
   const facts: InYourNames['facts'] = [];
-  let fund = 0;
+  const shown = new Set<string>();
+  type Item = { text: string; size: number };
+  const locked: Item[] = [];
   for (const t of names) {
-    const rows = week.all.filter((x) => x.ticker === t).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd));
-    fund += rows.length + new Set(week.stakes.filter((x) => x.ticker === t).map((x) => x.accession)).size;
-    if (rows[0]) facts.push({ text: `${rows[0].manager} ${FACT[rows[0].what](rows[0])}, which you own`, url: rows[0].url });
+    const cands = [
+      ...week.all.filter((x) => x.ticker === t).map((x) => ({ key: `${x.accession}|${x.ticker}|${x.what}`, featured: x.featured, size: Math.abs(x.usd), text: `${x.manager} ${FACT[x.what](x)}`, url: x.url })),
+      ...week.stakes.filter((x) => x.ticker === t).map((x) => ({ key: x.accession, featured: x.featured, size: 0, text: stakeFact(x), url: x.url })),
+    ].sort((a, b) => Number(b.featured) - Number(a.featured) || b.size - a.size);
+    const top = cands.find((c) => c.featured);
+    if (top) {
+      facts.push({ text: `${top.text}, which you own`, url: top.url });
+      shown.add(top.key);
+    }
+    for (const c of cands) if (!shown.has(c.key)) locked.push({ text: c.text, size: c.size });
   }
-  const ins = new Set(week.insiders.filter((x) => mine.has(x.ticker)).map((x) => x.accession));
+  // Company insiders and anyone's 13D/G, from the per-stock events the precompute keeps current.
+  const { stockEvents } = await import('./stockevents');
+  const r = names.length ? await stockEvents(env, names, 50, { budget: 8, freshMs: 6 * 3600_000 }) : { tickers: {} as Record<string, { events: import('./stockevents').StockEvent[] }> };
   const since = new Date(now - 7 * 86400_000).toISOString();
-  for (const t of names) {
-    const o = await env.HIST.get(`tev/${t}.json`);
-    if (!o) continue;
-    const c = JSON.parse(await new Response(o.body).text()) as { seen?: Record<string, { form: string; accepted_at: string } | 0> };
-    for (const [acc, e] of Object.entries(c.seen ?? {})) if (e && e.form.startsWith('4') && e.accepted_at >= since) ins.add(acc);
+  const fundAcc = new Set([...week.all.map((x) => x.accession), ...week.stakes.map((x) => x.accession)]);
+  for (const [t, x] of Object.entries(r.tickers)) {
+    for (const e of x.events) {
+      if (e.accepted_at < since || fundAcc.has(e.accession)) continue;
+      if (e.form.startsWith('4')) {
+        if (!e.open_market || !e.value_usd || e.value_usd < INSIDER_MIN_USD) continue;
+        const sold = (e.totals?.sold?.shares ?? 0) > (e.totals?.bought?.shares ?? 0);
+        locked.push({ text: `${short(e.issuer)}'s ${roleOf(e.role)} ${sold ? 'sold' : 'bought'} ${money(e.value_usd)} of ${t}`, size: e.value_usd });
+      } else locked.push({ text: `${e.filer_name} filed a ${e.form.replace(/^SCHEDULE /, '')} on ${t}`, size: 0 });
+    }
   }
-  return { names: names.length, facts, more_fund: fund - facts.length, insiders: ins.size };
+  locked.sort((a, b) => b.size - a.size);
+  return { names: names.length, facts, hook: locked[0]?.text ?? null, more: Math.max(0, locked.length - 1) };
 }
 
 const LABEL: Record<WeeklyMove['what'], string> = { new: 'new position', added: 'added', trimmed: 'trimmed', exited: 'sold out', bought: 'bought', sold: 'sold' };
 
 export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; sells: WeeklyMove[] }, weekOf: string, unsub: string, yours?: InYourNames): Mail {
   const line = (x: WeeklyMove) => `${x.manager}: ${LABEL[x.what]} ${x.ticker}, ${x.usd > 0 ? '+' : '−'}${money(x.usd)} (${x.form})`;
-  const top = moves.buys[0] ?? moves.sells[0];
+  // The subject's fallback: the week's biggest superinvestor move, buy or sell.
+  const top = [moves.buys[0], moves.sells[0]].filter((x): x is WeeklyMove => !!x).sort((a, b) => Number(b.featured) - Number(a.featured) || Math.abs(b.usd) - Math.abs(a.usd))[0];
   const pricing = `${env.SITE_URL}pricing/?utm_source=weekly&utm_medium=email`;
   const book = `${env.SITE_URL}my-book/`;
   const n = (k: number, w: string) => `${k} ${w}${k === 1 ? '' : 's'}`;
-  const lockedParts = yours ? [yours.insiders && `${n(yours.insiders, 'insider trade')}`, yours.more_fund && `${n(yours.more_fund, 'fund move')}`].filter(Boolean) : [];
-  const locked = lockedParts.length ? `+${lockedParts.join(' and ')} in your names, with Copy` : null;
+  const locked = yours?.hook ? `${yours.hook}, with Copy${yours.more ? ` (+${yours.more} more in your names)` : ''}` : null;
   const trial = 'Try Copy free for 14 days';
   // Leads the email: what moved in the names they saved, then what Copy adds. No names yet: how to add them.
   const yoursText = !yours
