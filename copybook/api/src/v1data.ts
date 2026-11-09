@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { lookupTickers } from './alerts';
 import { cleanItem4, fetch13F, fetchFilingMeta, filings13F, type Filed13F, type FilingMeta } from './edgar';
-import { ROUTES, v1error, v1json, v1prefix, noMs } from './v1';
+import { ROUTES, v1error, v1json, v1prefix, noMs, stampOf, type Stamp } from './v1';
 
 /** Smallest bulk file served: a real quarter is tens of MB gzipped (2026Q2: 69 MB); smaller ones are stubs from a failed run. */
 const MIN_BULK_BYTES = 1_000_000;
@@ -148,7 +148,7 @@ export const rowsOf = (d: { columns: string[]; rows: unknown[][] }): any[] => d.
 export async function filerBook(env: Env, cik: string, quarter: string): Promise<any | null> {
   const full = await env.HIST.get(`fb/${quarter}/${cik}.json`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (full) return { ...((await new Response(full.body).json()) as any), truncated: false };
+  if (full) return { ...((await new Response(full.body).json()) as any), truncated: false, __stamp: stampOf(full) };
   const res = await fetch(`${env.DATA_URL}f/${cik}.json`, { cf: { cacheTtl: 900 } } as RequestInit);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const shard = res.ok ? ((await res.json()) as any) : null;
@@ -228,19 +228,27 @@ async function versionsFor(env: Env, cik: string, reportDate: string, served: st
 }
 
 /** One filer's book for one quarter, in the /v1 holdings shape; null when there is none. */
+/** The build each served book was read from (see stampOf), kept beside the book rather than in it. */
+const STAMP = new WeakMap<object, Stamp>();
+
 async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<string, unknown> | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q: any;
-  if (f.curated) {
-    const obj = await env.HIST.get(`h/${f.row.slug}/${quarter}.json`);
-    if (!obj) return null;
+  let stamp: Stamp | undefined;
+  const obj = f.curated ? await env.HIST.get(`h/${f.row.slug}/${quarter}.json`) : null;
+  if (obj) {
     q = await new Response(obj.body).json();
+    stamp = stampOf(obj);
   } else {
+    // A newly curated fund whose history isn't in R2 yet is served like any filer (full book, else the public shard).
     q = await filerBook(env, f.row.cik, quarter);
     if (!q) return null;
+    stamp = q.__stamp;
   }
   const holdings = q.holdings ?? (q.columns ? rowsOf(q) : []);
   const cik = cikOf(q.sec_url, f.row.cik);
+  const out: Record<string, unknown> = {};
+  if (stamp) STAMP.set(out, stamp);
   const equityTotal = holdings.filter(isEquity).reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
   const main = q.accession ? await filingMeta(env, cik, q.accession) : null;
   const merged = ((q.amendments ?? []) as unknown[]).map((a) => (typeof a === 'string' ? a : (a as { accession?: string })?.accession)).filter(Boolean) as string[];
@@ -248,7 +256,7 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
   // Amendments: every 13F-HR/A EDGAR has for the period, whatever its type and including a served
   // restatement (not only those the data run merged); versions[] adds the original.
   const amendments = versions ? versions.filter((v) => v.form.endsWith('/A')).map((v) => v.accession) : (q.amendments ?? []);
-  return {
+  return Object.assign(out, {
     filer: f.curated ? { slug: f.row.slug, cik: f.row.cik, name: f.row.name, manager: f.row.manager, curated: true } : { slug: f.row.slug, cik: f.row.cik, name: f.row.name, manager: null, curated: false },
     quarter: q.quarter ?? quarter,
     report_date: q.report_date ?? quarterEnd(quarter),
@@ -270,7 +278,7 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
     truncated: Boolean(q.truncated ?? (q.position_count != null && q.position_count > holdings.length)),
     holdings: holdings.map((h: unknown) => position(h, equityTotal)),
     exited: (q.exited ?? []).map((h: unknown) => position(h, equityTotal)),
-  };
+  });
 }
 
 /** Superseded and original books: the data run's copy in R2 (v/{cik}/{accession}.json), else EDGAR when the table is small. */
@@ -299,7 +307,7 @@ async function versionBook(env: Env, book: Record<string, unknown>, version: str
   if (!versions) return v1error('server_error', 503, 'EDGAR filing list unavailable; retry shortly.');
   const v = version === 'original' ? versions.find((x) => x.form === '13F-HR') : versions.find((x) => x.accession === version);
   if (!v) return v1error('not_found', 404, `No such filing for this period; see filing.versions (${versions.map((x) => x.accession).join(', ')}).`);
-  if (v.status === 'current' && !versions.some((x) => x.status === 'merged')) return v1json({ data: { ...book, version: v.accession } });
+  if (v.status === 'current' && !versions.some((x) => x.status === 'merged')) return v1json({ ...(STAMP.get(book) ?? {}), data: { ...book, version: v.accession } });
   const rows = await versionHoldings(env, filing.filer_cik, v);
   if (!rows) return v1error('not_yet_available', 501, `The book as filed in ${v.accession} is too large to read live; it is served once the data run publishes superseded books.`);
   const equityTotal = rows.filter(isEquity).reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
@@ -323,7 +331,7 @@ const latestOf = (f: Filer) => (f.curated ? f.row.latest_quarter : f.row.quarter
 const MAX_RANGE = 8;
 
 /** The 6-character issuer code for a ticker or CUSIP, from the public stock list (string search, no full parse). */
-async function issuerCode(env: Env, id: string): Promise<{ code: string; ticker: string | null } | null> {
+export async function issuerCode(env: Env, id: string): Promise<{ code: string; ticker: string | null } | null> {
   const up = id.toUpperCase();
   if (/^[0-9A-Z]{8}[0-9]$/.test(up) || /^[0-9A-Z]{6}$/.test(up)) {
     if (/^[A-Z]{1,6}$/.test(up)) {
@@ -352,8 +360,8 @@ function streamFilers(body: ReadableStream<Uint8Array>, curated: unknown[]): Res
   const enc = new TextEncoder();
   const Identity = (globalThis as { IdentityTransformStream?: typeof TransformStream }).IdentityTransformStream ?? TransformStream;
   const { readable, writable } = new Identity<Uint8Array, Uint8Array>();
+  let w = writable.getWriter();
   (async () => {
-    let w = writable.getWriter();
     const reader = body.getReader();
     // The count line, then the opening bracket of the rows.
     let head = '';
@@ -373,22 +381,121 @@ function streamFilers(body: ReadableStream<Uint8Array>, curated: unknown[]): Res
       if (r.done) throw new Error('pre/v1-filers-rest.txt: no rows');
       rest = r.value;
     }
-    const n = Number(head.trim());
+    const [count, excluded] = head.trim().split(' ');
+    let n = Number(count);
+    // Filers curated since the precompute ran are still in its rows: drop them (rare; string search, no parse).
+    const left = excluded === undefined ? [] : (curated as { cik: string }[]).map((f) => f.cik).filter((c) => !excluded.split(',').includes(c));
+    let tail: string | null = null;
+    if (left.length) {
+      const dec = new TextDecoder();
+      let text = dec.decode(rest, { stream: true });
+      for (let r = await reader.read(); !r.done; r = await reader.read()) text += dec.decode(r.value, { stream: true });
+      text += dec.decode();
+      for (const cik of left) {
+        const at = text.indexOf(`"cik":"${cik}"`);
+        if (at < 0) continue;
+        const from = text.lastIndexOf('{"slug":', at);
+        const next = text.indexOf(',{"slug":', at);
+        text = next >= 0 ? text.slice(0, from) + text.slice(next + 1) : text.slice(0, from > 1 ? from - 1 : from) + ']';
+        n--;
+      }
+      tail = text;
+    }
     const cur = JSON.stringify(curated).slice(1, -1);
     await w.write(enc.encode(`${v1prefix()}"data":[${cur}${cur && n ? ',' : ''}`));
-    // Drop the file's own "[": its closing "]" closes data.
-    if (rest.length > 1) await w.write(rest.subarray(1));
-    reader.releaseLock();
-    w.releaseLock();
-    await body.pipeTo(writable, { preventClose: true });
-    w = writable.getWriter();
+    if (tail !== null) {
+      // Drop the rows' own "[": their closing "]" closes data.
+      await w.write(enc.encode(tail.slice(1)));
+    } else {
+      // Drop the file's own "[": its closing "]" closes data.
+      if (rest.length > 1) await w.write(rest.subarray(1));
+      reader.releaseLock();
+      w.releaseLock();
+      await body.pipeTo(writable, { preventClose: true });
+      w = writable.getWriter();
+    }
     await w.write(enc.encode(`,"count":${curated.length + n}}`));
     await w.close();
   })().catch((err) => {
     console.log(`v1 filers stream: ${err}`);
-    writable.abort(err).catch(() => {});
+    w.abort(err).catch(() => {});
   });
   return new Response(readable, { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'private, no-store' } });
+}
+
+/** Filer types in the holder index (and changes/{q}.json): ingest's filer_types.json. */
+export const FILER_TYPES = ['hedge_fund', 'active', 'index', 'bank', 'wealth', 'pension', 'other'];
+
+export interface HolderRow {
+  filer: { cik: string; name: string; slug: string | null; type: string | null; curated: boolean | null };
+  period: string | null;
+  kind: string;
+  shares: number;
+  prev_shares: number | null;
+  share_change: number | null;
+  value_usd: number;
+  prev_value_usd: number | null;
+  change: string | null;
+  /** The position's share of the filer's whole 13F book that period; null when that total isn't known. */
+  weight: number | null;
+  accession: string | null;
+  accepted_at: string | null;
+}
+
+/**
+ * Every 13F filer holding one issuer in its latest full book: R2 hl/{issuer6}.json (all rows, uploaded by
+ * the data run), else the older single-period s/{issuer6}.json. Largest first. Curated funds' rows carry
+ * their 13F's accession and EDGAR acceptance when cached; weight comes from the row, else a curated fund's total.
+ */
+export async function holdersOf(env: Env, code: string): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; rows: HolderRow[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
+  const hl = await env.HIST.get(`hl/${code}.json`);
+  const obj = hl ?? (await env.HIST.get(`s/${code}.json`));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let d: any;
+  if (obj) d = await new Response(obj.body).json();
+  else {
+    // Until the full list is in R2: the public file's top 25 holders, marked truncated.
+    const res = await fetch(`${env.DATA_URL}hl/${code}.json`, { cf: { cacheTtl: 900 } } as RequestInit);
+    if (!res.ok) return null;
+    d = await res.json();
+  }
+  const cur = new Map((await filers(env)).map((f) => [f.cik, f]));
+  const rows = rowsOf({ columns: d.columns, rows: d.rows ?? d.holders ?? [] }).map((h): HolderRow => {
+    const cik = pad(String(h.cik));
+    const c = cur.get(cik);
+    const period = h.period ?? d.period ?? null;
+    const latest = c && period && c.latest_quarter === period;
+    const total = latest ? c.total_value_usd : null;
+    return {
+      filer: { cik, name: h.name, slug: h.slug ?? c?.slug ?? null, type: h.type ?? c?.type ?? null, curated: h.curated ?? (c ? true : null) },
+      period,
+      kind: h.kind ?? 'equity',
+      shares: h.shares,
+      prev_shares: h.prev_shares ?? null,
+      share_change: h.prev_shares == null ? null : h.shares - h.prev_shares,
+      value_usd: h.value,
+      prev_value_usd: h.prev_value ?? null,
+      change: h.change ?? null,
+      weight: h.weight ?? (total && h.value != null ? Math.round((h.value / total) * 1e6) / 1e6 : null),
+      accession: h.accession ?? (latest ? c.latest_accession : null) ?? null,
+      accepted_at: noMs(h.accepted_at) ?? null,
+    };
+  });
+  // Acceptance for curated rows, from the per-filing cache only (no EDGAR reads for a list this long).
+  const accs = [...new Set(rows.filter((r) => r.accession && !r.accepted_at).map((r) => r.accession!))].slice(0, 60);
+  const metas = await Promise.all(accs.map(async (a) => [a, (JSON.parse((await env.DB.get(`filing:${a}`)) ?? 'null') as FilingMeta | null)?.accepted_at ?? null] as const));
+  const at = new Map(metas);
+  for (const r of rows) if (r.accession && !r.accepted_at) r.accepted_at = noMs(at.get(r.accession) ?? null);
+  rows.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0));
+  return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, rows, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj), source: obj ? (hl ? 'hl' : 's') : 'public' };
+}
+
+/** type= (comma list of FILER_TYPES) and cohort= (all|curated) on a holder list; null when invalid. */
+export function holderFilter(p: URLSearchParams): ((r: HolderRow) => boolean) | null {
+  const types = p.get('type')?.split(',').map((x) => x.trim()).filter(Boolean) ?? [];
+  const cohort = p.get('cohort') ?? 'all';
+  if (types.some((t) => !FILER_TYPES.includes(t)) || !['all', 'curated'].includes(cohort)) return null;
+  return (r) => (!types.length || types.includes(r.filer.type ?? '')) && (cohort === 'all' || r.filer.curated === true);
 }
 
 ROUTES.push(
@@ -420,7 +527,7 @@ ROUTES.push(
     if (!book) return v1error('not_found', 404, `No ${qp} 13F for ${f.row.slug}; latest is ${latestOf(f) ?? 'none'}.`);
     const version = url.searchParams.get('version');
     if (version && version !== 'original' && !/^\d{10}-\d{2}-\d{6}$/.test(version)) return v1error('bad_request', 400, 'version is original or an accession like 0001104659-26-097200.');
-    return version ? versionBook(env, book, version) : v1json({ data: book });
+    return version ? versionBook(env, book, version) : v1json({ ...(STAMP.get(book) ?? {}), data: book });
   }],
   ['GET', /^\/v1\/filers\/([^/]+)\/holdings$/, async ({ env, url }, [id]) => {
     const from = url.searchParams.get('from') ?? '';
@@ -443,36 +550,27 @@ ROUTES.push(
       else missing.push(q);
     }
     // At most 8 quarters per call; `next_from` continues the range.
-    return v1json({ data, missing, next_from: last < to ? nextQuarter(last) : null });
+    // Books read from different builds: the response names the oldest (each changes when its source is re-uploaded).
+    const stamps = data.map((b) => STAMP.get(b)).filter((x): x is Stamp => !!x).sort((a, b) => (a.data_built_at ?? '').localeCompare(b.data_built_at ?? ''));
+    return v1json({ ...(stamps[0] ?? {}), data, missing, next_from: last < to ? nextQuarter(last) : null });
   }],
   ['GET', /^\/v1\/stocks\/([^/]+)\/holders$/, async ({ env, url }, [id]) => {
-    const quarter = url.searchParams.get('quarter');
-    const cohort = url.searchParams.get('cohort') ?? 'all';
-    if (quarter && !QUARTER.test(quarter)) return v1error('bad_request', 400, 'quarter must look like 2025Q1.');
-    if (!['all', 'curated'].includes(cohort)) return v1error('bad_request', 400, 'cohort is all or curated.');
+    const p = url.searchParams;
+    const quarter = p.get('quarter');
+    const limit = Number(p.get('limit') ?? 100);
+    const offset = Number(p.get('offset') ?? 0);
+    const keep = holderFilter(p);
+    if ((quarter && !QUARTER.test(quarter)) || !keep || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0) {
+      return v1error('bad_request', 400, `quarter like 2026Q2; type: ${FILER_TYPES.join(', ')} (comma-separated); cohort: all or curated; limit 1-1000; offset from 0.`);
+    }
     const is = await issuerCode(env, decodeURIComponent(id));
     if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
-    const obj = await env.HIST.get(`s/${is.code}.json`);
-    if (!obj) return v1error('not_yet_available', 501, 'Coming: per-stock holder lists are not published yet. /v1/changelog logs the day this ships.');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const s = (await new Response(obj.body).json()) as any;
-    if (quarter && quarter !== s.period) return v1error('not_found', 404, `Holder lists are served for ${s.period} (vs ${s.prev_period}); other quarters are in /v1/filers/{filer}/holdings.`);
-    const curatedCiks = cohort === 'curated' ? new Set((await filers(env)).map((f) => f.cik)) : null;
-    const rows = rowsOf({ columns: s.columns, rows: s.holders })
-      .filter((h) => !curatedCiks || curatedCiks.has(pad(String(h.cik))))
-      .map((h) => ({
-        filer: { cik: pad(String(h.cik)), name: h.name, slug: h.slug ?? null },
-        kind: h.kind,
-        shares: h.shares,
-        prev_shares: h.prev_shares,
-        share_change: h.prev_shares == null ? null : h.shares - h.prev_shares,
-        value_usd: h.value,
-        prev_value_usd: h.prev_value,
-        change: h.change,
-        accession: h.accession ?? null,
-        accepted_at: noMs(h.accepted_at),
-      }));
-    return v1json({ data: { issuer: s.issuer, ticker: s.ticker ?? is.ticker, display_name: s.display_name ?? null, quarter: s.period, prev_quarter: s.prev_period, cohort, holders: rows }, count: rows.length });
+    const h = await holdersOf(env, is.code);
+    if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
+    // Each filer's latest full book: periods differ by filer (a fund that filed its Q3 13F shows Q3).
+    const rows = h.rows.filter((r) => keep(r) && (!quarter || r.period === quarter));
+    const data = { issuer: h.issuer, ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts, truncated: h.truncated, holders: rows.slice(offset, offset + limit) };
+    return v1json({ ...(h.stamp ?? {}), data, count: rows.length, next_offset: offset + limit < rows.length ? offset + limit : null });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, url }) => {
     // Persistent per-quarter exports of every filer's book, uploaded by the data run.
@@ -635,6 +733,7 @@ ROUTES.push(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: any[];
     let source: string;
+    let stamp: Stamp | undefined;
     const filer = p.get('filer');
     const stock = p.get('ticker') ?? p.get('cusip');
     if (filer) {
@@ -647,21 +746,21 @@ ROUTES.push(
       const fl = book.filer as any;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rows = [...(book.holdings as any[]), ...(book.exited as any[])].filter((h) => h.change).map((h) => ({ filer: { cik: fl.cik, slug: fl.slug, name: fl.name, curated: fl.curated }, ...h }));
+      stamp = STAMP.get(book);
       source = 'filer';
     } else if (stock) {
-      // One stock: every 13F holder's change in it (the per-issuer list, for the period it covers).
+      // One stock: every 13F holder's change in it, from the holder index (each filer's latest book in that quarter).
       const is = await issuerCode(env, stock);
-      const obj = is ? await env.HIST.get(`s/${is.code}.json`) : null;
       if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
-      if (!obj) return v1error('not_yet_available', 501, 'Coming: per-stock holder lists are not published yet. /v1/changelog logs the day this ships.');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const st = (await new Response(obj.body).json()) as any;
-      if (st.period !== quarter) return v1error('not_found', 404, `Per-stock changes are served for ${st.period}; use filer= for other quarters.`);
-      rows = rowsOf({ columns: st.columns, rows: st.holders }).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.name, curated: null }, cusip: null, ticker: st.ticker ?? is.ticker, issuer: st.display_name ?? null, put_call: h.kind === 'equity' ? null : h.kind === 'calls' ? 'Call' : 'Put', shares: h.shares, prev_shares: h.prev_shares, share_change: h.prev_shares == null ? null : h.shares - h.prev_shares, value_usd: h.value, value_delta_usd: h.prev_value == null ? null : h.value - h.prev_value, change: h.change }));
+      const h = await holdersOf(env, is.code);
+      if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
+      stamp = h.stamp;
+      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: h.display_name, put_call: r.kind === 'equity' ? null : r.kind === 'calls' ? 'Call' : r.kind === 'puts' ? 'Put' : null, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: r.prev_value_usd == null ? null : r.value_usd - r.prev_value_usd, change: r.change, accession: r.accession, accepted_at: r.accepted_at }));
       source = 'stock';
     } else {
       // Across filers: the data run's per-quarter change file (largest moves first).
       const obj = await env.HIST.get(`changes/${quarter}.json`);
+      stamp = stampOf(obj);
       if (!obj) return v1error('not_yet_available', 501, `Coming: cross-filer changes for ${quarter} are not published yet; /v1/changelog logs the day this ships. Meanwhile pass filer=.`);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (await new Response(obj.body).json()) as any;
@@ -669,11 +768,11 @@ ROUTES.push(
       source = 'all';
     }
     const curatedCiks = cohort === 'curated' ? new Set((await filers(env)).map((f) => f.cik)) : null;
-    if (cohort !== 'all' && cohort !== 'curated' && source !== 'all') return v1error('bad_request', 400, 'cohort by filer type works on cross-filer queries (no filer= or ticker=).');
+    if (cohort !== 'all' && cohort !== 'curated' && source === 'filer') return v1error('bad_request', 400, 'cohort by filer type works with ticker= or across filers (not filer=).');
     const out = rows
       .filter((r) => want.includes(r.change) && Math.abs(r.value_delta_usd ?? r.value_usd ?? 0) >= minValue)
       .filter((r) => cohort === 'all' || (curatedCiks ? curatedCiks.has(r.filer.cik) : r.filer.type === cohort))
       .sort((a, b) => Math.abs(b.value_delta_usd ?? 0) - Math.abs(a.value_delta_usd ?? 0));
-    return v1json({ data: out.slice(offset, offset + limit), quarter, count: out.length, next_offset: offset + limit < out.length ? offset + limit : null });
+    return v1json({ ...(stamp ?? {}), data: out.slice(offset, offset + limit), quarter, count: out.length, next_offset: offset + limit < out.length ? offset + limit : null });
   }],
 );

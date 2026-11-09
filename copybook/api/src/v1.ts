@@ -8,14 +8,37 @@ export const SCHEMA_VERSION = '2026-11-08';
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
-export const CHANGELOG: { date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+export const CHANGELOG: { id?: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-09-holders',
+    date: '2026-11-09',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'GET /v1/stocks/{ticker|cusip}/holders: every 13F filer holding the issuer in its latest full book (all filers, not only curated), largest first. Each row has filer (cik, name, slug, type, curated), period (each filer\'s own latest quarter), kind, shares, prev_shares, share_change, value_usd, prev_value_usd, change, weight (share of the filer\'s book; null when its total isn\'t known), accession and accepted_at (curated funds\' latest 13F, null otherwise). Filters: type= (hedge_fund, active, index, bank, wealth, pension, other; comma-separated), cohort=all|curated, quarter=; paginated with limit (1-1000) and offset, `count` and `next_offset`. `counts` has the issuer\'s holder counts by change and period. Until the full list is in R2 a ticker can return the public top 25 with `truncated: true`.',
+      'GET /v1/changes/{quarter}?ticker= (or cusip=) is live from the same holder index, with cohort=<type>.',
+      'build_id and data_built_at now name the build of the data each response read: an R2 book or holder list carries its upload\'s build (or its upload time as r2-<time>), so books from an older upload no longer share the static data\'s build_id.',
+      '/v1/filers lists each CIK once (a filer curated since the hourly list was built is no longer also listed as non-curated), and a newly curated filer whose history isn\'t in R2 yet serves its latest book like any filer instead of 404.',
+    ],
+  },
+  {
+    id: '2026-11-09-refiled-amendments',
+    date: '2026-11-09',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'announced',
+    changes: [
+      'Re-filed 13F amendments no longer double a fund\'s book. A 13F-HR/A marked NEW HOLDINGS that re-files the whole book (more than half its positions, or a total within 20% with at least half its positions) replaces the book: it gets role base with mislabeled_amendment: true, and the original becomes superseded (its book in versions[]). Corrected, against each filing\'s cover-page total: First Eagle (Matthew McLennan) 2026Q2 $120.67B to $60.75B; Mizuho Securities USA 2026Q2 $10.44B to $6.20B; JPMorgan Chase 2025Q3 $3,338B to $1,669B; HSBC 2025Q4 $372.1B to $196.2B; T. Rowe Price Investment Management 2025Q4 $252.8B to $158.4B; Mason Morfit 2024Q3 $8.31B to $4.37B; also Brookfield 2024Q4 and 2025Q1, Check Capital 2026Q2, Heard Capital 2025Q3, Lingotto 2025Q3 and UC Regents 2025Q2 to 2025Q4. The public site has the fixed books; /v1 holdings, changes and bulk switch when the data run\'s upload of the fixed books to the API lands, and this entry turns shipped then.',
+    ],
+  },
   {
     date: '2026-11-09',
     schema_version: SCHEMA_VERSION,
     breaking: false,
     status: 'shipped',
     changes: [
-      'Bulk exports, partial: GET /v1/bulk lists per-quarter gzip CSVs of every filer\'s 13F book (2026Q1 to 2026Q3 today) and GET /v1/bulk/{YYYYQn}.csv.gz streams one. Parquet is coming (501 until then). The files are as-filed books, not point-in-time yet: no accepted_at, source_accession, first_disclosed_at or change columns. Only files that pass a size check are listed; stubs from a failed run are hidden until regenerated. Known issue: Marsh & McLennan 2026Q2 is double counted (a mislabeled amendment counted with its original) until the data run\'s fix lands.',
+      'Bulk exports, partial: GET /v1/bulk lists per-quarter gzip CSVs of every filer\'s 13F book (2026Q1 to 2026Q3 today) and GET /v1/bulk/{YYYYQn}.csv.gz streams one. Parquet is coming (501 until then). The files are as-filed books, not point-in-time yet: no accepted_at, source_accession, first_disclosed_at or change columns. Only files that pass a size check are listed; stubs from a failed run are hidden until regenerated. Known issue: First Eagle (Matthew McLennan) 2026Q2 is double counted (a mislabeled amendment counted with its original) until the data run\'s fix lands; see 2026-11-09-refiled-amendments.',
       'Webhook detected_at, like every /v1 timestamp, has no milliseconds (the test webhook included).',
       'GET /v1/events?tickers= (and ticker=): also every Form 4 by the company\'s own insiders and every 13D/G any filer made on it (`source: "issuer"`), with `coverage` (how far back each EDGAR feed reached per ticker) and `pending`. Insider rows carry `insider.ownership`: direct and indirect lines with their balances and trades. Lookback: the issuer\'s latest 20 Form 4s and 10 Schedule 13D/Gs.',
       'Form 4 rows: `event_date` is the first transaction date (one rule everywhere) and `last_transaction_date` the last. Rows built before this change are corrected by the next hourly build.',
@@ -27,7 +50,7 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
     breaking: false,
     status: 'announced',
     changes: [
-      'Coming, not live yet (these return 501 not_yet_available until the data run publishes their files; each moves to a shipped entry the day it returns data): GET /v1/stocks/{ticker|cusip}/holders; GET /v1/changes/{quarter} with ticker=/cusip= and across filers (filer= is live); Parquet bulk exports (GET /v1/bulk/{YYYYQn}.parquet); point-in-time columns in the bulk files (accepted_at, source_accession, first_disclosed_at, change); as_of point-in-time books; filer `type` on /v1/filers (null until the data run publishes filer types) and cohort=<type> on /v1/changes.',
+      'Coming, not live yet (these return 501 not_yet_available until the data run publishes their files; each moves to a shipped entry the day it returns data): GET /v1/changes/{quarter} across filers (filer= and ticker= are live); Parquet bulk exports (GET /v1/bulk/{YYYYQn}.parquet); point-in-time columns in the bulk files (accepted_at, source_accession, first_disclosed_at, change); as_of point-in-time books; filer `type` on /v1/filers (null until the data run publishes filer types) and cohort=<type> on /v1/changes.',
       'Timestamps (accepted_at, uploaded_at, data_built_at) are ISO 8601 UTC to the second, without milliseconds (2026-11-06T21:46:52Z).',
     ],
   },
@@ -71,6 +94,20 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
 
 /** One timestamp format across /v1: ISO 8601 UTC to the second, no milliseconds (2026-11-06T21:46:52Z). */
 export const noMs = (t: string | null | undefined): string | null => (t ? t.replace(/\.\d+Z$/, 'Z') : null);
+
+/** Which build a response read: data_built_at and build_id. */
+export type Stamp = { build_id: string | null; data_built_at: string | null };
+/**
+ * The build of one R2 object: the build ingest named when uploading it (x-copybook-build-id and
+ * x-copybook-built-at, kept as custom metadata), else its upload time. A response that read R2 says so,
+ * so old R2 books and a newer static build never share a build_id.
+ */
+export function stampOf(o: { uploaded?: Date; customMetadata?: Record<string, string> } | null | undefined): Stamp | undefined {
+  if (!o) return undefined;
+  const at = noMs(o.customMetadata?.built_at || o.uploaded?.toISOString() || null);
+  const id = o.customMetadata?.build_id || (at ? `r2-${at.replace(/[-:]/g, '')}` : null);
+  return id || at ? { build_id: id, data_built_at: at } : undefined;
+}
 
 /** When the served data was built, from the data run's index (KV v1:build, refreshed hourly). */
 let build: { data_built_at: string | null; build_id: string | null } = { data_built_at: null, build_id: null };
@@ -138,7 +175,12 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     build = JSON.parse(b);
     build.data_built_at = noMs(build.data_built_at);
   }
-  if (path === '/v1/changelog') return v1json({ data: CHANGELOG }, 200, { 'cache-control': 'public, max-age=300' });
+  if (path === '/v1/changelog') {
+    // Entries that ship when a data upload lands (the backstop sets v1:fixed:{id} once /v1 serves it).
+    const fixed = await env.DB.get('v1:fixed:refiled-amendments');
+    const data = CHANGELOG.map((c) => (c.id === '2026-11-09-refiled-amendments' && fixed ? { ...c, status: 'shipped' as const } : c));
+    return v1json({ data }, 200, { 'cache-control': 'public, max-age=300' });
+  }
   const pin = req.headers.get('copybook-schema-version');
   if (pin && !SCHEMA_VERSIONS.includes(pin)) return v1error('bad_request', 400, `Unknown Copybook-Schema-Version ${pin}; served versions: ${SCHEMA_VERSIONS.join(', ')}.`);
   // The cron sets a per-run SEC budget on this module; a request after it in the same isolate

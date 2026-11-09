@@ -18,7 +18,7 @@ import { stripe, verifyStripeSignature } from './stripe';
 import { hmacHex, signToken, verifyToken } from './tokens';
 
 /** Paid data the data workflow uploads besides h/: every filer's full book per quarter, per-issuer holders, bulk exports. */
-const INGEST_KEY = /^(fb\/\d{4}Q[1-4]\/\d{10}\.json|s\/[0-9A-Z]{6}\.json|v\/\d{10}\/\d{10}-\d{2}-\d{6}\.json|changes\/\d{4}Q[1-4]\.json|bulk\/\d{4}Q[1-4]\.(csv\.gz|parquet))$/;
+const INGEST_KEY = /^(fb\/\d{4}Q[1-4]\/\d{10}\.json|s\/[0-9A-Z]{6}\.json|hl\/[0-9A-Z]{6}\.json|v\/\d{10}\/\d{10}-\d{2}-\d{6}\.json|changes\/\d{4}Q[1-4]\.json|bulk\/\d{4}Q[1-4]\.(csv\.gz|parquet))$/;
 
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$/;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
@@ -351,7 +351,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const key = path.slice('/ingest/'.length);
     const flow = key === 'flow/full.json';
     const pre = /^pre\/(stock-codes|sec-tickers|events)\.json$|^pre\/v1-filers-rest\.txt$/.test(key);
-    if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key) && !flow && !pre) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, v/{cik10}/{accession}.json, changes/{YYYYQn}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
+    if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key) && !flow && !pre) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, hl/{issuer6}.json, v/{cik10}/{accession}.json, changes/{YYYYQn}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
     const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
     // The full Flow lists are built by the site's Pages workflow; everything else by the data workflow.
     let why = await verifyGithubOidc(tok, env.INGEST_WORKFLOW);
@@ -359,7 +359,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (why && pre && env.PRECOMPUTE_WORKFLOW) why = await verifyGithubOidc(tok, env.PRECOMPUTE_WORKFLOW);
     if (why) return json({ ok: false, error: why }, 401, {});
     const type = key.endsWith('.csv') ? 'text/csv; charset=utf-8' : key.endsWith('.csv.gz') ? 'application/gzip' : key.endsWith('.parquet') ? 'application/vnd.apache.parquet' : key.endsWith('.txt') ? 'text/plain' : 'application/json';
-    await env.HIST.put(key, req.body, { httpMetadata: { contentType: type } });
+    // The uploading build, so /v1 can name the build each response read (build_id, data_built_at).
+    const built = { build_id: req.headers.get('x-copybook-build-id') ?? '', built_at: req.headers.get('x-copybook-built-at') ?? '' };
+    const meta = Object.fromEntries(Object.entries(built).filter(([, v]) => v && v.length <= 64));
+    await env.HIST.put(key, req.body, { httpMetadata: { contentType: type }, ...(Object.keys(meta).length ? { customMetadata: meta } : {}) });
     return json({ ok: true, key }, 200, {});
   }
 
@@ -685,21 +688,40 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return new Response(obj.body, { headers: { ...h, 'content-type': 'application/json', 'cache-control': 'private, max-age=300' } });
   }
 
-  // Holders of one stock as CSV: every 13F filer once the data run publishes them, until then Copybook's curated funds.
+  // Every 13F holder of one stock for Pro and Fund (My book's full lists), the same rows as /v1/stocks/{t}/holders:
+  // ?type=hedge_fund,active&cohort=all|curated&limit=&offset=.
+  const holdersJson = path.match(/^\/stocks\/([A-Za-z0-9.-]{1,10})\/holders$/);
+  if (req.method === 'GET' && holdersJson) {
+    if (!isPro(m)) return json({ ok: false, error: 'Every holder of a stock is part of Copy Pro and Copy Fund', code: 'pro_required' }, 403, h);
+    const { holdersOf, holderFilter, issuerCode } = await import('./v1data');
+    const keep = holderFilter(url.searchParams);
+    const limit = Number(url.searchParams.get('limit') ?? 200);
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    if (!keep || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0) return json({ ok: false, error: 'type: hedge_fund, active, index, bank, wealth, pension, other; cohort: all or curated; limit 1-1000', code: 'bad_request' }, 400, h);
+    const is = await issuerCode(env, holdersJson[1]);
+    const hs = is ? await holdersOf(env, is.code) : null;
+    if (!is || !hs) return json({ ok: false, error: 'unknown ticker', code: 'not_found' }, 404, h);
+    const rows = hs.rows.filter(keep);
+    return json({ ok: true, issuer: hs.issuer, ticker: is.ticker ?? hs.tickers[0] ?? null, tickers: hs.tickers, counts: hs.counts, truncated: hs.truncated, count: rows.length, holders: rows.slice(offset, offset + limit), next_offset: offset + limit < rows.length ? offset + limit : null }, 200, { ...h, 'cache-control': 'private, max-age=300' });
+  }
+
+  // Holders of one stock as CSV: every 13F filer (the holder index, ?type= lenses it), until it's in R2 Copybook's curated funds.
   const holders = path.match(/^\/stocks\/([A-Za-z0-9.-]{1,10})\/holders\.csv$/);
   if (req.method === 'GET' && holders) {
     const ticker = holders[1].toUpperCase();
-    const pub = await fetch(`${env.SITE_URL}d/stocks/${ticker}.json`, { cf: { cacheTtl: 900 } } as RequestInit);
+    const { holdersOf, holderFilter, issuerCode } = await import('./v1data');
+    const keep = holderFilter(url.searchParams);
+    if (!keep) return json({ ok: false, error: 'type: hedge_fund, active, index, bank, wealth, pension, other; cohort: all or curated', code: 'bad_request' }, 400, h);
+    const is = await issuerCode(env, ticker);
+    const hs = is ? await holdersOf(env, is.code) : null;
+    const full = hs && hs.source !== 'public' ? hs : null;
+    const pub = full ? null : await fetch(`${env.SITE_URL}d/stocks/${ticker}.json`, { cf: { cacheTtl: 900 } } as RequestInit);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const st: any = pub.ok ? await pub.json() : null;
-    const code = (st?.classes?.[0]?.cusip ?? '').slice(0, 6);
-    const full = code ? await env.HIST.get(`s/${code}.json`) : null;
+    const st: any = pub?.ok ? await pub.json() : null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: any[];
     if (full) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s: any = await new Response(full.body).json();
-      rows = s.holders.map((r: unknown[]) => ({ ...Object.fromEntries(s.columns.map((c: string, i: number) => [c, r[i]])), quarter: s.period }));
+      rows = full.rows.filter(keep).map((r) => ({ cik: r.filer.cik, name: r.filer.name, slug: r.filer.slug, type: r.filer.type, kind: r.kind, quarter: r.period, shares: r.shares, prev_shares: r.prev_shares, value: r.value_usd, prev_value: r.prev_value_usd, change: r.change, weight: r.weight, accession: r.accession, accepted_at: r.accepted_at }));
     } else if (st) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rows = (st.holders ?? []).map((x: any) => ({ cik: null, name: x.manager, slug: x.slug, kind: 'equity', quarter: x.quarter, shares: x.shares, prev_shares: x.prev_shares ?? null, value: x.value, prev_value: x.prev_value ?? null, change: x.change ?? null, weight: x.weight }));

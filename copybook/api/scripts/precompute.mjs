@@ -5,7 +5,7 @@
 //
 //   pre/stock-codes.json     {"NVDA":"67066G",...}   ticker -> 6-char issuer code (stock_holders.json)
 //   pre/sec-tickers.json     {"BRK.B":"0001067983"}  ticker -> issuer CIK (SEC company_tickers.json)
-//   pre/v1-filers-rest.txt   "<count>\n[...]"        /v1/filers rows for every non-curated filer
+//   pre/v1-filers-rest.txt   "<count> <curated ciks>\n[...]"  /v1/filers rows for every non-curated filer
 //
 // COPYBOOK_DRY_RUN=1 writes the files to ./pre instead of uploading.
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -40,7 +40,8 @@ const rest = (filers.filers ?? [])
 const files = {
   'pre/stock-codes.json': JSON.stringify(codes),
   'pre/sec-tickers.json': JSON.stringify(tickers),
-  'pre/v1-filers-rest.txt': `${rest.length}\n${JSON.stringify(rest)}`,
+  // The header names the curated CIKs left out, so the API can drop a filer curated since this run.
+  'pre/v1-filers-rest.txt': `${rest.length} ${[...curated].join(',')}\n${JSON.stringify(rest)}`,
 };
 for (const [k, v] of Object.entries(files)) console.log(`${k}: ${(v.length / 1024).toFixed(0)} KB`);
 

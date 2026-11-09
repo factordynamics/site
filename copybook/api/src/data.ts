@@ -162,7 +162,7 @@ export async function fetchHistory(env: Env, slug: string): Promise<unknown | nu
 /** Holders of one stock as CSV: every 13F holder (R2 s/{issuer}.json) when published, else Copybook's curated funds. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function holdersCsv(rows: any[]): string {
-  const head = ['filer_cik', 'filer_name', 'slug', 'kind', 'quarter', 'shares', 'prev_shares', 'share_change', 'value_usd', 'prev_value_usd', 'change', 'weight', 'accession', 'accepted_at'];
-  const out = rows.map((r) => [r.cik, r.name, r.slug, r.kind, r.quarter, r.shares, r.prev_shares, r.prev_shares == null ? '' : r.shares - r.prev_shares, r.value, r.prev_value, r.change, r.weight, r.accession, r.accepted_at].map(cell).join(','));
+  const head = ['filer_cik', 'filer_name', 'slug', 'kind', 'quarter', 'shares', 'prev_shares', 'share_change', 'value_usd', 'prev_value_usd', 'change', 'weight', 'accession', 'accepted_at', 'filer_type'];
+  const out = rows.map((r) => [r.cik, r.name, r.slug, r.kind, r.quarter, r.shares, r.prev_shares, r.prev_shares == null ? '' : r.shares - r.prev_shares, r.value, r.prev_value, r.change, r.weight, r.accession, r.accepted_at, r.type].map(cell).join(','));
   return [head.join(','), ...out].join('\r\n') + '\r\n';
 }

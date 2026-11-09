@@ -36,14 +36,17 @@ class MemKV implements KV {
 
 class MemR2 implements R2 {
   m = new Map<string, Uint8Array>();
+  meta = new Map<string, Record<string, string>>();
   async get(k: string) {
     const v = this.m.get(k);
     if (!v) return null;
     // Deliver in two chunks with the header line split, as R2 may.
-    return { size: v.length, body: new ReadableStream<Uint8Array>({ start(c) { c.enqueue(v.subarray(0, 20)); c.enqueue(v.subarray(20)); c.close(); } }) };
+    return { size: v.length, customMetadata: this.meta.get(k), body: new ReadableStream<Uint8Array>({ start(c) { c.enqueue(v.subarray(0, 20)); c.enqueue(v.subarray(20)); c.close(); } }) };
   }
-  async put(k: string, v: ReadableStream | ArrayBuffer | string | null) {
+  async put(k: string, v: ReadableStream | ArrayBuffer | string | null, opts?: { customMetadata?: Record<string, string> }) {
     this.m.set(k, new Uint8Array(await new Response(v).arrayBuffer()));
+    if (opts?.customMetadata) this.meta.set(k, opts.customMetadata);
+    else this.meta.delete(k);
   }
   async list({ prefix }: { prefix: string }) {
     return { objects: [...this.m].filter(([k]) => k.startsWith(prefix)).map(([key, v]) => ({ key, size: v.length, uploaded: new Date(0) })) };
@@ -428,6 +431,11 @@ describe('copybook api', () => {
     expect(hist.m.has('h/bill-ackman/2026Q2.json')).toBe(false);
     expect(await put('h/bill-ackman/2026Q2.json', await jwt({}))).toBe(200);
     expect(new TextDecoder().decode(hist.m.get('h/bill-ackman/2026Q2.json'))).toBe('{"holdings":[]}');
+    // The uploading build is kept on the object, and the holder index is an accepted key.
+    const tok = await jwt({});
+    const st = await handleRequest(new Request('https://api.test/ingest/hl/829933.json', { method: 'PUT', body: '{}', headers: { authorization: `Bearer ${tok}`, 'x-copybook-build-id': 'gust-3a8c773b', 'x-copybook-built-at': '2026-11-09T02:30:00Z' } }), env);
+    expect([st.status, hist.meta.get('hl/829933.json')]).toEqual([200, { build_id: 'gust-3a8c773b', built_at: '2026-11-09T02:30:00Z' }]);
+    expect(await put('hl/82993.json', tok)).toBe(400);
 
     const token = (await (await call('/session', { body: { checkout_session: 'cs_test_q' } })).json()).token;
     expect(token).toBeUndefined(); // no session yet: /holdings must refuse
@@ -1885,20 +1893,44 @@ describe('copybook api', () => {
     expect(long.next_from).toBe('2026Q1');
     expect((await v1('/v1/filers/2045724/holdings?from=2026Q2&to=2026Q1')).status).toBe(400);
 
-    // Holders of one stock, by ticker or CUSIP, from the paid per-issuer list.
-    expect((await v1('/v1/stocks/NVDA/holders')).status).toBe(501);
-    hist.m.set('s/67066G.json', new TextEncoder().encode(JSON.stringify({
-      issuer: '67066G', ticker: 'NVDA', display_name: 'NVIDIA', period: '2026Q2', prev_period: '2026Q1',
-      columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change'],
-      holders: [['0002045724', 'Situational Awareness LP', 'situational-awareness-lp-5724', 'equity', 100, 40, 18000, 6000, 'added'], ['0001067983', 'Berkshire Hathaway Inc', 'warren-buffett', 'equity', 10, 0, 1800, 0, 'new']],
-    })));
+    // Holders of one stock, by ticker or CUSIP: every filer from the holder index (R2 hl/, uploaded by the data run).
+    expect((await v1('/v1/stocks/NVDA/holders')).status).toBe(404);
+    await env.DB.put('filing:A2', JSON.stringify({ accession: 'A2', accepted_at: '2026-08-14T20:05:04.000Z' }));
+    await hist.put('hl/67066G.json', JSON.stringify({
+      issuer: '67066G', tickers: ['NVDA'], counts: { holders: 4, by_period: { '2026Q3': 1, '2026Q2': 3 } }, rows_total: 4,
+      columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change'],
+      // Not in size order: the API sorts largest first.
+      rows: [
+        ['0001067983', 'Berkshire Hathaway Inc', 'warren-buffett', 'active', true, '2026Q2', 10, 0, 1800, 0, 'new'],
+        ['0002045724', 'Situational Awareness LP', 'situational-awareness-lp-5724', 'hedge_fund', false, '2026Q3', 100, 40, 18000, 6000, 'added'],
+        ['0000102909', 'Vanguard Group Inc', 'vanguard-group-inc-2909', 'index', false, '2026Q2', 50, 50, 9000, 8000, 'unchanged'],
+        ['0001387322', 'Whale Rock Capital Management LLC', null, 'hedge_fund', false, '2026Q2', 5, null, 900, null, 'new'],
+      ],
+    }), { customMetadata: { build_id: 'gust-3a8c773b', built_at: '2026-11-09T02:30:00.000Z' } });
     const h = (await v1('/v1/stocks/NVDA/holders')).body;
-    expect(h.data).toMatchObject({ issuer: '67066G', ticker: 'NVDA', quarter: '2026Q2', prev_quarter: '2026Q1', cohort: 'all' });
-    expect(h.data.holders[0]).toMatchObject({ filer: { cik: '0002045724' }, shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, change: 'added' });
-    expect((await v1('/v1/stocks/67066G104/holders')).body.data).toEqual(h.data);
-    expect((await v1('/v1/stocks/NVDA/holders?cohort=curated')).body.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0001067983']);
-    expect((await v1('/v1/stocks/NVDA/holders?quarter=2026Q1')).status).toBe(404);
+    // The response names the upload it read, not the static data's build.
+    expect([h.build_id, h.data_built_at]).toEqual(['gust-3a8c773b', '2026-11-09T02:30:00Z']);
+    expect(h).toMatchObject({ count: 4, next_offset: null, data: { issuer: '67066G', ticker: 'NVDA', counts: { holders: 4 }, truncated: false } });
+    expect(h.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0002045724', '0000102909', '0001067983', '0001387322']);
+    expect(h.data.holders[0]).toEqual({ filer: { cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', type: 'hedge_fund', curated: false }, period: '2026Q3', kind: 'equity', shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, prev_value_usd: 6000, change: 'added', weight: null, accession: null, accepted_at: null });
+    // A curated fund's row: its latest 13F, acceptance from the filing cache, weight of its $2,000 book.
+    expect(h.data.holders[2]).toMatchObject({ filer: { slug: 'warren-buffett', curated: true }, accession: 'A2', accepted_at: '2026-08-14T20:05:04Z', weight: 0.9 });
+    expect(h.data.holders[3]).toMatchObject({ prev_shares: null, share_change: null, change: 'new' });
+    const ciks = async (q: string) => (await v1(`/v1/stocks/NVDA/holders${q}`)).body.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik);
+    expect(await ciks('?type=hedge_fund')).toEqual(['0002045724', '0001387322']);
+    expect(await ciks('?type=hedge_fund,active')).toEqual(['0002045724', '0001067983', '0001387322']);
+    expect(await ciks('?cohort=curated')).toEqual(['0001067983']);
+    expect(await ciks('?quarter=2026Q3')).toEqual(['0002045724']);
+    const page = (await v1('/v1/stocks/67066G104/holders?limit=2&offset=1')).body;
+    expect([page.count, page.next_offset, page.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)]).toEqual([4, 3, ['0000102909', '0001067983']]);
+    for (const bad of ['?type=hedgefund', '?limit=0', '?cohort=x']) expect((await v1(`/v1/stocks/NVDA/holders${bad}`)).status).toBe(400);
     expect((await v1('/v1/stocks/ZZZZ/holders')).status).toBe(404);
+    // The session route for My book (Pro): the same rows, lensed.
+    const sj = await (await call('/stocks/NVDA/holders?type=hedge_fund&limit=1', { token: t })).json();
+    expect([sj.count, sj.next_offset, sj.holders[0].filer.cik, sj.truncated]).toEqual([2, 1, '0002045724', false]);
+    // /v1/changes by ticker reads the same index, with a filer-type cohort.
+    const ch = (await v1('/v1/changes/2026Q2?ticker=NVDA&cohort=hedge_fund')).body;
+    expect([ch.build_id, ch.data.map((r: { filer: { cik: string }; value_delta_usd: number | null }) => [r.filer.cik, r.value_delta_usd])]).toEqual(['gust-3a8c773b', [['0001387322', null]]]);
 
     // Bulk exports: listed, then streamed as uploaded.
     expect((await v1('/v1/bulk/2026Q2.csv.gz')).status).toBe(501);
@@ -1932,11 +1964,17 @@ describe('copybook api', () => {
     await env.DB.put('filing:A2', JSON.stringify({ accession: 'A2', accepted_at: '2026-08-14T20:05:04Z' }));
     let csv = await call('/stocks/nvda/holders.csv', { token: t });
     expect(csv.headers.get('x-copybook-coverage')).toBe('curated');
-    expect((await csv.text()).split('\r\n')[1]).toBe('0001067983,Warren Buffett,warren-buffett,equity,2026Q2,10,0,10,1800,,new,0.9,A2,2026-08-14T20:05:04Z');
-    hist.m.set('s/67066G.json', new TextEncoder().encode(JSON.stringify({ issuer: '67066G', period: '2026Q2', columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change'], holders: [['0001387322', 'Whale Rock, LLC', null, 'equity', 100, 140, 18000, 20000, 'trimmed']] })));
+    expect((await csv.text()).split('\r\n')[1]).toBe('0001067983,Warren Buffett,warren-buffett,equity,2026Q2,10,0,10,1800,,new,0.9,A2,2026-08-14T20:05:04Z,');
+    hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"NVDA":"67066G"}'));
+    await hist.put('hl/67066G.json', JSON.stringify({ issuer: '67066G', tickers: ['NVDA'], columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change'], rows: [['0001387322', 'Whale Rock, LLC', null, 'hedge_fund', false, '2026Q2', 100, 140, 18000, 20000, 'trimmed'], ['0000102909', 'Vanguard Group Inc', null, 'index', false, '2026Q2', 50, 50, 9000, 8000, 'unchanged']] }));
     csv = await call('/stocks/NVDA/holders.csv', { token: t });
     expect(csv.headers.get('x-copybook-coverage')).toBe('all-filers');
-    expect((await csv.text()).split('\r\n')[1]).toBe('0001387322,"Whale Rock, LLC",,equity,2026Q2,100,140,-40,18000,20000,trimmed,,,');
+    expect((await csv.text()).split('\r\n').slice(1, 3)).toEqual(['0001387322,"Whale Rock, LLC",,equity,2026Q2,100,140,-40,18000,20000,trimmed,,,,hedge_fund', '0000102909,Vanguard Group Inc,,equity,2026Q2,50,50,0,9000,8000,unchanged,,,,index']);
+    // The lensed CSV: only the filer types asked for.
+    expect((await (await call('/stocks/NVDA/holders.csv?type=hedge_fund,active', { token: t })).text()).trim().split('\r\n')).toHaveLength(2);
+    expect((await call('/stocks/NVDA/holders.csv?type=nope', { token: t })).status).toBe(400);
+    // The JSON list for My book is Pro and Fund only.
+    expect((await call('/stocks/NVDA/holders', { token: t })).status).toBe(403);
     expect((await call('/stocks/ZZZZ/holders.csv', { token: t })).status).toBe(404);
 
     // The followed funds' latest books in one file, one row per position with its fund.
@@ -2222,12 +2260,25 @@ describe('copybook api', () => {
     const key = (await (await call('/keys', { body: { name: 'k' }, token: tk })).json()).key;
     const v1 = async (path: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env)).json();
     const rest = [{ slug: 'whale-rock-7322', cik: '0001387322', curated: false }, { slug: 'x-1', cik: '0000000001', curated: false }];
-    hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`2\n${JSON.stringify(rest)}`));
+    hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`2 0001067983,0001040273\n${JSON.stringify(rest)}`));
     const all = await v1('/v1/filers');
     expect(all).toMatchObject({ schema_version: expect.any(String), count: 4 });
     expect(all.data.map((f: { slug: string }) => f.slug)).toEqual(['warren-buffett', 'dan-loeb', 'whale-rock-7322', 'x-1']);
     expect((await v1('/v1/filers?curated=false')).data.map((f: { slug: string }) => f.slug)).toEqual(['whale-rock-7322', 'x-1']);
     expect((await v1('/v1/filers?curated=true')).count).toBe(2);
+    // Dan Loeb was curated after the list was built (the header names only Buffett): listed once, as curated, wherever his row was.
+    const stale = (rows: unknown[]) => hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`${rows.length} 0001067983\n${JSON.stringify(rows)}`));
+    const loeb = { slug: 'third-point-0273', cik: '0001040273', curated: false };
+    for (const rows of [[rest[0], loeb, rest[1]], [rest[0], rest[1], loeb], [loeb]]) {
+      stale(rows);
+      const r = await v1('/v1/filers');
+      expect([r.count, r.data.map((f: { slug: string; curated: boolean }) => `${f.slug}:${f.curated}`)]).toEqual([2 + rows.length - 1, ['warren-buffett:true', 'dan-loeb:true', ...rows.filter((x) => x !== loeb).map((x) => `${x.slug}:false`)]]);
+    }
+    // A newly curated fund with no history in R2 yet serves its latest book like any filer, still curated.
+    shards['0001040273.json'] = { ok: true, cik: '0001040273', quarter: '2026Q2', report_date: '2026-06-30', form: '13F-HR', accession: '0001040273-26-000004', filing_date: '2026-08-14', position_count: 1, total_value: 900, columns: ['ticker', 'issuer', 'cusip', 'put_call', 'shares', 'value'], rows: [['NVDA', 'NVIDIA CORP', '67066G104', null, 5, 900]] };
+    await env.DB.put('filing:0001040273-26-000004', JSON.stringify({ accession: '0001040273-26-000004', accepted_at: '2026-08-14T20:00:00Z' }));
+    const lb = await v1('/v1/filers/dan-loeb/holdings/latest');
+    expect(lb.data).toMatchObject({ filer: { slug: 'dan-loeb', curated: true }, quarter: '2026Q2', total_value_usd: 900, filing: { accession: '0001040273-26-000004' } });
 
     // Ticker -> issuer from the precomputed map (the full stock list is never fetched).
     hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"NVDAX":"999999","NVDA":"67066G"}'));

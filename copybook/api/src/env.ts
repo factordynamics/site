@@ -13,17 +13,20 @@ export interface R2Object {
   body: ReadableStream<Uint8Array>;
   size?: number;
   httpMetadata?: { contentType?: string };
+  /** When the object was written, and the build that wrote it (ingest's x-copybook-build-id / x-copybook-built-at). */
+  uploaded?: Date;
+  customMetadata?: Record<string, string>;
 }
 
 export interface R2 {
   get(key: string): Promise<R2Object | null>;
-  put(key: string, value: ReadableStream | ArrayBuffer | string | null, opts?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+  put(key: string, value: ReadableStream | ArrayBuffer | string | null, opts?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }): Promise<unknown>;
   list(opts: { prefix: string }): Promise<{ objects: { key: string; size: number; uploaded: Date }[] }>;
 }
 
 export interface Env {
   DB: KV;
-  /** Private bucket for paid data: h/{slug}/{quarter}.json|.csv, fb/{quarter}/{cik}.json full books, s/{issuer}.json holders, bulk/{quarter}.csv.gz exports. */
+  /** Private bucket for paid data: h/{slug}/{quarter}.json|.csv, fb/{quarter}/{cik}.json full books, hl/{issuer}.json (and older s/{issuer}.json) holders, bulk/{quarter}.csv.gz exports. */
   HIST: R2;
   /** GitHub Actions OIDC identity allowed to upload history, e.g. refcell/gust/.github/workflows/copybook-data.yml@refs/heads/main */
   INGEST_WORKFLOW: string;

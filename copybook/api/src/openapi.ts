@@ -279,24 +279,26 @@ export function openapi() {
       },
       '/v1/stocks/{stock}/holders': {
         get: {
-          summary: 'Every 13F holder of one issuer, with the change vs the prior quarter (coming: returns 501 today)',
-          'x-status': 'coming',
-          description: '**Coming, not live yet:** returns 501 not_yet_available until the data run publishes per-stock holder files; /v1/changelog logs the day it ships. Share classes of one issuer (same 6-character CUSIP issuer code) are rolled up; calls and puts are separate rows (`kind`). Served for the latest complete 13F period.',
+          summary: 'Every 13F holder of one issuer, all filers, with each filer\'s change vs its prior quarter',
+          description: 'Every 13F filer holding the issuer in its latest full book (about 9,000 filers covered, not only curated), largest first. `period` is that filer\'s own latest quarter, so a fund that has filed its Q3 13F shows Q3 while others still show Q2; `counts.by_period` has the split. Share classes of one issuer (same 6-character CUSIP issuer code) are rolled up; calls and puts are separate rows (`kind`). `weight` is the position\'s share of the filer\'s whole book that period (null when that total isn\'t known). `accession` and `accepted_at` are set for curated funds\' latest 13F. `filer.type` is one of hedge_fund, active, index, bank, wealth, pension, other. If the full list for an issuer isn\'t in the API yet, the public top 25 is served with `truncated: true`. `build_id`/`data_built_at` name the upload this list came from.',
           parameters: [
             { name: 'stock', in: 'path', required: true, description: 'Ticker (NVDA), 9-character CUSIP or 6-character issuer code.', schema: { type: 'string' } },
+            { name: 'type', in: 'query', required: false, description: 'Filer types, comma-separated: hedge_fund, active, index, bank, wealth, pension, other.', schema: { type: 'string' } },
             { name: 'cohort', in: 'query', required: false, schema: { type: 'string', enum: ['all', 'curated'], default: 'all' } },
-            { name: 'quarter', in: 'query', required: false, schema: { type: 'string', pattern: '^\\d{4}Q[1-4]$' } },
+            { name: 'quarter', in: 'query', required: false, description: 'Only filers whose latest book is this quarter.', schema: { type: 'string', pattern: '^\\d{4}Q[1-4]$' } },
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 1000, default: 100 } },
+            { name: 'offset', in: 'query', required: false, schema: { type: 'integer', minimum: 0, default: 0 } },
           ],
           responses: {
             '200': {
               description: 'Holders, largest first',
-              content: json(envelope({ type: 'object' }, { count: { type: 'integer' } }), {
+              content: json(envelope({ type: 'object' }, { count: { type: 'integer' }, next_offset: { type: ['integer', 'null'] } }), {
                 ...BUILD,
-                data: { issuer: '67066G', ticker: 'NVDA', display_name: 'NVIDIA', quarter: '2026Q2', prev_quarter: '2026Q1', cohort: 'all', holders: [{ filer: { cik: '0001387322', name: 'Whale Rock Capital Management LLC', slug: 'whale-rock-capital-management-llc-7322' }, kind: 'equity', shares: 1200000, prev_shares: 900000, share_change: 300000, value_usd: 216000000, prev_value_usd: 140000000, change: 'added', accession: null, accepted_at: null }] },
-                count: 1,
+                data: { issuer: '829933', ticker: 'SIRI', tickers: ['SIRI'], display_name: 'Sirius XM', cohort: 'all', type: null, counts: { holders: 608, new: 76, added: 153, trimmed: 124, exited: 55, unchanged: 79, no_prior: 176, by_period: { '2026Q3': 64, '2026Q2': 536 } }, truncated: false, holders: [{ filer: { cik: '0001067983', name: 'BERKSHIRE HATHAWAY INC', slug: 'warren-buffett', type: 'active', curated: true }, period: '2026Q2', kind: 'equity', shares: 124807117, prev_shares: 124807117, share_change: 0, value_usd: 3686802237, prev_value_usd: 2880548260, change: 'unchanged', weight: 0.0143, accession: '0000950123-26-008377', accepted_at: '2026-08-14T20:05:04Z' }] },
+                count: 663,
+                next_offset: 100,
               }),
             },
-            '501': { description: 'not_yet_available: holder lists are loading', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } },
             ...errResponses,
           },
         },
@@ -335,15 +337,15 @@ export function openapi() {
         get: {
           summary: 'New, added, trimmed and exited positions for one report period, largest moves first',
           'x-status': 'partial',
-          'x-status-detail': { 'filer=': 'live', 'ticker= / cusip=': 'coming', 'across filers': 'coming' },
-          description: 'With filer=: that filer\'s change rows (exact); live. **Coming, not live yet** (501 not_yet_available until the data run publishes their files; /v1/changelog logs the day each ships): with ticker= or cusip=, every 13F holder\'s change in that stock; without either, across all filers with cohort=curated or a filer type.',
+          'x-status-detail': { 'filer=': 'live', 'ticker= / cusip=': 'live', 'across filers': 'coming' },
+          description: 'With filer=: that filer\'s change rows (exact); live. With ticker= or cusip=: every 13F holder\'s change in that stock among filers whose latest book is that quarter (the holder index, as /v1/stocks/{stock}/holders), with cohort=curated or a filer type; live. **Coming, not live yet** (501 not_yet_available until the data run publishes the files; /v1/changelog logs the day it ships): without filer= or ticker=, across all filers.',
           parameters: [
             { $ref: '#/components/parameters/quarter' },
             { name: 'change', in: 'query', required: false, description: 'new, added, trimmed, exited (comma-separated)', schema: { type: 'string' } },
             { name: 'filer', in: 'query', required: false, schema: { type: 'string' } },
             { name: 'ticker', in: 'query', required: false, schema: { type: 'string' } },
             { name: 'cusip', in: 'query', required: false, schema: { type: 'string' } },
-            { name: 'cohort', in: 'query', required: false, description: 'all, curated, or a filer type (hedge_fund, active, bank, broker, index, other)', schema: { type: 'string', default: 'all' } },
+            { name: 'cohort', in: 'query', required: false, description: 'all, curated, or a filer type (hedge_fund, active, index, bank, wealth, pension, other)', schema: { type: 'string', default: 'all' } },
             { name: 'min_value_usd', in: 'query', required: false, description: 'Smallest |value_delta_usd|', schema: { type: 'number', minimum: 0 } },
             { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 1000, default: 100 } },
             { name: 'offset', in: 'query', required: false, schema: { type: 'integer', minimum: 0, default: 0 } },
@@ -394,7 +396,7 @@ export function openapi() {
           responses: {
             '200': {
               description: 'Changelog',
-              content: json(envelope({ type: 'array', items: { type: 'object', required: ['date', 'schema_version', 'breaking', 'status', 'changes'], properties: { date: { type: 'string', format: 'date' }, schema_version: { type: 'string' }, breaking: { type: 'boolean' }, status: { type: 'string', enum: ['shipped', 'announced'], description: 'shipped: live and returning data. announced: coming; not live yet.' }, changes: { type: 'array', items: { type: 'string' } } } } }), { ...BUILD, data: CHANGELOG.slice(0, 1) }),
+              content: json(envelope({ type: 'array', items: { type: 'object', required: ['date', 'schema_version', 'breaking', 'status', 'changes'], properties: { id: { type: 'string', description: 'Stable id for entries that track a data fix (matches the data changelog), e.g. 2026-11-09-refiled-amendments.' }, date: { type: 'string', format: 'date' }, schema_version: { type: 'string' }, breaking: { type: 'boolean' }, status: { type: 'string', enum: ['shipped', 'announced'], description: 'shipped: live and returning data. announced: coming; not live yet.' }, changes: { type: 'array', items: { type: 'string' } } } } }), { ...BUILD, data: CHANGELOG.slice(0, 1) }),
             },
           },
         },
