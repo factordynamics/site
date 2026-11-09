@@ -15,6 +15,7 @@ import sc13gSiri from './fixtures/sc13ga-siri-vanguard.xml?raw';
 import form4BuffettGift from './fixtures/form4-brk-buffett-gift.txt?raw';
 import sc13dBrkA from './fixtures/sc13da-brk-class-a.xml?raw';
 import { quarterStart } from '../src/seasons';
+import { computeMoves, displayCase } from '../src/edgar';
 import form4Csgp from './fixtures/form4-csgp-florance-buy.txt?raw';
 import { cleanItem4, parseSchedule13 } from '../src/edgar';
 
@@ -674,6 +675,7 @@ describe('copybook api', () => {
       { accession: 'ICI-13F', slug: 'icici', quarter: '2026Q3', filing_date: '2026-11-12' },
       { accession: 'VGD-13F', slug: 'vanguard-group', quarter: '2026Q3', filing_date: '2026-11-12' },
       { accession: 'FSH-13F', slug: 'fisher', quarter: '2026Q3', filing_date: '2026-11-11' },
+      { accession: 'GRD-13F', slug: 'guardcap', quarter: '2026Q3', filing_date: '2026-11-11' },
       { accession: '0000950123-26-011111', slug: 'warren-buffett', quarter: '2026Q3', filing_date: '2026-11-10' },
       { accession: 'OLD-13F', slug: 'bill-ackman', quarter: '2026Q2', filing_date: '2026-08-14' }, // before the week
     ];
@@ -684,6 +686,12 @@ describe('copybook api', () => {
         // A CUSIP change: one exit and one new position on XOM net to +$0.9B, added; on CVX to nothing.
         row('new', 'XOM', 5.2e9, { shares: 50, prev_shares: 0 }), row('exited', 'XOM', -4.3e9, { shares: 0, prev_shares: 40 }),
         row('new', 'CVX', 3e9, { shares: 30, prev_shares: 0 }), row('exited', 'CVX', -3e9, { shares: 0, prev_shares: 30 }),
+      ] },
+      // GuardCap's real card: BKNG's shares changed units between quarters (a -$3.3B "trim" on a $1.47B book); CME is flagged by ingest.
+      'GRD-13F': { manager: 'GUARDCAP ASSET MANAGEMENT Ltd', firm: 'GUARDCAP ASSET MANAGEMENT Ltd', featured: false, total_value: 1465165097, changes: { trimmed: 3 }, moves: [
+        row('trimmed', 'BKNG', -3301994445, { shares: 1304, prev_shares: 646216, weight: 0.004557 }),
+        row('trimmed', 'CME', -16246874, { shares: 711166, prev_shares: 773225, weight: 0.127072, suspect_units: true }),
+        row('trimmed', 'ILMN', -16097356, { shares: 679878, prev_shares: 740132, weight: 0.123969 }),
       ] },
       'VGD-13F': { manager: 'Vanguard Group', firm: 'Vanguard Group Inc', featured: false, changes: { new: 1 }, moves: [row('new', 'VVV', 9e11)] },
       '0000950123-26-011111': { manager: 'Warren Buffett', featured: true, changes: { new: 1, added: 2, trimmed: 1, exited: 1 }, moves: [row('added', 'PUTX', 9e9, { put_call: 'Put' }), row('added', 'GOOGL', 8.8e9), row('new', 'DHI', 2e9), row('trimmed', 'BAC', -1.7e9), row('exited', 'STZ', -1e9)] },
@@ -727,6 +735,9 @@ describe('copybook api', () => {
     for (const no of ['X3', 'IVV', ', LLC', 'VVV', 'Vanguard', 'OLDX', 'PUTX', '$77.0B', 'gift', '$50.0K']) expect(w.text).not.toContain(no);
     expect(w.text.indexOf('BAC')).toBeLessThan(w.text.indexOf('STZ'));
     expect(w.text).not.toMatch(/sold out (XOM|CVX)|CVX/); // netted: an added XOM, and CVX unchanged
+    // Impossible and flagged moves never show; an all-caps filer name reads normally.
+    expect(w.text).toContain('Guardcap Asset Management: trimmed ILMN, −$16.1M');
+    expect(w.text).not.toMatch(/BKNG|CME|GUARDCAP/);
     vi.stubGlobal('fetch', realFetch);
     const unsub = w.text.match(/Unsubscribe: (\S+)/)![1];
     expect((w as unknown as { headers: Record<string, string> }).headers['List-Unsubscribe']).toBe(`<${unsub}>`);
@@ -770,6 +781,20 @@ describe('copybook api', () => {
     expect(go.headers.get('location')).toBe('https://checkout.stripe.com/c/pay/cs_x');
     expect(checkout).toContain('customer=wb');
     expect(checkout).toContain('line_items[0][price]=price_copy_monthly');
+  });
+
+  it('alert moves: a unit mismatch between quarters is never sent (GuardCap BKNG); real trades are', () => {
+    const pos = (ticker: string, cusip: string, shares: number, value: number) => ({ ticker, cusip, issuer: ticker, put_call: null, shares, value });
+    // Last quarter's BKNG share count was in the wrong units: 646,216 "shares" worth $6.6M.
+    const prev = [pos('BKNG', '09857L108', 646216, 6_600_000), pos('ILMN', '452327109', 740132, 100_000_000), pos('OLD', '000000001', 10, 5_000_000), pos('BIG', '000000002', 1000, 10e9)];
+    const cur = [pos('BKNG', '09857L108', 1304, 6_677_000), pos('ILMN', '452327109', 679878, 92_000_000), pos('ISRG', '46120E602', 1000, 4_000_000), pos('BIG', '000000002', 1000, 10e9)];
+    // A $10B book: the -$842M BKNG "trim" is under half of it, but 100x the position's value either quarter.
+    const { moves } = computeMoves(cur, prev);
+    expect([...moves.new, ...moves.added, ...moves.trimmed, ...moves.exited].map((r) => r.ticker).sort()).toEqual(['ILMN', 'ISRG', 'OLD']);
+    expect(moves.sold_usd).toBeLessThan(20_000_000);
+    expect(displayCase('GUARDCAP ASSET MANAGEMENT Ltd')).toBe('Guardcap Asset Management Ltd');
+    expect(displayCase('AQR CAPITAL MANAGEMENT LLC')).toBe('AQR Capital Management LLC');
+    expect(displayCase('ICICI Prudential Asset Management')).toBe('ICICI Prudential Asset Management');
   });
 
   it('GET /events: every issuer Form 4 since the quarter whose 13Fs are due began, not just the latest 20 (CSGP CEO buy behind 21 grants)', async () => {

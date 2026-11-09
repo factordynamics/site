@@ -179,6 +179,26 @@ export function quarterOf(reportDate: string): string {
 }
 
 /**
+ * A move whose size can't be right, so it never reaches an email, chat post, webhook or the weekly: a
+ * unit mismatch between quarters (GuardCap's BKNG "trim" of $3.3B on a $1.5B book). Dropped when the
+ * data run flags it `suspect_units`, when the $ change exceeds half the filer's book, or when it exceeds
+ * twice the larger of the prior and current position values (twice: the trade is priced at this quarter's
+ * value per share, so a price move alone can lift it above the prior value).
+ */
+export function implausibleMove(r: { value_delta: number; value?: number | null; prev_value?: number | null; suspect_units?: boolean }, book: number | null): boolean {
+  if (r.suspect_units) return true;
+  const d = Math.abs(r.value_delta);
+  if (book && d > 0.5 * book) return true;
+  return r.prev_value != null && d > 2 * Math.max(r.value ?? 0, r.prev_value);
+}
+
+/** All-caps filer names ("GUARDCAP ASSET MANAGEMENT Ltd") as "Guardcap Asset Management Ltd"; short acronyms (AQR, LLC) stay. */
+export function displayCase(name: string): string {
+  if ((name.match(/\b[A-Z]{4,}\b/g) ?? []).length < 1 || /[a-z]{3,}/.test(name.replace(/\b(Ltd|Inc|Co|Corp|Llc|Plc)\b\.?/g, ''))) return name;
+  return name.replace(/\b([A-Z])([A-Z&']{3,})\b/g, (_, a: string, b: string) => a + b.toLowerCase()).replace(/\b(Of|And|The|For)\b/g, (w, _x, i: number) => (i ? w.toLowerCase() : w));
+}
+
+/**
  * New, exited, added and trimmed positions against the prior quarter, sized by the trade at this
  * filing's own value per share (a price move alone is no trade), as the data run computes them.
  */
@@ -213,6 +233,10 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     else if (c.shares !== p.shares) rows.push(row(named, c.shares > p.shares ? 'added' : 'trimmed', c.shares, p.shares, value, c.shares ? ((c.shares - p.shares) * value) / c.shares : 0));
   }
   for (const p of before.values()) rows.push(row(p, 'exited', 0, p.shares, 0, -p.value));
+  // Moves whose size can't be right (units changed between quarters) are left out; the larger book is the yardstick.
+  const prior = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p.value]));
+  const book = Math.max(total, prevTotal);
+  for (let i = rows.length - 1; i >= 0; i--) if (implausibleMove({ ...rows[i], prev_value: prior.get(`${rows[i].cusip}|${rows[i].put_call ?? ''}`) ?? null }, book)) rows.splice(i, 1);
   const top = (c: string) =>
     rows
       .filter((r) => r.change === c)

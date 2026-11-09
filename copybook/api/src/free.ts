@@ -6,6 +6,7 @@
  */
 import { FOOTER, sendMail, type Mail } from './email';
 import type { Env, Member } from './env';
+import { displayCase, implausibleMove } from './edgar';
 import { changeFollows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
 import { bump } from './revenue';
 import { signToken, verifyToken } from './tokens';
@@ -138,7 +139,7 @@ export interface Week {
 /** ETFs and index products held in a 13F ("iShares 20 Yr Tr Bd ETF"): index flow, not a pick. */
 const FUND_SECURITY = /\b(etf|ishares|spdr|select sector|proshares|direxion|invesco qqq|vanguard|index)\b/i;
 /** "Fisher Asset Management, LLC" reads as "Fisher Asset Management". */
-const plainName = (n: string) => n.replace(/,?\s+(llc|l\.?l\.?c\.?|l\.?p\.?|ltd\.?|limited|inc\.?|co\.?)$/i, '').trim();
+const plainName = (n: string) => displayCase(n).replace(/,?\s+(llc|l\.?l\.?c\.?|l\.?p\.?|ltd\.?|limited|inc\.?|co\.?)$/i, '').trim();
 const PASSIVE = /\b(vanguard|blackrock|ishares|state street|spdr|geode|dimensional|invesco|schwab|northern trust|index|etf|securities co|morgan stanley|barclays|deutsche bank|ubs|jpmorgan|goldman sachs|citigroup|bank of america|mitsubishi|mizuho|amundi|nomura|wells fargo|royal bank)\b/i;
 /** Filing cards read per weekly run (each is a subrequest): the superinvestors' first, then other funds, newest first. */
 const MAX_CARDS = 30;
@@ -174,7 +175,7 @@ export async function weeklyMoves(env: Env, now: number): Promise<Week> {
   const read = await Promise.all(cards.map((c) => get(`${env.SITE_URL}d/f/${c.accession}.json`)));
   cards.forEach((c, i) => {
     // A card keeps its top 5 moves by size in `moves` (each with `change`); `changes` holds only counts.
-    const d = read[i] as { manager?: string; firm?: string; featured?: boolean; moves?: (Row & { change?: string })[] } | null;
+    const d = read[i] as { manager?: string; firm?: string; featured?: boolean; total_value?: number; moves?: (Row & { change?: string; weight?: number; suspect_units?: boolean })[] } | null;
     if (!d) return;
     const manager = plainName(d.manager ?? d.firm ?? c.slug);
     if (!d.featured && !featured.has(c.slug) && PASSIVE.test(`${manager} ${d.firm ?? ''}`)) return;
@@ -183,6 +184,8 @@ export async function weeklyMoves(env: Env, now: number): Promise<Week> {
     const byTicker = new Map<string, Row & { change?: string }>();
     for (const r of Array.isArray(d.moves) ? d.moves : []) {
       if (!r.ticker || r.put_call || !['new', 'added', 'trimmed', 'exited'].includes(r.change ?? '')) continue;
+      // A $ change bigger than half the book is a unit mismatch between quarters, not a trade.
+      if (implausibleMove({ ...r, value: r.weight != null && d.total_value ? r.weight * d.total_value : null }, d.total_value ?? null)) continue;
       const o = byTicker.get(r.ticker);
       if (!o) byTicker.set(r.ticker, { ...r });
       else {

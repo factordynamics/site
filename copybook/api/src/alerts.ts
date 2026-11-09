@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
-import { companyFilings, computeMoves, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { companyFilings, computeMoves, displayCase, implausibleMove, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, type Env, type Member } from './env';
 import { getFollows, listMembers, putMember, type Follows } from './members';
 
@@ -722,7 +722,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
       fresh.push({
         slug: lead.slug,
         slugs,
-        manager: lead.manager,
+        manager: displayCase(lead.manager),
         name: lead.name,
         quarter: quarterOf(f.report_date),
         report_date: f.report_date,
@@ -803,7 +803,11 @@ function recentMoves(env: Env): (acc: string) => Promise<Moves | null> {
       const r = await fetch(`${env.DATA_URL}alerts.json`);
       recent = r.ok ? (((await r.json()) as { recent?: { accession: string; moves?: Moves }[] }).recent ?? []) : [];
     }
-    return recent.find((x) => x.accession === acc)?.moves ?? null;
+    const m = recent.find((x) => x.accession === acc)?.moves ?? null;
+    if (!m) return null;
+    // The data run's rows, guarded like the poll's: its trade size as a share of the book, and its suspect_units flag.
+    const ok = (rows: MoveRow[]) => rows.filter((r) => !implausibleMove(r, r.delta_pct_of_book != null && r.value_delta ? Math.abs(r.value_delta / r.delta_pct_of_book) : null));
+    return { ...m, new: ok(m.new), added: ok(m.added), trimmed: ok(m.trimmed), exited: ok(m.exited) };
   };
 }
 
