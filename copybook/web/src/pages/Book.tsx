@@ -275,7 +275,7 @@ export function Book() {
 
   const csv = () => {
     // Every column names whose figures it holds: all 13F filers or the funds we track closely.
-    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'new_all', 'exited_all', 'holders_smart', 'holders_smart_older_filings', 'top10_smart', 'over_5pct_smart', `filed_${season}_smart`, 'holders_hedge', 'holders_hedge_older_filings', 'top10_hedge', 'over_5pct_hedge', `filed_${season}_hedge`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'latest_form', 'latest_date', 'latest_filer', 'latest_action', 'latest_value_usd', 'latest_pct_change', 'latest_accession', 'holder_form', 'holder_date', 'holder_filer', 'holder_line', 'holder_accession', 'lens']
+    const head = ['ticker', 'name', 'owned', 'holders_all', 'holders_all_min', 'holders_all_older_filings', 'all_filer_count_incomplete', 'top10_all', 'top10_all_min', 'over_5pct_all', 'over_5pct_all_min', `filed_${season}_all`, `filed_${season}_all_min`, 'new_all', 'exited_all', 'holders_smart', 'holders_smart_older_filings', 'top10_smart', 'over_5pct_smart', `filed_${season}_smart`, 'holders_hedge', 'holders_hedge_older_filings', 'top10_hedge', 'over_5pct_hedge', `filed_${season}_hedge`, 'holders_tracked', 'holders_tracked_last_13f', 'superinvestors', 'new_tracked', 'exited_tracked', 'top10_tracked', 'over_5pct_tracked', `filed_${season}_tracked`, 'bought_tracked', 'sold_tracked', 'net_usd_tracked', 'split', 'insider_form', 'insider_action', 'insider_value_usd', 'insider_pct_change', 'insider_trade_date', 'insider_filed_date', 'insider_accession', 'insider_name', 'insider_title', 'insider_exercise_and_sale', 'insider_none', 'holder_form', 'holder_action', 'holder_pct_of_class', 'holder_filed_date', 'holder_accession', 'holder_filer', 'holder_line', 'lens']
     const q = (v: unknown) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))
     const body = rows.map((r) =>
       [
@@ -288,9 +288,10 @@ export function Book() {
         r.t.holders, r.t.prev, r.featured, r.t.added, r.t.exited, r.t.top10, r.t.over5, r.t.filed,
         r.split && !r.split.adjusted ? '' : r.bought, r.split && !r.split.adjusted ? '' : r.sold, r.split && !r.split.adjusted ? '' : Math.round(r.net),
         r.split ? `${r.split.ratio} ${r.split.adjusted ? 'adjusted' : 'not counted'}` : '',
-        r.latest?.form ?? '', r.latest?.date ?? '', r.latest?.manager ?? '',
-        r.latest?.action ?? '', r.latest?.value != null ? Math.round(Math.abs(r.latest.value)) : '', r.latest?.pct != null ? (r.latest.pct * 100).toFixed(2) : '', dashed(r.latest?.accession),
-        r.holder?.form ?? '', r.holder?.date ?? '', r.holder?.manager ?? '', r.holder?.line ?? '', dashed(r.holder?.accession),
+        // The two lines of the page's Form 4/13D cell, exactly: the insider trade, then the 13D/G.
+        r.insider?.form ?? '', r.insider?.action ?? '', r.insider?.value != null ? Math.round(Math.abs(r.insider.value)) : '', r.insider?.pct != null ? (r.insider.pct * 100).toFixed(2) : '',
+        r.insider?.tradeDate ?? '', r.insider?.date ?? '', dashed(r.insider?.accession), r.insider?.who ?? '', r.insider?.title ?? '', r.insider ? (r.insider.exSale ? 'true' : 'false') : '', r.insider ? '' : (r.empty ?? ''),
+        r.holder?.form.replace(/^SCHEDULE /i, '') ?? '', r.holder?.action ?? '', r.holder?.ofClass ?? '', r.holder?.date ?? '', dashed(r.holder?.accession), r.holder?.who ?? '', r.holder?.line ?? '',
         LENSES.find(([k]) => k === lens)![1],
       ].map(q).join(','),
     )
@@ -402,10 +403,10 @@ export function Book() {
                         <tr key={r.ticker} className="border-b border-line last:border-0 hover:bg-ink/[0.025]">
                           <td className="px-3 py-2.5 pl-5 md:pl-6">
                             <span className="flex items-center gap-2">
-                              <Link to={stockPath(r.ticker)} className="font-mono text-[13px] font-semibold hover:text-accent">
+                              <Link to={stockPath(r.ticker)} title={r.name} className="font-mono text-[13px] font-semibold hover:text-accent">
                                 {r.ticker}
                               </Link>
-                              <span className="max-w-[6rem] truncate text-ink-2" title={r.name}>{r.name}</span>
+                              <span className="hidden max-w-[6rem] truncate text-ink-2 min-[1400px]:inline" title={r.name}>{r.name}</span>
                               {r.owned ? <Badge tone="accent" className="whitespace-nowrap">{linked.has(r.ticker) ? 'Owned · 13F' : 'Owned'}</Badge> : <Badge className="whitespace-nowrap">Watched</Badge>}
                             </span>
                           </td>
@@ -728,6 +729,13 @@ type Latest = {
   value: number | null
   pct: number | null
   accession: string
+  /** For the CSV: the trade's own date, the person or fund, their title, and an option exercise sold the same day. */
+  tradeDate: string | null
+  who: string
+  title: string | null
+  exSale: boolean
+  /** 13D/G: the percent of the class after the filing. */
+  ofClass: number | null
 }
 type StockEv = NonNullable<Stock['since']>[number]
 const pctChange = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(x) < 0.1 ? (Math.abs(x) * 100).toFixed(1) : Math.round(Math.abs(x) * 100)}%`
@@ -759,7 +767,7 @@ function evLatest(e: StockEv): Latest {
               : 'Amended'
   }
   const action = e.kind === 'form4' ? (e.action === 'buy' ? 'bought' : e.action === 'sell' ? 'sold' : 'traded') : sched
-  return { form: e.form, date: e.filing_date, manager: who, line: `${what} · ${who}`, url: e.url, action, value: e.kind === 'form4' ? (e.value_usd ?? null) : null, pct, accession: accNo(e.url) }
+  return { form: e.form, date: e.filing_date, manager: who, line: `${what} · ${who}`, url: e.url, action, value: e.kind === 'form4' ? (e.value_usd ?? null) : null, pct, accession: accNo(e.url), tradeDate: e.event_date ?? null, who, title: null, exSale: false, ofClass: e.kind === 'form4' ? null : (e.percent_of_class ?? null) }
 }
 
 // Insider names arrive surname-first ("Jain Ajit"); people read first-last. Entities stay as filed.
@@ -797,7 +805,22 @@ export function issuerLatest(e: IssuerEvent): Latest {
   }
   const action = f4 ? (e.action === 'buy' ? 'bought' : e.action === 'sell' ? 'sold' : (VERB[e.action] ?? 'other')) : sched
   // EDGAR dates filings in New York time; a 6:30 pm ET acceptance is the next day in UTC.
-  return { form: e.form, date: new Date(e.accepted_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }), manager: who, line: `${what} · ${who}${role}`, url: e.url, action, value: f4 && (e.action === 'buy' || e.action === 'sell' || e.action === 'mixed') ? e.value_usd : null, pct, accession: accNo(e.accession) }
+  return {
+    form: e.form,
+    date: new Date(e.accepted_at).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }),
+    manager: who,
+    line: `${what} · ${who}${role}`,
+    url: e.url,
+    action,
+    value: f4 && (e.action === 'buy' || e.action === 'sell' || e.action === 'mixed') ? e.value_usd : null,
+    pct,
+    accession: accNo(e.accession),
+    tradeDate: e.trade_date ?? e.event_date ?? null,
+    who,
+    title: e.role ? e.role.split(',')[0].trim() : null,
+    exSale: f4 && e.action === 'sell' && exerciseAndSale(e),
+    ofClass: f4 ? null : e.percent_of_class,
+  }
 }
 // EDGAR's own form (0001017918-26-000058), so spreadsheets read it as text, not 1.017918e+14.
 const dashed = (a?: string) => (a && /^\d{18}$/.test(a) ? `${a.slice(0, 10)}-${a.slice(10, 12)}-${a.slice(12)}` : (a ?? ''))
@@ -854,7 +877,7 @@ function EventsCell({ r, w }: { r: { ticker: string; insider?: Latest | null; ho
   const line = (l: Latest) => (
     <span className="block max-w-[14rem]">
       <span className="font-medium">{l.form.replace(/^SCHEDULE /i, '')}</span> · {dateLabel(l.date)}
-      <a href={l.url} className={`block ${w} truncate text-ink-2 hover:text-accent`} title={`${l.line}. Open the filing on EDGAR`}>
+      <a href={l.url} className={`block ${w} text-ink-2 hover:text-accent`} title={`${l.line}. Open the filing on EDGAR`}>
         {l.line}
       </a>
     </span>

@@ -113,6 +113,8 @@ export type IssuerEvent = {
   prev_shares_after: number | null
   percent_of_class: number | null
   event_date: string | null
+  /** Form 4: the open-market trade's date (the window is on it). */
+  trade_date?: string | null
   accepted_at: string
   accession: string
   url: string
