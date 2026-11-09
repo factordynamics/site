@@ -902,8 +902,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const st: any = pub?.ok ? await pub.json() : null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: any[];
+    // Like /v1 holders: current share (SH) positions by default; ?include=options,exited adds those rows (`kind` and
+    // `change` say which).
+    const include = new Set((url.searchParams.get('include') ?? '').split(',').map((x) => x.trim()).filter(Boolean));
+    if ([...include].some((x) => x !== 'options' && x !== 'exited')) return json({ ok: false, error: 'include: options, exited (comma-separated)', code: 'bad_request' }, 400, h);
     if (full) {
-      rows = full.rows.filter(keep).map((r) => ({ cik: r.filer.cik, name: r.filer.name, slug: r.filer.slug, type: r.filer.type, kind: r.kind, quarter: r.period, shares: r.shares, prev_shares: r.prev_shares, value: r.value_usd, prev_value: r.prev_value_usd, change: r.change, weight: r.weight, accession: r.accession, accepted_at: r.accepted_at }));
+      const { splitHolders } = await import('./v1data');
+      const sp = splitHolders(full.rows.filter(keep), include.has('options'));
+      rows = [...sp.holders, ...(include.has('exited') ? sp.exited : [])].map((r) => ({ cik: r.filer.cik, name: r.filer.name, slug: r.filer.slug, type: r.filer.type, kind: r.kind, quarter: r.period, shares: r.shares, prev_shares: r.prev_shares, value: r.value_usd, prev_value: r.prev_value_usd, change: r.change, weight: r.weight, accession: r.accession, accepted_at: r.accepted_at }));
     } else if (st) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rows = (st.holders ?? []).map((x: any) => ({ cik: null, name: x.manager, slug: x.slug, kind: 'equity', quarter: x.quarter, shares: x.shares, prev_shares: x.prev_shares ?? null, value: x.value, prev_value: x.prev_value ?? null, change: x.change ?? null, weight: x.weight }));
@@ -922,7 +928,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
         r.accepted_at = meta?.accepted_at ?? null;
       }
     } else return json({ ok: false, error: 'unknown ticker' }, 404, h);
-    return new Response(holdersCsv(rows), { headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="copybook-${ticker}-holders.csv"`, 'cache-control': 'private, no-store', 'x-copybook-coverage': full ? 'all-filers' : 'curated' } });
+    return new Response(holdersCsv(rows), { headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="copybook-${ticker}-holders.csv"`, 'cache-control': 'private, no-store', 'x-copybook-coverage': full ? 'all-filers' : 'curated', 'x-copybook-rows': ['equity', ...include].join(',') } });
   }
 
   // Every followed fund's latest 13F in one CSV, streamed fund by fund.

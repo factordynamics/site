@@ -2519,6 +2519,12 @@ describe('copybook api', () => {
     // The lensed CSV: only the filer types asked for.
     expect((await (await call('/stocks/NVDA/holders.csv?type=hedge_fund,active', { token: t })).text()).trim().split('\r\n')).toHaveLength(2);
     expect((await call('/stocks/NVDA/holders.csv?type=nope', { token: t })).status).toBe(400);
+    // Like /v1: share positions by default; ?include=options,exited adds those rows, `kind` and `change` say which.
+    await hist.put('hl/67066G.json', JSON.stringify({ issuer: '67066G', tickers: ['NVDA'], columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call'], rows: [['0000000001', 'Holder A', null, 'hedge_fund', false, '2026Q2', 100, 100, 1000, 1000, 'unchanged', null], ['0000000002', 'Seller B', null, 'hedge_fund', false, '2026Q2', 0, 50, 0, 500, 'exited', null], ['0000000003', 'Options C', null, 'hedge_fund', false, '2026Q2', 10, 0, 100, 0, 'new', 'Call']] }));
+    const kinds = async (q: string) => (await (await call(`/stocks/NVDA/holders.csv${q}`, { token: t })).text()).trim().split('\r\n').slice(1).map((l) => l.split(',').slice(1, 4).filter(Boolean).join(' ') + ' ' + l.split(',')[10]);
+    expect(await kinds('')).toEqual(['Holder A equity unchanged']);
+    expect(await kinds('?include=options,exited')).toEqual(['Holder A equity unchanged', 'Options C calls new', 'Seller B equity exited']);
+    expect((await call('/stocks/NVDA/holders.csv?include=bonds', { token: t })).status).toBe(400);
     // The JSON list for My book is Pro and Fund only.
     expect((await call('/stocks/NVDA/holders', { token: t })).status).toBe(403);
     expect((await call('/stocks/ZZZZ/holders.csv', { token: t })).status).toBe(404);
