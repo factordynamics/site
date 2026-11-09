@@ -339,7 +339,32 @@ def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int
     return "long_only", "shape: diversified"
 
 
+def apply_overrides() -> int:
+    """Curated runs: the hand overrides and reviewed cases on top of the last full run's filer_types.json,
+    so a change to them is live (and passes the gate) without waiting for a full run."""
+    doc = read(DATA / "filer_types.json")
+    if not doc:
+        return 0
+    changed = {c: t for c, t in OVERRIDES.items() if c in doc["filers"] and doc["filers"][c].get("type") != t}
+    for c, t in changed.items():
+        doc["filers"][c] |= {"type": t, "basis": "override"}
+    if changed:
+        (DATA / "filer_types.json").write_text(json.dumps(doc, separators=(",", ":")) + "\n")
+        filers_doc = read(DATA / "filers.json") or {"filers": []}
+        for f in filers_doc["filers"]:
+            f["type"] = changed.get(f["cik"], f.get("type"))
+        (DATA / "filers.json").write_text(json.dumps(filers_doc, separators=(",", ":")) + "\n")
+        for c, t in changed.items():
+            shard = read(DATA / "f" / f"{c}.json")
+            if shard is not None:
+                (DATA / "f" / f"{c}.json").write_text(json.dumps(shard | {"type": t}, separators=(",", ":")) + "\n")
+    print(f"filer types: {len(changed)} overrides applied to the last full run's types")
+    return 0
+
+
 def main() -> int:
+    if "--overrides" in sys.argv:
+        return apply_overrides()
     filers_doc = read(DATA / "filers.json") or {"filers": []}
     curated = {m["cik"]: m for m in (read(DATA / "index.json") or {}).get("managers") or []}
     out: dict[str, dict] = {}
