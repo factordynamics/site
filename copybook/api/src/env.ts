@@ -103,6 +103,8 @@ export interface Member {
   why_sent?: string;
   /** A Copy Fund seat: the owner's Stripe customer id. Billing, seats and shared lists are the owner's. */
   seat_of?: string;
+  /** Sessions issued before this (unix) are refused: the Fund owner revoked the seat's sessions. */
+  sessions_after?: number;
   /** Set once the member picks an alert scope themselves (POST /alerts). */
   alerts_chosen?: boolean;
   /** A one-time line for the next email, e.g. "followed" after moving "all" to followed funds. */

@@ -45,7 +45,17 @@ function mirror(owner: Member, seat: Seat, prev?: Member | null): Member {
     alerts_chosen: prev?.alerts_chosen,
     welcomed: true,
     seat_of: owner.customer,
+    ...(prev?.sessions_after ? { sessions_after: prev.sessions_after } : {}),
   };
+}
+
+/** The owner signs a seat out everywhere: its sessions issued until now stop working; it can sign in again by email. */
+export async function revokeSeatSessions(env: Env, owner: Member, raw: string, now = Date.now()): Promise<boolean> {
+  const seat = (await listSeats(env, owner.customer)).find((s) => s.email === raw.trim().toLowerCase());
+  const m = seat ? await getMember(env, seat.id) : null;
+  if (!m) return false;
+  await putMember(env, { ...m, sessions_after: Math.floor(now / 1000) });
+  return true;
 }
 
 export async function inviteSeat(env: Env, owner: Member, raw: string): Promise<{ ok: true; seat: Seat } | { ok: false; status: number; error: string; code: string }> {
@@ -82,5 +92,5 @@ export async function mirrorSeats(env: Env, owner: Member): Promise<void> {
 }
 
 export function seatsView(owner: Member, seats: Seat[]) {
-  return { max: SEAT_LIMIT, active: isActive(owner) && owner.plan === 'fund', seats: seats.map(({ email, invited_at }) => ({ email, invited_at })) };
+  return { max: SEAT_LIMIT, active: isActive(owner) && owner.plan === 'fund', seats: seats.map(({ email, invited_at }) => ({ email, invited_at })), revoke_available: true };
 }

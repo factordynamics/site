@@ -2374,7 +2374,7 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ to: ['analyst@fund.example'], subject: 'You have a Copy Fund seat on Copybook' });
     const login = decodeURIComponent(sent[0].text.match(/\?login=([^\s]+)/)![1]);
-    const seat = (await (await call('/session', { body: { login } })).json()).token;
+    let seat = (await (await call('/session', { body: { login } })).json()).token;
     expect((await (await call('/me', { token: seat })).json()).member).toMatchObject({ email: 'analyst@fund.example', plan: 'fund', active: true, seat: true, owner: 'pm@fund.example' });
 
     // The book, follows and peers are the team's; alert settings are the seat's own.
@@ -2426,6 +2426,21 @@ describe('copybook api', () => {
     await cron(47);
     expect(posts.filter((p) => p.url === teamSlack)).toHaveLength(1);
     expect(posts.filter((p) => p.url.includes('discord.com'))).toHaveLength(1);
+
+    // The owner signs a seat out everywhere: its sessions stop working at once (even after the owner's next
+    // subscription update rewrites the seat), and the seat can sign in again by email.
+    const before = await call('/seats/analyst%40fund.example/revoke', { method: 'POST', token: seat });
+    expect(before.status).toBe(403); // only the owner
+    const rv = await call('/seats/analyst%40fund.example/revoke', { method: 'POST', token: owner });
+    expect([rv.status, (await rv.json()).revoke_available]).toEqual([200, true]);
+    await webhook({ type: 'customer.subscription.updated', data: { object: sub('sub_fund', 'cus_fund', 'active', 'year', 'fund_yearly') } });
+    expect((await call('/me', { token: seat })).status).toBe(401);
+    expect((await call('/me', { token: owner })).status).toBe(200);
+    expect((await call('/seats/nobody%40fund.example/revoke', { method: 'POST', token: owner })).status).toBe(404);
+    await new Promise((r) => setTimeout(r, 1000)); // a new session is issued in a later second
+    const again = (await (await call('/session', { body: { login: await signToken(env.SESSION_SECRET, 'login', seatId, 600) } })).json()).token;
+    expect((await call('/me', { token: again })).status).toBe(200);
+    seat = again;
 
     // Ten seats at most; the 11th is refused.
     for (const n of [2, 3, 4, 5, 6, 7, 8, 9, 10]) expect((await call('/seats', { body: { email: `s${n}@fund.example` }, token: owner })).status).toBe(201);

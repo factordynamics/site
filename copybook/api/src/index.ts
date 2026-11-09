@@ -13,7 +13,7 @@ import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows
 export { MemberFollows } from './members';
 import { importBook } from './book';
 import { businessSummary, handleKeepResume, handleWhy } from './revenue';
-import { inviteSeat, listSeats, removeSeat, seatsView } from './seats';
+import { inviteSeat, listSeats, removeSeat, revokeSeatSessions, seatsView } from './seats';
 import { stripe, verifyStripeSignature } from './stripe';
 import { hmacHex, signToken, verifyToken } from './tokens';
 
@@ -133,7 +133,9 @@ async function body(req: Request): Promise<Record<string, unknown>> {
 async function authed(req: Request, env: Env): Promise<Member | null> {
   const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   const p = await verifyToken(env.SESSION_SECRET, token, 'session');
-  return p ? getMember(env, p.c) : null;
+  const m = p ? await getMember(env, p.c) : null;
+  // Signed out everywhere (a Fund owner revoked the seat's sessions): sessions issued before then are refused.
+  return m && !(m.sessions_after && p!.x - SESSION_TTL <= m.sessions_after) ? m : null;
 }
 
 async function issueSession(env: Env, m: Member) {
@@ -755,6 +757,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const r = await inviteSeat(env, m, email);
       if (!r.ok) return json({ ok: false, error: r.error, code: r.code }, r.status, h);
       return json({ ok: true, ...seatsView(m, await listSeats(env, m.customer)) }, 201, h);
+    }
+    const revoke = path.match(/^\/seats\/([^/]+)\/revoke$/);
+    if (req.method === 'POST' && revoke) {
+      if (!(await revokeSeatSessions(env, m, decodeURIComponent(revoke[1])))) return json({ ok: false, error: 'no such seat' }, 404, h);
+      return json({ ok: true, revoked_at: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), ...seatsView(m, await listSeats(env, m.customer)) }, 200, h);
     }
     const del = path.match(/^\/seats\/([^/]+)$/);
     if (req.method === 'DELETE' && del) {
