@@ -16,6 +16,11 @@ on:
     - cron: "40 */3 * * *"
     - cron: "15,35,55 * 9-17 11 *"
   workflow_dispatch:
+    inputs:
+      force_data:
+        description: Publish even if the data is older than the live site's
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -83,6 +88,10 @@ jobs:
       - run: node scripts/sitemap.mjs dist "${VITE_DATA_BASE}index.json"
       # Share tags: one description per page, twitter matching og. Fails the deploy otherwise.
       - run: node scripts/checkmeta.mjs dist
+      # Never publish an older data snapshot than the live one (the data repo can briefly go backwards).
+      - run: node scripts/freshgate.mjs dist
+        env:
+          FORCE_DATA: ${{ inputs.force_data && '1' || '' }}
       # Skip the deploy (without failing) until Pages is enabled in the repo settings.
       - id: pages
         env:

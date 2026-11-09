@@ -1,4 +1,4 @@
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Signup } from '../components/Signup'
 import { Arrow, Badge, Button, Lock, Panel, Skeleton } from '../components/ui'
 import { TRIAL_DAYS } from '../config'
@@ -16,15 +16,17 @@ const CHANGE: Record<RecapMove['change'], string> = { new: 'New', added: 'Added'
 const dueLabel = (iso: string) => new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
 
 export function Recap() {
-  const { quarter = '' } = useParams()
+  const { quarter = '', view } = useParams()
+  const nav = useNavigate()
   const q = quarter.toUpperCase()
   const valid = /^\d{4}Q[1-4]$/.test(q)
   const tick = useTick(120_000, true)
   const r = useAsync(() => (valid ? loadRecap(q, tick ? Date.now() : undefined) : Promise.reject(new Error('bad quarter'))), [q, tick])
   const member = useMember()
   // Rank by dollars or by % of book (a small fund's conviction counts as much as a big book's dollars).
-  const [params, setParams] = useSearchParams()
-  const by: 'usd' | 'pct' = params.get('by') === 'pct' ? 'pct' : 'usd'
+  // The % view has its own path (/season/{q}/pct/) so a shared link unfurls its own card; ?by=pct still works.
+  const [params] = useSearchParams()
+  const by: 'usd' | 'pct' = view === 'pct' || params.get('by') === 'pct' ? 'pct' : 'usd'
   const paid = Boolean(member?.active)
   const d = r.data
   const Q = quarterLabel(q)
@@ -89,7 +91,7 @@ export function Recap() {
                   ['pct', '% of book'],
                 ] as const
               ).map(([k, l]) => (
-                <button key={k} type="button" role="tab" aria-selected={by === k} onClick={() => setParams(k === 'usd' ? {} : { by: k }, { replace: true })} className={`min-h-9 rounded-full px-3.5 ${by === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                <button key={k} type="button" role="tab" aria-selected={by === k} onClick={() => nav(`/season/${quarter}/${k === 'pct' ? 'pct/' : ''}`, { replace: true })} className={`min-h-9 rounded-full px-3.5 ${by === k ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                   {l}
                 </button>
               ))}

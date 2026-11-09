@@ -54,8 +54,11 @@ page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Co
   } catch {}
   // The season recap, with its own title and share card (scripts/cards.mjs).
   try {
-    const r = JSON.parse(readFileSync(join(dist, 'og', `season-${index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort().at(-1).toLowerCase()}.json`), 'utf8'))
-    page(r.path, r.title, r.desc, '', r.url)
+    const rq = index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort().at(-1).toLowerCase()
+    for (const k of [rq, `${rq}-pct`]) {
+      const r = JSON.parse(readFileSync(join(dist, 'og', `season-${k}.json`), 'utf8'))
+      page(r.path, r.title, r.desc, '', r.url)
+    }
   } catch {}
   // The season tracker's title names the quarter now filing, for search during filing week.
   const qs = index.managers.filter((m) => m.ok && m.quarter).map((m) => m.quarter).sort()

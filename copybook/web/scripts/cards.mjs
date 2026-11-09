@@ -224,11 +224,18 @@ ${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572
       : `<text x="${x0}" y="352" font-family="Geist" font-size="22" fill="#8a8f99">Nothing yet</text>`)
   const usd = (f, sold) => [f.ticker, who(sold ? f.sellers : f.buyers, sold ? f.n_sellers : f.n_buyers), `${f.net_value >= 0 ? '+' : '−'}${money(f.net_value)}`]
   const pct = (f) => [f.ticker, who(f.buyers, f.n_buyers), `+${(f.pct * 100).toFixed(1)}% of book`]
+  const pctSold = (f) => [f.ticker, who(f.sellers, f.n_sellers), `−${(Math.abs(f.pct) * 100).toFixed(1)}% of book`]
+  // Two cards: the page's default, and the "% of book" view (/season/{q}/pct/), so a shared link unfurls what it shows.
+  for (const byPct of [false, true]) {
   // After the deadline the card leads with breadth: what the most superinvestors bought.
-  const left = r.final
+  const left = byPct
+    ? col((r.most_bought_pct ?? []).slice(0, 3).map(pct), 72, 'BIGGEST BUYS, % OF BOOK', '#126b3c')
+    : r.final
     ? col(r.most_buyers.slice(0, 3).map((f) => [f.ticker, short(cut(f.name, 18)), `${f.n_buyers} bought`]), 72, 'BOUGHT BY THE MOST', '#126b3c')
     : col(r.most_bought.slice(0, 3).map((f) => usd(f, false)), 72, 'MOST BOUGHT', '#126b3c')
-  const right = r.final
+  const right = byPct
+    ? col((r.most_sold_pct ?? []).slice(0, 3).map(pctSold), 638, 'BIGGEST SALES, % OF BOOK', '#b4322a')
+    : r.final
     ? col((r.most_bought_pct ?? []).slice(0, 3).map(pct), 638, 'BIGGEST BETS, % OF BOOK', '#2b44d6')
     : col(r.most_sold.slice(0, 3).map((f) => usd(f, true)), 638, 'MOST SOLD', '#b4322a')
   const card = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
@@ -237,29 +244,30 @@ ${rows || `<text x="72" y="430" font-family="Geist" font-size="24" fill="#5f6572
 <text x="124" y="94" font-family="Geist" font-weight="600" font-size="32" letter-spacing="-0.8" fill="#0c0e13">Copybook</text>
 <text x="1128" y="92" text-anchor="end" font-family="Geist" font-weight="500" font-size="22" fill="#5f6572">${x(`${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'filed so far'}`)}</text>
 <text x="72" y="196" font-family="Geist" font-weight="600" font-size="54" letter-spacing="-2" fill="#0c0e13">${x(`${q} 13F recap`)}</text>
-<text x="72" y="238" font-family="Geist" font-size="24" fill="#5f6572">What the superinvestors bought and sold${r.final ? '' : ', so far'}</text>
+<text x="72" y="238" font-family="Geist" font-size="24" fill="#5f6572">${byPct ? 'Their biggest bets, as a share of each one’s book' : 'What the superinvestors bought and sold'}${r.final ? '' : ', so far'}</text>
 <path d="M72 262H1128" stroke="#e6e3dc"/>
 ${left}
 ${right}
 <path d="M600 284V500" stroke="#e6e3dc"/>
 <path d="M72 556H1128" stroke="#e6e3dc"/>
 <text x="72" y="596" font-family="Geist" font-weight="500" font-size="22" fill="#393e49">${x(`${r.opened_count} new · ${r.exited_count} exits`)}</text>
-<text x="1128" y="596" text-anchor="end" font-family="Geist" font-weight="600" font-size="22" fill="#2b44d6">${x(`copybook.factordynamics.com/season/${r.quarter.toLowerCase()}`)}</text>
+<text x="1128" y="596" text-anchor="end" font-family="Geist" font-weight="600" font-size="22" fill="#2b44d6">${x(`copybook.factordynamics.com/season/${r.quarter.toLowerCase()}${byPct ? '/pct' : ''}`)}</text>
 </svg>`
   const v = createHash('sha1').update(card).digest('hex').slice(0, 10)
-  const slug = r.quarter.toLowerCase()
+  const slug = r.quarter.toLowerCase() + (byPct ? '-pct' : '')
   writeFileSync(join(out, 'og', `season-${slug}.png`), new Resvg(card, { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng())
   const top = r.most_bought.slice(0, 3).map((f) => f.ticker)
   writeFileSync(
     join(out, 'og', `season-${slug}.json`),
     JSON.stringify({
-      path: `season/${slug}/`,
+      path: `season/${r.quarter.toLowerCase()}/${byPct ? 'pct/' : ''}`,
       url: `${SITE}og/season-${slug}.png?v=${v}`,
-      title: `${q} 13F recap: what the superinvestors bought and sold · Copybook`,
+      title: byPct ? `${q} 13F recap: the superinvestors' biggest bets by % of book · Copybook` : `${q} 13F recap: what the superinvestors bought and sold · Copybook`,
       desc: `${r.superinvestors.filed} of ${r.superinvestors.total} superinvestors ${r.final ? 'filed' : 'have filed'} ${q} 13Fs.${top.length ? ` Most bought: ${top.join(', ')}.` : ''} New positions, full exits, the biggest moves and who filed late, from SEC EDGAR.`,
     }),
   )
-  console.log(`recap card: ${q}${r.final ? ' final' : ' so far'} (v=${v})`)
+  console.log(`recap card${byPct ? ' (% of book)' : ''}: ${q}${r.final ? ' final' : ' so far'} (v=${v})`)
+  }
 }
 
 // /speed/'s share card: this season's median and 90th percentile from EDGAR acceptance to delivery, or

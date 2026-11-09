@@ -68,6 +68,7 @@ handoff.then(() =>
             <Route path="flow" element={<Flow />} />
             <Route path="season" element={<Season />} />
             <Route path="season/:quarter" element={<Recap />} />
+            <Route path="season/:quarter/:view" element={<Recap />} />
             <Route path="for-funds" element={<ForFunds />} />
             <Route path="for-quants" element={<ForQuants />} />
             <Route path="consensus" element={<Consensus />} />
