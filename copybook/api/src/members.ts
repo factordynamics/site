@@ -51,6 +51,37 @@ function priceOf(sub: any) {
   return sub?.items?.data?.[0]?.price ?? sub?.plan;
 }
 
+const TIERS = new Set(['copy', 'pro', 'fund', 'holdterm']);
+
+/**
+ * A Copybook (or Holdterm) price: `copybook` metadata, or one of our lookup keys. The Stripe account also carries
+ * other prices (the Substack-era newsletter, Creo): their subscriptions never become members.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function isOurPrice(p: any): boolean {
+  if (!p || typeof p !== 'object') return false;
+  return TIERS.has(String(p.metadata?.copybook ?? '')) || /^(copy|pro|fund|holdterm)_(monthly|yearly)$/.test(String(p.lookup_key ?? ''));
+}
+
+/** Every item of the subscription is a Copybook price (an item-less object is not ours). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function isOurSubscription(sub: any): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const items = (sub?.items?.data ?? []) as any[];
+  return items.length ? items.every((i) => isOurPrice(i?.price ?? i?.plan)) : isOurPrice(sub?.plan);
+}
+
+/** An invoice for a Copybook price (lines carry the price object, or only its id in newer API versions). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function isOurInvoice(env: Env, inv: any): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const l of (inv?.lines?.data ?? []) as any[]) {
+    const p = l?.price ?? l?.plan ?? l?.pricing?.price_details?.price;
+    if (p && typeof p === 'object' ? isOurPrice(p) : typeof p === 'string' && isOurPrice(await stripe(env, 'GET', `prices/${p}`).catch(() => null))) return true;
+  }
+  return false;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function planOf(sub: any): Member['plan'] {
   const p = priceOf(sub);

@@ -1134,13 +1134,28 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0); // once per season
 
     // A failed payment: one email with Stripe's hosted page to update the card and pay, once per invoice.
-    const inv = { id: 'in_fail', customer: 'cus_pz', amount_due: 900, hosted_invoice_url: 'https://invoice.stripe.com/i/acct_x/test_fail', next_payment_attempt: now() + 3 * 86400 };
+    const inv = { id: 'in_fail', customer: 'cus_pz', lines: { data: [{ price: { lookup_key: 'copy_monthly' } }] }, amount_due: 900, hosted_invoice_url: 'https://invoice.stripe.com/i/acct_x/test_fail', next_payment_attempt: now() + 3 * 86400 };
     sent = [];
     await webhook({ type: 'invoice.payment_failed', data: { object: inv } });
     await webhook({ type: 'invoice.payment_failed', data: { object: inv } });
     expect(sent.map((m) => m.subject)).toEqual(["Your Copy payment didn't go through"]);
     expect(sent[0].text).toContain('$9.00');
     expect(sent[0].text).toContain('https://invoice.stripe.com/i/acct_x/test_fail');
+
+    // The account's other prices (the Substack-era $5 newsletter, Creo) never make or change a member, or send email.
+    sent = [];
+    const legacyPrice = { id: 'monthly5usd', lookup_key: null, metadata: { substack: 'yes' }, recurring: { interval: 'month' } };
+    const legacy = { id: 'sub_legacy', customer: 'cus_legacy', status: 'active', items: { data: [{ price: legacyPrice, current_period_end: now() + 30 * 86400 }] } };
+    stripeObjects['customers/cus_legacy'] = { id: 'cus_legacy', email: 'reader@substack.example' };
+    stripeObjects['subscriptions/sub_legacy'] = legacy;
+    stripeObjects['prices/monthly5usd'] = legacyPrice;
+    for (const type of ['customer.subscription.created', 'customer.subscription.updated']) expect((await webhook({ type, data: { object: legacy } })).status).toBe(200);
+    await webhook({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_legacy', customer: 'cus_legacy', customer_details: { email: 'reader@substack.example' } } } });
+    // An existing Copy member's legacy invoice: no Copybook dunning email either (lines carry only the price id).
+    const legacyInv = { id: 'in_legacy', customer: 'cus_pz', lines: { data: [{ pricing: { price_details: { price: 'monthly5usd' } } }] }, amount_due: 500, amount_paid: 500, hosted_invoice_url: 'https://invoice.stripe.com/i/x' };
+    await webhook({ type: 'invoice.payment_failed', data: { object: legacyInv } });
+    await webhook({ type: 'invoice.paid', data: { object: legacyInv } });
+    expect([await env.DB.get('cus:cus_legacy'), await env.DB.get('email:reader@substack.example'), sent.length]).toEqual([null, null, 0]);
   });
 
   it('alert moves: a unit mismatch between quarters is never sent (GuardCap BKNG); real trades are', () => {
@@ -1484,11 +1499,12 @@ describe('copybook api', () => {
     expect((await (await call('/me', { token: rr })).json()).member.referral).toMatchObject({ signups: 1, paid: 0 });
     calls.length = 0;
     sent = [];
-    await webhook({ type: 'invoice.paid', data: { object: { customer: 'cus_nw', amount_paid: 0 } } }); // the trial's $0 invoice
+    stripeObjects['prices/price_pro_yearly'] = { id: 'price_pro_yearly', lookup_key: 'pro_yearly', metadata: { copybook: 'pro' } }; // invoice lines name the price by id
+    await webhook({ type: 'invoice.paid', data: { object: { customer: 'cus_nw', lines: { data: [{ pricing: { price_details: { price: 'price_pro_yearly' } } }] }, amount_paid: 0 } } }); // the trial's $0 invoice
     expect(calls).toHaveLength(0);
     // The first paid invoice: one month of the referrer's own plan (Copy, $9) as a balance credit, once.
-    await webhook({ type: 'invoice.paid', data: { object: { customer: 'cus_nw', amount_paid: 35100 } } });
-    await webhook({ type: 'invoice.paid', data: { object: { customer: 'cus_nw', amount_paid: 35100 } } });
+    await webhook({ type: 'invoice.paid', data: { object: { customer: 'cus_nw', lines: { data: [{ pricing: { price_details: { price: 'price_pro_yearly' } } }] }, amount_paid: 35100 } } });
+    await webhook({ type: 'invoice.paid', data: { object: { customer: 'cus_nw', lines: { data: [{ pricing: { price_details: { price: 'price_pro_yearly' } } }] }, amount_paid: 35100 } } });
     expect(calls.map((c) => [c.path, c.body.match(/amount=(-?\d+)/)?.[1]])).toEqual([['customers/cus_rr/balance_transactions', '-900']]);
     expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['rr@example.com', 'You earned a free month of Copy']]);
     expect((await (await call('/me', { token: rr })).json()).member.referral).toMatchObject({ signups: 1, paid: 1, months_earned: 1 });

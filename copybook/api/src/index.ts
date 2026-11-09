@@ -9,7 +9,7 @@ import { handleV1, v1error } from './v1';
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
 import { ACTIVE, apiBase, isActive, isCopy, isPaused, isPro, linkBase, type Env, type Member } from './env';
-import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
+import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
 import { businessSummary, handleKeepResume, handleWhy } from './revenue';
@@ -147,18 +147,28 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
   }
   const event = JSON.parse(raw);
   const obj = event.data?.object ?? {};
+  // Only Copybook and Holdterm prices make or change members: the account's other subscriptions (the Substack-era
+  // newsletter, Creo) are logged and acknowledged, so Stripe doesn't retry, with no member, plan change or email.
+  const ignore = (what: string) => (console.log(`webhook: ${event.type} ${obj.id ?? ''} ignored (${what} not a Copybook price)`), json({ ok: true, ignored: true }, 200, {}));
   switch (event.type) {
     case 'checkout.session.completed':
       if (obj.mode === 'subscription' && obj.subscription) {
         const sub = await stripe(env, 'GET', `subscriptions/${obj.subscription}`);
+        if (!isOurSubscription(sub)) return ignore('subscription');
         await syncSubscription(env, sub, obj.customer_details?.email);
       }
       break;
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted':
+      if (!isOurSubscription(obj)) return ignore('subscription');
       await syncSubscription(env, obj);
       break;
+    case 'invoice.paid':
+    case 'invoice.payment_failed':
+      if (!(await isOurInvoice(env, obj))) return ignore('invoice');
+  }
+  switch (event.type) {
     case 'invoice.paid': {
       const { rewardReferrer } = await import('./referrals');
       console.log(`referral: ${await rewardReferrer(env, obj)}`);
@@ -375,6 +385,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!m) return json({ ok: false, error: 'no such member' }, 404, h);
     const r = await changeFollows(env, m, (await body(req)) as unknown as FollowOp);
     return json(r.ok ? { ok: true, follows: r.follows } : r, r.ok ? 200 : 400, h);
+  }
+
+  // Operator, read-only: members whose Stripe subscription is not a Copybook or Holdterm price (made before the webhook's guard).
+  if (req.method === 'GET' && path === '/ops/price-audit') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const out: Record<string, unknown>[] = [];
+    let checked = 0;
+    for (const m of await listMembers(env)) {
+      if (!m.subscription?.startsWith('sub_')) continue;
+      checked++;
+      const sub = await stripe(env, 'GET', `subscriptions/${m.subscription}`).catch(() => null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (sub && !isOurSubscription(sub)) out.push({ customer: m.customer, subscription: m.subscription, member_plan: m.plan, member_status: m.status, stripe_status: sub.status, prices: (sub.items?.data ?? []).map((i: any) => ({ id: i.price?.id, product: i.price?.product, unit_amount: i.price?.unit_amount, interval: i.price?.recurring?.interval, metadata: i.price?.metadata })) });
+    }
+    return json({ ok: true, checked, not_copybook: out.length, members: out }, 200, h);
   }
 
   // Operator: one account per email for a free signup and paid member split before the merge shipped.
