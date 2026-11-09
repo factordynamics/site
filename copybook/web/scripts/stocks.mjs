@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { getJson } from './getjson.mjs'
 import { ETF_NAMES } from './etfs.mjs'
 import { isEdgarDay } from '../src/lib/calendar.mjs'
+import { displayName } from '../src/lib/names.mjs'
 
 const out = process.argv[2] || 'dist'
 const base = process.argv[3] || process.env.VITE_DATA_BASE || 'https://refcell.github.io/gust/copybook/data/'
@@ -368,31 +369,63 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
     return a.length % 2 ? a[(a.length - 1) / 2] : Math.round((a[a.length / 2 - 1] + a[a.length / 2]) / 2)
   }
   const expected = []
-  for (const m of active.filter((x) => x.featured)) {
-    const h = await read(`${m.slug}-history.json`).catch(() => null)
-    const past = (h?.history ?? []).filter((x) => x.accepted_at && qn(x.quarter) < q && !/\/A$/.test(x.form ?? '')).sort((x, y) => y.quarter.localeCompare(x.quarter)).slice(0, 4)
-    if (!past.length) continue
+  const notFiling = []
+  // Every superinvestor, including those whose 13F is filed by another entity (Ackman by Pershing
+  // Square Inc.): their timing comes from the entity that files. 13F-NT quarters (holdings reported
+  // elsewhere) and amendments say nothing about when the 13F-HR goes in, so they are skipped.
+  for (const m of index.managers.filter((x) => x.featured && x.ok !== false && x.status !== 'inactive')) {
+    const via = m.status === 'reported_by_other' && m.reported_by?.slug && m.reported_by.slug !== m.slug ? m.reported_by : null
+    const src = via?.slug ?? m.slug
+    const h = await read(`${src}-history.json`).catch(() => null)
+    // Each quarter's original 13F-HR, not the amendment that may now head the quarter.
+    const past = (h?.history ?? [])
+      .filter((x) => qn(x.quarter) < q)
+      .map((x) => {
+        const orig = (x.filings ?? []).filter((f) => f.form === '13F-HR' && f.accepted_at).sort((a, z) => a.accepted_at.localeCompare(z.accepted_at))[0]
+        return { quarter: x.quarter, accepted_at: orig?.accepted_at ?? (x.form === '13F-HR' ? x.accepted_at : null) }
+      })
+      .filter((x) => x.accepted_at)
+      .sort((x, y) => y.quarter.localeCompare(x.quarter))
+      .slice(0, 4)
+    if (!past.length || qn(past[0].quarter) < q - 4) {
+      notFiling.push({ slug: m.slug, manager: m.manager, last: past[0]?.quarter ?? m.quarter ?? null })
+      continue
+    }
+    // Most recent first.
     const hist = past.map((x) => ({ quarter: x.quarter, accepted_at: x.accepted_at, days_before: edgarDaysBefore(nyDay(x.accepted_at), deadlineDay(qn(x.quarter))) }))
-    const days = median(hist.map((x) => Math.max(0, x.days_before)))
-    const mins = median(past.map((x) => nyMinutes(x.accepted_at)))
-    const spread = Math.max(...hist.map((x) => x.days_before)) - Math.min(...hist.map((x) => x.days_before))
-    const now = books.find((b) => b.slug === m.slug)
-    const filedNow = now && qn(now.quarter) === q
+    // The usual day: the value at least 2 of the last 4 share; a tie goes to the most recent quarters.
+    const counts = new Map()
+    for (const x of hist) counts.set(Math.max(0, x.days_before), (counts.get(Math.max(0, x.days_before)) ?? 0) + 1)
+    const best = Math.max(...counts.values())
+    const days = hist.map((x) => Math.max(0, x.days_before)).find((d) => counts.get(d) === best)
+    const pattern = best >= 3 ? 'usually' : best === 2 ? 'most' : 'none'
+    // Time of day: the median of the last four when they agree within 30 minutes, else the last two.
+    const mins = past.map((x) => nyMinutes(x.accepted_at))
+    const spread = (xs) => Math.max(...xs) - Math.min(...xs)
+    const recent = mins.slice(0, 2)
+    const wide = recent.length === 2 && spread(recent) > 30
+    const time_et = spread(mins) <= 30 ? median(mins) : wide ? recent[0] : median(recent)
+    const time_range = spread(mins) > 30 && wide ? [Math.min(...recent), Math.max(...recent)] : null
+    const books_ = books.find((b) => b.slug === m.slug) ?? books.find((b) => b.slug === src)
+    const filedNow = books_ && qn(books_.quarter) === q
     expected.push({
       slug: m.slug,
       manager: m.manager,
-      expected_date: shiftBack(due.toISOString().slice(0, 10), days),
-      days_before: days,
-      time_et: mins,
-      steady: spread <= 1,
+      ...(via ? { via: displayName(via.name ?? '') } : {}),
+      pattern,
+      expected_date: pattern === 'none' ? null : shiftBack(due.toISOString().slice(0, 10), days),
+      days_before: pattern === 'none' ? Math.max(0, hist[0].days_before) : days,
+      time_et,
+      ...(time_range ? { time_range } : {}),
       history: hist,
-      ...(filedNow ? { filed: { filing_date: now.filing_date, accession: now.accession } } : {}),
+      ...(filedNow ? { filed: { filing_date: books_.filing_date, accession: books_.accession } } : {}),
     })
   }
-  expected.sort((a, b) => a.expected_date.localeCompare(b.expected_date) || a.time_et - b.time_et)
+  expected.sort((a, b) => (a.expected_date ?? '9').localeCompare(b.expected_date ?? '9') || a.time_et - b.time_et)
   const seasonOut = {
     quarter: Q,
     expected,
+    not_filing: notFiling,
     deadline: due.toISOString(),
     curated: { filed: active.filter((m) => qn(m.quarter) === q).length, total: active.length },
     featured: { filed: active.filter((m) => m.featured && qn(m.quarter) === q).length, total: active.filter((m) => m.featured).length },

@@ -206,12 +206,14 @@ export function Season() {
   )
 }
 
-// "Usually deadline day, after the close", from the filer's last four 13Fs.
+// "Usually deadline day, after the close", from the filer's last four 13F-HRs.
+const dayPhrase = (n: number) => (n === 0 ? 'deadline day' : n === 1 ? 'the business day before the deadline' : n >= 10 ? `about ${Math.round(n / 5)} weeks before the deadline` : `${n} business days before the deadline`)
 function usual(x: Expected) {
-  const day = x.days_before === 0 ? 'deadline day' : x.days_before === 1 ? 'the business day before the deadline' : x.days_before >= 10 ? `about ${Math.round(x.days_before / 5)} weeks before the deadline` : `${x.days_before} business days before the deadline`
   const t = x.time_et
   const when = t < 9 * 60 + 30 ? 'before the open' : t < 16 * 60 ? 'during market hours' : 'after the close'
-  return `${x.steady ? 'Usually' : 'Most often'} ${day}, ${when}`
+  const at = x.time_range ? `${clock(x.time_range[0])}–${clock(x.time_range[1])} lately` : `around ${clock(t)}`
+  if (x.pattern === 'none') return `No fixed day; last filed ${x.days_before === 0 ? 'on deadline day' : dayPhrase(x.days_before)}, ${when} (${at})`
+  return `${x.pattern === 'usually' ? 'Usually' : 'Most often'} ${dayPhrase(x.days_before)}, ${when} (${at})`
 }
 const clock = (m: number) => `${((Math.floor(m / 60) + 11) % 12) + 1}:${String(m % 60).padStart(2, '0')} ${m < 720 ? 'am' : 'pm'}`
 const dayLabel = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -226,7 +228,7 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
   const waiting = list.filter((x) => !x.filed)
   const done = list.filter((x) => x.filed)
   // Group the ones still to file by expected day.
-  const days = [...new Set(waiting.map((x) => x.expected_date))]
+  const days = [...new Set(waiting.map((x) => x.expected_date ?? ''))]
   return (
     <section id="expected" className="mt-5 scroll-mt-24 rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" aria-labelledby="expected-title">
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
@@ -251,13 +253,13 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
       <div className="divide-y divide-line">
         {days.map((day) => (
           <div key={day} className="grid grid-cols-1 gap-x-6 gap-y-1 px-5 py-3 md:grid-cols-[9rem_minmax(0,1fr)] md:px-6">
-            <p className={`pt-2 text-[13px] font-medium ${day < today ? 'text-[#8a5a0b]' : day === today ? 'text-accent' : 'text-ink-2'}`}>
-              {day === today ? 'Today' : dayLabel(day)}
-              {day < today && <span className="block text-[12px] font-normal">later than usual</span>}
+            <p className={`pt-2 text-[13px] font-medium ${day && day < today ? 'text-[#8a5a0b]' : day === today ? 'text-accent' : 'text-ink-2'}`}>
+              {!day ? 'No fixed day' : day === today ? 'Today' : dayLabel(day)}
+              {day && day < today && <span className="block text-[12px] font-normal">later than usual</span>}
             </p>
             <ul className="grid min-w-0 grid-cols-1 gap-x-6 sm:grid-cols-2">
               {waiting
-                .filter((x) => x.expected_date === day)
+                .filter((x) => (x.expected_date ?? '') === day)
                 .map((x) => (
                   <li key={x.slug} className="min-w-0">
                     <Link to={`/investors/${x.slug}/`} className="flex items-start gap-2.5 rounded-lg py-1.5 hover:text-accent">
@@ -265,7 +267,8 @@ function ExpectedPanel({ list, cards, now }: { list: Expected[]; cards?: Set<str
                       <span className="min-w-0">
                         <span className="block truncate text-[14px] font-medium">{x.manager}</span>
                         <span className="block text-[12.5px] leading-snug text-ink-3" title={x.history.map((h) => `${quarterLabel(h.quarter)}: ${new Date(h.accepted_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}`).join('\n')}>
-                          {usual(x)} (around {clock(x.time_et)})
+                          {x.via && <span className="text-ink-2">Files as {x.via.replace(/,?\s+(Inc|LLC|L\.?P|Ltd)\.?$/i, '')}. </span>}
+                          {usual(x)}
                         </span>
                       </span>
                     </Link>

@@ -91,13 +91,18 @@ export type SeasonFlow = { funds: number; bought: SeasonRow[]; sold: SeasonRow[]
 export type Expected = {
   slug: string
   manager: string
-  expected_date: string
-  /** EDGAR business days before the deadline (0 = deadline day). */
+  /** Filed through another entity (Ackman: Pershing Square). */
+  via?: string
+  /** usually: 3+ of the last 4 quarters on the same day; most: 2 of 4; none: no repeat. */
+  pattern: 'usually' | 'most' | 'none'
+  /** Null when there's no fixed day. */
+  expected_date: string | null
+  /** EDGAR business days before the deadline (0 = deadline day); the last one when there's no pattern. */
   days_before: number
   /** Minutes after midnight, New York time. */
   time_et: number
-  /** All four within a business day of each other. */
-  steady: boolean
+  /** The last two times, when they spread out. */
+  time_range?: [number, number]
   history: { quarter: string; accepted_at: string; days_before: number }[]
   filed?: { filing_date?: string; accession?: string }
 }
@@ -112,6 +117,8 @@ export type Season = {
   splits?: { ticker: string; name: string; ratio: string }[]
   /** Superinvestors' usual filing day and time, from their last four 13Fs. */
   expected?: Expected[]
+  /** Superinvestors with no 13F-HR in the last year. */
+  not_filing?: { slug: string; manager: string; last: string | null }[]
   featured_flow: SeasonFlow
   all_flow: SeasonFlow
   generated_at: string
