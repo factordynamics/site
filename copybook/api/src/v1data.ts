@@ -1,4 +1,4 @@
-import type { Env } from './env';
+import { apiBase, type Env } from './env';
 import { lookupTickers } from './alerts';
 import { cleanItem4, fetch13F, fetchFilingMeta, filings13F, type Filed13F, type FilingMeta } from './edgar';
 import { ROUTES, v1error, v1json, v1prefix, noMs, stampOf, type Stamp } from './v1';
@@ -641,7 +641,7 @@ ROUTES.push(
     // Persistent per-quarter exports of every filer's book, uploaded by the data run.
     // Only files that pass a size check: a full quarter of every filer is tens of MB gzipped; a stub (a failed run) is hidden until regenerated.
     const list = await env.HIST.list({ prefix: 'bulk/' });
-    const data = list.objects.filter((o) => o.size >= MIN_BULK_BYTES).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.size, uploaded_at: noMs(o.uploaded.toISOString()), url: `${url.origin}/v1/${o.key}` }));
+    const data = list.objects.filter((o) => o.size >= MIN_BULK_BYTES).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.size, uploaded_at: noMs(o.uploaded.toISOString()), url: `${apiBase(env, url)}/v1/${o.key}` }));
     return v1json({ data: data.sort((a: { file: string }, b: { file: string }) => b.file.localeCompare(a.file)) });
   }],
   ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env }, [file]) => {

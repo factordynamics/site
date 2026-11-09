@@ -8,7 +8,7 @@ import { handleV1 } from './v1';
 
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
-import { isActive, isCopy, isPro, type Env, type Member } from './env';
+import { apiBase, isActive, isCopy, isPro, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, LOGIN_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
@@ -707,21 +707,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       // A seat also sees its team's channel (the Fund owner's), read-only.
       const owner = m.seat_of ? await getMember(env, m.seat_of) : null;
       const team = owner ? { owner, c: await getChannels(env, owner.customer), failing: await getFailures(env, owner.customer) } : undefined;
-      return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), url.origin, await getFailures(env, m.customer), team) }, 200, h);
+      return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), apiBase(env, url), await getFailures(env, m.customer), team) }, 200, h);
     }
     if (req.method === 'PUT' && path === '/channels') {
       // A seat can't save its team's destination (409 already_team_channel); an owner's save clears seats' copies of it.
       const team = m.seat_of ? await getChannels(env, m.seat_of) : undefined;
       const r = await updateChannels(env, m, await body(req), team);
       if (r.ok && channelScope(m) === 'team') await clearSeatDuplicates(env, m);
-      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, url.origin, await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
+      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, apiBase(env, url), await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
     }
     if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, ...(await testChannels(env, m, await getChannels(env, m.customer))) }, 200, h);
     if (path === '/channels/feed' && (req.method === 'POST' || req.method === 'DELETE')) {
       const c = await rotateFeed(env, m, req.method === 'DELETE');
       // A new feed starts with the member's alerts from the last 30 days (at most 20), not empty.
       if (req.method === 'POST') await seedFeed(env, m.customer, await recentFeed(env, m, Date.now()));
-      return json({ ok: true, channels: channelsView(m, c, url.origin, await getFailures(env, m.customer)) }, 200, h);
+      return json({ ok: true, channels: channelsView(m, c, apiBase(env, url), await getFailures(env, m.customer)) }, 200, h);
     }
     return json({ ok: false, error: 'not found' }, 404, h);
   }
@@ -839,7 +839,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const n = crypto.randomUUID();
     await env.DB.put(`dl:${n}`, '1', { expirationTtl: DOWNLOAD_TTL });
     const token = await signToken(env.SESSION_SECRET, 'download', m.customer, DOWNLOAD_TTL, { s: link[1], n });
-    return json({ ok: true, url: `${url.origin}/csv/${link[1]}.csv?dl=${token}` }, 200, h);
+    return json({ ok: true, url: `${apiBase(env, url)}/csv/${link[1]}.csv?dl=${token}` }, 200, h);
   }
 
   // The full Flow lists (every name, every fund behind each move); the public file has the top rows.

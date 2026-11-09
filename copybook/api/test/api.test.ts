@@ -314,6 +314,9 @@ describe('copybook api', () => {
     const link = (await (await call('/csv-link/warren-buffett', { method: 'POST', token: session.token })).json()).url as string;
     expect(link).toMatch(/^https:\/\/api\.test\/csv\/warren-buffett\.csv\?dl=/);
     expect(link).not.toContain(session.token);
+    // Behind a proxy under a path (self-hosted), links use API_URL, not the request's origin.
+    const proxied = (await (await handleRequest(new Request('http://127.0.0.1:8787/csv-link/warren-buffett', { method: 'POST', headers: { authorization: `Bearer ${session.token}` } }), { ...env, API_URL: 'https://host.test/copybook/' })).json()).url as string;
+    expect(proxied).toMatch(/^https:\/\/host\.test\/copybook\/csv\/warren-buffett\.csv\?dl=/);
     const dlPath = link.slice('https://api.test'.length);
     expect((await call(dlPath.replace('/warren-buffett.csv', '/bill-ackman.csv'))).status).toBe(401);
     expect(await (await call(dlPath)).text()).toBe(csv);
