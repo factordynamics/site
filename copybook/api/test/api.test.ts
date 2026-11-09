@@ -624,6 +624,43 @@ describe('copybook api', () => {
     expect(sent[0].subject).toMatch(/^Copybook daily digest for \d{4}-\d{2}-\d{2}: 1 Form 4\/13D\/G$/);
   });
 
+  it('POST /upgrade: Copy yearly gets a portal confirm page for Pro yearly on the same subscription item; Pro and bad plans are refused', async () => {
+    const session = async (c: string, lookup: string, interval = 'month') => {
+      stripeObjects[`checkout/sessions/cs_test_${c}`] = { id: `cs_test_${c}`, status: 'complete', created: now(), subscription: `sub_${c}`, customer_details: { email: `${c}@example.com` } };
+      const s = sub(`sub_${c}`, `cus_${c}`, 'active', interval, lookup);
+      s.items.data[0] = { ...s.items.data[0], id: `si_${c}` } as (typeof s.items.data)[0];
+      stripeObjects[`subscriptions/sub_${c}`] = s;
+      return ((await (await call('/session', { body: { checkout_session: `cs_test_${c}` } })).json()) as { token: string }).token;
+    };
+    const copy = await session('cu', 'copy_yearly', 'year');
+    const pro = await session('pu', 'pro_monthly');
+    let portal = '';
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      const url = String(u);
+      if (url.startsWith('https://api.stripe.com/v1/prices?')) {
+        const key = new URL(url).searchParams.get('lookup_keys[]');
+        return Response.json({ data: [{ id: `price_${key}`, lookup_key: key }] });
+      }
+      if (url.includes('billing_portal/sessions')) portal = decodeURIComponent(String(init?.body));
+      return orig(u, init);
+    });
+    const r = await call('/upgrade', { body: { plan: 'pro' }, token: copy });
+    expect(r.status).toBe(200);
+    expect((await r.json()).url).toMatch(/^https:\/\/billing\.stripe\.com\//);
+    // The yearly Copy member is offered yearly Pro (not monthly), on its existing item, so no second subscription.
+    expect(portal).toContain('flow_data[type]=subscription_update_confirm');
+    expect(portal).toContain('flow_data[subscription_update_confirm][subscription]=sub_cu');
+    expect(portal).toContain('flow_data[subscription_update_confirm][items][0][id]=si_cu');
+    expect(portal).toContain('flow_data[subscription_update_confirm][items][0][price]=price_pro_yearly');
+    expect(portal).toContain(`flow_data[after_completion][redirect][return_url]=${env.SITE_URL}account/?upgraded=pro`);
+    portal = '';
+    expect(await (await call('/upgrade', { body: { plan: 'pro' }, token: pro })).json()).toMatchObject({ code: 'already_on_plan' });
+    expect((await call('/upgrade', { body: { plan: 'copy' }, token: copy })).status).toBe(400);
+    await call('/upgrade', { body: { plan: 'fund' }, token: pro });
+    expect(portal).toContain('[price]=price_fund_monthly');
+  });
+
   it('Copy Pro: keys only for Pro, shown once, /v1 needs an active Pro key, rate limits with standard headers, revoke works', async () => {
     let clock = Date.parse('2026-11-09T15:00:10Z');
     env.METER = memMeters(() => clock);

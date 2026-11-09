@@ -373,6 +373,40 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: 'Not part of Holdterm Alerts', code: 'holdterm_plan' }, 402, h);
   }
 
+  // Copy -> Pro/Fund (or Pro -> Fund): a portal page that confirms swapping the one subscription item to the
+  // higher plan's price at the same interval, prorated. A new checkout would start a second subscription.
+  if (req.method === 'POST' && path === '/upgrade') {
+    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    const plan = String((await body(req)).plan ?? '');
+    const rank: Record<string, number> = { copy: 1, pro: 2, fund: 3 };
+    if (plan !== 'pro' && plan !== 'fund') return json({ ok: false, error: 'plan must be "pro" or "fund"', code: 'bad_request' }, 400, h);
+    if (rank[m.plan] >= rank[plan]) return json({ ok: false, error: `Already on ${m.plan === 'fund' ? 'Copy Fund' : 'Copy Pro'}`, code: 'already_on_plan' }, 409, h);
+    const sub = await stripe(env, 'GET', `subscriptions/${m.subscription}`);
+    const item = sub.items?.data?.[0];
+    const interval = item?.price?.recurring?.interval === 'year' ? 'yearly' : 'monthly';
+    const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': `${plan}_${interval}`, active: true })).data?.[0];
+    if (!item?.id || !price?.id) return json({ ok: false, error: 'upgrade unavailable for this subscription', code: 'upgrade_unavailable' }, 409, h);
+    try {
+      const s = await stripe(env, 'POST', 'billing_portal/sessions', {
+        customer: m.customer,
+        configuration: env.PORTAL_CONFIGURATION || undefined,
+        return_url: `${env.SITE_URL}account/`,
+        'flow_data[type]': 'subscription_update_confirm',
+        'flow_data[subscription_update_confirm][subscription]': m.subscription,
+        'flow_data[subscription_update_confirm][items][0][id]': item.id,
+        'flow_data[subscription_update_confirm][items][0][price]': price.id,
+        'flow_data[subscription_update_confirm][items][0][quantity]': 1,
+        'flow_data[after_completion][type]': 'redirect',
+        'flow_data[after_completion][redirect][return_url]': `${env.SITE_URL}account/?upgraded=${plan}`,
+      });
+      return json({ ok: true, url: s.url }, 200, h);
+    } catch (e) {
+      // e.g. a subscription already set to cancel: Stripe refuses the update flow.
+      const msg = String((e as Error).message).match(/"message":"([^"]+)"/)?.[1] ?? 'Stripe refused the upgrade';
+      return json({ ok: false, error: msg, code: 'upgrade_unavailable' }, 409, h);
+    }
+  }
+
   // Copy Fund seats: the owner invites teammates by email; each gets their own sign-in link.
   if (path === '/seats' || path.startsWith('/seats/')) {
     if (m.seat_of) return json({ ok: false, error: "Seats are managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
