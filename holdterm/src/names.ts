@@ -102,3 +102,20 @@ export function issuerName(n: string | null | undefined): string {
     .join(' ')
   return s
 }
+
+// Short firm names for dense tables ("Lingotto Investment Management" -> "Lingotto"); the full name stays in
+// the title. Strips at most two generic trailing words, never the last distinctive one.
+const GENERIC_TAIL = /\s*(?:,|&)?\s*\b(Asset Management|Investment Management|Fund Management|Wealth Management|Portfolio Management|Management|Investment Counsel|Investment Advisers|Investment Advisors|Investment Partners|Advisers|Advisors|Investments|Investment|Group|Holdings|Holding|Associates|Company|& Co\.?|Co\.?|Partners|International|Global Investors|Investors)$/i
+// Names whose generic-looking tail is the brand, or that need a hand-made short form.
+const SHORT: Record<string, string> = { 'Graham Holdings': 'Graham Holdings', 'Focused Investors': 'Focused Investors', 'Caledonia (Private) Investments': 'Caledonia', 'Prescott General Partners': 'Prescott', 'Darlington Partners Capital Management': 'Darlington Partners', 'Greenbrier Partners Capital Management': 'Greenbrier Partners' }
+export function shortFirm(firm: string): string {
+  if (SHORT[firm]) return SHORT[firm]
+  let n = firm.trim()
+  for (let i = 0; i < 2; i++) {
+    const next = n.replace(GENERIC_TAIL, '').replace(/[\s,&]+$/, '')
+    // Keep at least one word that is not an initial ("C WorldWide" ok; never just "C").
+    if (next === n || !/[A-Za-z]{3,}/.test(next)) break
+    n = next
+  }
+  return n
+}

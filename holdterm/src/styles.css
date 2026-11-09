@@ -385,6 +385,14 @@ main:focus {
 }
 
 /* ---------- layout ---------- */
+/* A plain-language summary under a fund or stock title. */
+.summary {
+  margin: -4px 0 0;
+  max-width: 900px;
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--fg2);
+}
 .page {
   display: flex;
   flex-direction: column;
@@ -1286,6 +1294,17 @@ pre.email {
 }
 
 /* ---------- home ---------- */
+/* Firm names in dense tables wrap to at most two lines instead of being cut off. */
+.firm {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  line-height: 1.3;
+  max-width: 240px;
+  min-width: 72px;
+}
 .home {
   --trade-w: 250px;
 }
@@ -1518,6 +1537,10 @@ pre.email {
   }
   .head h1 {
     font-size: 23px;
+  }
+  .summary {
+    font-size: 15px;
+    margin-top: -2px;
   }
   .hb-row {
     grid-template-columns: minmax(0, 1.2fr) minmax(30px, 1fr) 66px;
@@ -1765,6 +1788,10 @@ pre.email a {
   }
   .guide-head,
   .guide > .guide-cards {
+    display: none;
+  }
+  .promo-guide .upsell,
+  .promo-upsell .guide {
     display: none;
   }
   .guide-mini {

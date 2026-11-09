@@ -34,7 +34,7 @@ import {
 } from './data'
 import { A, Bar, ChangeTag, date, day, Failed, Grid, Loading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
-import { firmName, fundPath, issuerName } from './names'
+import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
 import { follows, Follow, getToken, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, UNAVAILABLE, type Follows } from './account'
 
@@ -77,6 +77,15 @@ function FundLink({ slug, name }: { slug: string; name: string }) {
 }
 
 // ---------- shared bits ----------
+/** A firm in a dense table: its short name ("Lingotto"), wrapping to a second line rather than cut off. */
+function Firm({ name, strong }: { name: string; strong?: boolean }) {
+  const short = shortFirm(name)
+  return (
+    <span className={`firm${strong ? ' strong' : ''}`} title={short !== name ? name : undefined}>
+      {short}
+    </span>
+  )
+}
 function Sector({ s, full }: { s?: string | null; full?: boolean }) {
   const k = s || 'Unclassified'
   const short = SECTOR_SHORT[k] ?? 'Other'
@@ -266,9 +275,33 @@ function Upsell() {
   )
 }
 
+/** Phones have room above the filings for one promo per visit: the guide on a first visit, the alerts offer
+ * after that (or whichever is still open). Chosen once per visit, so dismissing one never reveals the other. */
+function phonePromo(): 'guide' | 'upsell' | '' {
+  try {
+    let first = sessionStorage.getItem('holdterm-first-visit')
+    if (first == null) {
+      const n = Number(localStorage.getItem('holdterm-visits') || 0) + 1
+      localStorage.setItem('holdterm-visits', String(n))
+      first = n === 1 ? '1' : '0'
+      sessionStorage.setItem('holdterm-first-visit', first)
+    }
+    // Kept for the whole visit, so dismissing the guide doesn't bring the offer back on the next page load.
+    const kept = sessionStorage.getItem('holdterm-promo')
+    if (kept != null) return kept as 'guide' | 'upsell' | ''
+    const guide = !localStorage.getItem(GUIDE_KEY)
+    const upsell = showUpsell()
+    const pick = guide && upsell ? (first === '1' ? 'guide' : 'upsell') : ''
+    sessionStorage.setItem('holdterm-promo', pick)
+    return pick
+  } catch {
+    return ''
+  }
+}
 export function Home() {
+  const [promo] = useState(phonePromo)
   return (
-    <>
+    <div className={promo ? `promo-${promo}` : undefined}>
       <Upsell />
       <div className="intro">
         <div>
@@ -278,7 +311,7 @@ export function Home() {
       </div>
       <FirstVisit />
       <HomeBody />
-    </>
+    </div>
   )
 }
 function HomeBody() {
@@ -360,7 +393,7 @@ function HomeBody() {
             href={(m) => fundPath(m.slug)}
             cols={[
               { key: 'f', label: 'filed', render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
-              { key: 'm', label: 'fund', link: true, render: (m) => <span className="trunc strong">{m.firm}</span> },
+              { key: 'm', label: 'fund', link: true, render: (m) => <Firm name={m.firm} strong /> },
               { key: 'q', label: 'qtr', hideSm: true, render: (m) => <span className={m.quarter === s.q ? 'tag acc' : 'dim'}>{quarterLabel(m.quarter)}</span> },
               { key: 'v', label: 'book', num: true, hideSm: true, width: '76px', render: (m) => usd(bySlug.get(m.slug)?.long_value ?? m.total_value) },
               {
@@ -423,7 +456,7 @@ function HomeBody() {
                 href={(x) => stockHref(x.h)}
                 cols={[
                   { key: 't', label: 'stock', render: (x) => <StockCell t={x.h.ticker} name={x.h.display_name || x.h.issuer} former={x.h.former} label={x.h.label} />, width: '72px' },
-                  { key: 'f', label: 'fund', link: true, render: (x) => <span className="trunc">{x.b.firm}</span> },
+                  { key: 'f', label: 'fund', link: true, render: (x) => <Firm name={x.b.firm} /> },
                   { key: 'a', label: '', render: (x) => <span className={`tag ${x.h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(x.h)}</span> },
                   { key: 'v', label: '$ traded', num: true, render: (x) => <span className={x.h.value_delta! > 0 ? 'pos' : 'neg'}>{signedUsd(x.h.value_delta)}</span> },
                 ]}
@@ -439,7 +472,7 @@ function HomeBody() {
                 href={(e) => (e.ticker ? `/s/${e.ticker}` : null)}
                 cols={[
                   { key: 'f', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, width: '72px' },
-                  { key: 'w', label: 'fund', render: (e) => <span className="trunc">{firmOf(firms, e.slug, e.manager)}</span> },
+                  { key: 'w', label: 'fund', render: (e) => <Firm name={firmOf(firms, e.slug, e.manager)} /> },
                   { key: 't', label: 'stock', render: (e) => <StockCell t={e.ticker} name={issuerName(e.display_name || e.issuer)} former={e.former} /> },
                   { key: 'a', label: '', render: (e) => <ActionTag e={e} /> },
                 ]}
@@ -456,7 +489,7 @@ function HomeBody() {
               href={(r) => stockHref(r)}
               cols={[
                 { key: 't', label: 'stock', render: (r) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, width: '72px' },
-                { key: 'f', label: 'fund', render: (r) => <A to={fundPath(r.slug)}>{r.firm}</A> },
+                { key: 'f', label: 'fund', render: (r) => <A to={fundPath(r.slug)}><Firm name={r.firm} /></A> },
                 { key: 'w', label: 'weight', num: true, render: (r) => pct(r.weight, 1) },
               ]}
             />
@@ -611,10 +644,11 @@ export function Fund({ slug }: { slug: string }) {
         </div>
         <Follow kind="investors" id={slug} />
       </div>
+      <FundSummary book={book} live={live} buys={buys} sells={sells} bought={bought} sold={-sold} top10={top10} newN={stock.filter((x) => x.change === 'new').length} exitN={stock.filter((x) => x.change === 'exited').length} />
       <div className="stats fund-stats">
-        <Stat label="period" value={quarterLabel(book.quarter)} sub={`Filed ${date(book.filing_date)}`} />
+        <Stat label="as of" value={quarterLabel(book.quarter)} sub={`Quarter ended ${day(book.report_date)}, filed ${day(book.filing_date)}`} />
         <Stat
-          label="13F book"
+          label="portfolio value"
           value={usd(book.long_value)}
           sub={
             <>
@@ -624,8 +658,8 @@ export function Fund({ slug }: { slug: string }) {
             </>
           }
         />
-        <Stat label="positions" value={live.length} sub={`${stock.filter((x) => x.change === 'new').length} new, ${stock.filter((x) => x.change === 'exited').length} sold out`} />
-        <Stat label="top 10 weight" value={pct(top10, 1)} sub={<Bar value={top10} max={1} />} />
+        <Stat label="stocks held" value={live.length} sub={`${stock.filter((x) => x.change === 'new').length} new, ${stock.filter((x) => x.change === 'exited').length} sold out`} />
+        <Stat label="in the top 10 holdings" value={pct(top10, 1)} sub={<Bar value={top10} max={1} />} />
         <Stat label="bought" value={usd(bought)} tone="pos" sub={`Across ${buys.length} positions`} />
         <Stat label="sold" value={usd(-sold)} tone="neg" sub={`Across ${sells.length} positions`} />
       </div>
@@ -722,6 +756,39 @@ function noteAmount(h: Holding) {
   if (noteLabel(h).startsWith('Preferred')) return `${num(h.shares)} shares`
   const p = h.principal_amount || h.shares
   return p ? `${usd(p)} principal` : '—'
+}
+const longDate = (d: string) => `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}, ${d.slice(0, 4)}`
+const plural = (n: number, one: string, many = one + 's') => `${num(n)} ${n === 1 ? one : many}`
+const nameOf = (h: Holding) => issuerName(h.display_name || h.issuer).replace(/\s+(class|cl\.?)\s+[a-z]\b.*$/i, '')
+/** "a, b and c" */
+const listing = (xs: (string | false | 0)[]) => xs.filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')
+/** The fund's latest 13F in two or three plain sentences, for readers who don't parse stat cards. */
+function FundSummary({ book, live, buys, sells, bought, sold, top10, newN, exitN }: { book: Book; live: Holding[]; buys: Holding[]; sells: Holding[]; bought: number; sold: number; top10: number; newN: number; exitN: number }) {
+  const top = [...live].sort((a, c) => c.weight - a.weight)[0]
+  const lag = Math.round((Date.parse(book.filing_date) - Date.parse(book.report_date)) / 86_400_000)
+  const shape = top10 >= 0.8 ? ', a very concentrated portfolio' : top10 >= 0.6 ? ', a concentrated portfolio' : ''
+  return (
+    <p className="summary">
+      On {longDate(book.report_date)}, {book.firm} held {plural(live.length, 'US-listed stock')} worth {usd(book.long_value)}, reported in a 13F filed {lag} days later.{' '}
+      {top && (
+        <>
+          Its largest holding is {nameOf(top)} at {pct(top.weight, 1)}
+          {live.length > 10 ? `, and the ten largest make up ${pct(top10, 0)}${shape}` : ''}.{' '}
+        </>
+      )}
+      {!book.prev_long_value ? (
+        <>This is its first 13F on file, so there are no trades to compare.</>
+      ) : bought || sold ? (
+        <>
+          Over the quarter it bought {usd(bought)} of stock and sold {usd(sold)}
+          {newN || exitN ? `, opening ${plural(newN, 'new position')} and closing ${num(exitN)}` : ''}.{' '}
+          {listing([buys[0] && `The biggest buy was ${nameOf(buys[0])}`, sells[0] && `${buys[0] ? 'the' : 'The'} biggest sale ${nameOf(sells[0])}`])}.
+        </>
+      ) : (
+        <>It made no trades over the quarter.</>
+      )}
+    </p>
+  )
 }
 /** Weight last quarter vs now, as two bars on one scale. */
 function WeightShift({ prev, now, max }: { prev: number; now: number; max: number }) {
@@ -1074,6 +1141,7 @@ export function Stock({ ticker }: { ticker: string }) {
   const nNew = cnt('new')
   const prevHolders = holders.length - nNew + exited.length
   const value = holders.reduce((x, h) => x + h.value, 0)
+  const topHolder = [...holders].sort((a, b) => b.weight - a.weight)[0]
   const movers = [...holders, ...exited].filter((h) => h.change && h.change !== 'unchanged').sort((a, b) => Math.abs(b.delta_value ?? 0) - Math.abs(a.delta_value ?? 0))
   const tickers = new Set(d.classes.map((c) => c.ticker))
   const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && !ownVehicle(e))
@@ -1104,6 +1172,21 @@ export function Stock({ ticker }: { ticker: string }) {
         </div>
         <Follow kind="stocks" id={d.ticker} />
       </div>
+      <p className="summary">
+        {holders.length ? (
+          <>
+            {num(holders.length)} of the investors Holdterm follows {holders.length === 1 ? 'owns' : 'own'} {issuerName(d.name)}, {usd(value)} in all, in their latest 13Fs.{' '}
+            {topHolder && (
+              <>
+                {name(topHolder)} has the most of its portfolio in it, {pct(topHolder.weight, 1)}.{' '}
+              </>
+            )}
+            {movers.length > 0 && <>Last quarter {listing([nNew > 0 && `${plural(nNew, 'investor')} started a position`, cnt('added') > 0 && `${num(cnt('added'))} added`, cnt('trimmed') > 0 && `${num(cnt('trimmed'))} trimmed`, exited.length > 0 && `${num(exited.length)} sold out`])}.</>}
+          </>
+        ) : (
+          <>None of the investors Holdterm follows reports {issuerName(d.name)} in its latest 13F.</>
+        )}
+      </p>
       <div className="stats">
         <Stat label="funds holding it" value={holders.length} sub={`${prevHolders} last quarter (${holders.length - prevHolders >= 0 ? '+' : ''}${holders.length - prevHolders})`} />
         <Stat label="value held" value={usd(value)} sub="Across those funds’ latest 13Fs" />
