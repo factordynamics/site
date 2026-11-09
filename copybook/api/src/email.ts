@@ -76,6 +76,15 @@ export function leadNoticeMail(env: Env, l: Record<string, unknown> & { topic: u
   };
 }
 
+/** A chat or webhook destination stopped working; email alerts carry on. */
+export function channelFailMail(env: Env, to: string, label: string, reason: string): Mail {
+  return {
+    to,
+    subject: `Your ${label} alerts stopped: ${reason}`,
+    text: `Copybook couldn't deliver your alerts to ${label}: ${reason}.\n\nYour email alerts are unaffected and keep arriving as usual. To fix ${label}, reconnect it (or paste a new URL or token) at ${env.SITE_URL}account/ and use "Send a test". Delivery resumes, and this notice clears, with the next alert that goes through.${FOOTER}`,
+  };
+}
+
 export function loginMail(env: Env, to: string, token: string, welcome: boolean): Mail {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
   const intro = welcome
@@ -516,14 +525,17 @@ export interface FeedItem {
   title: string;
   text: string;
   url: string;
+  /** EDGAR acceptance. */
   published: string;
+  /** When Copybook sent the alert. */
+  sent?: string;
 }
 
 /** Feed entries for this delivery, one per filing; ids are stable so a follow-up gets its own entry. */
 export function feedItems(env: Env, filings: Alert13F[], events: AlertEvent[], now: number): FeedItem[] {
   const none: Follows = { investors: [], stocks: [], owned: [], peers: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 0, cluster_buys: true, any_13d: true };
   return [
-    ...filings.map((a) => ({ id: `${a.accession}${a.followup ? ':moves' : ''}`, title: filingHeadline(a), text: filingBlock(env, a, none), url: filingUrl(env, a), published: a.accepted ?? new Date(now).toISOString() })),
-    ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, title: eventHeadline(e), text: eventLine(env, e, none), url: e.slug ? `${env.SITE_URL}investors/${e.slug}` : e.url, published: e.accepted ?? new Date(now).toISOString() })),
+    ...filings.map((a) => ({ id: `${a.accession}${a.followup ? ':moves' : ''}`, title: filingHeadline(a), text: filingBlock(env, a, none), url: filingUrl(env, a), published: a.accepted ?? new Date(now).toISOString(), sent: a.sent_at ?? new Date(now).toISOString() })),
+    ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, title: eventHeadline(e), text: eventLine(env, e, none), url: e.slug ? `${env.SITE_URL}investors/${e.slug}` : e.url, published: e.accepted ?? new Date(now).toISOString(), sent: e.sent_at ?? new Date(now).toISOString() })),
   ];
 }

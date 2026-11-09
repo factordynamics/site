@@ -304,7 +304,7 @@ export function openapi() {
       '/v1/events': {
         get: {
           summary: 'Form 4 and Schedule 13D/G filings, newest first, with filters',
-          description: 'The same filings the investor pages show: each curated filer\'s Form 4 and 13D/G since its latest 13F, plus every filing the minute poll parsed (followed filers, and any filer\'s 13D/G on members\' names). Each carries EDGAR\'s acceptance time (`accepted_at`), per-class Form 4 holdings (`classes`), the 13D\'s Item 4 excerpt (`purpose`) and the same filer\'s previous Schedule 13D/G on the issuer (`prev`). Details are read from EDGAR hourly, so a filing from the last hour can show null detail fields until then.',
+          description: 'The same filings the investor pages show: each curated filer\'s Form 4 and 13D/G since its latest 13F, plus every filing the minute poll parsed (followed filers, and any filer\'s 13D/G on members\' names). Each carries EDGAR\'s acceptance time (`accepted_at`), per-class Form 4 holdings (`classes`), the 13D\'s Item 4 excerpt (`purpose`) and the same filer\'s previous Schedule 13D/G on the issuer (`prev`). Details are read from EDGAR hourly, so a filing from the last hour can show null detail fields until then. Top-level `shares`, `shares_after` and `value_usd` sum every share class the filing reports (Lennar Class A and Class B together); `classes` has the per-class figures. `purpose` is set only on Schedule 13D filings and amendments that state or amend Item 4; it is null for 13Gs.',
           parameters: [
             { name: 'filer', in: 'query', required: false, description: 'Filer slug or CIK', schema: { type: 'string' } },
             { name: 'ticker', in: 'query', required: false, schema: { type: 'string' } },
@@ -321,7 +321,7 @@ export function openapi() {
               description: 'Events',
               content: json(envelope({ type: 'array', items: { type: 'object' } }, { count: { type: 'integer' }, next_offset: { type: ['integer', 'null'] } }), {
                 ...BUILD,
-                data: [{ accession: '0000921669-26-000412', form: 'SC 13D/A', kind: '13d', action: 'stake_update', filer: { slug: 'carl-icahn', cik: '0000921669', name: 'Carl Icahn' }, issuer: { name: 'CVR ENERGY INC', cik: '0001376139', ticker: 'CVI', cusip: '12662P108', display_name: 'CVR Energy' }, filing_date: '2026-11-05', accepted_at: '2026-11-05T21:14:03.000Z', event_date: '2026-11-03', shares: null, value_usd: null, avg_price: null, shares_after: 71198718, percent_of_class: 64.1, ten_percent_owner: null, amendment_no: 27, prev: { accession: '0000921669-25-000301', form: 'SC 13D/A', percent_of_class: 70.8, shares_after: 71198718 }, classes: null, purpose: null, insider: null, details_pending: false, sec_url: 'https://www.sec.gov/Archives/edgar/data/921669/000092166926000412/0000921669-26-000412-index.html' }],
+                data: [{ accession: '0000921669-26-000412', form: 'SC 13D/A', kind: '13d', action: 'stake_update', filer: { slug: 'carl-icahn', cik: '0000921669', name: 'Carl Icahn' }, issuer: { name: 'CVR ENERGY INC', cik: '0001376139', ticker: 'CVI', cusip: '12662P108', display_name: 'CVR Energy' }, filing_date: '2026-11-05', accepted_at: '2026-11-05T21:14:03Z', event_date: '2026-11-03', shares: null, value_usd: null, avg_price: null, shares_after: 71198718, percent_of_class: 64.1, ten_percent_owner: null, amendment_no: 27, prev: { accession: '0000921669-25-000301', form: 'SC 13D/A', percent_of_class: 70.8, shares_after: 71198718 }, classes: null, purpose: null, insider: null, details_pending: false, sec_url: 'https://www.sec.gov/Archives/edgar/data/921669/000092166926000412/0000921669-26-000412-index.html' }],
                 count: 1,
                 next_offset: null,
               }),
@@ -371,7 +371,7 @@ export function openapi() {
           responses: {
             '200': {
               description: 'Available files, newest first',
-              content: json(envelope({ type: 'array', items: { type: 'object', required: ['file', 'quarter', 'bytes', 'uploaded_at', 'url'], properties: { file: { type: 'string' }, quarter: { type: 'string' }, bytes: { type: 'integer' }, uploaded_at: { type: 'string', format: 'date-time' }, url: { type: 'string' } } } }), { ...BUILD, data: [{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 48211933, uploaded_at: '2026-11-09T02:10:00.000Z', url: 'https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz' }] }),
+              content: json(envelope({ type: 'array', items: { type: 'object', required: ['file', 'quarter', 'bytes', 'uploaded_at', 'url'], properties: { file: { type: 'string' }, quarter: { type: 'string' }, bytes: { type: 'integer' }, uploaded_at: { type: 'string', format: 'date-time' }, url: { type: 'string' } } } }), { ...BUILD, data: [{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 48211933, uploaded_at: '2026-11-09T02:10:00Z', url: 'https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz' }] }),
             },
             ...errResponses,
           },
@@ -379,9 +379,11 @@ export function openapi() {
       },
       '/v1/bulk/{file}': {
         get: {
-          summary: 'Download one bulk export (streams the file; not JSON)',
+          summary: 'Download one bulk export (streams the file; not JSON) (coming: returns 501 today)',
+          'x-status': 'coming',
+          description: '**Coming, not live yet:** returns 501 not_yet_available until the data run uploads the file; /v1/changelog logs the day it ships.',
           parameters: [{ name: 'file', in: 'path', required: true, schema: { type: 'string', pattern: '^\\d{4}Q[1-4]\\.(csv\\.gz|parquet)$' } }],
-          responses: { '200': { description: 'The file', content: { 'application/gzip': {}, 'application/vnd.apache.parquet': {} } }, ...errResponses },
+          responses: { '200': { description: 'The file', content: { 'application/gzip': {}, 'application/vnd.apache.parquet': {} } }, '501': { description: 'not_yet_available: not published yet', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }, ...errResponses },
         },
       },
       '/v1/changelog': {
@@ -415,7 +417,7 @@ export function openapi() {
                   required: ['schema_version', 'type', 'id', 'detected_at', 'filer', 'sec_url'],
                   properties: {
                     schema_version: { type: 'string' },
-                    type: { type: 'string', enum: ['13f', 'form4', '13d', '13g', 'insider_buy', 'insider_cluster'] },
+                    type: { type: 'string', enum: ['13f', 'form4', '13d', '13g', 'insider_buy', 'insider_cluster', 'test'], description: 'test: sent by "Send a test" in /account/, with a unique id and Copybook-Delivery each time; no filing behind it.' },
                     id: { type: 'string', description: 'Accession, with :moves or :details on a follow-up; cluster ids start with cluster:.' },
                     accession: { type: ['string', 'null'] },
                     form: { type: 'string' },
@@ -447,7 +449,7 @@ export function openapi() {
                     copybook_url: { type: ['string', 'null'] },
                   },
                 },
-                example: { schema_version: '2026-11-08', type: '13d', id: '0001193125-26-451979', accession: '0001193125-26-451979', form: 'SCHEDULE 13D/A', accepted_at: '2026-11-06T21:15:32.000Z', detected_at: '2026-11-06T21:16:01.000Z', filer: { slug: 'carl-icahn', name: 'Carl Icahn' }, issuer: 'CVR Energy, Inc.', ticker: 'CVI', action: 'stake_update', details_pending: false, followup: false, shares: null, value_usd: null, avg_price: null, classes: null, percent_of_class: 64.1, shares_after: 71201875, prev_percent_of_class: 70.8, prev_shares_after: 71201875, amendment_no: 41, item4: null, insider: null, insiders: null, sec_url: 'https://www.sec.gov/Archives/edgar/data/921669/000119312526451979/0001193125-26-451979-index.html', copybook_url: 'https://copybook.factordynamics.com/investors/carl-icahn' },
+                example: { schema_version: '2026-11-08', type: '13d', id: '0001193125-26-451979', accession: '0001193125-26-451979', form: 'SCHEDULE 13D/A', accepted_at: '2026-11-06T21:15:32Z', detected_at: '2026-11-06T21:16:01Z', filer: { slug: 'carl-icahn', name: 'Carl Icahn' }, issuer: 'CVR Energy, Inc.', ticker: 'CVI', action: 'stake_update', details_pending: false, followup: false, shares: null, value_usd: null, avg_price: null, classes: null, percent_of_class: 64.1, shares_after: 71201875, prev_percent_of_class: 70.8, prev_shares_after: 71201875, amendment_no: 41, item4: null, insider: null, insiders: null, sec_url: 'https://www.sec.gov/Archives/edgar/data/921669/000119312526451979/0001193125-26-451979-index.html', copybook_url: 'https://copybook.factordynamics.com/investors/carl-icahn' },
               },
             },
           },

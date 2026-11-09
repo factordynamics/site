@@ -254,7 +254,7 @@ export function easternToUtc(stamp: string): string {
   const dstStart = Date.UTC(y, 2, sunday(2, 2), 2);
   const dstEnd = Date.UTC(y, 10, sunday(10, 1), 2);
   const offsetHours = local >= dstStart && local < dstEnd ? 4 : 5;
-  return new Date(local + offsetHours * 3600_000).toISOString();
+  return new Date(local + offsetHours * 3600_000).toISOString().replace('.000Z', 'Z');
 }
 
 /** Parses EDGAR's -index-headers.html and, for amendments, primary_doc.xml. */

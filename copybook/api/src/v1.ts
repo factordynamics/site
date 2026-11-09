@@ -15,7 +15,8 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
     breaking: false,
     status: 'announced',
     changes: [
-      'Coming, not live yet (these return 501 not_yet_available until the data run publishes their files; each moves to a shipped entry the day it returns data): GET /v1/stocks/{ticker|cusip}/holders; GET /v1/changes/{quarter} with ticker=/cusip= and across filers (filer= is live); persistent bulk exports at GET /v1/bulk/{YYYYQn}.csv.gz|.parquet (GET /v1/bulk lists what exists, empty until then); as_of point-in-time books.',
+      'Coming, not live yet (these return 501 not_yet_available until the data run publishes their files; each moves to a shipped entry the day it returns data): GET /v1/stocks/{ticker|cusip}/holders; GET /v1/changes/{quarter} with ticker=/cusip= and across filers (filer= is live); persistent bulk exports at GET /v1/bulk/{YYYYQn}.csv.gz|.parquet (GET /v1/bulk lists what exists, empty until then); as_of point-in-time books; filer `type` on /v1/filers (null until the data run publishes filer types) and cohort=<type> on /v1/changes.',
+      'Timestamps (accepted_at, uploaded_at, data_built_at) are ISO 8601 UTC to the second, without milliseconds (2026-11-06T21:46:52Z).',
     ],
   },
   {
@@ -24,7 +25,7 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
     breaking: false,
     status: 'shipped',
     changes: [
-      'Every 13F filer: /v1/filers lists all of them (about 9,000) with `curated` and `type`; ?curated=true|false filters. Holdings work for any filer by its slug or CIK.',
+      'Every 13F filer: /v1/filers lists all of them (about 9,000) with `curated`; ?curated=true|false filters. Holdings work for any filer by its slug or CIK.',
       'Holdings: `latest` as the quarter, `truncated` (true while only the public top-500 shard is available for a filer), filer.curated.',
       'GET /v1/filers/{filer}/holdings?from=&to=: up to 8 quarters per call, with `missing` and `next_from`.',
       'filing.versions[]: every 13F-HR and 13F-HR/A for the period, oldest first, including originals a restatement replaced, each with status current, superseded, merged or not_merged. filing.amendment_type for the served filing.',
@@ -55,6 +56,9 @@ export const CHANGELOG: { date: string; schema_version: string; breaking: boolea
     changes: ['Launch: /v1/me, /v1/filers, /v1/filers/{filer}/holdings/{quarter} with filing.accepted_at and amendments[] objects, schema_version, stable error codes, per-key rate limits.'],
   },
 ];
+
+/** One timestamp format across /v1: ISO 8601 UTC to the second, no milliseconds (2026-11-06T21:46:52Z). */
+export const noMs = (t: string | null | undefined): string | null => (t ? t.replace(/\.\d+Z$/, 'Z') : null);
 
 /** When the served data was built, from the data run's index (KV v1:build, refreshed hourly). */
 let build: { data_built_at: string | null; build_id: string | null } = { data_built_at: null, build_id: null };
@@ -103,7 +107,7 @@ export const ROUTES: [string, RegExp, Handler][] = [
     /^\/v1\/me$/,
     async ({ env, key }) => {
       const u = await meter(env, key.id).usage(30);
-      return v1json({ data: { key: { id: key.id, name: key.name, prefix: key.prefix, created: key.created, last_used_at: u.last_used_at }, usage: u.days } });
+      return v1json({ data: { key: { id: key.id, name: key.name, prefix: key.prefix, created: noMs(key.created), last_used_at: noMs(u.last_used_at) }, usage: u.days } });
     },
   ],
 ];
@@ -118,7 +122,10 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     return new Response(JSON.stringify(openapi()), { headers: { ...base, 'cache-control': 'public, max-age=300' } });
   }
   const b = await env.DB.get('v1:build');
-  if (b) build = JSON.parse(b);
+  if (b) {
+    build = JSON.parse(b);
+    build.data_built_at = noMs(build.data_built_at);
+  }
   if (path === '/v1/changelog') return v1json({ data: CHANGELOG }, 200, { 'cache-control': 'public, max-age=300' });
   const pin = req.headers.get('copybook-schema-version');
   if (pin && !SCHEMA_VERSIONS.includes(pin)) return v1error('bad_request', 400, `Unknown Copybook-Schema-Version ${pin}; served versions: ${SCHEMA_VERSIONS.join(', ')}.`);

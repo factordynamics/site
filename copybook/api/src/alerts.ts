@@ -1,7 +1,7 @@
 import { addToFeed, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
 import { countAlerts, logSent, runRevenue } from './revenue';
-import { alertMail, digestMail, holdtermAlertMail, sendMail } from './email';
+import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
 import { companyFilings, computeMoves, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, type Env, type Member } from './env';
 import { getFollows, listMembers, putMember, type Follows } from './members';
@@ -16,6 +16,8 @@ export function alertable(f: { form: string; filing_date: string }, now = Date.n
 
 export interface Alert13F {
   slug: string;
+  /** When it was sent (set in the day's store, for seeding a new feed). */
+  sent_at?: string;
   /** Every curated slug this filing reports for (a parent can report for a manager). */
   slugs: string[];
   manager: string;
@@ -65,6 +67,8 @@ export interface Insider {
 
 export interface AlertEvent {
   id: string;
+  /** When it was sent (set in the day's store, for seeding a new feed). */
+  sent_at?: string;
   /** A company insider's open-market buy on a stock members own or watch. */
   insider?: Insider;
   /** Three or more insiders of one company buying within 30 days. */
@@ -249,10 +253,12 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   // Everything goes in the day's digest store; digest members get it from there tonight.
   const key = `digest:${etDay(now)}`;
   const day = JSON.parse((await env.DB.get(key)) ?? '{"filings":[],"events":[]}') as DigestDay;
-  day.filings.push(...filings);
-  day.events.push(...events);
+  const sent_at = new Date(now).toISOString();
+  day.filings.push(...filings.map((a) => ({ ...a, sent_at })));
+  day.events.push(...events.map((e) => ({ ...e, sent_at })));
   day.late = [...(day.late ?? []), ...late];
-  await env.DB.put(key, JSON.stringify(day), { expirationTtl: 3 * 86400 });
+  // Kept a month: a new private feed is seeded from the last 30 days.
+  await env.DB.put(key, JSON.stringify(day), { expirationTtl: 31 * 86400 });
   if (!filings.length && !events.length) return { emails: 0, digest: 0, mail: 'none', late: late.length };
 
   const meta = await filerMeta(env);
@@ -260,6 +266,9 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   const mails = [];
   const notes: Member[] = [];
   const chats: string[] = [];
+  // Chat and webhook destinations already posted to in this delivery (per alert): a destination shared
+  // by several members, such as a Fund team's Slack, gets each alert once.
+  const posted = new Set<string>();
   let digest = 0;
   for (const raw of await listMembers(env)) {
     if (!isActive(raw) || !raw.email || raw.alerts === 'off') continue;
@@ -276,8 +285,8 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
     await countAlerts(env, m.customer, mine.filings.length + mine.events.length);
     // Chat, feed and webhook get every alert as it happens, whatever the email schedule.
     const ch = await getChannels(env, m.customer);
-    if (ch.discord || ch.slack || ch.telegram) chats.push(...Object.entries(await sendChats(env, ch, mine.filings, mine.events, f)).map(([k, v]) => `${k} ${v}`));
-    if (ch.webhook) await sendWebhooks(env, m, ch, mine.filings, mine.events, now);
+    if (ch.discord || ch.slack || ch.telegram) chats.push(...Object.entries(await sendChats(env, m.customer, ch, mine.filings, mine.events, f, now, posted)).map(([k, v]) => `${k} ${v}`));
+    if (ch.webhook) await sendWebhooks(env, m, ch, mine.filings, mine.events, now, posted);
     if (ch.feed_token) await addToFeed(env, m, ch, mine.filings, mine.events, now);
     if (f.digest) digest++;
     else {
@@ -289,6 +298,22 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   await logSent(env, mails.length, now);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   return { emails: mails.length, digest, mail, ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
+}
+
+/** A member's alerts from the last `days` days' stores, newest first (at most 20): what a new private feed starts with. */
+export async function recentFeed(env: Env, raw: Member, now: number, days = 30): Promise<FeedItem[]> {
+  const f = await getFollows(env, raw);
+  const m = await scoped(env, raw, f);
+  const meta = await filerMeta(env);
+  const out: FeedItem[] = [];
+  for (let d = 0; d < days && out.length < 20; d++) {
+    const day = await env.DB.get(`digest:${etDay(now - d * 86_400_000)}`);
+    if (!day) continue;
+    const { filings, events } = JSON.parse(day) as DigestDay;
+    const mine = forMember(m, f, filings, events, meta);
+    out.push(...feedItems(env, mine.filings, mine.events, now).filter((i) => !out.some((x) => x.id === i.id)));
+  }
+  return out.sort((a, b) => (b.sent ?? b.published).localeCompare(a.sent ?? a.published)).slice(0, 20);
 }
 
 /** After EDGAR closes: one email per digest member with the day's filings and events they follow. */

@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { lookupTickers } from './alerts';
 import { fetch13F, fetchFilingMeta, filings13F, type Filed13F, type FilingMeta } from './edgar';
-import { ROUTES, v1error, v1json, v1prefix } from './v1';
+import { ROUTES, v1error, v1json, v1prefix, noMs } from './v1';
 
 /**
  * /v1 data endpoints. Everything is from SEC EDGAR filings as filed. Units: money in whole US
@@ -167,7 +167,7 @@ async function amendmentsOf(env: Env, cik: string, list: any[]) {
     out.push({
       accession: acc,
       filed_on: m?.filed_on ?? null,
-      accepted_at: m?.accepted_at ?? null,
+      accepted_at: noMs(m?.accepted_at),
       amendment_type: m?.amendment_type ?? a?.amendment_type ?? null,
       amendment_no: m?.amendment_no ?? null,
       confidential_treatment_expired: m?.confidential_treatment_expired ?? null,
@@ -208,7 +208,7 @@ async function versionsFor(env: Env, cik: string, reportDate: string, served: st
     const vs: Omit<Version, 'status'>[] = [];
     for (const f of list.filter((x) => x.report_date === reportDate)) {
       const m = await filingMeta(env, cik, f.accession);
-      vs.push({ accession: f.accession, form: m?.form ?? f.form, amendment_type: m?.amendment_type ?? null, accepted_at: m?.accepted_at ?? null, filed_on: m?.filed_on ?? null });
+      vs.push({ accession: f.accession, form: m?.form ?? f.form, amendment_type: m?.amendment_type ?? null, accepted_at: noMs(m?.accepted_at), filed_on: m?.filed_on ?? null });
     }
     if (!vs.length) return null;
     vs.sort((a, b) => (a.accepted_at ?? '').localeCompare(b.accepted_at ?? ''));
@@ -254,7 +254,7 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
       filer_cik: pad(q.filer_cik ?? cik),
       form: q.form ?? '13F-HR',
       filing_date: q.filing_date ?? null,
-      accepted_at: main?.accepted_at ?? null,
+      accepted_at: noMs(main?.accepted_at),
       sec_url: q.sec_url ?? null,
       amendment_type: main?.amendment_type ?? null,
       amendments: await amendmentsOf(env, cik, amendments),
@@ -467,19 +467,19 @@ ROUTES.push(
         prev_value_usd: h.prev_value,
         change: h.change,
         accession: h.accession ?? null,
-        accepted_at: h.accepted_at ?? null,
+        accepted_at: noMs(h.accepted_at),
       }));
     return v1json({ data: { issuer: s.issuer, ticker: s.ticker ?? is.ticker, display_name: s.display_name ?? null, quarter: s.period, prev_quarter: s.prev_period, cohort, holders: rows }, count: rows.length });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, url }) => {
     // Persistent per-quarter exports of every filer's book, uploaded by the data run.
     const list = await env.HIST.list({ prefix: 'bulk/' });
-    const data = list.objects.map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.size, uploaded_at: o.uploaded.toISOString(), url: `${url.origin}/v1/${o.key}` }));
+    const data = list.objects.map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.size, uploaded_at: noMs(o.uploaded.toISOString()), url: `${url.origin}/v1/${o.key}` }));
     return v1json({ data: data.sort((a: { file: string }, b: { file: string }) => b.file.localeCompare(a.file)) });
   }],
   ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env }, [file]) => {
     const obj = await env.HIST.get(`bulk/${file}`);
-    if (!obj) return v1error('not_found', 404, `No bulk export ${file} yet; GET /v1/bulk lists what is available.`);
+    if (!obj) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet. /v1/changelog logs the day this ships; GET /v1/bulk lists what exists.`);
     return new Response(obj.body, {
       headers: { 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
     });
@@ -531,7 +531,7 @@ ROUTES.push(
         filer: { slug: e.slug || null, cik: pad(cikOf(e.url, '0')), name: e.manager ?? null },
         issuer: { name: e.issuer ?? null, cik: e.issuer_cik ?? null, ticker: e.ticker ?? null, cusip: e.cusip ?? null, display_name: e.display_name ?? null },
         filing_date: e.filing_date,
-        accepted_at: e.accepted ?? e.accepted_at ?? null,
+        accepted_at: noMs(e.accepted ?? e.accepted_at),
         event_date: e.event_date ?? null,
         shares: e.shares ?? null,
         value_usd: e.value_usd ?? null,
@@ -605,7 +605,7 @@ ROUTES.push(
       if (!obj) return v1error('not_yet_available', 501, `Coming: cross-filer changes for ${quarter} are not published yet; /v1/changelog logs the day this ships. Meanwhile pass filer=.`);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (await new Response(obj.body).json()) as any;
-      rows = rowsOf(c).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: h.type ?? null }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ?? null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: h.accepted_at ?? null }));
+      rows = rowsOf(c).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: h.type ?? null }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ?? null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
       source = 'all';
     }
     const curatedCiks = cohort === 'curated' ? new Set((await filers(env)).map((f) => f.cik)) : null;

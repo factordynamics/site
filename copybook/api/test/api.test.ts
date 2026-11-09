@@ -60,6 +60,8 @@ let secFiles: Record<string, string>;
 let filers: Record<string, unknown>[];
 let posts: { url: string; body: string; headers: Record<string, string> }[];
 let hookStatus: number;
+/** Queued answers per chat host (discord.com, hooks.slack.com, api.telegram.org); 200 once empty. */
+let chatReplies: Record<string, { status: number; body?: unknown }[]>;
 let shards: Record<string, unknown>;
 let events: unknown[];
 let recentMoves: unknown[];
@@ -113,6 +115,7 @@ beforeEach(async () => {
   secFiles = {};
   posts = [];
   hookStatus = 200;
+  chatReplies = {};
   filers = [{ cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', ok: true, position_count: 2, quarter: '2026Q2', error: null }];
   shards = {};
   stockPages = {};
@@ -146,6 +149,8 @@ beforeEach(async () => {
       const hd: Record<string, string> = {};
       new Headers(init?.headers).forEach((v, k) => void (hd[k] = v));
       posts.push({ url, body: String(init?.body), headers: hd });
+      const next = chatReplies[new URL(url).hostname]?.shift();
+      if (next) return Response.json(next.body ?? {}, { status: next.status });
       return new Response('ok', { status: url.startsWith('https://hooks.example.com') ? hookStatus : 200 });
     }
     if (url === `${SITE}data/index.json`) return Response.json(index);
@@ -663,7 +668,7 @@ describe('copybook api', () => {
     expect(next.status).toBe(200);
     const nextBody = await next.json();
     expect(nextBody.data.usage[0]).toEqual({ day: '2026-11-09', requests: 61 }); // only allowed requests count
-    expect(nextBody.data.key.last_used_at).toBe('2026-11-09T15:01:10.000Z');
+    expect(nextBody.data.key.last_used_at).toBe('2026-11-09T15:01:10Z');
     expect((await (await call('/keys', { token: pro.token })).json()).keys.find((k: { id: string }) => k.id === made.id).last_used_at).toBe('2026-11-09T15:01:10.000Z');
 
     const spec = await (await v1('/v1/openapi.json')).json();
@@ -1017,7 +1022,8 @@ describe('copybook api', () => {
     await cron(47);
     const by = (host: string) => posts.filter((p) => p.url.includes(host));
     expect(JSON.parse(by('hooks.slack.com')[0].body).text).toContain('Buffett SIRI Form 4: bought $25K');
-    expect(JSON.parse(by('discord.com')[0].body).content).toContain('https://www.sec.gov/C1');
+    // The SEC link is in <…> so Discord doesn't unfurl it.
+    expect(JSON.parse(by('discord.com')[0].body).content).toContain('<https://www.sec.gov/C1>');
     expect(by('api.telegram.org')[0].url).toBe('https://api.telegram.org/bot123456789:AAbbccddeeffgghhiijjkkllmmnnoopp/sendMessage');
     expect(JSON.parse(by('api.telegram.org')[0].body)).toMatchObject({ chat_id: '-1001234' });
     // The webhook is signed: t=<seconds>,v1=HMAC(secret, "<t>.<body>").
@@ -1040,8 +1046,57 @@ describe('copybook api', () => {
     expect(jf.items[0]).toMatchObject({ id: 'C1', title: 'Buffett SIRI Form 4: bought $25K' });
     const rss = await (await handleRequest(new Request(feedUrls.rss_url), env)).text();
     expect(rss).toContain('<title>Buffett SIRI Form 4: bought $25K</title>');
+    expect(jf.items[0].sent_at).toBeTruthy();
     await req(copy, 'DELETE', '/channels/feed');
     expect((await handleRequest(new Request(feedUrls.json_url), env)).status).toBe(404);
+
+    // Chat failures. Discord asks to wait 150 s (429), Slack answers 500 every time, Telegram's bot was removed (404).
+    const at47 = new Date();
+    at47.setUTCHours(at47.getUTCHours() === 3 ? 4 : at47.getUTCHours(), 47, 0, 0);
+    const minute = (n: number) => cron(0, at47.getTime() + n * 60_000);
+    chatReplies = { 'discord.com': [{ status: 429, body: { retry_after: 150, global: false } }], 'hooks.slack.com': Array(4).fill({ status: 500 }), 'api.telegram.org': [{ status: 404, body: { ok: false } }] };
+    posts = [];
+    sent = [];
+    events = [ev('seed'), ev('C1'), ev('C2')];
+    await cron(47);
+    const stopped = () => sent.filter((m) => m.to[0] === 'chan@example.com' && /alerts stopped/.test(m.subject)).map((m) => m.subject);
+    // The email alert still goes out; Telegram is flagged at once with one notice; the others wait to retry.
+    expect(sent.some((m) => m.to[0] === 'chan@example.com' && /SIRI/.test(m.subject))).toBe(true);
+    expect(stopped()).toEqual(['Your Telegram alerts stopped: the webhook or chat no longer exists (HTTP 404)']);
+    await minute(1); // Slack's first retry (500 again); Discord's wait isn't over
+    expect(by('discord.com')).toHaveLength(1);
+    expect(by('hooks.slack.com')).toHaveLength(2);
+    await minute(3); // past Discord's 150 s: delivered
+    expect(by('discord.com')).toHaveLength(2);
+    await minute(6); // Slack's second retry
+    await minute(21); // the third and last: Slack is flagged, once
+    expect(by('hooks.slack.com')).toHaveLength(4);
+    expect(stopped()).toEqual(['Your Telegram alerts stopped: the webhook or chat no longer exists (HTTP 404)', 'Your Slack alerts stopped: HTTP 500 after 4 tries']);
+    await minute(40);
+    expect(by('hooks.slack.com')).toHaveLength(4);
+    const failing = (await (await req(copy, 'GET', '/me')).json()).member.channels_failing;
+    expect(Object.keys(failing).sort()).toEqual(['slack', 'telegram']);
+    expect((await (await req(copy, 'GET', '/channels')).json()).channels.failing.slack).toMatchObject({ reason: 'HTTP 500 after 4 tries' });
+    // The next alert: Telegram still answers 404 but no second notice; Slack works again and its flag clears.
+    chatReplies = { 'api.telegram.org': [{ status: 404 }] };
+    events = [ev('seed'), ev('C1'), ev('C2'), ev('C3')];
+    await minute(60);
+    expect(by('api.telegram.org').length).toBeGreaterThan(1);
+    expect(stopped()).toHaveLength(2);
+    expect(Object.keys((await (await req(copy, 'GET', '/me')).json()).member.channels_failing)).toEqual(['telegram']);
+    // So does a test that goes through.
+    expect((await (await req(copy, 'POST', '/channels/test')).json()).results).toMatchObject({ slack: '200', telegram: '200', discord: '200' });
+    expect((await (await req(copy, 'GET', '/me')).json()).member.channels_failing).toEqual({});
+
+    // A new feed starts with the member's recent alerts (sent time included); "Send a test" writes to it.
+    const feed2 = (await (await req(copy, 'POST', '/channels/feed')).json()).channels.feed;
+    let items = (await (await handleRequest(new Request(feed2.json_url), env)).json()).items;
+    expect(items.map((i: { id: string }) => i.id).sort()).toEqual(['C1', 'C2', 'C3']);
+    expect(items.every((i: { sent_at: string | null }) => !!i.sent_at)).toBe(true);
+    await req(copy, 'PUT', '/channels', { slack: null, discord: null, telegram: null });
+    expect((await (await req(copy, 'POST', '/channels/test')).json()).results).toEqual({ feed: 'ok' });
+    items = (await (await handleRequest(new Request(feed2.json_url), env)).json()).items;
+    expect(items[0].title).toBe('Copybook test');
   });
 
   it('minute event poll: Form 4 per class from a curated filer, any filer\'s 13D/A on an owned stock with the change, unread filings alerted at once and completed later', async () => {
@@ -1278,6 +1333,24 @@ describe('copybook api', () => {
     expect((await call('/seats', { token: seat })).status).toBe(403);
     expect((await call('/keys', { body: { name: 'seat key' }, token: seat })).status).toBe(201);
 
+    // Slack is the team's: the owner connects the team channel, and a seat that connects the same one too
+    // still gets each alert once there; the seat's own Discord gets its copy. Seats see the team channel read-only.
+    const teamSlack = 'https://hooks.slack.com/services/T000/B000/teamchannel0001';
+    const chan = (token: string, b: unknown) => handleRequest(new Request('https://api.test/channels', { method: b ? 'PUT' : 'GET', body: b ? JSON.stringify(b) : undefined, headers: { authorization: `Bearer ${token}` } }), env);
+    expect((await (await chan(owner, { slack: teamSlack })).json()).channels).toMatchObject({ scope: 'team', editable: true });
+    const seatView = (await (await chan(seat, { slack: teamSlack, discord: 'https://discord.com/api/webhooks/123456789/seatpersonalabcdefghijklmn' })).json()).channels;
+    expect(seatView).toMatchObject({ scope: 'personal' });
+    expect((await (await chan(seat, null)).json()).channels).toMatchObject({ scope: 'personal', team: { scope: 'team', editable: false, slack: 'https://hooks.slack.com/…0001', discord: null } });
+    const today = new Date().toISOString().slice(0, 10);
+    const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25 });
+    events = [ev('seed')];
+    await cron(47);
+    posts = [];
+    events = [ev('seed'), ev('T1')];
+    await cron(47);
+    expect(posts.filter((p) => p.url === teamSlack)).toHaveLength(1);
+    expect(posts.filter((p) => p.url.includes('discord.com'))).toHaveLength(1);
+
     // Five seats at most.
     for (const n of [2, 3, 4, 5]) expect((await call('/seats', { body: { email: `s${n}@fund.example` }, token: owner })).status).toBe(201);
     expect((await call('/seats', { body: { email: 's6@fund.example' }, token: owner })).status).toBe(409);
@@ -1355,9 +1428,9 @@ describe('copybook api', () => {
     expect((await v1('/v1/stocks/ZZZZ/holders')).status).toBe(404);
 
     // Bulk exports: listed, then streamed as uploaded.
-    expect((await v1('/v1/bulk/2026Q2.csv.gz')).status).toBe(404);
+    expect((await v1('/v1/bulk/2026Q2.csv.gz')).status).toBe(501);
     hist.m.set('bulk/2026Q2.csv.gz', new Uint8Array([31, 139, 8, 0, 1, 2, 3]));
-    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 7, uploaded_at: '1970-01-01T00:00:00.000Z', url: 'https://api.test/v1/bulk/2026Q2.csv.gz' }]);
+    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 7, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://api.test/v1/bulk/2026Q2.csv.gz' }]);
     const gz = await handleRequest(new Request('https://api.test/v1/bulk/2026Q2.csv.gz', { headers: { authorization: `Bearer ${key}` } }), env);
     expect(gz.headers.get('content-disposition')).toBe('attachment; filename="copybook-13f-2026Q2.csv.gz"');
     expect([...new Uint8Array(await gz.arrayBuffer())]).toEqual([31, 139, 8, 0, 1, 2, 3]);
@@ -1378,10 +1451,10 @@ describe('copybook api', () => {
     // Every 13F holder once published: share change computed, names with commas quoted.
     stockPages['NVDA'] = { classes: [{ cusip: '67066G104' }], holders: [{ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q2', shares: 10, prev_shares: 0, value: 1800, change: 'new', weight: 0.9 }] };
     // Curated rows carry the fund's CIK, its 13F's accession and EDGAR acceptance (cached per filing).
-    await env.DB.put('filing:A2', JSON.stringify({ accession: 'A2', accepted_at: '2026-08-14T20:05:04.000Z' }));
+    await env.DB.put('filing:A2', JSON.stringify({ accession: 'A2', accepted_at: '2026-08-14T20:05:04Z' }));
     let csv = await call('/stocks/nvda/holders.csv', { token: t });
     expect(csv.headers.get('x-copybook-coverage')).toBe('curated');
-    expect((await csv.text()).split('\r\n')[1]).toBe('0001067983,Warren Buffett,warren-buffett,equity,2026Q2,10,0,10,1800,,new,0.9,A2,2026-08-14T20:05:04.000Z');
+    expect((await csv.text()).split('\r\n')[1]).toBe('0001067983,Warren Buffett,warren-buffett,equity,2026Q2,10,0,10,1800,,new,0.9,A2,2026-08-14T20:05:04Z');
     hist.m.set('s/67066G.json', new TextEncoder().encode(JSON.stringify({ issuer: '67066G', period: '2026Q2', columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change'], holders: [['0001387322', 'Whale Rock, LLC', null, 'equity', 100, 140, 18000, 20000, 'trimmed']] })));
     csv = await call('/stocks/NVDA/holders.csv', { token: t });
     expect(csv.headers.get('x-copybook-coverage')).toBe('all-filers');
@@ -1487,13 +1560,13 @@ describe('copybook api', () => {
     events = [ev('0001-26-000001', 'form4', 'OXY', '2026-11-03'), ev('0001-26-000002', '13d', 'SIRI', '2026-11-05'), ev('0001-26-000003', 'form4', 'OXY', '2026-10-01')];
     // The minute poll's parse of #1 (acceptance, classes) and an any-filer 13D the data run doesn't carry.
     await env.DB.put('v1:events', JSON.stringify([
-      { ...ev('0001-26-000001', 'form4', 'OXY', '2026-11-03'), accepted: '2026-11-03T21:00:00.000Z', classes: [{ security: 'Common Stock', bought: 100, sold: 0, value_usd: 5000, shares_before: 900, shares_after: 1000 }] },
-      { ...ev('0009-26-000009', '13d', 'OXY', '2026-11-06'), slug: '', manager: 'Some Activist', url: 'https://www.sec.gov/Archives/edgar/data/9999/x-index.html', accepted: '2026-11-06T14:00:00.000Z', prev_accession: '0009-26-000001', prev_percent_of_class: 4.1, percent_of_class: 6.2 },
+      { ...ev('0001-26-000001', 'form4', 'OXY', '2026-11-03'), accepted: '2026-11-03T21:00:00Z', classes: [{ security: 'Common Stock', bought: 100, sold: 0, value_usd: 5000, shares_before: 900, shares_after: 1000 }] },
+      { ...ev('0009-26-000009', '13d', 'OXY', '2026-11-06'), slug: '', manager: 'Some Activist', url: 'https://www.sec.gov/Archives/edgar/data/9999/x-index.html', accepted: '2026-11-06T14:00:00Z', prev_accession: '0009-26-000001', prev_percent_of_class: 4.1, percent_of_class: 6.2 },
     ]));
     let r = await v1('/v1/events?ticker=oxy');
     expect(r.body.count).toBe(3);
     expect(r.body.data.map((e: { accession: string }) => e.accession)).toEqual(['0009-26-000009', '0001-26-000001', '0001-26-000003']);
-    expect(r.body.data[1]).toMatchObject({ accepted_at: '2026-11-03T21:00:00.000Z', filer: { slug: 'warren-buffett', cik: '0001067983' }, classes: [{ shares_before: 900, shares_after: 1000 }] });
+    expect(r.body.data[1]).toMatchObject({ accepted_at: '2026-11-03T21:00:00Z', filer: { slug: 'warren-buffett', cik: '0001067983' }, classes: [{ shares_before: 900, shares_after: 1000 }] });
     expect(r.body.data[0]).toMatchObject({ filer: { cik: '0000009999', name: 'Some Activist' }, prev: { accession: '0009-26-000001', percent_of_class: 4.1 }, percent_of_class: 6.2 });
     expect((await v1('/v1/events?filer=1067983&form=13d')).body.data.map((e: { accession: string }) => e.accession)).toEqual(['0001-26-000002']);
     expect((await v1('/v1/events?from=2026-11-01&to=2026-11-04')).body.data.map((e: { accession: string }) => e.accession)).toEqual(['0001-26-000001']);
@@ -1506,15 +1579,15 @@ describe('copybook api', () => {
     // shows, with EDGAR's detail. Icahn's real CVI 13D/A #41 (0001193125-26-451979), paired with #40.
     const icahn = (id: string, extra: Record<string, unknown>) => ({ id, slug: 'carl-icahn', manager: 'Carl Icahn', form: 'SCHEDULE 13D/A', kind: '13d', action: 'stake_update', filing_date: '2026-11-06', url: `https://www.sec.gov/Archives/edgar/data/921669/${id.replace(/-/g, '')}/${id}-index.html`, issuer: 'CVR Energy, Inc.', issuer_cik: '0001376139', ticker: 'CVI', cusip: '12662P108', shares_after: 71201875, ...extra });
     hist.m.set('pre/events.json', new TextEncoder().encode(JSON.stringify({ events: [
-      icahn('0001193125-26-451979', { accepted: '2026-11-06T21:46:52.000Z', percent_of_class: 64.1, amendment_no: 41, item4: 'Item 4 of the Initial 13D is hereby amended and supplemented by adding the following: On November 3, 2026, the Issuer entered into an underwriting agreement', prev_accession: '0001193125-26-445965', prev_form: 'SCHEDULE 13D/A', prev_percent_of_class: 70.8, prev_shares_after: 71201875 }),
-      icahn('0001193125-26-445965', { filing_date: '2026-11-03', accepted: '2026-11-04T02:57:23.000Z', percent_of_class: 70.8, amendment_no: 40 }),
-      { ...icahn('0001539497-26-002606', { form: '4', kind: 'form4', action: 'buy', filing_date: '2026-09-25', ticker: 'IEP', issuer: 'Icahn Enterprises L.P.', issuer_cik: '0000813762', cusip: null, accepted: '2026-09-25T20:31:10.000Z', classes: [{ security: 'Depositary Units', bought: 1000, sold: 0, value_usd: 9000, shares_before: 1, shares_after: 1001 }] }) },
+      icahn('0001193125-26-451979', { accepted: '2026-11-06T21:46:52Z', percent_of_class: 64.1, amendment_no: 41, item4: 'Item 4 of the Initial 13D is hereby amended and supplemented by adding the following: On November 3, 2026, the Issuer entered into an underwriting agreement', prev_accession: '0001193125-26-445965', prev_form: 'SCHEDULE 13D/A', prev_percent_of_class: 70.8, prev_shares_after: 71201875 }),
+      icahn('0001193125-26-445965', { filing_date: '2026-11-03', accepted: '2026-11-04T02:57:23Z', percent_of_class: 70.8, amendment_no: 40 }),
+      { ...icahn('0001539497-26-002606', { form: '4', kind: 'form4', action: 'buy', filing_date: '2026-09-25', ticker: 'IEP', issuer: 'Icahn Enterprises L.P.', issuer_cik: '0000813762', cusip: null, accepted: '2026-09-25T20:31:10Z', classes: [{ security: 'Depositary Units', bought: 1000, sold: 0, value_usd: 9000, shares_before: 1, shares_after: 1001 }] }) },
     ] })));
     // The poll's own record of #41 has no Item 4: it must not blank the build's.
-    await env.DB.put('v1:events', JSON.stringify([icahn('0001193125-26-451979', { accepted: '2026-11-06T21:46:52.000Z', percent_of_class: 64.1, item4: null })]));
+    await env.DB.put('v1:events', JSON.stringify([icahn('0001193125-26-451979', { accepted: '2026-11-06T21:46:52Z', percent_of_class: 64.1, item4: null })]));
     r = await v1('/v1/events?ticker=CVI');
     expect(r.body.data.map((e: { accession: string }) => e.accession)).toEqual(['0001193125-26-451979', '0001193125-26-445965']);
-    expect(r.body.data[0]).toMatchObject({ accepted_at: '2026-11-06T21:46:52.000Z', percent_of_class: 64.1, amendment_no: 41, prev: { accession: '0001193125-26-445965', percent_of_class: 70.8 }, filer: { slug: 'carl-icahn', cik: '0000921669' } });
+    expect(r.body.data[0]).toMatchObject({ accepted_at: '2026-11-06T21:46:52Z', percent_of_class: 64.1, amendment_no: 41, prev: { accession: '0001193125-26-445965', percent_of_class: 70.8 }, filer: { slug: 'carl-icahn', cik: '0000921669' } });
     expect(r.body.data[0].purpose).toMatch(/^Item 4 of the Initial 13D/);
     r = await v1('/v1/events?filer=carl-icahn');
     expect(r.body.count).toBe(3);
@@ -1683,18 +1756,18 @@ describe('copybook api', () => {
     };
 
     const cur = (await v1('/v1/filers/warren-buffett/holdings/2026Q2')).body.data;
-    expect(cur.filing).toMatchObject({ accession: REST, accepted_at: '2026-09-01T22:14:00.000Z', amendment_type: 'RESTATEMENT' });
+    expect(cur.filing).toMatchObject({ accession: REST, accepted_at: '2026-09-01T22:14:00Z', amendment_type: 'RESTATEMENT' });
     expect(cur.filing.versions.map((v: { accession: string; status: string; accepted_at: string }) => [v.accession, v.status, v.accepted_at])).toEqual([
-      [ORIG, 'superseded', '2026-08-14T20:18:47.000Z'],
-      [REST, 'current', '2026-09-01T22:14:00.000Z'],
-      [NEWH, 'not_merged', '2026-10-02T13:00:00.000Z'],
+      [ORIG, 'superseded', '2026-08-14T20:18:47Z'],
+      [REST, 'current', '2026-09-01T22:14:00Z'],
+      [NEWH, 'not_merged', '2026-10-02T13:00:00Z'],
     ]);
     // Amendments come from EDGAR, not only the ones the data run merged.
     expect(cur.filing.amendments.map((a: { accession: string; amendment_type: string }) => [a.accession, a.amendment_type])).toEqual([[REST, 'RESTATEMENT'], [NEWH, 'NEW HOLDINGS']]);
 
     const orig = await v1('/v1/filers/warren-buffett/holdings/2026Q2?version=original');
     expect(orig.status).toBe(200);
-    expect(orig.body.data).toMatchObject({ version: ORIG, total_value_usd: 2800, position_count: 2, filing: { accession: ORIG, form: '13F-HR', accepted_at: '2026-08-14T20:18:47.000Z', amendment_type: null, filing_date: '2026-08-14' } });
+    expect(orig.body.data).toMatchObject({ version: ORIG, total_value_usd: 2800, position_count: 2, filing: { accession: ORIG, form: '13F-HR', accepted_at: '2026-08-14T20:18:47Z', amendment_type: null, filing_date: '2026-08-14' } });
     expect(orig.body.data.holdings.map((h: { ticker: string; shares: number; value_usd: number; change: string | null }) => [h.ticker, h.shares, h.value_usd, h.change])).toEqual([['AAPL', 10, 2000, null], [null, 20, 800, null]]);
     expect((await v1(`/v1/filers/1067983/holdings/2026Q2?version=${ORIG}`)).body.data.version).toBe(ORIG);
     expect((await v1(`/v1/filers/warren-buffett/holdings/2026Q2?version=${REST}`)).body.data).toMatchObject({ version: REST, total_value_usd: 3000 });
@@ -1735,8 +1808,8 @@ describe('copybook api', () => {
     expect(byCik.body).toEqual(bySlug.body);
     const d = bySlug.body.data;
     // Both are EDT (UTC-4): 16:05:12 and 16:10:02 ET.
-    expect(d.filing.accepted_at).toBe('2025-05-15T20:05:12.000Z');
-    expect(d.filing.amendments).toEqual([{ accession: '0000950123-25-008361', filed_on: '2025-08-14', accepted_at: '2025-08-14T20:10:02.000Z', amendment_type: 'NEW HOLDINGS', amendment_no: 1, confidential_treatment_expired: true }]);
+    expect(d.filing.accepted_at).toBe('2025-05-15T20:05:12Z');
+    expect(d.filing.amendments).toEqual([{ accession: '0000950123-25-008361', filed_on: '2025-08-14', accepted_at: '2025-08-14T20:10:02Z', amendment_type: 'NEW HOLDINGS', amendment_no: 1, confidential_treatment_expired: true }]);
     for (const k of spec.components.schemas.Holdings.properties.filing.required) expect(d.filing).toHaveProperty(k);
     expect(fl.body.data[0]).toMatchObject({ curated: true, type: null }); // null until classified
     // Cached after the first read: EDGAR is not asked again.
@@ -1778,10 +1851,10 @@ describe('copybook api', () => {
 
   it('EDGAR Eastern timestamps convert to UTC on both sides of the DST switches', async () => {
     const { easternToUtc } = await import('../src/edgar');
-    expect(easternToUtc('20260106120000')).toBe('2026-01-06T17:00:00.000Z'); // EST
-    expect(easternToUtc('20260308015959')).toBe('2026-03-08T06:59:59.000Z'); // just before DST starts
-    expect(easternToUtc('20260308030000')).toBe('2026-03-08T07:00:00.000Z'); // just after
-    expect(easternToUtc('20261031235900')).toBe('2026-11-01T03:59:00.000Z'); // EDT
-    expect(easternToUtc('20261102000000')).toBe('2026-11-02T05:00:00.000Z'); // EST again
+    expect(easternToUtc('20260106120000')).toBe('2026-01-06T17:00:00Z'); // EST
+    expect(easternToUtc('20260308015959')).toBe('2026-03-08T06:59:59Z'); // just before DST starts
+    expect(easternToUtc('20260308030000')).toBe('2026-03-08T07:00:00Z'); // just after
+    expect(easternToUtc('20261031235900')).toBe('2026-11-01T03:59:00Z'); // EDT
+    expect(easternToUtc('20261102000000')).toBe('2026-11-02T05:00:00Z'); // EST again
   });
 });

@@ -1,8 +1,8 @@
-import { resolveFollowedFilers, runScheduled } from './alerts';
+import { recentFeed, resolveFollowedFilers, runScheduled } from './alerts';
 import { fetchHistory, historyCsv, holdersCsv, shard, SHARD_KEY, SLUG } from './data';
 import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } from './v1data';
 import { verifyGithubOidc } from './oidc';
-import { channelsView, getChannels, rotateFeed, serveFeed, testChannels, updateChannels } from './channels';
+import { channelsView, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
 import { handleV1 } from './v1';
 
@@ -325,7 +325,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, login: await signToken(env.SESSION_SECRET, 'login', m.customer, HANDOFF_TTL) }, 200, h);
   }
 
-  if (req.method === 'GET' && path === '/me') return json({ ok: true, member: publicView(m) }, 200, h);
+  // channels_failing: chat or webhook destinations that stopped (reason, since), so /account/ can flag them.
+  if (req.method === 'GET' && path === '/me') return json({ ok: true, member: { ...publicView(m), channels_failing: await getFailures(env, m.customer) } }, 200, h);
 
   if (req.method === 'POST' && path === '/portal') {
     if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
@@ -366,15 +367,22 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // Where alerts go besides email: Discord, Slack, Telegram and a private feed (Copy); a signed webhook (Pro).
   if (path === '/channels' || path.startsWith('/channels/')) {
-    if (req.method === 'GET' && path === '/channels') return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), url.origin) }, 200, h);
+    if (req.method === 'GET' && path === '/channels') {
+      // A seat also sees its team's channel (the Fund owner's), read-only.
+      const owner = m.seat_of ? await getMember(env, m.seat_of) : null;
+      const team = owner ? { owner, c: await getChannels(env, owner.customer), failing: await getFailures(env, owner.customer) } : undefined;
+      return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), url.origin, await getFailures(env, m.customer), team) }, 200, h);
+    }
     if (req.method === 'PUT' && path === '/channels') {
       const r = await updateChannels(env, m, await body(req));
-      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, url.origin) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : 400, h);
+      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, url.origin, await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : 400, h);
     }
-    if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, results: await testChannels(m, await getChannels(env, m.customer)) }, 200, h);
+    if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, results: await testChannels(env, m, await getChannels(env, m.customer)) }, 200, h);
     if (path === '/channels/feed' && (req.method === 'POST' || req.method === 'DELETE')) {
       const c = await rotateFeed(env, m, req.method === 'DELETE');
-      return json({ ok: true, channels: channelsView(m, c, url.origin) }, 200, h);
+      // A new feed starts with the member's alerts from the last 30 days (at most 20), not empty.
+      if (req.method === 'POST') await seedFeed(env, m.customer, await recentFeed(env, m, Date.now()));
+      return json({ ok: true, channels: channelsView(m, c, url.origin, await getFailures(env, m.customer)) }, 200, h);
     }
     return json({ ok: false, error: 'not found' }, 404, h);
   }
