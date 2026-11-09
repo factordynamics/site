@@ -50,8 +50,8 @@ class MemR2 implements R2 {
     // Deliver in two chunks with the header line split, as R2 may.
     return { size: v.length, customMetadata: this.meta.get(k), body: new ReadableStream<Uint8Array>({ start(c) { c.enqueue(v.subarray(0, 20)); c.enqueue(v.subarray(20)); c.close(); } }) };
   }
-  async put(k: string, v: ReadableStream | ArrayBuffer | string | null, opts?: { customMetadata?: Record<string, string> }) {
-    this.m.set(k, new Uint8Array(await new Response(v).arrayBuffer()));
+  async put(k: string, v: ReadableStream | ArrayBuffer | ArrayBufferView | string | null, opts?: { customMetadata?: Record<string, string> }) {
+    this.m.set(k, new Uint8Array(await new Response(v as BodyInit).arrayBuffer()));
     if (opts?.customMetadata) this.meta.set(k, opts.customMetadata);
     else this.meta.delete(k);
   }
@@ -445,6 +445,59 @@ describe('copybook api', () => {
     const st = await handleRequest(new Request('https://api.test/ingest/hl/829933.json', { method: 'PUT', body: '{}', headers: { authorization: `Bearer ${tok}`, 'x-copybook-build-id': 'gust-3a8c773b', 'x-copybook-built-at': '2026-11-09T02:30:00Z' } }), env);
     expect([st.status, hist.meta.get('hl/829933.json')]).toEqual([200, { build_id: 'gust-3a8c773b', built_at: '2026-11-09T02:30:00Z' }]);
     expect(await put('hl/82993.json', tok)).toBe(400);
+    // Many objects in one request: a manifest line, then their bytes back to back, each with its build.
+    const batch = (objects: { key: string; body: string; build_id?: string }[], token = tok, sizes?: number[]) => {
+      const enc = new TextEncoder();
+      const parts = objects.map((o) => enc.encode(o.body));
+      const head = enc.encode(`${JSON.stringify({ built_at: '2026-11-09T05:00:00Z', objects: objects.map((o, i) => ({ key: o.key, size: sizes?.[i] ?? parts[i].length, ...(o.build_id ? { build_id: o.build_id } : {}) })) })}\n`);
+      const all = new Uint8Array(head.length + parts.reduce((t, p) => t + p.length, 0));
+      let at = 0;
+      for (const p of [head, ...parts]) all.set(p, (at += p.length) - p.length);
+      return handleRequest(new Request('https://api.test/ingest-batch', { method: 'POST', body: all, headers: { authorization: `Bearer ${token}` } }), env);
+    };
+    const ok = await batch([{ key: 'hl/AAAAAA.json', body: '{"a":"é"}', build_id: 'gust-b1' }, { key: 'fb/2026Q3/0001067983.json', body: '{"rows":[]}' }, { key: 'hl/BBBBBB.json', body: '' }]);
+    expect([ok.status, await ok.json()]).toEqual([200, { ok: true, written: 3, refused: [] }]);
+    expect(new TextDecoder().decode(hist.m.get('hl/AAAAAA.json'))).toBe('{"a":"é"}'); // multi-byte UTF-8 sliced by bytes
+    expect(new TextDecoder().decode(hist.m.get('fb/2026Q3/0001067983.json'))).toBe('{"rows":[]}');
+    expect([hist.meta.get('hl/AAAAAA.json'), hist.meta.get('fb/2026Q3/0001067983.json')]).toEqual([{ built_at: '2026-11-09T05:00:00Z', build_id: 'gust-b1' }, { built_at: '2026-11-09T05:00:00Z' }]);
+    // Sizes that don't add up, or a foreign token, write nothing.
+    expect((await batch([{ key: 'hl/CCCCCC.json', body: '{}' }], tok, [5])).status).toBe(400);
+    expect((await batch([{ key: 'hl/CCCCCC.json', body: '{}' }], await jwt({}, other.privateKey))).status).toBe(401);
+    expect(hist.m.has('hl/CCCCCC.json')).toBe(false);
+    // The same as an uncompressed tar (Python's tarfile, ustar), headers applied to every object; a bad key is refused, the rest written.
+    const tar = (files: [string, string][]) => {
+      const enc = new TextEncoder();
+      const blocks: Uint8Array[] = [];
+      for (const [name, body] of files) {
+        const h = new Uint8Array(512);
+        const b = enc.encode(body);
+        h.set(enc.encode(name), 0);
+        h.set(enc.encode('0000644\0'), 100);
+        h.set(enc.encode(`${b.length.toString(8).padStart(11, '0')}\0`), 124);
+        h.set(enc.encode('0'), 156);
+        h.set(enc.encode('ustar\x0000'), 257);
+        h.set(enc.encode('        '), 148);
+        h.set(enc.encode(`${h.reduce((t, x) => t + x, 0).toString(8).padStart(6, '0')}\0 `), 148);
+        blocks.push(h, b, new Uint8Array((512 - (b.length % 512)) % 512));
+      }
+      blocks.push(new Uint8Array(1024));
+      const out = new Uint8Array(blocks.reduce((t, x) => t + x.length, 0));
+      let at = 0;
+      for (const x of blocks) out.set(x, (at += x.length) - x.length);
+      return out;
+    };
+    const big = '{"rows":"' + 'x'.repeat(700) + '"}'; // spans two blocks
+    const tr = await handleRequest(new Request('https://api.test/ingest/bundle', { method: 'PUT', body: tar([['hl/EEEEEE.json', big], ['index.json', '{}'], ['changes/2026Q3.json', '{"q":3}']]), headers: { authorization: `Bearer ${tok}`, 'x-copybook-build-id': 'gust-tar', 'x-copybook-built-at': '2026-11-09T06:00:00Z' } }), env);
+    expect([tr.status, await tr.json()]).toMatchObject([200, { ok: true, written: 2, refused: ['index.json'] }]);
+    expect([new TextDecoder().decode(hist.m.get('hl/EEEEEE.json')), new TextDecoder().decode(hist.m.get('changes/2026Q3.json')), hist.meta.get('changes/2026Q3.json')]).toEqual([big, '{"q":3}', { build_id: 'gust-tar', built_at: '2026-11-09T06:00:00Z' }]);
+    // Single uploads are capped per minute (per location, in the Cache API): the 121st is refused before any work.
+    const cache = new Map<string, string>();
+    (globalThis as { caches?: unknown }).caches = { default: { match: async (k: string) => (cache.has(k) ? new Response(cache.get(k)) : undefined), put: async (k: string, r: Response) => void cache.set(k, await r.text()) } };
+    const codes: number[] = [];
+    for (let i = 0; i < 121; i++) codes.push(await put('hl/DDDDDD.json', tok));
+    delete (globalThis as { caches?: unknown }).caches;
+    expect([codes.slice(0, 120).every((c) => c === 200), codes[120]]).toEqual([true, 429]);
+
 
     const token = (await (await call('/session', { body: { checkout_session: 'cs_test_q' } })).json()).token;
     expect(token).toBeUndefined(); // no session yet: /holdings must refuse
@@ -973,6 +1026,25 @@ describe('copybook api', () => {
     const sq3 = [pos('SPLT', '000000007', 12000, 60_000_000), pos('REST', '000000009', 1, 1e9)];
     expect(all(computeMoves(sq3, sq2).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['SPLT', true]]); // 10x off: tagged
     expect(all(computeMoves(sq3, sq2, undefined, new Set(['000000007'])).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['SPLT', false]]);
+  });
+
+  it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {
+    const { runQuotaCheck } = await import('../src/revenue');
+    expect(await runQuotaCheck(env, Date.now())).toEqual({ status: 'no analytics token' });
+    Object.assign(env, { CF_ANALYTICS_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct' });
+    let used = [30_000, 39_000];
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
+      String(u) === 'https://api.cloudflare.com/client/v4/graphql' ? Response.json({ data: { viewer: { accounts: [{ w: [{ sum: { requests: used[0] } }], p: [{ sum: { requests: used[1] } }] }] } } }) : orig(u, init));
+    sent = [];
+    expect(await runQuotaCheck(env, Date.now())).toMatchObject({ status: 'ok', total: 69_000 });
+    used = [46_913, 79_189];
+    await runQuotaCheck(env, Date.now());
+    await runQuotaCheck(env, Date.now() + 3600_000);
+    vi.stubGlobal('fetch', orig);
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['hello@factordynamics.com', "Copybook: 126% of today's Workers requests used (126,102 of 100,000)"]]);
+    expect(sent[0].text).toContain('Pages Functions 79,189');
+    Object.assign(env, { CF_ANALYTICS_TOKEN: undefined, CF_ACCOUNT_ID: undefined });
   });
 
   it('Holdterm alerts skip books that fail the data check and the funds Holdterm holds back', async () => {
@@ -2207,6 +2279,7 @@ describe('copybook api', () => {
     expect(await ciks('?type=hedge_fund')).toEqual(['0002045724', '0001387322']);
     expect(await ciks('?type=hedge_fund&include_options=true')).toEqual(['0002045724', '0001423053', '0001387322']);
     expect(await ciks('?type=hedge_fund,active')).toEqual(['0002045724', '0001067983', '0001387322']);
+    expect(await ciks('?type=smart_money')).toEqual(['0002045724', '0001067983', '0001387322']); // ingest's hedge_fund + long_only
     // During ingest's rename, long_only and active match each other.
     expect(await ciks('?type=long_only&current_only=false')).toEqual(['0001067983', '0000000077']);
     expect(await ciks('?cohort=curated')).toEqual(['0001067983']);

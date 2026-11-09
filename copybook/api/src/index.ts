@@ -20,6 +20,85 @@ import { hmacHex, signToken, verifyToken } from './tokens';
 /** Paid data the data workflow uploads besides h/: every filer's full book per quarter, per-issuer holders, bulk exports. */
 const INGEST_KEY = /^(fb\/\d{4}Q[1-4]\/\d{10}\.json|s\/[0-9A-Z]{6}\.json|hl\/[0-9A-Z]{6}\.json|v\/\d{10}\/\d{10}-\d{2}-\d{6}\.json|changes\/\d{4}Q[1-4]\.json|bulk\/\d{4}Q[1-4]\.(csv\.gz|parquet))$/;
 
+type IngestKind = 'data' | 'flow' | 'pre';
+/** Which workflow may upload a key: the full Flow lists come from the site's Pages workflow, pre/ from the precompute, the rest from the data workflow. */
+function ingestKind(key: string): IngestKind | null {
+  if (key === 'flow/full.json') return 'flow';
+  if (/^pre\/(stock-codes|sec-tickers|events)\.json$|^pre\/v1-filers-rest\.txt$/.test(key)) return 'pre';
+  return SHARD_KEY.test(key) || INGEST_KEY.test(key) ? 'data' : null;
+}
+const INGEST_KEYS_ERROR = 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, hl/{issuer6}.json, v/{cik10}/{accession}.json, changes/{YYYYQn}.json or bulk/{YYYYQn}.csv.gz|.parquet';
+/** Null when the request's GitHub OIDC token is from a workflow allowed every kind of key in it, else why not. */
+async function ingestAuth(env: Env, req: Request, kinds: Set<IngestKind>): Promise<string | null> {
+  const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+  const data = await verifyGithubOidc(tok, env.INGEST_WORKFLOW);
+  if (!data) return null;
+  // Another workflow's token covers only its own kind, and only when the request has nothing else.
+  if (kinds.size === 1 && kinds.has('flow') && env.PAGES_WORKFLOW) return verifyGithubOidc(tok, env.PAGES_WORKFLOW);
+  if (kinds.size === 1 && kinds.has('pre') && env.PRECOMPUTE_WORKFLOW) return verifyGithubOidc(tok, env.PRECOMPUTE_WORKFLOW);
+  return data;
+}
+const contentTypeOf = (key: string) => (key.endsWith('.csv') ? 'text/csv; charset=utf-8' : key.endsWith('.csv.gz') ? 'application/gzip' : key.endsWith('.parquet') ? 'application/vnd.apache.parquet' : key.endsWith('.txt') ? 'text/plain' : 'application/json');
+/** The uploading build (headers x-copybook-build-id/-built-at, or a manifest's build_id/built_at), so /v1 can name the build each response read. */
+function buildMeta(req: Request | null, o: { build_id?: unknown; built_at?: unknown } | null): Record<string, string> {
+  const v = { build_id: req?.headers.get('x-copybook-build-id') ?? o?.build_id, built_at: req?.headers.get('x-copybook-built-at') ?? o?.built_at };
+  return Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => typeof e[1] === 'string' && !!e[1] && e[1].length <= 64));
+}
+
+type Upload = { key: string; bytes: Uint8Array; meta?: { build_id?: unknown; built_at?: unknown } };
+/** An uncompressed tar (ustar or GNU): each regular file's name is its R2 key. Headers are read, bodies only sliced. */
+function untar(buf: Uint8Array): Upload[] | string {
+  const out: Upload[] = [];
+  const dec = new TextDecoder();
+  const str = (o: number, n: number) => dec.decode(buf.subarray(o, o + n)).replace(/\0.*$/s, '');
+  let at = 0;
+  let longName: string | null = null;
+  while (at + 512 <= buf.length) {
+    if (buf.subarray(at, at + 512).every((b) => b === 0)) break; // end of archive
+    const size = parseInt(str(at + 124, 12).trim() || '0', 8);
+    const type = String.fromCharCode(buf[at + 156] || 48);
+    const prefix = str(at + 345, 155);
+    const name = longName ?? (prefix ? `${prefix}/${str(at, 100)}` : str(at, 100));
+    longName = null;
+    if (!Number.isFinite(size) || at + 512 + size > buf.length) return 'truncated tar';
+    const body = buf.subarray(at + 512, at + 512 + size);
+    if (type === 'L') longName = dec.decode(body).replace(/\0.*$/s, '');
+    // PAX (Python's default format): a long name comes as a "path=" record in the header before the file.
+    else if (type === 'x') longName = dec.decode(body).match(/^\d+ path=(.*)$/m)?.[1] ?? null;
+    else if (type === '0' || type === '7') out.push({ key: name.replace(/^\.\//, ''), bytes: body });
+    at += 512 + Math.ceil(size / 512) * 512;
+  }
+  return out;
+}
+/** POST /ingest-batch: {"objects":[{"key","size",build_id?,built_at?}]} on the first line, then the bytes in order. */
+function unmanifest(buf: Uint8Array): Upload[] | string {
+  const nl = buf.indexOf(10);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let m: any = null;
+  try {
+    m = nl > 0 ? JSON.parse(new TextDecoder().decode(buf.subarray(0, nl))) : null;
+  } catch {
+    m = null;
+  }
+  const objs: { key: string; size: number; build_id?: string; built_at?: string }[] = Array.isArray(m?.objects) ? m.objects : [];
+  if (!objs.length || objs.some((o) => typeof o?.key !== 'string' || !Number.isInteger(o.size) || o.size < 0)) return 'first line: {"objects":[{"key","size"},...]}, then their bytes in order';
+  if (objs.reduce((t, o) => t + o.size, 0) !== buf.length - nl - 1) return "the objects' sizes don't add up to the bytes after the manifest line";
+  let at = nl + 1;
+  return objs.map((o) => ({ key: o.key, bytes: buf.subarray(at, (at += o.size)), meta: { build_id: o.build_id ?? m.build_id, built_at: o.built_at ?? m.built_at } }));
+}
+const BATCH_MAX_OBJECTS = 500;
+const BATCH_MAX_BYTES = 90_000_000;
+const INGEST_PER_MINUTE = 120;
+/** Counts this location's single uploads per minute in the Cache API (no KV writes); true past the cap. Approximate by design. */
+async function overIngestRate(): Promise<boolean> {
+  if (typeof caches === 'undefined') return false;
+  const c = (caches as unknown as { default: Cache }).default;
+  const key = `https://copybook.internal/ingest-rate/${Math.floor(Date.now() / 60_000)}`;
+  const n = Number((await (await c.match(key).catch(() => undefined))?.text()) ?? 0) + 1;
+  await c.put(key, new Response(String(n), { headers: { 'cache-control': 'max-age=120' } })).catch(() => undefined);
+  return n > INGEST_PER_MINUTE;
+}
+
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$/;
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
@@ -351,23 +430,43 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return obj ? new Response(obj.body, { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }) : json({ updated_at: null, ciks: [] }, 200, {});
   }
 
+  // Many uploads in one request: PUT /ingest/bundle (an uncompressed tar, each entry named by its R2 key) or
+  // POST /ingest-batch (a JSON manifest line, then the objects' bytes back to back). Each request counts against
+  // the Workers plan's quota, so a full rebuild is ~50 of these, not ~25,000 single PUTs. Keys that fail the
+  // allowlist are refused and listed; the rest are written.
+  if ((req.method === 'PUT' && path === '/ingest/bundle') || (req.method === 'POST' && path === '/ingest-batch')) {
+    const buf = new Uint8Array(await req.arrayBuffer());
+    if (buf.length > BATCH_MAX_BYTES) return json({ ok: false, error: `bundle over ${BATCH_MAX_BYTES} bytes; split it` }, 413, {});
+    const parsed = path === '/ingest/bundle' ? untar(buf) : unmanifest(buf);
+    if (typeof parsed === 'string') return json({ ok: false, error: parsed }, 400, {});
+    if (!parsed.length || parsed.length > BATCH_MAX_OBJECTS) return json({ ok: false, error: `1 to ${BATCH_MAX_OBJECTS} objects per bundle` }, 400, {});
+    const kinds = parsed.map((o) => ingestKind(o.key));
+    const good = parsed.filter((_, i) => kinds[i]);
+    const refused = parsed.filter((_, i) => !kinds[i]).map((o) => o.key);
+    const why = await ingestAuth(env, req, new Set(kinds.filter((k): k is IngestKind => !!k)));
+    if (why) return json({ ok: false, error: why }, 401, {});
+    const head = buildMeta(req, null);
+    // A few at a time: R2 writes are I/O, not CPU.
+    for (let i = 0; i < good.length; i += 25) {
+      await Promise.all(good.slice(i, i + 25).map((o) => {
+        const meta = { ...buildMeta(null, o.meta ?? null), ...head };
+        return env.HIST.put(o.key, o.bytes, { httpMetadata: { contentType: contentTypeOf(o.key) }, ...(Object.keys(meta).length ? { customMetadata: meta } : {}) });
+      }));
+    }
+    return json({ ok: true, written: good.length, refused, ...(refused.length ? { error: INGEST_KEYS_ERROR } : {}) }, 200, {});
+  }
+
   // The data workflow uploads per-quarter history here, authenticated by its GitHub OIDC token.
   if (req.method === 'PUT' && path.startsWith('/ingest/')) {
     const key = path.slice('/ingest/'.length);
-    const flow = key === 'flow/full.json';
-    const pre = /^pre\/(stock-codes|sec-tickers|events)\.json$|^pre\/v1-filers-rest\.txt$/.test(key);
-    if (!SHARD_KEY.test(key) && !INGEST_KEY.test(key) && !flow && !pre) return json({ ok: false, error: 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, hl/{issuer6}.json, v/{cik10}/{accession}.json, changes/{YYYYQn}.json or bulk/{YYYYQn}.csv.gz|.parquet' }, 400, {});
-    const tok = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
-    // The full Flow lists are built by the site's Pages workflow; everything else by the data workflow.
-    let why = await verifyGithubOidc(tok, env.INGEST_WORKFLOW);
-    if (why && flow && env.PAGES_WORKFLOW) why = await verifyGithubOidc(tok, env.PAGES_WORKFLOW);
-    if (why && pre && env.PRECOMPUTE_WORKFLOW) why = await verifyGithubOidc(tok, env.PRECOMPUTE_WORKFLOW);
+    const kind = ingestKind(key);
+    if (!kind) return json({ ok: false, error: INGEST_KEYS_ERROR }, 400, {});
+    // Single uploads past the per-minute cap (per location) are refused: many objects go in one POST /ingest-batch.
+    if (await overIngestRate()) return json({ ok: false, error: `over ${INGEST_PER_MINUTE} single uploads a minute; send many objects in one POST /ingest-batch`, code: 'rate_limited' }, 429, { 'retry-after': '60' });
+    const why = await ingestAuth(env, req, new Set([kind]));
     if (why) return json({ ok: false, error: why }, 401, {});
-    const type = key.endsWith('.csv') ? 'text/csv; charset=utf-8' : key.endsWith('.csv.gz') ? 'application/gzip' : key.endsWith('.parquet') ? 'application/vnd.apache.parquet' : key.endsWith('.txt') ? 'text/plain' : 'application/json';
-    // The uploading build, so /v1 can name the build each response read (build_id, data_built_at).
-    const built = { build_id: req.headers.get('x-copybook-build-id') ?? '', built_at: req.headers.get('x-copybook-built-at') ?? '' };
-    const meta = Object.fromEntries(Object.entries(built).filter(([, v]) => v && v.length <= 64));
-    await env.HIST.put(key, req.body, { httpMetadata: { contentType: type }, ...(Object.keys(meta).length ? { customMetadata: meta } : {}) });
+    const meta = buildMeta(req, null);
+    await env.HIST.put(key, req.body, { httpMetadata: { contentType: contentTypeOf(key) }, ...(Object.keys(meta).length ? { customMetadata: meta } : {}) });
     return json({ ok: true, key }, 200, {});
   }
 

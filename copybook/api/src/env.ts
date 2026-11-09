@@ -20,7 +20,7 @@ export interface R2Object {
 
 export interface R2 {
   get(key: string): Promise<R2Object | null>;
-  put(key: string, value: ReadableStream | ArrayBuffer | string | null, opts?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }): Promise<unknown>;
+  put(key: string, value: ReadableStream | ArrayBuffer | ArrayBufferView | string | null, opts?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }): Promise<unknown>;
   list(opts: { prefix: string }): Promise<{ objects: { key: string; size: number; uploaded: Date }[] }>;
 }
 
@@ -55,6 +55,9 @@ export interface Env {
   RESEND_API_KEY?: string;
   /** Fine-grained GitHub PAT (refcell/gust only, Actions: read and write) to dispatch the data refresh. */
   GITHUB_DISPATCH_TOKEN?: string;
+  /** Cloudflare API token with Account Analytics read, for the daily request-budget check. */
+  CF_ANALYTICS_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
   /** SEC requests per minute run: 40 fits the free plan's 50 subrequests; raise on Workers Paid. */
   SEC_BUDGET?: string;
   /** Durable Object namespace: one KeyMeter per API key (rate limits and usage). */

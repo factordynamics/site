@@ -106,8 +106,10 @@ export type Stamp = { build_id: string | null; data_built_at: string | null };
  */
 export function stampOf(o: { uploaded?: Date; customMetadata?: Record<string, string> } | null | undefined): Stamp | undefined {
   if (!o) return undefined;
-  const at = noMs(o.customMetadata?.built_at || o.uploaded?.toISOString() || null);
-  const id = o.customMetadata?.build_id || (at ? `r2-${at.replace(/[-:]/g, '')}` : null);
+  // Worker uploads store build_id/built_at; direct S3 uploads (x-amz-meta-copybook-build-id) arrive as copybook-build-id.
+  const cm = o.customMetadata ?? {};
+  const at = noMs(cm.built_at || cm['copybook-built-at'] || o.uploaded?.toISOString() || null);
+  const id = cm.build_id || cm['copybook-build-id'] || (at ? `r2-${at.replace(/[-:]/g, '')}` : null);
   return id || at ? { build_id: id, data_built_at: at } : undefined;
 }
 

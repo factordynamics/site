@@ -650,6 +650,49 @@ export async function paymentFailed(env: Env, inv: any): Promise<string> {
  * Filing weeks only (7 days before a 13F deadline through the day after): one email a day to the team with the
  * last 24 hours: alerts sent, live latency p50/p90, missed filings recovered, failing channels, and the funnel.
  */
+/** Workers requests a day on the plan, and when to warn: the free plan's 100,000 (Workers Paid has no daily cap). */
+export const DAILY_REQUESTS = 100_000;
+const WARN_AT = 0.7;
+
+/**
+ * The account's Workers and Pages Functions requests since 00:00 UTC (they share the daily quota), from Cloudflare's
+ * GraphQL analytics (one subrequest, no Worker request). Null without CF_ANALYTICS_TOKEN or when it can't be read.
+ */
+export async function requestsToday(env: Env, now: number): Promise<{ workers: number; pages: number; total: number } | null> {
+  if (!env.CF_ANALYTICS_TOKEN || !env.CF_ACCOUNT_ID) return null;
+  const start = `${new Date(now).toISOString().slice(0, 10)}T00:00:00Z`;
+  const query = `query($a:String!,$s:Time!,$e:Time!){viewer{accounts(filter:{accountTag:$a}){w:workersInvocationsAdaptive(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests}} p:pagesFunctionsInvocationsAdaptiveGroups(limit:100,filter:{datetime_geq:$s,datetime_leq:$e}){sum{requests}}}}}`;
+  try {
+    const res = await fetch('https://api.cloudflare.com/client/v4/graphql', { method: 'POST', headers: { authorization: `Bearer ${env.CF_ANALYTICS_TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify({ query, variables: { a: env.CF_ACCOUNT_ID, s: start, e: new Date(now).toISOString() } }) });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const acc = ((await res.json()) as any)?.data?.viewer?.accounts?.[0];
+    if (!acc) return null;
+    const sum = (xs: { sum: { requests: number } }[] = []) => xs.reduce((t, x) => t + (x.sum?.requests ?? 0), 0);
+    const workers = sum(acc.w);
+    const pages = sum(acc.p);
+    return { workers, pages, total: workers + pages };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hourly: one email to the team, once per UTC day, when the account passes 70% of the plan's daily Workers
+ * requests, so a burst (a bulk upload, a busy Pages function) is caught before the API starts answering 429.
+ */
+export async function runQuotaCheck(env: Env, now: number, to = 'hello@factordynamics.com'): Promise<Record<string, unknown>> {
+  const used = await requestsToday(env, now);
+  if (!used) return { status: 'no analytics token' };
+  const share = used.total / DAILY_REQUESTS;
+  if (share < WARN_AT) return { status: 'ok', ...used, share: Math.round(share * 1000) / 10 };
+  const key = `quota:warned:${new Date(now).toISOString().slice(0, 10)}`;
+  if (await env.DB.get(key)) return { status: 'already warned', ...used };
+  const pct = Math.round(share * 100);
+  const status = await sendMail(env, [{ to, subject: `Copybook: ${pct}% of today's Workers requests used (${used.total.toLocaleString('en-US')} of ${DAILY_REQUESTS.toLocaleString('en-US')})`, text: `Since 00:00 UTC the Cloudflare account has used ${used.total.toLocaleString('en-US')} of the free plan's ${DAILY_REQUESTS.toLocaleString('en-US')} Workers requests a day: copybook-api and other Workers ${used.workers.toLocaleString('en-US')}, Pages Functions ${used.pages.toLocaleString('en-US')}.\n\nAt 100% every API request (sign-in, accounts, checkout, /v1) returns 429 until 00:00 UTC. Workers Paid ($5/mo) removes the daily cap: dash.cloudflare.com, Workers & Pages, Plans.${FOOTER}` }]);
+  if (status === '200') await env.DB.put(key, '1', { expirationTtl: 3 * 86400 });
+  return { status, ...used };
+}
+
 export async function runOpsDigest(env: Env, now: number, to = 'hello@factordynamics.com'): Promise<Record<string, unknown>> {
   if (!inFilingWeek(now)) return { status: 'not a filing week' };
   const key = `ops:sent:${new Date(now).toISOString().slice(0, 10)}`;
@@ -668,7 +711,9 @@ export async function runOpsDigest(env: Env, now: number, to = 'hello@factordyna
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
   const f = await funnel(env, now, 1);
+  const used = await requestsToday(env, now);
   const lines = [
+    `Workers requests today (UTC): ${used ? `${used.total.toLocaleString('en-US')} of ${DAILY_REQUESTS.toLocaleString('en-US')} (${Math.round((used.total / DAILY_REQUESTS) * 100)}%; Pages Functions ${used.pages.toLocaleString('en-US')})` : 'n/a'}`,
     `Alerts sent: ${alerts}`,
     `Latency (live, EDGAR acceptance to send): p50 ${at(0.5) ?? 'n/a'} s, p90 ${at(0.9) ?? 'n/a'} s, from ${lat.length} alerts`,
     `Missed filings recovered: ${missed} (${Number((await env.DB.get('missed:count')) ?? 0)} this season)`,

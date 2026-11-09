@@ -431,7 +431,7 @@ function streamFilers(body: ReadableStream<Uint8Array>, curated: unknown[]): Res
  * Filer types in the holder index (and changes/{q}.json), ingest's filer_types.json. Ingest is renaming
  * active to long_only and adding sovereign and insurance; both names match during the switch.
  */
-export const FILER_TYPES = ['hedge_fund', 'active', 'long_only', 'index', 'bank', 'wealth', 'pension', 'sovereign', 'insurance', 'other'];
+export const FILER_TYPES = ['hedge_fund', 'long_only', 'active', 'smart_money', 'index', 'bank', 'insurance', 'wealth', 'pension', 'sovereign', 'other'];
 const SAME_TYPE: Record<string, string> = { active: 'long_only', long_only: 'active' };
 
 /** The page's staleness rule: a holder is current when its latest 13F is for the newest ended quarter or the one before. */
@@ -522,7 +522,7 @@ export async function holdersOf(env: Env, code: string): Promise<{ issuer: strin
     const latest = c && period && c.latest_quarter === period;
     const total = latest ? c.total_value_usd : null;
     return {
-      filer: { cik, name: h.name, slug: h.slug ?? c?.slug ?? null, type: h.type ?? types.get(cik) ?? c?.type ?? null, curated: h.curated ?? (c ? true : null) },
+      filer: { cik, name: h.name, slug: h.slug ?? c?.slug ?? null, type: types.get(cik) ?? h.type ?? c?.type ?? null, curated: h.curated ?? (c ? true : null) },
       period,
       kind: h.kind ?? (h.put_call ? `${String(h.put_call).toLowerCase()}s` : 'equity'),
       put_call: h.put_call ?? (h.kind === 'calls' ? 'Call' : h.kind === 'puts' ? 'Put' : null),
@@ -556,7 +556,8 @@ export function holderFilter(p: URLSearchParams, now = Date.now()): ((r: HolderR
   const cohort = p.get('cohort') ?? 'all';
   const cur = p.get('current_only') ?? 'true';
   if (types.some((t) => !FILER_TYPES.includes(t)) || !['all', 'curated'].includes(cohort) || !['true', 'false'].includes(cur) || !['true', 'false', null].includes(p.get('include_options'))) return null;
-  const want = new Set(types.flatMap((t) => [t, SAME_TYPE[t] ?? t]));
+  // smart_money is ingest's hedge_fund + long_only; active is long_only's retired name, still accepted.
+  const want = new Set(types.flatMap((t) => (t === 'smart_money' ? ['hedge_fund', 'long_only', 'active'] : [t, SAME_TYPE[t] ?? t])));
   const quarters = currentQuarters(now);
   return (r) => (!types.length || want.has(r.filer.type ?? '')) && (cohort === 'all' || r.filer.curated === true) && (cur === 'false' || !r.period || quarters.includes(r.period));
 }
