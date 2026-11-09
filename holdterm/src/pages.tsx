@@ -73,13 +73,14 @@ function Sector({ s }: { s?: string | null }) {
     </span>
   )
 }
-function Who({ list, max = 3 }: { list: { slug: string; manager: string }[]; max?: number }) {
+function Who({ list, max = 3, tagQ }: { list: { slug: string; manager: string; quarter?: string }[]; max?: number; tagQ?: string }) {
   return (
     <span className="who">
       {list.slice(0, max).map((w, i) => (
         <span key={w.slug}>
           {i > 0 && <span className="dim">, </span>}
           <A to={fundPath(w.slug)}>{w.manager}</A>
+          {tagQ && w.quarter === tagQ && <span className="qtag" title={`from the ${quarterLabel(tagQ)} 13F`}>{tagQ.slice(4)}</span>}
         </span>
       ))}
       {list.length > max && <span className="dim"> +{list.length - max}</span>}
@@ -668,6 +669,9 @@ export function Flows() {
   if (books.error) return <Failed error={books.error} />
   if (!books.data) return <Loading what="reading every book" />
   const fundsN = q === 'latest' ? books.data.length : books.data.filter((b) => b.quarter === q).length
+  // In "latest" mode the books span quarters: say how many of each, and tag the newest quarter's funds.
+  const mix = quarters.map((x) => [x, books.data!.filter((b) => b.quarter === x).length] as const)
+  const tagQ = q === 'latest' && mix.length > 1 ? mix[0][0] : undefined
   const exits = (r: Agg) => r.sellers.filter((s) => s.change === 'exited').length
   let list: Agg[]
   if (tab === 'buyers') list = rows.filter((r) => r.buyers.length).sort((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)
@@ -689,7 +693,7 @@ export function Flows() {
             {x === 'latest' ? 'each fund’s latest' : quarterLabel(x)}
           </button>
         ))}
-        <span className="dim">· {fundsN} funds</span>
+        <span className="dim">· {fundsN} funds{tagQ && ` (${mix.map(([x, n]) => `${n} ${quarterLabel(x)}`).join(' + ')})`}</span>
       </div>
       <Tabs<ATab>
         value={tab}
@@ -716,7 +720,7 @@ export function Flows() {
             isBuy
               ? { key: 'b', label: tab === 'new' ? 'new' : 'buyers', num: true, render: (r) => <span className="pos">{tab === 'new' ? r.newBuyers : r.buyers.length}</span> }
               : { key: 's', label: tab === 'exits' ? 'sold out' : 'sellers', num: true, render: (r) => <span className="neg">{tab === 'exits' ? exits(r) : r.sellers.length}</span> },
-            { key: 'w', label: isBuy ? 'who bought' : 'who sold', hideSm: true, render: (r) => <Who list={[...(isBuy ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))} /> },
+            { key: 'w', label: isBuy ? 'who bought' : 'who sold', hideSm: true, render: (r) => <Who tagQ={tagQ} list={[...(isBuy ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))} /> },
             { key: 'bv', label: 'bought', num: true, hideSm: true, render: (r) => <span className="pos">{r.buy ? usd(r.buy) : '·'}</span>, sort: (r) => r.buy },
             { key: 'sv', label: 'sold', num: true, hideSm: true, render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '·'}</span>, sort: (r) => -r.sell },
             {

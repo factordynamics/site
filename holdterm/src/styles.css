@@ -544,6 +544,15 @@ table.grid {
 .who a:hover {
   color: var(--acc);
 }
+.qtag {
+  margin-left: 3px;
+  padding: 0 3px;
+  border: 1px solid var(--acc);
+  border-radius: 2px;
+  color: var(--acc);
+  font-size: 0.75em;
+  vertical-align: 1px;
+}
 .wcell,
 .netcell {
   display: inline-flex;
