@@ -242,8 +242,14 @@ async function rememberEvents(env: Env, events: AlertEvent[]): Promise<void> {
 
 type DigestDay = { filings: Alert13F[]; events: AlertEvent[]; late?: AlertEvent[] };
 
-async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], now: number): Promise<{ emails: number; digest: number; mail: string; late?: number }> {
+/** One stored event through the fan-out to the given members only (an operator's replay): no digest store, no late split. */
+export async function deliverTo(env: Env, e: AlertEvent, only: Set<string>, now: number) {
+  return deliver(env, [], [e], now, only);
+}
+
+async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], now: number, only?: Set<string>): Promise<{ emails: number; digest: number; mail: string; late?: number }> {
   if (!filings.length && !allEvents.length) return { emails: 0, digest: 0, mail: 'none' };
+  if (only) return fanOut(env, filings, allEvents, now, [], only);
   // Old filings are never presented as news: they go to tonight's digest as "earlier filings".
   // Follow-ups complete an alert already sent, so they go out whenever they're ready.
   // /v1/events serves what the poll parsed (acceptance, classes, prior stake), newest first.
@@ -260,7 +266,11 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   // Kept a month: a new private feed is seeded from the last 30 days.
   await env.DB.put(key, JSON.stringify(day), { expirationTtl: 31 * 86400 });
   if (!filings.length && !events.length) return { emails: 0, digest: 0, mail: 'none', late: late.length };
+  return fanOut(env, filings, events, now, late);
+}
 
+/** Each member's share of these alerts: email (unless they take the digest), chat, webhook and feed. */
+async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: number, late: AlertEvent[], only?: Set<string>): Promise<{ emails: number; digest: number; mail: string; late?: number; chats?: string }> {
   const meta = await filerMeta(env);
   filings = await withCards(env, filings);
   const mails = [];
@@ -271,7 +281,7 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   const posted = new Set<string>();
   let digest = 0;
   for (const raw of await listMembers(env)) {
-    if (!isActive(raw) || !raw.email || raw.alerts === 'off') continue;
+    if (!isActive(raw) || !raw.email || raw.alerts === 'off' || (only && !only.has(raw.customer))) continue;
     if (raw.plan === 'holdterm') {
       // Holdterm members get Holdterm-branded alerts, never Copybook's.
       const mine = forHoldterm(await getFollows(env, raw), filings, events, meta);
@@ -288,6 +298,9 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
     if (ch.discord || ch.slack || ch.telegram) chats.push(...Object.entries(await sendChats(env, m.customer, ch, mine.filings, mine.events, f, now, posted)).map(([k, v]) => `${k} ${v}`));
     if (ch.webhook) await sendWebhooks(env, m, ch, mine.filings, mine.events, now, posted);
     if (ch.feed_token) await addToFeed(env, m, ch, mine.filings, mine.events, now);
+    // Without a feed, what was delivered is remembered (ids by day, 30 days) so a feed created later
+    // starts with exactly what the member got, whatever their scope is by then.
+    else if (!only) await rememberDelivered(env, m.customer, now, [...mine.filings.map((a) => `${a.accession}${a.followup ? ':moves' : ''}`), ...mine.events.map((e) => `${e.id}${e.followup ? ':details' : ''}`)]);
     if (f.digest) digest++;
     else {
       mails.push(alertMail(env, m.email, mine.filings, mine.events, f, m));
@@ -300,18 +313,37 @@ async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], n
   return { emails: mails.length, digest, mail, ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }
 
-/** A member's alerts from the last `days` days' stores, newest first (at most 20): what a new private feed starts with. */
+type Delivered = { day: string; ids: string[] }[];
+
+async function rememberDelivered(env: Env, customer: string, now: number, ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const key = `delivered:${customer}`;
+  const day = etDay(now);
+  const log = (JSON.parse((await env.DB.get(key)) ?? '[]') as Delivered).filter((d) => d.day >= etDay(now - 30 * DAY));
+  const today = log.find((d) => d.day === day) ?? (log.unshift({ day, ids: [] }), log[0]);
+  today.ids = [...new Set([...today.ids, ...ids])].slice(-50);
+  await env.DB.put(key, JSON.stringify(log), { expirationTtl: 31 * 86400 });
+}
+
+/**
+ * A member's alerts from the last `days` days' stores, newest first (at most 20): what a new private
+ * feed starts with. Every alert actually delivered (the delivery log), plus what their follows match
+ * now for days before that log existed.
+ */
 export async function recentFeed(env: Env, raw: Member, now: number, days = 30): Promise<FeedItem[]> {
   const f = await getFollows(env, raw);
   const m = await scoped(env, raw, f);
   const meta = await filerMeta(env);
+  const got = new Set((JSON.parse((await env.DB.get(`delivered:${raw.customer}`)) ?? '[]') as Delivered).flatMap((d) => d.ids));
   const out: FeedItem[] = [];
   for (let d = 0; d < days && out.length < 20; d++) {
     const day = await env.DB.get(`digest:${etDay(now - d * 86_400_000)}`);
     if (!day) continue;
     const { filings, events } = JSON.parse(day) as DigestDay;
     const mine = forMember(m, f, filings, events, meta);
-    out.push(...feedItems(env, mine.filings, mine.events, now).filter((i) => !out.some((x) => x.id === i.id)));
+    const fl = filings.filter((a) => got.has(`${a.accession}${a.followup ? ':moves' : ''}`) || mine.filings.includes(a));
+    const ev = events.filter((e) => got.has(`${e.id}${e.followup ? ':details' : ''}`) || mine.events.includes(e));
+    out.push(...feedItems(env, fl, ev, now, true).filter((i) => !out.some((x) => x.id === i.id)));
   }
   return out.sort((a, b) => (b.sent ?? b.published).localeCompare(a.sent ?? a.published)).slice(0, 20);
 }
@@ -1321,7 +1353,9 @@ export async function runScheduled(env: Env, scheduledTime: number): Promise<Rec
   if (queue.length) out.deferred_jobs = queue.map((j) => j.name);
   const next = JSON.stringify(queue);
   if (next !== (rawQueue ?? '[]')) await env.DB.put('jobs:due', next);
-  if (!busy) await step('webhooks', () => runWebhookRetries(env, scheduledTime));
+  // Chat and webhook retries get a slot every minute, so a deadline afternoon of back-to-back filings
+  // can't starve them: 2 on a busy minute, 5 on a quiet one, oldest due first.
+  await step('webhooks', () => runWebhookRetries(env, scheduledTime, busy ? 2 : 5));
   // Every 3 hours, 10 minutes after gust's own cron: a full refresh only if that run didn't start.
   if (t.getUTCMinutes() === 33 && t.getUTCHours() % 3 === 0) await step('dispatch', () => dispatchRefresh(env, 'full', 'scheduled by copybook-api', scheduledTime));
   else if (env.GITHUB_DISPATCH_TOKEN) {

@@ -76,6 +76,16 @@ export function leadNoticeMail(env: Env, l: Record<string, unknown> & { topic: u
   };
 }
 
+/** A seat had saved its Fund team's destination too: its copy is removed so each alert arrives once. */
+export function teamDuplicateMail(env: Env, to: string, labels: string[]): Mail {
+  const what = labels.join(' and ');
+  return {
+    to,
+    subject: `Your ${what} alerts now come from your team's channel`,
+    text: `You had connected the same ${what} destination your Copy Fund team's owner connected for the team. To deliver each alert there once, we removed your copy; team alerts keep arriving there from the team's channel${labels.includes('webhook') ? ", signed with the team's webhook secret (shown read-only in your account)" : ''}.\n\nYou can still connect personal channels of your own at ${env.SITE_URL}account/.${FOOTER}`,
+  };
+}
+
 /** A chat or webhook destination stopped working; email alerts carry on. */
 export function channelFailMail(env: Env, to: string, label: string, reason: string): Mail {
   return {
@@ -529,13 +539,18 @@ export interface FeedItem {
   published: string;
   /** When Copybook sent the alert. */
   sent?: string;
+  /** A "Send a test" item, not an alert. */
+  test?: boolean;
 }
 
 /** Feed entries for this delivery, one per filing; ids are stable so a follow-up gets its own entry. */
-export function feedItems(env: Env, filings: Alert13F[], events: AlertEvent[], now: number): FeedItem[] {
+export function feedItems(env: Env, filings: Alert13F[], events: AlertEvent[], now: number, seeded = false): FeedItem[] {
   const none: Follows = { investors: [], stocks: [], owned: [], peers: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 0, cluster_buys: true, any_13d: true };
+  // A live item was sent now. A seeded one (an older alert in a new feed) keeps when it was sent, else
+  // EDGAR's acceptance, else its filing day, so readers don't show it as new.
+  const sentAt = (x: { sent_at?: string; accepted?: string; filing_date: string }) => x.sent_at ?? (seeded ? (x.accepted ?? `${x.filing_date}T21:00:00Z`) : new Date(now).toISOString());
   return [
-    ...filings.map((a) => ({ id: `${a.accession}${a.followup ? ':moves' : ''}`, title: filingHeadline(a), text: filingBlock(env, a, none), url: filingUrl(env, a), published: a.accepted ?? new Date(now).toISOString(), sent: a.sent_at ?? new Date(now).toISOString() })),
-    ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, title: eventHeadline(e), text: eventLine(env, e, none), url: e.slug ? `${env.SITE_URL}investors/${e.slug}` : e.url, published: e.accepted ?? new Date(now).toISOString(), sent: e.sent_at ?? new Date(now).toISOString() })),
+    ...filings.map((a) => ({ id: `${a.accession}${a.followup ? ':moves' : ''}`, title: filingHeadline(a), text: filingBlock(env, a, none), url: filingUrl(env, a), published: a.accepted ?? sentAt(a), sent: sentAt(a) })),
+    ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, title: eventHeadline(e), text: eventLine(env, e, none), url: e.slug ? `${env.SITE_URL}investors/${e.slug}` : e.url, published: e.accepted ?? sentAt(e), sent: sentAt(e) })),
   ];
 }

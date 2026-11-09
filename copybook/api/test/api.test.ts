@@ -1087,16 +1087,61 @@ describe('copybook api', () => {
     // So does a test that goes through.
     expect((await (await req(copy, 'POST', '/channels/test')).json()).results).toMatchObject({ slack: '200', telegram: '200', discord: '200' });
     expect((await (await req(copy, 'GET', '/me')).json()).member.channels_failing).toEqual({});
+    // A test that shows a destination is gone flags it at once, in plain words; the email waits for a real alert.
+    chatReplies = { 'discord.com': [{ status: 404 }] };
+    sent = [];
+    const t404 = await (await req(copy, 'POST', '/channels/test')).json();
+    expect(t404.messages).toMatchObject({ discord: 'Discord rejected this webhook (deleted or wrong URL)', slack: 'Delivered' });
+    expect(Object.keys((await (await req(copy, 'GET', '/me')).json()).member.channels_failing)).toEqual(['discord']);
+    expect(sent).toHaveLength(0);
+    await req(copy, 'POST', '/channels/test');
+    expect((await (await req(copy, 'GET', '/me')).json()).member.channels_failing).toEqual({});
 
     // A new feed starts with the member's recent alerts (sent time included); "Send a test" writes to it.
+    const beforeFeed = new Date().toISOString();
+    await new Promise((r) => setTimeout(r, 5));
     const feed2 = (await (await req(copy, 'POST', '/channels/feed')).json()).channels.feed;
     let items = (await (await handleRequest(new Request(feed2.json_url), env)).json()).items;
+    // Seeded items keep when they were sent, not the feed's creation time (in RSS pubDate too).
+    const afterFeed = new Date().toISOString();
+    expect(items.filter((i: { sent_at: string }) => i.sent_at >= beforeFeed && i.sent_at <= afterFeed)).toEqual([]);
+    const feedRes = await handleRequest(new Request(feed2.rss_url), env);
+    expect(feedRes.headers.get('cache-control')).toBe('no-store');
     expect(items.map((i: { id: string }) => i.id).sort()).toEqual(['C1', 'C2', 'C3']);
     expect(items.every((i: { sent_at: string | null }) => !!i.sent_at)).toBe(true);
     await req(copy, 'PUT', '/channels', { slack: null, discord: null, telegram: null });
     expect((await (await req(copy, 'POST', '/channels/test')).json()).results).toEqual({ feed: 'ok' });
     items = (await (await handleRequest(new Request(feed2.json_url), env)).json()).items;
     expect(items[0].title).toBe('Copybook test');
+  });
+
+  it('chat retries get a slot every minute: ten busy minutes in a row still retry a failed Slack post on time', async () => {
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    await cron(17);
+    await putMember('s', 'slack@example.com', 'active', ['warren-buffett']);
+    await putFollows('s', { investors: ['warren-buffett'] });
+    await env.DB.put('channels:s', JSON.stringify({ slack: 'https://hooks.slack.com/services/T000/B000/busyafternoon01' }));
+    const t20 = new Date();
+    t20.setUTCHours(t20.getUTCHours() === 3 ? 4 : t20.getUTCHours(), 20, 0, 0);
+    const tick = (min: number) => cron(0, t20.getTime() + min * 60_000);
+    const iso = (min: number) => new Date(t20.getTime() + min * 60_000 - 20_000).toISOString();
+    const entry = (acc: string, when: string) => `<entry><title>4 - BERKSHIRE (0001067983) (Reporting)</title><updated>${when}</updated><category scheme="https://www.sec.gov/" label="form type" term="4"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
+    await tick(-1); // seeds the poll
+    const accs: string[] = [];
+    chatReplies = { 'hooks.slack.com': [{ status: 500 }] };
+    // A deadline afternoon: a new Berkshire Form 4 every minute for 11 minutes, so every minute is busy.
+    for (let i = 0; i <= 10; i++) {
+      accs.unshift(`0001067983-26-9000${String(i).padStart(2, '0')}`);
+      secFiles['feed:4'] = `<feed>${accs.map((a, j) => entry(a, iso(i - j))).join('')}</feed>`;
+      await tick(i);
+      if (i === 0) expect(JSON.parse((await env.DB.get('webhooks:retry'))!)).toHaveLength(1);
+      if (i === 1) {
+        // The first alert's retry went out one minute later, in a busy minute.
+        expect(posts.filter((p) => p.body.includes(accs[1])).length).toBe(2);
+        expect(await env.DB.get('webhooks:retry')).toBeNull();
+      }
+    }
+    expect(posts.filter((p) => p.url.includes('hooks.slack.com'))).toHaveLength(12);
   });
 
   it('missed-filing detector: a followed Form 4 pushed off the poll\'s feed page by a burst is requeued after 10 minutes, sent, logged and counted', async () => {
@@ -1373,8 +1418,23 @@ describe('copybook api', () => {
     const teamSlack = 'https://hooks.slack.com/services/T000/B000/teamchannel0001';
     const chan = (token: string, b: unknown) => handleRequest(new Request('https://api.test/channels', { method: b ? 'PUT' : 'GET', body: b ? JSON.stringify(b) : undefined, headers: { authorization: `Bearer ${token}` } }), env);
     expect((await (await chan(owner, { slack: teamSlack })).json()).channels).toMatchObject({ scope: 'team', editable: true });
-    const seatView = (await (await chan(seat, { slack: teamSlack, discord: 'https://discord.com/api/webhooks/123456789/seatpersonalabcdefghijklmn' })).json()).channels;
-    expect(seatView).toMatchObject({ scope: 'personal' });
+    // A seat can't save the team's channel as its own (409, nothing stored); its personal Discord is fine.
+    const dupe = await chan(seat, { slack: teamSlack, discord: 'https://discord.com/api/webhooks/123456789/seatpersonalabcdefghijklmn' });
+    expect(dupe.status).toBe(409);
+    expect((await dupe.json()).code).toBe('already_team_channel');
+    expect((await (await chan(seat, null)).json()).channels.discord).toBeNull();
+    expect((await (await chan(seat, { discord: 'https://discord.com/api/webhooks/123456789/seatpersonalabcdefghijklmn' })).json()).channels).toMatchObject({ scope: 'personal' });
+    // A duplicate saved before the rule: the owner's next save clears the seat's copy, once, with an email.
+    const seatId = (await env.DB.get('email:analyst@fund.example'))!;
+    await env.DB.put(`channels:${seatId}`, JSON.stringify({ ...JSON.parse((await env.DB.get(`channels:${seatId}`))!), slack: teamSlack }));
+    sent = [];
+    await chan(owner, { slack: teamSlack });
+    expect(JSON.parse((await env.DB.get(`channels:${seatId}`))!).slack).toBeUndefined();
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['analyst@fund.example', "Your Slack alerts now come from your team's channel"]]);
+    // The team webhook has one secret, readable by seats; a seat can't add the same URL with its own.
+    const ownerHook = (await (await chan(owner, { webhook: 'https://hooks.example.com/team' })).json()).channels.webhook;
+    expect((await (await chan(seat, null)).json()).channels.team.webhook).toEqual({ url: 'https://hooks.example.com/team', secret: ownerHook.secret });
+    expect((await chan(seat, { webhook: 'https://hooks.example.com/team' })).status).toBe(409);
     expect((await (await chan(seat, null)).json()).channels).toMatchObject({ scope: 'personal', team: { scope: 'team', editable: false, slack: 'https://hooks.slack.com/…0001', discord: null } });
     const today = new Date().toISOString().slice(0, 10);
     const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25 });

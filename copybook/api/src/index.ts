@@ -1,8 +1,8 @@
-import { recentFeed, resolveFollowedFilers, runScheduled } from './alerts';
+import { type AlertEvent, deliverTo, recentFeed, resolveFollowedFilers, runScheduled } from './alerts';
 import { fetchHistory, historyCsv, holdersCsv, shard, SHARD_KEY, SLUG } from './data';
 import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } from './v1data';
 import { verifyGithubOidc } from './oidc';
-import { channelsView, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
+import { channelScope, channelsView, clearSeatDuplicates, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
 import { handleV1 } from './v1';
 
@@ -194,6 +194,32 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json(r.ok ? { ok: true, follows: r.follows } : r, r.ok ? 200 : 400, h);
   }
 
+  // Operator: clear Fund seats' copies of their team's destinations (one-off for duplicates saved before the 409).
+  const dedupe = path.match(/^\/ops\/team-dedupe\/(cus_\w+)$/);
+  if (req.method === 'POST' && dedupe) {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const owner = await getMember(env, dedupe[1]);
+    return owner ? json({ ok: true, cleared: await clearSeatDuplicates(env, owner) }, 200, h) : json({ ok: false, error: 'no such member' }, 404, h);
+  }
+
+  // Operator: send one real, already-parsed Form 4 or 13D/G (from /v1/events' store) through the alert
+  // fan-out to the named members only: their email, chat, feed and webhook, with their team rules. It
+  // is marked a replay (never counted in latency) and stays out of the day's digest store.
+  if (req.method === 'POST' && path === '/ops/deliver') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = (await body(req)) as { accession?: string; customers?: string[] };
+    if (!b.accession || !Array.isArray(b.customers) || !b.customers.length) return json({ ok: false, error: 'accession and customers[]' }, 400, h);
+    const pre = await env.HIST.get('pre/events.json');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const all: any[] = [...(JSON.parse((await env.DB.get('v1:events')) ?? '[]') as unknown[]), ...(pre ? (((await new Response(pre.body).json()) as { events: unknown[] }).events ?? []) : [])];
+    const ev = all.find((e) => e.id === b.accession) as AlertEvent | undefined;
+    if (!ev) return json({ ok: false, error: 'no such event in the store' }, 404, h);
+    const replays = JSON.parse((await env.DB.get('alerts:replays')) ?? '[]') as string[];
+    if (!replays.includes(ev.id)) await env.DB.put('alerts:replays', JSON.stringify([...replays, ev.id].slice(-200)));
+    const at = new Date().toISOString();
+    return json({ ok: true, sent_at: at, result: await deliverTo(env, ev, new Set(b.customers), Date.now()) }, 200, h);
+  }
+
   // Fund-plan, support and data-deletion requests from the contact and pricing pages. No sign-in;
   // a filled `website` field (hidden from people) marks a bot and is dropped without saying so.
   if (req.method === 'POST' && path === '/fund-request') {
@@ -376,10 +402,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), url.origin, await getFailures(env, m.customer), team) }, 200, h);
     }
     if (req.method === 'PUT' && path === '/channels') {
-      const r = await updateChannels(env, m, await body(req));
-      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, url.origin, await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : 400, h);
+      // A seat can't save its team's destination (409 already_team_channel); an owner's save clears seats' copies of it.
+      const team = m.seat_of ? await getChannels(env, m.seat_of) : undefined;
+      const r = await updateChannels(env, m, await body(req), team);
+      if (r.ok && channelScope(m) === 'team') await clearSeatDuplicates(env, m);
+      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, url.origin, await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
     }
-    if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, results: await testChannels(env, m, await getChannels(env, m.customer)) }, 200, h);
+    if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, ...(await testChannels(env, m, await getChannels(env, m.customer))) }, 200, h);
     if (path === '/channels/feed' && (req.method === 'POST' || req.method === 'DELETE')) {
       const c = await rotateFeed(env, m, req.method === 'DELETE');
       // A new feed starts with the member's alerts from the last 30 days (at most 20), not empty.

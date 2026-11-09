@@ -1,7 +1,8 @@
 import type { Alert13F, AlertEvent } from './alerts';
-import { channelFailMail, chatText, feedItems, sendMail, type FeedItem } from './email';
+import { channelFailMail, chatText, feedItems, sendMail, teamDuplicateMail, type FeedItem } from './email';
 import { isPro, type Env, type Member } from './env';
 import { getMember, type Follows } from './members';
+import { listSeats } from './seats';
 import { hmacHex } from './tokens';
 
 /**
@@ -19,7 +20,7 @@ export interface Channels {
 
 export type Dest = 'discord' | 'slack' | 'telegram' | 'webhook';
 /** A destination that stopped working: KV chfail:{customer}, apart from the member's settings so the cron never overwrites an edit. */
-export type ChannelFailures = Partial<Record<Dest, { reason: string; since: string }>>;
+export type ChannelFailures = Partial<Record<Dest, { reason: string; since: string; notified?: boolean }>>;
 const failKey = (customer: string) => `chfail:${customer}`;
 
 export async function getFailures(env: Env, customer: string): Promise<ChannelFailures> {
@@ -28,14 +29,28 @@ export async function getFailures(env: Env, customer: string): Promise<ChannelFa
 
 const LABEL: Record<Dest, string> = { discord: 'Discord', slack: 'Slack', telegram: 'Telegram', webhook: 'webhook' };
 
-/** Flags a destination as failing and emails the member once (until it works again). Email alerts carry on. */
-async function markFailing(env: Env, customer: string, dest: Dest, reason: string): Promise<void> {
+/**
+ * Flags a destination as failing and, for a real alert, emails the member once (until it works
+ * again). A failed test only flags it: the member is looking at the result. Email alerts carry on.
+ */
+async function markFailing(env: Env, customer: string, dest: Dest, reason: string, notify = true): Promise<void> {
   const f = await getFailures(env, customer);
-  if (f[dest]) return;
-  f[dest] = { reason, since: new Date().toISOString() };
+  if (f[dest] && (f[dest]!.notified || !notify)) return;
+  f[dest] = { reason, since: f[dest]?.since ?? new Date().toISOString(), notified: notify };
   await env.DB.put(failKey(customer), JSON.stringify(f));
+  if (!notify) return;
   const m = await getMember(env, customer);
   if (m?.email) await sendMail(env, [channelFailMail(env, m.email, LABEL[dest], reason)]);
+}
+
+/** What a test result means, in words for the account page. */
+function testMessage(dest: Dest, status: string): string {
+  const label = dest === 'webhook' ? 'Your endpoint' : LABEL[dest];
+  if (/^2\d\d$/.test(status)) return 'Delivered';
+  if (status === '404' || status === '410') return dest === 'telegram' ? 'Telegram rejected this chat (wrong chat id, or the bot was removed)' : `${label} rejected this ${dest === 'webhook' ? 'URL' : 'webhook'} (deleted or wrong URL)`;
+  if (status === '401' || status === '403') return dest === 'telegram' ? 'Telegram rejected this bot (token revoked, or the bot was blocked or removed from the chat)' : `${label} refused it (access revoked)`;
+  if (status === '429') return `${label} is rate limiting; try again in a minute`;
+  return /^\d+$/.test(status) ? `${label} answered HTTP ${status}` : `No answer from ${label}`;
 }
 
 /** The next delivery that goes through clears the flag. */
@@ -79,13 +94,16 @@ function feedUrls(token: string, apiBase: string) {
  */
 export const channelScope = (m: Member): 'team' | 'personal' => (!m.seat_of && m.plan === 'fund' ? 'team' : 'personal');
 
+const failView = (f: ChannelFailures) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, { reason: v.reason, since: v.since }]));
+
 export function channelsView(m: Member, c: Channels, apiBase: string, failing: ChannelFailures = {}, team?: { owner: Member; c: Channels; failing: ChannelFailures }) {
   return {
     scope: channelScope(m),
     editable: true,
     /** Destinations that stopped working, with why and since when; cleared by the next delivery that works. */
-    failing,
-    ...(team ? { team: { scope: 'team' as const, editable: false, discord: team.c.discord ? mask(team.c.discord) : null, slack: team.c.slack ? mask(team.c.slack) : null, telegram: team.c.telegram ? { chat_id: team.c.telegram.chat_id } : null, webhook: team.c.webhook ? { url: team.c.webhook.url } : null, failing: team.failing } } : {}),
+    failing: failView(failing),
+    // The team's webhook signs every team alert with one secret, which seats can read to verify them.
+    ...(team ? { team: { scope: 'team' as const, editable: false, discord: team.c.discord ? mask(team.c.discord) : null, slack: team.c.slack ? mask(team.c.slack) : null, telegram: team.c.telegram ? { chat_id: team.c.telegram.chat_id } : null, webhook: team.c.webhook ? { url: team.c.webhook.url, secret: team.c.webhook.secret } : null, failing: failView(team.failing) } } : {}),
     discord: c.discord ? mask(c.discord) : null,
     slack: c.slack ? mask(c.slack) : null,
     telegram: c.telegram ? { chat_id: c.telegram.chat_id } : null,
@@ -106,7 +124,42 @@ function httpsPublic(u: string): boolean {
 }
 
 /** PUT /channels: each field set (string or object), cleared (null) or left alone (absent). */
-export async function updateChannels(env: Env, m: Member, b: Record<string, unknown>): Promise<{ ok: true; channels: Channels } | { ok: false; error: string; code: string }> {
+/** Which of `c`'s destinations are also the team's (`team`): the same URL, or the same Telegram chat. */
+function sameAs(c: Channels, team: Channels): Exclude<Dest, never>[] {
+  const out: Dest[] = [];
+  if (c.discord && c.discord === team.discord) out.push('discord');
+  if (c.slack && c.slack === team.slack) out.push('slack');
+  if (c.telegram && team.telegram && c.telegram.chat_id === team.telegram.chat_id) out.push('telegram');
+  if (c.webhook && team.webhook && c.webhook.url === team.webhook.url) out.push('webhook');
+  return out;
+}
+
+/**
+ * A Fund team's destinations are the owner's: one post per alert, signed with one team secret. Any
+ * seat that also saved one of them (before seats were stopped from doing so, or before the owner
+ * connected it) loses its copy, and is told once by email.
+ */
+export async function clearSeatDuplicates(env: Env, owner: Member): Promise<string[]> {
+  const team = await getChannels(env, owner.customer);
+  const cleared: string[] = [];
+  for (const seat of await listSeats(env, owner.customer)) {
+    const c = await getChannels(env, seat.id);
+    const dup = sameAs(c, team);
+    if (!dup.length) continue;
+    for (const d of dup) delete c[d];
+    await putChannels(env, seat.id, c);
+    const fail = await getFailures(env, seat.id);
+    if (dup.some((d) => fail[d])) {
+      for (const d of dup) delete fail[d];
+      await env.DB.put(failKey(seat.id), JSON.stringify(fail));
+    }
+    await sendMail(env, [teamDuplicateMail(env, seat.email, dup.map((d) => LABEL[d]))]);
+    cleared.push(`${seat.id}: ${dup.join(', ')}`);
+  }
+  return cleared;
+}
+
+export async function updateChannels(env: Env, m: Member, b: Record<string, unknown>, team?: Channels): Promise<{ ok: true; channels: Channels } | { ok: false; error: string; code: string }> {
   const c = await getChannels(env, m.customer);
   const bad = (error: string) => ({ ok: false as const, error, code: 'bad_request' });
   if (b.discord !== undefined) {
@@ -134,6 +187,11 @@ export async function updateChannels(env: Env, m: Member, b: Record<string, unkn
       // A new URL keeps the secret; ask for a new one with rotate_secret.
       c.webhook = { url, secret: c.webhook?.secret && !b.rotate_secret ? c.webhook.secret : `whsec_${randomToken(24)}`, created: c.webhook?.created ?? new Date().toISOString() };
     } else return bad('webhook: a public https URL');
+  }
+  // A seat can't save its team's destination as its own: nothing is stored.
+  if (team) {
+    const dup = sameAs(c, team).filter((d) => b[d] !== undefined);
+    if (dup.length) return { ok: false, error: "Already your team's channel", code: 'already_team_channel' };
   }
   await putChannels(env, m.customer, c);
   const fail = await getFailures(env, m.customer);
@@ -354,11 +412,12 @@ export async function sendWebhooks(env: Env, m: Member, c: Channels, filings: Al
 }
 
 /** Every quiet minute: retries due webhook and chat deliveries (at most 5 a run), with backoff. */
-export async function runWebhookRetries(env: Env, now: number): Promise<Record<string, unknown>> {
+export async function runWebhookRetries(env: Env, now: number, max = 5): Promise<Record<string, unknown>> {
   const raw = await env.DB.get('webhooks:retry');
   if (!raw) return { status: 'none' };
   const q = JSON.parse(raw) as Retry[];
-  const due = q.filter((r) => r.next_at <= now).slice(0, 5);
+  // Oldest due first, so a busy afternoon can't push any one retry back indefinitely.
+  const due = q.filter((r) => r.next_at <= now).sort((a, b) => a.next_at - b.next_at).slice(0, max);
   if (!due.length) return { status: 'waiting', queued: q.length };
   const keep = q.filter((r) => !due.includes(r));
   let sent = 0;
@@ -396,7 +455,8 @@ export async function serveFeed(env: Env, token: string, format: 'json' | 'rss',
   const customer = /^[\w-]{20,64}$/.test(token) ? await env.DB.get(`feedtok:${token}`) : null;
   if (!customer) return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
   const items = JSON.parse((await env.DB.get(`feed:${customer}`)) ?? '[]') as FeedItem[];
-  const headers = { 'cache-control': 'private, max-age=60', 'access-control-allow-origin': '*', 'referrer-policy': 'no-referrer' };
+  // Never cached: a revoked token must stop working for both formats at once.
+  const headers = { 'cache-control': 'no-store', 'access-control-allow-origin': '*', 'referrer-policy': 'no-referrer' };
   if (format === 'json') {
     return new Response(
       JSON.stringify({
@@ -406,43 +466,50 @@ export async function serveFeed(env: Env, token: string, format: 'json' | 'rss',
         feed_url: selfUrl,
         description: 'Your Copybook alerts: 13F, Form 4 and Schedule 13D/G filings from SEC EDGAR. Not investment advice.',
         // date_published is EDGAR's acceptance; sent_at is when Copybook sent the alert.
-        items: items.map((i) => ({ id: i.id, url: i.url, title: i.title, content_text: i.text, date_published: i.published, sent_at: i.sent ?? null })),
+        // A "Send a test" item is tagged test, so readers (and the account page) can count alerts only.
+        items: items.map((i) => ({ id: i.id, url: i.url, title: i.title, content_text: i.text, date_published: i.published, sent_at: i.sent ?? null, ...(i.test ? { tags: ['test'] } : {}) })),
       }),
       { headers: { ...headers, 'content-type': 'application/feed+json; charset=utf-8' } },
     );
   }
   const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Copybook alerts</title><link>${xml(env.SITE_URL)}</link><description>Your Copybook alerts: 13F, Form 4 and Schedule 13D/G filings from SEC EDGAR. Not investment advice.</description>
-${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(i.url)}</link><guid isPermaLink="false">${xml(i.id)}</guid><pubDate>${new Date(i.published).toUTCString()}</pubDate><description>${xml(i.text)}</description></item>`).join('\n')}
+${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(i.url)}</link><guid isPermaLink="false">${xml(i.id)}</guid><pubDate>${new Date(i.sent ?? i.published).toUTCString()}</pubDate><description>${xml(i.text)}</description></item>`).join('\n')}
 </channel></rss>`;
   return new Response(rss, { headers: { ...headers, 'content-type': 'application/rss+xml; charset=utf-8' } });
 }
 
 /** POST /channels/test: a short message to every configured destination (and a test item in the feed), so a member can check setup. */
-export async function testChannels(env: Env, m: Member, c: Channels): Promise<Record<string, string>> {
+export async function testChannels(env: Env, m: Member, c: Channels): Promise<{ results: Record<string, string>; messages: Record<string, string> }> {
   const text = 'Copybook test: your alerts will arrive here. SEC EDGAR filings, as filed. Not investment advice.';
   const now = new Date().toISOString();
   const out: Record<string, string> = {};
+  // A test that works clears a flag; one that shows the destination is gone sets it (the email waits for a real alert).
+  const after = async (dest: Dest, status: string) => {
+    if (/^2\d\d$/.test(status)) await recovered(env, m.customer, dest);
+    else if (REVOKED.test(status)) await markFailing(env, m.customer, dest, why(status, 1), false);
+  };
   for (const dest of ['discord', 'slack', 'telegram'] as const) {
     const r = await sendChat(c, dest, text);
     if (!r) continue;
     out[dest] = r.status;
-    if (/^2\d\d$/.test(r.status)) await recovered(env, m.customer, dest);
+    await after(dest, r.status);
   }
   if (c.webhook && isPro(m)) {
     // Shaped like an alert (type test), with its own delivery id so receivers that deduplicate keep every test.
     const id = `test:${crypto.randomUUID()}`;
     const body = JSON.stringify({ schema_version: '2026-11-08', type: 'test', id, accession: null, form: 'TEST', accepted_at: null, detected_at: now, followup: false, filer: { slug: null, name: 'Copybook test' }, sec_url: 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent', copybook_url: env.SITE_URL });
     out.webhook = await post(c.webhook.url, body, { 'copybook-signature': await signature(c.webhook.secret, body), 'copybook-delivery': id });
-    if (/^2\d\d$/.test(out.webhook)) await recovered(env, m.customer, 'webhook');
+    await after('webhook', out.webhook);
   }
   if (c.feed_token) {
     const key = `feed:${m.customer}`;
     const items = JSON.parse((await env.DB.get(key)) ?? '[]') as FeedItem[];
-    await env.DB.put(key, JSON.stringify([{ id: `test:${now}`, title: 'Copybook test', text, url: env.SITE_URL, published: now, sent: now }, ...items].slice(0, 50)));
+    await env.DB.put(key, JSON.stringify([{ id: `test:${now}`, title: 'Copybook test', text, url: env.SITE_URL, published: now, sent: now, test: true }, ...items].slice(0, 50)));
     out.feed = 'ok';
   }
-  return out;
+  const messages = Object.fromEntries(Object.entries(out).map(([d, st]) => [d, d === 'feed' ? 'Test item added to your feed' : testMessage(d as Dest, st)]));
+  return { results: out, messages };
 }
 
 /**
