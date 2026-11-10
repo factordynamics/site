@@ -151,7 +151,7 @@ function Footer() {
       </div>
       <div className="border-t border-night-line">
         <div className="container-x flex flex-col gap-2 py-6 text-[12.5px] text-white/60 md:flex-row md:items-center md:justify-between">
-          <p>© 2026 Factor Dynamics. Data from SEC EDGAR Form 13F-HR, as filed.</p>
+          <p>© 2026 Factor Dynamics. Data from SEC EDGAR Form 13F-HR, as filed. <span className="num text-ink-3/70">build {import.meta.env.VITE_BUILD}</span></p>
           <p>Holdings are reported about 45 days after quarter end. Not investment advice.</p>
         </div>
       </div>

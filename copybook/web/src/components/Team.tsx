@@ -87,12 +87,12 @@ export function Team() {
           <ul className="mt-4 divide-y divide-line rounded-xl shadow-[0_0_0_1px_var(--color-line)]">
             {s.seats.length === 0 && <li className="px-4 py-3 text-[14px] text-ink-3">No one else yet.</li>}
             {s.seats.map((x) => (
-              <li key={x.email} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[14px]">
-                <span className="min-w-0">
+              <li key={x.email} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5 text-[14px]">
+                <span className="min-w-0 flex-1 basis-52">
                   <span className="block truncate font-medium">{x.email}</span>
                   {when(x.invited_at) && <span className="block text-[12.5px] text-ink-3">Invited {when(x.invited_at)}</span>}
                 </span>
-                <span className="flex shrink-0 gap-1">
+                <span className="-mr-2 flex shrink-0 gap-1">
                   {s.revoke_available && (
                     <Button size="sm" variant="ghost" onClick={() => signOut(x.email)}>
                       Sign out everywhere

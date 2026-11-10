@@ -52,7 +52,12 @@ export function Account() {
           if (last) setState({ kind: 'in', member: last, welcome: false, stale: true })
           member = await readMe()
         }
-        else return setState({ kind: 'out' })
+        else {
+          // Back from /resume/ with no sign-in: the API sends a dead or expired resume link to plain /account/.
+          const fromResume = Number(sessionStorage.getItem('copybook-resume-sent') ?? 0) > Date.now() - 5 * 60_000
+          sessionStorage.removeItem('copybook-resume-sent')
+          return setState({ kind: 'out', ...(fromResume ? { error: 'This link has expired. Sign in to manage your plan.' } : {}) })
+        }
         for (let i = 0; upgraded && member.plan !== upgraded && i < 8; i++) {
           await new Promise((r) => setTimeout(r, 2000))
           member = await fetchMe()
@@ -206,7 +211,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
             {member.interval === 'yearly' ? ', yearly' : member.interval === 'monthly' ? ', monthly' : ''}
             {member.pause_after_trial && !cancelling && !paused ? (
               <>
-                {' · '}free trial until {dayLabel(member.pause_after_trial.from)} → then paused until {dayLabel(member.pause_after_trial.until)} · no charges ·{' '}
+                {' · '}free trial until {dayLabel(member.trial_end ?? member.pause_after_trial.from)} → then paused until {dayLabel(member.pause_after_trial.until)} · no charges ·{' '}
                 <UndoPause onChange={onChange} />
               </>
             ) : (

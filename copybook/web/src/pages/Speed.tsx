@@ -11,11 +11,12 @@ import { seasonNow } from '../lib/stocks'
 // records them, per channel. Re-read every minute while open. Nothing is hand-picked.
 
 type Alert = Latency['alerts'][number]
-const FORMS: [string, string][] = [
+// The summary's order: what members buy first.
+const LEAD: [string, string][] = [
   ['13F', '13F'],
-  ['Form 4', 'Form 4'],
   ['13D', 'Schedule 13D'],
   ['13G', 'Schedule 13G'],
+  ['Form 4', 'Form 4'],
 ]
 const CHANNELS: [string, string][] = [
   ['email', 'Email'],
@@ -66,22 +67,27 @@ export function Speed() {
         </p>
       </header>
 
-      <section className="mt-10 grid gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] md:grid-cols-4" aria-label="Season summary">
-        {(
-          [
-            ['Median', median != null ? gapLabel(median) : '—', 'EDGAR acceptance to delivery'],
-            ['90th percentile', p90 != null ? gapLabel(p90) : '—', '9 in 10 alerts arrive within this'],
-            ['Alerts timed', (d?.count ?? 0).toLocaleString('en-US'), `${quarterLabel(season)} season so far`],
-            ['How often we check', 'Every minute', 'EDGAR’s latest-filings feed'],
-          ] as const
-        ).map(([k, v, s]) => (
-          <div key={k} className="bg-card p-5 md:p-6">
-            <p className="text-[12.5px] text-ink-3">{k}</p>
-            {loading ? <Skeleton className="mt-2 h-8 w-24" /> : <p className="num mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em]">{v}</p>}
-            <p className="mt-2 text-[12.5px] text-ink-3">{s}</p>
-          </div>
-        ))}
+      {/* Per form first: the blend is mostly 13G, so it leads with nothing anyone buys. 13F is timed to the
+          first email until the API times it to the email that carries the moves (by_form['13F'].timed_to). */}
+      <section className="mt-10 grid gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-4" aria-label="Alert speed by form type">
+        {LEAD.map(([k, label]) => {
+          const g = stat(d?.by_form, k) as LatencyStat & { timed_to?: string }
+          return (
+            <div key={k} className="bg-card p-5 md:p-6">
+              <p className="text-[12.5px] font-medium text-ink-2">{label}</p>
+              {loading ? <Skeleton className="mt-2 h-8 w-24" /> : <p className="num mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em]">{g.median_seconds != null ? gapLabel(g.median_seconds) : '—'}</p>}
+              <p className="mt-2 text-[12.5px] text-ink-3">
+                median{g.p90_seconds != null ? ` · 90th pct ${gapLabel(g.p90_seconds)}` : ''} · {g.count.toLocaleString('en-US')} {g.count === 1 ? 'alert' : 'alerts'}
+              </p>
+              {k === '13F' && g.timed_to !== 'moves' && <p className="mt-1 text-[12px] text-ink-3">Timed to first email; moves can follow later.</p>}
+            </div>
+          )
+        })}
       </section>
+      <p className="mt-3 text-[13px] text-ink-3">
+        All alert types: median {median != null ? gapLabel(median) : '—'}
+        {p90 != null ? `, 90th percentile ${gapLabel(p90)}` : ''}, {(d?.count ?? 0).toLocaleString('en-US')} alerts in the {quarterLabel(season)} season so far. We check EDGAR every minute.
+      </p>
 
       {empty ? (
         <section className="mt-6 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)] md:p-8">
@@ -101,13 +107,10 @@ export function Speed() {
       ) : (
         !loading && (
           <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <Panel title="By form type" sub="Median and 90th percentile this season">
-              <Rows rows={FORMS.map(([k, label]) => [k, label, stat(d?.by_form, k)])} />
-            </Panel>
             <Panel title="By channel" sub="Email to the mailer handoff; chat, webhook and feed to the first successful post">
               <Rows rows={CHANNELS.map(([k, label]) => [k, label, stat(d?.by_channel, k)])} />
             </Panel>
-            <Panel title="Distribution" sub={`The latest ${alerts.length} alerts by time from EDGAR acceptance`} className="lg:col-span-2">
+            <Panel title="Distribution" sub={`The latest ${alerts.length} alerts by time from EDGAR acceptance`} >
               <Histogram gaps={gaps} />
             </Panel>
           </div>
