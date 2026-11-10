@@ -202,7 +202,7 @@ export function FilingCard() {
           {d && <ShareCard d={d} />}
           {d && (
             <Panel title={`Get ${d.manager}’s next 13F by email`}>
-              <p className="text-[14px] leading-relaxed text-ink-2">Follow with Copy and the next filing lands in your inbox minutes after EDGAR accepts it, with every new, added, trimmed and exited position inside.</p>
+              <p className="text-[14px] leading-relaxed text-ink-2">Follow with Copy and the next filing lands in your inbox, checked on EDGAR every minute, with every new, added, trimmed and exited position inside.</p>
               <div className="mt-4 flex flex-wrap items-center gap-2.5">
                 <FollowButton kind="investor" id={d.slug} name={d.manager} size="md" />
                 <Button to={`/investors/${d.slug}/`} variant="outline">

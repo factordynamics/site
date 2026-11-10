@@ -49,7 +49,7 @@ export function Onboarding({ onDone, shared }: { onDone?: (member?: Member) => v
       <h2 id="onb-title" className="mt-2 text-[26px] font-semibold tracking-[-0.03em]">
         Whom do you want to follow?
       </h2>
-      <p className="mt-1.5 text-[15px] text-ink-2">We’ll email you minutes after they file, with their biggest buys and sells in it.{shared && ' Your picks are shared with your team.'}</p>
+      <p className="mt-1.5 text-[15px] text-ink-2">We’ll email you when they file, with their biggest buys and sells in it.{shared && ' Your picks are shared with your team.'}</p>
       <div className="mt-5 flex flex-wrap gap-1.5" role="tablist" aria-label="Investor style">
         {GROUPS.map(([g, slugs]) => {
           const n = slugs.filter((sl) => investors.includes(sl)).length

@@ -89,7 +89,7 @@ export function Season() {
           </p>
           <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Who has filed, and what they bought.</h1>
           <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
-            Every manager with $100M or more in 13F securities, mostly US-listed stocks, must file its {Q || 'quarter-end'} holdings with the SEC within 45 days. The funds we track closely are read minutes after EDGAR accepts them; this page refreshes about every 20 minutes.
+            Every manager with $100M or more in 13F securities, mostly US-listed stocks, must file its {Q || 'quarter-end'} holdings with the SEC within 45 days. We check EDGAR every minute for the funds we track closely; this page refreshes about every 20 minutes.
           </p>
           <Share className="mt-5" text={d ? postText(d, Boolean(passed), recap.data?.most_bought, now) : undefined} />
         </div>
@@ -158,7 +158,7 @@ export function Season() {
           {d && !paid && rows.length > FREE && (
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-accent-soft px-5 py-4 md:px-6">
               <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
-                <Lock /> {rows.length - FREE} more names, and an email minutes after each fund you follow files, with Copy
+                <Lock /> {rows.length - FREE} more names, and an email each time a fund you follow files, with Copy
               </p>
               <Link to="/pricing/" className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
                 Start 14-day free trial

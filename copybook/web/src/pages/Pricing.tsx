@@ -30,9 +30,9 @@ const tiers = (filers: string, curated: number): Tier[] => [
     who: 'For individual investors who follow the best funds.',
     lead: 'Everything in Free, plus',
     now: [
-      { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, usually within minutes: holdings per share class, % of the class before → after, threshold crossings and the 13D’s Item 4.' },
+      { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, checked on EDGAR every minute: holdings per share class, % of the class before → after, threshold crossings and the 13D’s Item 4.' },
       { t: 'My book', d: 'Your names, who owns them among the superinvestors, and alerts when that changes.' },
-      { t: 'An email minutes after they file', d: `We check EDGAR every minute. Alerts, moves and history cover the ${curated} managers we track closely, and the list is growing.` },
+      { t: 'An email when they file', d: `We check EDGAR every minute. Alerts, moves and history cover the ${curated} managers we track closely, and the list is growing.` },
       { t: 'The moves inside the email', d: 'New, added, trimmed and exited positions, with dollars and share of the book.' },
       { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
       { t: 'Telegram, Discord, Slack and RSS delivery', d: 'Each alert in your chat or reader as it happens, as well as by email.' },
@@ -153,10 +153,10 @@ export function Pricing() {
     <div className="container-x pt-12 md:pt-16">
       <header className="mx-auto max-w-2xl text-center">
         <p className="text-[13px] font-medium text-accent">Pricing</p>
-        <h1 className="mt-3 text-[32px] font-semibold leading-[1.08] tracking-[-0.04em] sm:text-[38px] md:text-h1">See what they bought between 13Fs, minutes after they file.</h1>
+        <h1 className="mt-3 text-[32px] font-semibold leading-[1.08] tracking-[-0.04em] sm:text-[38px] md:text-h1">See what they bought between 13Fs, the day they file.</h1>
         {hook.data && (
           <p className="mx-auto mt-4 max-w-xl rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">
-            You just saw {hook.data}. Copy emails moves like this within minutes.
+            You just saw {hook.data}. Copy emails moves like this, checked on EDGAR every minute.
           </p>
         )}
         <p className="mt-4 text-[16px] leading-relaxed text-ink-2 sm:text-[17px]">

@@ -443,7 +443,7 @@ function CTABand() {
               Be first to see <span className="font-serif font-normal italic text-[#9fb0ff]">every new filing.</span>
             </h2>
             <p className="mt-4 max-w-lg text-[16px] leading-relaxed text-white/70">
-              Copy adds quarter-over-quarter changes, 8 quarters of 13F history with CSV export, and an email minutes after a fund you follow files.
+              Copy adds quarter-over-quarter changes, 8 quarters of 13F history with CSV export, and an email each time a fund you follow files, checked on EDGAR every minute.
             </p>
           </div>
           <div className="flex flex-col items-start gap-3 md:items-end">

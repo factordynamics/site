@@ -16,7 +16,7 @@ const NAV = [
 ]
 
 export function Layout() {
-  const { pathname } = useLocation()
+  const { pathname, hash } = useLocation()
   // Re-read on every route change, so it updates after checkout or sign-out. A session whose /me failed with
   // nothing cached (member null) gets the signed-out header, so the trial is always one click away.
   const member = useMemberState()
@@ -31,9 +31,18 @@ export function Layout() {
   const [menu, setMenu] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   useEffect(() => {
-    window.scrollTo(0, 0)
     setMenu(false)
-  }, [pathname])
+    // A link to a section (/security/#who-can-see-member-data) scrolls to it once the lazy page renders.
+    const id = hash.slice(1)
+    if (!id || id.includes('=')) return window.scrollTo(0, 0)
+    let n = 0
+    const t = setInterval(() => {
+      const el = document.getElementById(decodeURIComponent(id))
+      if (el || ++n > 30) clearInterval(t)
+      el?.scrollIntoView()
+    }, 100)
+    return () => clearInterval(t)
+  }, [pathname, hash])
   useEffect(() => {
     const on = () => setScrolled(window.scrollY > 8)
     on()
@@ -137,7 +146,7 @@ function Footer() {
           </a>
         </div>
         <FooterCol title="Product" links={[['Investors', '/investors/'], ['Flow', '/flow/'], ['Pricing', '/pricing/'], ['For funds', '/for-funds/'], ['For quants', '/for-quants/'], ['API', '/api/']]} />
-        <FooterCol title="Company" links={[['About', '/about/'], ['Methodology', '/methodology/'], ['Contact', '/contact/'], ['Terms', '/terms/'], ['Privacy', '/privacy/'], ['Security', '/security/']]} />
+        <FooterCol title="Company" links={[['About', '/about/'], ['Methodology', '/methodology/'], ['Contact', '/contact/'], ['Terms', '/terms/'], ['Privacy', '/privacy/'], ['Security', '/security/'], ['Status', '/status/']]} />
         <FooterCol title="Popular" links={[['Warren Buffett', '/investors/warren-buffett/'], ['Bill Ackman', '/investors/bill-ackman/'], ['Stanley Druckenmiller', '/investors/stanley-druckenmiller/']]} />
       </div>
       <div className="border-t border-night-line">

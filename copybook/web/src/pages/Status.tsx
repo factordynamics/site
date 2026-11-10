@@ -1,0 +1,202 @@
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { Skeleton } from '../components/ui'
+import { apiReady } from '../config'
+import { loadLatency, type Latency } from '../lib/account'
+import { useAsync, useTick, useTitle } from '../lib/data'
+import { INCIDENTS } from '../lib/hosting'
+
+// /status/: live state of each part of Copybook, read in the browser from the same public sources the site
+// uses (api.json and latency.json on R2, and the API's /health), rechecked every minute. Nothing is typed in
+// by hand except the incident list, which /speed/ shares.
+
+type Health = {
+  ok?: boolean
+  poller_host?: string | null
+  poller_last_run?: string | null
+  poller_age_s?: number | null
+  api_up_since?: string | null
+  /** Routes the API reports as slow or failing, once /health lists them. */
+  degraded?: (string | { route?: string; path?: string; note?: string; status?: string })[] | null
+}
+type Probe = { base: string; at: string | null; health: Health | null; ms: number | null }
+type Lat = Latency & { uptime_7d?: number | null; availability_7d?: number | null }
+
+const API_JSON = import.meta.env.VITE_API_JSON_URL as string
+const POLLER_LATE_S = 5 * 60
+
+async function probe(): Promise<Probe> {
+  const base = await apiReady
+  const at = await fetch(`${API_JSON}?m=${Math.floor(Date.now() / 60_000)}`)
+    .then((r) => (r.ok ? (r.json() as Promise<{ at?: string }>) : null))
+    .then((j) => j?.at ?? null)
+    .catch(() => null)
+  const t0 = performance.now()
+  const health = await fetch(`${base}/health`, { cache: 'no-store', signal: AbortSignal.timeout(10_000) })
+    .then((r) => (r.ok ? (r.json() as Promise<Health>) : null))
+    .catch(() => null)
+  return { base, at, health, ms: health ? Math.round(performance.now() - t0) : null }
+}
+
+const ago = (s: number) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : s < 90 * 60 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`)
+const utc = (t: string) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' }) + ' UTC'
+const host = (u: string) => {
+  try {
+    return new URL(u).host
+  } catch {
+    return u
+  }
+}
+const pct = (v: number) => `${(v <= 1 ? v * 100 : v).toFixed(2)}%`
+
+type Tone = 'up' | 'warn' | 'down' | 'wait' | 'none'
+const DOT: Record<Tone, string> = { up: 'bg-up', warn: 'bg-[#d98a00]', down: 'bg-down', wait: 'bg-ink/20 animate-pulse', none: 'bg-ink/20' }
+const WORD: Record<Tone, string> = { up: 'text-up', warn: 'text-[#7a4b00]', down: 'text-down', wait: 'text-ink-3', none: 'text-ink-2' }
+
+function Row({ name, tone, state, children }: { name: string; tone: Tone; state: string; children?: ReactNode }) {
+  return (
+    <div className="grid gap-1 py-4 sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-6">
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden className={`size-2 shrink-0 rounded-full ${DOT[tone]}`} />
+        <span className="text-[15px] font-medium">{name}</span>
+      </div>
+      <div className="text-[14px] leading-relaxed text-ink-2">
+        <span className={`font-medium ${WORD[tone]}`}>{state}</span>
+        {children && <span className="block text-ink-3">{children}</span>}
+      </div>
+    </div>
+  )
+}
+
+export function Status() {
+  useTitle('Status · Copybook')
+  const tick = useTick(60_000, true)
+  const p = useAsync(probe, [tick])
+  const lat = useAsync(loadLatency, [tick])
+  // Re-render the "N s ago" lines between checks.
+  const [, setNow] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setNow((n) => n + 1), 10_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const pr = p.data
+  const l = lat.data as Lat | null | undefined
+  const h = pr?.health ?? null
+  const checking = !pr
+
+  // The poller's latest run, from whichever source saw it most recently.
+  const runs = [h?.poller_last_run, l?.poller_last_run].filter((x): x is string => Boolean(x)).map((x) => ({ x, t: Date.parse(x) }))
+  const last = runs.sort((a, b) => b.t - a.t)[0]
+  const pollerHost = (last && (last.x === h?.poller_last_run ? h?.poller_host : l?.poller_host)) ?? h?.poller_host ?? l?.poller_host
+  const pollerAge = last ? (Date.now() - last.t) / 1000 : null
+  const pollerTone: Tone = pollerAge == null ? (lat.loading && checking ? 'wait' : 'warn') : pollerAge < POLLER_LATE_S ? 'up' : 'down'
+
+  const apiTone: Tone = checking ? 'wait' : h ? 'up' : 'down'
+  const degraded = (h?.degraded ?? []).map((d) => (typeof d === 'string' ? d : [d.route ?? d.path, d.note ?? d.status].filter(Boolean).join(': ')))
+  const uptime = l?.uptime_7d ?? l?.availability_7d ?? null
+
+  const overall: { tone: Tone; text: string } = checking
+    ? { tone: 'wait', text: 'Checking…' }
+    : apiTone === 'down' && pollerTone === 'down'
+      ? { tone: 'down', text: 'Alerts and member pages are down' }
+      : apiTone === 'down'
+        ? { tone: 'down', text: 'Member pages and the API are unavailable. Filing alerts still go out.' }
+        : pollerTone === 'down'
+          ? { tone: 'warn', text: 'Filing alerts are delayed' }
+          : degraded.length
+            ? { tone: 'warn', text: 'Some API routes are degraded' }
+            : { tone: 'up', text: 'All systems normal' }
+
+  return (
+    <div className="container-x pt-12 md:pt-16">
+      <header className="max-w-2xl">
+        <p className="text-[13px] font-medium text-accent">Status</p>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Copybook status.</h1>
+        <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
+          Checked live from your browser against the same public sources the site uses, and rechecked every minute. Alert timings are on the{' '}
+          <Link to="/speed/" className="font-medium text-accent hover:text-accent-2">
+            speed page
+          </Link>
+          .
+        </p>
+      </header>
+
+      <section className="mt-10 max-w-3xl rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" aria-live="polite">
+        <div className="flex items-center gap-3 border-b border-line px-5 py-4 md:px-6">
+          <span aria-hidden className={`size-2.5 shrink-0 rounded-full ${DOT[overall.tone]}`} />
+          <p className="text-[17px] font-semibold tracking-[-0.01em]">{overall.text}</p>
+        </div>
+        <div className="divide-y divide-line px-5 md:px-6">
+          {checking ? (
+            <div className="space-y-3 py-5">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="h-4 w-3/5" />
+            </div>
+          ) : (
+            <>
+              <Row name="Member API" tone={apiTone} state={h ? `Up · answered in ${pr!.ms} ms` : 'Not answering'}>
+                Dedicated machine via Cloudflare Tunnel · {host(pr!.base)}
+                {pr!.at ? ` · address since ${utc(pr!.at)}` : ''}
+                {h?.api_up_since ? ` · running since ${utc(h.api_up_since)}` : ''}
+              </Row>
+              <Row
+                name="Filing alerts"
+                tone={pollerTone}
+                state={pollerAge == null ? 'No recent poller run on record' : `EDGAR poller last ran ${ago(pollerAge)} ago · ${pollerHost === 'cloudflare' ? 'Cloudflare' : 'backup'}`}
+              >
+                {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
+              </Row>
+              <Row name="Filing pages" tone="up" state="Up">
+                Stock, fund and filing pages are static files, so they stay up when the member API is down.
+              </Row>
+              {degraded.length > 0 && (
+                <Row name="Degraded routes" tone="warn" state={`${degraded.length} ${degraded.length === 1 ? 'route' : 'routes'}`}>
+                  {degraded.join(' · ')}
+                </Row>
+              )}
+              <Row name="Uptime, last 7 days" tone={uptime == null ? 'none' : uptime >= (uptime <= 1 ? 0.999 : 99.9) ? 'up' : 'warn'} state={uptime == null ? 'Not measured yet' : pct(uptime)}>
+                {uptime == null ? 'A measured 7-day figure appears here once the API publishes it. There is no uptime SLA.' : 'Member API, as measured by the API host. There is no uptime SLA.'}
+              </Row>
+            </>
+          )}
+        </div>
+      </section>
+
+      <section className="mt-10 max-w-3xl">
+        <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Incidents</h2>
+        <ol className="mt-3 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
+          {INCIDENTS.map(([when, what]) => (
+            <li key={when} className="py-3 text-[14px] leading-relaxed">
+              <span className="num block text-[12.5px] text-ink-3">{when}</span>
+              <span className="text-ink-2">{what}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-4 text-[14px] leading-relaxed text-ink-2">
+          What happens to alerts during each kind of outage is on the{' '}
+          <Link to="/speed/#availability" className="font-medium text-accent hover:text-accent-2">
+            speed page
+          </Link>
+          ; how the API host is run and protected is on{' '}
+          <Link to="/security/" className="font-medium text-accent hover:text-accent-2">
+            security
+          </Link>
+          .
+        </p>
+        <p className="mt-2 text-[13px] text-ink-3">
+          Sources:{' '}
+          <a href={API_JSON} className="font-mono text-accent hover:text-accent-2">
+            api.json
+          </a>
+          ,{' '}
+          <a href={import.meta.env.VITE_LATENCY_URL} className="font-mono text-accent hover:text-accent-2">
+            latency.json
+          </a>{' '}
+          and the API’s <code className="font-mono">/health</code>.
+        </p>
+      </section>
+    </div>
+  )
+}

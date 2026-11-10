@@ -106,7 +106,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
           <p className="text-[14.5px] font-semibold">{signedIn ? 'Following is a Copy feature' : `Follow ${name} with Copy`}</p>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
             {kind === 'investor'
-              ? 'Get an email minutes after they file a new 13F, with their biggest buys and sells in it.'
+              ? 'Get an email when they file a new 13F, with their biggest buys and sells in it.'
               : 'Get an email when a fund you track buys or sells it, and see who holds it each filing season.'}
           </p>
           <div className="mt-3.5 flex items-center gap-2">

@@ -59,7 +59,7 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
     {
       done: n >= FUNDS,
       title: `Follow ${FUNDS} funds`,
-      body: n >= FUNDS ? `Following ${n}. Each 13F, Form 4 and 13D they file reaches you minutes after EDGAR accepts it.` : `${n} of ${FUNDS} followed. Each 13F, Form 4 and 13D they file reaches you minutes after EDGAR accepts it.`,
+      body: n >= FUNDS ? `Following ${n}. Each 13F, Form 4 and 13D they file reaches you; we check EDGAR every minute.` : `${n} of ${FUNDS} followed. Each 13F, Form 4 and 13D they file reaches you; we check EDGAR every minute.`,
       act: { label: n ? 'Follow more' : 'Pick funds', to: '/investors/' },
     },
     {

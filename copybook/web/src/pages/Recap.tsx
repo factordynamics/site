@@ -192,7 +192,7 @@ export function Recap() {
         <section className="mt-10 flex flex-col items-start justify-between gap-4 rounded-[var(--radius-card)] bg-night p-6 text-white shadow-[var(--shadow-card)] md:flex-row md:items-center md:p-8">
           <div className="max-w-xl">
             <h2 className="text-[20px] font-semibold tracking-[-0.02em]">Next quarter, know the day they file.</h2>
-            <p className="mt-1.5 text-[14.5px] text-white/70">Copy emails you each superinvestor’s moves minutes after EDGAR accepts the 13F, with every list on this page in full.</p>
+            <p className="mt-1.5 text-[14.5px] text-white/70">Copy emails you each superinvestor’s moves when the 13F reaches EDGAR (we check every minute), with every list on this page in full.</p>
           </div>
           <Button to="/pricing/" size="lg">
             Start {TRIAL_DAYS}-day free trial <Arrow />

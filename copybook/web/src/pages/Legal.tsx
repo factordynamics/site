@@ -41,7 +41,10 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
         'What we store',
         <ul key="s" className="list-disc space-y-1.5 pl-5">
           <li>Your email address, to sign you in and send the alerts you ask for.</li>
-          <li>Your follows, the stocks you own or watch, and your alert settings.</li>
+          <li>Your book: the tickers you own or watch, and the funds you follow.</li>
+          <li>The peers you pick and, on Copy Fund, who is on your team.</li>
+          <li>The contents of any 13F filing or broker CSV you import into My book.</li>
+          <li>Your alert and channel settings, including Slack and Discord webhook URLs (which work as credentials) and the signing secrets for webhooks we send you.</li>
           <li>Your Stripe customer ID and plan status. Card details go straight to Stripe; we never see or store them.</li>
           <li>API key names, creation dates and request counts, if you create keys.</li>
           <li>If you join the waitlist, your email, encrypted in your browser before it’s sent.</li>
@@ -79,9 +82,9 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['Where the machine is', HOSTING.physical],
       ['Backups', HOSTING.backups],
       ['Access logging', HOSTING.logging],
-      ['Availability', <>{HOSTING.availability} Status and incidents are on the <Link to="/speed/#availability" className="font-medium text-accent hover:text-accent-2">speed page</Link>.</>],
+      ['Availability', <>{HOSTING.availability} Live status and incidents are on the <Link to="/status/" className="font-medium text-accent hover:text-accent-2">status page</Link>.</>],
       ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
-      ['Your book is private', 'A list of holdings you upload or enter is private to you, or to your team on Copy Fund. It is never shared, never shown to other members, and never used in aggregates, rankings or anything we publish.'],
+      ['Your book is private', <>A list of holdings you upload or enter is private to you, or to your team on Copy Fund. It is never shared, except as described under <Link to="/security/#who-can-see-member-data" className="font-medium text-accent hover:text-accent-2">Who can see member data</Link>; it is never shown to other members, and never used in aggregates, rankings or anything we publish.</>],
       ['API keys', 'A key’s secret is shown once, when you create it. Revoke a key from your account page and requests with it fail immediately.'],
       ['Deleting data', <>Remove follows, owned stocks and keys yourself on your account page at any time, or ask us to delete everything through the {contact}. {HOSTING.deletion}</>],
       ['Breach notification', 'If a breach affects member data, we notify the affected members within 72 hours of finding it.'],
@@ -104,7 +107,7 @@ export function Legal({ page }: { page: keyof typeof PAGES }) {
       </header>
       <div className="mt-12 max-w-3xl space-y-10">
         {p.sections.map(([h, body]) => (
-          <section key={h}>
+          <section key={h} id={h.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')} className="scroll-mt-24">
             <h2 className="text-[20px] font-semibold tracking-[-0.02em]">{h}</h2>
             <div className="mt-2.5 text-[15.5px] leading-relaxed text-ink-2">{body}</div>
           </section>

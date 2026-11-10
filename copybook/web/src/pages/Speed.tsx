@@ -3,7 +3,7 @@ import { Signup } from '../components/Signup'
 import { Badge, Panel, Skeleton } from '../components/ui'
 import { gapLabel, loadLatency, type Latency, type LatencyStat } from '../lib/account'
 import { quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
-import { OUTAGES } from '../lib/hosting'
+import { INCIDENTS, OUTAGES } from '../lib/hosting'
 import { seasonNow } from '../lib/stocks'
 
 // /speed/: the public alert latency log (the API's latency.json on R2). Every live alert this season, from EDGAR
@@ -210,12 +210,6 @@ export function Speed() {
   )
 }
 
-// Newest first, in UTC. Every incident that made member pages or alerts unavailable or slow.
-const INCIDENTS: [string, string][] = [
-  ['Nov 9, 2026 · 05:31–05:33 UTC', 'A failed deploy of the API, rolled back. No alerts were missed.'],
-  ['Nov 9, 2026 · 05:01–05:28 UTC', 'Member pages and the API were slow or unavailable: network saturation on the API machine. No alerts were missed.'],
-  ['Nov 9, 2026 · 03:54–05:01 UTC', 'Member pages (account, My book) and the API were unavailable: the API hit Cloudflare’s daily request quota. The API moved to a dedicated machine. No alerts were missed.'],
-]
 const ago = (ms: number) => (ms < 90_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : ms < 90 * 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 3_600_000)} h`)
 
 function Rows({ rows }: { rows: [string, string, LatencyStat][] }) {

@@ -27,13 +27,13 @@ export function Signup({ source, className = '' }: { source: string; className?:
           <h2 id={`${id}-title`} className="text-[16px] font-semibold tracking-[-0.01em]">
             Get the Friday top moves free
           </h2>
-          <p className="mt-1 text-[13.5px] text-ink-2">The week’s five biggest buys and sells by the investors we track, from SEC filings. Or start Copy and get each filing minutes after it lands on EDGAR.</p>
+          <p className="mt-1 text-[13.5px] text-ink-2">The week’s five biggest buys and sells by the investors we track, from SEC filings. Or start Copy and get each filing by email, checked on EDGAR every minute.</p>
           <Button to={pricingTo()} className="mt-4">
             Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
         </div>
         {onFriday ? (
-          <p className="shrink-0 text-[13.5px] text-ink-2 md:w-[380px] md:pt-1">You’re on the Friday email. Copy adds each filing from the funds you follow, minutes after it lands.</p>
+          <p className="shrink-0 text-[13.5px] text-ink-2 md:w-[380px] md:pt-1">You’re on the Friday email. Copy adds an email for each filing from the funds you follow, checked on EDGAR every minute.</p>
         ) : state.s === 'done' || state.s === 'member' ? (
           <div role="status" className="shrink-0 md:w-[380px] md:pt-1">
             <p className="flex items-center gap-2 text-[14.5px] font-medium">

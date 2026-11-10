@@ -85,6 +85,7 @@ page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
 }
 page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Copy Fund, prorated, on the same billing interval.')
 page('resume/', 'Keep your plan · Copybook', 'Resume a paused or cancelled Copybook plan.', '\n    <meta name="robots" content="noindex" />')
+page('status/', 'Status · Copybook', 'Live status of Copybook’s member API, EDGAR poller and filing pages, and the incident log.')
 page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copybook.', '\n    <meta name="robots" content="noindex" />')
 {
   // The season tracker's share card (scripts/cards.mjs), with its cache-busting URL.
@@ -138,7 +139,7 @@ page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copyboo
     : ''
   page('season/', title, desc, ld({ '@type': 'Article', headline: title, description: desc, image: season?.url, url: `${SITE}season/`, dateModified: built, publisher: ORG, author: ORG, isBasedOn: EDGAR, mainEntityOfPage: `${SITE}season/` }), season?.url, body)
 }
-page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F alerts · Copy Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack minutes after EDGAR. Five seats, invoiced annually.')
+page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F alerts · Copy Fund', 'See who owns what you own across every 13F filer, compare your book with your peers, and get filings in Slack, checked on EDGAR every minute. Ten seats, invoiced annually.')
 page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Copy Pro', 'Every 13F filer’s latest holdings as JSON, with the EDGAR accession and acceptance time of every filing; holders by stock, Form 4 and 13D/G events and bulk CSV files. From $39/month.')
 page('my-book/', 'My book · Copybook', 'Your stocks through the eyes of every 13F filer: who holds them, who bought and sold this season, and every Form 4 and 13D.')
 page('methodology/', 'Methodology · Copybook', 'How Copybook reads SEC 13F, Form 4 and Schedule 13D/G filings: amendments, unit fixes, options, tickers, refresh cadence, and a changelog of every data correction.')

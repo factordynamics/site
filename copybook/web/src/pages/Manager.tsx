@@ -394,7 +394,7 @@ function FilerPanel({ f, member }: { f: ManagerFile; member: boolean }) {
       <div className="mt-5 rounded-xl bg-accent-soft px-4 py-3.5 text-[13.5px] leading-relaxed text-accent-2">
         <p className="font-medium">{member ? 'Follow it for its next 13F' : 'Get an email when this filer files'}</p>
         <p className="mt-0.5 opacity-90">
-          When it files, you get an email with its new, added, trimmed and exited positions vs the last quarter, minutes after EDGAR accepts it. Buys and sells show on this page as soon as we keep its previous quarter.
+          When it files, you get an email with its new, added, trimmed and exited positions vs the last quarter. We check EDGAR every minute. Buys and sells show on this page as soon as we keep its previous quarter.
           {!member && (
             <>
               {' '}

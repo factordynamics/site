@@ -157,7 +157,13 @@ export function ForFunds() {
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <Panel className="h-full">
           <ul className="space-y-2.5 text-[14.5px] leading-relaxed text-ink-2">
-            <li>An uploaded or linked book is private to your team. It is never shown to anyone else and never used in aggregates.</li>
+            <li>
+              An uploaded or linked book is private to your team. It is never shared, except as described under{' '}
+              <Link to="/security/#who-can-see-member-data" className="font-medium text-accent hover:text-accent-2">
+                Who can see member data
+              </Link>
+              , and never used in aggregates.
+            </li>
             <li>{HOSTING.api}</li>
             <li>{HOSTING.encryption}</li>
             <li>{HOSTING.access}</li>
@@ -169,7 +175,7 @@ export function ForFunds() {
           <ul className="space-y-2.5 text-[14.5px] leading-relaxed text-ink-2">
             <li>
               {HOSTING.availability}{' '}
-              <Link to="/speed/#availability" className="font-medium text-accent hover:text-accent-2">
+              <Link to="/status/" className="font-medium text-accent hover:text-accent-2">
                 Status and incidents
               </Link>
             </li>
