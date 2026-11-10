@@ -793,6 +793,14 @@ describe('copybook api', () => {
     await run(cf, min(18));
     expect(toMember().map((m) => m.subject)).toHaveLength(2);
     expect(JSON.parse((await cfStore.get('alerts:handled'))!)).toEqual(expect.arrayContaining([ackman, loeb]));
+
+    // gene publishes a stale copy of the handled events (an echo from an overlapping minute, stamped later than
+    // Cloudflare's write): Cloudflare merges it instead of taking it, so the event it handled since is never re-sent.
+    await cfStore.put('events:handled', JSON.stringify(['ev-old', 'ev-new']));
+    await gene.DB.put('events:handled', JSON.stringify(['ev-gene', 'ev-old']));
+    await run(gene, min(19));
+    await run(cf, min(19));
+    expect(JSON.parse((await cfStore.get('events:handled'))!)).toEqual(['ev-gene', 'ev-old', 'ev-new']);
     expect((await cf.DB.list({ prefix: '' })).keys).toEqual([]); // not one KV write on Cloudflare
   });
 
@@ -1238,10 +1246,11 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
       String(u) === 'https://api.cloudflare.com/client/v4/graphql' ? Response.json({ data: { viewer: { accounts: [{ w: [{ sum: { requests: used[0] } }], p: [{ sum: { requests: used[1] } }] }] } } }) : orig(u, init));
     sent = [];
-    expect(await runQuotaCheck(env, Date.now())).toMatchObject({ status: 'ok', total: 69_000 });
+    const noon = Date.UTC(2026, 10, 11, 12); // one UTC day for both checks, whatever the clock says
+    expect(await runQuotaCheck(env, noon)).toMatchObject({ status: 'ok', total: 69_000 });
     used = [46_913, 79_189];
-    await runQuotaCheck(env, Date.now());
-    await runQuotaCheck(env, Date.now() + 3600_000);
+    await runQuotaCheck(env, noon);
+    await runQuotaCheck(env, noon + 3600_000);
     vi.stubGlobal('fetch', orig);
     expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['hello@factordynamics.com', "Copybook: 126% of today's Workers requests used (126,102 of 100,000)"]]);
     expect(sent[0].text).toContain('Pages Functions 79,189');

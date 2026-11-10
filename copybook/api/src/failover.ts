@@ -31,6 +31,8 @@ const WINDOW_MS = 7 * 86_400_000;
 /** Never synced: per-host caches, rate limits and one-use tokens, the job queue, sync's own state. */
 const SKIP = ['rl:', 'dl:', 'host:', 'sync:', 'filing:', 'subs13f:', 'jobs:'];
 const synced = (k: string) => !SKIP.some((p) => k.startsWith(p));
+/** Lists of handled filings (accessions): a union on sync, never last-writer-wins. */
+const GROW_ONLY = new Set(['alerts:handled', 'events:handled']);
 
 /**
  * Cloudflare's cron store: R2 objects kv/{key} (the free plan has about 33k R2 writes a day, KV 1,000), reading
@@ -174,7 +176,14 @@ async function apply(env: Env, mine: Index, cap = isCloudflare(env) ? 40 : 2000)
       if (t < 0) {
         if (cur !== null) await env.DB.delete(k), n++;
       } else {
-        const v = await r2Get(env, `sync/${from}/${k}`);
+        let v = await r2Get(env, `sync/${from}/${k}`);
+        // Handled-filing lists only grow: a peer's copy (often an echo of an older one of ours) is merged, never
+        // replaces ours, or filings handled since would be sent again. Ours stay last, so trimming keeps them.
+        if (v !== null && cur !== null && GROW_ONLY.has(k)) {
+          const mineList = JSON.parse(cur) as string[];
+          const have = new Set(mineList);
+          v = JSON.stringify([...(JSON.parse(v) as string[]).filter((x) => !have.has(x)), ...mineList]);
+        }
         if (v !== null && v !== cur) {
           await env.DB.put(k, v, k.startsWith('digest:') || k.startsWith('delivered:') ? { expirationTtl: 31 * 86400 } : undefined);
           n++;
