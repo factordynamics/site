@@ -160,6 +160,18 @@ class MoveMathTest(unittest.TestCase):
         self.assertEqual(rows[0]["share_change"], 465409)
         self.assertAlmostEqual(rows[0]["value_delta"], 465409 * 5197180970 / 31933523, delta=1)
 
+    def test_line_far_off_the_cross_filer_price_is_suspect(self):
+        # AllianceBernstein 2026Q2 KLAC: $1,472 a share against a $301.71 median across filers.
+        prev = {"quarter": "2026Q1", "holdings": [self.row("482480100", "KLAC", 7_000_000, 7e9)]}
+        cur = {"quarter": "2026Q2", "holdings": [self.row("482480100", "KLAC", 7_472_826, 11.0e9)]}
+        build.CONSENSUS.update({("2026Q1", "482480100"): 1000.0, ("2026Q2", "482480100"): 301.71})
+        try:
+            self.assertTrue(build.with_changes(cur, prev)[0].get("suspect_units"))
+            cur["holdings"] = [self.row("482480100", "KLAC", 36_459_000, 11.0e9)]  # priced like its peers
+            self.assertFalse(build.with_changes(cur, prev)[0].get("suspect_units"))
+        finally:
+            build.CONSENSUS.clear()
+
     def test_stale_split_field_is_not_kept(self):
         prev = {"quarter": "2026Q2", "holdings": [self.row("037833100", "AAPL", 100, 20000)]}
         stale = self.row("037833100", "AAPL", 120, 25000) | {

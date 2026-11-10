@@ -64,6 +64,16 @@ CACHE_FORMAT = 4  # bump when stored quarters lack fields the build now needs (f
 MIN_CACHE_FORMAT = CACHE_FORMAT if os.environ.get("SCOPE") == "full" else 3
 OWN_BOOKS: dict[tuple[str, str], dict] = {}  # (cik, report_date) -> a fund's own book before combining
 SPLITS: dict[str, dict[str, float]] = {}  # cusip -> to_quarter -> ratio; see splits.py
+# (quarter, cusip) -> median value per share over every filer's full book (moves.py writes consensus.json).
+CONSENSUS: dict[tuple[str, str], float] = {}
+OFF_MEDIAN = 3.0  # a line priced over 3x off every other filer's is mis-scaled (AllianceBernstein KLAC 2026Q2)
+
+
+def consensus() -> dict[tuple[str, str], float]:
+    if not CONSENSUS and (DATA / "consensus.json").exists():
+        for q, prices in (json.loads((DATA / "consensus.json").read_text()).get("quarters") or {}).items():
+            CONSENSUS.update({(q, c): px for c, px in prices.items()})
+    return CONSENSUS
 _CUSIP_MAP: dict[str, str] | None = None
 
 
@@ -629,6 +639,14 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                     h = h | {"suspect_units": True}
                 elif abs(delta) > 1.5 * max(h["value"], p["value"]):  # no trade is worth more than that
                     delta = h["value"] - p["value"]
+        # Cross-filer check: this line or its prior priced over OFF_MEDIAN x off the CUSIP's median across
+        # every filer that quarter (AllianceBernstein 2026Q2 KLAC at $1,472 a share, peers $301.71).
+        if not prn and not h.get("put_call") and not h.get("suspect_units"):
+            def off(row, q):
+                m, n = consensus().get((q or "", row["cusip"])), amount(row)
+                return bool(m and n and row["value"] > 0 and not 1 / OFF_MEDIAN <= row["value"] / n / m <= OFF_MEDIAN)
+            if off(h, q_to) or (p is not None and off(p, q_from)):
+                h = h | {"suspect_units": True}
         rows.append(h | extra(p, change, delta, ds, r, prn))
     for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):
         prn = p.get("shares_type") == "PRN"

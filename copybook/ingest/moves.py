@@ -305,6 +305,13 @@ def main() -> int:
                     shards.append(b | {"cik": p.stem, "quarter": b.get("quarter") or folder.name, "_fb_only": True})
     qs = {s["quarter"] for s in shards if s.get("ok") and s.get("quarter")}
     load_consensus(qs | {prev_quarter(q) for q in qs})
+    build.CONSENSUS.clear()
+    build.CONSENSUS.update(CONS)  # the cross-filer price check in with_changes; build.py reads consensus.json
+    keep = sorted({q for q, _ in CONS})[-3:]
+    write(DATA / "consensus.json", {
+        "note": "Median value per share of each CUSIP across every 13F filer's full book, per quarter (SEC 13F only). "
+                "A line over 3x off is flagged suspect_units and kept out of flows and alerts.",
+        "quarters": {q: {c: float(f"{px:.6g}") for (qq, c), px in sorted(CONS.items()) if qq == q} for q in keep}})
     n = with_prev = 0
     index = read(DATA / "index.json") or {}
     curated = {m["cik"]: m for m in index.get("managers") or []}
