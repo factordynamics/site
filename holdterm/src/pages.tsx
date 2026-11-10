@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { api, checkout, price as PRICE, SITE } from './config'
+import { api, channels, checkout, price as PRICE, SITE } from './config'
+import { AppIcon, ChatPreviews, EmailPreview, loadLatestTitle, loadSamples, PushPreview, SampleSources } from './alert-previews'
 import {
   aggregate,
   funds,
@@ -275,8 +276,9 @@ function Upsell() {
       <span className="upsell-tag" aria-hidden>
         Alerts
       </span>
+      <UpsellNote />
       <p>
-        <span className="hide-sm">Get an email when the funds you follow file a 13F, 13D or Form 4. </span>
+        <span className="hide-sm">Get an alert like this when the funds you follow file a 13F, 13D or Form 4. </span>
         <span className="show-sm">Email alerts on your funds’ filings. </span>
         <span className="upsell-price">{PRICE.trialDays} days free, then ${PRICE.monthly}/mo.</span>
       </p>
@@ -287,6 +289,23 @@ function Upsell() {
         <span aria-hidden>×</span>
       </button>
     </section>
+  )
+}
+
+/** A real recent alert, drawn as a notification inside the offer (wide screens only; its box is a fixed size, so
+ * nothing moves when the text arrives). */
+function UpsellNote() {
+  const r = useLoad(loadLatestTitle, [])
+  return (
+    <span className="upsell-note" aria-hidden={!r.data}>
+      <AppIcon size={22} />
+      <span className="upsell-note-text">
+        <span className="upsell-note-top">
+          Holdterm{r.data && <span className="dim"> · {day(r.data.date)}</span>}
+        </span>
+        <span className="upsell-note-title">{r.data ? <><span className="sr">Example alert: </span>{r.data.title}</> : '\u00a0'}</span>
+      </span>
+    </span>
   )
 }
 
@@ -1354,36 +1373,6 @@ function ActivityLine({ events, days, name, open }: { events: Event[]; days: num
 }
 
 // ---------- alerts (paid) ----------
-function sampleEmail(b: Book) {
-  const fmt = (h: Holding) => {
-    const tk = (h.ticker ?? '').padEnd(6)
-    const nm = (h.display_name ?? '').slice(0, 22).padEnd(22)
-    const d = signedUsd(h.value_delta).padStart(9)
-    const ch = h.change === 'new' ? 'new' : h.change === 'exited' ? 'sold out' : h.prev_shares ? `${(((h.share_change ?? 0) / h.prev_shares) * 100).toFixed(0)}% shares` : ''
-    return `  ${tk} ${nm} ${d}  ${ch}`
-  }
-  const buys = b.holdings.filter((h) => isStockLine(h) && (h.value_delta ?? 0) > 0).sort((a, c) => (c.value_delta ?? 0) - (a.value_delta ?? 0)).slice(0, 5)
-  const sells = b.holdings.filter((h) => isStockLine(h) && (h.value_delta ?? 0) < 0).sort((a, c) => (a.value_delta ?? 0) - (c.value_delta ?? 0)).slice(0, 5)
-  return [
-    `Subject: ${b.firm} filed its ${quarterLabel(b.quarter)} 13F`,
-    `From: Holdterm <holdterm@factordynamics.com>`,
-    ``,
-    `${b.firm.toUpperCase()} · 13F-HR · ${quarterLabel(b.quarter)}`,
-    `filed ${b.filing_date} · book ${usd(b.long_value)} · ${b.long_count} positions`,
-    ``,
-    `TOP BUYS`,
-    ...buys.map(fmt),
-    ``,
-    `TOP SELLS`,
-    ...sells.map(fmt),
-    ``,
-    `  ${SITE}${fundPath(b.slug)}`,
-    `  SEC filing ${b.accession}`,
-    ``,
-    `--`,
-    `Manage alerts: ${SITE}/account/ · SEC EDGAR data, not investment advice.`,
-  ].join('\n')
-}
 function Check() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden style={{ marginTop: 3, color: 'var(--pos)' }}>
@@ -1391,75 +1380,110 @@ function Check() {
     </svg>
   )
 }
+const CHANNEL_LIST: { name: string; what: string; live: boolean | 'soon' }[] = [
+  { name: 'Email', what: 'A clear summary of each filing: what was bought and sold, in dollars, with links to the portfolio and the SEC filing.', live: true },
+  { name: 'Phone and browser push', what: 'A notification on your phone or computer the moment we have the filing. On iPhone, add Holdterm to your home screen first.', live: channels.push || 'soon' },
+  { name: 'Discord and Slack', what: 'Paste a channel webhook and every alert posts there, ready for a team or an investing club.', live: channels.chat || 'soon' },
+  { name: 'Telegram', what: 'Alerts as messages from your own Telegram bot.', live: channels.chat || 'soon' },
+  { name: 'Private RSS feed', what: 'Every alert in a private feed for your reader, or for automations of your own.', live: channels.chat || 'soon' },
+]
 export function Alerts() {
-  title('Email alerts')
+  title('Alerts')
   const [yearly, setYearly] = useState(false)
-  const sample = useLoad(() => loadBook('warren-buffett'), [])
+  const r = useLoad(loadSamples, [])
+  const s = r.data
   const link = yearly ? checkout.yearly : checkout.monthly
-  return (
-    <div className="page">
-      <div className="head">
-        <div>
-          <h1>Email alerts</h1>
-          <p className="lede">Know within hours when the investors you follow buy or sell. It’s the one thing Holdterm sells; the site stays free, with no ads.</p>
-        </div>
+  const plan = (
+    <div className="ap-plan">
+      <div className="filters" role="group" aria-label="Billing period">
+        <button className={!yearly ? 'chip on' : 'chip'} aria-pressed={!yearly} onClick={() => setYearly(false)}>
+          Monthly
+        </button>
+        <button className={yearly ? 'chip on' : 'chip'} aria-pressed={yearly} onClick={() => setYearly(true)}>
+          Yearly <span className="pos">save {Math.round((1 - PRICE.yearly / (PRICE.monthly * 12)) * 100)}%</span>
+        </button>
       </div>
-      <div className="alerts-grid">
-        <div className="alerts-side">
-        <Panel title="Holdterm alerts">
-          <div className="price">
-            <span className="big">${yearly ? PRICE.yearly : PRICE.monthly}</span>
-            <span className="dim">/{yearly ? 'year' : 'month'}</span>
-          </div>
-          <div className="filters" role="group" aria-label="billing period">
-            <button className={!yearly ? 'chip on' : 'chip'} aria-pressed={!yearly} onClick={() => setYearly(false)}>
-              Monthly ${PRICE.monthly}
-            </button>
-            <button className={yearly ? 'chip on' : 'chip'} aria-pressed={yearly} onClick={() => setYearly(true)}>
-              Yearly ${PRICE.yearly} <span className="pos">save {Math.round((1 - PRICE.yearly / (PRICE.monthly * 12)) * 100)}%</span>
-            </button>
-          </div>
-          <a className="btn" href={link}>
-            Start your {PRICE.trialDays}-day free trial
-          </a>
-          <p className="dim small">
-            {PRICE.trialDays} days free, then ${PRICE.monthly}/month or ${PRICE.yearly}/year until you cancel. Cancel any time from your account. Checkout is by Stripe and billed by Factor Dynamics, which runs Holdterm. See the <A to="/terms">terms</A> and <A to="/privacy">privacy</A>.
-          </p>
-          <p className="small">
-            Already subscribed? <A to="/account">Sign in with your email</A>
-          </p>
-        </Panel>
-        <Panel title="what you get">
-          <ul className="list">
+      <div className="price">
+        <span className="big">${yearly ? PRICE.yearly : PRICE.monthly}</span>
+        <span className="dim">/{yearly ? 'year' : 'month'} after a {PRICE.trialDays}-day free trial</span>
+      </div>
+      <a className="btn big-btn" href={link}>
+        Start your free trial
+      </a>
+      <p className="dim small">
+        Cancel any time. Checkout is by Stripe, billed by Factor Dynamics, which runs Holdterm. <A to="/terms">Terms</A> · <A to="/privacy">Privacy</A> · Already a member? <A to="/account">Sign in</A>
+      </p>
+    </div>
+  )
+  return (
+    <div className="page alerts-page">
+      <section className="ap-hero">
+        <div className="ap-hero-text">
+          <p className="eyebrow">Holdterm Alerts</p>
+          <h1>Know the moment your investors make a move</h1>
+          <p className="lede">When a fund you follow files a 13F, 13D, 13G or Form 4, you get a plain-English summary within hours: what it bought, what it sold and how much. By email, on your phone or in your team’s chat.</p>
+          {plan}
+        </div>
+        <div className="ap-hero-art">{s ? <PushPreview s={s} /> : <div className="ap-phone ap-skeleton" aria-hidden />}</div>
+      </section>
+
+      <section className="ap-section">
+        <h2>Choose where alerts arrive</h2>
+        <p className="dim">Every plan includes every channel. Pick one or several in your account.</p>
+        <div className="ap-channels">
+          {CHANNEL_LIST.map((c) => (
+            <div className="ap-channel" key={c.name}>
+              <div className="ap-channel-head">
+                <b>{c.name}</b>
+                {c.live === true ? <span className="tag pos-tag">Included</span> : <span className="tag">Coming soon</span>}
+              </div>
+              <p>{c.what}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="ap-section ap-split">
+        <div>
+          <h2>A real alert, by email</h2>
+          <p className="dim">This is the email members got for {s ? `${s.filing.manager}’s ${quarterLabel(s.filing.quarter)} 13F` : 'a recent 13F'}, exactly as sent.</p>
+          <ul className="ap-points">
             <li>
-              <Check /> An email within hours of a fund you follow filing its 13F, with the biggest buys, sells, new positions and sales
+              <Check /> <span><b>The headline first.</b> Who filed, what kind of filing, and when.</span>
             </li>
             <li>
-              <Check /> 13D, 13G and Form 4 filings by those funds, and by any fund in stocks you follow
+              <Check /> <span><b>In plain English.</b> How much was bought and sold, and the biggest move.</span>
             </li>
             <li>
-              <Check /> Follow nobody and you get every roster fund
+              <Check /> <span><b>The trades that matter.</b> The five biggest buys and sells, sized in dollars.</span>
             </li>
             <li>
-              <Check /> Plain text with a link to the SEC filing; change what you follow any time
+              <Check /> <span><b>One tap to check.</b> Links to the full portfolio on Holdterm and to the filing on SEC EDGAR.</span>
+            </li>
+            <li>
+              <Check /> <span><b>Only what you follow.</b> Pick funds and stocks, or follow nobody to hear about every fund we track.</span>
             </li>
           </ul>
-        </Panel>
         </div>
-        <Panel title="Sample alert" right={<span className="dim">Built from a real filing</span>} className="sample">
-          {sample.data ? (
-            <pre className="email">
-              {sampleEmail(sample.data)}
-              {'\n'}
-              <a href={sample.data.sec_url} target="_blank" rel="noreferrer">
-                open this filing on SEC EDGAR ↗
-              </a>
-            </pre>
-          ) : (
-            <Loading />
-          )}
-        </Panel>
-      </div>
+        {s ? <EmailPreview s={s} /> : r.error ? <Failed error={r.error} what="the sample alert" /> : <Loading what="building the sample email" />}
+      </section>
+
+      <section className="ap-section ap-split reverse">
+        <div>
+          <h2>Or straight into your chat</h2>
+          <p className="dim">The same alerts, formatted for each app, so a team or an investing club sees every filing together.</p>
+        </div>
+        {s ? <ChatPreviews s={s} /> : <Loading what="building the previews" rows={4} />}
+      </section>
+
+      <section className="ap-section ap-cta">
+        <div>
+          <h2>Try it free for {PRICE.trialDays} days</h2>
+          <p className="dim">Then ${PRICE.monthly} a month or ${PRICE.yearly} a year. The rest of Holdterm stays free, with no ads.</p>
+        </div>
+        {plan}
+      </section>
+      {s && <SampleSources s={s} />}
     </div>
   )
 }

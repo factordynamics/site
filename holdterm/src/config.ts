@@ -17,3 +17,5 @@ export const checkout = {
 export const api = 'https://solid-amanda-dir-fiction.trycloudflare.com/copybook'
 
 export const price = { monthly: 3, yearly: 29, trialDays: 7 }
+// Delivery channels besides email, switched on as the alerts API ships them for Holdterm members.
+export const channels = { chat: false, push: false }
