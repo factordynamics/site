@@ -16,6 +16,7 @@ SPID=
 LOG=$HOME/copybook-api/rehearsal-b-$(date -u +%Y%m%dT%H%MZ).log
 mask() { sed -E 's/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9-]+\.)/\1***@\2/g'; }
 cleanup() {
+  set +e  # never let a failed log copy skip deleting the scratch copy (it holds secrets)
   [ -n "$SPID" ] && { kill "$SPID" 2>/dev/null; wait "$SPID" 2>/dev/null; }
   cat "$R/times.txt" "$R/verify.txt" > "$LOG" 2>/dev/null; tail -20 "$R/server.log" 2>/dev/null | mask >> "$LOG"
   [ "${KEEP:-0}" = 1 ] || rm -rf "$R"
@@ -46,10 +47,13 @@ step "1 secrets"
 
 # 2. Code: sparse clone, install, build the bundle; runtime files from copybook/selfhost.
 git clone -q --filter=blob:none --sparse https://github.com/factordynamics/site.git site
-git -C site sparse-checkout set copybook .github
-(cd site/copybook/api && npx -y pnpm@10 install --frozen-lockfile >/dev/null 2>&1 && npx wrangler deploy --dry-run --outdir "$R/build" >/dev/null 2>&1)
+git -C site sparse-checkout set copybook holdterm/src .github
+# Tool output goes to build.log; on failure its tail (masked) is printed.
+fail() { echo "FAILED: $1"; tail -25 "$R/build.log" | mask; exit 1; }
+(cd site/copybook/api && npx -y pnpm@10 install --frozen-lockfile) >> "$R/build.log" 2>&1 || fail "pnpm install"
+(cd site/copybook/api && npx wrangler deploy --dry-run --outdir "$R/build") >> "$R/build.log" 2>&1 || fail "wrangler build"
 cp -r site/copybook/selfhost ops
-(cd ops && npm ci --silent >/dev/null 2>&1)
+(cd ops && npm ci) >> "$R/build.log" 2>&1 || fail "npm ci in selfhost"
 cat > copybook-api.env <<EOF
 SITE_API_DIR=$R/site/copybook/api
 BUILD_DIR=$R/build

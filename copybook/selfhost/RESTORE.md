@@ -22,7 +22,25 @@ sessions and follows are there up to about a minute before gene went down. Limit
 
 Any Amp thread with Andreas's personal secrets can do this, including an orb.
 
-## Option B: another machine (about 1–2 hours of agent time)
+## Option B: another machine (rehearsed: 7 min scripted, about 30–60 min end to end)
+
+**Rehearsed 2026-11-10 23:47 UTC** with `rehearse-b.sh` (steps 1–4 plus a local boot and the 19-check verify, in an
+empty directory on gene, secrets from Amp secrets only, scratch port, no cron or tunnel): 19/19 PASS, total 433 s.
+
+| Step | Measured |
+|---|---|
+| 1 secrets | 0 s |
+| 2 clone, install, build | 6 s (gene's package caches were warm; expect 1–3 min on a new machine) |
+| 3a R2 pull (42,747 objects, 3.47 GB) | 282 s |
+| 3b R2 import | 139 s |
+| 4a decrypt and untar the nightly backup (2026-11-10) | 1 s |
+| 4b KV overlay from Cloudflare (333 keys) | 3 s |
+| boot to /health | 1 s |
+| 19-check verify | 1 s |
+
+Not covered by the rehearsal: getting a machine with an Amp runner (the long pole; minutes for a desktop that already
+has one), installing Node 22+, `age` and `cloudflared` there, step 5 (units, tunnel) and step 6 (webhook repoint).
+Realistic total with a ready machine: 30–60 min of agent time.
 
 Needs a Linux machine with Node 22+ and outbound internet, reachable by an Amp thread (a runner on another desktop, or
 a VM with the Amp CLI). Inbound ports are not needed: the quick tunnel is outbound.
@@ -31,11 +49,12 @@ a VM with the Amp CLI). Inbound ports are not needed: the quick tunnel is outbou
    `COPYBOOK_SESSION_SECRET`, `STRIPE_WEBHOOK_SECRET` ← `COPYBOOK_STRIPE_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`,
    `RESEND_API_KEY`, `HEALTH_TOKEN` ← `COPYBOOK_HEALTH_TOKEN`, `CF_API_TOKEN` and `CLOUDFLARE_API_TOKEN` ←
    `CLOUDFLARE_API_TOKEN`.
-2. Sparse-clone factordynamics/site (`copybook`, `.github`), `npx pnpm@10 install --frozen-lockfile` in `copybook/api`,
+2. Install Node 22+, `age` and `cloudflared` (static binaries in `~/copybook-api/bin`). Sparse-clone factordynamics/site
+   (`copybook`, `holdterm/src`, `.github`; the API imports `holdterm/src/names`, and the build fails without it), `npx pnpm@10 install --frozen-lockfile` in `copybook/api`,
    `npx wrangler deploy --dry-run --outdir ~/copybook-api/build`. Copy this directory to `~/copybook-api/ops`, `npm ci`
    there, and `copybook-api.env.example` to `~/copybook-api/copybook-api.env` (fix paths).
-3. R2: `node r2-pull.mjs <mirror dir>` (3.5 GB from copybook-history, ~5–15 min), then with the service stopped
-   `node import.mjs r2 <mirror dir>` (~5 min).
+3. R2: `node r2-pull.mjs <mirror dir>` (3.5 GB from copybook-history, 5 min measured), then with the service stopped
+   `node import.mjs r2 <mirror dir>` (2.5 min measured).
 4. KV and Durable Objects: decrypt the newest `backups/*.tar.age` (key `COPYBOOK_BACKUP_AGE_KEY`; see
    restore-check.sh) and untar into `~/copybook-api/state`. Then bring KV up to the minute from Cloudflare:
    `node ../site/copybook/api/scripts/kv-export.mjs kv.json && node import.mjs kv kv.json && shred -u kv.json`.
