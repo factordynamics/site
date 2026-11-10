@@ -5,7 +5,7 @@
  * that every marketing and lifecycle email carries.
  */
 import { FOOTER, previewInbox, sendMail, type Mail } from './email';
-import { apiBase, type Env, type Member } from './env';
+import { apiBase, followCounts, testAddress, type Env, type Member } from './env';
 import { checkMove, displayCase, UNUSUAL } from './edgar';
 import { changeFollows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
 import { bump } from './revenue';
@@ -508,7 +508,8 @@ export async function mergeFreeSignup(env: Env, email: string): Promise<Record<s
   if (!paid || paid.status === 'free') return { ok: false, error: 'no paid member with that email' };
   const merged = await carryFreeSignup(env, paid);
   await putMember(env, merged);
-  return { ok: true, customer: merged.customer, follows: await getFollows(env, merged) };
+  const f = await getFollows(env, merged);
+  return { ok: true, customer: merged.customer, follows: merged.test || testAddress(merged.email) ? f : followCounts(f) };
 }
 
 /** Operator: this week's issue for one free member, sent now (a check of what Friday sends; the week isn't marked sent). `dry` returns the text instead. */
@@ -522,6 +523,8 @@ export async function previewWeekly(env: Env, email: string, now: number, dry = 
   const f = await changeFollows(env, m, { get: true });
   const yours = await inYourNames(env, (f.ok ? f.follows : await getFollows(env, m)).owned.slice(0, FREE_NAMES), moves, now);
   const mail = weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), yours);
-  if (dry) return { ok: true, sent: false, subject: mail.subject, in_your_names: yours, text: mail.text };
-  return { ok: true, status: await sendMail(env, [mail]), subject: mail.subject, in_your_names: yours };
+  // A real member's issue names their stocks: the operator gets counts only (their own test inboxes show in full).
+  const shown = previewInbox(email) || testAddress(email) ? { subject: mail.subject, in_your_names: yours, text: mail.text } : { customer: m.customer, in_your_names: yours.facts.length, text_chars: mail.text.length };
+  if (dry) return { ok: true, sent: false, ...shown };
+  return { ok: true, status: await sendMail(env, [mail]), ...shown };
 }

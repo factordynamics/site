@@ -151,6 +151,15 @@ export function linkBase(env: Env, req: Request, url: URL): string {
   return h && /^https:\/\/[a-z0-9-]+\.(trycloudflare\.com|tail70ba3\.ts\.net)\/copybook$/.test(h) ? h : apiBase(env, url);
 }
 
+/**
+ * Operator output never carries a real member's data (agent sessions are logged): an email shows as a***@domain,
+ * lists as counts, destinations not at all. Test members (gate and critic inboxes, `test`) show as they are.
+ */
+export const testAddress = (e: string) => /^copybook-(test|gate)-/.test(e) || e.endsWith('@fldubai.com');
+export const maskEmail = (e: string) => (testAddress(e) ? e : e.replace(/^(.)[^@]*(@.*)$/, '$1***$2'));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const followCounts = (f: any) => Object.fromEntries(['investors', 'stocks', 'owned', 'peers'].map((k) => [k, Array.isArray(f?.[k]) ? f[k].length : 0]).concat([['linked_book', f?.book ? 1 : 0]]));
+
 export const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 
 /** Copy Pro and Copy Fund: API keys, /v1, webhooks, bulk export. */

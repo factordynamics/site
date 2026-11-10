@@ -8,7 +8,7 @@ import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
-import { ACTIVE, apiBase, isActive, isCopy, isPaused, isPro, linkBase, type Env, type Member } from './env';
+import { ACTIVE, apiBase, followCounts, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
@@ -386,7 +386,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const m = await getMember(env, ops[1]);
     if (!m) return json({ ok: false, error: 'no such member' }, 404, h);
     const r = await changeFollows(env, m, (await body(req)) as unknown as FollowOp);
-    return json(r.ok ? { ok: true, follows: r.follows } : r, r.ok ? 200 : 400, h);
+    return json(r.ok ? { ok: true, customer: m.customer, follows: m.test || testAddress(m.email) ? r.follows : followCounts(r.follows) } : r, r.ok ? 200 : 400, h);
   }
 
   // Operator, read-only: members whose Stripe subscription is not a Copybook or Holdterm price (made before the webhook's guard).

@@ -41,7 +41,7 @@ if (customer) {
   const live = subs.find((s) => ['active', 'trialing', 'past_due', 'incomplete'].includes(s.status) && s.items.data.some((i) => i.price.lookup_key?.startsWith('fund_')));
   if (live) throw new Error(`${email} already has Copy Fund ${live.id} (${live.status})`);
 }
-console.log(`${dry ? 'Would invoice' : 'Invoicing'} ${email}${fund ? ` (${fund})` : ''}: Copy Fund yearly, ${price.unit_amount / 100} ${price.currency.toUpperCase()}, net 30${coupon ? `, coupon ${coupon}` : ''}`);
+console.log(`${dry ? 'Would invoice' : 'Invoicing'} ${email.replace(/^(.)[^@]*/, '$1***')}${fund ? ` (${fund})` : ''}: Copy Fund yearly, ${price.unit_amount / 100} ${price.currency.toUpperCase()}, net 30${coupon ? `, coupon ${coupon}` : ''}`);
 if (dry) process.exit(0);
 customer ??= await stripe('POST', 'customers', { email, name: fund ?? name, 'metadata[copybook]': 'fund', 'metadata[contact]': name });
 const sub = await stripe('POST', 'subscriptions', {

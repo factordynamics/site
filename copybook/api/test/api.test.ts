@@ -1176,6 +1176,17 @@ describe('copybook api', () => {
     await env.DB.put('feedtok:tok_gone', 'cus_gone');
     await env.DB.put('follows:cus_gone2', '{}'); // another member whose id starts the same: kept
     const op = (path: string, b: unknown) => handleRequest(new Request(`https://api.test${path}`, { method: 'POST', body: JSON.stringify(b), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env);
+    // Operator output: a real member's lists as counts and their row ID, never tickers; a test inbox's in full.
+    await putMember('cus_real', 'real@example.com', 'active', []);
+    await putFollows('cus_real', { owned: ['AAPL', 'NVDA'], stocks: ['AAPL'] });
+    const masked = await (await op('/ops/follows/cus_real', { add: { list: 'stocks', ticker: 'MSFT' } })).text();
+    expect(JSON.parse(masked)).toMatchObject({ ok: true, customer: 'cus_real', follows: { owned: 2, investors: 0 } });
+    expect(masked).not.toMatch(/AAPL|NVDA|MSFT|real@/);
+    await putMember('cus_tester', 'copybook-test-x@fldubai.com', 'active', []);
+    await putFollows('cus_tester', { owned: ['AAPL'] });
+    expect((await (await op('/ops/follows/cus_tester', { get: true })).json()).follows.owned).toEqual(['AAPL']);
+    const { maskEmail } = await import('../src/env');
+    expect([maskEmail('jane.doe@fund.example'), maskEmail('copybook-gate-1@fldubai.com')]).toEqual(['j***@fund.example', 'copybook-gate-1@fldubai.com']);
     expect((await op('/ops/erase-member', { email: 'Gone@Example.com' })).status).toBe(200);
     const left = [];
     for (const p of ['cus:', 'follows:', 'channels:', 'stats:', 'delivered:', 'why:', 'feedtok:', 'email:gone']) left.push(...(await env.DB.list({ prefix: p })).keys.map((k) => k.name).filter((n) => n.includes('gone') || n.includes(fid)));

@@ -26,11 +26,11 @@ const SAMPLE = /^\[(sample|preview|draft)\]/i;
 export async function sendMail(env: Env, mails: Mail[]): Promise<string> {
   // A sample never reaches a member's real address.
   const blocked = mails.filter((m) => SAMPLE.test(m.subject) && !previewInbox(m.to));
-  if (blocked.length) console.log(`sample not sent to a member: ${blocked.map((m) => m.subject).join(' | ')}`);
+  if (blocked.length) console.log(`samples not sent to members: ${blocked.length}`);
   mails = mails.filter((m) => !blocked.includes(m));
   if (!mails.length) return blocked.length ? 'blocked' : 'none';
   if (!env.RESEND_API_KEY) {
-    console.log(`email skipped (no RESEND_API_KEY): ${mails.map((m) => m.subject).join(' | ')}`);
+    console.log(`email skipped (no RESEND_API_KEY): ${mails.length}`);
     return 'skipped';
   }
   const statuses: string[] = [];
@@ -41,7 +41,8 @@ export async function sendMail(env: Env, mails: Mail[]): Promise<string> {
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(batch),
     });
-    if (!res.ok) console.log(`resend ${res.status}: ${await res.text()}`);
+    // Resend's error can quote an address: the log keeps its error name only.
+    if (!res.ok) console.log(`resend ${res.status}: ${((await res.json().catch(() => ({}))) as { name?: string }).name ?? 'error'}`);
     statuses.push(String(res.status));
   }
   return statuses.join(',');
