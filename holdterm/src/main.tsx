@@ -377,7 +377,7 @@ function App() {
               <Mark size={20} />
               <span className="word">Holdterm</span>
             </A>
-            <p className="tagline">13F, 13D/G and Form 4 filings of concentrated, long-term investors, as filed with the SEC. No ads. Not investment advice.</p>
+            <p className="tagline">What concentrated, long-term investors own and trade, from their filings with the SEC. No ads. Not investment advice.</p>
           </div>
           <nav aria-label="footer">
             <A to="/guide">How to read Holdterm</A>

@@ -2326,46 +2326,71 @@ export function About() {
     </article>
   )
 }
+// Terms and Privacy use the same article layout as About and Guide. The text last changed on Nov 8, 2026.
+const LEGAL_UPDATED = 'November 8, 2026'
 export function Terms() {
   title('Terms')
   return (
-    <div className="page narrow prose">
-      <h1>terms</h1>
-      <Panel title="the short version">
-        <ul className="list">
-          <li><span className="dim" aria-hidden>•</span> Holdterm is operated by Factor Dynamics. By using the site or buying alerts you agree to these terms.</li>
-          <li><span className="dim" aria-hidden>•</span> Everything here is information drawn from public SEC filings. It is not investment, tax or legal advice, and it is not a recommendation to buy or sell anything.</li>
-          <li><span className="dim" aria-hidden>•</span> Filings can be late, amended or wrong, and our processing can introduce errors. The data is provided as is, without warranty. Check the linked SEC filing before relying on any number.</li>
-          <li><span className="dim" aria-hidden>•</span> Alerts are a subscription: ${PRICE.monthly}/month or ${PRICE.yearly}/year after a {PRICE.trialDays}-day free trial, renewing until you cancel. Cancel any time in the billing portal; you keep access to the end of the period you paid for. Payments are processed by Stripe.</li>
-          <li><span className="dim" aria-hidden>•</span> Alerts are sent on a best-effort basis; delivery can be delayed or missed. Our liability is limited to the fees you paid in the last 12 months.</li>
-          <li><span className="dim" aria-hidden>•</span> Don’t resell or bulk-redistribute Holdterm’s pages or emails. The underlying SEC filings are public.</li>
-          <li><span className="dim" aria-hidden>•</span> We may change these terms; material changes to paid plans are emailed to subscribers first.</li>
+    <article className="page narrow article">
+      <header className="article-head">
+        <p className="eyebrow">Last updated {LEGAL_UPDATED}</p>
+        <h1>Terms of use</h1>
+        <p className="lede">Holdterm is run by Factor Dynamics. By using the site or buying alerts you agree to these terms.</p>
+      </header>
+      <section>
+        <h2>The information</h2>
+        <ul className="plain-list">
+          <li>Everything here is information drawn from public SEC filings. It is not investment, tax or legal advice, and it is not a recommendation to buy or sell anything.</li>
+          <li>Filings can be late, amended or wrong, and our processing can introduce errors. The data is provided as is, without warranty. Check the linked SEC filing before relying on any number.</li>
+          <li>Don’t resell or bulk-redistribute Holdterm’s pages or emails. The underlying SEC filings are public.</li>
         </ul>
-      </Panel>
-      <Panel title="contact">
+      </section>
+      <section>
+        <h2>Alerts</h2>
+        <ul className="plain-list">
+          <li>
+            Alerts are a subscription: ${PRICE.monthly} a month or ${PRICE.yearly} a year after a {PRICE.trialDays}-day free trial, renewing until you cancel. Payments are processed by Stripe.
+          </li>
+          <li>
+            Cancel any time in the <a href={checkout.portal}>billing portal ↗</a>; you keep access to the end of the period you paid for.
+          </li>
+          <li>Alerts are sent on a best-effort basis, and delivery can be delayed or missed. Our liability is limited to the fees you paid in the last 12 months.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>Changes and contact</h2>
         <p>
-          Questions or corrections: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>, or <a href={ISSUES}>open an issue on GitHub ↗</a>.
+          We may change these terms; material changes to paid plans are emailed to subscribers first. Questions or corrections: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>, or{' '}
+          <a href={ISSUES}>open an issue on GitHub ↗</a>.
         </p>
-      </Panel>
-    </div>
+      </section>
+    </article>
   )
 }
 export function Privacy() {
   title('Privacy')
   return (
-    <div className="page narrow prose">
-      <h1>privacy</h1>
-      <Panel title="what we keep">
-        <ul className="list">
-          <li><span className="dim" aria-hidden>•</span> Browsing is anonymous: no accounts, ads, tracking pixels or third-party analytics on the public pages.</li>
-          <li><span className="dim" aria-hidden>•</span> If you buy alerts we keep your email, your Stripe customer and subscription ids, and the funds and stocks you follow. That is all we need to send alerts.</li>
-          <li><span className="dim" aria-hidden>•</span> Card details go to Stripe and never reach us. Emails are sent through Resend.</li>
-          <li><span className="dim" aria-hidden>•</span> Signing in stores a session token in your browser’s local storage. No other cookies.</li>
-          <li><span className="dim" aria-hidden>•</span> We don’t sell or share your data. Cancel in the billing portal and email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> to ask for deletion, and we delete your record.</li>
-          <li><span className="dim" aria-hidden>•</span> Contact: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.</li>
+    <article className="page narrow article">
+      <header className="article-head">
+        <p className="eyebrow">Last updated {LEGAL_UPDATED}</p>
+        <h1>Privacy</h1>
+        <p className="lede">Reading Holdterm needs no account. The public pages have no ads, tracking pixels or third-party analytics.</p>
+      </header>
+      <section>
+        <h2>What we keep</h2>
+        <ul className="plain-list">
+          <li>If you buy alerts we keep your email, your Stripe customer and subscription IDs, and the funds and stocks you follow. That is all we need to send alerts.</li>
+          <li>Card details go to Stripe and never reach us. Emails are sent through Resend.</li>
+          <li>Signing in stores a session token in your browser’s local storage. Your light or dark setting, the notices you close and a count of your visits are kept there too, and never leave your browser. There are no cookies.</li>
         </ul>
-      </Panel>
-    </div>
+      </section>
+      <section>
+        <h2>Deleting your data</h2>
+        <p>
+          We don’t sell or share your data. Cancel in the <a href={checkout.portal}>billing portal ↗</a> and email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> to ask for deletion, and we delete your record.
+        </p>
+      </section>
+    </article>
   )
 }
 
