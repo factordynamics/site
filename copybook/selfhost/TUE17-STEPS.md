@@ -39,15 +39,16 @@ changes (api.json and the front ends follow within 2 minutes).
    a. Session secret (rotating it signs every member out once; they sign in again by email link):
         NEW=$(openssl rand -base64 48 | tr -d '\n')
         sudo sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$NEW|" /var/lib/copybook/copybook-api/secrets.env
-      Then in the Cloudflare dashboard: Workers → copybook-api → Settings → Variables → SESSION_SECRET → set the same
-      value (print it once with `echo "$NEW"`, paste, then `unset NEW; clear`). Then:
+      Then in the Cloudflare dashboard (yourself, not an agent: whoever sets it sees it): Workers → copybook-api →
+      Settings → Variables → SESSION_SECRET → set the same value (print it once with `echo "$NEW"`, paste, then `unset NEW; clear`). Then:
         sudo systemctl --user --machine=copybook@ restart copybook-api
       Stripe's webhook signing secret too (whoever holds it can forge a payment event): Stripe dashboard → Developers →
-      Webhooks → gene's endpoint → Roll secret (expire the old one now), then
+      Webhooks → endpoint we_1UZHeoDSKGGzRqYZUz48mjdU (…/copybook/webhook; Copybook's only one) → Roll secret
+      (expire the old one now), then
         sudo sed -i "s|^STRIPE_WEBHOOK_SECRET=.*|STRIPE_WEBHOOK_SECRET=<new whsec_…>|" /var/lib/copybook/copybook-api/secrets.env
         sudo systemctl --user --machine=copybook@ restart copybook-api
-      and, if the Worker's endpoint is a separate one, roll it as well and set the Worker's STRIPE_WEBHOOK_SECRET.
-      Payments can send a test event afterwards to confirm gene takes the new secret.
+      and set the same value as the Worker's STRIPE_WEBHOOK_SECRET in the dashboard (it keeps a copy for failover; it
+      has no endpoint of its own). Payments can send a test event afterwards to confirm gene takes the new secret.
    b. Amp Settings → Secrets: delete COPYBOOK_SESSION_SECRET, COPYBOOK_STRIPE_WEBHOOK_SECRET, COPYBOOK_BACKUP_AGE_KEY,
       COPYBOOK_WAITLIST_PRIVATE_KEY (it decrypts the waitlist's emails; keep it offline if you still need it), and the
       account passwords CLOUDFLARE_ACCOUNT_PASSWORD, STRIPE_ACCOUNT_PASSWORD and RESEND_ACCOUNT_PASSWORD (each signs in
@@ -81,10 +82,17 @@ changes (api.json and the front ends follow within 2 minutes).
    ACC_KEEP (reported as "kept", a stated residual, not a failure); the unexpired old-secret session must be refused;
    and /me and /v1 must still answer 200. It records the output in RESTORE.md and reports PASS or FAIL.
 
-Payments' access (agents' tokens keep exactly this; filled in from payments' reply before Tue):
-- Cloudflare: Workers Scripts edit; KV: PENDING; R2: PENDING (copybook-public via R2_PUBLIC_KEY_ID either way).
-- Stripe restricted key: PENDING.
-- Acceptance run: ACC_KEEP="PENDING".
+Payments' access (from payments' reply, Nov 11; the agents' tokens keep exactly this):
+- Cloudflare token: Workers Scripts edit (deploys, `wrangler secret put`); Account Analytics read (optional after
+  Nov 11); Workers KV: none (dropped; the store moved to R2). R2 copybook-history read: the lead's call, see below.
+  copybook-public: through the separate R2 token (R2_PUBLIC_KEY_ID/SECRET, read and write, for failover's api.json).
+- Stripe restricted key: Customers write (includes read; test members, delete for cleanup), Subscriptions write,
+  Prices read, Products read, Checkout Sessions read, Invoices write, Webhook Endpoints write, Events read, Coupons
+  write, Promotion Codes write, Billing Portal configuration read. Nothing else.
+- R2 copybook-history read. Payments uses it for audits of member objects (kv/, sync/) and offered to audit through
+  the API's logged operator routes instead. Drop it (recommended: no unlogged agent reads of member data at
+  Cloudflare) or keep it (then a stated residual).
+- Acceptance run: ACC_KEEP="stripe-customers" if copybook-history read is dropped, or "stripe-customers cf-r2" if kept.
 
 From then on:
 - Deploys need nothing from you: any commit on main that passes the boot test deploys to gene and is logged with its
