@@ -20,12 +20,31 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <!-- SEC data hosts: connect early. The section pages wait on the investor index, so start it before the app script;
-         fund and stock pages render from their own files first, so they leave the bandwidth to those. -->
+    <!-- SEC data hosts: connect early. The section pages wait on the investor index, so start it as soon as the app
+         script has downloaded, while it starts up: started any earlier, the data (300 KB to 1.3 MB) shares the link with
+         the script and delays the first paint (measured on a throttled phone: 2.0-2.7 s with the preload in the head,
+         1.3 s like this, tables within 0.15 s of the same time). Fund and stock pages render from their own files
+         first, so they leave the bandwidth to those. -->
     <link rel="preconnect" href="https://refcell.github.io" crossorigin="anonymous" />
     <link rel="preconnect" href="https://copybook.factordynamics.com" crossorigin="anonymous" />
     <script>
-      var pre = function (f) {
+      var later = [],
+        go = function () {
+          later.splice(0).forEach(add)
+        },
+        pre = function (f) {
+          later.push(f)
+        }
+      try {
+        new PerformanceObserver(function (l) {
+          l.getEntries().forEach(function (e) {
+            if (/\/assets\/index-[^/]*\.js$/.test(e.name)) go()
+          })
+        }).observe({ type: 'resource', buffered: true })
+      } catch (e) {
+        pre = add
+      }
+      function add(f) {
         var l = document.createElement('link')
         l.rel = 'preload'
         l.as = 'fetch'
