@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
 from ingest import build
 from ingest import splits as sp
 from ingest.datasets import prev_quarter
+from ingest.filer_types import signature
 from ingest.parse import ABOVE_20K, consensus_factor, consensus_prices, not_common
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
@@ -314,6 +315,7 @@ def write_hedge_flow(shards: list[dict], types: dict, curated: dict) -> tuple[in
                   "lists": lists, "stocks": {t: stocks[t] for t in sorted(keep)}}
     write(DATA / "hedge_flow.json", {
         "generated_at": (read(DATA / "index.json") or {}).get("generated_at"),
+        "types_sig": signature(types),
         "note": "Hedge funds (filer_types.json type hedge_fund) across every 13F filer, per report period, counting only "
                 "funds that filed the period and the quarter before. Split-adjusted; options, notes and mis-scaled lines "
                 "left out. breadth = buyers - sellers; filed_of_prev_holders = [N, M]: N of the M hedge funds that held "
@@ -539,7 +541,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         if p.name not in written:
             p.unlink()
     write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
-                               "tickers": dict(sorted(index.items()))})
+                               "types_sig": signature(types), "tickers": dict(sorted(index.items()))})
     return len(keep)
 
 

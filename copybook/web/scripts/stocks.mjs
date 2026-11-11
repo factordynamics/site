@@ -604,7 +604,9 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   // Two lenses: hedge funds alone, and hedge funds plus long-only managers (ingest's smart_money;
   // "active" until its long_only type lands).
   const SMART = new Set([...(ft?.smart_money ?? ['hedge_fund', 'active']), 'hedge_fund', 'long_only'])
-  const typeOf = (cik, own) => own ?? ft?.filers?.[cik]?.type ?? null
+  // filer_types.json first (the set index.json's types_as_of dates, and /v1's source); a fall/ book's stamped
+  // type lags it until the next moves.py run.
+  const typeOf = (cik, own) => ft?.filers?.[cik]?.type ?? own ?? null
   const lenses = { smart: new Map(), hedge: new Map() } // page -> {current, older, top10, over5, quarters, moves}
   const lensOf = (k, t) => lenses[k].get(t) ?? lenses[k].set(t, { current: 0, older: 0, top10: 0, over5: 0, quarters: {}, moves: [] }).get(t)
   const curatedByCik = new Map(index.managers.filter((m) => m.ok).map((m) => [m.cik, m]))

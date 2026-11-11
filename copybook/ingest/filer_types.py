@@ -509,6 +509,9 @@ RECLASS = os.environ.get("COPYBOOK_TYPES_RECLASS") == "1"
 
 
 def main() -> int:
+    if "--lenses-stale" in sys.argv:
+        print(int(lenses_stale()))
+        return 0
     if "--overrides" in sys.argv:
         return apply_overrides()
     published_types = (read(DATA / "filer_types.json") or {}).get("filers") or {}
@@ -592,6 +595,20 @@ def main() -> int:
 
 def load() -> dict[str, dict]:
     return (read(DATA / "filer_types.json") or {}).get("filers") or {}
+
+
+def signature(types: dict[str, dict]) -> str:
+    """Short hash of {cik: type}: moves.py stamps it as types_sig on hl/index.json and hedge_flow.json."""
+    import hashlib
+
+    return hashlib.sha1(json.dumps(sorted((c, (t or {}).get("type")) for c, t in types.items())).encode()).hexdigest()[:12]
+
+
+def lenses_stale() -> bool:
+    """True when hl/ or hedge_flow.json (with fall/, built in the same moves.py run) used another type set than
+    filer_types.json, e.g. after hand overrides in a curated run. The curated run then rebuilds them."""
+    sig = signature(load())
+    return any((read(p) or {}).get("types_sig") != sig for p in (DATA / "hl" / "index.json", DATA / "hedge_flow.json"))
 
 
 if __name__ == "__main__":
