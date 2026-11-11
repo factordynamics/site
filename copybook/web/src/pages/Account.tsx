@@ -152,6 +152,8 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
   // Member-facing dates are on New York's calendar, like EDGAR's.
   const endLabel = end ? timeLabel(end.getTime() / 1000) : undefined
   const trial = member.status === 'trialing'
+  const cardless = trial && member.has_payment_method === false
+  const day = end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })
   const alertMode = member.alerts === 'off' ? 'off' : Array.isArray(member.alerts) ? 'follows' : 'all'
   const idx = useAsync(loadIndex, [])
   // Any 13F filer can be followed; names outside the curated set come from filers.json, loaded only when needed.
@@ -252,9 +254,16 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
           </div>
           <p className="mt-3 text-[14px] text-ink-2">{member.email}</p>
           <p className="mt-1 text-[14px] text-ink-2">
-            {PLAN_NAME[member.plan] ?? 'Copy'}
-            {member.interval === 'yearly' ? ', yearly' : member.interval === 'monthly' ? ', monthly' : ''}
-            {member.pause_after_trial && !cancelling && !paused ? (
+            {/* A cardless trial has no interval yet: the add-card choice below picks it (retail, Nov 11). */}
+            {cardless ? (
+              `Copy trial${day && !cancelling ? ` · ends ${day}` : ''}`
+            ) : (
+              <>
+                {PLAN_NAME[member.plan] ?? 'Copy'}
+                {member.interval === 'yearly' ? ', yearly' : member.interval === 'monthly' ? ', monthly' : ''}
+              </>
+            )}
+            {cardless ? null : member.pause_after_trial && !cancelling && !paused ? (
               <>
                 {' · '}free trial until {timeLabel(member.trial_end ?? member.pause_after_trial.from)} → then paused until {dayLabel(member.pause_after_trial.until)} · no charges ·{' '}
                 <UndoPause onChange={onChange} />
@@ -263,8 +272,9 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
               endLabel && !cancelling && !paused && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`
             )}
           </p>
-          {member.plan === 'copy' && member.interval === 'monthly' && member.founding_price === true && member.yearly_perks === false && !member.seat && member.collection !== 'send_invoice' && !cancelling && !paused && <ToYearly cardless={trial && member.has_payment_method === false} day={end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })} />}
-          {trial && member.has_payment_method === false && !cancelling && <NoCard founding={member.founding_price === true} end={endLabel} day={end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })} />}
+          {/* A cardless trial gets one add-card action, the NoCard box; the switch line is for members with a card. */}
+          {member.plan === 'copy' && member.interval === 'monthly' && member.founding_price === true && member.yearly_perks === false && !cardless && !member.seat && member.collection !== 'send_invoice' && !cancelling && !paused && <ToYearly />}
+          {cardless && !cancelling && <NoCard founding={member.founding_price === true} end={endLabel} day={day} />}
           {member.seat ? (
             <p className="mt-4 rounded-xl bg-accent-soft px-3.5 py-2.5 text-[14px] text-accent-2">
               Part of {member.owner ? `${member.owner}’s` : 'your team’s'} Copy Fund plan. Billing and seats are managed by the plan owner.
@@ -969,33 +979,12 @@ function InvoiceSwitch({ onChange }: { onChange: (m: Member) => void }) {
   )
 }
 
-/** Monthly Copy, trial or paying: the yearly founding price through payments' POST /yearly only, never the portal's own
- *  update flow, so a trial keeps its end date ($0 today) and a cardless trial lands on the add-card choice. */
-function ToYearly({ cardless, day }: { cardless: boolean; day?: string }) {
+/** Monthly Copy with a card, trial or paying: the yearly founding price through payments' POST /yearly only, never the portal's own
+ *  update flow, so a trial keeps its end date ($0 today). A cardless trial uses the add-card choice instead. */
+function ToYearly() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   // Member-facing: the founding price on both intervals; "Goes to $99" is for prospects only (the lead, Nov 11).
-  // A cardless trial has nothing to switch yet: the line points at the add-card choice, yearly preselected.
-  if (cardless)
-    return (
-      <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-ink-2">
-        <span>
-          Keep Copy at the founding price: add a card{day ? ` before ${day}` : ''}. Yearly ${prices.yearly} or ${prices.monthly}/month.
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            const box = document.getElementById(ADD_CARD)
-            box?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-            box?.querySelector<HTMLInputElement>('input[value=yearly]')?.click()
-            box?.querySelector<HTMLInputElement>('input[value=yearly]')?.focus({ preventScroll: true })
-          }}
-          className="font-medium text-accent hover:text-accent-2"
-        >
-          Add card →
-        </button>
-      </p>
-    )
   return (
     <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-ink-2">
       <span>
@@ -1051,7 +1040,7 @@ function NoCard({ end, day, founding }: { end?: string; day?: string; founding: 
     { id: 'monthly' as const, label: `$${prices.monthly}/month${on}`, sub: founding ? 'Founding price kept · cancel anytime' : 'Cancel anytime' },
   ]
   return (
-    <div ref={box} id={ADD_CARD} className="mt-4 scroll-mt-24 rounded-xl bg-accent-soft px-3.5 py-3 text-[14px] text-accent-2">
+    <div ref={box} className="mt-4 rounded-xl bg-accent-soft px-3.5 py-3 text-[14px] text-accent-2">
       <p>No card on file: without one, the trial simply ends{end ? ` ${end}` : ''}.</p>
       {/* The trial lock, as /pricing/ states it (trader, Nov 11): a trial started before Feb 1 keeps the founding price. */}
       {founding && <p className="mt-1 text-[13px] text-accent-2/85">You started before Feb 1, so the founding price stays: ${prices.monthly}/month or ${prices.yearly}/year, locked while you stay subscribed.</p>}
