@@ -725,6 +725,15 @@ main:focus {
   gap: 8px;
   margin-top: 16px;
 }
+.panel-failed {
+  margin: 0;
+  padding: 14px 0 6px;
+  color: var(--fg2);
+  line-height: 1.55;
+}
+.panel-failed .btn {
+  margin-left: 4px;
+}
 .failed details {
   margin-top: 14px;
   font-size: 13px;

@@ -607,8 +607,16 @@ export async function loadBooks(): Promise<Book[]> {
     booksProgress.total = ms.length
     window.dispatchEvent(new Event('holdterm:books'))
   }
-  const books = await Promise.all(ms.map((m) => loadBook(m.slug).catch(() => null).finally(tick)))
-  return books.filter((b): b is Book => Boolean(b))
+  return keepLoaded(await Promise.all(ms.map((m) => loadBook(m.slug).catch(() => null).finally(tick))))
+}
+/** The books that loaded. A fund or two can be missing (a fund just added to the roster may not have its file
+ * yet) and is left out; more than that means the data host failed, and a page built from what is left would
+ * show wrong totals as if they were real, so it throws and the page shows its error state instead. */
+export function keepLoaded(bs: (Book | null)[]): Book[] {
+  const ok = bs.filter((b): b is Book => Boolean(b))
+  const failed = bs.length - ok.length
+  if (failed > Math.max(2, bs.length * 0.05)) throw new Error(`${failed} of ${bs.length} portfolios didn’t load`)
+  return ok
 }
 
 export type Who = { slug: string; manager: string; weight: number; value: number; change: Change; delta: number; quarter: string }

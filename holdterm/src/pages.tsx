@@ -9,6 +9,7 @@ import {
   inRoster,
   isStale,
   loadBook,
+  keepLoaded,
   loadBooks,
   loadBooksAfterIndex,
   loadEvents,
@@ -372,7 +373,18 @@ const nextQ = (q: string) => (q.endsWith('4') ? `${Number(q.slice(0, 4)) + 1}Q1`
 
 // ---------- home ----------
 /** Each fund's latest book for the funds that filed in a given quarter. */
-const loadQuarterBooks = (slugs: string[]) => Promise.all(slugs.map((x) => loadBook(x).catch(() => null))).then((bs) => bs.filter((b): b is Book => Boolean(b)))
+const loadQuarterBooks = (slugs: string[]) => Promise.all(slugs.map((x) => loadBook(x).catch(() => null))).then(keepLoaded)
+/** A home panel whose data didn't arrive: one line and a retry, instead of a loading bar that never ends. */
+function PanelFailed({ what }: { what: string }) {
+  return (
+    <p className="panel-failed" role="alert">
+      {what} didn’t load. This is usually a brief network hiccup.{' '}
+      <button type="button" className="btn ghost" onClick={() => location.reload()}>
+        Try again
+      </button>
+    </p>
+  )
+}
 const moveLabel = (h: Holding) => (h.change === 'new' ? 'New' : h.change === 'exited' ? 'Sold out' : h.change === 'added' ? 'Added' : 'Trimmed')
 // ---------- alerts upsell ----------
 // One closable line above the home page. Shown to signed-out visitors only; a dismissal is kept for 90 days,
@@ -599,15 +611,15 @@ function HomeBody() {
   const conviction = [...conv.values()].sort((a, b) => b.weight - a.weight).slice(0, 8)
   const newStakes = events.filter((e) => e.action === 'new_stake' && daysAgo(e.filing_date) <= 30).length
   const wait = <span className="dim">…</span>
-  const crowd = (r: Agg | undefined) => (!books.data ? wait : r ? <CoValue r={r} /> : <span className="dim">None yet</span>)
-  const crowdSub = (r: Agg | undefined, line: (r: Agg) => string) => (books.data && r ? line(r) : 'Across the investors who have filed')
+  const crowd = (r: Agg | undefined) => (books.error ? <span className="dim">Didn’t load</span> : !books.data ? wait : r ? <CoValue r={r} /> : <span className="dim">None yet</span>)
+  const crowdSub = (r: Agg | undefined, line: (r: Agg) => string) => (books.error ? 'The portfolios didn’t arrive. Reload to try again.' : books.data && r ? line(r) : 'Across the investors who have filed')
   return (
     <div className="page home">
       <div className="stats home-stats" role="list" aria-label={`${quarterLabel(lead)} so far`}>
         <Stat label={`${quarterLabel(s.q)} 13Fs filed`} value={`${seasonFiled.length} of ${ms.length}`} sub={<>{daysLeft < 0 ? `Were due ${day(s.due)}` : `Due ${day(s.due)}${daysLeft > 1 ? `, ${daysLeft} days left` : daysLeft === 1 ? ', 1 day left' : ', today'}`}<Bar value={seasonFiled.length} max={ms.length} /></>} />
         <Stat label={`Most bought in ${quarterLabel(lead)}`} value={crowd(picks.bought)} tone={books.data && picks.bought ? 'pos' : undefined} sub={crowdSub(picks.bought, picks.boughtLine)} />
         <Stat label={`Most sold in ${quarterLabel(lead)}`} value={crowd(picks.sold)} tone={books.data && picks.sold ? 'neg' : undefined} sub={crowdSub(picks.sold, picks.soldLine)} />
-        <Stat label="New 5% stakes" value={ev.data ? num(newStakes) : wait} sub="Schedule 13D and 13G filings in the last 30 days" />
+        <Stat label="New 5% stakes" value={ev.data ? num(newStakes) : ev.error ? <span className="dim">Didn’t load</span> : wait} sub={ev.error ? 'The filings didn’t arrive. Reload to try again.' : 'Schedule 13D and 13G filings in the last 30 days'} />
       </div>
       {/* Two columns of about equal height on wide screens; one column below 1100px keeps the order
           latest filings, largest trades, stakes, biggest bets (styles.css, .home-bets). */}
@@ -657,7 +669,7 @@ function HomeBody() {
                 render: (m) => {
                   const b = bySlug.get(m.slug)
                   const h = b && biggest(b)
-                  if (!h) return <span className="dim">{b ? 'No trades' : '…'}</span>
+                  if (!h) return <span className="dim">{b ? 'No trades' : books.error ? '—' : '…'}</span>
                   return (
                     <span className="move">
                       <StockCell t={h.ticker} name={h.display_name || h.issuer} former={h.former} label={h.label} />
@@ -725,6 +737,8 @@ function HomeBody() {
                   },
                 ]}
               />
+            ) : books.error ? (
+              <PanelFailed what="The largest trades" />
             ) : (
               <Loading what="Loading the largest trades" rows={10} />
             )}
@@ -769,6 +783,8 @@ function HomeBody() {
                 ]}
                 empty="No filings in the last 30 days."
               />
+            ) : ev.error ? (
+              <PanelFailed what="Recent filings" />
             ) : (
               <Loading what="Loading recent filings" rows={8} />
             )}
