@@ -55,7 +55,7 @@ const setToken = (token: string) => {
   localStorage.setItem(KEY, JSON.stringify({ token, exp: Date.now() + 30 * DAY }))
   sessionStorage.removeItem(REAUTH)
 }
-// Set when the API rejects a stored session (401), such as a session from before the server move: the
+// Set when the API confirms a stored session is invalid (401), such as a session from before the server move: the
 // account page and My book then ask the member to sign in again instead of treating them as a visitor.
 const REAUTH = 'copybook-reauth'
 export const needsReauth = () => !getToken() && sessionStorage.getItem(REAUTH) === '1'
@@ -162,30 +162,66 @@ export async function probe<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+/**
+ * True only when the API confirms the session is invalid. A 401 that isn't the API's JSON member answer (a
+ * proxy or tunnel during a restart, another host) never signs a member out; only code 'invalid_session' does
+ * (forged, expired or revoked). A host without codes yet: its bare "sign in required" is confirmed by one more
+ * /me read 1.5 s later.
+ */
+async function sessionInvalid(res: Response, token: string): Promise<boolean> {
+  const body = (await res.clone().json().catch(() => null)) as { code?: string; error?: string } | null
+  if (body?.code) return body.code === 'invalid_session' // member_unavailable (failover lag), no_session, link codes: keep it
+  if (body?.error !== 'sign in required') return false
+  await wait(1500)
+  const again = await apiFetch('/me', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' }).catch(() => null)
+  if (again?.status !== 401) return false
+  const b = (await again.json().catch(() => null)) as { code?: string; error?: string } | null
+  return b?.code ? b.code === 'invalid_session' : b?.error === 'sign in required'
+}
+/** Signs out after a confirmed invalid session, unless this tab already holds a newer one. True if it signed out. */
+async function onUnauthorized(res: Response, token: string) {
+  if (!(await sessionInvalid(res, token)) || getToken() !== token) return false
+  sessionStorage.setItem(REAUTH, '1')
+  signOut()
+  return true
+}
+
 export async function call<T>(path: string, init: { method?: string; body?: unknown; auth?: boolean; cache?: RequestCache; timeout?: number } = {}): Promise<T> {
+  const method = init.method ?? (init.body !== undefined ? 'POST' : 'GET')
   const headers: Record<string, string> = {}
   if (init.body !== undefined) headers['Content-Type'] = 'application/json'
+  const token = init.auth ? getToken() : null
   if (init.auth) {
-    const t = getToken()
-    if (!t) throw new ApiError(401)
-    headers.Authorization = `Bearer ${t}`
+    if (!token) throw new ApiError(401)
+    headers.Authorization = `Bearer ${token}`
   }
-  const res = await apiFetch(path, {
-    method: init.method ?? (init.body !== undefined ? 'POST' : 'GET'),
-    headers,
-    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-    cache: init.cache,
-    signal: init.timeout ? AbortSignal.timeout(init.timeout) : undefined,
+  const send = () =>
+    apiFetch(path, {
+      method,
+      headers,
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      cache: init.cache,
+      signal: init.timeout ? AbortSignal.timeout(init.timeout) : undefined,
+    })
+  // A read that meets a dropped connection or a 5xx (an API restart) is retried once after a short wait;
+  // writes aren't, so nothing is sent twice. Neither ever clears the stored session.
+  let res = await send().catch(async (e) => {
+    if (method !== 'GET') throw e
+    await wait(1500)
+    return send()
   }).catch((e) => {
     setDown(true)
     throw e
   })
-  setDown(res.status === 429 || res.status >= 500)
-  if (res.status === 401 && init.auth) {
-    sessionStorage.setItem(REAUTH, '1')
-    signOut()
+  if (method === 'GET' && res.status >= 500) {
+    await wait(1500)
+    res = await send().catch(() => res)
   }
-  if (res.ok && init.auth && (init.method ?? (init.body !== undefined ? 'POST' : 'GET')) !== 'GET') {
+  setDown(res.status === 429 || res.status >= 500)
+  // An unconfirmed 401 keeps the session, and a read is asked once more.
+  if (res.status === 401 && token && !(await onUnauthorized(res, token)) && method === 'GET') res = await send().catch(() => res)
+  if (res.ok && init.auth && method !== 'GET') {
     forgetMe()
     shared.clear()
   }
@@ -364,7 +400,7 @@ export async function downloadFile(path: string, filename: string) {
   const t = getToken()
   if (!t) throw new ApiError(401)
   const res = await apiFetch(path, { headers: { Authorization: `Bearer ${t}` } })
-  if (res.status === 401) signOut()
+  if (res.status === 401) await onUnauthorized(res, t)
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => null))
   const url = URL.createObjectURL(await res.blob())
   const a = Object.assign(document.createElement('a'), { href: url, download: filename })
