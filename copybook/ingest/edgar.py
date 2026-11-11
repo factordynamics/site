@@ -170,7 +170,9 @@ def amendment_cover(cik: str, accession: str) -> dict:
     conf = tag("confDeniedExpired").lower()
     return {"type": tag("amendmentType").upper(), "no": int(no) if no.isdigit() else None,
             "confidential_treatment_expired": True if conf in ("true", "y") else False if conf in ("false", "n") else None,
-            "confidential_omitted": tag("isConfidentialOmitted").lower() in ("true", "y")}
+            "confidential_omitted": tag("isConfidentialOmitted").lower() in ("true", "y"),
+            "entry_total": int(tag("tableEntryTotal")) if tag("tableEntryTotal").isdigit() else None,
+            "value_total": float(tag("tableValueTotal")) if re.fullmatch(r"[0-9.]+", tag("tableValueTotal")) else None}
 
 
 def amendment_type(cik: str, accession: str) -> str:

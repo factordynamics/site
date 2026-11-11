@@ -1211,7 +1211,7 @@ def baseline(m: dict, i: int) -> dict | None:
 
 def prior_note(m: dict, i: int) -> dict:
     """Why history[i] has no prior book, when the quarter before was filed but empty: {prev_quarter_status,
-    prev_quarter_accession}. confidential_omitted when its cover says isConfidentialOmitted (Norges Bank 2026Q1
+    prev_quarter_accession, prev_quarter_note (the cover's totals)}. confidential_omitted when its cover says isConfidentialOmitted (Norges Bank 2026Q1
     0001374170-26-000023: 1,507 entries, $864.7B on the cover, one placeholder line in the table), else empty."""
     from ingest.datasets import prev_quarter
     hist = m.get("history") or []
@@ -1225,15 +1225,22 @@ def prior_note(m: dict, i: int) -> dict:
     if _AMEND is None:
         _AMEND = json.loads(AMEND_PATH.read_text()) if AMEND_PATH.exists() else {}
     cur = _AMEND.get(gap["accession"])
-    if not isinstance(cur, dict) or "confidential_omitted" not in cur:
+    if not isinstance(cur, dict) or "entry_total" not in cur:
         try:
             cur = (cur if isinstance(cur, dict) else {}) | amendment_cover(str(m["cik"]), gap["accession"])
         except Exception:  # noqa: BLE001 - the note is optional; the next run retries
             return {}
         _AMEND[gap["accession"]] = cur
         AMEND_PATH.write_text(json.dumps(dict(sorted(_AMEND.items())), separators=(",", ":")) + "\n")
-    return {"prev_quarter_status": "confidential_omitted" if cur.get("confidential_omitted") else "empty",
-            "prev_quarter_accession": gap["accession"]}
+    secret = bool(cur.get("confidential_omitted"))
+    n, v = cur.get("entry_total"), cur.get("value_total")
+    # Cover totals are as filed (dollars from 2023; a cover over $10T is in thousands, as some older filers report).
+    v = v * 1000 if v and v < 1e7 and n and n > 100 else v
+    told = f"reported {n:,} entries, ${v / 1e9:,.1f}B" if n and v else "reported holdings on its cover"
+    return {"prev_quarter_status": "confidential_omitted" if secret else "empty",
+            "prev_quarter_accession": gap["accession"],
+            "prev_quarter_note": f"Prior 13F ({gap['accession']}) {told}, all confidential: no prior lines to compare"
+                                 if secret else f"Prior 13F ({gap['accession']}) was filed with no holdings"}
 
 
 def with_prior_note(rows: list[dict], note: dict) -> list[dict]:
