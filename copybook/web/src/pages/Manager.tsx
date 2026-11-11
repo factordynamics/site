@@ -346,15 +346,16 @@ export function ManagerPage() {
               {rows.slice(0, n).map((h) => (
                 <tr key={h.key} className="border-b border-line last:border-0 hover:bg-ink/[0.025]">
                   <td className="px-5 py-2.5 md:px-6">
-                    <div className="flex items-center gap-2">
+                    {/* Below sm the name and badges wrap under the ticker, so Value and Weight stay on screen at 390 px. */}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
                       {h.ticker ? (
-                        <Link to={stockPath(h.ticker)} className="w-14 shrink-0 hover:text-accent">
+                        <Link to={stockPath(h.ticker)} className="basis-full shrink-0 hover:text-accent sm:w-14 sm:basis-auto">
                           <Ticker t={h.ticker} />
                         </Link>
                       ) : (
-                        <Ticker t={h.ticker} className="w-14 shrink-0" />
+                        <Ticker t={h.ticker} className="basis-full shrink-0 sm:w-14 sm:basis-auto" />
                       )}
-                      <span className="min-w-0 truncate text-ink-2">{h.issuer}</span>
+                      <span className="min-w-0 max-w-[7.5rem] truncate text-ink-2 sm:max-w-[14rem] lg:max-w-none" title={h.issuer}>{h.issuer}</span>
                       {h.put_call ? (
                         <Badge tone={h.put_call.toLowerCase() === 'put' ? 'down' : 'up'} className="shrink-0">
                           {h.put_call.toLowerCase() === 'put' ? 'Puts' : 'Calls'}

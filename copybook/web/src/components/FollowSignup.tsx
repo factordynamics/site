@@ -130,7 +130,9 @@ export function FollowSignup({ people, others = [], collapsed = false, cta, kind
     >
       {many && !open && (
         <p className="mb-2 text-[13px] leading-snug text-ink-2">
-          Follows {chosen.map((p) => p.name).join(', ')}.{' '}
+          {/* The Friday email (payments' weeklyMail) always has the week's biggest buys and sells across every
+              superinvestor; followed investors' own moves come first. */}
+          Covers every superinvestor’s biggest moves; {chosen.map((p) => p.name).join(', ')} {chosen.length === 1 ? 'comes' : 'come'} first.{' '}
           <button type="button" onClick={() => setOpen(true)} className="font-medium text-accent underline-offset-2 hover:underline">
             Change
           </button>
@@ -138,7 +140,7 @@ export function FollowSignup({ people, others = [], collapsed = false, cta, kind
       )}
       {many && open && (
         <fieldset className="mb-2.5">
-          <legend className="text-[12.5px] font-medium text-ink-3">Follow free</legend>
+          <legend className="text-[12.5px] font-medium text-ink-3">First in your email, ahead of every superinvestor’s biggest moves</legend>
           <div className="mt-0.5 flex flex-wrap gap-x-4">
             {choices.map((p) => (
               <label key={p.slug} className="inline-flex min-h-11 cursor-pointer items-center gap-2 pr-1 text-[14px] text-ink">

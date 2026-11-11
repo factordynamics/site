@@ -12,8 +12,11 @@ export function useBook(holdings: Holding[] | undefined) {
     const shares = hs.filter((h) => !h.put_call)
     const total = shares.reduce((s, h) => s + h.value, 0)
     const rows: Agg[] = shares.map((h) => ({ ...h, weight: total ? h.value / total : 0 })).sort((a, b) => b.value - a.value)
-    const options: Agg[] = hs.filter((h) => h.put_call).sort((a, b) => b.value - a.value)
-    const optionsValue = options.reduce((s, h) => s + h.value, 0)
+    const opts = hs.filter((h) => h.put_call)
+    const optionsValue = opts.reduce((s, h) => s + h.value, 0)
+    // "Share of filing": each option line over the whole filing (shares + option notional), computed here so a small
+    // line reads "<0.1%" rather than a stored weight rounded to 0.
+    const options: Agg[] = opts.map((h) => ({ ...h, weight: total + optionsValue ? h.value / (total + optionsValue) : 0 })).sort((a, b) => b.value - a.value)
     const sectors = sectorMix(rows)
     return { rows, total, options, optionsValue, sectors, top10: concentration(rows, 10), top1: rows[0] }
   }, [holdings])
