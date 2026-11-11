@@ -118,7 +118,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
       const t = r.t.toLowerCase()
       const n = r.n.toLowerCase()
       const sc = t === s ? 10 : t.startsWith(s) ? 5 : n.startsWith(s) ? 4 : n.includes(s) ? 1 : 0
-      if (sc) out.push({ kind: 'stock', label: r.t, sub: `${r.n} · ${r.h} holders`, to: `/s/${encodeURIComponent(r.t)}`, score: sc + Math.min(r.h, 200) / 400 })
+      if (sc) out.push({ kind: 'stock', label: r.t, sub: `${r.n} · ${r.h} ${r.h === 1 ? "holder" : "holders"}`, to: `/s/${encodeURIComponent(r.t)}`, score: sc + Math.min(r.h, 200) / 400 })
     }
     return out.sort((a, b) => b.score - a.score).slice(0, 12)
   }, [q, stocks, mgrs])
@@ -152,7 +152,9 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
             spellCheck={false}
             autoComplete="off"
           />
-          <kbd>esc</kbd>
+          <button type="button" className="palette-close" onClick={() => setOpen(false)}>
+            Cancel
+          </button>
         </div>
         <ul>
           {hits.map((h, i) => (
@@ -169,50 +171,11 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   )
 }
 
-function Help({ close }: { close: () => void }) {
-  const rows: [string, string][] = [
-    ['/  or  ⌘K', 'Search tickers and investors'],
-    ['g h', 'Overview'],
-    ['g m', 'Investors'],
-    ['g f', 'Buys and sells'],
-    ['g c', 'Most owned stocks'],
-    ['g d', '13D, 13G and Form 4 filings'],
-    ['g e', 'Email alerts'],
-    ['j / k', 'Move down / up a table'],
-    ['Enter', 'Open the selected row'],
-    ['1-5', 'Switch tabs'],
-    ['?', 'This help'],
-  ]
-  return (
-    <div className="overlay" onClick={close}>
-      <div className="palette help" onClick={(e) => e.stopPropagation()}>
-        <div className="prompt">
-          Keyboard shortcuts
-        </div>
-        <table className="grid">
-          <tbody>
-            {rows.map(([k, v]) => (
-              <tr key={k}>
-                <td>
-                  <kbd>{k}</kbd>
-                </td>
-                <td className="dim">{v}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
 function App() {
   const path = usePath()
   const [search, setSearch] = useState(false)
-  const [help, setHelp] = useState(false)
   const [theme, toggleTheme] = useTheme()
   useEffect(() => {
-    let g = 0
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
@@ -221,15 +184,8 @@ function App() {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if ((e.target as HTMLElement).closest('input,textarea,select')) return
-      if (e.key === 'Escape') return void (setHelp(false), setSearch(false))
+      if (e.key === 'Escape') return void setSearch(false)
       if (e.key === '/') return void (e.preventDefault(), setSearch(true))
-      if (e.key === '?') return void setHelp((h) => !h)
-      if (e.key === 'g') return void (g = Date.now())
-      if (Date.now() - g < 1200) {
-        const hit = NAV.find((n) => n[2] === e.key)
-        g = 0
-        if (hit) navigate(hit[0])
-      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -254,7 +210,6 @@ function App() {
             <button className="search-btn" onClick={() => setSearch(true)} aria-label="Search stocks and investors">
               <Glass />
               <span className="label">Search stocks or investors</span>
-              <kbd>/</kbd>
             </button>
             <button className="icon-btn" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} title={theme === 'dark' ? 'Light theme' : 'Dark theme'}>
               {theme === 'dark' ? (
@@ -300,7 +255,6 @@ function App() {
         </div>
       </footer>
       <Search open={search} setOpen={setSearch} />
-      {help && <Help close={() => setHelp(false)} />}
     </>
   )
 }

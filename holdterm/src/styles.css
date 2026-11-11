@@ -1271,13 +1271,13 @@ a.hb-row:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.palette.help table {
-  margin: 8px 16px 14px;
-  width: auto;
-}
-.palette.help td {
+.palette-close {
   border: 0;
-  padding: 4px 16px 4px 0;
+  background: none;
+  color: var(--acc);
+  font: 600 14px var(--sans);
+  padding: 6px 4px;
+  cursor: pointer;
 }
 
 /* ---------- home ---------- */
@@ -2702,4 +2702,23 @@ p a,
   color: var(--acc);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+.chart-box .axis-title {
+  font: 500 12px var(--sans);
+  fill: var(--dim);
+}
+.chart-readout {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--fg2);
+}
+.chart-box .col {
+  transition: fill 0.12s;
+}
+.chart-box g:focus-visible {
+  outline: none;
+}
+.chart-box g:focus-visible .col {
+  stroke: var(--acc);
+  stroke-width: 2;
 }

@@ -3,7 +3,7 @@ import { api } from './config'
 import { A } from './lib'
 
 // Paid alerts account, against the alerts API (POST /session, /login, /portal; GET /me; GET/PUT /follows).
-export type Member = { email: string; status: string; active: boolean; plan: string; period_end?: number | string | null; cancel_at_period_end?: boolean }
+export type Member = { email: string; status: string; active: boolean; plan: string; interval?: 'monthly' | 'yearly' | null; period_end?: number | string | null; cancel_at_period_end?: boolean; /** False when no card is on file (a trial then ends instead of renewing). */ has_payment_method?: boolean | null }
 export type Follows = { investors: string[]; stocks: string[] }
 
 const KEY = 'holdterm-session'

@@ -22,14 +22,15 @@ function niceStep(raw: number) {
   return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p
 }
 
-/** Value by quarter: labelled columns, quarter-on-quarter change under each, hover/focus tooltip. */
+/** Portfolio value by quarter: columns on a labelled dollar axis, the quarter and its change from the quarter
+ * before under each, and a hover/focus readout. Axis titles say what both axes measure. */
 export function ValueHistory({ data, title }: { data: { label: string; value: number }[]; title: string }) {
   const [ref, W] = useWidth<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
-  const H = 170
-  const pad = { l: 46, r: 4, t: 18, b: 36 }
+  const H = 228
+  const pad = { l: 62, r: 6, t: 22, b: 62 }
   const max = Math.max(...data.map((d) => d.value), 1)
-  const step = niceStep(max / 3)
+  const step = niceStep(max / 4)
   const top = Math.ceil(max / step) * step
   const iw = Math.max(0, W - pad.l - pad.r)
   const ih = H - pad.t - pad.b
@@ -37,17 +38,34 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
   const ticks: number[] = []
   for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v)
   const showLabels = bw >= 44
+  const sel = hover ?? data.length - 1
+  const d0 = data[sel]
+  const p0 = data[sel - 1]?.value
   return (
-    <div ref={ref} className="chart-box">
+    <div ref={ref} className="chart-box value-chart">
+      {d0 && (
+        <p className="chart-readout" aria-live="polite">
+          <b>{d0.label.replace(/'(\d\d)$/, '20$1')}</b>: {usd(d0.value)}
+          {p0 ? (
+            <span className={d0.value >= p0 ? 'pos' : 'neg'}>
+              {' '}
+              ({d0.value >= p0 ? 'up' : 'down'} {Math.abs((d0.value / p0 - 1) * 100).toFixed(1)}% from the quarter before)
+            </span>
+          ) : null}
+        </p>
+      )}
       {W > 0 && (
         <svg width={W} height={H} role="img" aria-label={title}>
           <title>{title}</title>
+          <text x={12} y={pad.t + ih / 2} textAnchor="middle" transform={`rotate(-90 12 ${pad.t + ih / 2})`} className="axis-title">
+            Portfolio value
+          </text>
           {ticks.map((v) => {
             const y = Math.round(pad.t + ih - (v / top) * ih) + 0.5
             return (
               <g key={v}>
-                <line x1={pad.l} x2={W - pad.r} y1={y} y2={y} className="gridline" />
-                <text x={pad.l - 6} y={y + 4} textAnchor="end" className="axis">
+                <line x1={pad.l} x2={W - pad.r} y1={y} y2={y} className={v === 0 ? 'gridline strong' : 'gridline'} />
+                <text x={pad.l - 8} y={y + 4} textAnchor="end" className="axis">
                   {usdAxis(v)}
                 </text>
               </g>
@@ -55,31 +73,35 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
           })}
           {data.map((d, i) => {
             const h = (d.value / top) * ih
-            const x = pad.l + i * bw + bw * 0.16
+            const x = pad.l + i * bw + bw * 0.18
+            const cw = bw * 0.64
             const prev = data[i - 1]?.value
             const delta = prev ? d.value / prev - 1 : null
-            const on = hover === i
+            const on = i === sel
             return (
-              <g key={d.label} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} tabIndex={0} onFocus={() => setHover(i)} onBlur={() => setHover(null)} aria-label={`${d.label}: ${usd(d.value)}`}>
+              <g key={d.label} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} tabIndex={0} onFocus={() => setHover(i)} onBlur={() => setHover(null)} aria-label={`${d.label}: ${usd(d.value)}${delta != null ? `, ${delta >= 0 ? 'up' : 'down'} ${Math.abs(delta * 100).toFixed(1)}%` : ''}`}>
                 <rect x={pad.l + i * bw} y={pad.t} width={bw} height={ih} fill="transparent" />
-                <rect x={x} y={pad.t + ih - h} width={bw * 0.68} height={h} className={on || (hover == null && i === data.length - 1) ? 'col on' : 'col'} />
+                <rect x={x} y={pad.t + ih - h} width={cw} height={h} rx={3} className={on ? 'col on' : 'col'} />
                 {(showLabels || on) && (
-                  <text x={x + bw * 0.34} y={pad.t + ih - h - 5} textAnchor="middle" className="vlabel">
+                  <text x={x + cw / 2} y={pad.t + ih - h - 6} textAnchor="middle" className="vlabel">
                     {usd(d.value, d.value >= 1e11 ? 0 : 1)}
                   </text>
                 )}
-                <text x={x + bw * 0.34} y={H - 20} textAnchor="middle" className="axis">
+                <text x={x + cw / 2} y={pad.t + ih + 17} textAnchor="middle" className="axis">
                   {bw < 52 ? d.label.replace(/^Q(\d) '(\d\d)$/, '$1Q$2') : d.label}
                 </text>
                 {delta != null && (showLabels || on) && (
-                  <text x={x + bw * 0.34} y={H - 5} textAnchor="middle" className={`axis ${delta >= 0 ? 'pos' : 'neg'}`}>
-                    {delta >= 0 ? '+' : ''}
-                    {(delta * 100).toFixed(0)}%
+                  <text x={x + cw / 2} y={pad.t + ih + 33} textAnchor="middle" className={`axis ${delta >= 0 ? 'pos' : 'neg'}`}>
+                    {delta >= 0 ? '+' : '−'}
+                    {Math.abs(delta * 100).toFixed(0)}%
                   </text>
                 )}
               </g>
             )
           })}
+          <text x={pad.l + iw / 2} y={H - 4} textAnchor="middle" className="axis-title">
+            Quarter, with the change from the quarter before
+          </text>
         </svg>
       )}
     </div>

@@ -37,7 +37,7 @@ import { A, Bar, ChangeTag, date, day, Failed, Grid, Loading, num, Panel, pct, p
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
-import { follows, Follow, getToken, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, UNAVAILABLE, type Follows } from './account'
+import { follows, Follow, getToken, useMember, startFromUrl, requestLogin, setFollow, openPortal, signOut, UNAVAILABLE, type Follows, type Member } from './account'
 
 /** Sets the page's title and canonical. A missing page asks not to be indexed and has no canonical; a real page
  * opened from the static 404 shell (a lowercase ticker, a link followed from a 404) drops the shell's noindex. */
@@ -422,7 +422,6 @@ function HomeBody() {
           }
         >
           <Grid
-            keyboard
             rows={filers}
             href={(m) => fundPath(m.slug)}
             cols={[
@@ -572,7 +571,6 @@ export function Funds() {
       </div>
       <Panel title="All investors" right={<span className="dim hide-sm">Sorted by 13F book size</span>}>
         <Grid
-          keyboard
           rank
           rows={ms}
           initial={['v', 'desc']}
@@ -627,7 +625,7 @@ export function Funds() {
 
 // ---------- one fund ----------
 type ITab = 'holdings' | 'buys' | 'sells' | 'options' | 'notes' | 'filings' | 'events'
-const FUND_TAB: Record<ITab, string> = { holdings: 'Holdings', buys: 'Buys this quarter', sells: 'Sells this quarter', options: 'Options', notes: 'Notes and preferreds', filings: '13F filings', events: '13D/G and Form 4 filings' }
+const FUND_TAB: Record<ITab, string> = { holdings: 'What it owns', buys: 'What it bought this quarter', sells: 'What it sold this quarter', options: 'Options', notes: 'Bonds and preferred shares', filings: 'Past 13F filings', events: 'Stakes and insider trades' }
 export function Fund({ slug }: { slug: string }) {
   const b = useLoad(() => loadBook(slug), [slug])
   const ix = useLoad(loadIndex, [])
@@ -669,11 +667,15 @@ export function Fund({ slug }: { slug: string }) {
           </h1>
           {book.pm && <p className="lede">Portfolio manager {book.pm}</p>}
           <div className="meta">
-            <span>EDGAR filer {filer ? filer.name : book.name}</span>
-            <span>CIK {(filer?.cik ?? book.cik).replace(/^0+/, '')}</span>
-            <a href={book.sec_url} target="_blank" rel="noreferrer">
-              13F-HR {book.accession} ↗
-            </a>
+            <span>
+              Source:{' '}
+              <a href={book.sec_url} target="_blank" rel="noreferrer">
+                {quarterLabel(book.quarter)} 13F, filed {date(book.filing_date)} on SEC EDGAR ↗
+              </a>
+            </span>
+            <span title={`SEC accession ${book.accession}`}>
+              Filed as {filer ? filer.name : book.name} (CIK {(filer?.cik ?? book.cik).replace(/^0+/, '')})
+            </span>
           </div>
         </div>
         <Follow kind="investors" id={slug} />
@@ -701,16 +703,17 @@ export function Fund({ slug }: { slug: string }) {
         value={tab}
         onChange={setTab}
         options={[
-          ['holdings', `holdings ${live.length}`],
-          ['buys', `buys ${buys.length}`],
-          ['sells', `sells ${sells.length}`],
-          ...(opts.length ? ([['options', `options ${opts.length}`]] as [ITab, string][]) : []),
-          ...(notes.length ? ([['notes', `notes and preferreds ${notes.length}`]] as [ITab, string][]) : []),
-          ['filings', `13F filings ${hist.length}`],
-          ['events', `13D/G and Form 4 ${events.length}`],
+          ['holdings', `Holdings ${live.length}`],
+          ['buys', `Bought ${buys.length}`],
+          ['sells', `Sold ${sells.length}`],
+          ...(opts.length ? ([['options', `Options ${opts.length}`]] as [ITab, string][]) : []),
+          ...(notes.length ? ([['notes', `Bonds and preferreds ${notes.length}`]] as [ITab, string][]) : []),
+          ['filings', `History ${hist.length}`],
+          ['events', `Stakes and insider trades ${events.length}`],
         ]}
+        label={`${book.firm} portfolio`}
       />
-      <Panel title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Reported price = value ÷ shares as filed</span> : tab === 'options' ? <span className="dim hide-sm">Notional = underlying shares × price; not part of the book</span> : tab === 'notes' ? <span className="dim hide-sm">Debt and preferred lines as filed; not part of the stock book</span> : undefined}>
+      <Panel title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Price in filing = reported value ÷ shares</span> : tab === 'options' ? <span className="dim hide-sm">Value of the underlying shares; not counted in the portfolio</span> : tab === 'notes' ? <span className="dim hide-sm">As filed; not counted in the stock portfolio</span> : undefined}>
         {tab === 'holdings' && <HoldingsGrid rows={live} own={(x) => ownHolding(book, x)} />}
         {tab === 'buys' && <MovesGrid rows={buys} />}
         {tab === 'sells' && <MovesGrid rows={sells} />}
@@ -724,7 +727,7 @@ export function Fund({ slug }: { slug: string }) {
               { key: 'pc', label: 'type', render: (r) => <span className={`tag ${r.put_call === 'CALL' ? 'pos' : 'neg'}`}>{r.put_call}</span> },
               { key: 'sh', label: 'shares', num: true, hideSm: true, render: (r) => num(r.shares) },
               { key: 'v', label: 'notional', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
-              { key: 'd', label: 'Δ notional', num: true, render: (r) => <span className="dim">{signedUsd((r.value || 0) - (r.prev_value ?? 0))}</span> },
+              { key: 'd', label: 'Change', num: true, render: (r) => <span className="dim">{signedUsd((r.value || 0) - (r.prev_value ?? 0))}</span> },
             ]}
           />
         )}
@@ -738,7 +741,7 @@ export function Fund({ slug }: { slug: string }) {
               { key: 'a', label: 'amount', num: true, hideSm: true, render: noteAmount, sort: (r) => r.principal_amount ?? r.shares },
               { key: 'c', label: 'activity', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
               { key: 'v', label: 'value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
-              { key: 'pv', label: 'last qtr', num: true, hideSm: true, render: (r) => <span className="dim">{usd(r.prev_value)}</span>, sort: (r) => r.prev_value ?? 0 },
+              { key: 'pv', label: 'Last quarter', num: true, hideSm: true, render: (r) => <span className="dim">{usd(r.prev_value)}</span>, sort: (r) => r.prev_value ?? 0 },
             ]}
           />
         )}
@@ -746,31 +749,31 @@ export function Fund({ slug }: { slug: string }) {
           <Grid
             rows={[...hist].reverse()}
             cols={[
-              { key: 'q', label: 'qtr', render: (r) => quarterLabel(r.quarter) },
-              { key: 'rd', label: 'period end', render: (r) => date(r.report_date) },
-              { key: 'fd', label: 'filed', render: (r) => date(r.filing_date) },
-              { key: 'v', label: 'book', num: true, render: (r) => usd(r.equity_value ?? r.total_value) },
-              { key: 'n', label: 'positions', num: true, render: (r) => r.position_count },
+              { key: 'q', label: 'Quarter', render: (r) => quarterLabel(r.quarter) },
+              { key: 'rd', label: 'Holdings as of', render: (r) => date(r.report_date) },
+              { key: 'fd', label: 'Filed', render: (r) => date(r.filing_date) },
+              { key: 'v', label: 'Portfolio value', num: true, render: (r) => usd(r.equity_value ?? r.total_value) },
+              { key: 'n', label: 'Positions', num: true, render: (r) => r.position_count },
               {
                 key: 's',
                 label: <span className="sr">SEC filing</span>,
                 render: (r) => (
-                  <a href={r.sec_url} target="_blank" rel="noreferrer" className="dim ext">
-                    SEC ↗
+                  <a href={r.sec_url} target="_blank" rel="noreferrer" className="ext">
+                    View filing ↗
                   </a>
                 ),
               },
             ]}
           />
         )}
-        {tab === 'events' && <Grid rows={events} cols={eventCols(firms, false)} empty="no Form 4 or 13D/G filed since the latest 13F period" />}
+        {tab === 'events' && <Grid rows={events} cols={eventCols(firms, false)} empty="No 5% stake (13D or 13G) or insider trade (Form 4) filings since its latest 13F." />}
       </Panel>
       <div className="duo wide">
-        <Panel title="13F book by quarter" right={<span className="dim">Reported value and change vs prior quarter</span>}>
-          {book.options_value > 0 && hist.some((r) => r.equity_value == null && r.long_value == null) && <div className="dim small">as filed, including options notional</div>}
-          {hist.length > 1 ? <ValueHistory title={`${book.firm} 13F book by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.equity_value ?? r.long_value ?? r.total_value }))} /> : <div className="dim empty">one quarter on file</div>}
+        <Panel title="Portfolio value by quarter" right={<span className="dim hide-sm">Value of US-listed stocks in each 13F</span>}>
+          {book.options_value > 0 && hist.some((r) => r.equity_value == null && r.long_value == null) && <div className="dim small">Older quarters as filed, including options.</div>}
+          {hist.length > 1 ? <ValueHistory title={`${book.firm} portfolio value by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.equity_value ?? r.long_value ?? r.total_value }))} /> : <div className="dim empty">Only one quarter on file so far.</div>}
         </Panel>
-        <Panel title="sector mix">
+        <Panel title="Sectors">
           <SectorRows items={live} />
         </Panel>
       </div>
@@ -843,7 +846,6 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
   const max = Math.max(...rows.map((r) => Math.max(r.weight, r.prev_weight ?? 0)))
   return (
     <Grid
-      keyboard
       rank
       rows={rows}
       initial={['w', 'desc']}
@@ -852,11 +854,11 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
         { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, sort: (r) => r.ticker ?? '', width: '80px' },
         { key: 'n', label: 'company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge">{r.put_call}</span> : null}{own?.(r) ? <span className="badge">own fund</span> : null}</span>, sort: (r) => r.display_name ?? '' },
         { key: 's', label: 'sector', hideSm: true, render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
-        { key: 'w', label: '% of book', num: true, render: (r) => pct(r.weight), sort: (r) => r.weight },
-        { key: 'ws', label: 'last qtr → now', hideSm: true, render: (r) => <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />, title: 'weight last quarter (grey) and now' },
-        { key: 'c', label: 'activity', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
+        { key: 'w', label: 'Weight', num: true, render: (r) => pct(r.weight), sort: (r) => r.weight, title: 'Share of the portfolio' },
+        { key: 'ws', label: 'Last quarter vs now', hideSm: true, render: (r) => <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />, title: 'Share of the portfolio last quarter (grey) and now' },
+        { key: 'c', label: 'This quarter', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
         { key: 'sh', label: 'shares', num: true, hideSm: true, render: (r) => num(r.shares), sort: (r) => r.shares },
-        { key: 'p', label: 'reported price', num: true, hideSm: true, render: (r) => (r.shares && !r.put_call ? price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
+        { key: 'p', label: 'Price in filing', num: true, hideSm: true, render: (r) => (r.shares && !r.put_call ? price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
         { key: 'v', label: 'value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
       ]}
     />
@@ -865,7 +867,6 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
 function MovesGrid({ rows }: { rows: Holding[] }) {
   return (
     <Grid
-      keyboard
       rank
       rows={rows}
       href={stockHref}
@@ -873,10 +874,10 @@ function MovesGrid({ rows }: { rows: Holding[] }) {
         { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
         { key: 'n', label: 'company', link: true, render: (r) => <span className="trunc">{r.display_name}</span> },
         { key: 'c', label: 'activity', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} /> },
-        { key: 'sc', label: 'Δ shares', num: true, hideSm: true, render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
-        { key: 'd', label: 'Δ value', num: true, render: (r) => <span className={(r.value_delta ?? 0) > 0 ? 'pos' : 'neg'}>{signedUsd(r.value_delta)}</span>, sort: (r) => r.value_delta ?? 0 },
-        { key: 'pb', label: '% of book', num: true, render: (r) => pct(r.pct_of_book), sort: (r) => r.pct_of_book ?? 0, title: 'trade size as a share of the whole 13F book' },
-        { key: 'w', label: 'weight now', num: true, hideSm: true, render: (r) => pct(r.weight), sort: (r) => r.weight },
+        { key: 'sc', label: 'Shares changed', num: true, hideSm: true, render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
+        { key: 'd', label: 'Trade size', num: true, render: (r) => <span className={(r.value_delta ?? 0) > 0 ? 'pos' : 'neg'}>{signedUsd(r.value_delta)}</span>, sort: (r) => r.value_delta ?? 0 },
+        { key: 'pb', label: 'Of portfolio', num: true, render: (r) => pct(r.pct_of_book), sort: (r) => r.pct_of_book ?? 0, title: 'Trade size as a share of the whole portfolio' },
+        { key: 'w', label: 'Weight now', num: true, hideSm: true, render: (r) => pct(r.weight), sort: (r) => r.weight },
       ]}
     />
   )
@@ -941,7 +942,6 @@ export function Flows() {
       />
       <Panel title={`${num(list.length)} stocks`} right={<span className="dim hide-sm">Trade size = share change × filed price; a price move alone counts as 0</span>}>
         <Grid
-          keyboard
           rank
           limit={100}
           rows={list}
@@ -1084,7 +1084,6 @@ export function Consensus() {
       />
       <Panel title={`${num(list.length)} stocks`}>
         <Grid
-          keyboard
           rank
           limit={150}
           rows={list}
@@ -1150,13 +1149,12 @@ export function Filings() {
             </button>
           </div>
           <Panel title={`${list.length} filings`}>
-            <Grid keyboard rows={list} limit={150} href={(e) => (e.ticker && !ownVehicle(e) ? `/s/${e.ticker}` : null)} cols={eventCols(firms)} />
+            <Grid rows={list} limit={150} href={(e) => (e.ticker && !ownVehicle(e) ? `/s/${e.ticker}` : null)} cols={eventCols(firms)} />
           </Panel>
         </>
       ) : market && market.length ? (
         <Panel title="open-market insider trades · Form 4 codes P and S" right={<span className="dim hide-sm">officers, directors and 10% owners</span>}>
           <Grid<Insider>
-            keyboard
             limit={200}
             rows={market}
             href={(r) => (r.ticker ? `/s/${r.ticker}` : null)}
@@ -1319,10 +1317,9 @@ export function Stock({ ticker }: { ticker: string }) {
         ]}
       />
       <Panel title={STOCK_TAB[tab]}>
-        {tab === 'holders' && <Grid keyboard rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty="no roster fund holds it; count all tracked funds" />}
+        {tab === 'holders' && <Grid rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty="no roster fund holds it; count all tracked funds" />}
         {tab === 'activity' && (
           <Grid
-            keyboard
             rows={movers}
             href={fundHref}
             cols={[holderCols[0], holderCols[2], { key: 'd', label: 'Δ value', num: true, render: (h) => <span className={(h.delta_value ?? 0) >= 0 ? 'pos' : 'neg'}>{signedUsd(h.delta_value)}</span>, sort: (h) => h.delta_value ?? 0 }, holderCols[1], holderCols[5]]}
@@ -1495,12 +1492,16 @@ const when = (v: number | string | null | undefined) => {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 /** The member's plan in a sentence, with the tone of its status pill. */
-function planLine(m: { status: string; active: boolean; period_end?: number | string | null; cancel_at_period_end?: boolean }): { pill: string; tone: 'pos' | 'neg' | 'acc'; text: string } {
+function planLine(m: Member): { pill: string; tone: 'pos' | 'neg' | 'acc'; text: string } {
   const end = when(m.period_end)
+  const price = m.interval === 'yearly' ? `$${PRICE.yearly} a year` : `$${PRICE.monthly} a month`
   if (!m.active) return { pill: m.status === 'canceled' ? 'Canceled' : 'Inactive', tone: 'neg', text: 'Alerts are off. Start a new plan to turn them back on; what you follow is kept.' }
   if (m.cancel_at_period_end) return { pill: 'Ending', tone: 'neg', text: `Alerts stop on ${end || 'the end of this period'}. Resume any time in billing.` }
-  if (m.status === 'trialing') return { pill: 'Free trial', tone: 'acc', text: `Your free trial ends on ${end || 'its last day'}, then $${PRICE.monthly} a month unless you cancel.` }
-  return { pill: 'Active', tone: 'pos', text: end ? `Renews on ${end}.` : 'Your plan is active.' }
+  if (m.status === 'trialing')
+    return m.has_payment_method === false
+      ? { pill: 'Free trial', tone: 'acc', text: `Your free trial ends on ${end || 'its last day'}. Add a card in billing before then to keep alerts on at ${price}.` }
+      : { pill: 'Free trial', tone: 'acc', text: `Your free trial ends on ${end || 'its last day'}, then ${price} unless you cancel.` }
+  return { pill: 'Active', tone: 'pos', text: end ? `Renews on ${end} at ${price}.` : 'Your plan is active.' }
 }
 export function Account() {
   title('Account')

@@ -138,24 +138,24 @@ export function Stat({ label, value, sub, tone }: { label: string; value: ReactN
     </div>
   )
 }
-export function Tabs<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || (e.target as HTMLElement).closest('input,textarea,select')) return
-      const i = Number(e.key) - 1
-      if (i >= 0 && i < options.length) onChange(options[i][0])
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [options, onChange])
+export function Tabs<T extends string>({ value, options, onChange, label }: { value: T; options: [T, string][]; onChange: (v: T) => void; label?: string }) {
+  // Left and right arrows move between tabs, as screen-reader users expect of a tab list.
+  const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const i = options.findIndex((o) => o[0] === value)
+    const j = e.key === 'ArrowRight' ? (i + 1) % options.length : e.key === 'ArrowLeft' ? (i - 1 + options.length) % options.length : e.key === 'Home' ? 0 : e.key === 'End' ? options.length - 1 : -1
+    if (j < 0) return
+    e.preventDefault()
+    onChange(options[j][0])
+    ;(e.currentTarget.children[j] as HTMLElement | undefined)?.focus()
+  }
   return (
-    <div className="tabs" role="tablist">
-      {options.map(([k, label]) => {
+    <div className="tabs" role="tablist" aria-label={label} onKeyDown={onKey}>
+      {options.map(([k, text]) => {
         // "holdings 14" shows its count as a badge.
-        const m = label.match(/^(.*\S)\s+(\d[\d,]*)$/)
+        const m = text.match(/^(.*\S)\s+(\d[\d,]*)$/)
         return (
-          <button key={k} role="tab" aria-selected={value === k} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
-            {cap(m ? m[1] : label)}
+          <button key={k} role="tab" aria-selected={value === k} tabIndex={value === k ? 0 : -1} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
+            {cap(m ? m[1] : text)}
             {m && <span className="count">{m[2]}</span>}
           </button>
         )
@@ -179,7 +179,7 @@ export function ChangeTag({ change, share_change, prev_shares }: { change: strin
   )
 }
 
-// ---------- data grid: sortable, j/k + Enter keyboard navigation ----------
+// ---------- data grid: sortable, rows link to their page ----------
 export type Col<R> = {
   key: string
   label: ReactNode
@@ -192,7 +192,6 @@ export type Col<R> = {
   /** Wrap this cell in a real link to the row's href (keyboard, middle-click, copy link). */
   link?: boolean
 }
-let activeGrid: symbol | null = null
 export function Grid<R>({
   cols,
   rows,
@@ -201,7 +200,6 @@ export function Grid<R>({
   limit,
   rowClass,
   empty = 'no rows',
-  keyboard = false,
   rank = false,
 }: {
   cols: Col<R>[]
@@ -211,13 +209,10 @@ export function Grid<R>({
   limit?: number
   rowClass?: (r: R) => string
   empty?: string
-  keyboard?: boolean
   rank?: boolean
 }) {
   const [sort, setSort] = useState<[string, 'asc' | 'desc'] | undefined>(initial)
-  const [cur, setCur] = useState(-1)
   const [shown, setShown] = useState(limit ?? Infinity)
-  const id = useRef(Symbol('grid'))
   const body = useRef<HTMLTableSectionElement>(null)
   const wrap = useRef<HTMLDivElement>(null)
   const [cue, setCue] = useState(false)
@@ -244,29 +239,6 @@ export function Grid<R>({
     })
   }, [rows, sort, cols])
   const visible = sorted.slice(0, shown)
-
-  useEffect(() => {
-    if (!keyboard) return
-    activeGrid = id.current
-    const onKey = (e: KeyboardEvent) => {
-      if (activeGrid !== id.current || e.metaKey || e.ctrlKey || e.altKey) return
-      const t = e.target as HTMLElement
-      if (t.closest('input,textarea,select')) return
-      if (e.key === 'j' || e.key === 'k') {
-        e.preventDefault()
-        setCur((c) => Math.max(0, Math.min(visible.length - 1, c + (e.key === 'j' ? 1 : -1))))
-      } else if (e.key === 'Enter' && cur >= 0 && href) {
-        const to = href(visible[cur])
-        if (to) navigate(to)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [keyboard, visible, cur, href])
-  useEffect(() => {
-    if (cur < 0) return
-    body.current?.children[cur]?.scrollIntoView({ block: 'nearest' })
-  }, [cur])
 
   if (!rows.length) return <div className="empty dim">{empty}</div>
   return (
@@ -303,7 +275,7 @@ export function Grid<R>({
             return (
               <tr
                 key={i}
-                className={`${i === cur ? 'cur' : ''} ${to ? 'link' : ''} ${rowClass?.(r) ?? ''}`}
+                className={`${to ? 'link' : ''} ${rowClass?.(r) ?? ''}`}
                 onClick={(e) => {
                   if (!to || (e.target as HTMLElement).closest('a')) return
                   navigate(to)
