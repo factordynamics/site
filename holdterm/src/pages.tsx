@@ -489,7 +489,7 @@ function HomeBody() {
   const s = season()
   const seasonFiled = ms.filter((m) => m.quarter === s.q)
   // Before three funds have filed this season, lead with the previous quarter's filings instead.
-  const lead = seasonFiled.length >= 3 ? s.q : [...new Set(ms.map((m) => m.quarter))].sort().reverse().find((q) => q !== s.q) ?? s.q
+  const lead = leadQuarter(ms.map((m) => m.quarter))
   // Every fund's latest 13F, newest first; the trades panel uses the lead quarter only.
   const filers = useMemo(() => [...ms].sort((a, b) => b.filing_date.localeCompare(a.filing_date) || b.total_value - a.total_value).slice(0, 15), [ms])
   const need = useMemo(() => [...new Set([...filers, ...ms.filter((m) => m.quarter === lead)].map((m) => m.slug))], [filers, ms, lead])
@@ -1232,9 +1232,8 @@ export function Flows() {
   const books = useLoad(loadBooks, [])
   const [picked, setQ] = useState<string | null>(null)
   const [tab, setTab] = useState<ATab>('buyers')
-  const sq = season().q
-  const nb = (books.data ?? []).length
-  const q = picked ?? (nb && (books.data ?? []).filter((b) => b.quarter === sq).length * 2 >= nb ? sq : 'latest')
+  // Opens on the quarter the home page leads with; "Each fund's latest" is one chip away.
+  const q = picked ?? (books.data?.length ? leadQuarter(books.data.map((b) => b.quarter)) : 'latest')
   const quarters = useMemo(() => [...new Set((books.data ?? []).map((b) => b.quarter))].sort().reverse(), [books.data])
   // Flows are stock picks: ETFs, index and T-bill funds are left out.
   const rows = useMemo(() => (books.data ? (q === 'latest' ? aggregate(books.data) : aggregate(books.data.filter((b) => b.quarter === q), books.data)).rows.filter((r) => !r.fund) : []), [books.data, q])
@@ -1303,12 +1302,14 @@ export function Flows() {
       </div>
       <p className="dim small quarter-note">
         {q !== 'latest'
-          ? `${plural(fundsN, 'investor')} filed for ${quarterLabel(q)}.`
+          ? fundsN < books.data.length
+            ? `${num(fundsN)} of the ${num(books.data.length)} investors have filed for ${quarterLabel(q)}. “Each fund’s latest” adds the others’ earlier 13Fs.`
+            : `${plural(fundsN, 'investor')} filed for ${quarterLabel(q)}.`
           : tagQ
             ? `${num(fundsN)} investors: ${num(mix[0][1])} have filed for ${quarterLabel(tagQ)}, and the other ${num(fundsN - mix[0][1])} are shown with ${mix.length === 2 ? `their ${quarterLabel(mix[1][0])} 13F` : 'an earlier 13F'}.${leadTop?.buyers.length ? ` Among those ${num(mix[0][1])}, the most bought is ${aggName(leadTop)}, by ${num(leadTop.buyers.length)}.` : ''}`
             : `${plural(fundsN, 'investor')}, each with its latest 13F.`}
       </p>
-      <FlowsStats rows={rows} q={q} n={fundsN} />
+      <FlowsStats rows={rows} q={q} n={fundsN} mixed={!!tagQ} />
       <Tabs<ATab>
         value={tab}
         onChange={setTab}
@@ -1375,7 +1376,13 @@ const aggName = (r: Agg) => `${aggCo(r)}${r.ticker ? ` (${r.label ?? r.ticker})`
 /** A summary card's answer is the company, linked to its page; the ticker leads the line below it (tkLine), so the
  * cards read "Alphabet / GOOGL+GOOG · bought by 27 of 183" rather than opening on a ticker. */
 const CoValue = ({ r }: { r: Agg }) => (r.ticker ? <A to={stockHref(r)!} className="tk stat-co" title={`${aggCo(r)} (${r.label ?? r.ticker})`}>{aggCo(r)}</A> : <span className="stat-co">{aggCo(r)}</span>)
-const tkLine = (r: Agg, rest: string) => (r.ticker ? `${r.label ?? r.ticker} · ${rest}` : cap(rest))
+const tkLine = (r: Agg, rest: string) => (r.ticker ? `${(r.label ?? r.ticker).split('+').join(' and ').replace(/ and (?=.* and )/g, ', ')} · ${rest}` : cap(rest))
+/** The quarter the home page leads with and Buys & sells opens on, so the two never answer "most bought" from different
+ * filings: this 13F season's quarter once three investors have filed for it, else the quarter before. */
+export function leadQuarter(qs: string[]) {
+  const sq = season().q
+  return qs.filter((q) => q === sq).length >= 3 ? sq : ([...new Set(qs)].sort().reverse().find((q) => q !== sq) ?? sq)
+}
 /** The most bought and most sold stock among \`rows\` (an aggregate over \`n\` investors) and how to say each. The home page and
  * Buys & sells both use it, so they always name the same stock with the same count and words. Ties on the count go to
  * the bigger trade, as in the tables' own order (sell is negative). */
@@ -1389,13 +1396,15 @@ export function crowdPicks(rows: Agg[], n: number) {
     bought: bought?.buyers.length ? bought : undefined,
     sold: sold?.sellers.length ? sold : undefined,
     // Counts say "of how many", so a quoted card can't read as everyone, and selling says whether anyone sold out.
-    boughtLine: (r: Agg) => tkLine(r, `bought by ${num(r.buyers.length)} of ${num(n)}${r.newBuyers ? `, ${num(r.newBuyers)} new` : ''}`),
+    // The most buyers can still be net selling (and the most sellers net buying): say so, or the card next to it
+    // ("Biggest net sale") reads as a contradiction.
+    boughtLine: (r: Agg) => tkLine(r, `bought by ${num(r.buyers.length)} of ${num(n)}${r.newBuyers ? `, ${num(r.newBuyers)} new` : ''}${r.net < 0 ? '; more money out than in' : ''}`),
     soldLine: (r: Agg) =>
-      tkLine(r, exits(r) ? `sold by ${num(r.sellers.length)} of ${num(n)}: ${num(r.sellers.length - exits(r))} trimmed, ${num(exits(r))} sold out` : `trimmed by ${num(r.sellers.length)} of ${num(n)}, none sold out`),
+      tkLine(r, `${exits(r) ? `sold by ${num(r.sellers.length)} of ${num(n)}: ${num(r.sellers.length - exits(r))} trimmed, ${num(exits(r))} sold out` : `trimmed by ${num(r.sellers.length)} of ${num(n)}, none sold out`}${r.net > 0 ? '; more money in than out' : ''}`),
   }
 }
 /** The quarter's four answers as cards, like the home page's: most investors buying and selling, most money in and out. */
-function FlowsStats({ rows, q, n }: { rows: Agg[]; q: string; n: number }) {
+function FlowsStats({ rows, q, n, mixed }: { rows: Agg[]; q: string; n: number; mixed?: boolean }) {
   const top = (cmp: (a: Agg, b: Agg) => number) => [...rows].sort(cmp)[0] as Agg | undefined
   const { bought: buyers, sold: sellers, boughtLine: bought, soldLine: sold } = crowdPicks(rows, n)
   const netBuy = top((a, b) => b.net - a.net)
@@ -1408,7 +1417,8 @@ function FlowsStats({ rows, q, n }: { rows: Agg[]; q: string; n: number }) {
   // A net figure that one investor makes up most of says so, so "+$2.0B into NVIDIA" isn't read as a crowd.
   const net = (r: Agg) => {
     const lead = [...(r.net > 0 ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0]
-    const one = lead && Math.abs(lead.delta) > Math.abs(r.net) / 2 ? `, ${shortFirm(lead.manager)} alone ${signedUsd(lead.delta)}` : ''
+    // When the view mixes quarters, the one investor's trade says which 13F it is from.
+    const one = lead && Math.abs(lead.delta) > Math.abs(r.net) / 2 ? `, ${shortFirm(lead.manager)} alone ${signedUsd(lead.delta)}${mixed ? ` in ${quarterLabel(lead.quarter)}` : ''}` : ''
     return tkLine(r, `${signedUsd(r.net)} net${one}`)
   }
   return (
