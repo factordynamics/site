@@ -1119,7 +1119,7 @@ describe('copybook api', () => {
       if (String(u) === `${SITE}d/recap/2026Q3.json`)
         return Response.json({
           filing: [{ slug: 'irving-kahn', filing_date: day }, { slug: 'matthew-mclennan', filing_date: day }, { slug: 'bill-ackman', filing_date: '2026-11-03' }],
-          biggest: [{ slug: 'bill-ackman', manager: 'Bill Ackman', ticker: 'UBER', change: 'new', delta_value: 2e9 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'CHRW', change: 'exited', delta_value: -686e6 }],
+          biggest: [{ slug: 'bill-ackman', manager: 'Bill Ackman', ticker: 'UBER', change: 'new', delta_value: 2e9 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'CHRW', change: 'exited', delta_value: -686e6 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'EXPD', change: 'exited', delta_value: -329.4e6 }, { slug: 'irving-kahn', manager: 'Irving Kahn', ticker: 'TRIM', change: 'trimmed', delta_value: -8e6 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'NVR', change: 'new', delta_value: 400.1e6 }],
         });
       if (String(u) === 'https://mg.test/v3/factordynamics.com/messages') {
         mg.push(new URLSearchParams(String(init?.body)));
@@ -1167,7 +1167,7 @@ describe('copybook api', () => {
     mg.length = 0;
     sent = [];
     const r = await runEmail2(env, now);
-    expect(r).toMatchObject({ sent: 10, filed_today: 2, biggest: 1 });
+    expect(r).toMatchObject({ sent: 10, filed_today: 2, biggest: 3 });
     expect(mg.map((b) => b.get('to')).sort()).toEqual(Array.from({ length: 10 }, (_, i) => `reader${i}@reader.test`));
     expect(sent).toHaveLength(0);
     const k = mg.find((b) => b.get('to') === 'reader0@reader.test')!;
@@ -1176,7 +1176,8 @@ describe('copybook api', () => {
     expect(text).toMatch(/Your follows that filed today:\n  Irving Kahn, Q3 13F: Trimmed TRIM −\$8\.0M; Added ADDS \+\$5\.0M; New NEWB \+\$4\.0M\n/);
     expect(text).not.toContain('GONE');
     expect(text).toContain(`f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows`);
-    expect(text).toContain("The day's biggest moves:\n  Matthew McLennan: sold out of CHRW −$686.0M\n");
+    // Largest first, at most 2 per manager: McLennan's third (EXPD) gives way to Kahn's.
+    expect(text).toContain("The day's biggest moves:\n  Matthew McLennan: sold out of CHRW −$686.0M\n  Matthew McLennan: new position in NVR +$400.1M\n  Irving Kahn: trimmed TRIM −$8.0M\n");
     expect(text).not.toContain('UBER');
     expect(text).toContain('pricing/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-paid&client_reference_id=email_e2-paid');
     expect(text).toMatch(/You get this because you signed up for the free Copybook weekly\. Unsubscribe: \S+[\s\S]*1 Test St, Testville$/);

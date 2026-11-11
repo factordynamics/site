@@ -678,7 +678,8 @@ export async function runWeeklyNames(env: Env, now: number, only?: string[]): Pr
     const mine = forMember({ ...raw, alerts: raw.alerts === 'off' ? f.investors : raw.alerts }, f, filings, events, meta);
     mails.push({ ...weeklyNamesMail(env, raw.email, weekOf, mine.filings, mine.events, f, isPaused(raw, now) ? raw.paused_until! : null), test: !!raw.test || testAddress(raw.email) });
   }
-  const status = await sendMail(env, mails, { tier: 'low' });
+  // An operator's preview goes now; the real send is low priority (the weekend budget).
+  const status = await sendMail(env, mails, only ? {} : { tier: 'low' });
   if (!only && (status === 'none' || status.split(',').every((s) => s === '200'))) {
     await env.DB.put('names-weekly:last', week);
     // The front end shows the digest promise once the first real send went out.
