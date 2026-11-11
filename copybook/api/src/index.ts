@@ -568,7 +568,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const page = (clean(b.page, 100) ?? '/').split('?')[0];
     const src = clean(b.utm_source, 60) ?? 'direct';
     const post = `${src}|${clean(b.utm_content, 60) ?? '-'}`;
-    const key = `track:${new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10)}`;
+    // Load tests and our own checks (utm_source=opscheck) count apart, so no funnel figure (pages, sources, hours)
+    // ever includes them; they still do the same reads and writes as a real visit.
+    const ops = src === 'opscheck' ? 'ops' : '';
+    const key = `track${ops}:${new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10)}`;
     const d = JSON.parse((await env.DB.get(key)) ?? '{}') as Record<string, Record<string, Record<string, number>>>;
     const byPage = ((d[kind] ??= {}).page ??= {});
     const bySrc = (d[kind].source ??= {});
@@ -583,7 +586,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     await env.DB.put(key, JSON.stringify(d), { expirationTtl: 400 * 86400 });
     // By UTC hour too (kind x utm_source|utm_content), kept 30 days, so a read-out can tell before a post from after it.
     const at = new Date().toISOString();
-    const hk = `trackh:${at.slice(0, 10)}`;
+    const hk = `track${ops}h:${at.slice(0, 10)}`;
     const hd = JSON.parse((await env.DB.get(hk)) ?? '{}') as Record<string, Record<string, Record<string, number>>>;
     const hb = ((hd[at.slice(11, 13)] ??= {})[kind] ??= {});
     hb[uk] = (hb[uk] ?? 0) + 1;

@@ -2148,6 +2148,8 @@ describe('copybook api', () => {
     const track = (b: Record<string, unknown>) => handleRequest(new Request('https://api.test/track', { method: 'POST', body: JSON.stringify(b), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': '9.9.9.9' } }), env);
     for (const b of [{ kind: 'visit', page: '/investors/irving-kahn/', utm_source: 'x', utm_content: 'kahn-watch' }, { kind: 'visit', page: '/season/', utm_source: 'x', utm_content: 'seed-season' }, { kind: 'visit', page: '/season/', utm_source: 'x', utm_content: 'seed-season' }, { kind: 'trial_click', page: '/pricing/', utm_source: null }])
       expect(await (await track(b)).json()).toEqual({ ok: true, counted: true });
+    // A load test's or our own check's calls (utm_source=opscheck) are kept apart: in no page, source, post or hour count.
+    for (const kind of ['visit', 'signup_view']) await track({ kind, page: '/season/', utm_source: 'opscheck', utm_content: 'load' });
     const ops = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
     expect(ops.track_by_utm).toEqual({ visit: { 'x|kahn-watch': 1, 'x|seed-season': 2 }, trial_click: { 'direct|-': 1 } });
     expect(Object.values(ops.track)[0]).toMatchObject({ visit: { page: { '/season/': 2 }, source: { x: 3 } } });
