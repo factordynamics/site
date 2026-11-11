@@ -223,7 +223,7 @@ export function Pricing() {
                 <p className={`relative min-h-[1.5em] text-[13.5px] font-semibold ${dark ? 'text-[#7fe0a6]' : 'text-[#126b3c]'}`}>{referredDeal(tier.id, cycle)}</p>
               ) : (
                 <p className={`relative text-[12.5px] ${cycle === 'yearly' ? 'min-h-[53px]' : 'min-h-[1.5em]'} ${dark ? 'text-white/60' : 'text-ink-3'}`}>
-                  {plan ? (cycle === 'yearly' ? `About $${Math.round(plan.yearly / 12)} a month · save ${save}%` : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
+                  {plan ? (cycle === 'yearly' ? `About $${Math.round(plan.yearly / 12)} a month · save ${save}% vs monthly` : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
                   {plan && cycle === 'yearly' && <span className="block text-[11.5px]">Prepaid and protected: pro-rata refund if we ever discontinue the plan.</span>}
                 </p>
               )}
