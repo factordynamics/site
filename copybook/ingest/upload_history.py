@@ -17,12 +17,14 @@ A manifest of SHA-256 hashes (COPYBOOK_H_MANIFEST) records what the API's store 
 TARGET: a manifest written for another store is discarded, so everything is sent again once.
 Each run sends only what changed, curated h/ first, then hl/, then fb/, then the rest, as tar
 bundles (PUT /ingest/bundle) one at a time, at most 100 files or 20 MB each, never one request per
-file. A failed bundle is retried once after 30 s; a second failure stops the run (non-zero exit),
+file. Bundles are gzipped (content-encoding: gzip, ~4x fewer bytes through gene's slow Funnel relay); an API
+that answers 400 to gzip gets plain tars for the rest of the run. A failed bundle is retried once after 30 s; a second failure stops the run (non-zero exit),
 as does a refused required key. UPLOAD_BUDGET_S stops cleanly; the next run continues.
 """
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import io
 import json
@@ -52,7 +54,9 @@ KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|i
 # and the rest of that kind are skipped until the next run.
 OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/")
 BUNDLE_ENTRIES = 100  # the self-hosted API's rate limit: 100 entries or 20 MB per bundle, one at a time
-BUNDLE_BYTES = 5_000_000  # a 19 MB bundle hit Cloudflare's 100 s tunnel timeout (HTTP 524)
+BUNDLE_BYTES = 5_000_000  # a 19 MB bundle hit Cloudflare's 100 s tunnel timeout (HTTP 524); plain tars only
+BUNDLE_RAW_BYTES = 20_000_000  # the API's limit per bundle, uncompressed; gzipped it is ~5 MB on the wire
+GZIP = [os.environ.get("COPYBOOK_UPLOAD_GZIP", "1") != "0"]  # cleared when the API refuses a gzipped bundle
 ORDER = ("h/", "hl/", "fb/")  # sent first, in this order
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
@@ -124,7 +128,8 @@ def main() -> int:
     rank = lambda key: next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
     todo.sort(key=lambda t: (rank(t[0]), t[0]))
     print(f"upload: {len(todo)} new or changed of {len(files)} files to {API}, one bundle at a time of up to "
-          f"{BUNDLE_ENTRIES} files / {BUNDLE_BYTES / 1e6:.0f} MB", flush=True)
+          f"{BUNDLE_ENTRIES} files / {(BUNDLE_RAW_BYTES if GZIP[0] else BUNDLE_BYTES) / 1e6:.0f} MB"
+          f"{' before gzip' if GZIP[0] else ''}", flush=True)
     sent = 0
     try:
         for batch in bundles(todo):
@@ -154,7 +159,8 @@ def bundles(todo: list[tuple[str, Path, str]]):
     batch, size = [], 0
     for item in todo:
         n = item[1].stat().st_size + 1024
-        if batch and (len(batch) >= BUNDLE_ENTRIES or size + n > BUNDLE_BYTES):
+        cap = BUNDLE_RAW_BYTES if GZIP[0] else BUNDLE_BYTES
+        if batch and (len(batch) >= BUNDLE_ENTRIES or size + n > cap):
             yield batch
             batch, size = [], 0
         batch.append(item)
@@ -172,12 +178,16 @@ def put_bundle(batch: list[tuple[str, Path, str]], token: Token) -> tuple[set[st
             info = tarfile.TarInfo(key)
             info.size, info.mtime = len(body), 0
             tar.addfile(info, io.BytesIO(body))
-    body = buf.getvalue()
+    raw = buf.getvalue()
     last, failures = "", 0
-    for attempt in range(3):
-        req = Request(f"{API}/ingest/bundle", data=body, method="PUT", headers={
-            "Authorization": "Bearer " + token.get(), "Content-Type": "application/x-tar", "User-Agent": USER_AGENT,
-            "x-copybook-build-id": BUILD.get("build_id") or "", "x-copybook-built-at": BUILD.get("data_built_at") or ""})
+    for attempt in range(4):
+        zipped = GZIP[0]
+        body = gzip.compress(raw, 6) if zipped else raw
+        headers = {"Authorization": "Bearer " + token.get(), "Content-Type": "application/x-tar", "User-Agent": USER_AGENT,
+                   "x-copybook-build-id": BUILD.get("build_id") or "", "x-copybook-built-at": BUILD.get("data_built_at") or ""}
+        if zipped:
+            headers["Content-Encoding"] = "gzip"
+        req = Request(f"{API}/ingest/bundle", data=body, method="PUT", headers=headers)
         try:
             with urlopen(req, timeout=300) as resp:
                 out = json.loads(resp.read())
@@ -188,6 +198,10 @@ def put_bundle(batch: list[tuple[str, Path, str]], token: Token) -> tuple[set[st
             if e.code == 401 and attempt == 0:
                 token.value = ""  # a stale token: refresh once, not counted as the retry
                 continue
+            if e.code == 400 and zipped:  # an API without gzip support: plain tars from now on, not counted
+                print(f"::warning::API refused a gzipped bundle ({last}); sending plain tars", flush=True)
+                GZIP[0] = False
+                continue
             if e.code < 500 and e.code != 429:
                 break
         except (URLError, TimeoutError, OSError) as e:
@@ -196,7 +210,7 @@ def put_bundle(batch: list[tuple[str, Path, str]], token: Token) -> tuple[set[st
         if failures > 1:
             break
         time.sleep(30)  # one retry after 30 s, then the run stops
-    raise RuntimeError(f"bundle of {len(batch)} files ({len(body) / 1e6:.1f} MB) failed: {last}")
+    raise RuntimeError(f"bundle of {len(batch)} files ({len(raw) / 1e6:.1f} MB) failed: {last}")
 
 
 if __name__ == "__main__":

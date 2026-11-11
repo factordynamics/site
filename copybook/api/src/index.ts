@@ -728,12 +728,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return obj ? new Response(obj.body, { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }) : json({ updated_at: null, ciks: [] }, 200, {});
   }
 
-  // Many uploads in one request: PUT /ingest/bundle (an uncompressed tar, each entry named by its R2 key) or
+  // Many uploads in one request: PUT /ingest/bundle (a tar, each entry named by its R2 key; gzipped when sent with
+  // content-encoding: gzip, which cuts the bytes through gene's slow Funnel relay about 4x) or
   // POST /ingest-batch (a JSON manifest line, then the objects' bytes back to back). Each request counts against
   // the Workers plan's quota, so a full rebuild is ~50 of these, not ~25,000 single PUTs. Keys that fail the
   // allowlist are refused and listed; the rest are written.
   if ((req.method === 'PUT' && path === '/ingest/bundle') || (req.method === 'POST' && path === '/ingest-batch')) {
-    const buf = new Uint8Array(await req.arrayBuffer());
+    let buf = new Uint8Array(await req.arrayBuffer());
+    // A runtime that already decoded the body leaves no gzip magic, so check the bytes, not only the header.
+    if (/gzip/i.test(req.headers.get('content-encoding') ?? '') && buf[0] === 0x1f && buf[1] === 0x8b) {
+      try {
+        buf = new Uint8Array(await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+      } catch {
+        return json({ ok: false, error: 'bad gzip body' }, 400, {});
+      }
+    }
     if (buf.length > BATCH_MAX_BYTES) return json({ ok: false, error: `bundle over ${BATCH_MAX_BYTES} bytes; split it` }, 413, {});
     const parsed = path === '/ingest/bundle' ? untar(buf) : unmanifest(buf);
     if (typeof parsed === 'string') return json({ ok: false, error: parsed }, 400, {});

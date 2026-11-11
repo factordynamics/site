@@ -516,6 +516,10 @@ describe('copybook api', () => {
     const tr = await handleRequest(new Request('https://api.test/ingest/bundle', { method: 'PUT', body: tar([['hl/EEEEEE.json', big], ['index.json', '{}'], ['changes/2026Q3.json', '{"q":3}']]), headers: { authorization: `Bearer ${tok}`, 'x-copybook-build-id': 'gust-tar', 'x-copybook-built-at': '2026-11-09T06:00:00Z' } }), env);
     expect([tr.status, await tr.json()]).toMatchObject([200, { ok: true, written: 2, refused: ['index.json'] }]);
     expect([new TextDecoder().decode(hist.m.get('hl/EEEEEE.json')), new TextDecoder().decode(hist.m.get('changes/2026Q3.json')), hist.meta.get('changes/2026Q3.json')]).toEqual([big, '{"q":3}', { build_id: 'gust-tar', built_at: '2026-11-09T06:00:00Z' }]);
+    // The same tar gzipped (content-encoding: gzip) is unpacked before the entries are written.
+    const gz = new Uint8Array(await new Response(new Blob([tar([['hl/FFFFFF.json', big]])]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+    const tg = await handleRequest(new Request('https://api.test/ingest/bundle', { method: 'PUT', body: gz, headers: { authorization: `Bearer ${tok}`, 'content-encoding': 'gzip' } }), env);
+    expect([tg.status, await tg.json(), new TextDecoder().decode(hist.m.get('hl/FFFFFF.json'))]).toMatchObject([200, { ok: true, written: 1 }, big]);
     // Single uploads are capped per minute (per location, in the Cache API): the 121st is refused before any work.
     const cache = new Map<string, string>();
     (globalThis as { caches?: unknown }).caches = { default: { match: async (k: string) => (cache.has(k) ? new Response(cache.get(k)) : undefined), put: async (k: string, r: Response) => void cache.set(k, await r.text()) } };
