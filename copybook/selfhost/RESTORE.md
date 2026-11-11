@@ -10,7 +10,7 @@ nightly backup has a manifest (`backups/YYYY-MM-DD.manifest.json`: plaintext and
 weekly without the key by `backup-verify.sh` and monthly with it by `restore-check.sh`;
 `setup-service-user.sh` (run once with sudo) moves the service, its state and secrets to a dedicated `copybook` user.
 
-## Option A: fail members over to the Cloudflare Worker (minutes)
+## Option A: fail members over to the Cloudflare Worker (rehearsed Nov 11: serving in under 25 s)
 
 Automatic since Nov 11: Cloudflare's minute cron does steps 0–1 itself when both of gene's front doors (api.json's base
 and Funnel) fail /health on 2 checks in a row, and moves members back after 3 healthy minutes
@@ -31,6 +31,20 @@ sessions and follows are there up to about a minute before gene went down. Limit
    (same signing secret).
 
 Any Amp thread with Andreas's personal secrets can do this, including an orb.
+
+Rehearsed Wed Nov 11, 16:01–16:08 UTC, by hand with `failover-a.sh`, gene left up, the deployer paused:
+- `to-worker` wrote api.json at 16:01:07 (the PUT finished 16:01:21). By 16:01:31, the first check, workers.dev's
+  `/health?probe=1` answered from the Worker itself (`api_host cloudflare`, not proxied).
+- `verify.mjs` against the Worker: 16 of 17 pass (sign-in, /me, CORS, forged session, login, checkout return, history,
+  csv-link on the public base, CSV, single use, a 32 MB CSV, follows, signed webhook replay and a bad signature). The
+  Pro API-key check failed with 401 on gene too, so it was not the failover.
+- `back` wrote api.json at 16:07:50; by 16:07:53 workers.dev proxied to gene again. Members were on the Worker 6 min 43 s.
+- Stripe: a no-op update of the webhook endpoint succeeded (16:06:32), so step 2's call works. It wasn't repointed,
+  because gene stayed up.
+- Found: while failed over, the Worker didn't honour deletions. A key deleted on gene before the flip, and a seat
+  removed on the Worker during it, both kept working there; gene rejected the seat within 27 s of fail-back. (gene's
+  deletions leave the old `sync/gene/` copy, and the Worker's read falls back to it.) Payments' fix is 834d8ff; until it
+  is live, keep a failover short, because revocations wait for fail-back.
 
 ## Option B: another machine (rehearsed: 7 min scripted, about 30–60 min end to end)
 
