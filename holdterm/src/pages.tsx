@@ -925,7 +925,7 @@ export function Fund({ slug }: { slug: string }) {
         label={`${book.firm} portfolio`}
       />
       {tab === 'filings' && valuePanel}
-      <Panel title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Price in filing = reported value ÷ shares</span> : tab === 'options' ? <span className="dim hide-sm">Value of the underlying shares; not counted in the portfolio</span> : tab === 'notes' ? <span className="dim hide-sm">As filed; not counted in the stock portfolio</span> : undefined}>
+      <Panel className="fund-table" title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Prices come from the filing itself, not the market</span> : tab === 'options' ? <span className="dim hide-sm">Value of the underlying shares; not counted in the portfolio</span> : tab === 'notes' ? <span className="dim hide-sm">As filed; not counted in the stock portfolio</span> : undefined}>
         {tab === 'holdings' && <HoldingsGrid rows={live} own={(x) => ownHolding(book, x)} />}
         {tab === 'buys' && <MovesGrid rows={buys} empty={movesEmpty(book, 'bought')} />}
         {tab === 'sells' && <MovesGrid rows={sells} empty={movesEmpty(book, 'sold')} />}
@@ -934,7 +934,7 @@ export function Fund({ slug }: { slug: string }) {
             rows={[...opts].sort((a, c) => c.value - a.value)}
             href={stockHref}
             cols={[
-              { key: 't', label: 'Ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
+              { key: 't', label: 'Ticker', render: holdingTicker, width: '80px' },
               { key: 'n', label: 'Company', hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
               { key: 'pc', label: 'Call or put', render: (r) => <span className={`tag ${r.put_call === 'CALL' ? 'pos' : 'neg'}`}>{r.put_call === 'CALL' ? 'Call' : 'Put'}</span> },
               { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (r) => num(r.shares) },
@@ -1026,7 +1026,14 @@ function noteAmount(h: Holding) {
   return p ? `${usd(p)} principal` : '—'
 }
 const plural = (n: number, one: string, many = one + 's') => `${num(n)} ${n === 1 ? one : many}`
-const nameOf = (h: Holding) => issuerName(h.display_name || h.issuer).replace(/\s+(class|cl\.?)\s+[a-z]\b.*$/i, '')
+/** A fund table's ticker cell; phones hide the Company column, so the company's name goes on a second line. */
+const holdingTicker = (r: Holding) => (
+  <>
+    <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />
+    {r.ticker && <span className="row-sub stock-sub show-sm">{r.display_name || issuerName(r.issuer)}</span>}
+  </>
+)
+const nameOf = (h: Holding) => issuerName(h.display_name || h.issuer).replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')
 /** "a, b and c" */
 const listing = (xs: (string | false | 0)[]) => xs.filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')
 /** The fund's latest 13F in two or three plain sentences, for readers who don't parse stat cards. */
@@ -1047,7 +1054,7 @@ function FundSummary({ book, live, buys, sells, top10 }: { book: Book; live: Hol
         <>This is its first 13F on file, so there are no trades to compare.</>
       ) : buys.length || sells.length ? (
         <>
-          {listing([buys[0] && `The biggest buy was ${nameOf(buys[0])}`, sells[0] && (buys[0] ? `the biggest sale ${nameOf(sells[0])}` : `The biggest sale was ${nameOf(sells[0])}`)])}.
+          {listing([buys[0] && `The biggest buy was ${nameOf(buys[0])}`, sells[0] && (buys[0] ? `the biggest sale was ${nameOf(sells[0])}` : `The biggest sale was ${nameOf(sells[0])}`)])}.
         </>
       ) : (
         <>It made no trades over the quarter.</>
@@ -1079,7 +1086,7 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
       initial={['w', 'desc']}
       href={stockHref}
       cols={[
-        { key: 't', label: 'Ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, sort: (r) => r.ticker ?? '', width: '80px' },
+        { key: 't', label: 'Ticker', render: holdingTicker, sort: (r) => r.ticker ?? '', width: '80px' },
         { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge">{r.put_call}</span> : null}{own?.(r) ? <span className="badge">own fund</span> : null}</span>, sort: (r) => r.display_name ?? '' },
         { key: 's', label: 'Sector', hideSm: true, hide: 'lg', render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
         { key: 'w', label: 'Weight', num: true, render: (r) => pct(r.weight), sort: (r) => r.weight, title: 'Share of the portfolio' },
@@ -1107,7 +1114,7 @@ function MovesGrid({ rows, empty }: { rows: Holding[]; empty?: ReactNode }) {
       rows={rows}
       href={stockHref}
       cols={[
-        { key: 't', label: 'Ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
+        { key: 't', label: 'Ticker', render: holdingTicker, width: '80px' },
         { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
         { key: 'c', label: 'What changed', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} /> },
         { key: 'sc', label: 'Shares changed', num: true, hideSm: true, hide: 'md', render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
@@ -1223,7 +1230,7 @@ export function Flows() {
 }
 
 /** A stock in running text: "Alphabet (GOOGL)". */
-const aggName = (r: Agg) => `${r.name.replace(/\s+(class|cl\.?)\s+[a-z]\b.*$/i, '')}${r.ticker ? ` (${r.label ?? r.ticker})` : ''}`
+const aggName = (r: Agg) => `${r.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')}${r.ticker ? ` (${r.label ?? r.ticker})` : ''}`
 function FlowsSummary({ rows, funds, q }: { rows: Agg[]; funds: number; q: string }) {
   const most = (f: (r: Agg) => number) => [...rows].sort((a, b) => f(b) - f(a))[0]
   const buyers = most((r) => r.buyers.length)
