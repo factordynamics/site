@@ -282,6 +282,9 @@ async function issuerCiks(env: Env, tickers: string[]): Promise<Record<string, {
  * Tickers' events, refreshing those older than `freshMs` with at most `budget` SEC requests (a request
  * spends its own; the scheduled precompute passes what the minute left). The rest come back in `pending`.
  */
+/** Tickers whose EDGAR feeds a request is reading now (one read per ticker at a time, across requests). */
+const READING = new Set<string>();
+
 export async function stockEvents(env: Env, tickers: string[], limit: number, opts: { budget?: number; freshMs?: number; keep?: (e: StockEvent) => boolean; deadlineMs?: number } = {}) {
   // A request reads EDGAR only until its deadline: the rest is served from the cache and listed in `pending`
   // (the cron refreshes owned and watched names on its own).
@@ -316,17 +319,35 @@ export async function stockEvents(env: Env, tickers: string[], limit: number, op
       pending.push(t);
       continue;
     }
+    // A read another request started is still going: served from the cache, listed as pending.
+    if (left !== Infinity && READING.has(t)) {
+      pending.push(t);
+      continue;
+    }
     // Under a deadline, refreshed on a copy: a read cut off mid-way can't change what this response serves.
     const c = left === Infinity ? cache.get(t)! : (structuredClone(cache.get(t)!) as Cached);
     const before = JSON.stringify(c);
-    const done = await (left === Infinity ? refresh(t, c) : Promise.race([refresh(t, c), new Promise<'late'>((r) => setTimeout(() => r('late'), left))])).catch(() => false);
+    const save = async (ok: boolean) => {
+      if (ok !== false && JSON.stringify(c) !== before) await env.HIST.put(`tev/${t}.json`, JSON.stringify(c));
+      return ok;
+    };
+    const read = refresh(t, c).catch(() => false);
+    if (left === Infinity) {
+      cache.set(t, c);
+      if (!(await save(await read))) pending.push(t);
+      continue;
+    }
+    READING.add(t);
+    // A read past the deadline finishes after the response and is saved, so the next call serves it (the analyst: a
+    // late read was thrown away, so polls repeated it and slow tickers stayed pending). gene's process keeps running.
+    const kept = read.then(save).catch(() => false).finally(() => READING.delete(t));
+    const done = await Promise.race([kept, new Promise<'late'>((r) => setTimeout(() => r('late'), left))]);
     if (done === 'late') {
       pending.push(t);
       continue;
     }
     cache.set(t, c);
     if (!done) pending.push(t);
-    if (JSON.stringify(c) !== before) await env.HIST.put(`tev/${t}.json`, JSON.stringify(c));
   }
   const data: Record<string, { cik: string; checked_at: string | null; from: Cached['from'] | null; window: string | null; events: StockEvent[] }> = {};
   for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, from: c.from ?? null, window: c.window ?? null, events: (opts.keep ? events(c).filter(opts.keep) : events(c)).slice(0, limit) };

@@ -2901,9 +2901,26 @@ describe('copybook api', () => {
     expect(Number(JSON.parse((await env.DB.get('issuers:checked'))!).CVI)).toBeGreaterThan(Date.now() - 60_000);
     expect(v1.coverage['BRK.B']).toMatchObject({ issuer_cik: '0001067983', form4_from: '2026-07-15T20:05:00Z' });
     expect(v1.pending).toEqual([]);
-  });
+    // A slow EDGAR (the analyst: 4 of 6 polls were 503 busy): the read passes the call's deadline, so the call answers
+    // at once from the cache with the ticker pending; the read finishes after the response and is saved, so the next
+    // call, EDGAR still slow, serves it with nothing pending instead of reading it again.
+    hist.m.delete('tev/CVI.json');
+    const fast = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).includes('sec.gov') && (await new Promise((r) => setTimeout(r, 1700))), fast(u, init)));
+    const ev = async () => {
+      const t = Date.now();
+      const r = await handleRequest(new Request('https://api.test/v1/events?tickers=CVI&form=13d', { headers: { authorization: `Bearer ${key}` } }), env);
+      return { status: r.status, ms: Date.now() - t, pending: (await r.json()).pending };
+    };
+    const slow1 = await ev();
+    expect([slow1.status, slow1.pending, slow1.ms < 2600]).toEqual([200, ['CVI'], true]);
+    for (let i = 0; i < 100 && !hist.m.get('tev/CVI.json'); i++) await new Promise((r) => setTimeout(r, 100));
+    const slow2 = await ev();
+    vi.stubGlobal('fetch', fast);
+    expect([slow2.status, slow2.pending, slow2.ms < 1000]).toEqual([200, [], true]);
+  }, 30_000);
 
-  it('referrals: a code per paying member; checkout applies a month free server-side; the referrer is credited a month once, after the first paid invoice', async () => {
+  it('referrals: a code per paying member; checkout applies a month free server-side; the referrer is credited a month once, after the slow1 paid invoice', async () => {
     stripeObjects['checkout/sessions/cs_test_rr'] = { id: 'cs_test_rr', status: 'complete', created: now(), subscription: 'sub_rr', customer_details: { email: 'rr@example.com' } };
     stripeObjects['subscriptions/sub_rr'] = sub('sub_rr', 'cus_rr', 'active');
     const rr = ((await (await fullCheckout('cs_test_rr')).json()) as { token: string }).token;
