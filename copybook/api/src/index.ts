@@ -243,9 +243,6 @@ function spread(xs: number[]) {
 /** From then (the deploy of 0bf5b8f) a 13F is timed by the email that carries its moves. Filings accepted earlier are left out of the figures. */
 const MOVES_FIX_AT = '2026-11-11T00:01:00Z';
 
-/** A row re-timed from a day store, whose send time was the minute's start (up to 60 s before the real send): stamped on a whole minute. */
-const approx = (l: LatencyRow) => /T\d\d:\d\d:00\.000Z$/.test(l.sent);
-
 export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = []) {
   const { season, from } = seasonOf(now);
   const fixAt = Date.parse(MOVES_FIX_AT);
@@ -291,7 +288,7 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
       return g;
     })(),
     moves_fix_at: MOVES_FIX_AT,
-    before_moves_fix: { '13F': { ...spread(pre.map((l) => l.seconds)), max_seconds: pre.length ? Math.max(...pre.map((l) => l.seconds)) : null, rows: pre.map((l) => ({ accession: l.accession, manager: l.manager ?? null, slug: l.slug, accepted_at: l.accepted, sent_at: l.sent, seconds: l.seconds, ...(approx(l) ? { sent_approx: true } : {}) })) } },
+    before_moves_fix: { '13F': { ...spread(pre.map((l) => l.seconds)), max_seconds: pre.length ? Math.max(...pre.map((l) => l.seconds)) : null, rows: pre.map((l) => ({ accession: l.accession, manager: l.manager ?? null, slug: l.slug, accepted_at: l.accepted, sent_at: l.sent, seconds: l.seconds })) } },
     by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },
     by_coverage: group(rows, (l) => l.coverage ?? 'curated', (l) => l.seconds),
     recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, coverage: l.coverage ?? 'curated', accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
@@ -305,7 +302,6 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
       accepted_at: l.accepted,
       sent_at: l.sent,
       gap_seconds: l.seconds,
-      ...(approx(l) ? { sent_approx: true } : {}),
     })),
   };
 }
@@ -588,6 +584,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const b = await body(req);
     await logAccess(env, req, 'POST /ops/weekly-preview', [await env.DB.get(`email:${String(b.email ?? '').trim().toLowerCase()}`)], 'owned names read for the preview');
     return json(await previewWeekly(env, String(b.email ?? '').trim().toLowerCase(), Date.now(), b.dry === true), 200, h);
+  }
+
+  // Operator: Email 2's preview, to our inbox and test inboxes only (other addresses are dropped).
+  if (req.method === 'POST' && path === '/ops/email2-preview') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = await body(req);
+    const to = (Array.isArray(b.to) ? b.to : []).map((x: unknown) => String(x).trim().toLowerCase());
+    const { runEmail2 } = await import('./free');
+    return json(await runEmail2(env, b.at ? Date.parse(String(b.at)) : Date.now(), to), 200, h);
   }
 
   // Operator: clear Fund seats' copies of their team's destinations (one-off for duplicates saved before the 409).

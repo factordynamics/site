@@ -410,7 +410,8 @@ export async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEve
   // Everything goes in the day's digest store; digest members get it from there tonight.
   const key = `digest:${etDay(now)}`;
   const day = JSON.parse((await env.DB.get(key)) ?? '{"filings":[],"events":[]}') as DigestDay;
-  // The real time, not the minute's start: rows re-timed from this store were up to a minute early (Acadian, Vulcan).
+  // The real send time, not the run's start: gene's moves take 25-45 s to compute, so rows re-timed from this store
+  // (Acadian, Vulcan) came out that much early.
   const sent_at = new Date().toISOString();
   day.filings.push(...filings.map((a) => ({ ...a, sent_at })));
   day.events.push(...events.map((e) => ({ ...e, sent_at })));
@@ -1743,7 +1744,7 @@ export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reaso
 
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
 interface Job {
-  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota';
+  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota' | 'email2';
   at: number;
 }
 
@@ -1799,6 +1800,8 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   if (m === 23) due.push({ name: 'quota', at: scheduledTime });
   // The free weekly: Saturday 02:00 UTC (9pm ET Friday), so it has Friday's after-close filers and their pages.
   if (m === 0 && h === 2 && t.getUTCDay() === 6) due.push({ name: 'weekly', at: scheduledTime });
+  // Email 2, once: 13F deadline night, Mon Nov 16 9:30pm ET (Tue 02:30 UTC). runEmail2 records it done, sent or skipped.
+  if (m === 30 && h === 2 && t.toISOString().slice(0, 10) === '2026-11-17') due.push({ name: 'email2', at: scheduledTime });
   // Owned and watched names' insider and 13D/G events: every 10 minutes (each name hourly, 10 minutes in filing week).
   if (m % 10 === 9) due.push({ name: 'issuers', at: scheduledTime });
   const rawQueue = await env.DB.get('jobs:due');
@@ -1815,6 +1818,7 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
       ops: () => import('./revenue').then((x) => x.runOpsDigest(env, job.at)),
       quota: () => import('./revenue').then((x) => x.runQuotaCheck(env, job.at)),
       weekly: () => import('./free').then((x) => x.runWeekly(env, job.at)),
+      email2: () => import('./free').then((x) => x.runEmail2(env, job.at)),
       // A quiet minute's leftover SEC requests, keeping 4 for the mailer and GitHub.
       issuers: () => import('./stockevents').then((x) => x.precomputeIssuers(env, scheduledTime, inFilingWeek(scheduledTime), Math.min(16, secBudget.left - 4))),
     };

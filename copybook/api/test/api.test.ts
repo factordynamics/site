@@ -1087,6 +1087,90 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', realFetch);
   });
 
+  it("Email 2: once, through Mailgun, to real free signups only; follows that filed today lead; skipped without a postal address or under 10", async () => {
+    const realFetch = globalThis.fetch;
+    const mg: URLSearchParams[] = [];
+    const now = Date.now();
+    const day = new Date(now - 5 * 3600_000).toISOString().slice(0, 10);
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u) === `${SITE}d/expected.json`) return Response.json({ quarter: '2026Q3', expected: [{ slug: 'seth-klarman', manager: 'Seth Klarman', expected_date: '2026-11-20' }] });
+      if (String(u) === `${SITE}d/recap/2026Q3.json`)
+        return Response.json({
+          filing: [{ slug: 'irving-kahn', filing_date: day }, { slug: 'matthew-mclennan', filing_date: day }, { slug: 'bill-ackman', filing_date: '2026-11-03' }],
+          biggest: [{ slug: 'bill-ackman', manager: 'Bill Ackman', ticker: 'UBER', change: 'new', delta_value: 2e9 }, { slug: 'matthew-mclennan', manager: 'Matthew McLennan', ticker: 'CHRW', change: 'exited', delta_value: -686e6 }],
+        });
+      if (String(u) === 'https://mg.test/v3/factordynamics.com/messages') {
+        mg.push(new URLSearchParams(String(init?.body)));
+        return Response.json({ id: 'x' });
+      }
+      return realFetch(u, init);
+    });
+    const { runEmail2 } = await import('../src/free');
+    // Kahn filed today: 4 changed rows, of which Email 2 shows the 3 largest.
+    const row = (t: string, change: string, v: number) => ({ ticker: t, display_name: null, issuer: t, cusip: 'X', put_call: null, shares: 10, prev_shares: 5, value: Math.abs(v), value_delta: v, change });
+    const kahn = { slug: 'irving-kahn', slugs: ['irving-kahn'], manager: 'Irving Kahn', name: 'Kahn Brothers', quarter: '2026Q3', report_date: '2026-09-30', filing_date: day, accession: '0001039565-26-000005', sec_url: 'https://www.sec.gov/k', accepted: new Date(now).toISOString(),
+      moves: { bought_usd: 9e6, sold_usd: 8e6, new: [row('NEWB', 'new', 4e6)], added: [row('ADDS', 'added', 5e6)], trimmed: [row('TRIM', 'trimmed', -8e6)], exited: [row('GONE', 'exited', -1e6)] } };
+    const { deliver } = await import('../src/alerts');
+    await deliver(env, [kahn as never], [], now);
+    // Nine real free signups (five follow Kahn) and two test signups.
+    const signup = (email: string, i: number, follow: string) =>
+      handleRequest(new Request('https://api.test/signup', { method: 'POST', body: JSON.stringify({ email, follow: [{ kind: 'investor', id: follow }] }), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': `8.8.${i}.1` } }), env);
+    for (let i = 0; i < 9; i++) await signup(`reader${i}@reader.test`, i, i < 5 ? 'irving-kahn' : 'seth-klarman');
+    await signup('copybook-test-e2@fldubai.com', 20, 'irving-kahn');
+    await signup('copybook-kahn-e2@fldubai.com', 21, 'irving-kahn');
+
+    // No postal address: skipped for good (no Copy ask can go out without one).
+    expect(await runEmail2(env, now)).toEqual({ status: 'skipped', why: 'no postal address' });
+    expect(JSON.parse((await env.DB.get('e2:done'))!).skipped).toBe('no postal address');
+    await env.DB.delete('e2:done');
+    // Its preview still goes (through Resend, with a marked placeholder) to test inboxes only.
+    sent = [];
+    await runEmail2(env, now, ['copybook-test-e2@fldubai.com', 'reader1@reader.test']);
+    expect(sent.map((m) => [m.to[0], m.text.endsWith('[postal address: not configured yet]')])).toEqual([['copybook-test-e2@fldubai.com', true]]);
+    expect(await env.DB.get('e2:done')).toBeNull();
+    Object.assign(env, { POSTAL_ADDRESS: '1 Test St, Testville', MAILGUN_API_KEY: 'k', MAILGUN_BASE: 'https://mg.test' });
+    // Nine real signups: under 10, skipped; the test signups don't count.
+    expect(await runEmail2(env, now)).toEqual({ status: 'skipped', why: '9 real free signups, under 10' });
+    expect(mg).toHaveLength(0);
+    await env.DB.delete('e2:done');
+
+    // A preview reaches our inbox and test inboxes only, marked [Preview], and never marks Email 2 done.
+    await runEmail2(env, now, ['hello@factordynamics.com', 'reader0@reader.test', 'copybook-kahn-e2@fldubai.com']);
+    expect(mg.map((b) => b.get('to'))).toEqual(['hello@factordynamics.com', 'copybook-kahn-e2@fldubai.com']);
+    expect(mg.every((b) => b.get('subject')!.startsWith('[Preview] '))).toBe(true);
+    expect(await env.DB.get('e2:done')).toBeNull();
+
+    // Ten real signups: one Mailgun batch to exactly them.
+    await signup('reader9@reader.test', 9, 'seth-klarman');
+    mg.length = 0;
+    sent = [];
+    const r = await runEmail2(env, now);
+    expect(r).toMatchObject({ sent: 10, filed_today: 2, biggest: 1 });
+    expect(mg.map((b) => b.get('to')).sort()).toEqual(Array.from({ length: 10 }, (_, i) => `reader${i}@reader.test`));
+    expect(sent).toHaveLength(0);
+    const k = mg.find((b) => b.get('to') === 'reader0@reader.test')!;
+    const text = k.get('text')!;
+    // Kahn's 3 largest moves (not GONE, the smallest), with his filing card; the day's biggest only from today's filers.
+    expect(text).toMatch(/Your follows that filed today:\n  Irving Kahn, Q3 13F: Trimmed TRIM −\$8\.0M; Added ADDS \+\$5\.0M; New NEWB \+\$4\.0M\n/);
+    expect(text).not.toContain('GONE');
+    expect(text).toContain(`f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows`);
+    expect(text).toContain("The day's biggest moves:\n  Matthew McLennan: sold out of CHRW −$686.0M\n");
+    expect(text).not.toContain('UBER');
+    expect(text).toContain('pricing/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-paid&client_reference_id=email_e2-paid');
+    expect(text).toMatch(/You get this because you signed up for the free Copybook weekly\. Unsubscribe: \S+[\s\S]*1 Test St, Testville$/);
+    expect(k.get('h:List-Unsubscribe-Post')).toBe('List-Unsubscribe=One-Click');
+    expect(k.get('html')).toContain('>See the filing</a>');
+    expect(k.get('subject')).toBe('Irving Kahn filed today: the moves');
+    // A Klarman follower: none filed today, pointed to Friday.
+    const s5 = mg.find((b) => b.get('to') === 'reader5@reader.test')!;
+    expect(s5.get('text')).toContain("Your follows that filed today: none filed today. Their moves come in Friday's email.");
+    expect(s5.get('subject')).toBe('13F deadline day: the biggest superinvestor moves');
+    // Once only.
+    expect(await runEmail2(env, now)).toEqual({ status: 'already done' });
+    Object.assign(env, { POSTAL_ADDRESS: undefined, MAILGUN_API_KEY: undefined });
+    vi.stubGlobal('fetch', realFetch);
+  });
+
   it("a CUSIP change nets into one share-based move (Fisher's Q3 XOM: +$75.7M, not +$894.9M)", async () => {
     const { computeMoves, netRenamed } = await import('../src/edgar');
     const other = { cusip: '037833100', put_call: null, issuer: 'APPLE INC', ticker: 'AAPL', shares: 1e6, value: 2e8 };
@@ -2413,8 +2497,14 @@ describe('copybook api', () => {
     const rss = await (await handleRequest(new Request(feedUrls.rss_url), env)).text();
     expect(rss).toContain('<title>Buffett SIRI Form 4: bought $25K</title>');
     expect(jf.items[0].sent_at).toBeTruthy();
-    await req(copy, 'DELETE', '/channels/feed');
+    // "Rotate feed link": a new URL that works at once, and the old one is dead at once.
+    const rotated = (await (await req(copy, 'POST', '/channels/feed')).json()).channels.feed;
+    expect(rotated.json_url).not.toBe(feedUrls.json_url);
     expect((await handleRequest(new Request(feedUrls.json_url), env)).status).toBe(404);
+    expect((await handleRequest(new Request(feedUrls.rss_url), env)).status).toBe(404);
+    expect((await handleRequest(new Request(rotated.json_url), env)).status).toBe(200);
+    await req(copy, 'DELETE', '/channels/feed');
+    expect((await handleRequest(new Request(rotated.json_url), env)).status).toBe(404);
 
     // Chat failures. Discord asks to wait 150 s (429), Slack answers 500 every time, Telegram's bot was removed (404).
     const at47 = new Date();

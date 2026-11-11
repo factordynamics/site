@@ -24,7 +24,7 @@ export interface Mail {
 
 /** Sends through Resend's batch API (100 per request). Returns a short status for logs. */
 /** Who may get a sample or preview (a template with illustrative figures): our inbox and the test inboxes only. */
-export const previewInbox = (to: string) => to === 'hello@factordynamics.com' || to.startsWith('copybook-test-');
+export const previewInbox = (to: string) => to === 'hello@factordynamics.com' || to.startsWith('copybook-test-') || /^copybook-[a-z0-9-]+@fldubai\.com$/.test(to);
 const SAMPLE = /^\[(sample|preview|draft)\]/i;
 
 /**
@@ -119,7 +119,7 @@ async function delay(env: Env, mails: Mail[]): Promise<void> {
 }
 
 export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; tier?: Tier; via?: 'mailgun' } = {}): Promise<string> {
-  const tier: Tier = opts.tier ?? (opts.bulk ? 'alert' : 'account');
+  const tier: Tier = opts.tier ?? (opts.via ? 'low' : opts.bulk ? 'alert' : 'account');
   await loadMeter(env);
   // A sample never reaches a member's real address.
   const blocked = mails.filter((m) => SAMPLE.test(m.subject) && !previewInbox(m.to));
@@ -132,11 +132,12 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
     await notice80(env);
     return statuses.join(',') || 'delayed';
   };
-  // A one-off batch that must not use the alerts' Resend budget (Email 1): Mailgun only.
+  // A one-off batch (Email 2): Mailgun while it has room for the day; the rest goes on as low-priority mail, so it
+  // never takes the alerts' Resend hold (past that, it waits in the reset queue).
   if (opts.via === 'mailgun') {
     if (!mailgunOn(env)) return 'skipped (no MAILGUN_API_KEY)';
-    for (const m of mails) statuses.push(String(await sendMailgun(env, m)));
-    return done();
+    mails = await viaMailgun(env, mails, statuses);
+    if (!mails.length) return done();
   }
   if (tier !== 'account') {
     // Saturday and Sunday (UTC) EDGAR accepts nothing: low-priority mail (the Friday email) may use both providers'

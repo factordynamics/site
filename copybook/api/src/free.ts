@@ -496,6 +496,81 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
+/** Email 2: one batch on deadline night, Tue Nov 17 02:30 UTC (Mon 9:30pm ET), through Mailgun, to real free signups. */
+const E2_MIN = 10;
+const e2 = (env: Env, path: string, content: string) => `${env.SITE_URL}${path}${path.includes('?') ? '&' : '?'}utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=${content}`;
+
+/** One member's Email 2: their follows that filed today (3 moves each), the day's biggest moves, one trial ask. */
+export function email2Mail(env: Env, to: string, day: string, follows: { a: Alert13F }[], biggest: { manager: string; text: string }[], season: string, unsub: string, postal: string): Mail {
+  const dayName = new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+  const three = (a: Alert13F) => {
+    const m = a.moves!;
+    const rows = [...m.new.map((r) => ['New', r] as const), ...m.added.map((r) => ['Added', r] as const), ...m.trimmed.map((r) => ['Trimmed', r] as const), ...m.exited.map((r) => ['Sold out', r] as const)]
+      .sort((x, y) => Math.abs(y[1].value_delta) - Math.abs(x[1].value_delta))
+      .slice(0, 3);
+    return rows.map(([l, r]) => `${l} ${r.ticker || r.display_name || r.issuer} ${r.value_delta > 0 ? '+' : '−'}${money(r.value_delta)}`).join('; ');
+  };
+  const card = (a: Alert13F) => e2(env, `f/${a.accession}/`, 'e2-follows');
+  const pricing = `${e2(env, 'pricing/', 'e2-paid')}&client_reference_id=email_e2-paid`;
+  const yoursText = follows.length
+    ? `Your follows that filed today:\n${follows.map(({ a }) => `  ${a.manager}, ${qLabel(a.quarter)} 13F: ${three(a)}\n    ${card(a)}`).join('\n')}`
+    : `Your follows that filed today: none filed today. Their moves come in Friday's email.`;
+  const bigText = biggest.length ? `The day's biggest moves:\n${biggest.map((b) => `  ${b.manager}: ${b.text}`).join('\n')}\n  The season so far: ${e2(env, `season/${season.toLowerCase()}/`, 'e2-recap')}` : '';
+  const ask = `Copy emails each of these minutes after EDGAR accepts it, with 13F history and CSV. Try it free for 14 days: ${pricing}`;
+  const why = 'You get this because you signed up for the free Copybook weekly.';
+  return {
+    to,
+    subject: follows.length ? `${follows.map(({ a }) => plainName(a.manager)).slice(0, 2).join(' and ')}${follows.length > 2 ? ' and more' : ''} filed today: the moves` : `13F deadline day: the biggest superinvestor moves`,
+    text: `13F deadline day, ${dayName}.\n\n${yoursText}\n\n${bigText ? `${bigText}\n\n` : ''}${ask}\n\n${why} Unsubscribe: ${unsub}${FOOTER}\n${postal}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>13F deadline day, ${esc(dayName)}.</p><div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:16px;margin:0 0 4px">Your follows that filed today</h3>${follows.length ? follows.map(({ a }) => `<p style="margin:6px 0"><b>${esc(a.manager)}</b>, ${esc(qLabel(a.quarter))} 13F: ${esc(three(a))} · <a href="${esc(card(a))}" style="color:#1d4ed8">See the filing</a></p>`).join('') : '<p style="margin:6px 0">None filed today. Their moves come in Friday\'s email.</p>'}</div>${biggest.length ? `<h3 style="font-size:15px;margin:18px 0 6px">The day's biggest moves</h3><ul style="padding-left:18px;margin:0">${biggest.map((b) => `<li>${esc(b.manager)}: ${esc(b.text)}</li>`).join('')}</ul><p style="margin:6px 0"><a href="${esc(e2(env, `season/${season.toLowerCase()}/`, 'e2-recap'))}" style="color:#1d4ed8">The season so far</a></p>` : ''}<p style="margin-top:20px"><a href="${esc(pricing)}" style="color:#1d4ed8"><b>Copy</b></a> emails each of these minutes after EDGAR accepts it, with 13F history and CSV. Try it free for 14 days.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">${why} Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. ${esc(postal)}. <a href="${esc(unsub)}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+    unsubscribe: unsub,
+  };
+}
+
+/**
+ * Email 2, once: skipped (and recorded why) without a postal address, without Mailgun, under 10 real free signups, or
+ * when the season recap can't be read. `preview`: sent only to our inbox and test inboxes, subject marked [Preview].
+ */
+export async function runEmail2(env: Env, now: number, preview?: string[]): Promise<Record<string, unknown>> {
+  const postal = env.POSTAL_ADDRESS?.trim();
+  if (!preview && (await env.DB.get('e2:done'))) return { status: 'already done' };
+  const skip = async (why: string) => {
+    if (!preview) await env.DB.put('e2:done', JSON.stringify({ at: new Date(now).toISOString(), skipped: why }));
+    return { status: 'skipped', why };
+  };
+  // A preview may go before the address and Mailgun are configured: a marked placeholder, and through Resend.
+  if (!postal && !preview) return skip('no postal address');
+  if (!env.MAILGUN_API_KEY && !preview) return skip('no MAILGUN_API_KEY');
+  // Recipients: real free signups who haven't unsubscribed (a preview: the given test inboxes only).
+  const members: Member[] = [];
+  if (preview) {
+    for (const to of preview.filter(previewInbox)) members.push((await memberByEmail(env, to)) ?? ({ customer: `preview:${to}`, email: to, status: 'free' } as Member));
+    if (!members.length) return { status: 'skipped', why: 'no preview inbox given' };
+  } else {
+    for (const m of await listMembers(env)) if (m.status === 'free' && !m.marketing_off && m.email && !testAddress(m.email) && (await env.DB.get(`email:${m.email}`)) === m.customer) members.push(m);
+    if (members.length < E2_MIN) return skip(`${members.length} real free signups, under ${E2_MIN}`);
+  }
+  const follows = new Map<string, Follows>();
+  for (const m of members) follows.set(m.customer, m.customer.startsWith('preview:') ? ({ investors: ['irving-kahn', 'seth-klarman', 'howard-marks'], stocks: [], owned: [] } as unknown as Follows) : await getFollows(env, m));
+  const ctx = await followContext(env, [...follows.values()].flatMap((f) => f.investors));
+  // The ET day of the deadline (Mon 9:30pm ET is Tue 02:30 UTC); its biggest moves from the season recap.
+  const day = etDay(now);
+  const season = ctx.quarter ?? '';
+  const rc = season ? ((await fetch(`${env.SITE_URL}d/recap/${season}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { filing?: { slug: string; filing_date?: string | null }[]; biggest?: { slug: string; manager: string; ticker: string | null; name?: string; change: string; delta_value: number }[] } | null) : null;
+  if (!rc) return preview ? { status: 'skipped', why: 'season recap unreadable' } : skip('season recap unreadable');
+  const filedToday = new Set((rc.filing ?? []).filter((f) => f.filing_date === day).map((f) => f.slug));
+  const VERB: Record<string, string> = { new: 'new position in', added: 'added', trimmed: 'trimmed', exited: 'sold out of' };
+  const biggest = (rc.biggest ?? []).filter((b) => filedToday.has(b.slug) && VERB[b.change]).slice(0, 6).map((b) => ({ manager: plainName(b.manager), text: `${VERB[b.change]} ${b.ticker ?? b.name ?? ''} ${b.delta_value > 0 ? '+' : '−'}${money(b.delta_value)}` }));
+  const mails = await Promise.all(members.map(async (m) => {
+    const filed = (follows.get(m.customer)?.investors ?? []).map((s) => ctx.filed.get(s)).filter((a): a is Alert13F => !!a?.moves && etDay(Date.parse(a.accepted ?? `${a.filing_date}T21:00:00Z`)) === day);
+    const mail = email2Mail(env, m.email, day, filed.map((a) => ({ a })), biggest, season, m.customer.startsWith('preview:') ? `${env.SITE_URL}unsubscribe/` : await unsubscribeUrl(env, m.customer), postal || '[postal address: not configured yet]');
+    return preview ? { ...mail, subject: `[Preview] ${mail.subject}` } : mail;
+  }));
+  const status = await sendMail(env, mails, preview && !env.MAILGUN_API_KEY ? {} : { via: 'mailgun' });
+  if (!preview) await env.DB.put('e2:done', JSON.stringify({ at: new Date(now).toISOString(), sent: mails.length, status }));
+  return { status, sent: mails.length, filed_today: filedToday.size, biggest: biggest.length };
+}
+
 /** Fridays after EDGAR closes: free members who haven't unsubscribed, once per week. */
 export async function runWeekly(env: Env, now: number): Promise<Record<string, unknown>> {
   const week = etDay(now);
