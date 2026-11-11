@@ -5321,6 +5321,11 @@ describe('copybook api', () => {
     }
 
     expect((await v1('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20')).body.error.code).toBe('not_yet_available');
+    // Ignoring as_of would hand back today's answer as a point-in-time one.
+    for (const p of ['/v1/stocks/AAPL/holders?as_of=2025-06-01', '/v1/changes/2025Q1?filer=warren-buffett&as_of=2025-06-01', '/v1/filers/warren-buffett/holdings?from=2025Q1&to=2025Q1&as_of=2025-06-01']) {
+      const r = await v1(p);
+      expect([r.status, r.body.error.code]).toEqual([400, 'as_of_not_supported']);
+    }
     expect((await v1('/v1/filers/warren-buffett/holdings/2019Q1')).status).toBe(404);
     expect((await v1('/v1/filers/warren-buffett/holdings/Q1')).body.error.code).toBe('bad_request');
     expect((await v1('/v1/filers/nobody/holdings/2025Q1')).status).toBe(404);

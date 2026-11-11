@@ -5,12 +5,22 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.6';
+export const SPEC_REVISION = '2026-11-11.7';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-as-of-refused',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'as_of on any /v1 endpoint other than GET /v1/filers/{filer}/holdings/{quarter} now returns 400 `as_of_not_supported`. It was silently ignored, so a request such as /v1/stocks/{stock}/holders?as_of=2025-06-01 got today\'s holders. Point-in-time books (as_of, per-row lots[], point-in-time bulk) are due Nov 30, 2026 on holdings and bulk; holders and changes by Dec 14, 2026.',
+    ],
+  },
   {
     id: '2026-11-11-value-delta-basis',
     date: '2026-11-11',
@@ -279,6 +289,7 @@ export const ERRORS = {
   not_found: 'No such resource.',
   bad_request: 'A parameter is missing or invalid.',
   not_yet_available: 'This option is documented but not served yet.',
+  as_of_not_supported: 'as_of is not supported on this endpoint yet; it would be ignored, so the request is refused.',
   server_error: 'Something went wrong on our side.',
   busy: 'The API is busy; retry after the Retry-After seconds.',
   quarter_incomplete_by_ticker: "Past quarters by ticker aren't complete yet; use /v1/bulk/{quarter} or per-filer /v1/changes. Full coverage is due Nov 23, 2026.",
@@ -374,6 +385,11 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     const m = path.match(re);
     if (!m) continue;
     if (req.method !== method) return v1error('bad_request', 405, `Use ${method}.`, limits);
+    // as_of comes to one filer's book first (/v1/filers/{filer}/holdings/{quarter}). Anywhere else it would be silently
+    // ignored and a client would take today's answer for a point-in-time one, so it is refused.
+    if (url.searchParams.has('as_of') && !/^\/v1\/filers\/[^/]+\/holdings\/[^/]+$/.test(path)) {
+      return v1error('as_of_not_supported', 400, 'as_of is served only on GET /v1/filers/{filer}/holdings/{quarter} (from Nov 30, 2026); holders and changes follow by Dec 14, 2026. See /v1/changelog.', limits);
+    }
     let res = await handler({ env, req, url, key: auth.key }, m.slice(1));
     // Text only: a gzip bulk file served here (R2 signing unset) must stay bytes.
     if (funnel && res.ok && res.body && /csv/.test(res.headers.get('content-type') ?? '')) {
