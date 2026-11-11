@@ -1267,14 +1267,7 @@ export function Flows() {
               <span className="skel skel-chip" />
               <span className="skel skel-chip" />
             </div>
-            <div className="stats flows-stats" aria-hidden>
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="stat">
-                  <span className="skel skel-label" />
-                  <span className="skel skel-value" />
-                </div>
-              ))}
-            </div>
+            <TickStatsSkel />
             <TabsSkel labels={['Most buyers', 'Most money in', 'New positions', 'Most sellers', 'Sold out']} />
           </>
         }
@@ -1400,7 +1393,7 @@ function FlowsStats({ rows, q }: { rows: Agg[]; q: string }) {
   )
   const by = (n: number, extra: number, word: string) => `by ${plural(n, 'investor')}${extra ? `, ${num(extra)} ${word}` : ''}`
   return (
-    <div className="stats flows-stats" role="list" aria-label={`Buys and sells${scope}`}>
+    <div className="stats tick-stats" role="list" aria-label={`Buys and sells${scope}`}>
       {card('Most bought', buyers, !!buyers?.buyers.length, 'pos', (r) => `${aggCo(r)}, ${by(r.buyers.length, r.newBuyers, 'new')}`)}
       {card('Biggest net buy', netBuy, (netBuy?.net ?? 0) > 0, 'pos', (r) => `${aggCo(r)}, ${signedUsd(r.net)} net`)}
       {card('Most sold', sellers, !!sellers?.sellers.length, 'neg', (r) => `${aggCo(r)}, ${by(r.sellers.length, exits(r), 'sold out')}`)}
@@ -1408,18 +1401,32 @@ function FlowsStats({ rows, q }: { rows: Agg[]; q: string }) {
     </div>
   )
 }
-function ConsensusSummary({ rows, total, n, mix }: { rows: Agg[]; total: number; n: number; mix: { sector: string; weight: number }[] }) {
+/** Four cards whose values are tickers or short figures: two rows of two on tablets, so "GOOGL+GOOG" fits. */
+const TickStatsSkel = () => (
+  <div className="stats tick-stats" aria-hidden>
+    {[0, 1, 2, 3].map((i) => (
+      <div key={i} className="stat">
+        <span className="skel skel-label" />
+        <span className="skel skel-value" />
+      </div>
+    ))}
+  </div>
+)
+/** The combined portfolio at a glance, as Buys & sells' cards: its size, the most widely owned stock, the largest
+ * holding and how much the ten largest add up to. The sector panel below covers the sectors. */
+function ConsensusStats({ rows, total, n }: { rows: Agg[]; total: number; n: number }) {
   const stocks = rows.filter((r) => !r.fund)
   const wide = [...stocks].sort((a, b) => b.holders.length - a.holders.length || b.value - a.value)[0]
   const big = [...stocks].sort((a, b) => b.value - a.value)
   const top10 = big.slice(0, 10).reduce((t, r) => t + r.value, 0) / (total || 1)
   if (!wide) return null
   return (
-    <p className="summary">
-      Together they hold {usd(total)} in {num(rows.length)} stocks and funds. The most widely owned is {aggName(wide)}, held by {num(wide.holders.length)} of {num(n)} investors
-      {big[0] && big[0] !== wide ? `, and the most money is in ${aggName(big[0])}, ${usd(big[0].value)}` : ''}. The ten largest make up {pct(top10, 0)} of the total
-      {mix[0] ? `, and the largest sector is ${mix[0].sector.toLowerCase()} at ${pct(mix[0].weight, 0)}` : ''}.
-    </p>
+    <div className="stats tick-stats" role="list" aria-label="The combined portfolio at a glance">
+      <Stat label="Held in total" value={usd(total)} sub={`In ${num(rows.length)} stocks and funds`} />
+      <Stat label="Most widely owned" value={<Tick t={wide.ticker} name={aggCo(wide)} label={wide.label} />} sub={`${aggCo(wide)}, by ${num(wide.holders.length)} of ${num(n)} investors`} />
+      <Stat label="Largest holding" value={<Tick t={big[0].ticker} name={aggCo(big[0])} label={big[0].label} />} sub={`${aggCo(big[0])}, ${usd(big[0].value)}, ${pct(big[0].value / (total || 1), 1)} of the total`} />
+      <Stat label="Ten largest holdings" value={pct(top10, 0)} sub="Of everything held" />
+    </div>
   )
 }
 function FilingsSummary({ list, firms }: { list: Event[]; firms: Map<string, string> }) {
@@ -1471,6 +1478,7 @@ export function Consensus() {
         progress={<BooksProgress what="Adding up every investor’s latest 13F" />}
         before={
           <>
+            <TickStatsSkel />
             <section className="panel" aria-hidden>
               <header>
                 <h2>By sector</h2>
@@ -1501,9 +1509,9 @@ export function Consensus() {
         <div>
           <h1>Most owned stocks</h1>
           <p className="lede">Every stock and fund in all {n} investors’ latest 13Fs, combined, with options and notes left out.</p>
-          <ConsensusSummary rows={agg.rows} total={agg.total} n={n} mix={mix} />
         </div>
       </div>
+      <ConsensusStats rows={agg.rows} total={agg.total} n={n} />
       <Panel title="By sector" right={<span className="dim hide-sm">Choose a sector to filter</span>}>
         <StackBar parts={mix.map((m) => ({ label: m.sector, value: m.value, color: SECTOR_COLOR[m.sector] ?? '#bab0ac' }))} />
         <div className="filters" role="group" aria-label="sector filter">
