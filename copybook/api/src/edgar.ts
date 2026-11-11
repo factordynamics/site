@@ -116,6 +116,12 @@ export interface MoveRow {
   unusual?: boolean;
   /** One of an exit and a new line under one issuer prefix (holdCusipPairs): maybe one position, so not counted. */
   cusip_pair?: boolean;
+  /** Ingest's flag: this line and another CUSIP of the same issuer are one position filed under the wrong class. */
+  cusip_mismatch?: boolean;
+  /** On a line whose value can't be trusted: other filers' median value per share, for \"filed value implausible\". */
+  median_per_share?: number;
+  /** Ingest's reason for holding the line (hl/ held_reason), e.g. mixed_scale or pre_split. */
+  held_reason?: string;
 }
 
 export interface Moves {
@@ -575,9 +581,11 @@ export function unreliableSide(x: unknown): 'value' | 'shares' | 'both' | null {
  */
 export function markUnreliable(r: MoveRow, prior?: unknown): MoveRow | null {
   const side = unreliableSide(prior) ?? unreliableSide(r);
+  const why = (prior as { held_reason?: unknown } | undefined)?.held_reason;
+  if (side && typeof why === 'string' && why && !r.held_reason) r = { ...r, held_reason: why };
   if (!side || r.unreliable === side) return r;
   const filedPs = r.shares > 0 && r.value > 0 ? r.value / r.shares : null;
-  if (r.change === 'new' || r.change === 'exited') return { ...r, unreliable: side };
+  if (r.change === 'new' || r.change === 'exited') return { ...r, unreliable: side, ...(side !== 'shares' && filedPs ? { filed_per_share: filedPs } : {}) };
   if (side === 'value') return { ...r, unreliable: 'value', ...(filedPs ? { filed_per_share: filedPs } : {}) };
   const pv = r.prev_value ?? (prior as { value?: number } | undefined)?.value;
   if (side === 'shares' && pv != null) return { ...r, change: r.value - pv >= 0 ? 'added' : 'trimmed', value_delta: Math.round(r.value - pv), value_delta_basis: 'filed_value', delta_pct_of_book: r.delta_pct_of_book && r.value_delta ? (r.delta_pct_of_book * (r.value - pv)) / r.value_delta : null, unreliable: 'shares' };
@@ -681,7 +689,9 @@ export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Positio
     const x = ops && cm && (ops / cm > OFF_MEDIAN || cm / ops > OFF_MEDIAN) ? { ...x0, price_outlier: true } : x0;
     const prior = before.get(posKey(x));
     const reason = gateRow(x, prior, splits.get(x.cusip) ?? 1, consensus.get(x.cusip));
-    const m = reason ? null : markUnreliable(x, prior);
+    const m0 = reason ? null : markUnreliable(x, prior);
+    // A line whose value can't be trusted names other filers' median per share (\"≈$7,758/sh vs ~$78\").
+    const m = m0 && m0 !== x && (m0.unreliable === 'value' || m0.unreliable === 'both') && cm ? { ...m0, median_per_share: cm } : m0;
     if (m !== x) marked = true;
     if (!m) held.push({ cusip: x.cusip, ticker: x.ticker, issuer: x.issuer, display_name: x.display_name, put_call: x.put_call, change: x.change, reason: reason ?? 'unreliable_shares' });
     return m ? [m] : [];
@@ -697,25 +707,30 @@ export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Positio
  */
 export function holdCusipPairs(rows: MoveRow[]): MoveRow[] {
   const key = (r: MoveRow) => `${r.cusip.slice(0, 6).toUpperCase()}|${(r.put_call ?? '').toUpperCase()}`;
-  const open = (r: MoveRow) => (r.change === 'new' || r.change === 'exited') && !r.unreliable && !r.prn;
+  // Marked lines too (Mizuho Securities' Q2 Oracle exit, held as \"both\", left its Q3 ORCL \"new\" headlined).
+  const open = (r: MoveRow) => (r.change === 'new' || r.change === 'exited') && !r.prn;
   const n = new Map<string, { new: number; exited: number }>();
   for (const r of rows.filter(open)) {
     const c = n.get(key(r)) ?? { new: 0, exited: 0 };
     c[r.change as 'new' | 'exited']++;
     n.set(key(r), c);
   }
+  // Ingest's cusip_mismatch flag holds a line on its own, pair or not.
   const pairs = new Set([...n].filter(([, c]) => c.new === 1 && c.exited === 1).map(([k]) => k));
-  return pairs.size ? rows.map((r) => (open(r) && pairs.has(key(r)) ? { ...r, unreliable: 'both' as const, cusip_pair: true } : r)) : rows;
+  const hold = (r: MoveRow) => !r.cusip_pair && ((open(r) && pairs.has(key(r))) || r.cusip_mismatch === true);
+  return rows.some(hold) ? rows.map((r) => (hold(r) ? { ...r, unreliable: 'both' as const, cusip_pair: true } : r)) : rows;
 }
 
 export function movesOf(rows0: MoveRow[], limit = MOVE_ROWS): Moves {
   const rows = holdCusipPairs(rows0);
   // A marked row (unreliable) is never listed as a trade: it goes under "Not counted" with its filed facts (the lead,
   // Nov 11 17:12: no held row shows a $ size, and none is filed under Added or Trimmed by its value's direction).
+  // A \"value\" row is a real trade (its shares reconcile, only the $ is bad, the analyst's round 39): listed in its group
+  // by share count, after the sized rows, and never in the totals or the headline.
   const top = (c: string) =>
     rows
-      .filter((r) => r.change === c && !r.unreliable)
-      .sort((a, b) => Math.abs(b.value_delta) - Math.abs(a.value_delta))
+      .filter((r) => r.change === c && (!r.unreliable || r.unreliable === 'value'))
+      .sort((a, b) => Number(a.unreliable === 'value') - Number(b.unreliable === 'value') || Math.abs(b.value_delta) - Math.abs(a.value_delta))
       .slice(0, limit);
   // A marked row (unreliable) shows but never counts toward the totals.
   const counted = rows.filter((r) => !r.unreliable);
@@ -734,14 +749,23 @@ const notCounted = (rows: MoveRow[], shown: MoveRow[]) => {
   const out = rows.filter((r) => r.unreliable && r.change !== 'exchanged' && !shown.includes(r));
   return out.length ? { not_counted: out } : {};
 };
-/** Moves stored before marked rows left the lists: each marked row moves from new/added/trimmed/exited to not_counted. */
+/**
+ * Moves stored before marked rows left the lists: each marked row moves from new/added/trimmed/exited to not_counted,
+ * except a \"value\" row (a real trade, shown by shares). A row sent \"as filed\" after the 24-hour hold (filer_value) is a
+ * \"value\" row too: its $ comes out of the totals.
+ */
 export function countedMoves(m0: Moves): Moves {
-  const paired = holdCusipPairs([...m0.new, ...m0.added, ...m0.trimmed, ...m0.exited]);
-  const m = paired.some((r) => r.cusip_pair) ? { ...m0, new: paired.filter((r) => r.change === 'new'), added: paired.filter((r) => r.change === 'added'), trimmed: paired.filter((r) => r.change === 'trimmed'), exited: paired.filter((r) => r.change === 'exited') } : m0;
+  const asValue = (r: MoveRow) => (r.filer_value && !r.unreliable ? { ...r, unreliable: 'value' as const } : r);
+  const lists = [m0.new, m0.added, m0.trimmed, m0.exited].flat();
+  const fv = lists.filter((r) => r.filer_value && !r.unreliable).map((r) => r.value_delta);
+  const m1 = fv.length ? { ...m0, bought_usd: m0.bought_usd - fv.reduce((s, v) => s + Math.max(v, 0), 0), sold_usd: m0.sold_usd + fv.reduce((s, v) => s + Math.min(v, 0), 0), new: m0.new.map(asValue), added: m0.added.map(asValue), trimmed: m0.trimmed.map(asValue), exited: m0.exited.map(asValue) } : m0;
+  const paired = holdCusipPairs([...m1.new, ...m1.added, ...m1.trimmed, ...m1.exited]);
+  const m = paired.some((r) => r.cusip_pair) ? { ...m1, new: paired.filter((r) => r.change === 'new'), added: paired.filter((r) => r.change === 'added'), trimmed: paired.filter((r) => r.change === 'trimmed'), exited: paired.filter((r) => r.change === 'exited') } : m1;
   const all = [m.new, m.added, m.trimmed, m.exited].flat();
-  if (!all.some((r) => r.unreliable)) return m;
-  const keep = (rows: MoveRow[]) => rows.filter((r) => !r.unreliable);
-  const out = [...(m.not_counted ?? []), ...all.filter((r) => r.unreliable)];
+  const out0 = (r: MoveRow) => !!r.unreliable && r.unreliable !== 'value';
+  if (!all.some(out0)) return m;
+  const keep = (rows: MoveRow[]) => rows.filter((r) => !out0(r));
+  const out = [...(m.not_counted ?? []), ...all.filter(out0)];
   return { ...m, new: keep(m.new), added: keep(m.added), trimmed: keep(m.trimmed), exited: keep(m.exited), not_counted: [...new Map(out.map((r) => [posKey(r), r])).values()] };
 }
 /** "HON: CUSIP exchanged (438516106 → 438516205), not a trade" */

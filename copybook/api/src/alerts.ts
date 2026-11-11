@@ -1592,11 +1592,22 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
       // ingest's side wins. A line it now holds ("both": Mizuho's non-standard option lines under the options rule)
       // leaves the moves for the held line, and its correction note says so; an unmarked line takes its side.
       const book = stored.some((r) => r.put_call || r.unreliable) ? await buildRows(env, x).catch(() => null) : null;
+      // Re-marked from ingest's current data, not the stored marking (the analyst's round 39): Mizuho Markets' SPY calls,
+      // stored as \"shares\" with a -$58.0M filed change, are \"both\" in hl/ now. Its held_reason and cusip_mismatch ride along.
       const sideOf = (r: MoveRow) => {
-        const s = book ? unreliableSide(book.rows.get(rowKey(r))) : null;
-        return s === 'both' || (s && !r.unreliable) ? { unreliable: s } : undefined;
+        const b = book?.rows.get(rowKey(r)) as (BuildRow & { held_reason?: string }) | undefined;
+        const s = b ? unreliableSide(b) : null;
+        return s ? { unreliable: s, ...(b?.held_reason ? { held_reason: b.held_reason } : {}) } : undefined;
       };
-      const now1 = paired.map((r) => markUnreliable(guardShares(r, r.prev_value != null ? r.value - r.prev_value : v1.get(posKey(r))), sideOf(r)));
+      const flags = (r: MoveRow): MoveRow => {
+        const b = book?.rows.get(rowKey(r)) as (BuildRow & { cusip_mismatch?: boolean }) | undefined;
+        return b?.cusip_mismatch === true && !r.cusip_mismatch ? { ...r, cusip_mismatch: true } : r;
+      };
+      const marked0 = paired.map((r) => markUnreliable(guardShares(flags(r), r.prev_value != null ? r.value - r.prev_value : v1.get(posKey(r))), sideOf(r)));
+      // A line whose value can't be trusted names other filers' median per share.
+      const needMedian = marked0.filter((r) => r && (r.unreliable === 'value' || r.unreliable === 'both') && r.median_per_share == null);
+      const cons = needMedian.length ? await consensusFor(env, x.quarter, needMedian.map((r) => r!.cusip)).catch(() => null) : null;
+      const now1 = marked0.map((r) => (r && cons?.get(r.cusip)?.cur && (r.unreliable === 'value' || r.unreliable === 'both') && r.median_per_share == null ? { ...r, median_per_share: cons.get(r.cusip)!.cur! } : r));
       const heldNow = paired.filter((r, i) => !now1[i] && sideOf(r)?.unreliable === 'both').map((r) => ({ cusip: r.cusip, ticker: r.ticker, issuer: r.issuer, display_name: r.display_name, put_call: r.put_call, change: r.change, reason: 'unreliable_shares' as const }));
       const isHeld = (p: { cusip: string; put_call?: string | null }) => heldNow.some((h) => posKey(h) === posKey(p));
       const ch = now1.filter((r): r is MoveRow => !!r);

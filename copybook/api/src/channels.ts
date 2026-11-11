@@ -4,7 +4,7 @@ import { isPro, type Env, type Member } from './env';
 import { SCHEMA_VERSION } from './v1';
 import { getMember, type Follows } from './members';
 import { listSeats } from './seats';
-import { cleanItem4, countedMoves, filingId, type Moves } from './edgar';
+import { cleanItem4, countedMoves, filingId, type MoveRow, type Moves } from './edgar';
 import { hmacHex } from './tokens';
 
 /**
@@ -474,7 +474,10 @@ function hookMoves(m: Moves): Moves {
   const c = countedMoves(m);
   // No direction either: an add or trim reads change \"unknown\" (as hl/'s held rows; \"trimmed\" would assert a trade);
   // new and exited stand. value and prev_value are the facts.
-  return c.not_counted?.length ? { ...c, not_counted: c.not_counted.map((r) => ({ ...r, change: r.change === 'new' || r.change === 'exited' ? r.change : 'unknown', value_delta: null as unknown as number, delta_pct_of_book: null, counted: false })) } : c;
+  // A \"value\" row stays in its group (a real trade by shares) with value_delta null; it is outside bought_usd and sold_usd.
+  const v = (rows: MoveRow[]) => rows.map((r) => (r.unreliable === 'value' ? { ...r, value_delta: null as unknown as number, delta_pct_of_book: null, counted: false } : r));
+  const g = { ...c, new: v(c.new), added: v(c.added), trimmed: v(c.trimmed), exited: v(c.exited) };
+  return c.not_counted?.length ? { ...g, not_counted: c.not_counted.map((r) => ({ ...r, change: r.change === 'new' || r.change === 'exited' ? r.change : 'unknown', value_delta: null as unknown as number, delta_pct_of_book: null, counted: false })) } : g;
 }
 
 export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEvent[], detectedAt: number): { id: string; body: string }[] {

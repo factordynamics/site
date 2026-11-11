@@ -516,11 +516,11 @@ const rowName = (r: MoveRow) => (r.ticker || (r.display_name || r.issuer || r.cu
 /** 4,380,656 as "4.38M", 44,294 as "44K". */
 const compact = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toPrecision(3)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n.toLocaleString('en-US'));
 /** " · Unusual size · check the filing" after a large but real move. */
-const odd = (r: MoveRow) => `${r.unusual ? ` · ${UNUSUAL}` : ''}${r.filer_value ? ` · ${FILER_VALUE}` : ''}${unreliableNote(r) ? ` · ${unreliableNote(r)}` : ''}`;
+const odd = (r: MoveRow) => `${r.unusual ? ` · ${UNUSUAL}` : ''}${r.filer_value && r.unreliable !== 'value' ? ` · ${FILER_VALUE}` : ''}${unreliableNote(r) ? ` · ${unreliableNote(r)}` : ''}`;
 
 /** A marked row's note (markUnreliable): what can't be trusted, and that it isn't in the totals. */
 function unreliableNote(r: MoveRow): string {
-  if (r.unreliable === 'value') return `value unavailable${r.filed_per_share ? ` (filed at ≈$${r.filed_per_share >= 100 ? Math.round(r.filed_per_share).toLocaleString('en-US') : r.filed_per_share.toFixed(2)}/sh)` : ''}, not in totals`;
+  if (r.unreliable === 'value') return 'value unavailable, not in totals';
   if (r.unreliable === 'shares') return r.change === 'new' || r.change === 'exited' ? "share counts don't reconcile, not in totals" : 'not counted';
   if (r.unreliable === 'both') return 'share count unreliable in this filing, not in totals';
   return '';
@@ -534,14 +534,17 @@ const NOT_COUNTED_SHARES = "share counts don't reconcile, not counted";
 /** A row's size: dollars, the share change when its value can't be trusted ("TEVA +159,272 sh"), or the filed values. */
 const amount = (r: MoveRow) => {
   if (sharesOnly(r)) return `${usd(prevFiled(r), false)} → ${usd(r.value, false)} as filed`;
-  if (r.unreliable !== 'value' || r.change === 'new' || r.change === 'exited') return usd(r.value_delta);
-  const d = r.shares - r.prev_shares;
-  return `${d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh`;
+  return r.unreliable === 'value' || r.unreliable === 'both' ? shareMove(r) : usd(r.value_delta);
+};
+/** A move by share count, for a line whose $ can't be trusted: \"+159,272 sh\", \"3,900,000 sh\" (new), \"-133,000 sh\" (exit). */
+const shareMove = (r: MoveRow) => {
+  const d = r.change === 'new' ? r.shares : r.change === 'exited' ? -(r.prev_shares ?? 0) : r.shares - (r.prev_shares ?? 0);
+  return `${r.change === 'new' ? '' : d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh`;
 };
 
 /** The trade as a share of this filing's book; no % without it (pct_of_book is the position's weight, never a trade size). */
 const bookPct = (r: MoveRow) => {
-  if (sharesOnly(r)) return '';
+  if (sharesOnly(r) || r.unreliable === 'value' || r.unreliable === 'both') return '';
   const d = r.delta_pct_of_book;
   if (!d) return '';
   return Math.abs(d) < 0.0005 ? '<0.1%' : `${(Math.abs(d) * 100).toFixed(1)}%`;
@@ -622,6 +625,13 @@ function yourMoves(a: Alert13F, f: Follows): MoveRow[] {
   return all.filter((r) => r.ticker && (f.owned.includes(r.ticker) || f.stocks.includes(r.ticker)) && !seen.has(`${r.ticker}:${r.put_call ?? ''}`) && !!seen.add(`${r.ticker}:${r.put_call ?? ''}`));
 }
 const verb = (r: MoveRow) => (!r.prev_shares ? 'new' : !r.shares ? 'exited' : r.shares > r.prev_shares ? 'added' : 'trimmed');
+/** One of your names: a trade in $, a \"value\" trade by shares, or a held line's facts. */
+const yourLine = (r: MoveRow) =>
+  r.unreliable === 'value'
+    ? `${verb(r)} ${shareTrade(r) || shareMove(r)}, value unavailable`
+    : r.unreliable
+      ? `${heldFacts(r) ? `${heldFacts(r)}, ` : ''}not counted (${notCountedWhy(r)})`
+      : `${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''}`;
 
 /** Rows the publish gate held back, named without figures. */
 const posName = (h: { ticker: string | null; display_name: string | null; issuer: string; put_call: string | null }) => `${h.ticker || h.display_name || h.issuer}${h.put_call ? ` ${h.put_call.toLowerCase()}s` : ''}`;
@@ -633,22 +643,37 @@ function heldLine(a: Alert13F): string {
   ].filter(Boolean).join(' ');
 }
 /** Why a line isn't counted, in a few words. */
-const notCountedWhy = (x: { unreliable?: string; put_call: string | null; reason?: string; cusip_pair?: boolean }) =>
-  x.cusip_pair ? 'possible CUSIP change' : x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'both' && x.put_call ? "filed figures don't reconcile" : x.unreliable === 'shares' || x.put_call ? "share counts don't reconcile" : 'pre-split count';
+// \"pre-split\" only where ingest's held_reason says so (the trader, Nov 11): Mizuho's Oracle and O read \"pre-split count\"
+// from a fallback, which was wrong.
+const notCountedWhy = (x: { unreliable?: string; put_call: string | null; reason?: string; cusip_pair?: boolean; held_reason?: string }) =>
+  x.cusip_pair ? 'possible CUSIP change' : /pre.?split|mixed.?scale/i.test(x.held_reason ?? '') ? 'share count looks pre-split' : x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'both' && x.put_call ? "filed figures don't reconcile" : "share counts don't reconcile";
+const perShare = (x: number) => (x >= 10 ? Math.round(x).toLocaleString('en-US') : x.toFixed(2));
+/** \"filed value implausible (≈$7,758/sh vs ~$78)\": a line priced far off other filers, without its filed $. */
+function implausible(r: MoveRow): string {
+  const ps = r.filed_per_share ?? (r.shares > 0 && r.value > 0 ? r.value / r.shares : null);
+  const m = r.median_per_share;
+  const off = (r as { price_outlier?: boolean }).price_outlier === true || r.unreliable === 'value' || (!!ps && !!m && (ps / m > 3 || m / ps > 3));
+  return ps && off ? `filed value implausible (≈$${perShare(ps)}/sh${m ? ` vs ~$${perShare(m)}` : ''})` : '';
+}
 /**
  * A marked row's filed facts, never a computed trade in $: "value as filed fell from $121.6M to $6.7M" (shares side),
  * "+159,272 sh" (value side), "new, 3.9M sh, value as filed $30.2B", "sold all 646K sh, value as filed was $121.6M".
  */
 function heldFacts(r: MoveRow): string {
-  if (r.change === 'new') return `new, ${compact(r.shares)} sh${r.value ? `, value as filed ${usd(r.value, false)}` : ''}`;
-  if (r.change === 'exited') {
-    const was = r.prev_value ?? (r.value_delta < 0 ? -r.value_delta : null); // an exit's delta is minus its filed value
-    return `sold all${r.prev_shares ? ` ${compact(r.prev_shares)} sh` : ''}${was ? `, value as filed was ${usd(was, false)}` : ''}`;
+  // Only a \"shares\" line keeps its filed $ (\"value as filed\"); a \"value\" or \"both\" line never prints one (the analyst's
+  // round 39): its shares, and why the value is off when it is priced far from other filers.
+  if (r.unreliable === 'shares') {
+    if (r.change === 'new') return `new, ${compact(r.shares)} sh${r.value ? `, value as filed ${usd(r.value, false)}` : ''}`;
+    if (r.change === 'exited') {
+      const was = r.prev_value ?? (r.value_delta < 0 ? -r.value_delta : null); // an exit's delta is minus its filed value
+      return `sold all${r.prev_shares ? ` ${compact(r.prev_shares)} sh` : ''}${was ? `, value as filed was ${usd(was, false)}` : ''}`;
+    }
+    return filedFacts(r);
   }
-  if (r.unreliable === 'shares') return filedFacts(r);
   const d = r.shares - (r.prev_shares ?? 0);
-  const ps = r.filed_per_share;
-  return r.unreliable === 'value' && d ? `${d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh${ps ? `, filed at ≈$${ps >= 100 ? Math.round(ps).toLocaleString('en-US') : ps.toFixed(2)}/sh` : ''}` : '';
+  const sh = r.change === 'new' ? `new, ${compact(r.shares)} sh` : r.change === 'exited' ? `sold all${r.prev_shares ? ` ${compact(r.prev_shares)} sh` : ''}` : r.unreliable === 'value' ? (d ? `${d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh` : '') : r.prev_shares ? `${compact(r.prev_shares)} → ${compact(r.shares)} sh as filed` : '';
+  const why = implausible(r);
+  return [sh, why].filter(Boolean).join('; ');
 }
 const isMoveRow = (x: unknown): x is MoveRow => typeof (x as MoveRow)?.value_delta === 'number';
 /** "Not counted: SPY calls, SPY puts (share counts don't reconcile).": lines held out, or marked and past the lists. */
@@ -660,7 +685,8 @@ function notCountedLine(a: Alert13F): string {
   for (const x of items) {
     const facts = isMoveRow(x) ? heldFacts(x) : '';
     const why = notCountedWhy(x);
-    if (facts) by.set(`${posName(x)} ${facts} (${why})`, []);
+    // \"EW puts new, 3.9M sh; filed value implausible (≈$7,758/sh vs ~$78)\" already says why.
+    if (facts) by.set(facts.includes('implausible') ? `${posName(x)} ${facts}` : `${posName(x)} ${facts} (${why})`, []);
     else by.set(why, [...(by.get(why) ?? []), posName(x)]);
   }
   return `Not counted: ${[...by].map(([k, names]) => (names.length ? `${[...new Set(names)].join(', ')} (${k})` : k)).join('; ')}.`;
@@ -735,7 +761,7 @@ function filingBlock(env: Env, a0: Alert13F, f: Follows): string {
     for (const r of mv.exchanged ?? []) lines.push(`  ${exchangeLine(r)}`);
     if (a.held?.length || a.moves?.not_counted?.length) lines.push(`  ${heldLine(a)}`);
     const mine = yourMoves(a, f);
-    if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${r.unreliable ? `${heldFacts(r) ? `${heldFacts(r)}, ` : ''}not counted (${notCountedWhy(r)})` : `${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''}`} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
+    if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${yourLine(r)} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
   } else if (a.top?.length) {
     lines.push('  No earlier quarter on file for this filer, so no changes yet. Largest holdings:');
     lines.push(`  ${a.top.map((r) => `${r.ticker || r.display_name || r.issuer}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} ${usd(r.value, false)}${flag(r.ticker, f)}`).join(', ')}`);
@@ -965,12 +991,12 @@ function filingHtml(env: Env, a0: Alert13F, f: Follows): string {
     out.push(table(['Stock', 'Shares', 'Value', '% of book'], a.reveal.rows.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, r.shares.toLocaleString('en-US'), usd(r.value, false), bookPct(r)]), [1, 2, 3]));
   } else if (mv) {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
-    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}${unreliableNote(r) ? `<br><span style="color:#b45309;font-size:12px">${esc(unreliableNote(r))}</span>` : ''}`, amount(r), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, r.unreliable === 'value' ? '' : bookPct(r)]));
+    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value && r.unreliable !== 'value' ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}${unreliableNote(r) ? `<br><span style="color:#b45309;font-size:12px">${esc(unreliableNote(r))}</span>` : ''}`, amount(r), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, r.unreliable === 'value' ? '' : bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', 'Trade, % of book'], rows, [2, 4]));
     for (const r of mv.exchanged ?? []) out.push(`<p style="margin:6px 0 2px">${esc(exchangeLine(r))}</p>`);
     if (a.held?.length || a.moves?.not_counted?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);
     const mine = yourMoves(a, f);
-    if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${r.unreliable ? esc(`${heldFacts(r) ? `${heldFacts(r)}, ` : ''}not counted (${notCountedWhy(r)})`) : `${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${esc(shareTrade(r))}` : ''}`} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
+    if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${esc(yourLine(r))} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
   } else if (a.top?.length) {
     out.push('<p style="margin:2px 0">No earlier quarter on file for this filer, so no changes yet. Largest holdings:</p>');
     out.push(table(['Stock', 'Value'], a.top.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, usd(r.value, false)]), [1]));
@@ -1062,7 +1088,7 @@ function holdtermFiling(env: Env, a0: Alert13F): string {
     for (const [title, rows] of [['TOP BUYS', buys], ['TOP SELLS', sells]] as const) {
       if (!rows.length) continue;
       lines.push(title);
-      for (const [label, r] of rows) lines.push(sharesOnly(r) ? `  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad('-', 9)}  ${filedFacts(r)}; ${NOT_COUNTED_SHARES}` : `  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad(usd(r.value_delta), 9)}  ${positionChange(label === 'ADD' ? 'Added' : label === 'TRIM' ? 'Trimmed' : label === 'NEW' ? 'New' : 'Exited', r)}${odd(r)}`);
+      for (const [label, r] of rows) lines.push(sharesOnly(r) ? `  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad('-', 9)}  ${filedFacts(r)}; ${NOT_COUNTED_SHARES}` : `  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad(amount(r), 9)}  ${positionChange(label === 'ADD' ? 'Added' : label === 'TRIM' ? 'Trimmed' : label === 'NEW' ? 'New' : 'Exited', r)}${odd(r)}`);
     }
   } else if (a.top?.length) {
     lines.push('', 'LARGEST HOLDINGS', ...a.top.slice(0, 5).map((r) => `  ${pad(rowName(r), 19)}${lpad(usd(r.value, false), 9)}`));
