@@ -99,6 +99,8 @@ export async function createCheckout(env: Env, b: Record<string, unknown>): Prom
     success_url: `${env.SITE_URL}account/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${env.SITE_URL}pricing/${ref ? `?ref=${ref}` : ''}`,
     'metadata[copybook]': ref ? 'referral' : 'checkout',
+    // The seller on the card statement is the account's name: say whose product it is.
+    'custom_text[submit][message]': 'Copybook is made by Factor Dynamics.',
   });
   // The first charge, after the trial, with the referral month off: what the pricing page shows next to the button.
   const list = Number(price.unit_amount ?? 0);

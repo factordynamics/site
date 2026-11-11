@@ -293,6 +293,8 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
       success_url: `${account}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${env.SITE_URL}pricing/`,
       'metadata[copybook]': 'resume',
+      // The seller on the card statement is the account's name: say whose product it is.
+      'custom_text[submit][message]': 'Copybook is made by Factor Dynamics.',
     });
     return go(cs.url);
   } catch (e) {
