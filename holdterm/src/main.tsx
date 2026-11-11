@@ -2,9 +2,9 @@ import '@fontsource-variable/inter/index.css'
 import './styles.css'
 import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { aggregate, freshness, funds, loadBooks, loadIndex, loadStockIndex, roster, searchNames, type Agg, type Manager, type StockIndexRow } from './data'
+import { aggregate, freshness, funds, loadBooks, loadIndex, loadStockIndex, quarterLabel, roster, searchNames, type Agg, type Manager, type StockIndexRow } from './data'
 import { A, navigate, usd, usePath } from './lib'
-import { dataSlug, fundPath, issuerName, publicSlug } from './names'
+import { dataSlug, firmName, fundPath, issuerName, publicSlug } from './names'
 import { price as PRICE } from './config'
 import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Guide, Home, NotFound, reportError, Privacy, Stock, Terms } from './pages'
 
@@ -122,17 +122,41 @@ const ALIAS: Record<string, string> = { google: 'GOOGL', facebook: 'META', tsmc:
 /** Letters and digits only, so "coca cola" finds Coca-Cola and "jp morgan" finds JPMorgan Chase. */
 const flat = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '')
 const pctWord = (x: number) => `${Math.round(x * 100)}%`
-/** Why a fund the published rule screened out last time isn't followed, in the rule's own terms. */
-function whyNot(c: (typeof roster.near_misses)[number] & { fails?: string[] }) {
+/** A well-known 13F filer Holdterm doesn't follow, with what the screen found (scripts/not-followed.py). */
+type NotFollowed = { c: string; s: string | null; n: string; p?: string; f?: string[]; h?: string[]; last?: string; v?: number; k?: number; t10?: number; t1?: number; etf?: number; to?: number; kind?: string; x?: string }
+type NotFollowedFile = { period: string; filers: NotFollowed[] }
+// The kind of filer a name says it is (screen.py's type test), as a noun.
+const KIND: [RegExp, string][] = [
+  [/bank|banco|bancorp|trust co|national association/, 'a bank'],
+  [/securities|capital markets/, 'a broker'],
+  [/insurance|assurance|life/, 'an insurer'],
+  [/pension|retirement|teachers/, 'a pension'],
+  [/university|regents|college|endowment/, 'an endowment'],
+  [/foundation/, 'a foundation'],
+  [/sovereign|investment board/, 'a state investment fund'],
+  [/wealth/, 'a wealth manager'],
+  [/family office/, 'a family office'],
+]
+/** Why a fund isn't followed, in the published rule's own terms and the numbers the screen found (at most two reasons). */
+function whyNot(c: NotFollowed, period: string) {
   const r = roster.rule
-  const why: Record<string, string> = {
-    top10: `its ten largest holdings are ${pctWord(c.top10)} of its portfolio, and the rule asks for at least ${pctWord(r.min_top10)}`,
-    turnover: `it traded ${pctWord(c.turnover)} of its portfolio last quarter, and the rule allows up to ${pctWord(r.max_turnover)}`,
-    etf: `more than ${pctWord(r.max_etf)} of its portfolio is in ETFs and index funds`,
-    top1: `its largest position is more than ${pctWord(r.max_top1)} of its portfolio`,
+  if (c.h) return c.h.join(', and ')
+  if (c.last) return `its latest 13F is for ${quarterLabel(c.last)}, and the rule last screened ${quarterLabel(period)} filings`
+  const why: Record<string, string | undefined> = {
+    size: c.v != null ? `its US stocks were worth ${usd(c.v)} in its ${quarterLabel(period)} 13F, and the rule asks for at least ${usd(r.min_value, 0)}` : undefined,
+    positions: c.k != null ? `it held ${c.k.toLocaleString('en-US')} stocks, and the rule asks for ${r.min_positions} to ${r.max_positions}` : undefined,
+    top10: c.t10 != null ? `its ten largest holdings are ${pctWord(c.t10)} of its portfolio, and the rule asks for at least ${pctWord(r.min_top10)}` : undefined,
+    top1: c.t1 != null ? `its largest position is ${pctWord(c.t1)} of its portfolio, and the rule allows up to ${pctWord(r.max_top1)}` : undefined,
+    etf: c.etf != null ? `${pctWord(c.etf)} of its portfolio is in ETFs and index funds, and the rule allows up to ${pctWord(r.max_etf)}` : undefined,
+    turnover: c.to != null ? `it traded ${pctWord(c.to)} of its portfolio last quarter, and the rule allows up to ${pctWord(r.max_turnover)}` : undefined,
+    type: c.x ? `the rule leaves it out as a ${c.x}` : c.kind ? `it’s ${KIND.find(([re]) => re.test(c.kind!))?.[1] ?? 'a kind of filer'}, which the rule leaves out` : undefined,
+    // Only on its own: a late filing can land outside the data the screen reads, so other reasons are surer.
+    history: (c.f ?? []).length === 1 ? `the screen found no 13F from it for the quarter before or two years earlier, and the rule asks for at least ${r.min_years} years of filings` : undefined,
   }
-  return (c.fails ?? []).map((f) => why[f]).filter(Boolean).join(', and ')
+  return (c.f ?? []).map((f) => why[f]).filter(Boolean).slice(0, 2).join('. Also, ')
 }
+let notFollowedP: Promise<NotFollowedFile> | undefined
+const loadNotFollowed = () => (notFollowedP ??= import('./not-followed.json').then((m) => m.default as NotFollowedFile))
 
 function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => void }) {
   const [q, setQ] = useState('')
@@ -140,6 +164,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   const [stocks, setStocks] = useState<StockIndexRow[]>([])
   const [mgrs, setMgrs] = useState<Manager[]>([])
   const [held, setHeld] = useState<Agg[]>([])
+  const [nf, setNf] = useState<NotFollowedFile | null>(null)
   const input = useRef<HTMLInputElement>(null)
   // Escape, Cancel or a click outside puts focus back where it was, not at the top of the page.
   const back = useRef<HTMLElement | null>(null)
@@ -157,6 +182,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
     if (!mgrs.length) loadIndex().then((ix) => setMgrs(funds(ix))).catch(() => {})
     // The same counts as the stock pages and Most owned: share classes combined, followed investors only.
     if (!held.length) loadBooks().then((b) => setHeld(aggregate(b).rows)).catch(() => {})
+    if (!nf) loadNotFollowed().then(setNf).catch(() => {})
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const owned = useMemo(() => {
     const m = new Map<string, number>()
@@ -212,7 +238,18 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   const hits = groups.flatMap(([, h]) => h)
   // A fund the rule screened out (say, Fundsmith) gets a plain reason instead of silence.
   const s0 = q.trim().toLowerCase()
-  const missed = s0.length > 2 ? roster.near_misses.find((c) => `${c.firm} ${(c.slug ?? '').replace(/-/g, ' ')}`.toLowerCase().includes(s0)) : undefined
+  // Searched by firm or by the person it's known for: "michael burry", "druckenmiller", "fundsmith".
+  const missed = useMemo(() => {
+    if (!nf || s0.length < 3) return undefined
+    const fs = flat(s0)
+    const hay = (c: NotFollowed) => [firmName(c.s ?? '', c.n), c.n, c.p ?? '', (c.s ?? '').replace(/-/g, ' ')].join(' | ').toLowerCase()
+    // The file is from the last screen; a fund the roster has taken on since (a roster run) is followed now.
+    const on = new Set(roster.funds.flatMap((f) => [f.cik, f.predecessor]))
+    const m = nf.filers.filter((c) => !on.has(c.c) && (hay(c).includes(s0) || (fs.length > 3 && flat(hay(c)).includes(fs))))
+    // A whole-word start beats a match inside a word ("smith": Terry Smith before Smithfield).
+    return m.find((c) => hay(c).split(/[ |]+/).some((w) => w.startsWith(s0.split(' ')[0]))) ?? m[0]
+  }, [nf, s0])
+  const why = missed && nf ? whyNot(missed, nf.period) : ''
   const toRule = (e: React.MouseEvent) => {
     e.preventDefault()
     setOpen(false)
@@ -296,7 +333,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
             ))}
         </div>
         {!q.trim() && !hits.length && <div className="no-hits">Loading suggestions…</div>}
-          {q.trim() && !hits.length && !(missed && whyNot(missed)) && (
+          {q.trim() && !hits.length && !why && (
             <div className="no-hits">
               <b>Nothing matches “{q.trim()}”</b>
               <span>Try a company name such as Apple, a ticker such as MSFT, or an investor such as Berkshire Hathaway.</span>
@@ -310,9 +347,9 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
               )}
             </div>
           )}
-        {missed && whyNot(missed) && (
+        {missed && why && (
           <p className="search-why">
-            {missed.firm} isn’t one of the investors Holdterm follows: {whyNot(missed)}.{' '}
+            {firmName(missed.s ?? '', missed.n)}{missed.p && !firmName(missed.s ?? '', missed.n).includes(missed.p) ? ` (${missed.p})` : ''} isn’t one of the investors Holdterm follows: {why}.{' '}
             <a href="/about#roster" onClick={toRule}>
               How investors are chosen
             </a>

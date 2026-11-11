@@ -3,6 +3,9 @@
 # Nobody is hand-picked; the only manual input is the type exclusion list in roster-exclusions.json.
 # Usage: python3 -I scripts/screen.py DIR_Q DIR_PRIOR_Q DIR_TWO_YEARS_AGO PERIOD PRIOR_PERIOD OLD_PERIOD > scripts/universe.json
 #   e.g. 01jun2026-31aug2026 01mar2026-31may2026 01jun2024-31aug2024 30-JUN-2026 31-MAR-2026 30-JUN-2024
+# Then, for search's "why isn't this fund followed" (src/not-followed.json), with the same arguments:
+#   SCREEN_ALL=/tmp/screen-all.json python3 -I scripts/screen.py ... > /dev/null
+#   python3 -I scripts/not-followed.py /tmp/screen-all.json index.json > src/not-followed.json
 import collections, csv, json, os, re, sys
 
 csv.field_size_limit(10**9)
@@ -19,6 +22,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 INCUMBENTS = set(json.load(open(os.path.join(HERE, 'incumbents.json')))['ciks'])
 EXCLUDED = json.load(open(os.path.join(HERE, 'roster-exclusions.json')))
 dq, dp, do, pq, pp, po = sys.argv[1:7]
+# With SCREEN_ALL=path, also write every 13F-HR filer of the period with the tests it fails ('history', 'size' and
+# 'positions' come first; the others only for filers that pass those), for scripts/not-followed.py. stdout is unchanged.
+ALL = os.environ.get('SCREEN_ALL')
+every = []
 
 
 def rows(d, f):
@@ -77,7 +84,9 @@ for c, bk in B.items():
     tot = sum(h[0] for h in live.values())
     b = RULE['incumbent_buffer'] if c in INCUMBENTS else 0
     lo, hi = 1 - b, 1 + b
-    if c not in o or c not in p or tot < RULE['min_value'] * lo or not RULE['min_positions'] <= len(live) <= RULE['max_positions'] * hi:
+    pre = [k for k, bad in [('history', c not in o or c not in p), ('size', tot < RULE['min_value'] * lo), ('positions', not RULE['min_positions'] <= len(live) <= RULE['max_positions'] * hi)] if bad]
+    if pre:
+        if ALL: every.append(dict(cik=c, name=names.get(q[c][-1], ''), value=round(tot), positions=len(live), fails=pre))
         continue
     name = names.get(q[c][-1], '')
     w = sorted((h[0] / tot for h in live.values()), reverse=True)
@@ -90,6 +99,12 @@ for c, bk in B.items():
     if c in EXCLUDED: row['excluded'] = EXCLUDED[c]
     row['fails'] = fails
     out.append(row)
+    if ALL: every.append(row)
 out.sort(key=lambda r: -r['value'])
 json.dump(dict(period=pq, source='SEC Form 13F data sets', rule=RULE, screened=len(out), funds=[r for r in out if not r['fails']], near_misses=[r for r in out if len(r['fails']) == 1 and r['fails'] != ['type']]), sys.stdout, indent=1)
 print()
+if ALL:
+    for r in every:  # what kind of filer the name says it is, for the 'type' reason
+        m = 'type' in r['fails'] and 'excluded' not in r and TYPE.search(r['name'])
+        if m: r['kind'] = m.group(0).lower()
+    json.dump(sorted(every, key=lambda r: -r['value']), open(ALL, 'w'), indent=0)
