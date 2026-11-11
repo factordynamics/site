@@ -311,5 +311,21 @@
   "ticker": "GE",
   "listed": true,
   "source": "General Electric CUSIP before the 2021 reverse split (now 369604301); same issuer, ticker GE (SEC company_tickers.json: GE = CIK 40545)"
+ },
+ "023135906": {
+  "ticker": "AMZN",
+  "listed": true,
+  "filers": [
+   "intermede-investment-partners-ltd-4713"
+  ],
+  "source": "Intermede Investment Partners Q2 2026 13F (0001664713-26-000003): AMAZON COM INC, title COM, 452,551 SH, no putCall, filed under Amazon's option CUSIP. Remove once Copybook maps it."
+ },
+ "92343V954": {
+  "ticker": "VZ",
+  "listed": true,
+  "filers": [
+   "davis-asset-management-l-p-5894"
+  ],
+  "source": "Davis Asset Management Q2 2026 13F: Verizon Communications, title COM, SH, no putCall, filed under Verizon's option CUSIP. Remove once Copybook maps it."
  }
 }

@@ -109,9 +109,12 @@ export type StockHolder = {
   value: number
   weight: number
   prev_shares?: number | null
+  prev_value?: number | null
   delta_value?: number | null
   change: Change
   put_call?: string
+  /** The share counts don't fit across filings (the book's suspect_units), so no trade is counted. */
+  unclear?: boolean
 }
 export type StockFile = {
   ticker: string
@@ -178,7 +181,9 @@ async function readCounting<T>(body: ReadableStream<Uint8Array>, onBytes: (n: nu
   return JSON.parse(new TextDecoder().decode(all)) as T
 }
 
-const OVERRIDE = TICKERS as unknown as Record<string, { ticker: string; listed: boolean; name?: string; same_as?: string }>
+// \`filers\`: a common-stock line filed under an option CUSIP (90 or 95) with no put or call, by these funds. Copybook's
+// stock file leaves it out, so the stock page reads those funds' books for it (loadStock).
+const OVERRIDE = TICKERS as unknown as Record<string, { ticker: string; listed: boolean; name?: string; same_as?: string; filers?: string[] }>
 /** Fills tickers Copybook hasn't mapped from src/tickers.json (each entry cites its SEC source). */
 export function fillTicker<T extends { cusip?: string | null; ticker: string | null; former?: string; display_name?: string }>(h: T): T {
   const o = !h.ticker && h.cusip ? OVERRIDE[h.cusip] : undefined
@@ -207,9 +212,8 @@ const TICKER_KEY = new Map<string, string>()
  * (one trust issues many funds) and preferreds or notes keep their full CUSIP. */
 export function issuerKey(h: KeyLine & { put_call?: string | null }) {
   if (!h.cusip) return h.ticker || h.issuer
-  // Issue numbers 90 and 95 are option CUSIPs (calls and puts); untickered lines filed under one are not the stock,
-  // unless the line says it is common stock (Intermede's Q2 Amazon: "COM" under 023135906, no put or call).
-  const optionCusip = !h.ticker && /^(90|95)$/.test(h.cusip.slice(6, 8)) && !/\bCOM(MON)?\b/i.test(h.title ?? '')
+  // Issue numbers 90 and 95 are option CUSIPs (calls and puts); untickered lines filed under one are not the stock.
+  const optionCusip = !h.ticker && /^(90|95)$/.test(h.cusip.slice(6, 8))
   if (optionCusip || isWarrant(h) || isFundLike({ sector: h.sector, issuer: h.issuer, title: h.title ?? '' }) || isSenior(h)) return h.cusip
   const base = OVERRIDE[h.cusip]?.same_as ?? h.cusip.slice(0, 6)
   if (!h.ticker) return base
@@ -233,6 +237,14 @@ export const tradeBreak = (delta: number, value: number, prevValue: number) => M
 function normalise(hs: Holding[]) {
   const by = new Map<string, { sector: string; value: number }>()
   for (const h of hs) {
+    // Copybook flags a line whose share counts don't fit across filings (suspect_units: Guardcap's BKNG, 646,216 then
+    // 1,304 shares). There is no reliable trade, so every page counts none: no trade value, not a buyer or seller,
+    // and the row says the shares don't match rather than "No change". Stock pages apply it too (loadStock).
+    if (h.suspect_units && !h.put_call) {
+      h.value_delta = 0
+      h.share_change = null
+      h.change = 'unchanged'
+    }
     // Such a trade is shown as the change in reported value, which is bounded by the two positions.
     if (h.value_delta != null && !h.put_call && tradeBreak(h.value_delta, h.value, h.prev_value ?? 0)) {
       h.value_delta = h.value - (h.prev_value ?? 0)
@@ -382,11 +394,19 @@ const LOCAL = new Map<string, { cusip: string; ticker: string }[]>()
 {
   const groups = new Map<string, { cusip: string; ticker: string }[]>()
   for (const [cusip, o] of Object.entries(OVERRIDE)) {
-    if (typeof o !== 'object' || !o.listed) continue
+    if (typeof o !== 'object' || !o.listed || o.filers) continue
     const k = o.same_as ?? cusip.slice(0, 6)
     groups.set(k, [...(groups.get(k) ?? []), { cusip, ticker: o.ticker }])
   }
   for (const g of groups.values()) for (const c of g) LOCAL.set(c.ticker, g)
+}
+/** A stock-page holder row from a fund's own book lines, as /consensus counts them. */
+const bookRow = (b: Book, ls: Holding[]): StockHolder => {
+  const shares = ls.reduce((x, h) => x + h.shares, 0)
+  const unclear = ls.some((h) => h.suspect_units)
+  const prev = unclear || ls.some((h) => h.shares_break) ? null : ls.some((h) => h.prev_shares != null) ? ls.reduce((x, h) => x + (h.prev_shares ?? 0), 0) : null
+  const change = unclear ? 'unchanged' : ls.length === 1 ? ls[0].change : changeOf(shares, prev)
+  return { slug: b.slug, manager: b.firm, firm: b.firm, quarter: b.quarter, filing_date: b.filing_date, featured: false, shares, value: ls.reduce((x, h) => x + h.value, 0), weight: ls.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: ls.reduce((x, h) => x + (h.value_delta ?? 0), 0), change, put_call: ls[0].put_call ?? undefined, unclear }
 }
 const changeOf = (shares: number, prev: number | null): Change => (prev == null ? 'new' : shares > prev ? (prev ? 'added' : 'new') : shares < prev ? (shares ? 'trimmed' : 'exited') : 'unchanged')
 /** A stock's holders: Copybook's stock file, plus roster lines whose ticker Holdterm resolves from the CUSIP
@@ -409,11 +429,7 @@ async function loadOneStock(t: string): Promise<StockFile> {
       const lines = b.holdings.filter((h) => cus.has(h.cusip))
       if (!lines.length) continue
       if (!d) d = { ticker: t, name: lines[0].display_name || lines[0].issuer, sector: sectorOf(t, lines[0].sector), value: 0, classes: [], holders: [], exited: [], options: [], counts: undefined as unknown as StockFile['counts'], quarters: [] }
-      const row = (ls: Holding[]): StockHolder => {
-        const shares = ls.reduce((x, h) => x + h.shares, 0)
-        const prev = ls.some((h) => h.prev_shares != null) ? ls.reduce((x, h) => x + (h.prev_shares ?? 0), 0) : null
-        return { slug: b.slug, manager: b.firm, firm: b.firm, quarter: b.quarter, filing_date: b.filing_date, featured: false, shares, value: ls.reduce((x, h) => x + h.value, 0), weight: ls.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: ls.reduce((x, h) => x + (h.value_delta ?? 0), 0), change: ls.length === 1 ? ls[0].change : changeOf(shares, prev), put_call: ls[0].put_call ?? undefined }
-      }
+      const row = (ls: Holding[]) => bookRow(b, ls)
       const stock = lines.filter((h) => !h.put_call)
       if (stock.length) {
         const r = row(stock)
@@ -440,22 +456,59 @@ const holderSum = (rows: StockHolder[]): StockHolder => {
   const prev = rows.some((h) => h.prev_shares != null) ? rows.reduce((x, h) => x + (h.prev_shares ?? 0), 0) : null
   return { ...rows[0], shares, value: rows.reduce((x, h) => x + h.value, 0), weight: rows.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: rows.reduce((x, h) => x + (h.delta_value ?? 0), 0), change: changeOf(shares, prev) }
 }
+const median = (xs: number[]) => {
+  const v = [...xs].sort((a, b) => a - b)
+  return v.length ? v[Math.floor(v.length / 2)] : NaN
+}
 export async function loadStock(t: string): Promise<StockFile> {
   const d = await mergeClasses(t)
-  // Copybook's per-holder Δ is share change × price; where that's bigger than the position allows, take the
-  // fund's own (bounded) figure from its book.
-  const cus = new Set(d.classes.map((c) => c.cusip))
+  const tickers = new Set(d.classes.map((c) => c.ticker))
+  // Common stock filed under an option CUSIP (tickers.json \`filers\`): read from those funds' books, as /consensus
+  // counts it, until Copybook's stock file includes it.
+  const misfiled = Object.entries(OVERRIDE).filter(([, o]) => typeof o === 'object' && o.filers && tickers.has(o.ticker))
+  const cus = new Set([...d.classes.map((c) => c.cusip), ...misfiled.map(([c]) => c)])
+  let holders = [...d.holders]
+  let exited = [...d.exited]
+  for (const [c, o] of misfiled)
+    for (const slug of o.filers!) {
+      const b = await loadBook(slug).catch(() => null)
+      const ls = b?.holdings.filter((h) => h.cusip === c && !h.put_call)
+      if (!b || !ls?.length) continue
+      const row = bookRow(b, ls)
+      const same = [...holders, ...exited].find((h) => h.slug === b.slug)
+      holders = holders.filter((h) => h !== same)
+      exited = exited.filter((h) => h !== same)
+      const all = same ? holderSum([same, row]) : row
+      ;(all.value > 0 ? holders : exited).push(all)
+    }
+  // Copybook's per-holder Δ is share change × price, and its stock file doesn't carry the books' suspect_units flag.
+  // A row whose price (value ÷ shares), now or last quarter, is more than twice off the median of the same
+  // quarter's filers, or whose Δ is bigger than the position allows, is checked against the fund's own book: a
+  // suspect line counts no trade (as on every other page), and a broken share count takes the book's bounded figure.
+  const price = (v: number | null | undefined, s: number | null | undefined) => (v && s && v > 0 && s > 0 ? v / s : null)
+  const byQ = (f: (h: StockHolder) => number | null) => {
+    const m = new Map<string, number[]>()
+    for (const h of holders) {
+      const p = f(h)
+      if (p != null) m.set(h.quarter, [...(m.get(h.quarter) ?? []), p])
+    }
+    return new Map([...m].filter(([, v]) => v.length >= 3).map(([q, v]) => [q, median(v)]))
+  }
+  const nowMed = byQ((h) => price(h.value, h.shares))
+  const prevMed = byQ((h) => price(h.prev_value, h.prev_shares))
+  const off = (p: number | null, m: number | undefined) => p != null && m != null && (p > 2 * m || m > 2 * p)
+  const check = (h: StockHolder) =>
+    off(price(h.value, h.shares), nowMed.get(h.quarter)) || off(price(h.prev_value, h.prev_shares), prevMed.get(h.quarter)) || (h.delta_value != null && Math.abs(h.delta_value) > 1.5 * Math.max(h.value, h.prev_value ?? 0))
   const fixed = await Promise.all(
-    d.holders.map(async (h) => {
-      if (h.delta_value == null || Math.abs(h.delta_value) <= 1.5 * h.value) return h
+    holders.map(async (h) => {
+      if (!check(h)) return h
       const b = await loadBook(h.slug).catch(() => null)
       const ls = b?.holdings.filter((x) => cus.has(x.cusip) && !x.put_call)
-      if (!ls?.length) return h
-      const delta = ls.reduce((x, l) => x + (l.value_delta ?? 0), 0)
-      return ls.some((l) => l.shares_break) ? { ...h, delta_value: delta, prev_shares: null, change: ls.length === 1 ? ls[0].change : h.change } : h
+      if (!b || !ls?.length || !ls.some((l) => l.suspect_units || l.shares_break)) return h
+      return { ...h, ...bookRow(b, ls), featured: h.featured, manager: h.manager, firm: h.firm }
     }),
   )
-  return { ...d, holders: fixed }
+  return { ...d, holders: fixed, exited }
 }
 async function mergeClasses(t: string): Promise<StockFile> {
   // The index of every stock is fetched alongside the stock's own file rather than after it: most stock pages
@@ -610,9 +663,7 @@ export function aggregate(books: Book[], rank: Book[] = books): { rows: Agg[]; t
       if (a.sector === 'Unclassified' && h.sector) a.sector = h.sector
       const value = ls.reduce((x, l) => x + l.value, 0)
       const weight = ls.reduce((x, l) => x + l.weight, 0)
-      // A line Copybook flags as having share counts that don't fit across filings (suspect_units) has no reliable
-      // trade, so it adds nothing to the buys and sells; the holding itself still counts.
-      const d = ls.reduce((x, l) => x + (l.suspect_units ? 0 : (l.value_delta ?? 0)), 0)
+      const d = ls.reduce((x, l) => x + (l.value_delta ?? 0), 0)
       const change: Change = value <= 0 ? 'exited' : ls.every((l) => l.change === 'new') ? 'new' : d > 0 ? 'added' : d < 0 ? 'trimmed' : 'unchanged'
       const who: Who = { slug: b.slug, manager: b.firm, weight, value, change, delta: d, quarter: b.quarter }
       if (value > 0) {

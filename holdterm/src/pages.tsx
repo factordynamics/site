@@ -1054,7 +1054,7 @@ export function Fund({ slug }: { slug: string }) {
               { key: 'n', label: 'Company', render: (r) => (r.ticker ? <StockCell t={r.ticker} name={r.display_name || r.issuer} /> : <span className="trunc">{issuerName(r.display_name || r.issuer)}</span>), sort: (r) => r.display_name || r.issuer },
               { key: 'k', label: 'Security', render: (r) => <span className="trunc dim">{noteLabel(r)}</span>, sort: (r) => r.title },
               { key: 'a', label: 'Amount', num: true, hideSm: true, render: noteAmount, sort: (r) => r.principal_amount ?? r.shares },
-              { key: 'c', label: 'This quarter', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
+              { key: 'c', label: 'This quarter', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} unclear={r.suspect_units} />, sort: (r) => r.share_change ?? 0 },
               { key: 'v', label: 'Value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
               { key: 'pv', label: 'Last quarter', num: true, hideSm: true, render: (r) => <span className="dim">{usd(r.prev_value)}</span>, sort: (r) => r.prev_value ?? 0 },
             ]}
@@ -1195,7 +1195,7 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
         { key: 's', label: 'Sector', hideSm: true, hide: 'lg', render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
         { key: 'w', label: 'Weight', num: true, render: (r) => pct(r.weight), sort: (r) => r.weight, title: 'Share of the portfolio' },
         { key: 'ws', label: 'Last quarter vs now', hideSm: true, hide: 'lg', render: (r) => <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />, title: 'Share of the portfolio last quarter (grey) and now' },
-        { key: 'c', label: 'This quarter', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
+        { key: 'c', label: 'This quarter', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} unclear={r.suspect_units} />, sort: (r) => r.share_change ?? 0 },
         { key: 'sh', label: 'Shares', num: true, hideSm: true, hide: 'md', render: (r) => num(r.shares), sort: (r) => r.shares },
         { key: 'p', label: 'Price in filing', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
         { key: 'v', label: 'Value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
@@ -1220,7 +1220,7 @@ function MovesGrid({ rows, empty }: { rows: Holding[]; empty?: ReactNode }) {
       cols={[
         { key: 't', label: 'Ticker', render: holdingTicker, width: '80px' },
         { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
-        { key: 'c', label: 'What changed', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} /> },
+        { key: 'c', label: 'What changed', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} unclear={r.suspect_units} /> },
         { key: 'sc', label: 'Shares changed', num: true, hideSm: true, hide: 'md', render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
         { key: 'd', label: 'Trade size', num: true, render: (r) => <span className={(r.value_delta ?? 0) > 0 ? 'pos' : 'neg'}>{signedUsd(r.value_delta)}</span>, sort: (r) => r.value_delta ?? 0 },
         { key: 'pb', label: <><span className="hide-sm">Trade, % of portfolio</span><span className="show-sm">Trade %</span></>, num: true, render: (r) => pct(r.pct_of_book), sort: (r) => r.pct_of_book ?? 0, title: ((r) => `Trade value ÷ this 13F’s total${r ? `, ${usd(r.value_delta! / r.pct_of_book!)}` : ''}`)(rows.find((r) => r.value_delta && r.pct_of_book)) },
@@ -1450,7 +1450,7 @@ function FilingsStats({ list, firms, days }: { list: Event[]; firms: Map<string,
     <div className="stats tick-stats" role="list" aria-label={`Filings in the last ${days} days`}>
       <Stat label="5% stakes reported" value={num(stakes.length)} sub={`13D and 13G filings, last ${days} days`} />
       <Stat label="New 5% stakes" value={num(newStakes.length)} tone={newStakes.length ? 'pos' : undefined} sub="A first 13D or 13G on the company" />
-      <Stat label="Insider trades" value={num(f4.length)} sub={buys || sells ? cap(listing([buys > 0 && plural(buys, 'open-market buy'), sells > 0 && plural(sells, 'sale')])) : 'Form 4 filings'} />
+      <Stat label="Insider trades" value={num(f4.length)} sub={f4.length ? cap(listing([buys > 0 && plural(buys, 'open-market buy'), sells > 0 && plural(sells, 'sale'), f4.length - buys - sells > 0 && `${num(f4.length - buys - sells)} other`])) : 'Form 4 filings'} />
       <Stat
         label="Latest new stake"
         value={latestNew ? <Tick t={latestNew.ticker} name={issuerName(latestNew.display_name || latestNew.issuer)} /> : <span className="dim">None</span>}
@@ -1744,7 +1744,7 @@ export function Stock({ ticker }: { ticker: string }) {
   const holderCols: Col<StockHolder>[] = [
     { key: 'm', label: 'Investor', link: true, render: (h) => <Firm name={name(h)} strong={inRoster(h.slug)} />, sort: (h) => name(h) },
     { key: 'w', label: 'Weight', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight, title: 'Share of the investor’s portfolio' },
-    { key: 'c', label: 'This quarter', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} />, sort: (h) => h.delta_value ?? 0 },
+    { key: 'c', label: 'This quarter', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} unclear={h.unclear} />, sort: (h) => h.delta_value ?? 0 },
     { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (h) => num(h.shares), sort: (h) => h.shares },
     { key: 'v', label: 'Value', num: true, hideSm: true, render: (h) => usd(h.value), sort: (h) => h.value },
     { key: 'q', label: 'As of', num: true, render: (h) => <span className="dim">{quarterLabel(h.quarter).replace(' 20', " '")}</span>, sort: (h) => h.quarter },
