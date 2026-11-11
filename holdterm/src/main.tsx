@@ -226,10 +226,16 @@ function Search({ open, setOpen, initial = '' }: { open: boolean; setOpen: (b: b
     const st: Hit[] = []
     const fs = flat(s)
     for (const { r, name, nf } of named) {
-      const t = r.t.toLowerCase()
       const n = name.toLowerCase()
-      const sc = t === s ? 10 : ALIAS[s] === r.t ? 8 : t.startsWith(s) ? 5 : n.startsWith(s) || (fs.length > 3 && nf.startsWith(fs)) ? 4 : n.includes(s) || (fs.length > 3 && nf.includes(fs)) ? 1 : 0
-      if (sc) st.push(stockHit(r.t, name, sc + Math.min(owned.get(r.t) ?? 0, 100) / 100))
+      // Tickers compare without punctuation, so BRKB, BRK-B, BRK/B and BRK B all find BRK.B, and a company's other
+      // classes (the index's aliases: GOOG, BRK.A, BF.A) match exactly too, showing and opening the class typed.
+      const exact = fs ? [r.t, ...r.a].find((t) => flat(t) === fs) : undefined
+      const tier = exact ? 10 : ALIAS[s] === r.t ? 8 : fs && [r.t, ...r.a].some((t) => flat(t).startsWith(fs)) ? 5 : n.startsWith(s) || (fs.length > 3 && nf.startsWith(fs)) ? 4 : n.includes(s) || (fs.length > 3 && nf.includes(fs)) ? 1 : 0
+      if (!tier) continue
+      const t = exact ?? r.t
+      // Within a tier, the most widely held by the investors Holdterm follows first (then by holders across all
+      // 13F filers), so the common stock beats a levered ETF named after it ("Direxion … BRKB Bull 2X").
+      st.push(stockHit(t, name, tier + ((owned.get(t) ?? owned.get(r.t) ?? 0) + Math.min(r.h, 9999) / 10000) / 1000))
     }
     const top = (xs: Hit[]) => xs.sort((a, b) => b.score - a.score).slice(0, 6)
     const g: [string, Hit[]][] = [
