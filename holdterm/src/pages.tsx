@@ -225,14 +225,15 @@ function ActionTag({ e }: { e: Event }) {
   const same = was && !dir && e.prev_shares != null && e.shares_after === e.prev_shares
   const [label, tone] = was ? [dir === 'pos' ? `Bought, was ${was}` : dir === 'neg' ? `Sold, was ${was}` : same ? `Same shares, was ${was}` : `Was ${was}`, dir] : (ACTION[e.action] ?? [e.action, ''])
   const why = was && !dir ? (same ? 'Same number of shares: the percentage moved because the company’s share count changed' : undefined) : e.action === 'other' ? OTHER_WHY : undefined
-  // Phones get the short form of the two long labels, so the action column fits.
+  // Phones get the short form of the two long labels, so the action column fits. "Same shares, was 70.8%" is
+  // too wide for it up to 1100px, so tablets get "Was 70.8%" too; the tooltip says why.
   const short = label === ACTION[e.action]?.[0] ? { new_stake: 'New 5%+', stake_update: 'Update' }[e.action as string] : same ? `Was ${was}` : undefined
   return (
     <span className={`tag ${tone}`} title={why}>
       {short ? (
         <>
-          <span className="hide-sm">{label}</span>
-          <span className="show-sm">{short}</span>
+          <span className={same ? 'tag-wide' : 'hide-sm'}>{label}</span>
+          <span className={same ? 'tag-narrow' : 'show-sm'}>{short}</span>
         </>
       ) : (
         label
