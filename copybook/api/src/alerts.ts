@@ -1,8 +1,8 @@
 import { addToFeed, flushChannelLatency, getChannels, getFailures, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
-import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
+import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue, yearlyPeakLine } from './revenue';
 import { inFilingWeek } from './seasons';
-import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
+import { alertMail, digestMail, FOOTER, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
 import { guardShares, markUnreliable, unreliableSide, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
@@ -595,7 +595,12 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
         if (!send.filings.length && !send.events.length) continue;
       }
       if (test && !only) await env.DB.put(testMailKey(m.customer, now), String(n + 1), { expirationTtl: 2 * 86400 });
-      const am = alertMail(env, m.email, send.filings, send.events, f, m);
+      const am0 = alertMail(env, m.email, send.filings, send.events, f, m);
+      // Berkshire's 13F (Nov 16): monthly members and monthly trials get one line to switch to yearly.
+      const yl = replay ? null : await yearlyPeakLine(env, m, send.filings);
+      const ylHtml = yl ? `<p style="margin:12px 0">${yl.replace(/: (https:\/\/\S+)$/, (_, u: string) => `: <a href="${u}" style="color:#1d4ed8">switch now</a>`)}</p>` : '';
+      const foot = am0.html ? am0.html.lastIndexOf('<p style="margin-top:24px') : -1;
+      const am = yl ? { ...am0, text: am0.text.replace(FOOTER, `\n\n${yl}${FOOTER}`), html: am0.html && foot >= 0 ? am0.html.slice(0, foot) + ylHtml + am0.html.slice(foot) : am0.html } : am0;
       mails.push({ ...am, ...(replay ? { subject: `Replay (test): ${am.subject}` } : {}), test, ids: [...send.filings.map((a) => a.accession), ...send.events.map((e) => e.id)] });
       notes.push(m);
     }

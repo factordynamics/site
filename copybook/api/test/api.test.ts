@@ -3253,7 +3253,12 @@ describe('copybook api', () => {
     expect(sessions.every((b) => /metadata\[client\]=(bot|browser|unknown)/.test(b))).toBe(true);
     const noCard = (b: string) => [b.includes('payment_method_collection=if_required'), b.includes('[missing_payment_method]=cancel')];
     expect([noCard(sessions[0]), noCard(sessions[sessions.length - 1])]).toEqual([[false, false], [true, true]]);
-    const { trialEndingMail } = await import('../src/revenue');
+    const { trialEndingMail, yearlyPeakLine } = await import('../src/revenue');
+    // Yearly at the peak: Berkshire's alert carries one switch line for monthly members and monthly trials only.
+    const mo = { customer: 'cus_y', email: 'y@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', subscription: 'sub_y' } as never;
+    const brk = [{ slug: 'warren-buffett', slugs: ['warren-buffett'] }];
+    const yl = await yearlyPeakLine(env, mo, brk);
+    expect([/^Switch to yearly: \$79, less than 9 months of monthly, price locked: \S+\/keep\?t=\S+$/.test(yl ?? ''), await yearlyPeakLine(env, { ...(mo as object), interval: 'yearly' } as never, brk), await yearlyPeakLine(env, mo, [{ slug: 'bill-ackman' }])]).toEqual([true, null, null]);
     const tm = (card: boolean) => trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Math.floor(Date.now() / 1000) + 2 * 86400, has_payment_method: card } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 1, 0, 'https://api.test/keep?t=x', 'https://api.test/unsubscribe?t=x', 2);
     expect([/add a card/i.test(tm(false).subject), /nothing is charged/.test(tm(false).text), /renews on/.test(tm(false).text), /add a card/i.test(tm(true).subject), /renews on/.test(tm(true).text)]).toEqual([true, true, false, false, true]);
     expect(calls.find((c) => c.path === 'coupons')!.body).toContain('amount_off=3900'); // a month of Pro, off the first year

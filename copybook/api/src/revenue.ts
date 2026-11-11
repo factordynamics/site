@@ -485,6 +485,18 @@ export async function maybeWinback(env: Env, prev: Member | null, m: Member, now
  * The email buttons: GET /keep switches a trial to the yearly price on a portal confirm page (the
  * member sees the amount first); GET /resume starts a new monthly subscription at Checkout, no trial.
  */
+/**
+ * Yearly at the peak (the lead, Nov 11): in an alert that carries Berkshire's 13F, one line for a monthly member or a
+ * monthly trial, linked to the portal's switch (/keep). Null for everyone else.
+ */
+export async function yearlyPeakLine(env: Env, m: Member, filings: { slug: string; slugs?: string[]; followup?: boolean }[]): Promise<string | null> {
+  const p = PRICES[m.plan];
+  if (!p || m.interval !== 'monthly' || m.seat_of || !isActive(m) || m.comped) return null;
+  if (!filings.some((a) => !a.followup && (a.slug === 'warren-buffett' || a.slugs?.includes('warren-buffett')))) return null;
+  const keep = `${API(env)}keep?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'keep', m.customer, 14 * 86400))}`;
+  return `Switch to yearly: ${money(p.year)}, ${monthsFree(p)}: ${keep}`;
+}
+
 export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url: URL, method = 'GET'): Promise<Response> {
   const go = (to: string) => Response.redirect(to, 303);
   const account = `${env.SITE_URL}account/`;
