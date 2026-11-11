@@ -30,7 +30,10 @@ type StatusFile = {
   generated_at?: string
   alerts_13f?: { state: 'ok' | 'amber'; reasons?: string[]; pending_moves?: number; oldest_pending_seconds?: number | null; reset_queue?: number }
   probe?: { target?: string; interval_seconds?: number; '24h'?: Window; '7d'?: Window; daily?: (Window & { day: string })[] }
+  freshness?: { last_13f?: { manager: string; accepted_at: string } | null }
+  restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; rows?: { at: string; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed'; build?: string | null; prev_build?: string | null; note?: string }[] }
 }
+const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Short restart, cause unconfirmed' } as const
 const STATUS_URL = String(import.meta.env.VITE_LATENCY_URL).replace(/latency\.json$/, 'status.json')
 
 const API_JSON = import.meta.env.VITE_API_JSON_URL as string
@@ -100,6 +103,12 @@ export function Status() {
   const lagS = builtAt ? (Date.now() - builtAt) / 1000 : null
   const filingDay = isEdgarDay(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }))
   const dataTone: Tone = lagS == null ? (fresh.loading ? 'wait' : 'warn') : filingDay && lagS > 2 * 3600 ? 'warn' : 'up'
+  // The newest 13F by EDGAR acceptance: payments' status.json once it has read a build, else the site build's.
+  const newest13f = st.data?.freshness?.last_13f
+    ? { manager: st.data.freshness.last_13f.manager, at: `accepted ${utc(st.data.freshness.last_13f.accepted_at)}` }
+    : fresh.data?.latest_13f
+      ? { manager: fresh.data.latest_13f.manager, at: fresh.data.latest_13f.accepted_at ? `accepted ${utc(fresh.data.latest_13f.accepted_at)}` : `filed ${new Date(`${fresh.data.latest_13f.filing_date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` }
+      : null
   const dataIssues = (log.data?.entries ?? []).filter((e) => e.kind === 'correction' || e.kind === 'incident')
   const l = lat.data as Latency | null | undefined
   const h = pr?.health ?? null
@@ -118,6 +127,7 @@ export function Status() {
   const pr7 = st.data?.probe?.['7d']
   const days = st.data?.probe?.daily ?? []
   // A percentage from a few dozen checks misleads: show one only once about a full day (90% of 1,440 minutes) is measured.
+  const rs = st.data?.restarts
   const full24 = (pr24?.checks ?? 0) >= 1296
 
   const apiTone: Tone = checking ? 'wait' : h ? 'up' : 'down'
@@ -190,7 +200,7 @@ export function Status() {
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
               </Row>
               <Row name="Filing data" tone={dataTone} state={lagS == null ? 'Not known yet' : `Last data build ${ago(lagS)} ago${dataTone === 'warn' ? ', later than usual for a filing day' : ''}`}>
-                {fresh.data?.latest_13f ? `Newest 13F in the data: ${displayName(fresh.data.latest_13f.manager)}${fresh.data.latest_13f.filing_date ? `, filed ${new Date(`${fresh.data.latest_13f.filing_date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : ''}. ` : ''}
+                {newest13f ? `Newest 13F in the data: ${displayName(newest13f.manager)}, ${newest13f.at}. ` : ''}
                 Rebuilt about every 20 minutes on filing days; past 2 hours this turns amber.
               </Row>
               <Row name="Filing pages" tone="up" state="Up">
@@ -248,6 +258,34 @@ export function Status() {
             </li>
           ))}
         </ol>
+        {rs && (
+          <>
+            <h3 className="mt-6 text-[15px] font-semibold">Restarts, last 7 days</h3>
+            <p className="mt-1 text-[13.5px] text-ink-3">
+              {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'} · {rs.unplanned_7d} unplanned · {rs.short_unconfirmed_7d} short, cause unconfirmed. A deploy is a new build back up in under 60 seconds.
+            </p>
+            {rs.rows?.length ? (
+              <ol className="mt-2 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
+                {rs.rows.map((r) => (
+                  <li key={r.at} className="grid gap-x-4 py-2.5 text-[13.5px] sm:grid-cols-[9.5rem_minmax(0,1fr)_auto]">
+                    <span className="num text-ink-3">{utc(r.at)}</span>
+                    <span className="min-w-0 text-ink-2">
+                      {KIND[r.kind] ?? r.kind}
+                      {r.build ? (
+                        <span className="font-mono text-[12.5px] text-ink-3">
+                          {' '}
+                          {r.prev_build ? `${r.prev_build.slice(0, 7)} → ` : ''}
+                          {r.build.slice(0, 7)}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className={`num ${r.down_seconds ? 'text-ink-2' : 'text-ink-3'}`}>{r.down_seconds ? `${r.down_seconds} s down` : 'no downtime'}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </>
+        )}
         <p className="mt-4 text-[14px] leading-relaxed text-ink-2">{HOSTING.shared}</p>
         <p className="mt-3 text-[14px] leading-relaxed text-ink-2">{HOST_MOVE}</p>
         <p className="mt-4 text-[14px] leading-relaxed text-ink-2">

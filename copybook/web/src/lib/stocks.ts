@@ -112,7 +112,7 @@ export type Expected = {
 }
 /** d/expected.json: superinvestors still to file this quarter (scripts/stocks.mjs). */
 export type ExpectedSoon = Pick<Expected, 'slug' | 'manager' | 'pattern' | 'expected_date' | 'time_et' | 'time_range'> & { total_value: number }
-export const loadExpected = () => getJSON<{ quarter: string; generated_at?: string; latest_13f?: { manager: string; filing_date?: string } | null; expected: ExpectedSoon[] }>(`${D}expected.json${fresh()}`).catch(() => null)
+export const loadExpected = () => getJSON<{ quarter: string; generated_at?: string; latest_13f?: { manager: string; filing_date?: string; accepted_at?: string | null } | null; expected: ExpectedSoon[] }>(`${D}expected.json${fresh()}`).catch(() => null)
 const hr = (m: number) => ({ h: ((Math.floor(m / 60) + 11) % 12) + 1, pm: m >= 720 })
 /** "Thu Nov 12" for an ISO date. */
 export const shortDay = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')

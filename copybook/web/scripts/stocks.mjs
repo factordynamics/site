@@ -497,8 +497,10 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
     JSON.stringify({
       quarter: Q,
       generated_at: index.generated_at,
-      // The newest 13F in the data, for /status/'s freshness line.
-      latest_13f: seasonOut.latest[0] ? { manager: seasonOut.latest[0].manager, filing_date: seasonOut.latest[0].filing_date } : null,
+      // The newest 13F in the data by EDGAR acceptance time, for /status/'s freshness line.
+      latest_13f: (({ manager, filing_date, accepted_at } = {}) => (manager ? { manager, filing_date, accepted_at: accepted_at ?? null } : null))(
+        books.filter((b) => qn(b.quarter) === q).sort((a, z) => (z.accepted_at ?? z.filing_date ?? '').localeCompare(a.accepted_at ?? a.filing_date ?? ''))[0],
+      ),
       expected: expected
         .filter((x) => !x.filed && !x.placeholder && x.expected_date)
         .map(({ slug, manager, pattern, expected_date, time_et, time_range }) => ({ slug, manager, pattern, expected_date, time_et, time_range, total_value: aum.get(slug) ?? 0 })),

@@ -5,7 +5,7 @@
 
 export const HOSTING = {
   /** Where the member API runs. */
-  api: 'Copybook’s member API runs on a single dedicated machine in the United States operated by Factor Dynamics. It isn’t in a data centre: it’s on a residential connection, reached through a temporary Cloudflare quick tunnel while we move the API to its own hostname (api.copybook.factordynamics.com), with Tailscale as a backup route.',
+  api: 'Copybook’s member API runs on a single machine in the United States operated by Factor Dynamics. It isn’t in a data centre: it’s on a residential connection, reached through a temporary Cloudflare quick tunnel while we move the API to its own hostname (api.copybook.factordynamics.com), with Tailscale as a backup route.',
   /** Everything else: alerts, files, payments. */
   files: 'Filing alerts are sent by a Cloudflare Workers job that checks EDGAR every minute, with that machine as its backup. Paid history files and the public alert-latency log are stored in Cloudflare R2. The website and public 13F data are static files served by GitHub Pages. Payments are handled entirely by Stripe.',
   /** What the two hosts share, and how. */
@@ -55,5 +55,5 @@ export const INCIDENTS: [string, string, string?][] = [
   ['Nov 9, 2026 · 05:41–05:48 UTC', 'Holders and /v1 holders returned 503 “busy” on both hosts. Other pages and alerts were not affected.'],
   ['Nov 9, 2026 · 05:31–05:33 UTC', 'A failed deploy of the API, rolled back. No alerts were missed.'],
   ['Nov 9, 2026 · 05:01–05:28 UTC', 'Member pages and the API were slow or unavailable: network saturation on the API machine. No alerts were missed.'],
-  ['Nov 9, 2026 · 03:54–05:01 UTC', 'Member pages (account, My book) and the API were unavailable: the API hit Cloudflare’s daily request quota. The API moved to a dedicated machine. No alerts were missed.'],
+  ['Nov 9, 2026 · 03:54–05:01 UTC', 'Member pages (account, My book) and the API were unavailable: the API hit Cloudflare’s daily request quota. The API moved off Cloudflare to the machine it runs on now. No alerts were missed.'],
 ]
