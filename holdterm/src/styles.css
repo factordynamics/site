@@ -1600,20 +1600,22 @@ a.hb-row:hover {
     font-size: 21px;
   }
   /* Label, value and second line share rows across the cards, so a label that wraps ("Top 10 holdings" at
-     721px) doesn't drop its value below its neighbours'. */
-  .stats:not(.home-stats) {
+     721px) doesn't drop its value below its neighbours'. Buys & sells' one-line labels don't need it. */
+  .stats:not(.home-stats):not(.flows-stats) {
     row-gap: 0;
   }
-  .stats:not(.home-stats) .stat {
+  .stats:not(.home-stats):not(.flows-stats) .stat {
     grid-row: span 3;
     display: grid;
     grid-template-rows: subgrid;
     align-content: start;
   }
 }
-/* …except the home page's cards, whose second lines are sentences: two rows of two below 880px. */
+/* …except the home page's cards, whose second lines are sentences, and Buys & sells' cards, whose values can be
+   "GOOGL+GOOG": two rows of two below 880px. */
 @media (min-width: 721px) and (max-width: 880px) {
-  .home-stats {
+  .home-stats,
+  .flows-stats {
     grid-auto-flow: row;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
