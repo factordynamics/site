@@ -23,7 +23,7 @@ const SUBJECT = { first: "You're on the Copybook weekly", follow: 'Follow saved.
 const localTime = (t: number | string) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 export const inboxLine = (subject: string) => `Check your inbox: your sign-in link is in the email “${subject}”.`
 export const alreadyLine = (at?: string) => `You’re already signed up. Your sign-in link is in the email we sent ${at ? `at ${localTime(at)}` : 'within the last hour'}.`
-type SignupRes = { ok: boolean; created?: boolean; code?: string; sent_at?: string; sign_in_sent_at?: string; welcome?: 'sent' | 'queued' | 'test_inbox' | 'not_sent'; send_at?: string; token?: string; session?: string; following?: boolean; follow?: 'added' | 'already' | 'cap_reached' | 'sign_in'; sign_in_email?: 'not_needed' | 'sent' | 'rate_limited' | 'already_sent' | 'queued' | 'test_inbox' | 'not_sent' }
+type SignupRes = { ok: boolean; created?: boolean; code?: string; sent_at?: string; sign_in_sent_at?: string; welcome?: 'sent' | 'queued' | 'test_inbox' | 'not_sent'; send_at?: string; token?: string; session?: string; following?: boolean; follow?: 'added' | 'already' | 'cap_reached' | 'sign_in'; sign_in_email?: 'not_needed' | 'sent' | 'rate_limited' | 'already_sent' | 'queued' | 'test_inbox' | 'not_sent' | 'sent_if_member' }
 /** After a successful /signup: keeps a new account's provisional session (so this device is signed in at once),
  *  and returns the line saying which email holds the sign-in link, when it comes, or that one went out already. */
 export function signupDone(r: SignupRes): string | null {
@@ -34,6 +34,7 @@ export function signupDone(r: SignupRes): string | null {
   if (mail === 'queued') return `${queuedLine(r.send_at)}${here}`
   if (mail === 'test_inbox') return `A test address: the email went to the test inbox.${here}`
   if (mail === 'not_sent') return signedIn ? `The email didn’t go out, but you’re signed in on this device now.` : 'The sign-in email didn’t go out. Please try again in a few minutes.'
+  if (mail === 'sent_if_member') return 'Check your inbox. If this address already has an account, we’ve sent it a sign-in link.'
   if (r.created) return `${inboxLine(SUBJECT.first)}${here}`
   if (r.code === 'already_member' || r.code === 'already_sent' || r.sign_in_email === 'already_sent' || r.sign_in_email === 'rate_limited') return alreadyLine(r.sign_in_sent_at ?? r.sent_at)
   if (r.sign_in_email === 'sent') return inboxLine(r.follow === 'added' ? SUBJECT.follow : SUBJECT.link)
@@ -43,7 +44,7 @@ export function signupDone(r: SignupRes): string | null {
 export function signupError(err: unknown): string {
   if (err instanceof ApiError && (err.code === 'already_member' || err.code === 'already_sent')) return alreadyLine(err.sentAt)
   if (err instanceof ApiError && err.status === 429) {
-    if (err.alreadyMember) return 'You’re already signed up; use the link we emailed.'
+    if (err.alreadyMember) return `You’re already signed up; use the link we emailed.${err.retryAt ? ` Lost it? Request a new link after ${localTime(err.retryAt)}.` : ''}`
     if (!err.retryAt) return err.detail ?? 'Too many tries. Please try again a little later.'
     const m = Math.max(1, Math.ceil((err.retryAt - Date.now()) / 60_000))
     return `Too many tries. Try again in ${m} minute${m === 1 ? '' : 's'} (after ${localTime(err.retryAt)}).`
