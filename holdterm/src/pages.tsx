@@ -794,7 +794,25 @@ export function Funds() {
     return v === 'filed' || v === 'due' ? v : 'all'
   })
   if (ix.error) return <Failed error={ix.error} what="the investors" />
-  if (!ix.data) return <PageLoading what="Loading the investors" stats={0} rows={20} />
+  // While loading, the page's own heading shows at once; only the table waits for the data.
+  if (!ix.data)
+    return (
+      <PageLoading
+        what="Loading the investors"
+        stats={0}
+        rows={20}
+        head={
+          <div className="head">
+            <div>
+              <h1>Investors</h1>
+              <p className="lede">
+                {roster.funds.length} concentrated, long-term funds chosen by a <A to="/about#roster">published rule</A>, each with its latest 13F.
+              </p>
+            </div>
+          </div>
+        }
+      />
+    )
   const ms = funds(ix.data)
   const all = ix.data.managers.filter((m) => m.ok)
   const metric = new Map(roster.funds.map((f) => [f.slug, f]))
@@ -955,7 +973,30 @@ export function Fund({ slug }: { slug: string }) {
     ) : (
       <Failed error={b.error} what="this portfolio" />
     )
-  if (!b.data) return <PageLoading what="Loading this portfolio" stats={5} rows={15} />
+  if (!b.data)
+    return (
+      <PageLoading
+        what="Loading this portfolio"
+        stats={5}
+        rows={15}
+        head={
+          meta && (
+            // A followed investor's name is known before its 13F arrives: the page starts with it.
+            <>
+              <Crumbs parent={['/funds', 'Investors']} here={firmName(slug, meta.firm)} />
+              <div className="head">
+                <div>
+                  <h1>{firmName(slug, meta.firm)}</h1>
+                  <div className="meta" aria-hidden>
+                    <span className="skel skel-line short" />
+                  </div>
+                </div>
+              </div>
+            </>
+          )
+        }
+      />
+    )
   const book = b.data
   title(`${book.firm} 13F portfolio`)
   const filer = meta && meta.filer_slug !== slug ? ix.data?.managers.find((m) => m.slug === meta.filer_slug) : null
@@ -1695,7 +1736,22 @@ export function Filings() {
   const [tab, setTab] = useState<ETab>('all')
   const [own, setOwn] = useState(false)
   if (ev.error) return <Failed error={ev.error} what="the latest filings" />
-  if (!ev.data) return <PageLoading what="Loading the latest filings" stats={4} rows={20} />
+  if (!ev.data)
+    return (
+      <PageLoading
+        what="Loading the latest filings"
+        stats={4}
+        rows={20}
+        head={
+          <div className="head">
+            <div>
+              <h1>Stakes and insider trades</h1>
+              <p className="lede">Stakes above 5% and insider trades the investors reported between their quarterly 13Fs.</p>
+            </div>
+          </div>
+        }
+      />
+    )
   const scoped = ev.data.events.filter((e) => inRoster(e.slug) && (own || !ownVehicle(e)))
   let list = scoped
   if (tab === '13dg') list = list.filter((e) => e.kind !== 'form4')
