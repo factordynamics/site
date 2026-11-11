@@ -35,9 +35,9 @@ type StatusFile = {
   freshness?: { last_13f?: { manager: string; accepted_at: string } | null }
   /** Payments' check that the index.json fields alert routing reads are present and hold known values. */
   index_contract?: { ok: boolean; build?: string | null; problems?: string[]; checked_at?: string }
-  restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; rows?: { at: string; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed'; build?: string | null; prev_build?: string | null; note?: string }[] }
+  restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; planned_7d?: number; rows?: { at: string; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed' | 'planned'; build?: string | null; prev_build?: string | null; note?: string }[] }
 }
-const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Brief restart we couldn’t attribute' } as const
+const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Brief restart we couldn’t attribute', planned: 'Planned' } as const
 const STATUS_URL = String(import.meta.env.VITE_LATENCY_URL).replace(/latency\.json$/, 'status.json')
 
 const API_JSON = import.meta.env.VITE_API_JSON_URL as string
@@ -379,7 +379,7 @@ export function Status() {
             <h3 className="mt-6 text-[15px] font-semibold">Restarts, last 7 days</h3>
             <p className="mt-1 text-[13.5px] font-medium text-ink-2">{RESTART_POLICY}</p>
             <p className="mt-1 text-[13.5px] text-ink-3">
-              {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'} · {rs.unplanned_7d} unplanned{rs.short_unconfirmed_7d ? ` · ${rs.short_unconfirmed_7d} brief ${rs.short_unconfirmed_7d === 1 ? 'restart' : 'restarts'} we couldn’t attribute` : ''}. A deploy is a new build back up in under 60 seconds.
+              {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'}{rs.planned_7d ? ` · ${rs.planned_7d} planned` : ''} · {rs.unplanned_7d} unplanned{rs.short_unconfirmed_7d ? ` · ${rs.short_unconfirmed_7d} brief ${rs.short_unconfirmed_7d === 1 ? 'restart' : 'restarts'} we couldn’t attribute` : ''}. A deploy is a new build back up in under 60 seconds.
             </p>
             {rs.rows?.length ? (
               <ol className="mt-2 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
@@ -387,7 +387,7 @@ export function Status() {
                   <li key={r.at} className="grid gap-x-4 py-2.5 text-[13.5px] sm:grid-cols-[9.5rem_minmax(0,1fr)_auto]">
                     <span className="num text-ink-3">{utc(r.at)}</span>
                     <span className="min-w-0 text-ink-2">
-                      {KIND[r.kind] ?? r.kind}
+                      {r.note ? (r.kind === 'planned' ? r.note : `${KIND[r.kind] ?? r.kind}: ${r.note}`) : (KIND[r.kind] ?? r.kind)}
                       {r.build ? (
                         <span className="font-mono text-[12.5px] text-ink-3">
                           {' '}

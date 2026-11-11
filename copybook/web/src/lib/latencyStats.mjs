@@ -1,16 +1,38 @@
 // Every timed alert this season, for /speed/ and its share card: latency.json's alerts plus the 13F alerts
 // whose moves went out late before the Nov 11 fix, which payments lists apart under before_moves_fix.
 // Leaving those out would report only the fast ones. Each row is timed from EDGAR acceptance to delivery.
-export function seasonGaps(l) {
-  const late = Object.entries(l?.before_moves_fix ?? {}).flatMap(([form, b]) =>
-    (b?.rows ?? []).map((r) => ({ form, accession: r.accession, accepted_at: r.accepted_at, seconds: r.seconds })),
+// The one computation behind every figure on /speed/, its share card and home's speed line. Each alert row
+// once (latency.json alerts[], plus any pre-fix 13F moves row only listed under before_moves_fix), with:
+//   seconds   EDGAR acceptance to the alert that counts: a 13F's moves email (the pre-fix ones by their late
+//             moves send), a missed filing's eventual delay, null when it never went out;
+//   excluded  replays and tests: listed, never counted;
+//   missed    filings that should have alerted and didn't when due: listed and counted on their own line;
+//   later     a second send of a filing already counted (payments' in_stats false): listed, not counted;
+//   counted   everything else with a time: the rows every median, percentile and total is taken over;
+//   preFix    13F moves sent late before the Nov 11 fix.
+export function speedRows(l) {
+  const late = new Map(
+    Object.entries(l?.before_moves_fix ?? {}).flatMap(([form, b]) => (b?.rows ?? []).map((r) => [r.accession, { form, ...r }])),
   )
-  const lateIds = new Set(late.map((r) => r.accession))
-  return [
-    // The site's loadLatency keeps the full log as `log`; latency.json itself has it as `alerts`.
-    ...(l?.log ?? l?.alerts ?? []).filter((a) => !lateIds.has(a.accession)).map((a) => ({ form: a.form, accession: a.accession, accepted_at: a.accepted_at, seconds: a.gap_seconds })),
-    ...late,
-  ]
+  const log = l?.log ?? l?.alerts ?? []
+  const seen = new Set(log.map((a) => a.accession))
+  const all = [...log, ...[...late.values()].filter((r) => !seen.has(r.accession)).map((r) => ({ ...r, gap_seconds: r.seconds, sent_at: r.sent_at }))]
+  return all.map((a) => {
+    const excluded = Boolean(a.replay || a.test)
+    const missed = Boolean(a.missed)
+    const seconds = a.never ? null : missed && a.delay_seconds != null ? a.delay_seconds : (late.get(a.accession)?.seconds ?? a.gap_seconds ?? null)
+    // Payments' in_stats (from Nov 11) marks each accession's first live send; a later send of the same filing
+    // is listed but not counted, so no filing counts twice.
+    const later = a.in_stats === false && !excluded && !missed
+    return { ...a, seconds, excluded, missed, later, preFix: late.has(a.accession) && !missed, counted: !excluded && !missed && !later && Number.isFinite(seconds) }
+  })
+}
+
+// Every counted alert's time, for the share card (same rows as /speed/'s "All").
+export function seasonGaps(l) {
+  return speedRows(l)
+    .filter((r) => r.counted)
+    .map((r) => ({ form: r.form, accession: r.accession, accepted_at: r.accepted_at, seconds: r.seconds }))
 }
 
 // Payments' method, so the numbers match latency.json's: median is the mean of the middle two for an even
@@ -23,12 +45,12 @@ export function gapStats(values) {
 }
 
 // Home's season figure: the median seconds from EDGAR acceptance to each 13F's first alert this season,
-// replays and tests left out and a missed filing counted by its eventual delay, as /speed/ counts them.
+// counted the way /speed/ counts them (speedRows): replays, tests and missed filings left out.
 // Null below five such alerts, so the hero never quotes a median of one or two.
 export function firstAlertMedian(l) {
-  const s = (l?.log ?? l?.alerts ?? [])
-    .filter((a) => a.form?.startsWith('13F') && !a.replay && !a.test && !a.never)
-    .map((a) => (a.missed && a.delay_seconds != null ? a.delay_seconds : a.first_alert_at ? (Date.parse(a.first_alert_at) - Date.parse(a.accepted_at)) / 1000 : a.gap_seconds))
+  const s = speedRows(l)
+    .filter((r) => r.counted && r.form?.startsWith('13F'))
+    .map((r) => (r.first_alert_at ? (Date.parse(r.first_alert_at) - Date.parse(r.accepted_at)) / 1000 : r.gap_seconds))
     .filter((x) => Number.isFinite(x) && x >= 0)
   return s.length >= 5 ? gapStats(s) : null
 }
