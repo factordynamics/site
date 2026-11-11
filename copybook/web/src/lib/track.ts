@@ -7,7 +7,8 @@ import { utmTags } from './attribution'
 // Launch-week funnel counts for signed-out readers on the pages X posts land on (filer pages, /season/,
 // /f/ cards): visits, free signups shown, and trial clicks, by page and utm_source (POST {api}/track).
 // Counting only: no identifiers are sent, a visit counts once per page per browser session, and a failure is ignored.
-type Kind = 'visit' | 'signup_view' | 'trial_click'
+// signup_focus (first focus on a signup's email field) and signup_submit count once per page per session, like a visit.
+type Kind = 'visit' | 'signup_view' | 'signup_focus' | 'signup_submit' | 'trial_click'
 
 export function track(kind: Kind, page = location.pathname) {
   if (getToken()) return

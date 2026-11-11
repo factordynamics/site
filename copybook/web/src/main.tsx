@@ -17,6 +17,7 @@ import { analytics } from './config'
 const Investors = lazy(() => import('./pages/Investors').then((m) => ({ default: m.Investors })))
 const History = lazy(() => import('./pages/History').then((m) => ({ default: m.History })))
 const Flow = lazy(() => import('./pages/Flow').then((m) => ({ default: m.Flow })))
+const Weekly = lazy(() => import('./pages/Weekly').then((m) => ({ default: m.Weekly })))
 const Consensus = lazy(() => import('./pages/Consensus').then((m) => ({ default: m.Consensus })))
 const Pricing = lazy(() => import('./pages/Pricing').then((m) => ({ default: m.Pricing })))
 const Account = lazy(() => import('./pages/Account').then((m) => ({ default: m.Account })))
@@ -94,6 +95,7 @@ Promise.all([handoff, fontsReady]).then(() =>
             <Route path="upgrade" element={<Upgrade />} />
             <Route path="resume" element={<Resume />} />
             <Route path="unsubscribe" element={<Unsubscribe />} />
+            <Route path="weekly" element={<Weekly />} />
             <Route path="why" element={<Why />} />
             <Route path="status" element={<Status />} />
             <Route path="about" element={<About />} />

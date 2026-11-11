@@ -5,6 +5,7 @@ import { signupLive, TRIAL_DAYS } from '../config'
 import { call, getToken, isFree, isPaying, useMemberState } from '../lib/account'
 import { signupDone, signupError } from './FollowSignup'
 import { utmTags } from '../lib/attribution'
+import { track } from '../lib/track'
 import { Arrow, Button, Check } from './ui'
 
 // Free weekly email (POST {api}/signup): a free account that gets the week's top moves every Friday,
@@ -61,6 +62,7 @@ export function Signup({ source, className = '' }: { source: string; className?:
             className="relative w-full shrink-0 md:w-[380px] md:pt-1"
             onSubmit={async (e) => {
               e.preventDefault()
+              track('signup_submit')
               const v = email.trim()
               if (!/^\S+@\S+\.\S+$/.test(v)) return setState({ s: 'error', msg: 'Check the email address and try again.' })
               setState({ s: 'sending' })
@@ -93,6 +95,7 @@ export function Signup({ source, className = '' }: { source: string; className?:
                 required
                 autoComplete="email"
                 value={email}
+                onFocus={() => track('signup_focus')}
                 onChange={(e) => {
                   setEmail(e.target.value)
                   if (state.s === 'error') setState({ s: 'idle' })

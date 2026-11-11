@@ -51,14 +51,18 @@ export function signupError(err: unknown): string {
   }
   return err instanceof ApiError && err.status === 400 && err.detail ? err.detail : 'That didn’t go through. Please try again.'
 }
-export function FollowSignup({ people, kind = 'investor', label, className = '', onDone, extra, quietLabel = false, secondary = false }: { people: { slug: string; name: string }[]; kind?: 'investor' | 'stock'; label?: string; className?: string; onDone?: () => void; extra?: ReactNode; quietLabel?: boolean; secondary?: boolean }) {
+// `collapsed` names the follows on one line with a Change link that opens the checkboxes, adding `others` to pick
+// from (/season/'s newsletter: famous names by default, the next filers on Change); `cta` names the button.
+export function FollowSignup({ people, others = [], collapsed = false, cta, kind = 'investor', label, className = '', onDone, extra, quietLabel = false, secondary = false }: { people: { slug: string; name: string }[]; others?: { slug: string; name: string }[]; collapsed?: boolean; cta?: string; kind?: 'investor' | 'stock'; label?: string; className?: string; onDone?: () => void; extra?: ReactNode; quietLabel?: boolean; secondary?: boolean }) {
   const [email, setEmail] = useState('')
   const [website, setWebsite] = useState('')
   const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'error'; following?: boolean; capped?: boolean; note?: string | null; msg?: string }>({ s: 'idle' })
-  // Several people (/season/'s next filers): each one a checkbox, all ticked, so the reader sees and picks who they follow.
-  const [off, setOff] = useState<string[]>([])
-  const chosen = people.filter((p) => !off.includes(p.slug))
-  const many = people.length > 1
+  // Several people (/season/'s next filers): each one a checkbox, ticked by default, so the reader sees and picks who they follow.
+  const [open, setOpen] = useState(!collapsed)
+  const choices = open ? [...people, ...others.filter((o) => !people.some((p) => p.slug === o.slug))] : people
+  const [picked, setPicked] = useState<string[]>(() => people.map((p) => p.slug))
+  const chosen = choices.filter((p) => picked.includes(p.slug))
+  const many = choices.length > 1
   const [slow, setSlow] = useState(false)
   useEffect(() => track('signup_view'), [])
   const who = chosen.length === 1 ? possessive(chosen[0].name) : 'their'
@@ -98,6 +102,7 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
       className={className}
       onSubmit={async (e) => {
         e.preventDefault()
+        track('signup_submit')
         const v = email.trim()
         if (!/^\S+@\S+\.\S+$/.test(v)) return setState({ s: 'error', msg: 'Check the email address and try again.' })
         if (!chosen.length) return setState({ s: 'error', msg: 'Tick at least one investor to follow.' })
@@ -123,16 +128,24 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
         }
       }}
     >
-      {many && (
+      {many && !open && (
+        <p className="mb-2 text-[13px] leading-snug text-ink-2">
+          Follows {chosen.map((p) => p.name).join(', ')}.{' '}
+          <button type="button" onClick={() => setOpen(true)} className="font-medium text-accent underline-offset-2 hover:underline">
+            Change
+          </button>
+        </p>
+      )}
+      {many && open && (
         <fieldset className="mb-2.5">
           <legend className="text-[12.5px] font-medium text-ink-3">Follow free</legend>
           <div className="mt-0.5 flex flex-wrap gap-x-4">
-            {people.map((p) => (
+            {choices.map((p) => (
               <label key={p.slug} className="inline-flex min-h-11 cursor-pointer items-center gap-2 pr-1 text-[14px] text-ink">
                 <input
                   type="checkbox"
-                  checked={!off.includes(p.slug)}
-                  onChange={(e) => setOff((o) => (e.target.checked ? o.filter((x) => x !== p.slug) : [...o, p.slug]))}
+                  checked={picked.includes(p.slug)}
+                  onChange={(e) => setPicked((o) => (e.target.checked ? [...o, p.slug] : o.filter((x) => x !== p.slug)))}
                   className="size-4 accent-[var(--color-accent)]"
                 />
                 {p.name}
@@ -151,6 +164,7 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
           required
           autoComplete="email"
           value={email}
+          onFocus={() => track('signup_focus')}
           onChange={(e) => {
             setEmail(e.target.value)
             if (state.s === 'error') setState({ s: 'idle' })
@@ -159,7 +173,7 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
           className="h-10 min-w-[11rem] flex-1 rounded-full bg-paper px-4 text-[14.5px] text-ink shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
         />
         <Button type="submit" variant={extra || secondary ? 'outline' : 'primary'} disabled={state.s === 'sending' || !chosen.length} className="shrink-0">
-          {state.s === 'sending' ? 'Following…' : many && chosen.length ? `Follow ${chosen.length} free` : 'Follow free'}
+          {state.s === 'sending' ? 'Following…' : cta ?? (many && chosen.length ? `Follow ${chosen.length} free` : 'Follow free')}
         </Button>
         {extra}
       </div>

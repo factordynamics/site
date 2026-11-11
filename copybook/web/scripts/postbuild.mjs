@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { getJson } from './getjson.mjs'
 import { ogCard } from './ogcard.mjs'
 import { displayName } from '../src/lib/names.mjs'
+import { X_LINKS } from './xlinks.mjs'
 import { API, API_JSON_URL } from '../api.config.mjs'
 import { dueLead, investorTitle, seasonTitle, stockTitle } from '../src/lib/titles.mjs'
 
@@ -108,6 +109,7 @@ page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Co
 page('resume/', 'Keep your plan · Copybook', 'Resume a paused or cancelled Copybook plan.', '\n    <meta name="robots" content="noindex" />')
 page('unsubscribe/', 'Unsubscribe · Copybook', 'Unsubscribe from Copybook’s weekly email and tips.', '\n    <meta name="robots" content="noindex" />')
 page('status/', 'Status · Copybook', 'Live status of Copybook’s member API, EDGAR poller and filing pages, and the incident log.')
+page('weekly/', 'The free Friday email: last week’s edition · Copybook', 'Every Friday: the week’s biggest superinvestor buys and sells from SEC filings. Free. Here is last week’s edition.')
 page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copybook.', '\n    <meta name="robots" content="noindex" />')
 {
   // The season tracker's share card (scripts/cards.mjs), with its cache-busting URL.
@@ -383,4 +385,14 @@ writeFileSync(
   ),
 )
 writeFileSync(join(dist, '.nojekyll'), '')
+// /x/{slug}/: the target's own page, sent on to it with the post's UTM tags (scripts/xlinks.mjs).
+for (const [slug, to] of Object.entries(X_LINKS)) {
+  const url = `${SITE}${to}${to.includes('?') ? '&' : '?'}utm_source=x&utm_content=${encodeURIComponent(slug)}`
+  const html = readFileSync(join(dist, to.split('?')[0], 'index.html'), 'utf8').replace(
+    '<head>',
+    () => `<head>\n    <meta name="robots" content="noindex" />\n    <script>location.replace(${JSON.stringify(url)}+location.hash)</script>`,
+  )
+  mkdirSync(join(dist, 'x', slug), { recursive: true })
+  writeFileSync(join(dist, 'x', slug, 'index.html'), html)
+}
 console.log(`wrote ${n} investor pages`)
