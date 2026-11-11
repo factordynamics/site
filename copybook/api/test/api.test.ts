@@ -531,6 +531,57 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(1);
   });
 
+  it("the day's email limit: 13F alerts first, deadline week one email an hour, past the room a feed note and /status/, never a queue", async () => {
+    const { deliver, flushHeld, CAP_NOTE } = await import('../src/alerts');
+    const { mailQuota } = await import('../src/email');
+    const f13 = (slug: string, manager: string, acc: string, t: number) => ({ slug, slugs: [slug], manager, name: manager, quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-16', accession: acc, sec_url: 'https://www.sec.gov/x', accepted: new Date(t).toISOString(), tickers: [], moves: { bought_usd: 1e6, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] } });
+    for (const c of ['cap1', 'cap2', 'cap3']) {
+      await putMember(c, `${c}@example.com`, 'active', ['seth-klarman', 'howard-marks', 'irving-kahn']);
+      await env.DB.put(`channels:${c}`, JSON.stringify({ email: true, feed_token: `tok-${c}-0123456789abcdefghij` }));
+      await env.DB.put(`feedtok:tok-${c}-0123456789abcdefghij`, c);
+    }
+    // Deadline Monday, 3pm UTC: each member's first alert goes at once; the next two within the hour are held and go
+    // together at the hour's end as one email naming the funds.
+    const t0 = Date.UTC(2026, 10, 16, 15);
+    resendUsed = 0;
+    mailQuota.used = 0;
+    sent = [];
+    await deliver(env, [f13('irving-kahn', 'Kahn Brothers', '0001039565-26-000005', t0) as never], [], t0);
+    await deliver(env, [f13('seth-klarman', 'Baupost', '0001061768-26-000009', t0 + 600_000) as never], [], t0 + 600_000);
+    await deliver(env, [f13('howard-marks', 'Oaktree', '0000949509-26-000011', t0 + 1_200_000) as never], [], t0 + 1_200_000);
+    expect(sent.filter((m) => m.to[0] === 'cap1@example.com')).toHaveLength(1);
+    await flushHeld(env, t0 + 61 * 60_000);
+    const cap1 = sent.filter((m) => m.to[0] === 'cap1@example.com').map((m) => m.subject);
+    expect([cap1.length, /^2 funds you follow filed: /.test(cap1[1])]).toEqual([2, true]);
+    // Two emails of room left (100 less the 15 kept for account mail, less 83): two members get the next 13F, the third
+    // gets it in its feed with the day's note, and /status/ says so. Nothing waits for the reset.
+    const t1 = t0 + 3 * 3600_000;
+    resendUsed = 83;
+    mailQuota.used = 83;
+    sent = [];
+    await putMember('cap4', 'cap4@example.com', 'active', ['warren-buffett']);
+    await env.DB.put('channels:cap4', JSON.stringify({ email: true, feed_token: 'tok-cap4-0123456789abcdefghij' }));
+    for (const c of ['cap1', 'cap2', 'cap3']) await env.DB.put(`cus:${c}`, JSON.stringify({ ...JSON.parse((await env.DB.get(`cus:${c}`))!), alerts: ['warren-buffett'] }));
+    sent = [];
+    await deliver(env, [f13('warren-buffett', 'Berkshire', '0000950123-26-000778', t1 + 3 * 3600_000) as never], [], t1 + 3 * 3600_000);
+    const notes = await Promise.all(['cap1', 'cap2', 'cap3', 'cap4'].map(async (c) => JSON.parse((await env.DB.get(`feed:${c}`)) ?? '[]').some((i: { title: string }) => i.title === CAP_NOTE)));
+    const day = new Date(t1).toISOString().slice(0, 10);
+    const cap = JSON.parse((await env.DB.get(`mail:capskip:${day}`))!);
+    expect([sent.length, notes.filter(Boolean).length, cap.count, JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]').length]).toEqual([2, 2, 2, 0]);
+    // 15 left: a Form 4 alone takes none of it (20 kept for 13F alerts): skipped for every member.
+    resendUsed = 70;
+    mailQuota.used = 70;
+    sent = [];
+    const t2 = t1 + 4 * 3600_000;
+    await deliver(env, [], [{ id: '0001193125-26-123456', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-11-16', url: 'https://www.sec.gov/y', issuer: 'OCCIDENTAL', display_name: null, ticker: 'OXY', shares: 1000, value_usd: 50_000, avg_price: 50, shares_after: 1000, percent_of_class: null, accepted: new Date(t2).toISOString() } as never], t2);
+    expect([sent.length, JSON.parse((await env.DB.get(`mail:capskip:${day}`))!).count]).toEqual([0, 6]);
+    const { alertHealth } = await import('../src/status');
+    const ah = await alertHealth(env, t2);
+    expect([ah.email_limit?.skipped_emails, ah.reasons.some((r: string) => /daily email limit was reached at \d\d:\d\d UTC: 6 alert emails to 4 members were skipped/.test(r))]).toEqual([6, true]);
+    resendUsed = 0;
+    mailQuota.used = 0;
+  });
+
   it('login emails only active members but always answers ok', async () => {
     // subscription.created can arrive before checkout.session.completed: the email comes from the customer.
     stripeObjects['customers/cus_1'] = { id: 'cus_1', email: 'a@example.com' };

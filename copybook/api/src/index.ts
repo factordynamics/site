@@ -842,6 +842,36 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, customer: c, items: keep.map((x) => ({ id: x.id, title: x.title, content_text: x.text, sent_at: x.sent ?? null, published: x.published ?? null })) }, 200, h);
   }
 
+  // Operator, dry run (the lead, Nov 11): the alert emails a filing day would send from current follows and the site's
+  // expected filers, with deadline week's one-email-an-hour batching, against the day's room (Resend; Mailgun if set).
+  if (req.method === 'GET' && path === '/ops/mail-projection') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const { MAIL_DAILY_CAP, MAIL_RESERVE, MAILGUN_DAILY_CAP } = await import('./email');
+    const ex = (await fetch(`${env.SITE_URL}d/expected.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { quarter?: string; expected?: { slug: string; expected_date: string; time_et?: number }[] } | null;
+    const days = [...new Set((ex?.expected ?? []).map((x) => x.expected_date))].sort();
+    const day = url.searchParams.get('day') ?? days[days.length - 1] ?? null;
+    const filing = (ex?.expected ?? []).filter((x) => x.expected_date === day);
+    const hourOf = new Map(filing.map((x) => [x.slug, Math.floor((x.time_et ?? 960) / 60)]));
+    let members = 0, emails = 0, chatOnly = 0, digest = 0;
+    const byHour: Record<string, number> = {};
+    for (const m of await listMembers(env)) {
+      if (!isActive(m) || !m.email || m.email_pending || m.alerts === 'off' || m.plan === 'holdterm' || m.test || testAddress(m.email)) continue;
+      const f = await getFollows(env, m);
+      const funds = m.alerts === 'all' ? [...hourOf.keys()] : [...new Set([...(Array.isArray(m.alerts) ? m.alerts : []), ...f.investors])].filter((x) => hourOf.has(x));
+      if (!funds.length) continue;
+      if (f.digest) { digest++; continue; }
+      const ch = await getChannels(env, m.customer);
+      if ((['discord', 'slack', 'telegram', 'webhook'] as const).some((d) => !!ch[d] && !!ch.verified?.[d]) && !ch.keep_email) { chatOnly++; continue; }
+      // One email per member per hour in deadline week: the distinct hours their funds are expected in.
+      const hours = [...new Set(funds.map((x) => hourOf.get(x)!))];
+      members++;
+      emails += hours.length;
+      for (const hr of hours) byHour[`${String(hr).padStart(2, '0')}:00 ET`] = (byHour[`${String(hr).padStart(2, '0')}:00 ET`] ?? 0) + 1;
+    }
+    const room = MAIL_DAILY_CAP - MAIL_RESERVE + (env.MAILGUN_API_KEY ? MAILGUN_DAILY_CAP : 0);
+    return json({ ok: true, day, quarter: ex?.quarter ?? null, expected_filers: filing.length, members_emailed: members, projected_alert_emails: emails, by_hour: Object.fromEntries(Object.entries(byHour).sort()), room_for_alerts: room, account_reserve: MAIL_RESERVE, mailgun: !!env.MAILGUN_API_KEY, over_by: Math.max(0, emails - room), chat_only_members: chatOnly, digest_members: digest, note: 'Follow-ups (moves arriving after the first email), Form 4 and 13D/G alerts and new trials add to this; over the room, 13F alerts go first and the rest go to feeds, chat and webhooks only.' }, 200, h);
+  }
+
   if (req.method === 'GET' && path === '/ops/member-counts') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const counts: Record<string, number> = {};

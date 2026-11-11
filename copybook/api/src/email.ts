@@ -20,6 +20,8 @@ export interface Mail {
   unsubscribe?: string;
   /** A test or critic member: sent after real members when the day's email budget runs low. */
   test?: boolean;
+  /** An alert email carrying a 13F (the lead, Nov 11): first in line when the day's budget runs low. */
+  filing?: boolean;
   /** A preview, replay or sample to a test inbox: counted against PREVIEW_DAILY_CAP. */
   preview?: boolean;
   /** Filings and events the email carries: a delayed send is excluded from the latency figures. */
@@ -301,7 +303,8 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
     const hold = wk ? WEEKEND_RESERVE : MAIL_RESERVE + (tier === 'low' ? LOW_HOLD : 0);
     const room = Math.max(0, Math.min(MAIL_DAILY_CAP - hold - mailQuota.used, MAIL_MONTHLY_CAP - MAIL_RESERVE - mailQuota.monthly));
     if (mails.length > room) {
-      const order = [...mails.filter((m) => !m.test), ...mails.filter((m) => m.test)];
+      // Members' 13F alerts first, then their other alerts, then test members' (the lead, Nov 11).
+      const order = [...mails.filter((m) => !m.test && m.filing), ...mails.filter((m) => !m.test && !m.filing), ...mails.filter((m) => m.test)];
       // Past Resend's share: Mailgun (when configured) for alerts and weekend low-priority mail, then the reset queue.
       const over = order.slice(room);
       await delay(env, tier === 'alert' || wk ? await viaMailgun(env, over, statuses, wk ? WEEKEND_RESERVE : 0, tally) : over);
@@ -970,7 +973,12 @@ export function eventHeadline(e: AlertEvent, firm = false): string {
 
 export function alertMail(env: Env, to: string, filings: Alert13F[], events: AlertEvent[], f: Follows, m?: Member): Mail {
   const heads = [...filings.map((a) => filingHeadline(a)), ...events.map((e) => eventHeadline(e))];
-  const subject = `${heads[0]}${heads.length > 1 ? ` + ${heads.length - 1} more` : ''}`;
+  // Several funds' 13Fs in one email (deadline week's hourly batch): "3 funds you follow filed: Buffett, Klarman + 1 more".
+  const funds = [...new Set(filings.filter((a) => !a.followup).map((a) => siteName(a.slug) ?? a.manager))];
+  const subject =
+    funds.length > 1
+      ? `${funds.length} funds you follow filed: ${funds.slice(0, 2).join(', ')}${funds.length > 2 ? ` + ${funds.length - 2} more` : ''}${events.length ? ` + ${events.length} more` : ''}`
+      : `${heads[0]}${heads.length > 1 ? ` + ${heads.length - 1} more` : ''}`;
   const intro = 'New filings from managers and stocks you follow:';
   return { to, subject, text: body(env, intro, filings, events, f, m), html: htmlBody(env, intro, filings, events, f, m) };
 }

@@ -270,6 +270,35 @@ const testMailKey = (customer: string, now: number) => `mailn:${customer}:${new 
  */
 export const COALESCE_BASE_MS = 2 * 60_000;
 export const COALESCE_MS = 20 * 60_000;
+/** Deadline week (3 days before a 13F deadline to the day after): one alert email per member per hour, batched. */
+export const DEADLINE_WINDOW_MS = 60 * 60_000;
+export const inDeadlineWeek = (now: number) => DEADLINES.some((d) => now >= deadlineMs(d.date) - 3 * 86_400_000 && now <= deadlineMs(d.date) + 86_400_000);
+/** Today's room kept for 13F alerts: an email with only Form 4s or 13D/Gs is skipped once this little is left. */
+export const FILING_HOLD = 20;
+/** The feed note when an email is skipped for the day's email limit. */
+export const CAP_NOTE = 'Email limit reached today; this alert is in your feed';
+
+/**
+ * Over the day's email room (both providers; Mailgun counts when configured, so failover needs no change here): the
+ * email is skipped, never queued for after the reset. The alert already went to the member's feed, chat and webhooks;
+ * the feed gets one note a day saying why there was no email, and the day's count feeds /status/ (the lead, Nov 11).
+ */
+async function capSkipped(env: Env, m: Member, ch: { feed_token?: string | null }, now: number): Promise<void> {
+  const day = new Date(now).toISOString().slice(0, 10);
+  const k = `mail:capskip:${day}`;
+  const c = JSON.parse((await env.DB.get(k)) ?? 'null') as { count: number; first_at: string; members: number } | null;
+  const mine = `capskip:${m.customer}:${day}`;
+  const firstForMember = !(await env.DB.get(mine));
+  await env.DB.put(k, JSON.stringify({ count: (c?.count ?? 0) + 1, first_at: c?.first_at ?? new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), members: (c?.members ?? 0) + (firstForMember ? 1 : 0) }), { expirationTtl: 3 * 86400 });
+  await env.DB.put(mine, String(Number((await env.DB.get(mine)) ?? 0) + 1), { expirationTtl: 2 * 86400 });
+  if (firstForMember && ch.feed_token) {
+    const key = `feed:${m.customer}`;
+    const items = JSON.parse((await env.DB.get(key)) ?? '[]') as FeedItem[];
+    const at = new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const note: FeedItem = { id: `capnote:${day}`, title: CAP_NOTE, text: `${CAP_NOTE}. Today's other alerts arrive here, in chat and by webhook as they happen; email resumes after 00:00 UTC.`, url: `${env.SITE_URL}account/`, published: at, sent: at };
+    if (!items.some((x) => x.id === note.id)) await env.DB.put(key, JSON.stringify([note, ...items].slice(0, 50)));
+  }
+}
 const HELD = 'mail:held';
 interface Held {
   until: number;
@@ -333,6 +362,8 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
   if (!due.length) return {};
   const mails = [];
   const sentWith: { filings: Alert13F[]; events: AlertEvent[] }[] = [];
+  let room: number | undefined;
+  let skipped = 0;
   for (const c of due) {
     const w = JSON.parse((await env.DB.get(`mailwin:${c}`)) ?? 'null') as Held | null;
     await env.DB.delete(`mailwin:${c}`);
@@ -342,14 +373,23 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
     const f = await getFollows(env, m);
     const test = !!m.test || testAddress(m.email);
     if (test && Number((await env.DB.get(testMailKey(c, now))) ?? 0) >= TEST_MAIL_CAP) continue;
+    // The same room rule as fanOut: past it the batch is skipped (it went to feed, chat and webhooks as it happened).
+    if (!test) {
+      room ??= await (await import('./email')).mailRoom(env);
+      if (room - mails.length - (w.filings.length ? 0 : FILING_HOLD) <= 0) {
+        await capSkipped(env, m, await getChannels(env, c), now);
+        skipped++;
+        continue;
+      }
+    }
     const u = await unmailed(env, c, w.filings, w.events, now);
     if (!u.filings.length && !u.events.length) continue;
     if (test) await env.DB.put(testMailKey(c, now), String(Number((await env.DB.get(testMailKey(c, now))) ?? 0) + 1), { expirationTtl: 2 * 86400 });
-    mails.push({ ...alertMail(env, m.email, u.filings, u.events, f, m), test, ids: [...u.filings.map((a) => a.accession), ...u.events.map((e) => e.id)] });
+    mails.push({ ...alertMail(env, m.email, u.filings, u.events, f, m), test, filing: u.filings.length > 0, ids: [...u.filings.map((a) => a.accession), ...u.events.map((e) => e.id)] });
     sentWith.push(u);
   }
   await env.DB.put(HELD, JSON.stringify(index));
-  if (!mails.length) return { held_flushed: 0 };
+  if (!mails.length) return { held_flushed: 0, ...(skipped ? { cap_skipped: skipped } : {}) };
   const status = await sendMail(env, mails, { bulk: true });
   await logSent(env, mails.length, now);
   // Coalesced emails are timed as they went: a row per item at this send, tagged coalesced.
@@ -500,6 +540,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   let held = 0;
   let testCapped = 0;
   let chatOnly = 0;
+  let capSkips = 0;
   let pressure: { room: number; projected: number } | undefined;
   let heldIndex: Record<string, number> | undefined;
   // Paused members' followed funds that filed a 13F: one "resume now" note per member per ET day.
@@ -574,9 +615,10 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
         const open = win && win.until > now;
         pressure ??= await emailPressure(env, now);
         const tight = pressure.room - mails.length <= pressure.projected;
+        const deadline = inDeadlineWeek(now);
         // A 13F's moves follow-up (its first email went without them) is what the member waits for: never held for the
-        // short window, only while email is short.
-        if (open && (tight || !mine.filings.some((a) => a.followup))) {
+        // short window, only while email is short or in deadline week (one email an hour, the lead, Nov 11).
+        if (open && (tight || deadline || !mine.filings.some((a) => a.followup))) {
           // Inside this member's window: held, sent with the window's other alerts at its end.
           await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ ...win, filings: [...win.filings, ...mine.filings], events: [...win.events, ...evs] }));
           held++;
@@ -585,9 +627,19 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
         // Anything still held goes out with this email (the window ended, or email is no longer short).
         if (win && (win.filings.length || win.events.length)) send = { filings: [...win.filings, ...mine.filings], events: [...win.events, ...evs] };
         // This email opens the member's next window.
-        const until = now + (tight ? COALESCE_MS : COALESCE_BASE_MS);
+        const until = now + (deadline ? DEADLINE_WINDOW_MS : tight ? COALESCE_MS : COALESCE_BASE_MS);
         await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ until, filings: [], events: [] } satisfies Held));
         (heldIndex ??= JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>)[m.customer] = until;
+      }
+      // The day's email room: members' 13F alerts get all of it, other alert emails stop with FILING_HOLD left. Past it the
+      // email is skipped (the alert went to feed, chat and webhooks above), with a feed note and a count for /status/.
+      if (!only && !test) {
+        pressure ??= await emailPressure(env, now);
+        if (pressure.room - mails.length - (send.filings.length ? 0 : FILING_HOLD) <= 0) {
+          await capSkipped(env, m, ch, now);
+          capSkips++;
+          continue;
+        }
       }
       // Never the same alert twice to one member (an operator's replay excepted).
       if (!only) {
@@ -601,7 +653,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       const ylHtml = yl ? `<p style="margin:12px 0">${yl.replace(/ (Switch now|Add card): (https:\/\/\S+)$/, (_, w: string, u: string) => ` <a href="${u}" style="color:#1d4ed8">${w} →</a>`)}</p>` : '';
       const foot = am0.html ? am0.html.lastIndexOf('<p style="margin-top:24px') : -1;
       const am = yl ? { ...am0, text: am0.text.replace(FOOTER, `\n\n${yl}${FOOTER}`), html: am0.html && foot >= 0 ? am0.html.slice(0, foot) + ylHtml + am0.html.slice(foot) : am0.html } : am0;
-      mails.push({ ...am, ...(replay ? { subject: `Replay (test): ${am.subject}` } : {}), test, ids: [...send.filings.map((a) => a.accession), ...send.events.map((e) => e.id)] });
+      mails.push({ ...am, ...(replay ? { subject: `Replay (test): ${am.subject}` } : {}), test, filing: send.filings.length > 0, ids: [...send.filings.map((a) => a.accession), ...send.events.map((e) => e.id)] });
       notes.push(m);
     }
   }
@@ -612,7 +664,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   for (const p of pausedNotes) await env.DB.put(p.key, '1', { expirationTtl: 2 * 86400 });
-  return { emails: mails.length, digest, mail, ...(held ? { held } : {}), ...(testCapped ? { test_capped: testCapped } : {}), ...(chatOnly ? { chat_only: chatOnly } : {}), ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
+  return { emails: mails.length, digest, mail, ...(held ? { held } : {}), ...(testCapped ? { test_capped: testCapped } : {}), ...(chatOnly ? { chat_only: chatOnly } : {}), ...(capSkips ? { cap_skipped: capSkips } : {}), ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }
 
 type Delivered = { day: string; ids: string[] }[];
