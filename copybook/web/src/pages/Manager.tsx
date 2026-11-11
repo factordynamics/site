@@ -61,7 +61,9 @@ export function ManagerPage() {
   // entity files it, as Pershing Square Inc. does for Ackman), else this page.
   const cardSet = useAsync(loadCardSet, [])
   const acc = (f as { accession?: string } | undefined)?.accession
-  const card = f && (cards.data?.get(f.slug) ?? (acc && cardSet.data?.has(acc) ? acc : undefined))
+  // A curated fund's latest filing always has a card: /f/ renders one at runtime when the build hasn't made it yet
+  // (it needs a prior quarter to compare with).
+  const card = f && ((acc && !f.filer && f.prev_quarter ? acc : undefined) ?? cards.data?.get(f.slug) ?? (acc && cardSet.data?.has(acc) ? acc : undefined))
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()

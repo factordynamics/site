@@ -241,7 +241,7 @@ export function Season() {
           ) : (
             <ul className="divide-y divide-line">
               {d.latest.slice(0, 14).map((r) => {
-                const card = r.accession && cards.data?.has(r.accession) ? `/f/${r.accession}/` : null
+                const card = r.accession && (r.live || cards.data?.has(r.accession)) ? `/f/${r.accession}/` : null
                 const c = r.changes
                 return (
                   <li key={r.slug}>

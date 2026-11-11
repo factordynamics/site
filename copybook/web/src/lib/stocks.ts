@@ -1,6 +1,6 @@
 import type { Ev } from '../components/FundNotes'
 import { call } from './account'
-import { BASE, displayName, flagNote, flagOf, getJSON, unreliable, type Change, type Flag } from './data'
+import { BASE, displayName, flagNote, flagOf, getJSON, live, unreliable, type Change, type Flag, type Manager } from './data'
 
 // Derived at build time by scripts/stocks.mjs from the curated 13F books, served from the site host.
 const D = `${BASE}d/`
@@ -118,7 +118,21 @@ export type Expected = {
 }
 /** d/expected.json: superinvestors still to file this quarter (scripts/stocks.mjs). */
 export type ExpectedSoon = Pick<Expected, 'slug' | 'manager' | 'pattern' | 'expected_date' | 'time_et' | 'time_range'> & { total_value: number }
-export const loadExpected = () => getJSON<{ quarter: string; generated_at?: string; latest_13f?: { manager: string; filing_date?: string; accepted_at?: string | null } | null; expected: ExpectedSoon[] }>(`${D}expected.json${fresh()}`).catch(() => null)
+// A fund that filed after the last site build: gust's index.json (read live, two-minute bucket, the same URL every
+// page shares) already carries its new quarter. Season-week files built with the site are overlaid with it, so a
+// filing moves /season/'s count, Next up and Just filed within minutes of the data publish, without a rebuild.
+type Live = Manager & { accession?: string; accepted_at?: string | null }
+const filedNow = (quarter: string) =>
+  getJSON<{ managers: Live[] }>(live('index.json'))
+    .then((i) => new Map(i.managers.filter((m) => m.quarter === quarter).map((m) => [m.slug, m])))
+    .catch(() => new Map<string, Live>())
+export const loadExpected = () =>
+  getJSON<{ quarter: string; generated_at?: string; latest_13f?: { manager: string; filing_date?: string; accepted_at?: string | null } | null; expected: ExpectedSoon[] }>(`${D}expected.json${fresh()}`)
+    .then(async (e) => {
+      const now = await filedNow(e.quarter)
+      return { ...e, expected: e.expected.filter((x) => !now.has(x.slug)) }
+    })
+    .catch(() => null)
 const hr = (m: number) => ({ h: ((Math.floor(m / 60) + 11) % 12) + 1, pm: m >= 720 })
 /** "Thu Nov 12" for an ISO date. */
 export const shortDay = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
@@ -158,7 +172,8 @@ export type Season = {
   featured: { filed: number; total: number; stopped?: { slug: string; manager: string; note: string | null }[] }
   filers: { filed: number; total: number }
   by_day: { date: string; count: number }[]
-  latest: { slug: string; manager: string; firm: string; filing_date?: string; accession?: string; featured: boolean; total_value?: number; changes: Record<string, number> | null }[]
+  /** `live`: filed after the last site build, from the live index.json (loadSeason); its card renders at runtime. */
+  latest: { slug: string; manager: string; firm: string; filing_date?: string; accession?: string; featured: boolean; total_value?: number; changes: Record<string, number> | null; live?: true }[]
   splits?: { ticker: string; name: string; ratio: string }[]
   /** Superinvestors' usual filing day and time, from their last four 13Fs. */
   expected?: Expected[]
@@ -179,6 +194,20 @@ export const loadSeason = (v?: number) =>
       return { ...f, bought: rows(f.bought), sold: rows(f.sold), most_buyers: rows(f.most_buyers) }
     }
     return { ...s, latest: s.latest.map((x) => ({ ...named(x), firm: displayName(x.firm) })), featured_flow: fix(s.featured_flow), all_flow: fix(s.all_flow) }
+  }).then(async (s) => {
+    const now = await filedNow(s.quarter)
+    const known = new Set(s.latest.map((x) => x.slug))
+    const fresh13f = [...now.values()].filter((m) => !known.has(m.slug)).sort((a, b) => (b.accepted_at ?? b.filing_date ?? '').localeCompare(a.accepted_at ?? a.filing_date ?? ''))
+    if (!fresh13f.length) return s
+    const expected = s.expected?.map((x) => (x.filed || !now.has(x.slug) ? x : { ...x, filed: { filing_date: now.get(x.slug)!.filing_date, accession: now.get(x.slug)!.accession } }))
+    return {
+      ...s,
+      expected,
+      featured: { ...s.featured, filed: expected ? expected.filter((x) => x.filed).length : s.featured.filed },
+      curated: { ...s.curated, filed: s.curated.filed + fresh13f.length },
+      // Newest first, ahead of the build's list; their moves come with the next build, the card at /f/ at once.
+      latest: [...fresh13f.map((m) => ({ slug: m.slug, manager: displayName(m.manager), firm: displayName(m.name), filing_date: m.filing_date, accession: m.accession, featured: Boolean(m.featured), total_value: m.total_value, changes: null, live: true as const })), ...s.latest],
+    }
   })
 
 export type PctRow = { ticker: string; name: string; pct: number; n_buyers: number; n_sellers: number; buyers: { slug: string; manager: string; pct: number }[]; sellers: { slug: string; manager: string; pct: number }[] }
