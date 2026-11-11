@@ -578,6 +578,14 @@ class MoveMathTest(unittest.TestCase):
                                    {"quarter": "2026Q2", "holdings": [self.row("68389X204", "ORCL", 132845, 19_500_000)]})
             self.assertEqual([(x["change"], x["share_change"], x["prev_cusip"], x["cusip_mismatch"]["mistyped"],
                                x.get("unreliable")) for x in r], [("added", 33082, "68389X204", "68389X204", None)])
+            # The merge is shown, never silent (lead, Nov 11): the misfiled CUSIP, its filed price and the matched one.
+            self.assertEqual([(x["cusip_pair"], x["filed_cusip"], x["filed_price"], x["matched_cusip"]) for x in r],
+                             [("merged_misfiled", "68389X204", round(19_500_000 / 132845, 4), "68389X105")])
+            # Priced 1.3x common (inside 1.5x, outside the 0.8-1.25 band): held as a possible CUSIP change, no trade.
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("68389X105", "ORCL", 165927, 21_000_000)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("68389X204", "ORCL", 132845, 132845 * 190.5)]})
+            self.assertEqual([(x["change"], x["cusip_pair"], x["suspect_reason"], x["unreliable"], x["value_delta"])
+                              for x in r], [(None, "possible_cusip_change", "possible_cusip_change", "both", 0)])
             # GOOGL -> GOOG, each priced at its own median: exit plus new, both class_switch.
             r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("02079K107", "GOOG", 1000, 340_740)]},
                                    {"quarter": "2026Q2", "holdings": [self.row("02079K305", "GOOGL", 1000, 357_370)]})

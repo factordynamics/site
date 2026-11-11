@@ -656,7 +656,7 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book",
                  "value_delta_basis")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
-STALE = ("split", "prev_shares_as_filed", "unreliable", "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
+STALE = ("split", "prev_shares_as_filed", "unreliable", "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed", "filed_cusip", "filed_price", "matched_cusip", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
          "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
@@ -1025,7 +1025,8 @@ def unreliable_side(r: dict, quarter: str | None) -> str | None:
     not flagged."""
     if not (r.get("suspect_units") or r.get("price_outlier")) or r.get("shares_type") == "PRN":
         return None
-    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale", "sign_mismatch") or r.get("put_call") \
+    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale", "sign_mismatch", "possible_cusip_change") \
+            or r.get("put_call") \
             or r.get("value_rescale") == "rejected":  # Mizuho Securities MCHP: neither as filed nor x1000 reconciles
         return "both"  # an option line held by classify_options: neither its shares nor its value is reliable
     sh, ps, v, pv = (r.get(k) or 0 for k in ("shares", "prev_shares", "value", "prev_value"))
@@ -1081,6 +1082,9 @@ def line_key(h: dict) -> tuple:
 
 def _px(h: dict) -> float | None:
     return h["value"] / h["shares"] if (h.get("shares") or 0) > 0 and (h.get("value") or 0) > 0 else None
+
+
+BAND_LO, BAND_HI = 0.8, 1.25  # the options band
 
 
 def mistyped(h: dict, quarter: str | None, other: str) -> bool:
@@ -1165,8 +1169,15 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         h_, p_ = next(x for x in latest["holdings"] if line_key(x) == k), gone[pk]
         typo_new, typo_old = mistyped(h_, q_to, pk[0]), mistyped(p_, q_from, k[0])
         if typo_new or typo_old:
+            # Merged only when the misfiled line's price is within the options band (0.8-1.25) of the matched CUSIP's
+            # median (lead, Nov 11: Mizuho ORCL Q2 68389X204 at $146.8, common's price): cusip_pair merged_misfiled,
+            # shown on every surface. Nearer than 1.5x but outside the band: the pair is held (possible_cusip_change).
+            line, q_line, other = (h_, q_to, pk[0]) if typo_new else (p_, q_from, k[0])
+            px, m = _px(line), consensus().get((q_line or "", other))
             renamed[k] = pk
-            mismatch[k] = {"cusip": k[0], "prev_cusip": pk[0], "mistyped": k[0] if typo_new else pk[0]}
+            mismatch[k] = {"cusip": k[0], "prev_cusip": pk[0], "mistyped": line["cusip"],
+                           "filed_price": round(px, 4) if px else None,
+                           "in_band": bool(px and m and BAND_LO <= px / m <= BAND_HI)}
         elif priced_at_own(h_, q_to) and priced_at_own(p_, q_from):
             switch |= {k, pk}
 
@@ -1223,7 +1234,11 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         if p is not None and p["cusip"] != h["cusip"]:
             h = h | {"prev_cusip": p["cusip"]}
         if k in mismatch:  # the mistyped line is read as the other CUSIP, so the unit checks price it against the right median
-            h = h | {"cusip_mismatch": mismatch[k]}
+            mm = mismatch[k]
+            h = h | {"cusip_mismatch": {f: mm[f] for f in ("cusip", "prev_cusip", "mistyped")},
+                     "cusip_pair": "merged_misfiled" if mm["in_band"] else "possible_cusip_change",
+                     "filed_cusip": mm["mistyped"], "filed_price": mm["filed_price"],
+                     "matched_cusip": mm["prev_cusip"] if mm["mistyped"] == mm["cusip"] else mm["cusip"]}
             if mismatch[k]["mistyped"] == h["cusip"]:
                 h = h | {"cusip": p["cusip"], "cusip_as_filed": h["cusip"]}
             else:
@@ -1284,6 +1299,10 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 and abs(now / amount(p) - 1) <= 0.005:
             row |= {"suspect_units": True, "suspect_units_basis": "own_prior", "suspect_reason": "reissue_ratio_not_applied",
                     "change": None, "share_change": None, "value_delta": 0, "delta_pct_of_book": 0.0, "value_delta_basis": None}
+        if row.get("cusip_pair") == "possible_cusip_change":  # outside the band: held, no trade, out of every sum
+            row |= {"suspect_units": True, "suspect_units_basis": "own_prior", "suspect_reason": "possible_cusip_change",
+                    "change": None, "share_change": None, "value_delta": 0, "delta_pct_of_book": 0.0,
+                    "value_delta_basis": None}
         rows.append(row)
     for key in dup:  # the duplicate's own prior line is the new code's position, not a sale
         before.pop(key, None)
@@ -1722,7 +1741,7 @@ def shares_out(x):
 V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display_name", "late_disclosure", "parts",
             "value_delta_basis", "unreliable", "value_change", "price_outlier", "suspect_units", "suspect_reason",
             "shares_basis", "shares_as_filed", "option_held", "held_lines", "mixed_scale", "value_rescale",
-            "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed",
+            "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed", "filed_cusip", "filed_price", "matched_cusip",
             "split", "prev_shares_as_filed", "suspect_duplicate", "prev_reason", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
 
 

@@ -40,7 +40,7 @@ FULL_COLUMNS = ("row_type", "ticker", "issuer", "title", "cusip", "put_call", "s
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
                 "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "suspect_units_basis", "suspect_reason", "prev_cusip",
                 "source_accession", "first_disclosed_at", "value_scale", "value_adjusted", "value_delta_basis", "unreliable",
-                "value_change", "shares_basis", "shares_as_filed", "option_held", "option_ratio")
+                "value_change", "shares_basis", "shares_as_filed", "option_held", "option_ratio", "cusip_pair", "filed_cusip", "filed_price", "matched_cusip")
 
 
 SECS: dict[str, dict] = {}
@@ -78,6 +78,7 @@ UNCLASSED: dict[str, int] = {}
 FB_KEEP = set(FB_COLUMNS) | {"display_name", "sector"}  # plain full-book columns (bulk.FB_COLUMNS, enrich's labels)
 CLASS_SUM_MAX = 10  # more held class_sum_mismatch rows than this fail the run (lead, Nov 11)
 CLASS_SUM_OFF: list[dict] = []  # (issuer6, cik, row value_delta, classes' sum): rows held because the two differ
+PAIRS: dict[tuple, dict] = {}  # (issuer6, cik) -> cusip_pair, filed_cusip, filed_price, matched_cusip (ORCL Mizuho)
 CHECK_HELD: list[tuple] = []  # (value, cik, filed CUSIP, issuer): lines held cusip_check_digit this run
 GATE_OFF: list[dict] = []  # issuers whose counts or net differ from their own rows: hl/ is then not rewritten
 CLS: dict[tuple, dict] = {}  # (issuer6, cik) -> {cusip: that share class's shares, prior, value, value_delta, changes}
@@ -294,7 +295,7 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
 
 CHANGE_COLUMNS = ("cik", "slug", "filer_name", "curated", "type", "cusip", "ticker", "issuer", "put_call", "change",
                   "shares", "prev_shares", "share_change", "value", "value_delta", "accession", "accepted_at", "value_delta_basis",
-                  "shares_basis")  # "contracts": an option line filed in contracts, shares x100 (BNP Paribas FM)
+                  "shares_basis", "cusip_pair", "filed_cusip", "filed_price", "matched_cusip")  # "contracts": an option line filed in contracts, shares x100 (BNP Paribas FM)
 CHANGES_MAX = 20_000  # largest |value_delta| per quarter; the Worker parses the whole file
 
 
@@ -769,6 +770,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     CLASS_SUM_OFF.clear()
     GATE_OFF.clear()
     CHECK_HELD.clear()
+    PAIRS.clear()
     tick: dict[str, dict[str, float]] = {}
     book: dict[str, float] = {}  # cik -> value of its share positions (the weight denominator)
     top10: dict[str, set] = {}  # cik -> issuer codes among its ten largest share positions
@@ -811,6 +813,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 # why it is held, named on the row (Aware Super XOM 2026Q3 at $1,854 a share: cross_filer)
                 a[11] = a[11] or why
             a[7] = a[7] or r.get("prev_cusip")
+            if r.get("cusip_pair") in ("merged_misfiled", "possible_cusip_change"):  # the pair's marker, on the holder row
+                PAIRS[(c[:6], cik)] = {f: r.get(f) for f in ("cusip_pair", "filed_cusip", "filed_price", "matched_cusip")}
             # A held reissue (units unconfirmed) whose codes share an issuer prefix (BYND 08862E109 -> 08862E307):
             # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
             if r.get("change") in ("new", "exited") and (r.get("cusip") or "").upper() in held_codes:
@@ -854,7 +858,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
             "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
             "price_outlier", "value_basis", "unreliable", "value_delta", "value_delta_basis", "held_reason", "classes",
-            "shares_unit", "shares_ratio", "ratio_source", "classes_held", "cusip", "issuer_cusip6", "net_direction"]
+            "shares_unit", "shares_ratio", "ratio_source", "classes_held", "cusip", "issuer_cusip6", "net_direction",
+            "cusip_pair", "filed_cusip", "filed_price", "matched_cusip"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0, "mixed": 0, "unknown": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {}, "by_period": {}}
@@ -976,7 +981,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                           for k in sorted(cls.values(), key=lambda k: -k["value"])] if multi else None,
                          unit, ratio_of, CLASS_RATIO_SOURCE.get(unit) if unit else None,
                          held_n if multi else None, single, code,
-                         None if counted is None else "buy" if counted > 0 else "sell" if counted < 0 else "flat"])
+                         None if counted is None else "buy" if counted > 0 else "sell" if counted < 0 else "flat",
+                         *((PAIRS.get((code, cik)) or {}).get(f) for f in ("cusip_pair", "filed_cusip", "filed_price", "matched_cusip"))])
         # Hard gates (lead, Nov 11): net is exactly the sum of the counted rows, per quarter (a held row and its
         # classes add nothing), and the change counts are the rows' own tallies. Either off: hl/ is not rewritten.
         vi, ci = cols.index("value_delta"), cols.index("change")
@@ -1226,7 +1232,7 @@ def main() -> int:
                 build.shares_out(float(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
                 int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), rec.get("accession"),
                 rec.get("accepted_at") or ACCEPTED.get(rec.get("accession") or ""), r.get("value_delta_basis"),
-                r.get("shares_basis")]
+                r.get("shares_basis"), *(r.get(f) for f in ("cusip_pair", "filed_cusip", "filed_price", "matched_cusip"))]
 
     for shard in shards:
         path = DATA / "f" / f"{shard['cik']}.json"
