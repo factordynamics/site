@@ -884,6 +884,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
   if (!m) return json({ ok: false, error: 'sign in required' }, 401, h);
 
+  // Any member: sign out everywhere. Every session issued before this second stops working at once (a copied token
+  // included); the browser that asked gets a fresh session. API keys are separate and stay until deleted.
+  if (req.method === 'POST' && path === '/me/sessions/revoke') {
+    const now = Math.floor(Date.now() / 1000);
+    // authed() refuses sessions issued at or before sessions_after; the fresh one below is issued this second.
+    const next = { ...m, sessions_after: now - 1 };
+    await putMember(env, next);
+    return json({ ok: true, revoked_at: new Date(now * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'), ...(await issueSession(env, next)) }, 200, h);
+  }
+
   // Short-lived sign-in token for carrying a session across origins in a URL (e.g. the old-host redirect).
   if (req.method === 'POST' && path === '/handoff') {
     return json({ ok: true, login: await signToken(env.SESSION_SECRET, 'login', m.customer, HANDOFF_TTL) }, 200, h);

@@ -2964,7 +2964,7 @@ describe('copybook api', () => {
   it('Copy Fund seats: invites with their own sign-in, a shared book and peers, per-seat alert settings, billing stays with the owner', async () => {
     stripeObjects['checkout/sessions/cs_test_fund'] = { id: 'cs_test_fund', status: 'complete', created: now(), subscription: 'sub_fund', customer_details: { email: 'pm@fund.example' } };
     stripeObjects['subscriptions/sub_fund'] = sub('sub_fund', 'cus_fund', 'active', 'year', 'fund_yearly');
-    const owner = (await (await call('/session', { body: { checkout_session: 'cs_test_fund' } })).json()).token;
+    let owner = (await (await call('/session', { body: { checkout_session: 'cs_test_fund' } })).json()).token;
     await call('/follows/warren-buffett', { method: 'POST', token: owner });
     await call('/follows/owned/NVDA', { method: 'POST', token: owner });
     sent = [];
@@ -3044,6 +3044,14 @@ describe('copybook api', () => {
     // Its API keys stop too: "sign out everywhere" leaves a departing colleague no access.
     expect((await v1me()).status).toBe(401);
     expect((await call('/seats/nobody%40fund.example/revoke', { method: 'POST', token: owner })).status).toBe(404);
+    // Any member signs their own sessions out everywhere: a copied token dies at once, this browser gets a fresh session.
+    const copied = await signToken(env.SESSION_SECRET, 'session', 'cus_fund', 30 * 86400, {}, Date.now() / 1000 - 30);
+    const here = await signToken(env.SESSION_SECRET, 'session', 'cus_fund', 30 * 86400, {}, Date.now() / 1000 - 20);
+    expect((await call('/me', { token: copied })).status).toBe(200);
+    const so = await (await call('/me/sessions/revoke', { method: 'POST', token: here })).json();
+    expect(so).toMatchObject({ ok: true, member: { email: expect.any(String) } });
+    expect([(await call('/me', { token: copied })).status, (await call('/me', { token: here })).status, (await call('/me', { token: so.token })).status]).toEqual([401, 401, 200]);
+    owner = so.token;
     await new Promise((r) => setTimeout(r, 1000)); // a new session is issued in a later second
     const again = (await (await call('/session', { body: { login: await signToken(env.SESSION_SECRET, 'login', seatId, 600) } })).json()).token;
     expect((await call('/me', { token: again })).status).toBe(200);
