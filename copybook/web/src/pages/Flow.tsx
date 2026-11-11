@@ -49,6 +49,8 @@ export function Flow() {
   const auto = periods.find((p) => filedOf(p) >= Math.max(3, totalOf(p) / 3)) ?? periods[periods.length - 1]
   const d = periods.find((p) => p.quarter === params.get('q')) ?? auto
   const newest = periods[0]
+  // Just filed always leads with the newest period's filings (a filing-day 13F shows at once), unless a period was picked.
+  const jf = !params.get('q') && newest && filedOf(newest) > 0 ? newest : d
   const s: FlowScope | undefined = d ? d[scope] : undefined
   const rows = s?.[tab] ?? []
   const shown = paid ? rows.slice(0, limit) : rows.slice(0, FREE_ROWS)
@@ -159,12 +161,12 @@ export function Flow() {
           )}
         </section>
 
-        <Panel title="Just filed" sub={d ? `${quarterLabel(d.quarter)} 13Fs, newest first` : undefined}>
-          {!d ? (
+        <Panel title="Just filed" sub={jf ? `${quarterLabel(jf.quarter)} 13Fs, newest first` : undefined}>
+          {!jf ? (
             <Skeleton className="h-[360px] w-full" />
           ) : (
             <ul className="divide-y divide-line">
-              {d.recent
+              {jf.recent
                 .filter((r) => scope !== 'featured' || r.featured)
                 .slice(0, 12)
                 .map((r) => (
@@ -180,7 +182,7 @@ export function Flow() {
                       </span>
                     </Link>
                     {r.accession && cards.data?.get(r.slug) === r.accession && (
-                      <Link to={`/f/${r.accession}/`} className="shrink-0 rounded-full px-2.5 py-1 text-[12.5px] font-medium text-accent hover:bg-accent-soft" aria-label={`Share ${r.manager}’s ${quarterLabel(d.quarter)} 13F`}>
+                      <Link to={`/f/${r.accession}/`} className="shrink-0 rounded-full px-2.5 py-1 text-[12.5px] font-medium text-accent hover:bg-accent-soft" aria-label={`Share ${r.manager}’s ${quarterLabel(jf.quarter)} 13F`}>
                         Share
                       </Link>
                     )}
