@@ -36,7 +36,7 @@ TOP = 10
 MOVE_COLUMNS = ("ticker", "issuer", "cusip", "put_call", "shares", "prev_shares", "value", "value_delta", "change")
 FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type", "prev_shares", "prev_value",
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
-                "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "suspect_units_basis", "prev_cusip",
+                "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "suspect_units_basis", "suspect_reason", "prev_cusip",
                 "source_accession", "first_disclosed_at", "value_scale", "value_adjusted")
 
 
@@ -372,6 +372,8 @@ def write_full(base: dict, prev_q: str | None, rows: list[dict]) -> None:
     full = {k: v for k, v in base.items() if k not in ("rows", "columns", "truncated", "_fb_only")} | {
         "accepted_at": base.get("accepted_at") or ACCEPTED.get(base.get("accession") or ""),
         "prev_quarter": prev_q,
+        # The rows' total after per-line unit fixes (Regions 78468R622 filed $1, served $1,000), not the filed total.
+        "total_value": round(sum(r.get("value") or 0 for r in rows if r.get("change") != "exited")),
         "equity_value": build.apply_weights({"holdings": [r for r in rows if r["change"] != "exited"]}).get("equity_value"),
         "columns": list(FULL_COLUMNS),
         "rows": [[(r.get("split") or {}).get("ratio") if k == "split_ratio" else

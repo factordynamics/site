@@ -168,6 +168,11 @@ class MoveMathTest(unittest.TestCase):
         build.CONSENSUS.update({("2026Q1", "482480100"): 1000.0, ("2026Q2", "482480100"): 301.71})
         try:
             self.assertTrue(build.with_changes(cur, prev)[0].get("suspect_units"))
+            self.assertEqual(build.with_changes(cur, prev)[0]["suspect_reason"], "cross_filer")
+            # Geode SION: this line at the peer median, its prior quarter's line 3.5x off: flagged for the prior.
+            odd_prev = {"quarter": "2026Q1", "holdings": [self.row("482480100", "KLAC", 2_000_000, 7e9)]}
+            sion = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("482480100", "KLAC", 36_459_000, 11.0e9)]}, odd_prev)[0]
+            self.assertEqual((sion["suspect_units"], sion["suspect_reason"]), (True, "cross_filer_prior"))
             cur["holdings"] = [self.row("482480100", "KLAC", 36_459_000, 11.0e9)]  # priced like its peers
             self.assertIs(build.with_changes(cur, prev)[0].get("suspect_units"), False)  # checked: false, not null
             # UBS 2026Q3: a book with no stored prior was served without any check; the cross-filer check still runs.
@@ -180,7 +185,7 @@ class MoveMathTest(unittest.TestCase):
             # No median for the CUSIP: the filer's own prior decides (GuardCap BKNG: $188 -> $5,138 a share).
             own = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 1_304, 6.7e6)]},
                                      {"quarter": "2026Q1", "holdings": [self.row("09857L108", "BKNG", 646_216, 121.6e6)]})[0]
-            self.assertEqual((own["suspect_units"], own["suspect_units_basis"]), (True, "own_prior"))
+            self.assertEqual((own["suspect_units"], own["suspect_units_basis"], own["suspect_reason"]), (True, "own_prior", "own_prior"))
             # Neither can run (a new line with no median), or not a share line: null, and the basis says why.
             new = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("000000001", "NEW", 10, 1e3)]}, prev)
             self.assertEqual([(r["suspect_units"], r["suspect_units_basis"]) for r in new if r["change"] == "new"], [(None, "none")])
@@ -332,3 +337,25 @@ class OlderQuarterChangesTest(unittest.TestCase):
         self.assertEqual((r1["BBBBBB101"]["change"], r1["CCCCCC101"]["change"]), ("new", "exited"))
         self.assertEqual(rows(q2)["BBBBBB101"]["change"], "exited")  # Q2 against stored Q1, not the prior store
         self.assertEqual(sorted(per), ["2026Q1", "2026Q2"])
+
+
+class BulkExportTest(unittest.TestCase):
+    def test_bulk_rows_are_the_rows_v1_serves(self):
+        # Nov 11: bulk read the plain fb/ book; /v1 serves fq/ (Regions 78468R622 filed $1, served $1,000; exited lines).
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from ingest import export
+        with tempfile.TemporaryDirectory() as d:
+            data = Path(d)
+            cols = ["cusip", "shares", "value", "change", "source_accession"]
+            for folder, rows in (("fb", [["78468R622", 10, 1, None, None]]),
+                                 ("fq", [["78468R622", 10, 1000, "added", "0001281761-26-000010"],
+                                         ["111111111", 0, 0, "exited", "0001281761-26-000010"]])):
+                (data / folder / "2026Q3").mkdir(parents=True)
+                (data / folder / "2026Q3" / "0001281761.json").write_text(json.dumps(
+                    {"ok": True, "cik": "0001281761", "accession": "0001281761-26-000010", "columns": cols, "rows": rows}))
+            with mock.patch.object(export, "DATA", data):
+                got = [(r[6], r[13], r[17]) for r in export.rows("2026Q3")]
+        self.assertEqual(got, [("78468R622", 1000, "added"), ("111111111", 0, "exited")])

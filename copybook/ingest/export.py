@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Bulk export: every filer's full 13F book per quarter as data/bulk/{YYYYQn}.csv.gz.
 
-Read from fb/{quarter}/{cik}.json (SEC Form 13F data sets and EDGAR, as filed), except that a
-curated fund's quarter comes from h/{slug}/{quarter}.json, the same book /v1 serves (restatements,
+Every row /v1 serves: fq/{quarter}/{cik}.json (moves.py: per-line unit fixes, exited and zero-value lines,
+per-row source filing and change) where present, else fb/{quarter}/{cik}.json (SEC Form 13F data sets and EDGAR,
+as filed); a curated fund's quarter comes from h/{slug}/{quarter}.json, the same book /v1 serves (restatements,
 unit fixes and NEW HOLDINGS amendments applied, per-row source filing). Paid: the
 files go to R2 as bulk/{quarter}.csv.gz (upload_history.py) for the Copy API's /v1/bulk.
 Output is deterministic (gzip mtime 0, rows sorted), so an unchanged quarter is not re-sent.
@@ -54,6 +55,7 @@ def curated_books(quarter: str) -> dict[str, dict]:
 def rows(quarter: str):
     curated = curated_books(quarter)
     paths = {p.stem: p for p in (DATA / "fb" / quarter).glob("*.json")}
+    paths |= {p.stem: p for p in (DATA / "fq" / quarter).glob("*.json")}  # the book /v1 serves
     for cik in sorted(set(paths) | set(curated)):
         if cik in curated:
             b = curated[cik]
@@ -70,7 +72,7 @@ def rows(quarter: str):
             b = json.loads(paths[cik].read_text())
         except ValueError:
             continue
-        if not b.get("ok"):
+        if b.get("ok") is False or not b.get("columns"):
             continue
         cols = b["columns"]
         head = (b.get("cik") or cik, b.get("name") or "", b.get("quarter") or quarter, b.get("report_date") or "",
@@ -79,7 +81,8 @@ def rows(quarter: str):
             h = dict(zip(cols, r))
             yield head + (h.get("cusip") or "", h.get("ticker") or "", h.get("issuer") or "", h.get("title") or "",
                           h.get("put_call") or "", h.get("shares") or 0, h.get("shares_type") or "SH", h.get("value") or 0,
-                          b.get("accepted_at") or "", b.get("accession") or "", b.get("accepted_at") or "", "")
+                          b.get("accepted_at") or "", h.get("source_accession") or b.get("accession") or "",
+                          h.get("first_disclosed_at") or b.get("accepted_at") or "", h.get("change") or "")
 
 
 def export(quarter: str) -> list[Path]:

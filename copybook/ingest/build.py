@@ -551,7 +551,8 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
-STALE = ("split", "prev_shares_as_filed", "suspect_units", "suspect_units_basis", "prev_cusip", "prev_principal_amount")
+STALE = ("split", "prev_shares_as_filed", "suspect_units", "suspect_units_basis", "suspect_reason", "prev_cusip",
+         "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
 
@@ -578,9 +579,12 @@ def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: st
     filers: this line or its prior priced over OFF_MEDIAN x off the CUSIP's median across every filer that quarter
     (AllianceBernstein 2026Q2 KLAC at $1,472 a share, peers $301.71), plus the own-prior check when it can run.
     own_prior: no median for the CUSIP, so only the filer's own value per share against its prior quarter (over
-    5x apart with no split on file: GuardCap BKNG). none: neither could run; suspect_units stays null."""
+    5x apart with no split on file: GuardCap BKNG). none: neither could run; suspect_units stays null.
+    suspect_reason, when true: cross_filer (this line off this quarter's median), cross_filer_prior (the prior
+    quarter's line off that quarter's median, so the change is unreliable though this line is priced like its peers:
+    Geode SION at $5.26), or own_prior (value per share over 5x from the filer's own prior quarter)."""
     if h.get("shares_type") == "PRN" or h.get("put_call"):
-        return {"suspect_units": None, "suspect_units_basis": "none"}
+        return {"suspect_units": None, "suspect_units_basis": "none", "suspect_reason": None}
 
     def off(row: dict, quarter: str | None, kk: float = 1.0) -> bool | None:
         m, n = consensus().get((quarter or "", row["cusip"])), amount(row)
@@ -590,17 +594,18 @@ def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: st
         # median over the split ratio.
         return not any(1 / OFF_MEDIAN <= row["value"] / n / (m / s) <= OFF_MEDIAN for s in {1.0, kk})
 
-    peers = [c for c in (off(h, q), off(p, q_prev, k) if p is not None else None) if c is not None]
+    here, before = off(h, q), (off(p, q_prev, k) if p is not None else None)
     own = None
     now, was = amount(h), (amount(p) * r if p is not None else 0)
     if p is not None and now and was and h["value"] > 0 and p["value"] > 0:
         jump = (h["value"] / now) / (p["value"] / was)
         own = jump > 5 or jump < 0.2
-    if peers:
-        return {"suspect_units": bool(any(peers) or own), "suspect_units_basis": "filers"}
+    reason = "cross_filer" if here else "cross_filer_prior" if before else "own_prior" if own else None
+    if here is not None or before is not None:
+        return {"suspect_units": bool(here or before or own), "suspect_units_basis": "filers", "suspect_reason": reason}
     if own is not None:
-        return {"suspect_units": own, "suspect_units_basis": "own_prior"}
-    return {"suspect_units": None, "suspect_units_basis": "none"}
+        return {"suspect_units": own, "suspect_units_basis": "own_prior", "suspect_reason": reason}
+    return {"suspect_units": None, "suspect_units_basis": "none", "suspect_reason": None}
 
 
 def with_changes(latest: dict, prev: dict | None) -> list[dict]:

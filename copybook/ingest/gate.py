@@ -208,7 +208,7 @@ def provenance(data: Path) -> dict:
     first_disclosed_at, and checked share rows (no notes or options, not exited) whose suspect_units is not
     true or false. Plus AllianceBernstein's KLAC and BKNG flags, the cross-filer check's reference case."""
     out = {"rows": 0, "no_source": 0, "no_disclosed": 0, "share_rows": 0, "unchecked": 0, "examples": [], "ab": {},
-           "basis": {}, "null_books": {}, "plain_books": 0}
+           "basis": {}, "null_books": {}, "plain_books": 0, "bare_books": []}
     seen: set[tuple[str, str]] = set()
     for folder in ("fq", "fb"):
         for f in sorted((data / folder).glob("*/*.json")):
@@ -225,6 +225,8 @@ def provenance(data: Path) -> dict:
                 out["plain_books"] += 1  # served without change columns or the unit check
             idx = {c: i for i, c in enumerate(cols)}
             get = lambda r, c: r[idx[c]] if c in idx and idx[c] < len(r) else None
+            if rows and not any(get(r, "source_accession") or get(r, "first_disclosed_at") for r in rows):
+                out["bare_books"].append(f"{folder}/{f.parent.name}/{f.stem}")  # no row names its filing
             for r in rows:
                 out["rows"] += 1
                 miss = [c for c in ("source_accession", "first_disclosed_at") if not get(r, c)]
@@ -420,6 +422,10 @@ def main() -> int:
     worst = sorted(pv["null_books"].items(), key=lambda x: -x[1])[:8]
     if worst:
         print("gate: share rows with suspect_units null, most per book: " + ", ".join(f"{b} {n}" for b, n in worst))
+    if pv["bare_books"]:  # served with no provenance at all (Root Financial 2026Q3, Nov 11 05:41)
+        print(f"::error::{len(pv['bare_books'])} full books with no source_accession or first_disclosed_at on any row: "
+              f"{', '.join(pv['bare_books'][:20])}; not publishing.")
+        failed = True
     if pv["no_source"] or pv["no_disclosed"]:  # accepted.py fills them under its budget; the next run continues
         print(f"::warning::per-row provenance missing in {', '.join(pv['examples'])}")
     merged = foreign_merges(data / "h")

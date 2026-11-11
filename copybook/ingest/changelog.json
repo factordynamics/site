@@ -2,6 +2,13 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-bulk-equals-v1",
+   "date": "2026-11-11",
+   "kind": "correction",
+   "title": "Bulk files carry the same rows and values as /v1; book totals equal their rows; suspect_reason",
+   "body": "The quarterly bulk files (/v1/bulk) were exported from the books as filed, while /v1 serves the books with per-line unit fixes and change rows. So bulk lacked the exited and zero-value lines /v1 keeps, and showed lines that /v1 rescales at their filed values: Regions Financial (0001281761) 78468R622 was $1 in bulk and $1,000 in /v1. Bulk now has exactly the rows /v1 serves, with per-row source_accession, first_disclosed_at and change. A full book's total_value_usd is now the sum of its rows after unit fixes; Regions' had been $65,934 below its rows. New field suspect_reason, next to suspect_units, says why a line was flagged: cross_filer (this line's implied price over 3x off the CUSIP's median across all filers that quarter), cross_filer_prior (the prior quarter's line was that far off, so the change is unreliable even though this line matches its peers; Geode SION at $5.26), or own_prior (value per share over 5x apart from the filer's own prior quarter with no split on file). It is null when the line is not flagged. From the first full run after 08:00 UTC on Nov 11."
+  },
+  {
    "id": "2026-11-11-suspect-units-basis",
    "date": "2026-11-11",
    "kind": "correction",
