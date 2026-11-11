@@ -372,17 +372,6 @@ class MoveMathTest(unittest.TestCase):
             b = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("M8769Q102", "TEVA", 1130855, 4528837000)]},
                                    {"quarter": "2026Q2", "holdings": [self.row("M8769Q102", "TEVA", 971583, 24289575)]})[0]
             self.assertEqual((b["unreliable"], b["change"], b["share_change"], b["value_delta"]), ("value", "added", 159272, 0))
-            # Mizuho Markets SPY calls 2026Q3 (0001062993-26-005826): 479,831 sh $610.5M -> 19,152 sh $552.5M, about
-            # $28,846 a share against SPY's ~$763. Read as filed it was -$13.3B; the filed values say -$58.0M.
-            call = lambda sh, v: self.row("78462F903", "SPY", sh, v) | {"put_call": "Call"}
-            m = build.with_changes({"quarter": "2026Q3", "holdings": [call(19152, 552.5e6)]},
-                                   {"quarter": "2026Q2", "holdings": [call(479831, 610.5e6)]})[0]
-            self.assertEqual((m.get("price_outlier"), m["unreliable"], m["change"], m["value_delta"], m["value_change"]),
-                             (True, "shares", None, 0, -58000000))
-            # An option priced like its underlying is not flagged.
-            ok = build.with_changes({"quarter": "2026Q3", "holdings": [call(700000, 534.1e6)]},
-                                    {"quarter": "2026Q2", "holdings": [call(479831, 296.0e6)]})[0]
-            self.assertEqual((ok.get("price_outlier"), ok.get("unreliable"), ok["change"]), (None, None, "added"))
             # A new position keeps its label whatever the flag, with no $ trade.
             n = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("09857L108", "BKNG", 1304, 6676571)]},
                                    {"quarter": "2026Q2", "holdings": []})[0]
@@ -390,6 +379,52 @@ class MoveMathTest(unittest.TestCase):
         finally:
             build.CONSENSUS.clear()
             build.SPLITS.pop("09857L108", None)
+
+    def test_option_lines_price_against_the_common_line(self):
+        build.CONSENSUS.update({("2026Q3", "78462F103"): 762.63, ("2026Q3", "78462F903"): 2836.21,
+                                ("2026Q2", "78462F103"): 746.77, ("2026Q3", "28176E108"): 86.32,
+                                ("2026Q2", "28176E108"): 90.46, ("2026Q3", "872540109"): 101.0})
+        opt = lambda c, t, sh, v, pc: self.row(c, t, sh, v) | {"put_call": pc}
+        try:
+            # IMC 2026Q3 (0001452861-26-000007): 78462F903 calls 41,048,800 sh, $31.3B = $762.63, the same as its own
+            # SPY common line. In band, counted; never priced against option-style CUSIPs' $2,836 median.
+            imc = {"quarter": "2026Q3", "holdings": [self.row("78462F103", "SPY", 1547924, 1180493280),
+                                                     opt("78462F903", "SPY", 41048800, 31305046344, "Call")]}
+            r = [x for x in build.with_changes(imc, {"quarter": "2026Q2", "holdings": [opt("78462F903", "SPY", 25000000, 18669250000, "Call")]})
+                 if x["put_call"]][0]
+            self.assertEqual((r.get("price_outlier"), r.get("unreliable"), r["change"], r["option_benchmark"], r["value_delta_basis"]),
+                             (None, None, "added", "filing_common", "trade"))
+            # No common line in the filing: the cross-filer median of the common CUSIP, by ticker (not the $2,836).
+            alone = build.classify_options({"quarter": "2026Q3", "holdings": [opt("78462F903", "SPY", 41048800, 31305046344, "Call")]})
+            self.assertEqual((alone["options_basis"], alone["holdings"][0]["option_benchmark"]), ("standard", "filers_common"))
+            # BNP Paribas FM 2026Q2: contract counts (3,500 contracts x 100 x $746.77 = $261.4M filed): x100, counted.
+            bnp = build.classify_options({"quarter": "2026Q2", "holdings": [
+                opt("78462F103", "SPY", 3500, 261369500, "Put"), opt("78462F103", "SPY", 2000, 149354000, "Call")]})
+            h = bnp["holdings"][0]
+            self.assertEqual((bnp["options_basis"], h["shares"], h["shares_as_filed"], h["shares_basis"], h.get("price_outlier")),
+                             ("contracts", 350000, 3500, "contracts", None))
+            self.assertEqual(build.classify_options(bnp)["holdings"][0]["shares"], 350000)  # idempotent on read-back
+            # Nine Masts: the filer's option lines at ~8x the common: every one held, unreliable both, not counted.
+            nm = build.with_changes({"quarter": "2026Q3", "holdings": [opt("78462F103", "SPY", 10000, 61700000, "Call"),
+                                                                     opt("78462F103", "SPY", 5000, 30850000, "Put")]},
+                                    {"quarter": "2026Q2", "holdings": [opt("78462F103", "SPY", 20000, 120000000, "Call")]})
+            self.assertEqual({(x["option_held"], x["unreliable"], x["value_delta"], x["value_delta_basis"]) for x in nm},
+                             {("filer_non_standard", "both", 0, None)})
+            # Mizuho Markets SPY calls 2026Q3 (0001062993-26-005826), filer at ~6x: held, not -$58.0M or -$13.3B.
+            mz = build.with_changes({"quarter": "2026Q3", "holdings": [opt("78462F103", "SPY", 19152, 552460839, "Call")]},
+                                    {"quarter": "2026Q2", "holdings": [opt("78462F103", "SPY", 479831, 610478402, "Call")]})[0]
+            self.assertEqual((mz["unreliable"], mz["change"], mz["value_delta"]), ("both", None, 0))
+            # Belvedere 2026Q3: EW puts 3,898,050 sh at $30.24B (~87x) in an otherwise compliant book: that line held.
+            bel = build.classify_options({"quarter": "2026Q3", "holdings": [
+                self.row("872540109", "TJX", 100000, 10100000), opt("872540109", "TJX", 50000, 5050000, "Call"),
+                opt("872540109", "TJX", 40000, 4040000, "Put"), opt("28176E108", "EW", 3898050, 30243052287, "Put")]})
+            got = {h["cusip"] + h["put_call"]: h.get("option_held") for h in bel["holdings"] if h.get("put_call")}
+            self.assertEqual((bel["options_basis"], got), ("standard", {"872540109Call": None, "872540109Put": None,
+                                                                         "28176E108Put": "isolated"}))
+            rows = build.with_changes(bel, None)
+            self.assertEqual(build.counted(rows)[0], 10100000 + 5050000 + 4040000)  # the EW puts are not counted
+        finally:
+            build.CONSENSUS.clear()
 
     def test_lines_are_price_checked_before_they_are_summed(self):
         build.SPLITS["09857L108"] = {"2026Q2": 25.0}

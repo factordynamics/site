@@ -38,13 +38,15 @@ MOVE_COLUMNS = ("ticker", "issuer", "cusip", "put_call", "shares", "prev_shares"
 FULL_COLUMNS = ("row_type", "ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type", "prev_shares", "prev_value",
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
                 "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "suspect_units_basis", "suspect_reason", "prev_cusip",
-                "source_accession", "first_disclosed_at", "value_scale", "value_adjusted")
+                "source_accession", "first_disclosed_at", "value_scale", "value_adjusted", "value_delta_basis", "unreliable",
+                "value_change", "shares_basis", "shares_as_filed", "option_held", "option_ratio")
 
 
 SECS: dict[str, dict] = {}
 NO_PRIOR: dict[str, dict] = {}  # cik -> latest full book with no prior quarter (served with its unit check, no changes)
 PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
 NETS: dict[str, tuple] = {}  # issuer6 -> (net_quarter, hl/ counts.net), for the parity check against changes/
+BASIS: dict[tuple, set] = {}  # (issuer6, cik) -> value_delta_basis of its lines in the issuer
 LINES: dict[tuple, list] = {}  # (issuer6, cik) -> [lines, value_delta of lines priced by the value difference]
 REPRICED: dict[str, list] = {}  # issuer6 -> rows whose trade from the row's own fields differs from value_delta
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
@@ -180,6 +182,7 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
         if (r["cusip"], r.get("put_call") or "") in odd or abs(r.get("value_delta") or 0) > big:
             r["price_outlier"] = True
     rows = [build.hold(r, q) if r.get("price_outlier") else r for r in rows]  # only the reliable side, no $
+    EQUITY[shard["cik"]] = build.counted(rows)[1] or EQUITY.get(shard["cik"])  # weights without held lines' value
     moved = [r for r in rows if r["change"] not in ("unchanged", None) and not r.get("put_call")
              and not r.get("price_outlier") and not r.get("suspect_units")]
     counts = {c: sum(1 for r in rows if r["change"] == c and not r.get("put_call"))
@@ -199,7 +202,7 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
 
 
 CHANGE_COLUMNS = ("cik", "slug", "filer_name", "curated", "type", "cusip", "ticker", "issuer", "put_call", "change",
-                  "shares", "prev_shares", "share_change", "value", "value_delta", "accession", "accepted_at")
+                  "shares", "prev_shares", "share_change", "value", "value_delta", "accession", "accepted_at", "value_delta_basis")
 CHANGES_MAX = 20_000  # largest |value_delta| per quarter; the Worker parses the whole file
 
 
@@ -557,12 +560,15 @@ def fill_provenance(rows: list[dict], shard: dict) -> None:
 def write_full(base: dict, prev_q: str | None, rows: list[dict]) -> None:
     """fq/{quarter}/{cik}.json: the full book with change columns, uploaded as R2 fb/{quarter}/{cik}.json in place
     of the plain book (upload_history.py)."""
+    tvc, evc = build.counted(rows)
+    build.reweight(rows, evc)
     full = {k: v for k, v in base.items() if k not in ("rows", "columns", "truncated", "_fb_only")} | {
         "accepted_at": base.get("accepted_at") or ACCEPTED.get(base.get("accession") or ""),
         "prev_quarter": prev_q,
         # The rows' total after per-line unit fixes (Regions 78468R622 filed $1, served $1,000), not the filed total.
         "total_value": round(sum(r.get("value") or 0 for r in rows if r.get("change") != "exited")),
         "equity_value": build.apply_weights({"holdings": [r for r in rows if r["change"] != "exited"]}).get("equity_value"),
+        "total_value_counted": tvc, "equity_value_counted": evc,
         "columns": list(FULL_COLUMNS),
         "rows": [[(r.get("split") or {}).get("ratio") if k == "split_ratio" else
                   round(r.get("principal_amount") or 0) if k == "shares" and r.get("shares_type") == "PRN" else
@@ -693,6 +699,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 a[6] = True
             ln = LINES.setdefault((c[:6], cik), [0, 0])
             ln[0] += 1
+            if r.get("value_delta_basis"):
+                BASIS.setdefault((c[:6], cik), set()).add(r["value_delta_basis"])
             a[0] += r.get("shares") or 0
             a[1] += r.get("prev_shares") or 0
             a[2] += r.get("value") or 0
@@ -711,7 +719,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
             "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
-            "price_outlier", "value_basis", "unreliable", "value_delta"]
+            "price_outlier", "value_basis", "unreliable", "value_delta", "value_delta_basis"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0, "unknown": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {}, "by_period": {}}
@@ -756,7 +764,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          round(weight, 6) if weight is not None else None,
                          fl["accession"], fl["filing_date"], fl["accepted_at"],
                          fl.get("original_accession") or fl["accession"], prev_cusip, dup,
-                         bad_value, "filed_price_outlier" if bad_value else "filed", side, counted])
+                         bad_value, "filed_price_outlier" if bad_value else "filed", side, counted,
+                         None if counted is None else "filed_value" if "filed_value" in BASIS.get((code, cik), ()) else "trade"])
         if not counts["holders"]:
             continue
         # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period
@@ -830,9 +839,34 @@ def write_quality(shards: list[dict], curated: dict, filers: dict) -> dict:
         "held": {"rows": len(lines), "filers": len({x["cik"] for x in lines})},
         "by_reason": {k: {"rows": v["rows"], "filers": len(v["filers"]), "options": v["options"]} for k, v in sorted(by.items())},
         "largest": lines[:25],
+        "options": options_quality(),
     }
     write(DATA / "quality.json", body)
     return body
+
+
+def options_quality() -> dict:
+    """Option lines by filer-quarter basis (build.classify_options) over every book this run compared: contracts
+    (shares x100, counted), non_standard (every option line held), standard (isolated lines held)."""
+    by_q: dict[str, dict] = {}
+    for (cik, q, _acc), v in build.OPTION_LOG.items():
+        if not v["basis"]:
+            continue
+        b = by_q.setdefault(q or "?", {"books": {}, "option_lines": 0, "held": {"filer_non_standard": 0, "isolated": 0},
+                                       "contracts": [], "non_standard": []})
+        b["books"][v["basis"]] = b["books"].get(v["basis"], 0) + 1
+        b["option_lines"] += v["option_lines"]
+        b["held"]["filer_non_standard" if v["basis"] == "non_standard" else "isolated"] += v["held"]
+        if v["basis"] in ("contracts", "non_standard"):
+            b[v["basis"]].append({"cik": cik, "name": v["name"], "median_ratio": v["median_ratio"],
+                                  "option_lines": v["option_lines"]})
+    for b in by_q.values():
+        for k in ("contracts", "non_standard"):
+            b[k].sort(key=lambda x: -x["option_lines"])
+    return {"note": "Per report quarter, every 13F book this run compared (each filer's latest and its prior): how its "
+                    "option lines price against the underlying's common line. contracts (median 80-125x): shares x100, "
+                    "counted. non_standard (median not within 2% of 1x): every option line held. standard: lines "
+                    "outside 0.8-1.25x held as isolated.", "quarters": dict(sorted(by_q.items(), reverse=True))}
 
 
 def datetime_now() -> str:
@@ -932,7 +966,7 @@ def main() -> int:
                 r["cusip"], r.get("ticker"), r.get("issuer"), r.get("put_call"), r["change"], int(round(r.get("shares") or 0)),
                 build.shares_out(float(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
                 int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), rec.get("accession"),
-                rec.get("accepted_at") or ACCEPTED.get(rec.get("accession") or "")]
+                rec.get("accepted_at") or ACCEPTED.get(rec.get("accession") or ""), r.get("value_delta_basis")]
 
     for shard in shards:
         path = DATA / "f" / f"{shard['cik']}.json"

@@ -372,6 +372,30 @@ def apply_weights(q: dict) -> dict:
     return q
 
 
+HELD_SIDES = ("both", "value")  # a line whose filed value can't be trusted: out of the counted totals and weights
+
+
+def counted(rows: list[dict]) -> tuple[int, int]:
+    """(total_value_counted, equity_value_counted): the book's filed value without lines whose value is unreliable
+    (unreliable "both" or "value": Belvedere's 2026Q3 EW and ES puts, BMO's TEVA at ~$4,005 a share). The filed
+    total_value stays as filed."""
+    live = [r for r in rows if r.get("change") != "exited" and r.get("unreliable") not in HELD_SIDES]
+    return round(sum(r.get("value") or 0 for r in live)), round(sum(r.get("value") or 0 for r in live if is_equity(r)))
+
+
+def reweight(rows: list[dict], eq: float) -> None:
+    """Weights over the counted share book (counted()); a held line weighs 0."""
+    for r in rows:
+        if r.get("change") == "exited":
+            continue
+        pct = 0.0 if r.get("unreliable") in HELD_SIDES or not eq else round((r.get("value") or 0) / eq, 6)
+        r["weight"] = pct
+        if is_equity(r):
+            r["pct_of_book"] = pct
+        elif r.get("put_call") or r.get("shares_type") == "PRN":
+            r["notional_pct_of_book"] = pct
+
+
 def fix_cached(q: dict) -> dict:
     """Re-run the implied-price unit checks on a stored quarter (idempotent)."""
     hs = q["holdings"]
@@ -607,7 +631,8 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
     return trail
 
 
-CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book")
+CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book",
+                 "value_delta_basis")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
 STALE = ("split", "prev_shares_as_filed", "unreliable", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
          "prev_principal_amount")
@@ -772,23 +797,111 @@ def needs_line_check(q: dict) -> bool:
 LINE_RECHECK = [int(os.environ.get("COPYBOOK_LINE_RECHECK_PER_RUN") or 40)]
 
 
-_UNDERLYING: dict = {"n": -1, "px": {}}
+def option_code(cusip: str | None) -> bool:
+    """A CUSIP whose 7th-8th characters are an option code (90 calls, 95 puts): never a common line."""
+    return len(cusip or "") == 9 and cusip[6:8] in ("90", "95")
 
 
-def underlying_median(quarter: str | None, cusip: str) -> float | None:
-    """The common-line median price (consensus) of an option line's underlying that quarter: its own CUSIP when the
-    line is filed under the common's (most are), else the one common CUSIP sharing its first 6 characters (SPY calls
-    78462F903). None when that prefix has several (an ETF trust's series: VanEck 92189F, iShares 464287)."""
-    if _UNDERLYING["n"] != len(consensus()):  # rebuilt when the medians change (each run; tests)
-        _UNDERLYING["n"], _UNDERLYING["px"] = len(consensus()), {}
-        for (qq, c), px in consensus().items():
-            if len(c) == 9 and c[6] != "9":
-                _UNDERLYING["px"].setdefault((qq, c[:6]), []).append(px)
-    exact = consensus().get((quarter or "", cusip or ""))
-    if exact:
-        return exact
-    one = _UNDERLYING["px"].get((quarter or "", (cusip or "")[:6])) or []
+_COMMON: dict = {"n": -1, "ticker": {}, "prefix": {}}
+
+
+def common_median(quarter: str | None, h: dict) -> float | None:
+    """The cross-filer median of an option line's underlying common CUSIP that quarter (consensus, which never counts
+    option lines): the line's own CUSIP when it isn't an option-style code, else the one common CUSIP with the line's
+    ticker, else the one common CUSIP under its 6-character prefix. Never a median of option-style CUSIPs (78462F903
+    read $2,836 for SPY, 595112903 $34.50 for MU), and never a guess among an ETF trust's series (iShares 464287)."""
+    cons, c, q = consensus(), h.get("cusip") or "", quarter or ""
+    if not option_code(c) and cons.get((q, c)):
+        return cons[(q, c)]
+    if _COMMON["n"] != len(cons):  # rebuilt when the medians change (each run; tests)
+        _COMMON.update(n=len(cons), ticker={}, prefix={})
+        for (qq, cc), px in cons.items():
+            if len(cc) == 9 and not option_code(cc):
+                t = ticker_for(cc)
+                if t:
+                    _COMMON["ticker"].setdefault((qq, t), []).append((cc, px))
+                _COMMON["prefix"].setdefault((qq, cc[:6]), []).append(px)
+    t = h.get("ticker") or ticker_for(c)
+    got = _COMMON["ticker"].get((q, t)) or [] if t else []
+    same = [px for cc, px in got if cc[:6] == c[:6]]
+    if len(same) == 1 or len(got) == 1:
+        return (same or [got[0][1]])[0]
+    one = _COMMON["prefix"].get((q, c[:6])) or []
     return one[0] if len(one) == 1 else None
+
+
+OPTION_FIELDS = ("option_ratio", "option_benchmark", "option_held", "shares_basis", "shares_as_filed", "price_outlier")
+OPTION_LOG: dict[tuple, dict] = {}  # (cik, quarter, accession) -> the book's option classification (quality.json)
+
+
+def classify_options(q: dict | None) -> dict | None:
+    """Form 13F reports a put or call at the underlying's shares and value, so a compliant option line prices at the
+    stock (27,527 of 27,665 lines across 40 filers within 2% of the same filing's common line). Each option line is
+    benchmarked against the issuer's common line: the same filing's (same CUSIP, else the one common CUSIP with its
+    ticker, else with its issuer name), otherwise the cross-filer median of the common (common_median). Then per
+    filer-quarter, on the median of those ratios:
+    - contracts (80-125x: BNP Paribas FM, National Bank of Canada file contract counts): shares x100,
+      shares_basis "contracts", the filed value kept; counted like any line;
+    - non_standard (not within 2% of 1x: Nine Masts 8.09x, Mizuho Markets 6.0x): every option line held
+      (option_held "filer_non_standard", price_outlier), no side reliable;
+    - standard: a line outside 0.8-1.25x of its benchmark (Belvedere EW puts ~87x) is held (option_held "isolated").
+    Idempotent: a book read back from an earlier build gets its filed shares back first. Copies; never mutates q."""
+    import statistics
+    if not q or not any(h.get("put_call") for h in q.get("holdings") or []):
+        return q
+    quarter = q.get("quarter")
+    groups: dict[tuple, dict] = {}  # ("c"|"t"|"i", key) -> {cusips, value, shares}: the filing's common lines
+    for h in q["holdings"]:
+        c = h.get("cusip") or ""
+        if h.get("put_call") or h.get("shares_type") == "PRN" or option_code(c) or not (h.get("shares") or 0) > 0 \
+                or not (h.get("value") or 0) > 0 or h.get("suspect_units"):
+            continue
+        for key in (("c", c), ("t", h.get("ticker")), ("i", (h.get("issuer") or "").upper().strip())):
+            if key[1]:
+                g = groups.setdefault(key, {"cusips": set(), "value": 0.0, "shares": 0.0})
+                g["cusips"].add(c)
+                g["value"] += h["value"]
+                g["shares"] += h["shares"]
+    own = lambda key: (lambda g: g["value"] / g["shares"] if g and len(g["cusips"]) == 1 else None)(groups.get(key))
+    lines = []
+    for h in q["holdings"]:
+        if not h.get("put_call") or h.get("shares_type") == "PRN":
+            lines.append((h, None, None))
+            continue
+        h = {k: v for k, v in h.items() if k not in OPTION_FIELDS} | (
+            {"shares": h["shares_as_filed"]} if h.get("shares_basis") == "contracts" and h.get("shares_as_filed") is not None else {})
+        px, basis = None, None
+        for key in (("c", h.get("cusip") if not option_code(h.get("cusip")) else None), ("t", h.get("ticker")),
+                    ("i", (h.get("issuer") or "").upper().strip())):
+            if key[1] and own(key):
+                px, basis = own(key), "filing_common"
+                break
+        if px is None and (px := common_median(quarter, h)):
+            basis = "filers_common"
+        ratio = h["value"] / h["shares"] / px if px and (h.get("shares") or 0) > 0 and (h.get("value") or 0) > 0 else None
+        lines.append((h, ratio, basis))
+    rs = [r for _, r, _ in lines if r is not None]
+    med = statistics.median_low(rs) if rs else None
+    kind = None if med is None else "contracts" if 80 <= med <= 125 else "standard" if 0.98 <= med <= 1.02 else "non_standard"
+    out, held = [], 0
+    for h, ratio, basis in lines:
+        if not h.get("put_call") or h.get("shares_type") == "PRN":
+            out.append(h)
+            continue
+        h = h | {"option_ratio": float(f"{ratio:.4g}") if ratio else None, "option_benchmark": basis}
+        if kind == "contracts":
+            h |= {"shares_as_filed": h["shares"], "shares": h["shares"] * 100, "shares_basis": "contracts"}
+            ratio = ratio / 100 if ratio else None
+        why = "filer_non_standard" if kind == "non_standard" else \
+            "isolated" if ratio is not None and not 0.8 <= ratio <= 1.25 else None
+        if why:
+            h |= {"option_held": why, "price_outlier": True}
+            held += 1
+        out.append(h)
+    OPTION_LOG[(q.get("cik"), quarter, q.get("accession"))] = {
+        "basis": kind, "median_ratio": float(f"{med:.4g}") if med else None, "lines": sum(1 for _, _, b in lines if b),
+        "option_lines": sum(1 for h in out if h.get("put_call")), "held": held, "name": q.get("name")}
+    return q | {"holdings": out, "options_basis": kind, "options_ratio_median": float(f"{med:.4g}") if med else None}
 
 
 def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: str | None) -> dict:
@@ -801,14 +914,9 @@ def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: st
     quarter's line off that quarter's median, so the change is unreliable though this line is priced like its peers:
     Geode SION at $5.26), or own_prior (value per share over 5x from the filer's own prior quarter)."""
     if h.get("put_call") and h.get("shares_type") != "PRN":
-        # An option line reports the underlying's shares and value, so it prices like the common (Mizuho Markets
-        # 2026Q3 SPY calls: 19,152 sh at $552.5M, ~$28,846 a share against ~$763): over OFF_MEDIAN x off the
-        # underlying's common-line median, this quarter or the prior one, it is a price_outlier.
-        def off_opt(row: dict | None, quarter: str | None) -> bool:
-            m, n = underlying_median(quarter, row["cusip"]) if row else None, amount(row) if row else 0
-            return bool(m and n and row["value"] > 0 and not 1 / OFF_MEDIAN <= row["value"] / n / m <= OFF_MEDIAN)
+        # Option lines: classify_options held this line or its prior (filer non-standard, or isolated off the common).
         out = {"suspect_units": None, "suspect_units_basis": "none", "suspect_reason": None}
-        return out | ({"price_outlier": True} if off_opt(h, q) or off_opt(p, q_prev) else {})
+        return out | ({"price_outlier": True} if h.get("option_held") or (p or {}).get("option_held") else {})
     if h.get("shares_type") == "PRN":
         return {"suspect_units": None, "suspect_units_basis": "none", "suspect_reason": None}
 
@@ -839,17 +947,17 @@ def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: st
 def unreliable_side(r: dict, quarter: str | None) -> str | None:
     """Which side of a flagged line (suspect_units or price_outlier) can't be trusted: "value" (the share count
     reconciles with the prior, the filed $ is off: BMO TEVA 2026Q3 at ~$4,005 a share, Francois Rochon GLD 2026Q2),
-    "shares" (the filed values are consistent, the share count implies the wrong price: Mizuho Markets SPY calls
-    2026Q3; or the implied price is a split ratio off the median: Guardcap BKNG 2026Q3, 1,304 pre-split shares at
-    ~$5,120), "both" (reissue_ratio_not_applied, mixed_scale, or undecided). A position summed from several lines
+    "shares" (the filed values are consistent, the share count implies the wrong price: the implied price is a split ratio off the median: Guardcap BKNG 2026Q3, 1,304 pre-split shares at
+    ~$5,120), "both" (reissue_ratio_not_applied, mixed_scale, an
+    option line classify_options held, or undecided). A position summed from several lines
     whose price sits between scales (neither the median nor a split ratio off it) mixes lines and is "both": Crosslink
     CRM 2026Q2 before the per-line check (check_lines) read as "shares" +$5.6M, while one of its two lines wasn't
     CRM. So is a split-adjusted prior priced between scales (Allianz BKNG 2026Q1, pre- and post-split lines). None:
     not flagged."""
     if not (r.get("suspect_units") or r.get("price_outlier")) or r.get("shares_type") == "PRN":
         return None
-    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale"):
-        return "both"
+    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale") or r.get("put_call"):
+        return "both"  # an option line held by classify_options: neither its shares nor its value is reliable
     sh, ps, v, pv = (r.get(k) or 0 for k in ("shares", "prev_shares", "value", "prev_value"))
     ks = {k for k in (SPLITS.get(r.get("cusip") or "") or {}).values() if k and k != 1}
     between = lambda f: not any(abs(math.log(f * x)) < math.log(1.5) for x in {1.0, *ks, *(1 / k for k in ks)})
@@ -860,11 +968,6 @@ def unreliable_side(r: dict, quarter: str | None) -> str | None:
     m0 = consensus().get((sp.get("from_quarter") or "", r.get("cusip") or ""))
     if not r.get("put_call") and sp and pf > 0 and pv > 0 and m0 and between(pv / pf / m0):
         return "both"
-    if r.get("put_call"):
-        # An option line off its underlying's price: the notional (value) is filed as such far more often than the
-        # count (contracts instead of shares, ~100x: CTC, Belvedere), unless only the value moved off its prior.
-        s_ok, v_ok = 0.5 <= sh / ps <= 2 if sh > 0 and ps > 0 else None, 0.5 <= v / pv <= 2 if v > 0 and pv > 0 else None
-        return "value" if s_ok and v_ok is False else "shares"
     if sh > 0 and ps > 0:
         # Mizuho Markets SPY calls 2026Q3: 479,831 -> 19,152 sh while $610.5M -> $552.5M: the shares are off.
         s_ok, v_ok = 0.5 <= sh / ps <= 2, v > 0 and pv > 0 and 0.5 <= v / pv <= 2
@@ -891,7 +994,7 @@ def hold(r: dict, quarter: str | None) -> dict:
     r = r | {"unreliable": side}
     if r.get("change") is None and r.get("prev_shares") is None:
         return r  # no prior on file: nothing to hold
-    r |= {"value_delta": 0, "delta_pct_of_book": 0.0}
+    r |= {"value_delta": 0, "delta_pct_of_book": 0.0, "value_delta_basis": None}
     if side == "value":
         return r
     r["share_change"] = None
@@ -919,6 +1022,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     value_delta over the share-position book (equity_value). PRN notes compare
     principal amounts and never count as shares (share_change null).
     """
+    latest, prev = classify_options(latest), classify_options(prev)
     if prev is None:  # no prior quarter: the cross-filer check still runs on each share line
         return [hold({f: v for f, v in h.items() if f not in STALE} | {f: None for f in CHANGE_FIELDS} | {"row_type": "holding"}
                 | units(h, None, 1.0, 1.0, latest.get("quarter"), None), latest.get("quarter")) for h in latest["holdings"]]
@@ -954,8 +1058,11 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
             return 1.0
         return ratio_between(SPLITS, h["cusip"], q_from, q_to, h.get("put_call"))
 
-    def extra(p, change, delta, ds, r, prn):
+    def extra(p, change, delta, ds, r, prn, basis="trade"):
+        # value_delta_basis: "trade" (shares traded x this filing's price; an exit at the prior's value), "filed_value"
+        # (the filed value difference: a mis-scaled line or a trade capped at the positions' size), None (no trade).
         out = {
+            "value_delta_basis": basis,
             "prev_shares": 0 if prn or not p else p["shares"] * r,
             "prev_value": p["value"] if p else 0,
             "prev_weight": (p.get("weight") or 0.0) if p else 0.0,
@@ -991,9 +1098,10 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
             if abs(math.log(was / now_px)) < abs(math.log(was / (now_px * r))):
                 r = 1.0
         if h.get("late_disclosure"):
-            rows.append(h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, "disclosed_later", 0, None, r, prn))
+            rows.append(h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, "disclosed_later", 0, None, r, prn, None))
             continue
         now = amount(h)
+        basis = "trade"
         if p is None:
             change, delta, ds = "new", h["value"], now
         else:
@@ -1009,11 +1117,11 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
             if not prn and now and was and h["value"] > 0 and p["value"] > 0:
                 jump = (h["value"] / now) / (p["value"] / was)
                 if jump > 5 or jump < 0.2:
-                    delta = max(h["value"] - p["value"], -p["value"])
+                    delta, basis = max(h["value"] - p["value"], -p["value"]), "filed_value"
                     h = h | {"suspect_units": True}
                 elif abs(delta) > 1.5 * max(h["value"], p["value"]):  # no trade is worth more than that
-                    delta = h["value"] - p["value"]
-        row = h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn)
+                    delta, basis = h["value"] - p["value"], "filed_value"
+        row = h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn, basis)
         if h.get("mixed_scale") or (p or {}).get("mixed_scale"):  # Allianz 2026Q1 BKNG: no scaling of the sum is right
             row |= {"suspect_units": True, "suspect_units_basis": "filers", "suspect_reason": "mixed_scale"}
         # A linked reissue with a share ratio (HON 1-for-2) whose filer still reports the pre-split count under the new
@@ -1021,7 +1129,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         if p is not None and not prn and p["cusip"] != h["cusip"] and r != 1.0 and amount(p) > 0 \
                 and abs(now / amount(p) - 1) <= 0.005:
             row |= {"suspect_units": True, "suspect_units_basis": "own_prior", "suspect_reason": "reissue_ratio_not_applied",
-                    "change": None, "share_change": None, "value_delta": 0, "delta_pct_of_book": 0.0}
+                    "change": None, "share_change": None, "value_delta": 0, "delta_pct_of_book": 0.0, "value_delta_basis": None}
         rows.append(row)
     for key in dup:  # the duplicate's own prior line is the new code's position, not a sale
         before.pop(key, None)
@@ -1456,6 +1564,8 @@ def shares_out(x):
 
 
 V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display_name", "late_disclosure", "parts",
+            "value_delta_basis", "unreliable", "value_change", "price_outlier", "suspect_units", "suspect_reason",
+            "shares_basis", "shares_as_filed", "option_held", "held_lines", "mixed_scale",
             "split", "prev_shares_as_filed", "suspect_duplicate", "prev_reason", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
 
 
@@ -1513,6 +1623,8 @@ def v1_holdings(m: dict, q: dict, prev: dict | None, rows: list[dict]) -> dict:
         "total_value_usd": int(round(q.get("total_value") or 0)),
         "equity_value_usd": int(round(q.get("equity_value") or 0)),
         "options_notional_usd": int(round(q.get("options_notional") or 0)),
+        **({"total_value_counted_usd": meta_counted[0], "equity_value_counted_usd": meta_counted[1]}
+           if (meta_counted := counted(rows)) else {}),
         "prn_value_usd": int(round(q.get("prn_value") or 0)),
         "position_count": q.get("position_count"),
         "holdings": [v1_position(r) for r in rows if r["change"] != "exited"],
@@ -1537,6 +1649,9 @@ def write_history(m: dict) -> None:
         prev = baseline(m, i)
         note = prior_note(m, i)
         rows = [compact_row(h) for h in with_prior_note(with_changes(q, prev), note)]
+        tvc, evc = counted(rows)
+        reweight(rows, evc)
+        meta |= {"total_value_counted": tvc, "equity_value_counted": evc}
         # `holdings` stays the filed book; positions sold out since the prior quarter go in `exited`.
         body = {
             "slug": m["slug"], "manager": m["manager"], "cik": m["cik"], **meta,

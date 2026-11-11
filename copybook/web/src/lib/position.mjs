@@ -31,7 +31,7 @@ export function addLine(p, h) {
 /** The position's change against the prior quarter and the trade in dollars (null when unknown). */
 export function positionMove(p) {
   const change = !p.had_prev ? null : p.shares === 0 ? 'exited' : p.prev_shares === 0 ? 'new' : p.shares > p.prev_shares ? 'added' : p.shares < p.prev_shares ? 'trimmed' : 'unchanged'
-  if (!(p.had_prev && p.suspect)) return { change, delta_value: Math.round(p.delta_value) }
+  if (!(p.had_prev && p.suspect)) return { change, delta_value: Math.round(p.delta_value), ...(p.had_prev ? { value_delta_basis: 'trade' } : {}) }
   if (change === 'new' || change === 'exited' || p.side === 'value') return { change, delta_value: null }
   return { change: 'unknown', delta_value: null, ...(p.side === 'shares' ? { value_change: Math.round(p.value - p.prev_value) } : {}) }
 }

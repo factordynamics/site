@@ -19,7 +19,7 @@ test('a line ingest flags suspect_units is no trade: change unknown, delta_value
 
 test('an unflagged line keeps its trade at this filing\u2019s price', () => {
   const p = addLine(newPosition(true), line({ shares: 120, value: 12000, prev_shares: 100, prev_value: 9000, suspect_units: false }))
-  assert.deepEqual(positionMove(p), { change: 'added', delta_value: 2000 })
+  assert.deepEqual(positionMove(p), { change: 'added', delta_value: 2000, value_delta_basis: 'trade' })
   assert.deepEqual(positionFlags(p), {})
   // One flagged class makes the whole rolled-up position unknown.
   addLine(p, line({ shares: 10, value: 50000, prev_shares: 10, prev_value: 1000, suspect_units: true, suspect_reason: 'own_prior' }))
