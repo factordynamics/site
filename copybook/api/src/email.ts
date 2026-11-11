@@ -564,6 +564,12 @@ const bookPct = (r: MoveRow) => {
   return Math.abs(d) < 0.0005 ? '<0.1%' : `${(Math.abs(d) * 100).toFixed(1)}%`;
 };
 
+const misfiled = (r: MoveRow) => r.cusip_pair === 'merged_misfiled' && !!r.filed_cusip;
+/** ": Q2 was filed under 68389X204 at common's price, treated as common": a prior line ingest merged into this class. */
+const misfiledNote = (a: { quarter: string }, r: MoveRow) => {
+  const q = Number(a.quarter.slice(-1));
+  return `: Q${q === 1 ? 4 : q - 1} was filed under ${r.filed_cusip} at common's price, treated as common`;
+};
 /** A change sized from filed values because the share counts don't (guardShares): no share or position figures. */
 const UNRECONCILED = "share counts don't reconcile; change from filed values";
 /** How much of the position itself changed: a trim of 40% of the shares reads differently from 0.4% of the book. */
@@ -659,8 +665,8 @@ function heldLine(a: Alert13F): string {
 /** Why a line isn't counted, in a few words. */
 // \"pre-split\" only where ingest's held_reason says so (the trader, Nov 11): Mizuho's Oracle and O read \"pre-split count\"
 // from a fallback, which was wrong.
-const notCountedWhy = (x: { unreliable?: string; put_call: string | null; reason?: string; cusip_pair?: boolean; held_reason?: string }) =>
-  x.cusip_pair ? 'possible CUSIP change' : /pre.?split|mixed.?scale/i.test(x.held_reason ?? '') ? 'share count looks pre-split' : x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'both' && x.put_call ? "filed figures don't reconcile" : "share counts don't reconcile";
+const notCountedWhy = (x: { unreliable?: string; put_call: string | null; reason?: string; cusip_pair?: boolean | string; held_reason?: string }) =>
+  x.cusip_pair === true ? 'possible CUSIP change' : /pre.?split|mixed.?scale/i.test(x.held_reason ?? '') ? 'share count looks pre-split' : x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'both' && x.put_call ? "filed figures don't reconcile" : "share counts don't reconcile";
 const perShare = (x: number) => (x >= 10 ? Math.round(x).toLocaleString('en-US') : x.toFixed(2));
 /** \"filed value implausible (≈$7,758/sh vs ~$78)\": a line priced far off other filers, without its filed $. */
 function implausible(r: MoveRow): string {
@@ -687,6 +693,21 @@ function heldFacts(r: MoveRow): string {
   }
   const d = r.shares - (r.prev_shares ?? 0);
   const sh = r.change === 'new' ? `new, ${compact(r.shares)} sh` : r.change === 'exited' ? `sold all${r.prev_shares ? ` ${compact(r.prev_shares)} sh` : ''}` : r.unreliable === 'value' ? (d ? `${d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh` : '') : r.prev_shares ? `${compact(r.prev_shares)} → ${compact(r.shares)} sh as filed` : '';
+  // A "both" line: neither figure is blamed (the analyst, Nov 11: O's $11.1M is plausible, its 23.3M shares aren't).
+  // "new; 23.3M sh and $11.1M as filed don't reconcile (≈$0.48/sh vs ~$54)". Options keep no filed $ (above).
+  if (r.unreliable === 'both' && !r.put_call) {
+    const ps = r.filed_per_share ?? (r.shares > 0 && r.value > 0 ? r.value / r.shares : null);
+    const m = r.median_per_share;
+    const filed = r.change === 'exited' ? { sh: r.prev_shares ?? 0, v: r.prev_value ?? (r.value_delta < 0 ? -r.value_delta : 0) } : { sh: r.shares, v: r.value };
+    const head = r.change === 'new' ? 'new' : r.change === 'exited' ? 'sold all' : r.change;
+    return `${head}; ${compact(filed.sh)} sh and ${usd(filed.v, false)} as filed don't reconcile${ps && r.change !== 'exited' ? ` (≈$${perShare(ps)}/sh${m ? ` vs ~$${perShare(m)}` : ''})` : ''}`;
+  }
+  // A "both" option line keeps no filed $ either, and blames neither figure.
+  if (r.unreliable === 'both') {
+    const ps = r.filed_per_share ?? (r.shares > 0 && r.value > 0 ? r.value / r.shares : null);
+    const m = r.median_per_share;
+    return [sh, `shares and value as filed don't reconcile${ps ? ` (≈$${perShare(ps)}/sh${m ? ` vs ~$${perShare(m)}` : ''})` : ''}`].filter(Boolean).join('; ');
+  }
   const why = implausible(r);
   return [sh, why].filter(Boolean).join('; ');
 }
@@ -701,7 +722,7 @@ function notCountedLine(a: Alert13F): string {
   // ticker read as a round trip otherwise, the misreading the hold exists to prevent. "ORCL 133K → 166K sh: possible CUSIP
   // change (68389X105 → 68389X204)".
   const pairs = new Map<string, MoveRow[]>();
-  for (const x of items) if (isMoveRow(x) && x.cusip_pair) pairs.set(posName(x), [...(pairs.get(posName(x)) ?? []), x]);
+  for (const x of items) if (isMoveRow(x) && x.cusip_pair === true) pairs.set(posName(x), [...(pairs.get(posName(x)) ?? []), x]);
   const merged = new Set<MoveRow>();
   for (const [name, rows] of pairs) {
     const gone = rows.find((r) => r.change === 'exited');
@@ -715,7 +736,7 @@ function notCountedLine(a: Alert13F): string {
     const facts = isMoveRow(x) ? heldFacts(x) : '';
     const why = notCountedWhy(x);
     // \"EW puts new, 3.9M sh; filed value implausible (≈$7,758/sh vs ~$78)\" already says why.
-    if (facts) by.set(facts.includes('implausible') ? `${posName(x)} ${facts}` : `${posName(x)} ${facts} (${why})`, []);
+    if (facts) by.set(/implausible|don't reconcile/.test(facts) ? `${posName(x)} ${facts}` : `${posName(x)} ${facts} (${why})`, []);
     else by.set(why, [...(by.get(why) ?? []), posName(x)]);
   }
   return `Not counted: ${[...by].map(([k, names]) => (names.length ? `${[...new Set(names)].join(', ')} (${k})` : k)).join('; ')}.`;
@@ -782,6 +803,8 @@ function filingBlock(env: Env, a0: Alert13F, f: Follows): string {
       const parts = rows.map((r) => {
         // \"BKNG value as filed fell from $121.6M to $6.7M; share counts don't reconcile, not counted\": no computed trade.
         if (sharesOnly(r)) return `${rowName(r)} ${filedFacts(r)}; ${NOT_COUNTED_SHARES}${flag(r.ticker, f)}`;
+        // Ingest merged a prior line filed under another class's CUSIP (the lead, Nov 11: Mizuho's Oracle).
+        if (misfiled(r)) return `${rowName(r)} ${shareMove(r)} (${usd(r.value_delta)})${misfiledNote(a, r)}${flag(r.ticker, f)}`;
         const pos = label === 'Trimmed' || label === 'Added' ? positionChange(label, r) : '';
         const bits = [pos && (pos.startsWith('sold ') ? `${pos} of the position` : pos), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean);
         return `${rowName(r)} ${amount(r)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}${odd(r)}`;
@@ -1021,7 +1044,7 @@ function filingHtml(env: Env, a0: Alert13F, f: Follows): string {
     out.push(table(['Stock', 'Shares', 'Value', '% of book'], a.reveal.rows.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, r.shares.toLocaleString('en-US'), usd(r.value, false), bookPct(r)]), [1, 2, 3]));
   } else if (mv) {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
-    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value && r.unreliable !== 'value' ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}${unreliableNote(r) ? `<br><span style="color:#b45309;font-size:12px">${esc(unreliableNote(r))}</span>` : ''}`, amount(r), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, r.unreliable === 'value' ? '' : bookPct(r)]));
+    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${misfiled(r) ? `<br><span style="color:#6b7280;font-size:12px">${esc(misfiledNote(a, r).slice(2))}</span>` : ''}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value && r.unreliable !== 'value' ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}${unreliableNote(r) ? `<br><span style="color:#b45309;font-size:12px">${esc(unreliableNote(r))}</span>` : ''}`, amount(r), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, r.unreliable === 'value' ? '' : bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', 'Trade, % of book'], rows, [2, 4]));
     for (const r of mv.exchanged ?? []) out.push(`<p style="margin:6px 0 2px">${esc(exchangeLine(r))}</p>`);
     if (a.held?.length || a.moves?.not_counted?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);

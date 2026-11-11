@@ -115,7 +115,12 @@ export interface MoveRow {
   /** A real but unusually large move: shown with "Unusual size · check the filing". */
   unusual?: boolean;
   /** One of an exit and a new line under one issuer prefix (holdCusipPairs): maybe one position, so not counted. */
-  cusip_pair?: boolean;
+  /** true: held here as a possible CUSIP change (holdCusipPairs). "merged_misfiled": ingest merged a prior line filed under
+   * another class's CUSIP at this class's price (Mizuho's Q2 Oracle under 68389X204), with filed_cusip and filed_price. */
+  cusip_pair?: boolean | 'merged_misfiled';
+  filed_cusip?: string | null;
+  filed_price?: number | null;
+  matched_cusip?: string | null;
   /** Ingest's flag: this line and another CUSIP of the same issuer are one position filed under the wrong class. */
   cusip_mismatch?: boolean;
   /** On a line whose value can't be trusted: other filers' median value per share, for \"filed value implausible\". */
@@ -768,7 +773,7 @@ export function countedMoves(m0: Moves): Moves {
   const nc1 = m1.not_counted ?? [];
   const both = holdCusipPairs([...lists1, ...nc1]);
   const paired = both.slice(0, lists1.length);
-  const m = both.some((r) => r.cusip_pair) ? { ...m1, new: paired.filter((r) => r.change === 'new'), added: paired.filter((r) => r.change === 'added'), trimmed: paired.filter((r) => r.change === 'trimmed'), exited: paired.filter((r) => r.change === 'exited'), ...(nc1.length ? { not_counted: both.slice(lists1.length) } : {}) } : m1;
+  const m = both.some((r) => r.cusip_pair === true) ? { ...m1, new: paired.filter((r) => r.change === 'new'), added: paired.filter((r) => r.change === 'added'), trimmed: paired.filter((r) => r.change === 'trimmed'), exited: paired.filter((r) => r.change === 'exited'), ...(nc1.length ? { not_counted: both.slice(lists1.length) } : {}) } : m1;
   const all = [m.new, m.added, m.trimmed, m.exited].flat();
   const out0 = (r: MoveRow) => !!r.unreliable && r.unreliable !== 'value';
   if (!all.some(out0)) return m;
