@@ -250,13 +250,17 @@ def collect_reissues(cik: str, rows: list[dict]) -> None:
         for n in new.get(round(g["prev_shares"]), []):
             tg, wg = word(g)
             tn, wn = word(n)
-            if n["cusip"] != g["cusip"] and ((tg and tg == tn) or (wg and wg == wn)):
+            # same class only: a SPAC's units or rights becoming ordinary shares is not one position
+            if n["cusip"] != g["cusip"] and ((tg and tg == tn) or (wg and wg == wn)) and build.same_class(g, n):
                 PAIRS.setdefault((g["cusip"], n["cusip"]), set()).add(cik)
 
 
 def write_links(quarter: str | None) -> list[str]:
     """cusip_links.json: every reissue seen in at least MIN_LINK_FILERS filers' books, plus earlier ones."""
-    links = dict(build.cusip_links())
+    # Links detected for this quarter are re-checked each run (a stricter rule drops ones it no longer finds);
+    # seeds and earlier quarters' links stay.
+    links = {o: v for o, v in build.cusip_links().items()
+             if v.get("basis") != "detected" or v.get("quarter") != quarter or len(PAIRS.get((o, v["new"]), ())) >= MIN_LINK_FILERS}
     added = []
     for (old, new), ciks in sorted(PAIRS.items(), key=lambda kv: -len(kv[1])):
         if len(ciks) < MIN_LINK_FILERS or old in links or old == new:
@@ -274,6 +278,7 @@ def write_links(quarter: str | None) -> list[str]:
                 "old CUSIP's holders report the same shares under the new one (filers = how many showed it this run). "
                 "Changes, holder counts, bulk and /v1 treat the two as one position.",
         "links": links})
+    build.cusip_links().clear()
     build.cusip_links().update(links)
     return added
 
