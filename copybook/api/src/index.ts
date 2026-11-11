@@ -616,6 +616,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
         have.add(f.accession);
       }
     }
+    // A replay of a curated 13F no longer in the alert store (older than its 7 days, or never alerted): from the data run's index.
+    if (replayTo && want.size > have.size) {
+      const idx = (await (await fetch(`${env.DATA_URL}index.json`)).json().catch(() => ({}))) as { managers?: { slug: string; cik: string; manager: string; name: string; featured?: boolean; quarter?: string; report_date?: string; filing_date?: string; accession?: string; accepted_at?: string; sec_url?: string }[] };
+      for (const r of idx.managers ?? []) {
+        if (!r.accession || !want.has(r.accession) || have.has(r.accession) || !r.quarter || !r.report_date) continue;
+        const cik = String(Number(r.cik));
+        pending.push({ slug: r.slug, slugs: [r.slug], manager: r.manager, name: r.name, quarter: r.quarter, report_date: r.report_date, filing_date: r.filing_date ?? '', accession: r.accession, sec_url: r.sec_url ?? `https://www.sec.gov/Archives/edgar/data/${cik}/${r.accession.replace(/-/g, '')}/${r.accession}-index.html`, accepted: r.accepted_at, moves: null, tickers: [], moves_pending: true, replay_to: replayTo, replay_at: replayAt });
+        have.add(r.accession);
+      }
+    }
     await env.DB.put('alerts:pending-moves', JSON.stringify(pending));
     return json({ ok: true, queued: [...want].filter((a) => have.has(a)), not_found: [...want].filter((a) => !have.has(a)), ...(replayTo ? { replay_at: replayAt } : {}) }, 200, h);
   }

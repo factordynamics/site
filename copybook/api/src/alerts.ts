@@ -1184,7 +1184,8 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   }
   // index.json (900 KB) only changes with a data build: when it hasn't, skip parsing it and go
   // straight to the follow-ups. Its derived KV (CIK map, /v1 filers, periods) is unchanged too.
-  const etag = await env.DB.get('idx:etag');
+  // Without /status/'s freshness record yet, read the index once even if unchanged, so it's filled.
+  const etag = (await env.DB.get('status:fresh')) ? await env.DB.get('idx:etag') : null;
   const res = await fetch(`${env.DATA_URL}index.json`, etag ? { headers: { 'if-none-match': etag } } : {});
   if (res.status !== 304 && !res.ok) throw new Error(`index.json ${res.status}`);
   const idx = (res.status === 304 ? { managers: [] } : await res.json()) as { managers?: IndexRow[]; generated_at?: string; build_id?: string };
@@ -1196,7 +1197,7 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   const was = JSON.parse((await env.DB.get('v1:build')) ?? '{}') as { data_built_at?: string | null };
   const older = !!was.data_built_at && !!idx.generated_at && idx.generated_at < was.data_built_at;
   if (older) return { status: 'older index ignored', index_built_at: idx.generated_at, serving: was.data_built_at };
-  if (JSON.stringify(was) !== build) {
+  if (JSON.stringify(was) !== build || !(await env.DB.get('status:fresh'))) {
     await env.DB.put('v1:build', build);
     // /status/ freshness: the build, and the newest 13F in it (by EDGAR acceptance).
     const last = rows.filter((r) => r.accepted_at && r.accession && /^13F/.test(r.form ?? '13F')).sort((a, b) => b.accepted_at!.localeCompare(a.accepted_at!))[0];
