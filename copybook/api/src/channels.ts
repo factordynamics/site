@@ -559,6 +559,15 @@ export async function addToFeed(env: Env, m: Member, c: Channels, filings: Alert
 }
 
 const xml = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[ch]!);
+/**
+ * An item's text as HTML, for readers that run plain text into one paragraph on a phone: a paragraph per block, a line
+ * break per line, links clickable. Escaped first, so nothing in a filer's or issuer's name can inject markup.
+ */
+const itemHtml = (text: string) =>
+  text
+    .split(/\n{2,}/)
+    .map((b) => `<p>${b.split('\n').map((l) => xml(l.trim()).replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}">${u}</a>`)).join('<br>')}</p>`)
+    .join('');
 
 /** GET /feed/{token}.json (JSON Feed 1.1) or .rss (RSS 2.0). The token is the only credential. */
 export async function serveFeed(env: Env, token: string, format: 'json' | 'rss', selfUrl: string): Promise<Response> {
@@ -577,14 +586,14 @@ export async function serveFeed(env: Env, token: string, format: 'json' | 'rss',
         description: 'Your Copybook alerts: 13F, Form 4 and Schedule 13D/G filings from SEC EDGAR. Not investment advice.',
         // date_published is EDGAR's acceptance; sent_at is when Copybook sent the alert.
         // A "Send a test" item is tagged test, so readers (and the account page) can count alerts only.
-        items: items.map((i) => ({ id: i.id, url: publicLinks(i.url), title: i.title, content_text: publicLinks(i.text), date_published: i.published, sent_at: i.sent ?? null, ...(i.test ? { tags: ['test'] } : {}) })),
+        items: items.map((i) => ({ id: i.id, url: publicLinks(i.url), title: i.title, content_text: publicLinks(i.text), content_html: itemHtml(publicLinks(i.text)), date_published: i.published, sent_at: i.sent ?? null, ...(i.test ? { tags: ['test'] } : {}) })),
       }),
       { headers: { ...headers, 'content-type': 'application/feed+json; charset=utf-8' } },
     );
   }
   const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Copybook alerts</title><link>${xml(env.SITE_URL)}</link><description>Your Copybook alerts: 13F, Form 4 and Schedule 13D/G filings from SEC EDGAR. Not investment advice.</description>
-${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(publicLinks(i.url))}</link><guid isPermaLink="false">${xml(i.id)}</guid><pubDate>${new Date(i.sent ?? i.published).toUTCString()}</pubDate><description>${xml(publicLinks(i.text))}</description></item>`).join('\n')}
+${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(publicLinks(i.url))}</link><guid isPermaLink="false">${xml(i.id)}</guid><pubDate>${new Date(i.sent ?? i.published).toUTCString()}</pubDate><description><![CDATA[${itemHtml(publicLinks(i.text)).replace(/]]>/g, ']]&gt;')}]]></description></item>`).join('\n')}
 </channel></rss>`;
   return new Response(rss, { headers: { ...headers, 'content-type': 'application/rss+xml; charset=utf-8' } });
 }
@@ -623,13 +632,13 @@ export async function testChannels(env: Env, m: Member, c: Channels): Promise<{ 
   if (c.feed_token) {
     const key = `feed:${m.customer}`;
     const items = JSON.parse((await env.DB.get(key)) ?? '[]') as FeedItem[];
-    await env.DB.put(key, JSON.stringify([{ id: `test:${now}`, title: 'Copybook test', text, url: env.SITE_URL, published: now, sent: now, test: true }, ...items].slice(0, 50)));
+    await env.DB.put(key, JSON.stringify([{ id: `test:${now}`, title: 'Copybook test', text, url: last?.url ?? env.SITE_URL, published: now, sent: now, test: true }, ...items].slice(0, 50)));
     out.feed = 'ok';
   }
   // Email only when it's the member's chosen channel (keep_email, or no chat or webhook set up).
   if (c.verified) await putChannels(env, m.customer, c);
   if (targets.includes('email')) {
-    const st = await sendMail(env, [{ to: m.email, subject: 'Copybook test: your alerts will arrive here', text: `This is a test. When a fund you follow files, or someone trades a stock you own or watch, the alert arrives at this address within minutes.\n\nChange where alerts go: ${env.SITE_URL}account/\n\nSEC EDGAR filings, as filed. Not investment advice.` }]);
+    const st = await sendMail(env, [{ to: m.email, subject: last ? `Copybook test: ${last.title}`.slice(0, 120) : 'Copybook test: your alerts will arrive here', text: `This is a test. When a fund you follow files, or someone trades a stock you own or watch, the alert arrives at this address within minutes.${last ? `\n\nYour latest alert, as it would arrive:\n\n${last.title}\n${last.text}`.slice(0, 4000) : ''}\n\nChange where alerts go: ${env.SITE_URL}account/\n\nSEC EDGAR filings, as filed. Not investment advice.` }]);
     out.email = st;
   }
   const messages = Object.fromEntries(Object.entries(out).map(([d, st]) => [d, d === 'feed' ? 'Test item added to your feed' : d === 'email' ? (st === '200' ? `Test email sent to ${m.email}` : `The test email could not be sent (${st})`) : testMessage(d as Dest, st)]));

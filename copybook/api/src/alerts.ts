@@ -1472,7 +1472,7 @@ export async function scrubFalseCorrections(env: Env, now: number): Promise<Reco
   // Feeds keep their own copy of each item: rebuilt from the scrubbed day stores, with reissued CUSIPs netted (an
   // "EXIT XOM · NEW XOM" pair reads as the one add or trim it was) and today's display names ("Fidelity (FMR)").
   const fixed = new Map<string, Alert13F>();
-  const rows = (m: Moves) => [...m.new.map((r) => ({ ...r, change: 'new' })), ...m.added.map((r) => ({ ...r, change: 'added' })), ...m.trimmed.map((r) => ({ ...r, change: 'trimmed' })), ...m.exited.map((r) => ({ ...r, change: 'exited' }))] as MoveRow[];
+  const rows = movesRows;
   for (let d = 0; d < 31; d++) {
     const raw = await env.DB.get(`digest:${etDay(now - d * DAY)}`);
     if (!raw) continue;
@@ -1484,6 +1484,27 @@ export async function scrubFalseCorrections(env: Env, now: number): Promise<Reco
       fixed.set(filingId(x), renamed ? { ...x, moves: { ...net!.moves, bought_usd: x.moves!.bought_usd, sold_usd: x.moves!.sold_usd } } : x);
     }
   }
+  n.feeds = await rewriteFeeds(env, fixed, now);
+  // Queued correction emails (delayed for the daily limit, or awaiting retry) with an "unchanged" line: dropped.
+  for (const k of ['host:mail-delayed', 'host:mail-retry']) {
+    const q = JSON.parse((await env.DB.get(k)) ?? '[]') as Mail[];
+    const keep = q.filter((m) => !(/Correction:/.test(m.subject) && / was unchanged, not /.test(m.text)));
+    if (keep.length !== q.length) {
+      n.queued_mail += q.length - keep.length;
+      await env.DB.put(k, JSON.stringify(keep));
+    }
+  }
+  const res = { at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), stores: n.stores, verdicts: n.verdicts, feeds: n.feeds, queued_mail: n.queued_mail, accessions: [...n.accessions] };
+  await env.DB.put(FLAG, JSON.stringify(res));
+  return res;
+}
+
+const movesRows = (m: Moves) => [...m.new.map((r) => ({ ...r, change: 'new' })), ...m.added.map((r) => ({ ...r, change: 'added' })), ...m.trimmed.map((r) => ({ ...r, change: 'trimmed' })), ...m.exited.map((r) => ({ ...r, change: 'exited' }))] as MoveRow[];
+
+/** Members' feed items for these alerts re-rendered (title and text) where they read differently; the feeds changed. */
+async function rewriteFeeds(env: Env, fixed: Map<string, Alert13F>, now: number): Promise<number> {
+  let feeds = 0;
+  if (!fixed.size) return feeds;
   for (const m of await listMembers(env)) {
     const key = `feed:${m.customer}`;
     const raw = await env.DB.get(key);
@@ -1498,22 +1519,54 @@ export async function scrubFalseCorrections(env: Env, now: number): Promise<Reco
       return { ...i, title: fresh.title, text: fresh.text };
     });
     if (hit) {
-      n.feeds++;
+      feeds++;
       await env.DB.put(key, JSON.stringify(out));
     }
   }
-  // Queued correction emails (delayed for the daily limit, or awaiting retry) with an "unchanged" line: dropped.
-  for (const k of ['host:mail-delayed', 'host:mail-retry']) {
-    const q = JSON.parse((await env.DB.get(k)) ?? '[]') as Mail[];
-    const keep = q.filter((m) => !(/Correction:/.test(m.subject) && / was unchanged, not /.test(m.text)));
-    if (keep.length !== q.length) {
-      n.queued_mail += q.length - keep.length;
-      await env.DB.put(k, JSON.stringify(keep));
+  return feeds;
+}
+
+/**
+ * A stored row sent before its split was on file, restated in today's units (prior shares times the ratio, the trade
+ * re-sized as shares x this filing's price) only when that reproduces ingest's build figure from reconciliation: FMR's
+ * Q3 CRWD, 4-for-1, 7,847,117 -> 31,388,468 prior shares, +$8.55B -> +$2.32B. Else the row as sent.
+ */
+function splitRestate(r: MoveRow, splits: Map<string, number>, built: import('./email').CorrectionRow[]): MoveRow[] {
+  const k = splits.get(r.cusip) ?? 1;
+  const b = built.find((c) => c.cusip === r.cusip && (c.put_call ?? '') === (r.put_call ?? ''));
+  if (k === 1 || !b || r.split || r.put_call || !r.shares || !r.prev_shares || !r.value) return [r];
+  const prev = Math.round(r.prev_shares * k);
+  const delta = Math.round(((r.shares - prev) * r.value) / r.shares);
+  const want = b.v1.value_delta;
+  if (b.v1.change === 'unchanged' ? prev !== r.shares : Math.abs(delta - want) > Math.max(2, Math.abs(want) * 0.01)) return [r];
+  if (prev === r.shares) return [];
+  return [{ ...r, change: delta > 0 ? 'added' : 'trimmed', prev_shares: prev, split: k, prev_shares_as_filed: r.prev_shares, value_delta: delta, delta_pct_of_book: r.delta_pct_of_book != null && r.value_delta ? (r.delta_pct_of_book * delta) / r.value_delta : null }];
+}
+
+/**
+ * gene, every 5 minutes: members' feed items restated from the day stores once the facts behind them are on file, so a
+ * feed reads like ingest's build: a reissued CUSIP netted as one add or trim once it is linked with a units result (GTES
+ * when ingest's file links it), and a split on file applied where the build confirms it (splitRestate). Emails and the
+ * day stores keep what was sent; the feed's "Corrected" line still says what the alert said.
+ */
+export async function restateFeeds(env: Env, now: number): Promise<{ feeds: number; alerts: string[] }> {
+  await loadReissues(env, now);
+  const fixed = new Map<string, Alert13F>();
+  for (let d = 0; d < 31; d++) {
+    const raw = await env.DB.get(`digest:${etDay(now - d * DAY)}`);
+    if (!raw) continue;
+    for (const x of (JSON.parse(raw) as DigestDay).filings) {
+      if (!x.moves) continue;
+      const ch = movesRows(x.moves);
+      const splits = x.corrected?.rows.length ? await splitsFor(env, x.quarter) : null;
+      const adj = splits ? ch.flatMap((r) => splitRestate(r, splits, x.corrected!.rows)) : ch;
+      const net = netRenamed({ moves: x.moves, changed: adj });
+      if (net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i])) continue;
+      const moves = net.changed === adj ? movesOf(adj) : net.moves;
+      fixed.set(filingId(x), { ...x, moves: { ...moves, bought_usd: x.moves.bought_usd, sold_usd: x.moves.sold_usd } });
     }
   }
-  const res = { at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), stores: n.stores, verdicts: n.verdicts, feeds: n.feeds, queued_mail: n.queued_mail, accessions: [...n.accessions] };
-  await env.DB.put(FLAG, JSON.stringify(res));
-  return res;
+  return { feeds: await rewriteFeeds(env, fixed, now), alerts: [...fixed.keys()] };
 }
 
 /**
