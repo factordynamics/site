@@ -283,6 +283,67 @@ def foreign_merges(hist: Path) -> list[str]:
     return bad
 
 
+def bad_baselines(data: Path) -> list[str]:
+    """Quarters in h/ whose changes were computed against anything but the quarter right before, from the same
+    filers (MFG 2026Q2 against Mizuho Bank's 2026Q1 book; FMR 2025Q3 against 2025Q1)."""
+    def prev_q(q: str) -> str:
+        y, n = int(q[:4]), int(q[5])
+        return f"{y - 1}Q4" if n == 1 else f"{y}Q{n - 1}"
+
+    def filer(fund: str, q: dict) -> int:
+        rep = (q.get("reported_by") or {}).get("cik") if q.get("status") in ("notice", "successor") else None
+        return int(rep or fund)
+
+    def sources(fund: str, q: dict) -> set[int]:
+        c = (q.get("combined_with") or {}).get("cik")
+        return {filer(fund, q)} | ({int(c)} if c and str(c).isdigit() else set())
+
+    bad = []
+    hist = data / "h"
+    roster = {m.get("slug") for m in (read_json(data / "index.json") or {}).get("managers") or []}
+    for folder in sorted(hist.glob("*")) if hist.exists() else []:
+        if folder.name not in roster:  # a cached folder of a fund no longer tracked isn't published
+            continue
+        fund = (read_json(data / f"{folder.name}-history.json") or {}).get("cik")
+        books = {p.stem: b for p in folder.glob("*Q?.json") if (b := read_json(p)) is not None}
+        for name, q in sorted(books.items()):
+            pq = q.get("prev_quarter")
+            if not pq or not fund:
+                continue
+            prev = books.get(pq) or {}
+            if pq != prev_q(name) or filer(fund, q) not in sources(fund, prev):
+                bad.append(f"{folder.name} {name} vs {pq}")
+    return bad
+
+
+def history_gaps(data: Path, span: int = 8) -> list[str]:
+    """Tracked funds' quarters missing inside their last `span` quarters, with no reason on record: neither a 13F-HR
+    that is empty as filed (placeholders, confidential treatment not yet lifted) nor a 13F-NT. FMR 2025Q2 went
+    missing this way (its 13F-HR sat on an older EDGAR submissions page); a quarter the filer never filed lists too."""
+    qn = lambda q: int(q[:4]) * 4 + int(q[5]) - 1
+    out = []
+    for m in (read_json(data / "index.json") or {}).get("managers") or []:
+        b = read_json(data / f"{m.get('slug')}.json") or {}
+        served = set(b.get("history_quarters") or [])
+        if not served:
+            continue
+        why = {s.get("quarter"): s.get("reason") for s in b.get("skipped_quarters") or []}
+        top = max(map(qn, served))
+        span_q = [f"{n // 4}Q{n % 4 + 1}" for n in range(top - span + 1, top)]
+        low = min(map(qn, served))
+        for q in span_q:
+            if qn(q) > low and q not in served and why.get(q) not in ("empty", "notice"):
+                out.append(f"{m['slug']} {q} ({why.get(q) or 'no 13F-HR read'})")
+    return out
+
+
+def read_json(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
 def total_drift(hist: Path, tol: float = 0.001) -> list[str]:
     """Quarters whose total (after the unit fix) is more than tol off the filed cover totals of the
     filings they are built from (cover_total sums them for merged and combined books). A warning only:
@@ -432,6 +493,17 @@ def main() -> int:
     if merged:
         print(f"::error::Another filer's 13F merged into a book: {'; '.join(merged[:20])}; not publishing.")
         failed = True
+    gaps = history_gaps(data)
+    if gaps:  # listed, not fatal: a fund that skipped a quarter on EDGAR shows here too
+        print(f"::warning::{len(gaps)} tracked-fund quarters missing with no reason on record: {'; '.join(gaps[:30])}")
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as f:
+                f.write(f"### Tracked-fund quarters missing ({len(gaps)})\n\n" + "".join(f"- {g}\n" for g in gaps) + "\n")
+    based = bad_baselines(data)
+    if based:  # build.py's baseline() refuses these; a hit here is a cached book of a fund whose fetch failed
+        print(f"::warning::{len(based)} quarters diffed against a non-adjacent quarter or another filer's book: "
+              f"{'; '.join(based[:20])}")
     drift = total_drift(data / "h")
     if drift:
         print(f"::warning::{len(drift)} books more than 0.1% off their filed cover totals: {'; '.join(drift[:10])}")

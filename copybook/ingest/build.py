@@ -179,9 +179,20 @@ def notice_info(cik: str, meta) -> dict:
     return _NOTICES[meta.accession]
 
 
+PAGES_PATH = DATA / "submission_pages.json"  # 13F rows of EDGAR's older submission pages (edgar.fetch_submissions)
+_PAGES: dict | None = None
+
+
 def submissions_for(cik: str) -> dict:
+    global _PAGES
     if cik not in _SUBS:
-        _SUBS[cik] = fetch_submissions(cik)
+        if _PAGES is None:
+            _PAGES = json.loads(PAGES_PATH.read_text()) if PAGES_PATH.exists() else {}
+        before = len(_PAGES)
+        since = (datetime.now(timezone.utc) - timedelta(days=92 * (max(HISTORY_QUARTERS, 12) + 2))).date().isoformat()
+        _SUBS[cik] = fetch_submissions(cik, since, _PAGES)
+        if len(_PAGES) != before:
+            PAGES_PATH.write_text(json.dumps(_PAGES, separators=(",", ":")) + "\n")
     return _SUBS[cik]
 
 
@@ -214,7 +225,14 @@ def notice_periods(cik: str, metas: list, notices: list, cache: dict) -> tuple[l
             continue
         done.add(nt.report_date)
         info = notice_info(cik, nt)
-        rep = next((r for r in info["reporters"] if r.get("cik")), None)
+        named = [r for r in info["reporters"] if r.get("cik")]
+        if len(named) > 1:  # each named manager reports part of the book (MFG's notices name 9): none of them is it
+            skipped.append({"quarter": quarter_label(nt.report_date), "report_date": nt.report_date,
+                            "notice_accession": nt.accession, "notice_filing_date": nt.filing_date,
+                            "notice_note": info.get("note") or "", "reported_by": None, "reason": "notice",
+                            "detail": f"13F-NT names {len(named)} other managers, each reporting part of its holdings"})
+            continue
+        rep = named[0] if named else None
         base = {
             "quarter": quarter_label(nt.report_date),
             "report_date": nt.report_date,
@@ -490,6 +508,10 @@ def load_period(cik: str, group: list, cache: dict) -> dict | None:
         q = fix_cached(cache[key])
         return q | {"filings": mark_refiled(trail, q.get("refiled") or [])}
     loaded = load_filing(cik, base)
+    while loaded is None and additions:
+        # A placeholder base (Norges Bank's Q1/Q3 13F-HRs omit the table under confidential treatment): the first
+        # NEW HOLDINGS amendment that discloses the book becomes the book.
+        loaded, additions = load_filing(cik, additions[0]), additions[1:]
     if loaded is None:
         return None
     extras = []
@@ -1027,7 +1049,28 @@ def baseline(m: dict, i: int) -> dict | None:
     hist = m.get("history") or []
     if i + 1 >= len(hist):
         return None
-    return hist[i + 1]  # quarters two filers both filed are already combined (ingest, share_reporter_books)
+    from ingest.datasets import prev_quarter
+    cur, prev = hist[i], hist[i + 1]
+    # Only the quarter right before (FMR 2025Q3 skipped to 2025Q1), and only when the filer whose 13F-HR is this
+    # quarter's book is in that quarter's book too: MFG's own 2026Q2 against Mizuho Bank's 2026Q1 13F-HR showed
+    # Mizuho Bank's positions as MFG's exits. (Pershing Square Inc. reporting in 2026Q2 against the 2026Q1 book it
+    # was combined into passes.)
+    if prev_quarter(cur["quarter"]) != prev["quarter"] or book_filer(m, cur) not in book_sources(m, prev):
+        return None
+    return prev  # quarters two filers both filed are already combined (ingest, share_reporter_books)
+
+
+def book_filer(m: dict, q: dict) -> int | str | None:
+    """The CIK whose 13F-HR is a quarter's book: the reporting manager's for a 13F-NT quarter, else the fund's."""
+    rep = (q.get("reported_by") or {}).get("cik") if q.get("status") in ("notice", "successor") else None
+    c = rep or m.get("cik")
+    return int(c) if str(c).isdigit() else c
+
+
+def book_sources(m: dict, q: dict) -> set:
+    """Every CIK in a quarter's book: book_filer plus a filer combined into it."""
+    c = (q.get("combined_with") or {}).get("cik")
+    return {book_filer(m, q)} | ({int(c) if str(c).isdigit() else c} if c else set())
 
 
 def manager_json(m: dict) -> dict:

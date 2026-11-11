@@ -104,6 +104,19 @@ class ChangesTest(unittest.TestCase):
         finally:
             build.OWN_BOOKS.clear()
 
+    def test_no_baseline_from_another_filers_book_or_across_a_gap(self):
+        # MFG filed its own 2026Q2 after 13F-NTs whose 2026Q1 book was Mizuho Bank's 13F-HR; FMR skipped 2025Q2.
+        q = lambda qq, st="filed", **kw: {"quarter": qq, "status": st, "holdings": [row("H", 1, 1)], "total_value": 1, **kw}
+        bank = {"cik": "0001512734", "name": "Mizuho Bank"}
+        mfg = {"cik": "0001335730", "history": [q("2026Q2"), q("2026Q1", "notice", reported_by=bank)]}
+        self.assertIsNone(baseline(mfg, 0))
+        succession = {"cik": "0001335730", "history": [q("2026Q2", "notice", reported_by=bank),
+                                                        q("2026Q1", "notice", reported_by=bank)]}
+        self.assertEqual(baseline(succession, 0)["quarter"], "2026Q1")
+        gap = {"cik": "0000315066", "history": [q("2025Q3"), q("2025Q1")]}
+        self.assertIsNone(baseline(gap, 0))
+        self.assertEqual(baseline({"cik": "1", "history": [q("2026Q1"), q("2025Q4")]}, 0)["quarter"], "2025Q4")
+
     def test_no_prior_filing_is_unknown_not_new(self):
         self.assertEqual({r["change"] for r in with_changes({"holdings": [row("A", 1, 1)]}, None)}, {None})
 

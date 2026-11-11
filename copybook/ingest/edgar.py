@@ -70,10 +70,33 @@ class FilingMeta:
     accepted_at: str = ""  # EDGAR acceptance time, ISO UTC ("2025-08-14T20:10:02Z")
 
 
-def fetch_submissions(cik: str) -> dict:
+def fetch_submissions(cik: str, since: str | None = None, pages: dict | None = None) -> dict:
+    """EDGAR's submissions JSON. `recent` holds only the last ~1,000 filings or a year, so a busy filer's older
+    13F-HRs (FMR 2025Q2, JPMorgan 2025Q3) sit in its `files` pages: with `since` (YYYY-MM-DD), the 13F rows of every
+    page filed on or after it are appended to `recent`. `pages` caches those rows by page, so each is fetched once."""
     padded = cik.zfill(10)
     raw = get(f"{DATA_BASE}/submissions/CIK{padded}.json")
-    return json.loads(raw.decode("utf-8"))
+    subs = json.loads(raw.decode("utf-8"))
+    recent = subs.get("filings", {}).get("recent", {})
+    n = len(recent.get("form", []))
+    for page in subs.get("filings", {}).get("files") or [] if since else []:
+        if (page.get("filingTo") or "") < since:
+            continue
+        key = f"{page.get('name')}|{page.get('filingCount')}|{page.get('filingTo')}"
+        rows = (pages or {}).get(key)
+        if rows is None:
+            full = json.loads(get(f"{DATA_BASE}/submissions/{page['name']}").decode("utf-8"))
+            keep = [i for i, f in enumerate(full.get("form", [])) if str(f).startswith("13F")]
+            rows = {k: [v[i] for i in keep] for k, v in full.items()
+                    if isinstance(v, list) and len(v) == len(full.get("form", []))}
+            if pages is not None:
+                pages[key] = rows
+        m = len(rows.get("form", []))
+        for k, v in list(recent.items()):
+            if isinstance(v, list) and len(v) == n:
+                recent[k] = v + (rows.get(k) or [""] * m)
+        n += m
+    return subs
 
 
 HOLDINGS_FORMS = {"13F-HR", "13F-HR/A"}
