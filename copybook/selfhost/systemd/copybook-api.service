@@ -9,6 +9,14 @@ Type=simple
 WorkingDirectory=%h/copybook-api/ops
 EnvironmentFile=%h/copybook-api/copybook-api.env
 EnvironmentFile=%h/copybook-api/secrets.env
+# workerd fsyncs on its only request thread, so an fsync during btrfs's 30-second commit freezes every request for
+# 0.4-4 s (Nov 11). nosync.c skips fsync for the R2 mirror (ingest data, re-uploadable) and the per-key API meters only;
+# member, follows, key and billing stores keep every fsync. If gcc is missing the build fails, ld.so ignores the missing
+# library, and the service runs with every fsync as before.
+ExecStartPre=-/usr/bin/gcc -O2 -shared -fPIC -o %h/copybook-api/bin/nosync.so %h/copybook-api/ops/nosync.c -ldl
+Environment=LD_PRELOAD=%h/copybook-api/bin/nosync.so
+Environment=NOSYNC_PREFIXES=%h/copybook-api/state/r2/:%h/copybook-api/state/do/copybook-api-KeyMeter/
+Environment=NOSYNC_LOG=%h/copybook-api/nosync.log
 ExecStart=%h/.local/share/mise/installs/node/26.12.1/bin/node server.mjs
 Restart=always
 RestartSec=5
