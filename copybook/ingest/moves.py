@@ -161,12 +161,12 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
     prev = book(read(DATA / "fb" / pq / f"{shard['cik']}.json"))
     if cur is None:  # latest book only as a truncated public shard: its newest full book stands in
         if prev is not None:
-            LATEST[shard["cik"]] = [h | {"change": None, "prev_shares": None, "prev_value": None} for h in prev["holdings"]]
+            LATEST[shard["cik"]] = build.with_changes(prev, None)  # the units guard runs here too
             PERIOD[shard["cik"]] = pq
             FILING[shard["cik"]] = filing(prev)
         return None
     if prev is None:  # holdings only: still counted as holders, with no change
-        LATEST[shard["cik"]] = [h | {"change": None, "prev_shares": None, "prev_value": None} for h in cur["holdings"]]
+        LATEST[shard["cik"]] = build.with_changes(cur, None)  # no change, but the cross-filer units guard runs
         NO_PRIOR[shard["cik"]] = cur
         FILING[shard["cik"]] = filing(cur | {k: shard[k] for k in ("accession", "filing_date", "accepted_at") if shard.get(k)})
         return None
@@ -177,6 +177,7 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
         big = 5 * max(r.get("value") or 0, r.get("prev_value") or 0)
         if (r["cusip"], r.get("put_call") or "") in odd or abs(r.get("value_delta") or 0) > big:
             r["price_outlier"] = True
+    rows = [build.hold(r, q) if r.get("price_outlier") else r for r in rows]  # only the reliable side, no $
     moved = [r for r in rows if r["change"] not in ("unchanged", None) and not r.get("put_call")
              and not r.get("price_outlier") and not r.get("suspect_units")]
     counts = {c: sum(1 for r in rows if r["change"] == c and not r.get("put_call"))
@@ -421,10 +422,10 @@ def write_hedge_flow(shards: list[dict], types: dict, curated: dict) -> tuple[in
         if not q:
             continue
         for code, r in issuer_rows(LATEST[cik]):
-            if r.get("suspect_units"):
+            if r.get("unreliable"):
                 r = r | {"value_delta": 0}
             a = agg.setdefault(q, {}).setdefault(code, {}).setdefault(cik, [0, 0, 0, 0, 0, r.get("change") is not None])
-            if r.get("suspect_units"):  # a holder, but neither a buyer nor a seller
+            if r.get("unreliable"):  # a holder, but neither a buyer nor a seller
                 a[5] = False
             a[0] += r.get("shares") or 0
             a[1] += r.get("prev_shares") or 0
@@ -658,25 +659,25 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             c = linked(r.get("cusip"))
             if r.get("suspect_duplicate"):  # the filer is counted once, on the new code; its row says so
                 if len(c) >= 6:
-                    per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False])[8] = True
+                    per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False, None])[8] = True
                 continue
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
                     or not_common(r.get("title")):
                 continue  # preferreds share the common stock's issuer code (BAC 060505682) but aren't its holders
-            if r.get("suspect_units"):
+            # A flagged line (build.hold) shows its reliable side only and no $ trade. unreliable "value" (BMO 2026Q3
+            # TEVA at ~$4,005 a share): its shares and change stand (added +159,272), its value stays out of weights
+            # and $. "shares" (Guardcap BKNG 2026Q3, Crosslink CRM 2026Q2) or "both": the change is unknown, unless
+            # the position is new or gone.
+            side = r.get("unreliable")
+            if side:
                 r = r | {"value_delta": 0}
-            # A mis-valued line (BMO 2026Q3 TEVA at ~$4,005 a share, 101x every other filer): its shares still make
-            # it a holder with its share change, but its value stays out of weights and $.
-            bad_value = bool(r.get("price_outlier"))
+            bad_value = side == "value"
             if bad_value:
-                r = r | {"value": 0, "prev_value": 0, "value_delta": 0}
-            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False])
-            a[9] = a[9] or bad_value  # its shares and change stand (BMO TEVA added +159,272); only its $ are out
-            # A suspect_units line (share count or value off scale: Guardcap BKNG 2026Q3, Crosslink CRM 2026Q2) has an
-            # unknown change, unless only its value is off: a price_outlier whose shares moved under 2x (BMO TEVA).
-            ps_ = r.get("prev_shares") or 0
-            if r.get("suspect_units") and not (bad_value and ps_ and 0.5 <= (r.get("shares") or 0) / ps_ <= 2):
-                a[6] = True
+                r = r | {"value": 0, "prev_value": 0}
+            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False, None])
+            a[9] = a[9] or bad_value
+            if side:
+                a[10] = side if a[10] in (None, side) else "both"
             a[7] = a[7] or r.get("prev_cusip")
             # A held reissue (units unconfirmed) whose codes share an issuer prefix (BYND 08862E109 -> 08862E307):
             # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
@@ -686,7 +687,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             a[1] += r.get("prev_shares") or 0
             a[2] += r.get("value") or 0
             a[3] += r.get("prev_value") or 0
-            a[4] = a[4] or r.get("change") is not None
+            a[4] = a[4] or r.get("change") is not None or r.get("prev_shares") is not None  # held: unknown, not no prior
             a[5] += r.get("value_delta") or 0
             by_issuer[c[:6]] = by_issuer.get(c[:6], 0) + (r.get("value") or 0)
             t = r.get("ticker") or (SECS.get(c) or {}).get("ticker")
@@ -700,18 +701,19 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
             "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
-            "price_outlier", "value_basis"]
+            "price_outlier", "value_basis", "unreliable"]
     for code, hs in per.items():
-        blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
+        blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0, "unknown": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {}, "by_period": {}}
         rows, counts, deltas = [], blank(), {}
         lenses = {name: blank() for name in LENSES}
-        for cik, (sh, ps, v, pv, known, delta, unsure, prev_cusip, dup, bad_value) in hs.items():
-            known = known and not unsure
+        for cik, (sh, ps, v, pv, known, delta, unsure, prev_cusip, dup, bad_value, side) in hs.items():
             change = None
-            if known:
+            if known and not unsure:
                 change = ("exited" if sh <= 0 else "new" if ps <= 0 else "added" if sh > ps + 0.5
                           else "trimmed" if sh < ps - 0.5 else "unchanged")
+                if side in ("shares", "both") and change not in ("new", "exited"):
+                    change = "unknown"  # a flagged share count: never trimmed or added
             q = PERIOD.get(cik) or meta[cik].get("quarter")
             kind = (types.get(cik) or {}).get("type")
             weight = v / book[cik] if book.get(cik) else None
@@ -721,18 +723,19 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                     c["by_period"][q] = c["by_period"].get(q, 0) + 1
                     c["top10"] += code in top10.get(cik, ())
                     c["over5pct"] += bool(weight and weight > 0.05)
-                c[change or "no_prior"] += 1
-                if known:
+                c[change or ("unknown" if known else "no_prior")] += 1
+                if change not in (None, "unknown"):
                     c["net_by_period"][q] = c["net_by_period"].get(q, 0) + round(delta)
-            deltas[cik] = round(delta) if known else None
+            deltas[cik] = round(delta) if change not in (None, "unknown") and not side else None
             m = curated.get(cik) or filers.get(cik) or {}
             fl = FILING.get(cik) or filing(meta[cik])
             rows.append([cik, meta[cik].get("name"), m.get("slug"), kind, cik in curated,
-                         q, round(sh), round(ps) if known else None, round(v), round(pv) if known else None, change,
+                         q, round(sh), build.shares_out(float(ps)) if known else None, round(v), round(pv) if known else None,
+                         change or ("unknown" if known else None),
                          round(weight, 6) if weight is not None else None,
                          fl["accession"], fl["filing_date"], fl["accepted_at"],
                          fl.get("original_accession") or fl["accession"], prev_cusip, dup,
-                         bad_value, "filed_price_outlier" if bad_value else "filed"])
+                         bad_value, "filed_price_outlier" if bad_value else "filed", side])
         if not counts["holders"]:
             continue
         # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period
@@ -765,6 +768,55 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                                "types_sig": signature(types), "tickers": dict(sorted(index.items()))})
     write_site_holders(site, signature(types))
     return len(keep)
+
+
+def write_quality(shards: list[dict], curated: dict, filers: dict) -> dict:
+    """quality.json (public, for /status/): every filer's latest-book lines the units guard held this run (no trade
+    in $, out of every total: stock pages, hl/ net, /changes, Flow, /season/, alerts), by reason, with the filers
+    affected and the largest held lines by the trade they would have read as filed (share change x filed price)."""
+    reason_of = lambda r: ("reissue_ratio_not_applied" if r.get("suspect_reason") == "reissue_ratio_not_applied"
+                           else {"value": "price_outlier", "shares": "unreliable_shares"}.get(r["unreliable"], "unreliable_both"))
+    meta = {s["cik"]: s for s in shards}
+    by: dict[str, dict] = {}
+    lines = []
+    for cik, rows in LATEST.items():
+        for r in rows:
+            if not r.get("unreliable") or r.get("prev_shares") is None:
+                continue  # flagged with no prior on file: no trade was held
+            why = reason_of(r)
+            b = by.setdefault(why, {"rows": 0, "filers": set(), "options": 0})
+            b["rows"] += 1
+            b["filers"].add(cik)
+            b["options"] += bool(r.get("put_call"))
+            sh, ps, v, pv = (r.get(k) or 0 for k in ("shares", "prev_shares", "value", "prev_value"))
+            px = v / sh if sh else pv / ps if ps else 0
+            m = curated.get(cik) or filers.get(cik) or {}
+            lines.append({
+                "cik": cik, "name": m.get("name") or m.get("manager"), "slug": m.get("slug"),
+                "period": PERIOD.get(cik) or (meta.get(cik) or {}).get("quarter"),
+                "accession": (FILING.get(cik) or {}).get("accession"), "ticker": r.get("ticker"), "cusip": r.get("cusip"),
+                "put_call": r.get("put_call"), "reason": why, "unreliable": r["unreliable"],
+                "suspect_reason": r.get("suspect_reason"), "shares": round(sh), "prev_shares": build.shares_out(float(ps)),
+                "value": round(v), "prev_value": round(pv), "change": r.get("change") or "unknown",
+                "delta_as_filed": round((sh - ps) * px), "value_change": round(v - pv)})
+    lines.sort(key=lambda x: -abs(x["delta_as_filed"]))
+    body = {
+        "generated": datetime_now(), "build": (read(DATA / "build.json") or {}).get("build_id"),
+        "note": "Lines in every 13F filer's latest book that the units guard held (suspect_units, price_outlier, "
+                "reissue_ratio_not_applied): no trade in $, kept out of every total. unreliable says which side is off: "
+                "value (the share change stands), shares (value_change from filed values shows instead), both (unknown). "
+                "delta_as_filed is what the line would have read as filed (share change x filed price).",
+        "held": {"rows": len(lines), "filers": len({x["cik"] for x in lines})},
+        "by_reason": {k: {"rows": v["rows"], "filers": len(v["filers"]), "options": v["options"]} for k, v in sorted(by.items())},
+        "largest": lines[:25],
+    }
+    write(DATA / "quality.json", body)
+    return body
+
+
+def datetime_now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def write_site_holders(site: dict[str, list], sig: str) -> None:
@@ -857,7 +909,7 @@ def main() -> int:
         meta = curated.get(cik) or filers.get(cik) or {}
         return [cik, meta.get("slug"), rec.get("name") or meta.get("name"), cik in curated, (types.get(cik) or {}).get("type"),
                 r["cusip"], r.get("ticker"), r.get("issuer"), r.get("put_call"), r["change"], int(round(r.get("shares") or 0)),
-                int(round(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
+                build.shares_out(float(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
                 int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), rec.get("accession"),
                 rec.get("accepted_at") or ACCEPTED.get(rec.get("accession") or "")]
 
@@ -912,6 +964,9 @@ def main() -> int:
           flush=True)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
     net_parity(per_quarter)
+    qy = write_quality(shards, curated, filers)
+    print(f"moves: quality.json: {qy['held']['rows']} lines held across {qy['held']['filers']} filers: "
+          + ", ".join(f"{k} {v['rows']}" for k, v in qy["by_reason"].items()), flush=True)
     print("moves: hedge_flow.json %d periods, recent_filings.json %d filings" % write_hedge_flow(shards, types, curated),
           flush=True)
     print(f"moves: {write_combined_shards()} shards in fall/ for the site build", flush=True)

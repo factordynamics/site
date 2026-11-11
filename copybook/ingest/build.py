@@ -605,7 +605,7 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
-STALE = ("split", "prev_shares_as_filed", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
+STALE = ("split", "prev_shares_as_filed", "unreliable", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
          "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
@@ -727,6 +727,20 @@ SEED_LINKS = {
 }
 
 
+_UNDERLYING: dict = {"n": -1, "px": {}}
+
+
+def underlying_median(quarter: str | None, cusip: str) -> float | None:
+    """The common-line median price (consensus) of an option line's issuer that quarter: the CUSIP with the same
+    first 6 characters and no option code (90x/95x) in the 7th-9th."""
+    if _UNDERLYING["n"] != len(consensus()):  # rebuilt when the medians change (each run; tests)
+        _UNDERLYING["n"], _UNDERLYING["px"] = len(consensus()), {}
+        for (qq, c), px in sorted(consensus().items()):
+            if len(c) == 9 and c[6] != "9":
+                _UNDERLYING["px"].setdefault((qq, c[:6]), px)
+    return _UNDERLYING["px"].get((quarter or "", (cusip or "")[:6]))
+
+
 def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: str | None) -> dict:
     """suspect_units and suspect_units_basis for one row. Share lines only (notes and options: null, basis none).
     filers: this line or its prior priced over OFF_MEDIAN x off the CUSIP's median across every filer that quarter
@@ -736,7 +750,16 @@ def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: st
     suspect_reason, when true: cross_filer (this line off this quarter's median), cross_filer_prior (the prior
     quarter's line off that quarter's median, so the change is unreliable though this line is priced like its peers:
     Geode SION at $5.26), or own_prior (value per share over 5x from the filer's own prior quarter)."""
-    if h.get("shares_type") == "PRN" or h.get("put_call"):
+    if h.get("put_call") and h.get("shares_type") != "PRN":
+        # An option line reports the underlying's shares and value, so it prices like the common (Mizuho Markets
+        # 2026Q3 SPY calls: 19,152 sh at $552.5M, ~$28,846 a share against ~$763): over OFF_MEDIAN x off the
+        # underlying's common-line median, this quarter or the prior one, it is a price_outlier.
+        def off_opt(row: dict | None, quarter: str | None) -> bool:
+            m, n = underlying_median(quarter, row["cusip"]) if row else None, amount(row) if row else 0
+            return bool(m and n and row["value"] > 0 and not 1 / OFF_MEDIAN <= row["value"] / n / m <= OFF_MEDIAN)
+        out = {"suspect_units": None, "suspect_units_basis": "none", "suspect_reason": None}
+        return out | ({"price_outlier": True} if off_opt(h, q) or off_opt(p, q_prev) else {})
+    if h.get("shares_type") == "PRN":
         return {"suspect_units": None, "suspect_units_basis": "none", "suspect_reason": None}
 
     def off(row: dict, quarter: str | None, kk: float = 1.0) -> bool | None:
@@ -763,6 +786,55 @@ def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: st
     return {"suspect_units": None, "suspect_units_basis": "none", "suspect_reason": None}
 
 
+def unreliable_side(r: dict, quarter: str | None) -> str | None:
+    """Which side of a flagged line (suspect_units or price_outlier) can't be trusted: "value" (the share count
+    reconciles with the prior, the filed $ is off: BMO TEVA 2026Q3 at ~$4,005 a share, Francois Rochon GLD 2026Q2),
+    "shares" (the filed values are consistent, the share count implies the wrong price: Crosslink CRM 2026Q2,
+    136,035 -> 2,347,970 sh while $25.4M -> $31.0M; or the implied price is a split ratio off the median: Guardcap
+    BKNG 2026Q3, 1,304 pre-split shares at ~$5,120), "both" (reissue_ratio_not_applied, or undecided). None: not
+    flagged."""
+    if not (r.get("suspect_units") or r.get("price_outlier")) or r.get("shares_type") == "PRN":
+        return None
+    if r.get("suspect_reason") == "reissue_ratio_not_applied":
+        return "both"
+    sh, ps, v, pv = (r.get(k) or 0 for k in ("shares", "prev_shares", "value", "prev_value"))
+    if sh > 0 and ps > 0:
+        # Mizuho Markets SPY calls 2026Q3: 479,831 -> 19,152 sh while $610.5M -> $552.5M: the shares are off.
+        s_ok, v_ok = 0.5 <= sh / ps <= 2, v > 0 and pv > 0 and 0.5 <= v / pv <= 2
+        if s_ok != v_ok:
+            return "value" if s_ok else "shares"
+    if r.get("price_outlier") and not r.get("suspect_units"):
+        return "value"
+    m = consensus().get((quarter or "", r.get("cusip") or ""))
+    if sh > 0 and v > 0 and m:
+        f = v / sh / m
+        for k in (SPLITS.get(r.get("cusip") or "") or {}).values():
+            if k and k != 1 and min(abs(math.log(f * k)), abs(math.log(f / k))) < math.log(1.5):
+                return "shares"
+    return "both"
+
+
+def hold(r: dict, quarter: str | None) -> dict:
+    """A flagged line shows only its reliable side and no trade in $ (value_delta 0, out of every total):
+    "value": change and share_change stand; "shares": share_change null, value_change = filed value - prior filed
+    value; "both": change null (unknown), share_change null. new, exited and disclosed_later keep their change."""
+    side = unreliable_side(r, quarter)
+    if side is None:
+        return r
+    r = r | {"unreliable": side}
+    if r.get("change") is None and r.get("prev_shares") is None:
+        return r  # no prior on file: nothing to hold
+    r |= {"value_delta": 0, "delta_pct_of_book": 0.0}
+    if side == "value":
+        return r
+    r["share_change"] = None
+    if side == "shares":
+        r["value_change"] = round((r.get("value") or 0) - (r.get("prev_value") or 0))
+    if r.get("change") not in ("new", "exited", "disclosed_later"):
+        r["change"] = None
+    return r
+
+
 def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     """Holdings with prior-quarter fields, plus exited positions as value-0 rows.
 
@@ -781,8 +853,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     principal amounts and never count as shares (share_change null).
     """
     if prev is None:  # no prior quarter: the cross-filer check still runs on each share line
-        return [{f: v for f, v in h.items() if f not in STALE} | {f: None for f in CHANGE_FIELDS} | {"row_type": "holding"}
-                | units(h, None, 1.0, 1.0, latest.get("quarter"), None) for h in latest["holdings"]]
+        return [hold({f: v for f, v in h.items() if f not in STALE} | {f: None for f in CHANGE_FIELDS} | {"row_type": "holding"}
+                | units(h, None, 1.0, 1.0, latest.get("quarter"), None), latest.get("quarter")) for h in latest["holdings"]]
     eq = latest.get("equity_value") or sum(h["value"] for h in latest["holdings"] if is_equity(h)) or None
     q_from, q_to = prev.get("quarter"), latest.get("quarter")
     known_by = latest.get("accepted_at")
@@ -904,7 +976,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 **extra(p, "exited", -p["value"], -amount(p) * r, r, prn),
             }
         )
-    return rows
+    return [hold(r, q_to) for r in rows]
 
 
 def moves(rows: list[dict], limit: int = MOVE_ROWS) -> dict | None:
@@ -1284,13 +1356,22 @@ def manager_json(m: dict) -> dict:
 
 def compact_row(h: dict) -> dict:
     """Whole-dollar values and share counts, 6-digit weights: keeps full books small on Pages."""
-    ints = ("value", "shares", "prev_shares", "prev_value", "share_change", "principal_amount",
+    ints = ("value", "shares", "prev_value", "share_change", "principal_amount",
             "prev_principal_amount", "prev_shares_as_filed", "value_as_filed")
     fracs = ("weight", "pct_of_book", "prev_weight", "notional_pct_of_book", "delta_pct_of_book")
     return {
-        k: (round(v) if k in ints and isinstance(v, float) else round(v, 6) if k in fracs and isinstance(v, float) else v)
+        k: (round(v) if k in ints and isinstance(v, float) else round(v, 6) if k in fracs and isinstance(v, float)
+            else shares_out(v) if k == "prev_shares" else v)
         for k, v in h.items()
     }
+
+
+def shares_out(x):
+    """A split-adjusted share count as written: whole when it is whole, else 4 decimals, so a linked prior under one
+    share (DZ Bank DD 2026Q1: 1 share at 1-for-3 is 0.3333) never rounds to 0 and reads as new."""
+    if not isinstance(x, float):
+        return x
+    return round(x) if abs(x - round(x)) < 1e-6 or abs(x) >= 1000 else round(x, 4)
 
 
 V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display_name", "late_disclosure", "parts",

@@ -154,11 +154,11 @@ for (const st of stocks.values()) {
   const ticker = [...st.classes.values()].sort((a, b) => b.value - a.value)[0]?.ticker ?? null
   for (const c of confirmed.filter((x) => cusips.has(x.cusip))) {
     ;(st.splits ??= {})[c.to_quarter] = { ratio: ratioLabel(c.ratio), adjusted: true }
-    splitLog.push({ ticker: ticker ?? c.ticker, name: st.name, quarter: c.to_quarter, ratio: ratioLabel(c.ratio), treatment: 'adjusted', holders: c.holders, share_ratio: c.ratio, price_ratio: c.price_ratio, xbrl_shares_ratio: c.xbrl_shares_ratio ?? null, source: `Ingest: ${c.confirmed_by}` })
+    splitLog.push({ ticker: ticker ?? c.ticker, name: st.name, quarter: c.to_quarter, ratio: ratioLabel(c.ratio), treatment: 'adjusted', holders: c.holders ?? null, share_ratio: c.ratio, price_ratio: c.price_ratio ?? null, xbrl_shares_ratio: c.xbrl_shares_ratio ?? null, source: `Ingest: ${c.confirmed_by}` })
   }
   if (st.sector === 'Funds & ETFs') continue
   const byQ = new Map()
-  for (const h of st.holders) if (h.change !== 'unknown' && h.shares > 0 && h.prev_shares > 0 && h.value > 0 && h.prev_value > 0) (byQ.get(h.quarter) ?? byQ.set(h.quarter, []).get(h.quarter)).push({ s: h.shares / h.prev_shares, p: h.value / h.shares / (h.prev_value / h.prev_shares) })
+  for (const h of st.holders) if (h.change !== 'unknown' && !h.unreliable && h.shares > 0 && h.prev_shares > 0 && h.value > 0 && h.prev_value > 0) (byQ.get(h.quarter) ?? byQ.set(h.quarter, []).get(h.quarter)).push({ s: h.shares / h.prev_shares, p: h.value / h.shares / (h.prev_value / h.prev_shares) })
   for (const [q, r] of byQ) {
     if (r.length < 5 || st.splits?.[q] || [...cusips].some((c) => checked[`${c}:${q}`])) continue
     const ms = med(r.map((x) => x.s))
@@ -172,7 +172,7 @@ for (const st of stocks.values()) {
     const strong = r.length >= 10 && Math.abs(ms / k - 1) < 0.05 && Math.abs(mp * k - 1) < 0.1
     if (strong)
       for (const h of st.holders) {
-        if (h.quarter !== q || !h.change || h.change === 'unknown' || !h.prev_shares) continue
+        if (h.quarter !== q || !h.change || h.change === 'unknown' || h.unreliable || !h.prev_shares) continue
         h.prev_shares *= k
         const price = h.shares ? h.value / h.shares : h.prev_value / h.prev_shares
         h.delta_value = r0((h.shares - h.prev_shares) * price)
@@ -183,7 +183,7 @@ for (const st of stocks.values()) {
   }
 }
 mkdirSync(join(out, 'd'), { recursive: true })
-writeFileSync(join(out, 'd', 'splits.json'), JSON.stringify({ generated_at: index.generated_at, splits: splitLog.sort((a, b) => b.quarter.localeCompare(a.quarter) || (a.ticker ?? '').localeCompare(b.ticker ?? '')) }))
+writeFileSync(join(out, 'd', 'splits.json'), JSON.stringify({ generated_at: index.generated_at, note: 'Every row has every key. holders and price_ratio may be null: a split or reissue confirmed by an issuer filing (8-K) rather than by holders has no holder count or price ratio; xbrl_shares_ratio may be null too.', splits: splitLog.sort((a, b) => b.quarter.localeCompare(a.quarter) || (a.ticker ?? '').localeCompare(b.ticker ?? '')) }))
 
 const list = []
 const byTicker = {}
@@ -297,7 +297,7 @@ function flowFor(scope, full = false, q = '') {
   for (const s of stocks.values()) {
     if (!s.classes.size || s.splits?.[q]?.adjusted === false) continue
     const ticker = [...s.classes.values()].sort((a, b) => b.value - a.value)[0].ticker
-    const moves = s.holders.filter((h) => slugs.has(h.slug) && h.change && h.change !== 'unchanged' && h.change !== 'unknown')
+    const moves = s.holders.filter((h) => slugs.has(h.slug) && h.change && h.change !== 'unchanged' && h.change !== 'unknown' && h.delta_value != null)
     if (!moves.length) continue
     const pick = ({ slug, manager, featured, change, delta_value, weight }) => ({ slug, manager, featured, change, delta_value, weight })
     const buyers = moves.filter((h) => h.change === 'new' || h.change === 'added').sort((a, b) => b.delta_value - a.delta_value)

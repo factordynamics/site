@@ -349,8 +349,52 @@ class MoveMathTest(unittest.TestCase):
         cur = {"quarter": "2026Q3", "holdings": [self.row("09857L108", "BKNG", 1304, 6.7e6)]}
         r = build.with_changes(cur, prev)[0]
         self.assertTrue(r["suspect_units"])
-        self.assertAlmostEqual(r["value_delta"], 6.7e6 - 121.6e6, delta=1)
+        # No median or split on file to say which side is off: both, change unknown, no $ trade.
+        self.assertEqual((r["unreliable"], r["change"], r["share_change"], r["value_delta"]), ("both", None, None, 0))
         self.assertNotIn("BKNG", [m["ticker"] for m in (build.moves([r]) or {}).get("trimmed", [])])
+
+    def test_flagged_line_shows_its_reliable_side_only(self):
+        build.SPLITS["09857L108"] = {"2026Q2": 25.0}
+        build.CONSENSUS.update({("2026Q2", "09857L108"): 178.24, ("2026Q3", "09857L108"): 162.91,
+                                ("2026Q1", "79466L302"): 186.67, ("2026Q2", "79466L302"): 156.66,
+                                ("2026Q2", "M8769Q102"): 25.0, ("2026Q3", "M8769Q102"): 33.0,
+                                ("2026Q2", "78462F103"): 617.0, ("2026Q3", "78462F103"): 763.0})
+        try:
+            # Guardcap BKNG 2026Q3: 1,304 shares at ~$5,120, the 25:1 split ratio off the median: shares unreliable.
+            g = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("09857L108", "BKNG", 1304, 6676571)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 646216, 121636487)]})[0]
+            self.assertEqual((g["unreliable"], g["change"], g["value_delta"], g["value_change"]), ("shares", None, 0, -114959916))
+            # Crosslink CRM 2026Q2: 136,035 -> 2,347,970 sh while $25.4M -> $31.0M: shares unreliable, never "added".
+            c = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("79466L302", "CRM", 2347970, 31001326)]},
+                                   {"quarter": "2026Q1", "holdings": [self.row("79466L302", "CRM", 136035, 25393653)]})[0]
+            self.assertEqual((c["unreliable"], c["change"], c["share_change"], c["value_delta"]), ("shares", None, None, 0))
+            # BMO TEVA 2026Q3: ~$4,005 a share filed, a real +159,272 shares: value unreliable, the share change stands.
+            b = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("M8769Q102", "TEVA", 1130855, 4528837000)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("M8769Q102", "TEVA", 971583, 24289575)]})[0]
+            self.assertEqual((b["unreliable"], b["change"], b["share_change"], b["value_delta"]), ("value", "added", 159272, 0))
+            # Mizuho Markets SPY calls 2026Q3 (0001062993-26-005826): 479,831 sh $610.5M -> 19,152 sh $552.5M, about
+            # $28,846 a share against SPY's ~$763. Read as filed it was -$13.3B; the filed values say -$58.0M.
+            call = lambda sh, v: self.row("78462F903", "SPY", sh, v) | {"put_call": "Call"}
+            m = build.with_changes({"quarter": "2026Q3", "holdings": [call(19152, 552.5e6)]},
+                                   {"quarter": "2026Q2", "holdings": [call(479831, 610.5e6)]})[0]
+            self.assertEqual((m.get("price_outlier"), m["unreliable"], m["change"], m["value_delta"], m["value_change"]),
+                             (True, "shares", None, 0, -58000000))
+            # An option priced like its underlying is not flagged.
+            ok = build.with_changes({"quarter": "2026Q3", "holdings": [call(700000, 534.1e6)]},
+                                    {"quarter": "2026Q2", "holdings": [call(479831, 296.0e6)]})[0]
+            self.assertEqual((ok.get("price_outlier"), ok.get("unreliable"), ok["change"]), (None, None, "added"))
+            # A new position keeps its label whatever the flag, with no $ trade.
+            n = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("09857L108", "BKNG", 1304, 6676571)]},
+                                   {"quarter": "2026Q2", "holdings": []})[0]
+            self.assertEqual((n["change"], n["value_delta"]), ("new", 0))
+        finally:
+            build.CONSENSUS.clear()
+            build.SPLITS.pop("09857L108", None)
+
+    def test_linked_prior_under_one_share_is_kept(self):
+        # DZ Bank DD 2026Q1: 1 share, 1-for-3 into 26614N201: the prior is 0.3333, never 0 (which read as new).
+        self.assertEqual(build.compact_row({"prev_shares": 1 / 3, "shares": 2.0})["prev_shares"], 0.3333)
+        self.assertEqual(build.compact_row({"prev_shares": 22778297.4})["prev_shares"], 22778297)
 
 
 class HedgeFlowTest(unittest.TestCase):
