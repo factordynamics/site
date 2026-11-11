@@ -4,7 +4,7 @@ import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from '.
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
 import { bookSuspect, companyFilings, computeMoves, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
-import { isActive, isPaused, type Env, type Member } from './env';
+import { isActive, isPaused, testAddress, type Env, type Member } from './env';
 import { getFollows, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
 
@@ -318,7 +318,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     if (raw.plan === 'holdterm') {
       // Holdterm members get Holdterm-branded alerts, never Copybook's.
       const mine = forHoldterm(await getFollows(env, raw), filings, events, meta);
-      if (mine.filings.length || mine.events.length) mails.push(holdtermAlertMail(env, raw.email, mine.filings, mine.events));
+      if (mine.filings.length || mine.events.length) mails.push({ ...holdtermAlertMail(env, raw.email, mine.filings, mine.events), test: !!raw.test || testAddress(raw.email), ids: [...mine.filings.map((a) => a.accession), ...mine.events.map((e) => e.id)] });
       continue;
     }
     const f = await getFollows(env, raw);
@@ -336,7 +336,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     else if (!only) await rememberDelivered(env, m.customer, now, [...mine.filings.map((a) => `${a.accession}${a.followup ? ':moves' : ''}`), ...mine.events.map((e) => `${e.id}${e.followup ? ':details' : ''}`)]);
     if (f.digest) digest++;
     else {
-      mails.push(alertMail(env, m.email, mine.filings, mine.events, f, m));
+      mails.push({ ...alertMail(env, m.email, mine.filings, mine.events, f, m), test: !!m.test || testAddress(m.email), ids: [...mine.filings.map((a) => a.accession), ...mine.events.map((e) => e.id)] });
       notes.push(m);
     }
   }
@@ -859,10 +859,12 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
  */
 async function logLatency(env: Env, filings: { slug: string; accession: string; accepted?: string; kind?: string; manager?: string; quarter?: string; form?: string; extra?: boolean }[], sentAt: number): Promise<void> {
   const replays = new Set(JSON.parse((await env.DB.get('alerts:replays')) ?? '[]') as string[]);
+  // Emails held for the daily limit: the row is kept but marked, and not counted as fast.
+  const delayed = new Set(JSON.parse((await env.DB.get((await import('./email')).DELAYED_IDS)) ?? '[]') as string[]);
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
   const add = filings
     .filter((f) => f.accepted)
-    .map((f) => ({ slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', ...((f.kind ?? '13f') === '13f' ? { moves: true } : {}), accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}) }));
+    .map((f) => ({ slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', ...((f.kind ?? '13f') === '13f' ? { moves: true } : {}), accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}), ...(delayed.has(f.accession) ? { email_delayed: true } : {}) }));
   // A filing season's worth: the public /latency page reports the whole season.
   await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 2000)));
 }

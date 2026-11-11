@@ -199,6 +199,8 @@ interface LatencyRow {
   replay?: boolean;
   /** A 13F row timed by the email that carried its moves. */
   moves?: boolean;
+  /** Some of its emails waited for Resend's daily limit to reset. */
+  email_delayed?: boolean;
   /** Rows from before the tag are curated managers' (the poll timed only those). */
   coverage?: 'curated' | 'any_filer';
 }
@@ -229,7 +231,8 @@ function spread(xs: number[]) {
 export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = []) {
   const { season, from } = seasonOf(now);
   // 13Fs are timed by the email that carried the moves (rows tagged `moves`); older 13F rows timed the first email.
-  const rows = log.filter((l) => !l.replay && Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves));
+  // Emails held for the daily limit aren't counted as fast (they're reported as email_delayed).
+  const rows = log.filter((l) => !l.replay && !l.email_delayed && Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves));
   const chRows = ch.filter((c) => Date.parse(c.delivered) >= from);
   const all = spread(rows.map((l) => l.seconds));
   const FORM: Record<string, string> = { '13f': '13F-HR', form4: '4', '13d': 'SC 13D', '13g': 'SC 13G' };
@@ -337,7 +340,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // Filings the missed-filing detector found unsent 10+ minutes after acceptance and put back in front of the polls.
     const missed_recovered = { count: Number((await env.DB.get('missed:count')) ?? 0), recent: (JSON.parse((await env.DB.get('missed:log')) ?? '[]') as unknown[]).slice(0, 10) };
     const { pollerStatus } = await import('./failover');
-    return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: { ...(await import('./email')).mailQuota, cap: 100, reserve_for_account_mail: 15 }, moves_queue: { pending: ((JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).map((p) => p.accession)), last: JSON.parse((await env.DB.get('host:moves-last')) ?? 'null') }, ...business }, 200, h);
+    return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: { ...(await import('./email')).mailQuota, daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15 }, moves_queue: { pending: ((JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).map((p) => p.accession)), last: JSON.parse((await env.DB.get('host:moves-last')) ?? 'null') }, ...business }, 200, h);
   }
 
   // The site's referral card: whether ?ref= is a live code. Says nothing about whose it is; rate-limited per IP.

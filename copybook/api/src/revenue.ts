@@ -384,7 +384,7 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
       marks.push({ ...m, recap_sent: recap, recap_n: st.n });
     }
   }
-  const status = await sendMail(env, mails, { bulk: true });
+  const status = await sendMail(env, mails, { tier: 'low' });
   if (status.split(',').every((s) => s === '200')) {
     // Re-read so a webhook that landed meanwhile isn't overwritten.
     for (const mk of marks) {
@@ -650,7 +650,7 @@ export async function runSeasonal(env: Env, now: number): Promise<Record<string,
       winbacks++;
     }
   }
-  const status = mails.length ? await sendMail(env, mails, { bulk: true }) : 'none';
+  const status = mails.length ? await sendMail(env, mails, { tier: 'low' }) : 'none';
   if (mails.length && status.split(',').every((x) => x === '200')) {
     for (const mk of marks) {
       const cur = await getMember(env, mk.customer);

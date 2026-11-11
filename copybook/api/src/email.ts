@@ -16,6 +16,10 @@ export interface Mail {
   replyTo?: string;
   /** Marketing and lifecycle email: the one-click unsubscribe URL (List-Unsubscribe). */
   unsubscribe?: string;
+  /** A test or critic member: sent after real members when the day's email budget runs low. */
+  test?: boolean;
+  /** Filings and events the email carries: a delayed send is excluded from the latency figures. */
+  ids?: string[];
 }
 
 /** Sends through Resend's batch API (100 per request). Returns a short status for logs. */
@@ -23,27 +27,64 @@ export interface Mail {
 export const previewInbox = (to: string) => to === 'hello@factordynamics.com' || to.startsWith('copybook-test-');
 const SAMPLE = /^\[(sample|preview|draft)\]/i;
 
-/** Resend's free plan: 100 emails a day. Bulk mail (alerts, digests, weeklies) stops at the cap less a reserve, so sign-in, pause, resume and cancel mail still go out. */
+/**
+ * Resend's free plan: 100 emails a day and 3,000 a month, account-wide. Send order once the budget runs low:
+ * account mail (sign-in, receipts, pause, resume) always; alerts and digests up to the cap less a reserve,
+ * real members before test members; low-priority mail (free weekly, recap, pre-season) only while 50 are left
+ * for alerts. What doesn't fit is never dropped: it is queued and sent after the reset, marked as delayed.
+ */
 export const MAIL_DAILY_CAP = 100;
+export const MAIL_MONTHLY_CAP = 3000;
 export const MAIL_RESERVE = 15;
-/** Today's usage on this host, from Resend's x-resend-daily-quota header (emails sent today, account-wide). */
-export const mailQuota: { day: string; used: number; monthly: number | null; refused?: string } = { day: '', used: 0, monthly: null };
+const LOW_HOLD = 50;
+const DELAY_MARK = '(delayed: email limit) ';
+/** Usage from Resend's x-resend-daily-quota and x-resend-monthly-quota headers (emails sent, account-wide). */
+export const mailQuota: { day: string; used: number; month: string; monthly: number; delayed: number; refused?: string } = { day: '', used: 0, month: '', monthly: 0, delayed: 0 };
 const RETRY = 'host:mail-retry';
+const DELAYED = 'host:mail-delayed';
+const METER = 'host:mail-meter';
+export const DELAYED_IDS = 'host:mail-delayed-ids';
+type Tier = 'account' | 'alert' | 'low';
 
-export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean } = {}): Promise<string> {
+async function loadMeter(env: Env): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
-  if (mailQuota.day !== today) Object.assign(mailQuota, { day: today, used: 0, refused: undefined });
-  if (opts.bulk && mailQuota.used + mails.length > MAIL_DAILY_CAP - MAIL_RESERVE) {
-    const room = Math.max(0, MAIL_DAILY_CAP - MAIL_RESERVE - mailQuota.used);
-    console.log(`bulk mail over today's reserve: ${mails.length - room} not sent`);
-    mails = mails.slice(0, room);
-    if (!mails.length) return 'quota';
-  }
+  if (mailQuota.day === today) return;
+  const saved = JSON.parse((await env.DB.get(METER)) ?? 'null') as typeof mailQuota | null;
+  const month = today.slice(0, 7);
+  Object.assign(mailQuota, { day: today, used: saved?.day === today ? saved.used : 0, delayed: saved?.day === today ? saved.delayed : 0, month, monthly: saved?.month === month ? saved.monthly : 0, refused: undefined });
+}
+
+/** Mail that doesn't fit today's budget waits for the reset, marked; its filings aren't timed as fast. */
+async function delay(env: Env, mails: Mail[]): Promise<void> {
+  if (!mails.length) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const q = JSON.parse((await env.DB.get(DELAYED)) ?? '[]') as (Mail & { day: string })[];
+  const add = mails.map((m) => ({ ...m, subject: m.subject.startsWith(DELAY_MARK) ? m.subject : DELAY_MARK + m.subject, day: today }));
+  await env.DB.put(DELAYED, JSON.stringify([...q, ...add].slice(-2000)));
+  const ids = new Set(JSON.parse((await env.DB.get(DELAYED_IDS)) ?? '[]') as string[]);
+  for (const m of mails) for (const id of m.ids ?? []) ids.add(id);
+  await env.DB.put(DELAYED_IDS, JSON.stringify([...ids].slice(-500)));
+  mailQuota.delayed += mails.length;
+  console.log(`email limit: ${mails.length} delayed to after the reset`);
+}
+
+export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; tier?: Tier } = {}): Promise<string> {
+  const tier: Tier = opts.tier ?? (opts.bulk ? 'alert' : 'account');
+  await loadMeter(env);
   // A sample never reaches a member's real address.
   const blocked = mails.filter((m) => SAMPLE.test(m.subject) && !previewInbox(m.to));
   if (blocked.length) console.log(`samples not sent to members: ${blocked.length}`);
   mails = mails.filter((m) => !blocked.includes(m));
   if (!mails.length) return blocked.length ? 'blocked' : 'none';
+  if (tier !== 'account') {
+    const room = Math.max(0, Math.min(MAIL_DAILY_CAP - MAIL_RESERVE - (tier === 'low' ? LOW_HOLD : 0) - mailQuota.used, MAIL_MONTHLY_CAP - MAIL_RESERVE - mailQuota.monthly));
+    if (mails.length > room) {
+      const order = [...mails.filter((m) => !m.test), ...mails.filter((m) => m.test)];
+      await delay(env, order.slice(room));
+      mails = order.slice(0, room);
+      if (!mails.length) return 'delayed';
+    }
+  }
   if (!env.RESEND_API_KEY) {
     console.log(`email skipped (no RESEND_API_KEY): ${mails.length}`);
     return 'skipped';
@@ -57,35 +98,61 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean }
       body: JSON.stringify(batch),
     });
     // Resend's error can quote an address: the log keeps its error name only.
-    const used = Number(res.headers.get('x-resend-daily-quota'));
-    if (Number.isFinite(used) && res.headers.has('x-resend-daily-quota')) mailQuota.used = used;
+    if (res.headers.has('x-resend-daily-quota')) mailQuota.used = Number(res.headers.get('x-resend-daily-quota'));
     else if (res.ok) mailQuota.used += batch.length;
     if (res.headers.has('x-resend-monthly-quota')) mailQuota.monthly = Number(res.headers.get('x-resend-monthly-quota'));
+    else if (res.ok) mailQuota.monthly += batch.length;
     if (!res.ok) {
       const name = ((await res.json().catch(() => ({}))) as { name?: string }).name ?? 'error';
       console.log(`resend ${res.status}: ${name}`);
       mailQuota.refused = `${new Date().toISOString()} ${res.status} ${name}`;
-      // Account mail Resend refused (the day's quota, a rate limit, an outage) is sent again by the minute cron.
-      if (!opts.bulk && (res.status === 429 || res.status >= 500)) {
+      // Refused by Resend: alerts wait for the reset (marked delayed); account mail and outages retry every minute.
+      if (tier !== 'account' && res.status === 429) await delay(env, mails.slice(i, i + 100));
+      else if (res.status === 429 || res.status >= 500) {
         const q = JSON.parse((await env.DB.get(RETRY)) ?? '[]') as (Mail & { first: string })[];
         await env.DB.put(RETRY, JSON.stringify([...q, ...mails.slice(i, i + 100).map((m) => ({ ...m, first: (m as { first?: string }).first ?? new Date().toISOString() }))].slice(-200)));
       }
     }
     statuses.push(String(res.status));
   }
+  await env.DB.put(METER, JSON.stringify(mailQuota));
+  await notice80(env);
   return statuses.join(',');
 }
 
-/** Every minute: account mail Resend refused goes out once it accepts again (kept 2 days). */
+/** Once a day (and once a month) at 80% of the free plan's cap: a note to hello@. */
+async function notice80(env: Env): Promise<void> {
+  const day = mailQuota.used >= MAIL_DAILY_CAP * 0.8 ? `day ${mailQuota.day}` : null;
+  const month = mailQuota.monthly >= MAIL_MONTHLY_CAP * 0.8 ? `month ${mailQuota.month}` : null;
+  for (const what of [day, month]) {
+    if (!what) continue;
+    const k = `host:mail80:${what}`;
+    if (await env.DB.get(k)) continue;
+    await env.DB.put(k, '1', { expirationTtl: 40 * 86400 });
+    const [used, cap] = what.startsWith('day') ? [mailQuota.used, MAIL_DAILY_CAP] : [mailQuota.monthly, MAIL_MONTHLY_CAP];
+    await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: `Copybook: ${Math.round((used / cap) * 100)}% of this ${what.split(' ')[0]}'s email sends used (${used} of ${cap})`, text: `Resend's free plan: ${used} of ${cap} emails sent this ${what}. Past ${cap - MAIL_RESERVE}, alerts are queued and sent after the reset, marked "(delayed: email limit)"; chat, feed and webhook alerts still go out at once. Sign-in, receipts, pause and resume always go out.` }]);
+  }
+}
+
+/** Every minute: account mail Resend refused goes out once it accepts again (kept 2 days); after the daily reset, the delayed queue. */
 export async function retryMail(env: Env): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  const today = new Date().toISOString().slice(0, 10);
+  const waiting = JSON.parse((await env.DB.get(DELAYED)) ?? '[]') as (Mail & { day: string })[];
+  const due = waiting.filter((m) => m.day < today);
+  if (due.length) {
+    await env.DB.put(DELAYED, JSON.stringify(waiting.filter((m) => m.day >= today)));
+    // What still doesn't fit goes back on the queue (sendMail does that) for the next reset.
+    out.mail_delayed = { n: due.length, status: await sendMail(env, due.map(({ day: _d, ...m }) => m), { tier: 'alert' }) };
+  }
   const raw = await env.DB.get(RETRY);
-  if (!raw) return {};
+  if (!raw) return out;
   const q = (JSON.parse(raw) as (Mail & { first: string })[]).filter((m) => Date.now() - Date.parse(m.first) < 2 * 86_400_000);
   await env.DB.delete(RETRY);
-  if (!q.length) return {};
+  if (!q.length) return out;
   // A refusal puts them back on the list (sendMail does that), so nothing is lost.
   const status = await sendMail(env, q);
-  return { mail_retry: { n: q.length, status } };
+  return { ...out, mail_retry: { n: q.length, status } };
 }
 
 export const FOOTER = '\n\nSource: SEC EDGAR filings (13F-HR, Form 4, Schedules 13D and 13G), as filed. Not investment advice.\nCopybook by Factor Dynamics.';
