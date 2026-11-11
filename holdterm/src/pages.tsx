@@ -81,8 +81,10 @@ const qOf = (period: string) => {
 // ---------- fund names and links ----------
 /** Roster fund slug for any filer slug (a successor filer links to the fund it files for). */
 const fundSlug = (slug: string) => roster.funds.find((f) => f.filer_slug === slug)?.slug ?? slug
-function useFirms(): Map<string, string> {
-  const ix = useLoad(loadIndex, [])
+/** Display names of the investors by slug, from the index. `wait` holds the download back until the page's own
+ * data has arrived, so the large index doesn't slow the page down (names fall back to the bundled roster meanwhile). */
+function useFirms(wait = false): Map<string, string> {
+  const ix = useLoad(() => (wait ? Promise.resolve(null) : loadIndex()), [wait])
   return useMemo(() => new Map((ix.data?.managers ?? []).map((m) => [m.slug, m.firm])), [ix.data])
 }
 const firmOf = (firms: Map<string, string>, slug: string, fallback: string) => firms.get(fundSlug(slug)) ?? firmName(slug, fallback)
@@ -1387,7 +1389,7 @@ export function Stock({ ticker }: { ticker: string }) {
     }
     return m
   }, [])
-  const firms = useFirms()
+  const firms = useFirms(!s.data)
   const [tab, setTab] = useState<STab>('holders')
   title(s.data ? `${issuerName(s.data.name)} (${ticker}): who owns it` : `${ticker}: who owns it`)
   if (s.error) return missing(s.error) ? <NotFound what={`no tracked fund reports ${ticker} in its latest 13F`} /> : <Failed error={s.error} what={ticker} />

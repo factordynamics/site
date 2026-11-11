@@ -397,6 +397,9 @@ export async function loadStock(t: string): Promise<StockFile> {
   return { ...d, holders: fixed }
 }
 async function mergeClasses(t: string): Promise<StockFile> {
+  // The index of every stock is fetched alongside the stock's own file rather than after it: most stock pages
+  // need it to find the company's other share classes, and it is the larger download.
+  if (!ETF_NAMES[t]) loadStockIndex().catch(() => {})
   const d = await loadOneStock(t)
   const own = new Set(d.classes.map((c) => c.ticker))
   const prefix = d.classes[0]?.cusip.slice(0, 6)
