@@ -117,6 +117,19 @@ export async function bump(env: Env, kind: FunnelKind, m: Member, once?: string,
   await env.DB.put(key, JSON.stringify(d), { expirationTtl: 400 * 86400 });
 }
 
+/**
+ * Pause against cancel (the lead, Nov 11), in funnel:{day}.pause_cancel: `pause:{email|account}:{trialing|paying}` (email:
+ * opened from a trial email's pause link in the 7 days before), `cancel:{trialing|paying}`, and `click:{day12|trial_end}`
+ * for the links opened. Marketing reads whether the line takes cancels or paying members.
+ */
+export async function countPauseCancel(env: Env, key: string, now = Date.now()): Promise<void> {
+  const k = `funnel:${etDay(now)}`;
+  const d = JSON.parse((await env.DB.get(k)) ?? '{}') as Record<string, Record<string, number>>;
+  (d.pause_cancel ??= {})[key] = (d.pause_cancel[key] ?? 0) + 1;
+  await env.DB.put(k, JSON.stringify(d), { expirationTtl: 400 * 86400 });
+}
+const stateOf = (status: string | null | undefined) => (status === 'trialing' ? 'trialing' : 'paying');
+
 /** Counts the member's lifecycle step from Stripe's subscription change. Comped and test members don't count. */
 export async function countTransition(env: Env, prev: Member | null, m: Member): Promise<void> {
   if (!billable(m)) return;
@@ -125,7 +138,11 @@ export async function countTransition(env: Env, prev: Member | null, m: Member):
   if (m.status === 'active' && was === 'trialing') await bump(env, 'trial_to_paid', m, m.subscription);
   if (m.status === 'active' && was !== 'trialing' && was !== 'active' && was !== 'past_due') await bump(env, 'paid_direct', m, m.subscription);
   const cancelled = (m.cancel_at_period_end && !(prev?.subscription === m.subscription && prev.cancel_at_period_end)) || (m.status === 'canceled' && was !== null && was !== 'canceled' && !prev?.cancel_at_period_end);
-  if (cancelled) await bump(env, 'cancellations', m, m.subscription);
+  if (cancelled) {
+    const seen = await env.DB.get(`fseen:${m.subscription}:cancellations`);
+    await bump(env, 'cancellations', m, m.subscription);
+    if (!seen) await countPauseCancel(env, `cancel:${stateOf(was ?? m.status)}`);
+  }
 }
 
 /** The funnel for the last `days` ET days: per day, and totals by source. */
@@ -141,7 +158,7 @@ export async function funnel(env: Env, now: number, days: number) {
     for (const [kind, xs] of Object.entries(d)) for (const [k, n] of Object.entries(xs)) (total[kind] ??= {})[k] = (total[kind][k] ?? 0) + n;
   }
   const sum = (kind: string) => Object.values(total[kind] ?? {}).reduce((a, n) => a + n, 0);
-  return { days, signups: sum('signups'), trials: sum('trials'), invoice_trials: sum('invoice_trials'), trial_to_paid: sum('trial_to_paid'), paid_direct: sum('paid_direct'), cancellations: sum('cancellations'), pauses: sum('pauses'), by_source: Object.fromEntries(Object.entries(total).filter(([k]) => k !== 'plan_mix' && !k.startsWith('utm:'))), by_utm: Object.fromEntries(Object.entries(total).filter(([k]) => k.startsWith('utm:')).map(([k, v]) => [k.slice(4), v])), plan_mix: total.plan_mix ?? {}, by_day };
+  return { days, signups: sum('signups'), trials: sum('trials'), invoice_trials: sum('invoice_trials'), trial_to_paid: sum('trial_to_paid'), paid_direct: sum('paid_direct'), cancellations: sum('cancellations'), pauses: sum('pauses'), by_source: Object.fromEntries(Object.entries(total).filter(([k]) => k !== 'plan_mix' && k !== 'pause_cancel' && !k.startsWith('utm:'))), by_utm: Object.fromEntries(Object.entries(total).filter(([k]) => k.startsWith('utm:')).map(([k, v]) => [k.slice(4), v])), plan_mix: total.plan_mix ?? {}, pause_cancel: total.pause_cancel ?? {}, by_day };
 }
 
 const secs = (n: number) => (n < 120 ? `${n} seconds` : `${Math.round(n / 60)} minutes`);
@@ -493,8 +510,8 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
   return {
     to: m.email,
     subject: `Your ${p.name} trial ends in ${daysLeft === 1 ? '1 day' : `${daysLeft} days`}`,
-    text: `Your ${p.name} trial ends on ${ends}.\n\nThis trial so far:\n${got.map((g) => `  ${g}`).join('\n')}\n\nIf it ends, you lose:\n${lose.map((l) => `  - ${l}`).join('\n')}\n\n${cta}: ${keep}\n${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}.\n`}${pl ? `${pl}\n` : ''}${founding ? `${founding.trim()}\n` : ''}\nTo cancel before you're charged: ${env.SITE_URL}account/ (Manage billing).\n\nUnsubscribe from tips and newsletters: ${unsub}${FOOTER}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your ${p.name} trial ends on <b>${ends}</b>.</p><p style="margin-bottom:4px"><b>This trial so far</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p style="margin-bottom:4px"><b>If it ends, you lose</b></p><ul style="margin-top:0;padding-left:20px">${lose.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding.trim())}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}. `}${pl ? `${esc(pl.slice(0, pl.lastIndexOf(' ') - 1))}: <a href="${pl.slice(pl.lastIndexOf(' ') + 1)}" style="color:#1d4ed8">pause instead</a>. ` : ''}To cancel before you're charged, use Manage billing in <a href="${env.SITE_URL}account/" style="color:#1d4ed8">your account</a>.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and newsletters</a></p></div>`,
+    text: `Your ${p.name} trial ends on ${ends}.\n\nThis trial so far:\n${got.map((g) => `  ${g}`).join('\n')}\n\nIf it ends, you lose:\n${lose.map((l) => `  - ${l}`).join('\n')}\n\n${cta}: ${keep}\n${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}.\n`}${founding ? `${founding.trim()}\n` : ''}\nTo cancel before you're charged: ${env.SITE_URL}account/ (Manage billing).\n${pl ? `${pl}\n` : ''}\nUnsubscribe from tips and newsletters: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your ${p.name} trial ends on <b>${ends}</b>.</p><p style="margin-bottom:4px"><b>This trial so far</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p style="margin-bottom:4px"><b>If it ends, you lose</b></p><ul style="margin-top:0;padding-left:20px">${lose.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding.trim())}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}. `}To cancel before you're charged, use Manage billing in <a href="${env.SITE_URL}account/" style="color:#1d4ed8">your account</a>.</p>${pl ? `<p style="font-size:13px;color:#374151;margin:6px 0 0">${esc(pl.slice(0, pl.lastIndexOf(' ')))} <a href="${pl.slice(pl.lastIndexOf(' ') + 1)}" style="color:#1d4ed8">Pause instead</a></p>` : ''}<p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and newsletters</a></p></div>`,
     unsubscribe: unsub,
   };
 }
@@ -618,6 +635,9 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
       // ?to=pause (the trial emails' pause line): /account/'s pause offer, signed in; a cardless trial adds a card on
       // monthly first. As below, only the member's click there changes anything.
       if (url.searchParams.get('to') === 'pause') {
+        const from = url.searchParams.get('from') === 'day12' ? 'day12' : 'trial_end';
+        await env.DB.put(`pauseclick:${m.customer}`, from, { expirationTtl: 7 * 86400 });
+        if (billable(m)) await countPauseCancel(env, `click:${from}`);
         const login = encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, 120));
         const cardless = m.status === 'trialing' && m.has_payment_method === false;
         return go(`${account}?${cardless ? 'add_card=monthly&' : ''}pause=1&login=${login}`);
@@ -976,7 +996,7 @@ export function pauseOffer(m: Member, now = Date.now()): { label: string; until:
  * trials only, and never when the yearly pause rule says no. Null: no line.
  */
 export function pauseLine(m: Member, keep: string, now = Date.now()): string | null {
-  const link = `${keep}${keep.includes('?') ? '&' : '?'}to=pause`;
+  const link = `${keep}${keep.includes('?') ? '&' : '?'}to=pause&from=${m.has_payment_method === false ? 'day12' : 'trial_end'}`;
   const keeps = m.founding_price ? ', keeps your founding price' : '';
   if (m.has_payment_method === false) {
     if (m.interval !== 'monthly' || m.status !== 'trialing' || !m.trial_end || m.trial_end * 1000 <= now || m.plan === 'holdterm' || m.seat_of || pauseNextAt(m, now)) return null;
@@ -984,7 +1004,9 @@ export function pauseLine(m: Member, keep: string, now = Date.now()): string | n
   }
   const o = pauseOffer(m, now);
   if (!o) return null;
-  return `Rather pause? No charge from ${day(Date.parse(`${o.starts}T12:00:00Z`) / 1000)} until ${day(Date.parse(`${o.until}T12:00:00Z`) / 1000)}${keeps}: ${link}`;
+  // The alternative to cancelling, never a third plan (the lead): after the yearly and monthly options and the cancel line.
+  const month = new Date(`${o.until}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+  return `Not using it until ${month}? Pause instead of cancelling: no charge from ${day(Date.parse(`${o.starts}T12:00:00Z`) / 1000)} until ${shortDay(o.until)}${m.founding_price ? ', and you keep your founding price' : ''}. ${link}`;
 }
 
 /** Stores the one cancellation question's answer (from /account/ or the email); counted in business.cancel_reasons. */
@@ -1015,7 +1037,10 @@ export async function pauseMember(env: Env, m: Member, reason: string | null, no
   // The pause counts from when it starts (a trial's end), resumed early or not.
   const next = { ...(await syncSubscription(env, sub)), paused_at: Math.floor(start / 1000) };
   await putMember(env, next);
-  if (billable(next)) await bump(env, 'pauses', next, `${m.subscription}:${at}`, now);
+  if (billable(next)) {
+    await bump(env, 'pauses', next, `${m.subscription}:${at}`, now);
+    await countPauseCancel(env, `pause:${(await env.DB.get(`pauseclick:${m.customer}`)) ? 'email' : 'account'}:${stateOf(m.status)}`, now);
+  }
   await sendMail(env, [pauseReceiptMail(env, next, at, await resumeUrl(env, next))]);
   return { status: 200, body: { ok: true, paused_until: isoDay(at), starts: offer.starts, deadline: offer.deadline, member: { paused_until: next.paused_until, pause_after_trial: pauseScheduled(next, now) ? { from: next.paused_from, until: next.paused_until } : null } } };
 }

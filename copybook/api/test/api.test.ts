@@ -2454,6 +2454,8 @@ describe('copybook api', () => {
       return orig(u, init);
     });
     expect((await call('/pause', { body: { reason: 'nope' }, token })).status).toBe(400);
+    // Opened from a trial email's pause line first (attributed to the email in the funnel).
+    expect((await handleRequest(new Request(`https://api.test/keep?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'keep', 'cus_pz', 3600))}&to=pause&from=trial_end`), env)).headers.get('location')).toMatch(/account\/\?pause=1&login=/);
     sent = [];
     const p = await call('/pause', { body: { reason: 'seasonal', note: 'x'.repeat(400) }, token });
     expect([p.status, (await p.json()).paused_until]).toEqual([200, until]);
@@ -2467,6 +2469,10 @@ describe('copybook api', () => {
     // The seasonal reason, with its free text kept to 300 characters.
     const why = JSON.parse((await env.DB.get('why:cus_pz'))!);
     expect([why.reason, why.via, why.note.length]).toEqual(['seasonal', 'pause', 300]);
+    // Pause against cancel on /ops/funnel (the lead): this pause came from the email link by a paying member; the
+    // trialist above cancelled.
+    const pc = (await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json()).funnel.pause_cancel;
+    expect(pc).toEqual({ 'cancel:trialing': 1, 'click:trial_end': 1, 'pause:email:paying': 1 });
     // Paused: the account and follows are kept, paid features and alerts stop until then.
     const me = (await (await call('/me', { token })).json()).member;
     expect([me.status, me.active, me.paused_until, me.pause_offer]).toEqual(['active', false, r.at, null]);
@@ -3554,14 +3560,20 @@ describe('copybook api', () => {
       // Chosen Nov 30 by a carded trial ending Dec 14: starts Dec 14, still resumes Feb 2.
       const tr = { ...(act as object), status: 'trialing', has_payment_method: true, trial_end: at(114, 20) / 1000 } as never;
       expect(pauseOffer(tr, at(30))).toMatchObject({ starts: '2026-12-14', until: '2027-02-02', label: 'Pause until Feb 2 (keeps your founding price)' });
-      expect(pauseLine(tr, 'https://w/keep?t=k', at(30))).toBe('Rather pause? No charge from December 14 until February 2, keeps your founding price: https://w/keep?t=k&to=pause');
+      // Last, as the alternative to cancelling (the lead): never a third plan beside yearly and monthly.
+      expect(pauseLine(tr, 'https://w/keep?t=k', at(30))).toBe('Not using it until February? Pause instead of cancelling: no charge from December 14 until Feb 2, and you keep your founding price. https://w/keep?t=k&to=pause&from=trial_end');
+      expect(pauseLine({ ...(tr as object), founding_price: false } as never, 'k', at(30))).toBe('Not using it until February? Pause instead of cancelling: no charge from December 14 until Feb 2. k?to=pause&from=trial_end');
       const nocard = { ...(tr as object), has_payment_method: false, subscription: 'sub_p' } as never;
-      expect(pauseLine(nocard, 'https://w/keep?t=k', at(30))).toBe('Rather pause than go? Add a card on monthly and pause from December 14 until February 2: no charge until then, keeps your founding price. https://w/keep?t=k&to=pause');
+      expect(pauseLine(nocard, 'https://w/keep?t=k', at(30))).toBe('Rather pause than go? Add a card on monthly and pause from December 14 until February 2: no charge until then, keeps your founding price. https://w/keep?t=k&to=pause&from=day12');
       // Yearly, or a pause used in the last 12 months: no line.
       expect([pauseLine({ ...(tr as object), interval: 'yearly' } as never, 'k', at(30)), pauseLine({ ...(nocard as object), paused_at: at(1) / 1000 - 30 * 86400 } as never, 'k', at(30))]).toEqual([null, null]);
       // The day-12 email carries it, text and a link in the HTML.
       const d = trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Date.UTC(2026, 10, 25, 20) / 1000, has_payment_method: false } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 0, 0, 'https://w/keep?t=k', 'u');
-      expect([d.text.includes('Add a card on monthly and pause from November 25 until February 2: no charge until then. https://w/keep?t=k&to=pause'), d.html!.includes('href="https://w/keep?t=k&to=pause"')]).toEqual([true, true]);
+      expect([d.text.includes('Add a card on monthly and pause from November 25 until February 2: no charge until then. https://w/keep?t=k&to=pause&from=day12'), d.html!.includes('href="https://w/keep?t=k&to=pause&from=day12"')]).toEqual([true, true]);
+      // The trial-ending email puts it after yearly, monthly and the cancel line.
+      const te = trialEndingMail(env, { ...(tr as object), trial_end: Math.floor(Date.now() / 1000) + 2 * 86400 } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 0, 0, 'https://w/keep?t=k', 'u');
+      const iCancel = te.text.indexOf('To cancel before'), iPause = te.text.indexOf('Not using it until');
+      expect([iCancel > te.text.indexOf('Or stay monthly'), iPause > iCancel, te.html!.indexOf('Pause instead') > te.html!.indexOf('To cancel before')]).toEqual([true, true, true]);
       // Its link: signed in on the pause offer, after the add-card choice when there's no card; opening it changes nothing.
       const pauseHref = cardless!.split('Add card: ')[1].replace(/^\S+?\/keep/, 'https://api.test/keep') + '&to=pause';
       expect(/account\/\?add_card=monthly&pause=1&login=/.test((await handleRequest(new Request(pauseHref), env)).headers.get('location') ?? '')).toBe(true);
