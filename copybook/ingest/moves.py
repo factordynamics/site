@@ -138,7 +138,7 @@ def class_holds(cls: dict, known: bool) -> str | None:
             k["side"], k["reason"] = "both", k["reason"] if k["side"] else "zero_shares"
     price = lambda v, s: v / s if s > 0 and v > 0 else None
     near = lambda a, b: a is not None and b is not None and BAND[0] <= a / b <= BAND[1]
-    ks = [k for k in cls.values() if not k["side"]]
+    ks = list(cls.values())  # every class, held or not: a line the units guard held still shows the swap
     for i, a in enumerate(ks):
         for b in ks[i + 1:]:
             pa, pb = price(a["prev_value"], a["prev_shares"]), price(b["prev_value"], b["prev_shares"])
@@ -889,7 +889,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             multi = len(cls) > 1 and not reissue
             out_sh, out_ps, unit, ratio_of, held_n, basis = sh, ps, None, None, 0, None
             if multi:
-                class_holds(cls, known)
+                swap = class_holds(cls, known)
                 for k in cls.values():
                     k["change"] = class_change(k, known)
                     if k["change"] == "unchanged":
@@ -903,8 +903,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 else:  # every class held: the row is held (a held row's classes never reach net)
                     held = next(k for k in sorted(cls.values(), key=lambda k: -k["value"]))
                     change = "unknown" if known else None
-                    side = side or ("both" if any(k["side"] == "both" for k in cls.values()) else held["side"])
-                    reason = reason or held["reason"]
+                    side = "both" if swap else side or ("both" if any(k["side"] == "both" for k in cls.values()) else held["side"])
+                    reason = swap or reason or held["reason"]
                 units = [CLASS_UNITS.get(k["cusip"]) for k in cls.values()]
                 if all(units) and len({u[0] for u in units}) == 1:
                     unit, ratio_of = units[0][0], {k["cusip"]: CLASS_UNITS[k["cusip"]][1] for k in cls.values()}

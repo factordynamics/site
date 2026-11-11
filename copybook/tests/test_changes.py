@@ -862,6 +862,11 @@ class ShareClassHoldersTest(unittest.TestCase):
                 self.assertEqual((m["change"], m["value_delta"], m["unreliable"], m["held_reason"]),
                                  ("unknown", None, "both", "class_swap"))
                 self.assertEqual(read("084670")["counts"]["net"], 0)
+                # The units guard holding one class (B at $748,850) must not leave the other counted at -$4.87B.
+                moves.LATEST["0002056447"] = [books["0002056447"][0],
+                                              books["0002056447"][1] | {"unreliable": "shares", "suspect_units": True}]
+                moves.write_holders(shards, {}, {}, {})
+                self.assertEqual((row("084670", "0002056447")["held_reason"], read("084670")["counts"]["net"]), ("class_swap", 0))
                 t = row("594918", "0000929638")
                 self.assertEqual((t["change"], t["classes_held"]), ("added", 1))
                 self.assertAlmostEqual(t["value_delta"], 200 * 517.0, delta=1)
