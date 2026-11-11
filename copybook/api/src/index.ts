@@ -701,6 +701,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, ...r }, 200, h);
   }
 
+  // Operator: bulk files listed against what their download links serve, re-mirroring any that differ.
+  if (req.method === 'POST' && path === '/ops/bulk-check') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    return json(await (await import('./download')).checkBulk(env, 1_000_000, Date.now()), 200, h);
+  }
+
   // Operator: reconciliation as a dry run over the season, as sent and (recompute) as the current code would send it.
   if (req.method === 'POST' && path === '/ops/reconcile-dry') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
@@ -818,13 +824,17 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const why = await ingestAuth(env, req, new Set(kinds.filter((k): k is IngestKind => !!k)));
     if (why) return json({ ok: false, error: why }, 401, {});
     const head = buildMeta(req, null);
+    const { sha256Hex, mirrorSoon } = await import('./download');
     // A few at a time: R2 writes are I/O, not CPU.
     for (let i = 0; i < good.length; i += 25) {
-      await Promise.all(good.slice(i, i + 25).map((o) => {
-        const meta = { ...buildMeta(null, o.meta ?? null), ...head };
+      await Promise.all(good.slice(i, i + 25).map(async (o) => {
+        // Bulk exports carry their sha256, so the listing and the bucket's mirrored copy can be checked against it.
+        const meta = { ...buildMeta(null, o.meta ?? null), ...head, ...(o.key.startsWith('bulk/') ? { sha256: await sha256Hex(o.bytes) } : {}) };
         return env.HIST.put(o.key, o.bytes, { httpMetadata: { contentType: contentTypeOf(o.key) }, ...(Object.keys(meta).length ? { customMetadata: meta } : {}) });
       }));
     }
+    // The download links sign the account's bucket: on gene that's another store, so each new export is copied there.
+    for (const o of good) if (o.key.startsWith('bulk/')) mirrorSoon(env, o.key);
     return json({ ok: true, written: good.length, refused, ...(refused.length ? { error: INGEST_KEYS_ERROR } : {}) }, 200, {});
   }
 
@@ -838,6 +848,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const why = await ingestAuth(env, req, new Set([kind]));
     if (why) return json({ ok: false, error: why }, 401, {});
     const meta = buildMeta(req, null);
+    if (key.startsWith('bulk/')) {
+      const { sha256Hex, mirrorSoon } = await import('./download');
+      const bytes = new Uint8Array(await req.arrayBuffer());
+      await env.HIST.put(key, bytes, { httpMetadata: { contentType: contentTypeOf(key) }, customMetadata: { ...meta, sha256: await sha256Hex(bytes) } });
+      mirrorSoon(env, key);
+      return json({ ok: true, key }, 200, {});
+    }
     await env.HIST.put(key, req.body, { httpMetadata: { contentType: contentTypeOf(key) }, ...(Object.keys(meta).length ? { customMetadata: meta } : {}) });
     return json({ ok: true, key }, 200, {});
   }

@@ -818,20 +818,24 @@ ROUTES.push(
     return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { 'server-timing': timing.join(', ') });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, req, url }) => {
-    // Persistent per-quarter exports of every filer's book, uploaded by the data run.
-    // Only files that pass a size check: a full quarter of every filer is tens of MB gzipped; a stub (a failed run) is hidden until regenerated.
-    const list = await env.HIST.list({ prefix: 'bulk/' });
-    const data = list.objects.filter((o) => o.size >= MIN_BULK_BYTES).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.size, uploaded_at: noMs(o.uploaded.toISOString()), url: `${linkBase(env, req, url)}/v1/${o.key}` }));
+    // Persistent per-quarter exports of every filer's book, uploaded by the data run. Every field comes from the stored
+    // object itself (size, ETag, the sha256 stamped at upload); a download link serves exactly these bytes or the file
+    // streams from here. Only files that pass a size check: a stub (a failed run) is hidden until regenerated.
+    const { bulkFiles } = await import('./download');
+    const data = (await bulkFiles(env, MIN_BULK_BYTES)).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.bytes, etag: o.etag, sha256: o.sha256, uploaded_at: noMs(o.uploaded.toISOString()), url: `${linkBase(env, req, url)}/v1/${o.key}` }));
     return v1json({ data: data.sort((a: { file: string }, b: { file: string }) => b.file.localeCompare(a.file)) });
   }],
   ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env }, [file]) => {
-    // A stored file answers 302 to a 5-minute presigned URL on the account's R2 endpoint (a stable, fast host to allowlist);
-    // streamed from here only when signing isn't configured.
-    const head = (await env.HIST.list({ prefix: `bulk/${file}` })).objects.find((o) => o.key === `bulk/${file}`);
-    if (head && head.size >= MIN_BULK_BYTES) {
-      const { presignGet } = await import('./failover');
-      const loc = await presignGet(env, `bulk/${file}`, 300, { 'response-content-disposition': `attachment; filename="copybook-13f-${file}"` }).catch(() => null);
-      if (loc) return new Response(null, { status: 302, headers: { location: loc, 'cache-control': 'no-store' } });
+    // A 302 to a 5-minute presigned URL on the account's R2 endpoint (a stable, fast host to allowlist), only when the
+    // bucket's copy is the listed file (same size and sha256). Otherwise it streams from here and the mirror is redone.
+    const { bulkFiles, servedHead, sameFile, mirrorSoon } = await import('./download');
+    const f = (await bulkFiles(env, MIN_BULK_BYTES)).find((o) => o.key === `bulk/${file}`);
+    if (f && env.CF_API_TOKEN && env.CF_ACCOUNT_ID) {
+      if (sameFile(f, await servedHead(env, f.key))) {
+        const { presignGet } = await import('./failover');
+        const loc = await presignGet(env, f.key, 300, { 'response-content-disposition': `attachment; filename="copybook-13f-${file}"` }).catch(() => null);
+        if (loc) return new Response(null, { status: 302, headers: { location: loc, 'cache-control': 'no-store', ...(f.etag ? { etag: `"${f.etag}"` } : {}) } });
+      } else mirrorSoon(env, f.key);
     }
     const obj = await env.HIST.get(`bulk/${file}`);
     if (!obj || (obj.size ?? 0) < MIN_BULK_BYTES) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet${obj ? ' (the uploaded file failed its size check and waits to be regenerated)' : ''}. Parquet is coming; csv.gz is live for the quarters GET /v1/bulk lists.`);

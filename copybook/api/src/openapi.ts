@@ -422,7 +422,7 @@ export function openapi() {
           responses: {
             '200': {
               description: 'Available files, newest first',
-              content: json(envelope({ type: 'array', items: { type: 'object', required: ['file', 'quarter', 'bytes', 'uploaded_at', 'url'], properties: { file: { type: 'string' }, quarter: { type: 'string' }, bytes: { type: 'integer' }, uploaded_at: { type: 'string', format: 'date-time' }, url: { type: 'string' } } } }), { ...BUILD, data: [{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 48211933, uploaded_at: '2026-11-09T02:10:00Z', url: 'https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz' }] }),
+              content: json(envelope({ type: 'array', items: { type: 'object', required: ['file', 'quarter', 'bytes', 'etag', 'sha256', 'uploaded_at', 'url'], properties: { file: { type: 'string' }, quarter: { type: 'string' }, bytes: { type: 'integer' }, etag: { type: ['string', 'null'] }, sha256: { type: ['string', 'null'], description: 'Hex SHA-256 of the file a download serves; null until recorded' }, uploaded_at: { type: 'string', format: 'date-time' }, url: { type: 'string' } } } }), { ...BUILD, data: [{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 48211933, etag: '3f6d0c2a9b7e41d58c1f0e2a7b9d4c61', sha256: 'c1b4f0e2d9a87365e4f1a0b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f6', uploaded_at: '2026-11-09T02:10:00Z', url: 'https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz' }] }),
             },
             ...errResponses,
           },

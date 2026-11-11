@@ -245,10 +245,10 @@ async function geneSync(env: Env, now: number): Promise<{ published: number; app
 let tokenId: string | null = null;
 const enc = new TextEncoder();
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
-const sha256 = async (s: string) => hex(await crypto.subtle.digest('SHA-256', enc.encode(s)));
+const sha256 = async (s: string | Uint8Array) => hex(await crypto.subtle.digest('SHA-256', typeof s === 'string' ? enc.encode(s) : (s as Uint8Array<ArrayBuffer>)));
 const hmac = async (k: string | ArrayBuffer, s: string) => crypto.subtle.sign('HMAC', await crypto.subtle.importKey('raw', typeof k === 'string' ? enc.encode(k) : k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']), enc.encode(s));
 
-async function s3(env: Env, method: 'PUT' | 'GET', key: string, body = '', extra: Record<string, string> = {}): Promise<Response> {
+async function s3(env: Env, method: 'PUT' | 'GET', key: string, body: string | Uint8Array = '', extra: Record<string, string> = {}): Promise<Response> {
   if (!tokenId) {
     const r = await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', { headers: { authorization: `Bearer ${env.CF_API_TOKEN}` }, signal: AbortSignal.timeout(10_000) });
     tokenId = ((await r.json()) as { result?: { id?: string } }).result?.id ?? null;
@@ -267,12 +267,15 @@ async function s3(env: Env, method: 'PUT' | 'GET', key: string, body = '', extra
   for (const part of ['auto', 's3', 'aws4_request']) k = await hmac(k, part);
   const sig = hex(await hmac(k, ['AWS4-HMAC-SHA256', amz, scope, await sha256(canonical)].join('\n')));
   const { host: _, ...send } = headers;
-  return fetch(`https://${hostname}${path}`, { method, body: method === 'PUT' ? body : undefined, headers: { ...send, authorization: `AWS4-HMAC-SHA256 Credential=${tokenId}/${scope}, SignedHeaders=${names.join(';')}, Signature=${sig}` }, signal: AbortSignal.timeout(body.length > 1e6 ? 60_000 : 10_000) });
+  return fetch(`https://${hostname}${path}`, { method, body: method === 'PUT' ? (body as BodyInit) : undefined, headers: { ...send, authorization: `AWS4-HMAC-SHA256 Credential=${tokenId}/${scope}, SignedHeaders=${names.join(';')}, Signature=${sig}` }, signal: AbortSignal.timeout(body.length > 1e7 ? 900_000 : body.length > 1e6 ? 60_000 : 10_000) });
 }
 
 /** One object PUT on the account's R2 endpoint (the service's own token): what toR2 hands out presigned. */
-export const putObject = (env: Env, key: string, body: string, headers: Record<string, string> = {}) =>
+export const putObject = (env: Env, key: string, body: string | Uint8Array, headers: Record<string, string> = {}) =>
   env.CF_API_TOKEN && env.CF_ACCOUNT_ID ? s3(env, 'PUT', key, body, headers) : Promise.resolve(null);
+/** The first byte of one object on the account's R2 endpoint: its headers carry the size (content-range), ETag and metadata. */
+export const headObject = (env: Env, key: string) =>
+  env.CF_API_TOKEN && env.CF_ACCOUNT_ID ? s3(env, 'GET', key, '', { range: 'bytes=0-0' }) : Promise.resolve(null);
 
 /**
  * A presigned GET for one copybook-history object on the account's R2 endpoint, valid `ttl` seconds (R2 answers

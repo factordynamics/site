@@ -16,12 +16,13 @@ export interface R2Object {
   /** When the object was written, and the build that wrote it (ingest's x-copybook-build-id / x-copybook-built-at). */
   uploaded?: Date;
   customMetadata?: Record<string, string>;
+  etag?: string;
 }
 
 export interface R2 {
   get(key: string): Promise<R2Object | null>;
   put(key: string, value: ReadableStream | ArrayBuffer | ArrayBufferView | string | null, opts?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }): Promise<unknown>;
-  list(opts: { prefix: string; cursor?: string; include?: 'customMetadata'[] }): Promise<{ objects: { key: string; size: number; uploaded: Date; customMetadata?: Record<string, string> }[]; truncated?: boolean; cursor?: string }>;
+  list(opts: { prefix: string; cursor?: string; include?: 'customMetadata'[] }): Promise<{ objects: { key: string; size: number; uploaded: Date; etag?: string; customMetadata?: Record<string, string> }[]; truncated?: boolean; cursor?: string }>;
 }
 
 export interface Env {

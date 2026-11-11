@@ -162,6 +162,8 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
     index_contract: JSON.parse((await env.DB.get('index:contract')) ?? 'null'),
     // Ingest's filer-type publish guard (types_guard.json): checked_at, status (published, accepted, held, kept), reason, moved.
     types_guard: JSON.parse((await env.DB.get('types:guard')) ?? 'null'),
+    // Bulk downloads: each listed file against what its link serves (size, sha256, ETag), hourly.
+    bulk_check: JSON.parse((await env.DB.get('bulk:check')) ?? 'null'),
     probe: {
       target: 'members API /health, from Cloudflare cron',
       interval_seconds: 60,

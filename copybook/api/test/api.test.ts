@@ -3467,8 +3467,10 @@ describe('copybook api', () => {
     const gzBytes = new Uint8Array(1_200_000);
     gzBytes.set([31, 139, 8, 0]);
     hist.m.set('bulk/2026Q2.csv.gz', gzBytes);
+    const gzSha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', gzBytes))].map((x) => x.toString(16).padStart(2, '0')).join('');
+    hist.meta.set('bulk/2026Q2.csv.gz', { sha256: gzSha }); // stamped at upload
     hist.m.set('bulk/2025Q1.csv.gz', new Uint8Array(1440)); // a stub from a failed run: hidden, and 501 like a missing file
-    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 1_200_000, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://api.test/v1/bulk/2026Q2.csv.gz' }]);
+    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 1_200_000, etag: null, sha256: gzSha, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://api.test/v1/bulk/2026Q2.csv.gz' }]);
     const bulkVia = await (await handleRequest(new Request('https://api.test/v1/bulk', { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env)).json();
     expect(bulkVia.data[0].url).toBe('https://gene.tail70ba3.ts.net/copybook/v1/bulk/2026Q2.csv.gz');
     expect((await v1('/v1/bulk/2025Q1.csv.gz')).status).toBe(501);
@@ -3486,8 +3488,26 @@ describe('copybook api', () => {
     // With the service's R2 signing configured, a bulk file answers 302 on every host to a 5-minute presigned URL on
     // the account's R2 endpoint (R2 itself answers 403 once it expires); a stub stays 501.
     Object.assign(envF, { CF_API_TOKEN: 'cf-token', CF_ACCOUNT_ID: 'acct' });
-    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).endsWith('/user/tokens/verify') ? Response.json({ result: { id: 'tokid' } }) : orig(u, init)));
+    // The bucket the links sign holds an older copy (the Nov 9 stale bulk files): the download streams the listed file
+    // from here, never the stale one, and the listed file is mirrored to the bucket with its sha256.
+    const bucketUrl = 'https://acct.r2.cloudflarestorage.com/copybook-history/bulk/2026Q2.csv.gz';
+    let served = { size: 900_000, sha: 'stale' };
+    const bulkPuts: string[] = [];
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u).endsWith('/user/tokens/verify')) return Response.json({ result: { id: 'tokid' } });
+      if (String(u) === bucketUrl && init?.method === 'PUT') {
+        const h = init.headers as Record<string, string>;
+        bulkPuts.push(`${h['x-amz-meta-sha256']} ${(init.body as Uint8Array).length}`);
+        served = { size: (init.body as Uint8Array).length, sha: h['x-amz-meta-sha256'] };
+        return new Response(null, { status: 200 });
+      }
+      if (String(u) === bucketUrl) return new Response('x', { status: 206, headers: { 'content-range': `bytes 0-0/${served.size}`, etag: '"e1"', 'x-amz-meta-sha256': served.sha } });
+      return orig(u, init);
+    });
     const plain = (path: string) => handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), envF);
+    const stale = await plain('/v1/bulk/2026Q2.csv.gz');
+    expect([stale.status, (await stale.arrayBuffer()).byteLength]).toEqual([200, 1_200_000]);
+    await vi.waitFor(() => expect(bulkPuts).toEqual([`${gzSha} 1200000`]));
     for (const r of [await plain('/v1/bulk/2026Q2.csv.gz'), await viaF('/v1/bulk/2026Q2.csv.gz')]) {
       const u = new URL(r.headers.get('location')!);
       expect([r.status, `${u.origin}${u.pathname}`, u.searchParams.get('X-Amz-Expires'), u.searchParams.get('X-Amz-SignedHeaders'), !!u.searchParams.get('X-Amz-Signature'), u.searchParams.get('response-content-disposition')])

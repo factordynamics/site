@@ -1859,6 +1859,7 @@ async function typesGuard(env: Env): Promise<void> {
 
 export async function runBackstop(env: Env, now: number): Promise<Record<string, unknown>> {
   await typesGuard(env).catch((e) => console.error(`types_guard: ${e}`));
+  await import('./download').then((d) => d.checkBulk(env, 1_000_000, now)).catch((e) => console.error(`bulk_check: ${e}`));
   // index.json (900 KB) only changes with a data build: when it hasn't, skip parsing it and go
   // straight to the follow-ups. Its derived KV (CIK map, /v1 filers, periods) is unchanged too.
   // Without /status/'s freshness record yet, read the index once even if unchanged, so it's filled.
