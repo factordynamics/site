@@ -579,8 +579,13 @@ const verb = (r: MoveRow) => (!r.prev_shares ? 'new' : !r.shares ? 'exited' : r.
 
 /** Rows the publish gate held back, named without figures. */
 function heldLine(a: Alert13F): string {
-  const names = (a.held ?? []).map((h) => `${h.ticker || h.display_name || h.issuer}${h.put_call ? ` ${h.put_call.toLowerCase()}s` : ''}${h.change ? ` (${h.change})` : ''}`);
-  return `${names.map((n) => `${n}: move pending check`).join('; ')}. Figures failed a price check and are left out of this email and its totals; they follow once the full build of the filing confirms them, or within 24 hours marked if the filer's own figures look wrong.`;
+  const name = (h: NonNullable<Alert13F['held']>[number]) => `${h.ticker || h.display_name || h.issuer}${h.put_call ? ` ${h.put_call.toLowerCase()}s` : ''}`;
+  const out = (a.held ?? []).filter((h) => h.reason === 'unreliable_shares');
+  const wait = (a.held ?? []).filter((h) => h.reason !== 'unreliable_shares');
+  return [
+    wait.length ? `${wait.map((h) => `${name(h)}${h.change ? ` (${h.change})` : ''}: move pending check`).join('; ')}. Figures failed a price check and are left out of this email and its totals; they follow once the full build of the filing confirms them, or within 24 hours marked if the filer's own figures look wrong.` : '',
+    out.length ? `${out.map((h) => `${name(h)}: share count unreliable in this filing, not counted`).join('; ')}.` : '',
+  ].filter(Boolean).join(' ');
 }
 
 /** What the alert said, or what the build has, for one row of a correction. */
@@ -758,7 +763,9 @@ function filingHeadline(a: Alert13F, firm = false): string {
     return a.reveal.confidential ? `${who} revealed ${what}, previously confidential` : `${who} added ${what} to its ${q} 13F`;
   }
   // Held rows have no figures to rank, so any of them may be the largest move: the subject says they're coming.
-  const held = a.held?.length ? ` +${a.held.length} pending check` : '';
+  // Only rows still to come; a line not counted (unreliable share count) is no move to wait for.
+  const pend = (a.held ?? []).filter((h) => h.reason !== 'unreliable_shares').length;
+  const held = pend ? ` +${pend} pending check` : '';
   if (a.moves) return `${who} ${q}${a.followup ? ' changes' : ''}: ${headlineMoves(a.moves) || (held ? 'moves' : 'no position changes')}${held}`;
   return `${who} filed its ${q} 13F`;
 }

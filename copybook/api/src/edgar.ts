@@ -522,8 +522,18 @@ export interface HeldRow {
   display_name: string | null;
   put_call: string | null;
   change?: string;
-  reason: 'units' | 'price_vs_filers' | 'split_basis' | 'own_prior';
+  reason: 'units' | 'price_vs_filers' | 'split_basis' | 'own_prior' | 'unreliable_shares';
 }
+
+/**
+ * A line ingest marked as a unit error (suspect_units), mis-priced against every other filer (price_outlier), or a
+ * pre-split count kept under the new CUSIP (reissue_ratio_not_applied): its share count can't size a trade. Guardcap's
+ * Q2 BKNG (646,216 sh at about $188 a share) against its Q3 1,304 sh read as a $3.30B sale.
+ */
+export const unreliableShares = (x: unknown): boolean => {
+  const r = (x ?? {}) as { suspect_units?: unknown; price_outlier?: unknown; suspect_reason?: unknown; value_basis?: unknown };
+  return r.suspect_units === true || r.price_outlier === true || r.suspect_reason === 'reissue_ratio_not_applied' || r.value_basis === 'filed_price_outlier';
+};
 
 /** A position's key across EDGAR tables and ingest's books: CUSIP and put/call, case-blind. */
 export const posKey = (p: { cusip: string; put_call?: string | null }) => `${p.cusip.toUpperCase()}|${(p.put_call ?? '').toUpperCase()}`;
@@ -552,9 +562,12 @@ export function offFilers(r: MoveRow, c?: Consensus): boolean {
  * - split_basis: a split is on file (splits.json) and the row's prior shares aren't in today's units.
  * - own_prior: a split not on file yet. The filer's own value per share moved by about an integer k >= 2 and its
  *   share count by at least k/1.5 the other way (Jensen's APH: $176.32 to $84.30 a share, 614,660 to 1,047,486 sh).
- * Options are not checked (their value is the underlying's).
+ * - unreliable_shares: ingest flagged this line or the prior one (unreliableShares); never released.
+ * Options are otherwise not checked (their value is the underlying's).
  */
 export function gateRow(r: MoveRow, prior: { shares: number; value: number } | undefined, k: number, c: Consensus = {}): HeldRow['reason'] | null {
+  // Either line flagged by ingest: never a trade, options included (never released; named "not counted").
+  if (unreliableShares(r) || unreliableShares(prior)) return 'unreliable_shares';
   if (r.put_call) return null;
   const off = (x: number, m: number, lim: number) => x / m > lim || m / x > lim;
   const ps = r.shares > 0 && r.value > 0 ? r.value / r.shares : null;

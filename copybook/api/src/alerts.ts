@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { unreliableShares, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -1557,13 +1557,19 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
     if (!raw) continue;
     for (const x of (JSON.parse(raw) as DigestDay).filings) {
       if (!x.moves) continue;
-      const ch = movesRows(x.moves);
+      // A stored row on a line ingest has since flagged (unreliableShares) leaves the feed's moves and totals.
+      const all = movesRows(x.moves);
+      const ch = all.filter((r) => !unreliableShares(r));
       const splits = x.corrected?.rows.length ? await splitsFor(env, x.quarter) : null;
       const adj = splits ? ch.flatMap((r) => splitRestate(r, splits, x.corrected!.rows)) : ch;
       const net = netRenamed({ moves: x.moves, changed: adj });
-      if (net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i])) continue;
+      if (ch.length === all.length && net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i])) continue;
       const moves = net.changed === adj ? movesOf(adj) : net.moves;
-      fixed.set(filingId(x), { ...x, moves: { ...moves, bought_usd: x.moves.bought_usd, sold_usd: x.moves.sold_usd } });
+      // Totals cover every row (the stored lists keep the largest few): a dropped row's figure comes out of them.
+      const gone = all.filter((r) => unreliableShares(r));
+      const bought = x.moves.bought_usd - gone.reduce((s, r) => s + Math.max(r.value_delta, 0), 0);
+      const sold = x.moves.sold_usd + gone.reduce((s, r) => s + Math.min(r.value_delta, 0), 0);
+      fixed.set(filingId(x), { ...x, moves: { ...moves, bought_usd: bought, sold_usd: sold } });
     }
   }
   return { feeds: await rewriteFeeds(env, fixed, now), alerts: [...fixed.keys()] };
@@ -1605,7 +1611,13 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
       }
       const prior = r.prev_shares ? { shares: r.prev_shares_as_filed ?? r.prev_shares, value: r.prev_value ?? 0 } : undefined;
       const row: MoveRow = { ...r, split: undefined, ticker: r.ticker ?? h.ticker, delta_pct_of_book: r.delta_pct_of_book ?? null };
-      const why = r.suspect_units ? 'units' : gateRow(row, prior, ratioOf(r), cons.get(r.cusip));
+      // A line the build flags (suspect_units, price_outlier, a reissue ratio not applied) is never released, marked or
+      // not: its share count can't size a trade (the lead, Nov 11: Guardcap's BKNG -$3.30B).
+      if (h.reason === 'unreliable_shares' || unreliableShares(r)) {
+        end(a, h, 'not_counted');
+        continue;
+      }
+      const why = gateRow(row, prior, ratioOf(r), cons.get(r.cusip));
       const day = now - Date.parse(a.accepted ?? a.filing_date) >= DAY;
       if (!why) {
         ok.push(row);
@@ -1651,7 +1663,7 @@ interface HeldEnd {
   rule: HeldRow['reason'];
   held_at: string;
   released_at: string | null;
-  outcome: 'passed' | 'released_after_1d' | 'shown_as_filed' | 'dropped' | 'expired' | null;
+  outcome: 'passed' | 'released_after_1d' | 'shown_as_filed' | 'dropped' | 'not_counted' | 'expired' | null;
 }
 
 /** One reconciliation check, newest first in KV alerts:reconciled (latency.json's `reconciliation`). */

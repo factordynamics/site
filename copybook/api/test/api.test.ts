@@ -2379,6 +2379,20 @@ describe('copybook api', () => {
     const noSplit = computeMoves(jq3, jq2, undefined, new Map());
     expect(gateMoves(noSplit, jq2, new Map(), new Map()).held.map((h) => [h.ticker, h.reason])).toEqual([['APH', 'own_prior']]);
     expect(gateMoves(noSplit, jq2, new Map(), new Map([['032095101', { cur: 84.3, prev: 176.32 }]])).held.map((h) => [h.ticker, h.reason])).toEqual([['APH', 'own_prior']]);
+    // Guardcap's BKNG (0001732008-26-000006): Q2 filed as 646,216 sh for $121.6M (about $188 a share, a unit error ingest
+    // flags suspect_units), Q3 1,304 sh for $6.7M. Unflagged, nothing here catches it (27x is under the 100x unit rule,
+    // and no filers' prices are on hand) and it reads as a sale. Flagged, on either line or as price_outlier, it is
+    // held as not counted: out of the moves and totals, named "share count unreliable in this filing, not counted".
+    const gbk2 = [pos('BKNG', '09857L108', 646_216, 121_600_000), pos('REST', '000000009', 1, 1e9)];
+    const gbk3 = [pos('BKNG', '09857L108', 1_304, 6_700_000), pos('REST', '000000009', 1, 1e9)];
+    const bk = computeMoves(gbk3, gbk2, undefined, new Map());
+    expect(gateMoves(bk, gbk2, new Map(), new Map()).changed.map((r) => [r.ticker, r.change])).toEqual([['BKNG', 'trimmed']]);
+    for (const flagged of [[{ ...gbk2[0], suspect_units: true }, gbk2[1]], [{ ...gbk2[0], price_outlier: true }, gbk2[1]]]) {
+      const g = gateMoves(computeMoves(gbk3, flagged as never, undefined, new Map()), flagged as never, new Map(), new Map());
+      expect([g.changed, g.moves.bought_usd, g.moves.sold_usd, g.held.map((h) => [h.ticker, h.reason])]).toEqual([[], 0, 0, [['BKNG', 'unreliable_shares']]]);
+    }
+    const gmail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'guardcap', slugs: ['guardcap'], manager: 'GuardCap Asset Management', name: 'GuardCap Asset Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0001732008-26-000006', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] }, held: [{ cusip: '09857L108', ticker: 'BKNG', issuer: 'BKNG', display_name: null, put_call: null, change: 'trimmed', reason: 'unreliable_shares' }], tickers: ['BKNG'] }], [], { investors: ['guardcap'], stocks: [], owned: [] } as never);
+    expect([gmail.text.includes('BKNG: share count unreliable in this filing, not counted.'), /pending check|3\.3B|3,3/.test(`${gmail.subject} ${gmail.text}`)]).toEqual([true, false]);
     // A real 2x price move with the shares unchanged is not held, nor a 20% buy at a price filers agree on.
     const up = [pos('APH', '032095101', 614_660, 216_753_702), jq2[1]];
     expect(gateMoves(computeMoves(up, jq2, undefined, new Map()), jq2, new Map(), new Map()).held).toEqual([]);
@@ -2458,20 +2472,19 @@ describe('copybook api', () => {
     expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: ACA, passed: 0, held: 1 }] });
     expect(await checkHeld(env, now + 24 * 3600_000)).toMatchObject({ checked: [{ accession: ACA, passed: 1, held: 0 }] });
     expect(await env.DB.get('alerts:pending-check')).toBeNull();
-    // A row held because the filer's own value looks wrong (Mizuho Securities' GOOG at $150 against filers' $341) is
-    // never dropped: a day on it goes out as filed, marked, and the held list says so.
+    // A row held because the filer's own value looks wrong (Mizuho Securities' GOOG at $150 against filers' $341), on a
+    // line the build flags suspect_units: never counted (the lead, Nov 11), a day on as well. It leaves the queue with
+    // nothing sent, and the held list says so.
     const MZ = '0001062993-26-005832';
     hist.m.set('h/mizuho/2026Q3.json', new TextEncoder().encode(JSON.stringify({ accession: MZ, quarter: '2026Q3', holdings: [{ ...row('GOOG', '02079K107', 'added', 1_734_262, 829_083, 260_365_000, 165_000_000), prev_value: 294_800_000, suspect_units: true }] })));
     await putFollows('cus_j', { investors: ['jensen', 'mizuho'] });
     const goog = { ...base, slug: 'mizuho', slugs: ['mizuho'], manager: 'Mizuho', name: 'Mizuho Securities USA', accession: MZ, moves: { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] }, held: [{ cusip: '02079K107', ticker: 'GOOG', issuer: 'GOOG', display_name: null, put_call: null, change: 'added', reason: 'price_vs_filers' }] };
     await env.DB.put('alerts:pending-check', JSON.stringify([goog]));
     sent = [];
-    expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: MZ, passed: 0, held: 1 }] });
-    expect(sent).toHaveLength(0);
-    expect(await checkHeld(env, now + 24 * 3600_000)).toMatchObject({ checked: [{ accession: MZ, passed: 1, held: 0 }] });
-    expect(sent[0]?.text).toContain("Added: GOOG +$165.0M (+109% shares, 5.2% of book) · Filer's reported value looks wrong; shown as filed");
+    expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: MZ, passed: 0, held: 0 }] });
+    expect([sent, await env.DB.get('alerts:pending-check')]).toEqual([[], null]);
     expect((await reconciliation(env)).held).toEqual([
-      { accession: MZ, ticker: 'GOOG', cusip: '02079K107', rule: 'price_vs_filers', held_at: accepted, released_at: new Date(now + 24 * 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z'), outcome: 'shown_as_filed' },
+      { accession: MZ, ticker: 'GOOG', cusip: '02079K107', rule: 'price_vs_filers', held_at: accepted, released_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), outcome: 'not_counted' },
       expect.objectContaining({ accession: ACA, ticker: 'CMPX', rule: 'own_prior', outcome: 'released_after_1d' }),
       expect.objectContaining({ accession: ACC, ticker: 'APH', outcome: 'passed' }),
     ]);
