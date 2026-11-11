@@ -1032,6 +1032,7 @@ interface IndexRow {
   quarter?: string;
   sec_url?: string;
   reported_by?: { cik: string } | string;
+  accepted_at?: string;
 }
 
 /**
@@ -1170,7 +1171,12 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   const was = JSON.parse((await env.DB.get('v1:build')) ?? '{}') as { data_built_at?: string | null };
   const older = !!was.data_built_at && !!idx.generated_at && idx.generated_at < was.data_built_at;
   if (older) return { status: 'older index ignored', index_built_at: idx.generated_at, serving: was.data_built_at };
-  if (JSON.stringify(was) !== build) await env.DB.put('v1:build', build);
+  if (JSON.stringify(was) !== build) {
+    await env.DB.put('v1:build', build);
+    // /status/ freshness: the build, and the newest 13F in it (by EDGAR acceptance).
+    const last = rows.filter((r) => r.accepted_at && r.accession && /^13F/.test(r.form ?? '13F')).sort((a, b) => b.accepted_at!.localeCompare(a.accepted_at!))[0];
+    await env.DB.put('status:fresh', JSON.stringify({ ...JSON.parse(build), last_13f: last ? { slug: last.slug, manager: last.manager, accession: last.accession, accepted_at: last.accepted_at!.replace(/\.\d{3}Z$/, 'Z') } : null }));
+  }
 
   const ciks: CikMap = {};
   const byCik = (cik: string, m: IndexRow) => (ciks[cik.padStart(10, '0')] ??= []).push({ slug: m.slug, manager: m.manager, name: m.name, cik: m.cik.padStart(10, '0'), featured: m.featured, type: m.type ?? null });
@@ -1680,6 +1686,10 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
       out[name] = `error: ${err}`;
     }
   };
+  // /status/'s 1-minute probe of the members' API: Cloudflare's cron only, started now so it never delays the polls.
+  const fo = await import('./failover');
+  const st = fo.isCloudflare(env) ? await import('./status') : null;
+  const probe = st?.probeOnce(env, scheduledTime);
   // Alerts first: the 13F and Form 4 / 13D/G polls always run, at the start of the invocation.
   secBudget.left = Number(env.SEC_BUDGET ?? 40);
   await step('poll', () => runPoll(env, scheduledTime));
@@ -1735,6 +1745,7 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   if (queue.length) out.deferred_jobs = queue.map((j) => j.name);
   // The public latency.json, on every quiet minute (a busy one has spent its CPU on alerts; the next one catches up).
   if (!busy) await step('latency_json', () => import('./index').then((x) => x.publishLatency(env, scheduledTime)));
+  if (st && probe) await step('status', () => st.runStatus(env, scheduledTime, probe, !busy));
   const next = JSON.stringify(queue);
   if (next !== (rawQueue ?? '[]')) await env.DB.put('jobs:due', next);
   // Chat and webhook retries get a slot every minute, so a deadline afternoon of back-to-back filings

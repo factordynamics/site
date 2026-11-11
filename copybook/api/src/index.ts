@@ -347,6 +347,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'POST' && req.headers.get('origin') && !origin) return json({ ok: false, error: 'origin not allowed' }, 403, {});
 
   if (req.method === 'GET' && path === '/health') {
+    // /status/'s minute probe: up, since when, and which build (so a restart reads as a deploy or not).
+    if (url.searchParams.get('probe') === '1') {
+      const { pollerStatus } = await import('./failover');
+      const p = await pollerStatus(env, Date.now());
+      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null }, 200, { 'cache-control': 'no-store' });
+    }
     // Seconds from EDGAR acceptance to handing the alert to the mailer, for the latest alerted filings.
     // Live alerts only (test replays excluded); ?latency=all returns every stored one instead of the latest 10.
     const all = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as { seconds: number; replay?: boolean }[];

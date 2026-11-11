@@ -1,0 +1,170 @@
+import type { Env } from './env';
+
+/**
+ * The public /status/ data (PUBLIC_URL/status.json, written by the cron like latency.json, so pages read it without a
+ * Worker request): the 13F alert path's health, a 1-minute probe of the members' API from Cloudflare's cron with 24 h
+ * and 7 d uptime and daily bars, data freshness, and a restart log.
+ */
+
+/** The probe's state, in R2 only (Cloudflare's side; gene never needs it, so it isn't synced). */
+const PROBE = 'status/probe.json';
+const PROBE_MS = 10_000;
+/** A restart whose gap is under this and that a deploy explains is labelled `deploy` and left out of the unplanned count. */
+const DEPLOY_GAP_S = 60;
+
+interface ProbeState {
+  /** Per UTC hour (YYYY-MM-DDTHH): [ok, checks], 8 days kept. */
+  hours: Record<string, [number, number]>;
+  last?: { at: string; ok: boolean; ms: number; up_since: string | null; build: string | null };
+  /** The first failed check of the current outage. */
+  fail_since?: string | null;
+  restarts: Restart[];
+}
+
+export interface Restart {
+  /** The API's new boot time. */
+  at: string;
+  prev_up_since: string;
+  /** Seconds the probe couldn't reach the API around the restart (0 when no minute check failed). */
+  down_seconds: number;
+  /** deploy: a new build (gene's BUILD_SHA changed) with a gap under 60 s, excluded from the unplanned count.
+   *  unplanned: the same build (watchdog or crash), or a gap of 60 s or more. short_unconfirmed: under 60 s, build unknown. */
+  kind: 'deploy' | 'unplanned' | 'short_unconfirmed';
+  build?: string | null;
+  prev_build?: string | null;
+}
+
+const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
+const hourKey = (t: number) => new Date(t).toISOString().slice(0, 13);
+
+let apiBase: { at: number; url: string } | null = null;
+/** The members' API base the site uses (api.json, re-read every 10 minutes). */
+async function membersApi(env: Env, now: number): Promise<string | null> {
+  if (apiBase && now - apiBase.at < 600_000) return apiBase.url;
+  if (!env.PUBLIC_URL) return null;
+  const r = await fetch(`${env.PUBLIC_URL}api.json`, { signal: AbortSignal.timeout(5000) }).catch(() => null);
+  const url = r?.ok ? ((await r.json().catch(() => ({}))) as { api?: string }).api : undefined;
+  if (url) apiBase = { at: now, url: url.replace(/\/$/, '') };
+  return apiBase?.url ?? null;
+}
+
+/** One check of the members' API from Cloudflare: GET {api}/health?probe=1 within 10 s. */
+export async function probeOnce(env: Env, now: number): Promise<{ ok: boolean; ms: number; up_since: string | null; build: string | null }> {
+  const base = await membersApi(env, now);
+  const t0 = Date.now();
+  if (!base) return { ok: false, ms: 0, up_since: null, build: null };
+  try {
+    const r = await fetch(`${base}/health?probe=1`, { signal: AbortSignal.timeout(PROBE_MS), headers: { 'user-agent': 'copybook-status-probe' } });
+    const b = r.ok ? ((await r.json()) as { ok?: boolean; api_up_since?: string; api_build?: string | null }) : null;
+    return { ok: !!b?.ok, ms: Date.now() - t0, up_since: b?.api_up_since ?? null, build: b?.api_build ?? null };
+  } catch {
+    return { ok: false, ms: Date.now() - t0, up_since: null, build: null };
+  }
+}
+
+/** Adds one check to the state: the hour's counts, the outage start, and a restart when the boot time moved. */
+export function recordProbe(s: ProbeState, now: number, p: { ok: boolean; ms: number; up_since: string | null; build: string | null }): ProbeState {
+  const h = (s.hours[hourKey(now)] ??= [0, 0]);
+  h[0] += p.ok ? 1 : 0;
+  h[1] += 1;
+  const keep = hourKey(now - 8 * 86400_000);
+  for (const k of Object.keys(s.hours)) if (k < keep) delete s.hours[k];
+  if (!p.ok) s.fail_since ??= iso(now);
+  else {
+    const prev = s.last?.up_since;
+    if (prev && p.up_since && p.up_since !== prev) {
+      // The gap: from the first failed check (if any) to the new boot, at least the boot-to-check time is not counted.
+      const down = s.fail_since ? Math.max(0, Math.round((Date.parse(p.up_since) - Date.parse(s.fail_since)) / 1000)) : 0;
+      const newBuild = !!p.build && !!s.last?.build && p.build !== s.last.build;
+      const sameBuild = !!p.build && !!s.last?.build && p.build === s.last.build;
+      const kind: Restart['kind'] = down >= DEPLOY_GAP_S || sameBuild ? 'unplanned' : newBuild ? 'deploy' : 'short_unconfirmed';
+      s.restarts = [{ at: p.up_since, prev_up_since: prev, down_seconds: down, kind, build: p.build, prev_build: s.last?.build ?? null }, ...s.restarts].slice(0, 100);
+    }
+    s.fail_since = null;
+  }
+  s.last = { at: iso(now), ok: p.ok, ms: p.ms, up_since: p.up_since ?? s.last?.up_since ?? null, build: p.build ?? s.last?.build ?? null };
+  return s;
+}
+
+/** Uptime over the last `hours` hours of checks, as a fraction (null with no checks), and the check count. */
+function uptime(s: ProbeState, now: number, hours: number) {
+  let ok = 0;
+  let n = 0;
+  for (let i = 0; i < hours; i++) {
+    const v = s.hours[hourKey(now - i * 3600_000)];
+    if (v) [ok, n] = [ok + v[0], n + v[1]];
+  }
+  return { uptime: n ? Math.round((ok / n) * 1e5) / 1e5 : null, checks: n, failed: n - ok };
+}
+
+/** The 13F alert path: amber when a 13F alert waits for its moves over 10 minutes, or alert mail waits for the daily reset. */
+export async function alertHealth(env: Env, now: number) {
+  const pending = JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as { accepted?: string }[];
+  const ages = pending.map((p) => (p.accepted ? Math.round((now - Date.parse(p.accepted)) / 1000) : 0));
+  const oldest = ages.length ? Math.max(...ages) : null;
+  const reset = (JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as unknown[]).length;
+  const reasons = [...(oldest != null && oldest > 600 ? ['a 13F alert has waited over 10 minutes for its moves'] : []), ...(reset ? ['alert emails are waiting for the daily email reset'] : [])];
+  return { state: reasons.length ? 'amber' : 'ok', reasons, pending_moves: pending.length, oldest_pending_seconds: oldest, reset_queue: reset };
+}
+
+/** The status object: the probe's state plus what this host knows. */
+export async function buildStatus(env: Env, now: number, s: ProbeState) {
+  const daily = Array.from({ length: 7 }, (_, i) => {
+    const day = new Date(now - (6 - i) * 86400_000).toISOString().slice(0, 10);
+    let ok = 0;
+    let n = 0;
+    for (const [k, v] of Object.entries(s.hours)) if (k.startsWith(day)) [ok, n] = [ok + v[0], n + v[1]];
+    return { day, uptime: n ? Math.round((ok / n) * 1e5) / 1e5 : null, checks: n, failed: n - ok };
+  });
+  const week = now - 7 * 86400_000;
+  const recent = s.restarts.filter((r) => Date.parse(r.at) >= week);
+  const fresh = JSON.parse((await env.DB.get('status:fresh')) ?? 'null') as { data_built_at: string | null; build_id: string | null; last_13f: { slug: string; manager: string; accession: string; accepted_at: string } | null } | null;
+  const poller = JSON.parse((await env.DB.get('host:poller')) ?? 'null') as { host: string; last_run_at: string | null } | null;
+  return {
+    ok: true,
+    generated_at: iso(Math.floor(now / 60_000) * 60_000),
+    alerts_13f: await alertHealth(env, now),
+    probe: {
+      target: 'members API /health, from Cloudflare cron',
+      interval_seconds: 60,
+      last_at: s.last?.at ?? null,
+      last_ok: s.last?.ok ?? null,
+      last_ms: s.last?.ms ?? null,
+      down_since: s.fail_since ?? null,
+      '24h': uptime(s, now, 24),
+      '7d': uptime(s, now, 168),
+      daily,
+    },
+    freshness: {
+      data_built_at: fresh?.data_built_at ?? null,
+      build_id: fresh?.build_id ?? null,
+      last_13f: fresh?.last_13f ?? null,
+      // Acceptance of the newest 13F in the data build to that build.
+      last_13f_lag_seconds: fresh?.last_13f && fresh.data_built_at ? Math.max(0, Math.round((Date.parse(fresh.data_built_at) - Date.parse(fresh.last_13f.accepted_at)) / 1000)) : null,
+      data_age_seconds: fresh?.data_built_at ? Math.round((now - Date.parse(fresh.data_built_at)) / 1000) : null,
+      poller_host: poller?.host ?? null,
+      poller_last_run: poller?.last_run_at ?? null,
+    },
+    restarts: {
+      unplanned_7d: recent.filter((r) => r.kind === 'unplanned').length,
+      deploys_7d: recent.filter((r) => r.kind === 'deploy').length,
+      short_unconfirmed_7d: recent.filter((r) => r.kind === 'short_unconfirmed').length,
+      api_up_since: s.last?.up_since ?? null,
+      rows: s.restarts.slice(0, 30),
+    },
+  };
+}
+
+/** Cloudflare's cron, every minute: one probe, then status.json (only when the minute isn't busy, like latency.json). */
+export async function runStatus(env: Env, now: number, probe: Promise<Awaited<ReturnType<typeof probeOnce>>>, publish: boolean): Promise<string> {
+  const raw = await env.HIST.get(PROBE);
+  const s = recordProbe(raw ? (JSON.parse(await new Response(raw.body).text()) as ProbeState) : { hours: {}, restarts: [] }, now, await probe);
+  await env.HIST.put(PROBE, JSON.stringify(s));
+  if (!publish || !env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || !env.PUBLIC_BUCKET) return s.last?.ok ? 'probe ok' : 'probe failed';
+  const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/r2/buckets/${env.PUBLIC_BUCKET}/objects/status.json`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json', 'cache-control': 'public, max-age=60' },
+    body: JSON.stringify(await buildStatus(env, now, s)),
+  });
+  return `${s.last?.ok ? 'probe ok' : 'probe failed'}; status.json ${res.ok ? 'written' : `error ${res.status}`}`;
+}

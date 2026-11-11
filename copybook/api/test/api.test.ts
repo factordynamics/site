@@ -953,6 +953,46 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('/status/ data: probe uptime and daily bars, restarts told apart (deploy, unplanned, unconfirmed), 13F amber, freshness', async () => {
+    const { recordProbe, buildStatus } = await import('../src/status');
+    const t0 = Date.UTC(2026, 10, 11, 10, 0);
+    const min = (i: number) => t0 + i * 60_000;
+    const up = (since: string, build: string | null) => ({ ok: true, ms: 120, up_since: since, build });
+    const down = { ok: false, ms: 10_000, up_since: null, build: null };
+    let s = { hours: {}, restarts: [] } as Parameters<typeof recordProbe>[0];
+    s = recordProbe(s, min(0), up('2026-11-11T09:00:00Z', 'aaa'));
+    // A deploy: new build, back within the minute (no check failed).
+    s = recordProbe(s, min(1), up('2026-11-11T10:00:40Z', 'bbb'));
+    // A watchdog restart: same build, 3 checks failed (the gap from the first failure to the boot is 150 s).
+    s = recordProbe(s, min(2), down);
+    s = recordProbe(s, min(3), down);
+    s = recordProbe(s, min(4), down);
+    s = recordProbe(s, min(5), up('2026-11-11T10:04:30Z', 'bbb'));
+    // A new build that took 90 s still counts as unplanned; a short restart with no build named is unconfirmed.
+    s = recordProbe(s, min(6), down);
+    s = recordProbe(s, min(7), up('2026-11-11T10:07:30Z', 'ccc'));
+    s = recordProbe(s, min(8), up('2026-11-11T10:07:50Z', null));
+    expect(s.restarts.map((r) => [r.at, r.kind, r.down_seconds])).toEqual([
+      ['2026-11-11T10:07:50Z', 'short_unconfirmed', 0],
+      ['2026-11-11T10:07:30Z', 'unplanned', 90],
+      ['2026-11-11T10:04:30Z', 'unplanned', 150],
+      ['2026-11-11T10:00:40Z', 'deploy', 0],
+    ]);
+    // Yesterday noon's checks count in 24 h and 7 d, and in yesterday's bar, not today's.
+    s.hours['2026-11-10T12'] = [50, 60];
+    await env.DB.put('alerts:pending-moves', JSON.stringify([{ accession: 'a', accepted: new Date(min(8) - 11 * 60_000).toISOString() }]));
+    await env.DB.put('status:fresh', JSON.stringify({ data_built_at: '2026-11-11T09:30:00Z', build_id: 'gh-1', last_13f: { slug: 'x', manager: 'X', accession: '0000000000-26-000001', accepted_at: '2026-11-11T09:10:00Z' } }));
+    const st = await buildStatus(env, min(8), s);
+    expect(st.probe['24h']).toEqual({ uptime: Math.round((55 / 69) * 1e5) / 1e5, checks: 69, failed: 14 });
+    expect(st.probe['7d'].checks).toBe(69);
+    expect(st.probe.daily.slice(-2)).toEqual([{ day: '2026-11-10', uptime: 0.83333, checks: 60, failed: 10 }, { day: '2026-11-11', uptime: 0.55556, checks: 9, failed: 4 }]);
+    expect(st.restarts).toMatchObject({ unplanned_7d: 2, deploys_7d: 1, short_unconfirmed_7d: 1, api_up_since: '2026-11-11T10:07:50Z' });
+    expect(st.alerts_13f).toMatchObject({ state: 'amber', pending_moves: 1, oldest_pending_seconds: 660, reset_queue: 0 });
+    expect(st.freshness).toMatchObject({ data_built_at: '2026-11-11T09:30:00Z', last_13f_lag_seconds: 1200 });
+    await env.DB.put('alerts:pending-moves', '[]');
+    expect((await buildStatus(env, min(8), s)).alerts_13f.state).toBe('ok');
+  });
+
   it("a CUSIP change nets into one share-based move (Fisher's Q3 XOM: +$75.7M, not +$894.9M)", async () => {
     const { computeMoves, netRenamed } = await import('../src/edgar');
     const other = { cusip: '037833100', put_call: null, issuer: 'APPLE INC', ticker: 'AAPL', shares: 1e6, value: 2e8 };

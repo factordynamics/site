@@ -61,6 +61,8 @@ export interface Env {
   GITHUB_DISPATCH_TOKEN?: string;
   /** Set (as a secret) only on a retired copy of the API: every request is redirected to this base. */
   MOVED_TO?: string;
+  /** The commit this copy runs (gene's deployer sets it from state.deployed-sha): /health's api_build, so /status/ tells a deploy from a crash. */
+  BUILD_SHA?: string;
   /** "on": Cloudflare (poller) and gene (members) sync KV through R2 and share the poll (failover.ts). */
   SYNC?: string;
   /** Cloudflare API token: Account Analytics read (the daily request-budget check) and R2 write to PUBLIC_BUCKET (latency.json). */
