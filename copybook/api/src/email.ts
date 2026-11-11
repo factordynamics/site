@@ -434,6 +434,9 @@ export function shortName(manager: string): string {
   const name = manager.trim();
   // EDGAR writes filer names in capitals, people surname first ("ICAHN CARL C"): keep the order, drop the legal suffix.
   if (name === name.toUpperCase()) {
+    // Names known by their initials, as people write them.
+    const known: Record<string, string> = { 'FMR LLC': 'Fidelity (FMR)', FMR: 'Fidelity (FMR)' };
+    if (known[name.replace(/\.$/, '')]) return known[name.replace(/\.$/, '')];
     const bare = name.replace(/[,\s]+(LLC|L\.L\.C\.|LP|L\.P\.|INC\.?|CORP\.?|LTD\.?|PLC|CO\.?|ET AL)\.?$/i, '') || name;
     return bare.toLowerCase().replace(/(^|[\s\-/&(])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase());
   }

@@ -17,8 +17,10 @@ export interface Channels {
   telegram?: { bot_token: string; chat_id: string };
   webhook?: { url: string; secret: string; created: string };
   feed_token?: string;
-  /** The onboarding checklist's "Keep email" choice, kept on the member so every browser shows the step done. */
+  /** Also email alerts while a chat or webhook destination works (default: chat replaces email). */
   keep_email?: boolean;
+  /** When each destination last delivered a connect message or a test: only a verified destination replaces email. */
+  verified?: Partial<Record<Dest, string>>;
 }
 
 export type Dest = 'discord' | 'slack' | 'telegram' | 'webhook';
@@ -86,9 +88,18 @@ async function putChannels(env: Env, customer: string, c: Channels): Promise<voi
 const mask = (u: string) => `${u.slice(0, u.indexOf('/', 8) + 1)}…${u.slice(-4)}`;
 const randomToken = (bytes: number) => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(bytes)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
+/** Feed links use the Worker's stable name (it serves or forwards every path), never gene's own host names. */
+const WORKER_BASE = 'https://copybook-api.factordynamics.workers.dev';
 function feedUrls(token: string, apiBase: string) {
-  return { json_url: `${apiBase}/feed/${token}.json`, rss_url: `${apiBase}/feed/${token}.rss` };
+  const base = /\.ts\.net|trycloudflare\.com/.test(apiBase) ? WORKER_BASE : apiBase;
+  return { json_url: `${base}/feed/${token}.json`, rss_url: `${base}/feed/${token}.rss` };
 }
+
+/** What "Send a test" will send to, in order: the chat and webhook destinations, and email only when it's the member's chosen channel. */
+export const testTargets = (m: Member, c: Channels): string[] => {
+  const dests = (['discord', 'slack', 'telegram', 'webhook'] as const).filter((d) => !!c[d] && (d !== 'webhook' || isPro(m)));
+  return [...dests, ...(c.feed_token ? ['feed'] : []), ...(m.email && m.alerts !== 'off' && (c.keep_email || !dests.length) ? ['email'] : [])];
+};
 
 /** What the account page shows: destinations masked, the webhook secret (the member's own) in full. */
 /**
@@ -114,6 +125,10 @@ export function channelsView(m: Member, c: Channels, apiBase: string, failing: C
     webhook_available: isPro(m),
     feed: c.feed_token ? feedUrls(c.feed_token, apiBase) : null,
     keep_email: c.keep_email ?? false,
+    /** Destinations that delivered a connect message or test: alerts go there instead of email (unless keep_email). */
+    verified: Object.keys(c.verified ?? {}),
+    /** What "Send a test" sends to, for the button's label. */
+    test_sends: testTargets(m, c),
   };
 }
 
@@ -178,10 +193,13 @@ export async function updateChannels(env: Env, m: Member, b: Record<string, unkn
   }
   if (b.telegram !== undefined) {
     const t = b.telegram as { bot_token?: unknown; chat_id?: unknown } | null;
+    const chat = t && (typeof t.chat_id === 'string' || typeof t.chat_id === 'number') && String(t.chat_id).trim() ? String(t.chat_id).trim() : null;
     if (t === null) delete c.telegram;
-    else if (t && typeof t.bot_token === 'string' && TG_TOKEN.test(t.bot_token.trim()) && (typeof t.chat_id === 'string' || typeof t.chat_id === 'number') && TG_CHAT.test(String(t.chat_id).trim())) {
-      c.telegram = { bot_token: t.bot_token.trim(), chat_id: String(t.chat_id).trim() };
-    } else return bad('telegram: {bot_token from @BotFather, chat_id (a number, or @channelname)}');
+    else if (t && typeof t.bot_token === 'string' && TG_TOKEN.test(t.bot_token.trim()) && (chat === null || TG_CHAT.test(chat))) {
+      // No chat id: read it from the bot's latest message (the member messages their bot first).
+      c.telegram = { bot_token: t.bot_token.trim(), chat_id: chat ?? '' };
+    } else if (t && typeof t.bot_token === 'string' && !TG_TOKEN.test(t.bot_token.trim())) return { ok: false, error: 'Check the token from @BotFather', code: 'telegram_token' };
+    else return bad('telegram: {bot_token from @BotFather, chat_id (optional: a number, or @channelname)}');
   }
   if (b.webhook !== undefined) {
     if (b.webhook === null || b.webhook === '') delete c.webhook;
@@ -202,6 +220,29 @@ export async function updateChannels(env: Env, m: Member, b: Record<string, unkn
     const dup = sameAs(c, team).filter((d) => b[d] !== undefined);
     if (dup.length) return { ok: false, error: "Already your team's channel", code: 'already_team_channel' };
   }
+  // Save checks each new chat destination for real: Telegram's token (getMe) and chat (read from getUpdates when
+  // not given), then a "Connected" message. A destination that doesn't take it isn't saved; one that does is verified.
+  const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  for (const dest of ['discord', 'slack', 'telegram'] as const) {
+    if (b[dest] === undefined) continue;
+    if (!c[dest]) {
+      if (c.verified) delete c.verified[dest];
+      continue;
+    }
+    if (dest === 'telegram') {
+      const api = `https://api.telegram.org/bot${c.telegram!.bot_token}`;
+      if (!/^2\d\d$/.test(await post(`${api}/getMe`, {}))) return { ok: false, error: 'Check the token from @BotFather', code: 'telegram_token' };
+      if (!c.telegram!.chat_id) {
+        const id = await latestChat(api);
+        if (!id) return { ok: false, error: 'Token works. Now send any message to your bot in Telegram, then press Save again.', code: 'telegram_chat_needed' };
+        c.telegram!.chat_id = id;
+      }
+    }
+    const r = await sendChat(c, dest, 'Connected ✓ to Copybook. Your alerts will arrive here. SEC EDGAR filings, as filed. Not investment advice.');
+    if (!r || !/^2\d\d$/.test(r.status)) return { ok: false, error: testMessage(dest, r?.status ?? 'error'), code: `${dest}_unreachable` };
+    c.verified = { ...c.verified, [dest]: now };
+  }
+  if (b.webhook !== undefined && !c.webhook && c.verified) delete c.verified.webhook;
   await putChannels(env, m.customer, c);
   const fail = await getFailures(env, m.customer);
   const changed = (['discord', 'slack', 'telegram', 'webhook'] as const).filter((k) => b[k] !== undefined && fail[k]);
@@ -211,6 +252,21 @@ export async function updateChannels(env: Env, m: Member, b: Record<string, unkn
     else await env.DB.delete(failKey(m.customer));
   }
   return { ok: true, channels: c };
+}
+
+/** The chat id of the latest message or post the bot received (getUpdates), or null. */
+async function latestChat(api: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${api}/getUpdates`, { signal: AbortSignal.timeout(8000) });
+    const j = (await res.json()) as { result?: { message?: { chat?: { id?: number } }; channel_post?: { chat?: { id?: number } }; my_chat_member?: { chat?: { id?: number } } }[] };
+    for (const u of [...(j.result ?? [])].reverse()) {
+      const id = u.message?.chat?.id ?? u.channel_post?.chat?.id ?? u.my_chat_member?.chat?.id;
+      if (id !== undefined) return String(id);
+    }
+  } catch {
+    // no answer, or not JSON
+  }
+  return null;
 }
 
 /** A new private feed token (the old one stops working), or none. */
@@ -532,13 +588,21 @@ ${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(i.url)}</lin
 
 /** POST /channels/test: a short message to every configured destination (and a test item in the feed), so a member can check setup. */
 export async function testChannels(env: Env, m: Member, c: Channels): Promise<{ results: Record<string, string>; messages: Record<string, string> }> {
-  const text = 'Copybook test: your alerts will arrive here. SEC EDGAR filings, as filed. Not investment advice.';
+  // A real sample: the member's latest alert (their follows and names), with its filing link; else a plain line.
+  const { recentFeed } = await import('./alerts');
+  const last = (await recentFeed(env, m, Date.now(), 30).catch(() => []))[0];
+  const text = last
+    ? `Copybook test, with your latest alert:\n${last.title}\n${last.text}`.slice(0, 1800)
+    : 'Copybook test: your alerts will arrive here. SEC EDGAR filings, as filed. Not investment advice.';
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const targets = testTargets(m, c);
   const out: Record<string, string> = {};
   // A test that works clears a flag; one that shows the destination is gone sets it (the email waits for a real alert).
   const after = async (dest: Dest, status: string) => {
-    if (/^2\d\d$/.test(status)) await recovered(env, m.customer, dest);
-    else if (REVOKED.test(status)) await markFailing(env, m.customer, dest, why(status, 1), false);
+    if (/^2\d\d$/.test(status)) {
+      await recovered(env, m.customer, dest);
+      c.verified = { ...c.verified, [dest]: now };
+    } else if (REVOKED.test(status)) await markFailing(env, m.customer, dest, why(status, 1), false);
   };
   for (const dest of ['discord', 'slack', 'telegram'] as const) {
     const r = await sendChat(c, dest, text);
@@ -559,8 +623,9 @@ export async function testChannels(env: Env, m: Member, c: Channels): Promise<{ 
     await env.DB.put(key, JSON.stringify([{ id: `test:${now}`, title: 'Copybook test', text, url: env.SITE_URL, published: now, sent: now, test: true }, ...items].slice(0, 50)));
     out.feed = 'ok';
   }
-  // Every alert also goes by email (chat, webhook and feed are extras), so the test sends one too.
-  if (m.email && m.alerts !== 'off') {
+  // Email only when it's the member's chosen channel (keep_email, or no chat or webhook set up).
+  if (c.verified) await putChannels(env, m.customer, c);
+  if (targets.includes('email')) {
     const st = await sendMail(env, [{ to: m.email, subject: 'Copybook test: your alerts will arrive here', text: `This is a test. When a fund you follow files, or someone trades a stock you own or watch, the alert arrives at this address within minutes.\n\nChange where alerts go: ${env.SITE_URL}account/\n\nSEC EDGAR filings, as filed. Not investment advice.` }]);
     out.email = st;
   }

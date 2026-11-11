@@ -540,10 +540,11 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     else if (!only) await rememberDelivered(env, m.customer, now, [...mine.filings.map((a) => `${filingId(a)}`), ...mine.events.map((e) => `${e.id}${e.followup ? ':details' : ''}`)]);
     if (f.digest) digest++;
     else {
-      // A working Discord, Slack, Telegram or webhook destination replaces email, unless the member kept email
+      // A verified, working Discord, Slack, Telegram or webhook destination replaces email, unless the member kept email
       // (keep_email); then email too, while there's room for it today. Never for a replay or with all destinations failing.
       if (!only) {
-        const dests = (['discord', 'slack', 'telegram', 'webhook'] as const).filter((d) => !!ch[d] && (d !== 'webhook' || isPro(m)));
+        // Only destinations that took a connect message or a test (verified) replace email.
+        const dests = (['discord', 'slack', 'telegram', 'webhook'] as const).filter((d) => !!ch[d] && !!ch.verified?.[d] && (d !== 'webhook' || isPro(m)));
         if (dests.length) {
           const fails = await getFailures(env, m.customer);
           pressure ??= await emailPressure(env, now);

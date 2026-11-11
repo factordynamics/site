@@ -304,7 +304,17 @@ export function displayCase(name: string): string {
  * CUSIPs reissued for the same security, share for share (old -> new). Exxon's Q3 2026 holding-company
  * reorganisation: 30231G102 -> 30233Q108. Without the link every Q3 holder reads as "exited XOM" plus a new position.
  */
-export const REISSUED: Record<string, { to: string; ticker: string }> = { '30231G102': { to: '30233Q108', ticker: 'XOM' } };
+/** 2026Q3's, as ingest links them (data/cusip_links.json from Nov 11). */
+export const REISSUED: Record<string, { to: string; ticker: string }> = {
+  '30231G102': { to: '30233Q108', ticker: 'XOM' },
+  '682680103': { to: '30609A109', ticker: 'OKE' },
+  '438516106': { to: '438516205', ticker: 'HON' },
+  '26614N102': { to: '26614N201', ticker: 'DD' },
+  '04351P101': { to: 'K08588103', ticker: 'ASND' }, // ADS to ordinary
+  '881624209': { to: 'M8769Q102', ticker: 'TEVA' }, // ADR to ordinary
+  '811916105': { to: '811927102', ticker: 'SA' },
+  '415864107': { to: '29390K102', ticker: 'NVRI' },
+};
 const REISSUED_TO = new Map(Object.values(REISSUED).map((r) => [r.to, r.ticker]));
 /** The ticker of a reissued CUSIP, old or new: rows without a ticker yet still net (stored moves, the site's cards). */
 export const reissuedTicker = (cusip?: string | null): string | null => (cusip ? (REISSUED[cusip.toUpperCase()]?.ticker ?? REISSUED_TO.get(cusip.toUpperCase()) ?? null) : null);

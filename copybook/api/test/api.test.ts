@@ -2995,7 +2995,21 @@ describe('copybook api', () => {
       expect((await req(copy, 'PUT', '/channels', bad)).status).toBe(bad.webhook ? 403 : 400); // webhooks are Pro
     }
     const set = await (await req(copy, 'PUT', '/channels', { slack, discord, telegram: { bot_token: '123456789:AAbbccddeeffgghhiijjkkllmmnnoopp', chat_id: '-1001234' } })).json();
-    expect(set.channels).toMatchObject({ slack: 'https://hooks.slack.com/…mnop', telegram: { chat_id: '-1001234' }, webhook: null, webhook_available: false });
+    expect(set.channels).toMatchObject({ slack: 'https://hooks.slack.com/…mnop', telegram: { chat_id: '-1001234' }, webhook: null, webhook_available: false, verified: ['discord', 'slack', 'telegram'] });
+    // Save checked each for real: Telegram's token (getMe), then a "Connected" message to every destination.
+    expect(posts.map((p) => (p.url.includes('telegram') ? `api.telegram.org/${p.url.split('/').at(-1)}` : new URL(p.url).hostname))).toEqual(['discord.com', 'hooks.slack.com', 'api.telegram.org/getMe', 'api.telegram.org/sendMessage']);
+    expect(JSON.parse(posts[1].body).text).toMatch(/^Connected ✓ to Copybook/);
+    posts = [];
+    // A bad token is refused with what to check; no chat id: read from the bot's latest message, else asked for.
+    chatReplies = { 'api.telegram.org': [{ status: 401, body: { ok: false } }] };
+    expect(await (await req(copy, 'PUT', '/channels', { telegram: { bot_token: '123456789:AAbbccddeeffgghhiijjkkllmmnnoopp', chat_id: '-1001234' } })).json()).toMatchObject({ code: 'telegram_token', error: 'Check the token from @BotFather' });
+    chatReplies = { 'api.telegram.org': [{ status: 200, body: { ok: true } }, { status: 200, body: { ok: true, result: [{ message: { chat: { id: 555 } } }, { message: { chat: { id: 777 } } }] } }] };
+    expect((await (await req(copy, 'PUT', '/channels', { telegram: { bot_token: '123456789:AAbbccddeeffgghhiijjkkllmmnnoopp' } })).json()).channels.telegram).toEqual({ chat_id: '777' });
+    chatReplies = { 'api.telegram.org': [{ status: 200, body: { ok: true } }, { status: 200, body: { ok: true, result: [] } }] };
+    expect((await (await req(copy, 'PUT', '/channels', { telegram: { bot_token: '123456789:AAbbccddeeffgghhiijjkkllmmnnoopp' } })).json()).code).toBe('telegram_chat_needed');
+    chatReplies = {};
+    await req(copy, 'PUT', '/channels', { telegram: { bot_token: '123456789:AAbbccddeeffgghhiijjkkllmmnnoopp', chat_id: '-1001234' } });
+    posts = [];
     // The checklist's "Keep email" choice is the member's, not the browser's.
     expect(set.channels.keep_email).toBe(false);
     expect((await req(copy, 'PUT', '/channels', { keep_email: 'yes' })).status).toBe(400);
@@ -3069,6 +3083,11 @@ describe('copybook api', () => {
     await cron(47);
     expect(by('hooks.slack.com')).toHaveLength(1);
     expect(sent.filter((m) => m.to[0] === 'chan@example.com' && /SIRI/.test(m.subject))).toEqual([]);
+    // "Send a test" then tests the chats only, with a real alert, and says so up front (test_sends).
+    expect((await (await req(copy, 'GET', '/channels')).json()).channels.test_sends).toEqual(['discord', 'slack', 'telegram']);
+    const tr = (await (await req(copy, 'POST', '/channels/test')).json()).results;
+    expect([tr.email, Object.keys(tr).sort()]).toEqual([undefined, ['discord', 'slack', 'telegram']]);
+    expect(JSON.parse(by('hooks.slack.com').at(-1)!.body).text).toMatch(/^Copybook test, with your latest alert:\n.*SIRI/);
     await req(copy, 'PUT', '/channels', { keep_email: true });
     const at47 = new Date();
     // Not hour 3 (the digest job's), and the hour of replays below must stay in today's ET day (it ends at 05:00 UTC) for the feed seed.
