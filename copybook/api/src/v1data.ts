@@ -58,10 +58,36 @@ const isEquity = (h: any) => !h.put_call && (h.shares_type ?? h.sh_prn ?? 'SH') 
  * `shares_unit`, what the row's shares count. Absent otherwise.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const classFields = (h: any) => ({ ...(Array.isArray(h?.classes) ? { classes: h.classes } : {}), ...(typeof h?.shares_unit === 'string' && h.shares_unit ? { shares_unit: h.shares_unit } : {}) });
+const classFields = (h: any) => ({
+  ...(Array.isArray(h?.classes) ? { classes: h.classes } : {}),
+  ...(typeof h?.shares_unit === 'string' && h.shares_unit ? { shares_unit: h.shares_unit } : {}),
+  ...(['buy', 'sell', 'flat'].includes(h?.net_direction) ? { net_direction: h.net_direction } : {}),
+  ...(typeof h?.issuer_cusip6 === 'string' && h.issuer_cusip6 ? { issuer_cusip6: h.issuer_cusip6 } : {}),
+  ...(typeof h?.shares_ratio === 'number' ? { shares_ratio: h.shares_ratio, ratio_source: typeof h.ratio_source === 'string' ? h.ratio_source : null } : {}),
+});
+
+/**
+ * A row that sums several share classes (classes[] over 1) has no CUSIP of its own: `cusip` is null and the issuer's
+ * 6-character code is `issuer_cusip6`, so no client joins a blend on one class's CUSIP (FMR's BRK A+B served 084670702).
+ * Its shares mix units, so shares, prev_shares and share_change are null, unless the data run states them in one unit
+ * (shares_unit with shares_ratio, e.g. BRK in B-share equivalents). Every other row is unchanged.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function classShape<T>(row: T): T {
+  const r = row as any;
+  if (!Array.isArray(r?.classes) || r.classes.length < 2) return row;
+  const six = r.issuer_cusip6 ?? (typeof r.cusip === 'string' && r.cusip ? r.cusip.slice(0, 6) : null);
+  const oneUnit = typeof r.shares_ratio === 'number' && typeof r.shares_unit === 'string';
+  return { ...r, cusip: null, issuer_cusip6: six, ...(oneUnit ? {} : { shares: null, prev_shares: null, share_change: null }) } as T;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function position(h: any, equityTotal: number, allTotal: number) {
+  return classShape(positionRow(h, equityTotal, allTotal));
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function positionRow(h: any, equityTotal: number, allTotal: number) {
   // The equity-book weight: the data run's pct_of_book once it publishes it (ingest item W, next to the renamed
   // trade size delta_pct_of_book), else computed here over SH rows without put/call.
   // Computed here at full precision, like the other two (the data run's pct_of_book is rounded to 6 decimals).
@@ -518,6 +544,10 @@ export interface HolderRow {
   /** Ingest's per-class breakdown and share unit, when published (classFields). */
   classes?: unknown[];
   shares_unit?: string;
+  net_direction?: 'buy' | 'sell' | 'flat';
+  issuer_cusip6?: string;
+  shares_ratio?: number;
+  ratio_source?: string | null;
   filer: { cik: string; name: string; slug: string | null; type: string | null; curated: boolean | null };
   period: string | null;
   kind: string;
@@ -1148,7 +1178,7 @@ ROUTES.push(
     const nbp = (h.counts as any)?.net_by_period as Record<string, number> | undefined;
     if (quarter && nbp) h.counts = { ...h.counts, net: nbp[quarter] ?? 0, net_quarter: quarter };
     if ((p.get('current_only') ?? 'true') === 'true' && h.counts_current) h.counts = { ...h.counts, ...h.counts_current };
-    const data = { issuer: h.issuer, ...(is.superseded_by ? { superseded_by: is.superseded_by } : {}), ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts && h.pending?.length ? { ...h.counts, pending: h.pending.length } : h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited, ...(h.pending?.length ? { pending: h.pending.filter((r) => keep(r)) } : {}) };
+    const data = { issuer: h.issuer, ...(is.superseded_by ? { superseded_by: is.superseded_by } : {}), ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts && h.pending?.length ? { ...h.counts, pending: h.pending.length } : h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit).map(classShape), options: sp.options.map(classShape), exited: sp.exited.map(classShape), ...(h.pending?.length ? { pending: h.pending.filter((r) => keep(r)).map(classShape) } : {}) };
     return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { 'server-timing': timing.join(', ') });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, req, url }) => {
@@ -1328,7 +1358,8 @@ ROUTES.push(
   }],
   ['GET', /^\/v1\/changes\/([^/]+)$/, async ({ env, url }, [quarter]) => {
     const p = url.searchParams;
-    const CHANGES = ['new', 'added', 'trimmed', 'exited'];
+    // mixed: an issuer row whose classes moved in opposite directions (ingest's per-class change; never the sign of the $ sum).
+    const CHANGES = ['new', 'added', 'trimmed', 'exited', 'mixed'];
     const want = (p.get('change') ?? CHANGES.join(',')).split(',').map((x) => x.trim());
     const limit = Number(p.get('limit') ?? 100);
     const offset = Number(p.get('offset') ?? 0);
@@ -1388,6 +1419,6 @@ ROUTES.push(
       .filter((r) => want.includes(r.change) && Math.abs(r.value_delta_usd ?? r.value_usd ?? 0) >= minValue)
       .filter((r) => cohort === 'all' || (curatedCiks ? curatedCiks.has(r.filer.cik) : r.filer.type === cohort))
       .sort((a, b) => Math.abs(b.value_delta_usd ?? 0) - Math.abs(a.value_delta_usd ?? 0));
-    return v1json({ ...(stamp ?? {}), data: out.slice(offset, offset + limit), quarter, count: out.length, next_offset: offset + limit < out.length ? offset + limit : null });
+    return v1json({ ...(stamp ?? {}), data: out.slice(offset, offset + limit).map(classShape), quarter, count: out.length, next_offset: offset + limit < out.length ? offset + limit : null });
   }],
 );

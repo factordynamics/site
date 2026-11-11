@@ -5,12 +5,25 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.12';
+export const SPEC_REVISION = '2026-11-11.13';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-23-per-class-rows',
+    date: '2026-11-23',
+    schema_version: SCHEMA_VERSION,
+    breaking: true,
+    status: 'announced',
+    changes: [
+      'Breaking, effective Mon Nov 23, 2026: /v1/stocks/{stock}/holders and /v1/changes rows are one per full 9-character CUSIP (one per share class), with count and paging per class. A filer holding BRK.A and BRK.B has two rows.',
+      '`?group=issuer` (opt-in) returns one row per filer per issuer, summing only dollar fields (value_usd, prev_value_usd, value_delta_usd, value_change_usd); shares fields are null and per-class shares are in classes[].',
+      'Every class ticker resolves to its own CUSIP: /v1/stocks/GOOG/holders and /v1/stocks/BRK.A/holders (404 today) return that class\'s rows. A ticker or CUSIP of a class the issuer index lacks returns 404 with `did_you_mean` listing the issuer\'s classes, never another class\'s data.',
+      'Bulk files stay per CUSIP. Webhook and alert `moves` rows are keyed by class too, with classes[] on any summed line.',
+    ],
+  },
   {
     id: '2026-11-11-share-classes',
     date: '2026-11-11',
@@ -18,8 +31,9 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     breaking: false,
     status: 'shipped',
     changes: [
-      'Holdings, holders and changes rows carry `classes[]` (one entry per share class of a row that sums several, e.g. a filer\'s BRK.A and BRK.B) and `shares_unit` whenever the data run publishes them, as published. A summed row\'s dollar fields are the sum of its classes; read shares per class.',
-      'Announced for Nov 23, 2026: holders and changes rows keyed by full CUSIP (one row per share class); /v1/stocks/{ticker}/holders resolves every class ticker (GOOG, BRK.A); `?group=issuer` sums only dollar fields across classes.',
+      'Holdings, holders and changes rows carry `classes[]` (declared in the spec: cusip, ticker, put_call, shares, prev_shares, value, value_delta, value_delta_basis, change, prev_cusip, unreliable) and `shares_unit` whenever the data run publishes them. Invariant: an issuer\'s counts.net = the sum of its /v1/changes rows = the sum of their classes.',
+      'A row that sums several classes has `cusip` null and `issuer_cusip6` (it served one class\'s CUSIP, e.g. 084670702 for a BRK A+B row), and null shares, prev_shares and share_change unless `shares_unit` with `shares_ratio` and `ratio_source` state them in one unit.',
+      '`change` gains `mixed`, for a multi-class row whose classes moved in opposite directions, with `net_direction` (buy, sell or flat) for its summed trade. `change` is never derived from the sign of the dollar sum. /v1/changes includes mixed rows by default (change=mixed selects them).',
     ],
   },
   {

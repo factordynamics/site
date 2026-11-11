@@ -4603,11 +4603,13 @@ describe('copybook api', () => {
     expect([h.data.counts.net_source, h.data.counts.net_build, h.data.counts.changes_build]).toEqual(['hl', 'gust-3a8c773b', 'gust-3a8c773b']);
     // Ingest's share-class fields pass through as published, on holders and changes rows (FMR's BRK A and B, summed).
     const brkClasses = [{ cusip: '084670108', ticker: 'BRK.A', shares: 10, prev_shares: 8, value_delta: 1_500_000 }, { cusip: '084670702', ticker: 'BRK.B', shares: 1000, prev_shares: 900, value_delta: 50_000 }];
-    await hist.put('hl/084670.json', JSON.stringify({ issuer: '084670', tickers: ['BRK.B'], schema: 3, columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'classes', 'shares_unit'],
-      rows: [['0000315066', 'FMR LLC', null, 'active', false, '2026Q3', 1010, 908, 7_000_000, 5_000_000, 'added', null, brkClasses, 'mixed']] }));
+    await hist.put('hl/084670.json', JSON.stringify({ issuer: '084670', tickers: ['BRK.B'], schema: 3, columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'classes', 'shares_unit', 'cusip', 'net_direction'],
+      rows: [['0000315066', 'FMR LLC', null, 'active', false, '2026Q3', 1010, 908, 7_000_000, 5_000_000, 'mixed', null, brkClasses, 'mixed', '084670702', 'buy']] }));
     const brkRow = (await v1('/v1/stocks/084670702/holders')).body.data.holders[0];
     const brkChange = (await v1('/v1/changes/2026Q3?cusip=084670702')).body.data[0];
     expect([brkRow.classes, brkRow.shares_unit, brkChange.classes, brkChange.shares_unit]).toEqual([brkClasses, 'mixed', brkClasses, 'mixed']);
+    // A blend of classes has no CUSIP of its own and no shares in mixed units; its change is ingest's, not the $ sum's sign.
+    for (const r of [brkRow, brkChange]) expect([r.cusip, r.issuer_cusip6, r.shares, r.prev_shares, r.share_change, r.change, r.net_direction]).toEqual([null, '084670', null, null, null, 'mixed', 'buy']);
     expect('classes' in (await v1('/v1/stocks/NVDA/holders')).body.data.holders[0]).toBe(false);
     const nch = (await v1('/v1/changes/2026Q3?ticker=NVDA')).body.data.filter((r: { put_call: string | null }) => !r.put_call);
     // A holder index from before hl/ schema 3 has no held marking: GuardCap's BKNG (646,216 -> 1,304 sh, $121.6M -> $6.7M)
@@ -5482,7 +5484,7 @@ describe('copybook api', () => {
     for (const row of [...d.holdings, ...d.exited]) {
       for (const k of spec.components.schemas.Position.required) expect(row).toHaveProperty(k);
       // Nothing undocumented; classes and shares_unit only when the data run publishes them.
-      expect(Object.keys(row).sort()).toEqual(Object.keys(spec.components.schemas.Position.properties).filter((k) => !['classes', 'shares_unit'].includes(k) || k in row).sort());
+      expect(Object.keys(row).sort()).toEqual(Object.keys(spec.components.schemas.Position.properties).filter((k) => !['classes', 'shares_unit', 'shares_ratio', 'ratio_source', 'issuer_cusip6', 'net_direction'].includes(k) || k in row).sort());
     }
 
     expect((await v1('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20')).body.error.code).toBe('not_yet_available');
