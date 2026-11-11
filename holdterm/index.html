@@ -32,8 +32,9 @@
         document.head.appendChild(l)
       }
       if (/^\/(funds|flows|consensus|filings)?\/?$/.test(location.pathname)) pre('index.json')
-      // Pages built from every investor's 13F: all the books in one file.
-      if (/^\/(funds|flows|consensus)\/?$/.test(location.pathname)) pre('books.json')
+      // Pages built from every investor's 13F: all the books in one file. (Investors renders from the index
+      // alone and refines its numbers from the books after, so it lets the index go first.)
+      if (/^\/(flows|consensus)\/?$/.test(location.pathname)) pre('books.json')
     </script>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Holdterm" />

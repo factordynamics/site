@@ -8,6 +8,7 @@ import {
   isStale,
   loadBook,
   loadBooks,
+  loadBooksAfterIndex,
   loadEvents,
   loadFundEvents,
   loadHistory,
@@ -612,7 +613,7 @@ function ColKey({ items }: { items: [string, string][] }) {
 export function Funds() {
   title('Investors')
   const ix = useLoad(loadIndex, [])
-  const books = useLoad(loadBooks, [])
+  const books = useLoad(loadBooksAfterIndex, [])
   if (ix.error) return <Failed error={ix.error} what="the investors" />
   if (!ix.data) return <PageLoading what="Loading the investors" stats={0} rows={20} />
   const ms = funds(ix.data)
@@ -1028,7 +1029,14 @@ export function Flows() {
         ]}
         label="Ways to rank the quarter's trades"
       />
-      <Panel title={`${num(list.length)} stocks`} right={<span className="dim hide-sm">A trade is the change in shares at the filing’s price; a price move alone isn’t a trade</span>}>
+      <Panel title={`${num(list.length)} stocks`}>
+        <ColKey
+          items={[
+            [isBuy ? (tab === 'new' ? 'New positions' : 'Investors buying') : tab === 'exits' ? 'Sold all' : 'Investors selling', isBuy ? (tab === 'new' ? 'How many investors bought it for the first time.' : 'How many investors added shares, including new positions.') : tab === 'exits' ? 'How many investors sold every share.' : 'How many investors cut shares, including those who sold out.'],
+            ['Bought, Sold', 'The dollar value of shares added and cut, at the price in each 13F. A price move alone isn’t a trade.'],
+            ['Net money in', 'Bought minus sold. Negative means more money came out than went in.'],
+          ]}
+        />
         <Grid
           rank
           limit={100}
@@ -1039,15 +1047,16 @@ export function Flows() {
             { ...aggCols.name, hideSm: true },
             aggCols.sector,
             isBuy
-              ? { key: 'b', label: tab === 'new' ? 'New buyers' : 'Buyers', num: true, render: (r) => <span className="pos">{tab === 'new' ? r.newBuyers : r.buyers.length}</span> }
-              : { key: 's', label: tab === 'exits' ? 'Sold out' : 'Sellers', num: true, render: (r) => <span className="neg">{tab === 'exits' ? exits(r) : r.sellers.length}</span> },
+              ? { key: 'b', label: tab === 'new' ? 'New positions' : 'Investors buying', num: true, title: tab === 'new' ? 'Investors that bought it for the first time' : 'Investors that added shares', render: (r) => <span className="pos">{tab === 'new' ? r.newBuyers : r.buyers.length}</span> }
+              : { key: 's', label: tab === 'exits' ? 'Sold all' : 'Investors selling', num: true, title: tab === 'exits' ? 'Investors that sold every share' : 'Investors that cut shares', render: (r) => <span className="neg">{tab === 'exits' ? exits(r) : r.sellers.length}</span> },
             { key: 'w', label: isBuy ? 'Who bought' : 'Who sold', hideSm: true, render: (r) => <Who tagQ={tagQ} list={[...(isBuy ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))} /> },
-            { key: 'bv', label: 'Bought', num: true, hideSm: true, render: (r) => <span className="pos">{r.buy ? usd(r.buy) : '·'}</span>, sort: (r) => r.buy },
-            { key: 'sv', label: 'Sold', num: true, hideSm: true, render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '·'}</span>, sort: (r) => -r.sell },
+            { key: 'bv', label: 'Bought', num: true, hideSm: true, title: 'Value of shares added, at each filing’s price', render: (r) => <span className="pos">{r.buy ? usd(r.buy) : '·'}</span>, sort: (r) => r.buy },
+            { key: 'sv', label: 'Sold', num: true, hideSm: true, title: 'Value of shares cut, at each filing’s price', render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '·'}</span>, sort: (r) => -r.sell },
             {
               key: 'nv',
-              label: 'Net',
+              label: 'Net money in',
               num: true,
+              title: 'Bought minus sold',
               render: (r) => (
                 <span className="netcell">
                   <span className="netbar" aria-hidden>

@@ -448,6 +448,8 @@ const loadCombined = () =>
   (combinedP ??= Promise.all([get<{ generated_at: string; books: Record<string, Book> }>(DATA + 'books.json'), loadIndex()])
     .then(([c, ix]) => (c.generated_at >= ix.generated_at && c.books ? c.books : null))
     .catch(() => null))
+/** loadBooks for a page that already shows something from the index: the books start once it has arrived. */
+export const loadBooksAfterIndex = () => loadIndex().then(loadBooks)
 export async function loadBooks(): Promise<Book[]> {
   const pending = loadCombined()
   const ms = funds(await loadIndex())
