@@ -68,18 +68,59 @@ if [ "${DEPLOY_REQUIRE_APPROVAL:-0}" = 1 ] && ! grep -qx "$new" "$ROOT/deploy.ap
 fi
 rm -f "${STATUS_DIR:-/nonexistent}/deploy-pending.txt"
 
+# Restart policy (lead, Nov 11). Only deploy restarts count; the watchdog above still restarts an API that fails health.
+#  - Freeze windows (UTC): payments' heartbeat drill Wed 11 16:00–16:30, then Thu 12, Fri 13 and Mon 16 11:00–03:00:
+#    no deploy restart.
+#  - Between those windows, from Thu 12 11:00 to Tue 17 03:00: at most one (batched) deploy restart per gap.
+#  - Otherwise: at most one deploy restart per hour; commits that land meanwhile go out together at the next slot.
+#  - A head commit whose subject line starts with [P0] goes out at once, whatever the time. (Not "anywhere in the
+#    message": 8873bf4, the commit that documents this policy, mentions "[P0] overrides" and went out at once.)
+# A build whose bundle equals the running one restarts nothing and uses no slot (see below).
+RESTARTS=$ROOT/state.deploy-restarts   # epoch, sha of each deploy restart
+FREEZE="2026-11-11T16:00Z 2026-11-11T16:30Z 2026-11-12T11:00Z 2026-11-13T03:00Z 2026-11-13T11:00Z 2026-11-14T03:00Z 2026-11-16T11:00Z 2026-11-17T03:00Z"
+hold_reason() { # now, last deploy restart (epoch) -> prints why a deploy restart must wait, or nothing
+  local now=$1 last=$2 gap_start=0 a b
+  set -- $FREEZE
+  while [ $# -ge 2 ]; do
+    a=$(date -ud "$1" +%s); b=$(date -ud "$2" +%s); shift 2
+    if [ "$now" -ge "$a" ] && [ "$now" -lt "$b" ]; then echo "freeze window until $(date -ud @"$b" +%FT%H:%MZ)"; return; fi
+    [ "$now" -ge "$b" ] && [ "$a" -ge "$(date -ud 2026-11-12T11:00Z +%s)" ] && gap_start=$b
+  done
+  local fs=$(date -ud 2026-11-12T11:00Z +%s) fe=$(date -ud 2026-11-17T03:00Z +%s)
+  if [ "$now" -ge "$fs" ] && [ "$now" -lt "$fe" ]; then
+    [ "$gap_start" = 0 ] && gap_start=$fs
+    [ "$last" -ge "$gap_start" ] && echo "one batched restart between freeze windows already used ($(date -ud @"$last" +%FT%H:%MZ))"
+    return
+  fi
+  [ $((now - last)) -lt 3600 ] && echo "hourly batching: next slot $(date -ud @$((last + 3600)) +%FT%H:%MZ)"
+}
+last=$(tail -1 "$RESTARTS" 2>/dev/null | cut -f1); why=$(hold_reason "$(date +%s)" "${last:-0}")
+if [ -n "$why" ] && ! git log -1 --format=%s "$new" | grep -q '^\[P0\]'; then
+  # Say it once per held head commit, not every 2 minutes.
+  [ "$(cat "$ROOT/state.held" 2>/dev/null)" = "$new" ] || { echo "$new" > "$ROOT/state.held"; echo "holding $(git log -1 --format='%h %s' "$new" | cut -c1-90): $why"; }
+  exit 0
+fi
+
 echo "deploying $(git log -1 --format='%h %s' "$new" | cut -c1-120)"
 git merge -q --ff-only origin/main 2>/dev/null || [ "$(git rev-parse HEAD)" = "$new" ] || { echo "checkout is not a fast-forward of origin/main; not deploying"; echo "$new" > "$ROOT/state.last-failed"; exit 0; }
 cd "$API"
 if ! git diff --quiet "$cur" "$new" -- pnpm-lock.yaml package.json; then
   npx -y pnpm@10 install --frozen-lockfile >/dev/null 2>&1 || { echo "pnpm install failed"; echo "$new" > "$ROOT/state.last-failed"; exit 0; }
 fi
-if ! npx vitest run > "$ROOT/last-test.log" 2>&1; then
-  echo "tests failed at $new; keeping the running version (see $ROOT/last-test.log)"; echo "$new" > "$ROOT/state.last-failed"; exit 0
-fi
 rm -rf "$ROOT/build.new"
 if ! npx wrangler deploy --dry-run --outdir "$ROOT/build.new" > "$ROOT/last-build.log" 2>&1; then
   echo "build failed at $new (see $ROOT/last-build.log)"; echo "$new" > "$ROOT/state.last-failed"; exit 0
+fi
+# Only restart when the bundle changes. A holdterm/src or ingest commit often leaves it byte-identical (the bundle only
+# imports holdterm/src's names). The source map embeds the output path, so it, BUILD_SHA and README.md are left out.
+bundle_hash() { (cd "$1" && find . -type f ! -name '*.map' ! -name BUILD_SHA ! -name README.md | sort | xargs -r sha256sum | sha256sum | cut -c1-64); }
+if [ -d "$ROOT/build" ] && [ "$(bundle_hash "$ROOT/build.new")" = "$(bundle_hash "$ROOT/build")" ]; then
+  rm -rf "$ROOT/build.new"; echo "$new" > "$ROOT/state.deployed-sha"; rm -f "$ROOT/state.held"
+  echo "no change: the bundle at $(git log -1 --format=%h "$new") equals the running one ($(cut -c1-7 "$ROOT/build/BUILD_SHA" 2>/dev/null)); not restarting"
+  exit 0
+fi
+if ! npx vitest run > "$ROOT/last-test.log" 2>&1; then
+  echo "tests failed at $new; keeping the running version (see $ROOT/last-test.log)"; echo "$new" > "$ROOT/state.last-failed"; rm -rf "$ROOT/build.new"; exit 0
 fi
 # Boot the new bundle in workerd on a scratch port with throwaway state before swapping: vitest runs in Node, and
 # workerd can still refuse a bundle that passes it (e.g. a non-class value exported from the entry module).
@@ -96,7 +137,8 @@ if [ $ok != 1 ]; then echo "new bundle failed to boot in workerd at $new; keepin
 echo "$new" > "$ROOT/build.new/BUILD_SHA"
 rm -rf "$ROOT/build.prev"; mv "$ROOT/build" "$ROOT/build.prev"; mv "$ROOT/build.new" "$ROOT/build"
 systemctl --user restart copybook-api.service
-echo "$new" > "$ROOT/state.deployed-sha"
+echo "$new" > "$ROOT/state.deployed-sha"; rm -f "$ROOT/state.held"
+printf '%s\t%s\n' "$(date +%s)" "$new" >> "$RESTARTS"
 echo "deployed $new"
-# Every deploy, with its build, for the status directory (the public /status/ log names builds from /health).
-if [ -n "${STATUS_DIR:-}" ]; then printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$new" "$(git -C "$SITE" log -1 --format=%s "$new" | cut -c1-100)" >> "$STATUS_DIR/deploys.log"; fi
+# Every deploy restart (and only those), with its build (the public /status/ log names builds from /health).
+printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ)" "$new" "$(git -C "$SITE" log -1 --format=%s "$new" | cut -c1-100)" >> "${STATUS_DIR:-$ROOT}/deploys.log"
