@@ -1283,6 +1283,12 @@ a.hb-row:hover {
   position: relative;
   height: 12px;
 }
+/* One-sided bars run on a faint track, so the empty part reads as the rest of the scale (on a stock page,
+ * the rest of each investor's portfolio) rather than as a gap before the number. */
+.hbars:not(.signed) .hb-track {
+  border-radius: 3px;
+  background: var(--raise);
+}
 .hb-zero {
   position: absolute;
   left: 50%;
