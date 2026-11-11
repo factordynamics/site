@@ -178,6 +178,12 @@ export interface Member {
  * the site, never to gene's host.
  */
 export const WORKER_URL = 'https://copybook-api.factordynamics.workers.dev';
+/**
+ * The documented public /v1 base (the lead, Nov 11): the spec's servers URL and every absolute URL a /v1 response or
+ * webhook carries (Link headers, bulk URLs, changelog links). Never a machine or tunnel host (gene's Funnel or quick
+ * tunnel); the Worker forwards /v1 to gene. One constant, moved to api.factordynamics.com when that host goes live (Dec 5).
+ */
+export const PUBLIC_V1_BASE = WORKER_URL;
 
 /** The one public base URL for every absolute link the API hands out (feeds, CSV and bulk links, email links), without
  * a trailing slash: API_URL when set (the API can sit under a path behind a proxy, e.g. self-hosted at

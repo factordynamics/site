@@ -2,7 +2,7 @@ import type { Alert13F, AlertEvent } from './alerts';
 import { channelFailMail, chatText, feedItems, sendMail, teamDuplicateMail, type FeedItem } from './email';
 import { isPro, type Env, type Member } from './env';
 import { perClassNotice, SCHEMA_VERSION, SUMMED_PIN } from './v1';
-import { WORKER_URL } from './env';
+import { PUBLIC_V1_BASE } from './env';
 import { getMember, type Follows } from './members';
 import { listSeats } from './seats';
 import { cleanItem4, countedMoves, filingId, type MoveRow, type Moves } from './edgar';
@@ -93,7 +93,7 @@ const mask = (u: string) => `${u.slice(0, u.indexOf('/', 8) + 1)}…${u.slice(-4
 const randomToken = (bytes: number) => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(bytes)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 /** Feed links use the Worker's stable name (it serves or forwards every path), never gene's own host names. */
-const WORKER_BASE = 'https://copybook-api.factordynamics.workers.dev';
+const WORKER_BASE = PUBLIC_V1_BASE;
 /** gene's own host names (tunnel, Funnel) in a stored link, as the Worker's stable name. */
 const publicLinks = (s: string) => s.replace(/https:\/\/[a-z0-9-]+\.(?:[a-z0-9-]+\.ts\.net|trycloudflare\.com)(?:\/copybook)?/g, WORKER_BASE);
 function feedUrls(token: string, apiBase: string) {
@@ -562,13 +562,13 @@ const BACKOFF_MIN = [1, 5, 30, 120, 720];
  * retry) are left as they are.
  */
 export function withNotice(c: Channels, body: string, now: number): string {
-  const n = perClassNotice(c.webhook?.schema_version === SUMMED_PIN.version, WORKER_URL, now);
+  const n = perClassNotice(c.webhook?.schema_version === SUMMED_PIN.version, PUBLIC_V1_BASE, now);
   if (!n || body.includes('"deprecation":')) return body;
   return JSON.stringify({ ...JSON.parse(body), deprecation: { deprecated_at: n.deprecated_at, sunset: n.sunset, link: n.link } });
 }
 
 /** The same notice as headers, when the body carries it. */
-const noticeHeaders = (body: string): Record<string, string> => (body.includes('"deprecation":') ? perClassNotice(true, WORKER_URL, 0)!.headers : {});
+const noticeHeaders = (body: string): Record<string, string> => (body.includes('"deprecation":') ? perClassNotice(true, PUBLIC_V1_BASE, 0)!.headers : {});
 
 async function sendWebhook(c: Channels, id: string, body: string) {
   if (!c.webhook) return null; // removed meanwhile: nothing to do

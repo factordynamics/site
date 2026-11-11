@@ -1,4 +1,4 @@
-import { linkBase, type Env } from './env';
+import { PUBLIC_V1_BASE, type Env } from './env';
 import { lookupTickers } from './alerts';
 import { cleanItem4, easternToUtc, posKey, fetch13F, fetchFilingMeta, filings13F, SEC_UA, type Filed13F, type FilingMeta, unreliableSide } from './edgar';
 import { ROUTES, v1error, v1json, noMs, stampOf, type Stamp } from './v1';
@@ -1185,15 +1185,15 @@ ROUTES.push(
     const data = { issuer: h.issuer, ...(is.superseded_by ? { superseded_by: is.superseded_by } : {}), ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts && h.pending?.length ? { ...h.counts, pending: h.pending.length } : h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit).map(classShape), options: sp.options.map(classShape), exited: sp.exited.map(classShape), ...(h.pending?.length ? { pending: h.pending.filter((r) => keep(r)).map(classShape) } : {}) };
     return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { 'server-timing': timing.join(', ') });
   }],
-  ['GET', /^\/v1\/bulk$/, async ({ env, req, url }) => {
+  ['GET', /^\/v1\/bulk$/, async ({ env }) => {
     // Persistent per-quarter exports of every filer's book, uploaded by the data run. Every field comes from the stored
     // object itself (size, ETag, the sha256 stamped at upload); a download link serves exactly these bytes or the file
     // streams from here. Only files that pass a size check: a stub (a failed run) is hidden until regenerated.
     const { bulkFiles } = await import('./download');
-    const data = (await bulkFiles(env, MIN_BULK_BYTES)).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.bytes, etag: o.etag, sha256: o.sha256, uploaded_at: noMs(o.uploaded.toISOString()), url: `${linkBase(env, req, url)}/v1/${o.key}` }));
+    const data = (await bulkFiles(env, MIN_BULK_BYTES)).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.bytes, etag: o.etag, sha256: o.sha256, uploaded_at: noMs(o.uploaded.toISOString()), url: `${PUBLIC_V1_BASE}/v1/${o.key}` }));
     return v1json({ data: data.sort((a: { file: string }, b: { file: string }) => b.file.localeCompare(a.file)) });
   }],
-  ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env, req, url }, [file]) => {
+  ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env, url }, [file]) => {
     // ?redirect=false: the download link as JSON (200), for clients that forward Authorization on a redirect (Python
     // urllib: R2 answers 400). `auth: "none"` for a presigned link (send no Authorization to it); "required" when the file
     // streams from this API (send the key as usual).
@@ -1214,7 +1214,7 @@ ROUTES.push(
     if (!obj || (obj.size ?? 0) < MIN_BULK_BYTES) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet${obj ? ' (the uploaded file failed its size check and waits to be regenerated)' : ''}. Parquet is coming; csv.gz is live for the quarters GET /v1/bulk lists.`);
     // RFC 9530 Repr-Digest, so a client can check the bytes without the listing (the R2 link sends x-amz-meta-sha256).
     const sha = f?.sha256 ?? obj.customMetadata?.sha256;
-    if (asJson) return v1json({ data: { file, url: `${linkBase(env, req, url)}/v1/bulk/${file}`, auth: 'required', sha256: sha ?? null, bytes: obj.size ?? null, expires_at: null } });
+    if (asJson) return v1json({ data: { file, url: `${PUBLIC_V1_BASE}/v1/bulk/${file}`, auth: 'required', sha256: sha ?? null, bytes: obj.size ?? null, expires_at: null } });
     const digest: Record<string, string> = sha ? { 'repr-digest': `sha-256=:${btoa(String.fromCharCode(...(sha.match(/../g) ?? []).map((h) => parseInt(h, 16))))}:`, 'x-amz-meta-sha256': sha } : {};
     return new Response(obj.body, {
       headers: { ...digest, 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },

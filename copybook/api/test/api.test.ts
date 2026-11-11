@@ -4656,6 +4656,11 @@ describe('copybook api', () => {
         expect([hd.get('deprecation'), hd.get('sunset'), /changelog\?id=2026-11-23-per-class-rows>; rel="deprecation"/.test(hd.get('link') ?? '')]).toEqual(['@1795392000', 'Mon, 22 Feb 2027 00:00:00 GMT', true]);
       }
     }
+    // Public responses never name a machine or tunnel host (the lead, Nov 11), even when the request came in on gene's
+    // Funnel: Link headers, bulk URLs and the spec's servers all use the one public base.
+    const viaGene = await handleRequest(new Request('https://api.test/v1/stocks/084670702/holders', { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env);
+    const spec = await (await handleRequest(new Request('https://api.test/v1/openapi.json'), env)).text();
+    expect([viaGene.headers.get('link')?.startsWith('<https://copybook-api.factordynamics.workers.dev/v1/changelog'), /tail70ba3|trycloudflare/.test([...viaGene.headers.values()].join(' ') + (await viaGene.text()) + spec), JSON.parse(spec).servers]).toEqual([true, false, [{ url: 'https://copybook-api.factordynamics.workers.dev' }]]);
     // From Nov 23 only pinned clients and endpoints are warned, until Feb 22, 2027; then nobody.
     const { perClassNotice } = await import('../src/v1');
     const at = (d: string, pinned: boolean) => !!perClassNotice(pinned, 'https://b', Date.parse(d));
@@ -4772,9 +4777,9 @@ describe('copybook api', () => {
     const gzSha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', gzBytes))].map((x) => x.toString(16).padStart(2, '0')).join('');
     hist.meta.set('bulk/2026Q2.csv.gz', { sha256: gzSha }); // stamped at upload
     hist.m.set('bulk/2025Q1.csv.gz', new Uint8Array(1440)); // a stub from a failed run: hidden, and 501 like a missing file
-    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 1_200_000, etag: null, sha256: gzSha, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://api.test/v1/bulk/2026Q2.csv.gz' }]);
+    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 1_200_000, etag: null, sha256: gzSha, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz' }]);
     const bulkVia = await (await handleRequest(new Request('https://api.test/v1/bulk', { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env)).json();
-    expect(bulkVia.data[0].url).toBe('https://gene.tail70ba3.ts.net/copybook/v1/bulk/2026Q2.csv.gz');
+    expect(bulkVia.data[0].url).toBe('https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz');
     expect((await v1('/v1/bulk/2025Q1.csv.gz')).status).toBe(501);
     const gz = await handleRequest(new Request('https://api.test/v1/bulk/2026Q2.csv.gz', { headers: { authorization: `Bearer ${key}` } }), env);
     expect(gz.headers.get('content-disposition')).toBe('attachment; filename="copybook-13f-2026Q2.csv.gz"');
@@ -5544,10 +5549,10 @@ describe('copybook api', () => {
     expect(w.map((r: { weight: number | null; weight_incl_options: number | null; weight_equity: number | null }) => [r3(r.weight), r3(r.weight_incl_options), r.weight_equity])).toEqual([[0.667, 0.667, 1], [0.333, 0.333, null]]);
     // Announced with 90 days' notice: the holdings response says when weight changes.
     const wh = (await handleRequest(new Request('https://api.test/v1/filers/warren-buffett/holdings/2025Q2', { headers: { authorization: `Bearer ${key}` } }), env)).headers;
-    expect([wh.get('deprecation'), wh.get('sunset'), wh.get('link')]).toEqual(['@1794182400', 'Mon, 08 Feb 2027 00:00:00 GMT', '<https://api.test/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"']);
+    expect([wh.get('deprecation'), wh.get('sunset'), wh.get('link')]).toEqual(['@1794182400', 'Mon, 08 Feb 2027 00:00:00 GMT', '<https://copybook-api.factordynamics.workers.dev/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"']);
     // Through gene's front door the link keeps the /copybook prefix (it was missing, so the link returned 401), and it resolves.
     const viaGene = (await handleRequest(new Request('https://api.test/v1/filers/warren-buffett/holdings/2025Q2', { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env)).headers.get('link');
-    expect(viaGene).toBe('<https://gene.tail70ba3.ts.net/copybook/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"');
+    expect(viaGene).toBe('<https://copybook-api.factordynamics.workers.dev/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"');
     const entry = await (await handleRequest(new Request('https://api.test/v1/changelog?id=2026-11-09-weight-equity-only'), env)).json();
     expect(entry.data.map((c: { id: string }) => c.id)).toEqual(['2026-11-09-weight-equity-only']);
     for (const k of spec.components.schemas.Error.required) expect((await v1('/v1/filers/warren-buffett/holdings/2025Q9')).body).toHaveProperty(k);

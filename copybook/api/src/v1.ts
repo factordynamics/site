@@ -1,11 +1,11 @@
-import { linkBase, type Env } from './env';
+import { PUBLIC_V1_BASE, type Env } from './env';
 import { authKey, type KeyAuth, limitHeaders, meter, type MeterResult, type ApiKey } from './keys';
 import { secBudget } from './edgar';
 
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.16';
+export const SPEC_REVISION = '2026-11-11.17';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /**
@@ -30,6 +30,16 @@ export function perClassNotice(pinned: boolean, base: string, now = Date.now()):
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-public-base',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'The documented /v1 base (the spec\'s servers URL) is https://copybook-api.factordynamics.workers.dev, and every absolute URL a /v1 response or webhook carries (Link headers, /v1/bulk URLs, changelog links) uses it, whichever host the request came in on. Requests to the earlier base keep working. It moves to api.factordynamics.com when that host goes live, with a changelog entry.',
+    ],
+  },
   {
     id: '2026-11-23-per-class-rows',
     date: '2026-11-23',
@@ -478,11 +488,11 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     for (const [k, v] of Object.entries(limits)) res.headers.set(k, v);
     // Holders and changes rows go per class on Nov 23: every client is warned until then, pinned ones until Feb 22.
     if (res.status === 200 && (/^\/v1\/stocks\/[^/]+\/holders$/.test(path) || /^\/v1\/changes\//.test(path))) {
-      const n = perClassNotice(pin === SUMMED_PIN.version, linkBase(env, req, url));
+      const n = perClassNotice(pin === SUMMED_PIN.version, PUBLIC_V1_BASE);
       if (n) for (const [k, v] of Object.entries(n.headers)) res.headers.set(k, v);
     }
     // `weight` in positions turns equity-only on Feb 8, 2027 (RFC 9745 Deprecation, RFC 8594 Sunset).
-    if (/\/holdings/.test(path) && res.status === 200) for (const [k, v] of Object.entries(WEIGHT_DEPRECATION(linkBase(env, req, url)))) res.headers.set(k, v);
+    if (/\/holdings/.test(path) && res.status === 200) for (const [k, v] of Object.entries(WEIGHT_DEPRECATION(PUBLIC_V1_BASE))) res.headers.set(k, v);
     return res;
   }
   return v1error('not_found', 404, undefined, limits);
