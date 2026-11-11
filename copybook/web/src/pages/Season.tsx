@@ -101,11 +101,13 @@ export function Season() {
           {!passed && next && (
             <div className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[15px] leading-snug text-accent-2">
               <span className="font-medium">Next up: {next}.</span> Copy emails you each one’s 13F as it’s filed, with its moves; free follows get them in Friday’s email.
-              {!getToken() && up && up.people.length > 0 ? (
-                <FollowSignup people={up.people} label="Your email, to follow them free" quietLabel className="mt-3 text-[14.5px] text-ink" extra={<TrialButton />} />
-              ) : (
-                !isPaying(member) && <div className="mt-3"><TrialButton /></div>
+              {!isPaying(member) && (
+                <div className="mt-3">
+                  <TrialButton />
+                  <p className="mt-1.5 text-[12.5px] text-accent-2/80">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
+                </div>
               )}
+              {!getToken() && up && up.people.length > 0 && <FollowSignup people={up.people} label="Your email, to follow them free" quietLabel secondary className="mt-3 border-t border-accent/15 pt-3 text-[14.5px] text-ink" />}
             </div>
           )}
           <p className="mt-4 text-[17px] leading-relaxed text-ink-2">

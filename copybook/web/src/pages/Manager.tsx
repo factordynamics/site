@@ -12,7 +12,7 @@ import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
-import { fridayAfter, loadCards, loadExpected, loadRecap, recapPath, seasonNow, seasonStatus, shortDay, stockPath, usualTime } from '../lib/stocks'
+import { fridayAfter, loadCardSet, loadCards, loadExpected, loadRecap, recapPath, seasonNow, seasonStatus, shortDay, stockPath, usualTime } from '../lib/stocks'
 import { EdgarClosed } from '../components/EdgarClosed'
 import { TRIAL_DAYS } from '../config'
 import { track } from '../lib/track'
@@ -57,7 +57,11 @@ export function ManagerPage() {
   const idx = useAsync(loadIndex, [])
   const tracked = f ? idx.data?.managers.find((m) => m.slug === f.slug) : undefined
   const q3 = tracked ? seasonStatus(tracked, due) : null
-  const card = f && cards.data?.get(f.slug)
+  // Share target: the latest filing's /f/ card whenever one exists (by fund, or by the filing itself when another
+  // entity files it, as Pershing Square Inc. does for Ackman), else this page.
+  const cardSet = useAsync(loadCardSet, [])
+  const acc = (f as { accession?: string } | undefined)?.accession
+  const card = f && (cards.data?.get(f.slug) ?? (acc && cardSet.data?.has(acc) ? acc : undefined))
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
@@ -100,7 +104,6 @@ export function ManagerPage() {
               {f && f.name !== f.manager && <span>{f.name}</span>}
               {f && <Badge tone={stale ? 'warn' : 'neutral'}>{stale ? shownLabel : `${quarterLabel(f.quarter)} 13F`}</Badge>}
             </p>
-            {f && status === 'reported_by_other' && <Provenance f={f} />}
           </div>
         </div>
         {!f && (
@@ -143,6 +146,7 @@ export function ManagerPage() {
                   Get {possessive(shortFirst(f.manager))} 13F as it’s filed, {TRIAL_DAYS} days free
                 </Link>
               </div>
+              <p className="mt-1.5 text-[12.5px] text-accent-2/80">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
               {!getToken() && <FollowSignup people={[{ slug: f.slug, name: f.manager }]} label={`Or follow ${f.manager} free`} secondary className="mt-3 text-ink" />}
               <p className="mt-2 text-[13px] text-accent-2/85">{fridayLine(f.manager, q3.day)}</p>
             </>
@@ -151,6 +155,7 @@ export function ManagerPage() {
       )}
       {f && <EdgarClosed className="mt-4" />}
       {f && status !== 'reported_by_other' && <FundNotice f={f} />}
+      {f && status === 'reported_by_other' && <Provenance f={f} />}
 
       {/* The newest news first: on a phone "Since the last 13F" (Form 4s and 13D/Gs filed after it) sits right
           under the header; on wider screens it follows the summary figures. It renders nothing when empty. */}
@@ -496,7 +501,7 @@ function fridayLine(name: string, day: string) {
 function Provenance({ f }: { f: ManagerFile & { reported_by?: { slug?: string; name?: string } | null } }) {
   const by = f.reported_by?.name ? displayName(f.reported_by.name) : 'an affiliated filer'
   return (
-    <p className="mt-1.5 text-[13px] text-ink-3">
+    <p className="mt-4 text-[12.5px] text-ink-3">
       Holdings reported by{' '}
       {f.reported_by?.slug ? (
         <Link to={`/investors/${f.reported_by.slug}/`} className="underline decoration-line-2 underline-offset-2 hover:text-ink">

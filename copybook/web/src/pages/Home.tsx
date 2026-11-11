@@ -1,7 +1,7 @@
 import { Signup } from '../components/Signup'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { dayET, loadCoverage, loadExpected, loadSeason, nextUp, seasonNow, timeLeft } from '../lib/stocks'
+import { dayET, edgarClosed, shortDay, loadCoverage, loadExpected, loadSeason, nextUp, seasonNow, timeLeft } from '../lib/stocks'
 import { EdgarClosed } from '../components/EdgarClosed'
 import { loadLatency } from '../lib/account'
 import { firstAlertMedian } from '../lib/latencyStats.mjs'
@@ -96,10 +96,12 @@ function SeasonLead() {
   const soon = useAsync(loadExpected, [])
   const med = lat.data ? firstAlertMedian(lat.data) : null
   const next = soon.data ? nextUp(soon.data.expected, dayET()).text : ''
+  const closed = edgarClosed()
   return (
     <>
       <h1 className="mt-6 text-[38px] font-semibold leading-[1.04] tracking-[-0.045em] sm:text-[52px] lg:text-[60px]">
-        {quarterLabel(sn.quarter).split(' ')[0]} 13Fs are landing now.{' '}
+        {/* On a day EDGAR is closed, the headline says when filings resume (the closed line below says why). */}
+        {closed ? `${quarterLabel(sn.quarter).split(' ')[0]} 13Fs land again ${shortDay(closed.resume).split(' ')[0]} at 6:00 am ET.` : `${quarterLabel(sn.quarter).split(' ')[0]} 13Fs are landing now.`}{' '}
         <span className="font-serif font-normal italic tracking-[-0.025em] text-accent">Get each one as it’s filed.</span>
       </h1>
       <div className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2 md:text-[18px]">
@@ -133,7 +135,7 @@ function SeasonLead() {
           See who’s filed
         </Button>
       </div>
-      <p className="mt-2.5 text-[12.5px] text-ink-3">Card required. Cancel before day {TRIAL_DAYS + 1} and you pay nothing.</p>
+      <p className="mt-2.5 text-[12.5px] text-ink-3">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
     </>
   )
 }

@@ -604,9 +604,9 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   // Two lenses: hedge funds alone, and hedge funds plus long-only managers (ingest's smart_money;
   // "active" until its long_only type lands).
   const SMART = new Set([...(ft?.smart_money ?? ['hedge_fund', 'active']), 'hedge_fund', 'long_only'])
-  // filer_types.json first (the set index.json's types_as_of dates, and /v1's source); a fall/ book's stamped
-  // type lags it until the next moves.py run.
-  const typeOf = (cik, own) => ft?.filers?.[cik]?.type ?? own ?? null
+  // The published type set (filer_types.json) wins: shard bundles (fall/) keep the type a filer had when its
+  // shard was last written, so a reclass would otherwise reach the lenses only as each filer refiles.
+  const typeOf = (cik, fallback) => ft?.filers?.[String(cik).padStart(10, '0')]?.type ?? fallback ?? null
   const lenses = { smart: new Map(), hedge: new Map() } // page -> {current, older, top10, over5, quarters, moves}
   const lensOf = (k, t) => lenses[k].get(t) ?? lenses[k].set(t, { current: 0, older: 0, top10: 0, over5: 0, quarters: {}, moves: [] }).get(t)
   const curatedByCik = new Map(index.managers.filter((m) => m.ok).map((m) => [m.cik, m]))
@@ -633,7 +633,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       const total = d.equity_value || d.total_value - optionValue || d.total_value || 1
       const cur = curatedByCik.get(f.cik)
       const who = cur ? { slug: cur.slug, name: cur.manager, flag: cur.featured ? 2 : 1 } : { slug: f.slug, name: f.name, flag: 0 }
-      const ty = typeOf(f.cik, d.type ?? f.type ?? cur?.type)
+      const ty = typeOf(f.cik, f.type ?? d.type ?? cur?.type)
       const smart = SMART.has(ty)
       const hedge = ty === 'hedge_fund'
       const mine = new Map() // page -> [shares, value]; classes of one issuer roll up like the curated rows
