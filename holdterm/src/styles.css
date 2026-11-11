@@ -1107,11 +1107,21 @@ button.tag.held:hover {
 .fill.neg {
   background: var(--neg);
 }
+.shift-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.shift-nums {
+  color: var(--fg2);
+  font-size: 12.5px;
+}
 .shift {
   display: inline-flex;
   flex-direction: column;
   gap: 2px;
-  width: 90px;
+  width: 56px;
   vertical-align: middle;
 }
 .shift i {
