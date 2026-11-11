@@ -30,7 +30,9 @@ export type Holding = {
   share_change: number | null
   value_delta: number | null
   suspect_units?: boolean
-  pct_of_book: number | null
+  /** Holdterm's: the trade (value_delta, after the corrections and checks below) as a share of the 13F's total
+   * value, the same base as weight. Copybook's own pct_of_book is the weight, not the trade. */
+  trade_pct?: number | null
   /** Share counts break between this filing and the last; the trade is the change in reported value. */
   shares_break?: boolean
 }
@@ -324,7 +326,6 @@ function correct(b: Book) {
     h.prev_value = (h.prev_value ?? 0) + a.value
     h.share_change = h.shares - h.prev_shares
     h.value_delta = h.shares ? h.share_change * (h.value / h.shares) : -h.prev_value
-    h.pct_of_book = b.total_value ? h.value_delta / b.total_value : null
     h.change = h.share_change > 0 ? 'added' : h.share_change < 0 ? (h.shares ? 'trimmed' : 'exited') : 'unchanged'
     b.prev_total_value += a.value
   }
@@ -342,8 +343,7 @@ function longBook(b: Book) {
   b.notes_value = b.holdings.filter(isNoteOrPref).reduce((t, h) => t + h.value, 0)
   b.options_value = b.holdings.filter((h) => h.put_call).reduce((t, h) => t + h.value, 0)
   b.prev_long_value = b.prev_total_value == null ? null : longs.reduce((t, h) => t + (h.prev_value ?? 0), 0)
-  // "Of portfolio" is the trade over the 13F's total; Copybook's pct_of_book is the position's weight.
-  for (const h of b.holdings) h.pct_of_book = h.value_delta != null && b.total_value ? h.value_delta / b.total_value : null
+  for (const h of b.holdings) h.trade_pct = h.value_delta != null && b.total_value ? h.value_delta / b.total_value : null
   return b
 }
 const bookCache = new Map<string, Promise<Book>>()

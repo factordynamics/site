@@ -1216,7 +1216,7 @@ function MovesGrid({ rows, empty }: { rows: Holding[]; empty?: ReactNode }) {
         { key: 'c', label: 'What changed', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} unclear={r.suspect_units} /> },
         { key: 'sc', label: 'Shares changed', num: true, hideSm: true, hide: 'md', render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
         { key: 'd', label: 'Trade size', num: true, render: (r) => <span className={(r.value_delta ?? 0) > 0 ? 'pos' : 'neg'}>{signedUsd(r.value_delta)}</span>, sort: (r) => r.value_delta ?? 0 },
-        { key: 'pb', label: <><span className="hide-sm">Trade, % of portfolio</span><span className="show-sm">Trade %</span></>, num: true, render: (r) => pct(r.pct_of_book), sort: (r) => r.pct_of_book ?? 0, title: ((r) => `Trade value ÷ this 13F’s total${r ? `, ${usd(r.value_delta! / r.pct_of_book!)}` : ''}`)(rows.find((r) => r.value_delta && r.pct_of_book)) },
+        { key: 'pb', label: <><span className="hide-sm">Trade, % of portfolio</span><span className="show-sm">Trade %</span></>, num: true, render: (r) => <span className={(r.trade_pct ?? 0) > 0 ? 'pos' : 'neg'}>{(r.trade_pct ?? 0) > 0 ? '+' : ''}{pct(r.trade_pct)}</span>, sort: (r) => r.trade_pct ?? 0, title: ((r) => `Trade value ÷ this 13F’s total${r ? `, ${usd(r.value_delta! / r.trade_pct!)}` : ''}`)(rows.find((r) => r.value_delta && r.trade_pct)) },
         { key: 'w', label: 'Weight now', num: true, hideSm: true, hide: 'lg', render: (r) => pct(r.weight), sort: (r) => r.weight },
       ]}
     />
