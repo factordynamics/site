@@ -479,6 +479,18 @@ const roleOf = (role: string | null) => {
   return 'an officer';
 };
 
+/** Tracked funds by CIK (the data run's index.json, read at most hourly): a Form 4 owner's person ("Warren Buffett"). */
+let ownersByCik: { at: number; m: Map<string, string> } | null = null;
+async function ownerName(env: Env, cik: string | null, filer: string): Promise<string> {
+  if (!ownersByCik || Date.now() - ownersByCik.at > 3600_000) {
+    const idx = (await fetch(`${env.DATA_URL}index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { managers?: { cik?: string; manager?: string }[] } | null;
+    ownersByCik = { at: Date.now(), m: new Map((idx?.managers ?? []).filter((x) => x.cik && x.manager).map((x) => [String(Number(x.cik)), x.manager!])) };
+  }
+  const firm = short(filer);
+  const person = cik ? ownersByCik.m.get(String(Number(cik))) : undefined;
+  return person && !firm.toLowerCase().includes(person.toLowerCase()) && !person.toLowerCase().includes(firm.toLowerCase()) ? `${firm} (${displayCase(person)})` : firm;
+}
+
 /**
  * A free member's block. Facts are public (what the investor pages and filing cards show); the hook names
  * the biggest of what Copy adds: a company insider's open-market trade from $100K (never gifts, grants,
@@ -515,10 +527,11 @@ export async function inYourNames(env: Env, names: string[], week: Week, now: nu
         // Dated: the trade, then when it was filed ("sold Nov 4, filed Nov 6").
         const md = (d: string) => new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
         const verb = sold ? 'sold' : 'bought';
-        const when = `${e.event_date ? `${verb} ${md(e.event_date)}, ` : ''}filed ${md(etDay(Date.parse(e.accepted_at)))}`;
-        // "Capital One Financial's CEO sold", but "A 10% owner of Sirius XM bought" (an owner, a director: not the company's).
+        const when = `${e.event_date ? `${md(e.event_date)}, ` : ''}filed ${md(etDay(Date.parse(e.accepted_at)))}`;
+        // "Capital One Financial's CEO sold"; an owner or director by the Form 4's reporting-owner name, with the person
+        // when it's a fund we track: "Berkshire Hathaway (Warren Buffett), a 10% owner, bought".
         const role = roleOf(e.role);
-        const who = role.startsWith('a ') ? `A ${role.slice(2)} of ${short(e.issuer)}` : `${short(e.issuer)}'s ${role}`;
+        const who = role.startsWith('a ') ? `${await ownerName(env, e.filer_cik, e.filer_name)}, ${role},` : `${short(e.issuer)}'s ${role}`;
         locked.push({ text: `${who} ${verb} ${money(e.value_usd)} of ${t} (${when})`, size: e.value_usd });
       } else locked.push({ text: `${e.filer_name} filed a ${e.form.replace(/^SCHEDULE /, '')} on ${t}`, size: 0 });
     }
@@ -551,6 +564,10 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   // The subject's fallback: the week's biggest superinvestor move, buy or sell.
   const top = [moves.buys[0], moves.sells[0]].filter((x): x is WeeklyMove => !!x).sort((a, b) => Number(b.featured) - Number(a.featured) || Math.abs(b.usd) - Math.abs(a.usd))[0];
   const pricing = `${env.SITE_URL}pricing/?utm_source=weekly&utm_medium=email`;
+  const speed = `${env.SITE_URL}speed/?utm_source=weekly&utm_medium=email`;
+  // The only speed and history claims marketing allows (lead, Nov 11): the season median with /speed/, and history as served.
+  const COPY_SPEED = 'median under 2 minutes from EDGAR acceptance';
+  const COPY_HISTORY = '8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV';
   const book = `${env.SITE_URL}my-book/`;
   const n = (k: number, w: string) => `${k} ${w}${k === 1 ? '' : 's'}`;
   const locked = yours?.hook && postal ? `${yours.hook}, with Copy${yours.more ? ` (+${yours.more} more in your names)` : ''}` : null;
@@ -576,8 +593,8 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   return {
     to,
     subject: lead ? `In your names: ${lead.text.replace(/, which you own( \(.*\))?$/, '')}` : `The week in superinvestor filings: ${top ? `${top.manager} ${LABEL[top.what]} ${top.ticker}` : 'the biggest moves'}`,
-    text: `Superinvestor filings, week of ${weekOf}.\n\n${follows?.text ?? ''}${followedText}${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}${postal ? `\n\nThese came days after the filings. Copy emails each one minutes after EDGAR accepts it, with 13F history and CSV; free for 14 days: ${pricing}` : ''}\n\nYou get this because you signed up for the free Copybook weekly. Unsubscribe: ${unsub}${FOOTER}${postal ? `\n${postal}` : ''}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, week of ${esc(weekOf)}.</p>${follows?.html ?? ''}${followedHtml}${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}${postal ? `<p style="margin-top:20px">These came days after the filings. <a href="${pricing}" style="color:#1d4ed8"><b>Copy</b></a> emails each one minutes after EDGAR accepts it, with 13F history and CSV. Free for 14 days.</p>` : ''}<p style="color:#6b7280;font-size:12px;margin-top:24px">You get this because you signed up for the free Copybook weekly. Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.${postal ? ` ${esc(postal)}.` : ''} <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+    text: `Superinvestor filings, week of ${weekOf}.\n\n${follows?.text ?? ''}${followedText}${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}${postal ? `\n\nThese came days after the filings. Copy emails each one when it's filed, ${COPY_SPEED} (live figures: ${speed}), with ${COPY_HISTORY}. Free for 14 days: ${pricing}` : ''}\n\nYou get this because you signed up for the free Copybook weekly. Unsubscribe: ${unsub}${FOOTER}${postal ? `\n${postal}` : ''}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, week of ${esc(weekOf)}.</p>${follows?.html ?? ''}${followedHtml}${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}${postal ? `<p style="margin-top:20px">These came days after the filings. <a href="${pricing}" style="color:#1d4ed8"><b>Copy</b></a> emails each one when it's filed, ${COPY_SPEED} (<a href="${speed}" style="color:#1d4ed8">live figures</a>), with ${COPY_HISTORY}. Free for 14 days.</p>` : ''}<p style="color:#6b7280;font-size:12px;margin-top:24px">You get this because you signed up for the free Copybook weekly. Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.${postal ? ` ${esc(postal)}.` : ''} <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
     unsubscribe: unsub,
   };
 }
@@ -636,7 +653,7 @@ const lastName = (who: string) => who.replace(/\s*\(.*\)$/, '').split(' ').pop()
 const shortFirm = (slug: string, name: string) => firmName(slug, name).replace(/\s+(investment management|asset management|capital management|investment partners|global investors|management|advisors|advisers|investors|group)$/i, '').trim();
 const listNames = (xs: string[]) => (xs.length <= 1 ? xs.join('') : xs.length <= 3 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : `${xs.slice(0, 3).join(', ')} and ${xs.length - 3} more`);
 /** $400.1M as $400M, $8.0M as $8M: for subject lines. */
-const roundMoney = (v: number) => money(Math.abs(v)).replace(/(\d{3,})\.\d([KMB])/, '$1$2').replace(/\.0([KMB])/, '$1');
+const roundMoney = (v: number) => money(Math.abs(v)).replace(/(\d{3,})\.(\d)([KMB])/, (_, n: string, d: string, u: string) => `${Number(n) + (Number(d) >= 5 ? 1 : 0)}${u}`).replace(/\.0([KMB])/, '$1');
 /** "bought $400M of NVR" / "sold out of CHRW" / "sold $300M of HM1": one move in a subject. */
 /** Still-due names in a preheader: a person by last name, a firm in full ("Buffett", "Akre Capital Management"). */
 const dueName = (w: string) => (/\b(capital|management|partners|advisors|advisers|group|llc|lp|inc|street|fund|trust|associates|investments?)\b/i.test(w) ? w : lastName(w));
@@ -665,28 +682,30 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
       const text = a.moves ? `${who} filed its ${qLabel(a.quarter)} 13F ${when}: ${three(a)}` : `${who} filed its ${qLabel(a.quarter)} 13F ${when}`;
       return { text: `${text}\n    ${card(a)}`, html: `<p style="margin:6px 0"><b>${esc(who)}</b>${esc(text.slice(who.length))} · <a href="${esc(card(a))}" style="color:#1d4ed8">See the filing</a></p>` };
     }
-    const text = `${who}: expected ${expected ? dayLabel(expected) : `by ${dayLabel(dl.date)}`}`;
+    const text = `${who}: expected by ${dayLabel(expected ?? dl.date)}`;
     return { text, html: `<p style="margin:6px 0"><b>${esc(who)}</b>${esc(text.slice(who.length))}</p>` };
   });
-  const COPY_LINE = "Copy emails each 13F minutes after it's filed.";
+  const COPY_LINE = "Copy emails each 13F when it's filed: median under 2 minutes from EDGAR acceptance.";
   const names = o.yours && (o.yours.facts.length || o.yours.hook) ? o.yours : null;
   const moreNames = (n: number) => `+${n} more ${n === 1 ? 'item' : 'items'} in your names`;
-  const namesText = names ? `In your names:\n${names.facts.map((f) => `  ${f.text}.`).join('\n')}${names.hook ? `${names.facts.length ? '\n' : ''}  Copy alerts you minutes after filing: ${names.hook}${names.more ? ` (${moreNames(names.more)})` : ''}.` : ''}` : '';
-  const namesHtml = names ? `<div style="background:#f3f4f6;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:15px;margin:0 0 4px">In your names</h3>${names.facts.map((f) => `<p style="margin:4px 0">${esc(f.text)}.</p>`).join('')}${names.hook ? `<p style="margin:4px 0">Copy alerts you minutes after filing: ${esc(names.hook)}${names.more ? ` (${moreNames(names.more)})` : ''}.</p>` : ''}</div>` : '';
+  const namesText = names ? `In your names:\n${names.facts.map((f) => `  ${f.text}.`).join('\n')}${names.hook ? `${names.facts.length ? '\n' : ''}  Copy alerts you when it's filed: ${names.hook}${names.more ? ` (${moreNames(names.more)})` : ''}.` : ''}` : '';
+  const namesHtml = names ? `<div style="background:#f3f4f6;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:15px;margin:0 0 4px">In your names</h3>${names.facts.map((f) => `<p style="margin:4px 0">${esc(f.text)}.</p>`).join('')}${names.hook ? `<p style="margin:4px 0">Copy alerts you when it's filed: ${esc(names.hook)}${names.more ? ` (${moreNames(names.more)})` : ''}.</p>` : ''}</div>` : '';
   const moment = o.moment ? `${o.moment.example ? 'Preview example: ' : ''}${o.moment.firm} filed its 13F at ${o.moment.filed} ET. Copy members had its moves at ${o.moment.had} ET.` : '';
   const big = o.biggest.map((b) => `${b.who}: ${b.text}`);
   const bigTitle = deadlineNight ? "The day's biggest moves" : "Today's biggest moves";
   const recap = e2(env, `season/${(o.season || dl.quarter).toLowerCase()}/`, 'e2-recap');
   const why = o.follows ? 'You get this because you follow investors on Copybook.' : "You get this because you signed up for Copybook's free email.";
-  // Subject from the night's data: a follow that filed today, else the night's top manager; its top buy and top sell.
-  const followToday = o.rows.find((r) => r.a?.moves && isToday(r.a));
+  // Subject from the night's data: a followed manager that filed (today first, else the latest this season), its top move,
+  // and the first follow still due ("Pzena added $352M of Globe Life · Buffett due Monday"); else the night's top manager.
+  const followFiled = o.rows.find((r) => r.a?.moves && isToday(r.a)) ?? o.rows.find((r) => r.a?.moves && sorted(r.a).length);
+  const stillDue = o.rows.find((r) => !r.a);
+  const weekday = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
   let subject = '';
-  if (followToday?.a) {
-    const rows = sorted(followToday.a);
-    const buy = rows.find(([, r]) => r.value_delta > 0);
-    const sell = rows.find(([, r]) => r.value_delta < 0);
-    const what = (r: (typeof rows)[number][1]) => r.ticker || r.display_name || r.issuer;
-    subject = `${followToday.who.match(/\((.*)\)$/)?.[1] ?? followToday.who} ${[buy, sell].filter((x) => !!x).map((x) => headPart(x![0], x![1].value_delta, what(x![1]))).join(', ')}`;
+  if (followFiled?.a && sorted(followFiled.a).length) {
+    const [change, r] = sorted(followFiled.a)[0];
+    const name = followFiled.who.match(/\((.*)\)$/)?.[1] ?? lastName(followFiled.who);
+    const move = change === 'exited' ? `sold out of ${subjectName(r.display_name || r.issuer, r.ticker)}` : `${{ new: 'bought', added: 'added', trimmed: 'trimmed' }[change]} ${roundMoney(r.value_delta)} of ${subjectName(r.display_name || r.issuer, r.ticker)}`;
+    subject = `${name} ${move}${stillDue ? ` · ${dueName(stillDue.who)} due ${weekday(stillDue.expected ?? dl.date)}` : ''}`;
   } else if (o.biggest.length) {
     const firm = o.biggest[0].slug;
     const mine = o.biggest.filter((b) => b.slug === firm);
@@ -704,8 +723,9 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
   const leadHtml = lead.length ? `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:16px;margin:0 0 4px">Your follows</h3>${lead.map((l) => l.html).join('')}<p style="margin:8px 0 0;color:#374151">${esc(COPY_LINE)}</p></div>` : '';
   const momentHtml = moment ? `<p style="margin:0 0 12px"><b>${esc(moment)}</b></p>` : '';
   // The first block of moves, then the button (on a phone's first screen), then the moment, their names, the rest.
-  const body = lead.length ? [leadText, ask, moment, namesText, bigText] : [bigText, ask, moment, namesText];
-  const html = lead.length ? `${leadHtml}${button}${momentHtml}${namesHtml}${bigHtml}` : `${bigHtml}${button}${momentHtml}${namesHtml}`;
+  // The speed line sits directly above the trial button.
+  const body = lead.length ? [leadText, moment, ask, namesText, bigText] : [bigText, moment, ask, namesText];
+  const html = lead.length ? `${leadHtml}${momentHtml}${button}${namesHtml}${bigHtml}` : `${bigHtml}${momentHtml}${button}${namesHtml}`;
   return {
     to,
     subject,
@@ -717,7 +737,8 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
 
 /** A security in a subject: its short name ("C.H. Robinson Worldwide"), or the ticker when the name is just the ticker (NVR). */
 const subjectName = (name: string | undefined, ticker: string | null) => {
-  const n = name ? short(name).replace(/\b([A-Z])\. (?=[A-Z]\.)/g, '$1.') : '';
+  // "C. H. Robinson" and EDGAR's "C H ROBINSON" alike as "C.H. Robinson".
+  const n = name ? short(name).replace(/\b([A-Z])\. (?=[A-Z]\.)/g, '$1.').replace(/^([A-Z]) ([A-Z]) (?=[A-Z][a-z])/, '$1.$2. ') : '';
   return !n || (ticker && n.toUpperCase() === ticker.toUpperCase()) ? (ticker ?? n) : n;
 };
 
@@ -776,7 +797,7 @@ export async function runEmail2(env: Env, now: number, preview?: string[]): Prom
   }
   const biggest: E2Move[] = picked.map((b) => {
     const total = funds.get(b.slug)?.total_value;
-    return { slug: b.slug, who: whoOf(b.slug, b.manager), firm: firmOf(b.slug, plainName(b.manager)), usd: b.delta_value, change: b.change, what: subjectName(b.name, b.ticker), text: `${VERB[b.change]} ${b.name ?? b.ticker ?? ''} ${b.delta_value > 0 ? '+' : '−'}${money(b.delta_value)}${pctOf(total ? b.delta_value / total : null)}` };
+    return { slug: b.slug, who: whoOf(b.slug, b.manager), firm: firmOf(b.slug, plainName(b.manager)), usd: b.delta_value, change: b.change, what: subjectName(b.name, b.ticker), text: `${VERB[b.change]} ${subjectName(b.name, b.ticker)} ${b.delta_value > 0 ? '+' : '−'}${money(b.delta_value)}${pctOf(total ? b.delta_value / total : null)}` };
   });
   // The paid moment, clock times in ET: a 13F accepted after the moves fix whose moves email reached Copy members within
   // 5 minutes. The real send quotes only Nov 12-16 filings; a preview shows First Eagle's logged times, marked as an example.
@@ -949,9 +970,11 @@ export async function previewWeekly(env: Env, email: string, now: number, dry = 
   const fl = f.ok ? f.follows : await getFollows(env, m);
   const yours = await inYourNames(env, fl.owned.slice(0, FREE_NAMES), moves, now);
   const followed = moves.all.filter((x) => (fl.investors.includes(x.slug) && !/^13F/.test(x.form)) || (x.featured && fl.stocks.includes(x.ticker))).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 8);
-  const mail = weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), yours, followed, await followsSection(env, fl, now));
+  // Before the mailing address is set, a preview shows the issue as it will send, with a marked placeholder for it.
+  const penv = env.POSTAL_ADDRESS?.trim() ? env : { ...env, POSTAL_ADDRESS: '[postal address: not configured yet]' };
+  const mail = weeklyMail(penv, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), yours, followed, await followsSection(env, fl, now));
   // A real member's issue names their stocks: the operator gets counts only (their own test inboxes show in full).
-  const shown = previewInbox(email) || testAddress(email) ? { subject: mail.subject, in_your_names: yours, text: mail.text } : { customer: m.customer, in_your_names: yours.facts.length, text_chars: mail.text.length };
+  const shown = previewInbox(email) || testAddress(email) ? { subject: mail.subject, in_your_names: yours, text: mail.text, html: mail.html } : { customer: m.customer, in_your_names: yours.facts.length, text_chars: mail.text.length };
   if (dry) return { ok: true, sent: false, ...shown };
   return { ok: true, status: await sendMail(env, [mail], { preview: true }), ...shown };
 }
