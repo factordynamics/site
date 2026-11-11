@@ -95,6 +95,13 @@ hold_reason() { # now, last deploy restart (epoch) -> prints why a deploy restar
   [ $((now - last)) -lt 3600 ] && echo "hourly batching: next slot $(date -ud @$((last + 3600)) +%FT%H:%MZ)"
 }
 last=$(tail -1 "$RESTARTS" 2>/dev/null | cut -f1); why=$(hold_reason "$(date +%s)" "${last:-0}")
+# Operator override for one urgent deploy outside the hourly slot (not inside a freeze window; use [P0] there):
+#   echo <sha on main> > ~/copybook-api/state.deploy-now
+# That sha, or any later main that contains it, goes out at the next run; the file is removed once it deploys.
+now_sha=$(cat "$ROOT/state.deploy-now" 2>/dev/null || true)
+if [ -n "$why" ] && [ -n "$now_sha" ] && [ "${why#freeze}" = "$why" ] && git merge-base --is-ancestor "$now_sha" "$new" 2>/dev/null; then
+  echo "deploy-now override for $(git rev-parse --short "$now_sha") (was: $why)"; why=
+fi
 if [ -n "$why" ] && ! git log -1 --format=%s "$new" | grep -q '^\[P0\]'; then
   # Say it once per held head commit, not every 2 minutes.
   [ "$(cat "$ROOT/state.held" 2>/dev/null)" = "$new" ] || { echo "$new" > "$ROOT/state.held"; echo "holding $(git log -1 --format='%h %s' "$new" | cut -c1-90): $why"; }
@@ -115,7 +122,7 @@ fi
 # imports holdterm/src's names). The source map embeds the output path, so it, BUILD_SHA and README.md are left out.
 bundle_hash() { (cd "$1" && find . -type f ! -name '*.map' ! -name BUILD_SHA ! -name README.md | sort | xargs -r sha256sum | sha256sum | cut -c1-64); }
 if [ -d "$ROOT/build" ] && [ "$(bundle_hash "$ROOT/build.new")" = "$(bundle_hash "$ROOT/build")" ]; then
-  rm -rf "$ROOT/build.new"; echo "$new" > "$ROOT/state.deployed-sha"; rm -f "$ROOT/state.held"
+  rm -rf "$ROOT/build.new"; echo "$new" > "$ROOT/state.deployed-sha"; rm -f "$ROOT/state.held" "$ROOT/state.deploy-now"
   echo "no change: the bundle at $(git log -1 --format=%h "$new") equals the running one ($(cut -c1-7 "$ROOT/build/BUILD_SHA" 2>/dev/null)); not restarting"
   exit 0
 fi
@@ -137,7 +144,7 @@ if [ $ok != 1 ]; then echo "new bundle failed to boot in workerd at $new; keepin
 echo "$new" > "$ROOT/build.new/BUILD_SHA"
 rm -rf "$ROOT/build.prev"; mv "$ROOT/build" "$ROOT/build.prev"; mv "$ROOT/build.new" "$ROOT/build"
 systemctl --user restart copybook-api.service
-echo "$new" > "$ROOT/state.deployed-sha"; rm -f "$ROOT/state.held"
+echo "$new" > "$ROOT/state.deployed-sha"; rm -f "$ROOT/state.held" "$ROOT/state.deploy-now"
 printf '%s\t%s\n' "$(date +%s)" "$new" >> "$RESTARTS"
 echo "deployed $new"
 # Every deploy restart (and only those), with its build (the public /status/ log names builds from /health).
