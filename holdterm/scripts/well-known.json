@@ -1,0 +1,16 @@
+{
+ "_": "Well-known 13F filers people search for, besides the funds in Copybook's index.json: CIK -> name and the person they're known by. last_13f is the newest quarter it filed when it isn't in the screened period (checked on EDGAR). Used only by not-followed.py to explain in search why a fund isn't followed; it never adds a fund to the roster.",
+ "0001649339": { "name": "Scion Asset Management", "manager": "Michael Burry", "last_13f": "2025Q3" },
+ "0001029160": { "name": "Soros Fund Management", "manager": "George Soros" },
+ "0001037389": { "name": "Renaissance Technologies", "manager": "Jim Simons" },
+ "0001423053": { "name": "Citadel Advisors", "manager": "Ken Griffin" },
+ "0001517137": { "name": "Starboard Value", "manager": "Jeff Smith" },
+ "0000934639": { "name": "Maverick Capital", "manager": "Lee Ainslie" },
+ "0001138995": { "name": "Glenview Capital Management", "manager": "Larry Robbins" },
+ "0001056831": { "name": "Fairholme Capital Management", "manager": "Bruce Berkowitz" },
+ "0001096343": { "name": "Markel Group", "manager": "Tom Gayner" },
+ "0000783412": { "name": "Daily Journal", "manager": "Charlie Munger" },
+ "0001034524": { "name": "Polen Capital Management", "manager": "Polen Capital" },
+ "0001115373": { "name": "Semper Augustus Investments Group", "manager": "Chris Bloomstran" },
+ "0000859804": { "name": "Wedgewood Partners", "manager": "David Rolfe" }
+}
