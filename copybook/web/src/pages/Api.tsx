@@ -1,5 +1,5 @@
 import { API_LIMITS, API_OUTAGE, API_TIMING, API_UNIVERSE, HOST_MOVE } from '../lib/hosting'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Panel, Skeleton } from '../components/ui'
 import { ApiStatus } from '../components/ApiStatus'
@@ -10,7 +10,13 @@ import { HISTORY_EXACT, loadCoverage } from '../lib/stocks'
 // Renders the build's copy of the OpenAPI document (scripts/cards.mjs fetches {api}/v1/openapi.json), so new endpoints appear here with each build.
 type Op = { summary?: string; description?: string; parameters?: { name: string; in: string; required?: boolean; description?: string; schema?: { type?: string } }[]; responses?: Record<string, { description?: string }> }
 type Param = NonNullable<Op['parameters']>[number]
-type Spec = { info: { title: string; version: string; description?: string }; servers?: { url: string }[]; paths: Record<string, Record<string, Op>>; components?: { parameters?: Record<string, Param> } }
+type Spec = {
+  info: { title: string; version: string; description?: string }
+  servers?: { url: string }[]
+  paths: Record<string, Record<string, Op>>
+  components?: { parameters?: Record<string, Param>; schemas?: Record<string, { properties?: Record<string, { description?: string }> }> }
+  'x-versioning'?: { current?: string; pin_header?: string; notice_days?: number }
+}
 
 // The build's copy of the spec (scripts/cards.mjs), so the docs never depend on the API answering.
 const SPEC = `${import.meta.env.BASE_URL}api/openapi.json`
@@ -44,6 +50,31 @@ function parseInfo(d = '') {
   return { sentences, errors, glossary }
 }
 
+/** The spec's titled paragraphs ("**Versioning policy.** ..."), by title. A bold run ending in a period starts a section;
+ *  other bold runs ("**Copy Fund teams:**") stay inline. */
+function specSections(d = '') {
+  const out = new Map<string, string>()
+  const marks = [...d.matchAll(/\*\*([^*]+?\.)\*\*/g)]
+  marks.forEach((m, i) => out.set(m[1].replace(/\.$/, ''), d.slice(m.index! + m[0].length, marks[i + 1]?.index ?? d.length).trim()))
+  return out
+}
+/** Spec text with its **bold** and `code` runs. */
+function md(t: string): ReactNode[] {
+  return t.split(/(\*\*[^*]+\*\*|`[^`]+`)/).map((x, i) =>
+    x.startsWith('**') ? (
+      <strong key={i} className="font-medium text-ink">
+        {x.slice(2, -2).replace(/`/g, '')}
+      </strong>
+    ) : x.startsWith('`') ? (
+      <code key={i} className="font-mono text-[12.5px]">
+        {x.slice(1, -1)}
+      </code>
+    ) : (
+      x
+    ),
+  )
+}
+
 /** Display fixes for spec text that is behind the API (payments owns api/src/openapi.ts): the finished type rename and the full filer type list. */
 const TYPES = 'hedge_fund, long_only, index, bank, wealth, pension, sovereign, insurance, other'
 const docText = (t = '') =>
@@ -55,7 +86,7 @@ const docText = (t = '') =>
     .replace(/true while only the public top-500 shard is available for a filer/, GLOSSARY_FIX.truncated!)
 
 /** Quick-start calls: who am I, a filer's latest book, and every 13F holder of a stock. */
-const examples = (base: string) => ({
+const examples = (base: string, parquet: boolean) => ({
   curl: `# Your key and plan
 curl ${base}/v1/me \\
   -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"
@@ -74,7 +105,15 @@ curl --compressed \\
 curl ${base}/v1/bulk -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"
 curl -L -o 2026Q3.csv.gz ${base}/v1/bulk/2026Q3.csv.gz \\
   -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"
-shasum -a 256 2026Q3.csv.gz`,
+shasum -a 256 2026Q3.csv.gz${
+    parquet
+      ? `
+
+# The same rows as Parquet (sha256 in /v1/bulk too)
+curl -L -o 2026Q3.parquet ${base}/v1/bulk/2026Q3.parquet \\
+  -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"`
+      : ''
+  }`,
   python: `import requests
 
 API = "${base}"
@@ -138,6 +177,14 @@ export function ApiDocs() {
   // The published /v1 base (api.config.mjs API_DOCS_BASE), never the quick tunnel member pages use.
   const base = import.meta.env.VITE_API_DOCS_BASE as string
   const info = parseInfo(s?.info.description)
+  const sections = specSections(s?.info.description)
+  const xv = s?.['x-versioning']
+  // Bulk files the spec says the API serves (csv.gz, and parquet once its pattern lists it).
+  const parquet = /parquet/.test(JSON.stringify(s?.paths['/v1/bulk/{file}'] ?? ''))
+  // Fields on every response, errors included: the spec's Error envelope without `error`.
+  const envelopeFields = Object.entries(s?.components?.schemas?.Error?.properties ?? {}).filter(([k]) => k !== 'error')
+  const versioning = [...sections].filter(([t]) => /^(Versioning|Share classes|Weight)/.test(t))
+  const announced = (log.data?.data ?? []).filter((c) => c.status === 'announced')
   const [lang, setLang] = useState<'curl' | 'python' | 'urllib'>('curl')
   // Parameters are often $refs into components.parameters; resolve them so the table has names.
   const resolve = (x: Param | { $ref?: string }): Param | null => {
@@ -168,7 +215,7 @@ export function ApiDocs() {
           </Button>
         </div>
         <p className="mt-4 text-[14px] text-ink-3">
-          Coverage: {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers. History: {HISTORY_EXACT} (<Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">coverage</Link>). Coming: the as_of parameter with per-row amendment lots by Nov 30, Parquet bulk files with no date yet. Use is covered by our{' '}
+          Coverage: {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers. History: {HISTORY_EXACT} (<Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">coverage</Link>). Bulk files: gzip CSV{parquet ? ' and Parquet' : ''}, one per quarter.{announced.length > 0 && <> {announced.length} announced changes are listed under <a href="#versioning" className="font-medium text-accent hover:text-accent-2">versioning</a>.</>} Use is covered by our{' '}
           <Link to="/terms/" className="font-medium text-accent hover:text-accent-2">
             terms
           </Link>
@@ -186,7 +233,7 @@ export function ApiDocs() {
             ))}
           </div>
           <pre className="overflow-x-auto rounded-xl bg-night p-4 font-mono text-[12.5px] leading-relaxed text-white/90">
-            <code>{examples(base)[lang]}</code>
+            <code>{examples(base, parquet)[lang]}</code>
           </pre>
           <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. {HOST_MOVE} {API_OUTAGE} Live API status: <Link to="/status/" className="text-accent hover:text-accent-2">/status/</Link>.</p>
           <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[13.5px] leading-relaxed text-accent-2">
@@ -227,6 +274,24 @@ export function ApiDocs() {
             <Skeleton className="h-40 w-full" />
           )}
         </Panel>
+        {s && (envelopeFields.length > 0 || xv?.pin_header) && (
+          <Panel title="Every response" sub="On successes and errors alike, generated from the spec">
+            <dl className="divide-y divide-line text-[13.5px]">
+              {envelopeFields.map(([field, f]) => (
+                <div key={field} className="flex gap-4 py-2">
+                  <dt className="w-40 shrink-0 font-mono text-[12.5px] text-ink">{field}</dt>
+                  <dd className="min-w-0 text-ink-2 [overflow-wrap:anywhere]">{md(f.description ?? '')}</dd>
+                </div>
+              ))}
+              {xv?.pin_header && (
+                <div className="flex gap-4 py-2">
+                  <dt className="w-40 shrink-0 font-mono text-[12.5px] text-ink [overflow-wrap:anywhere]">{xv.pin_header}</dt>
+                  <dd className="min-w-0 text-ink-2">Response header: the schema served, your pin when valid, otherwise the default{xv.current ? ` (${xv.current})` : ''}. See versioning.</dd>
+                </div>
+              )}
+            </dl>
+          </Panel>
+        )}
         {info.glossary.length > 0 && (
           <Panel title="Field glossary" sub="Response fields that need more than their name">
             <dl className="divide-y divide-line text-[13.5px]">
@@ -295,14 +360,35 @@ export function ApiDocs() {
       </section>
 
       <div className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2">
-        <Panel title="Versioning" sub="How the API changes">
-          <ul className="list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed text-ink-2">
-            <li>All endpoints live under /v1. Every response carries <code className="font-mono text-[12.5px]">schema_version</code>, the date of the spec it follows.</li>
-            <li>Additive changes, such as new fields, endpoints or optional parameters, ship at any time. Ignore fields you don’t know.</li>
-            <li>Breaking changes are announced in the changelog at least 90 days before they take effect, for every paying key.</li>
-            <li><code className="font-mono text-[12.5px]">weight</code> keeps its current meaning until Feb 8, 2027. <code className="font-mono text-[12.5px]">weight_equity</code> is the stable equity-only field, and <code className="font-mono text-[12.5px]">weight_incl_options</code> the explicit name for today’s meaning.</li>
-          </ul>
-        </Panel>
+        <section id="versioning" className="scroll-mt-24">
+          <Panel title="Versioning" sub={xv?.current ? `Current schema ${xv.current}${xv.pin_header ? ` · pin one with ${xv.pin_header}` : ''}${xv.notice_days ? ` · ${xv.notice_days} days’ notice before a breaking change` : ''}` : 'How the API changes'}>
+            {s ? (
+              <div className="space-y-3 text-[14px] leading-relaxed text-ink-2">
+                {versioning.map(([title, text]) => (
+                  <p key={title}>
+                    <strong className="font-medium text-ink">{title}.</strong> {md(text)}
+                  </p>
+                ))}
+              </div>
+            ) : spec.error ? (
+              <p className="text-[14px] text-ink-2">The spec didn’t load. Open it directly with the button above.</p>
+            ) : (
+              <Skeleton className="h-32 w-full" />
+            )}
+            {announced.length > 0 && (
+              <div className="mt-4 border-t border-line pt-3">
+                <p className="text-[13px] font-medium text-ink">Announced, not live yet</p>
+                <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[13.5px] leading-relaxed text-ink-2">
+                  {announced.map((c, i) => (
+                    <li key={c.id ?? `${c.date}-${i}`}>
+                      <span className="num text-ink-3">{c.date}</span> {md(c.changes[0] ?? '')}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Panel>
+        </section>
         <section id="changelog" className="scroll-mt-24">
           <Panel title="API changelog" sub="Newest first">
             {log.data ? (
