@@ -1152,7 +1152,7 @@ export function Flows() {
       <div className="head">
         <div>
           <h1>Buys and sells</h1>
-          <p className="lede">What the investors bought and sold, each 13F compared with the fund’s quarter before.</p>
+          <p className="lede">What the investors bought and sold, comparing each fund’s latest 13F with the one before.</p>
           <FlowsSummary rows={rows} funds={fundsN} q={q} />
         </div>
       </div>
@@ -1234,15 +1234,13 @@ function FlowsSummary({ rows, funds, q }: { rows: Agg[]; funds: number; q: strin
   if (!buyers) return null
   return (
     <p className="summary">
-      Across {num(funds)} funds’ {q === 'latest' ? 'latest 13Fs' : `${quarterLabel(q)} 13Fs`}, the stock the most investors bought was {aggName(buyers)}, by {num(buyers.buyers.length)}
-      {netBuy && netBuy.net > 0 && netBuy !== buyers ? `, and the most money went into ${aggName(netBuy)}, ${signedUsd(netBuy.net)} net` : netBuy && netBuy.net > 0 ? `, for ${signedUsd(netBuy.net)} net` : ''}.{' '}
-      {fresh && fresh.newBuyers > 1 && <>{num(fresh.newBuyers)} investors opened a new position in {aggName(fresh)}. </>}
-      {sellers && sellers.sellers.length > 0 && (
-        <>
-          The stock the most investors sold was {aggName(sellers)}, by {num(sellers.sellers.length)}
-          {netSell && netSell.net < 0 && netSell !== sellers ? `, and the most money came out of ${aggName(netSell)}, ${signedUsd(netSell.net)} net` : ''}.
-        </>
-      )}
+      {/* One fact per sentence: the most buyers, the most money in, then the same for selling. */}
+      {plural(buyers.buyers.length, 'investor')} bought {aggName(buyers)}, more than any other stock
+      {fresh === buyers && fresh.newBuyers > 0 ? `, and ${num(fresh.newBuyers)} of them were new to it` : ''}.{' '}
+      {fresh && fresh !== buyers && fresh.newBuyers > 1 && <>The most new positions were in {aggName(fresh)}, {num(fresh.newBuyers)}. </>}
+      {netBuy && netBuy.net > 0 && <>The most money went into {netBuy === buyers ? 'it' : aggName(netBuy)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netBuy.net)}</span> net. </>}
+      {sellers && sellers.sellers.length > 0 && <>{plural(sellers.sellers.length, 'investor')} sold {sellers === buyers ? 'some of it too' : aggName(sellers)}, the most of any stock. </>}
+      {netSell && netSell.net < 0 && <>The most money came out of {aggName(netSell)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netSell.net)}</span> net.</>}
     </p>
   )
 }
@@ -1269,12 +1267,13 @@ function FilingsSummary({ list, firms }: { list: Event[]; firms: Map<string, str
   const latestNew = newStakes[0]
   return (
     <p className="summary">
-      The investors filed {plural(stakes.length, 'stake report')} on Schedule 13D or 13G, {num(newStakes.length)} of them new 5%+ stakes, and {plural(f4.length, 'Form 4')}, with {num(buys.length)} open-market {buys.length === 1 ? 'buy' : 'buys'} and {num(sells.length)} {sells.length === 1 ? 'sale' : 'sales'}.
+      The investors reported {plural(stakes.length, 'stake')} above 5%{newStakes.length ? `, ${num(newStakes.length)} of them new` : ''}, and {plural(f4.length, 'insider filing')}
+      {buys.length || sells.length ? `, including ${listing([buys.length > 0 && plural(buys.length, 'open-market buy'), sells.length > 0 && plural(sells.length, 'sale')])}` : ''}.
       {latestNew && (
         <>
           {' '}
-          The latest new stake: {shortFirm(firmOf(firms, latestNew.slug, latestNew.manager))} in {issuerName(latestNew.display_name || latestNew.issuer)}
-          {latestNew.percent_of_class != null ? `, ${latestNew.percent_of_class.toFixed(1)}% of the company` : ''}, filed {day(latestNew.filing_date)}.
+          The latest new one is {shortFirm(firmOf(firms, latestNew.slug, latestNew.manager))}’s {latestNew.percent_of_class != null ? `${latestNew.percent_of_class.toFixed(1)}% of ` : 'stake in '}
+          {issuerName(latestNew.display_name || latestNew.issuer)}, filed {day(latestNew.filing_date)}.
         </>
       )}
     </p>
@@ -1382,7 +1381,7 @@ export function Filings() {
       <div className="head">
         <div>
           <h1>Stakes and insider trades</h1>
-          <p className="lede">Schedule 13D and 13G stakes and Form 4 trades the investors filed between 13Fs, over the last {ev.data.window_days} days.</p>
+          <p className="lede">Stakes above 5% and insider trades the investors reported in the last {ev.data.window_days} days, between their quarterly 13Fs.</p>
           <FilingsSummary list={scoped} firms={firms} />
         </div>
       </div>
