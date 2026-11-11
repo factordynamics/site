@@ -1025,7 +1025,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       await env.DB.put(`lead:${id}`, JSON.stringify({ ...lead, invoice_trial: r?.state ?? 'error', ...(test ? { test: true } : {}) }));
       if (!test && env.CONTACT_EMAIL) await sendMail(env, [leadNoticeMail(env, { ...lead, message: `${lead.message ?? ''}\n[invoice trial: ${r?.state ?? 'error'}]`.trim() }, id)]);
       if (!r) return json({ ok: false, error: "We couldn't start the trial just now. We've got your request and will email you today.", code: 'server_error', id }, 502, h);
-      if (r.state === 'started') return json({ ok: true, id, trial: 'started', trial_end: r.trial_end, invoice_on: r.invoice_on, due_on: r.due_on, sign_in_email: r.sign_in_email }, 200, h);
+      // po and ap_email as the invoice will print them, so the confirmation can say so (null when not given).
+      if (r.state === 'started') return json({ ok: true, id, trial: 'started', trial_end: r.trial_end, invoice_on: r.invoice_on, due_on: r.due_on, sign_in_email: r.sign_in_email, po: str(b.po, 140), ap_email: str(b.ap_email, 200)?.toLowerCase() ?? null }, 200, h);
       if (r.state === 'already_member') return json({ ok: false, id, code: 'already_member', error: 'This address already has a Copybook subscription. Sign in, or switch to invoice billing in your account.' }, 409, h);
       if (r.state === 'domain_used') return json({ ok: false, id, code: 'trial_used', error: 'Your company has already had a Copy Fund trial. We have your request and will email you to set up an invoice.' }, 409, h);
       return json({ ok: false, id, code: 'freemail', error: 'Use your work email: an invoice trial goes to a company address.' }, 400, h);

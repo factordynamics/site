@@ -1464,6 +1464,7 @@ describe('copybook api', () => {
     const before = sent.length;
     const r = await go({ email: 'COO@acme-cap.test', fund: 'Acme Capital', billing_address: address, po: 'PO-55', ap_email: 'ap@acme-cap.test' });
     const j = await r.json();
+    expect([j.po, j.ap_email]).toEqual(['PO-55', 'ap@acme-cap.test']);
     expect([r.status, j.trial, j.sign_in_email, j.invoice_on, j.due_on]).toEqual([200, 'started', 'sent', new Date(Date.now() + 14 * 86400_000).toISOString().slice(0, 10), new Date(Date.now() + 44 * 86400_000).toISOString().slice(0, 10)]);
     const post = (p: string) => calls.find((c) => c.method === 'POST' && c.path === p)!.body;
     expect(Object.fromEntries(['trial_period_days', 'collection_method', 'days_until_due', 'metadata[invoice_trial]'].map((k) => [k, post('subscriptions').get(k)]))).toEqual({ trial_period_days: '14', collection_method: 'send_invoice', days_until_due: '30', 'metadata[invoice_trial]': 'true' });
