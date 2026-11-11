@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { FailingBanner } from '../components/Channels'
 import { Peers } from '../components/Peers'
@@ -9,9 +9,10 @@ import { TRIAL_DAYS } from '../config'
 import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, edgeFade, Lock, Panel, Skeleton, Stat } from '../components/ui'
 import { ApiStatus, Updating } from '../components/ApiStatus'
-import { ApiError, apiDown, getToken, needsReauth, isFree, isPro, lastEvents, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
+import { ApiError, apiDown, getToken, lastMe, needsVerify, pendingEmail, needsReauth, isFree, isPro, lastEvents, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
 import { getJSON, live, quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle, type Manager } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
+import { ConfirmEmail } from '../components/ConfirmEmail'
 import { accNo, cap, issuerLatest, pctChange, whenLabel, type Latest } from '../lib/insiders'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
 
@@ -971,10 +972,23 @@ const NonTrade = ({ n, ticker }: { n: number; ticker: string }) => (
 // A word joiner keeps the sign on the same line as the amount.
 const signed = (v: number) => `${v >= 0 ? '+' : '−'}\u2060${money(Math.abs(v))}`
 
+// The last paste's result outlives the form: the first names saved swap the empty page for the book, which mounts a new one.
+type ImportState = { busy?: boolean; msg?: string; ok?: boolean }
+let lastImport: ImportState = {}
+const importSubs = new Set<() => void>()
+const setState = (x: ImportState) => {
+  lastImport = x
+  importSubs.forEach((f) => f())
+}
+const subscribeImport = (f: () => void) => {
+  importSubs.add(f)
+  return () => importSubs.delete(f)
+}
+
 function Import({ link = true }: { link?: boolean }) {
   const [text, setText] = useState('')
   const [owned, setOwned] = useState(true)
-  const [state, setState] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
+  const state = useSyncExternalStore(subscribeImport, () => lastImport)
   const { follows } = useFollows()
   const go = async () => {
     // A CSV's Ticker or Symbol column, else the first column of each line, or every token on a single line: "$NVDA, AAPL BRK-B".
@@ -995,11 +1009,22 @@ function Import({ link = true }: { link?: boolean }) {
     const fresh = known.filter((t) => !have.has(t))
     let skipped: string[] = []
     if (fresh.length) {
-      if (owned) {
+      // Before the emailed link is opened the API refuses its importer (403 verify_email) but saves follows, so owned
+      // names save one by one as stock Follow does (trader, Nov 11); nothing is delivered until the email is confirmed.
+      const viaFollows = owned && Boolean(pendingEmail(lastMe()))
+      if (owned && !viaFollows) {
         // Owned names go through the API's importer, which keeps them apart from a linked 13F.
         const r = await importBook({ text: fresh.join(' '), mode: 'merge' }).catch((e) => (e instanceof ApiError ? e : null))
-        if (!r || r instanceof ApiError) return setState({ msg: r?.detail ?? 'That didn’t save. Please try again.', ok: false })
-        skipped = (r.skipped ?? []).filter((x) => x.trim())
+        if (r instanceof ApiError && needsVerify(r)) {
+          const failed = await addStocks(fresh, true).catch(() => null)
+          if (failed === null) return setState({ msg: 'That didn’t save. Please try again.', ok: false })
+          skipped = failed
+        } else if (!r || r instanceof ApiError) return setState({ msg: r?.detail ?? 'That didn’t save. Please try again.', ok: false })
+        else skipped = (r.skipped ?? []).filter((x) => x.trim())
+      } else if (viaFollows) {
+        const failed = await addStocks(fresh, true).catch(() => null)
+        if (failed === null) return setState({ msg: 'That didn’t save. Please try again.', ok: false })
+        skipped = failed
       } else {
         const failed = await addStocks(fresh, false).catch(() => null)
         if (failed === null) return setState({ msg: 'That didn’t save. Please try again.', ok: false })
@@ -1048,6 +1073,7 @@ function Import({ link = true }: { link?: boolean }) {
           {state.msg}
         </p>
       )}
+      {state.ok !== undefined && pendingEmail(lastMe()) && <ConfirmEmail email={pendingEmail(lastMe())!} kind="saved" className="mt-2" />}
       <p className="mt-3 text-[12.5px] text-ink-3">Remove a name with Following on its stock page.</p>
       {link ? (
         <LinkFund />
