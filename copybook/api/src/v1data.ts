@@ -428,7 +428,8 @@ const MAX_RANGE = 8;
 export async function issuerCode(env: Env, id: string): Promise<{ code: string; ticker: string | null; superseded_by?: string } | null> {
   // A reissued security resolves to its current issuer (the old code's book is stale: Q3's holders filed under the new
   // CUSIP, and ingest's hl/ counts the old-CUSIP holders under the new code). Asked for by the old code: `superseded_by`.
-  const { REISSUED, REISSUED_ISSUER } = await import('./edgar');
+  const { REISSUED, REISSUED_ISSUER, loadReissues } = await import('./edgar');
+  await loadReissues(env);
   const up0 = id.toUpperCase();
   const r = await issuerCodeRaw(env, up0);
   const cur = r ? REISSUED_ISSUER[r.code] : undefined;

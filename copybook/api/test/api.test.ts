@@ -1448,6 +1448,29 @@ describe('copybook api', () => {
     expect(netRenamed({ moves: {} as never, changed: stored as never }).changed.map((x) => [x.change, x.shares - x.prev_shares])).toEqual([['added', 465409]]);
     // A filer still holding the old CUSIP alongside the new one isn't relinked: the old row stays its own position.
     expect(computeMoves([...cur, { ...prev[0] }] as never, prev as never).changed.map((x) => [x.change, x.cusip])).toEqual([['new', '30233Q108']]);
+    // Every SEC-confirmed reissue, ours and ingest's (cusip_links.json, sec_13f_list only), links in the alert path: a
+    // filer that held either CUSIP last quarter never reads as an exit or a new position (the quant: FMR's TEVA ADS ->
+    // ordinary read as a $1.03B exit plus a new buy). Detection-only links (SPAC units to shares) are never used.
+    const ed = await import('../src/edgar');
+    const { compareToBuild } = await import('../src/alerts');
+    const real1 = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => String(u).endsWith('cusip_links.json')
+      ? Response.json({ links: { '12345A101': { new: '12345B107', ticker: 'NEWCO', basis: 'sec_13f_list' }, '99999U107': { new: '99999S104', ticker: 'SPAC', basis: 'detected' } } })
+      : real1(u, init));
+    await ed.loadReissues(env, Date.now() + 10 * 86400_000);
+    vi.stubGlobal('fetch', real1);
+    expect([ed.REISSUED['12345A101']?.to, ed.REISSUED['99999U107']]).toEqual(['12345B107', undefined]);
+    for (const [old, { to, ticker }] of Object.entries(ed.REISSUED)) {
+      const was = [{ cusip: old, put_call: null, issuer: ticker, shares: 30258016, value: 1_030_000_000 }, other];
+      const now = [{ cusip: to, put_call: null, issuer: ticker, shares: 25784696, value: 900_000_000 }, other];
+      const ch = computeMoves(now as never, was as never).changed;
+      expect([ticker, ch.map((x) => x.change)]).toEqual([ticker, ['trimmed']]);
+      // A build that left the pair unlinked (an exit plus a new line, no tickers) never corrects the trim.
+      const build = new Map([[`${to}|`, { cusip: to, ticker: null, change: 'new', value_delta: 900_000_000 }], [`${old}|`, { cusip: old, ticker: null, change: 'exited', value_delta: -1_030_000_000 }]]);
+      expect(compareToBuild(new Map([[`${to}|`, { ...ch[0], ticker: null }]]), build as never)).toEqual([]);
+    }
+    // A detection-only pair stays an exit plus a new position.
+    expect(computeMoves([{ cusip: '99999S104', put_call: null, issuer: 'S', shares: 10, value: 100 }] as never, [{ cusip: '99999U107', put_call: null, issuer: 'U', shares: 10, value: 100 }] as never).changed.map((x) => x.change).sort()).toEqual(['exited', 'new']);
     // By ticker or the old issuer code, XOM and TEVA resolve to the current issuer (the quant: XOM read the stale 30231G
     // book, 447 false exits; TEVA the old ADS code); HON kept its issuer code, so nothing moves.
     const { issuerCode } = await import('../src/v1data');

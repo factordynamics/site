@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { offFilers, reissuedTicker, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { offFilers, reissuedTicker, isReissued, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -1031,6 +1031,7 @@ async function revealAlert(env: Env, e: FeedEntry, meta: FilingMeta, mgrs: Manag
 }
 
 export async function runPoll(env: Env, now: number): Promise<Record<string, unknown>> {
+  await loadReissues(env, now);
   const curated = await cikMap(env);
   if (!curated) return { status: 'no cik map yet' };
   const extra = await extraMap(env);
@@ -1326,6 +1327,7 @@ const keepChanged = (rows: MoveRow[]) => rows.filter((r) => Math.abs(r.value_del
  * non-curated filer's baseline) or else from EDGAR, and sends the follow-up. The data run's moves stay the fallback.
  */
 export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promise<Record<string, unknown>> {
+  await loadReissues(env, now);
   const pending = JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[];
   if (!pending.length) return { pending: 0 };
   const t0 = Date.now();
@@ -1840,7 +1842,7 @@ async function filerValueRows(env: Env, a: Alert13F, rows: Map<string, MoveRow>)
 }
 
 /** Alerted rows against the build's: the rows that differ in direction, sign, or by over 10% in value, largest first. */
-function compareToBuild(rows: Map<string, MoveRow>, build: Map<string, BuildRow>): import('./email').CorrectionRow[] {
+export function compareToBuild(rows: Map<string, MoveRow>, build: Map<string, BuildRow>): import('./email').CorrectionRow[] {
   const b = { rows: build };
   const failed: import('./email').CorrectionRow[] = [];
   for (const r of rows.values()) {
@@ -1848,6 +1850,10 @@ function compareToBuild(rows: Map<string, MoveRow>, build: Map<string, BuildRow>
     // A CUSIP change the alert netted into one move (XOM's Q3 reorganisation): the build keeps the exit and the new line.
     if (!v && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
     if (v?.change === 'new' && r.change !== 'new' && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
+    // A reissued CUSIP (either side of a SEC-confirmed link) is linked by our own table, whatever the build says: a build
+    // that hasn't linked it (TEVA's ADS to ordinary, Nov 11) lists an exit plus a new line, and must never correct an
+    // add or trim into either.
+    if (isReissued(r.cusip) && (!v || v.change === 'new' || v.change === 'exited')) continue;
     // A row the build doesn't list can't be confirmed either way: never read as "unchanged" (retail, Nov 11: real exits
     // were "corrected" to unchanged when a build left its exits out).
     if (!v) continue;

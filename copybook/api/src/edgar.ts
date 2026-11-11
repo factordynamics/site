@@ -319,8 +319,42 @@ export const REISSUED: Record<string, { to: string; ticker: string }> = {
  * Old issuer code -> current one, where a reissue changed the 6-character issuer (XOM 30231G -> 30233Q, TEVA 881624 ->
  * M8769Q); HON's and DD's kept theirs. Only these SEC-confirmed links: never units, rights or warrants.
  */
-export const REISSUED_ISSUER: Record<string, string> = Object.fromEntries(Object.entries(REISSUED).filter(([o, r]) => o.slice(0, 6) !== r.to.slice(0, 6)).map(([o, r]) => [o.slice(0, 6), r.to.slice(0, 6)]));
-const REISSUED_TO = new Map(Object.values(REISSUED).map((r) => [r.to, r.ticker]));
+export const REISSUED_ISSUER: Record<string, string> = {};
+const REISSUED_TO = new Map<string, string>();
+function indexReissued(): void {
+  for (const [o, r] of Object.entries(REISSUED)) {
+    REISSUED_TO.set(r.to, r.ticker);
+    if (o.slice(0, 6) !== r.to.slice(0, 6)) REISSUED_ISSUER[o.slice(0, 6)] = r.to.slice(0, 6);
+  }
+}
+indexReissued();
+let reissuesAt = 0;
+/**
+ * Adds ingest's reissue links (data/cusip_links.json) to the hand-coded ones, at most hourly: only links the SEC's
+ * Official 13(f) List confirms (basis sec_13f_list), never detection alone (units to shares, rights, warrants). Links
+ * only add: a missing or unreadable file leaves the known ones.
+ */
+export async function loadReissues(env: { DATA_URL: string }, now = Date.now()): Promise<number> {
+  if (now - reissuesAt < 3600_000) return Object.keys(REISSUED).length;
+  reissuesAt = now;
+  try {
+    const res = await fetch(`${env.DATA_URL}cusip_links.json`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      const links = ((await res.json()) as { links?: Record<string, { new?: string; ticker?: string; basis?: string }> }).links ?? {};
+      for (const [old, l] of Object.entries(links)) {
+        const from = old.toUpperCase(), to = String(l.new ?? '').toUpperCase();
+        if (l.basis !== 'sec_13f_list' || !/^[0-9A-Z]{8}[0-9]$/.test(from) || !/^[0-9A-Z]{8}[0-9]$/.test(to) || !l.ticker || REISSUED[from]) continue;
+        REISSUED[from] = { to, ticker: String(l.ticker).toUpperCase() };
+      }
+      indexReissued();
+    }
+  } catch {
+    // keep the known links
+  }
+  return Object.keys(REISSUED).length;
+}
+/** Both CUSIPs of every known reissue (old and new). */
+export const isReissued = (cusip?: string | null): boolean => !!cusip && (!!REISSUED[cusip.toUpperCase()] || REISSUED_TO.has(cusip.toUpperCase()));
 /** The ticker of a reissued CUSIP, old or new: rows without a ticker yet still net (stored moves, the site's cards). */
 export const reissuedTicker = (cusip?: string | null): string | null => (cusip ? (REISSUED[cusip.toUpperCase()]?.ticker ?? REISSUED_TO.get(cusip.toUpperCase()) ?? null) : null);
 /**
