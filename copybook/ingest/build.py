@@ -38,8 +38,8 @@ from ingest.parse import (
     looks_like_thousands,
     parse_info_table,
     scale_if_thousands,
-    consensus_factor,
-    rescale_rejected,
+    in_dollars,
+    unit_verdict,
     consensus_prices,
     row_overstated,
     unit_fix,
@@ -442,21 +442,17 @@ def fix_with_consensus(managers: list[dict]) -> int:
         # A book whose lines as filed already sum to its cover page's total is in dollars, as the filer says: no line
         # in it is scaled x1000 (Mizuho Securities USA 2026Q3: cover $6.30B = its lines; x1000 on MCHP, ON and AKAM
         # made $13.18B, though ON and AKAM then priced near their peers). Such a line is held instead.
-        cover, tot = q.get("cover_total"), sum(h["value"] for h in q["holdings"])
-        in_dollars = bool(cover and abs(tot - cover) <= 0.02 * cover)
+        dollars = in_dollars(sum(h["value"] for h in q["holdings"]), q.get("cover_total"))
         for h in q["holdings"]:
             if not is_equity(h) or h["shares"] <= 0:
                 continue
-            m = cons.get((q["quarter"], h["cusip"]))
-            f = consensus_factor(h["value"] / h["shares"], m)
-            if f == 1000.0 and in_dollars:
+            f, rejected = unit_verdict(h["value"] / h["shares"], cons.get((q["quarter"], h["cusip"])), dollars)
+            if rejected:
                 h["price_outlier"], h["value_rescale"] = True, "rejected"
             elif f != 1.0:
                 h["value"] *= f
                 changed = True
                 n += 1
-            elif rescale_rejected(h["value"] / h["shares"], m):
-                h["price_outlier"], h["value_rescale"] = True, "rejected"
         if changed or q.pop("_rejudged", None):
             q["holdings"].sort(key=lambda h: h["value"], reverse=True)
             apply_weights(q)
@@ -894,8 +890,9 @@ def classify_options(q: dict | None) -> dict | None:
     filer-quarter, on the median of those ratios:
     - contracts (80-125x: BNP Paribas FM, National Bank of Canada file contract counts): shares x100,
       shares_basis "contracts", the filed value kept; counted like any line;
-    - non_standard (not within 2% of 1x: Nine Masts 8.09x, Mizuho Markets 6.0x): every option line held
-      (option_held "filer_non_standard", price_outlier), no side reliable;
+    - non_standard (median outside 0.8-1.25x, the isolated band: Nine Masts 8.09x, Mizuho Markets 6.0x, Creative
+      Planning 0.12x): every option line held (option_held "filer_non_standard", price_outlier), no side reliable.
+      A 3-10% filer-level offset (Allianz 1.032x, Raymond James 0.90x) is a price-date difference, not units: standard;
     - standard: a line outside 0.8-1.25x of its benchmark (Belvedere EW puts ~87x) is held (option_held "isolated").
     Idempotent: a book read back from an earlier build gets its filed shares back first. Copies; never mutates q."""
     import statistics
@@ -934,7 +931,7 @@ def classify_options(q: dict | None) -> dict | None:
         lines.append((h, ratio, basis))
     rs = [r for _, r, _ in lines if r is not None]
     med = statistics.median_low(rs) if rs else None
-    kind = None if med is None else "contracts" if 80 <= med <= 125 else "standard" if 0.98 <= med <= 1.02 else "non_standard"
+    kind = None if med is None else "contracts" if 80 <= med <= 125 else "standard" if 0.8 <= med <= 1.25 else "non_standard"
     out, held = [], 0
     for h, ratio, basis in lines:
         if not h.get("put_call") or h.get("shares_type") == "PRN":
@@ -981,12 +978,31 @@ def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: st
         return not any(1 / OFF_MEDIAN <= row["value"] / n / (m / s) <= OFF_MEDIAN for s in {1.0, kk})
 
     here, before = off(h, q), (off(p, q_prev, k) if p is not None else None)
+    if before and not here and r != 1 and h["value"] > 0 and p["value"] > 0 and amount(h) and amount(p):
+        # A pre-split prior that reconciles after the split factor is a counted change, not a flag: DekaBank BKNG
+        # 2026Q2 filed 44,018 sh at $4,102 after the 25:1 (x25 = $164.1, 0.92x the $178.24 median), 2026Q3 904,406
+        # at $162.9 (1.0x): both in the 0.8-1.25 band, so trimmed -196,044 at the current position price.
+        band = lambda px, m: bool(m) and 0.8 <= px / m <= 1.25
+        if band(p["value"] / (amount(p) * r), consensus().get((q_prev or "", p["cusip"]))) \
+                and band(h["value"] / amount(h), consensus().get((q or "", h["cusip"]))):
+            before = False
     own = None
     now, was = amount(h), (amount(p) * r if p is not None else 0)
     if p is not None and now and was and h["value"] > 0 and p["value"] > 0:
         jump = (h["value"] / now) / (p["value"] / was)
         own = jump > 5 or jump < 0.2
-    reason = "cross_filer" if here else "cross_filer_prior" if before else "own_prior" if own else None
+    # The share count and the filed value moved in opposite directions while the line sits over 1.5x off the median
+    # (under the 3x check): one side is wrong and nothing says which. Mizuho Securities USA 2026Q3 GOOG: 829,083 ->
+    # 1,734,262 sh while $294.8M -> $260.4M, $150.13 a share against $340.74.
+    sign = False
+    m_now = consensus().get((q or "", h["cusip"]))
+    if not here and p is not None and now and was and h["value"] > 0 and p["value"] > 0 and m_now \
+            and abs(math.log(h["value"] / now / m_now)) > math.log(1.5) and (now - was) * (h["value"] - p["value"]) < 0:
+        sign = True
+    reason = "cross_filer" if here else "cross_filer_prior" if before else "own_prior" if own else \
+        "sign_mismatch" if sign else None
+    if sign:
+        own = True
     if here is not None or before is not None:
         # basis names the check that tripped when flagged (own_prior only: own_prior), else the strongest that ran
         return {"suspect_units": bool(here or before or own), "suspect_reason": reason,
@@ -1008,7 +1024,7 @@ def unreliable_side(r: dict, quarter: str | None) -> str | None:
     not flagged."""
     if not (r.get("suspect_units") or r.get("price_outlier")) or r.get("shares_type") == "PRN":
         return None
-    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale") or r.get("put_call") \
+    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale", "sign_mismatch") or r.get("put_call") \
             or r.get("value_rescale") == "rejected":  # Mizuho Securities MCHP: neither as filed nor x1000 reconciles
         return "both"  # an option line held by classify_options: neither its shares nor its value is reliable
     sh, ps, v, pv = (r.get(k) or 0 for k in ("shares", "prev_shares", "value", "prev_value"))
@@ -1209,7 +1225,13 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         # today's level, not k times it; Amundi and 1832 on CRWD 2026Q2) is not multiplied again.
         if r != 1.0 and not (FILED_SPLITS.get((h["cusip"], q_to)) or {}).get("value_paid_out") and p is not None and not prn and p["value"] > 0 and amount(p) > 0 and h["value"] > 0 and amount(h) > 0:
             was, now_px = p["value"] / amount(p), h["value"] / amount(h)
-            if abs(math.log(was / now_px)) < abs(math.log(was / (now_px * r))):
+            # ...unless this line is itself valued at the pre-split price (r x the median) and the share counts only
+            # reconcile after the split: AllianceBernstein BKNG 2026Q2 (0001109448-26-000261) files 1,843,531 sh at
+            # $4,210.32, BKNG's March price, against 76,632 x 25 = 1,915,800: post-split shares, a stale value.
+            m = consensus().get((q_to or "", h["cusip"]))
+            stale = bool(m) and abs(math.log(now_px / (m * r))) < math.log(1.5)
+            by_shares = abs(math.log(amount(h) / (amount(p) * r))) < abs(math.log(amount(h) / amount(p)))
+            if abs(math.log(was / now_px)) < abs(math.log(was / (now_px * r))) and not (stale and by_shares):
                 r = 1.0
         # A split effective by this quarter whose prior line is still in pre-split units though no split falls between
         # the two quarters (Bowen Hanes DD: 7,000 sh at $45.80 in 2026Q2 after the 1-for-3 of that quarter, 2,731 at

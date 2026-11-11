@@ -19,7 +19,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ingest.figi import load_cache
-from ingest.parse import consensus_factor, consensus_prices
+from ingest.bulk import MAX_ROWS
+from ingest.parse import consensus_prices, in_dollars, unit_verdict
 from ingest.securities import UNCLASSIFIED
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
@@ -132,33 +133,90 @@ def write_csvs() -> int:
     return n
 
 
+COVER_FETCH_MAX = int(os.environ.get("COPYBOOK_COVER_FETCH_MAX", "300"))  # cover pages fetched per run (once a filing)
+
+
+def cover_total(r: dict, budget: list[int]) -> float | None:
+    """The filing's cover-page tableValueTotal: on shards from Nov 11 on, else fetched once and kept on the shard."""
+    if r.get("cover_total") is not None or r.get("amendments") or budget[0] <= 0 or not r.get("accession"):
+        return r.get("cover_total")
+    budget[0] -= 1
+    try:
+        from ingest.edgar import fetch_primary_doc, table_value_total
+        c = table_value_total(fetch_primary_doc(r["cik"], r["accession"]))
+        # as build.load_filing: a cover in thousands for a book scaled to dollars
+        r["cover_total"] = c * 1000 if c and r.get("values_in_thousands") and (r.get("total_value") or 0) / c > 300 else c
+    except Exception as exc:  # optional: without it the shard just isn't judged in dollars
+        print(f"::warning::enrich: cover page {r.get('accession')}: {exc}")
+    return r.get("cover_total")
+
+
 def fix_shards() -> int:
-    """Consensus unit check for every filer shard, against curated books for the same quarter."""
+    """The x1000 unit rule for every filer shard, the same as curated books (parse.unit_verdict), against curated
+    books' prices for the quarter. A shard is rebuilt from its full book (fb/, same accession) when there is one: the
+    full book keeps each line's value before any consensus rescale, so an earlier build's x1000 is judged again (Mizuho
+    Securities USA 2026Q3 read $11.91B with ON and AKAM x1000; its lines sum to the $6.30B cover). Lines that keep
+    their filed value are listed in value_rescale_rejected (moves.py holds them: price_outlier, not counted)."""
     def quarters():
         for p in (DATA / "h").glob("*/*Q?.json"):
             q = json.loads(p.read_text())
             yield q.get("quarter"), [(h["cusip"], h["value"], h["shares"], h["put_call"]) for h in q["holdings"]]
     cons = consensus_prices(quarters())
-    n = 0
+    curated = set()  # (cik, quarter, cusip) a curated book (build.py, with its cover total) refused to rescale
+    for m in (json.loads((DATA / "index.json").read_text()) if (DATA / "index.json").exists() else {}).get("managers") or []:
+        b = DATA / f"{m.get('slug')}.json"
+        if b.exists():
+            bk = json.loads(b.read_text())
+            curated.update((m.get("cik"), bk.get("quarter"), h.get("cusip")) for h in bk.get("holdings") or []
+                           if h.get("value_rescale") == "rejected")
+    budget, n = [COVER_FETCH_MAX], 0
     for p in sorted((DATA / "f").glob("*.json")):
         r = json.loads(p.read_text())
         if not r.get("ok"):
             continue
         cols = r["columns"]
+        fbp = DATA / "fb" / str(r.get("quarter")) / p.name
+        full = json.loads(fbp.read_text()) if fbp.exists() else None
+        if not (full and full.get("ok") and full.get("accession") == r.get("accession") and full.get("rows")
+                and all(k in full["columns"] for k in cols)):
+            full = None
+        src = full or r
+        sc = src["columns"]
+        rows = [[row[sc.index(k)] for k in cols] for row in src["rows"]]
         ci, vi, si, pi = (cols.index(k) for k in ("cusip", "value", "shares", "put_call"))
-        delta = 0
-        for row in r["rows"]:
-            if row[pi] or not row[si]:
-                continue
-            f = consensus_factor(row[vi] / row[si], cons.get((r.get("quarter"), row[ci])))
-            if f != 1.0:
-                new = int(row[vi] * f)
-                delta += new - row[vi]
-                row[vi] = new
-        if delta:
-            r["rows"].sort(key=lambda x: -x[vi])
-            r["total_value"] = max(r["total_value"] + delta, sum(x[vi] for x in r["rows"]))
-            p.write_text(json.dumps(r, separators=(",", ":")) + "\n")
+        ti = cols.index("shares_type") if "shares_type" in cols else None
+        if full:  # keep the tickers enrich and figi wrote on the shard
+            tick = {row[ci]: row[cols.index("ticker")] for row in r["rows"] if row[cols.index("ticker")]}
+            for row in rows:
+                row[cols.index("ticker")] = row[cols.index("ticker")] or tick.get(row[ci])
+        equity = [row for row in rows if not row[pi] and row[si] and row[vi] and (ti is None or row[ti] != "PRN")]
+        price = lambda row: row[vi] / row[si]
+        dollars = False
+        if any(f == 1000.0 for row in equity
+               for f in [unit_verdict(price(row), cons.get((r.get("quarter"), row[ci])))[0]]):
+            whole = full is not None or not r.get("truncated")
+            dollars = whole and in_dollars(sum(row[vi] or 0 for row in rows), cover_total(r, budget))
+        rejected, changed = [], full is not None
+        for row in equity:
+            f, rej = unit_verdict(price(row), cons.get((r.get("quarter"), row[ci])),
+                                  dollars or (r.get("cik"), r.get("quarter"), row[ci]) in curated)
+            if rej:
+                rejected.append(row[ci])
+            elif f != 1.0:
+                row[vi] = int(row[vi] * f)
+                changed = True
+        if sorted(set(rejected)) != (r.get("value_rescale_rejected") or []):
+            changed = True
+        if not changed:
+            continue
+        rows.sort(key=lambda x: -(x[vi] or 0))
+        total = sum(x[vi] or 0 for x in rows)
+        out = r | {"rows": rows[:MAX_ROWS] if full else rows, "value_rescale_rejected": sorted(set(rejected)) or None}
+        out["total_value"] = total if full else max(r["total_value"] + total - sum(x[vi] or 0 for x in r["rows"]), total)
+        if full:
+            out["truncated"] = len(rows) > MAX_ROWS
+        if out != r:
+            p.write_text(json.dumps(out, separators=(",", ":")) + "\n")
             n += 1
     return n
 

@@ -380,6 +380,46 @@ class MoveMathTest(unittest.TestCase):
             build.CONSENSUS.clear()
             build.SPLITS.pop("09857L108", None)
 
+    def test_pre_split_prior_that_reconciles_is_counted(self):
+        build.SPLITS["09857L108"] = {"2026Q2": 25.0}
+        build.CONSENSUS.update({("2026Q2", "09857L108"): 178.24, ("2026Q3", "09857L108"): 162.91})
+        try:
+            # DekaBank BKNG: 2026Q2 44,018 sh, $180.6M (pre-split, x25 = $164.1); 2026Q3 904,406 sh, $147.3M. Shares
+            # -17.8%, value -18.4%: a clean trim at the current position price, not "both".
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("09857L108", "BKNG", 904406, 147337000)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 44018, 180556000)]})[0]
+            self.assertEqual((r.get("unreliable"), r["change"], r["share_change"], r["prev_shares"]),
+                             (None, "trimmed", -196044, 1100450))
+            self.assertAlmostEqual(r["value_delta"], -196044 * 147337000 / 904406, delta=1)
+            # AllianceBernstein BKNG 2026Q2 (0001109448-26-000261): 1,843,531 sh at $4,210.32 (March's price) against
+            # 76,632 x 25 = 1,915,800: post-split shares, a stale value. Trimmed -72,269, value unreliable, no $.
+            build.CONSENSUS[("2026Q1", "09857L108")] = 4210.32
+            ab = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 1843531, 7761855440)]},
+                                    {"quarter": "2026Q1", "holdings": [self.row("09857L108", "BKNG", 76632, 410389649)]})[0]
+            self.assertEqual((ab["unreliable"], ab["change"], round(ab["share_change"]), ab["value_delta"]),
+                             ("value", "trimmed", -72269, 0))
+            # The same prior x25 at $4.10 a share is still off the band: not counted.
+            b = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("09857L108", "BKNG", 904406, 147337000)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 44018, 180556)]})[0]
+            self.assertEqual(b["value_delta"], 0)
+        finally:
+            build.CONSENSUS.clear()
+            build.SPLITS.pop("09857L108", None)
+
+    def test_shares_and_value_moving_apart_off_the_median_is_held(self):
+        build.CONSENSUS.update({("2026Q2", "02079K107"): 353.33, ("2026Q3", "02079K107"): 340.74})
+        try:
+            # Mizuho Securities USA GOOG 2026Q3: 829,083 -> 1,734,262 sh while $294.8M -> $260.4M ($150 a share).
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("02079K107", "GOOG", 1734262, 260359285)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("02079K107", "GOOG", 829083, 294794495)]})[0]
+            self.assertEqual((r["suspect_reason"], r["unreliable"], r["change"], r["value_delta"]), ("sign_mismatch", "both", None, 0))
+            # A real add at the peers' price is untouched.
+            ok = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("02079K107", "GOOG", 1734262, 590926000)]},
+                                    {"quarter": "2026Q2", "holdings": [self.row("02079K107", "GOOG", 829083, 294794495)]})[0]
+            self.assertEqual((ok.get("unreliable"), ok["change"]), (None, "added"))
+        finally:
+            build.CONSENSUS.clear()
+
     def test_option_lines_price_against_the_common_line(self):
         build.CONSENSUS.update({("2026Q3", "78462F103"): 762.63, ("2026Q3", "78462F903"): 2836.21,
                                 ("2026Q2", "78462F103"): 746.77, ("2026Q3", "28176E108"): 86.32,
@@ -410,6 +450,9 @@ class MoveMathTest(unittest.TestCase):
                                     {"quarter": "2026Q2", "holdings": [opt("78462F103", "SPY", 20000, 120000000, "Call")]})
             self.assertEqual({(x["option_held"], x["unreliable"], x["value_delta"], x["value_delta_basis"]) for x in nm},
                              {("filer_non_standard", "both", 0, None)})
+            # A filer at 1.05x (Wealth Enhancement 2026Q3) is a price-date offset, not units: standard, counted.
+            we = build.classify_options({"quarter": "2026Q3", "holdings": [opt("78462F103", "SPY", 10000, 8007615, "Call")]})
+            self.assertEqual((we["options_basis"], we["holdings"][0].get("option_held")), ("standard", None))
             # Mizuho Markets SPY calls 2026Q3 (0001062993-26-005826), filer at ~6x: held, not -$58.0M or -$13.3B.
             mz = build.with_changes({"quarter": "2026Q3", "holdings": [opt("78462F103", "SPY", 19152, 552460839, "Call")]},
                                     {"quarter": "2026Q2", "holdings": [opt("78462F103", "SPY", 479831, 610478402, "Call")]})[0]
@@ -452,6 +495,41 @@ class MoveMathTest(unittest.TestCase):
         self.assertEqual((h["value"], h.get("value_rescale")), (1273895, "rejected"))
         r = build.with_changes(m["history"][0] | {"holdings": [h]}, {"quarter": "2026Q2", "holdings": []})[0]
         self.assertEqual((r["change"], r["unreliable"], r["value_delta"], r["value_delta_basis"]), ("new", "both", 0, None))
+
+    def test_filer_shard_follows_the_same_unit_rule(self):
+        import tempfile
+        from pathlib import Path
+        from ingest import enrich
+        from ingest.bulk import COLUMNS, FB_COLUMNS
+        old = enrich.DATA
+        with tempfile.TemporaryDirectory() as d:
+            enrich.DATA = data = Path(d)
+            try:
+                for i in range(3):  # peers: AKAM at $106.35, MCHP at $77.77
+                    (data / "h" / f"p{i}").mkdir(parents=True)
+                    (data / "h" / f"p{i}" / "2026Q3.json").write_text(json.dumps({"quarter": "2026Q3", "holdings": [
+                        {"cusip": "00971T101", "value": 10635, "shares": 100, "put_call": None},
+                        {"cusip": "595017104", "value": 7777, "shares": 100, "put_call": None}]}))
+                # Mizuho Securities USA 2026Q3: its lines as filed sum to the cover; an earlier run left AKAM x1000.
+                akam = ["AKAM", "AKAMAI", "COM", "00971T101", None, 11211728, 1273895, "SH"]
+                mchp = ["MCHP", "MICROCHIP", "COM", "595017104", None, 18615337, 3256537, "SH"]
+                big = ["X", "X", "COM", "X", None, 1, 6_000_000_000, "SH"]
+                meta = {"ok": True, "cik": "0000812291", "quarter": "2026Q3", "accession": "0001062993-26-005832"}
+                (data / "f").mkdir()
+                (data / "f" / "0000812291.json").write_text(json.dumps(meta | {
+                    "columns": list(COLUMNS), "rows": [big, akam[:6] + [1273895000, "SH"], mchp], "total_value": 7_277_151_537,
+                    "cover_total": 6_000_000_000 + 1273895 + 3256537, "truncated": False}))
+                (data / "fb" / "2026Q3").mkdir(parents=True)
+                fb = lambda r: r + [None, None, r[6], 1.0, False]
+                (data / "fb" / "2026Q3" / "0000812291.json").write_text(json.dumps(meta | {
+                    "columns": list(FB_COLUMNS), "rows": [fb(big), fb(akam), fb(mchp)]}))
+                self.assertEqual(enrich.fix_shards(), 1)
+                s = json.loads((data / "f" / "0000812291.json").read_text())
+                self.assertEqual(s["total_value"], 6_000_000_000 + 1273895 + 3256537)
+                self.assertEqual(s["value_rescale_rejected"], ["00971T101", "595017104"])
+                self.assertEqual(enrich.fix_shards(), 0)  # idempotent
+            finally:
+                enrich.DATA = old
 
     def test_split_applies_by_its_date_not_the_cusip_change(self):
         # Bowen Hanes DD: 2026Q2 7,000 x 26614N102 at $45.80 (pre-split, after the 1-for-3 of that quarter); 2026Q3

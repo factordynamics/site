@@ -36,6 +36,7 @@ SHARD_KEYS = (
     "ok", "cik", "name", "form", "accession", "filing_date", "report_date", "quarter",
     "sec_url", "position_count", "total_value", "values_in_thousands", "indexed_date", "error",
     "filing_key", "amendments", "unit_fix", "accepted_at", "empty_latest", "backfill_checked",
+    "cover_total",  # tableValueTotal: enrich.py's in-dollars test (parse.unit_verdict)
 )
 # Rows are arrays in this column order to keep 9k shards small.
 # shares is SSHPRNAMT as filed: a share count, or a principal amount where shares_type is PRN.

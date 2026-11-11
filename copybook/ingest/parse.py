@@ -244,6 +244,24 @@ def consensus_factor(price: float, consensus: float | None) -> float:
     return f if f != 1.0 and 1 / RESCALE_BAND <= ratio * f <= RESCALE_BAND else 1.0
 
 
+def unit_verdict(price: float, consensus: float | None, in_dollars: bool = False) -> tuple[float, bool]:
+    """The one x1000 rule for every book (curated h/, every filer's f/ shard and fb/ full book): (factor, rejected).
+    Rescale only when the rescaled price lands near the peers' and the book isn't in dollars as filed (its lines sum
+    to the cover page's tableValueTotal: Mizuho Securities USA 2026Q3, $6.30B, ON and AKAM). rejected: the line keeps
+    its filed value and is price_outlier with value_rescale "rejected" (held, not counted)."""
+    f = consensus_factor(price, consensus)
+    if f == 1000.0 and in_dollars:
+        return 1.0, True
+    if f != 1.0:
+        return f, False
+    return 1.0, rescale_rejected(price, consensus)
+
+
+def in_dollars(lines_total: float | None, cover_total: float | None) -> bool:
+    """The book's lines as filed sum to its cover total (within 2%): its values are dollars, as the filer says."""
+    return bool(cover_total and lines_total and abs(lines_total - cover_total) <= 0.02 * cover_total)
+
+
 def rescale_rejected(price: float, consensus: float | None) -> bool:
     """Priced ~1000x off the peers, but x1000 (or /1000) doesn't land near them either: neither side reconciles."""
     if not consensus or price <= 0:

@@ -29,7 +29,7 @@ from ingest import build
 from ingest import splits as sp
 from ingest.datasets import prev_quarter
 from ingest.filer_types import signature
-from ingest.parse import ABOVE_20K, consensus_factor, consensus_prices, not_common
+from ingest.parse import ABOVE_20K, consensus_prices, not_common, unit_verdict
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
@@ -70,6 +70,7 @@ CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied pr
 # (cik, quarter, cusip): lines a curated book refused to rescale x1000 (build.fix_with_consensus: its cover total equals
 # the lines as filed). The fb/ copy has no cover total, so it follows that verdict (Mizuho Securities USA 2026Q3 ON, AKAM).
 REJECTED: set[tuple[str, str, str]] = set()
+UNCLASSED: dict[str, int] = {}  # quarter -> suspect_units rows that reached write_full with no unreliable class
 FIXED = [0]
 
 
@@ -124,9 +125,12 @@ def book(rec: dict | None) -> dict | None:
             h["principal_amount"], h["shares"] = h.get("shares") or 0, 0
         h["ticker"] = h.get("ticker") or (SECS.get(h.get("cusip") or "") or {}).get("ticker")
         if not h["put_call"] and h["shares_type"] == "SH" and h.get("shares") and h.get("value"):
-            f = consensus_factor(h["value"] / h["shares"], CONS.get((rec.get("quarter"), h.get("cusip"))))
-            if (rec.get("cik"), rec.get("quarter"), h.get("cusip")) in REJECTED:
-                f, h["price_outlier"], h["value_rescale"] = 1.0, True, "rejected"
+            # The same rule as curated books (parse.unit_verdict); this copy has no cover total, so REJECTED carries
+            # the in-dollars verdict that build.py (curated) or enrich.py (f/ shards) reached for the filing.
+            f, rejected = unit_verdict(h["value"] / h["shares"], CONS.get((rec.get("quarter"), h.get("cusip"))),
+                                       (rec.get("cik"), rec.get("quarter"), h.get("cusip")) in REJECTED)
+            if rejected:
+                h["price_outlier"], h["value_rescale"] = True, "rejected"
             if f != 1.0:  # a line filed in thousands (or 1000x too large) against every other filer's price
                 if h.get("value_as_filed") is None:  # the book's own as-filed value wins when it has one
                     h["value_as_filed"] = h["value"]
@@ -565,7 +569,14 @@ def fill_provenance(rows: list[dict], shard: dict) -> None:
 
 def write_full(base: dict, prev_q: str | None, rows: list[dict]) -> None:
     """fq/{quarter}/{cik}.json: the full book with change columns, uploaded as R2 fb/{quarter}/{cik}.json in place
-    of the plain book (upload_history.py)."""
+    of the plain book (upload_history.py). Every suspect_units line carries an unreliable class (a row reaching here
+    without one is held as "both" and counted in UNCLASSED), and a held row's value_delta is null, not 0."""
+    for i, r in enumerate(rows):
+        if r.get("suspect_units") and not r.get("unreliable") and r.get("shares_type") != "PRN":
+            UNCLASSED[base["quarter"]] = UNCLASSED.get(base["quarter"], 0) + 1
+            rows[i] = r | {"unreliable": "both", "share_change": None, "value_delta": 0, "delta_pct_of_book": 0.0,
+                           "value_delta_basis": None,
+                           "change": r.get("change") if r.get("change") in ("new", "exited", "disclosed_later") else None}
     tvc, evc = build.counted(rows)
     build.reweight(rows, evc)
     full = {k: v for k, v in base.items() if k not in ("rows", "columns", "truncated", "_fb_only")} | {
@@ -579,6 +590,7 @@ def write_full(base: dict, prev_q: str | None, rows: list[dict]) -> None:
         "rows": [[(r.get("split") or {}).get("ratio") if k == "split_ratio" else
                   round(r.get("principal_amount") or 0) if k == "shares" and r.get("shares_type") == "PRN" else
                   round(r.get("prev_principal_amount") or 0) if k == "prev_shares" and r.get("shares_type") == "PRN" else
+                  None if k == "value_delta" and r.get("unreliable") else
                   (round(r[k]) if k in ("shares", "value", "prev_shares", "prev_value", "value_delta", "share_change",
                                        "prev_shares_as_filed") and isinstance(r.get(k), float) else r.get(k))
                   for k in FULL_COLUMNS] for r in rows],
@@ -688,7 +700,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             # TEVA at ~$4,005 a share): its shares and change stand (added +159,272), its value stays out of weights
             # and $. "shares" (Guardcap BKNG 2026Q3, Crosslink CRM 2026Q2) or "both": the change is unknown, unless
             # the position is new or gone.
-            side = r.get("unreliable")
+            side = r.get("unreliable") or ("both" if r.get("suspect_units") else None)  # never a flag without a class
             if side:
                 r = r | {"value_delta": 0}
             bad_value = side == "value"
@@ -860,6 +872,7 @@ def write_quality(shards: list[dict], curated: dict, filers: dict) -> dict:
         "by_reason": {k: {"rows": v["rows"], "filers": len(v["filers"]), "options": v["options"]} for k, v in sorted(by.items())},
         "largest": lines[:25],
         "options": options_quality(),
+        "suspect_unclassified": dict(sorted(UNCLASSED.items())),  # held as "both" in write_full; 0 expected
     }
     write(DATA / "quality.json", body)
     return body
@@ -885,7 +898,7 @@ def options_quality() -> dict:
             b[k].sort(key=lambda x: -x["option_lines"])
     return {"note": "Per report quarter, every 13F book this run compared (each filer's latest and its prior): how its "
                     "option lines price against the underlying's common line. contracts (median 80-125x): shares x100, "
-                    "counted. non_standard (median not within 2% of 1x): every option line held. standard: lines "
+                    "counted. non_standard (median outside 0.8-1.25x): every option line held. standard: lines "
                     "outside 0.8-1.25x held as isolated.", "quarters": dict(sorted(by_q.items(), reverse=True))}
 
 
@@ -959,6 +972,7 @@ def main() -> int:
     SECS.update(read(DATA / "securities.json") or {})
     ACCEPTED.update(read(DATA / "accepted.json") or {})
     shards = [s for p in sorted((DATA / "f").glob("*.json")) if (s := read(p))]
+    REJECTED.update((s.get("cik"), s.get("quarter"), c) for s in shards for c in s.get("value_rescale_rejected") or [])
     # Filers with a full book but no public shard yet: their newest full book, for the holder index
     # and change files only (no public shard is written for them).
     have = {s.get("cik") for s in shards}
@@ -1048,6 +1062,8 @@ def main() -> int:
     qy = write_quality(shards, curated, filers)
     print(f"moves: quality.json: {qy['held']['rows']} lines held across {qy['held']['filers']} filers: "
           + ", ".join(f"{k} {v['rows']}" for k, v in qy["by_reason"].items()), flush=True)
+    print(f"moves: suspect_units rows with no unreliable class (now held as both), by quarter: {dict(sorted(UNCLASSED.items())) or 'none'}",
+          flush=True)
     print("moves: hedge_flow.json %d periods, recent_filings.json %d filings" % write_hedge_flow(shards, types, curated),
           flush=True)
     print(f"moves: {write_combined_shards()} shards in fall/ for the site build", flush=True)
