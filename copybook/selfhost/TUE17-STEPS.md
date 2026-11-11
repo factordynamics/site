@@ -26,7 +26,9 @@ changes (api.json and the front ends follow within 2 minutes).
    any failed check stops it there with nothing changed for members. It makes a new backup key in memory: gene keeps
    only the public key, and the private key goes only to the file on your stick, protected by a passphrase it asks
    for (twice, then once more to check). Save the passphrase in 1Password and copy the .age file to a second offline
-   place: without it no backup can be decrypted. If the API
+   place: without it no backup can be decrypted. Last, it makes every sudo from your account ask for the password
+   (no 5-minute reuse), so nothing else running as you can borrow a sudo you just typed; expect a prompt on each sudo
+   below. If the API
    doesn't come back it rolls back on its own and says so.
 
 3. Tell the Copybook API thread on gene: "service move done". The agent then:
@@ -124,8 +126,10 @@ What still isn't closed, stated plainly:
 - Code we deploy to the API can read member data, and deploys happen without per-deploy founder review. The same
   holds for the Worker, which payments deploys.
 - The front ends deploy on every push, and their code runs in signed-in members' browsers.
-- Agents share the machine's main user account, so isolation stops accidental reads, not a deliberately malicious
-  agent (one could, for example, capture a sudo password typed in that account). Do the steps above in a plain
-  terminal.
+- Agents share the machine's main user account, which keeps password sudo (every use needs your password, with no
+  cached credential; its few no-password commands read no files). So isolation stops accidental reads, not a
+  deliberately malicious agent: one could capture the password you type in that account. Do the steps above in a
+  plain terminal. Closing that needs a separate admin account that agents never run under, used from a text console
+  (Ctrl+Alt+F3), with sudo removed from this one: optional, about 10 minutes, ask the agent for the steps.
 - The agents' Stripe key can read customers, which payments' work needs.
 - Older agent session logs keep what agents saw then (masked since Nov 11: counts, row IDs, a***@domain).

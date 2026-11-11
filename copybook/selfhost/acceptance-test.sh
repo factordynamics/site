@@ -53,6 +53,12 @@ pid=$(pgrep -u copybook -f 'node server.mjs' | head -1)
 denied "API process environment (secrets)" cat "/proc/${pid:-0}/environ"
 denied "API process memory"      head -c 1 "/proc/${pid:-0}/mem"
 denied "root via sudo"           sudo -n true
+denied "a member file via sudo"  sudo -n cat "$D/state/kv/miniflare-KVNamespaceObject/86c782669b53e48b3b2e014f8f25bbf476c6fb00e489386ae2ddb90d794963fc.sqlite"
+l=$(sudo -n -l 2>&1)
+if printf '%s' "$l" | grep -q 'timestamp_timeout=0'; then echo "ok    sudo keeps no cached credential for $(id -un) (timestamp_timeout=0)"; else echo "FAIL  sudo may cache a credential for $(id -un) (no timestamp_timeout=0)"; fail=1; fi
+# NOPASSWD may cover only fixed commands that read no files; any shell, editor, file or service tool fails the test.
+bad=$(printf '%s' "$l" | tr -s ' \n' ' ' | grep -oE 'NOPASSWD: *[^,(]*' | grep -E 'NOPASSWD: *(ALL|/usr/bin/(ba|z|da|)sh|/usr/bin/(cat|less|more|head|tail|vi|vim|nvim|nano|tee|cp|mv|install|env|su|run0|pkexec|systemctl|journalctl|sudoedit|find|tar|rsync|sqlite3|node|python3?))\b' | head -3)
+if [ -z "$bad" ]; then echo "ok    NOPASSWD rules for $(id -un): $(printf '%s' "$l" | grep -c 'NOPASSWD') fixed commands, none that reads files"; else echo "FAIL  NOPASSWD rule that can read files: $bad"; fail=1; fi
 echo "== code that runs as the service user (writes)"
 denied "deploy approval list"    sh -c ': >> "$1"' sh "$D/deploy.approved"
 denied "deploy switch and paths (copybook-api.env)" sh -c ': >> "$1"' sh "$D/copybook-api.env"

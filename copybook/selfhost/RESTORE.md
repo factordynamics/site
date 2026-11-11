@@ -87,6 +87,10 @@ watcher run as the system user `copybook`:
   unsubscribe, keep and resume link; whoever holds it can sign in as any member) and `STRIPE_WEBHOOK_SECRET` (whoever
   holds it can forge a payment event). Both are rotated during the move, because agents held the old values; the
   Worker on Cloudflare gets the same new values.
+- `refcell` keeps password sudo (Andreas uses it), but from the move every sudo needs the password with no cached
+  credential (`/etc/sudoers.d/zz-copybook-maintainers`, `timestamp_timeout=0`), and its few NOPASSWD rules (reboot,
+  display brightness, DNS preset, browser theme colour, time zone) read no files. A deliberately malicious agent could
+  still capture the password when Andreas types it in that account; a separate admin account would close that.
 - Member requests reach the API without passing through `refcell`: the quick tunnel and Funnel's `/copybook` path go
   straight to `127.0.0.1:8787`.
 - API code still deploys from main without waiting on anyone; see "Who can deploy code that runs as the service user"
@@ -103,7 +107,9 @@ watcher run as the system user `copybook`:
 file, the members store, the private R2 copy, the hourly backups, the backup key, the service's secrets, the session
 and webhook signing secrets by name, and the API process's environment and memory, and needs `Permission denied` for
 each (a missing file doesn't count). It tries to write the deploy approval list, the service's scripts, source,
-bundle, node runtime and units, and to reach the service's systemd manager, and needs the same refusal. It checks the
+bundle, node runtime and units, and to reach the service's systemd manager, and needs the same refusal. It checks
+that `sudo -n` fails (including reading a member file through it), that sudo keeps no cached credential for the
+account, and that no NOPASSWD rule names a shell, editor or file tool. It checks the
 removed credentials and passwords are gone, that Cloudflare KV and R2 and Stripe customers are refused unless payments
 needs them (`ACC_KEEP`, reported as "kept", a stated residual), that a test
 member's session signed with the old session secret (saved before the rotation, unexpired) is now refused, and that

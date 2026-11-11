@@ -52,7 +52,7 @@ AGE_SHA256=eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b2c     
 AGE_KEYGEN_SHA256=0a0009db842259d6717f7eeb30acb6b90d2a2eb924c6acd0a0db0ca1f1537899
 CLOUDFLARED_SHA256=1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872 # cloudflared 2026.10.7 linux-amd64 (github.com/cloudflare/cloudflared)
 # sha256 of `git ls-tree -r <commit> -- copybook/selfhost` without *.md, backup.pub and this script (code_hash below).
-SELFHOST_CODE_SHA256=02a43cd918310b86c20e95dc4d5ce87f5c4400cfec18b28b1afc198ccccc27b5
+SELFHOST_CODE_SHA256=74ddf8c7d578b861c3b1eae7405829240269b56c5061eae18ceef3b6551a2e5f
 SECRET_KEYS='SESSION_SECRET|STRIPE_WEBHOOK_SECRET|STRIPE_SECRET_KEY|RESEND_API_KEY|HEALTH_TOKEN|CLOUDFLARE_API_TOKEN|CF_API_TOKEN'
 
 run() { if [ "$DRY" = 1 ]; then printf '+ %s\n' "$*"; else "$@"; fi; }
@@ -231,6 +231,18 @@ run rm -rf "$SRC/state" "$SRC/backups" "$SRC/build" "$SRC/build.prev" "$SRC/buil
 if [ "$DRY" = 1 ]; then echo "+ rewrite $SRC/secrets.env to RESEND_API_KEY only"; else
   grep -E '^RESEND_API_KEY=' "$SRC/secrets.env" > "$SRC/secrets.env.new" || true
   chown "$SRC_USER:$SRC_USER" "$SRC/secrets.env.new"; chmod 600 "$SRC/secrets.env.new"; mv "$SRC/secrets.env.new" "$SRC/secrets.env"
+fi
+
+echo "== 11. sudo from the maintainers' account ($SRC_USER) needs the password every time (no cached credential)"
+# The account keeps its sudo rights (Andreas uses it), but a sudo he types no longer leaves a 5-minute ticket that
+# other processes on that terminal could reuse. Its NOPASSWD rules (reboot, display brightness, DNS preset, browser
+# theme colour, time zone) read no files.
+if [ "$DRY" = 1 ]; then echo "+ /etc/sudoers.d/zz-copybook-maintainers: Defaults:$SRC_USER timestamp_timeout=0"; else
+  t=/etc/sudoers.d/.zz-copybook-maintainers.tmp   # names with a dot are never read by sudo
+  printf '# Copybook service-account move: every sudo by %s needs the password.\nDefaults:%s timestamp_timeout=0\n' "$SRC_USER" "$SRC_USER" > "$t"
+  chmod 0440 "$t"
+  if visudo -cf "$t" >/dev/null; then mv "$t" /etc/sudoers.d/zz-copybook-maintainers; echo "installed /etc/sudoers.d/zz-copybook-maintainers"
+  else rm -f "$t"; echo "!! the sudoers drop-in failed visudo's check; not installed (everything else is done)"; fi
 fi
 
 cat <<EOF
