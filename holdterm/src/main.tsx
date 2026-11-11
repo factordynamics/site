@@ -2,7 +2,7 @@ import '@fontsource-variable/inter/index.css'
 import './styles.css'
 import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { aggregate, funds, loadBooks, loadIndex, loadStockIndex, searchNames, type Agg, type Manager, type StockIndexRow } from './data'
+import { aggregate, freshness, funds, loadBooks, loadIndex, loadStockIndex, searchNames, type Agg, type Manager, type StockIndexRow } from './data'
 import { A, navigate, usd, usePath } from './lib'
 import { dataSlug, fundPath, issuerName, publicSlug } from './names'
 import { price as PRICE } from './config'
@@ -284,6 +284,30 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
 /** After an in-app navigation, move focus to the new page and say its name, as a full page load would: without
  * this, keyboard focus stays on the link that was used and a screen reader hears nothing. The title is read once
  * the page sets it (pages that load data set it when the data arrives) and it has settled, or after 3 seconds. */
+/** "Data updated 20 minutes ago": when Copybook last wrote the SEC data this page loaded (freshness in data.ts),
+ * kept current each minute. Nothing until a page has loaded some data. */
+function Fresh() {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const on = () => tick((n) => n + 1)
+    window.addEventListener('holdterm:fresh', on)
+    const t = setInterval(on, 60_000)
+    return () => (window.removeEventListener('holdterm:fresh', on), clearInterval(t))
+  }, [])
+  if (!freshness.at) return null
+  const m = Math.max(0, Math.round((Date.now() - freshness.at) / 60_000))
+  const ago = m < 1 ? 'just now' : m < 60 ? `${m} minute${m === 1 ? '' : 's'} ago` : m < 48 * 60 ? `${Math.round(m / 60)} hour${Math.round(m / 60) === 1 ? '' : 's'} ago` : `${Math.round(m / 1440)} days ago`
+  const at = new Date(freshness.at)
+  return (
+    <p className="fresh">
+      SEC data updated{' '}
+      <time dateTime={at.toISOString()} title={at.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}>
+        {ago}
+      </time>
+    </p>
+  )
+}
+
 function useRouteAnnouncer(path: string) {
   const [said, setSaid] = useState('')
   const first = useRef(true)
@@ -400,6 +424,7 @@ function App() {
               <span className="word">Holdterm</span>
             </A>
             <p className="tagline">What concentrated, long-term investors own and trade, from their filings with the SEC. No ads. Not investment advice.</p>
+            <Fresh />
           </div>
           <nav aria-label="footer">
             <A to="/guide">How to read Holdterm</A>
