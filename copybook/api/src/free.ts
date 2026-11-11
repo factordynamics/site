@@ -42,7 +42,11 @@ const isTest = (email: string) => email.startsWith('copybook-test-');
 type Json = Record<string, unknown>;
 type Reply = { status: number; body: Json; headers?: Record<string, string> };
 
-export async function handleSignup(env: Env, b: Json, ip: string): Promise<Reply> {
+/** What happened to each requested follow: stored, already followed, or refused at the free cap. */
+type FollowResult = 'added' | 'already' | 'cap_reached';
+
+/** `signedIn`: the member a valid session on this request belongs to (the site sends it when signed in). */
+export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: string): Promise<Reply> {
   const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
   const email = String(b.email ?? '').trim().toLowerCase();
   if (!EMAIL.test(email) || email.length > 254) return { status: 400, body: { ok: false, error: 'Check the email address and try again.', code: 'bad_request' } };
@@ -64,19 +68,40 @@ export async function handleSignup(env: Env, b: Json, ip: string): Promise<Reply
     : null);
   if (follows.some((x) => !x) || follows.length > 10) return { status: 400, body: { ok: false, error: 'follow: up to 10 of { kind: "investor", id: "<slug>" } or { kind: "stock", id: "<ticker>" }', code: 'bad_request' } };
   const follow = follows.length > 0;
-  // True when at least one follow is stored (a repeat follow counts): the page then promises it in the Friday email.
-  const addFollow = async (m: Member) => {
-    let ok = false;
-    for (const x of follows) ok = (await changeFollows(env, m, { add: { list: x!.list, value: x!.value, max: FREE_INVESTORS } })).ok || ok;
-    return ok;
+  // Each follow's own result: one refused at the cap is never reported as added, even next to a repeat follow.
+  const addFollows = async (m: Member) => {
+    const before = await getFollows(env, m);
+    const results: FollowResult[] = [];
+    for (const x of follows) {
+      if (before[x!.list].includes(x!.value)) {
+        results.push('already');
+        continue;
+      }
+      const r = await changeFollows(env, m, { add: { list: x!.list, value: x!.value, max: FREE_INVESTORS } });
+      results.push(r.ok ? 'added' : 'cap_reached');
+    }
+    const dropped = follows.filter((_, i) => results[i] === 'cap_reached').map((x) => ({ kind: x!.list === 'investors' ? 'investor' : 'stock', id: x!.value }));
+    // follow: cap_reached when any was refused (the sheet says so), else added (or already, when nothing was new).
+    return { following: results.some((r) => r !== 'cap_reached'), follow: dropped.length ? 'cap_reached' : results.includes('added') ? 'added' : 'already', ...(dropped.length ? { limit: FREE_INVESTORS, dropped } : {}) };
   };
   const cur = await memberByEmail(env, email);
-  // Already a member: nothing to create. Free members get the follow added and their sign-in link again; a paying
-  // member's follows change only when signed in (this form has no sign-in), so they are asked to follow there.
+  // Already a member: nothing to create. A free member's follows are added; signed in, that's all. Signed out, they get
+  // a sign-in link saying the follow was saved, at most one an hour. A paying member's follows change only when
+  // signed in to Copy, so they are asked to follow there.
   if (cur && cur.status !== 'canceled') {
-    const followed = cur.status === 'free' ? await addFollow(cur) : false;
-    if (cur.status === 'free') await sendMail(env, [await freeWelcomeMail(env, cur, false)]);
-    return { status: 200, body: { ok: true, ...(follow ? { following: followed, follow: followed ? 'added' : cur.status === 'free' ? 'limit' : 'sign_in' } : {}) } };
+    if (cur.status !== 'free') return { status: 200, body: { ok: true, ...(follow ? { following: false, follow: 'sign_in' } : {}) } };
+    const r = follow ? await addFollows(cur) : null;
+    let signIn: 'sent' | 'not_needed' | 'rate_limited' = 'not_needed';
+    if (signedIn !== cur.customer) {
+      const k = `rl:signin-mail:${cur.customer}`;
+      if (await env.DB.get(k)) signIn = 'rate_limited';
+      else {
+        await env.DB.put(k, '1', { expirationTtl: 3600 });
+        await sendMail(env, [await freeWelcomeMail(env, cur, false, r?.follow === 'added')]);
+        signIn = 'sent';
+      }
+    }
+    return { status: 200, body: { ok: true, sign_in_email: signIn, ...(r ?? {}) } };
   }
   const m: Member = {
     customer: await freeId(email),
@@ -92,13 +117,13 @@ export async function handleSignup(env: Env, b: Json, ip: string): Promise<Reply
     created_at: new Date().toISOString(),
   };
   await putMember(env, m);
-  const followed = await addFollow(m);
+  const r = follow ? await addFollows(m) : null;
   if (!isTest(email)) await bump(env, 'signups', m);
   const mail = await sendMail(env, [await freeWelcomeMail(env, m, true)]);
-  return { status: 201, body: { ok: true, created: true, welcome: mail === '200' ? 'sent' : 'not sent', ...(follow ? { following: followed, follow: followed ? 'added' : 'limit' } : {}) } };
+  return { status: 201, body: { ok: true, created: true, welcome: mail === '200' ? 'sent' : 'not sent', ...(r ?? {}) } };
 }
 
-async function freeWelcomeMail(env: Env, m: Member, first: boolean): Promise<Mail> {
+async function freeWelcomeMail(env: Env, m: Member, first: boolean, followSaved = false): Promise<Mail> {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, LOGIN_TTL))}`;
   const unsub = await unsubscribeUrl(env, m.customer);
   // What they follow, and when it comes: "You follow Irving Kahn: the Q3 13F is expected Thu Nov 12, and its moves come in Friday's email."
@@ -112,7 +137,7 @@ async function freeWelcomeMail(env: Env, m: Member, first: boolean): Promise<Mai
   const following = lines.length ? `${lines.join('\n')}\n\n` : '';
   return {
     to: m.email,
-    subject: first ? "You're on the Copybook weekly" : 'Your Copybook sign-in link',
+    subject: first ? "You're on the Copybook weekly" : followSaved ? 'Follow saved. Your Copybook sign-in link' : 'Your Copybook sign-in link',
     text: `${following}${first ? "You're signed up for the Copybook weekly: every Friday evening, the week's biggest superinvestor buys and sells from their SEC filings, with a link to each filing." : "Here is your sign-in link. You're on the free Copybook weekly, every Friday evening."}\n\nSign in (link works for 7 days): ${link}\n\nWant each filing minutes after EDGAR accepts it, 13F history and CSV? Copy is free for 14 days: ${env.SITE_URL}pricing/\n\nUnsubscribe: ${unsub}${FOOTER}`,
     unsubscribe: unsub,
   };

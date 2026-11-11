@@ -547,7 +547,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // Free accounts: the weekly email, no card. Rate-limited per IP and email; `website` is a honeypot.
   if (req.method === 'POST' && path === '/signup') {
     const { handleSignup } = await import('./free');
-    const r = await handleSignup(env, await body(req), req.headers.get('cf-connecting-ip') ?? 'unknown');
+    // Signed in (the site sends the session): a follow is added without a sign-in email.
+    const r = await handleSignup(env, await body(req), req.headers.get('cf-connecting-ip') ?? 'unknown', (await authed(req, env))?.customer);
     return json(r.body, r.status, { ...h, ...(r.headers ?? {}) });
   }
   // The one unsubscribe link in every weekly and lifecycle email (GET confirms; POST, incl. one-click, applies).
@@ -1116,6 +1117,17 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (req.method === 'GET' && path === '/follows') {
       const r = await changeFollows(env, m, { get: true });
       return json({ ok: true, follows: r.ok ? r.follows : await getFollows(env, m), limit: FREE_NAMES }, 200, h);
+    }
+    // Investors (up to 10) and stocks: follow and unfollow from /account/ or a page, signed in.
+    const fl = path.match(/^\/follows\/(investors|stocks)\/([^/]+)$/);
+    if (fl && (req.method === 'POST' || req.method === 'DELETE')) {
+      const { FREE_INVESTORS } = await import('./free');
+      const list = fl[1] as 'investors' | 'stocks';
+      const value = list === 'investors' ? decodeURIComponent(fl[2]) : decodeURIComponent(fl[2]).toUpperCase().replace('-', '.');
+      if (!(list === 'investors' ? SLUG : TICKER).test(value)) return json({ ok: false, error: list === 'investors' ? 'not a filer slug' : 'not a ticker like BRK.B', code: 'bad_request' }, 400, h);
+      const r = await changeFollows(env, m, req.method === 'POST' ? { add: { list, value, max: FREE_INVESTORS } } : { remove: { list, value } });
+      if (!r.ok && r.error.startsWith('limit:')) return json({ ok: false, error: `Free accounts follow up to ${FREE_INVESTORS} ${list}. Remove one, or start Copy for unlimited follows.`, code: 'cap_reached', limit: FREE_INVESTORS }, 402, h);
+      return r.ok ? json({ ok: true, follows: r.follows, limit: FREE_INVESTORS }, 200, h) : json({ ok: false, error: r.error }, 400, h);
     }
     const own = path.match(/^\/follows\/owned\/([^/]+)$/);
     if (own && (req.method === 'POST' || req.method === 'DELETE')) {

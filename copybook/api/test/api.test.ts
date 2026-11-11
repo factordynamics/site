@@ -1417,8 +1417,11 @@ describe('copybook api', () => {
     expect((await call('/history/warren-buffett', { token: s.token })).status).toBe(402);
     // 3 an hour per address: a repeat sends the sign-in link again, the 4th is refused.
     // A filer page's one-field signup from the same address adds the follow (a free member's Friday email leads with it).
-    expect(await (await signup({ email: 'reader@reader.test', follow: [{ kind: 'investor', id: 'bill-ackman' }, { kind: 'stock', id: 'hhh' }], source: 'follow:/investors/bill-ackman/' }, '2.2.2.2')).json()).toEqual({ ok: true, following: true, follow: 'added' });
+    expect(await (await signup({ email: 'reader@reader.test', follow: [{ kind: 'investor', id: 'bill-ackman' }, { kind: 'stock', id: 'hhh' }], source: 'follow:/investors/bill-ackman/' }, '2.2.2.2')).json()).toEqual({ ok: true, following: true, follow: 'added', sign_in_email: 'sent' });
+    // Signed out, a follow's sign-in link says the follow was saved; at most one an hour.
+    expect(sent.map((m) => m.subject).at(-1)).toBe('Follow saved. Your Copybook sign-in link');
     await signup({ email: 'reader@reader.test' }, '3.3.3.3');
+    expect(sent.filter((m) => /sign-in link/.test(m.subject))).toHaveLength(1);
     expect((await signup({ email: 'reader@reader.test' }, '4.4.4.4')).status).toBe(429);
     await putMember('paid', 'paid@reader.test', 'active', 'all'); // paying members never get the weekly
     // Up to 5 owned names on a free account; the 6th is refused with the limit, and /me shows them.
@@ -1429,7 +1432,23 @@ describe('copybook api', () => {
     await call('/follows/owned/MSFT', { method: 'DELETE', token: s.token });
     expect((await (await call('/follows', { token: s.token })).json()).follows.stocks).toEqual(['HHH', 'GOOGL', 'NVDA', 'AAPL']); // HHH first: followed from the signup form; the stock page stops saying Following
     expect((await (await call('/me', { token: s.token })).json()).member.free_names).toEqual({ names: ['GOOGL', 'HHH', 'NVDA', 'AAPL'], limit: 5, facts: [], hook: null, more: 0 });
-    expect((await call('/follows/stocks/TSLA', { method: 'POST', token: s.token })).status).toBe(402); // only owned names
+    // Free investor follows cap at 10: one past it is never reported as added (Weitz and Hawkins were dropped silently).
+    await env.DB.delete('rl:signup:reader@reader.test');
+    const nine = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map((x) => `fund-${x}`);
+    for (const x of nine) expect((await call(`/follows/investors/${x}`, { method: 'POST', token: s.token })).status).toBe(200);
+    const signedIn = (b: Record<string, unknown>, ip: string) => handleRequest(new Request('https://api.test/signup', { method: 'POST', body: JSON.stringify(b), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': ip, authorization: `Bearer ${s.token}` } }), env);
+    sent = [];
+    // A repeat (Ackman) next to a new follow past the cap: cap_reached, the dropped one named; signed in, no email.
+    const capped = await (await signedIn({ email: 'reader@reader.test', follow: [{ kind: 'investor', id: 'bill-ackman' }, { kind: 'investor', id: 'wally-weitz' }] }, '5.5.5.5')).json();
+    expect(capped).toEqual({ ok: true, following: true, follow: 'cap_reached', limit: 10, dropped: [{ kind: 'investor', id: 'wally-weitz' }], sign_in_email: 'not_needed' });
+    expect(sent).toHaveLength(0);
+    expect((await (await call('/follows', { token: s.token })).json()).follows.investors).not.toContain('wally-weitz');
+    const eleventh = await call('/follows/investors/wally-weitz', { method: 'POST', token: s.token });
+    expect([eleventh.status, (await eleventh.json()).code]).toEqual([402, 'cap_reached']);
+    // Free members unfollow from /account/: then the next follow fits.
+    expect((await call('/follows/investors/fund-a', { method: 'DELETE', token: s.token })).status).toBe(200);
+    expect(await (await signedIn({ email: 'reader@reader.test', follow: { kind: 'investor', id: 'wally-weitz' } }, '6.6.6.6')).json()).toMatchObject({ follow: 'added', sign_in_email: 'not_needed' });
+    for (const x of [...nine.slice(1), 'wally-weitz']) await call(`/follows/investors/${x}`, { method: 'DELETE', token: s.token });
 
     // Friday evening ET (02:00 UTC Saturday, 9pm ET Friday): the week's 13F cards, curated filers' Form 4s and 13D/Gs, and company insiders.
     sent = [];
@@ -3531,7 +3550,7 @@ describe('copybook api', () => {
     const stale = await plain('/v1/bulk/2026Q2.csv.gz');
     expect([stale.status, (await stale.arrayBuffer()).byteLength, stale.headers.get('content-length')]).toEqual([200, 1_200_000, '1200000']);
     // RFC 9530: the sha256 of the bytes, base64 between colons.
-    expect(stale.headers.get('repr-digest')).toBe(`sha-256=:${Buffer.from(gzSha, 'hex').toString('base64')}:`);
+    expect(stale.headers.get('repr-digest')).toBe(`sha-256=:${btoa(String.fromCharCode(...gzSha.match(/../g)!.map((x) => parseInt(x, 16))))}:`);
     await vi.waitFor(() => expect(bulkPuts).toEqual([`${gzSha} 1200000`]));
     for (const r of [await plain('/v1/bulk/2026Q2.csv.gz'), await viaF('/v1/bulk/2026Q2.csv.gz')]) {
       const u = new URL(r.headers.get('location')!);
