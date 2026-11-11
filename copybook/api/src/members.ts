@@ -160,7 +160,8 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     // Only a delivered welcome counts; otherwise the claim is released and the next event retries it.
     // Holdterm's welcome comes from Holdterm, never Copybook.
     const welcome = m.plan === 'holdterm' ? holdtermLoginMail(env, m.email, token, true) : loginMail(env, m.email, token, true, m);
-    m.welcomed = (await sendMail(env, [welcome])) === '200';
+    // A test address's welcome goes to the test inbox (sunk): delivered there, so not sent again on every event.
+    m.welcomed = ['200', 'sunk'].includes(await sendMail(env, [welcome]));
     if (!m.welcomed) await claim(env, customer, 'welcome', false);
   }
   // A cancel replaces a pause scheduled for the trial's end: Stripe's pause goes too, so a later resume is a plain
