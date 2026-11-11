@@ -1241,12 +1241,13 @@ describe('copybook api', () => {
     // The date of the send; a Kahn follower's email opens on Kahn's filing (his 3 largest moves, not GONE, person and
     // fund, % of fund), one Copy line for every row, the speed line, then the trial button on the first screen.
     const pricingUrl = 'https://refcell.github.io/gust/copybook/pricing/?from=e2&utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-paid&client_reference_id=email_e2-paid';
-    expect(text.startsWith(`13F deadline night, Monday, November 16.\n\nYour follows:\n  Irving Kahn (Kahn Brothers) filed its Q3 13F today: trimmed TRIM −$8.0M (1.0% of fund); added ADDS +$5.0M (0.6% of fund); new position in NEWB +$4.0M (0.5% of fund)\n    https://refcell.github.io/gust/copybook/f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows\n  Copy emails each 13F when it's filed: median under 2 minutes from EDGAR acceptance.\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\nStart 14-day free trial: ${pricingUrl}\nCard required · charged on day 15 unless you cancel.\n\n`)).toBe(true);
+    expect(text.startsWith(`13F deadline night, Monday, November 16.\n\nYour follows:\n  Irving Kahn (Kahn Brothers) filed its Q3 13F today: trimmed TRIM −$8.0M (1.0% of fund); added ADDS +$5.0M (0.6% of fund); new position in NEWB +$4.0M (0.5% of fund)\n    https://refcell.github.io/gust/copybook/f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\nGet each 13F as it's filed, with Copy · 14 days free · card required: ${pricingUrl}\n\n`)).toBe(true);
+    expect(text).not.toMatch(/median|minutes after/);
     expect(text).not.toContain('GONE');
     // The paid moment in ET clock times, only a send under 5 minutes (First Eagle, not Kahn's 400 s); no durations.
-    expect(text).toContain('\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\nStart 14-day');
+    expect(text).toContain('\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\nGet each 13F');
     expect(text).not.toMatch(/later\.|Preview example/);
-    expect(k.get('html')).toMatch(/Copy emails each 13F when it's filed: median under 2 minutes from EDGAR acceptance\.<\/p><\/div><p[^>]*><b>First Eagle filed its 13F at 12:09 pm ET\. Copy members had its moves at 12:11 pm ET\.<\/b><\/p><p[^>]*><a [^>]*>Start 14-day free trial<\/a><\/p><p[^>]*>Card required · charged on day 15 unless you cancel</);
+    expect(k.get('html')).toMatch(/<\/div><p[^>]*><b>First Eagle filed its 13F at 12:09 pm ET\. Copy members had its moves at 12:11 pm ET\.<\/b><\/p><p[^>]*><a [^>]*>Get each 13F as it's filed, with Copy<\/a><\/p><p[^>]*>14 days free · card required</);
     // Below: each manager's top sell and top buy (exits count), managers by their largest move.
     expect(text).toContain("The day's biggest moves:\n  Matthew McLennan (First Eagle): sold out of CHRW −$686.0M (1.4% of fund)\n  Matthew McLennan (First Eagle): new position in NVR +$400.1M (0.8% of fund)\n  David Tepper: sold out of TS1 −$500.0M\n  Howard Marks: trimmed HM1 −$300.0M\n");
     expect(text).not.toMatch(/UBER|EXPD|HM2|TS2/);
@@ -1260,7 +1261,7 @@ describe('copybook api', () => {
     expect(k.get('html')).toMatch(/^<div style="display:none[^>]*>Klarman due by Mon Nov 16</);
     // A Klarman follower: one row, expected (never "none filed" or "still due"); the subject is the night's top manager.
     const s5 = mg.find((b) => b.get('to') === 'reader5@reader.test')!;
-    expect(s5.get('text')).toContain("Your follows:\n  Seth Klarman: expected by Fri Nov 20\n  Copy emails each 13F when it's filed: median under 2 minutes from EDGAR acceptance.\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\nStart 14-day free trial:");
+    expect(s5.get('text')).toContain("Your follows:\n  Seth Klarman: expected by Fri Nov 20\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\nGet each 13F as it's filed, with Copy");
     expect(s5.get('text')).not.toMatch(/none filed|still due/i);
     expect(s5.get('subject')).toBe('First Eagle bought $400M of NVR, sold out of CHRW');
     // Pzena filed Q3 on Oct 30 (before this week's records): his top moves, never "still due".
@@ -1549,26 +1550,31 @@ describe('copybook api', () => {
       return realFetch(u, init);
     });
     await call('/follows/owned/SIRI', { method: 'POST', token: s.token }); // 5th name
-    // No mailing address: the Friday email skips itself (marketing email must carry one), and can still go once it's set.
+    // No mailing address: the Friday email still goes, as a plain newsletter (no Copy paragraph, no /speed/ or /pricing/ link).
     const { runWeekly } = await import('../src/free');
-    expect(await runWeekly(env, sat)).toMatchObject({ status: 'skipped', why: 'no postal address' });
-    expect(sent).toHaveLength(0);
+    expect(await runWeekly(env, sat)).toMatchObject({ status: '200' });
+    expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
+    expect(sent[0].text).not.toMatch(/Copy emails|pricing\/|speed\//);
+    sent = [];
+    await env.DB.delete('weekly:last');
     Object.assign(env, { POSTAL_ADDRESS: '1 Example Way, Suite 2, Austin, TX 78701' });
     await cron(42, sat);
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
     const w = sent[0];
     // Only the allowed claims: the season median with /speed/, and history as served (marketing's audit, Nov 11).
-    expect(w.text).toContain("Copy emails each one when it's filed, median under 2 minutes from EDGAR acceptance (live figures: " + SITE + 'speed/?utm_source=weekly&utm_medium=email), with 8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV.');
+    expect(w.text).toContain("This email comes once a week. Copy emails each one when it's filed, median under 2 minutes from EDGAR acceptance (live figures: " + SITE + 'speed/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-speed), with 8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV. 14 days free · card required: ' + SITE + 'pricing/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-paid');
+    // The window it covers, by name (Sat Nov 14 02:00 UTC: Fri Nov 6 to Fri Nov 13, ET).
+    expect(w.text.startsWith('Superinvestor filings, November 6–13.')).toBe(true);
     expect(w.subject).toBe('In your names: Warren Buffett added $8.8B of GOOGL');
     // "Your follows" leads: Ackman has no 13F on record this week and isn't on the expected list.
-    expect(w.text).toMatch(/^Superinvestor filings, week of .*\n\nYour follows:\n  Bill Ackman: not filed yet\n    https:\/\/\S+\/investors\/bill-ackman\/\n/);
+    expect(w.text).toMatch(/^Superinvestor filings, November 6–13\.\n\nYour follows:\n  Bill Ackman: not filed yet\n    https:\/\/\S+\/investors\/bill-ackman\/\n/);
     expect(w.text).toMatch(/Also this week from your follows:\n(  .*\n    .*\n)*  Bill Ackman: bought HHH/); // and the superinvestor moves in followed stocks (GOOGL)
     // "In your names" first: one public fact per saved name (superinvestors only), then the biggest locked item, named.
     expect(w.text).toContain(
       `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/\n  Nvidia's CEO sold $18.6M of NVDA (Nov 6, filed Nov 10), with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
     );
     expect(w.text.indexOf('In your names')).toBeLessThan(w.text.indexOf('Biggest buys'));
-    expect(w.html).toContain('Try Copy free for 14 days');
+    expect(w.html).toContain('Try Copy · 14 days free · card required');
     // The footer says why they get it and carries the mailing address; without the address, the Copy ask is dropped.
     expect(w.text).toContain('You get this because you signed up for the free Copybook weekly.');
     expect(w.text).toContain('\n1 Example Way, Suite 2, Austin, TX 78701');
