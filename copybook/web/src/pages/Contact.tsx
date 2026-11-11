@@ -189,7 +189,7 @@ export function Contact() {
                   <legend className="text-[13px] font-medium text-ink-2">How do you want to start?</legend>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {([
-                      [true, 'Start a 14-day trial now', 'Pay by invoice, no card. Net 30 after the trial.'],
+                      [true, 'Start a 14-day trial now', '14-day trial, no card. Invoice on day 14, Net 30.'],
                       [false, 'Talk to us first', 'We reply within one business day.'],
                     ] as const).map(([v, t, d]) => (
                       <label key={t} className={`cursor-pointer rounded-xl px-3.5 py-2.5 text-[14px] ${trial === v ? 'bg-ink/[0.04] shadow-[0_0_0_2px_var(--color-ink)]' : 'shadow-[0_0_0_1px_var(--color-line-2)] hover:bg-ink/[0.03]'}`}>
