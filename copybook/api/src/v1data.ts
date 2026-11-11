@@ -762,11 +762,36 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   const reissue = Object.entries(RE).find(([, x]) => x.to.startsWith(code));
   const reissueTo = reissue?.[1].to ?? null, reissueFrom = reissue?.[0] ?? null;
   if (old && Object.keys(d.counts?.by_period ?? {}).length <= 1 && new Set(raw.map((r) => r.period ?? d.period)).size <= 1) {
-    const prev = await readHolderIndex(env, old);
-    if (prev) {
+    // The old code's holder index, else its single-quarter snapshot (s/): whichever has more rows. Ingest's runs rewrite
+    // the old code's hl/ with only the lines still filed under it once they apply the link (TEVA, Nov 11 12:2x: 1 row),
+    // which would leave every Q3 filer without its prior.
+    const hl = await readHolderIndex(env, old);
+    const snapObj = await env.HIST.get(`s/${old}.json`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const snap: any = snapObj ? await new Response(snapObj.body).json() : null;
+    const rowsOfIdx = (x: any) => (x ? rowsOf({ columns: x.columns, rows: x.rows ?? x.holders ?? [] }).map((r) => ({ ...r, period: r.period ?? x.period ?? null })) : []);
+    const fromHl = rowsOfIdx(hl?.d), fromSnap = rowsOfIdx(snap);
+    const useSnap = fromSnap.length > fromHl.length;
+    const oldRows = useSnap ? fromSnap : fromHl;
+    // The new code's one period (the index's, else its rows').
+    const np: string | null = d.period ?? raw.find((r) => r.period)?.period ?? null;
+    if (oldRows.length) {
       // Rows kept from the old code are positions in the old CUSIP.
-      raw = mergeReissue(raw, rowsOf({ columns: prev.d.columns, rows: prev.d.rows ?? prev.d.holders ?? [] }).map((r) => ({ ...r, cusip: r.cusip ?? reissueFrom })), d.period ?? null);
-      d.counts = { ...(d.counts ?? {}), ...countsOf(raw), merged_from: old };
+      raw = mergeReissue(raw, oldRows.map((r) => ({ ...r, cusip: r.cusip ?? reissueFrom })), d.period ?? null);
+      // From a snapshot, a filer whose latest 13F is newer than the snapshot and lists neither code sold out (Barclays'
+      // TEVA): an exit in its latest quarter, sized by the snapshot's holding.
+      if (useSnap && np) {
+        const latest = new Map((await filers(env)).map((f) => [f.cik, f.latest_quarter as string | null]));
+        const rest = await env.HIST.get('pre/v1-filers-rest.txt');
+        if (rest) for (const m of (await new Response(rest.body).text()).matchAll(/"cik":"(\d{10})"[^{}]*?"latest_quarter":"(\d{4}Q\d)"/g)) if (!latest.has(m[1])) latest.set(m[1], m[2]);
+        raw = raw.map((r) => {
+          const lq = latest.get(pad(String(r.cik)));
+          return r.cusip === reissueFrom && r.period && r.period < np && lq && lq >= np && Number(r.shares) > 0
+            ? { ...r, period: lq, shares: 0, value: 0, prev_shares: Number(r.shares), prev_value: Number(r.value) || 0, change: 'exited', accession: null }
+            : r;
+        });
+      }
+      d.counts = { ...(d.counts ?? {}), ...countsOf(raw), merged_from: old, ...(useSnap ? { merged_via: 'snapshot' } : {}) };
     }
   }
   // net is the shares traded at each filing's value per share, never the value difference (a price move is no trade).

@@ -4098,6 +4098,23 @@ describe('copybook api', () => {
     const by = Object.fromEntries([...teva.data.holders, ...teva.data.exited].map((r: { filer: { name: string }; change: string; share_change: number | null; period: string }) => [r.filer.name, [r.change, r.share_change, r.period]]));
     expect(by).toEqual({ 'FMR LLC': ['trimmed', -4473320, '2026Q3'], 'Norges Bank': ['added', 1000000, '2026Q3'], 'BlackRock, Inc.': ['added', 1000000, '2026Q2'], 'Barclays PLC': ['exited', -800000, '2026Q3'] });
     expect([teva.data.issuer, teva.filers, teva.exited_count, teva.data.counts.merged_from, teva.data.counts.new ?? 0]).toEqual(['M8769Q', 3, 1, '881624', 0]);
+    // Ingest's run rewrote the old code's hl/ with the one line still filed under it (Nov 11 12:2x): the old Q2 snapshot
+    // (s/881624) carries the priors instead; a filer whose latest 13F is Q3 and lists neither code sold out (Barclays).
+    const hl0 = hist.m.get('hl/881624.json'), rest0 = hist.m.get('pre/v1-filers-rest.txt');
+    await hist.put('hl/881624.json', JSON.stringify({ issuer: '881624', columns: tcols, rows: [['0001999999', 'Lone Filer', null, 'other', false, '2026Q2', 10, 10, 300, 300, 'unchanged']] }));
+    await hist.put('s/881624.json', JSON.stringify({ issuer: '881624', period: '2026Q2', prev_period: '2026Q1', columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'accession'], holders: [
+      ['0000315066', 'FMR LLC', 'fmr-llc', 'equity', 30258016, 33132795, 1025141579, 997959810, 'trimmed', 'F2'],
+      ['0001364743', 'BlackRock, Inc.', null, 'equity', 70000000, 69000000, 2160000000, 2000000000, 'added', 'B2'],
+      ['0000312069', 'Barclays PLC', null, 'equity', 800000, 900000, 25000000, 27000000, 'trimmed', 'X2'],
+    ] }));
+    hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`2 \n${JSON.stringify([{ slug: 'barclays-plc', cik: '0000312069', name: 'Barclays PLC', manager: null, featured: false, status: null, latest_quarter: '2026Q3' }, { slug: 'blackrock', cik: '0001364743', name: 'BlackRock, Inc.', manager: null, featured: false, status: null, latest_quarter: '2026Q2' }])}`));
+    const snapV = (await v1('/v1/stocks/TEVA/holders?current_only=false')).body;
+    const bySnap = Object.fromEntries([...snapV.data.holders, ...snapV.data.exited].map((r: { filer: { name: string }; change: string; share_change: number | null; period: string }) => [r.filer.name, [r.change, r.share_change, r.period]]));
+    expect([bySnap['FMR LLC'], bySnap['BlackRock, Inc.'], bySnap['Barclays PLC'], snapV.data.counts.merged_via]).toEqual([['trimmed', -4473320, '2026Q3'], ['added', 1000000, '2026Q2'], ['exited', -800000, '2026Q3'], 'snapshot']);
+    hist.m.delete('s/881624.json');
+    if (hl0) hist.m.set('hl/881624.json', hl0);
+    if (rest0) hist.m.set('pre/v1-filers-rest.txt', rest0);
+    else hist.m.delete('pre/v1-filers-rest.txt');
     // The same view through /v1/changes?ticker=: no new TEVA for a filer that held the ADS, and the trade sized as shares
     // sold x this filing's price (-4,473,320 x $34.90 = -$156.1M), not the value difference (-$125.1M); the quant: FMR
     // read -$4.07M where -$177.1M was right.
