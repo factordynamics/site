@@ -404,7 +404,11 @@ export function money(n?: number | null, digits = 1) {
   if (a >= 1e3) return `$${(v / 1e3).toFixed(0)}K`
   return `$${v.toFixed(0)}`
 }
-export const pct = (w?: number | null, d = 1) => `${((Number(w) || 0) * 100).toFixed(d)}%`
+/** 0.123 -> "12.3%"; a small non-zero share reads "<0.1%" ("<1%" at d = 0), never "0.0%". */
+export const pct = (w?: number | null, d = 1) => {
+  const x = (Number(w) || 0) * 100
+  return x > 0 && x < 10 ** -d / 2 ? `<${(10 ** -d).toFixed(d)}%` : `${x.toFixed(d)}%`
+}
 export function sharesFmt(n?: number | null) {
   const v = Number(n) || 0
   if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`

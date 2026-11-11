@@ -103,7 +103,9 @@ export function StockPage() {
   }, [filers, tracked, api])
   const exited = useMemo(() => (d?.exited ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
   const notCounted = useMemo(() => (d?.not_counted ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
-  const flagged = [...tracked, ...exited].filter((h) => h.flag).length + notCounted.length
+  // Flagged rows never drop out of sight: listed under the moves with their note, valued by what can be trusted.
+  const flaggedRows = useMemo(() => [...tracked, ...exited, ...notCounted].filter((h) => h.flag).sort((a, b) => Math.max(b.value, b.prev_value) - Math.max(a.value, a.prev_value)), [tracked, exited, notCounted])
+  const flagged = flaggedRows.length
   const options = useMemo(() => (d?.options ?? []).filter((o) => scope === 'all' || o.featured), [d, scope])
   const [allMoves, setAllMoves] = useState(false)
   const moves = useMemo(
@@ -375,6 +377,25 @@ export function StockPage() {
               {allMoves ? 'Hide small moves' : `Show all ${moves.length} moves (${moves.length - bigMoves.length} under $1M or 0.1% of the fund’s book)`}
             </button>
           )}
+          {d && flaggedRows.length > 0 && (
+            <ul className="mt-4 divide-y divide-line border-t border-line">
+              {flaggedRows.slice(0, 8).map((h) => (
+                <li key={h.slug} className="flex items-start justify-between gap-3 py-2.5 text-[13.5px]">
+                  <span className="min-w-0">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Link to={`/investors/${h.slug}/`} className="min-w-0 truncate font-medium hover:text-accent">
+                        {h.manager}
+                      </Link>
+                      <QuarterTag q={h.quarter} fresh={multi && h.quarter === d.quarters[0]} />
+                      {(h.change === 'new' || h.change === 'exited') && <Badge tone={CHANGE[h.change].tone}>{CHANGE[h.change].label}</Badge>}
+                    </span>
+                    <span className="mt-0.5 block text-[12px] leading-snug text-ink-3">{h.note}</span>
+                  </span>
+                  <span className="num shrink-0 pt-0.5 text-[13px] text-ink-3">{flagMove(h)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           <NotCounted n={flagged} />
         </Panel>
         <Panel title="Largest holders" sub="Value as filed, and weight in each fund’s portfolio">
@@ -551,6 +572,20 @@ function HolderRow({ h, fresh }: { h: StockHolder; fresh: boolean }) {
       </span>
     </li>
   )
+}
+
+/** A flagged row's move from what can be trusted: the share change ("value"), the change in filed value ("shares"),
+ *  or nothing ("both"). Shown beside the row, never added to a total. */
+function flagMove(h: StockHolder) {
+  if (h.flag === 'value' && h.prev_shares) {
+    const r = (h.shares - h.prev_shares) / h.prev_shares
+    return `${r > 0 ? '+' : r < 0 ? '−' : ''}${pct(Math.abs(r), 0)} shares`
+  }
+  if (h.flag === 'shares' && (h.value || h.prev_value)) {
+    const v = h.value - h.prev_value
+    return `${v > 0 ? '+' : v < 0 ? '−' : ''}${money(Math.abs(v))} filed value`
+  }
+  return 'not counted'
 }
 
 function ChangeCell({ h }: { h: StockHolder }) {

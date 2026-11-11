@@ -110,7 +110,7 @@ function SeasonLead() {
           <Skeleton className="h-[1.2em] w-4/5" />
         ) : (
           <>
-            Copy emails each superinvestor’s 13F, with what they bought and sold. {med?.median_seconds != null && med.median_seconds < 120 ? 'Median under 2 minutes from EDGAR acceptance. ' : ''}Every alert is timed on the{' '}
+            Copy emails each superinvestor’s 13F, with what they bought and sold. {med?.median_seconds != null && med.median_seconds < 120 ? 'Median alert under 2 minutes after the SEC publishes the filing. ' : ''}Every alert is timed on the{' '}
             <Link to="/speed/" className="font-medium text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink">
               speed page
             </Link>
