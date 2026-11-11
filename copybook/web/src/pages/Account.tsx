@@ -12,7 +12,7 @@ import { dayLabel, Paused, timeLabel } from '../components/Paused'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { loadExpected, seasonStatus, stockPath } from '../lib/stocks'
-import { setFollow } from '../lib/follows'
+import { refreshFollows, setFollow } from '../lib/follows'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Signup } from '../components/Signup'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -843,6 +843,8 @@ function FreeFollows() {
   const idx = useAsync(loadIndex, [])
   const soon = useAsync(loadExpected, [])
   const [err, setErr] = useState<string | null>(null)
+  // Fresh from the API on every visit; the cached list only shows while it answers or if it's down.
+  useEffect(() => void refreshFollows(), [])
   if (status !== 'ready' || !follows.investors.length) return null
   const name = (slug: string) => idx.data?.managers.find((m) => m.slug === slug)?.manager ?? soon.data?.expected.find((x) => x.slug === slug)?.manager ?? slug
   return (
@@ -869,7 +871,7 @@ function FreeFollows() {
                 disabled={removing}
                 onClick={() => {
                   setErr(null)
-                  setFollow('investors', slug, false).catch(() => setErr(`Couldn’t remove ${name(slug)}. Please try again.`))
+                  setFollow('investors', slug, false).catch((e) => setErr(`Couldn’t remove ${name(slug)}${e instanceof ApiError && e.detail ? `: ${e.detail}` : ''}. Please try again.`))
                 }}
                 aria-label={`Stop following ${name(slug)}`}
                 className="shrink-0 rounded-full px-3 py-1 text-[13px] font-medium text-ink-2 shadow-[0_0_0_1px_var(--color-line-2)] hover:text-ink hover:shadow-[0_0_0_1px_var(--color-ink-3)] disabled:opacity-60"

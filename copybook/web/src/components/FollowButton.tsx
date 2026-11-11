@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { pricingTo } from '../lib/data'
 import { ApiError, getToken } from '../lib/account'
-import { isPaywall, setFollow, useFollows } from '../lib/follows'
+import { isCap, isPaywall, setFollow, useFollows } from '../lib/follows'
 import { track } from '../lib/track'
 import { CAP_MSG, FollowSignup } from './FollowSignup'
 
@@ -41,8 +41,9 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
   const [capped, setCapped] = useState(false)
   const save = (want: boolean) =>
     setFollow(kind === 'investor' ? 'investors' : 'stocks', id, want).catch((e) => {
-      setCapped(e instanceof ApiError && e.code === 'cap_reached')
-      if (isPaywall(e)) setOpen(true)
+      // The cap shows the cap message; only a real paywall shows the Copy pitch; anything else is the Retry line.
+      setCapped(isCap(e))
+      if (isCap(e) || isPaywall(e)) setOpen(true)
     })
   const click = () => (status !== 'ready' ? setOpen((o) => !o) : save(!on))
 

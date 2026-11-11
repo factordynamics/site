@@ -6,6 +6,7 @@ import { Arrow, AvatarStack, Badge, Button, Lock, Monogram, Panel, Skeleton } fr
 import { getToken, isPaying, useMember } from '../lib/account'
 import { track, useTrackVisit } from '../lib/track'
 import { FollowSignup } from '../components/FollowSignup'
+import { FollowButton } from '../components/FollowButton'
 import { EdgarClosed } from '../components/EdgarClosed'
 import { TRIAL_DAYS } from '../config'
 import { dateFmt, dateLabel, money, NUM, pricingTo, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
@@ -106,6 +107,17 @@ export function Season() {
                   <TrialButton />
                   <p className="mt-1.5 text-[12.5px] text-accent-2/80">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
                 </div>
+              )}
+              {/* Signed in (free or paid): a Follow button per name, saved to the account with the session. */}
+              {getToken() && up && up.people.length > 0 && (
+                <ul className="mt-3 flex flex-wrap gap-2 border-t border-accent/15 pt-3 text-ink" aria-label="Follow the next filers">
+                  {up.people.map((x) => (
+                    <li key={x.slug} className="inline-flex items-center gap-2 rounded-full bg-card py-1 pl-3 pr-1 text-[13.5px] shadow-[0_0_0_1px_var(--color-line)]">
+                      {x.name}
+                      <FollowButton kind="investor" id={x.slug} name={x.name} />
+                    </li>
+                  ))}
+                </ul>
               )}
               {!getToken() && up && up.people.length > 0 && <FollowSignup people={up.people} label="Your email, to follow them free" quietLabel secondary className="mt-3 border-t border-accent/15 pt-3 text-[14.5px] text-ink" />}
             </div>

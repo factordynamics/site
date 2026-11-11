@@ -86,6 +86,15 @@ function load() {
   )
 }
 
+/** Re-read GET /follows now (the account page on load): the caches only stand in while it answers or if it fails. */
+export function refreshFollows() {
+  if (!getToken()) return
+  return call<Res>('/follows', { auth: true, timeout: 20_000, cache: 'no-store' }).then(
+    (r) => set({ status: 'ready', follows: shape(r), pending: state.pending }),
+    () => null,
+  )
+}
+
 /** Reset after sign-in or sign-out so the next read refetches. */
 // The tab cache is keyed by session token, so a new sign-in never reads another session's follows.
 export const resetFollows = () => set({ status: 'idle', follows: EMPTY, pending: {} })
@@ -131,12 +140,13 @@ export function setFollow(kind: 'investors' | 'stocks' | 'peers' | 'owned', id: 
       // writes and answers with the full follows, which the button renders from.
       const path = `/follows/${kind}/${encodeURIComponent(id)}`
       const r = await call<Res>(path, { method: want ? 'POST' : 'DELETE', auth: true })
-      const f = shape(r)
+      // follows.limit is the free owned-names limit (5); investor and stock writes answer with the 10-follow cap instead.
+      const f = shape(kind === 'owned' ? r : { follows: r.follows })
       const ok = f[kind].includes(id) === want
       set({ status: 'ready', follows: f, pending: ok ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error' } } })
       if (!ok) throw new Error('not_confirmed')
     } catch (e) {
-      set({ ...state, pending: isPaywall(e) ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error' } } })
+      set({ ...state, pending: isPaywall(e) || isCap(e) ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error' } } })
       throw e
     }
   })
@@ -144,7 +154,10 @@ export function setFollow(kind: 'investors' | 'stocks' | 'peers' | 'owned', id: 
 
 export const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 
-export const isPaywall = (e: unknown) => e instanceof ApiError && (e.status === 401 || e.status === 402)
+/** The free follow cap (402 with code cap_reached): not a paywall, the member can remove one. */
+export const isCap = (e: unknown) => e instanceof ApiError && e.code === 'cap_reached'
+/** Copy required (401, or a 402 that isn't the free cap). */
+export const isPaywall = (e: unknown) => e instanceof ApiError && (e.status === 401 || e.status === 402) && !isCap(e)
 
 /** Add many tickers as owned or watched (My book import), one request each, queued behind other follow changes. */
 export function addStocks(tickers: string[], owned: boolean) {
