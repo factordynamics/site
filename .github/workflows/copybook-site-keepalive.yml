@@ -1,0 +1,47 @@
+name: Copybook site keepalive
+
+# GitHub's scheduler drops most of copybook-pages.yml's 10-minute runs (four ran on Nov 10), so the
+# site lagged the data by hours. Like refcell/gust's copybook-keepalive.yml, this uses GITHUB_TOKEN
+# alone (workflow_dispatch is the documented exception it may trigger): one job loops for about
+# 5 hours and every 10 minutes dispatches a Pages build when the published data
+# (index.json generated_at) is newer than the live site's (d/coverage.json) and no Pages run is
+# queued or running, then dispatches its successor. The concurrency group keeps one chain; the
+# cron restarts it if it dies.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+concurrency:
+  group: copybook-site-keepalive
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DATA: https://refcell.github.io/gust/copybook/data/index.json
+      LIVE: https://copybook.factordynamics.com/d/coverage.json
+    steps:
+      - name: Rebuild the site within 10 minutes of new data
+        run: |
+          start=$SECONDS
+          while [ $((SECONDS - start)) -lt 18000 ]; do
+            data=$(curl -fsS "$DATA?t=$(date +%s)" | jq -r .generated_at || true)
+            live=$(curl -fsS "$LIVE?t=$(date +%s)" | jq -r .generated_at || true)
+            busy=$(gh run list --workflow copybook-pages.yml -L 10 --json status -q '[.[] | select(.status != "completed")] | length' || echo 1)
+            if [ -n "$data" ] && [ "$data" != "$live" ] && [ "${busy:-1}" = 0 ]; then
+              echo "$(date -u +%T) data $data, live $live: dispatch"
+              gh workflow run copybook-pages.yml --ref main || echo "::warning::dispatch failed"
+            else
+              echo "$(date -u +%T) data $data, live $live, pages runs going $busy: skip"
+            fi
+            sleep 600
+          done
+          gh workflow run copybook-site-keepalive.yml --ref main
