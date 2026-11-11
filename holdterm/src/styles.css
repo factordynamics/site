@@ -1724,8 +1724,7 @@ a.hb-row:hover {
   .trunc.wide-name {
     max-width: 230px;
   }
-  .due.show-sm {
-    display: block;
+  .due.small {
     line-height: 1.6;
   }
   .row-sub.show-sm {
