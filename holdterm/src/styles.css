@@ -436,6 +436,11 @@ main:focus {
   flex-wrap: wrap;
   gap: 4px 14px;
 }
+.chip-n {
+  margin-left: 6px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 .head .meta .due-next {
   color: var(--fg2);
 }
