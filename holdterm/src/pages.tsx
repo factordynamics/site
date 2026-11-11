@@ -1803,8 +1803,9 @@ export function Stock({ ticker }: { ticker: string }) {
         {holders.length ? (
           <>
             {holders.length === 1 ? <>{name(bigHolder)} is the only investor Holdterm follows that owns it, {usd(bigHolder.value)} worth. </> : <>{name(bigHolder)} holds the most, {usd(bigHolder.value)}, or {pct(bigHolder.value / value, 0)} of what these investors hold. </>}
-            {buyer && <>{name(buyer)} bought the most last quarter, {buyer.change === 'new' ? `opening a ${usd(buyer.delta_value)} position` : `adding ${usd(buyer.delta_value)}`}. </>}
-            {seller && <>{name(seller)} sold the most{buyer ? '' : ' last quarter'}, {seller.change === 'exited' ? `selling out of ${usd(-(seller.delta_value ?? 0))}` : `cutting ${usd(-(seller.delta_value ?? 0))}`}.</>}
+            {/* Each trade is dated by its own 13F's quarter: holders' latest 13Fs can be for different quarters (Sanders' Q3 buy, H&H's Q2 sale). */}
+            {buyer && <>{name(buyer)} bought the most, {buyer.change === 'new' ? `opening a ${usd(buyer.delta_value)} position` : `adding ${usd(buyer.delta_value)}`} in {quarterLabel(buyer.quarter)}. </>}
+            {seller && <>{name(seller)} sold the most, {seller.change === 'exited' ? `selling out of ${usd(-(seller.delta_value ?? 0))}` : `cutting ${usd(-(seller.delta_value ?? 0))}`} in {quarterLabel(seller.quarter)}.</>}
           </>
         ) : (
           <>None of the investors Holdterm follows reports {issuerName(d.name)} in its latest 13F.</>
