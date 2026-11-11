@@ -119,8 +119,9 @@ for (const b of books) {
   // Rank of each position in this fund's share book (1 = largest), for "top 10" crowding counts.
   const rank = new Map([...per.entries()].filter(([, p]) => p.shares > 0).sort((a, z) => z[1].value - a[1].value).map(([k], i) => [k, i + 1]))
   for (const [k, p] of per) {
-    const { change, delta_value, value_change, value_delta_basis } = positionMove(p)
-    stocks.get(k).holders.push({ ...who, rank: rank.get(k) ?? null, shares: p.shares, value: r0(p.value), weight: p.value / total, prev_shares: p.prev_shares, prev_value: r0(p.prev_value), delta_value, value_delta_basis: value_delta_basis ?? null, change, ...(value_change != null ? { value_change } : {}), ...positionFlags(p) })
+    // Several share classes (BRK.A/BRK.B): shares in a conversion unit or null, counts per class in classes[].
+    const { change, delta_value, value_change, value_delta_basis, ...cls } = positionMove(p)
+    stocks.get(k).holders.push({ ...who, rank: rank.get(k) ?? null, shares: p.shares, value: r0(p.value), weight: p.value / total, prev_shares: p.prev_shares, prev_value: r0(p.prev_value), delta_value, value_delta_basis: value_delta_basis ?? null, change, ...(value_change != null ? { value_change } : {}), ...cls, ...positionFlags(p) })
   }
 }
 
@@ -190,6 +191,9 @@ mkdirSync(join(out, 'd'), { recursive: true })
 }
 writeFileSync(join(out, 'd', 'splits.json'), JSON.stringify({ generated_at: index.generated_at, note: 'Every row has every key. holders and price_ratio may be null: a split or reissue confirmed by an issuer filing (8-K) rather than by holders has no holder count or price ratio; xbrl_shares_ratio may be null too.', splits: splitLog.sort((a, b) => b.quarter.localeCompare(a.quarter) || (a.ticker ?? '').localeCompare(b.ticker ?? '')) }))
 
+// Shares held across classes, for holder counts: shares is null on a multi-class row with no conversion ratio.
+const sharesOf = (h) => h.shares ?? (h.classes ?? []).reduce((a, c) => a + (c.shares || 0), 0)
+const prevOf = (h) => h.prev_shares ?? (h.classes ?? []).reduce((a, c) => a + (c.prev_shares || 0), 0)
 const list = []
 const byTicker = {}
 mkdirSync(join(out, 'd', 'stocks'), { recursive: true })
@@ -198,11 +202,11 @@ for (const s of stocks.values()) {
   const classes = [...s.classes.values()].sort((a, b) => b.value - a.value)
   const ticker = classes[0].ticker
   if (byTicker[ticker]) continue
-  const holders = s.holders.filter((h) => h.shares > 0).sort((a, b) => b.value - a.value)
+  const holders = s.holders.filter((h) => sharesOf(h) > 0).sort((a, b) => b.value - a.value)
   // Sold-out positions, plus flagged ones gone from the book whose trade is unknown (they carry suspect_units).
-  const exited = s.holders.filter((h) => h.change === 'exited' || (h.change === 'unknown' && h.shares === 0)).sort((a, b) => (a.delta_value ?? 0) - (b.delta_value ?? 0))
+  const exited = s.holders.filter((h) => h.change === 'exited' || (h.change === 'unknown' && sharesOf(h) === 0)).sort((a, b) => (a.delta_value ?? 0) - (b.delta_value ?? 0))
   const count = (c) => s.holders.filter((h) => h.change === c).length
-  const prevHolders = s.holders.filter((h) => h.prev_shares > 0).length
+  const prevHolders = s.holders.filter((h) => prevOf(h) > 0).length
   if (!holders.length && !exited.length && !s.options.length) continue
   const file = {
     ticker,
@@ -305,14 +309,14 @@ function flowFor(scope, full = false, q = '') {
     const moves = s.holders.filter((h) => slugs.has(h.slug) && h.change && h.change !== 'unchanged' && h.change !== 'unknown' && h.delta_value != null)
     if (!moves.length) continue
     const pick = ({ slug, manager, featured, change, delta_value, weight }) => ({ slug, manager, featured, change, delta_value, weight })
-    const buyers = moves.filter((h) => h.change === 'new' || h.change === 'added').sort((a, b) => b.delta_value - a.delta_value)
-    const sellers = moves.filter((h) => h.change === 'trimmed' || h.change === 'exited').sort((a, b) => a.delta_value - b.delta_value)
+    const buyers = moves.filter((h) => h.change === 'new' || h.change === 'added' || (h.change === 'mixed' && h.delta_value > 0)).sort((a, b) => b.delta_value - a.delta_value)
+    const sellers = moves.filter((h) => h.change === 'trimmed' || h.change === 'exited' || (h.change === 'mixed' && h.delta_value < 0)).sort((a, b) => a.delta_value - b.delta_value)
     flows.push({
       ticker,
       name: s.name,
       sector: s.sector,
       // Nobody we follow held it last quarter: usually a spin-off, IPO or listing, not a decision.
-      fresh: !s.holders.some((h) => h.prev_shares > 0),
+      fresh: !s.holders.some((h) => prevOf(h) > 0),
       net_value: moves.reduce((a, h) => a + h.delta_value, 0),
       buy_value: buyers.reduce((a, h) => a + h.delta_value, 0),
       sell_value: sellers.reduce((a, h) => a + h.delta_value, 0),

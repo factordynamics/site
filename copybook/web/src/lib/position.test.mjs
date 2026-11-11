@@ -42,3 +42,29 @@ test('lines ingest held out of a counted row stay on it, and the counted trade i
   assert.equal(positionMove(p).change, 'trimmed')
   assert.deepEqual(positionFlags(p), { held_lines: [held] })
 })
+
+test('share classes trade at their own prices: FMR BRK A and B, Alphabet A and C', () => {
+  // FMR 2026Q3 (0000315066-26-002964): BRK.A 14,533 -> 6,959 at $747,005; BRK.B 10,400,007 -> 9,597,287 at $497.95.
+  const brk = newPosition(true)
+  addLine(brk, line({ cusip: '084670108', ticker: 'BRK.A', shares: 6959, value: 6959 * 747005, prev_shares: 14533, prev_value: 14533 * 700000 }))
+  addLine(brk, line({ cusip: '084670702', ticker: 'BRK.B', shares: 9597287, value: 9597287 * 497.95, prev_shares: 10400007, prev_value: 10400007 * 466 }))
+  const m = positionMove(brk)
+  assert.equal(m.change, 'trimmed')
+  assert.equal(m.delta_value, Math.round(-7574 * 747005 - 802720 * 497.95)) // ~-$6.06B, not -810,294 summed shares
+  assert.equal(m.shares, 6959 * 1500 + 9597287)
+  assert.equal(m.shares_unit, 'BRK.B')
+  assert.deepEqual(m.classes.map((c) => [c.ticker, c.shares - c.prev_shares, c.change]), [['BRK.A', -7574, 'trimmed'], ['BRK.B', -802720, 'trimmed']])
+  // GOOGL bought, GOOG sold: mixed, net_direction from the dollars; no share unit, so shares null.
+  const g = newPosition(true)
+  addLine(g, line({ cusip: '02079K305', ticker: 'GOOGL', shares: 1000, value: 344080, prev_shares: 900, prev_value: 300000 }))
+  addLine(g, line({ cusip: '02079K107', ticker: 'GOOG', shares: 500, value: 170370, prev_shares: 800, prev_value: 270000 }))
+  const gm = positionMove(g)
+  assert.deepEqual([gm.change, gm.net_direction, gm.shares, gm.prev_shares], ['mixed', 'sell', null, null])
+  // A held class is left out of the dollars and the row's flags.
+  const h = newPosition(true)
+  addLine(h, line({ cusip: '02079K305', ticker: 'GOOGL', shares: 1000, value: 344080, prev_shares: 900, prev_value: 300000 }))
+  addLine(h, line({ cusip: '02079K107', ticker: 'GOOG', shares: 500, value: 9e9, prev_shares: 800, prev_value: 270000, suspect_units: true, unreliable: 'both' }))
+  const hm = positionMove(h)
+  assert.deepEqual([hm.change, hm.delta_value, hm.classes_held], ['added', Math.round(100 * 344.08), 1])
+  assert.deepEqual(positionFlags(h), {})
+})
