@@ -618,29 +618,10 @@ function HomeBody() {
             ]}
             empty={`No ${quarterLabel(lead)} 13Fs yet.`}
           />
+          {/* One line on every width; the list of who hasn't filed is on Investors, one click away. */}
           {due.length > 0 && (
-            <div className="due small show-sm">
+            <div className="due small">
               {daysLeft < 0 ? `${plural(due.length, 'investor')} ${due.length === 1 ? 'hasn’t' : 'haven’t'} filed for ${quarterLabel(s.q)} yet. It was due ${day(s.due)}.` : `${plural(due.length, 'investor')} still to file for ${quarterLabel(s.q)}, due ${day(s.due)}.`} <A to="/funds?show=due">See who →</A>
-            </div>
-          )}
-          {due.length > 0 && (
-            <div className="due small hide-sm">
-              <span className="dim">{daysLeft < 0 ? 'Not filed yet' : 'Still to file'} ({due.length}):</span>{' '}
-              {due
-                .sort((a, b) => b.total_value - a.total_value)
-                .slice(0, 14)
-                .map((m, i) => (
-                  <span key={m.slug}>
-                    {i > 0 && ', '}
-                    <A to={fundPath(m.slug)}>{m.firm}</A>
-                  </span>
-                ))}
-              {due.length > 14 && (
-                <>
-                  {' '}
-                  <A to="/funds?show=due">+{due.length - 14} more</A>
-                </>
-              )}
             </div>
           )}
         </Panel>
