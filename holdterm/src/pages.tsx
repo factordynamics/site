@@ -35,7 +35,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, Bar, BooksProgress, cap, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, TabsSkel, Tick, type SkelCol, usd, useLoad, type Col } from './lib'
+import { A, AsFiled, Bar, BooksProgress, cap, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, TabsSkel, Tick, type SkelCol, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -1177,12 +1177,12 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
         { key: 't', label: 'Ticker', render: holdingTicker, sort: (r) => r.ticker ?? '', width: '80px' },
         { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge">{r.put_call}</span> : null}{own?.(r) ? <span className="badge">own fund</span> : null}</span>, sort: (r) => r.display_name ?? '' },
         { key: 's', label: 'Sector', hideSm: true, hide: 'lg', render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
-        { key: 'w', label: 'Weight', num: true, render: (r) => pct(r.weight), sort: (r) => r.weight, title: 'Share of the portfolio' },
+        { key: 'w', label: 'Weight', num: true, render: (r) => (r.suspect_units ? <AsFiled>{pct(r.weight)}</AsFiled> : pct(r.weight)), sort: (r) => r.weight, title: 'Share of the portfolio' },
         { key: 'ws', label: 'Last quarter vs now', hideSm: true, hide: 'lg', render: (r) => <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />, title: 'Share of the portfolio last quarter (grey) and now' },
         { key: 'c', label: 'This quarter', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} unclear={r.suspect_units} />, sort: (r) => r.share_change ?? 0 },
-        { key: 'sh', label: 'Shares', num: true, hideSm: true, hide: 'md', render: (r) => num(r.shares), sort: (r) => r.shares },
-        { key: 'p', label: 'Price in filing', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
-        { key: 'v', label: 'Value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
+        { key: 'sh', label: 'Shares', num: true, hideSm: true, hide: 'md', render: (r) => (r.suspect_units ? <AsFiled>{num(r.shares)}</AsFiled> : num(r.shares)), sort: (r) => r.shares },
+        { key: 'p', label: 'Price in filing', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? (r.suspect_units ? <AsFiled>{price(r.value / r.shares)}</AsFiled> : price(r.value / r.shares)) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
+        { key: 'v', label: 'Value', num: true, render: (r) => (r.suspect_units ? <AsFiled>{usd(r.value)}</AsFiled> : usd(r.value)), sort: (r) => r.value },
       ]}
     />
   )
@@ -1769,14 +1769,17 @@ export function Stock({ ticker }: { ticker: string }) {
       ),
       sort: (h) => name(h),
     },
-    { key: 'w', label: 'Weight', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight, title: 'Share of the investor’s portfolio' },
+    // A held row (share counts that don't fit) shows its numbers as filed, greyed, so they aren't read as real.
+    { key: 'w', label: 'Weight', num: true, render: (h) => (h.unclear ? <AsFiled>{pct(h.weight)}</AsFiled> : pct(h.weight)), sort: (h) => h.weight, title: 'Share of the investor’s portfolio' },
     // Rows can come from different quarters' 13Fs, so the column says what it compares rather than "This quarter".
     { key: 'c', label: 'Change', title: 'Compared with the investor’s previous 13F', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} unclear={h.unclear} />, sort: (h) => h.delta_value ?? 0 },
-    { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (h) => num(h.shares), sort: (h) => h.shares },
-    { key: 'v', label: 'Value', num: true, hideSm: true, render: (h) => usd(h.value), sort: (h) => h.value },
+    { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (h) => (h.unclear ? <AsFiled>{num(h.shares)}</AsFiled> : num(h.shares)), sort: (h) => h.shares },
+    { key: 'v', label: 'Value', num: true, hideSm: true, render: (h) => (h.unclear ? <AsFiled>{usd(h.value)}</AsFiled> : usd(h.value)), sort: (h) => h.value },
     { key: 'q', label: 'As of', num: true, hideSm: true, render: (h) => (h.quarter === freshQ ? <span className="qtag">{quarterLabel(h.quarter)}</span> : <span className="dim">{quarterLabel(h.quarter)}</span>), sort: (h) => h.quarter, title: 'The quarter of the 13F each row comes from; the newest are highlighted' },
   ]
   const fundHref = (h: StockHolder) => (inRoster(h.slug) ? fundPath(fundSlug(h.slug)) : null)
+  // Holders whose line is held (share counts that don't fit): left out of the trades, and the trades tab says so.
+  const heldNames = holders.filter((h) => h.unclear).map((h) => shortFirm(name(h)))
   const held = holders.length > 0 || exited.length > 0 || pick(d.options).length > 0
   return (
     <div className="page">
@@ -1844,7 +1847,7 @@ export function Stock({ ticker }: { ticker: string }) {
       </div>
       {holders.length > 0 && (
         <Panel title="Biggest bets on it" right={<span className="dim hide-sm">Share of each investor’s portfolio</span>}>
-          <HBars title="Investors with the most of their portfolio in it" fmt={(v) => pct(v, 1)} labelWidth={200} rows={[...holders].sort((a, b) => b.weight - a.weight).slice(0, 6).map((h) => ({ key: h.slug, href: fundHref(h), label: <span title={name(h)}>{shortFirm(name(h))}</span>, value: h.weight }))} />
+          <HBars title="Investors with the most of their portfolio in it" fmt={(v) => pct(v, 1)} labelWidth={200} rows={[...holders].filter((h) => !h.unclear).sort((a, b) => b.weight - a.weight).slice(0, 6).map((h) => ({ key: h.slug, href: fundHref(h), label: <span title={name(h)}>{shortFirm(name(h))}</span>, value: h.weight }))} />
         </Panel>
       )}
       <Tabs<STab>
@@ -1862,12 +1865,19 @@ export function Stock({ ticker }: { ticker: string }) {
       <Panel title={tab === 'activity' ? activityTitle(movers) : STOCK_TAB[tab]}>
         {tab === 'holders' && <Grid rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty={<Empty title="None of the investors Holdterm follows owns it" hint={`Holdterm follows ${roster.funds.length} concentrated, long-term investors. A stock shows up here once one of them reports it in a 13F.`} action={['See the stocks they own most', '/consensus']} />} />}
         {tab === 'activity' && (
+          <>
           <Grid
             rows={movers}
             href={fundHref}
             // Phones keep the quarter each trade is from; the weight is on the Investors tab.
             cols={[holderCols[0], { ...holderCols[2], label: 'What changed' }, { key: 'd', label: 'Trade size', num: true, render: (h) => <span className={(h.delta_value ?? 0) >= 0 ? 'pos' : 'neg'}>{signedUsd(h.delta_value)}</span>, sort: (h) => h.delta_value ?? 0 }, { ...holderCols[1], hideSm: true }, holderCols[5]]}
           />
+          {heldNames.length > 0 && (
+            <p className="dim small held-note">
+              Not counted here: {heldNames.join(', ').replace(/, ([^,]*)$/, ' and $1')}. {heldNames.length === 1 ? 'Its share counts don’t' : 'Their share counts don’t'} fit {heldNames.length === 1 ? 'its' : 'their'} previous 13F, so no trade is counted.
+            </p>
+          )}
+          </>
         )}
         {tab === 'options' && (
           <Grid
@@ -2451,6 +2461,7 @@ const PILLS: [ReactNode, string][] = [
   [<span className="tag pos">Added +14.6%</span>, 'It owns 14.6% more shares than last quarter. For very large additions the multiple is shown instead, such as “Added ×19”.'],
   [<span className="tag neg">Trimmed −25.2%</span>, 'It owns 25.2% fewer shares, but still holds some.'],
   [<span className="tag neg">Sold out</span>, 'It owned shares last quarter and reports none now.'],
+  [<ChangeTag change={null} unclear />, 'The share counts in this 13F and the one before don’t fit together, often a stock split the filer didn’t adjust for. No trade is counted, the line stays out of the buy and sell totals, and its shares and value are shown greyed, as filed.'],
   [<span className="tag pos">New 5%+ stake</span>, 'A 13D or 13G: the fund crossed 5% of a company, usually reported within days.'],
   [<span className="tag pos">Bought</span>, 'A Form 4: an insider (here, a fund owning 10% or more) bought on the open market.'],
 ]
