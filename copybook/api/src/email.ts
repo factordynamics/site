@@ -46,7 +46,7 @@ const DELAY_MARK = '(delayed: email limit) ';
 /** Usage from Resend's x-resend-daily-quota and x-resend-monthly-quota headers (emails sent, account-wide). */
 export const mailQuota: { day: string; used: number; month: string; monthly: number; delayed: number; mailgun: number; refused?: string; kinds?: MailKinds } = { day: '', used: 0, month: '', monthly: 0, delayed: 0, mailgun: 0 };
 /** This host's sends today by kind (both providers): real members, test and critic members, account mail; `preview` (part of test) is previews, replays and samples. */
-export type MailKinds = { real: number; test: number; account: number; preview: number };
+export type MailKinds = { real: number; test: number; account: number; preview: number; since?: string };
 /** Previews, replays and samples to test inboxes: at most this many a day; past it they wait for the reset. */
 export const PREVIEW_DAILY_CAP = 10;
 /** Mailgun's free plan, the overflow when MAILGUN_API_KEY is set: 100 a day, from the same address (factordynamics.com is verified there). */
@@ -136,7 +136,8 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
   const tier: Tier = opts.tier ?? (opts.via ? 'low' : opts.bulk ? 'alert' : 'account');
   await loadMeter(env);
   if (opts.preview) mails = mails.map((m) => ({ ...m, preview: true }));
-  const kinds = (mailQuota.kinds ??= { real: 0, test: 0, account: 0, preview: 0 });
+  // `since`: the first send counted today (Resend's `used` counts the whole UTC day, account-wide; these count from here).
+  const kinds = (mailQuota.kinds ??= { real: 0, test: 0, account: 0, preview: 0, since: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') });
   const tally = (m: Mail) => {
     if (m.preview) kinds.preview++;
     kinds[m.preview || m.test || testAddress(m.to) ? 'test' : tier === 'account' ? 'account' : 'real']++;

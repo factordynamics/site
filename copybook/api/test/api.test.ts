@@ -1005,7 +1005,7 @@ describe('copybook api', () => {
     expect(em.mailQuota.kinds).toMatchObject({ preview: 10, test: before.test + 10 - before.preview, real: before.real });
     expect(JSON.parse((await env.DB.get('host:mail-delayed'))!).filter((m: { subject: string }) => /preview 1[01]$/.test(m.subject))).toHaveLength(2);
     const probe = await (await handleRequest(new Request('https://api.test/health?probe=1'), env)).json();
-    expect(Object.keys(probe.mail_kinds)).toEqual(['day', 'real', 'test', 'account', 'preview']);
+    expect(Object.keys(probe.mail_kinds)).toEqual(['day', 'real', 'test', 'account', 'preview', 'since']);
     vi.stubGlobal('fetch', orig);
   });
 

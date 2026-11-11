@@ -8,6 +8,7 @@ import { makeMiniflare } from './mf.mjs';
 import http from 'node:http';
 import { existsSync } from 'node:fs';
 import { Readable } from 'node:stream';
+import { createGzip } from 'node:zlib';
 
 const env = process.env;
 const mf = makeMiniflare();
@@ -55,9 +56,19 @@ const server = http.createServer(async (req, res) => {
       if (k.startsWith('mf-') || k === 'content-encoding' || k === 'transfer-encoding' || k === 'connection' || (decoded && k === 'content-length')) return;
       out[k] = k in out ? [].concat(out[k], v) : v;
     });
+    // JSON and text compressed for clients that ask (a 3.7 MB book is well under 1 MB gzipped through Funnel's relay).
+    const gzip = r.body && /\bgzip\b/.test(req.headers['accept-encoding'] ?? '') && /json|text|csv/.test(r.headers.get('content-type') ?? '');
+    if (gzip) {
+      delete out['content-length'];
+      out['content-encoding'] = 'gzip';
+      out.vary = [].concat(out.vary ?? [], 'accept-encoding').join(', ');
+    }
     res.writeHead(r.status, out);
-    if (r.body) Readable.fromWeb(r.body).on('error', () => res.destroy()).pipe(res);
-    else res.end();
+    if (r.body) {
+      const src = Readable.fromWeb(r.body).on('error', () => res.destroy());
+      if (gzip) src.pipe(createGzip()).on('error', () => res.destroy()).pipe(res);
+      else src.pipe(res);
+    } else res.end();
   } catch (e) {
     // Path only (query strings carry signed tokens), emails masked: agents read this journal into session logs.
     console.error(`request ${req.method} ${String(req.url).split('?')[0].replace(/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@|%40)/g, '$1***$2')} failed: ${e?.stack ?? e}`);

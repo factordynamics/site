@@ -55,7 +55,7 @@ export async function membersApi(env: Env, now: number): Promise<string | null> 
 }
 
 /** One check of the members' API from Cloudflare: GET {api}/health?probe=1 within 10 s. */
-type Kinds = { day: string; real: number; test: number; account: number; preview: number };
+type Kinds = { day: string; real: number; test: number; account: number; preview: number; since?: string };
 type Probe = { ok: boolean; ms: number; up_since: string | null; build: string | null; dupes?: { total: number; last_7d: number } | null; mail?: Kinds | null };
 export async function probeOnce(env: Env, now: number): Promise<Probe> {
   const base = await membersApi(env, now);
@@ -203,13 +203,14 @@ async function mailQuotaStatus(env: Env, gene: Kinds | null) {
   const { mailQuota, PREVIEW_DAILY_CAP } = await import('./email');
   const m = (JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? mailQuota) as typeof mailQuota;
   const day = new Date().toISOString().slice(0, 10);
-  const add = (k: keyof Omit<Kinds, 'day'>) => (m.day === day ? (m.kinds?.[k] ?? 0) : 0) + (gene?.day === day ? (gene[k] ?? 0) : 0);
+  const add = (k: keyof Omit<Kinds, 'day' | 'since'>) => (m.day === day ? (m.kinds?.[k] ?? 0) : 0) + (gene?.day === day ? (gene[k] ?? 0) : 0);
   return {
     day,
     resend_used: m.day === day ? m.used : 0,
     daily_cap: 100,
     reserve_for_account_mail: 15,
-    by_kind: { real: add('real'), test: add('test'), account: add('account') },
+    // Counted by both hosts from `since` (the earlier host's first counted send today), not from 00:00 like resend_used.
+    by_kind: { real: add('real'), test: add('test'), account: add('account'), since: [m.day === day ? m.kinds?.since : null, gene?.day === day ? gene.since : null].filter((x): x is string => !!x).sort()[0] ?? null },
     previews: { sent: add('preview'), cap_per_host: PREVIEW_DAILY_CAP },
     test_member_alert_cap: 3,
     mailgun_used: m.day === day ? m.mailgun : 0,

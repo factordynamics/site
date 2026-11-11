@@ -18,6 +18,7 @@ export const CHANGELOG: { id: string; date: string; schema_version: string; brea
     changes: [
       'Fix: GET /v1/bulk/{file} downloads served an older copy of each export (from Nov 9 01:17 UTC) while GET /v1/bulk listed the newer one; the 2026Q2 file still counted First Eagle\'s book twice. A download now serves exactly the listed file: its link is handed out only when the stored copy has the listed size and sha256, otherwise the file streams from the API.',
       'Fix: GET /v1/filers ignored `limit` and `offset` and returned every filer (about 9,000). It now pages like the other list routes: limit 1 to 1000, default 500, with `next_offset` (null on the last page); `count` stays the total.',
+      'JSON responses are served inline again on every host, gzip-compressed when the request sends Accept-Encoding: gzip; only bulk exports and CSVs over 1 MB redirect to a presigned R2 link. Python urllib forwarded Authorization on the redirect, which R2 refuses (400). Never send Authorization to a presigned link.',
       'Added `etag` and `sha256` to each GET /v1/bulk entry, read from the stored object. Check a download with sha256sum; `sha256` is null for a file whose digest isn\'t recorded yet, until its next check.',
     ],
   },
@@ -283,8 +284,9 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
   const r: MeterResult | null = await meter(env, auth.key.id).hit();
   const limits = r ? limitHeaders(r) : {};
   if (r && !r.allowed) return v1error('rate_limited', 429, undefined, limits);
-  // On the Funnel name a generated response over 1 MB answers 302 to presigned R2 (served here if R2 can't take it).
-  // Bulk files redirect to presigned R2 on every host (their route).
+  // JSON is always served inline (gzip for clients that ask; Python's urllib forwards Authorization on a redirect and R2
+  // then answers 400). On the Funnel name a generated CSV over 1 MB answers 302 to presigned R2 (served here if R2
+  // can't take it); bulk files redirect to presigned R2 on every host (their route).
   const funnel = req.method === 'GET' && dl.viaFunnel(env, req, url);
   for (const [method, re, handler] of ROUTES) {
     const m = path.match(re);
@@ -292,7 +294,7 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     if (req.method !== method) return v1error('bad_request', 405, `Use ${method}.`, limits);
     let res = await handler({ env, req, url, key: auth.key }, m.slice(1));
     // Text only: a gzip bulk file served here (R2 signing unset) must stay bytes.
-    if (funnel && res.ok && res.body && /json|csv|text/.test(res.headers.get('content-type') ?? '')) {
+    if (funnel && res.ok && res.body && /csv/.test(res.headers.get('content-type') ?? '')) {
       const body = await res.text();
       const go = body.length > dl.LARGE_BYTES ? await dl.toR2(env, body, res) : null;
       if (go) {
