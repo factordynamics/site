@@ -1,12 +1,17 @@
 import { Signup } from '../components/Signup'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { loadCoverage, loadSeason, seasonNow } from '../lib/stocks'
+import { dayET, loadCoverage, loadExpected, loadSeason, nextUp, seasonNow, timeLeft } from '../lib/stocks'
+import { EdgarClosed } from '../components/EdgarClosed'
+import { loadLatency } from '../lib/account'
+import { firstAlertMedian } from '../lib/latencyStats.mjs'
+import { TRIAL_DAYS } from '../config'
+import { track } from '../lib/track'
 import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { SearchBox } from '../components/Search'
 import { Arrow, AvatarStack, Button, Check, Monogram, Panel, Skeleton, Ticker } from '../components/ui'
-import { useTitle, dateLabel, loadIndex, loadManager, loadSuperBook, money, pct, quarterLabel, sectorMix, useAsync, useTick, type Manager } from '../lib/data'
+import { pricingTo, useTitle, dateLabel, loadIndex, loadManager, loadSuperBook, money, pct, quarterLabel, sectorMix, useAsync, useTick, type Manager } from '../lib/data'
 
 const DEMO = ['warren-buffett', 'bill-ackman', 'stanley-druckenmiller', 'david-tepper']
 
@@ -33,6 +38,9 @@ export function Home() {
 function Hero({ managers }: { managers?: Manager[] }) {
   const [slug, setSlug] = useState(DEMO[0])
   const demo = DEMO.map((s) => managers?.find((m) => m.slug === s)).filter(Boolean) as Manager[]
+  // Through the filing deadline the hero sells the season: alerts as filings land, then the free tour.
+  const sn = seasonNow()
+  const season = sn.live && Date.now() < sn.deadline.getTime()
   return (
     <section className="relative overflow-hidden">
       <div className="grid-bg pointer-events-none absolute inset-0 -top-16" aria-hidden="true" />
@@ -40,14 +48,20 @@ function Hero({ managers }: { managers?: Manager[] }) {
         <div className="relative z-20 grid grid-cols-1 items-end gap-12 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rise max-w-3xl">
           <SeasonPill />
-          <h1 className="mt-6 text-[42px] font-semibold leading-[1.02] tracking-[-0.045em] sm:text-[54px] lg:text-[64px]">
-            See what the world’s best investors own,{' '}
-            <span className="font-serif font-normal italic tracking-[-0.025em] text-accent">straight from the filing.</span>
-          </h1>
-          <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2 md:text-[18px]">
-            Copybook turns SEC 13F filings into clear portfolios: top positions, sector mix and conviction, for the managers worth following.
-          </p>
-          <div className="mt-7 max-w-xl">
+          {season ? (
+            <SeasonLead />
+          ) : (
+            <>
+              <h1 className="mt-6 text-[42px] font-semibold leading-[1.02] tracking-[-0.045em] sm:text-[54px] lg:text-[64px]">
+                See what the world’s best investors own,{' '}
+                <span className="font-serif font-normal italic tracking-[-0.025em] text-accent">straight from the filing.</span>
+              </h1>
+              <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2 md:text-[18px]">
+                Copybook turns SEC 13F filings into clear portfolios: top positions, sector mix and conviction, for the managers worth following.
+              </p>
+            </>
+          )}
+          <div className={`${season ? 'mt-8' : 'mt-7'} max-w-xl`}>
             <SearchBox size="lg" placeholder="Search an investor or a ticker" />
             <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-3">
               Popular:
@@ -70,6 +84,57 @@ function Hero({ managers }: { managers?: Manager[] }) {
         </div>
       </div>
     </section>
+  )
+}
+
+// The season hero: how fast this season's 13F alerts went out (latency.json, never a fixed figure), who
+// files next (d/expected.json) and the trial.
+const secondsLabel = (s: number) => (s < 120 ? `${Math.round(s)} seconds` : `${Math.round(s / 60)} minutes`)
+function SeasonLead() {
+  const sn = seasonNow()
+  const lat = useAsync(() => loadLatency().catch(() => null), [])
+  const soon = useAsync(loadExpected, [])
+  const med = lat.data ? firstAlertMedian(lat.data) : null
+  const next = soon.data ? nextUp(soon.data.expected, dayET()).text : ''
+  return (
+    <>
+      <h1 className="mt-6 text-[38px] font-semibold leading-[1.04] tracking-[-0.045em] sm:text-[52px] lg:text-[60px]">
+        {quarterLabel(sn.quarter).split(' ')[0]} 13Fs are landing now.{' '}
+        <span className="font-serif font-normal italic tracking-[-0.025em] text-accent">Get each one the minute it’s filed.</span>
+      </h1>
+      <div className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2 md:text-[18px]">
+        {lat.loading ? (
+          <Skeleton className="h-[1.2em] w-4/5" />
+        ) : med?.median_seconds != null ? (
+          <>
+            Copy emails each superinvestor’s 13F, with what they bought and sold. This season the median 13F alert went out{' '}
+            <Link to="/speed/" className="font-medium text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink">
+              {secondsLabel(med.median_seconds)} after EDGAR accepted the filing
+            </Link>
+            .
+          </>
+        ) : (
+          <>
+            Copy emails each superinvestor’s 13F, with what they bought and sold,{' '}
+            <Link to="/speed/" className="font-medium text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink">
+              within minutes of EDGAR
+            </Link>
+            .
+          </>
+        )}
+        {next && <p className="mt-2 text-[15.5px] text-ink">Next up: {next}.</p>}
+      </div>
+      <EdgarClosed className="mt-4 max-w-xl" />
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <Button to={pricingTo()} size="lg" onClick={() => track('trial_click')}>
+          Start {TRIAL_DAYS}-day free trial <Arrow />
+        </Button>
+        <Button to="/season/" variant="outline" size="lg">
+          See who’s filed
+        </Button>
+      </div>
+      <p className="mt-2.5 text-[12.5px] text-ink-3">Card required. Cancel before day {TRIAL_DAYS + 1} and you pay nothing.</p>
+    </>
   )
 }
 
@@ -463,7 +528,7 @@ function SeasonPill() {
   const sn = seasonNow()
   const tick = useTick(120_000, sn.live)
   const d = useAsync(() => (sn.live ? loadSeason(tick ? Date.now() : undefined) : Promise.resolve(null)), [sn.live, tick])
-  const days = Math.ceil((sn.deadline.getTime() - Date.now()) / 864e5)
+  const left = Date.now() < sn.deadline.getTime() ? timeLeft(sn.deadline) : ''
   const cls = 'inline-flex max-w-full items-center gap-2 rounded-[18px] bg-card py-1 pl-1 pr-3 sm:rounded-full text-[13px] text-ink-2 shadow-[var(--shadow-card)] hover:text-ink'
   if (!sn.live)
     return (
@@ -480,7 +545,7 @@ function SeasonPill() {
       <span className="min-w-0 py-0.5 text-left leading-snug">
         {quarterLabel(sn.quarter)} 13F season
         {d.data ? `: ${d.data.featured.filed} of ${d.data.featured.total} superinvestors · ${d.data.curated.filed} of ${d.data.curated.total} funds filed` : ''}
-        {days > 0 ? ` · ${days} ${days === 1 ? 'day' : 'days'} left` : ''}
+        {left ? ` · ${left} left` : ''}
       </span>
       <Arrow />
     </Link>

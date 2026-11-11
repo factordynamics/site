@@ -12,7 +12,11 @@ import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
-import { loadCards, loadExpected, loadRecap, recapPath, seasonNow, shortDay, stockPath, usualTime } from '../lib/stocks'
+import { fridayAfter, loadCards, loadExpected, loadRecap, recapPath, seasonNow, seasonStatus, shortDay, stockPath, usualTime } from '../lib/stocks'
+import { EdgarClosed } from '../components/EdgarClosed'
+import { TRIAL_DAYS } from '../config'
+import { track } from '../lib/track'
+import { loadIndex } from '../lib/data'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
 import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, type ManagerFile } from '../lib/data'
 
@@ -49,6 +53,10 @@ export function ManagerPage() {
   const soon = useAsync(loadExpected, [])
   useTrackVisit()
   const due = f ? soon.data?.expected.find((x) => x.slug === f.slug) : undefined
+  // This season's line for a tracked fund: filed, its usual day, or due by the deadline (one helper with /account/).
+  const idx = useAsync(loadIndex, [])
+  const tracked = f ? idx.data?.managers.find((m) => m.slug === f.slug) : undefined
+  const q3 = tracked ? seasonStatus(tracked, due) : null
   const card = f && cards.data?.get(f.slug)
 
   const rows = useMemo(() => {
@@ -92,6 +100,7 @@ export function ManagerPage() {
               {f && f.name !== f.manager && <span>{f.name}</span>}
               {f && <Badge tone={stale ? 'warn' : 'neutral'}>{stale ? shownLabel : `${quarterLabel(f.quarter)} 13F`}</Badge>}
             </p>
+            {f && status === 'reported_by_other' && <Provenance f={f} />}
           </div>
         </div>
         {!f && (
@@ -108,32 +117,40 @@ export function ManagerPage() {
             <Button href={f.sec_url} variant="outline" size="sm">
               View filing on SEC
             </Button>
-            {card && (
-              <Button to={`/f/${card}/`} variant="outline" size="sm">
-                Share this 13F
-              </Button>
-            )}
             {Boolean(f.history_quarters?.length) && (
               <Button to={`/investors/${f.slug}/history/`} variant="outline" size="sm">
                 13F history since {quarterLabel([...f.history_quarters!].sort()[0])}
               </Button>
             )}
             {member?.active && !f.filer && <CsvButton slug={f.slug} variant="outline" />}
-            {card ? <Share copyOnly /> : <Share text={`${possessive(f.manager)} portfolio from the ${quarterLabel(f.quarter)} 13F`} />}
+            {/* One share pair on every fund page; with a filing card, X gets the card's link and image. */}
+            <Share url={card ? `${import.meta.env.BASE_URL}f/${card}/` : undefined} text={`${possessive(f.manager)} portfolio from the ${quarterLabel(f.quarter)} 13F`} />
           </div>
         )}
       </header>
 
-      {f && due && soon.data && (
-        <div className="mt-5 rounded-xl bg-accent-soft px-4 py-2.5 text-[14.5px] leading-snug text-accent-2">
-          <span className="font-medium">
-            {quarterLabel(soon.data.quarter).split(' ')[0]} 13F expected {shortDay(due.expected_date!)}, {usualTime(due)}.
-          </span>{' '}
-          {isPaying(member) ? 'Follow to get it by email, with its moves inside.' : `Follow free: ${possessive(f.manager)} moves land in Friday’s email. Or get the 13F as it’s filed, with Copy. We check EDGAR every minute.`}
-          {!getToken() && <FollowSignup people={[{ slug: f.slug, name: f.manager }]} label={`Follow ${f.manager} free`} className="mt-3 text-ink" />}
+      {f && q3 && q3.kind !== 'filed' && (
+        <div className="mt-5 rounded-xl bg-accent-soft px-4 py-3 text-[14.5px] leading-snug text-accent-2">
+          <p className="font-medium">
+            {q3.kind === 'expected' && due ? `${q3.text.replace(' expected', ' 13F expected')}, ${usualTime(due)}.` : `${q3.text.replace(' due', ' 13F due')}, the filing deadline.`}
+          </p>
+          {isPaying(member) ? (
+            <p className="mt-1">Follow to get it by email the minute it’s filed, with its moves inside.</p>
+          ) : (
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link to={pricingTo()} onClick={() => track('trial_click')} className="inline-flex min-h-10 items-center rounded-full bg-accent px-4.5 py-2 text-[14px] font-medium leading-tight text-white shadow-[0_1px_2px_rgb(12_14_19/0.2)] hover:bg-accent-2">
+                  Get {possessive(shortFirst(f.manager))} 13F the minute it’s filed, {TRIAL_DAYS} days free
+                </Link>
+              </div>
+              {!getToken() && <FollowSignup people={[{ slug: f.slug, name: f.manager }]} label={`Or follow ${f.manager} free`} secondary className="mt-3 text-ink" />}
+              <p className="mt-2 text-[13px] text-accent-2/85">{fridayLine(f.manager, q3.day)}</p>
+            </>
+          )}
         </div>
       )}
-      {f && <FundNotice f={f} />}
+      {f && <EdgarClosed className="mt-4" />}
+      {f && status !== 'reported_by_other' && <FundNotice f={f} />}
 
       {/* The newest news first: on a phone "Since the last 13F" (Form 4s and 13D/Gs filed after it) sits right
           under the header; on wider screens it follows the summary figures. It renders nothing when empty. */}
@@ -463,4 +480,31 @@ function RecapLabel() {
   const d = r.data
   if (!d) return <>{quarterLabel(q)} 13F season so far</>
   return <>{recapTitle({ quarter: d.quarter, filed: d.superinvestors.filed, total: d.superinvestors.total, names: d.filing.filter((f) => f.filed).map((f) => displayName(f.manager)), final: d.final }).replace(/ · Copybook$/, '')}</>
+}
+
+// "Ackman" for a person, the name in full for a firm.
+const shortFirst = (n: string) => (/^[A-Z][a-z]+ [A-Z][a-z]+$/.test(n) ? n.split(' ')[1] : n)
+
+/** When a free follower gets a filing made on `day`: Friday's email, N days later. */
+function fridayLine(name: string, day: string) {
+  const fr = fridayAfter(day)
+  const when = fr.days === 0 ? 'the same evening' : `${fr.days} ${fr.days === 1 ? 'day' : 'days'} later`
+  return `Free followers get ${possessive(shortFirst(name))} moves in Friday’s email (${shortDay(fr.day)}, ${when}).`
+}
+
+/** A fund whose holdings another entity files (Ackman: Pershing Square Inc.): said once, under the name. */
+function Provenance({ f }: { f: ManagerFile & { reported_by?: { slug?: string; name?: string } | null } }) {
+  const by = f.reported_by?.name ? displayName(f.reported_by.name) : 'an affiliated filer'
+  return (
+    <p className="mt-1.5 text-[13px] text-ink-3">
+      Holdings reported by{' '}
+      {f.reported_by?.slug ? (
+        <Link to={`/investors/${f.reported_by.slug}/`} className="underline decoration-line-2 underline-offset-2 hover:text-ink">
+          {by}
+        </Link>
+      ) : (
+        by
+      )}
+    </p>
+  )
 }

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Fragment, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button, Check } from '../components/ui'
-import { attributed, checkRef, referredCheckout, refCode } from '../lib/attribution'
+import { attributed, checkRef, referredCheckout, refCode, utmTags } from '../lib/attribution'
 import { useMember } from '../lib/account'
 import { money, useAsync, useTitle } from '../lib/data'
 import { loadCoverage, loadStock } from '../lib/stocks'
@@ -134,7 +134,8 @@ const EMAIL_FROM: Record<string, string> = {
 }
 
 export function Pricing() {
-  const [cycle, setCycle] = useState<'yearly' | 'monthly'>('yearly')
+  // Readers from X (utm_source=x, this visit or the session's landing) open on monthly; everyone else on yearly.
+  const [cycle, setCycle] = useState<'yearly' | 'monthly'>(() => (new URLSearchParams(location.search).get('utm_source') === 'x' || utmTags().utm_source === 'x' ? 'monthly' : 'yearly'))
   const live = checkoutEnabled()
   // Members move up through /upgrade (prorated, same interval); a second checkout would double-bill.
   const member = useMember()

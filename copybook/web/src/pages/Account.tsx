@@ -1,4 +1,4 @@
-import { loadFilers, loadIndex, quarterLabel, useAsync, useTitle } from '../lib/data'
+import { loadFilers, loadIndex, useAsync, useTitle } from '../lib/data'
 import { Link } from 'react-router-dom'
 import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
@@ -11,7 +11,8 @@ import { CopySetup } from '../components/CopySetup'
 import { dayLabel, Paused, timeLabel } from '../components/Paused'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
-import { loadExpected, shortDay, stockPath } from '../lib/stocks'
+import { loadExpected, seasonStatus, stockPath } from '../lib/stocks'
+import { setFollow } from '../lib/follows'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Signup } from '../components/Signup'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -128,6 +129,9 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
   const curatedNames = new Map((idx.data?.managers ?? []).map((m) => [m.slug, m.manager]))
   const needFilers = Boolean(idx.data) && follows.investors.some((s) => !curatedNames.has(s))
   const filerNames = useAsync(() => (needFilers ? loadFilers() : Promise.resolve([])), [needFilers])
+  // Each followed fund's season line ("Q3 filed …", "Q3 expected …", "Q3 due by …"), the helper free members' list uses.
+  const soon = useAsync(loadExpected, [])
+  const q3 = (slug: string) => (soon.data ? seasonStatus(idx.data?.managers.find((m) => m.slug === slug), soon.data.expected.find((x) => x.slug === slug))?.text : undefined)
   const names = new Map([...(filerNames.data ?? []).map((f) => [f.slug, f.name] as const), ...curatedNames])
   const onboard = member.active && status === 'ready' && (!follows.onboarded || editing)
   if (isFree(member)) return <Free member={member} onOut={onOut} />
@@ -379,6 +383,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
                     <Link to={`/investors/${slug}/`} className="inline-flex items-center gap-2 rounded-full bg-paper py-1 pl-1 pr-3 text-[13px] shadow-[0_0_0_1px_var(--color-line)] hover:shadow-[0_0_0_1px_var(--color-ink-3)]">
                       <Monogram name={names.get(slug) ?? slug} size={22} />
                       {names.get(slug) ?? slug}
+                      {q3(slug) && <span className="text-[12px] text-ink-3">· {q3(slug)}</span>}
                     </Link>
                   </li>
                 ))}
@@ -834,33 +839,48 @@ function deadlineQuarter(until: string | number) {
 // A free member's followed investors, each with when its next 13F is expected (d/expected.json). Their
 // moves lead the Friday email; a per-filing email is Copy.
 function FreeFollows() {
-  const { follows, status } = useFollows()
+  const { follows, status, pending } = useFollows()
   const idx = useAsync(loadIndex, [])
   const soon = useAsync(loadExpected, [])
+  const [err, setErr] = useState<string | null>(null)
   if (status !== 'ready' || !follows.investors.length) return null
-  const q = soon.data ? quarterLabel(soon.data.quarter).split(' ')[0] : ''
   const name = (slug: string) => idx.data?.managers.find((m) => m.slug === slug)?.manager ?? soon.data?.expected.find((x) => x.slug === slug)?.manager ?? slug
   return (
     <section className="mt-10 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
-      <h2 className="text-[15px] font-semibold">Investors you follow</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[15px] font-semibold">Investors you follow</h2>
+        {follows.limit != null && <span className="text-[12.5px] text-ink-3">{follows.investors.length} of 10 free follows</span>}
+      </div>
       <ul className="mt-3 divide-y divide-line">
         {follows.investors.map((slug) => {
-          const e = soon.data?.expected.find((x) => x.slug === slug)
-          // Filed this quarter already (index.json's latest book): say so, never "expected".
-          const mgr = idx.data?.managers.find((m) => m.slug === slug)
-          const filed = soon.data && mgr?.quarter === soon.data.quarter ? mgr.filing_date : null
+          // Filed this quarter (index.json's latest book), its usual day, or due by the deadline: never blank.
+          const line = soon.data ? seasonStatus(idx.data?.managers.find((m) => m.slug === slug), soon.data.expected.find((x) => x.slug === slug))?.text : undefined
+          const removing = pending[`investors:${slug}`]?.state === 'saving'
           return (
-            <li key={slug} className="py-2.5 text-[14px]">
-              <Link to={`/investors/${slug}/`} className="font-medium hover:text-accent">
-                {name(slug)}
-              </Link>
-              <span className="block text-[13px] text-ink-3">
-                {filed ? `${q} filed ${shortDay(filed)} · ` : e?.expected_date ? `${q} expected ${shortDay(e.expected_date)} · ` : ''}moves in Friday’s email
+            <li key={slug} className="flex items-center justify-between gap-3 py-2.5 text-[14px]">
+              <span className="min-w-0">
+                <Link to={`/investors/${slug}/`} className="font-medium hover:text-accent">
+                  {name(slug)}
+                </Link>
+                <span className="block text-[13px] text-ink-3">{line ? `${line} · ` : ''}moves in Friday’s email</span>
               </span>
+              <button
+                type="button"
+                disabled={removing}
+                onClick={() => {
+                  setErr(null)
+                  setFollow('investors', slug, false).catch(() => setErr(`Couldn’t remove ${name(slug)}. Please try again.`))
+                }}
+                aria-label={`Stop following ${name(slug)}`}
+                className="shrink-0 rounded-full px-3 py-1 text-[13px] font-medium text-ink-2 shadow-[0_0_0_1px_var(--color-line-2)] hover:text-ink hover:shadow-[0_0_0_1px_var(--color-ink-3)] disabled:opacity-60"
+              >
+                {removing ? 'Removing…' : 'Remove'}
+              </button>
             </li>
           )
         })}
       </ul>
+      {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
     </section>
   )
 }

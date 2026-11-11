@@ -222,6 +222,44 @@ export function seasonNow(now = new Date()) {
   return { quarter: `${qEnd.getUTCFullYear()}Q${q}`, deadline: due, live }
 }
 
+/** "5d 14h" (or "3h 20m" on the last day) to a time: home's season pill and /season/'s countdown. */
+export function timeLeft(to: Date | number, now = Date.now()) {
+  const m = Math.max(0, Math.floor((+to - now) / 60_000))
+  const d = Math.floor(m / 1440)
+  const h = Math.floor((m % 1440) / 60)
+  return d ? `${d}d ${h}h` : `${h}h ${m % 60}m`
+}
+
+/** New York's date (YYYY-MM-DD) for a time. */
+export const dayET = (t: Date | number = Date.now()) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+
+/** Where a tracked fund stands this season, for every "Q3 …" line (fund pages, /account/'s follows):
+ *  filed when index.json's latest book is the season's quarter, else its usual day from d/expected.json,
+ *  else due by the deadline. Null once the deadline has passed. */
+export function seasonStatus(m: { quarter?: string; filing_date?: string } | undefined, e: Pick<ExpectedSoon, 'expected_date'> | undefined, now = new Date()) {
+  const sn = seasonNow(now)
+  const Q = `Q${sn.quarter.slice(-1)}`
+  if (m?.quarter === sn.quarter && m.filing_date) return { kind: 'filed' as const, day: m.filing_date, text: `${Q} filed ${shortDay(m.filing_date)}` }
+  if (now > sn.deadline) return null
+  if (e?.expected_date && e.expected_date >= dayET(now)) return { kind: 'expected' as const, day: e.expected_date, text: `${Q} expected ${shortDay(e.expected_date)}` }
+  const due = dayET(sn.deadline)
+  return { kind: 'due' as const, day: due, text: `${Q} due by ${shortDay(due)}` }
+}
+
+/** The free Friday email that carries a filing made on `day` (YYYY-MM-DD): it goes out Fridays at 9 pm ET. */
+export function fridayAfter(day: string) {
+  const t = new Date(`${day}T12:00:00Z`)
+  t.setUTCDate(t.getUTCDate() + ((5 - t.getUTCDay() + 7) % 7))
+  const fri = t.toISOString().slice(0, 10)
+  return { day: fri, days: Math.round((t.getTime() - Date.parse(`${day}T12:00:00Z`)) / 864e5) }
+}
+
+/** EDGAR closures announced on the site, each shown until EDGAR reopens (`until`, 6:00 am ET). */
+const CLOSED = [{ day: '2026-11-11', name: 'Veterans Day', until: '2026-11-12T11:00:00Z', resume: '2026-11-12' }]
+export function edgarClosed(now = Date.now()) {
+  return CLOSED.find((c) => now >= Date.parse(`${c.day}T05:00:00Z`) && now < Date.parse(c.until)) ?? null
+}
+
 export type SplitLog = { ticker: string; name: string; quarter: string; ratio: string; treatment: 'adjusted' | 'excluded' | 'not treated'; holders: number; share_ratio: number; price_ratio: number; xbrl_shares_ratio: number | null; source: string }
 export const loadSplitLog = () => getJSON<{ splits: SplitLog[] }>(`${D}splits.json`).then((d) => d.splits)
 

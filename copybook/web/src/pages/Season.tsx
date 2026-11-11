@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { REF_NOTE, Share, shareUrl, useRefCode } from '../components/Share'
 import { Signup } from '../components/Signup'
-import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
-import { getToken, useMember } from '../lib/account'
+import { Arrow, AvatarStack, Badge, Button, Lock, Monogram, Panel, Skeleton } from '../components/ui'
+import { getToken, isPaying, useMember } from '../lib/account'
 import { track, useTrackVisit } from '../lib/track'
 import { FollowSignup } from '../components/FollowSignup'
-import { dateFmt, dateLabel, money, NUM, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { EdgarClosed } from '../components/EdgarClosed'
+import { TRIAL_DAYS } from '../config'
+import { dateFmt, dateLabel, money, NUM, pricingTo, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { seasonTitle } from '../lib/titles.mjs'
 import { dayName, isEdgarDay } from '../lib/calendar.mjs'
 import { cap } from '../lib/insiders'
-import { loadCardSet, loadExpected, loadRecap, loadSeason, nextUp, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
+import { edgarClosed, timeLeft, loadCardSet, loadExpected, loadRecap, loadSeason, nextUp, recapPath, seasonNow, stockPath, type Expected, type Season as SeasonData, type SeasonRow } from '../lib/stocks'
 
 // /season/: the 13F filing season as it happens. Built from d/season.json, which every Pages build
 // writes (every 20 minutes during the filing wave).
@@ -34,12 +36,12 @@ function useNow(ms = 30_000) {
 const dueLabel = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' })
 
-function left(ms: number) {
-  const m = Math.max(0, Math.floor(ms / 60_000))
-  const d = Math.floor(m / 1440)
-  const h = Math.floor((m % 1440) / 60)
-  return d ? `${d}d ${h}h` : `${h}h ${m % 60}m`
-}
+
+const TrialButton = () => (
+  <Button to={pricingTo()} onClick={() => track('trial_click')} className="shrink-0">
+    Start {TRIAL_DAYS}-day free trial
+  </Button>
+)
 
 export function Season() {
   // Re-read every two minutes while the season is live, so an open tab follows each build.
@@ -95,13 +97,15 @@ export function Season() {
             {Q || 'The'} 13F filing season · live
           </p>
           <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">Who has filed, and what they bought.</h1>
+          <EdgarClosed className="mt-4" />
           {!passed && next && (
-            <div className="mt-4 rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">
-              <span className="font-medium">Next up: {next}.</span>{' '}
-              <Link to="/pricing/" onClick={() => track('trial_click')} className="underline underline-offset-2 hover:text-accent">
-                Copy emails you each one’s moves.
-              </Link>
-              {!getToken() && up && up.people.length > 0 && <FollowSignup people={up.people} label="Follow them free" className="mt-3 text-[14.5px] text-ink" />}
+            <div className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[15px] leading-snug text-accent-2">
+              <span className="font-medium">Next up: {next}.</span> Copy emails you each one’s 13F the minute it’s filed, with its moves; free follows get them in Friday’s email.
+              {!getToken() && up && up.people.length > 0 ? (
+                <FollowSignup people={up.people} label="Your email, to follow them free" quietLabel className="mt-3 text-[14.5px] text-ink" extra={<TrialButton />} />
+              ) : (
+                !isPaying(member) && <div className="mt-3"><TrialButton /></div>
+              )}
             </div>
           )}
           <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
@@ -112,7 +116,7 @@ export function Season() {
         <div className="rounded-[var(--radius-card)] bg-night p-6 text-white shadow-[var(--shadow-card)]">
           <p className="text-[13px] text-white/60">{passed ? 'Deadline passed' : 'Filing deadline'}</p>
           <p className="mt-1 text-[15px] font-medium">{d ? dueLabel(d.deadline) : '\u00a0'}</p>
-          <p className="num mt-4 text-[40px] font-semibold leading-none tracking-[-0.03em]">{d ? (passed ? 'Closed' : left(due - now)) : '—'}</p>
+          <p className="num mt-4 text-[40px] font-semibold leading-none tracking-[-0.03em]">{d ? (passed ? 'Closed' : timeLeft(due, now)) : '—'}</p>
           <p className="mt-2 text-[13px] text-white/60">{passed ? 'Late filers and amendments still arrive; they appear here as they do.' : 'left to file'}</p>
           {d && (
             <Link to={recapPath(d.quarter)} className={`mt-4 inline-flex items-center gap-1 text-[13.5px] font-medium ${passed ? 'rounded-full bg-white px-3.5 py-1.5 text-ink hover:bg-white/90' : 'text-white/85 hover:text-white'}`}>
@@ -190,7 +194,7 @@ export function Season() {
           )}
         </section>
 
-        <Panel title="Just filed" sub={d ? `${d.latest.length} of the funds we track have filed ${Q}, newest first` : undefined}>
+        <Panel title="Just filed" sub={d ? `${edgarClosed() ? 'No filings today (EDGAR closed) · ' : ''}${d.latest.length} of the funds we track have filed ${Q}, newest first` : undefined}>
           {!d ? (
             <Skeleton className="h-[360px] w-full" />
           ) : (

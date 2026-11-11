@@ -21,3 +21,14 @@ export function gapStats(values) {
   if (!n) return { count: 0, median_seconds: null, p90_seconds: null }
   return { count: n, median_seconds: n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2, p90_seconds: v[Math.ceil(0.9 * n) - 1] }
 }
+
+// Home's season figure: the median seconds from EDGAR acceptance to each 13F's first alert this season,
+// replays and tests left out and a missed filing counted by its eventual delay, as /speed/ counts them.
+// Null below five such alerts, so the hero never quotes a median of one or two.
+export function firstAlertMedian(l) {
+  const s = (l?.log ?? l?.alerts ?? [])
+    .filter((a) => a.form?.startsWith('13F') && !a.replay && !a.test && !a.never)
+    .map((a) => (a.missed && a.delay_seconds != null ? a.delay_seconds : a.first_alert_at ? (Date.parse(a.first_alert_at) - Date.parse(a.accepted_at)) / 1000 : a.gap_seconds))
+    .filter((x) => Number.isFinite(x) && x >= 0)
+  return s.length >= 5 ? gapStats(s) : null
+}

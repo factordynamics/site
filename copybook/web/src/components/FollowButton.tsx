@@ -4,7 +4,7 @@ import { pricingTo } from '../lib/data'
 import { ApiError, getToken } from '../lib/account'
 import { isPaywall, setFollow, useFollows } from '../lib/follows'
 import { track } from '../lib/track'
-import { FollowSignup } from './FollowSignup'
+import { CAP_MSG, FollowSignup } from './FollowSignup'
 
 type Props = { kind: 'investor' | 'stock'; id: string; name: string; size?: 'sm' | 'md'; className?: string }
 
@@ -37,8 +37,11 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
     }
   }, [open])
 
+  // A free member past the follow cap (402 cap_reached) sees the cap, not the Copy pitch.
+  const [capped, setCapped] = useState(false)
   const save = (want: boolean) =>
     setFollow(kind === 'investor' ? 'investors' : 'stocks', id, want).catch((e) => {
+      setCapped(e instanceof ApiError && e.code === 'cap_reached')
       if (isPaywall(e)) setOpen(true)
     })
   const click = () => (status !== 'ready' ? setOpen((o) => !o) : save(!on))
@@ -130,9 +133,9 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
             </>
           ) : (
           <>
-          <p className="text-[14.5px] font-semibold">{signedIn ? 'Following is a Copy feature' : `Follow ${name} with Copy`}</p>
+          <p className="text-[14.5px] font-semibold">{capped ? 'You’re following 10 investors' : signedIn ? 'Following is a Copy feature' : `Follow ${name} with Copy`}</p>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-ink-2">
-            {kind === 'investor'
+            {capped ? CAP_MSG : kind === 'investor'
               ? 'Get an email when they file a new 13F, with their biggest buys and sells in it.'
               : 'Get an email when a fund you track buys or sells it, and see who holds it each filing season.'}
           </p>
@@ -140,9 +143,9 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
             <Link to={pricingTo()} onClick={() => track('trial_click')} className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
               Start 14-day free trial
             </Link>
-            {!signedIn && (
+            {(!signedIn || capped) && (
               <Link to="/account/" className="inline-flex h-8 items-center rounded-full px-3 text-[13px] font-medium text-ink-2 hover:bg-ink/5 hover:text-ink">
-                Sign in
+                {capped ? 'Manage follows' : 'Sign in'}
               </Link>
             )}
           </div>
