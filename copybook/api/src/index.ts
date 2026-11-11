@@ -1,4 +1,4 @@
-import { type AlertEvent, deliverTo, recentFeed, resolveFollowedFilers, runScheduled } from './alerts';
+import { type Alert13F, type AlertEvent, deliverTo, etDay, recentFeed, resolveFollowedFilers, runScheduled } from './alerts';
 import { fetchHistory, historyCsv, holdersCsv, shard, SHARD_KEY, SLUG } from './data';
 import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } from './v1data';
 import { verifyGithubOidc } from './oidc';
@@ -444,6 +444,25 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // Operator: send one real, already-parsed Form 4 or 13D/G (from /v1/events' store) through the alert
   // fan-out to the named members only: their email, chat, feed and webhook, with their team rules. It
   // is marked a replay (never counted in latency) and stays out of the day's digest store.
+  // Operator: 13Fs already alerted without moves (before moves_pending existed) go back on gene's moves queue.
+  if (req.method === 'POST' && path === '/ops/moves-requeue') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const want = new Set(((await body(req)).accessions as string[] | undefined) ?? []);
+    const pending = JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[];
+    const have = new Set(pending.map((p) => p.accession));
+    for (let d = 0; d < 7 && want.size > have.size; d++) {
+      const day = JSON.parse((await env.DB.get(`digest:${etDay(Date.now() - d * 86_400_000)}`)) ?? '{"filings":[]}') as { filings: Alert13F[] };
+      for (const f of day.filings) {
+        if (!want.has(f.accession) || have.has(f.accession) || f.followup || f.moves) continue;
+        const { sent_at: _s, ...a } = f;
+        pending.push({ ...a, moves_pending: true });
+        have.add(f.accession);
+      }
+    }
+    await env.DB.put('alerts:pending-moves', JSON.stringify(pending));
+    return json({ ok: true, queued: [...want].filter((a) => have.has(a)), not_found: [...want].filter((a) => !have.has(a)) }, 200, h);
+  }
+
   if (req.method === 'POST' && path === '/ops/deliver') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const b = (await body(req)) as { accession?: string; customers?: string[] };
