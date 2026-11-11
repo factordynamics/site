@@ -6,7 +6,7 @@
  * with an amount above zero), once per referred customer.
  */
 import { FOOTER, sendMail } from './email';
-import { FOUNDING_UNTIL } from './revenue';
+import { checkoutNote, FOUNDING_UNTIL } from './revenue';
 import { isActive, type Env, type Member } from './env';
 import { claim, getMember, memberByEmail } from './members';
 import { stripe } from './stripe';
@@ -118,7 +118,9 @@ export async function createCheckout(env: Env, b: Record<string, unknown>): Prom
     'metadata[copybook]': ref ? 'referral' : 'checkout',
     // The seller on the card statement is the account's name: say whose product it is.
     'custom_text[submit][message]': 'Copybook is made by Factor Dynamics.',
-    ...(Date.now() < FOUNDING_UNTIL ? { 'custom_text[after_submit][message]': 'Founding price, kept while subscribed.', 'subscription_data[metadata][founding]': 'true' } : {}),
+    // Pro and Fund: the founding price (amount and deadline) and the tax line. Copy: neither.
+    ...(checkoutNote(plan, price.unit_amount, price.recurring?.interval) ? { 'custom_text[after_submit][message]': checkoutNote(plan, price.unit_amount, price.recurring?.interval)! } : {}),
+    ...(plan !== 'copy' && Date.now() < FOUNDING_UNTIL ? { 'subscription_data[metadata][founding]': 'true' } : {}),
     // Pro and Fund: what a company's accounts team needs on the invoice.
     ...(plan === 'copy' ? {} : CHECKOUT_BUYER(plan)),
   });

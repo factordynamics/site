@@ -159,7 +159,21 @@ export const fundMemo = (env: Env) => `Copy Fund, up to ${SEAT_LIMIT} seats, fou
 export const TAX_LINE = 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.';
 /** Subscriptions started before this keep their price while subscribed: their invoices say so. */
 export const FOUNDING_UNTIL = Date.parse('2026-12-31T00:00:00-05:00');
-export const FOUNDING_FIELD = { name: 'Price', value: 'Founding price, kept while subscribed' };
+/**
+ * Pro and Fund only (/pricing/ promises Copy no founding price): "Founding price ($390/yr), kept while subscribed",
+ * from the price's amount and interval. Null for Copy.
+ */
+export function foundingLine(plan: string | null, cents: number | null | undefined, interval: string | null | undefined): string | null {
+  if (plan !== 'pro' && plan !== 'fund') return null;
+  const amt = cents ? `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}/${interval === 'year' ? 'yr' : 'mo'}` : null;
+  return `Founding price${amt ? ` (${amt})` : ''}, kept while subscribed`;
+}
+/** Checkout's after-submit text for Pro and Fund: the founding price with its deadline, then the tax line. Null for Copy. */
+export const checkoutNote = (plan: string, cents: number | null | undefined, interval: string | null | undefined) => {
+  const f = foundingLine(plan, cents, interval);
+  if (plan === 'copy') return null;
+  return `${f && Date.now() < FOUNDING_UNTIL ? `${f}; offer ends Dec 31. ` : ''}${TAX_LINE}`;
+};
 const footerFor = (env: Env, plan: string | null) => (plan === 'fund' ? `${fundTerms(env)} ${TAX_LINE}` : TAX_LINE);
 
 /**
@@ -172,12 +186,15 @@ const footerFor = (env: Env, plan: string | null) => (plan === 'fund' ? `${fundT
 export async function ensureInvoiceTerms(env: Env, sub: any, plan: string | null, extra: { company?: string | null; po?: string | null } = {}): Promise<{ result: string; footer: string; fields: { name: string; value: string }[] }> {
   const customer = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
   if (!customer) return { result: 'no customer', footer: '', fields: [] };
-  const founding = sub.metadata?.founding === 'true' || Number(sub.created ?? sub.start_date ?? 0) * 1000 < FOUNDING_UNTIL;
+  // Copy has no founding price: its invoices carry no Price field (an existing one is removed below).
+  const pr = sub.items?.data?.[0]?.price ?? sub.plan;
+  const line = foundingLine(plan, pr?.unit_amount, pr?.recurring?.interval ?? pr?.interval);
+  const founding = !!line && (sub.metadata?.founding === 'true' || Number(sub.created ?? sub.start_date ?? 0) * 1000 < FOUNDING_UNTIL);
   if (founding && sub.metadata?.founding !== 'true' && sub.id) await stripe(env, 'POST', `subscriptions/${sub.id}`, { 'metadata[founding]': 'true' });
   const c = await stripe(env, 'GET', `customers/${customer}`);
   const had = (c.invoice_settings?.custom_fields ?? []) as { name: string; value: string }[];
   const want = [
-    ...(founding ? [FOUNDING_FIELD] : []),
+    ...(founding && line ? [{ name: 'Price', value: line }] : []),
     { name: 'Company', value: extra.company?.trim().slice(0, 140) || had.find((f) => f.name === 'Company')?.value || '' },
     { name: 'PO', value: extra.po?.trim().slice(0, 140) || had.find((f) => f.name === 'PO')?.value || '' },
     ...had.filter((f) => !['Price', 'Company', 'PO'].includes(f.name)),
