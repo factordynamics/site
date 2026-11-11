@@ -4090,7 +4090,9 @@ describe('copybook api', () => {
     const tk = (await (await call('/session', { body: { checkout_session: 'cs_test_cpu' } })).json()).token;
     const key = (await (await call('/keys', { body: { name: 'k' }, token: tk })).json()).key;
     const v1 = async (path: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env)).json();
-    const rest = [{ slug: 'whale-rock-7322', cik: '0001387322', curated: false }, { slug: 'x-1', cik: '0001423053', curated: false, type: 'bank' }];
+    const rest = [{ slug: 'whale-rock-7322', cik: '0001387322', curated: false }, { slug: 'x-1', cik: '0001423053', curated: false, type: 'bank', latest_quarter: '2026Q3', history_quarters: ['2026Q3'] }];
+    // x-1's full books for 2026Q1 and Q2 are stored: /v1 serves them, so history_quarters lists them (not only the latest).
+    for (const q of ['2026Q1', '2026Q2']) hist.m.set(`fb/${q}/0001423053.json`, new TextEncoder().encode('{}'));
     hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`2 0001067983,0001040273\n${JSON.stringify(rest)}`));
     const all = await v1('/v1/filers');
     expect(all).toMatchObject({ schema_version: expect.any(String), count: 4 });
@@ -4099,6 +4101,11 @@ describe('copybook api', () => {
     expect((await v1('/v1/filers?curated=true')).count).toBe(2);
     // The type comes from filer_types.json (hand-checked overrides, reclasses), not the row's own copy.
     expect(all.data.find((f: { slug: string }) => f.slug === 'x-1').type).toBe('hedge_fund');
+    // The stored-quarter list is re-read hourly: an hour on, x-1's stored books show.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 2 * 3600_000);
+    expect((await v1('/v1/filers?curated=false')).data.find((f: { slug: string }) => f.slug === 'x-1').history_quarters).toEqual(['2026Q3', '2026Q2', '2026Q1']);
+    vi.useRealTimers();
     const page = await v1('/v1/filers?limit=2&offset=1');
     expect([page.count, page.next_offset, page.data.map((f: { slug: string }) => f.slug)]).toEqual([4, 3, ['dan-loeb', 'whale-rock-7322']]);
     expect((await v1('/v1/filers?offset=3')).next_offset).toBeNull();

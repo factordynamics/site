@@ -487,6 +487,37 @@ export interface HolderRow {
   accepted_at: string | null;
 }
 
+/**
+ * The quarters a non-curated filer's full book is stored for (fb/{quarter}/{cik}.json, what the holdings route serves),
+ * newest first, listed once an hour per isolate. API host only: the Worker's bucket holds no full books (its failover
+ * serves the latest quarter, so its rows keep that one), and 50+ list calls would pass the free plan's subrequest cap.
+ */
+let STORED: { at: number; by: Map<string, string[]> } | null = null;
+async function storedQuarters(env: Env, latest: string): Promise<Map<string, string[]> | null> {
+  if (env.MOVED_TO) return null;
+  if (STORED && Date.now() - STORED.at < 3600_000) return STORED.by;
+  const by = new Map<string, string[]>();
+  try {
+    for (let q = latest; q >= '2013Q2'; q = prevQuarter(q)) {
+      let cursor: string | undefined;
+      do {
+        const r = await env.HIST.list({ prefix: `fb/${q}/`, cursor });
+        for (const o of r.objects) {
+          const cik = o.key.slice(`fb/${q}/`.length).replace(/\.json$/, '');
+          if (!by.has(cik)) by.set(cik, []);
+          by.get(cik)!.push(q);
+        }
+        cursor = r.truncated ? r.cursor : undefined;
+      } while (cursor);
+    }
+  } catch {
+    return STORED?.by ?? null;
+  }
+  STORED = { at: Date.now(), by };
+  return by;
+}
+const prevQuarter = (q: string) => (q[5] === '1' ? `${Number(q.slice(0, 4)) - 1}Q4` : `${q.slice(0, 5)}${Number(q[5]) - 1}`);
+
 /** Ingest's type for every 13F filer by CIK (filer_types.json, ~9,000 CIKs), read once an hour per isolate. */
 let TYPES: { at: number; by: Map<string, string> } | null = null;
 async function filerTypes(env: Env): Promise<Map<string, string>> {
@@ -702,7 +733,13 @@ ROUTES.push(
     // Each filer's type from filer_types.json (as holders reads it), so hand-checked overrides and reclasses apply here
     // too; the row's own type only where that file has none.
     const types = await filerTypes(env);
-    const typed = (f: { cik: string; type?: string | null }) => (types.has(pad(f.cik)) ? { ...f, type: normType(types.get(pad(f.cik))!) } : f);
+    // A non-curated filer's history_quarters: every quarter the holdings route serves for it (stored full books, plus its
+    // latest from the public shard), newest first.
+    const latestQ = rest.reduce((m, f) => { const q = (f as { latest_quarter?: string | null }).latest_quarter ?? ''; return q > m ? q : m; }, '');
+    const stored = latestQ ? await storedQuarters(env, latestQ) : null;
+    const withQuarters = <T extends { cik: string; curated?: boolean; latest_quarter?: string | null; history_quarters?: string[] }>(f: T): T =>
+      f.curated || !stored ? f : { ...f, history_quarters: [...new Set([...(stored.get(pad(f.cik)) ?? []), ...(f.latest_quarter ? [f.latest_quarter] : [])])].sort().reverse() };
+    const typed = (f: { cik: string; type?: string | null }) => withQuarters(types.has(pad(f.cik)) ? { ...f, type: normType(types.get(pad(f.cik))!) } : f);
     const all = (want === 'false' ? rest : want === 'true' ? curated : [...curated, ...rest]).map(typed);
     return v1json({ data: all.slice(offset, offset + limit), count: all.length, next_offset: offset + limit < all.length ? offset + limit : null });
   }],
