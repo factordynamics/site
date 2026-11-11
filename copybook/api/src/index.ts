@@ -689,6 +689,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     await env.DB.put('alerts:pending-moves', JSON.stringify(pending));
     return json({ ok: true, queued: [...want].filter((a) => have.has(a)), not_found: [...want].filter((a) => !have.has(a)), ...(replayTo ? { replay_at: replayAt } : {}) }, 200, h);
   }
+  // Operator audit: an alert's stored copy and who it reached (row IDs only); each member listed gets an access entry.
+  if (req.method === 'GET' && path === '/ops/delivery') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const id = (url.searchParams.get('id') ?? '').trim();
+    if (!/^[\w:.-]{3,80}$/.test(id)) return json({ ok: false, error: 'id: an accession or event id', code: 'bad_request' }, 400, h);
+    const r = await (await import('./alerts')).deliveryRecord(env, id, Date.now());
+    await logAccess(env, req, 'GET /ops/delivery', r.recipients.map((x) => x.customer).filter((c) => c.startsWith('cus_') || c.startsWith('seat_')), `delivery record of ${id}`);
+    return json({ ok: true, ...r }, 200, h);
+  }
+
   if (req.method === 'GET' && path === '/ops/moves-replays') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     return json({ ok: true, replays: JSON.parse((await env.DB.get('alerts:moves-replays')) ?? '[]') }, 200, h);

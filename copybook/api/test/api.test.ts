@@ -1232,6 +1232,15 @@ describe('copybook api', () => {
     // Once a week; /me says the digest is live.
     expect(await runWeeklyNames(env, now)).toEqual({ emails: 0, status: 'already sent' });
     expect(await env.DB.get('names-weekly:live')).toBe(day(0));
+
+    // The operator audit of one alert: its stored copy and who got it, row IDs only, each read logged.
+    await env.DB.put('delivered:cus_n1', JSON.stringify([{ day: day(2), ids: [brk.accession, `${brk.accession}:moves`] }]));
+    const audit = (id: string) => handleRequest(new Request(`https://api.test/ops/delivery?id=${id}`, { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}`, 'x-copybook-operator': 'audit-test' } }), env);
+    const rec = await (await audit(brk.accession)).json();
+    expect([rec.alert.versions, rec.recipients, rec.counts]).toEqual([2, [{ customer: 'cus_n1', test: false, day: day(2), parts: [brk.accession, `${brk.accession}:moves`] }], { members: 1, real: 1 }]);
+    expect(JSON.stringify(rec)).not.toContain('n1@reader.test');
+    expect((await env.DB.get('access:cus_n1')) ?? '').toContain('audit-test');
+    expect((await audit('x')).status).toBe(400);
   });
 
   it('net-30 Fund order: a yearly Fund subscription billed by invoice, the order terms as memo and footer, emailed at once', async () => {

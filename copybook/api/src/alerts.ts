@@ -568,6 +568,32 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
 
 type Delivered = { day: string; ids: string[] }[];
 
+/**
+ * Operator audit, read-only: one alert's stored copy (the day's store keeps a month) and the members it reached
+ * (delivered:{customer}, 30 days), as row IDs with a test flag. The route logs the read for each member listed.
+ */
+export async function deliveryRecord(env: Env, id: string, now: number) {
+  let alert: Record<string, unknown> | null = null;
+  for (let d = 0; d < 31 && !alert; d++) {
+    const raw = await env.DB.get(`digest:${etDay(now - d * DAY)}`);
+    if (!raw) continue;
+    const day = JSON.parse(raw) as DigestDay;
+    const versions = [...day.filings.filter((a) => a.accession === id), ...[...day.events, ...(day.late ?? [])].filter((e) => e.id === id)];
+    if (versions.length) alert = { day: etDay(now - d * DAY), versions: versions.length, last: versions[versions.length - 1] };
+  }
+  const recipients: { customer: string; test: boolean; day: string; parts: string[] }[] = [];
+  const members = new Map((await listMembers(env)).map((m) => [m.customer, m]));
+  for (const c of [...members.keys(), 'probe-latency']) {
+    const log = JSON.parse((await env.DB.get(`delivered:${c}`)) ?? '[]') as Delivered;
+    for (const d of log) {
+      const parts = d.ids.filter((x) => x === id || x.startsWith(`${id}:`));
+      const m = members.get(c);
+      if (parts.length) recipients.push({ customer: c, test: !m || !!m.test || testAddress(m.email ?? ''), day: d.day, parts });
+    }
+  }
+  return { id, alert, recipients, counts: { members: new Set(recipients.map((r) => r.customer)).size, real: new Set(recipients.filter((r) => !r.test).map((r) => r.customer)).size }, note: 'delivered: keeps 30 days and at most 50 IDs a member a day' };
+}
+
 async function rememberDelivered(env: Env, customer: string, now: number, ids: string[]): Promise<void> {
   if (!ids.length) return;
   const key = `delivered:${customer}`;
