@@ -438,6 +438,8 @@ export type Latency = {
   poller_host?: string | null
   /** The latest alerts, newest first (the API's `recent`, or its older `alerts`). */
   alerts: { slug: string; manager: string; quarter?: string | null; form: string; accession: string; accepted_at: string; sent_at: string; gap_seconds: number; channel?: string }[]
+  /** Every live alert this season (the API's `alerts`), for /speed/'s figures; `alerts` above may be only the latest. */
+  log?: Latency['alerts']
 }
 type RawLatency = Omit<Latency, 'alerts'> & { alerts?: Latency['alerts']; recent?: { form: string; manager: string; slug: string; accession: string; accepted_at: string; delivered_at: string; seconds: number; channel: string }[] }
 // The latency log from static files, never the API: the public R2 copy (api.config.mjs, rewritten each
@@ -451,6 +453,7 @@ export const loadLatency = () =>
       d && {
         ...d,
         alerts: d.recent?.length ? d.recent.map((x) => ({ ...x, sent_at: x.delivered_at, gap_seconds: x.seconds })) : (d.alerts ?? []),
+        log: d.alerts ?? [],
       },
     )
     .catch(() => null)

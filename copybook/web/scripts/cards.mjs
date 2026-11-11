@@ -11,6 +11,7 @@ import { displayName, possessive } from '../src/lib/names.mjs'
 import { dayName, isEdgarDay } from '../src/lib/calendar.mjs'
 import { recapFilers, recapTitle } from '../src/lib/titles.mjs'
 import { getJson } from './getjson.mjs'
+import { gapStats, seasonGaps } from '../src/lib/latencyStats.mjs'
 import { buildCard, cardSvg, cut, dLabel, money, qLabel, qn, x } from '../src/lib/filingCard.mjs'
 import { API, LATENCY_URL } from '../api.config.mjs'
 
@@ -239,13 +240,15 @@ ${right}
     writeFileSync(join(out, 'api', 'changelog.json'), changelog)
   }
   const secs = (s) => (s == null ? '—' : s < 90 ? `${Math.round(s)}s` : `${(s / 60).toFixed(s < 600 ? 1 : 0)} min`)
-  const n = l?.count ?? 0
+  // Every timed alert, the late 13F moves before the Nov 11 fix included, as on /speed/.
+  const all = gapStats(seasonGaps(l).map((a) => a.seconds))
+  const n = all.count
   const body = !l
     ? `<text x="72" y="380" font-family="Geist" font-weight="600" font-size="44" letter-spacing="-1" fill="#0c0e13">Every alert timed, EDGAR to inbox</text>`
     : n
       ? [
-          ['MEDIAN', secs(l.median_seconds), '#2b44d6'],
-          ['90TH PERCENTILE', secs(l.p90_seconds), '#0c0e13'],
+          ['MEDIAN', secs(all.median_seconds), '#2b44d6'],
+          ['90TH PERCENTILE', secs(all.p90_seconds), '#0c0e13'],
           ['ALERTS TIMED', n.toLocaleString('en-US'), '#0c0e13'],
         ]
           .map(([k, v, fg], i) => {
@@ -271,6 +274,6 @@ ${body}
 </svg>`
   const v = createHash('sha1').update(card).digest('hex').slice(0, 10)
   writeFileSync(join(out, 'og', 'speed.png'), new Resvg(card, { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng())
-  writeFileSync(join(out, 'og', 'speed.json'), JSON.stringify({ url: `${SITE}og/speed.png?v=${v}`, count: n, median_seconds: l?.median_seconds ?? null, p90_seconds: l?.p90_seconds ?? null }))
-  console.log(`speed card: ${l ? (n ? `${n} alerts, median ${secs(l.median_seconds)}` : 'waiting for the first live alert') : 'latency unavailable'} (v=${v})`)
+  writeFileSync(join(out, 'og', 'speed.json'), JSON.stringify({ url: `${SITE}og/speed.png?v=${v}`, count: n, median_seconds: all.median_seconds, p90_seconds: all.p90_seconds }))
+  console.log(`speed card: ${l ? (n ? `${n} alerts, median ${secs(all.median_seconds)}` : 'waiting for the first live alert') : 'latency unavailable'} (v=${v})`)
 }

@@ -6,11 +6,12 @@ import { gapLabel, loadLatency, type Latency, type LatencyStat } from '../lib/ac
 import { quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { INCIDENTS, OUTAGES } from '../lib/hosting'
 import { seasonNow } from '../lib/stocks'
+import { gapStats, seasonGaps } from '../lib/latencyStats.mjs'
 
 // /speed/: the public alert latency log (the API's latency.json on R2). Every live alert this season, from EDGAR
 // acceptance to delivery, with medians and 90th percentiles per form type and, once the delivery log
-// records them, per channel. Re-read every minute while open. Every live alert counts; 13F alerts sent before
-// the moves fix (latency.json before_moves_fix) are shown separately under the 13F card.
+// records them, per channel. Re-read every minute while open. Every live alert counts, including the 13F alerts
+// whose moves went out late before the Nov 11 fix (latency.json before_moves_fix; see lib/latencyStats.mjs).
 
 type Alert = Latency['alerts'][number]
 // The summary's order: what members buy first.
@@ -44,9 +45,11 @@ export function Speed() {
   const d = lat.data
   // Until 13F rows are complete, the histogram and the latest-alerts table leave them out too.
   const alerts = ((d?.alerts ?? []) as Alert[]).filter((a) => f13Ready(d) || !a.form.startsWith('13F'))
-  const gaps = alerts.map((a) => a.gap_seconds)
-  const median = d?.median_seconds ?? null
-  const p90 = d?.p90_seconds ?? null
+  const timed = seasonGaps(d).filter((a) => f13Ready(d) || !a.form.startsWith('13F'))
+  const gaps = timed.map((a) => a.seconds)
+  const overall = gapStats(gaps)
+  const median = overall.median_seconds
+  const p90 = overall.p90_seconds
   const season = d?.season ?? seasonNow().quarter
   const loading = lat.loading && !d
   const empty = !loading && !d?.count
@@ -62,7 +65,7 @@ export function Speed() {
         <p className="text-[13px] font-medium text-accent">Speed</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">From EDGAR to you, timed.</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
-          {empty ? 'No live alerts timed yet. Once they go out, every live alert this season appears here' : 'Every live alert this filing season'}: when EDGAR accepted the filing, when we delivered it, and the gap in seconds. Every live alert is counted; 13F alerts from before the Nov 11 fix are listed separately. The raw log is public at{' '}
+          {empty ? 'No live alerts timed yet. Once they go out, every live alert this season appears here' : 'Every live alert this filing season'}: when EDGAR accepted the filing, when we delivered it, and the gap in seconds. Every live alert is counted. The raw log is public at{' '}
           <a href={import.meta.env.VITE_LATENCY_URL} className="font-mono text-[15px] text-accent hover:text-accent-2">
             latency.json
           </a>
@@ -72,10 +75,11 @@ export function Speed() {
 
       {/* Per form first: the blend is mostly 13G, so it leads with nothing anyone buys. 13F is timed to the
           first email until the API times it to the email that carries the moves (by_form['13F'].timed_to). */}
-      <section className="mt-10 grid gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-2 lg:grid-cols-4" aria-label="Alert speed by form type">
-        {LEAD.map(([k, label]) => {
+      <ThirteenF d={d} loading={loading} />
+      <BeforeFix d={d} />
+      <section className="mt-6 grid gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-3" aria-label="Alert speed by form type">
+        {LEAD.filter(([k]) => k !== '13F').map(([k, label]) => {
           const g = stat(d?.by_form, k) as LatencyStat & { timed_to?: string }
-          if (k === '13F') return <ThirteenF key={k} label={label} d={d} all={g} loading={loading} />
           return (
             <div key={k} className="bg-card p-5 md:p-6">
               <p className="text-[12.5px] font-medium text-ink-2">{label}</p>
@@ -87,10 +91,9 @@ export function Speed() {
           )
         })}
       </section>
-      <BeforeFix d={d} />
       <p className="mt-3 text-[13px] text-ink-3">
         All alert types: median {median != null ? gapLabel(median) : '—'}
-        {p90 != null ? `, 90th percentile ${gapLabel(p90)}` : ''}, {(d?.count ?? 0).toLocaleString('en-US')} alerts in the {quarterLabel(season)} season so far. We check EDGAR every minute.
+        {p90 != null ? `, 90th percentile ${gapLabel(p90)}` : ''}, {overall.count.toLocaleString('en-US')} alerts in the {quarterLabel(season)} season so far. We check EDGAR every minute.
       </p>
 
       {empty ? (
@@ -114,7 +117,7 @@ export function Speed() {
             <Panel title="By channel" sub="Email to the mailer handoff; chat, webhook and feed to the first successful post">
               <Rows rows={CHANNELS.map(([k, label]) => [k, label, stat(d?.by_channel, k)])} />
             </Panel>
-            <Panel title="Distribution" sub={`The latest ${alerts.length} alerts by time from EDGAR acceptance`} >
+            <Panel title="Distribution" sub={`All ${gaps.length.toLocaleString('en-US')} alerts this season by time from EDGAR acceptance`} >
               <Histogram gaps={gaps} />
             </Panel>
           </div>
@@ -281,28 +284,59 @@ export const f13Ready = (d: Latency | null | undefined) => {
   const g = d?.by_form?.['13F'] as (LatencyStat & { complete?: boolean }) | undefined
   return Boolean(g?.complete && g.count >= F13_MIN)
 }
-function ThirteenF({ label, d, all, loading }: { label: string; d: Latency | null | undefined; all: LatencyStat; loading: boolean }) {
+// 13F: the full season (every 13F alert, the six late ones included) and, apart, the alerts accepted after
+// the Nov 11 moves fix. Computed from the rows with payments' method, so they match latency.json's figures.
+function ThirteenF({ d, loading }: { d: Latency | null | undefined; loading: boolean }) {
   const ready = f13Ready(d)
+  const rows = seasonGaps(d).filter((a) => a.form.startsWith('13F'))
+  const all = gapStats(rows.map((a) => a.seconds))
+  const slow = rows.filter((a) => a.seconds > 900).length
+  const fixAt = (d as { moves_fix_at?: string } | null | undefined)?.moves_fix_at
+  const after = fixAt ? gapStats(rows.filter((a) => a.accepted_at >= fixAt).map((a) => a.seconds)) : null
+  const day = fixAt ? new Date(fixAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : null
+  const big = 'num mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em]'
   return (
-    <div className="bg-card p-5 md:p-6">
-      <p className="text-[12.5px] font-medium text-ink-2">{label}</p>
-      {loading ? (
-        <Skeleton className="mt-2 h-8 w-24" />
-      ) : ready ? (
-        <>
-          <p className="num mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em]">{all.median_seconds != null ? gapLabel(all.median_seconds) : '—'}</p>
-          <p className="mt-2 text-[12.5px] text-ink-3">
-            median{all.p90_seconds != null ? ` · 90th pct ${gapLabel(all.p90_seconds)}` : ''} · {all.count.toLocaleString('en-US')} alerts
-          </p>
-        </>
-      ) : (
-        <p className="mt-2 text-[14px] leading-snug text-ink-2">13F timings are being re-logged after a logging fix; back shortly.</p>
+    <section className="mt-10 grid gap-px overflow-hidden rounded-[var(--radius-card)] bg-line shadow-[var(--shadow-card)] sm:grid-cols-2" aria-label="13F alert speed">
+      <div className="bg-card p-5 md:p-6">
+        <p className="text-[12.5px] font-medium text-ink-2">13F, full season</p>
+        {loading ? (
+          <Skeleton className="mt-2 h-8 w-24" />
+        ) : ready ? (
+          <>
+            <p className={big}>{all.median_seconds != null ? gapLabel(all.median_seconds) : '—'}</p>
+            <p className="mt-2 text-[12.5px] text-ink-3">
+              median · {all.count.toLocaleString('en-US')} {all.count === 1 ? 'alert' : 'alerts'}
+              {all.p90_seconds != null ? ` · 90th percentile ${gapLabel(all.p90_seconds)}` : ''}
+              {slow ? ` · ${slow} took over 15 minutes` : ''}
+            </p>
+          </>
+        ) : (
+          <p className="mt-2 text-[14px] leading-snug text-ink-2">13F timings are being re-logged after a logging fix; back shortly.</p>
+        )}
+      </div>
+      {after && (
+        <div className="bg-card p-5 md:p-6">
+          <p className="text-[12.5px] font-medium text-ink-2">13F, since the {day} fix</p>
+          {loading ? (
+            <Skeleton className="mt-2 h-8 w-24" />
+          ) : after.count ? (
+            <>
+              <p className={big}>{after.median_seconds != null ? gapLabel(after.median_seconds) : '—'}</p>
+              <p className="mt-2 text-[12.5px] text-ink-3">
+                median · {after.count.toLocaleString('en-US')} {after.count === 1 ? 'alert' : 'alerts'}
+                {after.p90_seconds != null ? ` · 90th percentile ${gapLabel(after.p90_seconds)}` : ''}
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-[14px] leading-snug text-ink-2">No 13F alerts since the fix yet.</p>
+          )}
+        </div>
       )}
-    </div>
+    </section>
   )
 }
 
-// 13F alerts sent before the fix that timed them to the email carrying the moves: disclosed, not dropped.
+// Why the 13F season has a slow tail: the six alerts whose moves went out late. They are counted above.
 type Before = { count: number; median_seconds: number | null; p90_seconds?: number | null; max_seconds?: number | null; rows?: { manager: string; accepted_at: string; seconds: number }[] }
 function BeforeFix({ d }: { d: Latency | null | undefined }) {
   const x = d as (Latency & { moves_fix_at?: string; before_moves_fix?: Record<string, Before> }) | null | undefined
@@ -313,7 +347,7 @@ function BeforeFix({ d }: { d: Latency | null | undefined }) {
   const slow = b.max_seconds != null ? `slowest ${gapLabel(b.max_seconds)}` : b.p90_seconds != null ? `90th percentile ${gapLabel(b.p90_seconds)}` : ''
   return (
     <div id="before-fix" className="mt-3 scroll-mt-24 text-[13px] leading-relaxed text-ink-2">
-      Before a fix{day ? ` on ${day}` : ''}, {b.count} 13F {b.count === 1 ? 'alert' : 'alerts'} sent {b.count === 1 ? 'its' : 'their'} moves late (median {b.median_seconds != null ? gapLabel(b.median_seconds) : '—'}
+      {b.count} {b.count === 1 ? 'alert' : 'alerts'} sent {b.count === 1 ? 'its' : 'their'} moves late because of a bug fixed{day ? ` on ${day}` : ''} (median {b.median_seconds != null ? gapLabel(b.median_seconds) : '—'}
       {slow ? `, ${slow}` : ''}).{' '}
       {b.rows?.length ? (
         <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="font-medium text-accent hover:text-accent-2">
