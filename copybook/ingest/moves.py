@@ -619,6 +619,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     tick: dict[str, dict[str, float]] = {}
     book: dict[str, float] = {}  # cik -> value of its share positions (the weight denominator)
     top10: dict[str, set] = {}  # cik -> issuer codes among its ten largest share positions
+    held_codes = {c for o, v in build.HELD_LINKS.items() for c in (o, v["new"])}
     for cik, rows in LATEST.items():
         by_issuer: dict[str, float] = {}
         for r in rows:
@@ -630,7 +631,11 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 continue  # preferreds share the common stock's issuer code (BAC 060505682) but aren't its holders
             if r.get("suspect_units"):
                 r = r | {"value_delta": 0}
-            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0])
+            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False])
+            # A held reissue (units unconfirmed) whose codes share an issuer prefix (BYND 08862E109 -> 08862E307):
+            # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
+            if r.get("change") in ("new", "exited") and (r.get("cusip") or "").upper() in held_codes:
+                a[6] = True
             a[0] += r.get("shares") or 0
             a[1] += r.get("prev_shares") or 0
             a[2] += r.get("value") or 0
@@ -654,7 +659,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "by_period": {}}
         rows, counts, deltas = [], blank(), {}
         lenses = {name: blank() for name in LENSES}
-        for cik, (sh, ps, v, pv, known, delta) in hs.items():
+        for cik, (sh, ps, v, pv, known, delta, unsure) in hs.items():
+            known = known and not unsure
             change = None
             if known:
                 change = ("exited" if sh <= 0 else "new" if ps <= 0 else "added" if sh > ps + 0.5

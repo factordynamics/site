@@ -31,7 +31,7 @@ from ingest.edgar import (
     quarter_groups,
 )
 from ingest.managers import MANAGERS, load_managers
-from ingest.splits import ratio_between
+from ingest.splits import FILED as FILED_SPLITS, ratio_between
 from ingest.parse import (
     AggregatedHolding,
     aggregate_holdings,
@@ -669,7 +669,7 @@ def cusip_links() -> dict[str, dict]:
                                                      "quarter and the new one the next"}
                 continue
             v["units_check"] = {k: c.get(k) for k in ("to_quarter", "holders", "exact_at_1", "exact_at_ratio",
-                                                     "median_ratio", "split_ratio")}
+                                                     "median_ratio", "split_ratio", "evidence")}
             if not c.get("units_ok"):
                 HELD_LINKS[o] = v | {"units_reason": c.get("reason")}
                 continue
@@ -845,7 +845,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         r = k = ratio(h)
         # Per filer: a prior position already reported in post-split shares (its value per share is at
         # today's level, not k times it; Amundi and 1832 on CRWD 2026Q2) is not multiplied again.
-        if r != 1.0 and p is not None and not prn and p["value"] > 0 and amount(p) > 0 and h["value"] > 0 and amount(h) > 0:
+        if r != 1.0 and (h["cusip"], q_to) not in FILED_SPLITS and p is not None and not prn and p["value"] > 0 and amount(p) > 0 and h["value"] > 0 and amount(h) > 0:
             was, now_px = p["value"] / amount(p), h["value"] / amount(h)
             if abs(math.log(was / now_px)) < abs(math.log(was / (now_px * r))):
                 r = 1.0

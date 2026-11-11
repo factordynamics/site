@@ -45,6 +45,14 @@ MIN_EXACT = 5  # holders at exactly k
 RATIOS = sorted({2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 100, 1.5, 2.5,
                  *(1 / k for k in (2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 100)), 2 / 3})
 EXACT = 0.003
+# Splits the issuer's own SEC filing states, applied whatever the holders show: (new cusip, to_quarter) -> ratio
+# (new shares per old) and the filing. HON's 1-for-2 came the day of the Honeywell Aerospace spin-off, so the price
+# per share looked unchanged and the holder rule couldn't confirm it; the per-filer price check is skipped for these.
+FILED = {
+    ("438516205", "2026Q2"): {"ratio": 0.5, "ticker": "HON", "issuer": "Honeywell International",
+                              "evidence": "8-K 0000773840-26-000084 Ex. 99.1: 1-for-2 reverse stock split, effective "
+                                          "with the Honeywell Aerospace (HONA) spin-off; new CUSIP 438516205"},
+}
 
 
 def detect(pairs: list[tuple[dict, dict]]) -> dict[str, dict]:
@@ -186,10 +194,17 @@ def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], iss
     checked = doc.setdefault("checked", {})
     link_checks = doc.setdefault("links", {})
     seen: dict[str, dict] = {}
+    from ingest.datasets import prev_quarter
+    for (cusip, q_to), f in FILED.items():
+        known[(cusip, q_to)] = {"cusip": cusip, "ticker": f["ticker"], "issuer": f["issuer"],
+                                "from_quarter": prev_quarter(q_to), "to_quarter": q_to,
+                                "effective_after": quarter_end(prev_quarter(q_to)).isoformat(),
+                                "effective_by": quarter_end(q_to).isoformat(), "ratio": f["ratio"],
+                                "confirmed_by": "issuer filing", "evidence": f["evidence"]}
     for (q_from, q_to), pairs in sorted(transitions.items()):
         found = detect([(relink(a, links), relink(b, links)) for a, b in pairs.values()] if links
                        else list(pairs.values()))
-        stale = [k for k in known if k[1] == q_to and k[0] not in found]
+        stale = [k for k in known if k[1] == q_to and k[0] not in found and k not in FILED]
         if stale and len(pairs) < FULL_PAIRS:
             print(f"splits: {q_to} kept {len(stale)} on file not seen in {len(pairs)} filer pairs (a full run rechecks)")
             stale = []
@@ -225,6 +240,9 @@ def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], iss
                   f"({ev['exact_holders']}/{ev['holders']} holders exact, XBRL {xr})")
         for old, new in (links or {}).items():
             c = link_check(list(pairs.values()), old, new, (known.get((new, q_to)) or {}).get("ratio"))
+            if c:
+                c["evidence"] = (known.get((new, q_to)) or {}).get("evidence") or (
+                    "holders and SEC XBRL shares outstanding" if c.get("split_ratio") else "holders at exactly 1:1")
             if c and c["holders"] > (seen.get(old) or {}).get("holders", 0):
                 seen[old] = c | {"to_quarter": q_to, "pairs": len(pairs)}
     for old, c in seen.items():  # a curated run's few holders never overrule a full run's check

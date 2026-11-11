@@ -190,6 +190,18 @@ class MoveMathTest(unittest.TestCase):
         self.assertEqual(rows[0]["prev_shares_as_filed"], 31468114)  # no split: the filed prior, equal to prev_shares
         self.assertAlmostEqual(rows[0]["value_delta"], 465409 * 5197180970 / 31933523, delta=1)
 
+    def test_filed_split_applies_even_with_the_price_unchanged(self):
+        # HON 2026Q2: 1-for-2 reverse split (8-K) on the day of a spin-off, so the price per share barely moved.
+        # BlackRock 48,831,876 -> 22,778,297 is a trim of about 1.64M split-adjusted shares, not a 53% sale.
+        build._LINKS["438516106"] = {"old": "438516106", "new": "438516205", "ratio": 0.5,
+                                     "units_basis": "split_confirmed", "basis": "sec_13f_list"}
+        build.SPLITS["438516205"] = {"2026Q2": 0.5}
+        self.addCleanup(build.SPLITS.pop, "438516205")
+        prev = {"quarter": "2026Q1", "holdings": [self.row("438516106", "HON", 48_831_876, 48_831_876 * 200)]}
+        cur = {"quarter": "2026Q2", "holdings": [self.row("438516205", "HON", 22_778_297, 22_778_297 * 198)]}
+        r = build.with_changes(cur, prev)[0]
+        self.assertEqual((r["change"], r["prev_shares"], r["share_change"]), ("trimmed", 24_415_938, -1_637_641))
+
     def test_reissue_links_only_through_cusip_links(self):
         # ONEOK 682680103 -> 30609A109 (SEC 13(f) list, 2026Q3), across free-text titles.
         prev = {"quarter": "2026Q2", "holdings": [self.row("682680103", "OKE", 1000, 80000, title="cs")]}
