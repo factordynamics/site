@@ -340,6 +340,22 @@ describe('copybook api', () => {
     await env.DB.put('feedtok:feedtoken-proxied-0123456789', 'cus_feedself');
     const feed = await (await handleRequest(new Request('http://127.0.0.1:8787/feed/feedtoken-proxied-0123456789.json'), { ...env, API_URL: 'https://host.test/copybook/' })).json();
     expect(feed.feed_url).toBe('https://host.test/copybook/feed/feedtoken-proxied-0123456789.json');
+    // On the Funnel name a CSV link goes to the quick tunnel as it is (its own single-use token), unspent.
+    {
+      const TUN = 'https://quick-tunnel-y.trycloudflare.com/copybook';
+      const orig = globalThis.fetch;
+      vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
+        String(u) === 'https://pub.test/api.json' ? Response.json({ api: `${TUN}/` }) : String(u) === `${TUN}/health?probe=1` ? new Response('{}') : orig(u, init),
+      );
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(Date.now() + 11 * 60_000); // past any cached api.json
+      const fp = ((await (await call('/csv-link/warren-buffett', { method: 'POST', token: session.token })).json()).url as string).slice('https://api.test'.length);
+      const r = await handleRequest(new Request(`https://api.test${fp}`, { headers: { 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), { ...env, PUBLIC_URL: 'https://pub.test/' });
+      expect([r.status, r.headers.get('location')]).toEqual([302, `${TUN}${fp}`]);
+      expect(await (await call(fp)).text()).toBe(csv);
+      vi.useRealTimers();
+      vi.stubGlobal('fetch', orig);
+    }
     const dlPath = link.slice('https://api.test'.length);
     expect((await call(dlPath.replace('/warren-buffett.csv', '/bill-ackman.csv'))).status).toBe(401);
     expect(await (await call(dlPath)).text()).toBe(csv);
@@ -3231,7 +3247,7 @@ describe('copybook api', () => {
       return orig(u, init);
     });
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(Date.now() + 11 * 60_000); // past the cached api.json
+    vi.setSystemTime(Date.now() + 30 * 60_000); // past the cached api.json (an earlier test cached another tunnel)
     const envF = Object.assign(env, { PUBLIC_URL: 'https://pub.test/' });
     const viaF = (path: string) => handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), envF);
     const r302 = await viaF('/v1/bulk/2026Q2.csv.gz');
