@@ -56,7 +56,7 @@ export function Contact() {
           <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">{fund ? 'Copybook for your fund.' : 'Get in touch.'}</h1>
           {fund ? (
             <>
-              <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Copy Pro for up to {FUND_SEATS} seats at a flat price: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
+              <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Pro for up to {FUND_SEATS} seats at a flat price: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-ink-2">
                 {['Founding price $1,990/yr, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 on request', 'Your uploaded book stays private to your team'].map((x) => (
                   <li key={x} className="flex gap-2.5">

@@ -131,6 +131,7 @@ export function Speed() {
           <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Panel title="By channel" sub="Email to the mailer handoff; chat, webhook and feed to the first successful post">
               <Rows rows={CHANNELS.map(([k, label]) => [k, label, channel(k)])} />
+              <p className="mt-3 text-[12.5px] text-ink-3">{TEAM_NOTE}</p>
             </Panel>
             <Panel title="Distribution" sub={`All ${gaps.length.toLocaleString('en-US')} alerts this season by time from EDGAR acceptance`} >
               <Histogram gaps={gaps} />
@@ -424,6 +425,8 @@ const HOST_FROM = '2026-11-11T08:40:00Z'
 const POLLER: Record<string, string> = { cloudflare: 'Cloudflare', server: 'Our server' }
 const formLabel = (f: string) => (/^4(\/A)?$/.test(f) ? `Form ${f}` : f.replace(/^SCHEDULE\s+/, ''))
 const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : null)
+// Shown wherever team delivery appears, until payments backfills earlier rows from the webhook log (then drop it).
+const TEAM_NOTE = 'Team delivery times recorded from Nov 11, 09:40 UTC.'
 const formGroup = (f: string) => (f.startsWith('13F') ? '13F' : /13[DG]/.test(f) ? '13D/G' : /^4/.test(f) ? 'Form 4' : f)
 const dayET = (t: string) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })
 const NR = <span className="text-ink-3">not recorded</span>
@@ -519,7 +522,8 @@ function AlertLog({ rows: all, delayedByLimit }: { rows: Row[]; delayedByLimit: 
               </tbody>
             </table>
           </div>
-          <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" tabIndex={0} role="region" aria-label="Every alert this season and its latency">
+          <p className="mt-4 text-[12.5px] text-ink-3">{TEAM_NOTE}</p>
+          <div className="mt-2 overflow-x-auto rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" tabIndex={0} role="region" aria-label="Every alert this season and its latency">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-line text-left text-[12px] text-ink-3">
