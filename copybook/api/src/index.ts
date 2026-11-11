@@ -1523,7 +1523,15 @@ export default {
       const u = new URL(req.url);
       // Unsubscribe (the List-Unsubscribe one-click POST and its page) is answered here, so it works with gene down.
       if (u.pathname === '/unsubscribe') return import('./failover').then((fo) => fo.writeThrough(env, (e) => serve(req, e)));
-      return movedBase(env).then((b) => (new URL(b).origin === u.origin ? serve(req, env) : new Response(null, { status: 308, headers: { location: `${b}${u.pathname}${u.search}`, 'access-control-allow-origin': '*', 'cache-control': 'no-store' } })));
+      // Failed over to this copy: every request reads and writes the synced store (writeThrough), so what members change
+      // here (seats, sign-outs, API keys, channels, settings) is published and gene applies it once access moves back.
+      // Follows live in each host's own per-member object, which doesn't sync: they can't change here.
+      const followWrite = req.method !== 'GET' && req.method !== 'OPTIONS' && /^\/follows(\/|$)/.test(u.pathname);
+      return movedBase(env).then((b) =>
+        new URL(b).origin === u.origin && followWrite
+          ? json({ ok: false, code: 'read_only', error: "Follows can't be changed while we run on our backup. Try again in a few minutes." }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': '300', 'access-control-expose-headers': 'retry-after' })
+          : new URL(b).origin === u.origin ? import('./failover').then((fo) => fo.writeThrough(env, (e) => serve(req, e))) : new Response(null, { status: 308, headers: { location: `${b}${u.pathname}${u.search}`, 'access-control-allow-origin': '*', 'cache-control': 'no-store' } }),
+      );
     }
     return serve(req, env);
   },
