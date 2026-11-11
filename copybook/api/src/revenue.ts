@@ -150,7 +150,7 @@ const FOUNDING: Record<string, string> = { pro: 'Your founding price stays at $3
  */
 export const fundTerms = (env: Env) =>
   `Order terms: Copy Fund, up to ${SEAT_LIMIT} seats (manage them at ${env.SITE_URL}account/). Founding price $1,990 a year for up to ${SEAT_LIMIT} seats, whatever number are used, locked for as long as this subscription stays active. ` +
-  `The service period is shown on the line item. Renews each year at that price until cancelled. Cancel any time from Manage billing; access runs to the end of the paid year, and partial years aren't refunded. ` +
+  `The service period is shown on the line item. Renews each year at that price until cancelled. Cancel any time from Manage billing; access runs to the end of the paid year, and partial years aren't refunded. If we discontinue the plan during a prepaid period, we refund the unused part pro rata. ` +
   `Invoices are payable within 30 days. Terms in force on the invoice date: ${env.SITE_URL}terms/`;
 
 /** A Fund customer's invoice footer: the order terms, set once (a Fund checkout or net-30 order). */

@@ -1284,7 +1284,7 @@ describe('copybook api', () => {
     const posted = (p: string) => calls.find((c) => c.method === 'POST' && c.path === p)!.body;
     const footer = posted('customers').get('invoice_settings[footer]')!;
     // The order terms: the seats, the locked founding price, renewal and cancellation, net 30, and /terms/.
-    for (const s of ['Copy Fund, up to 10 seats', 'Founding price $1,990 a year for up to 10 seats, whatever number are used, locked for as long as this subscription stays active', 'Terms in force on the invoice date', 'Renews each year at that price until cancelled', 'Cancel any time from Manage billing', 'payable within 30 days', `${SITE}terms/`]) expect(footer).toContain(s);
+    for (const s of ['Copy Fund, up to 10 seats', 'Founding price $1,990 a year for up to 10 seats, whatever number are used, locked for as long as this subscription stays active', 'Terms in force on the invoice date', 'Renews each year at that price until cancelled', 'Cancel any time from Manage billing', 'If we discontinue the plan during a prepaid period, we refund the unused part pro rata.', 'payable within 30 days', `${SITE}terms/`]) expect(footer).toContain(s);
     expect(posted('customers').get('email')).toBe('pm@fund.test');
     expect(Object.fromEntries(['customer', 'items[0][price]', 'collection_method', 'days_until_due', 'metadata[copybook]'].map((k) => [k, posted('subscriptions').get(k)]))).toEqual({ customer: 'cus_fund', 'items[0][price]': 'price_fund_yearly', collection_method: 'send_invoice', days_until_due: '30', 'metadata[copybook]': 'fund' });
     expect(posted('invoices/in_fund').get('description')).toBe(footer);
