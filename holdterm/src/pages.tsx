@@ -200,12 +200,12 @@ function ActionTag({ e }: { e: Event }) {
   )
 }
 const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => [
-  { key: 'filed', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, sort: (e) => e.filing_date, width: '84px' },
-  { key: 'form', label: 'form', hideSm: true, render: (e) => <span className="form">{FORM[e.kind]}</span>, sort: (e) => e.kind },
-  ...(withWho ? [{ key: 'who', label: 'filer', render: (e: Event) => <FundLink slug={e.slug} name={<Firm name={firmOf(firms, e.slug, e.manager)} />} />, sort: (e: Event) => e.manager } as Col<Event>] : []),
+  { key: 'filed', label: 'Filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, sort: (e) => e.filing_date, width: '84px' },
+  { key: 'form', label: 'Form', hideSm: true, render: (e) => <span className="form">{FORM[e.kind]}</span>, sort: (e) => e.kind },
+  ...(withWho ? [{ key: 'who', label: 'Investor', render: (e: Event) => <FundLink slug={e.slug} name={<Firm name={firmOf(firms, e.slug, e.manager)} />} />, sort: (e: Event) => e.manager } as Col<Event>] : []),
   {
     key: 'iss',
-    label: 'issuer',
+    label: 'Company',
     render: (e) => (
       <span className="iss">
         <StockCell t={ownVehicle(e) ? null : e.ticker} name={issuerName(e.display_name || e.issuer)} former={ownVehicle(e) ? undefined : e.former} />
@@ -213,17 +213,17 @@ const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => 
       </span>
     ),
   },
-  { key: 'act', label: 'action', render: (e) => <ActionTag e={e} />, sort: (e) => e.action },
-  { key: 'pc', label: '% class', num: true, hideSm: true, render: (e) => (e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 2 : 1)}%` : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
-  { key: 'val', label: 'value', num: true, hideSm: true, render: (e) => (e.value_usd != null ? <span className={e.action === 'sell' ? 'neg' : e.action === 'buy' ? 'pos' : ''}>{usd(e.value_usd)}</span> : <span className="dim">—</span>), sort: (e) => e.value_usd ?? -1 },
-  { key: 'sa', label: 'shares after', num: true, hideSm: true, render: (e) => num(e.shares_after), sort: (e) => e.shares_after ?? -1 },
+  { key: 'act', label: 'What happened', render: (e) => <ActionTag e={e} />, sort: (e) => e.action },
+  { key: 'pc', label: 'Stake', num: true, hideSm: true, render: (e) => (e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 2 : 1)}%` : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
+  { key: 'val', label: 'Value', num: true, hideSm: true, render: (e) => (e.value_usd != null ? <span className={e.action === 'sell' ? 'neg' : e.action === 'buy' ? 'pos' : ''}>{usd(e.value_usd)}</span> : <span className="dim">—</span>), sort: (e) => e.value_usd ?? -1 },
+  { key: 'sa', label: 'Shares after', num: true, hideSm: true, render: (e) => num(e.shares_after), sort: (e) => e.shares_after ?? -1 },
   {
     key: 'sec',
     label: <span className="sr">SEC filing</span>,
     hideSm: true,
     render: (e) => (
-      <a href={e.url} target="_blank" rel="noreferrer" className="dim ext" aria-label={`SEC filing ${e.id}`}>
-        SEC ↗
+      <a href={e.url} target="_blank" rel="noreferrer" className="ext" aria-label={`View SEC filing ${e.id}`}>
+        View filing ↗
       </a>
     ),
   },
@@ -426,7 +426,7 @@ function HomeBody() {
             href={(m) => fundPath(m.slug)}
             cols={[
               { key: 'f', label: 'filed', render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
-              { key: 'm', label: 'fund', link: true, render: (m) => <Firm name={m.firm} strong /> },
+              { key: 'm', label: 'Investor', link: true, render: (m) => <Firm name={m.firm} strong /> },
               { key: 'q', label: 'qtr', hideSm: true, render: (m) => <span className={m.quarter === s.q ? 'tag acc' : 'dim'}>{quarterLabel(m.quarter)}</span> },
               { key: 'v', label: 'book', num: true, hideSm: true, width: '76px', render: (m) => usd(bySlug.get(m.slug)?.long_value ?? m.total_value) },
               {
@@ -489,7 +489,7 @@ function HomeBody() {
                 href={(x) => stockHref(x.h)}
                 cols={[
                   { key: 't', label: 'stock', render: (x) => <StockCell t={x.h.ticker} name={x.h.display_name || x.h.issuer} former={x.h.former} label={x.h.label} />, width: '72px' },
-                  { key: 'f', label: 'fund', link: true, render: (x) => <Firm name={x.b.firm} /> },
+                  { key: 'f', label: 'Investor', link: true, render: (x) => <Firm name={x.b.firm} /> },
                   { key: 'a', label: '', render: (x) => <span className={`tag ${x.h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(x.h)}</span> },
                   { key: 'v', label: '$ traded', num: true, render: (x) => <span className={x.h.value_delta! > 0 ? 'pos' : 'neg'}>{signedUsd(x.h.value_delta)}</span> },
                 ]}
@@ -505,7 +505,7 @@ function HomeBody() {
                 href={(e) => (e.ticker ? `/s/${e.ticker}` : null)}
                 cols={[
                   { key: 'f', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, width: '72px' },
-                  { key: 'w', label: 'fund', render: (e) => <Firm name={firmOf(firms, e.slug, e.manager)} /> },
+                  { key: 'w', label: 'Investor', render: (e) => <Firm name={firmOf(firms, e.slug, e.manager)} /> },
                   { key: 't', label: 'stock', render: (e) => <StockCell t={e.ticker} name={issuerName(e.display_name || e.issuer)} former={e.former} /> },
                   { key: 'a', label: '', render: (e) => <ActionTag e={e} /> },
                 ]}
@@ -522,7 +522,7 @@ function HomeBody() {
               href={(r) => stockHref(r)}
               cols={[
                 { key: 't', label: 'stock', render: (r) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, width: '72px' },
-                { key: 'f', label: 'fund', render: (r) => <A to={fundPath(r.slug)}><Firm name={r.firm} /></A> },
+                { key: 'f', label: 'Investor', render: (r) => <A to={fundPath(r.slug)}><Firm name={r.firm} /></A> },
                 { key: 'w', label: 'weight', num: true, render: (r) => pct(r.weight, 1) },
               ]}
             />
@@ -578,7 +578,7 @@ export function Funds() {
           cols={[
             {
               key: 'm',
-              label: 'fund',
+              label: 'Investor',
               link: true,
               render: (m) => (
                 <span className="trunc wide-name" title={m.firm}>
@@ -1189,7 +1189,7 @@ export function Filings() {
 
 // ---------- stock ----------
 type STab = 'holders' | 'activity' | 'options' | 'filings'
-const STOCK_TAB: Record<STab, string> = { holders: 'Funds that own it', activity: 'Buys and sells this quarter', options: 'Options', filings: '13D/G and Form 4 filings' }
+const STOCK_TAB: Record<STab, string> = { holders: 'Investors that own it', activity: 'Who bought and sold it this quarter', options: 'Options on it', filings: 'Stakes and insider trades' }
 export function Stock({ ticker }: { ticker: string }) {
   const s = useLoad(
     () =>
@@ -1239,12 +1239,12 @@ export function Stock({ ticker }: { ticker: string }) {
   // Filings by the investors Holdterm follows, as on /filings.
   const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && inRoster(e.slug) && !ownVehicle(e))
   const holderCols: Col<StockHolder>[] = [
-    { key: 'm', label: 'fund', link: true, render: (h) => <Firm name={name(h)} strong={inRoster(h.slug)} />, sort: (h) => name(h) },
-    { key: 'w', label: '% of book', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight },
-    { key: 'c', label: 'activity', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} />, sort: (h) => h.delta_value ?? 0 },
-    { key: 'sh', label: 'shares', num: true, hideSm: true, render: (h) => num(h.shares), sort: (h) => h.shares },
-    { key: 'v', label: 'value', num: true, hideSm: true, render: (h) => usd(h.value), sort: (h) => h.value },
-    { key: 'q', label: 'qtr', num: true, render: (h) => <span className="dim">{quarterLabel(h.quarter).replace(' 20', " '")}</span>, sort: (h) => h.quarter },
+    { key: 'm', label: 'Investor', link: true, render: (h) => <Firm name={name(h)} strong={inRoster(h.slug)} />, sort: (h) => name(h) },
+    { key: 'w', label: 'Weight', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight, title: 'Share of the investor’s portfolio' },
+    { key: 'c', label: 'This quarter', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} />, sort: (h) => h.delta_value ?? 0 },
+    { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (h) => num(h.shares), sort: (h) => h.shares },
+    { key: 'v', label: 'Value', num: true, hideSm: true, render: (h) => usd(h.value), sort: (h) => h.value },
+    { key: 'q', label: 'As of', num: true, render: (h) => <span className="dim">{quarterLabel(h.quarter).replace(' 20', " '")}</span>, sort: (h) => h.quarter },
   ]
   const fundHref = (h: StockHolder) => (inRoster(h.slug) ? fundPath(fundSlug(h.slug)) : null)
   return (
@@ -1264,12 +1264,10 @@ export function Stock({ ticker }: { ticker: string }) {
           </div>
           <p className="activity-line">{ev.data ? <ActivityLine events={events} days={ev.data.window_days} name={(e) => firmOf(firms, e.slug, e.manager)} open={() => (setTab('filings'), document.querySelector('.tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))} /> : '\u00a0'}</p>
           <div className="meta">
-            {d.classes.map((c) => (
-              <span key={c.cusip}>
-                CUSIP {c.cusip}
-                {d.classes.length > 1 ? ` (${c.ticker})` : ''}
-              </span>
-            ))}
+            <span>Source: investors’ latest 13Fs on SEC EDGAR</span>
+            <span title="The securities identifier used in 13F filings">
+              CUSIP {d.classes.map((c) => `${c.cusip}${d.classes.length > 1 ? ` (${c.ticker})` : ''}`).join(', ')}
+            </span>
           </div>
         </div>
         <Follow kind="stocks" id={d.ticker} />
@@ -1294,45 +1292,46 @@ export function Stock({ ticker }: { ticker: string }) {
         )}
       </p>
       <div className="stats">
-        <Stat label="funds holding it" value={holders.length} sub={`${prevHolders} last quarter (${holders.length - prevHolders >= 0 ? '+' : ''}${holders.length - prevHolders})`} />
-        <Stat label="value held" value={usd(value)} sub="Across those funds’ latest 13Fs" />
-        <Stat label="new / added" value={`${nNew} / ${cnt('added')}`} tone={nNew + cnt('added') > 0 ? 'pos' : undefined} />
-        <Stat label="trimmed / sold out" value={`${cnt('trimmed')} / ${exited.length}`} tone={cnt('trimmed') + exited.length > 0 ? 'neg' : undefined} />
+        <Stat label="Investors that own it" value={holders.length} sub={holders.length === prevHolders ? `Same as last quarter` : `${holders.length > prevHolders ? 'Up' : 'Down'} from ${prevHolders} last quarter`} />
+        <Stat label="Value they hold" value={usd(value)} sub="In their latest 13Fs" />
+        <Stat label="Bought more" value={plural(nNew + cnt('added'), 'investor')} tone={nNew + cnt('added') > 0 ? 'pos' : undefined} sub={`${num(nNew)} new, ${num(cnt('added'))} added`} />
+        <Stat label="Sold some or all" value={plural(cnt('trimmed') + exited.length, 'investor')} tone={cnt('trimmed') + exited.length > 0 ? 'neg' : undefined} sub={`${num(cnt('trimmed'))} trimmed, ${num(exited.length)} sold out`} />
       </div>
-        <Panel title="Biggest bets: share of each fund’s book">
-          {holders.length ? (
-            <HBars title="largest holders by weight" fmt={(v) => pct(v, 1)} labelWidth={190} rows={[...holders].sort((a, b) => b.weight - a.weight).slice(0, 6).map((h) => ({ key: h.slug, href: fundHref(h), label: name(h), value: h.weight }))} />
-          ) : (
-            <div className="empty dim">no roster fund holds it; count all tracked funds</div>
-          )}
-        </Panel>
+      <Panel title="Biggest bets on it" right={<span className="dim hide-sm">Share of each investor’s portfolio</span>}>
+        {holders.length ? (
+          <HBars title="Investors with the most of their portfolio in it" fmt={(v) => pct(v, 1)} labelWidth={200} rows={[...holders].sort((a, b) => b.weight - a.weight).slice(0, 6).map((h) => ({ key: h.slug, href: fundHref(h), label: <span title={name(h)}>{shortFirm(name(h))}</span>, value: h.weight }))} />
+        ) : (
+          <div className="empty dim">None of the investors Holdterm follows owns it.</div>
+        )}
+      </Panel>
       <Tabs<STab>
         value={tab}
         onChange={setTab}
         options={[
-          ['holders', `holders ${holders.length}`],
-          ['activity', `buys and sells ${movers.length}`],
-          ['options', `options ${pick(d.options).length}`],
-          ['filings', `13D/G and Form 4 ${events.length}`],
+          ['holders', `Investors ${holders.length}`],
+          ['activity', `Bought and sold ${movers.length}`],
+          ...(pick(d.options).length ? ([['options', `Options ${pick(d.options).length}`]] as [STab, string][]) : []),
+          ['filings', `Stakes and insider trades ${events.length}`],
         ]}
+        label={`${issuerName(d.name)} ownership`}
       />
       <Panel title={STOCK_TAB[tab]}>
-        {tab === 'holders' && <Grid rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty="no roster fund holds it; count all tracked funds" />}
+        {tab === 'holders' && <Grid rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty="None of the investors Holdterm follows owns it." />}
         {tab === 'activity' && (
           <Grid
             rows={movers}
             href={fundHref}
-            cols={[holderCols[0], holderCols[2], { key: 'd', label: 'Δ value', num: true, render: (h) => <span className={(h.delta_value ?? 0) >= 0 ? 'pos' : 'neg'}>{signedUsd(h.delta_value)}</span>, sort: (h) => h.delta_value ?? 0 }, holderCols[1], holderCols[5]]}
+            cols={[holderCols[0], holderCols[2], { key: 'd', label: 'Trade size', num: true, render: (h) => <span className={(h.delta_value ?? 0) >= 0 ? 'pos' : 'neg'}>{signedUsd(h.delta_value)}</span>, sort: (h) => h.delta_value ?? 0 }, holderCols[1], holderCols[5]]}
           />
         )}
         {tab === 'options' && (
           <Grid
             rows={pick(d.options)}
             href={fundHref}
-            cols={[holderCols[0], { key: 'pc', label: 'type', render: (h) => <span className={`tag ${h.put_call === 'CALL' ? 'pos' : 'neg'}`}>{h.put_call}</span> }, { key: 'v', label: 'notional', num: true, render: (h) => usd(h.value), sort: (h) => h.value }, holderCols[1]]}
+            cols={[holderCols[0], { key: 'pc', label: 'Type', render: (h) => <span className={`tag ${h.put_call === 'CALL' ? 'pos' : 'neg'}`}>{h.put_call === 'CALL' ? 'Call' : 'Put'}</span> }, { key: 'v', label: 'Value of shares', num: true, render: (h) => usd(h.value), sort: (h) => h.value }, holderCols[1]]}
           />
         )}
-        {tab === 'filings' && <Grid rows={events} cols={eventCols(firms)} empty="no Form 4 or 13D/G by tracked funds in the last 30 days" />}
+        {tab === 'filings' && <Grid rows={events} cols={eventCols(firms)} empty="No 5% stake (13D or 13G) or insider trade (Form 4) filings by these investors in the last 30 days." />}
       </Panel>
     </div>
   )

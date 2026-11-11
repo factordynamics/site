@@ -2722,3 +2722,14 @@ p a,
   stroke: var(--acc);
   stroke-width: 2;
 }
+/* Long meta items (a fund's filer name, a stock's source line) may wrap on phones. */
+@media (max-width: 560px) {
+  .head .meta > span {
+    white-space: normal;
+  }
+}
+@media (max-width: 560px) {
+  .hbars:not(.inline) .hb-row {
+    grid-template-columns: minmax(0, 150px) minmax(40px, 1fr) 60px;
+  }
+}
