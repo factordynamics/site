@@ -18,7 +18,7 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     breaking: false,
     status: 'shipped',
     changes: [
-      'as_of on any /v1 endpoint other than GET /v1/filers/{filer}/holdings/{quarter} now returns 400 `as_of_not_supported`. It was silently ignored, so a request such as /v1/stocks/{stock}/holders?as_of=2025-06-01 got today\'s holders. Point-in-time books (as_of, per-row lots[], point-in-time bulk) are due Nov 30, 2026 on holdings and bulk; holders and changes by Dec 14, 2026.',
+      'as_of on any /v1 endpoint other than GET /v1/filers/{filer}/holdings/{quarter} now returns 400 `as_of_not_supported`. It was silently ignored, so a request such as /v1/stocks/{stock}/holders?as_of=2025-06-01 got today\'s holders. GET /v1/filers/{filer}/holdings/{quarter}?as_of= keeps returning 501 `not_yet_available` until point-in-time books ship. Point-in-time books (as_of, per-row lots[], point-in-time bulk) are due Nov 30, 2026 on holdings and bulk; holders and changes by Dec 14, 2026.',
     ],
   },
   {
