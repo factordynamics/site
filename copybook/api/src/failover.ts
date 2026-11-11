@@ -334,7 +334,8 @@ async function checks(env: Env, now: number): Promise<Record<string, unknown>> {
   if (new Date(now).getUTCMinutes() % 5 !== 1) return {};
   const a = await import('./alerts');
   const scrub = await a.scrubFalseCorrections(env, now).catch((e) => `error: ${e}`);
-  return { ...(scrub ? { scrubbed: scrub } : {}), held: await a.checkHeld(env, now).catch((e) => `error: ${e}`), reconciled: await a.reconcileAlerts(env, now).catch((e) => `error: ${e}`) };
+  const restated = await a.restateFeeds(env, now).catch((e) => `error: ${e}`);
+  return { ...(scrub ? { scrubbed: scrub } : {}), ...(typeof restated === 'string' || restated.feeds ? { restated } : {}), held: await a.checkHeld(env, now).catch((e) => `error: ${e}`), reconciled: await a.reconcileAlerts(env, now).catch((e) => `error: ${e}`) };
 }
 
 /** Per invocation on Cloudflare: whether gene polled in the last 15 minutes (only then can both send). */

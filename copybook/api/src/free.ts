@@ -751,7 +751,7 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
     return [...m.new.map((r) => ['new', r] as const), ...m.added.map((r) => ['added', r] as const), ...m.trimmed.map((r) => ['trimmed', r] as const), ...m.exited.map((r) => ['exited', r] as const)]
       .sort((x, y) => Math.abs(y[1].value_delta) - Math.abs(x[1].value_delta));
   };
-  const three = (a: Alert13F) => sorted(a).slice(0, 3).map(([c, r]) => `${VERB[c]} ${r.ticker || r.display_name || r.issuer} ${r.value_delta > 0 ? '+' : '−'}${money(r.value_delta)}${pctOf(r.delta_pct_of_book)}`).join('; ');
+  const three = (a: Alert13F) => sorted(a).slice(0, 3).map(([c, r]) => `${VERB[c]} ${r.ticker || r.display_name || r.issuer}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} ${r.value_delta > 0 ? '+' : '−'}${money(r.value_delta)}${pctOf(r.delta_pct_of_book)}`).join('; ');
   const card = (a: Alert13F) => e2(env, `f/${a.accession}/`, 'e2-follows');
   const pricing = e2(env, 'pricing/?from=e2', 'e2-paid') + '&client_reference_id=email_e2-paid';
   const isToday = (a: Alert13F) => etDay(Date.parse(a.accepted ?? `${a.filing_date}T21:00:00Z`)) === etDay(o.now);

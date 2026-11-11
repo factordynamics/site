@@ -1606,6 +1606,47 @@ describe('copybook api', () => {
     const f = { investors: [], stocks: ['XOM'], owned: [] };
     expect(forMember({ alerts: 'followed' } as never, f as never, [filing as never], [], { pz: { featured: true } } as never).filings).toHaveLength(1);
     expect(forMember({ alerts: 'followed' } as never, { ...f, stocks: ['CVX'] } as never, [filing as never], [], { pz: { featured: true } } as never).filings).toHaveLength(0);
+    // Stored pairs net only through a link with a units result: an unlinked COM -> COM NEW pair under one ticker (a reverse
+    // split) stays an exit plus a new line; RBKB's link (1.3978) scales the prior, so 1,000 old shares held as 1,398 is no trade.
+    const pair = (o: string, n: string, t: string, prev: number, sh: number) => [{ change: 'exited', cusip: o, ticker: t, put_call: null, shares: 0, prev_shares: prev, value: 0, value_delta: -prev * 10 }, { change: 'new', cusip: n, ticker: t, put_call: null, shares: sh, prev_shares: 0, value: sh * 10, value_delta: sh * 10 }];
+    expect(netRenamed({ moves: {} as never, changed: pair('68232V801', '68232V900', 'ONCY', 30000, 1000) as never }).changed.map((x) => x.change)).toEqual(['exited', 'new']);
+    expect(netRenamed({ moves: {} as never, changed: pair('75689M101', '75689M200', 'RBKB', 1000, 1398) as never }).changed).toEqual([]);
+    expect(netRenamed({ moves: {} as never, changed: pair('75689M101', '75689M200', 'RBKB', 1000, 1500) as never }).changed.map((x) => [x.change, x.prev_shares, x.split])).toEqual([['added', 1398, 1.3978]]);
+
+    // FMR's Nov 10 feed item, as stored (0000315066-26-002964): CRWD sent before its 4-for-1 split was on file (+$8.55B;
+    // the build has +$2.32B), XOM and GTES as exits plus new lines. Once splits.json and the GTES link are on file, the
+    // feed reads like the build: CRWD +8,753,191 sh x $264.75, XOM and GTES one move each. The email stays as sent.
+    const { restateFeeds, etDay } = await import('../src/alerts');
+    const tR = t1 + 20_000_000;
+    vi.useFakeTimers({ toFake: ['Date'], now: tR });
+    const mv = (change: string, ticker: string | null, cusip: string, shares: number, prev_shares: number, value: number, value_delta: number) => ({ change, ticker, display_name: null, issuer: ticker ?? cusip, cusip, put_call: null, shares, prev_shares, value, value_delta, delta_pct_of_book: null });
+    const fmr = {
+      slug: 'fmr-llc', slugs: ['fmr-llc'], manager: 'FMR LLC', name: 'FMR LLC', quarter: '2026Q3', report_date: '2026-09-30', filing_date: etDay(tR), accession: '0000315066-26-002964', sec_url: 'https://www.sec.gov/Archives/edgar/data/315066/000031506626002964/0000315066-26-002964-index.html', tickers: [], followup: true,
+      moves: {
+        bought_usd: 1, sold_usd: 1,
+        new: [mv('new', 'XOM', '30233Q108', 145933748, 0, 23750717533, 23750717533), mv('new', 'GTES', 'G39104107', 19537900, 0, 511892996, 511892996)],
+        added: [mv('added', 'CRWD', '22788C105', 40141659, 7847117, 10627504388, 8549980129)],
+        trimmed: [],
+        exited: [mv('exited', 'XOM', '30231G102', 0, 137736841, 0, -18831380835), mv('exited', null, 'G39108108', 0, 19596691, 0, -548119448)],
+      },
+      corrected: { at: '2026-11-11T04:36:00Z', rows: [{ cusip: '22788C105', ticker: 'CRWD', name: 'CrowdStrike', put_call: null, emailed: { change: 'added', value_delta: 8549980129 }, v1: { change: 'added', value_delta: 2317407354 } }] },
+    };
+    await env.DB.put(`digest:${etDay(tR)}`, JSON.stringify({ filings: [fmr], events: [] }));
+    await putMember('cus_fd', 'fd@example.com', 'active', []);
+    await env.DB.put('feed:cus_fd', JSON.stringify([{ id: '0000315066-26-002964:moves', title: 'as sent', text: 'as sent', url: 'x', published: '2026-11-10T21:00:00Z' }]));
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
+      String(u).endsWith('cusip_links.json') ? Response.json({ links: { G39108108: { new: 'G39104107', ticker: 'GTES', basis: 'sec_13f_list', ratio: 1, units_basis: 'holders_1to1' } }, held: [] })
+      : String(u).endsWith('splits.json') ? Response.json({ splits: [{ cusip: '22788C105', ticker: 'CRWD', to_quarter: '2026Q3', ratio: 4 }] })
+      : real1(u, init));
+    expect(await restateFeeds(env, tR)).toEqual({ feeds: 1, alerts: ['0000315066-26-002964:moves'] });
+    vi.stubGlobal('fetch', real1);
+    vi.useRealTimers();
+    const item = (JSON.parse((await env.DB.get('feed:cus_fd'))!) as { text: string }[])[0].text;
+    const [body, note] = item.split(/\n\s*Corrected /);
+    expect([body.match(/CRWD \+\$[\d.]+[MB]/)?.[0], body.match(/XOM \+\$[\d.]+[MB]/)?.[0], /GTES/.test(body), /EXIT|G39108108|\$8\.5B|\$23\.8B/.test(body)]).toEqual(['CRWD +$2.3B', 'XOM +$1.3B', true, false]);
+    expect(note).toMatch(/CRWD was added/);
+    // Nothing more to restate: the feed is left alone.
+    expect((await restateFeeds(env, tR)).feeds).toBe(0);
   });
 
   it('launch week: test, critic and preview mail goes to the test-inbox sink, never to Resend', async () => {
@@ -3429,6 +3470,10 @@ describe('copybook api', () => {
     const rss = await (await handleRequest(new Request(feedUrls.rss_url), env)).text();
     expect(rss).toContain('<title>Buffett SIRI Form 4: bought $25K</title>');
     expect(jf.items[0].sent_at).toBeTruthy();
+    // HTML too, so phone readers keep the lines apart: a paragraph per block, a <br> per line, links clickable, names escaped.
+    const lines = jf.items[0].content_text.split('\n').filter((l: string) => l.trim()).length;
+    expect([jf.items[0].content_html.startsWith('<p>'), jf.items[0].content_html.split('<br>').length >= lines - jf.items[0].content_text.split(/\n{2,}/).length + 1, /<a href="https:\/\//.test(jf.items[0].content_html), /<(?!\/?(p|br|a)\b)/.test(jf.items[0].content_html)]).toEqual([true, true, true, false]);
+    expect(rss).toContain(`<description><![CDATA[${jf.items[0].content_html}]]></description>`);
     // "Rotate feed link": a new URL that works at once, and the old one is dead at once.
     const rotated = (await (await req(copy, 'POST', '/channels/feed')).json()).channels.feed;
     expect(rotated.json_url).not.toBe(feedUrls.json_url);
@@ -3454,6 +3499,12 @@ describe('copybook api', () => {
     expect([tr.email, Object.keys(tr).sort()]).toEqual([undefined, ['discord', 'slack', 'telegram']]);
     expect(JSON.parse(by('hooks.slack.com').at(-1)!.body).text).toMatch(/^Copybook test, with your latest alert:\n.*SIRI/);
     await req(copy, 'PUT', '/channels', { keep_email: true });
+    // The test email carries the same real sample: the latest alert in subject and body, not a placeholder.
+    sent = [];
+    await req(copy, 'POST', '/channels/test');
+    const te = sent.find((m) => m.to[0] === 'chan@example.com')!;
+    expect(te.subject).toMatch(/^Copybook test: .*SIRI/);
+    expect(te.text).toMatch(/Your latest alert, as it would arrive:\n\n.*SIRI/);
     const at47 = new Date();
     // Not hour 3 (the digest job's), and the hour of replays below must stay in today's ET day (it ends at 05:00 UTC) for the feed seed.
     at47.setUTCHours([3, 4].includes(at47.getUTCHours()) ? 2 : at47.getUTCHours(), 47, 0, 0);
@@ -3497,7 +3548,7 @@ describe('copybook api', () => {
     const t404 = await (await req(copy, 'POST', '/channels/test')).json();
     expect(t404.messages).toMatchObject({ discord: 'Discord rejected this webhook (deleted or wrong URL)', slack: 'Delivered' });
     expect(Object.keys((await (await req(copy, 'GET', '/me')).json()).member.channels_failing)).toEqual(['discord']);
-    expect(sent.map((m) => m.subject)).toEqual(['Copybook test: your alerts will arrive here']); // the test email, no failure notice
+    expect(sent.map((m) => m.subject)).toEqual(['Copybook test: Buffett SIRI Form 4: bought $25K']); // the test email, no failure notice
     await req(copy, 'POST', '/channels/test');
     expect((await (await req(copy, 'GET', '/me')).json()).member.channels_failing).toEqual({});
 
@@ -3517,7 +3568,8 @@ describe('copybook api', () => {
     // With a feed, the test still emails: every alert goes by email too.
     expect((await (await req(copy, 'POST', '/channels/test')).json()).results).toEqual({ feed: 'ok', email: '200' });
     items = (await (await handleRequest(new Request(feed2.json_url), env)).json()).items;
-    expect(items[0].title).toBe('Copybook test');
+    // It links to the latest alert's page (the filing's card or the investor), not the home page.
+    expect([items[0].title, items[0].url === items[1].url, items[0].url === 'https://refcell.github.io/gust/copybook/']).toEqual(['Copybook test', true, false]);
   });
 
   it("Item 4 excerpts: Icahn's real CVI 13D/A #41 without the amendment preamble or defined terms, cut at a sentence end", () => {

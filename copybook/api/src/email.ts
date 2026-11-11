@@ -605,7 +605,7 @@ export interface CorrectionRow {
 export function correctionMail(env: Env, to: string, a: Alert13F, rows: CorrectionRow[]): Mail {
   const who = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}`;
   const first = rows[0];
-  const subject = `Correction: ${who} ${first.ticker || first.name} was ${said(first.v1)}, not ${said(first.emailed)}${rows.length > 1 ? ` (+${rows.length - 1} more)` : ''}`;
+  const subject = `Correction: ${who} ${first.ticker || first.name}${first.put_call ? ` ${first.put_call.toLowerCase()}s` : ''} was ${said(first.v1)}, not ${said(first.emailed)}${rows.length > 1 ? ` (+${rows.length - 1} more)` : ''}`;
   const intro = `Our alert for ${who}'s ${quarterLabel(a.quarter)} 13F (accession ${a.accession}) had ${rows.length === 1 ? 'a wrong figure' : `${rows.length} wrong figures`}. Copybook checks every emailed move against the full build of the filing, which is what fund pages, the CSV and /v1 serve. ${rows.length === 1 ? 'This one' : 'These'} didn't match:`;
   const page = filingUrl(env, a);
   const text = [intro, rows.map((r) => `- ${corrLine(r)}`).join('\n'), `The filing's moves on Copybook: ${page}`, `SEC filing: ${a.sec_url}`].join('\n\n') + FOOTER;

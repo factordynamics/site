@@ -624,25 +624,30 @@ export const exchangeLine = (r: MoveRow) => `${r.ticker || r.display_name || r.i
  * sized by shares at this filing's price (+465,409 sh x $162.75 = +$75.7M), or nothing when the shares are the same.
  */
 export function netRenamed(r: { moves: Moves; changed: MoveRow[] }, limit = MOVE_ROWS): { moves: Moves; changed: MoveRow[] } {
-  const key = (x: MoveRow) => {
-    // A held pair's two lines are never netted by ticker (HON: 0.5x the shares would read as a 50% trim).
-    if (x.cusip && (HELD[x.cusip.toUpperCase()] || Object.values(HELD).some((h) => h.to === x.cusip.toUpperCase()))) return null;
-    const t = x.ticker ?? reissuedTicker(x.cusip);
-    return t ? `${t}|${(x.put_call ?? '').toUpperCase()}` : null;
-  };
+  // Only pairs linked with a units result (REISSUED: the hand-coded list plus ingest's links with ratio and units_basis).
+  // A same-ticker pair without one may be a reverse split, which 1:1 would read as a huge trim; a held pair (HON before
+  // its 0.5 link) is never netted. A link that is also a split scales the prior (DD 1-for-3, HON 1-for-2).
+  const pc = (x: MoveRow) => (x.put_call ?? '').toUpperCase();
   const exits = new Map<string, MoveRow>();
-  for (const x of r.changed) if (x.change === 'exited' && key(x)) exits.set(key(x)!, x);
+  for (const x of r.changed) {
+    const l = x.change === 'exited' && x.cusip ? REISSUED[x.cusip.toUpperCase()] : undefined;
+    if (l) exits.set(`${l.to}|${pc(x)}`, x);
+  }
   if (!exits.size) return r;
   const drop = new Set<MoveRow>();
   const merged: MoveRow[] = [];
   for (const n of r.changed) {
-    const e = n.change === 'new' && key(n) ? exits.get(key(n)!) : undefined;
-    if (!e || drop.has(e) || !n.shares) continue;
+    const k = `${(n.cusip ?? '').toUpperCase()}|${pc(n)}`;
+    const e = n.change === 'new' ? exits.get(k) : undefined;
+    if (!e || !n.shares) continue;
     drop.add(e).add(n);
-    exits.delete(key(n)!);
-    if (n.shares === e.prev_shares) continue;
-    const delta = ((n.shares - e.prev_shares) * n.value) / n.shares;
-    merged.push({ ...n, change: n.shares > e.prev_shares ? 'added' : 'trimmed', prev_shares: e.prev_shares, value_delta: Math.round(delta), delta_pct_of_book: n.delta_pct_of_book != null && n.value_delta ? (n.delta_pct_of_book * delta) / n.value_delta : null });
+    exits.delete(k);
+    const l = REISSUED[e.cusip.toUpperCase()];
+    const ratio = l.ratio ?? 1;
+    const prev = Math.round(e.prev_shares * ratio);
+    if (n.shares === prev) continue;
+    const delta = ((n.shares - prev) * n.value) / n.shares;
+    merged.push({ ...n, ticker: n.ticker ?? e.ticker ?? l.ticker, change: n.shares > prev ? 'added' : 'trimmed', prev_shares: prev, ...(ratio !== 1 ? { split: ratio, prev_shares_as_filed: e.prev_shares } : {}), value_delta: Math.round(delta), delta_pct_of_book: n.delta_pct_of_book != null && n.value_delta ? (n.delta_pct_of_book * delta) / n.value_delta : null });
   }
   if (!drop.size) return r;
   const changed = [...r.changed.filter((x) => !drop.has(x)), ...merged];
