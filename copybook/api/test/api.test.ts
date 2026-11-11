@@ -4660,7 +4660,7 @@ describe('copybook api', () => {
     // Funnel: Link headers, bulk URLs and the spec's servers all use the one public base.
     const viaGene = await handleRequest(new Request('https://api.test/v1/stocks/084670702/holders', { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env);
     const spec = await (await handleRequest(new Request('https://api.test/v1/openapi.json'), env)).text();
-    expect([viaGene.headers.get('link')?.startsWith('<https://copybook-api.factordynamics.workers.dev/v1/changelog'), /tail70ba3|trycloudflare/.test([...viaGene.headers.values()].join(' ') + (await viaGene.text()) + spec), JSON.parse(spec).servers]).toEqual([true, false, [{ url: 'https://copybook-api.factordynamics.workers.dev' }]]);
+    expect([viaGene.headers.get('link')?.startsWith('<https://copybook-api.factordynamics.workers.dev/v1/changelog'), /tail70ba3|trycloudflare/.test((() => { const all: string[] = []; viaGene.headers.forEach((v) => void all.push(v)); return all.join(' '); })() + (await viaGene.text()) + spec), JSON.parse(spec).servers]).toEqual([true, false, [{ url: 'https://copybook-api.factordynamics.workers.dev' }]]);
     // From Nov 23 only pinned clients and endpoints are warned, until Feb 22, 2027; then nobody.
     const { perClassNotice } = await import('../src/v1');
     const at = (d: string, pinned: boolean) => !!perClassNotice(pinned, 'https://b', Date.parse(d));
