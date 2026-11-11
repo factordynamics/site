@@ -40,13 +40,17 @@ class AdviserRuleTests(unittest.TestCase):
         self.assertEqual(verdict(adviser(5e9, 0, 0, individuals=3e9))[0], "wealth")
         self.assertEqual(verdict(adviser(50e9, 0, 0, inv_cos=40e9))[0], "long_only")
 
-    def test_own_form_d_counts_only_without_a_form_adv_match(self):
-        # Santa Monica Partners files Form D for its hedge fund under its own CIK and has no Form ADV match.
+    def test_form_d_alone_never_adds_a_hedge_fund(self):
+        # PM floor (Nov 11): a lone Form D vehicle at a wealth manager isn't enough; a published one is kept.
         form_d = ({"0000904793"}, {})
-        self.assertEqual(classify("0000904793", "SANTA MONICA PARTNERS LP", {}, form_d)[0], "hedge_fund")
-        # With an ADV match, ADV decides: a wealth book with a small hedge fund stays wealth.
-        wealthy = adviser(6.4e9, 1, 2.2e9, {"Hedge": 1, "Other": 1}, individuals=4e9)
-        self.assertEqual(classify("0000904793", "SANTA MONICA PARTNERS LP", {}, form_d, None, wealthy)[0], "wealth")
+        self.assertNotEqual(classify("0000904793", "SANTA MONICA PARTNERS LP", {}, form_d)[0], "hedge_fund")
+        self.assertEqual(classify("0000904793", "SANTA MONICA PARTNERS LP", {}, form_d, None, None, "hedge_fund")[0], "hedge_fund")
+
+    def test_a_concentrated_long_only_book_stays_long_only_whatever_the_client_mix(self):
+        wealthy = adviser(3e9, 0, 0, individuals=2.5e9)  # mostly individuals' accounts
+        picker, broad = {"positions": 25, "top10": 0.62}, {"positions": 400, "top10": 0.2}
+        self.assertEqual(classify("6", "Giverny Capital", picker, None, None, wealthy, "long_only")[0], "long_only")
+        self.assertEqual(classify("7", "Broad Wealth", broad, None, None, wealthy, "long_only")[0], "wealth")
 
     def test_the_reclass_removes_hedge_fund_only_when_form_adv_lists_no_hedge_funds(self):
         # Nov 11 review: ~1 in 5 dropped hedge funds were real (Sphera: no ADV match; Carlson: hedge funds at 20% of RAUM).

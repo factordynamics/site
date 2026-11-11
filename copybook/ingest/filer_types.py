@@ -122,6 +122,10 @@ RECLASS_CASES = {
     "0001159363": "wealth",     # CAZ Investments (access funds for individuals)
     "0001157519": "wealth",     # Okabena Investment Services (multi-family office)
     "0001335325": "wealth",     # HighVista Strategies (endowment-model OCIO)
+    "0001317947": "other",      # Bain Capital Credit (private credit)
+    "0001404784": "hedge_fund", # Granville Capital, Greensboro NC (ADV CRD 126679: 7 private funds, all hedge, 58% of RAUM)
+    # Market makers and prop traders (their 13F is inventory), whatever Form ADV says
+    "0001533421": "other", "0001488542": "other", "0001455915": "other", "0001279891": "other",  # Tower, Simplex, Old Mission, Wolverine
     "0001714498": "long_only",  # AIP (funds of hedge funds)
     "0001080818": "other",      # EnTrust Global (fund of funds)
     "0001560123": "other",      # Catterton (private equity)
@@ -320,12 +324,24 @@ def shape(book: dict | None, prev: dict | None) -> dict:
     return out
 
 
+def concentrated(s: dict) -> bool:
+    """A stock picker's book: top 10 at least 40% of the share book and under 100 positions."""
+    return bool(s) and (s.get("positions") or 10**9) < 100 and (s.get("top10") or 0) >= 0.4
+
+
 def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int]] | None = None,
              common: set[str] | None = None, adviser: dict | None = None, prior: str | None = None) -> tuple[str, str, dict]:
-    """(type, basis, type_evidence). hedge_fund comes only from the hand-checked cases, a name rule, Form ADV
-    (hedge funds' gross assets at least half of RAUM, or $1B and more at a quarter of it), or, for a filer with no
-    Form ADV match, its own Form D hedge-fund offerings. Name matches to Form D and book shape alone never make a
-    hedge fund: without such evidence those filers fall back to long_only."""
+    """(type, basis, type_evidence). A filer becomes hedge_fund only from the hand-checked cases, a name rule or Form
+    ADV (hedge funds' gross assets at least half of RAUM, or $1B and more at a quarter of it); Form D, names and book
+    shape alone never add one. A published hedge_fund stays unless Form ADV clearly shows it isn't one, and a published
+    long_only with a concentrated book stays long_only whatever the client mix (Akre, Giverny, Semper Augustus)."""
+    kind, basis, ev = _classify(cik, name, s, form_d, common, adviser, prior)
+    if prior == "long_only" and kind == "wealth" and concentrated(s) and not basis.startswith(("override", "hand", "name")):
+        return "long_only", f"kept: concentrated book ({basis})", ev
+    return kind, basis, ev
+
+
+def _classify(cik, name, s, form_d, common, adviser, prior) -> tuple[str, str, dict]:
     ev: dict = {}
     if form_d and (cik in form_d[0]):
         ev["form_d"] = "files Form D for hedge funds"
@@ -351,11 +367,7 @@ def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int
             return "hedge_fund", "kept: Form ADV doesn't show it isn't a hedge fund", ev
         if kind:
             return kind, f"Form ADV ({kind})", ev
-    elif "form_d" in ev:
-        # No Form ADV adviser under this CIK or name, but the filer itself files Form D for hedge funds (by CIK, not
-        # a shared name): Santa Monica Partners, Raffles Associates, LRT Capital.
-        return "hedge_fund", "Form D (filer's own hedge-fund offerings; no Form ADV match)", ev
-    elif prior == "hedge_fund":  # no Form ADV match: nothing shows it isn't one (Sphera, Harspring, Chesapeake)
+    elif prior == "hedge_fund":  # no Form ADV match: nothing shows it isn't one (Sphera, Harspring, Santa Monica)
         return "hedge_fund", "kept: no Form ADV match", ev
     kind, basis = shape_type(name, s)
     if kind == "hedge_fund":
