@@ -137,7 +137,11 @@ Output after the move: recorded here on Tue Nov 17.
 - **Decrypt drill, monthly, by Andreas** (TUE17-STEPS.md, "From then on"): with his stick and passphrase,
   `restore-check.sh` decrypts the newest backup, checks it against the manifest's plaintext sha256, opens it in a
   throwaway store and compares counts. It prints counts only.
-- What that costs: any restore from a backup, on gene or another machine (Option B), needs Andreas and his stick.
+- What that costs: any restore from a backup, on gene or another machine (Option B), needs Andreas and his stick, or
+  the sealed copy he may give a named trustee (TUE17-STEPS.md, optional step 2b).
+- If Andreas is unreachable: Cloudflare's poller keeps sending alerts, gene keeps serving members while it is up, and
+  if gene goes offline an agent moves members to the Worker with Option A (an orb can do it; no step needs gene or
+  Andreas). What waits for him: bringing gene back if it is powered off or broken, and any restore from a backup.
 - One honest limit: during a drill, the decrypted key is in the memory of that one run, which runs as `copybook`, for
   about a minute.
 - Until Nov 17 the old private key is also an Amp secret, so agents can recover alone during launch week. On Nov 17

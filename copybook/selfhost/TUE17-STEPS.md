@@ -31,6 +31,15 @@ changes (api.json and the front ends follow within 2 minutes).
    below. If the API
    doesn't come back it rolls back on its own and says so.
 
+2b. Optional, your call on the day (about 5 minutes; skip it if you prefer): a sealed copy for a named trustee.
+   Copy the same key file to a second stick, write the passphrase on paper, seal both in one envelope and give it to
+   a trusted person you choose, to be opened only for a restore when you can't be reached:
+     cp /run/media/$USER/<stick>/copybook-backup-key.age /run/media/$USER/<second stick>/
+   What it closes: without it, any restore from a backup (gene's disk dies, or a move to another machine) waits until
+   you and your stick are back; with it, a restore can go ahead if you're unreachable or your stick and passphrase are
+   lost. What it costs: one more copy exists; whoever opens the envelope and also gets a backup can read member data.
+   Replace the envelope whenever the backup key changes.
+
 3. Tell the Copybook API thread on gene: "service move done". The agent then:
    - saves a 7-day session for the comped test member signed with the current session secret, and checks the API
      takes it (acceptance-test.sh save-session); after step 4a that session must be refused;
@@ -114,7 +123,7 @@ From then on:
     sudo -u copybook env HOME=/var/lib/copybook AGE_KEY_FILE=/dev/shm/cbk.age /var/lib/copybook/copybook-api/ops/restore-check.sh
     sudo rm -f /dev/shm/cbk.age
   It asks for the passphrase and prints counts only. Any restore from a backup (on gene or another machine) needs
-  you for the same reason.
+  you for the same reason (or the trustee's sealed copy, if you made one in step 2b).
 - Optional, unrelated to Copybook: Funnel also forwards public TCP port 8443 to SSH port 22, where nothing listens
   today. To remove it: sudo tailscale funnel --tcp=8443 off
 
