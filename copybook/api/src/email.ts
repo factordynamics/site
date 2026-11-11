@@ -4,6 +4,7 @@ import { cleanItem4, countedMoves, exchangeLine, filingId, FILER_VALUE, posKey, 
 import { testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
 import { firmName, publicSlug } from '../../../holdterm/src/names';
+import { htEmail, htLoginEmail, type HtEvent, type HtFiling } from '../../../holdterm/src/alert-render';
 
 export interface Mail {
   to: string;
@@ -1085,71 +1086,29 @@ function htmlBody(env: Env, intro: string, filings: Alert13F[], events: AlertEve
 }
 
 // ---------------------------------------------------------------------------------------------
-// Holdterm: a separate brand on this Worker. Plain, terminal-style mail that never names Copybook.
+// Holdterm: a separate brand on this Worker. Its own designed mail (holdterm/src/alert-render.ts), never naming Copybook.
 
 export const HOLDTERM_FROM = 'Holdterm <holdterm@factordynamics.com>';
 const htSite = (env: Env) => env.HOLDTERM_SITE_URL ?? 'https://holdterm.factordynamics.com/';
-const htFooter = (env: Env) => `\n\n--\nManage alerts: ${htSite(env)}account/ · SEC EDGAR data, not investment advice.`;
 
+/** Holdterm's designed sign-in and welcome email (alert-render.ts, what its pages preview), with the text alternative. */
 export function holdtermLoginMail(env: Env, to: string, token: string, welcome: boolean): Mail {
   const link = `${htSite(env)}account?login=${encodeURIComponent(token)}`;
-  const intro = welcome
-    ? 'HOLDTERM ALERTS: ACTIVE\n\nYou will get an email when an investor you follow files a 13F, 13D, 13G or Form 4, and when one is filed on a stock you follow. Follow nobody and you get every featured investor.'
-    : 'HOLDTERM SIGN-IN';
-  const text = `${intro}\n\nSign in (${welcome ? 'this link works once, for 7 days' : 'this link works once, for 15 minutes'}):\n${link}${htFooter(env)}`;
-  return { to, from: HOLDTERM_FROM, subject: welcome ? 'Holdterm alerts are on' : 'Your Holdterm sign-in link', text, html: pre(text) };
+  return { to, from: HOLDTERM_FROM, ...htLoginEmail(link, welcome, htSite(env)) };
 }
 
-const pre = (text: string) =>
-  `<!doctype html><html><body style="margin:0;padding:16px;background:#fff"><pre style="font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#111;white-space:pre-wrap;margin:0">${esc(text)}</pre></body></html>`;
-
-const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length));
-const lpad = (s: string, n: number) => (s.length >= n ? s : ' '.repeat(n - s.length) + s);
-
-function holdtermFiling(env: Env, a0: Alert13F): string {
-  const a = withCounted(a0);
-  const lines = [`${a.manager.toUpperCase()} · ${quarterLabel(a.quarter)} 13F-HR`, `filed ${a.filing_date}${a.accepted ? ` · accepted ${acceptedUtc(a.accepted)}` : ''}`];
-  const mv = a.moves;
-  if (mv) {
-    lines.push(`bought ${usd(mv.bought_usd, false)} · sold ${usd(mv.sold_usd, false)}`, '');
-    const buys = [...mv.new.map((r) => ['NEW', r] as const), ...mv.added.map((r) => ['ADD', r] as const)].sort((x, y) => y[1].value_delta - x[1].value_delta).slice(0, 5);
-    const sells = [...mv.exited.map((r) => ['EXIT', r] as const), ...mv.trimmed.map((r) => ['TRIM', r] as const)].sort((x, y) => x[1].value_delta - y[1].value_delta).slice(0, 5);
-    for (const [title, rows] of [['TOP BUYS', buys], ['TOP SELLS', sells]] as const) {
-      if (!rows.length) continue;
-      lines.push(title);
-      for (const [label, r] of rows) lines.push(sharesOnly(r) ? `  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad('-', 9)}  ${filedFacts(r)}; ${NOT_COUNTED_SHARES}` : `  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad(amount(r), 9)}  ${positionChange(label === 'ADD' ? 'Added' : label === 'TRIM' ? 'Trimmed' : label === 'NEW' ? 'New' : 'Exited', r)}${odd(r)}`);
-    }
-  } else if (a.top?.length) {
-    lines.push('', 'LARGEST HOLDINGS', ...a.top.slice(0, 5).map((r) => `  ${pad(rowName(r), 19)}${lpad(usd(r.value, false), 9)}`));
-  } else {
-    lines.push('', 'Position changes follow once the filing is processed.');
-  }
-  lines.push('', `${htSite(env)}m/${publicSlug(a.slug)}`, a.sec_url);
-  return lines.join('\n');
-}
-
-function holdtermEvent(env: Env, e: AlertEvent): string {
-  const lines = [eventHeadline(e).toUpperCase()];
-  if (e.accepted) lines.push(`accepted ${acceptedUtc(e.accepted)} · ${e.id.startsWith('cluster:') ? 'cluster' : e.id}`);
-  if (e.kind === 'form4') for (const c of e.classes ?? []) if (c.shares_after != null) lines.push(`  ${pad(c.security, 28)}${c.shares_before != null ? `${n(c.shares_before)} -> ` : ''}${n(c.shares_after)}`);
-  if (e.kind !== 'form4') {
-    const c = stakeChange(e);
-    if (c.line) lines.push(`  ${c.line}${c.note ? ` (${c.note})` : ''}`);
-  }
-  const t = e.ticker ?? e.subject_tickers?.[0];
-  lines.push('', t ? `${htSite(env)}s/${t}` : e.slug ? `${htSite(env)}m/${publicSlug(e.slug)}` : '', e.url);
-  return lines.filter((l, i, a) => l || a[i - 1]).join('\n');
-}
-
+/**
+ * Holdterm's designed alert email (alert-render.ts htEmail, what /alerts previews; the lead, Nov 11), HTML with the
+ * plain-text alternative. Holdterm leads with the firm ("Berkshire Hathaway"), never the person, and links funds by their
+ * public slug (no redirect hop).
+ */
 export function holdtermAlertMail(env: Env, to: string, allFilings: Alert13F[], allEvents: AlertEvent[]): Mail {
-  // Holdterm leads with the firm ("Berkshire Hathaway"), never the person, in the subject and the header.
-  const filings = allFilings.map((a) => ({ ...a, manager: firmName(a.slug, a.name || a.manager) }));
-  const events = allEvents.map((e) => (e.manager ? { ...e, manager: firmName(e.slug ?? '', e.manager) } : e));
-  const heads = [...filings.map((a) => filingHeadline(a, true)), ...events.map((e) => eventHeadline(e, true))];
-  const subject = `${heads[0]}${heads.length > 1 ? ` + ${heads.length - 1} more` : ''}`;
-  const rule = '-'.repeat(48);
-  const text = `${[...filings.map((a) => holdtermFiling(env, a)), ...events.map((e) => holdtermEvent(env, e))].join(`\n${rule}\n`)}${htFooter(env)}`;
-  return { to, from: HOLDTERM_FROM, subject, text, html: pre(text) };
+  const filings = allFilings.map((a0) => {
+    const a = withCounted(a0);
+    return { ...a, slug: publicSlug(a.slug), manager: firmName(a.slug, a.name || a.manager) } as HtFiling;
+  });
+  const events = allEvents.map((e) => ({ ...e, slug: publicSlug(e.slug ?? ''), manager: e.manager ? firmName(e.slug ?? '', e.manager) : e.manager }) as HtEvent);
+  return { to, from: HOLDTERM_FROM, ...htEmail(filings, events, htSite(env)) };
 }
 
 // ---------------------------------------------------------------------------------------------

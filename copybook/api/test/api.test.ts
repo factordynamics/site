@@ -3887,10 +3887,15 @@ describe('copybook api', () => {
     expect(mail.text).toContain('https://holdterm.pages.dev/s/NVDA');
     expect(mail.text).not.toContain('HT3');
     // Holdterm names the firm, never the person: "Berkshire Hathaway SIRI Form 4", not "Buffett".
-    expect(mail.subject).toMatch(/^Berkshire Hathaway SIRI Form 4: bought/);
+    expect(mail.subject).toBe('Berkshire Hathaway bought $25K of SIRI + 2 more');
     expect(mail.text).not.toMatch(/Buffett/i);
-    expect(mail.text).toContain('Manage alerts: https://holdterm.pages.dev/account/ · SEC EDGAR data, not investment advice.');
-    expect(mail.html).toContain('<pre style="font:13px/1.45 ui-monospace');
+    // Holdterm's designed email (alert-render.ts htEmail, what /alerts previews), with its plain-text alternative.
+    expect(mail.text).toContain('Manage alerts: https://holdterm.pages.dev/account\nFrom SEC EDGAR filings, as filed. Not investment advice.');
+    expect([mail.html?.includes('<title>Holdterm</title>'), mail.html?.includes('<pre')]).toEqual([true, false]);
+    // A 13F links the fund by its public slug, no redirect hop (bill-ackman -> pershing-square).
+    const { holdtermAlertMail } = await import('../src/email');
+    const f13 = holdtermAlertMail({ ...env, HOLDTERM_SITE_URL: 'https://holdterm.pages.dev/' } as Env, 'ht@example.com', [{ slug: 'bill-ackman', slugs: ['bill-ackman'], manager: 'Bill Ackman', name: 'Pershing Square Capital Management, L.P.', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-13', accession: '0001336528-26-000099', sec_url: 'https://www.sec.gov/x', tickers: [], moves: null } as never], []);
+    expect([f13.text.includes('https://holdterm.pages.dev/m/pershing-square'), f13.text.includes('/m/bill-ackman'), /Ackman/.test(f13.subject)]).toEqual([true, false, false]);
     expect(JSON.stringify(mail)).not.toMatch(/copybook/i);
   });
 
