@@ -552,9 +552,11 @@ export const unreliableShares = (x: unknown): boolean => unreliableSide(x) !== n
  * `unreliable` when it carries one; until then price_outlier reads as value and the other flags as both.
  */
 export function unreliableSide(x: unknown): 'value' | 'shares' | 'both' | null {
-  const r = (x ?? {}) as { unreliable?: unknown; suspect_units?: unknown; price_outlier?: unknown; suspect_reason?: unknown; value_basis?: unknown };
+  const r = (x ?? {}) as { unreliable?: unknown; suspect_units?: unknown; price_outlier?: unknown; suspect_reason?: unknown; value_basis?: unknown; put_call?: unknown };
   if (r.unreliable === 'value' || r.unreliable === 'shares' || r.unreliable === 'both') return r.unreliable;
-  if (r.price_outlier === true || r.value_basis === 'filed_price_outlier') return 'value';
+  // Ingest's side when it gives one; else an option line off its price is contracts filed as shares (the count is
+  // wrong, the filed value stands: "shares"), and a stock line off its price has a wrong value ("value").
+  if (r.price_outlier === true || r.value_basis === 'filed_price_outlier') return r.put_call ? 'shares' : 'value';
   if (r.suspect_units === true || r.suspect_reason === 'reissue_ratio_not_applied') return 'both';
   return null;
 }
@@ -664,7 +666,7 @@ export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Positio
   let marked = false;
   const changed = r.changed.flatMap((x0) => {
     // An option line priced over 3x off its underlying's median per share (ingest's band: contracts filed as shares,
-    // BNP's SPY puts read +$16.0B) is a value-side flag: shown by its share change, never in totals or the headline.
+    // BNP's SPY puts) is a share-side flag: shown by its filed-value change, never in totals or the headline.
     const cm = consensus.get(x0.cusip)?.cur;
     const ops = x0.put_call && x0.shares > 0 && x0.value > 0 ? x0.value / x0.shares : null;
     const x = ops && cm && (ops / cm > OFF_MEDIAN || cm / ops > OFF_MEDIAN) ? { ...x0, price_outlier: true } : x0;

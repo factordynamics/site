@@ -15,7 +15,7 @@ import sc13gSiri from './fixtures/sc13ga-siri-vanguard.xml?raw';
 import form4BuffettGift from './fixtures/form4-brk-buffett-gift.txt?raw';
 import sc13dBrkA from './fixtures/sc13da-brk-class-a.xml?raw';
 import { quarterStart } from '../src/seasons';
-import { computeMoves, displayCase, gateMoves } from '../src/edgar';
+import { computeMoves, displayCase, gateMoves, unreliableSide } from '../src/edgar';
 import { forMember } from '../src/alerts';
 import { runSeasonal } from '../src/revenue';
 import { signToken } from '../src/tokens';
@@ -2475,7 +2475,11 @@ describe('copybook api', () => {
     const bq2 = [pos('SPY', '78462F103', 100_000, 6_660_000_000, 'Put'), pos('REST', '000000009', 1, 500e9)];
     const bq3 = [pos('SPY', '78462F103', 340_000, 22_650_000_000, 'Put'), pos('REST', '000000009', 1, 500e9)];
     const gopt = gateMoves(computeMoves(bq3, bq2, undefined, new Map()), bq2, new Map(), new Map([['78462F103', { cur: 666, prev: 640 }]]));
-    expect([gopt.changed.map((r) => [r.ticker, r.put_call, r.unreliable]), gopt.moves.bought_usd]).toEqual([[['SPY', 'Put', 'value']], 0]);
+    expect([gopt.changed.map((r) => [r.ticker, r.put_call, r.change, r.value_delta, r.unreliable]), gopt.moves.bought_usd]).toEqual([[['SPY', 'Put', 'added', 15_990_000_000, 'shares']], 0]);
+    const optMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'bnp', slugs: ['bnp'], manager: 'BNP Paribas', name: 'BNP PARIBAS', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000001', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: gopt.moves, tickers: [] }], [], { investors: ['bnp'], stocks: [], owned: [] } as never);
+    expect([/SPY|16\.0B/.test(optMail.subject), /SPY puts \+\$16\.0B[^\n]*not in totals/.test(optMail.text), /\+\d+% shares/.test(optMail.text)]).toEqual([false, true, false]);
+    // Ingest's own side wins when it gives one; without it, a stock line off its price is "value".
+    expect([unreliableSide({ put_call: 'Put', price_outlier: true, unreliable: 'value' }), unreliableSide({ put_call: 'Put', price_outlier: true }), unreliableSide({ put_call: null, price_outlier: true })]).toEqual(['value', 'shares', 'value']);
     // - "value" (price_outlier: BMO's Q3 TEVA filed at about $4,005 a share): the share change, value unavailable.
     const tq2 = [pos('TEVA', '881624209', 971_583, 26_200_000), gbk2[1]];
     const tq3 = [{ ...pos('TEVA', '881624209', 1_130_855, 4_529_000_000), price_outlier: true }, gbk3[1]];
