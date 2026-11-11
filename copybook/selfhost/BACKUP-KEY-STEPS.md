@@ -12,8 +12,8 @@ All backups are re-encrypted to it, so the 30 days of retention stay restorable,
    hourly local ones, each checked against its manifest), takes a fresh backup, runs backup-verify.sh, and confirms.
 3. After it confirms: Amp Settings -> Secrets -> delete COPYBOOK_BACKUP_AGE_KEY. The running Amp runner keeps the old
    value in its environment until it restarts, so restart it when convenient
-   (systemctl --user restart amp-runner). That ends agent shells in progress; the nf-* jobs run as separate units and
-   keep running.
+   (systemctl --user restart amp-runner). That ends agent shells in progress; other software on the machine runs as
+   separate units and keeps running.
 4. Monthly (first Monday; the weekly check asks you): run the decrypt drill yourself and paste its last line (counts only):
      AGE_KEY_FILE=/run/media/$USER/<stick>/copybook-backup-key.age ~/copybook-api/ops/restore-check.sh
    age asks for the passphrase. A restore onto another machine (RESTORE.md Option B) also needs you from then on.

@@ -1,6 +1,6 @@
 [Unit]
 Description=Copybook API second ingress: Cloudflare quick tunnel (trycloudflare.com) to the local proxy's /copybook/ route
-After=network-online.target amp-local-models.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]

@@ -17,7 +17,7 @@ if systemctl --user is-active -q copybook-api.service; then
     n=$(( $(cat "$fails_file" 2>/dev/null || echo 0) + 1 ))
     echo $n > "$fails_file"
     echo "health check failed ($n)"
-    # When the disk is saturated (I/O pressure "full" avg60 >= 40%, e.g. a 1 TB extraction on the same NVMe on Nov 9),
+    # When the disk is saturated (I/O pressure "full" avg60 >= 40%, e.g. other software on the same machine writing heavily, Nov 9),
     # a restart doesn't help and drops in-flight uploads: wait up to 5 failures (~10 min) before restarting anyway.
     io=$(awk '/^full/{split($3,a,"=");print int(a[2])}' /proc/pressure/io 2>/dev/null || echo 0)
     if [ "$n" -ge 2 ] && { [ "${io:-0}" -lt 40 ] || [ "$n" -ge 5 ]; }; then echo "restarting copybook-api.service (io full avg60 ${io}%)"; systemctl --user restart copybook-api.service; echo 0 > "$fails_file"

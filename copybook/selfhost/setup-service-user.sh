@@ -10,7 +10,7 @@
 # `systemctl --user` keeps working unchanged): copybook-api.service, copybook-api-update.timer (watchdog, auto-deploy,
 # encrypted hourly backups), copybook-api-backup.timer (nightly encrypted R2 backup), and the state, bundle, deployer
 # checkout and full secrets.env (0600).
-# What stays with refcell: the local-models proxy (forwards /copybook/ to 127.0.0.1:8787), Tailscale Funnel,
+# What stays with refcell: gene's local proxy (forwards /copybook/ to 127.0.0.1:8787), Tailscale Funnel,
 # copybook-tunnel and copybook-tunnel-watch. refcell's secrets.env shrinks to the two keys the watcher needs:
 # CF_API_TOKEN (api.json) and RESEND_API_KEY (send-only).
 # Safety: refcell's service is stopped (never two processes on one state dir), state is copied, the copy is started
