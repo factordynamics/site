@@ -804,9 +804,13 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   // The issuer's main equity CUSIP (hourly precompute) for rows the index states no CUSIP for.
   const pc = await env.HIST.get('pre/issuer-cusips.json');
   const pcText = pc ? await new Response(pc.body).text() : '';
-  const pcAt = pcText.indexOf(`"${code}":"`);
-  const pcVal = pcAt >= 0 ? pcText.slice(pcAt + 9, pcAt + 400).match(/^"((?:[^"\\]|\\.)*)"/) : null;
-  const [pcCusip, pcName] = pcVal ? (JSON.parse(`"${pcVal[1]}"`) as string).split('|') : [];
+  const pcOf = (c: string) => {
+    const at = pcText.indexOf(`"${c}":"`);
+    const v = at >= 0 ? pcText.slice(at + 9, at + 400).match(/^"((?:[^"\\]|\\.)*)"/) : null;
+    return v ? (JSON.parse(`"${v[1]}"`) as string).split('|') : [];
+  };
+  // A reissue's new code may not be in the stock list yet (TEVA's M8769Q): the old code's name.
+  const [pcCusip, pcName = reissueFrom ? pcOf(reissueFrom.slice(0, 6))[1] : undefined] = pcOf(code);
   const mainCusip = reissueTo ?? pcCusip ?? null;
   const rows = raw.map((h): HolderRow => {
     const cik = pad(String(h.cik));
