@@ -67,6 +67,7 @@ GZIP = [os.environ.get("COPYBOOK_UPLOAD_GZIP", "1") != "0"]  # cleared when the 
 ORDER = ("h/", "hl/", "fb/")  # sent first, in this order
 PROBE_MAX_S = 2.0  # gene's /health slower than this: members are waiting, so the backlog backs off
 FRESH_MAX = 60  # files per run in EDGAR hours: a few new filings' h/ books, never the backlog
+QUIET_LEAD_S = 90  # no bundle starts this close to a COPYBOOK_UPLOAD_QUIET window (one bundle takes 3-30 s)
 QUIET_FROM = datetime(2026, 11, 12, 11, tzinfo=timezone.utc)
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
@@ -218,7 +219,7 @@ def main() -> int:
     try:
         for batch in bundles(todo):
             now = datetime.now(timezone.utc)
-            until = quiet(now)
+            until = quiet(now + timedelta(seconds=QUIET_LEAD_S))  # a bundle sent just before must land before it
             if until and os.environ.get("SCOPE", "full") != "full":  # a curated publish never waits
                 print(f"upload: quiet window (COPYBOOK_UPLOAD_QUIET); {len(todo) - sent} files wait for the next run", flush=True)
                 break
