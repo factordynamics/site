@@ -975,17 +975,20 @@ describe('copybook api', () => {
     expect(toMember()).toHaveLength(1);
     expect(JSON.parse((await gene.DB.get('alerts:handled'))!)).toContain(ackman);
 
-    // Cloudflare goes quiet. Ten minutes on, gene polls and sends Third Point's filing; when Cloudflare is back it
-    // applies gene's handled filings first and never sends it again.
+    // Cloudflare goes quiet (last heartbeat min(4)). A minute on, gene still backs up; two minutes on (past 90 s), gene
+    // polls, sends Third Point's filing and records the takeover (120 s) for /status/. Cloudflare, back late the same
+    // minute and the next, applies gene's handled filings first and never sends it again: one email while both run.
     const loeb = '0000950123-26-044444';
     secFiles.feed = `<feed>${filing('0001040273', loeb, 'THIRD POINT')}${filing('0001336528', ackman, 'PERSHING SQUARE')}</feed>`;
-    expect(await run(gene, min(10))).toMatchObject({ poller: 'backup (cloudflare polls)' });
-    expect(await run(gene, min(15))).toMatchObject({ poller: 'gene polls (cloudflare silent)' });
+    expect(await run(gene, min(5))).toMatchObject({ poller: 'backup (cloudflare polls)' });
+    expect(await run(gene, min(6))).toMatchObject({ poller: 'gene polls (cloudflare silent)', takeover: { seconds: 120 } });
+    expect(JSON.parse(text('sync/takeover-gene.json')!).seconds).toBe(120);
     expect(toMember()).toHaveLength(2);
-    expect(await run(cf, min(16))).toMatchObject({ poller: 'resuming: polls from next minute' });
-    expect(await run(gene, min(17))).toMatchObject({ poller: 'backup (cloudflare polls)' });
-    await run(cf, min(17));
-    await run(cf, min(18));
+    expect(await run(cf, min(6) + 20_000)).toMatchObject({ poller: 'resuming: polls from next minute' });
+    expect(await run(gene, min(7))).toMatchObject({ poller: 'backup (cloudflare polls)' });
+    expect((await run(gene, min(7))).takeover).toBeUndefined();
+    await run(cf, min(7) + 20_000);
+    await run(cf, min(8));
     expect(toMember().map((m) => m.subject)).toHaveLength(2);
     expect(JSON.parse((await cfStore.get('alerts:handled'))!)).toEqual(expect.arrayContaining([ackman, loeb]));
 

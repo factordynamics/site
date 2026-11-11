@@ -228,6 +228,8 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
       data_age_seconds: fresh?.data_built_at ? Math.round((now - Date.parse(fresh.data_built_at)) / 1000) : null,
       poller_host: poller?.host ?? null,
       poller_last_run: poller?.last_run_at ?? null,
+      // The backup poller's last takeover: seconds from Cloudflare's last heartbeat to gene's first poll.
+      backup_takeover: await env.HIST.get((await import('./failover')).TAKEOVER).then((o) => (o ? new Response(o.body).json() : null)).catch(() => null),
     },
     restarts: {
       unplanned_7d: recent.filter((r) => r.kind === 'unplanned').length,
