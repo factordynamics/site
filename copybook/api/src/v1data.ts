@@ -778,20 +778,16 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
     if (oldRows.length) {
       // Rows kept from the old code are positions in the old CUSIP.
       raw = mergeReissue(raw, oldRows.map((r) => ({ ...r, cusip: r.cusip ?? reissueFrom })), d.period ?? null);
-      // From a snapshot, a filer whose latest 13F is newer than the snapshot and lists neither code sold out (Barclays'
-      // TEVA): an exit in its latest quarter, sized by the snapshot's holding.
-      if (useSnap && np) {
-        const latest = new Map((await filers(env)).map((f) => [f.cik, f.latest_quarter as string | null]));
-        const rest = await env.HIST.get('pre/v1-filers-rest.txt');
-        if (rest) for (const m of (await new Response(rest.body).text()).matchAll(/"cik":"(\d{10})"[^{}]*?"latest_quarter":"(\d{4}Q\d)"/g)) if (!latest.has(m[1])) latest.set(m[1], m[2]);
-        raw = raw.map((r) => {
-          const lq = latest.get(pad(String(r.cik)));
-          return r.cusip === reissueFrom && r.period && r.period < np && lq && lq >= np && Number(r.shares) > 0
-            ? { ...r, period: lq, shares: 0, value: 0, prev_shares: Number(r.shares), prev_value: Number(r.value) || 0, change: 'exited', accession: null }
-            : r;
-        });
-      }
-      d.counts = { ...(d.counts ?? {}), ...countsOf(raw), merged_from: old, ...(useSnap ? { merged_via: 'snapshot' } : {}) };
+      // From a snapshot, the old code's holders that didn't carry into the new code stay as they were: holders on the
+      // snapshot's quarter with no change (never an inferred exit: about 100 of 247 were false on TEVA). Exits count only
+      // from ingest's own rows, so they are pending until its merged index lands (counts.exits_pending).
+      if (useSnap && np) raw = raw.map((r) => (r.cusip === reissueFrom && r.period && r.period < np && r.change !== 'exited' ? { ...r, change: null, prev_shares: null, prev_value: null } : r));
+      d.counts = {
+        ...(d.counts ?? {}),
+        ...countsOf(raw),
+        merged_from: [old],
+        ...(useSnap ? { merged_via: 'snapshot', exits_pending: true, note: `Merged with the old issuer code's ${oldRows[0]?.period ?? 'prior'} snapshot until ingest publishes the merged index: holders still on that quarter show no change, and exits since are not counted yet.` } : {}),
+      };
     }
   }
   // net is the shares traded at each filing's value per share, never the value difference (a price move is no trade).

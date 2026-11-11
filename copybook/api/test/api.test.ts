@@ -4097,9 +4097,10 @@ describe('copybook api', () => {
     if (!teva.data) throw new Error(JSON.stringify(teva).slice(0, 300));
     const by = Object.fromEntries([...teva.data.holders, ...teva.data.exited].map((r: { filer: { name: string }; change: string; share_change: number | null; period: string }) => [r.filer.name, [r.change, r.share_change, r.period]]));
     expect(by).toEqual({ 'FMR LLC': ['trimmed', -4473320, '2026Q3'], 'Norges Bank': ['added', 1000000, '2026Q3'], 'BlackRock, Inc.': ['added', 1000000, '2026Q2'], 'Barclays PLC': ['exited', -800000, '2026Q3'] });
-    expect([teva.data.issuer, teva.filers, teva.exited_count, teva.data.counts.merged_from, teva.data.counts.new ?? 0]).toEqual(['M8769Q', 3, 1, '881624', 0]);
+    expect([teva.data.issuer, teva.filers, teva.exited_count, teva.data.counts.merged_from, teva.data.counts.new ?? 0]).toEqual(['M8769Q', 3, 1, ['881624'], 0]);
     // Ingest's run rewrote the old code's hl/ with the one line still filed under it (Nov 11 12:2x): the old Q2 snapshot
-    // (s/881624) carries the priors instead; a filer whose latest 13F is Q3 and lists neither code sold out (Barclays).
+    // (s/881624) carries the priors instead. Holders that didn't carry over stay Q2 holders with no change, never an
+    // inferred exit (the lead: ~100 of 247 inferred TEVA exits were false); exits are pending until ingest's merged index.
     const hl0 = hist.m.get('hl/881624.json'), rest0 = hist.m.get('pre/v1-filers-rest.txt');
     await hist.put('hl/881624.json', JSON.stringify({ issuer: '881624', columns: tcols, rows: [['0001999999', 'Lone Filer', null, 'other', false, '2026Q2', 10, 10, 300, 300, 'unchanged']] }));
     await hist.put('s/881624.json', JSON.stringify({ issuer: '881624', period: '2026Q2', prev_period: '2026Q1', columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'accession'], holders: [
@@ -4110,7 +4111,8 @@ describe('copybook api', () => {
     hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`2 \n${JSON.stringify([{ slug: 'barclays-plc', cik: '0000312069', name: 'Barclays PLC', manager: null, featured: false, status: null, latest_quarter: '2026Q3' }, { slug: 'blackrock', cik: '0001364743', name: 'BlackRock, Inc.', manager: null, featured: false, status: null, latest_quarter: '2026Q2' }])}`));
     const snapV = (await v1('/v1/stocks/TEVA/holders?current_only=false')).body;
     const bySnap = Object.fromEntries([...snapV.data.holders, ...snapV.data.exited].map((r: { filer: { name: string }; change: string; share_change: number | null; period: string }) => [r.filer.name, [r.change, r.share_change, r.period]]));
-    expect([bySnap['FMR LLC'], bySnap['BlackRock, Inc.'], bySnap['Barclays PLC'], snapV.data.counts.merged_via]).toEqual([['trimmed', -4473320, '2026Q3'], ['added', 1000000, '2026Q2'], ['exited', -800000, '2026Q3'], 'snapshot']);
+    expect([bySnap['FMR LLC'], bySnap['BlackRock, Inc.'], bySnap['Barclays PLC'], snapV.exited_count, snapV.data.counts.merged_via, snapV.data.counts.exits_pending, snapV.data.counts.merged_from]).toEqual([['trimmed', -4473320, '2026Q3'], [null, null, '2026Q2'], [null, null, '2026Q2'], 0, 'snapshot', true, ['881624']]);
+    expect(snapV.data.counts.note).toMatch(/2026Q2 snapshot/);
     hist.m.delete('s/881624.json');
     if (hl0) hist.m.set('hl/881624.json', hl0);
     if (rest0) hist.m.set('pre/v1-filers-rest.txt', rest0);
