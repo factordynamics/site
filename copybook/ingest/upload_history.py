@@ -52,7 +52,7 @@ KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|i
 # and the rest of that kind are skipped until the next run.
 OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/")
 BUNDLE_ENTRIES = 100  # the self-hosted API's rate limit: 100 entries or 20 MB per bundle, one at a time
-BUNDLE_BYTES = 20_000_000
+BUNDLE_BYTES = 5_000_000  # a 19 MB bundle hit Cloudflare's 100 s tunnel timeout (HTTP 524)
 ORDER = ("h/", "hl/", "fb/")  # sent first, in this order
 TOKEN_TTL = 240  # tokens last ~5 minutes; refresh well before
 # Cloudflare rejects urllib's default User-Agent (error 1010), so name the client.
