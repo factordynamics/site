@@ -43,7 +43,7 @@ async function healthy() {
   try { const r = await fetch(process.env.PROBE_URL, { signal: AbortSignal.timeout(5000) }); return r.ok && Date.now() - t0 < 2000; } catch { return false; }
 }
 async function push(rows) {
-  let done = 0, failed = 0, bytes = 0, i = 0;
+  let done = 0, failed = 0, replaced = 0, bytes = 0, i = 0;
   const t0 = Date.now();
   const tick = setInterval(() => console.log(`${done}/${rows.length} copied, ${(bytes / 1e6).toFixed(0)} MB, ${((Date.now() - t0) / 60000).toFixed(1)} min, paused ${paused}x`), 300000);
   await Promise.all(Array.from({ length: RATE ? 1 : 8 }, async () => {
@@ -51,18 +51,22 @@ async function push(rows) {
       if (Date.now() > DEADLINE) { console.log(`deadline reached; ${rows.length - i} left for the hourly push`); i = rows.length; break; }
       while (!(await healthy())) { paused++; console.log(`${new Date().toISOString()} probe slow or failing; pausing 60 s`); await sleep(60000); probedAt = 0; }
       const o = rows[i++];
-      const body = await readFile(`${R2}/copybook-history/blobs/${o.blob_id}`);
+      // Ingest may replace the object after the listing (Miniflare then deletes the old blob): skip it; the next run
+      // copies the new version.
+      let body;
+      try { body = await readFile(`${R2}/copybook-history/blobs/${o.blob_id}`); }
+      catch (e) { if (e.code !== 'ENOENT') throw e; replaced++; continue; }
       if (body.length !== o.size) { failed++; console.error(`FAIL ${o.key}: blob size ${body.length} != ${o.size}`); continue; }
       const h = { 'content-type': JSON.parse(o.http_metadata).contentType ?? 'application/octet-stream' };
       for (const [k, v] of Object.entries(JSON.parse(o.custom_metadata))) h[`x-amz-meta-${k}`] = String(v);
-      const r = await aws.fetch(`${B}/${enc(o.key)}`, { method: 'PUT', body, headers: h });
+      const r = await aws.fetch(`${B}/${enc(o.key)}`, { method: 'PUT', body, headers: h }).catch((e) => ({ ok: false, status: String(e) }));
       if (r.ok) { done++; bytes += body.length; } else { failed++; console.error(`FAIL ${o.key}: ${r.status}`); }
       // Rate cap: wait until the average since the start is back under RATE.
       if (RATE) { const ahead = (bytes / RATE) * 1000 - (Date.now() - t0); if (ahead > 0) await sleep(ahead); }
     }
   }));
   clearInterval(tick);
-  console.log(`copied ${done}, failed ${failed}, ${(bytes / 1e6).toFixed(1)} MB`);
+  console.log(`copied ${done}, failed ${failed}, replaced during the run ${replaced}, ${(bytes / 1e6).toFixed(1)} MB`);
 }
 const [cmd, ...prefixes] = process.argv.slice(2);
 if (cmd === 'keys') await push(prefixes.flatMap(local));

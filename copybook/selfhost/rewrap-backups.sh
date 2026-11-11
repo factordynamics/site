@@ -7,7 +7,11 @@
 set -euo pipefail
 ROOT=$HOME/copybook-api
 export PATH=$HOME/.local/share/mise/installs/node/26.12.1/bin:$ROOT/bin:$PATH
-cd "$ROOT/ops"; set -a; . ../copybook-api.env; . ../secrets.env; set +a
+# After the service-account move refcell keeps neither env file (only the send-only email key), so both are optional;
+# the R2 access then comes from the agents' Cloudflare token (Amp secret CLOUDFLARE_API_TOKEN, until TUE17 step 4c).
+cd "$ROOT/ops"; set -a; for f in ../copybook-api.env ../secrets.env; do if [ -f "$f" ]; then . "$f"; fi; done; set +a
+export CF_API_TOKEN=${CF_API_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}
+[ -n "$CF_API_TOKEN" ] || { echo "no Cloudflare token in env"; exit 1; }
 PREFIX=${PREFIX:-backups/}
 # The new key: from new-backup-key.sh (../backup.pub.new), or made by setup-service-user.sh (status directory).
 NEWPUB=${NEWPUB:-$( [ -f "$ROOT/backup.pub.new" ] && echo "$ROOT/backup.pub.new" || echo /var/lib/copybook-status/backup.pub )}
