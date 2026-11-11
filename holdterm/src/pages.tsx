@@ -269,6 +269,8 @@ function TagKey() {
     </details>
   )
 }
+/** "Thursday, Nov 6": the heading over a day's filings on phones. */
+const filedDay = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })
 const stakePct = (p: number) => `${p.toFixed(p < 10 ? 2 : 1)}%`
 const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => [
   // With an Investor column, phones show the date under the investor's name, so the company gets the width.
@@ -277,7 +279,7 @@ const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => 
   ...(withWho ? [{ key: 'who', label: 'Investor', render: (e: Event) => (
           <>
             <FundLink slug={e.slug} name={<Firm name={firmOf(firms, e.slug, e.manager)} />} />
-            <span className="row-sub stock-sub show-sm">Filed {date(e.filing_date)}</span>
+            <span className="row-sub stock-sub show-sm filed-sub">Filed {date(e.filing_date)}</span>
           </>
         ), sort: (e: Event) => e.manager } as Col<Event>] : []),
   {
@@ -1795,7 +1797,7 @@ export function Filings() {
               ]}
             />
             <TagKey />
-            <Grid rows={list} limit={150} href={(e) => (e.ticker && !ownVehicle(e) ? `/s/${e.ticker}` : null)} cols={eventCols(firms)} />
+            <Grid rows={list} limit={150} href={(e) => (e.ticker && !ownVehicle(e) ? `/s/${e.ticker}` : null)} cols={eventCols(firms)} groupSm={(e) => filedDay(e.filing_date)} />
           </Panel>
         </>
       ) : (
