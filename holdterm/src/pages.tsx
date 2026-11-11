@@ -1267,6 +1267,14 @@ export function Flows() {
               <span className="skel skel-chip" />
               <span className="skel skel-chip" />
             </div>
+            <div className="stats flows-stats" aria-hidden>
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="stat">
+                  <span className="skel skel-label" />
+                  <span className="skel skel-value" />
+                </div>
+              ))}
+            </div>
             <TabsSkel labels={['Most buyers', 'Most money in', 'New positions', 'Most sellers', 'Sold out']} />
           </>
         }
@@ -1278,7 +1286,7 @@ export function Flows() {
   const mix = quarters.map((x) => [x, books.data!.filter((b) => b.quarter === x).length] as const)
   const tagQ = q === 'latest' && mix.length > 1 ? mix[0][0] : undefined
   // The newest quarter on its own, as the home page counts it, so the two pages' "most bought" can be told apart.
-  const leadRows = tagQ ? aggregate(books.data.filter((b) => b.quarter === tagQ), books.data).rows.filter((r) => !r.fund) : []
+  const leadTop = tagQ ? aggregate(books.data.filter((b) => b.quarter === tagQ), books.data).rows.filter((r) => !r.fund).sort((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)[0] : undefined
   const exits = (r: Agg) => r.sellers.filter((s) => s.change === 'exited').length
   let list: Agg[]
   if (tab === 'buyers') list = rows.filter((r) => r.buyers.length).sort((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)
@@ -1294,7 +1302,6 @@ export function Flows() {
         <div>
           <h1>Buys and sells</h1>
           <p className="lede">What the investors bought and sold, comparing each fund’s latest 13F with the one before.</p>
-          <FlowsSummary rows={rows} funds={fundsN} q={q} lead={tagQ ? { q: tagQ, n: mix[0][1], rows: leadRows } : undefined} />
         </div>
       </div>
       {/* One row of quarter chips on every width; the count under it says, in words, which 13F each investor is shown with. */}
@@ -1310,9 +1317,10 @@ export function Flows() {
         {q !== 'latest'
           ? `${plural(fundsN, 'investor')} filed for ${quarterLabel(q)}.`
           : tagQ
-            ? `${num(fundsN)} investors: ${num(mix[0][1])} have filed for ${quarterLabel(tagQ)}, and the other ${num(fundsN - mix[0][1])} are shown with ${mix.length === 2 ? `their ${quarterLabel(mix[1][0])} 13F` : 'an earlier 13F'}.`
+            ? `${num(fundsN)} investors: ${num(mix[0][1])} have filed for ${quarterLabel(tagQ)}, and the other ${num(fundsN - mix[0][1])} are shown with ${mix.length === 2 ? `their ${quarterLabel(mix[1][0])} 13F` : 'an earlier 13F'}.${leadTop?.buyers.length ? ` Among those ${num(mix[0][1])}, the most bought is ${aggName(leadTop)}, by ${num(leadTop.buyers.length)}.` : ''}`
             : `${plural(fundsN, 'investor')}, each with its latest 13F.`}
       </p>
+      <FlowsStats rows={rows} q={q} />
       <Tabs<ATab>
         value={tab}
         onChange={setTab}
@@ -1372,37 +1380,32 @@ export function Flows() {
   )
 }
 
+/** A stock's company name without its share class: "Alphabet". */
+const aggCo = (r: Agg) => r.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')
 /** A stock in running text: "Alphabet (GOOGL)". */
-const aggName = (r: Agg) => `${r.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')}${r.ticker ? ` (${r.label ?? r.ticker})` : ''}`
-function FlowsSummary({ rows, lead }: { rows: Agg[]; funds: number; q: string; lead?: { q: string; n: number; rows: Agg[] } }) {
-  const most = (f: (r: Agg) => number) => [...rows].sort((a, b) => f(b) - f(a))[0]
-  const buyers = most((r) => r.buyers.length)
-  const sellers = most((r) => r.sellers.length)
-  const netBuy = most((r) => r.net)
-  const netSell = most((r) => -r.net)
-  const fresh = most((r) => r.newBuyers)
-  const freshLine = fresh && fresh !== buyers && fresh.newBuyers > 1
-  // Whether the sentence just before the selling one is still about the most-bought stock.
-  const lastOnBuyers = !freshLine && !(netBuy && netBuy.net > 0 && netBuy !== buyers)
-  const leadTop = lead && [...lead.rows].sort((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)[0]
-  if (!buyers) return null
+const aggName = (r: Agg) => `${aggCo(r)}${r.ticker ? ` (${r.label ?? r.ticker})` : ''}`
+/** The quarter's four answers as cards, like the home page's: most investors buying and selling, most money in and out. */
+function FlowsStats({ rows, q }: { rows: Agg[]; q: string }) {
+  const top = (cmp: (a: Agg, b: Agg) => number) => [...rows].sort(cmp)[0] as Agg | undefined
+  // Ties on the count go to the bigger trade, as in the tabs' own order (sell is negative).
+  const buyers = top((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)
+  const sellers = top((a, b) => b.sellers.length - a.sellers.length || a.sell - b.sell)
+  const netBuy = top((a, b) => b.net - a.net)
+  const netSell = top((a, b) => a.net - b.net)
+  const exits = (r: Agg) => r.sellers.filter((s) => s.change === 'exited').length
+  // The quarter chips just above name the quarter, so the labels stay short enough for two cards a row on phones.
+  const scope = q === 'latest' ? ' in each fund’s latest 13F' : ` in ${quarterLabel(q)}`
+  const card = (label: string, r: Agg | undefined, ok: boolean, tone: 'pos' | 'neg', sub: (r: Agg) => string) => (
+    <Stat label={label} value={r && ok ? <Tick t={r.ticker} name={aggCo(r)} label={r.label} /> : <span className="dim">None</span>} tone={r && ok ? tone : undefined} sub={r && ok ? sub(r) : undefined} />
+  )
+  const by = (n: number, extra: number, word: string) => `by ${plural(n, 'investor')}${extra ? `, ${num(extra)} ${word}` : ''}`
   return (
-    <p className="summary">
-      {/* While the newest quarter is still coming in, its answer leads, so the first name matches the home page; then
-          one fact per sentence across each fund's latest 13F: the most buyers, the most money in, the same for selling. */}
-      {leadTop && leadTop.buyers.length > 0 && (
-        <>
-          Among the {num(lead!.n)} investors that have filed for {quarterLabel(lead!.q)}, the most bought is {aggName(leadTop)}, by {num(leadTop.buyers.length)}. Across each fund’s latest 13F,{' '}
-        </>
-      )}
-      {plural(buyers.buyers.length, 'investor')} bought {aggName(buyers)}, more than any other stock
-      {fresh === buyers && fresh.newBuyers > 0 ? `, and ${num(fresh.newBuyers)} of them were new to it` : ''}.{' '}
-      {freshLine && <>The most new positions were in {aggName(fresh)}, {num(fresh.newBuyers)}. </>}
-      {/* "it" only right after a sentence about the most-bought stock; after one about another stock it names the wrong one. */}
-      {netBuy && netBuy.net > 0 && <>The most money went into {netBuy === buyers && !freshLine ? 'it' : aggName(netBuy)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netBuy.net)}</span> net. </>}
-      {sellers && sellers.sellers.length > 0 && <>{plural(sellers.sellers.length, 'investor')} sold {sellers === buyers && lastOnBuyers ? 'some of it too' : aggName(sellers)}, the most of any stock. </>}
-      {netSell && netSell.net < 0 && <>The most money came out of {aggName(netSell)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netSell.net)}</span> net.</>}
-    </p>
+    <div className="stats flows-stats" role="list" aria-label={`Buys and sells${scope}`}>
+      {card('Most bought', buyers, !!buyers?.buyers.length, 'pos', (r) => `${aggCo(r)}, ${by(r.buyers.length, r.newBuyers, 'new')}`)}
+      {card('Biggest net buy', netBuy, (netBuy?.net ?? 0) > 0, 'pos', (r) => `${aggCo(r)}, ${signedUsd(r.net)} net`)}
+      {card('Most sold', sellers, !!sellers?.sellers.length, 'neg', (r) => `${aggCo(r)}, ${by(r.sellers.length, exits(r), 'sold out')}`)}
+      {card('Biggest net sale', netSell, (netSell?.net ?? 0) < 0, 'neg', (r) => `${aggCo(r)}, ${signedUsd(r.net)} net`)}
+    </div>
   )
 }
 function ConsensusSummary({ rows, total, n, mix }: { rows: Agg[]; total: number; n: number; mix: { sector: string; weight: number }[] }) {
