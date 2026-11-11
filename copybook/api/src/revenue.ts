@@ -2,7 +2,7 @@ import type { Alert13F, AlertEvent } from './alerts';
 import { FOOTER, sendMail, type Mail } from './email';
 import { isActive, isPaused, WORKER_URL, pauseScheduled, testAddress, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
-import { getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
+import { customerHasCard, getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
 import { SEAT_LIMIT } from './seats';
 import { DEADLINES, deadlineLabel, deadlineMs, inFilingWeek, lastDeadline, nextDeadline, pauseResumesAt } from './seasons';
 import { stripe } from './stripe';
@@ -437,6 +437,18 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
   const charge = yearly ? `${money(p.year)}/year` : `${money(p.month)}/month`;
   const founding = FOUNDING[m.plan] ? ` ${FOUNDING[m.plan]}` : '';
   const ends = endAt(m.trial_end!);
+  // A no-card trial (Copy from Nov 11): it ends on its own, so the ask is to add a card, and doing nothing costs nothing.
+  if (m.has_payment_method === false) {
+    const add = `${env.SITE_URL}account/`;
+    const keepLine = `Add a card to keep ${p.name} (${charge}${yearly ? '' : `, or ${money(p.year)}/year`}): ${add} (Manage billing). The first charge is on ${ends}.`;
+    return {
+      to: m.email,
+      subject: `Your ${p.name} trial ends in ${daysLeft === 1 ? '1 day' : `${daysLeft} days`}: add a card to keep it`,
+      text: `Your ${p.name} trial ends on ${ends}. No card is on file, so if you do nothing it simply ends and nothing is charged.\n\nThis trial so far:\n${got.map((g) => `  ${g}`).join('\n')}\n\nIf it ends, you lose:\n${lose.map((l) => `  - ${l}`).join('\n')}\n\n${keepLine}\n${founding ? `${founding.trim()}\n` : ''}\nUnsubscribe from Copybook emails: ${unsub}${FOOTER}`,
+      html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your ${p.name} trial ends on <b>${ends}</b>. No card is on file, so if you do nothing it simply ends and nothing is charged.</p><p style="margin-bottom:4px"><b>This trial so far</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p style="margin-bottom:4px"><b>If it ends, you lose</b></p><ul style="margin-top:0;padding-left:20px">${lose.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p><a href="${add}" style="color:#1d4ed8"><b>Add a card to keep ${p.name}</b></a> (${esc(charge)}${yearly ? '' : `, or ${esc(money(p.year))}/year`}). The first charge is on ${ends}.</p>${founding ? `<p>${esc(founding.trim())}</p>` : ''}<p style="font-size:12px;color:#6b7280"><a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+      unsubscribe: unsub,
+    };
+  }
   return {
     to: m.email,
     subject: `Your ${p.name} trial ends in ${daysLeft === 1 ? '1 day' : `${daysLeft} days`}`,
@@ -683,7 +695,11 @@ Not going ahead? Cancel before ${ends} in your account and nothing is owed:
 ${env.SITE_URL}account/
 
 Unsubscribe: ${await unsubscribeUrl(env, m.customer)}${FOOTER}`, unsubscribe: await unsubscribeUrl(env, m.customer) });
-      } else mails.push(trialEndingMail(env, m, await memberStats(env, m.customer), f.investors.length, f.owned.length, keep, await unsubscribeUrl(env, m.customer), Math.max(1, Math.ceil(left / 86400_000))));
+      } else {
+        // A card added in Manage billing since the last sync (customer.updated doesn't re-sync): ask only if still none.
+        if (m.has_payment_method === false && (await customerHasCard(env, m.customer))) m.has_payment_method = true;
+        mails.push(trialEndingMail(env, m, await memberStats(env, m.customer), f.investors.length, f.owned.length, keep, await unsubscribeUrl(env, m.customer), Math.max(1, Math.ceil(left / 86400_000))));
+      }
       marks.push({ ...m, trial_reminded: m.trial_end });
     } else if (recap && m.status === 'active' && m.interval === 'monthly' && m.recap_sent !== recap && !m.marketing_off) {
       const f = await getFollows(env, m);

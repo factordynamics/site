@@ -121,6 +121,9 @@ export async function createCheckout(env: Env, b: Record<string, unknown>): Prom
     'subscription_data[trial_period_days]': TRIAL_DAYS,
     ...(promo ? { 'discounts[0][promotion_code]': promo.id } : ref ? { 'discounts[0][coupon]': await couponFor(env, plan), 'subscription_data[metadata][ref]': ref } : {}),
     ...(gate ? { payment_method_collection: 'if_required', 'subscription_data[metadata][test]': 'gatecheck' } : {}),
+    // Copy's 14-day trial needs no card (the lead, Nov 11): one is asked for near the end (trialEndingMail), and a trial
+    // that ends without one is cancelled, never invoiced. Pro and Fund keep the card at Checkout.
+    ...(plan === 'copy' && !gate ? { payment_method_collection: 'if_required', 'subscription_data[trial_settings][end_behavior][missing_payment_method]': 'cancel' } : {}),
     ...(source ? { 'subscription_data[metadata][source]': source } : {}),
     ...(email ? { customer_email: email } : {}),
     success_url: `${env.SITE_URL}account/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,

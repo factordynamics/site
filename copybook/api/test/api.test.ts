@@ -3207,6 +3207,13 @@ describe('copybook api', () => {
     // Copy: the whole first month on monthly; $9 off the first year ($70) on yearly.
     expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'monthly', ref: ref.code, email: 'new2@example.com' } })).json()).referral.first_charge_usd).toBe(0);
     expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'yearly', ref: ref.code, email: 'new3@example.com' } })).json()).referral.first_charge_usd).toBe(70);
+    // Copy's trial needs no card and is cancelled (never invoiced) if none is added; Pro still takes the card at Checkout.
+    const sessions = calls.filter((c) => c.path === 'checkout/sessions').map((c) => c.body);
+    const noCard = (b: string) => [b.includes('payment_method_collection=if_required'), b.includes('[missing_payment_method]=cancel')];
+    expect([noCard(sessions[0]), noCard(sessions[sessions.length - 1])]).toEqual([[false, false], [true, true]]);
+    const { trialEndingMail } = await import('../src/revenue');
+    const tm = (card: boolean) => trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Math.floor(Date.now() / 1000) + 2 * 86400, has_payment_method: card } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 1, 0, 'https://api.test/keep?t=x', 'https://api.test/unsubscribe?t=x', 2);
+    expect([/add a card/i.test(tm(false).subject), /nothing is charged/.test(tm(false).text), /renews on/.test(tm(false).text), /add a card/i.test(tm(true).subject), /renews on/.test(tm(true).text)]).toEqual([true, true, false, false, true]);
     expect(calls.find((c) => c.path === 'coupons')!.body).toContain('amount_off=3900'); // a month of Pro, off the first year
     const cs = calls.find((c) => c.path === 'checkout/sessions')!.body;
     expect(cs).toContain('discounts[0][coupon]=copybook-ref-pro-1mo');

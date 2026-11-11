@@ -109,6 +109,13 @@ export function isComped(sub: any): boolean {
  * Upserts the member for a Stripe subscription object and sends the welcome
  * email (with a sign-in link) the first time the customer becomes active.
  */
+/** The customer's default card (invoice_settings or a legacy source): what Stripe charges a subscription with none. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function customerHasCard(env: Env, c: any): Promise<boolean> {
+  const cust = typeof c === 'string' ? await stripe(env, 'GET', `customers/${c}`).catch(() => null) : c;
+  return !!(cust?.invoice_settings?.default_payment_method || cust?.default_source);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function syncSubscription(env: Env, sub: any, emailHint?: string | null): Promise<Member> {
   const customer = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
@@ -128,7 +135,8 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     interval: intervalOf(sub),
     trial_end: sub.status === 'trialing' ? Number(sub.trial_end ?? 0) || null : null,
     // A no-card trial ends without a charge unless a card is added (Holdterm's and the gate's links).
-    has_payment_method: !!(sub.default_payment_method || sub.default_source),
+    // A card added in Manage billing becomes the customer's default, which Stripe also charges at the trial's end.
+    has_payment_method: !!(sub.default_payment_method || sub.default_source) || (sub.status === 'trialing' && (await customerHasCard(env, sub.customer))),
     collection: String(sub.collection_method ?? 'charge_automatically'),
     ...(sub.collection_method === 'send_invoice'
       ? { invoice_terms: { amount: Number(sub.items?.data?.[0]?.price?.unit_amount ?? sub.plan?.amount ?? 0) || null, po: sub.metadata?.po || null, ap_email: sub.metadata?.ap_email || null } }
