@@ -107,15 +107,23 @@ export function EmailPreview({ s }: { s: Samples }) {
           </div>
         </div>
       </div>
-      {/* No allow-scripts, so allow-same-origin only lets this page read the email's height to fit the frame to it. */}
+      {/* No allow-scripts, so allow-same-origin only lets this page fit the frame to the email's height
+          and take the sample's links out of the tab order, so Tab goes straight to the real controls. A click opens
+          the link in a new tab (allow-popups) instead of loading a script-less page inside the frame. */}
       <iframe
         title={`Sample email: ${m.subject}`}
         srcDoc={m.html}
         sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+        tabIndex={-1}
         onLoad={(e) => {
-          const f = e.currentTarget
-          const h = f.contentDocument?.documentElement.scrollHeight
-          if (h) f.style.height = `${h}px`
+          const d = e.currentTarget.contentDocument
+          if (!d) return
+          e.currentTarget.style.height = `${d.documentElement.scrollHeight}px`
+          d.querySelectorAll('a').forEach((a) => {
+            a.tabIndex = -1
+            a.target = '_blank'
+            a.rel = 'noopener'
+          })
         }}
       />
     </figure>

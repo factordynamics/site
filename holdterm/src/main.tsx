@@ -124,8 +124,15 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   const [mgrs, setMgrs] = useState<Manager[]>([])
   const [held, setHeld] = useState<Agg[]>([])
   const input = useRef<HTMLInputElement>(null)
+  // Escape, Cancel or a click outside puts focus back where it was, not at the top of the page.
+  const back = useRef<HTMLElement | null>(null)
+  const close = () => {
+    setOpen(false)
+    back.current?.focus()
+  }
   useEffect(() => {
     if (!open) return
+    back.current = document.activeElement as HTMLElement | null
     setQ('')
     setCur(0)
     input.current?.focus()
@@ -193,7 +200,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   }
   let i = -1
   return (
-    <div className="overlay" onClick={() => setOpen(false)}>
+    <div className="overlay" onClick={close} onKeyDown={(e) => e.key === 'Escape' && close()}>
       <div className="palette" role="dialog" aria-label="Search" onClick={(e) => e.stopPropagation()}>
         <div className="prompt">
           <Glass />
@@ -211,15 +218,14 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
               setCur(0)
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') setOpen(false)
-              else if (e.key === 'ArrowDown') (e.preventDefault(), setCur((c) => Math.min(hits.length - 1, c + 1)))
+              if (e.key === 'ArrowDown') (e.preventDefault(), setCur((c) => Math.min(hits.length - 1, c + 1)))
               else if (e.key === 'ArrowUp') (e.preventDefault(), setCur((c) => Math.max(0, c - 1)))
               else if (e.key === 'Enter') go(hits[cur])
             }}
             spellCheck={false}
             autoComplete="off"
           />
-          <button type="button" className="palette-close" onClick={() => setOpen(false)}>
+          <button type="button" className="palette-close" onClick={close}>
             Cancel
           </button>
         </div>
