@@ -148,6 +148,8 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
     dupes_blocked: { since: dupes.since, api: s.api_dupes ?? null, cloudflare: { total: dupes.total, last_7d: dupes.last_7d } },
     moves_queue: await movesQueue(env, health),
     mail_quota: await mailQuotaStatus(env, s.api_mail ?? null),
+    // ingest's index.json against the fields alert routing reads (contract.ts): ok, build, problems, checked_at.
+    index_contract: JSON.parse((await env.DB.get('index:contract')) ?? 'null'),
     probe: {
       target: 'members API /health, from Cloudflare cron',
       interval_seconds: 60,

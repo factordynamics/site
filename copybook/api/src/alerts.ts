@@ -160,11 +160,7 @@ export const etDay = (t: number) => new Date(t - 5 * 3600_000).toISOString().sli
 // ---------------------------------------------------------------------------------------------
 // Targeting and delivery
 
-/**
- * Filer types whose moves in a stock are worth an alert to someone who only watches or owns that stock: hedge funds
- * and long-only managers (/v1's smart_money). `active` is long_only's name before ingest's Nov 9 rename.
- */
-const STOCK_ALERT_TYPES = new Set(['hedge_fund', 'long_only', 'active']);
+import { STOCK_ALERT_TYPES, checkIndex } from './contract';
 export type FilerMeta = Record<string, { featured?: boolean; type?: string | null }>;
 
 /**
@@ -1648,6 +1644,19 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
   };
 }
 
+async function indexContract(env: Env, idx: unknown, now: number): Promise<void> {
+  const problems = checkIndex(idx);
+  const build = (idx as { build_id?: string; generated_at?: string }).build_id ?? (idx as { generated_at?: string }).generated_at ?? null;
+  const rec = JSON.stringify({ ok: !problems.length, build, problems });
+  const was = await env.DB.get('index:contract');
+  if (was && JSON.parse(was).build === build && JSON.parse(was).ok === !problems.length) return;
+  await env.DB.put('index:contract', JSON.stringify({ ...JSON.parse(rec), checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z') }));
+  if (!problems.length) return;
+  console.error(`index.json breaks the alert routing contract: ${problems.join('; ')}`);
+  const { sendMail } = await import('./email');
+  await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: `Copybook: index.json breaks the alert routing contract (${problems.length} problem${problems.length === 1 ? '' : 's'})`, text: `Build ${build}. Alerts may be missing until ingest fixes these fields (copybook/api/src/contract.ts):\n\n${problems.map((x) => `- ${x}`).join('\n')}\n` }], { tier: 'account' });
+}
+
 export async function runBackstop(env: Env, now: number): Promise<Record<string, unknown>> {
   // index.json (900 KB) only changes with a data build: when it hasn't, skip parsing it and go
   // straight to the follow-ups. Its derived KV (CIK map, /v1 filers, periods) is unchanged too.
@@ -1658,6 +1667,8 @@ export async function runBackstop(env: Env, now: number): Promise<Record<string,
   const idx = (res.status === 304 ? { managers: [] } : await res.json()) as { managers?: IndexRow[]; generated_at?: string; build_id?: string };
   if (res.status === 304) return { status: 'unchanged', ...(await pendingFollowups(env, now)) };
   const rows = idx.managers ?? [];
+  // The routing contract (contract.ts): a renamed or missing field alerts hello@ once per build, and status.json shows it.
+  await indexContract(env, idx, now);
   // /v1 responses say when and from which build the data was made.
   const build = JSON.stringify({ data_built_at: idx.generated_at ?? null, build_id: idx.build_id ?? (idx.generated_at ? idx.generated_at.replace(/[-:]/g, '') : null) });
   // Never backwards: a stale cached index.json (an older build) never replaces the build /v1 already reports.

@@ -127,6 +127,8 @@ beforeEach(async () => {
   hist = new MemR2();
   env = { DB: new MemKV(), HIST: hist, INGEST_WORKFLOW: WORKFLOW, SITE_URL: SITE, DATA_URL: `${SITE}data/`, EMAIL_FROM: 'Copybook <a@b.c>', CONTACT_EMAIL: 'hello@example.com', STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: 'whsec_test', SESSION_SECRET: 'session-secret', RESEND_API_KEY: 're_x', METER: memMeters(), FOLLOWS: undefined as never };
   env.HEALTH_TOKEN = 'health_test_token';
+  // The fixture indexes carry only the fields each test needs; the routing contract has its own test (contract.test.ts).
+  await env.DB.put('index:contract', JSON.stringify({ ok: false, build: null, problems: ['fixture'] }));
   // 2026Q1 lives only in the private bucket; 2026Q2 still falls back to the public copy.
   hist.m.set('h/warren-buffett/2026Q1.csv', new TextEncoder().encode('manager,slug,cik,quarter,report_date,filing_date,accession,ticker,issuer,cusip,title,put_call,shares,value_usd,weight,change,prev_shares,share_change,value_delta_usd,pct_of_book\r\nWarren Buffett,warren-buffett,0001067983,2026Q1,2026-03-31,2026-05-15,A1,BAC,"BANK, ""OF"" AMERICA",060505104,COM,,5,100,0.1,new,,5,100,0.1\r\n'));
   env.FOLLOWS = memFollows();

@@ -1,6 +1,9 @@
 #!/bin/bash
 # Boots the Worker in local workerd (no Cloudflare traffic) and checks /health answers.
 cd "$(dirname "$0")/.."
+# The alert routing contract against the live index.json first: a renamed field must block the push or deploy.
+npx vitest run test/contract.test.ts > "${TMPDIR:-/tmp}/copybook-contract.log" 2>&1 || { tail -20 "${TMPDIR:-/tmp}/copybook-contract.log"; echo "contract: FAILED"; exit 1; }
+echo "contract: ok"
 WRANGLER_SEND_METRICS=false setsid timeout 90 npx wrangler dev --port 8799 --ip 127.0.0.1 > "${TMPDIR:-/tmp}/copybook-boot.log" 2>&1 &
 PID=$!
 for i in $(seq 1 60); do
