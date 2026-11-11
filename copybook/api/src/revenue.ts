@@ -552,6 +552,24 @@ export async function planPrice(env: Env, m: Member, interval: 'monthly' | 'year
   return (m.plan === 'copy' && m.founding_price ? await find(`copy_${interval}_founding`) : undefined) ?? (await find(`${m.plan}_${interval}`));
 }
 
+/** Whether a trial has a card to charge at its end: the subscription's own, else the customer's default. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function trialHasCard(env: Env, m: Member, sub: any): Promise<boolean> {
+  return !!(sub?.default_payment_method || sub?.default_source) || (await customerHasCard(env, m.customer));
+}
+
+/**
+ * A trial moved to another price of its plan: same subscription, trial_end kept, no proration, so nothing is due before
+ * the trial ends and the first charge is the new price on that day. Never through the portal's update flow.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function switchTrialPrice(env: Env, m: Member, sub: any, price: { id?: string }): Promise<void> {
+  const item = sub.items?.data?.[0];
+  if (!item?.id || !price.id || item.price?.id === price.id) return;
+  const trialEnd = sub.trial_end ?? m.trial_end;
+  await syncSubscription(env, await stripe(env, 'POST', `subscriptions/${m.subscription}`, { 'items[0][id]': item.id, 'items[0][price]': price.id, proration_behavior: 'none', ...(trialEnd ? { trial_end: String(trialEnd) } : {}) }));
+}
+
 /**
  * The portal's confirm page for moving a monthly plan (or a monthly trial) to yearly on the same subscription, back to
  * /account/?kept=yearly. Null when there's nothing to switch (yearly already, inactive, no item or price).
@@ -563,6 +581,14 @@ export async function yearlyPortalUrl(env: Env, m: Member): Promise<string | nul
   const item = sub.items?.data?.[0];
   const price = await planPrice(env, m, 'yearly');
   if (!item?.id || !price?.id) return null;
+  // A trialist never pays before the trial ends (the lead's P0, Nov 11): the portal's update flow bills the new price at
+  // once ($79 today, the trial gone). With a card the price changes here, trial end kept, nothing due today; without one
+  // the account page's add-a-card choice opens on yearly.
+  if (m.status === 'trialing') {
+    if (!(await trialHasCard(env, m, sub))) return `${account}?add_card=yearly`;
+    await switchTrialPrice(env, m, sub, price);
+    return `${account}?kept=yearly`;
+  }
   const s = await stripe(env, 'POST', 'billing_portal/sessions', {
     customer: m.customer,
     configuration: env.PORTAL_CONFIGURATION || undefined,
@@ -588,7 +614,13 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
     if (path === '/keep') {
       // A trial with no card: the account page's add-a-card choice, on yearly (POST /portal/card plan=yearly), signed in
       // by a fresh 2-minute link. Only the click there changes anything, so a mail scanner's GET switches nothing.
-      if (m.status === 'trialing' && m.has_payment_method === false) return go(`${account}?add_card=yearly&login=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, 120))}`);
+      // Any trial: the account page, signed in, where the member's own click switches it (add a card on yearly, or the
+      // switch that keeps the trial). A mail scanner's GET must never change a plan.
+      if (m.status === 'trialing') {
+        const login = encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, 120));
+        const sub = m.subscription?.startsWith('sub_') ? await stripe(env, 'GET', `subscriptions/${m.subscription}`).catch(() => null) : null;
+        return go(`${account}?${(await trialHasCard(env, m, sub)) ? 'switch=yearly' : 'add_card=yearly'}&login=${login}`);
+      }
       return go((await yearlyPortalUrl(env, m)) ?? account);
     }
     const plan = p!.s ?? m.plan;

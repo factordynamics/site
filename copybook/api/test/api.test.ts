@@ -5172,19 +5172,37 @@ describe('copybook api', () => {
     // One unsubscribe, also as the List-Unsubscribe header.
     const unsub = sent[0].text.match(/Unsubscribe from tips and newsletters: (\S+)/)![1];
     expect((sent[0] as unknown as { headers: Record<string, string> }).headers['List-Unsubscribe']).toBe(`<${unsub}>`);
-    // The button opens a portal page that swaps the trial's item to the yearly price.
+    // A trialist never pays before the trial ends (the lead's P0, Nov 11): never the portal's update flow, which bills
+    // the yearly price at once. Stripe calls are recorded.
     let portal = '';
+    const posts: { path: string; body: string }[] = [];
     const orig = globalThis.fetch;
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
-      if (String(u).startsWith('https://api.stripe.com/v1/prices?')) return Response.json({ data: [{ id: `price_${new URL(String(u)).searchParams.get('lookup_keys[]')}` }] });
+      if (String(u).startsWith('https://api.stripe.com/v1/prices?')) return Response.json({ data: [{ id: `price_${new URL(String(u)).searchParams.get('lookup_keys[]')}`, unit_amount: 7900 }] });
       if (String(u).includes('billing_portal/sessions')) portal = decodeURIComponent(String(init?.body));
+      else if (init?.method === 'POST' && String(u).includes('/v1/subscriptions/')) posts.push({ path: String(u).split('/v1/')[1], body: decodeURIComponent(String(init.body)) });
       return orig(u, init);
     });
-    stripeObjects['subscriptions/sub_trial'] = { ...sub('sub_trial', 'trial', 'trialing'), items: { data: [{ id: 'si_trial', price: { lookup_key: 'copy_monthly', recurring: { interval: 'month' } } }] } };
-    const kept = await handleRequest(new Request(keep.replace('https://copybook-api.factordynamics.workers.dev/', 'https://api.test/')), env);
-    expect(kept.status).toBe(303);
-    expect(portal).toContain('[items][0][id]=si_trial');
-    expect(portal).toContain('[items][0][price]=price_copy_yearly');
+    const trialSub = (card: boolean) => ({ ...sub('sub_trial', 'trial', 'trialing'), trial_end: trialEnd, ...(card ? { default_payment_method: 'pm_1' } : {}), items: { data: [{ id: 'si_trial', price: { id: 'price_copy_monthly', lookup_key: 'copy_monthly', recurring: { interval: 'month' } } }] } });
+    const yearly = async () => (await (await handleRequest(new Request('https://api.test/yearly', { method: 'POST', headers: { authorization: `Bearer ${await signToken(env.SESSION_SECRET, 'session', 'trial', 3600)}`, origin: 'https://refcell.github.io' } }), env)).json()).url as string;
+    const keepGet = async () => (await handleRequest(new Request(keep.replace('https://copybook-api.factordynamics.workers.dev/', 'https://api.test/')), env)).headers.get('location') ?? '';
+    // 1. No card: the email link and POST /yearly both open the add-a-card choice on yearly; nothing changes at Stripe.
+    stripeObjects['subscriptions/sub_trial'] = trialSub(false);
+    expect([/account\/\?add_card=yearly&login=/.test(await keepGet()), (await yearly()).endsWith('account/?add_card=yearly'), portal, posts.length]).toEqual([true, true, '', 0]);
+    // 2. A card on file: the email link only lands on /account/ (a mail scanner switches nothing); POST /yearly moves the
+    // trial to the yearly price here, trial end kept, no proration: $0 today, $79 at the trial's end.
+    stripeObjects['subscriptions/sub_trial'] = trialSub(true);
+    expect([/account\/\?switch=yearly&login=/.test(await keepGet()), posts.length]).toEqual([true, 0]);
+    expect((await yearly()).endsWith('account/?kept=yearly')).toBe(true);
+    expect([portal, posts.length, posts[0].body.includes('items[0][price]=price_copy_yearly'), posts[0].body.includes('proration_behavior=none'), posts[0].body.includes(`trial_end=${trialEnd}`)]).toEqual(['', 1, true, true, true]);
+    // 3. A paid monthly member: the portal's confirm page, as before.
+    posts.length = 0;
+    const trialRec = (await env.DB.get('cus:trial'))!;
+    await env.DB.put('cus:trial', JSON.stringify({ ...JSON.parse(trialRec), status: 'active', trial_end: null, interval: 'monthly' }));
+    stripeObjects['subscriptions/sub_trial'] = { ...trialSub(true), status: 'active', trial_end: null };
+    await yearly();
+    expect([portal.includes('[items][0][id]=si_trial'), portal.includes('[items][0][price]=price_copy_yearly'), posts.length]).toEqual([true, true, 0]);
+    await env.DB.put('cus:trial', trialRec);
     vi.stubGlobal('fetch', orig);
     sent = [];
     await cron(12, at + 86400_000);

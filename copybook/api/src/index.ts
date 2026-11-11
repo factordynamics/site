@@ -1397,10 +1397,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const item = sub.items?.data?.[0];
       const price = await (await import('./revenue')).planPrice(env, m, want);
       if (!item?.id || !price?.id) return json({ ok: false, error: 'plan unavailable', code: 'unavailable' }, 409, h);
-      if (item.price?.id !== price.id) {
-        const { syncSubscription } = await import('./members');
-        await syncSubscription(env, await stripe(env, 'POST', `subscriptions/${m.subscription}`, { 'items[0][id]': item.id, 'items[0][price]': price.id, proration_behavior: 'none' }));
-      }
+      await (await import('./revenue')).switchTrialPrice(env, m, sub, price);
       chosen = { interval: want, amount_usd: Number(price.unit_amount ?? 0) / 100, first_charge: m.trial_end ? new Date(m.trial_end * 1000).toISOString().slice(0, 10) : null };
     }
     const s = await stripe(env, 'POST', 'billing_portal/sessions', {
