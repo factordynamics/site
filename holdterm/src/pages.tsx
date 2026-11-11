@@ -1589,11 +1589,18 @@ const when = (v: number | string | null | undefined) => {
   const d = typeof v === 'number' ? new Date(v < 1e12 ? v * 1000 : v) : new Date(v)
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
+/** Plans that include Holdterm alerts: Holdterm's own, and Copybook Pro and Fund. Copybook's Copy plan does not. */
+const COVERED = new Set(['holdterm', 'pro', 'fund'])
+const covered = (m: Member) => m.active && COVERED.has(m.plan)
+const COPYBOOK_ACCOUNT = 'https://copybook.factordynamics.com/account/'
 /** The member's plan in a sentence, with the tone of its status pill. */
 function planLine(m: Member): { pill: string; tone: 'pos' | 'neg' | 'acc'; text: string } {
   const end = when(m.period_end)
   const price = m.interval === 'yearly' ? `$${PRICE.yearly} a year` : `$${PRICE.monthly} a month`
   if (!m.active) return { pill: m.status === 'canceled' ? 'Canceled' : 'Inactive', tone: 'neg', text: 'Alerts are off. Start a new plan to turn them back on; what you follow is kept.' }
+  if (m.plan === 'copy') return { pill: 'Copy plan', tone: 'acc', text: 'Your Copy plan already sends filing alerts on Copybook. Holdterm alerts are not part of it.' }
+  if (!COVERED.has(m.plan)) return { pill: 'Not included', tone: 'acc', text: 'Holdterm alerts are not part of your plan.' }
+  if (m.plan !== 'holdterm') return { pill: 'Included', tone: 'pos', text: `Holdterm alerts are included with your ${m.plan === 'fund' ? 'Fund' : 'Pro'} plan.` }
   if (m.cancel_at_period_end) return { pill: 'Ending', tone: 'neg', text: `Alerts stop on ${end || 'the end of this period'}. Resume any time in billing.` }
   if (m.status === 'trialing')
     return m.has_payment_method === false
@@ -1622,7 +1629,7 @@ export function Account() {
     )
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (member?.active) follows().then(setF).catch(() => {})
+    if (member && covered(member)) follows().then(setF).catch(() => {})
   }, [member])
   if (!api) return null
   if (pending) return <Loading what="Signing you in" />
@@ -1684,7 +1691,7 @@ export function Account() {
         </button>
       </header>
       {problem && <div className="notice warn">{problem}</div>}
-      {welcome && (
+      {welcome && covered(member) && (
         <div className="notice acct-welcome" role="status">
           <b>You’re in, and alerts are on.</b> Follow nobody and you hear about every investor Holdterm tracks, or choose investors and stocks below. You can also use <b>Follow</b> on any investor or stock page.
         </div>
@@ -1697,7 +1704,20 @@ export function Account() {
           </div>
           <p>{plan.text}</p>
           <div className="acct-actions">
-            {member.active ? (
+            {member.active && member.plan === 'copy' ? (
+              <>
+                <a className="btn" href={COPYBOOK_ACCOUNT}>
+                  Go to your Copybook account
+                </a>
+                <A to="/alerts" className="btn ghost">
+                  Holdterm alerts, ${PRICE.monthly} a month
+                </A>
+              </>
+            ) : member.active && !COVERED.has(member.plan) ? (
+              <A to="/alerts" className="btn">
+                See plans
+              </A>
+            ) : member.active ? (
               <button className="btn ghost" onClick={() => openPortal().catch((e: Error) => setProblem(e.message))}>
                 Manage billing
               </button>
@@ -1718,7 +1738,7 @@ export function Account() {
                 <b>Email</b>
                 <span className="dim">{member.email}</span>
               </span>
-              <span className={`tag ${member.active ? 'pos' : 'dim'}`}>{member.active ? 'On' : 'Off'}</span>
+              <span className={`tag ${covered(member) ? 'pos' : 'dim'}`}>{covered(member) ? 'On' : 'Off'}</span>
             </li>
             {[
               ['Phone and browser push', channels.push],
@@ -1735,7 +1755,7 @@ export function Account() {
           </ul>
         </section>
       </div>
-      {member.active && (
+      {covered(member) && (
         <>
           <FundFollows ms={ix.data ? funds(ix.data) : null} f={f} setF={setF} />
           <section className="acct-box">

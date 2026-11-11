@@ -2683,6 +2683,7 @@ p a,
 }
 .acct-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .acct-channels {
