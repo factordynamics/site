@@ -60,6 +60,16 @@ const PLANNED: { from: string; to: string; row: Restart }[] = [
     row: { started_at: '2026-11-11T08:53:19Z', at: '2026-11-11T08:56:00Z', prev_up_since: '2026-11-11T08:40:00Z', down_seconds: 114, kind: 'planned', build: 'caad4f5b6df5', prev_build: 'caad4f5b6df5', note: 'Planned failover test, 08:53–08:58 UTC. Member pages and the API returned errors for about 2 minutes until access moved to the backup automatically (1 min 54 s). Pages already open kept failing until reloaded. Alerts were not affected.' },
   },
 ];
+/**
+ * Events that weren't restarts (gene stayed up), for /status/'s list: planned drills, and incidents with their fix.
+ * Newest first.
+ */
+export const EVENTS: { kind: 'planned' | 'incident'; started_at: string; ended_at: string; title: string; note: string; fix?: string }[] = [
+  { kind: 'planned', started_at: '2026-11-11T16:48:36Z', ended_at: '2026-11-11T16:53:48Z', title: 'Planned failover drill', note: 'Member traffic moved to the backup for 5 minutes and back, with the primary EDGAR poller paused 15 minutes to test the backup poller. A revoked key or removed seat stopped working within 3 seconds on the server answering. No member-facing errors; alerts were not affected.' },
+  { kind: 'incident', started_at: '2026-11-11T16:01:07Z', ended_at: '2026-11-11T16:07:50Z', title: 'Revoked keys and seats kept working on the backup', note: 'Found by the 16:01 drill: while the backup served members, an API key deleted and a seat removed earlier still worked there. Only test seats were affected; no real member was. Fixed at 16:36 the same day.', fix: 'd0e5327' },
+  { kind: 'planned', started_at: '2026-11-11T16:01:07Z', ended_at: '2026-11-11T16:07:50Z', title: 'Planned failover drill', note: 'Member traffic moved to the backup for 7 minutes and back. No member-facing errors; alerts were not affected.' },
+];
+
 /** The restart log as shown: a planned window's rows as its one row, newest first. */
 const shownRestarts = (rows: Restart[]): Restart[] => {
   const out: Restart[] = [];
@@ -239,6 +249,8 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
       // The API host's own boot (while the Worker serves a failover, the host's last one, not an isolate's).
       api_up_since: (s.last?.host === 'cloudflare' ? s.hosts?.gene?.up_since : s.last?.up_since) ?? null,
       rows: shownRestarts(s.restarts).slice(0, 30),
+      // Planned drills and incidents that weren't restarts (EVENTS).
+      events: EVENTS,
       // The last failed checks (newest first), so each one in probe.24h can be told apart.
       failed_checks: (s.failures ?? []).filter((f) => Date.parse(f.at) >= now - 86400_000),
     },

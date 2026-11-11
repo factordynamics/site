@@ -1788,7 +1788,9 @@ async function proxyApi(req: Request, env: Env, base: string): Promise<Response>
       const b = (await r.json().catch(() => null)) as Record<string, unknown> | null;
       if (b) {
         for (const k of ['content-length', 'content-encoding', 'etag']) out.delete(k);
-        return new Response(JSON.stringify({ ...b, ...(await thisHost(env)), proxied: true, upstream: { this_host: b.this_host ?? b.api_host ?? null, by_kind: b.by_kind ?? null, api_build: b.api_build ?? null } }), { status, headers: out });
+        // This Worker's own mail tally is empty while it only proxies: by_kind is upstream's, labelled, with ours apart.
+        const mine = await thisHost(env);
+        return new Response(JSON.stringify({ ...b, ...mine, by_kind: b.by_kind ?? null, by_kind_host: b.this_host ?? b.api_host ?? null, proxy_by_kind: mine.by_kind, proxied: true, upstream: { this_host: b.this_host ?? b.api_host ?? null, by_kind: b.by_kind ?? null, api_build: b.api_build ?? null } }), { status, headers: out });
       }
     }
     return new Response(r.body, { status, headers: out });

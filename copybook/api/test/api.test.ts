@@ -1194,6 +1194,8 @@ describe('copybook api', () => {
     expect(st.freshness).toMatchObject({ data_built_at: '2026-11-11T09:30:00Z', last_13f_lag_seconds: 1200 });
     await env.DB.put('alerts:pending-moves', '[]');
     expect((await buildStatus(env, min(8), s)).alerts_13f.state).toBe('ok');
+    // Drills and incidents that weren't restarts are listed too (the 16:01 backup revocation, with its fix).
+    expect(st.restarts.events.map((e: { kind: string; started_at: string }) => `${e.kind} ${e.started_at.slice(11, 16)}`)).toEqual(['planned 16:48', 'incident 16:01', 'planned 16:01']);
   });
 
   it("Friday email: 'Your follows' leads (a followed 13F in the alert's format, its 10 largest rows; else the expected date); the welcome names the follow; weekend budget", async () => {
@@ -1519,7 +1521,7 @@ describe('copybook api', () => {
     expect(welcome.length).toBe(1);
     // The welcome says what the invoice will be and who gets it, and starts with the team; no card wording.
     const inv1 = new Date((Date.now() / 1000 + 14 * 86400) * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
-    expect([welcome[0].text.includes('$1,990'), welcome[0].text.includes('PO PO-55'), welcome[0].text.includes('a copy to ap@acme-cap.test'), welcome[0].text.includes(`Cancel before ${inv1} and nothing is owed`), /1\. Invite your team \(up to 10\)/.test(welcome[0].text), /not charged|subscribed from/.test(welcome[0].text)]).toEqual([true, true, true, true, true, false]);
+    expect([welcome[0].text.includes('$1,990'), welcome[0].text.includes('stays Net 30 even if you add a card'), welcome[0].text.includes('PO PO-55'), welcome[0].text.includes('a copy to ap@acme-cap.test'), welcome[0].text.includes(`Cancel before ${inv1} and nothing is owed`), /1\. Invite your team \(up to 10\)/.test(welcome[0].text), /not charged|subscribed from/.test(welcome[0].text)]).toEqual([true, true, true, true, true, true, false]);
     // /me: the invoice trial as /account/ shows it (amount in cents).
     const { publicView } = await import('../src/members');
     expect(publicView(m).invoice_trial).toEqual({ invoice_on: new Date(m.trial_end! * 1000).toISOString().slice(0, 10), due_on: new Date((m.trial_end! + 30 * 86400) * 1000).toISOString().slice(0, 10), amount: 199000, currency: 'usd', po: 'PO-55', ap_email: 'ap@acme-cap.test', invoice_to: 'coo@acme-cap.test' });
@@ -1722,7 +1724,7 @@ describe('copybook api', () => {
     // The stored new "Call"/"Put" and exited "CALL"/"PUT" lines are one position each, trimmed by the filed values'
     // change and marked (not a NEW plus an EXIT); the title leads with the largest real move.
     const [miBody] = mi.text.split(/\n\s*Corrected /);
-    expect([/^Corrected · Mizuho Markets Americas Q3: MRVL \+\$476\.1M/.test(mi.title), /NEW SPY|EXIT SPY/.test(mi.title), /New:[^\n]*SPY|Exited:[^\n]*SPY/.test(miBody), miBody.match(/SPY calls -\$[\d.]+M[^\n]*/)?.[0], miBody.match(/SPY puts -\$[\d.]+M/)?.[0]]).toEqual([true, false, false, "SPY calls -$58.0M (share counts don't reconcile; change from filed values, 0.9% of book) · not in totals, SPY puts -$5.9M (share counts don't reconcile; change from filed values, 0.1% of book) · not in totals", 'SPY puts -$5.9M']);
+    expect([/^Corrected · Mizuho Markets Americas Q3: MRVL \+\$476\.1M/.test(mi.title), /NEW SPY|EXIT SPY/.test(mi.title), /New:[^\n]*SPY|Exited:[^\n]*SPY/.test(miBody), miBody.match(/Trimmed: .*$/m)?.[0].includes("SPY calls value as filed fell from $610.5M to $552.5M; share counts don't reconcile, not counted"), /SPY calls -\$58\.0M|SPY puts -\$5\.9M/.test(miBody)]).toEqual([true, false, false, true, false]);
     // Netted fresh from the filings (Q3 "Call" against Q2 "CALL", case-blind), the trade is the filed values' change,
     // marked: never 19,152 - 479,831 sh x $28,846 = -$13.3B, 194.7% of a $6.8B book.
     const pos = (put_call: string, shares: number, value: number) => ({ cusip: '78462F103', issuer: 'SPDR S&P 500 ETF T', ticker: 'SPY', display_name: null, put_call, shares, value, title: 'SPY' });
@@ -2516,7 +2518,7 @@ describe('copybook api', () => {
     const gb = gateMoves(computeMoves(gbk3, both as never, undefined, new Map()), both as never, new Map(), new Map());
     expect([gb.changed, gb.moves.sold_usd, gb.held.map((h) => [h.ticker, h.reason])]).toEqual([[], 0, [['BKNG', 'unreliable_shares']]]);
     const gsMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'guardcap', slugs: ['guardcap'], manager: 'GuardCap Asset Management', name: 'GuardCap Asset Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0001732008-26-000006', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: gs.moves, tickers: ['BKNG'] }], [], { investors: ['guardcap'], stocks: [], owned: [] } as never);
-    expect([/BKNG -\$114\.9M \(share counts don't reconcile; change from filed values/.test(gsMail.text), /3\.3B|BKNG/.test(gsMail.subject), /sold \$114/.test(gsMail.text)]).toEqual([true, false, false]);
+    expect([gsMail.text.includes("BKNG value as filed fell from $121.6M to $6.7M; share counts don't reconcile, not counted"), /3\.3B|BKNG/.test(gsMail.subject), /sold \$114|-\$114\.9M/.test(gsMail.text)]).toEqual([true, false, false]);
     // An option line filed in contracts (price 100x its underlying's median: BNP's SPY puts, +$16.0B in a book far larger)
     // passes the size guard, so the 3x band against the underlying's median marks it: shown, never totalled or headlined.
     const bq2 = [pos('SPY', '78462F103', 100_000, 6_660_000_000, 'Put'), pos('REST', '000000009', 1, 500e9)];
@@ -2528,7 +2530,7 @@ describe('copybook api', () => {
     const gc = gateMoves(computeMoves(bq3, bq2, undefined, new Map()), bq2.map((p) => (p.put_call ? { ...p, shares_basis: 'contracts' } : p)) as never, new Map(), new Map([['78462F103', { cur: 666, prev: 640 }]]));
     expect([gc.changed.map((r) => r.unreliable), gc.moves.bought_usd]).toEqual([['shares'], 0]);
     const optMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'bnp', slugs: ['bnp'], manager: 'BNP Paribas', name: 'BNP PARIBAS', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000001', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: gopt.moves, tickers: [] }], [], { investors: ['bnp'], stocks: [], owned: [] } as never);
-    expect([/SPY|16\.0B/.test(optMail.subject), /SPY puts \+\$16\.0B[^\n]*not in totals/.test(optMail.text), /\+\d+% shares/.test(optMail.text)]).toEqual([false, true, false]);
+    expect([/SPY|16\.0B/.test(optMail.subject), optMail.text.includes("SPY puts value as filed rose from $6.7B to $22.6B; share counts don't reconcile, not counted"), /\+\d+% shares/.test(optMail.text)]).toEqual([false, true, false]);
     // Ingest's own side wins when it gives one; without it, a stock line off its price is "value".
     expect([unreliableSide({ put_call: 'Put', price_outlier: true, unreliable: 'value' }), unreliableSide({ put_call: 'Put', price_outlier: true }), unreliableSide({ put_call: null, price_outlier: true })]).toEqual(['value', 'shares', 'value']);
     // - "value" (price_outlier: BMO's Q3 TEVA filed at about $4,005 a share): the share change, value unavailable.
@@ -2839,7 +2841,7 @@ describe('copybook api', () => {
     // own mail tally, and keeps the live host's under upstream.
     for (const hp of ['/health', '/health?probe=1']) {
       const hb = await (await at(hp)).json();
-      expect([hb.this_host, hb.proxied, hb.api_host, hb.upstream, typeof hb.by_kind?.real]).toEqual(['cloudflare', true, 'gene', { this_host: 'gene', by_kind: { real: 2 }, api_build: 'gene00000001' }, 'number']);
+      expect([hb.this_host, hb.proxied, hb.api_host, hb.upstream, hb.by_kind, hb.by_kind_host, typeof hb.proxy_by_kind?.real]).toEqual(['cloudflare', true, 'gene', { this_host: 'gene', by_kind: { real: 2 }, api_build: 'gene00000001' }, { real: 2 }, 'gene', 'number']);
     }
     // api.json moves (to this Worker, then back): within 10 s every request follows it (the drill: isolates kept the
     // old base 61 s, so a revoked key still worked on the host that had stopped serving).

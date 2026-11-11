@@ -464,7 +464,7 @@ export function loginMail(env: Env, to: string, token: string, welcome: boolean,
   const inv = m?.collection === 'send_invoice' && m.plan === 'fund' && m.trial_end ? m : null;
   const day = (t: number) => new Date(t * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
   const terms = inv
-    ? ` Your 14-day trial runs until ${day(inv.trial_end!)}. On that day we issue the invoice for the year${inv.invoice_terms?.amount ? `, $${(inv.invoice_terms.amount / 100).toLocaleString('en-US')}` : ''}, due ${day(inv.trial_end! + 30 * 86400)} (Net 30)${inv.invoice_terms?.po ? `, with your PO ${inv.invoice_terms.po}` : ''}. It goes to ${to}${inv.invoice_terms?.ap_email ? `, with a copy to ${inv.invoice_terms.ap_email}` : ''}, with a Pay online link (card or US bank account). Cancel before ${day(inv.trial_end!)} and nothing is owed.`
+    ? ` Your 14-day trial runs until ${day(inv.trial_end!)}. On that day we issue the invoice for the year${inv.invoice_terms?.amount ? `, $${(inv.invoice_terms.amount / 100).toLocaleString('en-US')}` : ''}, due ${day(inv.trial_end! + 30 * 86400)} (Net 30)${inv.invoice_terms?.po ? `, with your PO ${inv.invoice_terms.po}` : ''}. It goes to ${to}${inv.invoice_terms?.ap_email ? `, with a copy to ${inv.invoice_terms.ap_email}` : ''}, with a Pay online link (card or US bank account). Your invoice stays Net 30 even if you add a card. Cancel before ${day(inv.trial_end!)} and nothing is owed.`
     : trial;
   const steps: [string, string, string][] = inv
     ? [
@@ -520,12 +520,19 @@ const odd = (r: MoveRow) => `${r.unusual ? ` · ${UNUSUAL}` : ''}${r.filer_value
 /** A marked row's note (markUnreliable): what can't be trusted, and that it isn't in the totals. */
 function unreliableNote(r: MoveRow): string {
   if (r.unreliable === 'value') return `value unavailable${r.filed_per_share ? ` (filed at ≈$${r.filed_per_share >= 100 ? Math.round(r.filed_per_share).toLocaleString('en-US') : r.filed_per_share.toFixed(2)}/sh)` : ''}, not in totals`;
-  if (r.unreliable === 'shares') return r.change === 'new' || r.change === 'exited' ? "share counts don't reconcile, not in totals" : 'not in totals';
+  if (r.unreliable === 'shares') return r.change === 'new' || r.change === 'exited' ? "share counts don't reconcile, not in totals" : 'not counted';
   if (r.unreliable === 'both') return 'share count unreliable in this filing, not in totals';
   return '';
 }
-/** A row's size: dollars, or the share change when its value can't be trusted ("TEVA +159,272 sh"). */
+/** An add or trim whose share counts don't reconcile: shown by its filed values only, no computed trade. */
+const sharesOnly = (r: MoveRow) => r.unreliable === 'shares' && (r.change === 'added' || r.change === 'trimmed');
+const prevFiled = (r: MoveRow) => r.prev_value ?? r.value - r.value_delta;
+/** "value as filed fell from $121.6M to $6.7M" */
+const filedFacts = (r: MoveRow) => `value as filed ${r.value < prevFiled(r) ? 'fell' : 'rose'} from ${usd(prevFiled(r), false)} to ${usd(r.value, false)}`;
+const NOT_COUNTED_SHARES = "share counts don't reconcile, not counted";
+/** A row's size: dollars, the share change when its value can't be trusted ("TEVA +159,272 sh"), or the filed values. */
 const amount = (r: MoveRow) => {
+  if (sharesOnly(r)) return `${usd(prevFiled(r), false)} → ${usd(r.value, false)} as filed`;
   if (r.unreliable !== 'value' || r.change === 'new' || r.change === 'exited') return usd(r.value_delta);
   const d = r.shares - r.prev_shares;
   return `${d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh`;
@@ -533,6 +540,7 @@ const amount = (r: MoveRow) => {
 
 /** The trade as a share of this filing's book; no % without it (pct_of_book is the position's weight, never a trade size). */
 const bookPct = (r: MoveRow) => {
+  if (sharesOnly(r)) return '';
   const d = r.delta_pct_of_book;
   if (!d) return '';
   return Math.abs(d) < 0.0005 ? '<0.1%' : `${(Math.abs(d) * 100).toFixed(1)}%`;
@@ -542,6 +550,7 @@ const bookPct = (r: MoveRow) => {
 const UNRECONCILED = "share counts don't reconcile; change from filed values";
 /** How much of the position itself changed: a trim of 40% of the shares reads differently from 0.4% of the book. */
 function positionChange(label: string, r: MoveRow): string {
+  if (sharesOnly(r)) return "share counts don't reconcile";
   if (r.unreliable === 'shares') return UNRECONCILED;
   if (label === 'New') return 'new';
   if (label === 'Exited') return 'sold all';
@@ -687,6 +696,8 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
     for (const [label, rows] of [['New', mv.new], ['Added', mv.added], ['Trimmed', mv.trimmed], ['Exited', mv.exited]] as const) {
       if (!rows.length) continue;
       const parts = rows.map((r) => {
+        // \"BKNG value as filed fell from $121.6M to $6.7M; share counts don't reconcile, not counted\": no computed trade.
+        if (sharesOnly(r)) return `${rowName(r)} ${filedFacts(r)}; ${NOT_COUNTED_SHARES}${flag(r.ticker, f)}`;
         const pos = label === 'Trimmed' || label === 'Added' ? positionChange(label, r) : '';
         const bits = [pos && (pos.startsWith('sold ') ? `${pos} of the position` : pos), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean);
         return `${rowName(r)} ${amount(r)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}${odd(r)}`;
@@ -696,7 +707,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
     for (const r of mv.exchanged ?? []) lines.push(`  ${exchangeLine(r)}`);
     if (a.held?.length || a.moves?.not_counted?.length) lines.push(`  ${heldLine(a)}`);
     const mine = yourMoves(a, f);
-    if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
+    if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${sharesOnly(r) ? `${filedFacts(r)}, ${NOT_COUNTED_SHARES}` : `${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''}`} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
   } else if (a.top?.length) {
     lines.push('  No earlier quarter on file for this filer, so no changes yet. Largest holdings:');
     lines.push(`  ${a.top.map((r) => `${r.ticker || r.display_name || r.issuer}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} ${usd(r.value, false)}${flag(r.ticker, f)}`).join(', ')}`);
@@ -926,7 +937,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     for (const r of mv.exchanged ?? []) out.push(`<p style="margin:6px 0 2px">${esc(exchangeLine(r))}</p>`);
     if (a.held?.length || a.moves?.not_counted?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);
     const mine = yourMoves(a, f);
-    if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${esc(shareTrade(r))}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
+    if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${sharesOnly(r) ? esc(`${filedFacts(r)}, ${NOT_COUNTED_SHARES}`) : `${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${esc(shareTrade(r))}` : ''}`} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
   } else if (a.top?.length) {
     out.push('<p style="margin:2px 0">No earlier quarter on file for this filer, so no changes yet. Largest holdings:</p>');
     out.push(table(['Stock', 'Value'], a.top.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, usd(r.value, false)]), [1]));
@@ -1017,7 +1028,7 @@ function holdtermFiling(env: Env, a: Alert13F): string {
     for (const [title, rows] of [['TOP BUYS', buys], ['TOP SELLS', sells]] as const) {
       if (!rows.length) continue;
       lines.push(title);
-      for (const [label, r] of rows) lines.push(`  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad(usd(r.value_delta), 9)}  ${positionChange(label === 'ADD' ? 'Added' : label === 'TRIM' ? 'Trimmed' : label === 'NEW' ? 'New' : 'Exited', r)}${odd(r)}`);
+      for (const [label, r] of rows) lines.push(sharesOnly(r) ? `  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad('-', 9)}  ${filedFacts(r)}; ${NOT_COUNTED_SHARES}` : `  ${pad(label, 5)}${pad(rowName(r), 14)}${lpad(usd(r.value_delta), 9)}  ${positionChange(label === 'ADD' ? 'Added' : label === 'TRIM' ? 'Trimmed' : label === 'NEW' ? 'New' : 'Exited', r)}${odd(r)}`);
     }
   } else if (a.top?.length) {
     lines.push('', 'LARGEST HOLDINGS', ...a.top.slice(0, 5).map((r) => `  ${pad(rowName(r), 19)}${lpad(usd(r.value, false), 9)}`));
