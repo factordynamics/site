@@ -75,7 +75,8 @@ function position(h: any, equityTotal: number, allTotal: number) {
     weight: allw,
     weight_incl_options: allw,
     weight_equity: eqw,
-    value_scale: h.value_scale ?? null,
+    // The data run marks a row it rescaled (value_as_filed, value_adjusted); the factor follows from the two values.
+    value_scale: h.value_scale ?? (h.value_adjusted === true && h.value_as_filed ? Math.round((h.value / h.value_as_filed) * 1000) / 1000 : null),
     value_as_filed: h.value_as_filed ?? null,
     value_adjusted: h.value_adjusted ?? null,
     zero_value: h.zero_value ?? (h.change !== 'exited' && h.value === 0),
@@ -306,7 +307,10 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
   const allTotal = q.total_value ?? holdings.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
   const main = q.accession ? await filingMeta(env, cik, q.accession) : null;
   const merged = ((q.amendments ?? []) as unknown[]).map((a) => (typeof a === 'string' ? a : (a as { accession?: string })?.accession)).filter(Boolean) as string[];
-  const versions = await versionsFor(env, cik, q.report_date ?? quarterEnd(quarter), q.accession ?? null, merged);
+  // Ingest's filings[] marks a NEW HOLDINGS amendment that re-filed the whole book (mislabeled_amendment); null without it.
+  const trail = Array.isArray(q.filings) ? (q.filings as { accession?: string; mislabeled_amendment?: boolean }[]) : null;
+  const mislabeled = (acc: string | null | undefined) => (trail ? trail.some((f) => f.accession === acc && f.mislabeled_amendment === true) : null);
+  const versions = (await versionsFor(env, cik, q.report_date ?? quarterEnd(quarter), q.accession ?? null, merged))?.map((v) => ({ ...v, mislabeled_amendment: mislabeled(v.accession) })) ?? null;
   // Amendments: every 13F-HR/A EDGAR has for the period, whatever its type and including a served
   // restatement (not only those the data run merged); versions[] adds the original.
   const amendments = versions ? versions.filter((v) => v.form.endsWith('/A')).map((v) => v.accession) : (q.amendments ?? []);
@@ -322,7 +326,8 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
       accepted_at: noMs(main?.accepted_at),
       sec_url: q.sec_url ?? null,
       amendment_type: main?.amendment_type ?? null,
-      amendments: await amendmentsOf(env, cik, amendments),
+      mislabeled_amendment: mislabeled(q.accession),
+      amendments: (await amendmentsOf(env, cik, amendments)).map((a) => ({ ...a, mislabeled_amendment: mislabeled(a.accession) })),
       versions,
     },
     prev_quarter: q.prev_quarter ?? null,

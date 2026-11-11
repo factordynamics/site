@@ -10,6 +10,17 @@ export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
   {
+    id: '2026-11-11-mislabeled-amendment',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Added `mislabeled_amendment` (boolean or null) to filing, filing.amendments[] and filing.versions[]: true for a 13F-HR/A marked NEW HOLDINGS that re-files the whole book, which replaces the book instead of adding to it. Null when the data run has no filing trail for the quarter.',
+      'Position.`value_scale` is filled for rows the data run rescaled (value_usd over value_as_filed, with value_adjusted true); still null on rows it did not mark.',
+    ],
+  },
+  {
     id: '2026-11-11-suspect-units-null',
     date: '2026-11-11',
     schema_version: SCHEMA_VERSION,

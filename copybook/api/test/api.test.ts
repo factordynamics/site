@@ -3530,7 +3530,8 @@ describe('copybook api', () => {
     // The data run serves the restatement and merged nothing; a later NEW HOLDINGS amendment isn't in it.
     hist.m.set('h/warren-buffett/2026Q2.json', new TextEncoder().encode(JSON.stringify({
       quarter: '2026Q2', report_date: '2026-06-30', accession: REST, form: '13F-HR/A', filing_date: '2026-09-02', sec_url: 'https://www.sec.gov/Archives/edgar/data/1067983/x-index.html', amendments: [], prev_quarter: '2026Q1', total_value: 3000, position_count: 1,
-      holdings: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', title: 'COM', put_call: null, shares: 15, value: 3000, weight: 1, change: 'added', prev_shares: 10, share_change: 5, value_delta: 1000 }],
+      holdings: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', title: 'COM', put_call: null, shares: 15, value: 3000, value_as_filed: 3, value_adjusted: true, weight: 1, change: 'added', prev_shares: 10, share_change: 5, value_delta: 1000 }],
+      filings: [{ accession: ORIG, role: 'superseded' }, { accession: REST, role: 'base' }, { accession: NEWH, role: 'ignored', mislabeled_amendment: true }],
     })));
     secFiles['submissions/CIK0001067983.json'] = JSON.stringify({ filings: { recent: {
       accessionNumber: [NEWH, REST, ORIG, '0001104659-26-062477'], form: ['13F-HR/A', '13F-HR/A', '13F-HR', '13F-HR'], reportDate: ['2026-06-30', '2026-06-30', '2026-06-30', '2026-03-31'],
@@ -3564,6 +3565,9 @@ describe('copybook api', () => {
     ]);
     // Amendments come from EDGAR, not only the ones the data run merged.
     expect(cur.filing.amendments.map((a: { accession: string; amendment_type: string }) => [a.accession, a.amendment_type])).toEqual([[REST, 'RESTATEMENT'], [NEWH, 'NEW HOLDINGS']]);
+    // Ingest's filing trail marks a mislabeled amendment; a rescaled row carries its unit fix.
+    expect([cur.filing.mislabeled_amendment, ...cur.filing.versions.map((v: { mislabeled_amendment: boolean }) => v.mislabeled_amendment), ...cur.filing.amendments.map((v: { mislabeled_amendment: boolean }) => v.mislabeled_amendment)]).toEqual([false, false, false, true, false, true]);
+    expect(cur.holdings[0]).toMatchObject({ value_usd: 3000, value_as_filed: 3, value_adjusted: true, value_scale: 1000 });
 
     const orig = await v1('/v1/filers/warren-buffett/holdings/2026Q2?version=original');
     expect(orig.status).toBe(200);
@@ -3609,7 +3613,7 @@ describe('copybook api', () => {
     const d = bySlug.body.data;
     // Both are EDT (UTC-4): 16:05:12 and 16:10:02 ET.
     expect(d.filing.accepted_at).toBe('2025-05-15T20:05:12Z');
-    expect(d.filing.amendments).toEqual([{ accession: '0000950123-25-008361', filed_on: '2025-08-14', accepted_at: '2025-08-14T20:10:02Z', amendment_type: 'NEW HOLDINGS', amendment_no: 1, confidential_treatment_expired: true }]);
+    expect(d.filing.amendments).toEqual([{ accession: '0000950123-25-008361', filed_on: '2025-08-14', accepted_at: '2025-08-14T20:10:02Z', amendment_type: 'NEW HOLDINGS', amendment_no: 1, confidential_treatment_expired: true, mislabeled_amendment: null }]); // null: this quarter has no filing trail from the data run
     for (const k of spec.components.schemas.Holdings.properties.filing.required) expect(d.filing).toHaveProperty(k);
     expect(fl.body.data[0]).toMatchObject({ curated: true, type: null }); // null until classified
     // Cached after the first read: EDGAR is not asked again.
