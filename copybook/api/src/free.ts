@@ -326,7 +326,7 @@ interface FollowContext {
   expected: Map<string, { manager: string; date: string }>;
   quarter: string | null;
 }
-async function followContext(env: Env, slugs: string[]): Promise<FollowContext> {
+async function followContext(env: Env, slugs: string[], now = Date.now()): Promise<FollowContext> {
   const filed = new Map<string, Alert13F>();
   for (const s of new Set(slugs)) {
     const raw = await env.DB.get(`wk13f:${s}`);
@@ -334,7 +334,30 @@ async function followContext(env: Env, slugs: string[]): Promise<FollowContext> 
   }
   // The site's list of superinvestors still to file this quarter, with each one's expected date (d/expected.json).
   const ex = await fetch(`${env.SITE_URL}d/expected.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) as { quarter?: string; expected?: { slug: string; manager: string; expected_date: string }[] } | null;
-  return { filed, expected: new Map((ex?.expected ?? []).map((x) => [x.slug, { manager: x.manager, date: x.expected_date }])), quarter: ex?.quarter ?? null };
+  const quarter = ex?.quarter ?? nextDeadline(now).quarter;
+  // Whether a follow has filed comes from the data run's index (each filer's latest 13F quarter), not from this week's
+  // alert records: a 13F filed before those started (Pzena, Oct 30) is filed, with the top moves from its card.
+  const { filers } = await import('./v1data');
+  const latest = new Map((await filers(env)).map((f) => [f.slug, f]));
+  for (const s of new Set(slugs)) {
+    const f = latest.get(s);
+    if (!f?.latest_accession || f.latest_quarter !== quarter || filed.get(s)?.quarter === quarter) continue;
+    filed.set(s, await cardAlert(env, f));
+  }
+  const expected = new Map((ex?.expected ?? []).filter((x) => !(filed.get(x.slug)?.quarter === quarter)).map((x) => [x.slug, { manager: x.manager, date: x.expected_date }]));
+  return { filed, expected, quarter };
+}
+/** A 13F filed before this week's alert records, as one: its filing from the index, its top moves from the site's card. */
+async function cardAlert(env: Env, f: import('./v1data').FilerRow): Promise<Alert13F> {
+  type CardRow = { ticker: string | null; name?: string; cusip?: string; change?: string; value_delta: number; put_call?: string | null };
+  const d = (await fetch(`${env.SITE_URL}d/f/${f.latest_accession}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { bought_usd?: number; sold_usd?: number; moves?: CardRow[] } | null;
+  const rows = (d?.moves ?? []).filter((r) => !r.put_call);
+  const of = (c: string) => rows.filter((r) => r.change === c).map((r) => ({ ...r, issuer: r.name ?? '', display_name: r.name ?? null })) as unknown as import('./edgar').MoveRow[];
+  return {
+    slug: f.slug, slugs: [f.slug], manager: f.manager, name: f.name, quarter: f.latest_quarter!, report_date: f.latest_report_date ?? '', filing_date: f.latest_filing_date ?? '',
+    accession: f.latest_accession!, sec_url: '', tickers: rows.map((r) => r.ticker).filter((t): t is string => !!t),
+    moves: rows.length ? { bought_usd: d?.bought_usd ?? 0, sold_usd: d?.sold_usd ?? 0, new: of('new'), added: of('added'), trimmed: of('trimmed'), exited: of('exited') } : null,
+  };
 }
 const qLabel = (q: string) => (/^\d{4}Q[1-4]$/.test(q) ? `Q${q[5]}` : q);
 const dayLabel = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '');
@@ -445,7 +468,11 @@ export async function inYourNames(env: Env, names: string[], week: Week, now: nu
       if (e.form.startsWith('4')) {
         if (!e.open_market || !e.value_usd || e.value_usd < INSIDER_MIN_USD) continue;
         const sold = (e.totals?.sold?.shares ?? 0) > (e.totals?.bought?.shares ?? 0);
-        locked.push({ text: `${short(e.issuer)}'s ${roleOf(e.role)} ${sold ? 'sold' : 'bought'} ${money(e.value_usd)} of ${t}`, size: e.value_usd });
+        // Dated: the trade, then when it was filed ("sold Nov 4, filed Nov 6").
+        const md = (d: string) => new Date(`${d.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+        const verb = sold ? 'sold' : 'bought';
+        const when = `${e.event_date ? `${verb} ${md(e.event_date)}, ` : ''}filed ${md(etDay(Date.parse(e.accepted_at)))}`;
+        locked.push({ text: `${short(e.issuer)}'s ${roleOf(e.role)} ${verb} ${money(e.value_usd)} of ${t} (${when})`, size: e.value_usd });
       } else locked.push({ text: `${e.filer_name} filed a ${e.form.replace(/^SCHEDULE /, '')} on ${t}`, size: 0 });
     }
   }
@@ -521,21 +548,31 @@ export interface E2Move {
   firm: string;
   text: string;
   usd: number;
+  change: string;
+  /** The security as named in a subject: its issuer, else the ticker. */
+  what: string;
 }
-/** The paid moment: a 13F whose moves email reached Copy members within 5 minutes, from the latency log. */
+/** The paid moment: a 13F whose moves email reached Copy members within 5 minutes, from the latency log (clock times, ET). */
 export interface E2Moment {
   firm: string;
   filed: string;
   had: string;
-  later: string;
+  /** A preview shows an earlier filing's logged times, marked "Preview example". */
+  example?: boolean;
+}
+/** One followed investor: its 13F this season (top moves), else when it's expected. */
+export interface E2Follow {
+  who: string;
+  a: Alert13F | null;
+  /** Expected date (YYYY-MM-DD) when not filed; null: by the deadline. */
+  expected: string | null;
 }
 export interface E2Input {
   now: number;
   season: string;
-  /** Followed investors that filed today, and earlier this season, with their names as shown. */
-  filed: { a: Alert13F; who: string }[];
-  earlier: { a: Alert13F; who: string }[];
-  /** Followed investors whose 13F is still due. */
+  /** One row per followed investor, filed first. */
+  rows: E2Follow[];
+  /** Still due for the preheader: the member's follows, else the superinvestors still to file. */
   due: string[];
   biggest: E2Move[];
   moment: E2Moment | null;
@@ -551,61 +588,86 @@ const lastName = (who: string) => who.replace(/\s*\(.*\)$/, '').split(' ').pop()
 /** "First Eagle Investment Management LLC" as "First Eagle": the fund's name as people say it. */
 const shortFirm = (slug: string, name: string) => firmName(slug, name).replace(/\s+(investment management|asset management|capital management|investment partners|global investors|management|advisors|advisers|investors|group)$/i, '').trim();
 const listNames = (xs: string[]) => (xs.length <= 1 ? xs.join('') : xs.length <= 3 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : `${xs.slice(0, 3).join(', ')} and ${xs.length - 3} more`);
+/** $400.1M as $400M, $8.0M as $8M: for subject lines. */
+const roundMoney = (v: number) => money(Math.abs(v)).replace(/(\d{3,})\.\d([KMB])/, '$1$2').replace(/\.0([KMB])/, '$1');
+/** "bought $400M of NVR" / "sold out of CHRW" / "sold $300M of HM1": one move in a subject. */
+const headPart = (change: string, v: number, what: string) => (change === 'exited' ? `sold out of ${what}` : `${v > 0 ? 'bought' : 'sold'} ${roundMoney(v)} of ${what}`);
+const VERB: Record<string, string> = { new: 'new position in', added: 'added', trimmed: 'trimmed', exited: 'sold out of' };
 
-/** One member's Email 2: their follows first (never an empty state), the paid moment, one trial button, the day's biggest moves. */
+/** One member's Email 2: their follows first (never an empty state), one trial button right after them, the paid moment, the day's biggest moves. */
 export function email2Mail(env: Env, to: string, o: E2Input): Mail {
   const dl = nextDeadline(o.now);
   const deadlineNight = dl.date === etDay(o.now);
   const dayName = new Date(o.now).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
   const intro = deadlineNight ? `13F deadline night, ${dayName}.` : `${dayName}. ${qLabel(dl.quarter)} 13Fs are due ${deadlineLabel(dl.date)}.`;
-  const three = (a: Alert13F) => {
+  const sorted = (a: Alert13F) => {
     const m = a.moves!;
-    const rows = [...m.new.map((r) => ['new position in', r] as const), ...m.added.map((r) => ['added', r] as const), ...m.trimmed.map((r) => ['trimmed', r] as const), ...m.exited.map((r) => ['sold out of', r] as const)]
-      .sort((x, y) => Math.abs(y[1].value_delta) - Math.abs(x[1].value_delta))
-      .slice(0, 3);
-    return rows.map(([l, r]) => `${l} ${r.ticker || r.display_name || r.issuer} ${r.value_delta > 0 ? '+' : '−'}${money(r.value_delta)}${pctOf(r.delta_pct_of_book)}`).join('; ');
+    return [...m.new.map((r) => ['new', r] as const), ...m.added.map((r) => ['added', r] as const), ...m.trimmed.map((r) => ['trimmed', r] as const), ...m.exited.map((r) => ['exited', r] as const)]
+      .sort((x, y) => Math.abs(y[1].value_delta) - Math.abs(x[1].value_delta));
   };
+  const three = (a: Alert13F) => sorted(a).slice(0, 3).map(([c, r]) => `${VERB[c]} ${r.ticker || r.display_name || r.issuer} ${r.value_delta > 0 ? '+' : '−'}${money(r.value_delta)}${pctOf(r.delta_pct_of_book)}`).join('; ');
   const card = (a: Alert13F) => e2(env, `f/${a.accession}/`, 'e2-follows');
   const pricing = e2(env, 'pricing/?from=e2', 'e2-paid') + '&client_reference_id=email_e2-paid';
-  const lead: { text: string; html: string }[] = [
-    ...o.filed.map(({ a, who }) => ({ text: `${who} filed its ${qLabel(a.quarter)} 13F today: ${three(a)}\n    ${card(a)}`, html: `<p style="margin:6px 0"><b>${esc(who)}</b> filed its ${esc(qLabel(a.quarter))} 13F today: ${esc(three(a))} · <a href="${esc(card(a))}" style="color:#1d4ed8">See the filing</a></p>` })),
-    ...o.earlier.map(({ a, who }) => ({ text: `${who} filed its ${qLabel(a.quarter)} 13F ${dayLabel(a.filing_date)}: ${three(a)}\n    ${card(a)}`, html: `<p style="margin:6px 0"><b>${esc(who)}</b> filed its ${esc(qLabel(a.quarter))} 13F ${esc(dayLabel(a.filing_date))}: ${esc(three(a))} · <a href="${esc(card(a))}" style="color:#1d4ed8">See the filing</a></p>` })),
-    ...o.due.map((n) => {
-      const line = `${n}'s ${qLabel(o.season || dl.quarter)} 13F is still due; Copy emails it minutes after filing.`;
-      return { text: line, html: `<p style="margin:6px 0">${esc(line)}</p>` };
-    }),
-  ];
+  const isToday = (a: Alert13F) => etDay(Date.parse(a.accepted ?? `${a.filing_date}T21:00:00Z`)) === etDay(o.now);
+  // One row per follow: its top moves if it filed this season, else when it's expected.
+  const lead = o.rows.map(({ who, a, expected }) => {
+    if (a) {
+      const when = isToday(a) ? 'today' : dayLabel(a.filing_date);
+      const text = a.moves ? `${who} filed its ${qLabel(a.quarter)} 13F ${when}: ${three(a)}` : `${who} filed its ${qLabel(a.quarter)} 13F ${when}`;
+      return { text: `${text}\n    ${card(a)}`, html: `<p style="margin:6px 0"><b>${esc(who)}</b>${esc(text.slice(who.length))} · <a href="${esc(card(a))}" style="color:#1d4ed8">See the filing</a></p>` };
+    }
+    const text = `${who}: expected ${expected ? dayLabel(expected) : `by ${dayLabel(dl.date)}`}`;
+    return { text, html: `<p style="margin:6px 0"><b>${esc(who)}</b>${esc(text.slice(who.length))}</p>` };
+  });
+  const COPY_LINE = "Copy emails each 13F minutes after it's filed.";
   const names = o.yours && (o.yours.facts.length || o.yours.hook) ? o.yours : null;
-  const namesText = names ? `In your names:\n${names.facts.map((f) => `  ${f.text}.`).join('\n')}${names.hook ? `${names.facts.length ? '\n' : ''}  Copy alerts you minutes after filing: ${names.hook}${names.more ? ` (+${names.more} more in your names)` : ''}.` : ''}` : '';
-  const namesHtml = names ? `<div style="background:#f3f4f6;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:15px;margin:0 0 4px">In your names</h3>${names.facts.map((f) => `<p style="margin:4px 0">${esc(f.text)}.</p>`).join('')}${names.hook ? `<p style="margin:4px 0">🔒 Copy alerts you minutes after filing: ${esc(names.hook)}${names.more ? ` (+${names.more} more in your names)` : ''}.</p>` : ''}</div>` : '';
-  const moment = o.moment ? `${o.moment.firm} filed at ${o.moment.filed} ET. Copy members had its moves at ${o.moment.had}. You're reading them ${o.moment.later}.` : '';
+  const moreNames = (n: number) => `+${n} more ${n === 1 ? 'item' : 'items'} in your names`;
+  const namesText = names ? `In your names:\n${names.facts.map((f) => `  ${f.text}.`).join('\n')}${names.hook ? `${names.facts.length ? '\n' : ''}  Copy alerts you minutes after filing: ${names.hook}${names.more ? ` (${moreNames(names.more)})` : ''}.` : ''}` : '';
+  const namesHtml = names ? `<div style="background:#f3f4f6;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:15px;margin:0 0 4px">In your names</h3>${names.facts.map((f) => `<p style="margin:4px 0">${esc(f.text)}.</p>`).join('')}${names.hook ? `<p style="margin:4px 0">Copy alerts you minutes after filing: ${esc(names.hook)}${names.more ? ` (${moreNames(names.more)})` : ''}.</p>` : ''}</div>` : '';
+  const moment = o.moment ? `${o.moment.example ? 'Preview example: ' : ''}${o.moment.firm} filed its 13F at ${o.moment.filed} ET. Copy members had its moves at ${o.moment.had} ET.` : '';
   const big = o.biggest.map((b) => `${b.who}: ${b.text}`);
   const bigTitle = deadlineNight ? "The day's biggest moves" : "Today's biggest moves";
   const recap = e2(env, `season/${(o.season || dl.quarter).toLowerCase()}/`, 'e2-recap');
   const why = o.follows ? 'You get this because you follow investors on Copybook.' : "You get this because you signed up for Copybook's free email.";
-  // Subject and preheader from the night's data: who filed among their follows, else the biggest move.
-  const b0 = o.biggest[0];
-  const subject = o.filed.length
-    ? `${deadlineNight ? 'Deadline night' : 'Today'}: ${listNames(o.filed.map((f) => lastName(f.who)))} filed. Here's what they did`
-    : b0
-      ? `${b0.firm} ${b0.text.replace(/ \([^)]*% of fund\)$/, '').replace(/([+−]\$[\d.]+[KMB])/, '($1)').replace(/\.0([KMB])/, '$1')}${o.biggest.length > 1 ? ` + ${o.biggest.length - 1} more ${deadlineNight ? 'deadline ' : ''}move${o.biggest.length > 2 ? 's' : ''}` : ''}`
-      : `${deadlineNight ? '13F deadline night' : 'Tonight'}: the biggest superinvestor moves`;
-  const pre = o.filed.length ? `${lastName(o.filed[0].who)}: ${three(o.filed[0].a)}` : moment || (big[1] ?? big[0] ?? intro);
-  const leadText = lead.length ? `Your follows:\n${lead.map((l) => `  ${l.text}`).join('\n')}` : '';
+  // Subject from the night's data: a follow that filed today, else the night's top manager; its top buy and top sell.
+  const followToday = o.rows.find((r) => r.a?.moves && isToday(r.a));
+  let subject = '';
+  if (followToday?.a) {
+    const rows = sorted(followToday.a);
+    const buy = rows.find(([, r]) => r.value_delta > 0);
+    const sell = rows.find(([, r]) => r.value_delta < 0);
+    const what = (r: (typeof rows)[number][1]) => r.ticker || r.display_name || r.issuer;
+    subject = `${followToday.who.match(/\((.*)\)$/)?.[1] ?? followToday.who} ${[buy, sell].filter((x) => !!x).map((x) => headPart(x![0], x![1].value_delta, what(x![1]))).join(', ')}`;
+  } else if (o.biggest.length) {
+    const firm = o.biggest[0].slug;
+    const mine = o.biggest.filter((b) => b.slug === firm);
+    const buy = mine.find((b) => b.usd > 0);
+    const sell = mine.find((b) => b.usd < 0);
+    subject = `${o.biggest[0].firm} ${[buy, sell].filter((x): x is E2Move => !!x).map((b) => headPart(b.change, b.usd, b.what)).join(', ')}`;
+  } else subject = `${deadlineNight ? '13F deadline night' : 'Tonight'}: the biggest superinvestor moves`;
+  // Preheader: who is still due, else the paid moment.
+  const pre = o.due.length ? `${listNames(o.due.map(lastName))} due by ${dayLabel(dl.date)}` : moment || (big[1] ?? big[0] ?? intro);
+  const leadText = lead.length ? `Your follows:\n${lead.map((l) => `  ${l.text}`).join('\n')}\n  ${COPY_LINE}` : '';
   const bigText = big.length ? `${bigTitle}:\n${big.map((x) => `  ${x}`).join('\n')}\n  The season so far: ${recap}` : '';
   const ask = `Start 14-day free trial: ${pricing}\nCard required · charged on day 15 unless you cancel.`;
-  const button = `<p style="margin:20px 0 4px"><a href="${esc(pricing)}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Start 14-day free trial</a></p><p style="margin:0 0 18px;font-size:13px;color:#6b7280">Card required · charged on day 15 unless you cancel</p>`;
+  const button = `<p style="margin:16px 0 4px"><a href="${esc(pricing)}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Start 14-day free trial</a></p><p style="margin:0 0 14px;font-size:13px;color:#6b7280">Card required · charged on day 15 unless you cancel</p>`;
   const bigHtml = big.length ? `<h3 style="font-size:15px;margin:18px 0 6px">${bigTitle}</h3><table style="border-collapse:collapse;font-size:14px">${o.biggest.map((b) => `<tr><td style="padding:4px 8px 4px 0;vertical-align:top">${esc(b.who)}</td><td style="padding:4px 0;vertical-align:top;color:${b.usd > 0 ? '#047857' : '#b91c1c'}">${esc(b.text)}</td></tr>`).join('')}</table><p style="margin:6px 0"><a href="${esc(recap)}" style="color:#1d4ed8">The season so far</a></p>` : '';
-  // No follows to lead with: the biggest moves lead, so the email never opens on an empty state.
-  const body = lead.length ? [leadText, namesText, moment, ask, bigText] : [bigText, namesText, moment, ask];
+  const leadHtml = lead.length ? `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:16px;margin:0 0 4px">Your follows</h3>${lead.map((l) => l.html).join('')}<p style="margin:8px 0 0;color:#374151">${esc(COPY_LINE)}</p></div>` : '';
+  const momentHtml = moment ? `<p style="margin:0 0 12px"><b>${esc(moment)}</b></p>` : '';
+  // The first block of moves, then the button (on a phone's first screen), then the moment, their names, the rest.
+  const body = lead.length ? [leadText, ask, moment, namesText, bigText] : [bigText, ask, moment, namesText];
+  const html = lead.length ? `${leadHtml}${button}${momentHtml}${namesHtml}${bigHtml}` : `${bigHtml}${button}${momentHtml}${namesHtml}`;
   return {
     to,
     subject,
     text: `${intro}\n\n${body.filter(Boolean).join('\n\n')}\n\n${why} Unsubscribe: ${o.unsub}${FOOTER}\n${o.postal}`,
-    html: `<div style="display:none;max-height:0;overflow:hidden">${esc(pre)}</div><div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>${esc(intro)}</p>${lead.length ? `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:16px;margin:0 0 4px">Your follows</h3>${lead.map((l) => l.html).join('')}</div>${namesHtml}${moment ? `<p style="margin:16px 0 0"><b>${esc(moment)}</b></p>` : ''}${button}${bigHtml}` : `${bigHtml}${namesHtml}${moment ? `<p style="margin:16px 0 0"><b>${esc(moment)}</b></p>` : ''}${button}`}<p style="color:#6b7280;font-size:12px;margin-top:24px">${esc(why)} <a href="${esc(o.unsub)}" style="color:#6b7280">Unsubscribe</a>.<br>${esc(FOOTER.trim()).replace(/\n/g, '<br>')}<br>${esc(o.postal)}</p></div>`,
+    html: `<div style="display:none;max-height:0;overflow:hidden">${esc(pre)}</div><div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>${esc(intro)}</p>${html}<p style="color:#6b7280;font-size:12px;margin-top:24px">${esc(why)} <a href="${esc(o.unsub)}" style="color:#6b7280">Unsubscribe</a>.<br>${esc(FOOTER.trim()).replace(/\n/g, '<br>')}<br>${esc(o.postal)}</p></div>`,
     unsubscribe: o.unsub,
   };
 }
+
+/** Email 2's speed line quotes only 13Fs from this ET day on (after the moves fix, as decided). */
+const E2_SPEED_FROM = '2026-11-12';
 
 /**
  * Email 2, once: skipped (and recorded why) without a postal address, without Mailgun, under 10 real free signups, or
@@ -632,10 +694,10 @@ export async function runEmail2(env: Env, now: number, preview?: string[]): Prom
   }
   const follows = new Map<string, Follows>();
   for (const m of members) follows.set(m.customer, m.customer.startsWith('preview:') ? ({ investors: ['irving-kahn', 'seth-klarman', 'howard-marks'], stocks: [], owned: [] } as unknown as Follows) : await getFollows(env, m));
-  const ctx = await followContext(env, [...follows.values()].flatMap((f) => f.investors));
+  const ctx = await followContext(env, [...follows.values()].flatMap((f) => f.investors), now);
   // The ET day of the send (Mon 9:30pm ET is Tue 02:30 UTC); its biggest moves from the season recap.
   const day = etDay(now);
-  const season = ctx.quarter ?? '';
+  const season = ctx.quarter ?? nextDeadline(now).quarter;
   const rc = season ? ((await fetch(`${env.SITE_URL}d/recap/${season}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { filing?: { slug: string; filing_date?: string | null }[]; biggest?: { slug: string; manager: string; ticker: string | null; name?: string; change: string; delta_value: number }[] } | null) : null;
   if (!rc) return preview ? { status: 'skipped', why: 'season recap unreadable' } : skip('season recap unreadable');
   // Each fund's name and book size (the data run's index.json), for "Matthew McLennan (First Eagle)" and % of fund.
@@ -645,53 +707,57 @@ export async function runEmail2(env: Env, now: number, preview?: string[]): Prom
   const whoOf = (slug: string, manager: string, name = '') => {
     const person = plainName(manager);
     const firm = firmOf(slug, name ? shortFirm(slug, name) : '');
-    return firm && firm.toLowerCase() !== person.toLowerCase() ? `${person} (${firm})` : person;
+    return firm && !person.toLowerCase().includes(firm.toLowerCase()) ? `${person} (${firm})` : person;
   };
   const filedToday = new Set((rc.filing ?? []).filter((f) => f.filing_date === day).map((f) => f.slug));
-  const VERB: Record<string, string> = { new: 'new position in', added: 'added', trimmed: 'trimmed', exited: 'sold out of' };
-  // Largest first, at most 2 per manager, at least 2 buys when today has any.
+  // The top buy and the top sell of each manager that filed today (exits count), managers by their largest move,
+  // at most 6 rows: at least 2 managers when 2 filed.
   const cands = (rc.biggest ?? []).filter((b) => filedToday.has(b.slug) && VERB[b.change]).sort((x, y) => Math.abs(y.delta_value) - Math.abs(x.delta_value));
-  const perManager = new Map<string, number>();
   const picked: typeof cands = [];
-  const take = (b: (typeof cands)[number]) => {
-    if (picked.includes(b) || (perManager.get(b.slug) ?? 0) >= 2 || picked.length >= 6) return;
-    perManager.set(b.slug, (perManager.get(b.slug) ?? 0) + 1);
-    picked.push(b);
-  };
-  for (const b of cands.filter((x) => x.delta_value > 0)) if (picked.length < 2) take(b);
-  for (const b of cands) take(b);
-  picked.sort((x, y) => Math.abs(y.delta_value) - Math.abs(x.delta_value));
+  for (const slug of [...new Set(cands.map((b) => b.slug))]) {
+    if (picked.length >= 6) break;
+    const mine = cands.filter((b) => b.slug === slug);
+    picked.push(...[mine.find((b) => b.delta_value < 0), mine.find((b) => b.delta_value > 0)].filter((b): b is (typeof cands)[number] => !!b).sort((x, y) => Math.abs(y.delta_value) - Math.abs(x.delta_value)).slice(0, 6 - picked.length));
+  }
   const biggest: E2Move[] = picked.map((b) => {
     const total = funds.get(b.slug)?.total_value;
-    return { slug: b.slug, who: whoOf(b.slug, b.manager), firm: firmOf(b.slug, plainName(b.manager)), usd: b.delta_value, text: `${VERB[b.change]} ${b.name ?? b.ticker ?? ''} ${b.delta_value > 0 ? '+' : '−'}${money(b.delta_value)}${pctOf(total ? b.delta_value / total : null)}` };
+    return { slug: b.slug, who: whoOf(b.slug, b.manager), firm: firmOf(b.slug, plainName(b.manager)), usd: b.delta_value, change: b.change, what: b.name ? short(b.name) : (b.ticker ?? ''), text: `${VERB[b.change]} ${b.name ?? b.ticker ?? ''} ${b.delta_value > 0 ? '+' : '−'}${money(b.delta_value)}${pctOf(total ? b.delta_value / total : null)}` };
   });
-  // The paid moment: 13Fs accepted today after the moves fix whose moves email reached Copy members within 5 minutes.
+  // The paid moment, clock times in ET: a 13F accepted after the moves fix whose moves email reached Copy members within
+  // 5 minutes. The real send quotes only Nov 12-16 filings; a preview shows First Eagle's logged times, marked as an example.
   const { MOVES_FIX_AT } = await import('./alerts');
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as { slug: string; accession: string; accepted: string; sent: string; seconds: number; kind?: string; moves?: boolean; replay?: boolean; email_delayed?: boolean }[];
-  const fast = log.filter((l) => (l.kind ?? '13f') === '13f' && l.moves && !l.replay && !l.email_delayed && Date.parse(l.accepted) >= Date.parse(MOVES_FIX_AT) && l.seconds < 300 && etDay(Date.parse(l.accepted)) === day);
+  const quick = log.filter((l) => (l.kind ?? '13f') === '13f' && l.moves && !l.replay && !l.email_delayed && Date.parse(l.accepted) >= Date.parse(MOVES_FIX_AT) && l.seconds < 300);
+  const fast = quick.filter((l) => etDay(Date.parse(l.accepted)) >= E2_SPEED_FROM && etDay(Date.parse(l.accepted)) <= day).sort((x, y) => Date.parse(y.accepted) - Date.parse(x.accepted));
+  const example = preview ? (quick.find((l) => l.slug === 'matthew-mclennan') ?? null) : null;
   const momentFor = (slugs: string[]): E2Moment | null => {
     const l = slugs.map((s) => fast.find((x) => x.slug === s)).find(Boolean) ?? fast[0];
-    if (!l) return null;
-    const ago = now - Date.parse(l.sent);
-    const later = ago < 90 * 60_000 ? `${Math.max(1, Math.round(ago / 60_000))} minutes later` : `${Math.round(ago / 3600_000)} hours later`;
-    return { firm: firmOf(l.slug, l.slug), filed: etTime(Date.parse(l.accepted)), had: etTime(Date.parse(l.sent)), later };
+    if (l) return { firm: firmOf(l.slug, l.slug), filed: etTime(Date.parse(l.accepted)), had: etTime(Date.parse(l.sent)) };
+    return example ? { firm: firmOf(example.slug, 'First Eagle'), filed: etTime(Date.parse(example.accepted)), had: etTime(Date.parse(example.sent)), example: true } : null;
   };
+  // Still due, for the preheader when a member's follows have all filed: the superinvestors still to file.
+  const seasonDue = [...ctx.expected.values()].map((x) => plainName(x.manager)).slice(0, 2);
   // "In your names" for members who saved names: this week's cached facts and Copy's hook (no SEC reads here).
   let week: Week | null = null;
   const mails = await Promise.all(members.map(async (m) => {
     const f = follows.get(m.customer)!;
-    const mine = f.investors.map((s) => ({ s, a: ctx.filed.get(s) }));
-    const isToday = (a: Alert13F) => etDay(Date.parse(a.accepted ?? `${a.filing_date}T21:00:00Z`)) === day;
-    const filed = mine.filter((x) => x.a?.moves && isToday(x.a)).map((x) => ({ a: x.a!, who: whoOf(x.s, x.a!.manager, x.a!.name) }));
-    const earlier = mine.filter((x) => x.a?.moves && !isToday(x.a) && (!season || x.a.quarter === season)).slice(0, 3).map((x) => ({ a: x.a!, who: whoOf(x.s, x.a!.manager, x.a!.name) }));
-    const due = mine.filter((x) => !(x.a && (!season || x.a.quarter === season))).slice(0, 3).map((x) => plainName(ctx.expected.get(x.s)?.manager ?? x.a?.manager ?? slugName(x.s)));
+    // One row per follow (filed this season first, then the ones still due), at most 6.
+    const rows: E2Follow[] = f.investors
+      .map((s) => {
+        const a = ctx.filed.get(s);
+        const filed = a && a.quarter === season ? a : null;
+        return { who: filed ? whoOf(s, filed.manager, filed.name) : plainName(ctx.expected.get(s)?.manager ?? a?.manager ?? funds.get(s)?.manager ?? slugName(s)), a: filed, expected: filed ? null : (ctx.expected.get(s)?.date ?? null) };
+      })
+      .sort((x, y) => Number(!!y.a) - Number(!!x.a) || (y.a ? Date.parse(y.a.accepted ?? `${y.a.filing_date}T21:00:00Z`) - Date.parse(x.a!.accepted ?? `${x.a!.filing_date}T21:00:00Z`) : 0))
+      .slice(0, 6);
+    const due = rows.filter((r) => !r.a).map((r) => r.who);
     let yours: InYourNames | null = null;
     if (f.owned?.length) {
       week ??= JSON.parse((await env.DB.get('free:week')) ?? 'null') ?? (await weeklyMoves(env, now));
       yours = await inYourNames(env, f.owned.slice(0, FREE_NAMES), week!, now, 0);
     }
     const unsub = m.customer.startsWith('preview:') ? `${env.SITE_URL}unsubscribe/` : await unsubscribeUrl(env, m.customer);
-    const mail = email2Mail(env, m.email, { now, season, filed, earlier, due, biggest, moment: momentFor([...filed.map((x) => x.a.slug), ...biggest.map((b) => b.slug)]), yours, follows: f.investors.length > 0, unsub, postal: postal || '[postal address: not configured yet]' });
+    const mail = email2Mail(env, m.email, { now, season, rows, due: due.length ? due : seasonDue, biggest, moment: momentFor([...rows.filter((r) => r.a).map((r) => r.a!.slug), ...biggest.map((b) => b.slug)]), yours, follows: f.investors.length > 0, unsub, postal: postal || '[postal address: not configured yet]' });
     return preview ? { ...mail, subject: `[Preview] ${mail.subject}` } : mail;
   }));
   const status = await sendMail(env, mails, preview && !env.MAILGUN_API_KEY ? { preview: true } : { via: 'mailgun', preview: !!preview });

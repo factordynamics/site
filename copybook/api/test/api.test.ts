@@ -1168,6 +1168,8 @@ describe('copybook api', () => {
             { slug: 'howard-marks', manager: 'Howard Marks', ticker: 'HM1', change: 'trimmed', delta_value: -300e6 }, { slug: 'howard-marks', manager: 'Howard Marks', ticker: 'HM2', change: 'trimmed', delta_value: -280e6 },
             { slug: 'irving-kahn', manager: 'Irving Kahn', ticker: 'ADDS', change: 'added', delta_value: 5e6 }],
         });
+      // Pzena filed Q3 on Oct 30, before this week's alert records: its card has the top moves.
+      if (String(u) === `${SITE}d/f/0001027796-26-000065.json`) return Response.json({ bought_usd: 4e8, sold_usd: 9e8, moves: [{ ticker: 'GL', change: 'added', value_delta: 351721663 }, { ticker: 'UBS', change: 'trimmed', value_delta: -293362928 }, { ticker: 'HUM', change: 'trimmed', value_delta: -287623650 }, { ticker: 'MGA', change: 'trimmed', value_delta: -240117000 }] });
       if (String(u) === 'https://mg.test/v3/factordynamics.com/messages') {
         mg.push(new URLSearchParams(String(init?.body)));
         return Response.json({ id: 'x' });
@@ -1181,10 +1183,12 @@ describe('copybook api', () => {
       moves: { bought_usd: 9e6, sold_usd: 8e6, new: [row('NEWB', 'new', 4e6)], added: [row('ADDS', 'added', 5e6)], trimmed: [row('TRIM', 'trimmed', -8e6)], exited: [row('GONE', 'exited', -1e6)] } };
     const { deliver } = await import('../src/alerts');
     await deliver(env, [kahn as never], [], now);
-    // Nine real free signups (five follow Kahn) and two test signups.
+    // The data run's index says Pzena's latest 13F is Q3 (filed Oct 30).
+    await env.DB.put('v1:filers', JSON.stringify([{ slug: 'richard-pzena', cik: '0001027796', name: 'Pzena Investment Management LLC', manager: 'Richard Pzena', featured: true, latest_quarter: '2026Q3', latest_report_date: '2026-09-30', latest_filing_date: '2026-10-30', latest_accession: '0001027796-26-000065' }]));
+    // Nine real free signups (five follow Kahn, one Pzena) and two test signups.
     const signup = (email: string, i: number, follow: string) =>
       handleRequest(new Request('https://api.test/signup', { method: 'POST', body: JSON.stringify({ email, follow: [{ kind: 'investor', id: follow }] }), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': `8.8.${i}.1` } }), env);
-    for (let i = 0; i < 9; i++) await signup(`reader${i}@reader.test`, i, i < 5 ? 'irving-kahn' : 'seth-klarman');
+    for (let i = 0; i < 9; i++) await signup(`reader${i}@reader.test`, i, i < 5 ? 'irving-kahn' : i === 6 ? 'richard-pzena' : 'seth-klarman');
     await signup('copybook-test-e2@fldubai.com', 20, 'irving-kahn');
     await signup('copybook-kahn-e2@fldubai.com', 21, 'irving-kahn');
 
@@ -1219,31 +1223,41 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
     const k = mg.find((b) => b.get('to') === 'reader0@reader.test')!;
     const text = k.get('text')!;
-    // The date of the send; a Kahn follower's email opens on Kahn's filing: his 3 largest moves (not GONE), person and fund, % of fund.
-    expect(text.startsWith('13F deadline night, Monday, November 16.\n\nYour follows:\n  Irving Kahn (Kahn Brothers) filed its Q3 13F today: trimmed TRIM −$8.0M (1.0% of fund); added ADDS +$5.0M (0.6% of fund); new position in NEWB +$4.0M (0.5% of fund)\n')).toBe(true);
+    // The date of the send; a Kahn follower's email opens on Kahn's filing (his 3 largest moves, not GONE, person and
+    // fund, % of fund), one Copy line for every row, then the trial button on the first screen.
+    const pricingUrl = 'https://refcell.github.io/gust/copybook/pricing/?from=e2&utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-paid&client_reference_id=email_e2-paid';
+    expect(text.startsWith(`13F deadline night, Monday, November 16.\n\nYour follows:\n  Irving Kahn (Kahn Brothers) filed its Q3 13F today: trimmed TRIM −$8.0M (1.0% of fund); added ADDS +$5.0M (0.6% of fund); new position in NEWB +$4.0M (0.5% of fund)\n    https://refcell.github.io/gust/copybook/f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows\n  Copy emails each 13F minutes after it's filed.\n\nStart 14-day free trial: ${pricingUrl}\nCard required · charged on day 15 unless you cancel.\n\n`)).toBe(true);
     expect(text).not.toContain('GONE');
-    expect(text).toContain(`f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows`);
-    // The paid moment from the logged times, only a send under 5 minutes (First Eagle, not Kahn's 400 s); then the button.
-    expect(text).toContain("First Eagle filed at 12:09 pm ET. Copy members had its moves at 12:11 pm. You're reading them 9 hours later.\n\nStart 14-day free trial: https://refcell.github.io/gust/copybook/pricing/?from=e2&utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-paid&client_reference_id=email_e2-paid\nCard required · charged on day 15 unless you cancel.");
-    expect(k.get('html')).toMatch(/>Start 14-day free trial<\/a><\/p><p[^>]*>Card required · charged on day 15 unless you cancel</);
-    // Below: at most 2 per manager, at least 2 buys (Kahn's small ADDS makes the list over Marks's second trim), largest first.
-    expect(text).toContain("The day's biggest moves:\n  Matthew McLennan (First Eagle): sold out of CHRW −$686.0M (1.4% of fund)\n  David Tepper: sold out of TS1 −$500.0M\n  David Tepper: trimmed TS2 −$450.0M\n  Matthew McLennan (First Eagle): new position in NVR +$400.1M (0.8% of fund)\n  Howard Marks: trimmed HM1 −$300.0M\n  Irving Kahn (Kahn Brothers): added ADDS +$5.0M (0.6% of fund)\n");
-    expect(text).not.toMatch(/UBER|EXPD|HM2/);
+    // The paid moment in ET clock times, only a send under 5 minutes (First Eagle, not Kahn's 400 s); no durations.
+    expect(text).toContain('\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\n');
+    expect(text).not.toMatch(/later\.|Preview example/);
+    expect(k.get('html')).toMatch(/Copy emails each 13F minutes after it's filed\.<\/p><\/div><p[^>]*><a [^>]*>Start 14-day free trial<\/a><\/p><p[^>]*>Card required · charged on day 15 unless you cancel</);
+    // Below: each manager's top sell and top buy (exits count), managers by their largest move.
+    expect(text).toContain("The day's biggest moves:\n  Matthew McLennan (First Eagle): sold out of CHRW −$686.0M (1.4% of fund)\n  Matthew McLennan (First Eagle): new position in NVR +$400.1M (0.8% of fund)\n  David Tepper: sold out of TS1 −$500.0M\n  Howard Marks: trimmed HM1 −$300.0M\n");
+    expect(text).not.toMatch(/UBER|EXPD|HM2|TS2/);
     // Member email links: the site and the Worker, never gene's host; one-click unsubscribe goes to the Worker.
-    for (const part of [text, k.get('html')!]) expect(part).not.toMatch(/ts\.net|trycloudflare/);
+    for (const part of [text, k.get('html')!]) expect(part).not.toMatch(/ts\.net|trycloudflare|🔒/);
     expect(text).toMatch(/You get this because you follow investors on Copybook\. Unsubscribe: https:\/\/copybook-api\.factordynamics\.workers\.dev\/unsubscribe\?t=\S+[\s\S]*1 Test St, Testville$/);
     expect(k.get('h:List-Unsubscribe')).toMatch(/^<https:\/\/copybook-api\.factordynamics\.workers\.dev\/unsubscribe\?t=/);
     expect(k.get('h:List-Unsubscribe-Post')).toBe('List-Unsubscribe=One-Click');
-    expect(k.get('subject')).toBe("Deadline night: Kahn filed. Here's what they did");
-    // The preheader is the lead, never an empty state.
-    expect(k.get('html')).toMatch(/^<div style="display:none[^>]*>Kahn: trimmed TRIM/);
-    // A Klarman follower: Klarman is still due (never "none filed"); the subject is the night's biggest move.
+    // Subject from the night's data: the followed fund's top buy and top sell. Preheader: who is still due.
+    expect(k.get('subject')).toBe('Kahn Brothers bought $5M of ADDS, sold $8M of TRIM');
+    expect(k.get('html')).toMatch(/^<div style="display:none[^>]*>Klarman due by Mon Nov 16</);
+    // A Klarman follower: one row, expected (never "none filed" or "still due"); the subject is the night's top manager.
     const s5 = mg.find((b) => b.get('to') === 'reader5@reader.test')!;
-    expect(s5.get('text')).toContain("Your follows:\n  Seth Klarman's Q3 13F is still due; Copy emails it minutes after filing.");
-    expect(s5.get('text')).not.toMatch(/none filed/i);
-    expect(s5.get('subject')).toBe('First Eagle sold out of CHRW (−$686M) + 5 more deadline moves');
+    expect(s5.get('text')).toContain("Your follows:\n  Seth Klarman: expected Fri Nov 20\n  Copy emails each 13F minutes after it's filed.\n\nStart 14-day free trial:");
+    expect(s5.get('text')).not.toMatch(/none filed|still due/i);
+    expect(s5.get('subject')).toBe('First Eagle bought $400M of NVR, sold out of CHRW');
+    // Pzena filed Q3 on Oct 30 (before this week's records): his top moves, never "still due".
+    const pz = mg.find((b) => b.get('to') === 'reader6@reader.test')!;
+    expect(pz.get('text')).toContain('Your follows:\n  Richard Pzena filed its Q3 13F Fri Oct 30: added GL +$351.7M; trimmed UBS −$293.4M; trimmed HUM −$287.6M\n');
+    expect(pz.get('text')).not.toMatch(/still due|expected/);
     // Once only.
     expect(await runEmail2(env, now)).toEqual({ status: 'already done' });
+    // A preview before Nov 12 has no filing of its own to quote: First Eagle's logged times, marked as an example.
+    mg.length = 0;
+    await runEmail2(env, Date.parse('2026-11-11T15:00:00Z'), ['copybook-kahn-e2@fldubai.com']);
+    expect(mg[0].get('text')).toContain('Preview example: First Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.');
     Object.assign(env, { POSTAL_ADDRESS: undefined, MAILGUN_API_KEY: undefined });
     vi.stubGlobal('fetch', realFetch);
   });
@@ -1464,7 +1478,7 @@ describe('copybook api', () => {
       { id: 'stale', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: '2026-10-01', accepted: inWeek(30), ticker: 'GOOGL', value_usd: 7.7e10 },
     ] }));
     // NVIDIA's insiders, as the precompute keeps them: the CEO's sale counts; a gift and a $50K buy never do.
-    const ev = (accession: string, extra: Record<string, unknown>) => ({ ticker: 'NVDA', form: '4', filer_name: 'HUANG JEN HSUN', filer_cik: '1', issuer: 'NVIDIA CORP', role: 'President and CEO, Director', action: 'sell', shares: 1, price: 1, value_usd: 18_600_000, shares_after: 1, prev_shares_after: 2, percent_of_class: null, event_date: '2026-11-11', last_transaction_date: null, ownership: [], codes: ['S'], transactions: [], totals: { sold: { shares: 1, value_usd: 18_600_000 } }, open_market: true, accepted_at: inWeek(3), accession, url: 'u', ...extra });
+    const ev = (accession: string, extra: Record<string, unknown>) => ({ ticker: 'NVDA', form: '4', filer_name: 'HUANG JEN HSUN', filer_cik: '1', issuer: 'NVIDIA CORP', role: 'President and CEO, Director', action: 'sell', shares: 1, price: 1, value_usd: 18_600_000, shares_after: 1, prev_shares_after: 2, percent_of_class: null, event_date: '2026-11-06', last_transaction_date: null, ownership: [], codes: ['S'], transactions: [], totals: { sold: { shares: 1, value_usd: 18_600_000 } }, open_market: true, accepted_at: inWeek(3), accession, url: 'u', ...extra });
     await hist.put('tev/NVDA.json', JSON.stringify({ v: 3, cik: '0001045810', checked_at: sat, tickers: ['NVDA'], seen: {
       'nv-sale': ev('nv-sale', {}),
       'nv-gift': ev('nv-gift', { action: 'gift', value_usd: null, codes: ['G'], totals: { gifted: { shares: 1, value_usd: null } }, open_market: false }),
@@ -1488,7 +1502,7 @@ describe('copybook api', () => {
     expect(w.text).toMatch(/Also this week from your follows:\n(  .*\n    .*\n)*  Bill Ackman: bought HHH/); // and the superinvestor moves in followed stocks (GOOGL)
     // "In your names" first: one public fact per saved name (superinvestors only), then the biggest locked item, named.
     expect(w.text).toContain(
-      `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/\n  Nvidia's CEO sold $18.6M of NVDA, with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
+      `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/\n  Nvidia's CEO sold $18.6M of NVDA (sold Nov 6, filed Nov 10), with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
     );
     expect(w.text.indexOf('In your names')).toBeLessThan(w.text.indexOf('Biggest buys'));
     expect(w.html).toContain('Try Copy free for 14 days');
