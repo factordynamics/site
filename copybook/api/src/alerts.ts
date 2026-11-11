@@ -1415,7 +1415,10 @@ async function buildRows(env: Env, a: Alert13F): Promise<{ build: string | null;
   const q: any = await new Response(obj.body).json();
   const serves = q.accession === a.accession || (Array.isArray(q.filings) && q.filings.some((x: { accession?: string; role?: string }) => x.accession === a.accession && x.role === 'base'));
   // Exits are in the book's own exited[] list, not in holdings[].
-  const holdings = [...((q.holdings ?? []) as BuildRow[]), ...((q.exited ?? []) as BuildRow[]).map((h) => ({ ...h, change: h.change ?? 'exited' }))];
+  // An exit inside holdings[] (row_type exited, change possibly null) counts as exited too.
+  const holdings = [...((q.holdings ?? []) as BuildRow[]), ...((q.exited ?? []) as BuildRow[]).map((h) => ({ ...h, change: h.change ?? 'exited' }))].map((h) =>
+    (h as { row_type?: string }).row_type === 'exited' && !h.change ? { ...h, change: 'exited' } : h,
+  );
   if (!serves || !holdings.some((h) => 'value_delta' in h)) return null;
   const rows = new Map(holdings.filter((h) => h.change && h.change !== 'unchanged').map((h) => [rowKey(h), h]));
   return { build: obj.customMetadata?.['build-id'] ?? obj.customMetadata?.build_id ?? q.build_id ?? null, rows };
@@ -1423,6 +1426,81 @@ async function buildRows(env: Env, a: Alert13F): Promise<{ build: string | null;
 /** One position's key across EDGAR tables and ingest's books: CUSIP and put/call ("Call" in one, "CALL" in the other). */
 const rowKey = posKey;
 const ratioOf = (r: BuildRow) => (typeof r.split === 'object' ? Number(r.split?.ratio) || 1 : Number(r.split) || 1);
+
+/**
+ * Once: correction notes that read a row missing from the build as "unchanged" (Nov 11, 10:4x UTC) are pulled from the
+ * day stores, the verdicts and members' feeds. A verdict left with no failed row passes. No correction email went out
+ * for them (alerts accepted before RECONCILE_MAIL_FROM are never mailed); any queued one is dropped.
+ */
+export async function scrubFalseCorrections(env: Env, now: number): Promise<Record<string, unknown> | null> {
+  const FLAG = 'alerts:scrub-unchanged:v1';
+  if (await env.DB.get(FLAG)) return null;
+  const bogus = (r: import('./email').CorrectionRow) => r.v1.change === 'unchanged' && r.v1.value_delta === 0;
+  const n = { stores: 0, verdicts: 0, feeds: 0, queued_mail: 0, accessions: new Set<string>() };
+  for (let d = 0; d < 31; d++) {
+    const key = `digest:${etDay(now - d * DAY)}`;
+    const raw = await env.DB.get(key);
+    if (!raw) continue;
+    const store = JSON.parse(raw) as DigestDay;
+    let hit = false;
+    for (const x of store.filings) {
+      if (!x.corrected?.rows.some(bogus)) continue;
+      n.accessions.add(x.accession);
+      const rows = x.corrected.rows.filter((r) => !bogus(r));
+      x.corrected = rows.length ? { ...x.corrected, rows } : undefined;
+      hit = true;
+    }
+    if (hit) {
+      n.stores++;
+      await env.DB.put(key, JSON.stringify(store), { expirationTtl: 31 * 86400 });
+    }
+  }
+  const log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
+  for (const v of log) {
+    if (!v.failed.some(bogus)) continue;
+    n.accessions.add(v.accession);
+    v.failed = v.failed.filter((r) => !bogus(r));
+    if (!v.failed.length) v.result = 'pass';
+    v.class = alertClass(v.failed, v.rows, v.accession);
+    n.verdicts++;
+  }
+  if (n.verdicts) await env.DB.put(RECONCILED, JSON.stringify(log));
+  // Feeds keep their own copy of each item: rebuilt from the scrubbed day stores.
+  const fixed = new Map<string, Alert13F>();
+  for (let d = 0; d < 31; d++) {
+    const raw = await env.DB.get(`digest:${etDay(now - d * DAY)}`);
+    if (raw) for (const x of (JSON.parse(raw) as DigestDay).filings) if (n.accessions.has(x.accession)) fixed.set(filingId(x), x);
+  }
+  for (const m of await listMembers(env)) {
+    const key = `feed:${m.customer}`;
+    const raw = await env.DB.get(key);
+    if (!raw || !raw.includes('Corrected')) continue;
+    let hit = false;
+    const out = (JSON.parse(raw) as FeedItem[]).map((i) => {
+      const a = fixed.get(i.id);
+      if (!a || !i.title.startsWith('Corrected · ')) return i;
+      hit = true;
+      const [fresh] = feedItems(env, [a], [], now, true);
+      return { ...i, title: fresh.title, text: fresh.text };
+    });
+    if (hit) {
+      n.feeds++;
+      await env.DB.put(key, JSON.stringify(out));
+    }
+  }
+  // Queued correction emails (delayed for the daily limit, or awaiting retry) with an "unchanged" line: dropped.
+  for (const k of ['host:mail-delayed', 'host:mail-retry']) {
+    const q = JSON.parse((await env.DB.get(k)) ?? '[]') as Mail[];
+    const keep = q.filter((m) => !(/Correction:/.test(m.subject) && / was unchanged, not /.test(m.text)));
+    if (keep.length !== q.length) {
+      n.queued_mail += q.length - keep.length;
+      await env.DB.put(k, JSON.stringify(keep));
+    }
+  }
+  const res = { at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), stores: n.stores, verdicts: n.verdicts, feeds: n.feeds, queued_mail: n.queued_mail, accessions: [...n.accessions] };
+  await env.DB.put(FLAG, JSON.stringify(res));
+  return res;
+}
 
 /**
  * gene, every 5 minutes: rows the gate held, against ingest's build. A held row that the build has, with no unit flag,
@@ -1758,7 +1836,10 @@ function compareToBuild(rows: Map<string, MoveRow>, build: Map<string, BuildRow>
     // A CUSIP change the alert netted into one move (XOM's Q3 reorganisation): the build keeps the exit and the new line.
     if (!v && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
     if (v?.change === 'new' && r.change !== 'new' && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
-    const got = v ? { change: v.change!, value_delta: Math.round(v.value_delta) } : { change: 'unchanged', value_delta: 0 };
+    // A row the build doesn't list can't be confirmed either way: never read as "unchanged" (retail, Nov 11: real exits
+    // were "corrected" to unchanged when a build left its exits out).
+    if (!v) continue;
+    const got = { change: v.change!, value_delta: Math.round(v.value_delta) };
     const bad = got.change !== r.change || Math.sign(got.value_delta) !== Math.sign(r.value_delta) || Math.abs(r.value_delta - got.value_delta) > MISMATCH * Math.abs(got.value_delta);
     if (bad) failed.push({ cusip: r.cusip, ticker: r.ticker ?? v?.ticker ?? null, name: r.display_name || r.issuer, put_call: r.put_call, emailed: { change: r.change!, value_delta: r.value_delta }, v1: got });
     v = undefined;

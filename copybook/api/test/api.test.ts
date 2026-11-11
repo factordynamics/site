@@ -2152,13 +2152,15 @@ describe('copybook api', () => {
     sent = [];
     const day = etDay(now);
     // The alert as sent: its exit (ORCL) is in the book's exited[]; its option says "Call"; its bond row was sized from shares.
-    await env.DB.put(`digest:${day}`, JSON.stringify({ filings: [{ ...base, moves: { bought_usd: 46_579_232, sold_usd: 5_000_000, new: [], added: [row('APH', '032095101', 'added', 1_047_486, 614_660, 88_303_070, 36_487_232), row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_200_000), { ...row('SPY', '78462F103', 'added', 2000, 1000, 1_300_000, 650_000), put_call: 'Call' }, row('BOND', '00000BND1', 'added', 141_206_378, 1, 141_206_378, 141_206_377)], trimmed: [], exited: [row('ORCL', '68389X105', 'exited', 0, 30_000, 0, -5_000_000)] } }], events: [] }));
+    await env.DB.put(`digest:${day}`, JSON.stringify({ filings: [{ ...base, moves: { bought_usd: 46_579_232, sold_usd: 5_000_000, new: [], added: [row('APH', '032095101', 'added', 1_047_486, 614_660, 88_303_070, 36_487_232), row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_200_000), { ...row('SPY', '78462F103', 'added', 2000, 1000, 1_300_000, 650_000), put_call: 'Call' }, row('BOND', '00000BND1', 'added', 141_206_378, 1, 141_206_378, 141_206_377)], trimmed: [], exited: [row('ORCL', '68389X105', 'exited', 0, 30_000, 0, -5_000_000), row('CHRW', '12541W209', 'exited', 0, 3_642_453, 0, -686_000_000)] } }], events: [] }));
     await env.DB.put('delivered:cus_j', JSON.stringify([{ day, ids: [ACC] }]));
     const r = await reconcileAlerts(env, now);
-    // MSFT within 10%, the ORCL exit and the SPY call pass; APH and the bond (sized from a zero prior, as Advent's was) are
+    // CHRW's exit isn't in the build at all (retail, Nov 11: a build without its exits): unconfirmed, never "corrected"
+    // to unchanged. MSFT within 10%, the ORCL exit and the SPY call pass; APH and the bond (sized from a zero prior, as Advent's was) are
     // wrong; the emailed bought total ($46.6M against the build's $11.8M, still off with APH and the bond at its figures) is
     // off too, but this accession's totals are already disclosed on /status/ (the split alerts), so it isn't mailed again.
-    expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 5, failed: 3, mailed: 1 }], rechecked: [], pending: 0 });
+    expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 6, failed: 3, mailed: 1 }], rechecked: [], pending: 0 });
+    expect(sent[0]?.text).not.toMatch(/CHRW|unchanged/);
     expect(sent[0]?.text).toContain('BOND');
     expect(sent[0]?.text).not.toContain('Total bought');
     expect(sent.map((m) => m.to[0])).toEqual(['copybook-test-j@fldubai.com']);
