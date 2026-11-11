@@ -683,7 +683,9 @@ def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: st
         own = jump > 5 or jump < 0.2
     reason = "cross_filer" if here else "cross_filer_prior" if before else "own_prior" if own else None
     if here is not None or before is not None:
-        return {"suspect_units": bool(here or before or own), "suspect_units_basis": "filers", "suspect_reason": reason}
+        # basis names the check that tripped when flagged (own_prior only: own_prior), else the strongest that ran
+        return {"suspect_units": bool(here or before or own), "suspect_reason": reason,
+                "suspect_units_basis": "own_prior" if reason == "own_prior" else "filers"}
     if own is not None:
         return {"suspect_units": own, "suspect_units_basis": "own_prior", "suspect_reason": reason}
     return {"suspect_units": None, "suspect_units_basis": "none", "suspect_reason": None}
