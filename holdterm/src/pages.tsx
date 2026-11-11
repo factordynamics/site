@@ -525,18 +525,8 @@ function HomeBody() {
     .slice(0, 10)
   // The quarter so far in plain words. Counted only once every filed book has loaded, so the numbers never change on screen.
   const leadBooks = (books.data ?? []).filter((b) => b.quarter === lead)
-  const tally = new Map<string, { h: Holding & { label?: string }; buy: number; sell: number; out: number; buyV: number; sellV: number }>()
-  for (const b of leadBooks)
-    for (const h of trades(b)) {
-      const t = tally.get(issuerKey(h)) ?? { h, buy: 0, sell: 0, out: 0, buyV: 0, sellV: 0 }
-      if (h.change === 'new' || h.change === 'added') (t.buy++, (t.buyV += h.value_delta ?? 0))
-      else if (h.change === 'trimmed' || h.change === 'exited') (t.sell++, (t.sellV -= h.value_delta ?? 0), h.change === 'exited' && t.out++)
-      tally.set(issuerKey(h), t)
-    }
-  // Ties on the count go to the bigger trade, as on Buys & sells, so both pages name the same stock.
-  const most = (k: 'buy' | 'sell') => [...tally.values()].sort((a, b) => b[k] - a[k] || (k === 'buy' ? b.buyV - a.buyV : b.sellV - a.sellV))[0]
-  const mostBought = most('buy')
-  const mostSold = most('sell')
+  // Most bought and most sold come from the same function and the same rows as Buys & sells' quarter view.
+  const picks = crowdPicks(books.data ? aggregate(leadBooks).rows : [], leadBooks.length)
   const due = ms.filter((m) => m.quarter !== s.q)
   const daysLeft = daysUntil(s.due)
   const events = (ev.data?.events ?? []).filter((e) => inRoster(e.slug) && !ownVehicle(e))
@@ -556,19 +546,14 @@ function HomeBody() {
   const conviction = [...conv.values()].sort((a, b) => b.weight - a.weight).slice(0, 8)
   const newStakes = events.filter((e) => e.action === 'new_stake' && daysAgo(e.filing_date) <= 30).length
   const wait = <span className="dim">…</span>
-  const crowd = (x: typeof mostBought | undefined, k: 'buy' | 'sell') =>
-    !books.data ? wait : x && x[k] > 0 ? <Tick t={x.h.ticker} name={issuerName(x.h.display_name || x.h.issuer)} label={x.h.label} /> : <span className="dim">None yet</span>
-  const crowdSub = (x: typeof mostBought | undefined, k: 'buy' | 'sell') =>
-    // Worded as on Buys & sells: selling with no sell-outs is trimming.
-    books.data && x && x[k] > 0
-      ? `${issuerName(x.h.display_name || x.h.issuer)}, ${k === 'buy' ? 'bought' : x.out ? 'sold' : 'trimmed'} by ${x[k]} of ${leadBooks.length} that have filed${k === 'sell' && x.out ? `, ${x.out} sold out` : ''}`
-      : 'Across the investors who have filed'
+  const crowd = (r: Agg | undefined) => (!books.data ? wait : r ? <Tick t={r.ticker} name={aggCo(r)} label={r.label} /> : <span className="dim">None yet</span>)
+  const crowdSub = (r: Agg | undefined, line: (r: Agg) => string) => (books.data && r ? line(r) : 'Across the investors who have filed')
   return (
     <div className="page home">
       <div className="stats home-stats" role="list" aria-label={`${quarterLabel(lead)} so far`}>
         <Stat label={`${quarterLabel(s.q)} 13Fs filed`} value={`${seasonFiled.length} of ${ms.length}`} sub={<>{daysLeft < 0 ? `Were due ${day(s.due)}` : `Due ${day(s.due)}${daysLeft > 1 ? `, ${daysLeft} days left` : daysLeft === 1 ? ', 1 day left' : ', today'}`}<Bar value={seasonFiled.length} max={ms.length} /></>} />
-        <Stat label={`Most bought in ${quarterLabel(lead)}`} value={crowd(mostBought, 'buy')} tone={books.data && mostBought?.buy ? 'pos' : undefined} sub={crowdSub(mostBought, 'buy')} />
-        <Stat label={`Most sold in ${quarterLabel(lead)}`} value={crowd(mostSold, 'sell')} tone={books.data && mostSold?.sell ? 'neg' : undefined} sub={crowdSub(mostSold, 'sell')} />
+        <Stat label={`Most bought in ${quarterLabel(lead)}`} value={crowd(picks.bought)} tone={books.data && picks.bought ? 'pos' : undefined} sub={crowdSub(picks.bought, picks.boughtLine)} />
+        <Stat label={`Most sold in ${quarterLabel(lead)}`} value={crowd(picks.sold)} tone={books.data && picks.sold ? 'neg' : undefined} sub={crowdSub(picks.sold, picks.soldLine)} />
         <Stat label="New 5% stakes" value={ev.data ? num(newStakes) : wait} sub="Schedule 13D and 13G filings in the last 30 days" />
       </div>
       <div className="home-grid">
@@ -1246,7 +1231,7 @@ export function Flows() {
   const q = picked ?? (nb && (books.data ?? []).filter((b) => b.quarter === sq).length * 2 >= nb ? sq : 'latest')
   const quarters = useMemo(() => [...new Set((books.data ?? []).map((b) => b.quarter))].sort().reverse(), [books.data])
   // Flows are stock picks: ETFs, index and T-bill funds are left out.
-  const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q), books.data).rows.filter((r) => !r.fund) : []), [books.data, q])
+  const rows = useMemo(() => (books.data ? (q === 'latest' ? aggregate(books.data) : aggregate(books.data.filter((b) => b.quarter === q))).rows.filter((r) => !r.fund) : []), [books.data, q])
   if (books.error) return <Failed error={books.error} what="this quarter’s trades" />
   if (!books.data)
     return (
@@ -1283,7 +1268,7 @@ export function Flows() {
   const mix = quarters.map((x) => [x, books.data!.filter((b) => b.quarter === x).length] as const)
   const tagQ = q === 'latest' && mix.length > 1 ? mix[0][0] : undefined
   // The newest quarter on its own, as the home page counts it, so the two pages' "most bought" can be told apart.
-  const leadTop = tagQ ? aggregate(books.data.filter((b) => b.quarter === tagQ), books.data).rows.filter((r) => !r.fund).sort((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)[0] : undefined
+  const leadTop = tagQ ? crowdPicks(aggregate(books.data.filter((b) => b.quarter === tagQ)).rows, mix[0][1]).bought : undefined
   const exits = (r: Agg) => r.sellers.filter((s) => s.change === 'exited').length
   let list: Agg[]
   if (tab === 'buyers') list = rows.filter((r) => r.buyers.length).sort((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)
@@ -1381,24 +1366,35 @@ export function Flows() {
 const aggCo = (r: Agg) => r.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')
 /** A stock in running text: "Alphabet (GOOGL)". */
 const aggName = (r: Agg) => `${aggCo(r)}${r.ticker ? ` (${r.label ?? r.ticker})` : ''}`
+/** The most bought and most sold stock among \`rows\` (an aggregate over \`n\` investors) and how to say each. The home page and
+ * Buys & sells both use it, so they always name the same stock with the same count and words. Ties on the count go to
+ * the bigger trade, as in the tables' own order (sell is negative). */
+export function crowdPicks(rows: Agg[], n: number) {
+  const stocks = rows.filter((r) => !r.fund)
+  const top = (cmp: (a: Agg, b: Agg) => number) => [...stocks].sort(cmp)[0] as Agg | undefined
+  const bought = top((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)
+  const sold = top((a, b) => b.sellers.length - a.sellers.length || a.sell - b.sell)
+  const exits = (r: Agg) => r.sellers.filter((s) => s.change === 'exited').length
+  return {
+    bought: bought?.buyers.length ? bought : undefined,
+    sold: sold?.sellers.length ? sold : undefined,
+    // Counts say "of how many", so a quoted card can't read as everyone, and selling says whether anyone sold out.
+    boughtLine: (r: Agg) => `${aggCo(r)}, bought by ${num(r.buyers.length)} of ${num(n)}${r.newBuyers ? `, ${num(r.newBuyers)} new` : ''}`,
+    soldLine: (r: Agg) =>
+      exits(r) ? `${aggCo(r)}, sold by ${num(r.sellers.length)} of ${num(n)}: ${num(r.sellers.length - exits(r))} trimmed, ${num(exits(r))} sold out` : `${aggCo(r)}, trimmed by ${num(r.sellers.length)} of ${num(n)}, none sold out`,
+  }
+}
 /** The quarter's four answers as cards, like the home page's: most investors buying and selling, most money in and out. */
 function FlowsStats({ rows, q, n }: { rows: Agg[]; q: string; n: number }) {
   const top = (cmp: (a: Agg, b: Agg) => number) => [...rows].sort(cmp)[0] as Agg | undefined
-  // Ties on the count go to the bigger trade, as in the tabs' own order (sell is negative).
-  const buyers = top((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)
-  const sellers = top((a, b) => b.sellers.length - a.sellers.length || a.sell - b.sell)
+  const { bought: buyers, sold: sellers, boughtLine: bought, soldLine: sold } = crowdPicks(rows, n)
   const netBuy = top((a, b) => b.net - a.net)
   const netSell = top((a, b) => a.net - b.net)
-  const exits = (r: Agg) => r.sellers.filter((s) => s.change === 'exited').length
   // The quarter chips just above name the quarter, so the labels stay short enough for two cards a row on phones.
   const scope = q === 'latest' ? ' in each fund’s latest 13F' : ` in ${quarterLabel(q)}`
   const card = (label: string, r: Agg | undefined, ok: boolean, tone: 'pos' | 'neg', sub: (r: Agg) => string) => (
     <Stat label={label} value={r && ok ? <Tick t={r.ticker} name={aggCo(r)} label={r.label} /> : <span className="dim">None</span>} tone={r && ok ? tone : undefined} sub={r && ok ? sub(r) : undefined} />
   )
-  // Counts say "of how many", so a quoted card can't read as everyone, and selling says whether anyone sold out.
-  const bought = (r: Agg) => `${aggCo(r)}, bought by ${num(r.buyers.length)} of ${num(n)}${r.newBuyers ? `, ${num(r.newBuyers)} new` : ''}`
-  const sold = (r: Agg) =>
-    exits(r) ? `${aggCo(r)}, sold by ${num(r.sellers.length)} of ${num(n)}: ${num(r.sellers.length - exits(r))} trimmed, ${num(exits(r))} sold out` : `${aggCo(r)}, trimmed by ${num(r.sellers.length)} of ${num(n)}, none sold out`
   // A net figure that one investor makes up most of says so, so "+$2.0B into NVIDIA" isn't read as a crowd.
   const net = (r: Agg) => {
     const lead = [...(r.net > 0 ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0]
@@ -1407,9 +1403,9 @@ function FlowsStats({ rows, q, n }: { rows: Agg[]; q: string; n: number }) {
   }
   return (
     <div className="stats tick-stats" role="list" aria-label={`Buys and sells${scope}`}>
-      {card('Most bought', buyers, !!buyers?.buyers.length, 'pos', bought)}
+      {card('Most bought', buyers, !!buyers, 'pos', bought)}
       {card('Biggest net buy', netBuy, (netBuy?.net ?? 0) > 0, 'pos', net)}
-      {card('Most sold', sellers, !!sellers?.sellers.length, 'neg', sold)}
+      {card('Most sold', sellers, !!sellers, 'neg', sold)}
       {card('Biggest net sale', netSell, (netSell?.net ?? 0) < 0, 'neg', net)}
     </div>
   )
