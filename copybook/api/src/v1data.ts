@@ -756,10 +756,15 @@ export function netByPeriod(rows: any[]): Record<string, number> {
 /** Counts over raw holder rows, as the holder index states them. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function countsOf(rows: any[]) {
-  const c: Record<string, number> = { holders: 0, new: 0, added: 0, trimmed: 0, exited: 0, unchanged: 0, no_prior: 0 };
+  const c: Record<string, number> = { holders: 0, new: 0, added: 0, trimmed: 0, exited: 0, unchanged: 0, no_prior: 0, option_rows: 0 };
   const by: Record<string, number> = {};
   let net = 0;
   for (const r of rows) {
+    // Calls and puts: counted apart (option_rows), so holders is share positions, as the response's `count` is.
+    if (r.put_call || (r.kind && r.kind !== 'equity')) {
+      c.option_rows++;
+      continue;
+    }
     if (r.change === 'exited') c.exited++;
     else {
       c.holders++;
@@ -777,7 +782,7 @@ function countsOf(rows: any[]) {
  * the data run), else the older single-period s/{issuer6}.json. Largest first. Curated funds' rows carry
  * their 13F's accession and EDGAR acceptance when cached; weight comes from the row, else a curated fund's total.
  */
-export async function holdersOf(env: Env, code: string, timing: string[] = []): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; rows: HolderRow[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
+export async function holdersOf(env: Env, code: string, timing: string[] = []): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; rows: HolderRow[]; pending?: (HolderRow & { reason: 'filed_newer_not_indexed' })[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
   let t = Date.now();
   const mark = (name: string) => (timing.push(`${name};dur=${Date.now() - t}`), (t = Date.now()));
   const read = await readHolderIndex(env, code);
@@ -794,6 +799,8 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   const reissueTo = reissue?.[1].to ?? null, reissueFrom = reissue?.[0] ?? null, linkQ = reissue?.[1].quarter ?? null;
   // Only while the new code's rows lack their priors (most read new): once ingest's rows carry them, nothing to merge.
   const lacking = raw.filter((r) => r.prev_shares == null || r.change === 'new').length;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let pendingRaw: any[] = [];
   if (old && lacking * 2 > raw.length && Object.keys(d.counts?.by_period ?? {}).length <= 1 && new Set(raw.map((r) => r.period ?? d.period)).size <= 1) {
     // The old code's holder index, else its single-quarter snapshot (s/): whichever has more rows. Ingest's runs rewrite
     // the old code's hl/ with only the lines still filed under it once they apply the link (TEVA, Nov 11 12:2x: 1 row),
@@ -818,7 +825,19 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       // From a snapshot, the old code's holders that didn't carry into the new code stay as they were: holders on the
       // snapshot's quarter with no change (never an inferred exit: about 100 of 247 were false on TEVA). Exits count only
       // from ingest's own rows, so they are pending until its merged index lands (counts.exits_pending).
-      if (useSnap && np) raw = raw.filter((r) => !(r.cusip === reissueFrom && r.change === 'exited')).map((r) => (r.cusip === reissueFrom && r.period && r.period < np ? { ...r, change: null, prev_shares: null, prev_value: null } : r));
+      // A snapshot holder whose filer has filed a newer 13F, and isn't among either code's current rows, is neither a
+      // holder nor an exit yet: listed apart in pending[] (filed_newer_not_indexed), out of the counts and net (the
+      // analyst: 128 such filers read as $2.39B of Q2 holders, hiding Barclays' exit and Migdal's Q3 holding).
+      if (useSnap && np) {
+        const latest = new Map((await filers(env)).map((f) => [f.cik, f.latest_quarter as string | null]));
+        const rest = await env.HIST.get('pre/v1-filers-rest.txt');
+        if (rest) for (const m of (await new Response(rest.body).text()).matchAll(/"cik":"(\d{10})"[^{}]*?"latest_quarter":"(\d{4}Q\d)"/g)) if (!latest.has(m[1])) latest.set(m[1], m[2]);
+        const stale = (r: { cusip?: string; period?: string | null }) => r.cusip === reissueFrom && !!r.period && r.period < np;
+        raw = raw.filter((r) => !(r.cusip === reissueFrom && r.change === 'exited'));
+        pendingRaw = raw.filter((r) => stale(r) && (latest.get(pad(String(r.cik))) ?? '') > r.period);
+        const out = new Set(pendingRaw);
+        raw = raw.filter((r) => !out.has(r)).map((r) => (stale(r) ? { ...r, change: null, prev_shares: null, prev_value: null } : r));
+      }
       d.counts = {
         ...(d.counts ?? {}),
         ...countsOf(raw),
@@ -850,7 +869,8 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   // A reissue's new code may not be in the stock list yet (TEVA's M8769Q): the old code's name.
   const [pcCusip, pcName = reissueFrom ? pcOf(reissueFrom.slice(0, 6))[1] : undefined] = pcOf(code);
   const mainCusip = reissueTo ?? pcCusip ?? null;
-  const rows = raw.map((h): HolderRow => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const toRow = (h: any): HolderRow => {
     const cik = pad(String(h.cik));
     const c = cur.get(cik);
     const period = h.period ?? d.period ?? null;
@@ -882,7 +902,9 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       issuer: h.issuer ?? d.display_name ?? (pcName || null),
       ...(h.suspect_duplicate ? { suspect_duplicate: h.suspect_duplicate } : {}),
     };
-  });
+  };
+  const rows = raw.map(toRow);
+  const pending = pendingRaw.map((r) => ({ ...toRow(r), reason: 'filed_newer_not_indexed' as const }));
   // Acceptance for every row with an accession: gene's EDGAR-filled map (any filer), then the curated per-filing
   // cache. What neither has is queued for gene's cron; the request never waits on EDGAR.
   const known = await acceptedMap(env);
@@ -894,7 +916,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   if (obj && rows.some((r) => r.accession && !r.accepted_at && !(dashed(r.accession) in known))) await queueAccepted(env, code).catch(() => undefined);
   mark('rows');
   rows.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0));
-  return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, rows, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj as Parameters<typeof stampOf>[0]), source: read.source };
+  return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, rows, pending, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj as Parameters<typeof stampOf>[0]), source: read.source };
 }
 
 /**
@@ -1020,7 +1042,7 @@ ROUTES.push(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nbp = (h.counts as any)?.net_by_period as Record<string, number> | undefined;
     if (quarter && nbp) h.counts = { ...h.counts, net: nbp[quarter] ?? 0, net_quarter: quarter };
-    const data = { issuer: h.issuer, ...(is.superseded_by ? { superseded_by: is.superseded_by } : {}), ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited };
+    const data = { issuer: h.issuer, ...(is.superseded_by ? { superseded_by: is.superseded_by } : {}), ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts && h.pending?.length ? { ...h.counts, pending: h.pending.length } : h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited, ...(h.pending?.length ? { pending: h.pending.filter((r) => keep(r)) } : {}) };
     return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { 'server-timing': timing.join(', ') });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env, req, url }) => {

@@ -129,6 +129,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     trial_end: sub.status === 'trialing' ? Number(sub.trial_end ?? 0) || null : null,
     // A no-card trial ends without a charge unless a card is added (Holdterm's and the gate's links).
     has_payment_method: !!(sub.default_payment_method || sub.default_source),
+    collection: String(sub.collection_method ?? 'charge_automatically'),
     period_end: Number(sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? 0),
     subscription: String(sub.id),
     // New members get alerts for the funds they follow and active managers' moves in stocks they own or watch.

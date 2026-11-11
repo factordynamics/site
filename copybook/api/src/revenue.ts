@@ -86,7 +86,7 @@ export async function logSent(env: Env, n: number, now: number): Promise<void> {
 }
 
 const etDay = (t: number) => new Date(t - 5 * 3600_000).toISOString().slice(0, 10);
-export type FunnelKind = 'signups' | 'trials' | 'trial_to_paid' | 'paid_direct' | 'cancellations' | 'pauses';
+export type FunnelKind = 'signups' | 'trials' | 'trial_to_paid' | 'paid_direct' | 'cancellations' | 'pauses' | 'invoice_trials';
 
 /**
  * Funnel counts by ET day (KV funnel:{day}, kept 400 days): each kind by source, and the plan mix
@@ -137,7 +137,7 @@ export async function funnel(env: Env, now: number, days: number) {
     for (const [kind, xs] of Object.entries(d)) for (const [k, n] of Object.entries(xs)) (total[kind] ??= {})[k] = (total[kind][k] ?? 0) + n;
   }
   const sum = (kind: string) => Object.values(total[kind] ?? {}).reduce((a, n) => a + n, 0);
-  return { days, signups: sum('signups'), trials: sum('trials'), trial_to_paid: sum('trial_to_paid'), paid_direct: sum('paid_direct'), cancellations: sum('cancellations'), pauses: sum('pauses'), by_source: Object.fromEntries(Object.entries(total).filter(([k]) => k !== 'plan_mix' && !k.startsWith('utm:'))), by_utm: Object.fromEntries(Object.entries(total).filter(([k]) => k.startsWith('utm:')).map(([k, v]) => [k.slice(4), v])), plan_mix: total.plan_mix ?? {}, by_day };
+  return { days, signups: sum('signups'), trials: sum('trials'), invoice_trials: sum('invoice_trials'), trial_to_paid: sum('trial_to_paid'), paid_direct: sum('paid_direct'), cancellations: sum('cancellations'), pauses: sum('pauses'), by_source: Object.fromEntries(Object.entries(total).filter(([k]) => k !== 'plan_mix' && !k.startsWith('utm:'))), by_utm: Object.fromEntries(Object.entries(total).filter(([k]) => k.startsWith('utm:')).map(([k, v]) => [k.slice(4), v])), plan_mix: total.plan_mix ?? {}, by_day };
 }
 
 const secs = (n: number) => (n < 120 ? `${n} seconds` : `${Math.round(n / 60)} minutes`);
@@ -183,7 +183,7 @@ const footerFor = (env: Env, plan: string | null) => (plan === 'fund' ? `${fundT
  * checkout. The subscription is tagged founding=true here. `sub`: the Stripe subscription; `extra`: checkout's fields.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function ensureInvoiceTerms(env: Env, sub: any, plan: string | null, extra: { company?: string | null; po?: string | null } = {}): Promise<{ result: string; footer: string; fields: { name: string; value: string }[] }> {
+export async function ensureInvoiceTerms(env: Env, sub: any, plan: string | null, extra: { company?: string | null; po?: string | null; ap_email?: string | null } = {}): Promise<{ result: string; footer: string; fields: { name: string; value: string }[] }> {
   const customer = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
   if (!customer) return { result: 'no customer', footer: '', fields: [] };
   // Copy has no founding price: its invoices carry no Price field (an existing one is removed below).
@@ -195,11 +195,13 @@ export async function ensureInvoiceTerms(env: Env, sub: any, plan: string | null
   const had = (c.invoice_settings?.custom_fields ?? []) as { name: string; value: string }[];
   const want = [
     ...(founding && line ? [{ name: 'Price', value: line }] : []),
-    { name: 'Company', value: extra.company?.trim().slice(0, 140) || had.find((f) => f.name === 'Company')?.value || '' },
     { name: 'PO', value: extra.po?.trim().slice(0, 140) || had.find((f) => f.name === 'PO')?.value || '' },
+    { name: 'AP email', value: extra.ap_email?.trim().slice(0, 140) || had.find((f) => f.name === 'AP email')?.value || '' },
     // Invoiced (net-30) subscriptions say their terms in words, not only by the due date.
     ...(sub.collection_method === 'send_invoice' ? [{ name: 'Payment terms', value: `Net ${sub.days_until_due ?? 30}` }] : []),
-    ...had.filter((f) => !['Price', 'Company', 'PO', 'Payment terms'].includes(f.name)),
+    // Stripe keeps 4 fields; the company is also the customer's name on the invoice, so it goes last.
+    { name: 'Company', value: extra.company?.trim().slice(0, 140) || had.find((f) => f.name === 'Company')?.value || '' },
+    ...had.filter((f) => !['Price', 'Company', 'PO', 'AP email', 'Payment terms'].includes(f.name)),
   ].filter((f) => f.value).slice(0, 4);
   const footer = footerFor(env, plan);
   if (c.invoice_settings?.footer === footer && JSON.stringify(had.map((f) => [f.name, f.value])) === JSON.stringify(want.map((f) => [f.name, f.value]))) return { result: 'already', footer, fields: want };
@@ -234,6 +236,150 @@ export async function fundInvoice(env: Env, email: string, name?: string, po?: s
   }
   inv = await stripe(env, 'POST', `invoices/${inv.id}/send`);
   return { customer, subscription: sub.id as string, invoice: inv.id as string, number: inv.number ?? null, due_date: inv.due_date ? new Date(inv.due_date * 1000).toISOString().slice(0, 10) : null, hosted_invoice_url: inv.hosted_invoice_url ?? null };
+}
+
+/**
+ * Freemail domains: an invoice trial needs a company address (one per company domain). Subdomains count too
+ * (mail.yahoo.co.uk).
+ */
+const FREEMAIL = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'hotmail.co.uk', 'live.com', 'msn.com', 'yahoo.com', 'yahoo.co.uk', 'ymail.com', 'aol.com', 'icloud.com', 'me.com', 'mac.com', 'proton.me', 'protonmail.com', 'pm.me', 'gmx.com', 'gmx.net', 'gmx.de', 'web.de', 'mail.com', 'zoho.com', 'yandex.com', 'yandex.ru', 'qq.com', '163.com', '126.com', 'fastmail.com', 'hey.com', 'tutanota.com', 'tuta.io', 'mail.ru', 'inbox.com', 'hushmail.com']);
+export const domainOf = (email: string) => email.trim().toLowerCase().split('@')[1] ?? '';
+export const isFreemail = (d: string) => [...FREEMAIL].some((f) => d === f || d.endsWith(`.${f}`)) || /^(yahoo|hotmail|outlook|live)\./.test(d);
+
+export interface InvoiceTrialForm {
+  email: string;
+  company: string;
+  address: { line1: string; line2?: string | null; city: string; state?: string | null; postal_code: string; country: string };
+  po?: string | null;
+  ap_email?: string | null;
+}
+export type InvoiceTrialResult =
+  | { state: 'started'; customer: string; subscription: string; trial_end: string; invoice_on: string; due_on: string; sign_in_email: 'sent' | 'not_sent' }
+  | { state: 'freemail' | 'domain_used' | 'already_member' };
+
+/**
+ * Copy Fund on a 14-day trial billed by invoice, no card and no approval (the /contact/?topic=fund form): the customer
+ * with the company and billing address, a yearly Fund subscription with send_invoice, Net 30 and a 14-day trial; the
+ * owner is signed up at once (the welcome email carries the sign-in link) and seats work. Day 14: Stripe issues the
+ * invoice (founding price, Net 30, PO and AP email as fields). Unpaid at day 44: access pauses (sweepInvoiceTrials).
+ * Cancelling before day 14 costs nothing. One per company domain; freemail refused.
+ */
+export async function fundInvoiceTrial(env: Env, f: InvoiceTrialForm, now = Date.now()): Promise<InvoiceTrialResult> {
+  const email = f.email.trim().toLowerCase();
+  const domain = domainOf(email);
+  if (!domain || isFreemail(domain)) return { state: 'freemail' };
+  const { memberByEmail } = await import('./members');
+  const had = await memberByEmail(env, email);
+  if (had && isActive(had) && had.status !== 'free') return { state: 'already_member' };
+  // Claimed before any Stripe call, so two submissions can't both start one; released if Stripe fails.
+  const lock = `invtrial:domain:${domain}`;
+  if (await env.DB.get(lock)) return { state: 'domain_used' };
+  await env.DB.put(lock, JSON.stringify({ at: new Date(now).toISOString(), email, pending: true }));
+  try {
+    const a = f.address;
+    const customer = await stripe(env, 'POST', 'customers', {
+      email,
+      name: f.company,
+      'address[line1]': a.line1,
+      ...(a.line2 ? { 'address[line2]': a.line2 } : {}),
+      'address[city]': a.city,
+      ...(a.state ? { 'address[state]': a.state } : {}),
+      'address[postal_code]': a.postal_code,
+      'address[country]': a.country,
+      'invoice_settings[footer]': footerFor(env, 'fund'),
+      'metadata[copybook]': 'fund',
+      'metadata[invoice_trial]': 'true',
+      ...(f.ap_email ? { 'metadata[ap_email]': f.ap_email } : {}),
+    });
+    const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': 'fund_yearly', active: true })).data?.[0];
+    if (!price) throw new Error('no active fund_yearly price');
+    const sub = await stripe(env, 'POST', 'subscriptions', {
+      customer: customer.id,
+      'items[0][price]': price.id,
+      trial_period_days: 14,
+      collection_method: 'send_invoice',
+      days_until_due: 30,
+      description: fundMemo(env),
+      'payment_settings[payment_method_types][0]': 'card',
+      'payment_settings[payment_method_types][1]': 'us_bank_account',
+      'metadata[copybook]': 'fund',
+      'metadata[invoice_trial]': 'true',
+      'metadata[source]': 'invoice_trial',
+      ...(now < FOUNDING_UNTIL ? { 'metadata[founding]': 'true' } : {}),
+      ...(/^copybook-test-/.test(email) ? { 'metadata[test]': 'invoice-trial' } : {}),
+    });
+    await ensureInvoiceTerms(env, sub, 'fund', { company: f.company, po: f.po ?? null, ap_email: f.ap_email ?? null });
+    const m = await syncSubscription(env, sub, email);
+    await env.DB.put(lock, JSON.stringify({ at: new Date(now).toISOString(), email, customer: customer.id, subscription: sub.id }));
+    const list = JSON.parse((await env.DB.get('invtrial:customers')) ?? '[]') as string[];
+    if (!list.includes(customer.id)) await env.DB.put('invtrial:customers', JSON.stringify([...list, customer.id]));
+    if (billable(m)) await bump(env, 'invoice_trials', m, `invtrial:${sub.id}`, now);
+    const trialEnd = Number(sub.trial_end ?? Math.floor(now / 1000) + 14 * 86400) * 1000;
+    const day = (t: number) => new Date(t).toISOString().slice(0, 10);
+    return { state: 'started', customer: customer.id, subscription: sub.id, trial_end: new Date(trialEnd).toISOString().replace(/\.\d+Z$/, 'Z'), invoice_on: day(trialEnd), due_on: day(trialEnd + 30 * 86400_000), sign_in_email: m.welcomed ? 'sent' : 'not_sent' };
+  } catch (e) {
+    await env.DB.delete(lock);
+    throw e;
+  }
+}
+
+/** Access paused for an unpaid invoice (past its due date): the owner and seats lose access until it's paid. */
+export async function markOverdue(env: Env, customer: string, invoice: { id?: string; number?: string | null; hosted_invoice_url?: string | null; amount_due?: number; due_date?: number | null }, now = Date.now()): Promise<string> {
+  const m = await getMember(env, customer);
+  if (!m || m.overdue_since) return m ? 'already' : 'no member';
+  m.overdue_since = new Date(now).toISOString();
+  await putMember(env, m);
+  const { mirrorSeats } = await import('./seats');
+  await mirrorSeats(env, m);
+  if (!m.email) return 'paused';
+  const amount = invoice.amount_due != null ? money(invoice.amount_due / 100) : 'the amount due';
+  const due = invoice.due_date ? new Date(invoice.due_date * 1000).toISOString().slice(0, 10) : 'its due date';
+  const url = invoice.hosted_invoice_url ?? `${env.SITE_URL}account/`;
+  const status = await sendMail(env, [
+    {
+      to: m.email,
+      subject: `Copy Fund is paused: invoice ${invoice.number ?? ''} is past due`.replace('  ', ' '),
+      text: `Your Copy Fund invoice ${invoice.number ?? ''} for ${amount} was due on ${due} and hasn't been paid, so Copybook access for you and your team's seats is paused.\n\nPay it online (card or ACH) and access comes back within minutes, with your follows, seats and API keys as they were:\n${url}\n\nIf it's already in your payables run, reply to this email and we'll keep you open meanwhile.\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    },
+  ]);
+  return `paused, mail ${status}`;
+}
+
+/** An overdue member paid: access back for the owner and seats. */
+export async function clearOverdue(env: Env, customer: string): Promise<string> {
+  const m = await getMember(env, customer);
+  if (!m?.overdue_since) return 'not overdue';
+  delete m.overdue_since;
+  await putMember(env, m);
+  const { mirrorSeats } = await import('./seats');
+  await mirrorSeats(env, m);
+  return 'resumed';
+}
+
+/** Daily: every invoice-billed Fund customer whose open invoice is past its due date is paused (Stripe's invoice.overdue covers it too). */
+export async function sweepInvoiceTrials(env: Env, now = Date.now()): Promise<{ checked: number; paused: number; resumed: number }> {
+  const list = JSON.parse((await env.DB.get('invtrial:customers')) ?? '[]') as string[];
+  let paused = 0, resumed = 0;
+  for (const c of list) {
+    const open = ((await stripe(env, 'GET', 'invoices', { customer: c, status: 'open', limit: 10 })).data ?? []) as { id: string; number: string | null; hosted_invoice_url: string | null; amount_due: number; due_date: number | null }[];
+    const late = open.find((i) => i.due_date && i.due_date * 1000 < now);
+    if (late && (await markOverdue(env, c, late, now)).startsWith('paused')) paused++;
+    if (!late && (await clearOverdue(env, c)) === 'resumed') resumed++;
+  }
+  return { checked: list.length, paused, resumed };
+}
+
+/** A Fund owner on a card trial (yearly) switches to paying by invoice (Net 30) from /account/, with nobody to email. */
+export async function switchToInvoice(env: Env, m: Member, f: { company?: string | null; po?: string | null; ap_email?: string | null } = {}): Promise<{ ok: true; collection: 'send_invoice' } | { ok: false; code: string; error: string }> {
+  if (m.seat_of || m.plan !== 'fund') return { ok: false, code: 'fund_owner_only', error: 'Only a Copy Fund owner can switch to invoice billing.' };
+  if (m.interval !== 'yearly') return { ok: false, code: 'monthly_card_only', error: 'Copy Fund monthly is paid by card. Switch to yearly to pay by invoice.' };
+  if (!isActive(m)) return { ok: false, code: 'subscription_inactive', error: 'No active Copy Fund subscription.' };
+  const sub = await stripe(env, 'POST', `subscriptions/${m.subscription}`, { collection_method: 'send_invoice', days_until_due: 30, 'metadata[invoice]': 'true', 'payment_settings[payment_method_types][0]': 'card', 'payment_settings[payment_method_types][1]': 'us_bank_account' });
+  await ensureInvoiceTerms(env, sub, 'fund', f);
+  await syncSubscription(env, sub);
+  const list = JSON.parse((await env.DB.get('invtrial:customers')) ?? '[]') as string[];
+  if (!list.includes(m.customer)) await env.DB.put('invtrial:customers', JSON.stringify([...list, m.customer]));
+  return { ok: true, collection: 'send_invoice' };
 }
 
 /** Day 11 of 14: the member's own numbers this trial, what ends with it, and one button to keep it (yearly preselected). */
@@ -489,12 +635,23 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
     const s = log.filter((l) => !l.replay && l.sent && Date.parse(l.sent) > now - 45 * 86400_000).map((l) => l.seconds).sort((a, b) => a - b);
     median = s.length ? s[Math.floor((s.length - 1) / 2)] : null;
   }
+  // Invoice-billed Fund customers past due: paused, with an email (Stripe's invoice.overdue does the same).
+  const invoices = await sweepInvoiceTrials(env, now).catch((e) => ({ error: String(e).slice(0, 160) }));
   for (const m of members) {
     const left = (m.trial_end ?? 0) * 1000 - now;
     if (m.status === 'trialing' && !pauseScheduled(m, now) && left > 0 && left <= 3 * 86400_000 && m.trial_reminded !== m.trial_end) {
       const f = await getFollows(env, m);
       const keep = `${API(env)}keep?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'keep', m.customer, 14 * 86400))}`;
-      mails.push(trialEndingMail(env, m, await memberStats(env, m.customer), f.investors.length, f.owned.length, keep, await unsubscribeUrl(env, m.customer), Math.max(1, Math.ceil(left / 86400_000))));
+      // Billed by invoice: no card to add and nothing to keep; the notice says when the invoice comes and how to stop it.
+      if (m.collection === 'send_invoice') {
+        const ends = new Date((m.trial_end ?? 0) * 1000).toISOString().slice(0, 10);
+        mails.push({ to: m.email, subject: `Your Copy Fund invoice comes on ${ends}`, text: `Your Copy Fund trial ends on ${ends}. That day Stripe emails your invoice for ${money(PRICES.fund.year)} (the founding price, a year), payable within 30 days by card, ACH or bank transfer. Access continues meanwhile.
+
+Not going ahead? Cancel before ${ends} in your account and nothing is owed:
+${env.SITE_URL}account/
+
+Unsubscribe: ${await unsubscribeUrl(env, m.customer)}${FOOTER}`, unsubscribe: await unsubscribeUrl(env, m.customer) });
+      } else mails.push(trialEndingMail(env, m, await memberStats(env, m.customer), f.investors.length, f.owned.length, keep, await unsubscribeUrl(env, m.customer), Math.max(1, Math.ceil(left / 86400_000))));
       marks.push({ ...m, trial_reminded: m.trial_end });
     } else if (recap && m.status === 'active' && m.interval === 'monthly' && m.recap_sent !== recap && !m.marketing_off) {
       const f = await getFollows(env, m);
@@ -512,7 +669,7 @@ export async function runRevenue(env: Env, now: number): Promise<Record<string, 
       if (cur) await putMember(env, { ...cur, trial_reminded: mk.trial_reminded ?? cur.trial_reminded, recap_sent: mk.recap_sent ?? cur.recap_sent, recap_n: mk.recap_n ?? cur.recap_n });
     }
   }
-  return { emails: mails.length, status };
+  return { emails: mails.length, status, invoices };
 }
 
 /** Counts only: paying members by plan and interval (comped and seats counted apart), trials, scheduled cancellations, cancel reasons, alerts sent. */

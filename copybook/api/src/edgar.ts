@@ -351,9 +351,10 @@ function indexReissued(): void {
 indexReissued();
 let reissuesAt = 0;
 /**
- * Adds ingest's reissue links (data/cusip_links.json) to the hand-coded ones, at most hourly: only links the SEC's
- * Official 13(f) List confirms (basis sec_13f_list), never detection alone (units to shares, rights, warrants). Links
- * only add: a missing or unreadable file leaves the known ones.
+ * Ingest's reissue links (data/cusip_links.json), read hourly (5 minutes after a failed read). Each good read rebuilds
+ * the maps from the hand-coded lists plus the file, so a link the file drops is dropped: a link applies only with the
+ * SEC's 13(f) List basis and ingest's units result (ratio and units_basis), and a pair in `held` never links. The maps
+ * are swapped in only after the whole file is read; a missing, unreadable or malformed file leaves them as they were.
  */
 export async function loadReissues(env: { DATA_URL: string }, now = Date.now()): Promise<number> {
   if (now < reissuesAt) return Object.keys(REISSUED).length;
@@ -367,28 +368,32 @@ export async function loadReissues(env: { DATA_URL: string }, now = Date.now()):
       const ok = (from: string, to: string) => /^[0-9A-Z]{8}[0-9]$/.test(from) && /^[0-9A-Z]{8}[0-9]$/.test(to);
       // Held pairs (an array from Nov 11 12:2x, a map before): ingest's word overrides a hand-coded link, never a 1:1
       // merge of mismatched or unchecked units.
-      const held = Array.isArray(file.held) ? file.held : Object.entries(file.held ?? {}).map(([o, v]) => ({ ...v, old: o }));
-      for (const k of Object.keys(REISSUED)) delete REISSUED[k];
-      for (const k of Object.keys(HELD)) delete HELD[k];
-      Object.assign(REISSUED, JSON.parse(BASE.reissued), {});
-      Object.assign(HELD, JSON.parse(BASE.held));
-      for (const l of held) {
+      const heldList = (Array.isArray(file.held) ? file.held : Object.entries(file.held ?? {}).map(([o, v]) => (v && typeof v === 'object' ? { ...v, old: o } : null))).filter((l): l is Link => !!l && typeof l === 'object');
+      // Built apart and swapped in only once the whole file has been read: a bad entry never leaves the maps half-built.
+      const nextR = JSON.parse(BASE.reissued) as typeof REISSUED;
+      const nextH = JSON.parse(BASE.held) as typeof HELD;
+      for (const l of heldList) {
         const from = String(l.old ?? '').toUpperCase(), to = String(l.new ?? '').toUpperCase();
         if (!ok(from, to)) continue;
-        delete REISSUED[from];
-        HELD[from] = { to, ticker: String(l.ticker ?? HELD[from]?.ticker ?? '').toUpperCase() };
+        delete nextR[from];
+        nextH[from] = { to, ticker: String(l.ticker ?? nextH[from]?.ticker ?? '').toUpperCase() };
       }
       for (const [old, l] of Object.entries(file.links ?? {})) {
+        if (!l || typeof l !== 'object') continue;
         const from = old.toUpperCase(), to = String(l.new ?? '').toUpperCase();
         // Only with ingest's units result, ratio and units_basis both: a COM -> COM NEW link without one may be a reverse
         // split, which netted 1:1 reads as a huge trim (ONCY, BARK, UPLD...). A units_basis alone never means 1:1. ratio
-        // multiplies the prior's shares.
+        // multiplies the prior's shares (HON 0.5, NVRI 1/3, RBKB 1.3978).
         const k = l.ratio == null ? NaN : Number(l.ratio);
-        if (l.basis !== 'sec_13f_list' || !ok(from, to) || !l.ticker || !(k > 0) || !l.units_basis || held.some((h) => String(h.old ?? '').toUpperCase() === from)) continue;
-        delete HELD[from];
-        const lq = typeof (l as { quarter?: string }).quarter === 'string' && /^\d{4}Q[1-4]$/.test((l as { quarter: string }).quarter) ? (l as { quarter: string }).quarter : REISSUED[from]?.quarter;
-        REISSUED[from] = { to, ticker: String(l.ticker).toUpperCase(), ...(Math.abs(k - 1) > 1e-6 ? { ratio: k } : {}), ...(lq ? { quarter: lq } : {}) };
+        if (l.basis !== 'sec_13f_list' || !ok(from, to) || !l.ticker || !(k > 0) || !l.units_basis || heldList.some((h) => String(h.old ?? '').toUpperCase() === from)) continue;
+        delete nextH[from];
+        const lq = typeof (l as { quarter?: string }).quarter === 'string' && /^\d{4}Q[1-4]$/.test((l as { quarter: string }).quarter) ? (l as { quarter: string }).quarter : nextR[from]?.quarter;
+        nextR[from] = { to, ticker: String(l.ticker).toUpperCase(), ...(Math.abs(k - 1) > 1e-6 ? { ratio: k } : {}), ...(lq ? { quarter: lq } : {}) };
       }
+      for (const k of Object.keys(REISSUED)) delete REISSUED[k];
+      for (const k of Object.keys(HELD)) delete HELD[k];
+      Object.assign(REISSUED, nextR);
+      Object.assign(HELD, nextH);
       indexReissued();
       reissuesAt = now + 3600_000;
     }

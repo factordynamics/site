@@ -94,6 +94,10 @@ export interface Member {
   synced_at?: string;
   /** The subscription has a card (or other payment method) to charge when its trial ends. */
   has_payment_method?: boolean;
+  /** Stripe's collection method: send_invoice for Copy Fund billed by invoice (Net 30). */
+  collection?: string;
+  /** An invoice past its due date: access is paused (owner and seats) until it's paid. */
+  overdue_since?: string;
   customer: string;
   email: string;
   status: string;
@@ -232,5 +236,5 @@ export function pauseScheduled(m: Member | null, now = Date.now()): boolean {
 }
 
 export function isActive(m: Member | null): m is Member {
-  return !!m && ACTIVE.has(m.status) && !isPaused(m);
+  return !!m && ACTIVE.has(m.status) && !isPaused(m) && !m.overdue_since;
 }

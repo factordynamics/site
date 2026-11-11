@@ -33,7 +33,8 @@ function mirror(owner: Member, seat: Seat, prev?: Member | null): Member {
   return {
     customer: seat.id,
     email: seat.email,
-    status: owner.plan === 'fund' ? owner.status : 'canceled',
+    // An owner paused for an unpaid invoice pauses every seat.
+    status: owner.plan === 'fund' ? (owner.overdue_since ? 'unpaid' : owner.status) : 'canceled',
     plan: 'fund',
     interval: owner.interval,
     period_end: owner.period_end,

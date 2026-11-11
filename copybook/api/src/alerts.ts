@@ -1854,12 +1854,11 @@ export function compareToBuild(rows: Map<string, MoveRow>, build: Map<string, Bu
     // that hasn't linked it (TEVA's ADS to ordinary, Nov 11) lists an exit plus a new line, and must never correct an
     // add or trim into either.
     if (isReissued(r.cusip) && (!v || v.change === 'new' || v.change === 'exited')) continue;
-    // A linked pair the build does list as one position: a split link (DD 1-for-3) compares split-adjusted shares, the
-    // build's prior possibly still in old units; a one-for-one link isn't checked for direction or value (no false
-    // "corrected" note).
-    if (v && isReissued(r.cusip)) {
-      const k = reissueRatio(r.cusip);
-      if (k === 1) continue;
+    // A split link the build lists as one position (DD 1-for-3, RBKB 1.3978): compare split-adjusted shares, the build's
+    // prior possibly still in old units. A one-for-one link the build lists as added or trimmed is checked like any row,
+    // so a wrong XOM or TEVA alert is corrected.
+    const k = v && isReissued(r.cusip) ? reissueRatio(r.cusip) : 1;
+    if (v && k !== 1) {
       const vp = Number(v.prev_shares ?? 0), rp = Number(r.prev_shares ?? 0), vs = Number(v.shares ?? 0);
       if (vs === Number(r.shares) && (Math.abs(rp - Math.round(vp * k)) <= 1 || Math.abs(rp - vp) <= 1)) continue;
       const adj = Math.abs(rp - vp) <= 1 ? vp : Math.round(vp * k);

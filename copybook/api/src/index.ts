@@ -189,12 +189,19 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
       break;
     case 'invoice.paid':
     case 'invoice.payment_failed':
+    case 'invoice.overdue':
       if (!(await isOurInvoice(env, obj))) return ignore('invoice');
   }
   switch (event.type) {
     case 'invoice.paid': {
       const { rewardReferrer } = await import('./referrals');
       console.log(`referral: ${await rewardReferrer(env, obj)}`);
+      if (typeof obj.customer === 'string') console.log(`overdue: ${await (await import('./revenue')).clearOverdue(env, obj.customer)}`);
+      break;
+    }
+    // An invoice (Copy Fund, Net 30) past its due date: access pauses for the owner and seats, with an email.
+    case 'invoice.overdue': {
+      if (typeof obj.customer === 'string' && obj.collection_method === 'send_invoice') console.log(`overdue: ${await (await import('./revenue')).markOverdue(env, obj.customer, obj)}`);
       break;
     }
     case 'invoice.payment_failed': {
@@ -936,6 +943,18 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!EMAIL.test(email)) return json({ ok: false, error: 'invalid email', code: 'bad_request' }, 400, h);
     if (seats !== null && !(Number.isInteger(seats) && seats >= 1 && seats <= 1000)) return json({ ok: false, error: 'seats must be a whole number from 1 to 1000', code: 'bad_request' }, 400, h);
     if (b.invoice !== undefined && typeof b.invoice !== 'boolean') return json({ ok: false, error: 'invoice must be true or false', code: 'bad_request' }, 400, h);
+    // A Fund trial billed by invoice (no card): company, billing address and a work email; PO and AP email optional.
+    const trial = topic === 'fund' && b.invoice_trial === true;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const addr = (b.billing_address && typeof b.billing_address === 'object' ? b.billing_address : {}) as Record<string, any>;
+    if (trial) {
+      const missing = [!str(b.fund ?? b.company, 200) && 'fund', ...['line1', 'city', 'postal_code', 'country'].filter((k) => !str(addr[k], 200)).map((k) => `billing_address.${k}`)].filter(Boolean) as string[];
+      if (str(addr.country, 10) && !/^[A-Za-z]{2}$/.test(String(addr.country).trim())) missing.push('billing_address.country (2 letters, e.g. US)');
+      if (b.ap_email !== undefined && b.ap_email !== null && b.ap_email !== '' && !EMAIL.test(String(b.ap_email).trim().toLowerCase())) missing.push('ap_email');
+      if (missing.length) return json({ ok: false, error: `missing or invalid: ${missing.join(', ')}`, code: 'bad_request', fields: missing }, 400, h);
+      const { domainOf, isFreemail } = await import('./revenue');
+      if (isFreemail(domainOf(email))) return json({ ok: false, error: 'Use your work email: an invoice trial goes to a company address.', code: 'freemail' }, 400, h);
+    }
     if (str(b.website, 200)) return json({ ok: true }, 200, h);
     // At most 5 requests an hour per IP and 3 per email address.
     const ip = req.headers.get('cf-connecting-ip') ?? 'unknown';
@@ -962,6 +981,23 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const id = `${at}-${crypto.randomUUID().slice(0, 8)}`;
     await env.DB.put(`lead:${id}`, JSON.stringify({ ...lead, ...(test ? { test: true } : {}) }));
     if (!test) await env.DB.put('leads:count', String(Number((await env.DB.get('leads:count')) ?? 0) + 1));
+    if (trial) {
+      const { fundInvoiceTrial } = await import('./revenue');
+      const r = await fundInvoiceTrial(env, {
+        email,
+        company: str(b.fund ?? b.company, 200)!,
+        address: { line1: str(addr.line1, 200)!, line2: str(addr.line2, 200), city: str(addr.city, 200)!, state: str(addr.state, 100), postal_code: str(addr.postal_code, 40)!, country: String(addr.country).trim().toUpperCase() },
+        po: str(b.po, 140),
+        ap_email: str(b.ap_email, 200)?.toLowerCase() ?? null,
+      }).catch((e) => (console.log(`invoice trial: ${String(e).slice(0, 200)}`), null));
+      await env.DB.put(`lead:${id}`, JSON.stringify({ ...lead, invoice_trial: r?.state ?? 'error', ...(test ? { test: true } : {}) }));
+      if (!test && env.CONTACT_EMAIL) await sendMail(env, [leadNoticeMail(env, { ...lead, message: `${lead.message ?? ''}\n[invoice trial: ${r?.state ?? 'error'}]`.trim() }, id)]);
+      if (!r) return json({ ok: false, error: "We couldn't start the trial just now. We've got your request and will email you today.", code: 'server_error', id }, 502, h);
+      if (r.state === 'started') return json({ ok: true, id, trial: 'started', trial_end: r.trial_end, invoice_on: r.invoice_on, due_on: r.due_on, sign_in_email: r.sign_in_email }, 200, h);
+      if (r.state === 'already_member') return json({ ok: false, id, code: 'already_member', error: 'This address already has a Copybook subscription. Sign in, or switch to invoice billing in your account.' }, 409, h);
+      if (r.state === 'domain_used') return json({ ok: false, id, code: 'trial_used', error: 'Your company has already had a Copy Fund trial. We have your request and will email you to set up an invoice.' }, 409, h);
+      return json({ ok: false, id, code: 'freemail', error: 'Use your work email: an invoice trial goes to a company address.' }, 400, h);
+    }
     const mail = await sendMail(env, [leadAckMail(env, lead)]);
     if (!test && env.CONTACT_EMAIL) await sendMail(env, [leadNoticeMail(env, lead, id)]);
     return json({ ok: true, id, acknowledgement: mail === '200' ? 'sent' : 'not sent' }, 200, h);
@@ -1197,6 +1233,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const b = await body(req);
     const ok = await noteReason(env, m.customer, String(b.reason ?? ''), 'account', typeof b.note === 'string' ? b.note.trim() : undefined);
     return ok ? json({ ok: true }, 200, h) : json({ ok: false, error: `reason: ${Object.keys(WHY).join(', ')}`, code: 'bad_request' }, 400, h);
+  }
+
+  // A Fund owner on a card trial (yearly) switches to paying by invoice, Net 30.
+  if (req.method === 'POST' && path === '/account/invoice') {
+    const { switchToInvoice } = await import('./revenue');
+    const b = await body(req);
+    const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 140) : null);
+    const r = await switchToInvoice(env, m, { company: str(b.company), po: str(b.po), ap_email: str(b.ap_email) });
+    return r.ok ? json({ ok: true, collection: r.collection, member: publicView((await getMember(env, m.customer)) ?? m) }, 200, h) : json(r, r.code === 'subscription_inactive' ? 402 : 403, h);
   }
 
   if (req.method === 'POST' && path === '/portal') {

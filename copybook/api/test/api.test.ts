@@ -1416,9 +1416,71 @@ describe('copybook api', () => {
     expect(footer).toMatch(/payable within 30 days\. Terms in force on the invoice date: \S+ Prices exclude applicable taxes\. Copybook does not currently collect sales tax\.$/);
     expect(posted('invoices/in_fund').get('footer')).toBe(footer);
     // The founding price, the company and the customer's PO print on the invoice (and on the customer's later ones).
-    expect([0, 1, 2].map((i) => [posted('invoices/in_fund').get(`custom_fields[${i}][name]`), posted('invoices/in_fund').get(`custom_fields[${i}][value]`)])).toEqual([['Price', 'Founding price, kept while subscribed'], ['Company', 'Example Capital'], ['PO', 'PO-7781']]);
+    expect([0, 1, 2].map((i) => [posted('invoices/in_fund').get(`custom_fields[${i}][name]`), posted('invoices/in_fund').get(`custom_fields[${i}][value]`)])).toEqual([['Price', 'Founding price, kept while subscribed'], ['PO', 'PO-7781'], ['Company', 'Example Capital']]);
     expect(posted('subscriptions').get('metadata[founding]')).toBe('true');
     expect(calls.map((c) => `${c.method} ${c.path}`).slice(-3)).toEqual(['POST invoices/in_fund', 'POST invoices/in_fund/finalize', 'POST invoices/in_fund/send']);
+    vi.stubGlobal('fetch', orig);
+  });
+
+  it('Fund trial by invoice: a work email, company and billing address start a 14-day trial billed Net 30, no card; one per domain; paused when overdue', async () => {
+    const calls: { method: string; path: string; body: URLSearchParams }[] = [];
+    const orig = globalThis.fetch;
+    let n = 0;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      const url = String(u);
+      if (!url.startsWith('https://api.stripe.com/v1/')) return orig(u, init);
+      const path = url.slice('https://api.stripe.com/v1/'.length).split('?')[0];
+      const body = new URLSearchParams(String(init?.body ?? ''));
+      calls.push({ method: init?.method ?? 'GET', path, body });
+      if (path === 'customers' && init?.method === 'POST') return Response.json({ id: `cus_it${++n}` });
+      if (path.startsWith('customers/')) return Response.json({ id: path.slice(10), invoice_settings: {} });
+      if (path === 'prices') return Response.json({ data: [{ id: 'price_fund_yearly' }] });
+      if (path === 'subscriptions' && init?.method === 'POST') {
+        const t = Math.floor(Date.now() / 1000);
+        return Response.json({ id: `sub_it${n}`, customer: body.get('customer'), status: 'trialing', trial_end: t + 14 * 86400, created: t, collection_method: 'send_invoice', days_until_due: 30, current_period_end: t + 14 * 86400, metadata: { copybook: 'fund' }, items: { data: [{ price: { id: 'price_fund_yearly', lookup_key: 'fund_yearly', unit_amount: 199000, recurring: { interval: 'year' } } }] } });
+      }
+      return Response.json({ id: 'x' });
+    });
+    const go = (b: Record<string, unknown>, ip = '7.7.7.1') => handleRequest(new Request('https://api.test/fund-request', { method: 'POST', body: JSON.stringify({ topic: 'fund', invoice_trial: true, ...b }), headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip } }), env);
+    const address = { line1: '1 Main St', city: 'Boston', state: 'MA', postal_code: '02110', country: 'us' };
+    // Freemail and missing fields are refused before anything is created.
+    const free = await go({ email: 'coo@gmail.com', fund: 'Acme Capital', billing_address: address }, '7.7.7.2');
+    expect([free.status, (await free.json()).code]).toEqual([400, 'freemail']);
+    const miss = await (await go({ email: 'coo@acme-cap.test', billing_address: { line1: '1 Main St' } }, '7.7.7.3')).json();
+    expect([miss.code, miss.fields]).toEqual(['bad_request', ['fund', 'billing_address.city', 'billing_address.postal_code', 'billing_address.country']]);
+    expect(calls).toEqual([]);
+    // Started: no card, trial 14 days, send_invoice Net 30; the owner is a member at once and gets the sign-in link.
+    const before = sent.length;
+    const r = await go({ email: 'COO@acme-cap.test', fund: 'Acme Capital', billing_address: address, po: 'PO-55', ap_email: 'ap@acme-cap.test' });
+    const j = await r.json();
+    expect([r.status, j.trial, j.sign_in_email, j.invoice_on, j.due_on]).toEqual([200, 'started', 'sent', new Date(Date.now() + 14 * 86400_000).toISOString().slice(0, 10), new Date(Date.now() + 44 * 86400_000).toISOString().slice(0, 10)]);
+    const post = (p: string) => calls.find((c) => c.method === 'POST' && c.path === p)!.body;
+    expect(Object.fromEntries(['trial_period_days', 'collection_method', 'days_until_due', 'metadata[invoice_trial]'].map((k) => [k, post('subscriptions').get(k)]))).toEqual({ trial_period_days: '14', collection_method: 'send_invoice', days_until_due: '30', 'metadata[invoice_trial]': 'true' });
+    expect([post('customers').get('name'), post('customers').get('address[country]'), post('customers').get('address[postal_code]'), post('subscriptions').has('default_payment_method')]).toEqual(['Acme Capital', 'US', '02110', false]);
+    // The invoice prints the PO and the AP email.
+    const fields = calls.filter((c) => c.method === 'POST' && c.path === 'customers/cus_it1').map((c) => {
+      const out: string[] = [];
+      c.body.forEach((v, k) => k.includes('custom_fields') && out.push(v));
+      return out;
+    }).flat();
+    expect(fields).toEqual(expect.arrayContaining(['PO', 'PO-55', 'AP email', 'ap@acme-cap.test', 'Payment terms', 'Net 30']));
+    const { getMember } = await import('../src/members');
+    const m = (await getMember(env, 'cus_it1'))!;
+    expect([m.email, m.plan, m.status, m.collection, isActive(m)]).toEqual(['coo@acme-cap.test', 'fund', 'trialing', 'send_invoice', true]);
+    expect(sent.slice(before).filter((x) => x.to[0] === 'coo@acme-cap.test').length).toBe(1);
+    // One invoice trial per company domain.
+    const again = await go({ email: 'cfo@acme-cap.test', fund: 'Acme Capital', billing_address: address }, '7.7.7.4');
+    expect([again.status, (await again.json()).code]).toEqual([409, 'trial_used']);
+    // Day 44 unpaid: access pauses, the owner is told; paid: back.
+    const rev = await import('../src/revenue');
+    const mailsBefore = sent.length;
+    expect(await rev.markOverdue(env, 'cus_it1', { number: 'CB-0042', amount_due: 199000, due_date: Math.floor(Date.now() / 1000) - 86400, hosted_invoice_url: 'https://invoice.stripe.com/i/y' })).toMatch(/^paused/);
+    expect(isActive(await getMember(env, 'cus_it1'))).toBe(false);
+    expect(sent.slice(mailsBefore).map((x) => [x.to[0], /past due/.test(x.subject), x.text.includes('$1,990')])).toEqual([['coo@acme-cap.test', true, true]]);
+    expect(await rev.clearOverdue(env, 'cus_it1')).toBe('resumed');
+    expect(isActive(await getMember(env, 'cus_it1'))).toBe(true);
+    // A card trial switches to invoice in the account; monthly stays card-only.
+    expect(await rev.switchToInvoice(env, { ...m, interval: 'monthly' } as never)).toMatchObject({ ok: false, code: 'monthly_card_only' });
     vi.stubGlobal('fetch', orig);
   });
 
@@ -1511,6 +1573,21 @@ describe('copybook api', () => {
     expect(ed.REISSUED['77777A101']?.to).toBe('77777A200');
     await ed.loadReissues(env, t1 + 3600_000 + 310_000);
     expect(ed.REISSUED['77777A101']).toBeUndefined();
+    vi.stubGlobal('fetch', real1);
+    // A one-for-one linked pair the build lists as one position is checked like any row: a wrong trim is corrected.
+    const xomRow = { cusip: '30233Q108', ticker: 'XOM', put_call: null, change: 'trimmed', shares: 900, prev_shares: 1000, value_delta: -10000 };
+    const xomBuild = (change: string, value_delta: number) => new Map([['30233Q108|', { cusip: '30233Q108', ticker: 'XOM', change, shares: 1100, prev_shares: 1000, value_delta }]]);
+    expect(compareToBuild(new Map([['30233Q108|', xomRow]]) as never, xomBuild('added', 10000) as never).map((x) => x.v1.change)).toEqual(['added']);
+    expect(compareToBuild(new Map([['30233Q108|', xomRow]]) as never, xomBuild('trimmed', -10000) as never)).toEqual([]);
+    // Ingest's ratios, any size: NVRI linked at 1/3 leaves HELD; RBKB's 1.3978 (above 1) scales the prior up. A null
+    // entry is skipped, and a file that fails to parse leaves the maps as they were.
+    vi.stubGlobal('fetch', fileWith({ '415864107': { new: '29390K102', ticker: 'NVRI', basis: 'sec_13f_list', ratio: 1 / 3, units_basis: 'split_confirmed' }, '75689M101': { new: '75689M200', ticker: 'RBKB', basis: 'sec_13f_list', ratio: 1.3978, units_basis: 'split_confirmed' }, '00000A101': null }));
+    await ed.loadReissues(env, t1 + 8_000_000);
+    expect([ed.HELD['415864107'], ed.REISSUED['415864107']?.ratio, ed.REISSUED['75689M101']?.ratio, !!ed.HELD['438516106']]).toEqual([undefined, 1 / 3, 1.3978, true]);
+    expect(computeMoves([{ cusip: '75689M200', put_call: null, issuer: 'RBKB', shares: 1398, value: 13980 }] as never, [{ cusip: '75689M101', put_call: null, issuer: 'RBKB', shares: 1000, value: 10000 }] as never).changed).toEqual([]);
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).endsWith('cusip_links.json') ? new Response('{"links": {"x": ') : real1(u, init)));
+    await ed.loadReissues(env, t1 + 12_000_000);
+    expect(ed.REISSUED['75689M101']?.ratio).toBe(1.3978);
     vi.stubGlobal('fetch', real1);
     // A detection-only pair stays an exit plus a new position.
     expect(computeMoves([{ cusip: '99999S104', put_call: null, issuer: 'S', shares: 10, value: 100 }] as never, [{ cusip: '99999U107', put_call: null, issuer: 'U', shares: 10, value: 100 }] as never).changed.map((x) => x.change).sort()).toEqual(['exited', 'new']);
@@ -4160,7 +4237,11 @@ describe('copybook api', () => {
     hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`2 \n${JSON.stringify([{ slug: 'barclays-plc', cik: '0000312069', name: 'Barclays PLC', manager: null, featured: false, status: null, latest_quarter: '2026Q3' }, { slug: 'blackrock', cik: '0001364743', name: 'BlackRock, Inc.', manager: null, featured: false, status: null, latest_quarter: '2026Q2' }])}`));
     const snapV = (await v1('/v1/stocks/TEVA/holders?current_only=false')).body;
     const bySnap = Object.fromEntries([...snapV.data.holders, ...snapV.data.exited].map((r: { filer: { name: string }; change: string; share_change: number | null; period: string }) => [r.filer.name, [r.change, r.share_change, r.period]]));
-    expect([bySnap['FMR LLC'], bySnap['BlackRock, Inc.'], bySnap['Barclays PLC'], snapV.exited_count, snapV.data.counts.merged_via, snapV.data.counts.exits_pending, snapV.data.counts.merged_from]).toEqual([['trimmed', -4473320, '2026Q3'], [null, null, '2026Q2'], [null, null, '2026Q2'], 0, 'snapshot', true, ['881624']]);
+    // BlackRock's latest 13F is still Q2: a Q2 holder. Barclays has filed Q3 and lists neither code in either index:
+    // pending (filed_newer_not_indexed), out of holders, the counts and net (the analyst, 13:00).
+    expect([bySnap['FMR LLC'], bySnap['BlackRock, Inc.'], bySnap['Barclays PLC'], snapV.exited_count, snapV.data.counts.merged_via, snapV.data.counts.exits_pending, snapV.data.counts.merged_from]).toEqual([['trimmed', -4473320, '2026Q3'], [null, null, '2026Q2'], undefined, 0, 'snapshot', true, ['881624']]);
+    expect([snapV.data.pending.map((r: { filer: { name: string }; reason: string; period: string }) => [r.filer.name, r.reason, r.period]), snapV.data.counts.pending]).toEqual([[['Barclays PLC', 'filed_newer_not_indexed', '2026Q2']], 1]);
+    expect(snapV.data.counts.holders).toBe(snapV.count);
     expect(snapV.data.counts.note).toMatch(/2026Q2 snapshot/);
     // One row per filer, none an exit: a Q3 holding under either code is current.
     const rowsOf2 = [...snapV.data.holders, ...snapV.data.exited] as { filer: { name: string; cik: string } }[];
