@@ -288,6 +288,8 @@ function longBook(b: Book) {
   b.notes_value = b.holdings.filter(isNoteOrPref).reduce((t, h) => t + h.value, 0)
   b.options_value = b.holdings.filter((h) => h.put_call).reduce((t, h) => t + h.value, 0)
   b.prev_long_value = b.prev_total_value == null ? null : longs.reduce((t, h) => t + (h.prev_value ?? 0), 0)
+  // "Of portfolio" is the trade over the 13F's total; Copybook's pct_of_book is the position's weight.
+  for (const h of b.holdings) h.pct_of_book = h.value_delta != null && b.total_value ? h.value_delta / b.total_value : null
   return b
 }
 const bookCache = new Map<string, Promise<Book>>()
