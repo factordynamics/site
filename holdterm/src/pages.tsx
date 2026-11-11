@@ -2091,12 +2091,17 @@ export function Alerts() {
               <p>{c.what}</p>
             </div>
           ))}
+          {/* What's planned is a card of its own, plainly marked, next to what ships today. */}
+          {soon.length > 0 && (
+            <div className="ap-channel ap-channel-soon">
+              <div className="ap-channel-head">
+                <b>Coming next</b>
+                <span className="tag">No extra cost</span>
+              </div>
+              <p>{soon.map((c, i) => (i && /^(Phone|Private)/.test(c.name) ? c.name.replace(/^P/, (x) => (c.name.startsWith('Private') ? 'a p' : x.toLowerCase())) : c.name)).join(', ').replace(/, ([^,]*)$/, ' and $1')}. Members get them as they arrive, at the same price.</p>
+            </div>
+          )}
         </div>
-        {soon.length > 0 && (
-          <p className="ap-soon">
-            <span className="tag">Coming soon</span> {soon.map((c) => c.name).join(', ').replace(/, ([^,]*)$/, ' and $1')}, at no extra cost.
-          </p>
-        )}
       </section>
 
       <section className="ap-section ap-split">
@@ -2139,7 +2144,15 @@ export function Alerts() {
           <h2>Try it free for {PRICE.trialDays} days</h2>
           <p className="dim">Then ${PRICE.monthly} a month or ${PRICE.yearly} a year. The rest of Holdterm stays free, with no ads.</p>
         </div>
-        {plan}
+        {/* The plan picker is at the top of the page; here, one button for the period chosen there. */}
+        <div className="ap-cta-act">
+          <a className="btn big-btn" href={link}>
+            Start your free trial{yearly ? `, $${PRICE.yearly} a year` : ''}
+          </a>
+          <p className="dim small">
+            Cancel any time. Already a member? <A to="/account">Sign in</A>
+          </p>
+        </div>
       </section>
       {s && <SampleSources s={s} />}
     </div>
