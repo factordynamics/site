@@ -759,8 +759,12 @@ export function countedMoves(m0: Moves): Moves {
   const lists = [m0.new, m0.added, m0.trimmed, m0.exited].flat();
   const fv = lists.filter((r) => r.filer_value && !r.unreliable).map((r) => r.value_delta);
   const m1 = fv.length ? { ...m0, bought_usd: m0.bought_usd - fv.reduce((s, v) => s + Math.max(v, 0), 0), sold_usd: m0.sold_usd + fv.reduce((s, v) => s + Math.min(v, 0), 0), new: m0.new.map(asValue), added: m0.added.map(asValue), trimmed: m0.trimmed.map(asValue), exited: m0.exited.map(asValue) } : m0;
-  const paired = holdCusipPairs([...m1.new, ...m1.added, ...m1.trimmed, ...m1.exited]);
-  const m = paired.some((r) => r.cusip_pair) ? { ...m1, new: paired.filter((r) => r.change === 'new'), added: paired.filter((r) => r.change === 'added'), trimmed: paired.filter((r) => r.change === 'trimmed'), exited: paired.filter((r) => r.change === 'exited') } : m1;
+  // Lines already held count toward a pair too (Mizuho Securities' Oracle exit, stored in not_counted, left ORCL \"new\").
+  const lists1 = [...m1.new, ...m1.added, ...m1.trimmed, ...m1.exited];
+  const nc1 = m1.not_counted ?? [];
+  const both = holdCusipPairs([...lists1, ...nc1]);
+  const paired = both.slice(0, lists1.length);
+  const m = both.some((r) => r.cusip_pair) ? { ...m1, new: paired.filter((r) => r.change === 'new'), added: paired.filter((r) => r.change === 'added'), trimmed: paired.filter((r) => r.change === 'trimmed'), exited: paired.filter((r) => r.change === 'exited'), ...(nc1.length ? { not_counted: both.slice(lists1.length) } : {}) } : m1;
   const all = [m.new, m.added, m.trimmed, m.exited].flat();
   const out0 = (r: MoveRow) => !!r.unreliable && r.unreliable !== 'value';
   if (!all.some(out0)) return m;

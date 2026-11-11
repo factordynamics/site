@@ -475,9 +475,10 @@ function hookMoves(m: Moves): Moves {
   // No direction either: an add or trim reads change \"unknown\" (as hl/'s held rows; \"trimmed\" would assert a trade);
   // new and exited stand. value and prev_value are the facts.
   // A \"value\" row stays in its group (a real trade by shares) with value_delta null; it is outside bought_usd and sold_usd.
-  const v = (rows: MoveRow[]) => rows.map((r) => (r.unreliable === 'value' ? { ...r, value_delta: null as unknown as number, delta_pct_of_book: null, counted: false } : r));
+  const v = (rows: MoveRow[]) => rows.map(({ value_change: _vc, ...r }: MoveRow & { value_change?: number }) => (r.unreliable === 'value' ? { ...r, value_delta: null as unknown as number, delta_pct_of_book: null, counted: false } : r));
   const g = { ...c, new: v(c.new), added: v(c.added), trimmed: v(c.trimmed), exited: v(c.exited) };
-  return c.not_counted?.length ? { ...g, not_counted: c.not_counted.map((r) => ({ ...r, change: r.change === 'new' || r.change === 'exited' ? r.change : 'unknown', value_delta: null as unknown as number, delta_pct_of_book: null, counted: false })) } : g;
+  // A row stored with a computed value_change (alerts from before b884d6f) loses it: value and prev_value are the facts.
+  return c.not_counted?.length ? { ...g, not_counted: c.not_counted.map(({ value_change: _vc, ...r }: MoveRow & { value_change?: number }) => ({ ...r, change: r.change === 'new' || r.change === 'exited' ? r.change : 'unknown', value_delta: null as unknown as number, delta_pct_of_book: null, counted: false })) } : g;
 }
 
 export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEvent[], detectedAt: number): { id: string; body: string }[] {
