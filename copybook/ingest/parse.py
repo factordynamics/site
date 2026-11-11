@@ -57,6 +57,7 @@ class AggregatedHolding:
     vote_shared: float = 0.0
     vote_none: float = 0.0
     lines: int = 0
+    line_parts: list = field(default_factory=list)  # [(shares, value as filed)] per line, for the per-line price check
 
 
 def parse_info_table(xml_text: str) -> list[HoldingRow]:
@@ -199,6 +200,7 @@ def aggregate_holdings(rows: list[HoldingRow]) -> list[AggregatedHolding]:
         existing.value += row.value
         existing.shares += row.shares
         existing.lines += 1
+        existing.line_parts.append((row.shares, row.value))
         if row.discretion:
             existing.discretion.add(row.discretion)
         existing.other_managers |= other_managers(row.other_manager)

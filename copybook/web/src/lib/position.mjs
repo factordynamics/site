@@ -3,7 +3,7 @@
 // shares at $5,120, against a prior of 646,216 post-split shares), so the position's trade is unknown: change
 // 'unknown' and delta_value null, never 'trimmed' or 'added', and no total counts it. Ingest names the unreliable
 // side of a flagged line (unreliable): 'value' (BMO TEVA filed at ~$4,005 a share, a real +159,272 shares) keeps
-// the share change; 'shares' (Crosslink CRM, Guardcap BKNG) shows value_change, the filed value against the prior's;
+// the share change; 'shares' (Guardcap BKNG, Mizuho SPY calls) shows value_change, the filed value against the prior's;
 // 'both' (or a flag with no side, from an older book) is unknown. A new or exited position keeps its label. No
 // flagged position has a delta_value, so no $ total counts it.
 

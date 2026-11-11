@@ -504,6 +504,9 @@ def load_period(cik: str, group: list, cache: dict) -> dict | None:
         and (cache[key].get("report_date") or "") >= UPGRADE_FROM[0] and UPGRADE[0] > 0
     if stale:  # refetched below; counted against this run's budget
         UPGRADE[0] -= 1
+    if key in cache and not stale and LINE_RECHECK[0] > 0 and needs_line_check(cache[key]):
+        LINE_RECHECK[0] -= 1  # summed before the per-line check (Crosslink 2026Q2 CRM): refetched below
+        stale = True
     if key in cache and not stale:
         q = fix_cached(cache[key])
         return original_disclosure(cik, q, base, group, cache) | {"filings": mark_refiled(trail, q.get("refiled") or [])}
@@ -538,7 +541,8 @@ def load_period(cik: str, group: list, cache: dict) -> dict | None:
             loaded, extras = x, []
             continue
         extras.append(x)
-    q = merge_quarter(loaded, extras) | {"filing_key": key, "format": CACHE_FORMAT, "refiled": refiled}
+    q = merge_quarter(loaded, extras) | {"filing_key": key, "format": CACHE_FORMAT, "refiled": refiled,
+                                         "lines_checked": True}
     q["cover_total"] = sum(b.get("cover_total") or 0 for b in [loaded, *extras]) or None
     return original_disclosure(cik, q, base, group, cache) | {"filings": mark_refiled(trail, refiled)}
 
@@ -727,6 +731,47 @@ SEED_LINKS = {
 }
 
 
+def check_lines(parts: list, cusip: str, quarter: str | None) -> dict:
+    """The per-line price check for a position filed on several lines (before they are summed). Each line's value per
+    share against the CUSIP's median across filers that quarter:
+    - a line OFF_MEDIAN x off while others are priced like the peers, and not a split ratio off, is not this position
+      (Crosslink 2026Q2 CRM: 135,175 sh at $156.66 and 2,212,795 sh at $4.44 under the same CUSIP): it is held on its
+      own (held_lines) and the position is the clean lines;
+    - lines priced a split ratio apart (Allianz 2026Q1 BKNG: 15,736 sh at $4,210 pre-split beside 45,219 sh at $168
+      post-split) mix units, so no scaling of the sum is right: mixed_scale, its change unknown.
+    {} when the check can't run or finds nothing."""
+    m = consensus().get((quarter or "", cusip))
+    lines = [(s, v) for s, v in parts if s > 0 and v > 0]
+    if not m or len(lines) < 2:
+        return {}
+    ks = {k for k in (SPLITS.get(cusip) or {}).values() if k and k != 1}
+    near = lambda f, k: abs(math.log(f / k)) < math.log(1.5)
+    clean = [(s, v) for s, v in lines if 1 / OFF_MEDIAN <= v / s / m <= OFF_MEDIAN]
+    off = [(s, v) for s, v in lines if (s, v) not in clean]
+    if not off or not clean:
+        return {}
+    if any(near(v / s / m, k) or near(v / s / m, 1 / k) for s, v in off for k in ks):
+        return {"mixed_scale": True}
+    return {"held_lines": [{"shares": round(s), "value": round(v), "implied_price": round(v / s, 2)} for s, v in off],
+            "shares": sum(s for s, _ in clean) + sum(s for s, v in parts if not (s > 0 and v > 0)),
+            "value": sum(v for _, v in clean) + sum(v for s, v in parts if not (s > 0 and v > 0))}
+
+
+def needs_line_check(q: dict) -> bool:
+    """A stored quarter summed before the per-line check, with a multi-line share position priced off its peers."""
+    if q.get("lines_checked"):
+        return False
+    for h in q.get("holdings") or []:
+        m = consensus().get((q.get("quarter") or "", h.get("cusip") or ""))
+        if (h.get("lines") or 0) > 1 and is_equity(h) and m and h.get("shares") and h.get("value", 0) > 0 \
+                and not 1 / OFF_MEDIAN <= h["value"] / h["shares"] / m <= OFF_MEDIAN:
+            return True
+    return False
+
+
+LINE_RECHECK = [int(os.environ.get("COPYBOOK_LINE_RECHECK_PER_RUN") or 40)]
+
+
 _UNDERLYING: dict = {"n": -1, "px": {}}
 
 
@@ -794,15 +839,27 @@ def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: st
 def unreliable_side(r: dict, quarter: str | None) -> str | None:
     """Which side of a flagged line (suspect_units or price_outlier) can't be trusted: "value" (the share count
     reconciles with the prior, the filed $ is off: BMO TEVA 2026Q3 at ~$4,005 a share, Francois Rochon GLD 2026Q2),
-    "shares" (the filed values are consistent, the share count implies the wrong price: Crosslink CRM 2026Q2,
-    136,035 -> 2,347,970 sh while $25.4M -> $31.0M; or the implied price is a split ratio off the median: Guardcap
-    BKNG 2026Q3, 1,304 pre-split shares at ~$5,120), "both" (reissue_ratio_not_applied, or undecided). None: not
-    flagged."""
+    "shares" (the filed values are consistent, the share count implies the wrong price: Mizuho Markets SPY calls
+    2026Q3; or the implied price is a split ratio off the median: Guardcap BKNG 2026Q3, 1,304 pre-split shares at
+    ~$5,120), "both" (reissue_ratio_not_applied, mixed_scale, or undecided). A position summed from several lines
+    whose price sits between scales (neither the median nor a split ratio off it) mixes lines and is "both": Crosslink
+    CRM 2026Q2 before the per-line check (check_lines) read as "shares" +$5.6M, while one of its two lines wasn't
+    CRM. So is a split-adjusted prior priced between scales (Allianz BKNG 2026Q1, pre- and post-split lines). None:
+    not flagged."""
     if not (r.get("suspect_units") or r.get("price_outlier")) or r.get("shares_type") == "PRN":
         return None
-    if r.get("suspect_reason") == "reissue_ratio_not_applied":
+    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale"):
         return "both"
     sh, ps, v, pv = (r.get(k) or 0 for k in ("shares", "prev_shares", "value", "prev_value"))
+    ks = {k for k in (SPLITS.get(r.get("cusip") or "") or {}).values() if k and k != 1}
+    between = lambda f: not any(abs(math.log(f * x)) < math.log(1.5) for x in {1.0, *ks, *(1 / k for k in ks)})
+    m = consensus().get((quarter or "", r.get("cusip") or ""))
+    if not r.get("put_call") and (r.get("lines") or 0) > 1 and sh > 0 and v > 0 and m and between(v / sh / m):
+        return "both"
+    sp, pf = r.get("split") or {}, r.get("prev_shares_as_filed") or 0
+    m0 = consensus().get((sp.get("from_quarter") or "", r.get("cusip") or ""))
+    if not r.get("put_call") and sp and pf > 0 and pv > 0 and m0 and between(pv / pf / m0):
+        return "both"
     if r.get("put_call"):
         # An option line off its underlying's price: the notional (value) is filed as such far more often than the
         # count (contracts instead of shares, ~100x: CTC, Belvedere), unless only the value moved off its prior.
@@ -957,6 +1014,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 elif abs(delta) > 1.5 * max(h["value"], p["value"]):  # no trade is worth more than that
                     delta = h["value"] - p["value"]
         row = h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn)
+        if h.get("mixed_scale") or (p or {}).get("mixed_scale"):  # Allianz 2026Q1 BKNG: no scaling of the sum is right
+            row |= {"suspect_units": True, "suspect_units_basis": "filers", "suspect_reason": "mixed_scale"}
         # A linked reissue with a share ratio (HON 1-for-2) whose filer still reports the pre-split count under the new
         # CUSIP (Newport Trust 6,432,598 -> 12,865,197): not a purchase. Flagged, change unknown, out of net and alerts.
         if p is not None and not prn and p["cusip"] != h["cusip"] and r != 1.0 and amount(p) > 0 \
@@ -1034,6 +1093,16 @@ def load_filing(cik: str, meta) -> dict | None:
     if factor > 1:
         thousands = True
     attach_tickers(holdings)
+    checked: dict[int, dict] = {}
+    for h in holdings:
+        if share_rows(h) and h.lines > 1:
+            raw = sum(v for _, v in h.line_parts)
+            scale = h.value / raw if raw else 1.0  # the unit fixes above, applied to each line alike
+            got = check_lines([(s, v * scale) for s, v in h.line_parts], h.cusip, quarter_label(meta.report_date))
+            if "held_lines" in got:
+                h.shares, h.value = got.pop("shares"), got.pop("value")
+            if got:
+                checked[id(h)] = got
     # $0 lines with shares or principal stay (as filed); lines with neither and placeholder CUSIPs go.
     holdings = [h for h in holdings if (h.value > 0 or h.shares > 0) and h.cusip != "000000000"]
     total = sum(h.value for h in holdings)
@@ -1056,6 +1125,7 @@ def load_filing(cik: str, meta) -> dict | None:
         "values_in_thousands": thousands,
         "unit_fix": factor,
         "total_value": total,
+        "lines_checked": True,
         "holdings": [
             {
                 "issuer": h.issuer,
@@ -1077,6 +1147,7 @@ def load_filing(cik: str, meta) -> dict | None:
                 "lines": h.lines,
                 "source_accession": meta.accession,
                 "first_disclosed_at": disclosed,
+                **checked.get(id(h), {}),
             }
             for h in holdings
         ],

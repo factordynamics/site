@@ -364,7 +364,7 @@ class MoveMathTest(unittest.TestCase):
             g = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("09857L108", "BKNG", 1304, 6676571)]},
                                    {"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 646216, 121636487)]})[0]
             self.assertEqual((g["unreliable"], g["change"], g["value_delta"], g["value_change"]), ("shares", None, 0, -114959916))
-            # Crosslink CRM 2026Q2: 136,035 -> 2,347,970 sh while $25.4M -> $31.0M: shares unreliable, never "added".
+            # One line whose share count jumps 17x while its value moves 1.2x: shares unreliable, never "added".
             c = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("79466L302", "CRM", 2347970, 31001326)]},
                                    {"quarter": "2026Q1", "holdings": [self.row("79466L302", "CRM", 136035, 25393653)]})[0]
             self.assertEqual((c["unreliable"], c["change"], c["share_change"], c["value_delta"]), ("shares", None, None, 0))
@@ -387,6 +387,46 @@ class MoveMathTest(unittest.TestCase):
             n = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("09857L108", "BKNG", 1304, 6676571)]},
                                    {"quarter": "2026Q2", "holdings": []})[0]
             self.assertEqual((n["change"], n["value_delta"]), ("new", 0))
+        finally:
+            build.CONSENSUS.clear()
+            build.SPLITS.pop("09857L108", None)
+
+    def test_lines_are_price_checked_before_they_are_summed(self):
+        build.SPLITS["09857L108"] = {"2026Q2": 25.0}
+        build.CONSENSUS.update({("2026Q1", "79466L302"): 186.67, ("2026Q2", "79466L302"): 156.66,
+                                ("2026Q1", "09857L108"): 4210.32, ("2026Q2", "09857L108"): 178.24})
+        try:
+            # Crosslink 2026Q2 (0001104329-26-000015): two CRM-CUSIP lines; the $4.44 one isn't CRM. It is held on its
+            # own and the position is the clean line: 136,035 -> 135,175 sh, trimmed -860, not "added" 2.2M shares.
+            got = build.check_lines([(135175, 21176516), (2212795, 9824810)], "79466L302", "2026Q2")
+            self.assertEqual((got["shares"], got["value"], [x["shares"] for x in got["held_lines"]]),
+                             (135175, 21176516, [2212795]))
+            cur = self.row("79466L302", "CRM", got["shares"], got["value"]) | {"held_lines": got["held_lines"], "lines": 2}
+            r = build.with_changes({"quarter": "2026Q2", "holdings": [cur]},
+                                   {"quarter": "2026Q1", "holdings": [self.row("79466L302", "CRM", 136035, 25393653)]})[0]
+            self.assertEqual((r["change"], r["share_change"], r.get("unreliable")), ("trimmed", -860, None))
+            self.assertAlmostEqual(r["value_delta"], -860 * 21176516 / 135175, delta=1)
+            # Summed before the check (a stored quarter not refetched yet): priced between scales, so both, not shares.
+            summed = self.row("79466L302", "CRM", 2347970, 31001326) | {"lines": 2}
+            r = build.with_changes({"quarter": "2026Q2", "holdings": [summed]},
+                                   {"quarter": "2026Q1", "holdings": [self.row("79466L302", "CRM", 136035, 25393653)]})[0]
+            self.assertEqual((r["unreliable"], r["change"], r["value_delta"]), ("both", None, 0))
+            # Allianz 2026Q1 (0001193125-26-216255): 15,736 sh at $4,210 (pre-split) beside 45,199 + 20 sh at $168
+            # (post-split): units mixed, so x25 on the sum is wrong: both, never "added +637,092".
+            self.assertEqual(build.check_lines([(15736, 66250000), (45199, 7593432), (20, 3360)], "09857L108", "2026Q1"),
+                             {"mixed_scale": True})
+            prior = self.row("09857L108", "BKNG", 60955, 74056328) | {"mixed_scale": True, "lines": 3}
+            a = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 2188767, 390125830)]},
+                                   {"quarter": "2026Q1", "holdings": [prior]})[0]
+            self.assertEqual((a["suspect_reason"], a["unreliable"], a["change"], a["value_delta"]), ("mixed_scale", "both", None, 0))
+            # The same prior read back without the flag (summed, priced between the scales) is both too.
+            a = build.with_changes({"quarter": "2026Q2", "holdings": [self.row("09857L108", "BKNG", 2188767, 390125830)]},
+                                   {"quarter": "2026Q1", "holdings": [self.row("09857L108", "BKNG", 60955, 74056328)]})[0]
+            self.assertEqual((a["unreliable"], a["change"]), ("both", None))
+            # A stored quarter summed before the check is refetched once; a checked one is not.
+            q = {"quarter": "2026Q2", "holdings": [summed]}
+            self.assertTrue(build.needs_line_check(q))
+            self.assertFalse(build.needs_line_check(q | {"lines_checked": True}))
         finally:
             build.CONSENSUS.clear()
             build.SPLITS.pop("09857L108", None)
