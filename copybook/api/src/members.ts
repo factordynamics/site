@@ -206,7 +206,7 @@ export function invoiceTrialView(m: Member) {
 
 export function publicView(m: Member) {
   // A Fund seat: billing belongs to the owner, so the site hides the portal for seats.
-  return { invoice_trial: invoiceTrialView(m), email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, has_payment_method: m.has_payment_method ?? null, collection: m.collection ?? null, overdue_since: m.overdue_since ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, paused_until: isPaused(m) ? m.paused_until : null, pause_after_trial: pauseScheduled(m) ? { from: m.paused_from, until: m.paused_until } : null, alerts: m.alerts, seat: Boolean(m.seat_of) };
+  return { delivery: m.email_pending ? ('pending_email_confirmation' as const) : ('active' as const), invoice_trial: invoiceTrialView(m), email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, has_payment_method: m.has_payment_method ?? null, collection: m.collection ?? null, overdue_since: m.overdue_since ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, paused_until: isPaused(m) ? m.paused_until : null, pause_after_trial: pauseScheduled(m) ? { from: m.paused_from, until: m.paused_until } : null, alerts: m.alerts, seat: Boolean(m.seat_of) };
 }
 
 /**

@@ -517,7 +517,8 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       }
       continue;
     }
-    if (!isActive(raw) || !raw.email || raw.alerts === 'off' || (only && !only.has(raw.customer))) continue;
+    // An unconfirmed trial (email_pending) gets nothing until its emailed link is opened.
+    if (!isActive(raw) || !raw.email || raw.email_pending || raw.alerts === 'off' || (only && !only.has(raw.customer))) continue;
     if (raw.plan === 'holdterm') {
       // Holdterm members get Holdterm-branded alerts, never Copybook's.
       const mine = forHoldterm(await getFollows(env, raw), filings, events, meta);
@@ -681,7 +682,7 @@ export async function runDigest(env: Env, now: number): Promise<{ emails: number
   const mails = [];
   const notes: Member[] = [];
   for (const raw of await listMembers(env)) {
-    if (!isActive(raw) || !raw.email || raw.alerts === 'off' || raw.plan === 'holdterm') continue;
+    if (!isActive(raw) || !raw.email || raw.email_pending || raw.alerts === 'off' || raw.plan === 'holdterm') continue;
     const f = await getFollows(env, raw);
     const m = await scoped(env, raw, f);
     // Digest members get the whole day; everyone else only the late filings they never got.
@@ -715,7 +716,7 @@ export async function runWeeklyNames(env: Env, now: number, only?: string[]): Pr
   const weekOf = new Date(now - 4 * 86_400_000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
   const mails: Mail[] = [];
   for (const raw of await listMembers(env)) {
-    if (!raw.email || raw.plan === 'holdterm' || raw.plan === 'free' || (only ? !only.includes(raw.email) : !(isActive(raw) || isPaused(raw, now)))) continue;
+    if (!raw.email || raw.email_pending || raw.plan === 'holdterm' || raw.plan === 'free' || (only ? !only.includes(raw.email) : !(isActive(raw) || isPaused(raw, now)))) continue;
     const f = await getFollows(env, raw);
     if (f.weekly_digest === false && !only) continue;
     // Paused members' alerts are off; the weekly summary still covers their follows.

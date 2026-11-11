@@ -667,7 +667,8 @@ export async function handleWhy(env: Env, req: Request, url: URL): Promise<Respo
 export async function runRevenue(env: Env, now: number): Promise<Record<string, unknown>> {
   // Unsubscribed members still get the trial-ending reminder: it's a notice before a charge, not marketing. The recap
   // below checks marketing_off itself.
-  const members = (await listMembers(env)).filter((m) => lifecycle(m) && isActive(m) && m.email);
+  // An unconfirmed trial (email_pending) has had its welcome, with the sign-in link; nothing else until it is opened.
+  const members = (await listMembers(env)).filter((m) => lifecycle(m) && isActive(m) && m.email && !m.email_pending);
   const mails: Mail[] = [];
   const marks: Member[] = [];
   // The season recap goes out from the day after each 13F deadline, for a week (Q3 2026: from Nov 17).

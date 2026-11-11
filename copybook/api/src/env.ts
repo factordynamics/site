@@ -130,6 +130,11 @@ export interface Member {
   sessions_after?: number;
   /** Set when the member first signs in by an emailed link: a signup's provisional session stops working then. */
   verified?: boolean;
+  /**
+   * A trial started at Checkout whose address no emailed link has proven yet: follows, watchlist and channels save, and
+   * nothing is delivered (alerts, digests, the weekly email, chat, feed, webhooks) until the link is opened.
+   */
+  email_pending?: boolean;
   /** Set once the member picks an alert scope themselves (POST /alerts). */
   alerts_chosen?: boolean;
   /** A one-time line for the next email, e.g. "followed" after moving "all" to followed funds. */

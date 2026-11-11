@@ -417,8 +417,14 @@ describe('copybook api', () => {
     // everywhere (which would mint a full session) answer a provisional-specific 403 until the emailed link is used.
     expect(r.session).toBe('provisional');
     expect((await call('/me', { token: r.token })).status).toBe(200);
-    expect((await call('/follows/investors/bill-ackman', { method: 'POST', token: r.token })).status).toBe(200);
-    for (const [method, path, body] of [['GET', '/keys'], ['POST', '/keys', { name: 'x' }], ['PUT', '/channels', { email: false }], ['POST', '/channels/test'], ['POST', '/portal'], ['GET', '/seats'], ['POST', '/handoff'], ['POST', '/me/sessions/revoke'], ['GET', '/history/warren-buffett']] as [string, string, unknown?][]) {
+    // Settings save at once and say delivery waits for the emailed link (the lead, Nov 11): follows, channels, the alert
+    // scope and adding a card. Nothing is delivered until then.
+    const fo = await (await call('/follows/investors/bill-ackman', { method: 'POST', token: r.token })).json();
+    const ch = await call('/channels', { method: 'PUT', body: { email: false }, token: r.token });
+    const me0 = await (await call('/me', { token: r.token })).json();
+    const card = await (await call('/portal/card', { method: 'POST', token: r.token })).json();
+    expect([r.delivery, fo.ok, fo.delivery, ch.status, (await ch.json()).delivery, me0.member?.delivery ?? me0.delivery, /^https:\/\/billing\.stripe\.com\//.test(card.url)]).toEqual(['pending_email_confirmation', true, 'pending_email_confirmation', 200, 'pending_email_confirmation', 'pending_email_confirmation', true]);
+    for (const [method, path, body] of [['GET', '/keys'], ['POST', '/keys', { name: 'x' }], ['POST', '/channels/test'], ['POST', '/portal'], ['GET', '/seats'], ['POST', '/handoff'], ['POST', '/me/sessions/revoke'], ['GET', '/history/warren-buffett']] as [string, string, unknown?][]) {
       const res = await call(path, { method, body, token: r.token });
       expect([path, res.status, (await res.json()).code]).toEqual([path, 403, 'verify_email']);
     }
@@ -426,7 +432,8 @@ describe('copybook api', () => {
     const welcome = sent.find((m) => m.to[0] === 'fast@example.com')!;
     expect(welcome.text).toContain('Open this link to confirm your address: it turns on alert channels, API keys and billing, and signs you in on any other device');
     const full = await (await call('/session', { body: { login: loginTokenFrom(welcome.text) } })).json();
-    expect([(await call('/channels', { token: full.token })).status, (await call('/me', { token: r.token })).status]).toEqual([200, 401]);
+    const meFull = await (await call('/me', { token: full.token })).json();
+    expect([(await call('/channels', { token: full.token })).status, (await call('/me', { token: r.token })).status, meFull.member?.delivery ?? meFull.delivery]).toEqual([200, 401, 'active']);
     // A checkout that types the address of an account made before it never hands off a session to that account.
     await putMember('cus_old', 'taken@example.com', 'active', []);
     await env.DB.put('email:taken@example.com', 'cus_old');

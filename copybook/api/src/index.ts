@@ -1214,7 +1214,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       // A link from before the member's sessions were ended (a removed or signed-out seat's old invite) is dead too.
       if (m.sessions_after && !((p.i ?? 0) > m.sessions_after)) return json({ ok: false, error: 'This sign-in link is no longer valid. Ask for a new one.', code: 'link_revoked' }, 401, h);
       // The address is proven: provisional sessions from the signup form stop working.
-      if (!m.verified) await putMember(env, { ...m, verified: true });
+      // A trial started at Checkout starts delivery now: everything it saved meanwhile (follows, channels) goes live.
+      if (!m.verified || m.email_pending) await putMember(env, { ...m, verified: true, email_pending: undefined });
       // Once: the link's nonce is marked used until the link would have expired anyway.
       if (p.n) {
         if (await env.DB.get(`used:${p.n}`)) return json({ ok: false, error: 'This sign-in link was already used. Ask for a new one.', code: 'link_used' }, 401, h);
@@ -1245,8 +1246,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const m = await syncSubscription(env, sub, cs.customer_details?.email);
       if (existed) return json({ ok: true, code: 'existing_account', sign_in: 'email', member: null }, 200, h);
       // A new subscriber: signed in on this device, provisionally (the address isn't proven yet), like the signup form.
+      // Its settings save at once; delivery waits for the emailed link (email_pending, the lead, Nov 11).
       const { PROVISIONAL_TTL } = await import('./members');
-      return json({ ok: true, token: await signToken(env.SESSION_SECRET, 'session', m.customer, PROVISIONAL_TTL, { s: 'provisional' }), session: 'provisional', member: publicView(m) }, 200, h);
+      const pm = m.verified || m.email_pending ? m : { ...m, email_pending: true };
+      if (pm !== m) await putMember(env, pm);
+      return json({ ok: true, token: await signToken(env.SESSION_SECRET, 'session', pm.customer, PROVISIONAL_TTL, { s: 'provisional' }), session: 'provisional', delivery: publicView(pm).delivery, member: publicView(pm) }, 200, h);
     }
     return json({ ok: false, error: 'login or checkout_session required' }, 400, h);
   }
@@ -1287,11 +1291,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: 'sign in required', code }, 401, h);
   }
 
-  // A provisional session reads /me and changes follows, nothing else: API keys, channels, the billing portal, seats,
-  // a cross-origin handoff and "sign out everywhere" (which mints a full session) wait for the emailed link. Starting
-  // the trial needs no session (POST /checkout).
-  if (PROVISIONAL.has(m) && !((req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/'))) {
-    return json({ ok: false, error: 'Open the sign-in link we emailed you to do this.', code: 'verify_email' }, 403, h);
+  // A provisional session reads /me and saves follows, channels and its alert scope (delivery waits for the emailed link:
+  // email_pending), and adds a card (POST /portal/card); API keys, channel tests, the full billing portal, seats, a
+  // cross-origin handoff and "sign out everywhere" (which mints a full session) wait for the link. Starting the trial
+  // needs no session (POST /checkout).
+  const setup = (req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/') || (req.method === 'POST' && path === '/portal/card') || (!!m.email_pending && ((path === '/channels' && (req.method === 'GET' || req.method === 'PUT')) || (req.method === 'POST' && path === '/alerts')));
+  if (PROVISIONAL.has(m) && !setup) {
+    return json({ ok: false, error: 'Open the sign-in link we emailed you to do this.', code: 'verify_email', delivery: 'pending_email_confirmation' }, 403, h);
   }
 
   // Any member: sign out everywhere. Every session issued before this second stops working at once (a copied token
@@ -1354,6 +1360,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // PO and AP email update the invoice (custom fields) and its AP copy; an account already on invoice billing keeps it.
     const r = await switchToInvoice(env, m, { company: str(b.company), po: str(b.po), ap_email: str(b.ap_email)?.toLowerCase() ?? null });
     return r.ok ? json({ ok: true, collection: r.collection, member: publicView((await getMember(env, m.customer)) ?? m) }, 200, h) : json(r, r.code === 'subscription_inactive' ? 402 : 403, h);
+  }
+
+  // "Add a card" (a trial without one, /account/ and the welcome page): the portal's payment-method form, back to /account/.
+  if (req.method === 'POST' && path === '/portal/card') {
+    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    if (!m.customer.startsWith('cus_')) return json({ ok: false, error: 'no subscription', code: 'no_subscription' }, 409, h);
+    const s = await stripe(env, 'POST', 'billing_portal/sessions', {
+      customer: m.customer,
+      return_url: `${env.SITE_URL}account/?card=added`,
+      configuration: env.PORTAL_CONFIGURATION || undefined,
+      'flow_data[type]': 'payment_method_update',
+      'flow_data[after_completion][type]': 'redirect',
+      'flow_data[after_completion][redirect][return_url]': `${env.SITE_URL}account/?card=added`,
+    });
+    return json({ ok: true, url: s.url }, 200, h);
   }
 
   if (req.method === 'POST' && path === '/portal') {
@@ -1497,14 +1518,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       // A seat also sees its team's channel (the Fund owner's), read-only.
       const owner = m.seat_of ? await getMember(env, m.seat_of) : null;
       const team = owner ? { owner, c: await getChannels(env, owner.customer), failing: await getFailures(env, owner.customer) } : undefined;
-      return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), stableBase(env, url), await getFailures(env, m.customer), team) }, 200, h);
+      return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), stableBase(env, url), await getFailures(env, m.customer), team), delivery: publicView(m).delivery }, 200, h);
     }
     if (req.method === 'PUT' && path === '/channels') {
       // A seat can't save its team's destination (409 already_team_channel); an owner's save clears seats' copies of it.
       const team = m.seat_of ? await getChannels(env, m.seat_of) : undefined;
       const r = await updateChannels(env, m, await body(req), team);
       if (r.ok && channelScope(m) === 'team') await clearSeatDuplicates(env, m);
-      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, stableBase(env, url), await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
+      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, stableBase(env, url), await getFailures(env, m.customer)), delivery: publicView(m).delivery }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
     }
     if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, ...(await testChannels(env, m, await getChannels(env, m.customer))) }, 200, h);
     if (path === '/channels/feed' && (req.method === 'POST' || req.method === 'DELETE')) {
@@ -1543,13 +1564,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       if (unknown.length) return json({ ok: false, error: `not a 13F filer on Copybook: ${value}`, code: 'unknown_investor' }, 400, h);
     }
     const r = await changeFollows(env, m, req.method === 'POST' ? { add: { list, value } } : { remove: { list, value } });
-    return r.ok ? json({ ok: true, follows: r.follows }, 200, h) : json({ ok: false, error: r.error }, 400, h);
+    return r.ok ? json({ ok: true, follows: r.follows, delivery: publicView(m).delivery }, 200, h) : json({ ok: false, error: r.error }, 400, h);
   }
 
   if (path === '/follows' && (req.method === 'GET' || req.method === 'PUT')) {
     if (req.method === 'GET') {
       const r = await changeFollows(env, m, { get: true });
-      return json({ ok: true, follows: r.ok ? r.follows : await getFollows(env, m) }, 200, h);
+      return json({ ok: true, follows: r.ok ? r.follows : await getFollows(env, m), delivery: publicView(m).delivery }, 200, h);
     }
     const b = await body(req);
     const list = (v: unknown, re: RegExp, upper: boolean): string[] | null | undefined => {

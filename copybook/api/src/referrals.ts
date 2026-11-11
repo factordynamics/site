@@ -30,6 +30,9 @@ export const CHECKOUT_BUYER = (plan: string): Record<string, string> => ({
 const MONTH: Record<string, number> = { copy: 900, pro: 3900, fund: 19900 };
 const NAME: Record<string, string> = { copy: 'Copy', pro: 'Copy Pro', fund: 'Copy Fund' };
 const TRIAL_DAYS = 14;
+/** Copy's Checkout line by the button: \"$0 due today. No card needed: if you don't add one, the trial just ends on November 25.\" */
+export const copySubmit = (now: number) =>
+  `$0 due today. No card needed: if you don't add one, the trial just ends on ${new Date(now + TRIAL_DAYS * 86_400_000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}. Copybook is made by Factor Dynamics.`;
 
 export const canRefer = (m: Member) => isActive(m) && !!MONTH[m.plan] && !m.seat_of;
 
@@ -132,7 +135,8 @@ export async function createCheckout(env: Env, b: Record<string, unknown>, clien
     cancel_url: `${env.SITE_URL}pricing/${ref ? `?ref=${ref}` : ''}`,
     'metadata[copybook]': ref ? 'referral' : 'checkout',
     // The seller on the card statement is the account's name: say whose product it is.
-    'custom_text[submit][message]': plan === 'fund' ? FUND_SUBMIT : 'Copybook is made by Factor Dynamics.',
+    // Copy: what the cardless trial means, on the main panel by the button (the trader and retail, Nov 11).
+    'custom_text[submit][message]': plan === 'fund' ? FUND_SUBMIT : plan === 'copy' && !gate ? copySubmit(Date.now()) : 'Copybook is made by Factor Dynamics.',
     // Pro and Fund: the founding price (amount and deadline) and the tax line. Copy: neither.
     ...(checkoutNote(plan, price.unit_amount, price.recurring?.interval) ? { 'custom_text[after_submit][message]': checkoutNote(plan, price.unit_amount, price.recurring?.interval)! } : {}),
     ...(plan !== 'copy' && Date.now() < FOUNDING_UNTIL ? { 'subscription_data[metadata][founding]': 'true' } : {}),
