@@ -363,7 +363,7 @@ export async function loadReissues(env: { DATA_URL: string }, now = Date.now()):
   try {
     const res = await fetch(`${env.DATA_URL}cusip_links.json`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
-      type Link = { old?: string; new?: string; ticker?: string; basis?: string; ratio?: number | null; units_basis?: string | null; units_check?: { split_ratio?: number | null } };
+      type Link = { old?: string; new?: string; ticker?: string; basis?: string; quarter?: string; ratio?: number | null; units_basis?: string | null; units_check?: { split_ratio?: number | null; to_quarter?: string | null } };
       const file = (await res.json()) as { links?: Record<string, Link>; held?: Link[] | Record<string, Link> };
       const ok = (from: string, to: string) => /^[0-9A-Z]{8}[0-9]$/.test(from) && /^[0-9A-Z]{8}[0-9]$/.test(to);
       // Held pairs (an array from Nov 11 12:2x, a map before): ingest's word overrides a hand-coded link, never a 1:1
@@ -387,7 +387,10 @@ export async function loadReissues(env: { DATA_URL: string }, now = Date.now()):
         const k = l.ratio == null ? NaN : Number(l.ratio);
         if (l.basis !== 'sec_13f_list' || !ok(from, to) || !l.ticker || !(k > 0) || !l.units_basis || heldList.some((h) => String(h.old ?? '').toUpperCase() === from)) continue;
         delete nextH[from];
-        const lq = typeof (l as { quarter?: string }).quarter === 'string' && /^\d{4}Q[1-4]$/.test((l as { quarter: string }).quarter) ? (l as { quarter: string }).quarter : nextR[from]?.quarter;
+        // The first quarter filed under the new CUSIP is the units check's to_quarter: the file's `quarter` is the list's
+        // (2026Q3 on every link), which put DD's Q2 holders on the old CUSIP and gave its Q3 rows a wrong prev_cusip.
+        const q = (x: unknown) => (typeof x === 'string' && /^\d{4}Q[1-4]$/.test(x) ? x : undefined);
+        const lq = q(l.units_check?.to_quarter) ?? nextR[from]?.quarter ?? q(l.quarter);
         nextR[from] = { to, ticker: String(l.ticker).toUpperCase(), ...(Math.abs(k - 1) > 1e-6 ? { ratio: k } : {}), ...(lq ? { quarter: lq } : {}) };
       }
       for (const k of Object.keys(REISSUED)) delete REISSUED[k];
