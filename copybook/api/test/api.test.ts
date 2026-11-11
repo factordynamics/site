@@ -1664,7 +1664,7 @@ describe('copybook api', () => {
     const opt = (change: string, put_call: string, shares: number, prev_shares: number, value: number, value_delta: number, pct: number) => ({ ...mv(change, 'SPY', '78462F103', shares, prev_shares, value, value_delta), put_call, delta_pct_of_book: pct });
     const miz = {
       slug: 'mizuho-markets-americas-llc', slugs: ['mizuho-markets-americas-llc'], manager: 'Mizuho Markets Americas LLC', name: 'MIZUHO MARKETS AMERICAS LLC', quarter: '2026Q3', report_date: '2026-09-30', filing_date: etDay(tR), accession: '0001062993-26-005826', sec_url: 'https://www.sec.gov/x', tickers: [],
-      moves: { bought_usd: 552460839, sold_usd: 610478402, new: [opt('new', 'Call', 19152, 0, 552460839, 552460839, 0.081)], added: [], trimmed: [], exited: [opt('exited', 'CALL', 0, 479831, 0, -610478402, -0.089)] },
+      moves: { bought_usd: 1086185072, sold_usd: 673643034, new: [opt('new', 'Call', 19152, 0, 552460839, 552460839, 0.081), opt('new', 'Put', 44518, 0, 57215045, 57215045, 0.008)], added: [{ ...mv('added', 'MRVL', '573874104', 5_000_000, 1_130_000, 615_000_000, 476_109_188), delta_pct_of_book: 0.07 }], trimmed: [], exited: [opt('exited', 'CALL', 0, 479831, 0, -610478402, -0.089), opt('exited', 'PUT', 0, 479831, 0, -63164632, -0.0092)] },
       corrected: { at: '2026-11-11T04:36:00Z', rows: [{ cusip: '78462F103', ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', put_call: 'CALL', emailed: { change: 'exited', value_delta: -610478402 }, v1: { change: 'trimmed', value_delta: -58017563 } }] },
     };
     await env.DB.put(`digest:${etDay(tR)}`, JSON.stringify({ filings: [fmr, miz], events: [] }));
@@ -1683,6 +1683,10 @@ describe('copybook api', () => {
     expect(note).toMatch(/CRWD was added/);
     const mi = (JSON.parse((await env.DB.get('feed:cus_fd'))!) as { title: string; text: string }[])[1];
     expect([/13\.3B|194\.7%|96% of the position/.test(mi.title + mi.text), /SPY calls was trimmed -\$58\.0M/.test(mi.text)]).toEqual([false, true]);
+    // The stored new "Call"/"Put" and exited "CALL"/"PUT" lines are one position each, trimmed by the filed values'
+    // change and marked (not a NEW plus an EXIT); the title leads with the largest real move.
+    const [miBody] = mi.text.split(/\n\s*Corrected /);
+    expect([/^Corrected · Mizuho Markets Americas Q3: MRVL \+\$476\.1M/.test(mi.title), /NEW SPY|EXIT SPY/.test(mi.title), /New:[^\n]*SPY|Exited:[^\n]*SPY/.test(miBody), miBody.match(/SPY calls -\$[\d.]+M[^\n]*/)?.[0], miBody.match(/SPY puts -\$[\d.]+M/)?.[0]]).toEqual([true, false, false, "SPY calls -$58.0M (share counts don't reconcile; change from filed values, 0.9% of book) · not in totals, SPY puts -$5.9M (share counts don't reconcile; change from filed values, 0.1% of book) · not in totals", 'SPY puts -$5.9M']);
     // Netted fresh from the filings (Q3 "Call" against Q2 "CALL", case-blind), the trade is the filed values' change,
     // marked: never 19,152 - 479,831 sh x $28,846 = -$13.3B, 194.7% of a $6.8B book.
     const pos = (put_call: string, shares: number, value: number) => ({ cusip: '78462F103', issuer: 'SPDR S&P 500 ETF T', ticker: 'SPY', display_name: null, put_call, shares, value, title: 'SPY' });

@@ -1499,6 +1499,27 @@ export async function scrubFalseCorrections(env: Env, now: number): Promise<Reco
   return res;
 }
 
+/** Stored new and exited lines of one position (CUSIP and option type, case-blind) as one row; the rows as they are otherwise. */
+function pairStored(rows: MoveRow[]): MoveRow[] {
+  const key = (r: MoveRow) => `${r.cusip.toUpperCase()}|${(r.put_call ?? '').toUpperCase()}`;
+  const exits = new Map(rows.filter((r) => r.change === 'exited').map((r) => [key(r), r]));
+  const drop = new Set<MoveRow>();
+  const merged: MoveRow[] = [];
+  for (const n of rows) {
+    const e = n.change === 'new' && n.shares > 0 ? exits.get(key(n)) : undefined;
+    if (!e || !e.prev_shares || drop.has(e)) continue;
+    drop.add(n).add(e);
+    const prevValue = -e.value_delta;
+    const ps = n.value / n.shares, pps = prevValue / e.prev_shares;
+    const book = n.delta_pct_of_book ? Math.abs(n.value_delta / n.delta_pct_of_book) : null;
+    const offUnits = ps > 0 && pps > 0 && (ps / pps > 3 || pps / ps > 3);
+    const delta = offUnits ? n.value - prevValue : ((n.shares - e.prev_shares) * n.value) / n.shares;
+    if (n.shares === e.prev_shares && !offUnits) continue;
+    merged.push({ ...n, ticker: n.ticker ?? e.ticker, display_name: n.display_name ?? e.display_name, change: delta >= 0 ? 'added' : 'trimmed', prev_shares: e.prev_shares, prev_value: prevValue, value_delta: Math.round(delta), delta_pct_of_book: book ? delta / book : null, ...(offUnits ? { unreliable: 'shares' as const } : {}) });
+  }
+  return drop.size ? [...rows.filter((r) => !drop.has(r)), ...merged] : rows;
+}
+
 const movesRows = (m: Moves) => [...m.new.map((r) => ({ ...r, change: 'new' })), ...m.added.map((r) => ({ ...r, change: 'added' })), ...m.trimmed.map((r) => ({ ...r, change: 'trimmed' })), ...m.exited.map((r) => ({ ...r, change: 'exited' }))] as MoveRow[];
 
 /** Members' feed items for these alerts re-rendered (title and text) where they read differently; the feeds changed. */
@@ -1563,12 +1584,16 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
       // its own prior value, else the correction's /v1 figure for the line (Mizuho's SPY calls, -$13.3B -> -$58.0M).
       const v1 = new Map((x.corrected?.rows ?? []).filter((c) => c.v1.change === 'added' || c.v1.change === 'trimmed').map((c) => [posKey({ cusip: c.cusip, put_call: c.put_call }), c.v1.value_delta]));
       const stored = movesRows(x.moves);
-      const now1 = stored.map((r) => markUnreliable(guardShares(r, r.prev_value != null ? r.value - r.prev_value : v1.get(posKey(r)))));
+      // A new and an exited line on one CUSIP and option type (stored before put/call matched case-blind: Mizuho's Q3
+      // "Call" against its Q2 "CALL") are one position: netted, sized from filed values when the two quarters' values per
+      // share are over 3x apart (calls $1,272 -> $28,846 a share: -$58.0M, not -$13.3B), else as a trade.
+      const paired = pairStored(stored);
+      const now1 = paired.map((r) => markUnreliable(guardShares(r, r.prev_value != null ? r.value - r.prev_value : v1.get(posKey(r)))));
       const ch = now1.filter((r): r is MoveRow => !!r);
       const splits = x.corrected?.rows.length ? await splitsFor(env, x.quarter) : null;
       const adj = splits ? ch.flatMap((r) => splitRestate(r, splits, x.corrected!.rows)) : ch;
       const net = netRenamed({ moves: x.moves, changed: adj });
-      if (now1.every((r, i) => r === stored[i]) && net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i])) {
+      if (paired === stored && now1.every((r, i) => r === stored[i]) && net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i])) {
         // A corrected filing is rendered from its stored copy too: an item frozen with other figures (gene's Mizuho
         // item read "SPY calls -$13.3B" from a render the day store never kept) takes the stored moves and the correction.
         if (x.corrected) fixed.set(filingId(x), x);
@@ -1578,9 +1603,9 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
       // Totals cover every row (the stored lists keep the largest few): each changed row's stored figure comes out and
       // what it counts now goes in (nothing, once dropped or marked).
       const counts = (r: MoveRow | null) => (!r || r.unreliable ? 0 : r.value_delta);
-      const diff = stored.map((r, i) => [counts(r), counts(now1[i])] as const).filter(([a, b]) => a !== b);
-      const bought = x.moves.bought_usd - diff.reduce((s, [a, b]) => s + Math.max(a, 0) - Math.max(b, 0), 0);
-      const sold = x.moves.sold_usd + diff.reduce((s, [a, b]) => s + Math.min(a, 0) - Math.min(b, 0), 0);
+      const was = stored.map(counts), is = now1.map(counts);
+      const bought = x.moves.bought_usd - was.reduce((s, v) => s + Math.max(v, 0), 0) + is.reduce((s, v) => s + Math.max(v, 0), 0);
+      const sold = x.moves.sold_usd + was.reduce((s, v) => s + Math.min(v, 0), 0) - is.reduce((s, v) => s + Math.min(v, 0), 0);
       fixed.set(filingId(x), { ...x, moves: { ...moves, bought_usd: bought, sold_usd: sold } });
     }
   }

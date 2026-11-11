@@ -520,7 +520,7 @@ const odd = (r: MoveRow) => `${r.unusual ? ` · ${UNUSUAL}` : ''}${r.filer_value
 /** A marked row's note (markUnreliable): what can't be trusted, and that it isn't in the totals. */
 function unreliableNote(r: MoveRow): string {
   if (r.unreliable === 'value') return `value unavailable${r.filed_per_share ? ` (filed at ≈$${r.filed_per_share >= 100 ? Math.round(r.filed_per_share).toLocaleString('en-US') : r.filed_per_share.toFixed(2)}/sh)` : ''}, not in totals`;
-  if (r.unreliable === 'shares') return (r.change === 'new' || r.change === 'exited' ? "share counts don't reconcile" : "change from filed values") + ', not in totals';
+  if (r.unreliable === 'shares') return r.change === 'new' || r.change === 'exited' ? "share counts don't reconcile, not in totals" : 'not in totals';
   if (r.unreliable === 'both') return 'share count unreliable in this filing, not in totals';
   return '';
 }
@@ -667,7 +667,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
       if (!rows.length) continue;
       const parts = rows.map((r) => {
         const pos = label === 'Trimmed' || label === 'Added' ? positionChange(label, r) : '';
-        const bits = [pos && (label === 'Trimmed' ? `${pos} of the position` : pos), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean);
+        const bits = [pos && (pos.startsWith('sold ') ? `${pos} of the position` : pos), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean);
         return `${rowName(r)} ${amount(r)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}${odd(r)}`;
       });
       lines.push(`  ${label}: ${parts.join(', ')}`);
