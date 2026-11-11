@@ -219,7 +219,7 @@ def main() -> int:
     try:
         for batch in bundles(todo):
             now = datetime.now(timezone.utc)
-            until = quiet(now + timedelta(seconds=QUIET_LEAD_S))  # a bundle sent just before must land before it
+            until = quiet(now) or quiet(now + timedelta(seconds=QUIET_LEAD_S))  # a bundle sent just before lands first
             if until and os.environ.get("SCOPE", "full") != "full":  # a curated publish never waits
                 print(f"upload: quiet window (COPYBOOK_UPLOAD_QUIET); {len(todo) - sent} files wait for the next run", flush=True)
                 break
