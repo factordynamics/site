@@ -4082,6 +4082,7 @@ describe('copybook api', () => {
     await hist.put('hl/M8769Q.json', JSON.stringify({ issuer: 'M8769Q', tickers: ['TEVA'], counts: { holders: 2, new: 2, by_period: { '2026Q3': 2 } }, columns: tcols, rows: [
       ['0000315066', 'FMR LLC', 'fmr-llc', 'long_only', true, '2026Q3', 25784696, null, 900000000, null, 'new'],
       ['0001364742', 'Norges Bank', null, 'sovereign', false, '2026Q3', 5000000, null, 170000000, null, 'new'],
+      ['0001669055', 'IFP Advisors', null, 'wealth', false, '2026Q3', 143876, null, 5000000, null, 'new'],
     ] }));
     await hist.put('hl/881624.json', JSON.stringify({ issuer: '881624', tickers: ['TEVA'], columns: tcols, rows: [
       // FMR's ADS line: exited in Q3 (the reissue). Norges' Q2 holding (its latest on this code). BlackRock still on Q2.
@@ -4090,14 +4091,18 @@ describe('copybook api', () => {
       ['0001364743', 'BlackRock, Inc.', null, 'index', false, '2026Q2', 70000000, 69000000, 2160000000, 2000000000, 'added'],
       // Barclays sold out for real: no ordinary line.
       ['0000312069', 'Barclays PLC', null, 'bank', false, '2026Q3', 0, 800000, 0, 25000000, 'exited'],
+      // IFP's Q3 13F lists both codes: a stale ADS line beside the ordinary one.
+      ['0001669055', 'IFP Advisors', null, 'wealth', false, '2026Q3', 143891, 140000, 5000500, 4600000, 'added'],
     ] }));
     const codes0 = hist.m.get('pre/stock-codes.json');
     hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"TEVA":"881624"}'));
     const teva = (await v1('/v1/stocks/TEVA/holders')).body;
     if (!teva.data) throw new Error(JSON.stringify(teva).slice(0, 300));
     const by = Object.fromEntries([...teva.data.holders, ...teva.data.exited].map((r: { filer: { name: string }; change: string; share_change: number | null; period: string }) => [r.filer.name, [r.change, r.share_change, r.period]]));
-    expect(by).toEqual({ 'FMR LLC': ['trimmed', -4473320, '2026Q3'], 'Norges Bank': ['added', 1000000, '2026Q3'], 'BlackRock, Inc.': ['added', 1000000, '2026Q2'], 'Barclays PLC': ['exited', -800000, '2026Q3'] });
-    expect([teva.data.issuer, teva.filers, teva.exited_count, teva.data.counts.merged_from, teva.data.counts.new ?? 0]).toEqual(['M8769Q', 3, 1, ['881624'], 0]);
+    expect(by).toEqual({ 'FMR LLC': ['trimmed', -4473320, '2026Q3'], 'Norges Bank': ['added', 1000000, '2026Q3'], 'BlackRock, Inc.': ['added', 1000000, '2026Q2'], 'Barclays PLC': ['exited', -800000, '2026Q3'], 'IFP Advisors': ['added', 3876, '2026Q3'] });
+    expect([teva.data.issuer, teva.filers, teva.exited_count, teva.data.counts.merged_from, teva.data.counts.new ?? 0]).toEqual(['M8769Q', 4, 1, ['881624'], 0]);
+    // One IFP row, on the new code, the stale line flagged and out of the sums.
+    expect(teva.data.holders.filter((r: { filer: { name: string } }) => r.filer.name === 'IFP Advisors').map((r: { cusip: string; shares: number; suspect_duplicate: unknown }) => [r.cusip, r.shares, r.suspect_duplicate])).toEqual([['M8769Q102', 143876, { cusip: '881624209', shares: 143891, value: 5000500 }]]);
     // Ingest's run rewrote the old code's hl/ with the one line still filed under it (Nov 11 12:2x): the old Q2 snapshot
     // (s/881624) carries the priors instead. Holders that didn't carry over stay Q2 holders with no change, never an
     // inferred exit (the lead: ~100 of 247 inferred TEVA exits were false); exits are pending until ingest's merged index.
@@ -4126,7 +4131,7 @@ describe('copybook api', () => {
     expect(fmr).toMatchObject({ change: 'trimmed', share_change: -4473320, value_delta_usd: -156138665, cusip: 'M8769Q102', prev_cusip: '881624209' });
     // Holders' net is the same trades: FMR -156.1M, Norges +1M x $34 = +34.0M (BlackRock's Q2 add is not in Q3's changes),
     // BlackRock +1M x $30.86 = +30.9M, Barclays' exit -25.0M.
-    expect(teva.data.counts.net).toBe(-156138665 + 34000000 + 30857143 - 25000000);
+    expect(teva.data.counts.net).toBe(-156138665 + 34000000 + 30857143 - 25000000 + 134699);
     expect(teva.data.holders.find((r: { filer: { name: string } }) => r.filer.name === 'BlackRock, Inc.').cusip).toBe('881624209');
     // A plain ticker: a price move is no trade. 100 -> 110 shares while the price doubled: +$2,000, not +$12,000.
     await hist.put('hl/037833.json', JSON.stringify({ issuer: '037833', tickers: ['AAPL'], counts: { holders: 1, net: 12000 }, columns: tcols, rows: [

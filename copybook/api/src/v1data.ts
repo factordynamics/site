@@ -518,6 +518,8 @@ export interface HolderRow {
   cusip?: string | null;
   prev_cusip?: string | null;
   issuer?: string | null;
+  /** The same quarter's stale line under the other code of a reissue, folded out of this position and every sum. */
+  suspect_duplicate?: { cusip: string | null; shares: number; value: number | null };
   accepted_at: string | null;
 }
 
@@ -691,6 +693,19 @@ export function mergeReissue(cur: any[], old: any[], period: string | null): any
       kept.push(o);
       continue;
     }
+    // The same quarter's book lists both codes (IFP Advisors' Q3 TEVA: a stale 881624209 line beside M8769Q102): one
+    // position, on the new code, inheriting the old line's prior; the stale line is flagged, never summed.
+    if (op && np && op === np && o.change !== 'exited' && Number(o.shares) > 0) {
+      if (o.prev_shares != null && (n.prev_shares == null || n.change === 'new')) {
+        n.prev_shares = Number(o.prev_shares);
+        n.prev_value = o.prev_value == null ? null : Number(o.prev_value);
+        const s = Number(n.shares) || 0;
+        n.change = n.prev_shares === 0 ? 'new' : s > n.prev_shares ? 'added' : s < n.prev_shares ? 'trimmed' : 'unchanged';
+        n.merged = true;
+      }
+      n.suspect_duplicate = { cusip: o.cusip ?? null, shares: Number(o.shares), value: o.value == null ? null : Number(o.value) };
+      continue;
+    }
     const noPrior = n.prev_shares == null || n.change === 'new' || (Number(n.prev_shares) === 0 && n.change !== 'exited');
     const prior = op && np && op === np && o.change === 'exited' ? { shares: o.prev_shares, value: o.prev_value } : op && np && op < np && Number(o.shares) > 0 ? { shares: o.shares, value: o.value } : null;
     if (noPrior && prior && prior.shares != null) {
@@ -834,6 +849,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       cusip: h.cusip ?? mainCusip,
       prev_cusip: h.prev_cusip ?? (reissueFrom && h.merged ? reissueFrom : null),
       issuer: h.issuer ?? d.display_name ?? (pcName || null),
+      ...(h.suspect_duplicate ? { suspect_duplicate: h.suspect_duplicate } : {}),
     };
   });
   // Acceptance for every row with an accession: gene's EDGAR-filled map (any filer), then the curated per-filing
