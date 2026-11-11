@@ -87,6 +87,8 @@ function position(h: any, equityTotal: number, allTotal: number) {
     prev_shares_as_filed: h.prev_shares_as_filed ?? null,
     share_change: h.share_change ?? null,
     value_delta_usd: h.value_delta ?? null,
+    // The bulk CSV's prev_value under Position's naming: an exited row's old value is here, not only as -value_delta_usd.
+    prev_value_usd: h.prev_value ?? (h.change === 'exited' && h.value_delta != null ? -h.value_delta : h.change === 'new' ? 0 : null),
     // Point-in-time provenance: filled once the data run publishes it per row.
     source_accession: h.source_accession ?? null,
     first_disclosed_at: h.first_disclosed_at ?? null,
