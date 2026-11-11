@@ -20,7 +20,7 @@ import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/u
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
 import { ApiStatus, Updating } from '../components/ApiStatus'
 import { ConfirmEmail } from '../components/ConfirmEmail'
-import { ApiError, call, errText, provisionalEmail, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { addCard, ApiError, call, errText, pendingEmail, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
@@ -200,6 +200,12 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
         )}
       </header>
 
+      {new URLSearchParams(location.search).get('card') === 'added' && member.has_payment_method !== false && (
+        <p role="status" className="mt-6 flex items-center gap-2 rounded-xl bg-[#e3f1e8] px-4 py-3 text-[14px] text-[#126b3c]">
+          <Check className="size-4 shrink-0" /> Card added. Copy continues after your trial{endLabel ? ` on ${endLabel}` : ''}.
+        </p>
+      )}
+
       {kept === 'yearly' && (
         <p role="status" className="mt-6 flex items-center gap-2 rounded-xl bg-[#e3f1e8] px-4 py-3 text-[14px] text-[#126b3c]">
           <Check className="size-4 shrink-0" /> You’re on yearly billing now. Stripe is emailing the confirmation.
@@ -207,7 +213,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
       )}
 
       {/* Step 0 for a provisional session: Copy's setup list carries it; other plans get it here. */}
-      {provisionalEmail() && !(member.active && member.plan === 'copy' && !member.seat) && <ConfirmEmail email={provisionalEmail()!} className="mt-6" />}
+      {pendingEmail(member) && !(member.active && member.plan === 'copy' && !member.seat) && <ConfirmEmail email={pendingEmail(member)!} className="mt-6" />}
 
       {member.active && <FailingBanner initial={member.channels_failing} onAccount />}
 
@@ -245,6 +251,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
               endLabel && !cancelling && !paused && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`
             )}
           </p>
+          {trial && member.has_payment_method === false && !cancelling && <NoCard end={endLabel} day={end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })} />}
           {member.seat ? (
             <p className="mt-4 rounded-xl bg-accent-soft px-3.5 py-2.5 text-[14px] text-accent-2">
               Part of {member.owner ? `${member.owner}’s` : 'your team’s'} Copy Fund plan. Billing and seats are managed by the plan owner.
@@ -375,7 +382,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
       {member.active && member.plan === 'copy' && !member.seat && !member.cancel_at_period_end && <UpgradePro member={member} className="mt-5" />}
       {member.active && member.referral && member.plan !== 'fund' && <Referral r={member.referral} />}
       {member.active && member.plan === 'fund' && !member.seat && <Team />}
-      {member.active && PLAN_NAME[member.plan ?? 'copy'] && !provisionalEmail() && <Channels />}
+      {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
       {member.active && <ApiKeys member={member} focus={focus} />}
 
       {(member.active || paused) && status === 'ready' && follows.onboarded && !editing && (
@@ -889,6 +896,37 @@ function InvoiceSwitch({ onChange }: { onChange: (m: Member) => void }) {
   )
 }
 
+/** A Copy trial with no card: it simply ends on its date unless a card is added (POST /portal/card). */
+function NoCard({ end, day }: { end?: string; day?: string }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  return (
+    <div className="mt-4 rounded-xl bg-accent-soft px-3.5 py-3 text-[14px] text-accent-2">
+      <p>No card on file: without one, the trial simply ends{end ? ` ${end}` : ''}.</p>
+      <Button
+        size="sm"
+        className="mt-2.5"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true)
+          setErr('')
+          addCard().catch((e) => {
+            setBusy(false)
+            setErr(errText(e, 'That didn’t open. Please try again.'))
+          })
+        }}
+      >
+        {busy ? 'Opening…' : `Add a card to keep Copy${day ? ` after ${day}` : ''}`}
+      </Button>
+      {err && (
+        <p role="alert" className="mt-2 text-[12.5px] text-down">
+          {err}
+        </p>
+      )}
+    </div>
+  )
+}
+
 function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => void }) {
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState<CancelReason | null>(null)
@@ -902,7 +940,7 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
     return (
       <button type="button" onClick={() => setOpen(true)} className="mt-3 min-h-9 text-[13px] text-ink-3 underline underline-offset-2 hover:text-ink-2">
         {/* Pause only where the API offers it (monthly with a card, confirmed by payments Nov 11); a trial ends now. */}
-        {offer && !member.pause_after_trial ? 'Pause or cancel' : member.status === 'trialing' ? 'End trial now' : 'Cancel'}
+        {offer && !member.pause_after_trial ? 'Pause or cancel' : member.status === 'trialing' && member.has_payment_method === false ? 'End trial now' : 'Cancel'}
       </button>
     )
   return (
@@ -961,8 +999,8 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
           Keep my plan
         </button>
       </div>
-      {offer && afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Your trial continues with everything until {member.trial_end ? timeLabel(member.trial_end) : dayLabel(offer.starts!)}. Then no charges and no real-time alerts until {dayLabel(offer.until)}, two weeks before the {offer.quarter ? offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2') : deadlineQuarter(offer.until)} 13F deadline. Your follows and settings stay.</p>}
-      {offer && !afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Pausing stops charges and real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. {member.digest_live ? ' The weekly digest of your names keeps coming, your' : ' Your'} follows and settings stay, and we’ll email you before it resumes.</p>}
+      {offer && afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Your trial continues with everything until {member.trial_end ? timeLabel(member.trial_end) : dayLabel(offer.starts!)}. Then no charges and no real-time alerts until {dayLabel(offer.until)}, two weeks before the {offer.quarter ? offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2') : deadlineQuarter(offer.until)} 13F deadline. Your follows and settings stay. A monthly plan can pause once a year, for up to 3 months.</p>}
+      {offer && !afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">A monthly plan can pause once a year, for up to 3 months. Pausing stops charges and real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. {member.digest_live ? ' The weekly digest of your names keeps coming, your' : ' Your'} follows and settings stay, and we’ll email you before it resumes.</p>}
       {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
     </div>
   )

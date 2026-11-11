@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ApiError, call, sharedGet } from '../lib/account'
+import { ApiError, call, lastMe, pendingEmail, sharedGet } from '../lib/account'
 import { Badge, Button } from './ui'
 
 // Where alerts go: GET/PUT {api}/channels, POST /channels/test, POST/DELETE /channels/feed.
@@ -138,7 +138,8 @@ export function Channels() {
         </div>
         {configured && (
           <div className="text-right">
-            <Button size="sm" variant="outline" onClick={sendTest}>
+            {/* A test waits for the emailed link (403 verify_email); channels themselves save meanwhile. */}
+            <Button size="sm" variant="outline" onClick={sendTest} disabled={Boolean(pendingEmail(lastMe()))}>
               Send a test
             </Button>
             {c?.test_sends?.length ? <p className="mt-1 text-[12px] text-ink-3">To {listLabel(c.test_sends)}</p> : null}

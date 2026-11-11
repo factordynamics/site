@@ -170,7 +170,33 @@ export function Pricing() {
   const [params] = useSearchParams()
   const hook = useAsync(() => (EMAIL_FROM[params.get('from') ?? ''] ? Promise.resolve(null) : fromFact(params.get('from'))), [params.get('from')])
   const copy = plans.copy
-  const monthsFree = Math.round(12 - copy.yearly / copy.monthly)
+  // Between seasons (marketing's plan rev 69): what Copy does from the November deadline to February's 13Fs. Last
+  // winter's counts are payments' (EDGAR full index): "filings", as 15 of the 19 are amendments.
+  const between = (
+      <section id="between-seasons" className="scroll-mt-24 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)] -order-1 md:order-last md:col-span-full md:mt-6 md:p-8" aria-labelledby="between">
+        <div className="grid gap-6 md:grid-cols-[1fr_1.15fr] md:gap-12">
+          <div>
+            <p className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-accent">Between seasons</p>
+            <h2 id="between" className="mt-2 text-[24px] font-semibold leading-tight tracking-[-0.03em]">
+              {Date.now() < Date.parse('2026-11-17T05:00:00Z') ? 'After Monday, Copy keeps working.' : 'Between 13F seasons, Copy keeps working.'}
+            </h2>
+            <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Copy emails you when they do.</p>
+            <p className="mt-3 text-[14px] leading-relaxed text-ink-3">Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow, and 13 open-market insider buys in the 100 stocks they hold most.</p>
+            <p className="mt-4 text-[14px] font-medium leading-relaxed">
+              Yearly ${plans.copy.yearly}: less than 9 months of monthly. Monthly? Pause once a year, up to 3 months, and it resumes for the next 13F season. {TRIAL_DAYS} days free, no card needed.
+            </p>
+          </div>
+          <FeatureList
+            items={[
+              { t: 'Insider buys in your stocks', d: 'Open-market Form 4 buys, as they’re filed.' },
+              { t: '13D and 13G stakes', d: 'Form 4 trades and 13D/G stakes by the funds you follow, and any new 13D or 13G in your stocks.' },
+              { t: 'The paid Friday edition', d: 'Insider buys and 13D/G in your names.' },
+              { t: 'No gap', d: 'You’re on before the first Q4 filer (due Feb 16), each 13F by email as it’s filed.' },
+            ]}
+          />
+        </div>
+      </section>
+  )
   return (
     <div className="container-x pt-12 md:pt-16">
       <header className="mx-auto max-w-2xl text-center">
@@ -205,7 +231,7 @@ export function Pricing() {
           {(['monthly', 'yearly'] as const).map((c) => (
             <button key={c} role="tab" aria-selected={cycle === c} onClick={() => setCycle(c)} className={`rounded-full px-4 py-1.5 ${cycle === c ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
               {c === 'monthly' ? 'Monthly' : 'Yearly'}
-              {c === 'yearly' && <span className="ml-1.5 text-[12px] font-medium text-up">${copy.yearly}/yr: about {monthsFree} months free</span>}
+              {c === 'yearly' && <span className="ml-1.5 text-[12px] font-medium text-up">${copy.yearly}/yr: less than 9 months of monthly</span>}
             </button>
           ))}
         </div>
@@ -218,7 +244,7 @@ export function Pricing() {
           const price = plan ? (cycle === 'yearly' ? plan.yearly : plan.monthly) : 0
           const save = plan ? Math.round((1 - plan.yearly / (plan.monthly * 12)) * 100) : 0
           const link = plan ? plan.links[cycle] || plan.links.monthly : ''
-          return (
+          const card = (
             <article
               key={tier.id}
               id={tier.id}
@@ -239,7 +265,7 @@ export function Pricing() {
                 <p className={`relative min-h-[1.5em] text-[13.5px] font-semibold ${dark ? 'text-[#7fe0a6]' : 'text-[#126b3c]'}`}>{referredDeal(tier.id, cycle)}</p>
               ) : (
                 <p className={`relative text-[12.5px] ${cycle === 'yearly' ? 'min-h-[53px]' : 'min-h-[1.5em]'} ${dark ? 'text-white/60' : 'text-ink-3'}`}>
-                  {plan ? (cycle === 'yearly' ? `About $${Math.round(plan.yearly / 12)} a month · save ${save}% vs monthly` : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
+                  {plan ? (cycle === 'yearly' ? (tier.id === 'copy' ? `$${plan.yearly}/yr: less than 9 months of monthly · founding price locked · history back to 2013 (from Dec 31)` : `About $${Math.round(plan.yearly / 12)} a month · save ${save}% vs monthly`) : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
                   {plan && cycle === 'yearly' && <span className="block text-[11.5px]">Prepaid and protected: pro-rata refund if we ever discontinue the plan.</span>}
                 </p>
               )}
@@ -313,6 +339,11 @@ export function Pricing() {
                     'Free forever. Upgrade when you want alerts and history.'
                   )}
                 </p>
+                {tier.id === 'copy' && (
+                  <a href="#between-seasons" className="mt-2 inline-flex text-[13px] font-medium text-[#9fb0ff] hover:text-white">
+                    What you get between seasons ↓
+                  </a>
+                )}
                 {plan && FOUNDING[tier.id as PlanId] && (
                   <p className="mt-3 rounded-lg bg-accent-soft px-3 py-2 text-[12px] font-medium leading-snug text-accent-2">{FOUNDING[tier.id as PlanId]}</p>
                 )}
@@ -347,34 +378,17 @@ export function Pricing() {
               </div>
             </article>
           )
+          // Phones: the between-seasons block right after the Copy card (trader, Nov 11); wider: full width below all four.
+          return tier.id === 'copy' ? (
+            <Fragment key={tier.id}>
+              {card}
+              {between}
+            </Fragment>
+          ) : (
+            card
+          )
         })}
       </div>
-
-      {/* Between seasons (marketing's plan rev 69): what Copy does from the November deadline to February's 13Fs.
-          Last winter's counts are payments' (EDGAR full index): "filings", as 15 of the 19 are amendments. */}
-      <section className="mx-auto mt-10 max-w-[1240px] rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)] md:p-8" aria-labelledby="between">
-        <div className="grid gap-6 md:grid-cols-[1fr_1.15fr] md:gap-12">
-          <div>
-            <p className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-accent">Between seasons</p>
-            <h2 id="between" className="mt-2 text-[24px] font-semibold leading-tight tracking-[-0.03em]">
-              {Date.now() < Date.parse('2026-11-17T05:00:00Z') ? 'After Monday, Copy keeps working.' : 'Between 13F seasons, Copy keeps working.'}
-            </h2>
-            <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Copy emails you when they do.</p>
-            <p className="mt-3 text-[14px] leading-relaxed text-ink-3">Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow, and 13 open-market insider buys in the 100 stocks they hold most.</p>
-            <p className="mt-4 text-[14px] font-medium leading-relaxed">
-              ${plans.copy.yearly}/year (about 3 months free) or ${plans.copy.monthly}/month. Monthly? Pause between seasons and it resumes for February’s 13Fs. {TRIAL_DAYS} days free, no card needed.
-            </p>
-          </div>
-          <FeatureList
-            items={[
-              { t: 'Insider buys in your stocks', d: 'Open-market Form 4 buys, as they’re filed.' },
-              { t: '13D and 13G stakes', d: 'Form 4 trades and 13D/G stakes by the funds you follow, and any new 13D or 13G in your stocks.' },
-              { t: 'The Friday email on Dec 4', d: 'With the season’s last late filers.' },
-              { t: 'February’s 13Fs', d: 'Each Q4 filing by email as it’s filed, with its moves (due Tue Feb 16).' },
-            ]}
-          />
-        </div>
-      </section>
 
       <section className="mx-auto mt-20 max-w-[1240px]" aria-labelledby="compare">
         <h2 id="compare" className="text-[28px] font-semibold tracking-[-0.03em]">
@@ -458,7 +472,7 @@ export function Pricing() {
               ],
               ['Do you show live prices or returns?', 'No. Values are what the fund reported at quarter end. We don’t re-price holdings or estimate performance.'],
               ['How are options shown?', 'Calls and puts are listed apart from shares. A 13F reports options at the value of the underlying shares, so we label them as notional and leave them out of portfolio weights and holder counts.'],
-              ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for. Monthly plans with a card can also pause between seasons instead.'],
+              ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for. Monthly plans with a card can also pause instead: once a year, for up to 3 months, and it resumes for the next 13F season.'],
               ['Is this investment advice?', 'No. Copybook shows public filings. 13F omits short positions, most non-US holdings and cash, so a portfolio here is never the whole picture.'],
             ] as [string, ReactNode][]
           ).map(([q, a]) => (

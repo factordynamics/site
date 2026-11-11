@@ -1,6 +1,6 @@
 import { readFollows } from './followsShape.mjs'
 import { useSyncExternalStore } from 'react'
-import { ApiError, call, getToken } from './account'
+import { ApiError, call, getToken, needsVerify } from './account'
 
 // Follows live in the Copy API (GET/PUT {api}/follows). Following is a Copy feature: 401 and 402
 // leave the store empty and the Follow buttons show the upgrade prompt.
@@ -148,7 +148,8 @@ export function setFollow(kind: 'investors' | 'stocks' | 'peers' | 'owned', id: 
       if (!ok) throw new Error('not_confirmed')
     } catch (e) {
       const note = isReadOnly(e) ? 'Follows can’t be changed while we’re on the backup. Try again in a few minutes.' : undefined
-      set({ ...state, pending: isPaywall(e) || isCap(e) ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error', note } } })
+      // A follow that waits for the emailed link (403 verify_email) isn't a failed save: its button says why.
+      set({ ...state, pending: isPaywall(e) || isCap(e) || needsVerify(e) ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error', note } } })
       throw e
     }
   })

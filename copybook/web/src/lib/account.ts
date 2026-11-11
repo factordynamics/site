@@ -5,6 +5,10 @@ export type Member = {
   email: string
   status: string
   active: boolean
+  /** False on a Copy trial started without a card (payments, Nov 11): it ends unless one is added. */
+  has_payment_method?: boolean
+  /** "pending_email_confirmation" until the emailed link is opened: follows and channels save, nothing is delivered. */
+  delivery?: 'pending_email_confirmation' | 'active'
   /** The product: copy, pro or fund. Older records read as copy. */
   plan: 'copy' | 'pro' | 'fund' | string
   interval?: 'monthly' | 'yearly' | 'unknown'
@@ -345,6 +349,10 @@ export const resumePlan = () => call<{ ok: boolean }>('/pause', { method: 'DELET
 export const sendCancelReason = (reason: CancelReason, note?: string) => call<{ ok: boolean }>('/cancel-reason', { body: { reason, ...(note ? { note } : {}) }, auth: true })
 /** Throws when the sign-in email can't be queued (a 5xx or no answer in 15 s), so the form can say so. */
 export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email }, timeout: 15_000 })
+/** Stripe's add-a-card form (POST /portal/card); it returns to /account/?card=added. */
+export const addCard = () => call<{ url: string }>('/portal/card', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
+/** The address waiting on its sign-in link: /me's delivery, else this device's provisional session. */
+export const pendingEmail = (m?: Member | null) => (m?.delivery === 'pending_email_confirmation' ? m.email : null) ?? provisionalEmail()
 export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
 /**
  * Move an existing subscription to a higher plan: POST {api}/upgrade returns a billing-portal page that

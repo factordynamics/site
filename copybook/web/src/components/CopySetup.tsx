@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { call, getToken, provisionalEmail, requestLogin, sharedGet } from '../lib/account'
+import { call, getToken, lastMe, pendingEmail, requestLogin, sharedGet } from '../lib/account'
 import { useFollows } from '../lib/follows'
 import { testLine, testResult } from './Channels'
 import { Button, Check } from './ui'
@@ -32,12 +32,11 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
   const [tested, setTested] = useState(() => localStorage.getItem(TESTED) === '1')
   const [test, setTest] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
 
-  // Fresh from checkout, the session is provisional: channels, tests and alerts wait for the emailed link, so
-  // /channels isn't called (it would 403) and step 0 says what to do (retail, Nov 11).
-  const prov = provisionalEmail()
+  // Fresh from checkout, delivery waits for the emailed link: follows and channels save, nothing is delivered and
+  // a test can't go out yet, so step 0 says what to do (retail, Nov 11; payments' delivery field).
+  const prov = pendingEmail(lastMe())
   const [resent, setResent] = useState<'idle' | 'busy' | 'sent' | 'error'>('idle')
   const load = useCallback(() => {
-    if (provisionalEmail()) return
     sharedGet<{ channels: Ch }>('/channels').then(
       (r) => {
         setCh(r.channels)
@@ -89,7 +88,7 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
           {
             done: false,
             title: 'Confirm your email',
-            body: resent === 'error' ? 'That didn’t send. Please try again in a minute.' : `Open the link we sent to ${prov} to turn on alerts, channels and tests.`,
+            body: resent === 'error' ? 'That didn’t send. Please try again in a minute.' : `Open the link we sent to ${prov} to start alerts and tests. Follows and channels save now.`,
             act: {
               label: resent === 'busy' ? 'Sending…' : resent === 'sent' ? 'Sent again' : 'Resend link',
               disabled: resent === 'busy' || resent === 'sent',
@@ -120,10 +119,10 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
       done: connected || keepEmail,
       title: 'Connect a channel (or keep email)',
       // A working chat or webhook replaces alert email unless keep_email is on (payments, Nov 11).
-      body: prov ? waits : chat ? (ch?.keep_email ? 'Alerts reach your chat and your inbox.' : 'Alerts go to your chat instead of email. Tick “Also email me alerts” below for both.') : connected ? 'Alerts reach your feed and your inbox.' : keepEmail ? 'Email only. You can add Slack, Discord, Telegram or a feed any time below.' : 'Add Telegram or Slack so alerts never wait on email limits.',
-      act: prov ? { label: 'Connect', disabled: true } : { label: connected ? 'Channels' : 'Connect', href: '#channels' },
+      body: chat ? (ch?.keep_email ? 'Alerts reach your chat and your inbox.' : 'Alerts go to your chat instead of email. Tick “Also email me alerts” below for both.') : connected ? 'Alerts reach your feed and your inbox.' : keepEmail ? 'Email only. You can add Slack, Discord, Telegram or a feed any time below.' : 'Add Telegram or Slack so alerts never wait on email limits.',
+      act: { label: connected ? 'Channels' : 'Connect', href: '#channels' },
       alt:
-        prov || connected || keepEmail
+        connected || keepEmail
           ? undefined
           : {
               label: 'Keep email',
