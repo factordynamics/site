@@ -40,7 +40,7 @@ FULL_COLUMNS = ("row_type", "ticker", "issuer", "title", "cusip", "put_call", "s
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
                 "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "suspect_units_basis", "suspect_reason", "prev_cusip",
                 "source_accession", "first_disclosed_at", "value_scale", "value_adjusted", "value_delta_basis", "unreliable",
-                "value_change", "shares_basis", "shares_as_filed", "option_held", "option_ratio", "cusip_pair", "filed_cusip", "filed_price", "matched_cusip")
+                "value_change", "shares_basis", "shares_as_filed", "option_held", "option_ratio", "cusip_pair", "filed_cusip", "filed_price", "matched_cusip", "held_reason")
 
 
 SECS: dict[str, dict] = {}
@@ -79,6 +79,10 @@ FB_KEEP = set(FB_COLUMNS) | {"display_name", "sector"}  # plain full-book column
 CLASS_SUM_MAX = 10  # more held class_sum_mismatch rows than this fail the run (lead, Nov 11)
 CLASS_SUM_OFF: list[dict] = []  # (issuer6, cik, row value_delta, classes' sum): rows held because the two differ
 PAIRS: dict[tuple, dict] = {}  # (issuer6, cik) -> cusip_pair, filed_cusip, filed_price, matched_cusip (ORCL Mizuho)
+COUNTED: dict[tuple, tuple] = {}  # (cik, cusip) -> (counted $ or None if held, side, reason): what changes/ carries
+HLQ: dict[str, str] = {}  # cik -> the period of its hl/ row
+NETQ: dict[str, dict] = {}  # issuer6 -> hl/ counts.net_by_period, for the hard parity gate against changes/
+TRADES = ("new", "added", "trimmed", "exited")
 CHECK_HELD: list[tuple] = []  # (value, cik, filed CUSIP, issuer): lines held cusip_check_digit this run
 GATE_OFF: list[dict] = []  # issuers whose counts or net differ from their own rows: hl/ is then not rewritten
 CLS: dict[tuple, dict] = {}  # (issuer6, cik) -> {cusip: that share class's shares, prior, value, value_delta, changes}
@@ -150,6 +154,7 @@ def class_holds(cls: dict, known: bool) -> str | None:
     return None
 
 
+DEFER: list[tuple] = []  # (base, prev_quarter, rows): latest-book fq/ files, written after hl/'s holds
 FIXED = [0]  # quarter -> suspect_units rows that reached write_full with no unreliable class
 
 
@@ -295,7 +300,8 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
 
 CHANGE_COLUMNS = ("cik", "slug", "filer_name", "curated", "type", "cusip", "ticker", "issuer", "put_call", "change",
                   "shares", "prev_shares", "share_change", "value", "value_delta", "accession", "accepted_at", "value_delta_basis",
-                  "shares_basis", "cusip_pair", "filed_cusip", "filed_price", "matched_cusip")  # "contracts": an option line filed in contracts, shares x100 (BNP Paribas FM)
+                  "shares_basis", "cusip_pair", "filed_cusip", "filed_price", "matched_cusip", "unreliable",
+                  "held_reason")  # "contracts": an option line filed in contracts, shares x100 (BNP Paribas FM)
 CHANGES_MAX = 20_000  # largest |value_delta| per quarter; the Worker parses the whole file
 
 
@@ -323,10 +329,47 @@ def net_parity(per_quarter: dict[str, list[list]]) -> None:
                   f"{r[0]} {r[1]} {r[3]} value_delta {r[4]:+,} row-priced {r[5]:+,} ({r[6]})" for r in rs[:12]), flush=True)
 
 
+def align(cik: str, rows: list[dict]) -> list[dict]:
+    """A filer's latest-book lines as hl/ counts them (COUNTED): a line hl/ holds is held here too (unreliable, held_reason,
+    no $), a counted line carries hl/'s trade. Lines hl/ never reads (options, notes, preferreds) are unchanged."""
+    out, seen = list(rows), set()
+    order = sorted(range(len(rows)), key=lambda i: (rows[i].get("change") not in TRADES, -abs(rows[i].get("value_delta") or 0)))
+    for i in order:
+        r = rows[i]
+        if r.get("put_call") or r.get("shares_type") == "PRN":
+            continue
+        key = (cik, linked(r.get("cusip") or ""))
+        got = COUNTED.get(key)
+        if got is None:
+            continue
+        val, side, reason = got
+        if val is None:
+            out[i] = r | {"unreliable": r.get("unreliable") or side, "held_reason": r.get("held_reason") or reason,
+                          "value_delta": 0, "value_delta_basis": None, "delta_pct_of_book": 0.0}
+        else:
+            out[i] = r | {"value_delta": 0 if key in seen else val}
+            seen.add(key)
+    return out
+
+
+def parity_gate(per_quarter: dict[str, list[list]]) -> list:
+    """Hard gate (lead, Nov 11): per issuer and period, hl/ net equals the sum of the counted changes/ rows of the
+    lines hl/ reads. Returns the issuers where it doesn't."""
+    sums: dict[str, dict] = {}
+    for q, rs in per_quarter.items():
+        for r in rs:
+            k = (r[0], linked(r[5]))
+            if r[14] is not None and not r[8] and HLQ.get(r[0]) == q and (COUNTED.get(k) or (None,))[0] is not None:
+                d = sums.setdefault(k[1][:6], {})
+                d[q] = d.get(q, 0) + r[14]
+    return [(code, byq, {q: v for q, v in sums.get(code, {}).items() if v}) for code, byq in NETQ.items()
+            if byq != {q: v for q, v in sums.get(code, {}).items() if v}]
+
+
 def write_changes(per_quarter: dict[str, list[list]]) -> None:
     """changes/{quarter}.json: every filer's moves in a report period (paid; R2 for /v1/changes)."""
     for q, rows in per_quarter.items():
-        rows.sort(key=lambda r: -abs(r[14] or 0))
+        rows.sort(key=lambda r: -abs(r[14] if r[14] is not None else (r[13] or 0)))  # held rows by position size
         write(DATA / "changes" / f"{q}.json", {
             "quarter": q, "rows_total": len(rows), "rows_kept": min(len(rows), CHANGES_MAX),
             "note": "new, added, trimmed and exited positions of every 13F filer against its previous quarter, "
@@ -771,6 +814,9 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     GATE_OFF.clear()
     CHECK_HELD.clear()
     PAIRS.clear()
+    COUNTED.clear()
+    HLQ.clear()
+    NETQ.clear()
     tick: dict[str, dict[str, float]] = {}
     book: dict[str, float] = {}  # cik -> value of its share positions (the weight denominator)
     top10: dict[str, set] = {}  # cik -> issuer codes among its ten largest share positions
@@ -959,6 +1005,23 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             if basis is None and counted is not None:
                 basis = "filed_value" if "filed_value" in BASIS.get((code, cik), ()) else "trade"
             single = next((k["cusip"] for k in sorted(cls.values(), key=lambda k: -k["shares"])), None) if not multi else None
+            # What each CUSIP of the row counts in changes/ and the filer views (lead, Nov 11: hl/ net = the sum of the
+            # counted changes/ rows): a held row or class counts nothing; a counted row's lines carry its classes'
+            # trades, the rounding on the largest, so they sum to the row exactly (a repriced reissue: on its new line).
+            HLQ[cik] = q
+            ks = sorted(cls.values(), key=lambda k: -abs(k["value_delta"]))
+            if counted is None and known and ks:
+                for k in ks:
+                    COUNTED[(cik, k["cusip"])] = (None, k["side"] or side or "both", k["reason"] or reason or "units")
+            elif counted is not None and ks:
+                live = [k for k in ks if not (multi and k["side"])]
+                part = {k["cusip"]: 0 if basis == "net_shares_repriced" else round(k["value_delta"]) for k in live}
+                first = next((k["cusip"] for k in live if "new" in k["changes"]), live[0]["cusip"]) \
+                    if basis == "net_shares_repriced" else live[0]["cusip"]
+                part[first] += counted - sum(part.values())
+                for k in ks:
+                    COUNTED[(cik, k["cusip"])] = (part[k["cusip"]], None, None) if k["cusip"] in part \
+                        else (None, k["side"], k["reason"] or "units")
             rows.append([cik, meta[cik].get("name"), m.get("slug"), kind, cik in curated,
                          q, None if out_sh is None else round(out_sh),
                          None if out_ps is None or not known else build.shares_out(float(out_ps)),
@@ -1001,6 +1064,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                              "counts": {k: counts[k] for k in tally}, "rows": tally})
         if not counts["holders"]:
             continue
+        NETQ[code] = {k: v for k, v in counts["net_by_period"].items() if v}
         # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period
         # keeps each quarter's sum, since holders' latest books span quarters during filing season.
         nq = max((PERIOD.get(cik) or meta[cik].get("quarter") or "" for cik in hs), default=None)
@@ -1234,7 +1298,8 @@ def main() -> int:
                 build.shares_out(float(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
                 int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), rec.get("accession"),
                 rec.get("accepted_at") or ACCEPTED.get(rec.get("accession") or ""), r.get("value_delta_basis"),
-                r.get("shares_basis"), *(r.get(f) for f in ("cusip_pair", "filed_cusip", "filed_price", "matched_cusip"))]
+                r.get("shares_basis"), *(r.get(f) for f in ("cusip_pair", "filed_cusip", "filed_price", "matched_cusip")),
+                r.get("unreliable"), r.get("held_reason")]
 
     for shard in shards:
         path = DATA / "f" / f"{shard['cik']}.json"
@@ -1262,11 +1327,10 @@ def main() -> int:
                 per_quarter.setdefault(shard["quarter"], []).append(row_of(cik, shard, r))
         if not shard.get("_fb_only"):
             write(path, base | summary)
-        write_full(base, summary["prev_quarter"], rows)
+        DEFER.append((base, summary["prev_quarter"], rows))  # written once hl/'s holds are known
     if os.environ.get("SCOPE", "full") == "full":  # curated runs must stay quick on filing days
         print(f"moves: changes for {older_changes(shards, curated, per_quarter, row_of)} books of earlier quarters",
               flush=True)
-    write_changes(per_quarter)
     # A curated fund's own book ({slug}.json, full and point-in-time) is its latest when at least as new.
     for cik, m in curated.items():
         b = read(DATA / f"{m['slug']}.json")
@@ -1286,6 +1350,30 @@ def main() -> int:
           + "; ".join(f"{o}->{v['new']} {v.get('ticker')} {v.get('filers')} filers" for o, v in build.cusip_links().items()),
           flush=True)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
+    # changes/ and the filer views (fq/) of each filer's latest book from the same lines and holds as hl/ (lead, Nov 11):
+    # held rows listed with change "unknown" and no $, counted rows with hl/'s trade.
+    recs = {s["cik"]: s for s in shards}
+    for base, prev_q, rows in DEFER:
+        write_full(base, prev_q, align(base["cik"], rows))
+    DEFER.clear()
+    redo = {(HLQ[cik], cik) for cik in LATEST if cik in HLQ}
+    for q in per_quarter:
+        per_quarter[q] = [r for r in per_quarter[q] if (q, r[0]) not in redo]
+    for q, cik in sorted(redo):
+        rec = {"name": recs.get(cik, {}).get("name")} | (FILING.get(cik) or filing(recs.get(cik, {})))
+        for r in align(cik, LATEST[cik]):
+            if r.get("change") not in TRADES or r.get("shares_type") == "PRN":
+                continue
+            row = row_of(cik, rec, r)
+            if r.get("unreliable") or r.get("suspect_units") or r.get("price_outlier"):
+                row[9], row[14], row[17] = "unknown", None, None
+            per_quarter.setdefault(q, []).append(row)
+    off = parity_gate(per_quarter)
+    print(f"moves: parity gate: {len(NETQ) - len(off)}/{len(NETQ)} issuers' hl/ net = the sum of their counted "
+          f"changes/ rows; off: {off[:5]}", flush=True)
+    if off and not (DATA / "holders_refused.json").exists():
+        raise RuntimeError(f"parity gate: {len(off)} issuers' hl/ net differ from changes/, e.g. {off[:3]}")
+    write_changes(per_quarter)
     print(f"moves: multi-class rows held because value_delta != the sum of their classes: {len(CLASS_SUM_OFF)}: "
           + "; ".join(f"{x['issuer6']} {x['cik']} {x['name']} {x['cusips']} row {x['value_delta']:+,} classes "
                       f"{x['classes_sum']:+,}" for x in CLASS_SUM_OFF[:20]), flush=True)

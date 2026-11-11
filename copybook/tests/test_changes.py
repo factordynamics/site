@@ -874,6 +874,20 @@ class ShareClassHoldersTest(unittest.TestCase):
                 self.assertEqual(read("594918")["counts"]["net"], round(200 * 517.0))
                 b = row("46429B", "0002080094")
                 self.assertEqual((b["change"], b["value_delta"]), ("unchanged", 0))
+                # changes/ carries hl/'s holds: Trivest's option-style line held, the common counted at hl/'s trade.
+                t_lines = {r["cusip"]: r for r in moves.align("0000929638", books["0000929638"])}
+                self.assertEqual((t_lines["594918904"]["unreliable"], t_lines["594918904"]["held_reason"]),
+                                 ("both", "option_cusip_no_putcall"))
+                self.assertEqual(t_lines["594918104"]["value_delta"], round(200 * 517.0))
+                # The parity gate: per issuer, hl/ net = the sum of the counted changes/ rows (col 14) it reads.
+                cols = moves.CHANGE_COLUMNS
+                rows_q = [[cik if f == "cik" else r["cusip"] if f == "cusip" else r.get("put_call") if f == "put_call"
+                           else (None if r.get("unreliable") else r["value_delta"]) if f == "value_delta" else None
+                           for f in cols] for cik in books for r in moves.align(cik, books[cik])]
+                self.assertEqual(moves.parity_gate({"2026Q3": rows_q}), [])
+                msft = next(r for r in rows_q if r[5] == "594918104")
+                msft[14] += 5  # a counted row a few dollars off fails it
+                self.assertEqual([x[0] for x in moves.parity_gate({"2026Q3": rows_q})], ["594918"])
                 self.assertEqual(moves.CLASS_SUM_OFF, [])
             finally:
                 moves.DATA = saved[0]
