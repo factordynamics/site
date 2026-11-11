@@ -6,7 +6,7 @@ import { parse } from 'smol-toml';
 export function makeMiniflare() {
   const env = process.env;
   const toml = parse(readFileSync(`${env.SITE_API_DIR}/wrangler.toml`, 'utf8'));
-  const SECRETS = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'SESSION_SECRET', 'RESEND_API_KEY', 'HEALTH_TOKEN', 'GITHUB_DISPATCH_TOKEN', 'SEC_BUDGET', 'CF_API_TOKEN', 'WAITLIST_PRIVATE_KEY_B64'];
+  const SECRETS = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'SESSION_SECRET', 'RESEND_API_KEY', 'HEALTH_TOKEN', 'GITHUB_DISPATCH_TOKEN', 'SEC_BUDGET', 'CF_API_TOKEN'];
   const bindings = { ...toml.vars, API_URL: env.PUBLIC_API_URL };
   for (const k of SECRETS) if (env[k]) bindings[k] = env[k];
   // The commit the bundle was built from (update.sh writes BUILD_DIR/BUILD_SHA): /health's api_build.
