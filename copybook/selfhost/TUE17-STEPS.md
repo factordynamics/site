@@ -23,8 +23,10 @@ changes (api.json and the front ends follow within 2 minutes).
    can read):
      sudo OFFLINE_KEY=/run/media/$USER/<stick>/copybook-backup-key.age ~/copybook-api/ops/setup-service-user.sh
    It first builds and boot-tests the API as the service user while the current one keeps serving (a few minutes);
-   any failed check stops it there with nothing changed for members. It asks for a passphrase for the offline copy of
-   the new backup key: save the passphrase in 1Password and copy the .age file to a second offline place. If the API
+   any failed check stops it there with nothing changed for members. It makes a new backup key in memory: gene keeps
+   only the public key, and the private key goes only to the file on your stick, protected by a passphrase it asks
+   for (twice, then once more to check). Save the passphrase in 1Password and copy the .age file to a second offline
+   place: without it no backup can be decrypted. If the API
    doesn't come back it rolls back on its own and says so.
 
 3. Tell the Copybook API thread on gene: "service move done". The agent then:
@@ -32,7 +34,7 @@ changes (api.json and the front ends follow within 2 minutes).
      takes it (acceptance-test.sh save-session); after step 4a that session must be refused;
    - re-encrypts every R2 backup to the new key (rewrap-backups.sh; it still has the old key at this point), so the
      old key, which agents have held, opens nothing that is kept;
-   - checks the status directory, the tunnel, api.json and the front ends, and runs verify (19 checks).
+   - checks the status directory (backup_private_keys_on_host must be 0), the tunnel, api.json and the front ends, and runs verify (19 checks).
    Wait for its "re-encrypted, ready for step 4".
 
 4. Rotate the signing secrets and take the credentials agents don't need:
@@ -104,8 +106,13 @@ From then on:
   (for example for a tier holding fund shorts or sub-13F names), set DEPLOY_REQUIRE_APPROVAL=1 in
   /var/lib/copybook/copybook-api/copybook-api.env with sudo, then approve each sha with
     echo <full sha> | sudo -u copybook tee -a /var/lib/copybook/copybook-api/deploy.approved
-- Monthly decrypt drill: automatic, as the service user (Mondays, result in /var/lib/copybook-status/backup-checks.log).
-  The offline copy is for rebuilding on another machine.
+- Backups: the weekly check runs on its own without the private key (Mondays; result in
+  /var/lib/copybook-status/backup-checks.log). Once a month, run the real decrypt drill with your stick (about 2 min):
+    sudo install -o copybook -g copybook -m 0400 /run/media/$USER/<stick>/copybook-backup-key.age /dev/shm/cbk.age
+    sudo -u copybook env HOME=/var/lib/copybook AGE_KEY_FILE=/dev/shm/cbk.age /var/lib/copybook/copybook-api/ops/restore-check.sh
+    sudo rm -f /dev/shm/cbk.age
+  It asks for the passphrase and prints counts only. Any restore from a backup (on gene or another machine) needs
+  you for the same reason.
 - Optional, unrelated to Copybook: Funnel also forwards public TCP port 8443 to SSH port 22, where nothing listens
   today. To remove it: sudo tailscale funnel --tcp=8443 off
 

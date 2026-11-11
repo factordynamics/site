@@ -3,9 +3,10 @@
 # PASS/FAIL) to $STATUS_DIR:
 #   checks.sh verify   copybook-checks-verify.timer (every 6 h): the 19 end-to-end checks against the public base,
 #                      test members only -> verify.txt
-#   checks.sh backup   copybook-checks-backup.timer (Mondays 11:30 UTC): backup-verify.sh (manifests, no key) and
-#                      restore-check.sh (decrypts the newest backup with ../backup.key, the service's copy of the key)
-#                      -> appended to backup-checks.log
+#   checks.sh backup   copybook-checks-backup.timer (Mondays 11:30 UTC): backup-verify.sh, without the private key
+#                      (which is offline with Andreas): manifests, ciphertext hashes, age headers, recipient, age and
+#                      counts -> appended to backup-checks.log. The real decrypt is restore-check.sh, run by Andreas
+#                      with his key file (RESTORE.md).
 set -uo pipefail
 ROOT=$HOME/copybook-api
 export PATH=$HOME/.local/share/mise/installs/node/26.12.1/bin:$ROOT/bin:$PATH
@@ -19,7 +20,6 @@ case "${1:-}" in
     {
       echo "== $(date -u +%FT%TZ)"
       ./backup-verify.sh 2>&1 | tail -15 | mask
-      AGE_KEY_FILE=$ROOT/backup.key ./restore-check.sh 2>&1 | tail -3 | mask
     } >> "$S/backup-checks.log" ;;
   *) echo "usage: checks.sh verify|backup"; exit 2 ;;
 esac

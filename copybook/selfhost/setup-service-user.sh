@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Moves the Copybook API on gene to a dedicated `copybook` service user, so the account AI maintenance agents run as
-# (refcell) cannot read member data, the service's secrets (including the token-signing secrets) or the backup key, and
-# is out of the member request path.
+# (refcell) cannot read member data or the service's secrets (including the token-signing secrets), and is out of the
+# member request path. The new backup key's private half never touches the host's disk: only the public key stays on
+# gene; the private key exists only as the passphrase-protected file on Andreas's stick (OFFLINE_KEY, required).
 #
 #   sudo OFFLINE_KEY=/run/media/<you>/<stick>/copybook-backup-key.age ~/copybook-api/ops/setup-service-user.sh
 #   DRY_RUN=1 ~/copybook-api/ops/setup-service-user.sh       # checks the pins, prints the commands, changes nothing
@@ -23,7 +24,8 @@
 # DEPLOY_REQUIRE_APPROVAL=0 in copybook-api.env), the nightly and hourly backups,
 # the hourly R2 push, the quick tunnel (now straight to the API, not through the maintainers' proxy) and its watcher,
 # plus two new timers: status (masked view for maintainers) and checks (verify, backup restore drill).
-# Makes a new backup key as copybook (0600); a passphrase-protected copy goes to OFFLINE_KEY for Andreas.
+# Makes a new backup key in memory: the public key goes to the service (backups encrypt to it), the private key only to
+# OFFLINE_KEY, passphrase-protected; nothing on gene can decrypt a backup without Andreas.
 # Points Funnel's /copybook path straight at the API (Stripe's webhook arrives there).
 # Maintainers keep: the front-end config updater, the in-flight sampler, and a read-only status directory
 # /var/lib/copybook-status (counts, shas, unit states, masked logs, sessions for the comped test members).
@@ -50,7 +52,7 @@ AGE_SHA256=eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b2c     
 AGE_KEYGEN_SHA256=0a0009db842259d6717f7eeb30acb6b90d2a2eb924c6acd0a0db0ca1f1537899
 CLOUDFLARED_SHA256=1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872 # cloudflared 2026.10.7 linux-amd64 (github.com/cloudflare/cloudflared)
 # sha256 of `git ls-tree -r <commit> -- copybook/selfhost` without *.md, backup.pub and this script (code_hash below).
-SELFHOST_CODE_SHA256=4c3dbb8fb543d50202911f984a3ab7e82338b7f4337930394eb17b5af26533fd
+SELFHOST_CODE_SHA256=02a43cd918310b86c20e95dc4d5ce87f5c4400cfec18b28b1afc198ccccc27b5
 SECRET_KEYS='SESSION_SECRET|STRIPE_WEBHOOK_SECRET|STRIPE_SECRET_KEY|RESEND_API_KEY|HEALTH_TOKEN|CLOUDFLARE_API_TOKEN|CF_API_TOKEN'
 
 run() { if [ "$DRY" = 1 ]; then printf '+ %s\n' "$*"; else "$@"; fi; }
@@ -71,8 +73,9 @@ SVC_ENABLE="copybook-api.service copybook-tunnel.service copybook-api-update.tim
 echo "== 0. checks (nothing changes yet)"
 [ "$DRY" = 1 ] || [ "$(id -u)" = 0 ] || die "run with sudo (or DRY_RUN=1)"
 [ -d "$SRC/state" ] || die "no $SRC/state: already migrated?"
-[ -z "${OFFLINE_KEY:-}" ] || [ -d "$(dirname "$OFFLINE_KEY")" ] || die "OFFLINE_KEY directory missing (is the stick mounted?)"
-[ -n "${OFFLINE_KEY:-}" ] || echo "note: OFFLINE_KEY not set; the new backup key will exist only on the service account"
+[ -n "${OFFLINE_KEY:-}" ] || die "set OFFLINE_KEY=<file on your USB stick>: the backup private key goes only there"
+[ -d "$(dirname "$OFFLINE_KEY")" ] || die "OFFLINE_KEY directory missing (is the stick mounted?)"
+[ -e "$OFFLINE_KEY" ] && die "$OFFLINE_KEY already exists; choose a new file name"
 BASE=$(cat "$SRC/state.deployed-sha"); [[ $BASE =~ ^[0-9a-f]{40}$ ]] || die "state.deployed-sha is not a commit sha"
 url() { sed -n -E "s#^$1=(https://[A-Za-z0-9./:_-]+)\$#\\1#p" "$SRC/copybook-api.env" | head -1; }
 PUB_API=$(url PUBLIC_API_URL); PUB_ORIGIN=$(url PUBLIC_ORIGIN)
@@ -171,24 +174,22 @@ unit copybook-status "Copybook masked status for maintainers ($STATUS)" status.s
 unit copybook-checks-verify "Copybook end-to-end checks (test members) -> $STATUS/verify.txt" 'checks.sh verify' '*-*-* 0/6:45:00'
 unit copybook-checks-backup "Copybook backup checks and decrypt drill -> $STATUS/backup-checks.log" 'checks.sh backup' 'Mon *-*-* 11:30:00 UTC'
 
-echo "== 6. new backup key, held by the service user"
-run runuser -u "$SVC" -- sh -c "umask 077; '$DST/bin/age-keygen' -o '$DST/backup.key' 2>/dev/null"
-if [ "$DRY" = 1 ]; then echo "+ backup.pub <- age-keygen -y backup.key"; else
-  runuser -u "$SVC" -- "$DST/bin/age-keygen" -y "$DST/backup.key" > "$DST/backup.pub"; cp "$DST/backup.pub" "$STATUS/backup.pub"
+echo "== 6. new backup key: public key on gene, private key only on the stick"
+if [ "$DRY" = 1 ]; then echo "+ age-keygen (in memory) -> backup.pub; age -p -o $OFFLINE_KEY (private key, passphrase-protected)"; else
+  # The private key lives only in this shell variable and the pipes below, never in a file on gene.
+  k=$("$DST/bin/age-keygen" 2>/dev/null)
+  printf '%s\n' "$k" | "$DST/bin/age-keygen" -y > "$DST/backup.pub"; cp "$DST/backup.pub" "$STATUS/backup.pub"
   echo "new backup public key: $(cat "$DST/backup.pub")"
-fi
-if [ -n "${OFFLINE_KEY:-}" ]; then
-  echo "Offline copy: choose a passphrase for $OFFLINE_KEY (age asks twice) and save it in 1Password."
-  if [ "$DRY" = 1 ]; then echo "+ age -p -o $OFFLINE_KEY < backup.key"; else
-    runuser -u "$SVC" -- cat "$DST/backup.key" | "$DST/bin/age" -p -o "$OFFLINE_KEY"
-    [ "$(printf ok | "$DST/bin/age" -R "$DST/backup.pub" | "$DST/bin/age" -d -i "$OFFLINE_KEY")" = ok ] && echo "offline copy opens with your passphrase" || die "offline copy check failed"
-  fi
+  echo "Choose a passphrase for $OFFLINE_KEY (age asks twice) and save it in 1Password."
+  printf '%s\n' "$k" | "$DST/bin/age" -p -o "$OFFLINE_KEY"; unset k
+  echo "Check: enter the passphrase once more."
+  [ "$(printf ok | "$DST/bin/age" -R "$DST/backup.pub" | "$DST/bin/age" -d -i "$OFFLINE_KEY")" = ok ] && echo "the stick's key opens backups made to the new public key" || die "offline key check failed"
 fi
 
 echo "== 7. ownership and modes"
 run chown -R -h "$SVC:$SVC" "$DST_HOME" "$STATUS"
 run chmod 0700 "$DST_HOME" "$DST" "$DST/state" "$DST/backups"
-run chmod 0600 "$DST/secrets.env" "$DST/backup.key"
+run chmod 0600 "$DST/secrets.env"
 
 echo "== 8. start as copybook and health-check"
 for _ in $(seq 20); do [ "$DRY" = 1 ] || [ -d "/run/user/$(id -u "$SVC")" ] && break; sleep 1; done

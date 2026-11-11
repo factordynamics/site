@@ -16,6 +16,8 @@ w() { cat > "$S/.$1.tmp" && mv "$S/.$1.tmp" "$S/$1"; }
   echo "last_failed $(cat ../state.last-failed 2>/dev/null)"; echo "pending_approval $(cat ../state.pending 2>/dev/null)"
   echo "api_base $(cat ../state.api-published 2>/dev/null)"; echo "cron_enabled $([ -e "$CRON_FLAG" ] && echo yes || echo no)"
   echo "health $(curl -s -m 10 'http://127.0.0.1:8787/health?probe=1')"
+  # The backup private key must not be on gene (it is offline with Andreas): count files holding an age secret key.
+  echo "backup_private_keys_on_host $(grep -rlsIE 'AGE-SECRET-KEY-1[0-9A-Z]{50,}' --exclude-dir=state --exclude-dir=node_modules --exclude-dir=site --exclude-dir=build --exclude-dir=build.prev --exclude-dir=backups --exclude-dir=.local --exclude-dir=.npm --exclude-dir=.cache "$HOME" | wc -l)"
   systemctl --user list-units --all --no-legend 'copybook*' | awk '{print "unit", $1, $3, $4}'
 } | w state.txt
 cp ../state.api-published "$S/api-published" 2>/dev/null

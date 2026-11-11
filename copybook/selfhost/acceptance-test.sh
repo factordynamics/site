@@ -42,7 +42,7 @@ denied "members store (KV)"      cat "$D/state/kv/miniflare-KVNamespaceObject/86
 denied "members store via sqlite" sqlite3 "file:$D/state/kv/miniflare-KVNamespaceObject/86c782669b53e48b3b2e014f8f25bbf476c6fb00e489386ae2ddb90d794963fc.sqlite?mode=ro" "select count(*) from _mf_entries"
 denied "private R2 copy"         cat "$D/state/r2/copybook-history/blobs/000034135f1fb8759c50c9070b7850d8198f25c1bd66dc8fb28bceec60960864000001a1be90d66b"
 denied "hourly backups"          ls "$D/backups"
-denied "backup key"              cat "$D/backup.key"
+denied "backup key file (none should exist; the key is offline)" cat "$D/backup.key"
 denied "service secrets"         cat "$D/secrets.env"
 # The token-signing secrets: SESSION_SECRET signs every member session, login, unsubscribe, keep and resume link (whoever
 # holds it can sign in as any member); STRIPE_WEBHOOK_SECRET authenticates Stripe's events (whoever holds it can forge
@@ -62,6 +62,8 @@ denied "API bundle"              touch "$D/build/BUILD_SHA"
 denied "service's node runtime"  touch "$(dirname "$D")/.local/share/mise/installs/node/26.12.1/bin/node"
 denied "service's units"         touch "$(dirname "$D")/.config/systemd/user/copybook-api.service"
 denied "service manager"         systemctl --user --machine=copybook@ show-environment
+n=$(sed -n 's/^backup_private_keys_on_host //p' "$S/state.txt")
+if [ "$n" = 0 ]; then echo "ok    backup private key on gene: none (the service reports 0 files with an age secret key)"; else echo "FAIL  backup private key on gene: service reports '${n:-no status}'"; fail=1; fi
 echo "== credentials held by this account"
 for v in COPYBOOK_SESSION_SECRET COPYBOOK_BACKUP_AGE_KEY COPYBOOK_STRIPE_WEBHOOK_SECRET COPYBOOK_WAITLIST_PRIVATE_KEY \
   SESSION_SECRET STRIPE_WEBHOOK_SECRET CLOUDFLARE_ACCOUNT_PASSWORD STRIPE_ACCOUNT_PASSWORD RESEND_ACCOUNT_PASSWORD; do

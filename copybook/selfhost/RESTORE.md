@@ -61,8 +61,8 @@ a VM with the Amp CLI). Inbound ports are not needed: the quick tunnel is outbou
 3. R2: `node r2-pull.mjs <mirror dir>` (3.5 GB from copybook-history, 5 min measured), then with the service stopped
    `node import.mjs r2 <mirror dir>` (2.5 min measured).
 4. KV and Durable Objects: decrypt the newest `backups/*.tar.age` (key `COPYBOOK_BACKUP_AGE_KEY` until Andreas takes the
-   key offline per BACKUP-KEY-STEPS.md; after that his passphrase-protected key file, so this step needs him; see
-   restore-check.sh) and untar into `~/copybook-api/state`. Then bring KV up to the minute from Cloudflare:
+   service-account move on Nov 17; after that only his passphrase-protected key file on his stick, so this step needs
+   him; see restore-check.sh) and untar into `~/copybook-api/state`. Then bring KV up to the minute from Cloudflare:
    `node ../site/copybook/api/scripts/kv-export.mjs kv.json && node import.mjs kv kv.json && shred -u kv.json`.
 5. Install the units in `systemd/` (change `copybook-tunnel.service` to `--url http://127.0.0.1:8787`; server.mjs
    accepts the `/copybook` prefix itself), `loginctl enable-linger`, start `copybook-api`, `copybook-tunnel`,
@@ -81,7 +81,8 @@ The AI agents that maintain Copybook run as the desktop account `refcell`. From 
 watcher run as the system user `copybook`:
 
 - `/var/lib/copybook` and `/var/lib/copybook/copybook-api` (state: KV, Durable Objects, the private R2 copy; hourly
-  backups) are owned by `copybook`, mode 0700; `secrets.env` and the backup key `backup.key` are 0600.
+  backups) are owned by `copybook`, mode 0700; `secrets.env` is 0600. The backup private key is not on gene at all
+  (see "Backups and the backup key" below).
 - The token-signing secrets are in that isolated set: `SESSION_SECRET` (signs every member session and every login,
   unsubscribe, keep and resume link; whoever holds it can sign in as any member) and `STRIPE_WEBHOOK_SECRET` (whoever
   holds it can forge a payment event). Both are rotated during the move, because agents held the old values; the
@@ -115,6 +116,27 @@ exists.
 
 Output after the move: recorded here on Tue Nov 17.
 
+## Backups and the backup key (from Tue Nov 17)
+
+- Backups (nightly to R2, hourly on gene) are encrypted with age to a public key. The setup script makes the key pair
+  in memory: gene keeps only the public key, and the private key is written only to Andreas's USB stick, protected by
+  his passphrase (plus a second offline copy he keeps). No file on gene can decrypt a backup, so neither the service
+  nor code deployed to it can read a backup. The status directory reports `backup_private_keys_on_host` (files on the
+  service account holding an age secret key; must be 0), and the acceptance test checks it.
+- **Weekly check, automatic and keyless** (`checks.sh backup` → `backup-verify.sh`, Mondays 11:30 UTC, result in
+  `/var/lib/copybook-status/backup-checks.log`): every R2 backup with a manifest must match the manifest's ciphertext
+  sha256 and size; it must be a well-formed age file (v1 header, exactly one X25519 recipient stanza) made for the
+  current public key; the newest must be under 30 hours old; and the newest manifest's member and key counts, written
+  at backup time from the plaintext, must be plausible against the live store. It can't prove a backup decrypts.
+- **Decrypt drill, monthly, by Andreas** (TUE17-STEPS.md, "From then on"): with his stick and passphrase,
+  `restore-check.sh` decrypts the newest backup, checks it against the manifest's plaintext sha256, opens it in a
+  throwaway store and compares counts. It prints counts only.
+- What that costs: any restore from a backup, on gene or another machine (Option B), needs Andreas and his stick.
+- One honest limit: during a drill, the decrypted key is in the memory of that one run, which runs as `copybook`, for
+  about a minute.
+- Until Nov 17 the old private key is also an Amp secret, so agents can recover alone during launch week. On Nov 17
+  every R2 backup is re-encrypted to the new key and the Amp secret is deleted.
+
 ## Who can deploy code that runs as the service user (from Tue Nov 17)
 
 File isolation stops accidental reads. It doesn't stop code that someone deliberately ships, so this is the list of
@@ -123,8 +145,8 @@ ways code gets to run as `copybook`, and who controls each. Deliberate-code risk
 | What | Who can change it | How |
 |---|---|---|
 | The API (`copybook/api`, `holdterm/src` and its npm lockfile) | Anyone who can push to main, including the agents | API code: any push to main deploys after a boot test; every deploy is logged on /status/ with its build. Per-deploy founder approval exists but is off (`DEPLOY_REQUIRE_APPROVAL=1` in the service's `copybook-api.env`, set with sudo, turns it on; then each sha waits for `echo <sha> \| sudo -u copybook tee -a …/deploy.approved`). Packages come from the lockfile, checked against npm's integrity hashes. |
-| The service's scripts and units (`/var/lib/copybook/copybook-api/ops`, `~copybook/.config/systemd/user`) | Andreas (root) | Installed once by `setup-service-user.sh` from the pinned `copybook/selfhost` code. The deployer doesn't update them; a change to `copybook/selfhost` reaches the service only when Andreas installs it with sudo. |
-| node, age, cloudflared under `/var/lib/copybook` | Andreas (root) | Installed by the setup script from upstream downloads it checks against pinned sha256s. |
+| The service's scripts and units (`/var/lib/copybook/copybook-api/ops`, `~copybook/.config/systemd/user`) | Andreas (root), and code already running as `copybook` | Installed once by `setup-service-user.sh` from the pinned `copybook/selfhost` code. The deployer doesn't update them, so a change to `copybook/selfhost` reaches the service when Andreas installs it with sudo. They are owned by `copybook`, so deployed API code (which runs as `copybook`) could also change them; that gives it nothing it doesn't already have. |
+| node, age, cloudflared under `/var/lib/copybook` | Andreas (root), and code already running as `copybook` | Installed by the setup script from upstream downloads it checks against pinned sha256s; owned by `copybook`, as above. |
 | The operating system, Tailscale, systemd | Andreas (root) | Through sudo, which needs his password; agents don't have it. |
 
 Not code: ingest's uploads (`/ingest/bundle`, archives of JSON and CSV), EDGAR filings and Stripe events are data that
