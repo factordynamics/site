@@ -349,8 +349,8 @@ function App() {
               )}
             </button>
             <A to="/alerts" className={`btn ${section === '/alerts' || section === '/account' ? 'ghost' : ''}`}>
-              <span className="hide-sm">Get alerts</span>
-              <span className="show-sm">Alerts</span>
+              <span className="hide-sm hide-md-nav">Get alerts</span>
+              <span className="show-sm show-md-nav">Alerts</span>
             </A>
           </div>
         </div>
