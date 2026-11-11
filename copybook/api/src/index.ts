@@ -826,6 +826,19 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
 
   // Operator: member counts by status, plan and test flag (counts only; agent sessions are logged).
+  // Operator: a test member's stored feed items (reviewers compare them with fresh renders), never a real member's and
+  // never the feed token. ?q= keeps items whose id or title contains any of the comma-separated strings.
+  if (req.method === 'GET' && path === '/ops/test-feed') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const c = url.searchParams.get('customer') ?? '';
+    const tm = c ? await getMember(env, c) : null;
+    if (!tm || !(tm.test || testAddress(tm.email ?? ''))) return json({ ok: false, error: 'test members only', code: 'not_test' }, 403, h);
+    const q = (url.searchParams.get('q') ?? '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const items = JSON.parse((await env.DB.get(`feed:${c}`)) ?? '[]') as { id: string; title: string; text: string; sent?: string; published?: string }[];
+    const keep = items.filter((x) => !q.length || q.some((k) => x.id.toLowerCase().includes(k) || x.title.toLowerCase().includes(k)));
+    return json({ ok: true, customer: c, items: keep.map((x) => ({ id: x.id, title: x.title, content_text: x.text, sent_at: x.sent ?? null, published: x.published ?? null })) }, 200, h);
+  }
+
   if (req.method === 'GET' && path === '/ops/member-counts') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const counts: Record<string, number> = {};
