@@ -1688,7 +1688,7 @@ export function Filings() {
 
 // ---------- stock ----------
 type STab = 'holders' | 'activity' | 'options' | 'filings'
-const STOCK_TAB: Record<STab, string> = { holders: 'Investors that own it', activity: 'Who bought and sold it this quarter', options: 'Options on it', filings: 'Stakes and insider trades' }
+const STOCK_TAB: Record<STab, string> = { holders: 'Investors that own it', activity: 'Who bought and sold it', options: 'Options on it', filings: 'Stakes and insider trades' }
 export function Stock({ ticker }: { ticker: string }) {
   const s = useLoad(
     () =>
@@ -1834,13 +1834,14 @@ export function Stock({ ticker }: { ticker: string }) {
         label={`${issuerName(d.name)} ownership`}
       />
       <TabPanel tab={tab}>
-      <Panel title={STOCK_TAB[tab]}>
+      <Panel title={tab === 'activity' ? activityTitle(movers) : STOCK_TAB[tab]}>
         {tab === 'holders' && <Grid rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty={<Empty title="None of the investors Holdterm follows owns it" hint={`Holdterm follows ${roster.funds.length} concentrated, long-term investors. A stock shows up here once one of them reports it in a 13F.`} action={['See the stocks they own most', '/consensus']} />} />}
         {tab === 'activity' && (
           <Grid
             rows={movers}
             href={fundHref}
-            cols={[holderCols[0], holderCols[2], { key: 'd', label: 'Trade size', num: true, render: (h) => <span className={(h.delta_value ?? 0) >= 0 ? 'pos' : 'neg'}>{signedUsd(h.delta_value)}</span>, sort: (h) => h.delta_value ?? 0 }, holderCols[1], holderCols[5]]}
+            // Phones keep the quarter each trade is from; the weight is on the Investors tab.
+            cols={[holderCols[0], { ...holderCols[2], label: 'What changed' }, { key: 'd', label: 'Trade size', num: true, render: (h) => <span className={(h.delta_value ?? 0) >= 0 ? 'pos' : 'neg'}>{signedUsd(h.delta_value)}</span>, sort: (h) => h.delta_value ?? 0 }, { ...holderCols[1], hideSm: true }, holderCols[5]]}
           />
         )}
         {tab === 'options' && (
@@ -1859,6 +1860,12 @@ export function Stock({ ticker }: { ticker: string }) {
   )
 }
 
+/** The trades tab's heading names the quarter, or says the trades come from each investor's latest 13F when
+ * those are for different quarters (the As of column says which). */
+function activityTitle(rows: StockHolder[]) {
+  const qs = [...new Set(rows.map((h) => h.quarter))]
+  return qs.length === 1 ? `Who bought and sold it in ${quarterLabel(qs[0])}` : 'Who bought and sold it, in each investor’s latest 13F'
+}
 const FORM: Record<Event['kind'], string> = { '13d': '13D', '13g': '13G', form4: 'Form 4' }
 /** Where a stock page's numbers come from, naming the quarters when its holders' latest 13Fs differ:
  * "From each investor’s latest 13F with the SEC: 12 for Q3 2026, 31 for Q2 2026". */
