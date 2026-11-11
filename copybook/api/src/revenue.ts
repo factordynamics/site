@@ -197,7 +197,9 @@ export async function ensureInvoiceTerms(env: Env, sub: any, plan: string | null
     ...(founding && line ? [{ name: 'Price', value: line }] : []),
     { name: 'Company', value: extra.company?.trim().slice(0, 140) || had.find((f) => f.name === 'Company')?.value || '' },
     { name: 'PO', value: extra.po?.trim().slice(0, 140) || had.find((f) => f.name === 'PO')?.value || '' },
-    ...had.filter((f) => !['Price', 'Company', 'PO'].includes(f.name)),
+    // Invoiced (net-30) subscriptions say their terms in words, not only by the due date.
+    ...(sub.collection_method === 'send_invoice' ? [{ name: 'Payment terms', value: `Net ${sub.days_until_due ?? 30}` }] : []),
+    ...had.filter((f) => !['Price', 'Company', 'PO', 'Payment terms'].includes(f.name)),
   ].filter((f) => f.value).slice(0, 4);
   const footer = footerFor(env, plan);
   if (c.invoice_settings?.footer === footer && JSON.stringify(had.map((f) => [f.name, f.value])) === JSON.stringify(want.map((f) => [f.name, f.value]))) return { result: 'already', footer, fields: want };
@@ -219,7 +221,10 @@ export async function fundInvoice(env: Env, email: string, name?: string, po?: s
   const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': 'fund_yearly', active: true })).data?.[0];
   if (!price) throw new Error('no active fund_yearly price');
   const founding = Date.now() < FOUNDING_UNTIL;
-  const sub = await stripe(env, 'POST', 'subscriptions', { customer, 'items[0][price]': price.id, collection_method: 'send_invoice', days_until_due: 30, description: fundMemo(env), 'metadata[copybook]': 'fund', ...(founding ? { 'metadata[founding]': 'true' } : {}) });
+  const sub = await stripe(env, 'POST', 'subscriptions', { customer, 'items[0][price]': price.id, collection_method: 'send_invoice', days_until_due: 30, description: fundMemo(env),
+    // Card or ACH Direct Debit on the hosted invoice page ("Pay online"): per-payment fees only, no bank details printed.
+    'payment_settings[payment_method_types][0]': 'card',
+    'payment_settings[payment_method_types][1]': 'us_bank_account', 'metadata[copybook]': 'fund', ...(founding ? { 'metadata[founding]': 'true' } : {}) });
   const terms = await ensureInvoiceTerms(env, sub, 'fund', { company: name, po });
   let inv = await stripe(env, 'GET', `invoices/${sub.latest_invoice}`);
   // A draft takes the terms as its memo, and the customer's footer and fields (set after it was drafted); then it goes out now.
