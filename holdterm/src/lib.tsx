@@ -391,6 +391,15 @@ export function Tabs<T extends string>({ value, options, onChange, label }: { va
           </button>
         )
       })}
+      {/* Phones: when more tabs are off to the right, an arrow at the edge says so and scrolls to them. A pointer
+          shortcut only: keyboard users move with the arrow keys, so it stays out of the tab order and the tree. */}
+      {(edge === 'fade-right' || edge === 'fade-both') && (
+        <span className="tabs-more" aria-hidden onClick={() => row.current?.scrollBy({ left: row.current.clientWidth * 0.6, behavior: 'smooth' })}>
+          <svg viewBox="0 0 16 16" width="16" height="16">
+            <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      )}
     </div>
   )
 }

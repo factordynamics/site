@@ -90,6 +90,8 @@ export type Event = {
   shares_after: number | null
   percent_of_class: number | null
   change_vs_13f: number | null
+  /** The same investor's previous 13D/G stake in this company, from the events file (set by loadEvents). */
+  prev_percent?: number
 }
 export type HistoryRow = { quarter: string; report_date: string; filing_date: string; total_value: number; long_value?: number; equity_value?: number; position_count: number; status: string; sec_url: string }
 export type StockHolder = {
@@ -349,7 +351,19 @@ export const loadHistory = (slug: string) =>
     // Skip a quarter whose upstream row already cites the second filing.
     return { history: d.history.map((r) => (add[r.quarter] && !JSON.stringify(r).includes(c?.history_source?.[r.quarter] ?? '\u0000') ? { ...r, total_value: r.total_value + add[r.quarter], equity_value: r.equity_value == null ? undefined : r.equity_value + add[r.quarter] } : r)) }
   })
-export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (seen(d.updated_at), (d.events = d.events.filter((e) => inRoster(e.slug))), d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector, e.cusip)))), d))
+export const loadEvents = () => get<{ updated_at: string; window_days: number; events: Event[] }>(DATA + 'events.json').then((d) => (seen(d.updated_at), (d.events = d.events.filter((e) => inRoster(e.slug))), d.events.forEach((e) => (fillTicker(e), (e.sector = sectorOf(e.ticker || e.former, e.sector, e.cusip)))), prevStakes(d.events), d))
+/** Each 13D/G stake update gets the investor's previous stake in the same company, when the file has it, so a
+ * page can say "Cut from 70.8%" instead of "Stake update". */
+function prevStakes(events: Event[]) {
+  const stakes = events.filter((e) => e.kind !== 'form4' && e.percent_of_class != null && (e.cusip || e.ticker)).sort((a, b) => a.filing_date.localeCompare(b.filing_date))
+  const last = new Map<string, number>()
+  for (const e of stakes) {
+    const k = `${e.slug}|${e.cusip || e.ticker}`
+    const p = last.get(k)
+    if (p != null && p !== e.percent_of_class) e.prev_percent = p
+    last.set(k, e.percent_of_class!)
+  }
+}
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
 export const loadInsiders = () => get<{ updated_at: string; rows: Insider[] } | Insider[]>(DATA + 'insiders.json').then((d) => (Array.isArray(d) ? d : d.rows ?? [])).catch(() => null)
 /** Tickers Holdterm fills from src/tickers.json, each with every CUSIP of its issuer group (classes, and a

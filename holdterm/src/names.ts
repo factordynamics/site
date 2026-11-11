@@ -107,7 +107,11 @@ const INVERTED: Record<string, string> = { 'Berkley W R': 'W. R. Berkley', 'Full
 export function issuerName(n: string | null | undefined): string {
   if (!n) return ''
   // EDGAR leftovers: state tags ("Inc/", "Inc./tx", "Inc \\tx\\"), "Plc New", "Pub", "Sab De Cv", "Joint Stock Co".
-  let t = n.replace(/^Joint Stock (Co|Company)\s+/i, '')
+  // Doubled-up names: "SAP (SAP)" and a fund plus its trust, "Jensen Quality Growth ETF Jensen Quality ETF".
+  let t = n
+    .replace(/^(.*\b(\S+))\s+\(\2\)$/, '$1')
+    .replace(/^(.+?\bETF)\s+.+\bETF$/, '$1')
+    .replace(/^Joint Stock (Co|Company)\s+/i, '')
   for (let prev = ''; prev !== t; ) {
     prev = t
     t = t.replace(/\s*[\\/]+[a-z]{0,3}[\\/]*$/i, '').replace(/[,\s]+(Inc\.?|Corp\.?|Plc|New|Pub|Sab De Cv|S\.A\.B\. de C\.V\.?)$/i, '')

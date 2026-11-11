@@ -6,7 +6,7 @@ import { aggregate, freshness, funds, loadBooks, loadIndex, loadStockIndex, sear
 import { A, navigate, usd, usePath } from './lib'
 import { dataSlug, fundPath, issuerName, publicSlug } from './names'
 import { price as PRICE } from './config'
-import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Guide, Home, ISSUES, NotFound, Privacy, Stock, Terms } from './pages'
+import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Guide, Home, NotFound, reportError, Privacy, Stock, Terms } from './pages'
 
 // [path, label, g-key]; alerts is the header's button, not a nav tab.
 const NAV: [string, string, string][] = [
@@ -447,7 +447,7 @@ function App() {
             <A to="/terms">Terms</A>
             <A to="/privacy">Privacy</A>
             <a href={`mailto:${CONTACT}`}>Contact</a>
-            <a href={ISSUES}>Report a data error</a>
+            <a href={reportError(path)}>Report a data error</a>
           </nav>
         </div>
       </footer>

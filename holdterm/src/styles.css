@@ -1765,7 +1765,9 @@ a.hb-row:hover {
     margin: 0;
   }
   .intro p {
-    display: none;
+    margin: 4px 0 0;
+    font-size: 14px;
+    line-height: 1.4;
   }
   /* Phones: one compact row (short copy, button, close), so the filings table stays above the fold. */
   .upsell {
@@ -2169,14 +2171,25 @@ p a,
     padding: 9px 11px;
     flex: none;
   }
-  .tabs.fade-right {
-    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
-  }
-  .tabs.fade-left {
+  /* More tabs to the right: an arrow on a fade at the edge (.tabs-more); to the left, a fade alone. */
+  .tabs.fade-left,
+  .tabs.fade-both {
     mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent);
   }
-  .tabs.fade-both {
-    mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  .tabs-more {
+    position: sticky;
+    right: 0;
+    flex: none;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 44px;
+    margin-right: -1px;
+    padding-right: 4px;
+    color: var(--fg2);
+    background: linear-gradient(to right, transparent, var(--bg) 55%);
+    cursor: pointer;
   }
 }
 /* ---------- stock page header ---------- */
@@ -2437,25 +2450,17 @@ p a,
 .ap-inbox .ap-note-top {
   color: var(--fg2);
 }
-.ap-inbox .ap-note-title {
-  font-size: 14px;
-  line-height: 1.35;
-}
-/* One line of preview under each subject, as a mail app shows it, so the subjects carry the inbox. */
 .ap-inbox .ap-note-body {
-  color: var(--dim);
-  -webkit-line-clamp: 1;
-  margin-top: 3px;
+  color: var(--fg2);
+  -webkit-line-clamp: 2;
 }
-/* The channels still to come: a dashed card next to the ones included today. */
-.ap-channel.ap-channel-soon {
-  background: transparent;
-  border-style: dashed;
-  border-color: var(--line2);
-  box-shadow: none;
+.ap-soon {
+  margin: 14px 0 0;
+  color: var(--fg2);
+  font-size: 14px;
 }
-.ap-channel-soon p {
-  color: var(--dim);
+.ap-soon .tag {
+  margin-right: 6px;
 }
 /* Phone lock screen with push notifications. */
 .ap-phone {

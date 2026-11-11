@@ -178,7 +178,7 @@ export function PushPreview({ s, compact = false }: { s: Samples; compact?: bool
             <div>
               <div className="ap-note-top">
                 <b>Holdterm</b>
-                <span>{i === 0 ? 'now' : `${i * 7 + 2}m ago`}</span>
+                <span>{i === 0 ? 'now' : 'earlier'}</span>
               </div>
               <div className="ap-note-title">{p.title}</div>
               <div className="ap-note-body">{p.body}</div>
