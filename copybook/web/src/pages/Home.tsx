@@ -540,7 +540,7 @@ function SeasonPill() {
       {/* Superinvestors first, the same count /season/ leads with; on a phone the line wraps rather than cutting off. */}
       <span className="min-w-0 py-0.5 text-left leading-snug">
         {quarterLabel(sn.quarter)} 13F season
-        {d.data ? `: ${d.data.featured.filed} of ${d.data.featured.total} superinvestors still filing · ${d.data.curated.filed} of ${d.data.curated.total} funds filed` : ''}
+        {d.data ? `: ${d.data.featured.filed} of ${d.data.featured.total} superinvestors have filed their ${quarterLabel(sn.quarter).split(' ')[0]} 13F · ${d.data.curated.filed} of ${d.data.curated.total} funds filed` : ''}
         {left ? ` · ${left} left` : ''}
       </span>
       <Arrow />

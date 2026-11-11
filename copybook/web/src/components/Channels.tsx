@@ -14,6 +14,10 @@ type Channels = {
   feed: { json_url: string; rss_url: string } | null
   /** With a working chat or webhook, alerts go there instead of email; true sends email as well (payments, Nov 11). */
   keep_email?: boolean
+  /** Destinations that took a connect message or a test; only these replace alert email. */
+  verified?: string[]
+  /** Where "Send a test" sends (email only with keep_email on or no chat set). */
+  test_sends?: string[]
   /** 'team' for a Copy Fund owner: these channels post the team's alerts. */
   scope?: 'team' | 'personal'
   /** Destinations that stopped delivering: retries ran out, or the destination was revoked. */
@@ -24,7 +28,7 @@ type Channels = {
 export type Failing = Partial<Record<'discord' | 'slack' | 'telegram' | 'webhook', { reason: string; since: string }>>
 export const CHANNEL_LABEL = { discord: 'Discord', slack: 'Slack', telegram: 'Telegram', webhook: 'The webhook' } as const
 const sinceLabel = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-type Put = Partial<{ keep_email: boolean; discord: string | null; slack: string | null; telegram: { bot_token: string; chat_id: string } | null; webhook: string | null; rotate_secret: boolean }>
+type Put = Partial<{ keep_email: boolean; discord: string | null; slack: string | null; telegram: { bot_token: string; chat_id?: string } | null; webhook: string | null; rotate_secret: boolean }>
 
 const field = 'h-10 w-full min-w-0 rounded-xl bg-paper px-3.5 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]'
 const why = (e: unknown) => (e instanceof ApiError && e.code === 'already_team_channel' ? 'Already your team’s channel. Alerts reach it once; no need to add it here.' : e instanceof ApiError && e.detail ? e.detail : 'That didn’t save. Please try again.')
@@ -102,7 +106,7 @@ export function Channels() {
               ? 'A chat, feed or webhook you add here is your team’s: every alert for the team’s follows posts there once, as it happens. Seats can add their own as well.'
               : c?.team
                 ? 'Add your own chat, feed or webhook for alerts on your settings, as they happen. The team’s channels come first; the plan owner manages them.'
-                : 'Add Telegram or Slack so alerts never wait on email limits. Once a chat or webhook works, alerts go there instead of email; if it stops working, email takes over.'}
+                : 'Add Telegram or Slack so alerts never wait on email limits. Saving one sends it a “Connected ✓” message; once it’s verified, alerts go there instead of email, and if it stops working, email takes over.'}
           </p>
           {c && c.scope !== 'team' && (
             <label className="mt-3 flex items-center gap-2.5 text-[14px] text-ink">
@@ -119,9 +123,12 @@ export function Channels() {
           {note('keep_email')}
         </div>
         {configured && (
-          <Button size="sm" variant="outline" onClick={sendTest}>
-            Send a test
-          </Button>
+          <div className="text-right">
+            <Button size="sm" variant="outline" onClick={sendTest}>
+              Send a test
+            </Button>
+            {c?.test_sends?.length ? <p className="mt-1 text-[12px] text-ink-3">To {listLabel(c.test_sends)}</p> : null}
+          </div>
         )}
       </div>
       {test && (
@@ -139,7 +146,8 @@ export function Channels() {
         <div className="mt-2 divide-y divide-line">
           {c.team && <TeamChannels t={c.team} />}
           <UrlChannel
-            name="Slack"
+            name={<>Slack{vbadge(c, 'slack')}</>}
+            label="Slack"
             hint={
               <>
                 An incoming webhook URL from Slack (<span className="font-mono text-[12px]">https://hooks.slack.com/services/…</span>). Create one under Apps → Incoming Webhooks in your workspace.
@@ -151,7 +159,8 @@ export function Channels() {
             note={<>{fail(c.failing, 'slack')}{note('slack')}</>}
           />
           <UrlChannel
-            name="Discord"
+            name={<>Discord{vbadge(c, 'discord')}</>}
+            label="Discord"
             hint={
               <>
                 A channel webhook URL (<span className="font-mono text-[12px]">https://discord.com/api/webhooks/…</span>), from the channel’s Integrations settings.
@@ -162,7 +171,7 @@ export function Channels() {
             onSave={(v) => save('discord', { discord: v })}
             note={<>{fail(c.failing, 'discord')}{note('discord')}</>}
           />
-          <Telegram value={c.telegram} onSave={(v) => save('telegram', { telegram: v })} note={<>{fail(c.failing, 'telegram')}{note('telegram')}</>} />
+          <Telegram value={c.telegram} badge={vbadge(c, 'telegram')} onSave={(v) => save('telegram', { telegram: v })} note={<>{fail(c.failing, 'telegram')}{note('telegram')}</>} />
           <Row name="Private feed" hint="An RSS and JSON Feed of your alerts for a reader or your own tools. The link is the password: anyone with it can read your alerts.">
             {c.feed ? (
               <>
@@ -189,6 +198,26 @@ export function Channels() {
         </div>
       )}
     </section>
+  )
+}
+
+const NAMES: Record<string, string> = { telegram: 'Telegram', slack: 'Slack', discord: 'Discord', webhook: 'the webhook', feed: 'your feed', email: 'email' }
+const listLabel = (xs: string[]) => {
+  const n = xs.map((x) => NAMES[x] ?? x)
+  return n.length > 1 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n[0]
+}
+// A saved chat or webhook: verified (took the connect message or a test, so it replaces alert email unless
+// keep_email is on) or not yet.
+function vbadge(c: Channels, k: 'slack' | 'discord' | 'telegram' | 'webhook') {
+  if (!c[k] || !c.verified) return null
+  return c.verified.includes(k) ? (
+    <Badge tone="up" className="ml-2 align-middle">
+      {c.keep_email ? 'Verified' : 'Verified · replaces email'}
+    </Badge>
+  ) : (
+    <Badge tone="warn" className="ml-2 align-middle">
+      Not verified
+    </Badge>
   )
 }
 
@@ -265,7 +294,7 @@ function Row({ name, hint, children }: { name: ReactNode; hint: ReactNode; child
   )
 }
 
-function UrlChannel({ name, hint, value, placeholder, onSave, note }: { name: string; hint: ReactNode; value: string | null; placeholder: string; onSave: (v: string | null) => Promise<boolean>; note: ReactNode }) {
+function UrlChannel({ name, label, hint, value, placeholder, onSave, note }: { name: ReactNode; label: string; hint: ReactNode; value: string | null; placeholder: string; onSave: (v: string | null) => Promise<boolean>; note: ReactNode }) {
   const [edit, setEdit] = useState(false)
   const [v, setV] = useState('')
   return (
@@ -291,7 +320,7 @@ function UrlChannel({ name, hint, value, placeholder, onSave, note }: { name: st
             }
           }}
         >
-          <input type="url" required value={v} onChange={(e) => setV(e.target.value)} placeholder={placeholder} aria-label={`${name} webhook URL`} className={`${field} flex-1 basis-64 font-mono text-[13px]`} />
+          <input type="url" required value={v} onChange={(e) => setV(e.target.value)} placeholder={placeholder} aria-label={`${label} webhook URL`} className={`${field} flex-1 basis-64 font-mono text-[13px]`} />
           <Button size="sm" type="submit">
             Save
           </Button>
@@ -307,13 +336,13 @@ function UrlChannel({ name, hint, value, placeholder, onSave, note }: { name: st
   )
 }
 
-function Telegram({ value, onSave, note }: { value: Channels['telegram']; onSave: (v: { bot_token: string; chat_id: string } | null) => Promise<boolean>; note: ReactNode }) {
+function Telegram({ value, badge, onSave, note }: { value: Channels['telegram']; badge: ReactNode; onSave: (v: { bot_token: string; chat_id?: string } | null) => Promise<boolean>; note: ReactNode }) {
   const [edit, setEdit] = useState(false)
   const [token, setToken] = useState('')
   const [chat, setChat] = useState('')
   return (
     <Row
-      name="Telegram"
+      name={<>Telegram{badge}</>}
       hint={
         <>
           Create a bot with <span className="font-mono text-[12px]">@BotFather</span>, send it a message, then enter its token and your chat id, or <span className="font-mono text-[12px]">@channelname</span> for a channel the bot is in.
@@ -335,7 +364,7 @@ function Telegram({ value, onSave, note }: { value: Channels['telegram']; onSave
           className="grid gap-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto]"
           onSubmit={async (e) => {
             e.preventDefault()
-            if (await onSave({ bot_token: token.trim(), chat_id: chat.trim() })) {
+            if (await onSave({ bot_token: token.trim(), ...(chat.trim() ? { chat_id: chat.trim() } : {}) })) {
               setEdit(false)
               setToken('')
               setChat('')
@@ -343,10 +372,11 @@ function Telegram({ value, onSave, note }: { value: Channels['telegram']; onSave
           }}
         >
           <input required value={token} onChange={(e) => setToken(e.target.value)} placeholder="Bot token" aria-label="Telegram bot token" autoComplete="off" className={`${field} font-mono text-[13px]`} />
-          <input required value={chat} onChange={(e) => setChat(e.target.value)} placeholder="Chat id" aria-label="Telegram chat id" className={`${field} font-mono text-[13px]`} />
+          <input value={chat} onChange={(e) => setChat(e.target.value)} placeholder="Chat id (optional)" aria-label="Telegram chat id, optional" aria-describedby="tg-chat-hint" className={`${field} font-mono text-[13px]`} />
           <Button size="sm" type="submit" className="h-10">
             Save
           </Button>
+          <p id="tg-chat-hint" className="text-[12px] text-ink-3 sm:col-span-3">Chat id: leave blank, and we find it after you message your bot.</p>
         </form>
       )}
       {note}
@@ -359,7 +389,7 @@ function Webhook({ c, onSave, note }: { c: Channels; onSave: (b: Put) => Promise
   const [edit, setEdit] = useState(false)
   return (
     <Row
-      name="Signed webhook"
+      name={<>Signed webhook{vbadge(c, 'webhook')}</>}
       hint={
         <>
           A JSON POST to your endpoint for each alert, signed in the <span className="font-mono text-[12px]">Copybook-Signature</span> header (HMAC-SHA256 of <span className="font-mono text-[12px]">t.body</span>). Failed deliveries retry for 12 hours.

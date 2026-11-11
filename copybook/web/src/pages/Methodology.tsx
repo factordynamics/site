@@ -167,6 +167,13 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
           <dt>Ticker</dt>
           <dd>Empty when the CUSIP has no single US listing (many foreign shares, units and warrants) or no mapping yet. The CUSIP and issuer are always shown.</dd>
         </div>
+        <div id="reissued-cusip" className="scroll-mt-24">
+          <dt>Reissued CUSIP</dt>
+          <dd>
+            When an issuer’s CUSIP changes, the old and new CUSIPs count as one position: holders reporting either are counted on the stock page, and a fund that kept its shares hasn’t sold them. See{' '}
+            <a href="#moves">CUSIP changes</a>.
+          </dd>
+        </div>
       </dl>
     ),
   },

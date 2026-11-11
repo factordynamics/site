@@ -105,7 +105,7 @@ function VendorSummary() {
         {row('Public anyway', VENDOR.publicBook)}
         {row('Controls today', list(VENDOR.today))}
         {row('From Nov 17, 2026', list(VENDOR.nov17))}
-        {row('What we don’t have', <span className="font-medium text-ink">{VENDOR.noCert}</span>)}
+        {row('What we don’t have', <><span className="font-medium text-ink">{VENDOR.noCert}</span> {VENDOR.training}</>)}
         {row('If the founder is unreachable', VENDOR.founder)}
       </dl>
       <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-4 text-[14px]">

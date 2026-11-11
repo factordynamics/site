@@ -115,7 +115,9 @@ export class ApiError extends Error {
   retryAt?: number
   /** /signup's already_member or already_sent: when the last sign-in email went. */
   sentAt?: string
-  constructor(status: number, body?: { code?: string; error?: string; retry_after?: number; retry_after_seconds?: number; retry_at?: string; sent_at?: string; sign_in_sent_at?: string } | null) {
+  /** A /signup 429 for an email that already has an account. */
+  alreadyMember?: boolean
+  constructor(status: number, body?: { code?: string; error?: string; retry_after?: number; retry_after_seconds?: number; retry_at?: string; sent_at?: string; sign_in_sent_at?: string; already_member?: boolean } | null) {
     super(`api ${status}`)
     this.status = status
     this.code = body?.code
@@ -123,6 +125,7 @@ export class ApiError extends Error {
     const wait = body?.retry_after_seconds ?? body?.retry_after
     this.retryAt = body?.retry_at ? Date.parse(body.retry_at) : typeof wait === 'number' ? Date.now() + wait * 1000 : undefined
     this.sentAt = body?.sign_in_sent_at ?? body?.sent_at
+    this.alreadyMember = body?.already_member === true
   }
 }
 

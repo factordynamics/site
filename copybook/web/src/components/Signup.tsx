@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { pricingTo } from '../lib/data'
 import { signupLive, TRIAL_DAYS } from '../config'
 import { call, getToken, isFree, isPaying, useMemberState } from '../lib/account'
-import { signupError, signupNote } from './FollowSignup'
+import { signupDone, signupError } from './FollowSignup'
 import { utmTags } from '../lib/attribution'
 import { Arrow, Button, Check } from './ui'
 
@@ -68,7 +68,7 @@ export function Signup({ source, className = '' }: { source: string; className?:
               const t = setTimeout(() => setSlow(true), 1000)
               try {
                 const r = await call<{ ok: boolean; created?: boolean }>('/signup', { body: { email: v, source, website, ...utmTags() } })
-                setState({ s: r.created || website ? 'done' : 'member', note: signupNote(r) })
+                setState({ s: r.created || website ? 'done' : 'member', note: signupDone(r) })
                 // A trial started next from this browser checks out with the same email, so it lands on this account.
                 try {
                   localStorage.setItem('copybook-signup-email', v)

@@ -28,6 +28,8 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
       ['Who runs it?', 'Factor Dynamics. Copybook is run by its founder with AI coding agents that maintain and deploy it. There is no security team or on-call rotation.'],
       ['Security contact', <>hello@factordynamics.com, or the {a('/contact/', 'contact form')}. We acknowledge security reports quickly; please report before disclosing.</>],
       ['Certifications and audits', VENDOR.noCert],
+      ['Legal entity', 'Pending; shown on invoices once registered.'],
+      ['Cyber or E&O insurance', 'None held today.'],
     ],
   ],
   [
@@ -62,7 +64,9 @@ const SECTIONS: [string, [string, ReactNode][]][] = [
       ['Controls in place today', ul(VENDOR.today)],
       ['Controls from Nov 17, 2026', ul(VENDOR.nov17)],
       ['Change management', 'Code changes are made and deployed by the maintenance agents without per-deploy founder review. Every API deploy is logged on the status page with its build, and every website build shows its commit in the page footer.'],
-      ['Penetration testing and vulnerability scanning', 'No third-party penetration test has been done.'],
+      ['Penetration testing', 'None performed.'],
+      // Not claimed until the founder confirms it (PM, Nov 11).
+      ['MFA on admin accounts (GitHub, Cloudflare, Stripe, Amp)', 'Being confirmed by the founder; answer by Nov 17.'],
     ],
   ],
   [

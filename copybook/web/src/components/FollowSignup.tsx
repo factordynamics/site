@@ -17,14 +17,15 @@ export const CAP_MSG = 'Free accounts follow up to 10 investors. Remove one, or 
 
 // What /signup emails, by subject as payments sends them (copybook/api free.ts), so a reader knows what to look for.
 const SUBJECT = { first: "You're on the Copybook weekly", follow: 'Follow saved. Your Copybook sign-in link', link: 'Your Copybook sign-in link' }
-const etTime = (t: number | string) => `${new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).replace(' AM', ' am').replace(' PM', ' pm')} ET`
+// The reader's own clock, with its zone ("6:37 AM EST").
+const localTime = (t: number | string) => new Date(t).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 export const inboxLine = (subject: string) => `Check your inbox: your sign-in link is in the email “${subject}”.`
-export const alreadyLine = (at?: string) => `You’re already signed up. Your sign-in link is in the email we sent ${at ? `at ${etTime(at)}` : 'within the last hour'}.`
-type SignupRes = { ok: boolean; created?: boolean; code?: string; sent_at?: string; sign_in_sent_at?: string; following?: boolean; follow?: 'added' | 'already' | 'cap_reached' | 'sign_in'; sign_in_email?: 'not_needed' | 'sent' | 'rate_limited' }
-/** The line under a successful /signup: which email holds the sign-in link, or that one went out already. */
-export function signupNote(r: SignupRes): string | null {
+export const alreadyLine = (at?: string) => `You’re already signed up. Your sign-in link is in the email we sent ${at ? `at ${localTime(at)}` : 'within the last hour'}.`
+type SignupRes = { ok: boolean; created?: boolean; code?: string; sent_at?: string; sign_in_sent_at?: string; welcome?: string; following?: boolean; follow?: 'added' | 'already' | 'cap_reached' | 'sign_in'; sign_in_email?: 'not_needed' | 'sent' | 'rate_limited' | 'already_sent' }
+/** After a successful /signup: the line saying which email holds the sign-in link, or that one went out already. */
+export function signupDone(r: SignupRes): string | null {
   if (r.created) return inboxLine(SUBJECT.first)
-  if (r.code === 'already_member' || r.code === 'already_sent' || r.sign_in_email === 'rate_limited') return alreadyLine(r.sign_in_sent_at ?? r.sent_at)
+  if (r.code === 'already_member' || r.code === 'already_sent' || r.sign_in_email === 'already_sent' || r.sign_in_email === 'rate_limited') return alreadyLine(r.sign_in_sent_at ?? r.sent_at)
   if (r.sign_in_email === 'sent') return inboxLine(r.follow === 'added' ? SUBJECT.follow : SUBJECT.link)
   return null
 }
@@ -32,9 +33,10 @@ export function signupNote(r: SignupRes): string | null {
 export function signupError(err: unknown): string {
   if (err instanceof ApiError && (err.code === 'already_member' || err.code === 'already_sent')) return alreadyLine(err.sentAt)
   if (err instanceof ApiError && err.status === 429) {
+    if (err.alreadyMember) return 'You’re already signed up; use the link we emailed.'
     if (!err.retryAt) return err.detail ?? 'Too many tries. Please try again a little later.'
     const m = Math.max(1, Math.ceil((err.retryAt - Date.now()) / 60_000))
-    return `Too many tries. Try again in ${m} minute${m === 1 ? '' : 's'} (after ${etTime(err.retryAt)}).`
+    return `Too many tries. Try again in ${m} minute${m === 1 ? '' : 's'} (after ${localTime(err.retryAt)}).`
   }
   return err instanceof ApiError && err.status === 400 && err.detail ? err.detail : 'That didn’t go through. Please try again.'
 }
@@ -95,7 +97,7 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
             body: { email: v, website, source: `follow:${location.pathname}`, follow: chosen.map((p) => ({ kind, id: p.slug })), ...utmTags() },
             auth: Boolean(getToken()),
           })
-          setState({ s: 'done', following: r.following === true, capped: r.follow === 'cap_reached', note: signupNote(r) })
+          setState({ s: 'done', following: r.following === true, capped: r.follow === 'cap_reached', note: signupDone(r) })
           onDone?.()
           try {
             localStorage.setItem('copybook-signup-email', v)
@@ -113,9 +115,9 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
       {many && (
         <fieldset className="mb-2.5">
           <legend className="text-[12.5px] font-medium text-ink-3">Follow free</legend>
-          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5">
+          <div className="mt-0.5 flex flex-wrap gap-x-4">
             {people.map((p) => (
-              <label key={p.slug} className="inline-flex items-center gap-2 text-[14px] text-ink">
+              <label key={p.slug} className="inline-flex min-h-11 cursor-pointer items-center gap-2 pr-1 text-[14px] text-ink">
                 <input
                   type="checkbox"
                   checked={!off.includes(p.slug)}
@@ -146,12 +148,13 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
           className="h-10 min-w-[11rem] flex-1 rounded-full bg-paper px-4 text-[14.5px] text-ink shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
         />
         <Button type="submit" variant={extra || secondary ? 'outline' : 'primary'} disabled={state.s === 'sending' || !chosen.length} className="shrink-0">
-          {state.s === 'sending' ? 'Following…' : many ? `Follow ${chosen.length} free` : 'Follow free'}
+          {state.s === 'sending' ? 'Following…' : many && chosen.length ? `Follow ${chosen.length} free` : 'Follow free'}
         </Button>
         {extra}
       </div>
       {/* A field people never see; bots that fill it get a quiet success. */}
       <input type="text" name="website" tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} className="hidden" aria-hidden />
+      {many && !chosen.length && <p className="mt-2 text-[12.5px] text-ink-2">Pick at least one investor</p>}
       {state.s === 'sending' && slow && <p className="mt-2 text-[12.5px] text-ink-3">Creating your free account…</p>}
       {state.s === 'error' && (
         <p role="alert" className="mt-2 text-[12.5px] text-down">
