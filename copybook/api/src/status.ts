@@ -107,14 +107,24 @@ function uptime(s: ProbeState, now: number, hours: number) {
   return { uptime: n ? Math.round((ok / n) * 1e5) / 1e5 : null, checks: n, failed: n - ok };
 }
 
-/** The 13F alert path: amber when a 13F alert waits for its moves over 10 minutes, or alert mail waits for the daily reset. */
+/**
+ * The 13F alert path: amber when a 13F alert waits for its moves over 10 minutes, a row the publish gate held has
+ * waited over 30 minutes for its check, or alert mail waits for the daily reset.
+ */
 export async function alertHealth(env: Env, now: number) {
   const pending = JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as { accepted?: string }[];
   const ages = pending.map((p) => (p.accepted ? Math.round((now - Date.parse(p.accepted)) / 1000) : 0));
   const oldest = ages.length ? Math.max(...ages) : null;
   const reset = (JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as unknown[]).length;
-  const reasons = [...(oldest != null && oldest > 600 ? ['a 13F alert has waited over 10 minutes for its moves'] : []), ...(reset ? ['alert emails are waiting for the daily email reset'] : [])];
-  return { state: reasons.length ? 'amber' : 'ok', reasons, pending_moves: pending.length, oldest_pending_seconds: oldest, reset_queue: reset };
+  const held = JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as { accepted?: string; filing_date?: string; held?: unknown[] }[];
+  const heldAges = held.map((a) => Math.round((now - Date.parse(a.accepted ?? a.filing_date ?? '')) / 1000)).filter((x) => Number.isFinite(x));
+  const oldestHeld = heldAges.length ? Math.max(...heldAges) : null;
+  const reasons = [
+    ...(oldest != null && oldest > 600 ? ['a 13F alert has waited over 10 minutes for its moves'] : []),
+    ...(oldestHeld != null && oldestHeld > 1800 ? ['a 13F move held by the publish gate has waited over 30 minutes for its check'] : []),
+    ...(reset ? ['alert emails are waiting for the daily email reset'] : []),
+  ];
+  return { state: reasons.length ? 'amber' : 'ok', reasons, pending_moves: pending.length, oldest_pending_seconds: oldest, held_rows: held.reduce((s, a) => s + (a.held?.length ?? 0), 0), oldest_held_seconds: oldestHeld, reset_queue: reset };
 }
 
 /** 13F alerts waiting for their moves, and gene's last fallback send; the same shape on /health and status.json. */

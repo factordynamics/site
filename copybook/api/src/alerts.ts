@@ -1096,7 +1096,8 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
           held = g.held;
           moves = r.moves;
           changed = keepChanged(r.changed);
-          tickers = [...new Set(r.changed.map((x) => x.ticker).filter((t): t is string => !!t))];
+          // Watchers match on every row, held ones too: they get the alert with "TICKER: move pending check".
+          tickers = [...new Set([...r.changed, ...g.held].map((x) => x.ticker).filter((t): t is string => !!t))];
           break;
         }
         if (!moves && isExtra) {
@@ -1304,7 +1305,7 @@ export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promi
       // change nets into one share-based move.
       await lookupTickers(env, raw.changed);
       const r = gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip)));
-      ready.push({ ...p, moves: r.moves, changed: keepChanged(r.changed), tickers: [...new Set(r.changed.map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, moves_pending: undefined, held: r.held.length ? r.held : undefined });
+      ready.push({ ...p, moves: r.moves, changed: keepChanged(r.changed), tickers: [...new Set([...r.changed, ...r.held].map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, moves_pending: undefined, held: r.held.length ? r.held : undefined });
     } catch (e) {
       failed.push(`${p.accession}: ${e}`);
     }
@@ -1417,14 +1418,15 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
       if (!why) {
         ok.push(row);
         end(a, h, 'passed');
-      } else if (why === 'own_prior' && day) {
+      } else if (day && why === 'own_prior') {
         // own_prior can't tell a real trade (a quant fund doubling shares as the price halves) from a split nobody
-        // has listed. A day after acceptance with the build agreeing and still no split in splits.json, it goes out.
+        // has listed; a day on, with the build agreeing and still no split in splits.json, it goes out unmarked.
         ok.push(row);
         end(a, h, 'released_after_1d');
-      } else if ((why === 'units' || why === 'price_vs_filers') && day) {
-        // The filer's own value per share looks wrong (Mizuho Securities' Q3): after a day it goes out as filed,
-        // marked, in the email, the feed and the archive; never dropped silently.
+      } else if (day) {
+        // Every other rule (units, price vs filers, split basis): a day after acceptance, with the build still not
+        // clearing it, the row goes out as filed and marked ("Filer's reported value looks wrong; shown as filed")
+        // in the email, the feed and the archive. Never dropped silently.
         ok.push({ ...row, filer_value: true });
         end(a, h, 'shown_as_filed');
       } else still.push(h);
@@ -1546,6 +1548,7 @@ export const RECONCILE_MAIL_FROM = '2026-11-11T05:00:00Z';
 const MISMATCH = 0.1;
 /** The reconciliation log (v4: classes include totals and no_rows; v3 compared rows only). */
 const RECONCILED = 'alerts:reconciled:v4';
+const RECONCILED_PREV = 'alerts:reconciled:v3';
 
 /**
  * gene, every 5 minutes: each 13F alert with moves, once ingest's build serves its filing, row by row against the build
@@ -1703,7 +1706,9 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
 
 /** latency.json's `reconciliation`: "alerts reconciled: N of N" on /status/. */
 export async function reconciliation(env: Env): Promise<Record<string, unknown>> {
-  const log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
+  // The two hosts load a new build up to an hour apart: until gene writes the new log, show the previous one.
+  let log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
+  if (!log.length) log = JSON.parse((await env.DB.get(RECONCILED_PREV)) ?? '[]') as Reconciled[];
   return {
     checked: log.length,
     passed: log.filter((x) => x.result === 'pass').length,

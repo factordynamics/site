@@ -440,7 +440,7 @@ const verb = (r: MoveRow) => (!r.prev_shares ? 'new' : !r.shares ? 'exited' : r.
 /** Rows the publish gate held back, named without figures. */
 function heldLine(a: Alert13F): string {
   const names = (a.held ?? []).map((h) => `${h.ticker || h.display_name || h.issuer}${h.put_call ? ` ${h.put_call.toLowerCase()}s` : ''}${h.change ? ` (${h.change})` : ''}`);
-  return `Moves pending check: ${names.join(', ')}. Their figures failed a price check and are left out of this email and its totals; they follow once the full build of the filing confirms them.`;
+  return `${names.map((n) => `${n}: move pending check`).join('; ')}. Figures failed a price check and are left out of this email and its totals; they follow once the full build of the filing confirms them, or within 24 hours marked if the filer's own figures look wrong.`;
 }
 
 /** What the alert said, or what the build has, for one row of a correction. */
@@ -616,7 +616,9 @@ function filingHeadline(a: Alert13F, firm = false): string {
     const what = `${rowName(r)} (${[usd(r.value, false), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean).join(', ')})${a.reveal.rows.length > 1 ? ` + ${a.reveal.rows.length - 1} more` : ''}`;
     return a.reveal.confidential ? `${who} revealed ${what}, previously confidential` : `${who} added ${what} to its ${q} 13F`;
   }
-  if (a.moves) return `${who} ${q}${a.followup ? ' changes' : ''}: ${headlineMoves(a.moves) || 'no position changes'}`;
+  // Held rows have no figures to rank, so any of them may be the largest move: the subject says they're coming.
+  const held = a.held?.length ? ` +${a.held.length} pending check` : '';
+  if (a.moves) return `${who} ${q}${a.followup ? ' changes' : ''}: ${headlineMoves(a.moves) || (held ? 'moves' : 'no position changes')}${held}`;
   return `${who} filed its ${q} 13F`;
 }
 

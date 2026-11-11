@@ -638,6 +638,34 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('minute poll: a watcher of a held row gets the alert with the row pending check, and /status/ turns amber after 30 minutes', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    index = { managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: 'b-q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    await cron(17);
+    // Watches APH only, doesn't follow Buffett: APH's row is held (an unlisted 2:1 split read as a buy), AAPL's goes out.
+    await putMember('w', 'watcher@example.com', 'active', []);
+    await putFollows('w', { stocks: ['APH'] });
+    const acc = '0000950123-26-077777';
+    secFiles.feed = `<feed><entry><title>13F-HR - BERKSHIRE (0001067983) (Filer)</title><updated>${today}T16:05:00-05:00</updated><category scheme="https://www.sec.gov/" label="form type" term="13F-HR"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry></feed>`;
+    const dir = `Archives/edgar/data/1067983/${acc.replace(/-/g, '')}/`;
+    secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: '9999.xml', size: '4000' }] } });
+    secFiles[`${dir}primary_doc.xml`] = '<edgarSubmission><periodOfReport>09-30-2026</periodOfReport></edgarSubmission>';
+    const it = (name: string, cusip: string, value: number, shares: number) => `<ns1:infoTable><ns1:nameOfIssuer>${name}</ns1:nameOfIssuer><ns1:cusip>${cusip}</ns1:cusip><ns1:value>${value}</ns1:value><ns1:shrsOrPrnAmt><ns1:sshPrnamt>${shares}</ns1:sshPrnamt></ns1:shrsOrPrnAmt></ns1:infoTable>`;
+    secFiles[`${dir}9999.xml`] = `<ns1:informationTable>${it('AMPHENOL CORP', '032095101', 88_303_070, 1_047_486)}${it('APPLE INC', '037833100', 160_000_000, 800_000)}</ns1:informationTable>`;
+    hist.m.set('h/warren-buffett/2026Q2.json', new TextEncoder().encode(JSON.stringify({ holdings: [{ cusip: '032095101', put_call: null, issuer: 'AMPHENOL CORP', ticker: 'APH', shares: 614_660, value: 108_376_851 }, { cusip: '037833100', put_call: null, issuer: 'APPLE INC', ticker: 'AAPL', shares: 1_000_000, value: 200_000_000 }] })));
+    await cron(5);
+    const mail = sent.find((m) => m.to[0] === 'watcher@example.com')!;
+    expect(mail.subject).toBe('Buffett Q3: AAPL -$40.0M +1 pending check');
+    expect(mail.text).toContain('APH (added): move pending check');
+    expect(mail.text).not.toMatch(/APH [+-]\$/);
+    // Held over 30 minutes: the 13F path on /status/ is amber.
+    const { alertHealth } = await import('../src/status');
+    const at = Date.parse(`${today}T16:05:00-05:00`);
+    const later = await alertHealth(env, at + 31 * 60_000);
+    expect([later.state, later.held_rows, later.reasons]).toEqual(['amber', 1, ['a 13F move held by the publish gate has waited over 30 minutes for its check']]);
+    expect((await alertHealth(env, at + 29 * 60_000)).state).toBe('ok');
+  });
+
   it('minute poll: emails a curated 13F within the minute with its moves, targeted by follows and watchlist, once', async () => {
     const today = new Date().toISOString().slice(0, 10);
     const row = (slug: string, cik: string, extra: Record<string, unknown> = {}) => ({ ok: true, slug, cik, manager: slug === 'warren-buffett' ? 'Warren Buffett' : slug, name: 'Berkshire Hathaway Inc', featured: true, form: '13F-HR', accession: `${slug}-q2`, report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2', ...extra });
