@@ -147,7 +147,7 @@ function StockCell({ t, name, former, label }: { t: string | null; name: string;
 const aggCols = {
   ticker: { key: 'ticker', label: 'Ticker', render: (r: Agg) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, sort: (r: Agg) => r.ticker ?? r.name, width: '80px' } as Col<Agg>,
   name: { key: 'name', label: 'Company', link: true, render: (r: Agg) => <span className="trunc">{r.name}</span>, sort: (r: Agg) => r.name } as Col<Agg>,
-  sector: { key: 'sector', label: 'Sector', hideSm: true, render: (r: Agg) => <Sector s={r.sector} />, sort: (r: Agg) => r.sector } as Col<Agg>,
+  sector: { key: 'sector', label: 'Sector', hideSm: true, hide: 'lg', render: (r: Agg) => <Sector s={r.sector} />, sort: (r: Agg) => r.sector } as Col<Agg>,
 }
 const stockHref = (r: { ticker: string | null }) => (r.ticker ? `/s/${encodeURIComponent(r.ticker)}` : null)
 
@@ -229,11 +229,12 @@ const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => 
   { key: 'act', label: 'What happened', render: (e) => <ActionTag e={e} />, sort: (e) => e.action },
   { key: 'pc', label: 'Stake', num: true, hideSm: true, render: (e) => (e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 2 : 1)}%` : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
   { key: 'val', label: 'Value', num: true, hideSm: true, render: (e) => (e.value_usd != null ? <span className={e.action === 'sell' ? 'neg' : e.action === 'buy' ? 'pos' : ''}>{usd(e.value_usd)}</span> : <span className="dim">—</span>), sort: (e) => e.value_usd ?? -1 },
-  { key: 'sa', label: 'Shares after', num: true, hideSm: true, render: (e) => num(e.shares_after), sort: (e) => e.shares_after ?? -1 },
+  { key: 'sa', label: 'Shares after', num: true, hideSm: true, hide: 'lg', render: (e) => num(e.shares_after), sort: (e) => e.shares_after ?? -1 },
   {
     key: 'sec',
     label: <span className="sr">SEC filing</span>,
     hideSm: true,
+    hide: 'md',
     render: (e) => (
       <a href={e.url} target="_blank" rel="noreferrer" className="ext" aria-label={`View SEC filing ${e.id}`}>
         View filing ↗
@@ -597,11 +598,11 @@ function byCompany(hs: Holding[]) {
   return [...by.values()]
 }
 /** What a table's less obvious columns mean, in a sentence each, above the table (hidden on phones). */
-function ColKey({ items }: { items: [string, string][] }) {
+function ColKey({ items }: { items: [string, string, ('lg' | 'md')?][] }) {
   return (
     <dl className="col-key">
-      {items.map(([t, d]) => (
-        <div key={t}>
+      {items.map(([t, d, hide]) => (
+        <div key={t} className={hide ? `hide-${hide}` : undefined}>
           <dt>{t}</dt>
           <dd>{d}</dd>
         </div>
@@ -661,13 +662,14 @@ export function Funds() {
               sort: (m) => m.firm,
             },
             { key: 'v', label: 'Portfolio', num: true, hideSm: true, render: (m) => usd(longOf(m).v), sort: (m) => longOf(m).v, title: 'Value of its US-listed stocks in its latest 13F; options left out' },
-            { key: 'n', label: 'Stocks', num: true, hideSm: true, render: (m) => longOf(m).n, sort: (m) => longOf(m).n },
+            { key: 'n', label: 'Stocks', num: true, hide: 'md', hideSm: true, render: (m) => longOf(m).n, sort: (m) => longOf(m).n },
             { key: 't', label: 'In top 10', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.top10, 0), sort: (m) => metric.get(m.slug)?.top10 ?? 0, title: 'Share of the portfolio in its ten biggest holdings' },
             { key: 'to', label: 'Traded', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.turnover, 0), sort: (m) => metric.get(m.slug)?.turnover ?? 0, title: 'Last quarter: half of everything bought and sold, as a share of the average portfolio' },
             {
               key: 'top',
               label: 'Biggest holdings',
               hideSm: true,
+              hide: 'md',
               render: (m) => (
                 <span className="tks">
                   {byCompany(m.top.filter((h) => isStockLine(h) && !isFundLike(h))).slice(0, 5).map(({ h, label }) => (
@@ -687,7 +689,7 @@ export function Funds() {
               ),
               sort: (m) => m.quarter,
             },
-            { key: 'f', label: 'Filed', num: true, hideSm: true, render: (m) => <span className="dim">{date(m.filing_date)}</span>, sort: (m) => m.filing_date },
+            { key: 'f', label: 'Filed', num: true, hideSm: true, hide: 'md', render: (m) => <span className="dim">{date(m.filing_date)}</span>, sort: (m) => m.filing_date },
           ]}
         />
       </Panel>
@@ -941,12 +943,12 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
       cols={[
         { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, sort: (r) => r.ticker ?? '', width: '80px' },
         { key: 'n', label: 'company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge">{r.put_call}</span> : null}{own?.(r) ? <span className="badge">own fund</span> : null}</span>, sort: (r) => r.display_name ?? '' },
-        { key: 's', label: 'sector', hideSm: true, render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
+        { key: 's', label: 'sector', hideSm: true, hide: 'lg', render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
         { key: 'w', label: 'Weight', num: true, render: (r) => pct(r.weight), sort: (r) => r.weight, title: 'Share of the portfolio' },
-        { key: 'ws', label: 'Last quarter vs now', hideSm: true, render: (r) => <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />, title: 'Share of the portfolio last quarter (grey) and now' },
+        { key: 'ws', label: 'Last quarter vs now', hideSm: true, hide: 'lg', render: (r) => <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />, title: 'Share of the portfolio last quarter (grey) and now' },
         { key: 'c', label: 'This quarter', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} />, sort: (r) => r.share_change ?? 0 },
-        { key: 'sh', label: 'shares', num: true, hideSm: true, render: (r) => num(r.shares), sort: (r) => r.shares },
-        { key: 'p', label: 'Price in filing', num: true, hideSm: true, render: (r) => (r.shares && !r.put_call ? price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
+        { key: 'sh', label: 'shares', num: true, hideSm: true, hide: 'md', render: (r) => num(r.shares), sort: (r) => r.shares },
+        { key: 'p', label: 'Price in filing', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
         { key: 'v', label: 'value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
       ]}
     />
@@ -962,10 +964,10 @@ function MovesGrid({ rows }: { rows: Holding[] }) {
         { key: 't', label: 'ticker', render: (r) => <StockCell t={r.ticker} name={r.display_name || r.issuer} former={r.former} />, width: '80px' },
         { key: 'n', label: 'company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
         { key: 'c', label: 'activity', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} /> },
-        { key: 'sc', label: 'Shares changed', num: true, hideSm: true, render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
+        { key: 'sc', label: 'Shares changed', num: true, hideSm: true, hide: 'md', render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
         { key: 'd', label: 'Trade size', num: true, render: (r) => <span className={(r.value_delta ?? 0) > 0 ? 'pos' : 'neg'}>{signedUsd(r.value_delta)}</span>, sort: (r) => r.value_delta ?? 0 },
         { key: 'pb', label: 'Of portfolio', num: true, render: (r) => pct(r.pct_of_book), sort: (r) => r.pct_of_book ?? 0, title: 'Trade size as a share of the whole portfolio' },
-        { key: 'w', label: 'Weight now', num: true, hideSm: true, render: (r) => pct(r.weight), sort: (r) => r.weight },
+        { key: 'w', label: 'Weight now', num: true, hideSm: true, hide: 'lg', render: (r) => pct(r.weight), sort: (r) => r.weight },
       ]}
     />
   )
@@ -1033,7 +1035,7 @@ export function Flows() {
         <ColKey
           items={[
             [isBuy ? (tab === 'new' ? 'New positions' : 'Investors buying') : tab === 'exits' ? 'Sold all' : 'Investors selling', isBuy ? (tab === 'new' ? 'How many investors bought it for the first time.' : 'How many investors added shares, including new positions.') : tab === 'exits' ? 'How many investors sold every share.' : 'How many investors cut shares, including those who sold out.'],
-            ['Bought, Sold', 'The dollar value of shares added and cut, at the price in each 13F. A price move alone isn’t a trade.'],
+            ['Bought, Sold', 'The dollar value of shares added and cut, at the price in each 13F. A price move alone isn’t a trade.', 'md'],
             ['Net money in', 'Bought minus sold. Negative means more money came out than went in.'],
           ]}
         />
@@ -1049,9 +1051,9 @@ export function Flows() {
             isBuy
               ? { key: 'b', label: tab === 'new' ? 'New positions' : 'Investors buying', num: true, title: tab === 'new' ? 'Investors that bought it for the first time' : 'Investors that added shares', render: (r) => <span className="pos">{tab === 'new' ? r.newBuyers : r.buyers.length}</span> }
               : { key: 's', label: tab === 'exits' ? 'Sold all' : 'Investors selling', num: true, title: tab === 'exits' ? 'Investors that sold every share' : 'Investors that cut shares', render: (r) => <span className="neg">{tab === 'exits' ? exits(r) : r.sellers.length}</span> },
-            { key: 'w', label: isBuy ? 'Who bought' : 'Who sold', hideSm: true, render: (r) => <Who tagQ={tagQ} list={[...(isBuy ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))} /> },
-            { key: 'bv', label: 'Bought', num: true, hideSm: true, title: 'Value of shares added, at each filing’s price', render: (r) => <span className="pos">{r.buy ? usd(r.buy) : '·'}</span>, sort: (r) => r.buy },
-            { key: 'sv', label: 'Sold', num: true, hideSm: true, title: 'Value of shares cut, at each filing’s price', render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '·'}</span>, sort: (r) => -r.sell },
+            { key: 'w', label: isBuy ? 'Who bought' : 'Who sold', hideSm: true, hide: 'lg', render: (r) => <Who tagQ={tagQ} list={[...(isBuy ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))} /> },
+            { key: 'bv', label: 'Bought', num: true, hideSm: true, hide: 'md', title: 'Value of shares added, at each filing’s price', render: (r) => <span className="pos">{r.buy ? usd(r.buy) : '·'}</span>, sort: (r) => r.buy },
+            { key: 'sv', label: 'Sold', num: true, hideSm: true, hide: 'md', title: 'Value of shares cut, at each filing’s price', render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '·'}</span>, sort: (r) => -r.sell },
             {
               key: 'nv',
               label: 'Net money in',
@@ -1183,10 +1185,10 @@ export function Consensus() {
       <Panel title={`${num(list.length)} stocks`}>
         <ColKey
           items={[
-            ['Of all investors', `How many of the ${n} investors own it.`],
-            ['Of all money', 'Its share of everything the investors hold combined.'],
+            ['Of all investors', `How many of the ${n} investors own it.`, 'md'],
+            ['Of all money', 'Its share of everything the investors hold combined.', 'lg'],
             ['Biggest bet', 'The largest share of any one investor’s portfolio it takes up.'],
-            ['Average bet', 'Its average share of the portfolios that own it.'],
+            ['Average bet', 'Its average share of the portfolios that own it.', 'lg'],
           ]}
         />
         <Grid
@@ -1199,12 +1201,12 @@ export function Consensus() {
             { ...aggCols.name, hideSm: true },
             aggCols.sector,
             { key: 'h', label: 'Owners', num: true, render: (r) => r.holders.length, sort: (r) => r.holders.length, title: 'How many of the investors own it' },
-            { key: 'hp', label: 'Of all investors', num: true, hideSm: true, render: (r) => <span className="wcell">{pct(r.holders.length / n, 0)}<Bar value={r.holders.length} max={n} /></span>, sort: (r) => r.holders.length },
+            { key: 'hp', label: 'Of all investors', num: true, hideSm: true, hide: 'md', render: (r) => <span className="wcell">{pct(r.holders.length / n, 0)}<Bar value={r.holders.length} max={n} /></span>, sort: (r) => r.holders.length },
             { key: 'v', label: 'Value held', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
-            { key: 'gw', label: 'Of all money', num: true, hideSm: true, render: (r) => pct(r.value / agg.total), sort: (r) => r.value, title: 'Share of everything the investors hold combined' },
+            { key: 'gw', label: 'Of all money', num: true, hideSm: true, hide: 'lg', render: (r) => pct(r.value / agg.total), sort: (r) => r.value, title: 'Share of everything the investors hold combined' },
             { key: 'mw', label: 'Biggest bet', num: true, render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'Largest share of any one investor’s portfolio' },
-            { key: 'aw', label: 'Average bet', num: true, hideSm: true, title: 'Average share of the portfolios that own it', render: (r) => pct(r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length), 2), sort: (r) => r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length) },
-            { key: 'who', label: 'Biggest holders', hideSm: true, render: (r) => <Who list={[...r.holders].sort((a, b) => b.weight - a.weight)} max={2} /> },
+            { key: 'aw', label: 'Average bet', num: true, hideSm: true, hide: 'lg', title: 'Average share of the portfolios that own it', render: (r) => pct(r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length), 2), sort: (r) => r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length) },
+            { key: 'who', label: 'Biggest holders', hideSm: true, hide: 'lg', render: (r) => <Who list={[...r.holders].sort((a, b) => b.weight - a.weight)} max={2} /> },
           ]}
         />
       </Panel>

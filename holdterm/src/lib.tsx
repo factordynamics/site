@@ -275,6 +275,8 @@ export type Col<R> = {
   sort?: (r: R) => number | string
   num?: boolean
   hideSm?: boolean
+  /** Also hidden on narrower desktops and tablets: `lg` at 1100px and below, `md` at 960px and below. */
+  hide?: 'lg' | 'md'
   title?: string
   width?: string
   /** Wrap this cell in a real link to the row's href (keyboard, middle-click, copy link). */
@@ -340,7 +342,7 @@ export function Grid<R>({
               <th
                 key={c.key}
                 scope="col"
-                className={`${c.num ? 'num' : ''} ${c.hideSm ? 'hide-sm' : ''}`}
+                className={`${c.num ? 'num' : ''} ${c.hideSm ? 'hide-sm' : ''} ${c.hide ? `hide-${c.hide}` : ''}`}
                 style={c.width ? { width: c.width } : undefined}
                 title={c.title}
                 aria-sort={sort?.[0] === c.key ? (sort[1] === 'desc' ? 'descending' : 'ascending') : c.sort ? 'none' : undefined}
@@ -371,7 +373,7 @@ export function Grid<R>({
               >
                 {rank && <td className="num rank dim">{i + 1}</td>}
                 {cols.map((c) => (
-                  <td key={c.key} className={`${c.num ? 'num' : ''} ${c.hideSm ? 'hide-sm' : ''}`}>
+                  <td key={c.key} className={`${c.num ? 'num' : ''} ${c.hideSm ? 'hide-sm' : ''} ${c.hide ? `hide-${c.hide}` : ''}`}>
                     {c.link && to ? (
                       <A to={to} className="rowlink">
                         {c.render(r, i)}
