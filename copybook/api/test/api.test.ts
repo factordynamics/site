@@ -940,7 +940,10 @@ describe('copybook api', () => {
     await at('F6', 26);
     expect(got()).toEqual([]);
     // Counted for the quant's audit: /health and the status probe carry it.
-    expect((await (await handleRequest(new Request('https://api.test/health'), env)).json()).dupes_blocked).toMatchObject({ total: 1, last_7d: 1 });
+    const hj = await (await handleRequest(new Request('https://api.test/health'), env)).json();
+    expect(hj.dupes_blocked).toMatchObject({ total: 1, last_7d: 1 });
+    // The moves queue in status.json's shape.
+    expect(Object.keys(hj.moves_queue)).toEqual(['pending', 'oldest_wait_seconds', 'last_fallback_send_at']);
     expect((await (await handleRequest(new Request('https://api.test/health?probe=1'), env)).json()).dupes_blocked).toEqual({ total: 1, last_7d: 1 });
     // A 13G or 13G/A never goes to a test member by email (feed only), and doesn't use up its 5.
     await env.DB.put(`mailn:t:${today}`, '0');
@@ -1745,15 +1748,16 @@ describe('copybook api', () => {
     const sq3 = [pos('SPLT', '000000007', 12000, 60_000_000), pos('REST', '000000009', 1, 1e9)];
     expect(all(computeMoves(sq3, sq2).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['SPLT', true]]); // 10x off: tagged
     expect(all(computeMoves(sq3, sq2, undefined, new Set(['000000007'])).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['SPLT', false]]);
-    // With its ratio (splits.json), the prior is in today's units: 1,000 x 10 = 10,000 to 12,000 is +2,000 sh (+$10M), not +11,000.
-    const adj = all(computeMoves(sq3, sq2, undefined, new Map([['000000007', 10]])).moves);
-    expect(adj.map((r) => [r.ticker, r.change, r.prev_shares, r.prev_shares_as_filed, r.split, r.value_delta])).toEqual([['SPLT', 'added', 10_000, 1000, 10, 10_000_000]]);
-    // Jensen's Q3 APH (2-for-1): 614,660 to 1,047,486 sh as filed is a trim of 181,834 sh (about -$15.3M at $84.30), not an add of +$36.5M.
+    // Jensen's Q3 APH (2-for-1), the sent alert's own row (Nov 10): 614,660 to 1,047,486 sh, $88,303,070. It read "added +$36,487,232";
+    // against the split-adjusted 1,229,320 it is a trim of 181,834 sh, about -$15.3M.
     const jq2 = [pos('APH', '032095101', 614_660, 47_000_000), pos('REST', '000000009', 1, 1e9)];
     const jq3 = [pos('APH', '032095101', 1_047_486, 88_303_070), pos('REST', '000000009', 1, 1e9)];
     const aph = all(computeMoves(jq3, jq2, undefined, new Map([['APH', 1], ['032095101', 2]])).moves)[0];
     expect([aph.change, aph.prev_shares, aph.shares - aph.prev_shares]).toEqual(['trimmed', 1_229_320, -181_834]);
     expect(aph.value_delta).toBeCloseTo(-15_328_606, -2);
+    // With its ratio (splits.json), the prior is in today's units: 1,000 x 10 = 10,000 to 12,000 is +2,000 sh (+$10M), not +11,000.
+    const adj = all(computeMoves(sq3, sq2, undefined, new Map([['000000007', 10]])).moves);
+    expect(adj.map((r) => [r.ticker, r.change, r.prev_shares, r.prev_shares_as_filed, r.split, r.value_delta])).toEqual([['SPLT', 'added', 10_000, 1000, 10, 10_000_000]]);
     // Equal after the split: no move at all.
     expect(all(computeMoves([pos('APH', '032095101', 1_229_320, 1e8), jq3[1]], jq2, undefined, new Map([['032095101', 2]])).moves)).toEqual([]);
   });

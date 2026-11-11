@@ -114,6 +114,12 @@ export async function alertHealth(env: Env, now: number) {
   return { state: reasons.length ? 'amber' : 'ok', reasons, pending_moves: pending.length, oldest_pending_seconds: oldest, reset_queue: reset };
 }
 
+/** 13F alerts waiting for their moves, and gene's last fallback send; the same shape on /health and status.json. */
+export async function movesQueue(env: Env, health: { pending_moves: number; oldest_pending_seconds: number | null }) {
+  const fallback = JSON.parse((await env.DB.get('host:moves-sent-last')) ?? 'null') as { at: string; accession: string } | null;
+  return { pending: health.pending_moves, oldest_wait_seconds: health.oldest_pending_seconds, last_fallback_send_at: fallback?.at ?? null };
+}
+
 /** The status object: the probe's state plus what this host knows. */
 export async function buildStatus(env: Env, now: number, s: ProbeState) {
   const daily = Array.from({ length: 7 }, (_, i) => {
@@ -130,7 +136,6 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
   const poller = { host: 'cloudflare', last_run_at: iso(Date.now()) };
   const health = await alertHealth(env, now);
   const dupes = await dupesBlocked(env, now);
-  const fallback = JSON.parse((await env.DB.get('host:moves-sent-last')) ?? 'null') as { at: string; accession: string } | null;
   return {
     ok: true,
     generated_at: iso(Math.floor(now / 60_000) * 60_000),
@@ -138,7 +143,7 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
     // gene's fallback for 13Fs sent without their moves (tables too big for the Worker, or no prior book on Cloudflare).
     // Alerts each host's per-member sent record kept from going out twice: the members' API (gene) and Cloudflare.
     dupes_blocked: { since: dupes.since, api: s.api_dupes ?? null, cloudflare: { total: dupes.total, last_7d: dupes.last_7d } },
-    moves_queue: { pending: health.pending_moves, oldest_wait_seconds: health.oldest_pending_seconds, last_fallback_send_at: fallback?.at ?? null },
+    moves_queue: await movesQueue(env, health),
     probe: {
       target: 'members API /health, from Cloudflare cron',
       interval_seconds: 60,
@@ -178,7 +183,7 @@ export async function runStatus(env: Env, now: number, probe: Promise<Awaited<Re
   if (!publish || !env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || !env.PUBLIC_BUCKET) return s.last?.ok ? 'probe ok' : 'probe failed';
   const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/r2/buckets/${env.PUBLIC_BUCKET}/objects/status.json`, {
     method: 'PUT',
-    headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json', 'cache-control': 'public, max-age=60' },
+    headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json', 'cache-control': 'public, max-age=10' },
     body: JSON.stringify(await buildStatus(env, now, s)),
   });
   return `${s.last?.ok ? 'probe ok' : 'probe failed'}; status.json ${res.ok ? 'written' : `error ${res.status}`}`;
