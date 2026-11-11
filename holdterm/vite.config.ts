@@ -10,7 +10,7 @@ import TICKERS from './src/tickers.json'
 import { aggregate, type Agg, type Book, isStockLine, issuerKey, loadBook, quarterLabel } from './src/data'
 import { issuerName } from './src/names'
 import { usd } from './src/lib'
-import { fundCard, png, siteCard, stockCard } from './scripts/og'
+import { fundCard, iconPng, png, siteCard, stockCard } from './scripts/og'
 
 const SITE = 'https://holdterm.factordynamics.com'
 const DERIVED = 'https://copybook.factordynamics.com/d/'
@@ -77,6 +77,32 @@ function fundFacts(b: Book) {
     lead,
     card: { pm: b.pm, quarter: quarterLabel(b.quarter), filed: fmtDay(b.filing_date), value: usd(b.long_value), positions: live.length, change: d == null || !isFinite(d) ? null : { text: `${d >= 0 ? '+' : '−'}${Math.abs(d * 100).toFixed(1)}% vs ${prevQ}`, up: d >= 0 }, top },
   }
+}
+
+/** Home-screen icons and the web app manifest (linked from index.html), so "Add to Home Screen" and share
+ * sheets show Holdterm's icon and name rather than a screenshot of the page. */
+function appIcons(dist: string) {
+  mkdirSync(join(dist, 'icons'), { recursive: true })
+  writeFileSync(join(dist, 'apple-touch-icon.png'), iconPng(180, true))
+  writeFileSync(join(dist, 'icons', 'icon-192.png'), iconPng(192, false))
+  writeFileSync(join(dist, 'icons', 'icon-512.png'), iconPng(512, false))
+  writeFileSync(join(dist, 'icons', 'maskable-512.png'), iconPng(512, true))
+  const manifest = {
+    name: 'Holdterm',
+    short_name: 'Holdterm',
+    description: SECTIONS['/'][1],
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+    background_color: '#f4f5f7',
+    theme_color: '#ffffff',
+    icons: [
+      { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+      { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+  }
+  writeFileSync(join(dist, 'manifest.webmanifest'), JSON.stringify(manifest, null, 2) + '\n')
 }
 
 /** The offline page and the service worker that serves it (public/sw.js): the shell it caches is this build's
@@ -230,6 +256,7 @@ const pages = (): Plugin => ({
     }
     writeFileSync(join(dist, '404.html'), page(html, '', null))
     offline(dist, html)
+    appIcons(dist)
 
     const redirects = [
       ...Object.entries(MOVED).map(([a, b]) => `${a} ${b} 301`),

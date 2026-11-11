@@ -30,4 +30,4 @@ remove it from visitors' browsers, don't delete it: build with `VITE_HOLDTERM_SW
 That ships the kill switch (`scripts/sw-kill.js`), which clears its caches, unregisters itself and reloads open
 tabs once; keep the variable set on later deploys until the worker is wanted again.
 
-Keys: `/` search, `g` then `h m f c d e` to jump, `j`/`k` + `enter` in tables, `1`-`5` tabs, `?` help.
+Keys: `/` or Ctrl+K opens search and Escape closes it; left and right arrows (and Home, End) move between tabs.

@@ -117,3 +117,14 @@ ${nameRows}
 <text x="770" y="168" font-family="Inter" font-weight="600" font-size="22" fill="${C.dim}">BIGGEST BETS ON IT</text>
 ${bars}`)
 }
+
+/** The app icon (the wordmark glyph) as a square PNG of `size` px. `bleed` fills the whole square with the brand
+ * colour and keeps the glyph inside the middle 60%, for iOS (which rounds the corners itself) and Android's
+ * maskable icons (which crop to a circle or squircle); otherwise it is the favicon's rounded square. */
+export function iconPng(size: number, bleed: boolean) {
+  const glyph = `<rect x="4" y="4.5" width="12" height="2.2" rx="1.1" fill="#0b0b0a"/><rect x="4" y="8.9" width="8.5" height="2.2" rx="1.1" fill="#0b0b0a"/><rect x="4" y="13.3" width="5" height="2.2" rx="1.1" fill="#0b0b0a"/>`
+  const svg = bleed
+    ? `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 20 20"><rect width="20" height="20" fill="${C.brand}"/><g transform="translate(10 10) scale(0.75) translate(-10 -10)">${glyph}</g></svg>`
+    : `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 20 20"><rect width="20" height="20" rx="4.5" fill="${C.brand}"/>${glyph}</svg>`
+  return new Resvg(svg, { fitTo: { mode: 'width', value: size } }).render().asPng()
+}
