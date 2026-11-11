@@ -9,7 +9,7 @@ import { FOOTER, followFiling, previewInbox, sendMail, type Mail } from './email
 import { deadlineLabel, nextDeadline } from './seasons';
 import { firmName } from '../../../holdterm/src/names';
 import { followCounts, testAddress, WORKER_URL, type Env, type Member } from './env';
-import { checkMove, displayCase, UNUSUAL } from './edgar';
+import { checkMove, displayCase, type MoveRow, netRenamed, reissuedTicker, UNUSUAL } from './edgar';
 import { changeFollows, type Follows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
 import { bump } from './revenue';
 import { signToken, verifyToken } from './tokens';
@@ -295,7 +295,8 @@ export async function weeklyMoves(env: Env, now: number, days = 7, followed: Set
     // One row per ticker: a CUSIP or class change shows as an exit plus a new position (Fisher's XOM),
     // so a fund's rows on one ticker are netted, and dropped when the holding is unchanged.
     const byTicker = new Map<string, Row & { change?: string; value?: number | null }>();
-    for (const raw of Array.isArray(d.moves) ? d.moves : []) {
+    // A reissued CUSIP's rows (XOM's Q3 30231G102 -> 30233Q108) take its ticker, so the exit and the new row net.
+    for (const raw of (Array.isArray(d.moves) ? d.moves : []).map((x) => ({ ...x, ticker: x.ticker ?? reissuedTicker(x.cusip) }))) {
       if (!raw.ticker || raw.put_call || !['new', 'added', 'trimmed', 'exited'].includes(raw.change ?? '')) continue;
       const value = raw.weight != null && total ? raw.weight * total : null;
       // New and exited rows carry both values; an add or trim that looks too big reads the prior book.
@@ -374,7 +375,16 @@ async function followContext(env: Env, slugs: string[], now = Date.now()): Promi
   const filed = new Map<string, Alert13F>();
   for (const s of new Set(slugs)) {
     const raw = await env.DB.get(`wk13f:${s}`);
-    if (raw) filed.set(s, JSON.parse(raw) as Alert13F);
+    if (!raw) continue;
+    const a = JSON.parse(raw) as Alert13F;
+    // Moves stored before reissued CUSIPs were linked (Boston Partners' Q3 "exited XOM" plus "new XOM"): netted here.
+    if (a.moves) {
+      const m = a.moves;
+      const rows = [...m.new.map((r) => ({ ...r, change: 'new' })), ...m.added.map((r) => ({ ...r, change: 'added' })), ...m.trimmed.map((r) => ({ ...r, change: 'trimmed' })), ...m.exited.map((r) => ({ ...r, change: 'exited' }))] as MoveRow[];
+      const n = netRenamed({ moves: m, changed: rows });
+      if (n.changed !== rows) a.moves = { ...n.moves, bought_usd: m.bought_usd, sold_usd: m.sold_usd };
+    }
+    filed.set(s, a);
   }
   // The site's list of superinvestors still to file this quarter, with each one's expected date (d/expected.json).
   const ex = await fetch(`${env.SITE_URL}d/expected.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) as { quarter?: string; expected?: { slug: string; manager: string; expected_date: string }[] } | null;

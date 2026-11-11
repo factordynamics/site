@@ -1405,6 +1405,9 @@ describe('copybook api', () => {
     // Same shares under the new CUSIP: no move at all.
     const same = computeMoves([{ ...cur[0], shares: 31468114 }, other] as never, prev as never);
     expect(same.changed).toEqual([]);
+    // Moves already stored as an exit plus a new row (alerts sent before the link), the new CUSIP without a ticker: netted.
+    const stored = [{ change: 'exited', cusip: '30231G102', ticker: 'XOM', put_call: null, shares: 0, prev_shares: 31468114, value: 0, value_delta: -4302320615 }, { change: 'new', cusip: '30233Q108', ticker: null, put_call: null, shares: 31933523, prev_shares: 0, value: 5197180970, value_delta: 5197180970 }];
+    expect(netRenamed({ moves: {} as never, changed: stored as never }).changed.map((x) => [x.change, x.shares - x.prev_shares])).toEqual([['added', 465409]]);
     // A filer still holding the old CUSIP alongside the new one isn't relinked: the old row stays its own position.
     expect(computeMoves([...cur, { ...prev[0] }] as never, prev as never).changed.map((x) => [x.change, x.cusip])).toEqual([['new', '30233Q108']]);
   });

@@ -304,7 +304,10 @@ export function displayCase(name: string): string {
  * CUSIPs reissued for the same security, share for share (old -> new). Exxon's Q3 2026 holding-company
  * reorganisation: 30231G102 -> 30233Q108. Without the link every Q3 holder reads as "exited XOM" plus a new position.
  */
-export const REISSUED: Record<string, string> = { '30231G102': '30233Q108' };
+export const REISSUED: Record<string, { to: string; ticker: string }> = { '30231G102': { to: '30233Q108', ticker: 'XOM' } };
+const REISSUED_TO = new Map(Object.values(REISSUED).map((r) => [r.to, r.ticker]));
+/** The ticker of a reissued CUSIP, old or new: rows without a ticker yet still net (stored moves, the site's cards). */
+export const reissuedTicker = (cusip?: string | null): string | null => (cusip ? (REISSUED[cusip.toUpperCase()]?.ticker ?? REISSUED_TO.get(cusip.toUpperCase()) ?? null) : null);
 /**
  * The prior book with reissued CUSIPs renamed to the new one, when this filing holds the new CUSIP and not the old,
  * so the diff, the price gate and alerts see one continuing position (no ticker lookup needed). Else unchanged.
@@ -312,7 +315,7 @@ export const REISSUED: Record<string, string> = { '30231G102': '30233Q108' };
 export function linkReissued<T extends { cusip: string }>(prev: T[], cur: { cusip: string }[]): T[] {
   const now = new Set(cur.map((c) => c.cusip.toUpperCase()));
   const to = (p: T) => {
-    const n = REISSUED[p.cusip.toUpperCase()];
+    const n = REISSUED[p.cusip.toUpperCase()]?.to;
     return n && now.has(n) && !now.has(p.cusip.toUpperCase()) ? n : null;
   };
   return prev.some(to) ? prev.map((p) => (to(p) ? { ...p, cusip: to(p)! } : p)) : prev;
@@ -500,7 +503,10 @@ export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
  * sized by shares at this filing's price (+465,409 sh x $162.75 = +$75.7M), or nothing when the shares are the same.
  */
 export function netRenamed(r: { moves: Moves; changed: MoveRow[] }, limit = MOVE_ROWS): { moves: Moves; changed: MoveRow[] } {
-  const key = (x: MoveRow) => (x.ticker ? `${x.ticker}|${(x.put_call ?? '').toUpperCase()}` : null);
+  const key = (x: MoveRow) => {
+    const t = x.ticker ?? reissuedTicker(x.cusip);
+    return t ? `${t}|${(x.put_call ?? '').toUpperCase()}` : null;
+  };
   const exits = new Map<string, MoveRow>();
   for (const x of r.changed) if (x.change === 'exited' && key(x)) exits.set(key(x)!, x);
   if (!exits.size) return r;
