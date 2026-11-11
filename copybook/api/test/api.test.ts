@@ -4172,13 +4172,14 @@ describe('copybook api', () => {
     expect([h.build_id, h.data_built_at]).toEqual(['gust-3a8c773b', '2026-11-09T02:30:00Z']);
     // Current share (SH) positions by default: count is their rows, filers the distinct filers among them. Options and
     // exits come in their own lists (CVI's 38 exited zero-share rows were in count before).
-    expect(h).toMatchObject({ count: 4, filers: 4, next_offset: null, options_count: { calls: { rows: 0, filers: 0 }, puts: { rows: 1, filers: 1 } }, exited_count: 1, data: { issuer: '67066G', ticker: 'NVDA', counts: { holders: 4 }, truncated: false } });
+    expect(h).toMatchObject({ count: 4, filers: 4, next_offset: null, options_count: { calls: { rows: 0, filers: 0 }, puts: { rows: 1, filers: 1 } }, exited_count: 1, data: { issuer: '67066G', ticker: 'NVDA', counts: { holders: 4, holders_all: 5, not_current: 1 }, truncated: false } });
+    // Counts follow current_only: Old Filer LP (last 13F 2025Q3) is in holders_all and not_current only; current_only=false counts it.
     expect(h.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0002045724', '0000102909', '0001067983', '0001387322']);
     expect(h.data.options.map((x: { filer: { cik: string; type: string } }) => [x.filer.cik, x.filer.type])).toEqual([['0001423053', 'hedge_fund']]);
     expect(h.data.exited).toEqual([expect.objectContaining({ kind: 'calls', put_call: 'CALL', shares: 0, weight: null, change: 'exited' })]); // as EDGAR writes it
     // current_only=false adds the filer whose latest 13F is a year old.
     const every = (await v1('/v1/stocks/NVDA/holders?current_only=false')).body;
-    expect([every.count, every.filers, every.data.holders[4].filer.name]).toEqual([5, 5, 'Old Filer LP']);
+    expect([every.count, every.filers, every.data.holders[4].filer.name, every.data.counts.holders, every.data.counts.holders_all]).toEqual([5, 5, 'Old Filer LP', 5, 5]);
     // include_options=true mixes calls and puts into the list.
     const mixed = (await v1('/v1/stocks/NVDA/holders?include_options=true')).body;
     expect([mixed.count, mixed.filers, mixed.data.holders[2].filer.name]).toEqual([5, 5, 'Citadel Advisors LLC']);

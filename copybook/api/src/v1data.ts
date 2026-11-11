@@ -782,7 +782,7 @@ function countsOf(rows: any[]) {
  * the data run), else the older single-period s/{issuer6}.json. Largest first. Curated funds' rows carry
  * their 13F's accession and EDGAR acceptance when cached; weight comes from the row, else a curated fund's total.
  */
-export async function holdersOf(env: Env, code: string, timing: string[] = []): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; rows: HolderRow[]; pending?: (HolderRow & { reason: 'filed_newer_not_indexed' })[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
+export async function holdersOf(env: Env, code: string, timing: string[] = []): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; counts_current?: Record<string, unknown> | null; rows: HolderRow[]; pending?: (HolderRow & { reason: 'filed_newer_not_indexed' })[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
   let t = Date.now();
   const mark = (name: string) => (timing.push(`${name};dur=${Date.now() - t}`), (t = Date.now()));
   const read = await readHolderIndex(env, code);
@@ -846,12 +846,23 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       };
     }
   }
+  let countsCurrent: Record<string, unknown> | null = null;
   // net is the shares traded at each filing's value per share, never the value difference (a price move is no trade),
   // for one quarter: the latest any filer reports (the sum of /v1/changes for it). By quarter in net_by_period.
   if (d.counts && obj) {
     const nbp = netByPeriod(raw);
     const q = Object.keys(nbp).sort().at(-1) ?? d.period ?? null;
-    d.counts = { ...d.counts, net: q ? (nbp[q] ?? 0) : 0, net_quarter: q, net_by_period: nbp };
+    // One definition whichever index the rows came from: holders are share positions (options apart), over the whole
+    // index; not_current of them have a latest 13F older than the two current quarters, which holders[] leaves out while
+    // current_only=true (the quant: TEVA's 626 against 617 rows were 7 filers last on 2026Q1 and 2 on 2025Q4).
+    // counts follow current_only (the analyst): by default the current filers' (what holders[] lists), with holders_all
+    // and not_current beside them; current_only=false, the whole index. net is one quarter's either way.
+    const cq = currentQuarters(Date.now());
+    const all = countsOf(raw);
+    const not_current = raw.filter((r) => !(r.put_call || (r.kind && r.kind !== 'equity')) && r.change !== 'exited' && !!r.period && !cq.includes(r.period)).length;
+    d.counts = { ...d.counts, ...all, holders_all: (all as Record<string, unknown>).holders, not_current, net: q ? (nbp[q] ?? 0) : 0, net_quarter: q, net_by_period: nbp };
+    const { net: _n, ...cur } = countsOf(raw.filter((r) => !r.period || cq.includes(r.period)));
+    countsCurrent = cur;
   }
   mark('read');
   const cur = new Map((await filers(env)).map((f) => [f.cik, f]));
@@ -916,7 +927,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   if (obj && rows.some((r) => r.accession && !r.accepted_at && !(dashed(r.accession) in known))) await queueAccepted(env, code).catch(() => undefined);
   mark('rows');
   rows.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0));
-  return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, rows, pending, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj as Parameters<typeof stampOf>[0]), source: read.source };
+  return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, counts_current: countsCurrent, rows, pending, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj as Parameters<typeof stampOf>[0]), source: read.source };
 }
 
 /**
@@ -1042,6 +1053,7 @@ ROUTES.push(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nbp = (h.counts as any)?.net_by_period as Record<string, number> | undefined;
     if (quarter && nbp) h.counts = { ...h.counts, net: nbp[quarter] ?? 0, net_quarter: quarter };
+    if ((p.get('current_only') ?? 'true') === 'true' && h.counts_current) h.counts = { ...h.counts, ...h.counts_current };
     const data = { issuer: h.issuer, ...(is.superseded_by ? { superseded_by: is.superseded_by } : {}), ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts && h.pending?.length ? { ...h.counts, pending: h.pending.length } : h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited, ...(h.pending?.length ? { pending: h.pending.filter((r) => keep(r)) } : {}) };
     return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { 'server-timing': timing.join(', ') });
   }],
