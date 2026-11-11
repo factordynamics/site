@@ -51,9 +51,10 @@ ACCEPTED: dict[str, str] = {}  # accession -> EDGAR acceptance time (accepted.py
 
 
 def filing(b: dict) -> dict:
+    from ingest.export import original  # the quarter's original 13F-HR, as in bulk's original_accession
     acc = b.get("accession")
     return {"accession": acc, "filing_date": b.get("filing_date"),
-            "accepted_at": b.get("accepted_at") or ACCEPTED.get(acc or "")}
+            "accepted_at": b.get("accepted_at") or ACCEPTED.get(acc or ""), "original_accession": original(b) or acc}
 # Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
 LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
@@ -647,7 +648,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     full.mkdir(exist_ok=True)
     index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
-            "weight", "accession", "filing_date", "accepted_at"]
+            "weight", "accession", "filing_date", "accepted_at", "original_accession"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "by_period": {}}
@@ -675,7 +676,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             rows.append([cik, meta[cik].get("name"), m.get("slug"), kind, cik in curated,
                          q, round(sh), round(ps) if known else None, round(v), round(pv) if known else None, change,
                          round(weight, 6) if weight is not None else None,
-                         fl["accession"], fl["filing_date"], fl["accepted_at"]])
+                         fl["accession"], fl["filing_date"], fl["accepted_at"],
+                         fl.get("original_accession") or fl["accession"]])
         if not counts["holders"]:
             continue
         rows.sort(key=lambda r: -(r[8] or r[9] or 0))

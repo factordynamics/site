@@ -115,6 +115,34 @@ def edgar_hours(now: datetime) -> bool:
     return (now if now.hour >= 11 else now - timedelta(days=1)).weekday() < 5
 
 
+def _links(root: Path) -> dict:
+    try:
+        return json.loads((root / "cusip_links.json").read_text()).get("links") or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def link_files(root: Path) -> dict[str, int]:
+    """hl/ files of reissued CUSIPs' issuers (cusip_links.json): the new code's merged file 0, the old code's 1. They
+    go before everything else, new first, so a cut-off upload never leaves gene with an old code's file shrunk to
+    its leftover lines and no merged file (TEVA hl/881624 on Nov 11 12:05)."""
+    out: dict[str, int] = {}
+    for old, v in _links(root).items():
+        out[f"hl/{v['new'][:6]}.json"] = 0
+    for old, v in _links(root).items():
+        out.setdefault(f"hl/{old[:6]}.json", 1)
+    return out
+
+
+def link_news(root: Path) -> dict[str, set[str]]:
+    """Old code's hl/ file -> the new codes' hl/ files that must reach gene first."""
+    out: dict[str, set[str]] = {}
+    for old, v in _links(root).items():
+        if old[:6] != v["new"][:6]:
+            out.setdefault(f"hl/{old[:6]}.json", set()).add(f"hl/{v['new'][:6]}.json")
+    return out
+
+
 def fresh_only(todo: list) -> list:
     """The curated h/ files of funds whose h/{slug}/index.json changed (a new filing), capped."""
     slugs = {k.split("/")[1] for k, _, _ in todo if k.startswith("h/") and k.endswith("/index.json")}
@@ -173,17 +201,20 @@ def main() -> int:
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             if manifest.get(key) != digest:
                 todo.append((key, path, digest))
-    rank = lambda key: next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
+    pair = link_files(root)
+    rank = lambda key: pair[key] - 2 if key in pair else next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
     todo.sort(key=lambda t: (rank(t[0]), t[0]))
     if edgar_hours(datetime.now(timezone.utc)) and os.environ.get("COPYBOOK_UPLOAD_ANYTIME") != "1":
         held = len(todo)
-        todo = fresh_only(todo)
+        todo = [t for t in todo if t[0] in pair] + [t for t in fresh_only(todo) if t[0] not in pair]
         print(f"upload: EDGAR hours; sending {len(todo)} files of new filings, {held - len(todo)} wait for 03:00 UTC",
               flush=True)
     print(f"upload: {len(todo)} new or changed of {len(files)} files to {API}, one bundle at a time of up to "
           f"{BUNDLE_ENTRIES} files / {(BUNDLE_RAW_BYTES if GZIP[0] else BUNDLE_BYTES) / 1e6:.0f} MB"
           f"{' before gzip' if GZIP[0] else ''}", flush=True)
     sent = 0
+    pending = {k for k, _, _ in todo}
+    pair_new = link_news(root)
     try:
         for batch in bundles(todo):
             now = datetime.now(timezone.utc)
@@ -208,7 +239,17 @@ def main() -> int:
                     print(f"::warning::gene's /health took {slow:.1f} s (limit {PROBE_MAX_S:.0f} s); backing off, "
                           f"{len(todo) - sent} files wait for the next run", flush=True)
                     break
+            # Never shrink an old code's holder file before its merged new-code file is on gene (TEVA, Nov 11 12:05).
+            ahead = {k for k, _, _ in batch}
+            early = [t for t in batch if pair.get(t[0]) == 1 and any(
+                n in pending and n not in ahead for n in pair_new.get(t[0], ()))]
+            if early:
+                print(f"::warning::upload: {len(early)} old-code hl/ files wait for their merged new-code file", flush=True)
+                batch = [t for t in batch if t not in early]
+                if not batch:
+                    continue
             written, refused = put_bundle(batch, token)
+            pending -= written
             for key, _, digest in batch:
                 if key in written:
                     manifest[key] = digest
