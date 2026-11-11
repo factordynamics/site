@@ -701,6 +701,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, ...r }, 200, h);
   }
 
+  // Operator: reconciliation as a dry run over the season, as sent and (recompute) as the current code would send it.
+  if (req.method === 'POST' && path === '/ops/reconcile-dry') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = (await req.json().catch(() => ({}))) as { offset?: number; limit?: number; recompute?: boolean; days?: number };
+    return json({ ok: true, ...(await (await import('./alerts')).reconcileDry(env, Date.now(), b)) }, 200, h);
+  }
+
   if (req.method === 'GET' && path === '/ops/delivery') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const id = (url.searchParams.get('id') ?? '').trim();

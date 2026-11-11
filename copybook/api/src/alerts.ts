@@ -1474,20 +1474,7 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
       pending++;
       continue;
     }
-    const failed: import('./email').CorrectionRow[] = [];
-    for (const r of rows.values()) {
-      let v: BuildRow | undefined = b.rows.get(rowKey(r));
-      // A CUSIP change the alert netted into one move (XOM's Q3 reorganisation): the build keeps the exit and the new line.
-      if (!v && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
-      if (v?.change === 'new' && r.change !== 'new' && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
-      const got = v ? { change: v.change!, value_delta: Math.round(v.value_delta) } : { change: 'unchanged', value_delta: 0 };
-      const bad = got.change !== r.change || Math.sign(got.value_delta) !== Math.sign(r.value_delta) || Math.abs(r.value_delta - got.value_delta) > MISMATCH * Math.abs(got.value_delta);
-      // Options and bond (PRN) rows are sized differently in the two paths (the underlying's value; principal, not
-      // shares): a difference there is logged for review, never mailed as a correction.
-      if (bad) failed.push({ cusip: r.cusip, ticker: r.ticker ?? v?.ticker ?? null, name: r.display_name || r.issuer, put_call: r.put_call, emailed: { change: r.change!, value_delta: r.value_delta }, v1: got, ...(r.put_call || (v as { shares_type?: string } | undefined)?.shares_type === 'PRN' ? { review: true } : {}) });
-      v = undefined;
-    }
-    failed.sort((x, y) => Math.abs(y.emailed.value_delta - y.v1.value_delta) - Math.abs(x.emailed.value_delta - x.v1.value_delta));
+    const failed = compareToBuild(rows, b.rows);
     // Who got it: the delivery log, as /ops/delivery reads it.
     const rec = await deliveryRecord(env, a.accession, now);
     const members = new Map((await listMembers(env)).map((m) => [m.customer, m]));
@@ -1519,6 +1506,91 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
     await env.DB.put(RECONCILED, JSON.stringify([...out, ...keep].slice(0, 500)));
   }
   return { checked: out.map((x) => ({ accession: x.accession, result: x.result, rows: x.rows, failed: x.failed.length, mailed: x.mailed })), pending };
+}
+
+/** Alerted rows against the build's: the rows that differ in direction, sign, or by over 10% in value, largest first. */
+function compareToBuild(rows: Map<string, MoveRow>, build: Map<string, BuildRow>): import('./email').CorrectionRow[] {
+  const b = { rows: build };
+  const failed: import('./email').CorrectionRow[] = [];
+  for (const r of rows.values()) {
+    let v: BuildRow | undefined = b.rows.get(rowKey(r));
+    // A CUSIP change the alert netted into one move (XOM's Q3 reorganisation): the build keeps the exit and the new line.
+    if (!v && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
+    if (v?.change === 'new' && r.change !== 'new' && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
+    const got = v ? { change: v.change!, value_delta: Math.round(v.value_delta) } : { change: 'unchanged', value_delta: 0 };
+    const bad = got.change !== r.change || Math.sign(got.value_delta) !== Math.sign(r.value_delta) || Math.abs(r.value_delta - got.value_delta) > MISMATCH * Math.abs(got.value_delta);
+    // Options and bond (PRN) rows are sized differently in the two paths (the underlying's value; principal, not
+    // shares): a difference there is logged for review, never mailed as a correction.
+    if (bad) failed.push({ cusip: r.cusip, ticker: r.ticker ?? v?.ticker ?? null, name: r.display_name || r.issuer, put_call: r.put_call, emailed: { change: r.change!, value_delta: r.value_delta }, v1: got, ...(r.put_call || (v as { shares_type?: string } | undefined)?.shares_type === 'PRN' ? { review: true } : {}) });
+    v = undefined;
+  }
+  failed.sort((x, y) => Math.abs(y.emailed.value_delta - y.v1.value_delta) - Math.abs(x.emailed.value_delta - x.v1.value_delta));
+  return failed;
+}
+
+/** An alert's move rows by key, as its email listed them. */
+const alertRows = (m: Moves, into = new Map<string, MoveRow>()) => {
+  for (const [change, rows] of [['new', m.new], ['added', m.added], ['trimmed', m.trimmed], ['exited', m.exited]] as const) for (const r of rows) into.set(rowKey(r), { ...r, change });
+  return into;
+};
+
+/**
+ * Operator's dry run over the season (no email, no log): every 13F alert with moves in the last `days` days' stores,
+ * against ingest's build, as sent and (with `recompute`) as the current code would send it now: the filing re-read from
+ * EDGAR, the prior book as gene reads it, splits, netting and the publish gate. Paged with offset and limit.
+ */
+export async function reconcileDry(env: Env, now: number, o: { offset?: number; limit?: number; recompute?: boolean; days?: number } = {}): Promise<Record<string, unknown>> {
+  const found = new Map<string, { a: Alert13F; rows: Map<string, MoveRow> }>();
+  for (let d = 0; d < (o.days ?? 31); d++) {
+    const raw = await env.DB.get(`digest:${etDay(now - d * DAY)}`);
+    if (!raw) continue;
+    for (const a of (JSON.parse(raw) as DigestDay).filings) {
+      if (!a.moves || a.reveal || a.replay_to?.length) continue;
+      const x = found.get(a.accession) ?? { a, rows: new Map<string, MoveRow>() };
+      alertRows(a.moves, x.rows);
+      found.set(a.accession, x);
+    }
+  }
+  const all = [...found.values()].sort((x, y) => (x.a.accepted ?? '').localeCompare(y.a.accepted ?? ''));
+  const page = all.slice(o.offset ?? 0, (o.offset ?? 0) + (o.limit ?? all.length));
+  secBudget.left = Math.max(secBudget.left, 200);
+  const out: Record<string, unknown>[] = [];
+  const row = (f: import('./email').CorrectionRow) => ({ ticker: f.ticker, cusip: f.cusip, put_call: f.put_call, sent: f.emailed, build: f.v1, ...(f.review ? { review: true } : {}) });
+  for (const { a, rows } of page) {
+    const b = await buildRows(env, a);
+    if (!b) {
+      out.push({ accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, result: 'no_build' });
+      continue;
+    }
+    const sent = compareToBuild(rows, b.rows);
+    const item: Record<string, unknown> = { accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, rows: rows.size, as_sent: { result: sent.length ? 'fail' : 'pass', failed: sent.map(row) } };
+    if (o.recompute) {
+      try {
+        const cik = a.sec_url.match(/\/edgar\/data\/(\d+)\//)?.[1] ?? '';
+        const f = await fetch13F(cik, a.accession, Infinity);
+        const prevEnd = f ? prevQuarterEnd(f.report_date) : '';
+        const book = f && ((a.extra ? await filerShardBook(env, cik, prevEnd) : await priorBook(env, a.slug, prevEnd, Infinity)) ?? (await prior13F(cik, f.report_date)));
+        if (!f?.holdings || !book) item.now = { result: 'unreadable' };
+        else {
+          const q = quarterOf(f.report_date);
+          const raw = computeMoves(f.holdings, book, undefined, await splitsFor(env, q), await perShareMedians(env, perShareSuspects(f.holdings, book).slice(0, 6), q));
+          await lookupTickers(env, raw.changed);
+          const g = gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip)));
+          const nowRows = alertRows(g.moves);
+          const diff = compareToBuild(nowRows, b.rows);
+          item.now = { result: diff.length ? 'fail' : 'pass', rows: nowRows.size, failed: diff.map(row), held: g.held.map((h) => ({ ticker: h.ticker, cusip: h.cusip, change: h.change, reason: h.reason })) };
+        }
+      } catch (e) {
+        item.now = { result: `error: ${e}` };
+      }
+    }
+    out.push(item);
+  }
+  const count = (k: 'as_sent' | 'now') => {
+    const xs = out.map((x) => (x[k] as { result?: string; failed?: { review?: boolean }[] } | undefined)).filter(Boolean) as { result: string; failed?: { review?: boolean }[] }[];
+    return { pass: xs.filter((x) => x.result === 'pass').length, fail: xs.filter((x) => x.result === 'fail').length, fail_mailable: xs.filter((x) => x.failed?.some((f) => !f.review)).length, other: xs.filter((x) => x.result !== 'pass' && x.result !== 'fail').length };
+  };
+  return { total: all.length, offset: o.offset ?? 0, checked: out.length, as_sent: count('as_sent'), ...(o.recompute ? { now: count('now') } : {}), no_build: out.filter((x) => x.result === 'no_build').length, alerts: out };
 }
 
 /** latency.json's `reconciliation`: "alerts reconciled: N of N" on /status/. */

@@ -1938,6 +1938,11 @@ describe('copybook api', () => {
     // Checked once: the next run doesn't mail again; the log feeds latency.json's reconciliation.
     sent = [];
     expect((await reconcileAlerts(env, now)).checked).toEqual([]);
+    // The operator's dry run reads the same stores: the alert fails as sent (APH mailable, the bond for review), and it sends nothing.
+    const { reconcileDry } = await import('../src/alerts');
+    const dry = await reconcileDry(env, now);
+    expect([dry.total, dry.as_sent]).toEqual([1, { pass: 0, fail: 1, fail_mailable: 1, other: 0 }]);
+    expect((dry.alerts as { as_sent: { failed: { ticker: string; review?: boolean }[] } }[])[0].as_sent.failed.map((f) => [f.ticker, !!f.review])).toEqual([['BOND', true], ['APH', false]]);
     expect(sent).toHaveLength(0);
     expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', failed_rows: 2, corrections_sent: 1 }] });
   });
