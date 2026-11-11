@@ -437,12 +437,19 @@ def fix_with_consensus(managers: list[dict]) -> int:
     n = 0
     for q in quarters:
         changed = False
+        # A book whose lines as filed already sum to its cover page's total is in dollars, as the filer says: no line
+        # in it is scaled x1000 (Mizuho Securities USA 2026Q3: cover $6.30B = its lines; x1000 on MCHP, ON and AKAM
+        # made $13.18B, though ON and AKAM then priced near their peers). Such a line is held instead.
+        cover, tot = q.get("cover_total"), sum(h["value"] for h in q["holdings"])
+        in_dollars = bool(cover and abs(tot - cover) <= 0.02 * cover)
         for h in q["holdings"]:
             if not is_equity(h) or h["shares"] <= 0:
                 continue
             m = cons.get((q["quarter"], h["cusip"]))
             f = consensus_factor(h["value"] / h["shares"], m)
-            if f != 1.0:
+            if f == 1000.0 and in_dollars:
+                h["price_outlier"], h["value_rescale"] = True, "rejected"
+            elif f != 1.0:
                 h["value"] *= f
                 changed = True
                 n += 1

@@ -441,6 +441,15 @@ class MoveMathTest(unittest.TestCase):
         build.fix_with_consensus([m] + others)  # an earlier build's x1000 is judged again from the filed value
         h = m["history"][0]["holdings"][0]
         self.assertEqual((h["value"], h.get("price_outlier"), h.get("value_rescale")), (3256537, True, "rejected"))
+        # AKAM in the same filing: x1000 would price at $113.6 against $106.35, but the cover ($6.30B) equals the
+        # lines as filed, so the book is in dollars: held, not +$1.27B.
+        akam = {"slug": "mz", "history": [{"quarter": "2026Q3", "unit_fix": 1.0, "cover_total": 1273895 + 5e9, "holdings": [
+            self.row("00971T101", "AKAM", 11211728, 1273895000) | {"value_as_filed": 1273895}, self.row("X", "X", 1, 5e9)]}]}
+        peers = [{"slug": f"p{i}", "history": [{"quarter": "2026Q3", "total_value": 10635, "holdings": [self.row("00971T101", "AKAM", 100, 10635)]}]}
+                 for i in range(3)]
+        build.fix_with_consensus([akam] + peers)
+        h = next(x for x in akam["history"][0]["holdings"] if x["ticker"] == "AKAM")
+        self.assertEqual((h["value"], h.get("value_rescale")), (1273895, "rejected"))
         r = build.with_changes(m["history"][0] | {"holdings": [h]}, {"quarter": "2026Q2", "holdings": []})[0]
         self.assertEqual((r["change"], r["unreliable"], r["value_delta"], r["value_delta_basis"]), ("new", "both", 0, None))
 
