@@ -35,3 +35,30 @@ it('index contract: the live index.json meets it', async () => {
   }
   expect(checkIndex(idx)).toEqual([]);
 }, 30_000);
+
+it("types guard: a held run emails hello@ once and status.json carries it", async () => {
+  const { runBackstop } = await import('../src/alerts');
+  const kv = new Map<string, string>();
+  const DB = { get: async (k: string) => kv.get(k) ?? null, put: async (k: string, v: string) => void kv.set(k, v), delete: async (k: string) => void kv.delete(k), list: async () => ({ keys: [], list_complete: true }) };
+  const sent: string[] = [];
+  const guard = { checked_at: '2026-11-11T06:23:00Z', status: 'held', reason: 'hedge_fund moved -93%', moved: [{ type: 'hedge_fund', published: 1243, candidate: 88, change_pct: -92.9 }] };
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async (u: string, init?: RequestInit) => {
+    if (String(u).endsWith('types_guard.json')) return Response.json(guard);
+    if (String(u).endsWith('index.json')) return new Response(null, { status: 304 });
+    if (String(u).includes('resend')) return sent.push(String(init?.body)), Response.json({ id: 'x' });
+    return new Response('{}', { status: 404 });
+  }) as typeof fetch;
+  try {
+    const env = { DB, DATA_URL: 'https://d.test/', RESEND_API_KEY: 'k', EMAIL_FROM: 'a@b.c', CONTACT_EMAIL: 'ops@test' } as never;
+    await kv.set('status:fresh', '{}');
+    await kv.set('idx:etag', 'e');
+    await runBackstop(env, Date.now()).catch(() => null);
+    await runBackstop(env, Date.now()).catch(() => null);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toContain('Copybook: ingest held a filer-type change (published types kept)');
+    expect(JSON.parse(kv.get('types:guard')!)).toMatchObject({ checked_at: '2026-11-11T06:23:00Z', status: 'held' });
+  } finally {
+    globalThis.fetch = orig;
+  }
+});

@@ -1734,7 +1734,24 @@ async function indexContract(env: Env, idx: unknown, now: number): Promise<void>
   await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: `Copybook: index.json breaks the alert routing contract (${problems.length} problem${problems.length === 1 ? '' : 's'})`, text: `Build ${build}. Alerts may be missing until ingest fixes these fields (copybook/api/src/contract.ts):\n\n${problems.map((x) => `- ${x}`).join('\n')}\n` }], { tier: 'account' });
 }
 
+/**
+ * Ingest's filer-type publish guard (data/types_guard.json): a full run that would move any type's count by over 10%
+ * keeps the published types (`held`). One email to hello@ per held run; status.json shows the latest (types_guard).
+ */
+async function typesGuard(env: Env): Promise<void> {
+  const g = (await fetch(`${env.DATA_URL}types_guard.json`, { signal: AbortSignal.timeout(5000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { checked_at?: string; status?: string; reason?: string; moved?: { type: string; published: number; candidate: number; change_pct: number }[] } | null;
+  if (!g?.checked_at) return;
+  const was = JSON.parse((await env.DB.get('types:guard')) ?? 'null') as { checked_at?: string } | null;
+  if (was?.checked_at === g.checked_at) return;
+  await env.DB.put('types:guard', JSON.stringify({ checked_at: g.checked_at, status: g.status ?? null, reason: g.reason ?? null, moved: g.moved ?? [] }));
+  if (g.status !== 'held') return;
+  const { sendMail } = await import('./email');
+  const moved = (g.moved ?? []).map((m) => `- ${m.type}: ${m.published} published, ${m.candidate} in the run (${m.change_pct > 0 ? '+' : ''}${m.change_pct}%)`).join('\n');
+  await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: 'Copybook: ingest held a filer-type change (published types kept)', text: `The data run of ${g.checked_at} didn't publish its filer types: ${g.reason ?? 'the counts moved too far'}. Members still get alerts routed by the previous types.\n\n${moved}\n\nTo accept the move, dispatch a full run with accept_types.\n` }], { tier: 'account' });
+}
+
 export async function runBackstop(env: Env, now: number): Promise<Record<string, unknown>> {
+  await typesGuard(env).catch((e) => console.error(`types_guard: ${e}`));
   // index.json (900 KB) only changes with a data build: when it hasn't, skip parsing it and go
   // straight to the follow-ups. Its derived KV (CIK map, /v1 filers, periods) is unchanged too.
   // Without /status/'s freshness record yet, read the index once even if unchanged, so it's filled.

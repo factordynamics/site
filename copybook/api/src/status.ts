@@ -150,6 +150,8 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
     mail_quota: await mailQuotaStatus(env, s.api_mail ?? null),
     // ingest's index.json against the fields alert routing reads (contract.ts): ok, build, problems, checked_at.
     index_contract: JSON.parse((await env.DB.get('index:contract')) ?? 'null'),
+    // Ingest's filer-type publish guard (types_guard.json): checked_at, status (published, accepted, held, kept), reason, moved.
+    types_guard: JSON.parse((await env.DB.get('types:guard')) ?? 'null'),
     probe: {
       target: 'members API /health, from Cloudflare cron',
       interval_seconds: 60,
