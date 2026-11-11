@@ -90,9 +90,7 @@ function Hero({ managers }: { managers?: Manager[] }) {
 
 // The season hero: how fast this season's 13F alerts went out (latency.json, never a fixed figure), who
 // files next (d/expected.json) and the trial.
-// "within 2 minutes" while the 13F median (the same figure /speed/'s 13F row shows) is under 120 s, else the
-// median rounded up to whole minutes; "within minutes" when latency.json can't load.
-const withinLabel = (s?: number | null) => (s == null ? 'within minutes' : s < 120 ? 'within 2 minutes' : `within ${Math.ceil(s / 60)} minutes`)
+// Marketing's sanctioned claim, only while the 13F median (the same figure /speed/'s 13F row shows) is under 120 s.
 function SeasonLead() {
   const sn = seasonNow()
   const lat = useAsync(() => loadLatency().catch(() => null), [])
@@ -112,7 +110,7 @@ function SeasonLead() {
           <Skeleton className="h-[1.2em] w-4/5" />
         ) : (
           <>
-            Copy emails each superinvestor’s 13F, with what they bought and sold. Most 13F alerts reach members {withinLabel(med?.median_seconds)} of the SEC filing. Every alert is timed on the{' '}
+            Copy emails each superinvestor’s 13F, with what they bought and sold. {med?.median_seconds != null && med.median_seconds < 120 ? 'Median under 2 minutes from EDGAR acceptance. ' : ''}Every alert is timed on the{' '}
             <Link to="/speed/" className="font-medium text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink">
               speed page
             </Link>
