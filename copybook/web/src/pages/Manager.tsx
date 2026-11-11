@@ -7,7 +7,7 @@ import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { Arrow, Badge, Button, Lock, Monogram, NotCounted, Panel, Skeleton, Stat, Ticker } from '../components/ui'
 import { getToken, isPaying, useMember } from '../lib/account'
 import { useTrackVisit } from '../lib/track'
-import { FollowSignup } from '../components/FollowSignup'
+import { FridayBox } from '../components/FridayBox'
 import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
@@ -132,7 +132,23 @@ export function ManagerPage() {
         )}
       </header>
 
-      {f && q3 && q3.kind !== 'filed' && (
+      {/* Signed out, a fund we track: the free Friday email that follows it first, the trial below (the /season/ pattern). */}
+      {f && !f.filer && !getToken() && (
+        <FridayBox
+          className="mt-5 max-w-2xl"
+          top={
+            q3 && q3.kind !== 'filed' ? (
+              <p className="mb-2 text-[13.5px] text-ink-2">
+                <span className="font-medium text-accent-2">{q3.kind === 'expected' && due ? `${q3.text.replace(' expected', ' 13F expected')}, ${usualTime(due)}.` : `${q3.text.replace(' due', ' 13F due')}, the filing deadline.`}</span> {fridayLine(f.manager, q3.day)}
+              </p>
+            ) : undefined
+          }
+          title={`Get ${possessive(f.manager)} moves free, in Friday’s email`}
+          people={[{ slug: f.slug, name: f.manager }]}
+          trial={`Want ${possessive(shortFirst(f.manager))} 13F the minute it’s filed? Copy emails it with its moves, checked on EDGAR every minute.`}
+        />
+      )}
+      {f && q3 && q3.kind !== 'filed' && getToken() && (
         <div className="mt-5 rounded-xl bg-accent-soft px-4 py-3 text-[14.5px] leading-snug text-accent-2">
           <p className="font-medium">
             {q3.kind === 'expected' && due ? `${q3.text.replace(' expected', ' 13F expected')}, ${usualTime(due)}.` : `${q3.text.replace(' due', ' 13F due')}, the filing deadline.`}
@@ -147,7 +163,6 @@ export function ManagerPage() {
                 </Link>
               </div>
               <p className="mt-1.5 text-[12.5px] text-accent-2/80">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
-              {!getToken() && <FollowSignup people={[{ slug: f.slug, name: f.manager }]} label={`Or follow ${f.manager} free`} secondary className="mt-3 text-ink" />}
               <p className="mt-2 text-[13px] text-accent-2/85">{fridayLine(f.manager, q3.day)}</p>
             </>
           )}

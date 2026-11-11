@@ -7,7 +7,8 @@ import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
-import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
+import { downloadFile, getToken, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
+import { FridayBox } from '../components/FridayBox'
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, Lock, Monogram, NotCounted, Panel, Skeleton, Stat } from '../components/ui'
 import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, NOT_COUNTED } from '../lib/data'
@@ -218,6 +219,17 @@ export function StockPage() {
       </header>
 
       {d && <Reissued tickers={d.classes.map((c) => c.ticker)} name={d.name} />}
+
+      {/* Signed out: the free Friday email that follows this stock first, the trial below (the /season/ pattern). */}
+      {d && !getToken() && (
+        <FridayBox
+          className="mt-5 max-w-2xl"
+          kind="stock"
+          title={`Get superinvestor moves in ${d.ticker} free, in Friday’s email`}
+          people={[{ slug: d.ticker, name: d.ticker }]}
+          trial={`Want the moves in ${d.ticker} the minute they’re filed? Copy emails each 13F as it’s filed, checked on EDGAR every minute.`}
+        />
+      )}
 
       {due && (
         <Link to="/season/#expected" className="mt-6 flex items-center gap-2 rounded-xl bg-accent-soft px-4 py-2.5 text-[14px] font-medium text-accent-2 hover:bg-[#dfe4fb]">

@@ -5,7 +5,7 @@ import { Signup } from '../components/Signup'
 import { Arrow, AvatarStack, Badge, Button, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { getToken, isPaying, useMember } from '../lib/account'
 import { track, useTrackVisit } from '../lib/track'
-import { FollowSignup } from '../components/FollowSignup'
+import { FridayBox } from '../components/FridayBox'
 import { FollowButton } from '../components/FollowButton'
 import { HedgeFlow } from '../components/HedgeFlow'
 import { EdgarClosed } from '../components/EdgarClosed'
@@ -39,8 +39,8 @@ const dueLabel = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' })
 
 
-const TrialButton = ({ quiet = false }: { quiet?: boolean }) => (
-  <Button to={pricingTo()} variant={quiet ? 'outline' : 'primary'} onClick={() => track('trial_click')} className="shrink-0">
+const TrialButton = () => (
+  <Button to={pricingTo()} onClick={() => track('trial_click')} className="shrink-0">
     Start {TRIAL_DAYS}-day free trial
   </Button>
 )
@@ -112,29 +112,15 @@ export function Season() {
           {/* Signed out: the free Friday email first (one field, famous names followed by default, Change to pick
               others), then the trial. Post A: 151 views of the follow-first form, 0 signups. */}
           {!getToken() && (
-            <div className="mt-4 rounded-xl bg-accent-soft px-4 py-3.5 text-[15px] leading-snug text-accent-2">
-              {!passed && next && <p className="mb-2 text-[13.5px] text-ink-2">Next up: {next}.</p>}
-              <p className="text-[16px] font-semibold tracking-[-0.01em] text-ink">Every Friday: the week’s biggest superinvestor buys and sells. Free.</p>
-              <FollowSignup
-                people={FAMOUS}
-                others={up?.people ?? []}
-                collapsed
-                cta="Get it free"
-                label="Your email, for the free Friday email"
-                quietLabel
-                className="mt-3 text-[14.5px] text-ink"
-              />
-              <Link to="/weekly/" className="mt-1 inline-flex items-center gap-1 text-[13.5px] font-medium text-accent hover:text-accent-2">
-                See last week’s email <Arrow className="size-3" />
-              </Link>
-              <div className="mt-4 border-t border-accent/20 pt-4">
-                <p className="text-[14px] text-ink-2">Want each 13F as it’s filed? Copy emails you each one with its moves, checked on EDGAR every minute.</p>
-                <div className="mt-2.5">
-                  <TrialButton quiet />
-                  <p className="mt-1.5 text-[12.5px] text-ink-3">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
-                </div>
-              </div>
-            </div>
+            <FridayBox
+              className="mt-4"
+              top={!passed && next ? <p className="mb-2 text-[13.5px] text-ink-2">Next up: {next}.</p> : undefined}
+              title="Every Friday: the week’s biggest superinvestor buys and sells. Free."
+              people={FAMOUS}
+              others={up?.people ?? []}
+              collapsed
+              trial="Want each 13F as it’s filed? Copy emails you each one with its moves, checked on EDGAR every minute."
+            />
           )}
           {getToken() && !passed && next && (
             <div className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[15px] leading-snug text-accent-2">
