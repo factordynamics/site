@@ -42,6 +42,7 @@ FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "val
 SECS: dict[str, dict] = {}
 PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
+EQUITY: dict[str, float] = {}  # cik -> value of its share positions (SH, no options, no PRN): the weight denominator
 FILING: dict[str, dict] = {}  # cik -> the filing behind its LATEST book (accession, filing_date, accepted_at)
 ACCEPTED: dict[str, str] = {}  # accession -> EDGAR acceptance time (accepted.py)
 
@@ -145,6 +146,8 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
         return None
     pq = prev_quarter(q)
     cur = book(read(DATA / "fb" / q / f"{shard['cik']}.json") or (None if shard.get("truncated") else shard))
+    if cur is not None and cur.get("equity_value"):
+        EQUITY[shard["cik"]] = round(cur["equity_value"])
     prev = book(read(DATA / "fb" / pq / f"{shard['cik']}.json"))
     if cur is None:  # latest book only as a truncated public shard: its newest full book stands in
         if prev is not None:
@@ -227,7 +230,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             t = r.get("ticker") or (SECS.get(c) or {}).get("ticker")
             if t:
                 tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
-        book[cik] = sum(by_issuer.values())
+        book[cik] = EQUITY.get(cik) or sum(by_issuer.values())  # the SH book, as on stock pages
         top10[cik] = {k for k, v in sorted(by_issuer.items(), key=lambda kv: -kv[1])[:10] if v > 0}
     out, full = DATA / "hl", DATA / "hlf"
     out.mkdir(exist_ok=True)
@@ -352,7 +355,9 @@ def main() -> int:
         path = DATA / "f" / f"{shard['cik']}.json"
         n += 1
         got = changes(shard)
-        base = {k: v for k, v in shard.items() if k not in ("prev_quarter", "changes", "moves")}
+        base = {k: v for k, v in shard.items() if k not in ("prev_quarter", "changes", "moves", "equity_value")}
+        if EQUITY.get(shard["cik"]):  # weights on the share (SH) book, never the total with notes and options
+            base["equity_value"] = EQUITY[shard["cik"]]
         if got is None:
             if not shard.get("_fb_only"):
                 write(path, base)
@@ -399,6 +404,8 @@ def main() -> int:
             LATEST[cik] = [h | {"shares_type": h.get("shares_type") or "SH"} for h in (b.get("holdings") or []) + (b.get("exited") or [])]
             PERIOD[cik] = b["quarter"]
             FILING[cik] = filing(b)
+            if b.get("equity_value"):
+                EQUITY[cik] = round(b["equity_value"])
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
     print(f"moves: {write_combined_shards()} shards in fall/ for the site build", flush=True)
     print(f"moves: {with_prev}/{n} filers have a prior quarter on file; {FIXED[0]} lines rescaled by the "

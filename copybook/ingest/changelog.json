@@ -2,6 +2,17 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-holder-weights",
+   "date": "2026-11-11",
+   "kind": "correction",
+   "title": "Holder weights use each filer's share book",
+   "body": "In the all-filer holder lists (stock pages' holders, data/hl/), a filer's weight in a stock was its position over its 13F total less options, which still included principal-amount notes (PRN). The methodology defines weight over the share (SH) book, as the fund pages do. Every filer's shard now carries equity_value (share positions only: no options, no notes), and holder weights divide by it. Filers with large note books moved most: Amundi's CMG weight goes from 0.000828 ($410.8M over a book including $51.4B of notes) to 0.000924, about 11% higher. Top-10 and over-5% crowding counts use the same denominator.",
+   "quarters": [
+    "2026Q2",
+    "2026Q3"
+   ]
+  },
+  {
    "id": "2026-11-11-amundi-merged-book",
    "date": "2026-11-11",
    "kind": "correction",

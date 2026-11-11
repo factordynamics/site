@@ -180,6 +180,29 @@ class MoveMathTest(unittest.TestCase):
         self.assertNotIn("split", rows[0])
         self.assertEqual((rows[0]["prev_shares"], rows[0]["change"]), (100, "added"))
 
+    def test_holder_weights_use_the_share_book(self):
+        # Amundi CMG: $410.8M over the SH book reads 0.000924; over the total with $51.4B of notes, 0.000828.
+        import tempfile
+        from pathlib import Path as P
+        from ingest import moves
+        cols = ["ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type"]
+        rows = [["CMG", "X", "COM", "169656105", None, 100, 400.0, "SH"],
+                [None, "X", "NOTE 1%", "123456AB1", None, 50, 51.0, "PRN"],
+                ["CMG", "X", "COM", "169656105", "Call", 10, 30.0, "SH"]]
+        with tempfile.TemporaryDirectory() as d:
+            old = moves.DATA
+            moves.DATA = P(d)
+            try:
+                for q in ("2026Q2", "2026Q3"):
+                    (P(d) / "fb" / q).mkdir(parents=True)
+                    (P(d) / "fb" / q / "0000000001.json").write_text(json.dumps(
+                        {"ok": True, "quarter": q, "columns": cols, "rows": rows}))
+                moves.changes({"ok": True, "cik": "0000000001", "quarter": "2026Q3"})
+                self.assertEqual(moves.EQUITY["0000000001"], 400)
+            finally:
+                moves.DATA = old
+                moves.EQUITY.clear()
+
     def test_gate_refuses_a_parent_book_merged_in(self):
         import tempfile
         from pathlib import Path as P
