@@ -3,14 +3,16 @@ import { ApiError, call, downloadFile, errText } from '../lib/account'
 import { Badge, Button } from './ui'
 
 // The access log (payments' GET /team/access for a Fund owner, GET /me/access for every member): sign-ins, API keys,
-// changes, downloads and every operator access, the last 90 days of a year-long, append-only log. Country comes
-// from Cloudflare; there is never an IP. Before the API serves these routes (404), neither panel shows.
+// changes, downloads and every operator access, the last 90 days of a year-long, append-only log, plus `use[]`: one
+// row per hour, seat, key or session, network (/24) and class. Country comes from Cloudflare; the network is a /24
+// (IPv6 /48), never the IP. Before the API serves these routes (404), neither panel shows.
 
 type Key = { id: string; name: string; prefix: string; created: string | null; last_used_at: string | null }
-type Ev = { at: string; seat?: string; kind: string; by: 'self' | 'owner' | 'operator'; country: string | null; detail?: string | null; key?: { id: string; name: string } | null; reason?: string | null }
+type Ev = { at: string; seat?: string; kind: string; by: 'self' | 'owner' | 'operator'; country: string | null; ip24?: string | null; detail?: string | null; key?: { id: string; name: string } | null; reason?: string | null }
 type Seat = { email: string; role: 'owner' | 'seat'; status: 'owner' | 'invited' | 'active' | 'revoked' | 'removed'; invited_at: string | null; removed_at: string | null; last_sign_in: string | null; last_api_use: string | null; key_count: number; keys: Key[] }
-type TeamAccessData = { shown_days: number; seats: Seat[]; events: Ev[] }
-type MyAccessData = { shown_days: number; last_sign_in: string | null; last_api_use: string | null; keys: Key[]; events: Ev[]; operator: { at: string; detail: string; reason: string | null }[] }
+type Use = { hour: string; seat?: string; via: 'key' | 'session' | 'feed'; key: { id: string; name: string } | null; ip24: string | null; class: 'bulk' | 'api' | 'feed' | 'account'; count: number }
+type TeamAccessData = { shown_days: number; seats: Seat[]; events: Ev[]; use?: Use[] }
+type MyAccessData = { shown_days: number; last_sign_in: string | null; last_api_use: string | null; keys: Key[]; events: Ev[]; use?: Use[]; operator: { at: string; detail: string; reason: string | null }[] }
 
 const KIND: Record<string, string> = {
   invite: 'Invited',
@@ -33,7 +35,9 @@ const STATUS: Record<Seat['status'], { label: string; tone: 'up' | 'accent' | 'd
   revoked: { label: 'Signed out everywhere', tone: 'down' },
   removed: { label: 'Removed', tone: 'neutral' },
 }
+const CLASS: Record<Use['class'], string> = { bulk: 'Bulk files', api: 'API', feed: 'Feed', account: 'Account' }
 const RULES = 'Entries are kept for a year and shown here for 90 days. The log is append-only: nothing edits or deletes an entry. It is erased with the account.'
+const NET = 'Country comes from the network, and we keep only the network block (a /24), never the full IP address.'
 
 const region = (() => {
   try {
@@ -44,6 +48,7 @@ const region = (() => {
 })()
 const place = (c: string | null) => (c ? (region?.of(c.toUpperCase()) ?? c.toUpperCase()) : null)
 const at = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'never')
+const hourLabel = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric' })
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'never')
 
 /** Loads one access route; `null` data with no error means the route isn't served yet, and the panel stays hidden. */
@@ -82,7 +87,7 @@ function EventList({ events, team }: { events: Ev[]; team?: boolean }) {
               {e.key && <span className="text-ink-2"> · key “{e.key.name}”</span>}
               {e.detail && <span className="text-ink-2"> · {e.detail}</span>}
               <span className="block text-[12.5px] text-ink-3">
-                {[team && e.seat, BY[e.by], place(e.country), e.reason && `reason: ${e.reason}`].filter(Boolean).join(' · ')}
+                {[team && e.seat, BY[e.by], [place(e.country), e.ip24].filter(Boolean).join(', '), e.reason && `reason: ${e.reason}`].filter(Boolean).join(' · ')}
               </span>
             </span>
           </li>
@@ -91,6 +96,37 @@ function EventList({ events, team }: { events: Ev[]; team?: boolean }) {
       {events.length > 12 && (
         <button type="button" onClick={() => setAll((x) => !x)} className="mt-2 text-[13px] font-medium text-accent hover:text-accent-2">
           {all ? 'Show fewer' : `Show all ${events.length}`}
+        </button>
+      )}
+    </>
+  )
+}
+
+/** `use[]`: who used the account, the API or a feed, hour by hour, through which key and from which network. */
+function UseList({ use, team }: { use: Use[]; team?: boolean }) {
+  const [all, setAll] = useState(false)
+  if (!use.length) return <p className="mt-3 text-[13.5px] text-ink-3">No use in the last 90 days.</p>
+  const shown = all ? use : use.slice(0, 12)
+  return (
+    <>
+      <ol className="mt-3 divide-y divide-line text-[13.5px]">
+        {shown.map((u, i) => (
+          <li key={`${u.hour}-${i}`} className="grid gap-x-4 gap-y-0.5 py-2 sm:grid-cols-[9.5rem_minmax(0,1fr)_auto]">
+            <span className="num text-[12.5px] text-ink-3">{hourLabel(u.hour)}</span>
+            <span className="min-w-0">
+              <span className="font-medium text-ink">{team && u.seat ? u.seat : CLASS[u.class]}</span>
+              <span className="text-ink-2"> · {u.via === 'key' ? (u.key ? `key “${u.key.name}”` : 'API key') : u.via === 'feed' ? 'feed link' : 'signed-in session'}</span>
+              <span className="block text-[12.5px] text-ink-3">{[team && u.seat && CLASS[u.class], u.ip24 ?? 'network not recorded'].filter(Boolean).join(' · ')}</span>
+            </span>
+            <span className="num text-[12.5px] text-ink-2 sm:text-right">
+              {u.count.toLocaleString('en-US')} {u.count === 1 ? 'request' : 'requests'}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {use.length > 12 && (
+        <button type="button" onClick={() => setAll((x) => !x)} className="mt-2 text-[13px] font-medium text-accent hover:text-accent-2">
+          {all ? 'Show fewer' : `Show all ${use.length} hours`}
         </button>
       )}
     </>
@@ -142,9 +178,17 @@ export function MyAccess() {
             ) : (
               <p className="mt-2 text-[13.5px] text-ink-3">Copybook support hasn’t opened your account in the last {a.data.shown_days} days.</p>
             )}
+            {a.data.use && (
+              <>
+                <h3 className="mt-5 text-[13px] font-medium text-ink-2">Use by hour, last {a.data.shown_days} days</h3>
+                <UseList use={a.data.use} />
+              </>
+            )}
             <h3 className="mt-5 text-[13px] font-medium text-ink-2">Activity, last {a.data.shown_days} days</h3>
             <EventList events={a.data.events.filter((e) => e.by !== 'operator')} />
-            <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">{RULES} Country comes from the network; we never record an IP address.</p>
+            <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
+              {RULES} {NET}
+            </p>
           </>
         )
       )}
@@ -181,29 +225,54 @@ export function TeamAccess() {
       setBusy('')
     }
   }
-  const csv = () =>
-    downloadFile(`/team/access?format=csv${seat ? `&seat=${encodeURIComponent(seat)}` : ''}`, 'copybook-team-access.csv').catch((e) =>
+  const csv = (part?: 'events') =>
+    downloadFile(`/team/access?format=csv${part ? `&part=${part}` : ''}${seat ? `&seat=${encodeURIComponent(seat)}` : ''}`, part ? 'copybook-team-events.csv' : 'copybook-team-access.csv').catch((e) =>
       setMsg({ text: errText(e, 'The CSV didn’t download. Please try again.'), ok: false }),
     )
+  const seatPicker = seats.length > 1 && (
+    <label className="flex items-center gap-2 text-[13px] text-ink-2">
+      Seat
+      <select value={seat} onChange={(e) => setSeat(e.target.value)} className="h-9 max-w-[14rem] rounded-lg bg-paper px-2.5 text-[13px] shadow-[0_0_0_1px_var(--color-line-2)]">
+        <option value="">Everyone</option>
+        {seats.map((s) => (
+          <option key={s.email} value={s.email}>
+            {s.email}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
 
   return (
     <section id="team-access" className="mt-5 scroll-mt-24 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="max-w-xl">
           <h2 className="text-[15px] font-semibold">Team access</h2>
-          <p className="mt-1 text-[14px] text-ink-2">Each seat’s sign-ins, API keys, changes and downloads. You can delete any key on the team.</p>
+          <p className="mt-1 text-[14px] text-ink-2">Who on your team used Copybook and the API, and when: hour by hour, by seat, key and network. You can delete any key on the team.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={csv}>
-          Download CSV
-        </Button>
       </div>
       {a.err && (
         <p role="alert" className="mt-3 text-[13.5px] text-down">
           {a.err}
         </p>
       )}
+      {a.data?.use && (
+        <>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-[13px] font-medium text-ink-2">Use by hour{seat ? `, ${seat}` : ''}, last {a.data.shown_days} days</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              {seatPicker}
+              <Button variant="outline" size="sm" onClick={() => csv()}>
+                Download CSV
+              </Button>
+            </div>
+          </div>
+          <UseList use={a.data.use} team={!seat} />
+        </>
+      )}
+      <h3 className="mt-6 text-[13px] font-medium text-ink-2">Seats and API keys</h3>
       {seats.length > 0 && (
-        <ul className="mt-4 divide-y divide-line">
+        <ul className="mt-2 divide-y divide-line">
           {seats.map((s) => (
             <li key={s.email} className="py-3">
               <p className="flex flex-wrap items-center gap-2 text-[14px]">
@@ -239,23 +308,18 @@ export function TeamAccess() {
         </p>
       )}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-[13px] font-medium text-ink-2">Activity, last {a.data?.shown_days ?? 90} days</h3>
-        {seats.length > 1 && (
-          <label className="flex items-center gap-2 text-[13px] text-ink-2">
-            Seat
-            <select value={seat} onChange={(e) => setSeat(e.target.value)} className="h-9 rounded-lg bg-paper px-2.5 text-[13px] shadow-[0_0_0_1px_var(--color-line-2)]">
-              <option value="">Everyone</option>
-              {seats.map((s) => (
-                <option key={s.email} value={s.email}>
-                  {s.email}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <h3 className="text-[13px] font-medium text-ink-2">Activity{seat ? `, ${seat}` : ''}, last {a.data?.shown_days ?? 90} days</h3>
+        <div className="flex flex-wrap items-center gap-3">
+          {!a.data?.use && seatPicker}
+          <Button variant="outline" size="sm" onClick={() => csv(a.data?.use ? 'events' : undefined)}>
+            Download CSV
+          </Button>
+        </div>
       </div>
       {a.data && <EventList events={a.data.events} team={!seat} />}
-      <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">{RULES} Country comes from the network; we never record an IP address.</p>
+      <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
+        {RULES} {NET}
+      </p>
     </section>
   )
 }
