@@ -294,7 +294,7 @@ export function Pricing() {
                   ) : plan ? (
                     // Said plainly under every paid button: Copy's trial takes no card (Nov 11); Pro's still does.
                     <>
-                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>{tier.id === 'copy' ? 'No card needed for the trial.' : `Card required · charged on day ${TRIAL_DAYS + 1} unless you cancel`}</span>
+                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>{tier.id === 'copy' ? `${TRIAL_DAYS} days free, no card needed. Then $${plans.copy.monthly}/month or $${plans.copy.yearly}/year.` : `Card required · charged on day ${TRIAL_DAYS + 1} unless you cancel`}</span>
                       {referred ? referredTerms(tier.id, cycle) : trialTerms(tier.id)}
                     </>
                   ) : (
@@ -337,6 +337,31 @@ export function Pricing() {
           )
         })}
       </div>
+
+      {/* Between seasons (marketing's plan rev 69): what Copy does from the November deadline to February's 13Fs.
+          Last winter's Form 4 and 13D/G counts join this once payments sends them. */}
+      <section className="mx-auto mt-10 max-w-[1240px] rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)] md:p-8" aria-labelledby="between">
+        <div className="grid gap-6 md:grid-cols-[1fr_1.15fr] md:gap-12">
+          <div>
+            <p className="text-[11.5px] font-semibold uppercase tracking-[0.06em] text-accent">Between seasons</p>
+            <h2 id="between" className="mt-2 text-[24px] font-semibold leading-tight tracking-[-0.03em]">
+              {Date.now() < Date.parse('2026-11-17T05:00:00Z') ? 'After Monday, Copy keeps working.' : 'Between 13F seasons, Copy keeps working.'}
+            </h2>
+            <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Copy emails you when they do.</p>
+            <p className="mt-4 text-[14px] font-medium leading-relaxed">
+              ${plans.copy.yearly}/year (about 3 months free) or ${plans.copy.monthly}/month. Cancel anytime. {TRIAL_DAYS} days free, no card needed.
+            </p>
+          </div>
+          <FeatureList
+            items={[
+              { t: 'Insider buys in your stocks', d: 'Open-market Form 4 buys, as they’re filed.' },
+              { t: '13D and 13G stakes', d: 'Form 4 trades and 13D/G stakes by the funds you follow, and any new 13D or 13G in your stocks.' },
+              { t: 'The Friday email on Dec 4', d: 'With the season’s last late filers.' },
+              { t: 'February’s 13Fs', d: 'Each Q4 filing by email as it’s filed, with its moves (due Tue Feb 16).' },
+            ]}
+          />
+        </div>
+      </section>
 
       <section className="mx-auto mt-20 max-w-[1240px]" aria-labelledby="compare">
         <h2 id="compare" className="text-[28px] font-semibold tracking-[-0.03em]">
