@@ -1602,17 +1602,21 @@ a.hb-row:hover {
   gap: 20px;
   align-items: start;
 }
+.home-main,
 .home-side {
   display: grid;
   gap: 20px;
 }
 /* The trades and filings panels fill in after the page renders: reserve their full height (table head +
- * 10 or 8 rows) so the panels below them don't jump. */
+ * 10 or 12 rows, 8 in one column) so the panels below them don't jump. */
 .reserve-10 > .body {
   min-height: calc(var(--th) + 10 * var(--tr) + 18px); /* + body padding */
 }
 .reserve-8 > .body {
   min-height: calc(var(--th) + 8 * var(--tr) + 18px);
+}
+.reserve-12 > .body {
+  min-height: calc(var(--th) + 12 * var(--tr) + 18px);
 }
 .home-stats .stat .sub {
   overflow: hidden;
@@ -1662,6 +1666,18 @@ a.hb-row:hover {
 @media (max-width: 1100px) {
   .home-grid {
     grid-template-columns: 1fr;
+  }
+  /* One column: biggest bets goes last, after the side panels, as before it moved to the main column. */
+  .home-main,
+  .home-side {
+    display: contents;
+  }
+  .home-bets {
+    order: 1;
+  }
+  /* One column shows eight recent stakes (HomeBody), so reserve eight rows. */
+  .reserve-12 > .body {
+    min-height: calc(var(--th) + 8 * var(--tr) + 18px);
   }
 }
 @media (max-width: 1060px) {

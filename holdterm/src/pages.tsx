@@ -525,6 +525,14 @@ function HomeBody() {
   const seasonFiled = ms.filter((m) => m.quarter === s.q)
   // Before three funds have filed this season, lead with the previous quarter's filings instead.
   const lead = leadQuarter(ms.map((m) => m.quarter))
+  // Two columns (over 1100px): twelve recent stakes even out the columns; one column keeps eight.
+  const [wide, setWide] = useState(() => typeof matchMedia !== 'undefined' && matchMedia('(min-width: 1101px)').matches)
+  useEffect(() => {
+    const mq = matchMedia('(min-width: 1101px)')
+    const on = () => setWide(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
   // Every fund's latest 13F, newest first; the trades panel uses the lead quarter only.
   const filers = useMemo(() => [...ms].sort((a, b) => b.filing_date.localeCompare(a.filing_date) || b.total_value - a.total_value).slice(0, 15), [ms])
   const need = useMemo(() => [...new Set([...filers, ...ms.filter((m) => m.quarter === lead)].map((m) => m.slug))], [filers, ms, lead])
@@ -581,7 +589,13 @@ function HomeBody() {
         if (h.ticker) cur.label = [...new Set([...(cur.label ?? cur.ticker ?? '').split('+'), h.ticker].filter(Boolean))].join('+')
       } else conv.set(id, { key: id, ticker: h.ticker, former: h.former, name: issuerName(h.display_name || h.issuer), slug: m.slug, firm: m.firm, weight: h.weight })
     }
-  for (const c of conv.values()) if (c.label?.includes('+')) [c.ticker] = (c.label = classOrder(c.label.split('+')).join('+')).split('+')
+  // A combined row names the company, not one class ("Berkshire Hathaway", not "Berkshire Hathaway Class A").
+  for (const c of conv.values())
+    if (c.label?.includes('+')) {
+      c.label = classOrder(c.label.split('+')).join('+')
+      c.ticker = c.label.split('+')[0]
+      c.name = c.name.replace(/,?\s+Class [A-Z]$/i, '')
+    }
   const conviction = [...conv.values()].sort((a, b) => b.weight - a.weight).slice(0, 8)
   const newStakes = events.filter((e) => e.action === 'new_stake' && daysAgo(e.filing_date) <= 30).length
   const wait = <span className="dim">…</span>
@@ -595,7 +609,10 @@ function HomeBody() {
         <Stat label={`Most sold in ${quarterLabel(lead)}`} value={crowd(picks.sold)} tone={books.data && picks.sold ? 'neg' : undefined} sub={crowdSub(picks.sold, picks.soldLine)} />
         <Stat label="New 5% stakes" value={ev.data ? num(newStakes) : wait} sub="Schedule 13D and 13G filings in the last 30 days" />
       </div>
+      {/* Two columns of about equal height on wide screens; one column below 1100px keeps the order
+          latest filings, largest trades, stakes, biggest bets (styles.css, .home-bets). */}
       <div className="home-grid">
+        <div className="home-main">
         <Panel
           title="Latest 13F filings"
           right={<A to="/funds">All investors →</A>}
@@ -660,6 +677,20 @@ function HomeBody() {
             </div>
           )}
         </Panel>
+          <Panel className="home-bets" title="Biggest single bets" right={<span className="dim">Largest share of one investor’s portfolio</span>}>
+            <Grid
+              rank
+              rows={conviction}
+              href={(r) => stockHref(r)}
+              cols={[
+                { key: 't', label: 'Stock', render: (r) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, width: '72px' },
+                { key: 'n', label: 'Company', hideSm: true, render: (r) => <span className="trunc dim">{r.name}</span> },
+                { key: 'f', label: 'Investor', render: (r) => <A to={fundPath(r.slug)}><Firm name={r.firm} /></A> },
+                { key: 'w', label: 'Weight', num: true, render: (r) => pct(r.weight, 1) },
+              ]}
+            />
+          </Panel>
+        </div>
         <div className="home-side">
           <Panel className="reserve-10 home-trades" title={`Largest trades in ${quarterLabel(lead)}`} right={<A to="/flows">All buys and sells →</A>}>
             {books.data ? (
@@ -699,7 +730,7 @@ function HomeBody() {
             )}
           </Panel>
           <Panel
-            className="reserve-8 home-trades home-filings"
+            className="reserve-12 home-trades home-filings"
             title={
               <>
                 Stakes and insider trades<span className="hide-sm">, last 30 days</span>
@@ -709,7 +740,7 @@ function HomeBody() {
           >
             {ev.data ? (
               <Grid
-                rows={events.slice(0, 8)}
+                rows={events.slice(0, wide ? 12 : 8)}
                 href={(e) => (e.ticker ? `/s/${e.ticker}` : null)}
                 cols={[
                   // Phones, as on the Stakes page: the date goes under the investor and the company's name under its ticker.
@@ -741,18 +772,6 @@ function HomeBody() {
             ) : (
               <Loading what="Loading recent filings" rows={8} />
             )}
-          </Panel>
-          <Panel title="Biggest single bets" right={<span className="dim">Largest share of one investor’s portfolio</span>}>
-            <Grid
-              rank
-              rows={conviction}
-              href={(r) => stockHref(r)}
-              cols={[
-                { key: 't', label: 'Stock', render: (r) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, width: '72px' },
-                { key: 'f', label: 'Investor', render: (r) => <A to={fundPath(r.slug)}><Firm name={r.firm} /></A> },
-                { key: 'w', label: 'Weight', num: true, render: (r) => pct(r.weight, 1) },
-              ]}
-            />
           </Panel>
         </div>
       </div>
