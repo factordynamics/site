@@ -468,11 +468,12 @@ export async function signature(secret: string, body: string, t = Math.floor(Dat
 /** The signed JSON body for one alert. */
 /**
  * A webhook's moves: held lines only in not_counted (whenever the alert was stored), each with value_delta null and
- * `counted: false`, so no client sums one; a \"shares\" line keeps its filed values (value, prev_value, value_change).
+ * `counted: false` and `change` null, so no client sums or reads one as a trade; its filed `value` and `prev_value` stay.
  */
 function hookMoves(m: Moves): Moves {
   const c = countedMoves(m);
-  return c.not_counted?.length ? { ...c, not_counted: c.not_counted.map((r) => ({ ...r, value_delta: null as unknown as number, delta_pct_of_book: null, counted: false, ...(r.unreliable === 'shares' && r.prev_value != null ? { value_change: Math.round(r.value - r.prev_value) } : {}) })) } : c;
+  // No direction either: change null (a held line's \"trimmed\" would assert a trade); value and prev_value are the facts.
+  return c.not_counted?.length ? { ...c, not_counted: c.not_counted.map((r) => ({ ...r, change: null as unknown as string, value_delta: null as unknown as number, delta_pct_of_book: null, counted: false })) } : c;
 }
 
 export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEvent[], detectedAt: number): { id: string; body: string }[] {
