@@ -996,7 +996,7 @@ function ToYearly({ cardless, day }: { cardless: boolean; day?: string }) {
   return (
     <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-ink-2">
       <span>
-        Switch to yearly at your founding price: ${prices.yearly}/yr, less than 9 months of monthly.
+        Switch to yearly at your founding price: ${prices.yearly}/yr, locked, with history back to 2013 (from Dec 31).
       </span>
       <button
         type="button"
