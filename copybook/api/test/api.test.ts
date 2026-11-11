@@ -2150,8 +2150,17 @@ describe('copybook api', () => {
       expect(await (await track(b)).json()).toEqual({ ok: true, counted: true });
     // A load test's or our own check's calls (utm_source=opscheck) are kept apart: in no page, source, post or hour count.
     for (const kind of ['visit', 'signup_view']) await track({ kind, page: '/season/', utm_source: 'opscheck', utm_content: 'load' });
+    // Client class, never the User-Agent: a page's own fetch (Sec-Fetch-*) is a browser, an unfurler or a prefetch a bot.
+    const tr = (headers: Record<string, string>) => handleRequest(new Request('https://api.test/track', { method: 'POST', body: JSON.stringify({ kind: 'trial_click', page: '/pricing/' }), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': '9.9.9.8', ...headers } }), env);
+    const chrome = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
+    await tr({ 'user-agent': chrome, 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'cross-site' });
+    await tr({ 'user-agent': 'Twitterbot/1.0' });
+    await tr({ 'user-agent': chrome, 'sec-purpose': 'prefetch', 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'cross-site' });
+    await tr({ 'user-agent': chrome });
     const ops = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
-    expect(ops.track_by_utm).toEqual({ visit: { 'x|kahn-watch': 1, 'x|seed-season': 2 }, trial_click: { 'direct|-': 1 } });
+    expect(ops.track_by_client.trial_click).toMatchObject({ browser: 1, bot: 3, unknown: 1, 'direct|-#browser': 1, 'direct|-#bot': 3 }); // + the earlier call with no User-Agent
+    expect(JSON.stringify(ops)).not.toContain('Chrome/130');
+    expect(ops.track_by_utm).toEqual({ visit: { 'x|kahn-watch': 1, 'x|seed-season': 2 }, trial_click: { 'direct|-': 5 } });
     expect(Object.values(ops.track)[0]).toMatchObject({ visit: { page: { '/season/': 2 }, source: { x: 3 } } });
     // By UTC hour as well, and the form's focus and submit (the lead): read-outs split before and after a post.
     for (const kind of ['signup_focus', 'signup_submit']) expect((await (await track({ kind, page: '/season/', utm_source: 'x', utm_content: 'seed-season' })).json()).counted).toBe(true);
@@ -3218,6 +3227,7 @@ describe('copybook api', () => {
     expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'yearly', ref: ref.code, email: 'new3@example.com' } })).json()).referral.first_charge_usd).toBe(70);
     // Copy's trial needs no card and is cancelled (never invoiced) if none is added; Pro still takes the card at Checkout.
     const sessions = calls.filter((c) => c.path === 'checkout/sessions').map((c) => c.body);
+    expect(sessions.every((b) => /metadata\[client\]=(bot|browser|unknown)/.test(b))).toBe(true);
     const noCard = (b: string) => [b.includes('payment_method_collection=if_required'), b.includes('[missing_payment_method]=cancel')];
     expect([noCard(sessions[0]), noCard(sessions[sessions.length - 1])]).toEqual([[false, false], [true, true]]);
     const { trialEndingMail } = await import('../src/revenue');

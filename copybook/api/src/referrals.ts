@@ -87,7 +87,7 @@ type Reply = { status: number; body: Record<string, unknown> };
 /** Fund checkout's submit note, as on the Fund Payment Links: the Terms, and the invoice route. */
 const FUND_SUBMIT = "Copybook is made by Factor Dynamics. By subscribing you agree to Copybook's Terms (copybook.factordynamics.com/terms/). To pay by invoice instead, use copybook.factordynamics.com/contact/?topic=fund.";
 
-export async function createCheckout(env: Env, b: Record<string, unknown>): Promise<Reply> {
+export async function createCheckout(env: Env, b: Record<string, unknown>, client?: 'bot' | 'browser' | 'unknown'): Promise<Reply> {
   const plan = String(b.plan ?? '');
   const interval = String(b.interval ?? '');
   if (!MONTH[plan] || (interval !== 'monthly' && interval !== 'yearly')) return { status: 400, body: { ok: false, error: 'plan: copy, pro or fund; interval: monthly or yearly', code: 'bad_request' } };
@@ -114,6 +114,8 @@ export async function createCheckout(env: Env, b: Record<string, unknown>): Prom
   const touch = { utm_source: tag(b.utm_source, 60), utm_content: tag(b.utm_content, 60), landing: tag(b.landing, 120) };
   const cs = await stripe(env, 'POST', 'checkout/sessions', {
     ...(isTest ? { 'metadata[test]': 'true' } : {}),
+    // The caller's coarse class (clientClass: bot, browser or unknown), never the User-Agent: /ops/funnel splits by it.
+    ...(client ? { 'metadata[client]': client } : {}),
     ...Object.fromEntries(Object.entries(touch).filter(([, v]) => v).map(([k, v]) => [`metadata[${k}]`, v!])),
     mode: 'subscription',
     'line_items[0][price]': price.id,

@@ -583,6 +583,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     bySrc[sk] = (bySrc[sk] ?? 0) + 1;
     const uk = post in byPost || Object.keys(byPost).length < 300 ? post : 'other';
     byPost[uk] = (byPost[uk] ?? 0) + 1;
+    // By client class (clientClass), overall and by post: bots and prefetches told apart from people.
+    const cls = clientClass(req);
+    const byClient = (d[kind].client ??= {});
+    byClient[cls] = (byClient[cls] ?? 0) + 1;
+    const byPostClient = (d[kind].utm_client ??= {});
+    byPostClient[`${uk}#${cls}`] = (byPostClient[`${uk}#${cls}`] ?? 0) + 1;
     await env.DB.put(key, JSON.stringify(d), { expirationTtl: 400 * 86400 });
     // By UTC hour too (kind x utm_source|utm_content), kept 30 days, so a read-out can tell before a post from after it.
     const at = new Date().toISOString();
@@ -616,7 +622,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (n >= 30) return json({ ok: false, error: 'too many requests, try again in an hour', code: 'rate_limited', retry_after: 3600, retry_after_seconds: 3600, retry_at: new Date(Date.now() + 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z') }, 429, { ...h, 'retry-after': '3600', 'access-control-expose-headers': 'retry-after' });
     await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
     const { createCheckout } = await import('./referrals');
-    const r = await createCheckout(env, await body(req));
+    const r = await createCheckout(env, await body(req), clientClass(req));
     return json(r.body, r.status, h);
   }
 
@@ -756,6 +762,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     for (const d of Object.values(track) as Record<string, { utm?: Record<string, number> }>[])
       for (const [kind, x] of Object.entries(d)) for (const [k, n] of Object.entries(x.utm ?? {})) (track_by_utm[kind] ??= {})[k] = (track_by_utm[kind][k] ?? 0) + n;
     // By UTC day and hour: { "2026-11-11": { "15": { visit: { "x|seed-season": 1 } } } } (30 days kept).
+    // The same counts by client class (bot, browser, unknown): overall per kind, and per post as "source|content#class".
+    const track_by_client: Record<string, Record<string, number>> = {};
+    for (const d of Object.values(track) as Record<string, { client?: Record<string, number>; utm_client?: Record<string, number> }>[])
+      for (const [kind, x] of Object.entries(d)) for (const [k, n] of Object.entries({ ...(x.client ?? {}), ...(x.utm_client ?? {}) })) (track_by_client[kind] ??= {})[k] = (track_by_client[kind][k] ?? 0) + n;
     const track_hourly: Record<string, unknown> = {};
     for (let d = 0; d < days; d++) {
       const day = new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
@@ -765,17 +775,24 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // Checkout sessions in the window from Stripe: open, complete or expired, our own (test) apart from real, by post.
     // Test: metadata.test, a client_reference_id starting "test", or a copybook-test- or gate address.
     const checkouts: Record<string, Record<string, Record<string, number>>> = {};
+    // By how the session was opened: our POST /checkout carries the caller's class (bot, browser, unknown); a Payment
+    // Link session is "pricing" when it came from our pages (they always set client_reference_id), else "external"
+    // (a bare buy.stripe.com link opened elsewhere: a crawler, an unfurler or a shared link), kept apart.
+    const checkouts_by_client: Record<string, Record<string, Record<string, number>>> = {};
     try {
       const { stripe } = await import('./stripe');
       let after: string | undefined;
       for (let page = 0; page < 5; page++) {
         const r = await stripe(env, 'GET', 'checkout/sessions', { 'created[gte]': Math.floor(Date.now() / 1000) - days * 86400, limit: 100, ...(after ? { starting_after: after } : {}) });
-        for (const cs of (r.data ?? []) as { id: string; status: string; client_reference_id?: string | null; metadata?: Record<string, string>; customer_details?: { email?: string } | null }[]) {
+        for (const cs of (r.data ?? []) as { id: string; status: string; payment_link?: string | null; client_reference_id?: string | null; metadata?: Record<string, string>; customer_details?: { email?: string } | null }[]) {
           const email = cs.customer_details?.email ?? '';
           const test = cs.metadata?.test === 'true' || /^test/i.test(cs.client_reference_id ?? '') || testAddress(email) || /^copybook-gate-/.test(email);
           const utm = cs.metadata?.utm_source ? `${cs.metadata.utm_source}|${cs.metadata.utm_content ?? '-'}` : (cs.client_reference_id ?? 'direct');
           const g = ((checkouts[test ? 'test' : 'real'] ??= {})[cs.status] ??= {});
           g[utm] = (g[utm] ?? 0) + 1;
+          const via = cs.payment_link ? (cs.client_reference_id ? 'pricing' : 'external') : (cs.metadata?.client ?? 'unknown');
+          const gc = ((checkouts_by_client[test ? 'test' : 'real'] ??= {})[cs.status] ??= {});
+          gc[via] = (gc[via] ?? 0) + 1;
         }
         if (!r.has_more || !r.data?.length) break;
         after = r.data.at(-1).id;
@@ -783,7 +800,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     } catch (e) {
       checkouts.error = { [String(e).slice(0, 120)]: { n: 1 } };
     }
-    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm, track_hourly, checkouts }, 200, h);
+    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm, track_by_client, track_hourly, checkouts, checkouts_by_client }, 200, h);
   }
 
   // Operator: one member's access log (for telling a member whether any session read their book), or an entry for a
@@ -1899,6 +1916,21 @@ async function serve(req: Request, env: Env): Promise<Response> {
  * and anonymous probes. Level 2 (95%): also anonymous stock events. Members (a bearer), sign-in, checkout, the Stripe
  * webhook, unsubscribe, feeds and /v1 are never shed.
  */
+/** Known crawlers, link unfurlers, preview fetchers and HTTP libraries (matched on the User-Agent, which is never stored). */
+const BOT_UA = /bot\b|bot\/|crawl|spider|slurp|facebookexternalhit|facebookcatalog|embedly|preview|unfurl|whatsapp|telegram|skype|discord|slack|linkedin|pinterest|headless|phantom|lighthouse|python|curl|wget|httpie|node-fetch|undici|axios|go-http|okhttp|java\/|libwww|scrapy|feedfetcher|monitor|uptime|checker|scanner|safelinks|proofpoint|mimecast|barracuda/i;
+/**
+ * A coarse class for a request, for telling people from machines in the funnel: "bot" (a known crawler, unfurler or
+ * HTTP library by User-Agent, or a prefetch: Purpose or Sec-Purpose prefetch), "browser" (a page's own fetch: the
+ * browser-only Sec-Fetch-* headers), else "unknown". The raw User-Agent is never stored.
+ */
+export function clientClass(req: Request): 'bot' | 'browser' | 'unknown' {
+  const ua = req.headers.get('user-agent') ?? '';
+  const purpose = `${req.headers.get('purpose') ?? ''} ${req.headers.get('sec-purpose') ?? ''} ${req.headers.get('x-moz') ?? ''}`;
+  if (!ua || BOT_UA.test(ua) || /prefetch|prerender/i.test(purpose)) return 'bot';
+  if (req.headers.get('sec-fetch-mode') && req.headers.get('sec-fetch-site')) return 'browser';
+  return 'unknown';
+}
+
 export function shedPath(req: Request, u: URL): number {
   if (req.method === 'POST' && u.pathname === '/track') return 1;
   if (req.method !== 'GET' || req.headers.get('authorization')) return 0;
