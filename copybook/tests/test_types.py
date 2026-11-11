@@ -40,6 +40,14 @@ class AdviserRuleTests(unittest.TestCase):
         self.assertEqual(verdict(adviser(5e9, 0, 0, individuals=3e9))[0], "wealth")
         self.assertEqual(verdict(adviser(50e9, 0, 0, inv_cos=40e9))[0], "long_only")
 
+    def test_own_form_d_counts_only_without_a_form_adv_match(self):
+        # Santa Monica Partners files Form D for its hedge fund under its own CIK and has no Form ADV match.
+        form_d = ({"0000904793"}, {})
+        self.assertEqual(classify("0000904793", "SANTA MONICA PARTNERS LP", {}, form_d)[0], "hedge_fund")
+        # With an ADV match, ADV decides: a wealth book with a small hedge fund stays wealth.
+        wealthy = adviser(6.4e9, 1, 2.2e9, {"Hedge": 1, "Other": 1}, individuals=4e9)
+        self.assertEqual(classify("0000904793", "SANTA MONICA PARTNERS LP", {}, form_d, None, wealthy)[0], "wealth")
+
     def test_shape_alone_never_makes_a_hedge_fund(self):
         shape = {"positions": 40, "top10": 0.6, "options": 0.2, "etf": 0.0, "turnover": 0.9, "aum": 2e9}
         kind, basis, _ = classify("0009999999", "Concentrated Options LP", shape)

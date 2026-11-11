@@ -106,10 +106,12 @@ OVERRIDES.update({
 # The reviewed cases (also the gate's regression test) win over everything above.
 CASES = Path(__file__).with_name("type_cases.json")
 OVERRIDES.update({c: v["type"] for c, v in json.loads(CASES.read_text())["filers"].items()})
-# Checked by hand (reclass review, 2026-11-11): Form ADV counts these advisers' private funds as hedge funds, but they
-# allocate to other managers (funds of funds, OCIOs, endowment-style platforms) or run private equity. Used only by the
-# Form ADV rule; the type is the one published before the reclass.
-ADV_NOT_HEDGE = {
+# Checked by hand (reclass review, 2026-11-11), used only when the classifier runs (not on the published types):
+# advisers whose Form ADV private funds are hedge funds but who allocate to other managers (funds of funds, OCIOs,
+# endowment-style platforms) or run private equity; rules-based ETF issuers; market makers whose 13F is inventory.
+RECLASS_CASES = {
+    "0001616667": "index", "0001744347": "index", "0001600064": "index",  # Pacer, Vident, Tidal (ETF issuers)
+    "0000932540": "other", "0001475597": "other", "0001831577": "other",  # Group One, HRT, Jump (market makers)
     "0001698246": "long_only",  # IFM Investors (infrastructure and pension-owned asset manager)
     "0001939480": "long_only",  # GCM Grosvenor (alternatives allocator, funds of funds)
     "0001514334": "long_only",  # MSD Partners (Dell family's investment firm)
@@ -318,24 +320,29 @@ def shape(book: dict | None, prev: dict | None) -> dict:
 
 def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int]] | None = None,
              common: set[str] | None = None, adviser: dict | None = None) -> tuple[str, str, dict]:
-    """(type, basis, type_evidence). hedge_fund comes only from the hand-checked cases, a name rule, or
-    Form ADV (hedge funds' gross assets at least half of RAUM, or $1B and more). Form D, names and book
-    shape alone never make a hedge fund: without ADV evidence such filers fall back to long_only."""
+    """(type, basis, type_evidence). hedge_fund comes only from the hand-checked cases, a name rule, Form ADV
+    (hedge funds' gross assets at least half of RAUM, or $1B and more at a quarter of it), or, for a filer with no
+    Form ADV match, its own Form D hedge-fund offerings. Name matches to Form D and book shape alone never make a
+    hedge fund: without such evidence those filers fall back to long_only."""
     ev: dict = {}
     if form_d and (cik in form_d[0]):
         ev["form_d"] = "files Form D for hedge funds"
     if cik in OVERRIDES:
         return OVERRIDES[cik], "override", ev | {"source": "hand-checked"}
+    if cik in RECLASS_CASES:
+        return RECLASS_CASES[cik], "hand-checked (reclass review)", ev | {"source": "hand-checked"}
     for kind, rx in RULES:
         if rx.search(name or ""):
             return kind, "name", ev | {"source": "name rule"}
     if adviser:
         kind, adv_ev = verdict(adviser)
         ev |= {"adv": adv_ev}
-        if kind == "hedge_fund" and cik in ADV_NOT_HEDGE:
-            return ADV_NOT_HEDGE[cik], "Form ADV hedge funds are allocations (hand-checked)", ev | {"source": "hand-checked"}
         if kind:
             return kind, f"Form ADV ({kind})", ev
+    elif "form_d" in ev:
+        # No Form ADV adviser under this CIK or name, but the filer itself files Form D for hedge funds (by CIK, not
+        # a shared name): Santa Monica Partners, Raffles Associates, LRT Capital.
+        return "hedge_fund", "Form D (filer's own hedge-fund offerings; no Form ADV match)", ev
     kind, basis = shape_type(name, s)
     if kind == "hedge_fund":
         kind, basis = "long_only", basis + "; no Form ADV hedge-fund evidence"
