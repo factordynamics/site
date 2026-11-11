@@ -83,6 +83,7 @@ export async function authKey(env: Env, header: string | null): Promise<KeyAuth>
 
 export interface Meter {
   hit(): Promise<MeterResult>;
+  count?(): Promise<void>;
   usage(days: number): Promise<Usage>;
 }
 
@@ -132,6 +133,19 @@ export class MeterLogic implements Meter {
     };
   }
 
+  /** Counts a use with no limit: a key's own usage, while the limit is its account's (or Fund seat's). */
+  async count(): Promise<void> {
+    const t = this.now();
+    const day = new Date(t).toISOString().slice(0, 10);
+    const minuteStart = Math.floor(t / 60_000) * 60_000;
+    if (this.win.start !== minuteStart) {
+      this.win = { start: minuteStart, n: 0 };
+      await this.storage.put('last', t);
+    }
+    this.win.n++;
+    await this.storage.put(`day:${day}`, ((await this.storage.get<number>(`day:${day}`)) ?? 0) + 1);
+  }
+
   async usage(days: number): Promise<Usage> {
     const out = [];
     for (let i = 0; i < days; i++) {
@@ -152,6 +166,7 @@ export class KeyMeter {
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === '/hit') return Response.json(await this.logic.hit());
+    if (url.pathname === '/count') return Response.json(await this.logic.count().then(() => ({ ok: true })));
     return Response.json(await this.logic.usage(Math.min(Number(url.searchParams.get('days')) || 30, 90)));
   }
 }
@@ -165,6 +180,7 @@ export function meter(env: Env, keyId: string): Meter {
   const stub = env.METER.get(env.METER.idFromName(keyId));
   return {
     hit: async () => (await stub.fetch('https://meter/hit')).json() as Promise<MeterResult>,
+    count: async () => void (await stub.fetch('https://meter/count')),
     usage: async (days) => (await stub.fetch(`https://meter/usage?days=${days}`)).json() as Promise<Usage>,
   };
 }

@@ -102,7 +102,7 @@ function memMeters(now: () => number = Date.now) {
         meters.set(n, new MeterLogic({ get: async <T,>(k: string) => store.get(k) as T | undefined, put: async (k: string, v: unknown) => void store.set(k, v) }, now));
       }
       const m = meters.get(n)!;
-      return { fetch: async (u: string) => Response.json(u.includes('/hit') ? await m.hit() : await m.usage(Number(new URL(u).searchParams.get('days')) || 30)) };
+      return { fetch: async (u: string) => Response.json(u.includes('/hit') ? await m.hit() : u.includes('/count') ? await m.count().then(() => ({ ok: true })) : await m.usage(Number(new URL(u).searchParams.get('days')) || 30)) };
     },
   };
 }
@@ -2989,20 +2989,28 @@ describe('copybook api', () => {
     // A session token is not an API key.
     expect((await (await v1('/v1/me', pro.token)).json()).error.code).toBe('invalid_key');
 
-    // 60 a minute per key: the 2nd call above was #1, so 59 more pass, then 429 with Retry-After until the minute rolls.
-    for (let i = 0; i < 58; i++) expect((await v1('/v1/me', made.key)).status).toBe(200);
+    // 60 a minute per account, across its keys (the lead: never 10x with 10 keys): the 2nd call above was #1, so 59
+    // more pass, then 429 with Retry-After until the minute rolls, on every key of the account.
+    const second = await (await call('/keys', { body: { name: 'second' }, token: pro.token })).json();
+    for (let i = 0; i < 57; i++) expect((await v1('/v1/me', made.key)).status).toBe(200);
+    expect((await v1('/v1/me', second.key)).status).toBe(200);
     const last = await v1('/v1/me', made.key);
     expect(last.headers.get('RateLimit-Limit')).toBe('60');
     expect(last.headers.get('RateLimit-Remaining')).toBe('0');
     const limited = await v1('/v1/me', made.key);
     expect(limited.status).toBe(429);
-    expect((await limited.json()).error.code).toBe('rate_limited');
+    expect((await limited.json()).error).toMatchObject({ code: 'rate_limited', scope: 'account', window: 'minute', limit: 60, retry_after_seconds: 50 });
     expect(limited.headers.get('Retry-After')).toBe('50');
+    const other = await v1('/v1/me', second.key);
+    expect([other.status, (await other.json()).error.scope]).toEqual([429, 'account']);
+    // A Fund seat has its own: the Fund owner's key is not limited by the Pro account's use.
+    const fundKey = await (await call('/keys', { body: { name: 'fund' }, token: fund.token })).json();
+    expect((await v1('/v1/me', fundKey.key)).status).toBe(200);
     clock += 60_000;
     const next = await v1('/v1/me', made.key);
     expect(next.status).toBe(200);
     const nextBody = await next.json();
-    expect(nextBody.data.usage[0]).toEqual({ day: '2026-11-09', requests: 61 }); // only allowed requests count
+    expect(nextBody.data.usage[0]).toEqual({ day: '2026-11-09', requests: 60 }); // this key's own allowed requests
     expect(nextBody.data.key.last_used_at).toBe('2026-11-09T15:01:10Z');
     expect((await (await call('/keys', { token: pro.token })).json()).keys.find((k: { id: string }) => k.id === made.id).last_used_at).toBe('2026-11-09T15:01:10.000Z');
 

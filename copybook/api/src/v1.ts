@@ -5,7 +5,7 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.3';
+export const SPEC_REVISION = '2026-11-11.4';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
@@ -23,7 +23,7 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
       'Holders `counts.net` is the shares traded in USD (shares bought or sold x each filing\'s price) over `counts.net_quarter`, the latest quarter (or ?quarter=, the same latest quarter), and equals that quarter\'s /v1/changes?ticker= sum. `counts.net_by_period` sums the same by each filer\'s latest filing period: not quarterly flow for any quarter but the latest.',
       'Holder rows add `suspect_duplicate` {cusip, shares, value} when the same quarter\'s book also lists the security under a reissue\'s other CUSIP (IFP Advisors\' TEVA): one position is kept on the new code, and the stale line is out of every sum. Present only when the holder index carries such a line.',
       'Holders of a reissue merged at read time (TEVA until the data run publishes its merged index): a prior-quarter holder whose filer has since filed a newer 13F, and is in neither CUSIP\'s current rows, is listed apart in `data.pending[]` with `reason: "filed_newer_not_indexed"` and `counts.pending`, out of holders, the counts and net; `counts.exits_pending` stays true meanwhile. `counts.holders` counts share positions only, like `count`; calls and puts are `counts.option_rows`.',
-      'Rate limits are per account from the next release (Copy Pro: 60 a minute and 20,000 a day across all its keys; Copy Fund: the same per seat). They were briefly per key; no member was affected.',
+      'Rate limits are per account (Copy Pro: 60 a minute and 20,000 a day across all its API keys; Copy Fund: the same per seat, the owner being one seat), not per key; a 429 says which (`scope`: account or seat) with `retry_after_seconds`. A bulk file download isn\'t metered, only the listing. Limits were briefly per key (each of up to 10 keys had its own); no member was affected.',
     ],
   },
   {
@@ -249,7 +249,7 @@ export const ERRORS = {
   invalid_key: 'The API key is malformed, unknown or revoked.',
   subscription_inactive: 'The Copy Pro subscription behind this key is not active.',
   pro_required: 'API access is part of Copy Pro.',
-  rate_limited: 'Too many requests for this key; see the RateLimit headers.',
+  rate_limited: 'Rate limit reached for this account (Copy Fund: this seat), across all its API keys; see the RateLimit headers and retry_after_seconds.',
   not_found: 'No such resource.',
   bad_request: 'A parameter is missing or invalid.',
   not_yet_available: 'This option is documented but not served yet.',
@@ -327,9 +327,19 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
   const dl = await import('./download');
   const auth: KeyAuth = await authKey(env, req.headers.get('authorization'));
   if (!auth.ok) return v1error(auth.code as ErrorCode, auth.status, auth.message);
-  const r: MeterResult | null = await meter(env, auth.key.id).hit();
+  // Limits are per account (Copy Pro: every key together) or per seat (Copy Fund: the owner is one seat), never per key;
+  // each key still counts its own use for the keys list. A bulk file download (its redirect to R2) isn't metered: only
+  // the listing is.
+  const scope = auth.member.plan === 'fund' ? 'seat' : 'account';
+  const metered = !/^\/v1\/bulk\/[^/]+$/.test(path);
+  const r: MeterResult | null = metered ? await meter(env, `acct:${auth.member.customer}`).hit() : null;
   const limits = r ? limitHeaders(r) : {};
-  if (r && !r.allowed) return v1error('rate_limited', 429, undefined, limits);
+  if (r && !r.allowed) {
+    const w = r.minute.remaining === 0 ? 'minute' : 'day';
+    const secs = r[w].reset;
+    return v1json({ error: { code: 'rate_limited', message: `Rate limit reached for this ${scope}: ${r[w].limit} requests a ${w}, across all its API keys. Retry after ${secs} s.`, scope, window: w, limit: r[w].limit, retry_after_seconds: secs, retry_at: new Date(Date.now() + secs * 1000).toISOString().replace(/\.\d+Z$/, 'Z') } }, 429, { ...limits, 'Retry-After': String(secs) });
+  }
+  if (metered) await meter(env, auth.key.id).count?.();
   // JSON is always served inline (gzip for clients that ask; Python's urllib forwards Authorization on a redirect and R2
   // then answers 400). On the Funnel name a generated CSV over 1 MB answers 302 to presigned R2 (served here if R2
   // can't take it); bulk files redirect to presigned R2 on every host (their route).
