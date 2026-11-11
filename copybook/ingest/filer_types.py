@@ -123,6 +123,7 @@ RECLASS_CASES = {
     "0001157519": "wealth",     # Okabena Investment Services (multi-family office)
     "0001335325": "wealth",     # HighVista Strategies (endowment-model OCIO)
     "0001317947": "other",      # Bain Capital Credit (private credit)
+    "0001730578": "wealth",     # Vanguard Capital Wealth Advisors (an RIA, not Vanguard; the name rule typed it index)
     "0001404784": "hedge_fund", # Granville Capital, Greensboro NC (ADV CRD 126679: 7 private funds, all hedge, 58% of RAUM)
     # Market makers and prop traders (their 13F is inventory), whatever Form ADV says
     "0001533421": "other", "0001488542": "other", "0001455915": "other", "0001279891": "other",  # Tower, Simplex, Old Mission, Wolverine
