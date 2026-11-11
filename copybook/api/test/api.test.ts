@@ -2563,7 +2563,7 @@ describe('copybook api', () => {
         writes.push(api);
         return Response.json({ success: true });
       }
-      if (url.endsWith('/health')) return up.has(url.slice(0, -7)) ? Response.json({ ok: true }) : new Response('error code: 1033', { status: 530 });
+      if (url.endsWith('/health?probe=1')) return up.has(url.slice(0, -15)) ? Response.json({ ok: true }) : new Response('error code: 1033', { status: 530 });
       if (url.includes('/graphql')) return new Response('no', { status: 500 });
       return orig(u, init);
     });

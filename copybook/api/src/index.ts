@@ -538,7 +538,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const this_host = { scope: 'this host', host: (await import('./failover')).isCloudflare(env) ? 'cloudflare' : 'gene', used: m.used, kinds: view, by_kind: view, waiting_now: waiting };
       // The figures status.json publishes (both hosts, one since, one set of labels), as of its generated_at; this
       // host's own tally under this_host. Without a readable status.json for today: this host's view.
-      const pub = env.PUBLIC_URL ? ((await fetch(`${env.PUBLIC_URL}status.json?t=${Date.now()}`, { signal: AbortSignal.timeout(2000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { generated_at?: string; mail_quota?: { day?: string; resend_used: number; by_kind: typeof view; waiting_now: typeof waiting } } | null) : null;
+      // Read at most once a minute per isolate: every /health fetched it (5 ms became 300 ms on gene).
+      if (env.PUBLIC_URL && (!STATUS_READ || Date.now() - STATUS_READ.at > 60_000)) STATUS_READ = { at: Date.now(), body: await fetch(`${env.PUBLIC_URL}status.json?t=${Date.now()}`, { signal: AbortSignal.timeout(2000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null) };
+      const pub = env.PUBLIC_URL ? (STATUS_READ?.body as { generated_at?: string; mail_quota?: { day?: string; resend_used: number; by_kind: typeof view; waiting_now: typeof waiting } } | null) : null;
       const both = pub?.mail_quota?.day === m.day && pub.mail_quota.by_kind ? pub.mail_quota : null;
       const shown = both ? { scope: 'both hosts', as_of: pub!.generated_at ?? null, used: both.resend_used, kinds: both.by_kind, by_kind: both.by_kind, waiting_now: both.waiting_now } : this_host;
       return { ...m, ...shown, this_host, alert_emails_today_by_hour: byHour, daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15, policy: (await import('./email')).MAIL_POLICY };
@@ -1629,6 +1631,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   return json({ ok: false, error: 'not found' }, 404, h);
 }
+
+/** /health's last read of the public status.json (once a minute per isolate). */
+let STATUS_READ: { at: number; body: unknown } | null = null;
 
 /** The stable public name: clients keep it, and the self-hosted base behind it moves (a quick tunnel rotates). */
 const PUBLIC_API = 'https://copybook-api.factordynamics.workers.dev';

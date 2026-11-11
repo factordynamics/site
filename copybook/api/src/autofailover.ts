@@ -40,7 +40,9 @@ const origin = (u: string) => {
 
 async function healthy(base: string): Promise<boolean> {
   try {
-    const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(PROBE_MS), headers: { 'user-agent': 'copybook-auto-failover' } });
+    // probe=1: up and serving, without /health's slower reads (status.json from r2.dev), which a slow round trip from
+    // gene could fail although the front door is fine.
+    const r = await fetch(`${base}/health?probe=1`, { signal: AbortSignal.timeout(PROBE_MS), headers: { 'user-agent': 'copybook-auto-failover' } });
     return r.ok && ((await r.json()) as { ok?: boolean }).ok === true;
   } catch {
     return false;
