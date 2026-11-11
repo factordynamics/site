@@ -365,6 +365,21 @@ main:focus {
 .foot .fresh {
   margin: 6px 0 0;
 }
+/* Data older than it should be while EDGAR is taking filings: the warning style, so it is noticed. */
+.foot .fresh.stale {
+  display: inline-block;
+  max-width: 420px;
+  padding: 6px 10px;
+  border: 1px solid #f3dca6;
+  border-radius: 8px;
+  background: #fff4dc;
+  color: #8a5300;
+}
+[data-theme='dark'] .foot .fresh.stale {
+  color: #ffcf7a;
+  background: rgba(255, 178, 36, 0.12);
+  border-color: rgba(255, 178, 36, 0.3);
+}
 .foot nav {
   display: flex;
   flex-wrap: wrap;
