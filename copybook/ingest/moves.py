@@ -78,6 +78,7 @@ UNCLASSED: dict[str, int] = {}
 FB_KEEP = set(FB_COLUMNS) | {"display_name", "sector"}  # plain full-book columns (bulk.FB_COLUMNS, enrich's labels)
 CLASS_SUM_MAX = 10  # more held class_sum_mismatch rows than this fail the run (lead, Nov 11)
 CLASS_SUM_OFF: list[dict] = []  # (issuer6, cik, row value_delta, classes' sum): rows held because the two differ
+CHECK_HELD: list[tuple] = []  # (value, cik, filed CUSIP, issuer): lines held cusip_check_digit this run
 GATE_OFF: list[dict] = []  # issuers whose counts or net differ from their own rows: hl/ is then not rewritten
 CLS: dict[tuple, dict] = {}  # (issuer6, cik) -> {cusip: that share class's shares, prior, value, value_delta, changes}
 # A filed conversion ratio between share classes: shares in that class's unit (Berkshire's charter: one Class A share
@@ -767,6 +768,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     CLS.clear()
     CLASS_SUM_OFF.clear()
     GATE_OFF.clear()
+    CHECK_HELD.clear()
     tick: dict[str, dict[str, float]] = {}
     book: dict[str, float] = {}  # cik -> value of its share positions (the weight denominator)
     top10: dict[str, set] = {}  # cik -> issuer codes among its ten largest share positions
@@ -793,6 +795,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             # (Ashurst MSFT 59491810R) is never a share line or class: held both.
             bad_code = ("option_cusip_no_putcall" if build.option_code(c)
                         else "cusip_check_digit" if not cusip_check_ok(c) else None)
+            if bad_code == "cusip_check_digit":
+                CHECK_HELD.append((r.get("value") or 0, cik, c, r.get("issuer") or r.get("title")))
             side = r.get("unreliable") or ("both" if r.get("suspect_units") or bad_code else None)  # never a flag without a class
             why = bad_code or r.get("suspect_reason") or r.get("option_held") or ("value_rescale_rejected" if r.get("value_rescale") else None) or ("price_outlier" if r.get("price_outlier") else "units")
             if side:
@@ -1013,6 +1017,10 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     # The class-sum ceiling (lead, Nov 11): a few mismatched rows are held (class_sum_mismatch); more than
     # CLASS_SUM_MAX, or any in a top-100 stock by value, means the class sums are broken: nothing in hl/ is rewritten
     # (the live index stays) and gate.py fails the run on holders_refused.json.
+    names = {s["cik"]: s.get("name") for s in shards}
+    print(f"moves: cusip_check_digit held {len(CHECK_HELD)} lines, ${sum(x[0] for x in CHECK_HELD):,.0f}; top 10: "
+          + "; ".join(f"{names.get(cik)} {cik} {c} {nm} ${v:,.0f}" for v, cik, c, nm in sorted(CHECK_HELD, reverse=True)[:10]),
+          flush=True)
     top100 = set(sorted(worth, key=lambda c: -worth[c])[:100])
     bad_top = [x for x in CLASS_SUM_OFF if x["issuer6"] in top100]
     refused = DATA / "holders_refused.json"
