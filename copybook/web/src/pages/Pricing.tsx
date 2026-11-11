@@ -46,7 +46,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
     who: 'For one analyst or quant. 1 seat, card billing.',
     lead: 'Everything in Copy, plus',
     now: [
-      { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
+      { t: 'API keys and docs', d: 'Up to 10 keys, with usage on your account page. Limits are per key: 60 requests a minute and 20,000 a day.' },
       { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, as JSON. History: ${HISTORY_EXACT}` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
