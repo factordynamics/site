@@ -65,6 +65,18 @@ class AdvFilesTest(unittest.TestCase):
         self.assertEqual((reg.rsplit("/", 1)[-1], ex.rsplit("/", 1)[-1]), ("ia110226-registered.zip", "ia11022026-exempt.zip"))
 
 
+    def test_a_filer_matches_its_adviser_by_legal_name_when_the_short_name_is_shared(self):
+        # Voss Capital, LP and Endeavour Capital Advisors were never matched: "VOSS" is too short to trust and
+        # "ENDEAVOUR" also names another adviser. The whole legal name identifies them.
+        from ingest.filer_types import adviser_for, adviser_index
+        mk = lambda *names: {"cik": None, "names": list(names)}
+        voss, endeavour = mk("VOSS CAPITAL, L.P."), mk("ENDEAVOUR CAPITAL ADVISORS INC.")
+        index = adviser_index([voss, mk("VOSS WEALTH MANAGEMENT LLC"), endeavour, mk("DVSM, LP", "ENDEAVOUR CAPITAL")])
+        self.assertIs(adviser_for("1", "Voss Capital, LP", index, set()), voss)
+        self.assertIs(adviser_for("2", "ENDEAVOUR CAPITAL ADVISORS INC", index, set()), endeavour)
+        self.assertIsNone(adviser_for("3", "Voss Partners LLC", index, set()))
+
+
 class IndexContractTest(unittest.TestCase):
     def test_a_renamed_type_fails_the_publish_gate(self):
         # Nov 9: `active` renamed to `long_only` silently stopped stock-match alerts for two days.

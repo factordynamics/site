@@ -106,6 +106,22 @@ OVERRIDES.update({
 # The reviewed cases (also the gate's regression test) win over everything above.
 CASES = Path(__file__).with_name("type_cases.json")
 OVERRIDES.update({c: v["type"] for c, v in json.loads(CASES.read_text())["filers"].items()})
+# Checked by hand (reclass review, 2026-11-11): Form ADV counts these advisers' private funds as hedge funds, but they
+# allocate to other managers (funds of funds, OCIOs, endowment-style platforms) or run private equity. Used only by the
+# Form ADV rule; the type is the one published before the reclass.
+ADV_NOT_HEDGE = {
+    "0001698246": "long_only",  # IFM Investors (infrastructure and pension-owned asset manager)
+    "0001939480": "long_only",  # GCM Grosvenor (alternatives allocator, funds of funds)
+    "0001514334": "long_only",  # MSD Partners (Dell family's investment firm)
+    "0001535457": "wealth",     # MIO Partners (McKinsey's investment office)
+    "0001476993": "wealth",     # Investure (OCIO)
+    "0001359262": "wealth",     # Makena Capital (endowment-model OCIO)
+    "0001519611": "wealth",     # Cerity Partners OCIO
+    "0001159363": "wealth",     # CAZ Investments (access funds for individuals)
+    "0001157519": "wealth",     # Okabena Investment Services (multi-family office)
+    "0001080818": "other",      # EnTrust Global (fund of funds)
+    "0001560123": "other",      # Catterton (private equity)
+}
 ACTIVISTS = {"0000921669", "0001345471", "0001418814", "0001336528", "0001040273", "0001791786",
              "0001517137", "0001998597", "0001535472", "0001582090"}
 
@@ -316,6 +332,8 @@ def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int
     if adviser:
         kind, adv_ev = verdict(adviser)
         ev |= {"adv": adv_ev}
+        if kind == "hedge_fund" and cik in ADV_NOT_HEDGE:
+            return ADV_NOT_HEDGE[cik], "Form ADV hedge funds are allocations (hand-checked)", ev | {"source": "hand-checked"}
         if kind:
             return kind, f"Form ADV ({kind})", ev
     kind, basis = shape_type(name, s)
@@ -350,24 +368,39 @@ def shape_type(name: str, s: dict) -> tuple[str, str]:
     return "long_only", "shape: diversified"
 
 
-def adviser_index(advisers: list[dict]) -> tuple[dict, dict]:
-    """{cik: adviser} and {name stem: adviser} for stems that name exactly one adviser."""
-    by_cik, by_stem, seen = {}, {}, {}
+SUFFIXES = {"LIMITED": "LTD", "INCORPORATED": "INC", "CORPORATION": "CORP", "COMPANY": "CO"}
+
+
+def legal(name: str) -> str:
+    """The whole legal name, normalized: 'Voss Capital, L.P.' and 'VOSS CAPITAL, LP' -> 'VOSS CAPITAL LP'."""
+    s = re.sub(r"\b([A-Z]) (?=[A-Z]\b)", r"\1", re.sub(r"[^A-Z0-9]+", " ", (name or "").upper().replace("&", " AND ")))
+    return " ".join(SUFFIXES.get(w, w) for w in s.split())
+
+
+def adviser_index(advisers: list[dict]) -> tuple[dict, dict, dict]:
+    """{cik: adviser}, {legal name: adviser} and {name stem: adviser}, names kept only when they name exactly one adviser."""
+    by_cik, by_legal, by_stem, seen = {}, {}, {}, {}
     for a in advisers:
         if a["cik"]:
             by_cik.setdefault(a["cik"], a)
-        for st in {stem(n) for n in a["names"]} - {""}:
-            seen[st] = seen.get(st, 0) + 1
-            by_stem[st] = a
-    return by_cik, {st: a for st, a in by_stem.items() if seen[st] == 1}
+        for key, table in [(("L", legal(n)), by_legal) for n in a["names"]] + [(("S", stem(n)), by_stem) for n in a["names"]]:
+            if key[1] and table.get(key[1]) is not a:
+                seen[key] = seen.get(key, 0) + 1
+                table[key[1]] = a
+    return (by_cik, {k: a for k, a in by_legal.items() if seen[("L", k)] == 1},
+            {k: a for k, a in by_stem.items() if seen[("S", k)] == 1})
 
 
-def adviser_for(cik: str, name: str, index: tuple[dict, dict] | None, common: set[str]) -> dict | None:
+def adviser_for(cik: str, name: str, index: tuple[dict, dict, dict] | None, common: set[str]) -> dict | None:
     if not index:
         return None
-    by_cik, by_stem = index
+    by_cik, by_legal, by_stem = index
     if cik in by_cik:
         return by_cik[cik]
+    # The same legal name on the 13F and the ADV (Voss Capital, LP; AIGH Capital Management LLC), even when the short
+    # stem is shared with other advisers (Voss Wealth) or too short to trust on its own.
+    if legal(name) in by_legal:
+        return by_legal[legal(name)]
     st = stem(name)
     # A stem shared by several 13F filers identifies nobody (Glenview Trust vs Glenview Capital have
     # different stems; "ATLAS" alone does not), and a one-word stem must be distinctive.
