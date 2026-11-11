@@ -2,7 +2,7 @@ import { addToFeed, flushChannelLatency, getChannels, runWebhookRetries, sendCha
 import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
-import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
+import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
 import { bookSuspect, companyFilings, computeMoves, netRenamed, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
@@ -625,6 +625,39 @@ export async function runDigest(env: Env, now: number): Promise<{ emails: number
   const status = await sendMail(env, mails, { bulk: true });
   await logSent(env, mails.length, now);
   if (status.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
+  return { emails: mails.length, status };
+}
+
+/**
+ * Saturday: "Your names this week" to every Copy, Pro and Fund member, paused ones included, unless they turned it
+ * off (weekly_digest). The week's alerts that match their follows, from the daily stores. `only`: an operator's preview.
+ */
+export async function runWeeklyNames(env: Env, now: number, only?: string[]): Promise<{ emails: number; status: string }> {
+  const week = etDay(now);
+  if (!only && (await env.DB.get('names-weekly:last')) === week) return { emails: 0, status: 'already sent' };
+  const days = (await Promise.all(Array.from({ length: 7 }, (_, d) => env.DB.get(`digest:${etDay(now - d * 86_400_000)}`)))).flatMap((r) => (r ? [JSON.parse(r) as DigestDay] : []));
+  // Each filing and event once, in its last stored version (a 13F's moves follow-up, a Form 4's details).
+  const last = <T>(xs: T[], id: (x: T) => string) => [...new Map(xs.map((x) => [id(x), x])).values()];
+  const filings = await withCards(env, last(days.reverse().flatMap((d) => d.filings), (a) => a.accession));
+  const events = last(days.flatMap((d) => [...d.events, ...(d.late ?? [])]), (e) => e.id);
+  const meta = await filerMeta(env);
+  // Friday 9:15pm ET: the week of that Monday.
+  const weekOf = new Date(now - 4 * 86_400_000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+  const mails: Mail[] = [];
+  for (const raw of await listMembers(env)) {
+    if (!raw.email || raw.plan === 'holdterm' || raw.plan === 'free' || (only ? !only.includes(raw.email) : !(isActive(raw) || isPaused(raw, now)))) continue;
+    const f = await getFollows(env, raw);
+    if (f.weekly_digest === false && !only) continue;
+    // Paused members' alerts are off; the weekly summary still covers their follows.
+    const mine = forMember({ ...raw, alerts: raw.alerts === 'off' ? f.investors : raw.alerts }, f, filings, events, meta);
+    mails.push({ ...weeklyNamesMail(env, raw.email, weekOf, mine.filings, mine.events, f, isPaused(raw, now) ? raw.paused_until! : null), test: !!raw.test || testAddress(raw.email) });
+  }
+  const status = await sendMail(env, mails, { tier: 'low' });
+  if (!only && (status === 'none' || status.split(',').every((s) => s === '200'))) {
+    await env.DB.put('names-weekly:last', week);
+    // The front end shows the digest promise once the first real send went out.
+    if (mails.some((m) => !m.test)) await env.DB.put('names-weekly:live', week);
+  }
   return { emails: mails.length, status };
 }
 
@@ -1761,7 +1794,7 @@ export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reaso
 
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
 interface Job {
-  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota' | 'email2';
+  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota' | 'email2' | 'namesWeekly';
   at: number;
 }
 
@@ -1817,6 +1850,8 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   if (m === 23) due.push({ name: 'quota', at: scheduledTime });
   // The free weekly: Saturday 02:00 UTC (9pm ET Friday), so it has Friday's after-close filers and their pages.
   if (m === 0 && h === 2 && t.getUTCDay() === 6) due.push({ name: 'weekly', at: scheduledTime });
+  // Members' "Your names this week": Saturday 02:15 UTC, after the free weekly.
+  if (m === 15 && h === 2 && t.getUTCDay() === 6) due.push({ name: 'namesWeekly', at: scheduledTime });
   // Email 2, once: 13F deadline night, Mon Nov 16 9:30pm ET (Tue 02:30 UTC). runEmail2 records it done, sent or skipped.
   if (m === 30 && h === 2 && t.toISOString().slice(0, 10) === '2026-11-17') due.push({ name: 'email2', at: scheduledTime });
   // Owned and watched names' insider and 13D/G events: every 10 minutes (each name hourly, 10 minutes in filing week).
@@ -1836,6 +1871,7 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
       quota: () => import('./revenue').then((x) => x.runQuotaCheck(env, job.at)),
       weekly: () => import('./free').then((x) => x.runWeekly(env, job.at)),
       email2: () => import('./free').then((x) => x.runEmail2(env, job.at)),
+      namesWeekly: () => runWeeklyNames(env, job.at),
       // A quiet minute's leftover SEC requests, keeping 4 for the mailer and GitHub.
       issuers: () => import('./stockevents').then((x) => x.precomputeIssuers(env, scheduledTime, inFilingWeek(scheduledTime), Math.min(16, secBudget.left - 4))),
     };

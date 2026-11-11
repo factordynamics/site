@@ -523,8 +523,6 @@ const isoDay = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-CA
  */
 const pausable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !!PRICES[m.plan] && !!m.subscription && m.interval === 'monthly';
 
-/** The paying members' "Your names this week" digest: false until it ships, so /account/ promises it only when it's true. */
-export const DIGEST_LIVE = false;
 
 export const PAUSE_NOTE = 'Monthly plans can pause until 2 weeks before the next 13F deadline.';
 export const PAUSE_AFTER_TRIAL_NOTE = 'Pause after your trial: no charge until 2 weeks before the next 13F deadline, when real-time alerts resume.';

@@ -251,9 +251,11 @@ export interface Follows {
   cluster_buys: boolean;
   /** A new Schedule 13D (or 13G) by any filer on owned and watched stocks. */
   any_13d: boolean;
+  /** Saturday's "Your names this week" summary (paying members, paused included). */
+  weekly_digest?: boolean;
 }
 
-export const FOLLOW_DEFAULTS = { include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true };
+export const FOLLOW_DEFAULTS = { include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true, weekly_digest: true };
 
 /** What a Fund team shares: the seats read and write the owner's lists; alert settings stay per seat. */
 const SHARED = ['investors', 'stocks', 'owned', 'owned_manual', 'peers', 'book', 'onboarded'] as const;

@@ -551,13 +551,14 @@ describe('copybook api', () => {
 
     expect((await call('/follows')).status).toBe(401);
     await call('/alerts', { body: { alerts: ['warren-buffett'] }, token: t });
-    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], owned_manual: [], peers: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
+    expect((await (await call('/follows', { token: t })).json()).follows).toEqual({ investors: ['warren-buffett'], stocks: [], owned: [], owned_manual: [], peers: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true, weekly_digest: true });
 
     for (const bad of [{ investors: ['Not A Slug'] }, { stocks: ['$AAPL'] }, { owned: 'AAPL' }, { onboarded: 'yes' }, { digest: 1 }, { insider_min_usd: -1 }, { insider_min_usd: '100k' }, { cluster_buys: 'no' }, { stocks: Array.from({ length: 501 }, (_, i) => `T${i}`) }]) {
       expect((await put(bad)).status).toBe(400);
     }
-    const r = await (await put({ stocks: ['aapl', 'BRK.B'], owned: ['googl'], onboarded: true, include_13g: true })).json();
-    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], owned_manual: ['GOOGL'], peers: [], onboarded: true, include_13g: true, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true });
+    // weekly_digest: the opt-out from Saturday's "Your names this week".
+    const r = await (await put({ stocks: ['aapl', 'BRK.B'], owned: ['googl'], onboarded: true, include_13g: true, weekly_digest: false })).json();
+    expect(r.follows).toEqual({ investors: ['warren-buffett'], stocks: ['AAPL', 'BRK.B', 'GOOGL'], owned: ['GOOGL'], owned_manual: ['GOOGL'], peers: [], onboarded: true, include_13g: true, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true, weekly_digest: false });
 
     // Any 13F filer can be followed, not only curated funds; a slug that is no filer is refused.
     const unknown = await put({ investors: ['warren-buffett', 'no-such-filer-1234'] });
@@ -1174,6 +1175,47 @@ describe('copybook api', () => {
     expect(await runEmail2(env, now)).toEqual({ status: 'already done' });
     Object.assign(env, { POSTAL_ADDRESS: undefined, MAILGUN_API_KEY: undefined });
     vi.stubGlobal('fetch', realFetch);
+  });
+
+  it('"Your names this week": paying members (paused too) get the week\'s alerts in their names once, by Saturday; opt-out, free and Holdterm skipped; digest_live after the first real send', async () => {
+    const now = Date.now();
+    const day = (d: number) => new Date(now - 5 * 3600_000 - d * 86_400_000).toISOString().slice(0, 10);
+    const row = (t: string, change: string, v: number) => ({ ticker: t, display_name: null, issuer: t, cusip: t, put_call: null, shares: 10, prev_shares: 5, value: Math.abs(v), value_delta: v, change });
+    const brk = { slug: 'warren-buffett', slugs: ['warren-buffett'], tickers: ['AAPL', 'BAC', 'OXY', 'KO'], manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', quarter: '2026Q3', report_date: '2026-09-30', filing_date: day(2), accession: '0000950123-26-000001', sec_url: 'https://www.sec.gov/b', accepted: new Date(now - 2 * 86_400_000).toISOString() };
+    // The 13F first went out without its moves (stored two days ago), then with them; Buffett's Form 4 yesterday.
+    await env.DB.put(`digest:${day(2)}`, JSON.stringify({ filings: [{ ...brk, moves_pending: true }, { ...brk, followup: true, moves: { bought_usd: 25e8, sold_usd: 31e8, new: [row('OXY', 'new', 5e8)], added: [row('AAPL', 'added', 2e9)], trimmed: [row('BAC', 'trimmed', -3e9)], exited: [row('KO', 'exited', -1e8)] } }], events: [] }));
+    await env.DB.put(`digest:${day(1)}`, JSON.stringify({ filings: [], events: [{ id: 'siri1', slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: day(1), accepted: new Date(now - 86_400_000).toISOString(), url: 'https://www.sec.gov/siri1', issuer: 'SIRIUS XM', display_name: 'Sirius XM', ticker: 'SIRI', shares: 1000, value_usd: 25000 }] }));
+    const pm = (c: string, email: string, extra: Record<string, unknown> = {}) => env.DB.put(`cus:${c}`, JSON.stringify({ customer: c, email, status: 'active', plan: 'copy', interval: 'monthly', period_end: 0, subscription: `sub_${c}`, alerts: ['warren-buffett'], welcomed: true, ...extra }));
+    await pm('cus_n1', 'n1@reader.test');
+    await putFollows('cus_n1', { investors: ['warren-buffett'] });
+    // Paused: alerts off, the summary still comes and says when alerts resume.
+    await pm('cus_n2', 'n2@reader.test', { alerts: 'off', paused_until: Math.floor(now / 1000) + 20 * 86400 });
+    await putFollows('cus_n2', { investors: ['warren-buffett'] });
+    await pm('cus_n3', 'n3@reader.test', { alerts: ['seth-klarman'] });
+    await putFollows('cus_n3', { investors: ['seth-klarman'] });
+    await pm('cus_n4', 'n4@reader.test');
+    await putFollows('cus_n4', { investors: ['warren-buffett'], weekly_digest: false });
+    await pm('cus_n5', 'n5@reader.test', { plan: 'free', status: 'free' });
+    await pm('cus_n6', 'n6@reader.test', { plan: 'holdterm' });
+    await pm('cus_n7', 'n7@reader.test', { status: 'canceled' });
+    const { runWeeklyNames } = await import('../src/alerts');
+    sent = [];
+    expect(await runWeeklyNames(env, now)).toEqual({ emails: 3, status: '200' });
+    const by = Object.fromEntries(sent.map((m) => [m.to[0], m]));
+    expect(Object.keys(by).sort()).toEqual(['n1@reader.test', 'n2@reader.test', 'n3@reader.test']);
+    const t1 = by['n1@reader.test'].text;
+    expect(by['n1@reader.test'].subject).toBe('Your names this week: 1 13F, 1 Form 4/13D/G');
+    // The 13F once, in its version with moves: the three largest trades, largest first.
+    expect(t1.match(/Berkshire Hathaway/g)?.length).toBe(1);
+    expect(t1).toMatch(/trimmed BAC [^,]+, added AAPL [^,]+, new OXY [^\n]+\n/);
+    expect(t1).not.toContain('KO');
+    expect(t1).toContain('https://www.sec.gov/siri1');
+    expect(by['n2@reader.test'].text).toMatch(/Your plan is paused; alerts resume \w+ \d+\. This weekly summary keeps coming meanwhile\./);
+    expect(by['n2@reader.test'].text).toContain('BAC');
+    expect(by['n3@reader.test'].subject).toBe('Your names this week: a quiet week');
+    // Once a week; /me says the digest is live.
+    expect(await runWeeklyNames(env, now)).toEqual({ emails: 0, status: 'already sent' });
+    expect(await env.DB.get('names-weekly:live')).toBe(day(0));
   });
 
   it('net-30 Fund order: a yearly Fund subscription billed by invoice, the order terms as memo and footer, emailed at once', async () => {

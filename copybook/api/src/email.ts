@@ -588,6 +588,38 @@ export function digestMail(env: Env, to: string, day: string, filings: Alert13F[
   return { to, subject: `Copybook daily digest for ${day}: ${n}`, text: body(env, intro, filings, events, f, m), html: htmlBody(env, intro, filings, events, f, m) };
 }
 
+/**
+ * Saturday's "Your names this week" for paying members (paused ones too): each 13F from a followed fund with its three
+ * largest trades and filing card, and each Form 4 and 13D/G on followed funds and names, one line each.
+ */
+export function weeklyNamesMail(env: Env, to: string, weekOf: string, filings: Alert13F[], events: AlertEvent[], f: Follows, pausedUntil: number | null): Mail {
+  const top3 = (a: Alert13F) =>
+    MOVE_LABELS.flatMap(([label, k]) => (a.moves?.[k] ?? []).map((r) => ({ label, r })))
+      .sort((x, y) => Math.abs(y.r.value_delta) - Math.abs(x.r.value_delta))
+      .slice(0, 3)
+      .map(({ label, r }) => `${label.toLowerCase()} ${rowName(r)} ${usd(r.value_delta)}`)
+      .join(', ');
+  const fl = filings.map((a) => ({ head: `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}, ${quarterLabel(a.quarter)} 13F`, moves: a.moves ? top3(a) : '', url: filingUrl(env, a) }));
+  const ev = events.map((e) => ({ head: eventHeadline(e, true), url: e.url }));
+  const n = [fl.length && `${fl.length} 13F${fl.length === 1 ? '' : 's'}`, ev.length && `${ev.length} Form 4/13D/G`].filter(Boolean).join(', ');
+  const paused = pausedUntil ? `Your plan is paused; alerts resume ${new Date(pausedUntil * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })}. This weekly summary keeps coming meanwhile.` : '';
+  const following = `You follow ${f.investors.length} fund${f.investors.length === 1 ? '' : 's'} and ${f.stocks.length} stock${f.stocks.length === 1 ? '' : 's'}. Change them: ${env.SITE_URL}account/`;
+  const off = `Turn off this weekly summary on ${env.SITE_URL}account/ (Email settings).`;
+  const quiet = `A quiet week: none of your funds or names filed a 13F, Form 4 or 13D/G.`;
+  const text = [
+    `Your names this week (week of ${weekOf}):`,
+    ...(paused ? [paused] : []),
+    ...(fl.length ? ['13F filings:', ...fl.map((x) => `- ${x.head}${x.moves ? `: ${x.moves}` : ''}\n  ${x.url}`)] : []),
+    ...(ev.length ? ['Form 4 and 13D/G:', ...ev.map((x) => `- ${x.head}\n  ${x.url}`)] : []),
+    ...(fl.length || ev.length ? [] : [quiet]),
+    following,
+    off,
+  ].join('\n\n') + FOOTER;
+  const li = (head: string, more: string, url: string) => `<li style="margin:6px 0">${esc(head)}${more ? `: ${esc(more)}` : ''} · ${link(url, 'See it')}</li>`;
+  const html = `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:640px"><p><b>Your names this week</b> (week of ${esc(weekOf)})</p>${paused ? `<p>${esc(paused)}</p>` : ''}${fl.length ? `<h3 style="font-size:15px;margin:16px 0 4px">13F filings</h3><ul style="padding-left:18px;margin:0">${fl.map((x) => li(x.head, x.moves, x.url)).join('')}</ul>` : ''}${ev.length ? `<h3 style="font-size:15px;margin:16px 0 4px">Form 4 and 13D/G</h3><ul style="padding-left:18px;margin:0">${ev.map((x) => li(x.head, '', x.url)).join('')}</ul>` : ''}${fl.length || ev.length ? '' : `<p>${esc(quiet)}</p>`}<p style="margin-top:18px">You follow ${f.investors.length} fund${f.investors.length === 1 ? '' : 's'} and ${f.stocks.length} stock${f.stocks.length === 1 ? '' : 's'}. ${link(`${env.SITE_URL}account/`, 'Change them')}.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">${link(`${env.SITE_URL}account/`, 'Turn off this weekly summary')} (Email settings). Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.</p></div>`;
+  return { to, subject: `Your names this week: ${n || 'a quiet week'}`, text, html };
+}
+
 // ---------------------------------------------------------------------------------------------
 // HTML: the same alert as tables
 

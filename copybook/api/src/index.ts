@@ -7,7 +7,7 @@ import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
 import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
-import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
+import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, previewInbox, sendMail } from './email';
 import { ACTIVE, apiBase, followCounts, logAccess, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, planOf, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
@@ -609,6 +609,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, ...(await fundInvoice(env, email, b.name ? String(b.name).slice(0, 120) : undefined)) }, 200, h);
   }
 
+  // Operator: "Your names this week" for the given test inboxes only (members' real addresses are dropped).
+  if (req.method === 'POST' && path === '/ops/names-weekly-preview') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = await body(req);
+    const to = (Array.isArray(b.to) ? b.to : []).map((x: unknown) => String(x).trim().toLowerCase()).filter(previewInbox);
+    const { runWeeklyNames } = await import('./alerts');
+    return json(to.length ? await runWeeklyNames(env, Date.now(), to) : { emails: 0, status: 'no test inbox given' }, 200, h);
+  }
+
   // Operator: Email 2's preview, to our inbox and test inboxes only (other addresses are dropped).
   if (req.method === 'POST' && path === '/ops/email2-preview') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
@@ -893,7 +902,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const free = isFree ? { free_names: { names, limit: 5, ...(await Promise.race([teaser!, new Promise<typeof none>((r) => setTimeout(() => r(none), 1500))])) } } : {};
     // A Fund seat sees who to ask about billing: the plan owner's email.
     const owner = m.seat_of ? { owner: (await getMember(env, m.seat_of))?.email ?? null } : {};
-    const { pauseOffer, DIGEST_LIVE } = await import('./revenue');
+    const { pauseOffer } = await import('./revenue');
+    // True once Saturday's "Your names this week" first went to a real member.
+    const DIGEST_LIVE = (await env.DB.get('names-weekly:live')) !== null;
     return json({ ok: true, member: { ...publicView(m), ...owner, pause_offer: pauseOffer(m), digest_live: DIGEST_LIVE, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, { ...h, 'cache-control': 'no-store' });
   }
 
@@ -1104,11 +1115,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const stocks = list(b.stocks, TICKER, true);
     const owned = list(b.owned, TICKER, true);
     const peers = list(b.peers, SLUG, false);
-    const flags = ['onboarded', 'include_13g', 'digest', 'insider_buys', 'cluster_buys', 'any_13d'] as const;
+    const flags = ['onboarded', 'include_13g', 'digest', 'insider_buys', 'cluster_buys', 'any_13d', 'weekly_digest'] as const;
     const minUsd = b.insider_min_usd;
     const badMin = minUsd !== undefined && !(typeof minUsd === 'number' && Number.isFinite(minUsd) && minUsd >= 0 && minUsd <= 1e10);
     if (investors === null || stocks === null || owned === null || peers === null || badMin || flags.some((k) => b[k] !== undefined && typeof b[k] !== 'boolean')) {
-      return json({ ok: false, error: `investors, peers: filer slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded, include_13g, digest, insider_buys, cluster_buys, any_13d: boolean; insider_min_usd: USD from 0` }, 400, h);
+      return json({ ok: false, error: `investors, peers: filer slugs; stocks, owned: tickers like BRK.B; at most ${MAX_FOLLOWS} each; onboarded, include_13g, digest, insider_buys, cluster_buys, any_13d, weekly_digest: boolean; insider_min_usd: USD from 0` }, 400, h);
     }
     // Any 13F filer can be followed: non-curated ones are looked up and added to the minute poll.
     if (investors?.length) {
