@@ -208,11 +208,16 @@ def main() -> int:
     if refused:
         print(f"::warning::upload: {refused} hl/ files without a value_delta column refused", flush=True)
     files = list(sources.values())
-    todo = []
+    todo, digests = [], {}
+    stamps = manifest.setdefault("_at", {})  # key -> x-copybook-built-at it was uploaded with (meta/builds.json)
+    # Only the stores /v1 gates are re-stamped: hl/ and the newest quarter's changes and filer views.
+    newest_q = max((st[1] for k in sources if (st := store_of(k)) and st[0] == "changes"), default=None)
+    gated = lambda key: (st := store_of(key)) is not None and (st[0] == "hl" or st[1] == newest_q)
     for key, path in sorted(sources.items()):
         if KEY.match(key):
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            if manifest.get(key) != digest:
+            digest = digests[key] = hashlib.sha256(path.read_bytes()).hexdigest()
+            # A gated key with no recorded stamp is re-sent (last in order) so its store can be vouched for.
+            if manifest.get(key) != digest or (gated(key) and key not in stamps):
                 todo.append((key, path, digest))
     pair = link_files(root)
     first = {k for k, _, _ in fresh_only(todo)}
@@ -223,8 +228,9 @@ def main() -> int:
         if (m := re.match(r"^h/([^/]+)/(\d{4}Q[1-4])\.", key)):
             newest[m[1]] = max(newest.get(m[1], ""), m[2])
     latest = lambda key: bool(m := re.match(r"^h/([^/]+)/(\d{4}Q[1-4])\.", key)) and newest.get(m[1]) == m[2]
-    rank = lambda key: -4 if key in first else pair[key] - 2 if key in pair else 0.5 if latest(key) else \
-        next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
+    restamp = {k for k, _, d in todo if manifest.get(k) == d}  # unchanged, only missing a stamp
+    rank = lambda key: 1000 if key in restamp else -4 if key in first else pair[key] - 2 if key in pair \
+        else 0.5 if latest(key) else next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
     todo.sort(key=lambda t: (rank(t[0]), t[0]))
     if edgar_hours(datetime.now(timezone.utc)) and os.environ.get("COPYBOOK_UPLOAD_ANYTIME") != "1":
         held = len(todo)
@@ -275,6 +281,7 @@ def main() -> int:
             for key, _, digest in batch:
                 if key in written:
                     manifest[key] = digest
+                    stamps[key] = BUILD.get("data_built_at") or ""
             sent += len(written)
             required = [k for k in refused if not OPTIONAL.search(k)]
             if required:
@@ -286,7 +293,55 @@ def main() -> int:
     finally:
         MANIFEST.write_text(json.dumps(manifest, separators=(",", ":")))
     print(f"upload: {sent} new or changed files in R2")
+    publish_builds(sources, digests, manifest, token)
     return 0
+
+
+def store_of(key: str) -> tuple[str, str | None] | None:
+    """The /v1 store a key belongs to (meta/builds.json): hl, changes/{q}, or a filer view (h/ or fb/) of {q}."""
+    if key.startswith("hl/"):
+        return "hl", None
+    if (m := re.match(r"^changes/(\d{4}Q[1-4])\.json$", key)):
+        return "changes", m[1]
+    if (m := re.match(r"^(?:h/[^/]+/|fb/)(\d{4}Q[1-4])[./]", key)):
+        return "filer_view", m[1]
+    return None
+
+
+def publish_builds(sources: dict, digests: dict, manifest: dict, token) -> None:
+    """meta/builds.json, uploaded last (payments, Nov 11): a store is listed only when every one of its keys is in R2
+    as built here (digest) with a stamp this uploader recorded; its built_at is the oldest of those stamps, so the API
+    serves every current object and answers 409 for any older one (Belvedere's r2-20261111T095247Z fb/ book). A
+    quarter is listed when its changes and filer views are both complete. Nothing complete: nothing is sent."""
+    stamps = manifest.get("_at") or {}
+    keys: dict[tuple, list] = {}
+    for key in sources:
+        if KEY.match(key) and (st := store_of(key)):
+            keys.setdefault(st, []).append(key)
+    ok = {st: min(stamps[k] for k in ks) for st, ks in keys.items()
+          if all(manifest.get(k) == digests.get(k) and stamps.get(k) for k in ks)}
+    incomplete = sorted(f"{a}{'/' + q if q else ''}" for (a, q) in keys if (a, q) not in ok)
+    newest_q = max((q for (a, q) in keys if a == "changes"), default=None)
+    quarters = [q for q in [newest_q] if q and ("changes", q) in ok and ("filer_view", q) in ok]
+    stores = {}
+    if ("hl", None) in ok:
+        stores["hl"] = {"build_id": BUILD.get("build_id"), "built_at": ok[("hl", None)]}
+    for name in ("changes", "filer_view"):
+        if quarters:
+            stores[name] = {"build_id": BUILD.get("build_id"), "built_at": min(ok[(name, q)] for q in quarters)}
+    print(f"upload: builds complete for {sorted(stores)} quarters {quarters}; incomplete {incomplete[:8]}", flush=True)
+    if not stores or not BUILD.get("build_id"):
+        return
+    body = json.dumps({"quarters": quarters, "stores": stores}, separators=(",", ":")).encode()
+    req = Request(f"{API}/ingest/meta/builds.json", data=body, method="PUT",
+                  headers={"Authorization": "Bearer " + token.get(), "Content-Type": "application/json",
+                           "User-Agent": USER_AGENT, "x-copybook-build-id": BUILD.get("build_id") or "",
+                           "x-copybook-built-at": BUILD.get("data_built_at") or ""})
+    try:
+        with urlopen(req, timeout=60):
+            print(f"upload: meta/builds.json {body.decode()}", flush=True)
+    except (HTTPError, URLError) as e:  # optional until every store is complete: the API then checks within a response
+        print(f"::warning::upload: meta/builds.json not sent: {e}", flush=True)
 
 
 def bundles(todo: list[tuple[str, Path, str]]):
