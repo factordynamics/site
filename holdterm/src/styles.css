@@ -436,6 +436,17 @@ main:focus {
   flex-wrap: wrap;
   gap: 4px 14px;
 }
+.tag-narrow {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .tag-wide {
+    display: none;
+  }
+  .tag-narrow {
+    display: inline;
+  }
+}
 .chip-n {
   margin-left: 6px;
   font-weight: 600;
