@@ -718,7 +718,11 @@ export function holdCusipPairs(rows: MoveRow[]): MoveRow[] {
   // Ingest's cusip_mismatch flag holds a line on its own, pair or not.
   const pairs = new Set([...n].filter(([, c]) => c.new === 1 && c.exited === 1).map(([k]) => k));
   const hold = (r: MoveRow) => !r.cusip_pair && ((open(r) && pairs.has(key(r))) || r.cusip_mismatch === true);
-  return rows.some(hold) ? rows.map((r) => (hold(r) ? { ...r, unreliable: 'both' as const, cusip_pair: true } : r)) : rows;
+  // The two lines name one issuer, by its ticker where either has one (\"ORCL\", not \"ORCL\" beside \"Oracle\").
+  const name = new Map<string, MoveRow>();
+  for (const r of rows) if (hold(r) && r.ticker && !name.has(key(r))) name.set(key(r), r);
+  const named = (r: MoveRow) => (r.ticker || !name.get(key(r)) ? {} : { ticker: name.get(key(r))!.ticker, display_name: name.get(key(r))!.display_name });
+  return rows.some(hold) ? rows.map((r) => (hold(r) ? { ...r, ...named(r), unreliable: 'both' as const, cusip_pair: true } : r)) : rows;
 }
 
 export function movesOf(rows0: MoveRow[], limit = MOVE_ROWS): Moves {

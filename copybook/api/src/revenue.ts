@@ -33,7 +33,9 @@ export const endAt = (unix: number) => `${day(unix)}, ${new Date(unix * 1000).to
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 /** Yearly as marketing words it (plan rev 75): \"less than 9 months of monthly, price locked\"; never \"months free\" or a %. */
 const monthsOf = (p: { month: number; year: number }) => (Number.isInteger(p.year / p.month) ? `the price of ${p.year / p.month} months of monthly` : `less than ${Math.ceil(p.year / p.month)} months of monthly`);
-const monthsFree = (p: { month: number; year: number }) => `${monthsOf(p)}, price locked`;
+/** Why yearly, for Copy (marketing's plan rev 78): no \"months free\" and no %. */
+export const COPY_YEARLY = 'Yearly $79: history back to 2013 (from Dec 31) · monthly costs $81+ even with a pause · founding price locked';
+const monthsFree = (p: { month: number; year: number }) => (p === PRICES.copy ? COPY_YEARLY.replace(/^Yearly \$79: /, '') : `${monthsOf(p)}, price locked`);
 
 /** What one member got (email, digest or chat), for the trial and season emails: KV stats:{customer}. */
 export interface MemberStats {
@@ -420,7 +422,7 @@ export async function switchToInvoice(env: Env, m: Member, f: { company?: string
 /** Copy's quiet stretch: a trial ending between the Q3 13F deadline and February's (Nov 17, 2026 to Feb 1, 2027). */
 const betweenSeasons = (unix: number) => unix * 1000 >= Date.UTC(2026, 10, 17) && unix * 1000 < Date.UTC(2027, 1, 2);
 /** Last winter on EDGAR, the accessions published at /winter-2025-26.json (the trader's re-count, Nov 11). */
-export const WINTER_LINE = 'Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and 18 open-market buys by directors and officers in the 100 stocks they hold most by value.';
+export const WINTER_LINE = 'Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes), and 14 open-market buys of $100K or more by directors and officers in the 100 stocks they hold most by value.';
 
 /**
  * The day-12 email for a cardless Copy trial between seasons (marketing's plan rev 76): it just ends, nothing charged;
@@ -438,7 +440,7 @@ export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now(), 
   // The member's own names (marketing's rev 73): only when every name is read and something happened.
   const pv = preview && !preview.pending.length && preview.insider_buys + preview.schedule_13dg > 0 ? preview : null;
   const mine = pv ? `Your ${pv.names} name${pv.names === 1 ? '' : 's'} had ${pv.insider_buys} insider buy${pv.insider_buys === 1 ? '' : 's'} and ${pv.schedule_13dg} 13D/G filing${pv.schedule_13dg === 1 ? '' : 's'} last winter${pv.events.length ? `, e.g. ${pv.events.slice(0, 2).map(winterLine).join('; ')}` : ''}.` : '';
-  const keep = 'Keep Copy at the founding price: $79/yr, locked. Goes to $99 for new members Feb 1. Monthly? Pause once a year, up to 3 months, and it resumes for the next 13F season. Both start once you add a card.';
+  const keep = `Keep Copy. ${COPY_YEARLY}. Monthly? Pause once a year, up to 3 months. Founding prices go to $12/month and $99/year for new members Feb 1. Both start once you add a card.`;
   const stay = 'The free pages and the free Friday email stay yours.';
   return {
     to: m.email,

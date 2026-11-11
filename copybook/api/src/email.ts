@@ -662,7 +662,8 @@ function implausible(r: MoveRow): string {
 function heldFacts(r: MoveRow): string {
   // Only a \"shares\" line keeps its filed $ (\"value as filed\"); a \"value\" or \"both\" line never prints one (the analyst's
   // round 39): its shares, and why the value is off when it is priced far from other filers.
-  if (r.unreliable === 'shares') {
+  // A held option line never shows a filed $ either, whatever its stored side (the analyst, Nov 11: Mizuho's TLT puts).
+  if (r.unreliable === 'shares' && !r.put_call) {
     if (r.change === 'new') return `new, ${compact(r.shares)} sh${r.value ? `, value as filed ${usd(r.value, false)}` : ''}`;
     if (r.change === 'exited') {
       const was = r.prev_value ?? (r.value_delta < 0 ? -r.value_delta : null); // an exit's delta is minus its filed value
@@ -697,7 +698,8 @@ function correctedNote(a: Alert13F): string {
   const out = new Set([...(a.held ?? []).filter((h) => h.reason === 'unreliable_shares'), ...[...(a.moves?.new ?? []), ...(a.moves?.added ?? []), ...(a.moves?.trimmed ?? []), ...(a.moves?.exited ?? []), ...(a.moves?.not_counted ?? [])].filter((r) => r.unreliable)].map((x) => posKey(x)));
   const gone = c.rows.filter((r) => r.v1.change === 'held' || out.has(posKey(r)));
   const rest = c.rows.filter((r) => !gone.includes(r));
-  return `Corrected ${c.at.slice(0, 10)}: ${[gone.length ? `${[...new Set(gone.map((r) => posName({ ...r, display_name: null, issuer: r.name })))].join(', ')} not counted (${notCountedWhy(gone[0])})` : '', ...rest.map(corrLine)].filter(Boolean).join('; ')}`;
+  const parts = [gone.length ? `${[...new Set(gone.map((r) => posName({ ...r, display_name: null, issuer: r.name })))].join(', ')} not counted (${notCountedWhy(gone[0])})` : '', ...rest.map(corrLine)].filter(Boolean).map((x) => x.replace(/\.$/, ''));
+  return `Corrected ${c.at.slice(0, 10)}: ${parts.join('; ')}.`;
 }
 
 /** What the alert said, or what the build has, for one row of a correction. */

@@ -416,8 +416,10 @@ interface WinterCache {
   seen: Record<string, WinterEvent | 0>;
   done: boolean;
 }
-export const WINTER = { from: '2025-12-01', to: '2026-01-31', key: (t: string) => `winter/2025-26/${t}.json` };
-const inWinter = (e: FeedEntry) => etDate(e.accepted) >= WINTER.from && etDate(e.accepted) <= WINTER.to;
+// Insider buys go by transaction date (the lead, Nov 11: MSFT's April buy filed Dec 12 isn't winter), so Form 4s filed
+// up to Feb 6 are read for late-January trades; 13D/Gs go by filing day. Buys of $100,000 or more only.
+export const WINTER = { from: '2025-12-01', to: '2026-01-31', filedTo: '2026-02-06', minBuy: 100_000, key: (t: string) => `winter/2025-26/${t}.json` };
+const inWinter = (e: FeedEntry) => etDate(e.accepted) >= WINTER.from && etDate(e.accepted) <= (e.form.startsWith('4') ? WINTER.filedTo : WINTER.to);
 
 async function winterEvent(ticker: string, cik: string, e: FeedEntry, siblings: string[]): Promise<WinterEvent | 0 | null> {
   const f4 = e.form.startsWith('4');
@@ -427,9 +429,13 @@ async function winterEvent(ticker: string, cik: string, e: FeedEntry, siblings: 
   if (!f4) return { ...base, kind: 'schedule_13dg', date: ev.event_date, who: ev.filer_name, role: null, value_usd: null, action: ev.action };
   const roles = (ev.role ?? '').split(', ').filter(Boolean);
   // A director or officer only (not a 10% owner alone, nor the company itself as an owner: issuer_cik checked above).
-  if (!ev.codes?.includes('P') || !roles.some((r) => r !== '10% owner')) return 0;
+  if (!roles.some((r) => r !== '10% owner')) return 0;
+  // Purchases (non-derivative P) dated in the window, $100,000 or more in all.
+  const buys = (ev.transactions ?? []).filter((l) => !l.derivative && l.code === 'P' && !!l.date && l.date.slice(0, 10) >= WINTER.from && l.date.slice(0, 10) <= WINTER.to);
+  const value = Math.round(buys.reduce((s, l) => s + l.shares * (l.price ?? 0), 0));
+  if (!buys.length || value < WINTER.minBuy) return 0;
   const role = roles.includes('Director') ? 'director' : (roles.find((r) => r !== '10% owner') ?? 'officer');
-  return { ...base, kind: 'insider_buy', date: ev.event_date, who: ev.filer_name, role, value_usd: ev.totals?.bought?.value_usd ?? null, action: null };
+  return { ...base, kind: 'insider_buy', date: buys.map((l) => l.date!.slice(0, 10)).sort()[0], who: ev.filer_name, role, value_usd: value, action: null };
 }
 
 /** Gene's spare SEC requests: the next followed or owned name's winter, a few filings at a time, until every name is done. */
@@ -452,7 +458,7 @@ export async function fillWinter(env: Env, budget: number): Promise<Record<strin
         const out: FeedEntry[] = [];
         for (let p = 0; p < 6; p++) {
           spent++;
-          const page = await companyFilings(c.cik!, type, size, p * size, '20260131');
+          const page = await companyFilings(c.cik!, type, size, p * size, type === '4' ? '20260206' : '20260131');
           out.push(...page);
           if (page.length < size || etDate(page[page.length - 1].accepted) < WINTER.from) break;
         }

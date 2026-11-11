@@ -1742,11 +1742,11 @@ describe('copybook api', () => {
     expect([body.match(/CRWD \+\$[\d.]+[MB]/)?.[0], body.match(/XOM \+\$[\d.]+[MB]/)?.[0], /GTES/.test(body), /EXIT|G39108108|\$8\.5B|\$23\.8B/.test(body)]).toEqual(['CRWD +$2.3B', 'XOM +$1.3B', true, false]);
     expect(note).toMatch(/CRWD was added/);
     const mi = (JSON.parse((await env.DB.get('feed:cus_fd'))!) as { title: string; text: string }[])[1];
-    expect([/13\.3B|194\.7%|96% of the position/.test(mi.title + mi.text), /Corrected 2026-11-11: SPY calls not counted \(share counts don't reconcile\)$/.test(mi.text)]).toEqual([false, true]);
+    expect([/13\.3B|194\.7%|96% of the position/.test(mi.title + mi.text), /Corrected 2026-11-11: SPY calls not counted \(share counts don't reconcile\)\.$/.test(mi.text)]).toEqual([false, true]);
     // The stored new "Call"/"Put" and exited "CALL"/"PUT" lines are one position each, trimmed by the filed values'
     // change and marked (not a NEW plus an EXIT); the title leads with the largest real move.
     const [miBody] = mi.text.split(/\n\s*Corrected /);
-    expect([/^Corrected · Mizuho Markets Americas Q3: MRVL \+\$476\.1M/.test(mi.title), /NEW SPY|EXIT SPY/.test(mi.title), /New:[^\n]*SPY|Exited:[^\n]*SPY/.test(miBody), (miBody.match(/Not counted: .*$/m)?.[0].includes("SPY calls value as filed fell from $610.5M to $552.5M (share counts don't reconcile)") && !/Trimmed:[^\n]*SPY/.test(miBody)), /SPY calls -\$58\.0M|SPY puts -\$5\.9M/.test(miBody)]).toEqual([true, false, false, true, false]);
+    expect([/^Corrected · Mizuho Markets Americas Q3: MRVL \+\$476\.1M/.test(mi.title), /NEW SPY|EXIT SPY/.test(mi.title), /New:[^\n]*SPY|Exited:[^\n]*SPY/.test(miBody), (/SPY calls [\d.KM]+ → [\d.KM]+ sh as filed \(share counts don't reconcile\)/.test(miBody.match(/Not counted: .*$/m)?.[0] ?? '') && !/610\.5M|552\.5M/.test(miBody) && !/Trimmed:[^\n]*SPY/.test(miBody)), /SPY calls -\$58\.0M|SPY puts -\$5\.9M/.test(miBody)]).toEqual([true, false, false, true, false]);
     // Netted fresh from the filings (Q3 "Call" against Q2 "CALL", case-blind), the trade is the filed values' change,
     // marked: never 19,152 - 479,831 sh x $28,846 = -$13.3B, 194.7% of a $6.8B book.
     const pos = (put_call: string, shares: number, value: number) => ({ cusip: '78462F103', issuer: 'SPDR S&P 500 ETF T', ticker: 'SPY', display_name: null, put_call, shares, value, title: 'SPY' });
@@ -1766,7 +1766,7 @@ describe('copybook api', () => {
     expect((await restateFeeds(env, tR)).feeds).toBe(1);
     const mh = (JSON.parse((await env.DB.get('feed:cus_fd'))!) as { title: string; text: string }[])[1];
     const [mhBody, mhNote] = mh.text.split(/\n\s*Corrected /);
-    expect([/SPY/.test(mh.title), /SPY calls -\$|SPY puts -\$/.test(mhBody), /Not counted: SPY calls, SPY puts \(share counts don't reconcile\)\./.test(mhBody), /MRVL \+\$476\.1M/.test(mhBody), /58\.0M/.test(mhNote), /^2026-11-11: SPY calls not counted \(share counts don't reconcile\)$/.test(mhNote)]).toEqual([false, false, true, true, false, true]);
+    expect([/SPY/.test(mh.title), /SPY calls -\$|SPY puts -\$/.test(mhBody), /Not counted: SPY calls, SPY puts \(share counts don't reconcile\)\./.test(mhBody), /MRVL \+\$476\.1M/.test(mhBody), /58\.0M/.test(mhNote), /^2026-11-11: SPY calls not counted \(share counts don't reconcile\)\.$/.test(mhNote)]).toEqual([false, false, true, true, false, true]);
     expect((await restateFeeds(env, tR)).feeds).toBe(0);
   });
 
@@ -1776,7 +1776,7 @@ describe('copybook api', () => {
     const t = (tk: string, v: number, extra = {}) => ({ change: 'trimmed', ticker: tk, display_name: null, issuer: tk, cusip: tk.padEnd(9, '0'), put_call: null, shares: 1, prev_shares: 2, value: 1, value_delta: v, delta_pct_of_book: null, ...extra });
     const mv = movesOf([t('AA', -9e7), t('BB', -8e7), t('CC', -7e7), t('DD', -6.5e7), t('EE', -6.2e7), t('EF', -6.1e7), t('SPY', -5.8e7, { put_call: 'Call', unreliable: 'shares' })] as never, 5);
     const m = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'w', slugs: ['w'], manager: 'W', name: 'W', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000008', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: mv, tickers: [] }], [], { investors: ['w'], stocks: [], owned: [] } as never);
-    expect([mv.trimmed.some((r) => r.ticker === 'SPY'), /Not counted: SPY calls value as filed fell from \$58\.0M to \$\S+ \(share counts don't reconcile\)\./.test(m.text), mv.sold_usd]).toEqual([false, true, 4.28e8]);
+    expect([mv.trimmed.some((r) => r.ticker === 'SPY'), /Not counted: SPY calls [\d.KM]+ → [\d.KM]+ sh as filed \(share counts don't reconcile\)\./.test(m.text) && !/58\.0M/.test(m.text), mv.sold_usd]).toEqual([false, true, 4.28e8]);
   });
 
   it("display names: the site's shared overrides name the firm in alert subjects, headers, the Friday email and possessives", async () => {
@@ -3084,7 +3084,12 @@ describe('copybook api', () => {
     expect(r.tickers.CSGP.window).toBe(quarterStart(Date.now()).replace(/\.\d{3}Z$/, 'Z'));
     // Last winter (Dec 1, 2025 to Jan 31, 2026 by filing day), for the day-12 email and /me?include=winter: the CEO's
     // code-P buy filed in the window counts with its dollars; a grant in the window and a buy filed before it don't.
-    secFiles['company:0001057352:4'] = `<feed>${entry('0001628280-26-052968', '2026-01-13T21:00:00Z')}${entry(acc(1), '2026-01-10T21:00:00Z')}${entry(acc(99), '2025-11-20T21:00:00Z')}</feed>`;
+    // By transaction date, $100K or more (the lead, Nov 11): the CEO's buy dated Jan 13 counts; the same buy dated in
+    // April but filed in the window (MSFT's case), a grant, and a buy filed before the window don't.
+    const dated = (d: string) => form4Csgp.replace('<value>2026-08-04</value>', `<value>${d}</value>`);
+    secFiles['Archives/edgar/data/1057352/000162828026052968/0001628280-26-052968.txt'] = dated('2026-01-13');
+    secFiles[`Archives/edgar/data/1057352/${acc(2).replace(/-/g, '')}/${acc(2)}.txt`] = dated('2025-04-23');
+    secFiles['company:0001057352:4'] = `<feed>${entry('0001628280-26-052968', '2026-01-14T21:00:00Z')}${entry(acc(1), '2026-01-10T21:00:00Z')}${entry(acc(2), '2025-12-12T21:00:00Z')}${entry(acc(99), '2025-11-20T21:00:00Z')}</feed>`;
     await env.DB.put('issuers:tickers', JSON.stringify(['CSGP', 'IVV']));
     const { fillWinter, winterPreview } = await import('../src/stockevents');
     for (let i = 0; i < 3; i++) await fillWinter(env, 20);
@@ -3092,7 +3097,7 @@ describe('copybook api', () => {
     expect([pv.names, pv.insider_buys, pv.schedule_13dg, pv.pending, pv.events.map((e) => [e.ticker, e.kind, e.value_usd, e.accession])]).toEqual([2, 1, 0, [], [['CSGP', 'insider_buy', 2489837, '0001628280-26-052968']]]);
     const { day12Mail } = await import('../src/revenue');
     const d12 = day12Mail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Date.UTC(2026, 10, 25, 20) / 1000, has_payment_method: false } as never, 'u', Date.now(), pv);
-    expect(d12.text).toMatch(/Your 2 names had 1 insider buy and 0 13D\/G filings last winter, e\.g\. CSGP (director|.+) bought \$2\.5M on Aug 4\./);
+    expect(d12.text).toMatch(/Your 2 names had 1 insider buy and 0 13D\/G filings last winter, e\.g\. CSGP (director|.+) bought \$2\.5M on Jan 13\./);
     const me = await (await call('/me?include=winter', { token })).json();
     expect(me.member.winter_preview === null || typeof me.member.winter_preview?.names === 'number').toBe(true);
   });
@@ -3286,7 +3291,7 @@ describe('copybook api', () => {
     const brk = [{ slug: 'warren-buffett', slugs: ['warren-buffett'] }];
     // The day-12 email for a cardless Copy trial ending between seasons (plan rev 76): it just ends, nothing charged.
     const d12 = trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Date.UTC(2026, 10, 25, 20) / 1000, has_payment_method: false } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 0, 0, 'k', 'u');
-    expect([d12.subject, /nothing is charged/.test(d12.text), d12.text.includes('19 Schedule 13D/G filings') && d12.text.includes('18 open-market buys'), /\b13 insider/.test(d12.text), /Pause once a year, up to 3 months/.test(d12.text), /months free/.test(d12.text)]).toEqual(['Your Copy trial ends Wednesday', true, true, false, true, false]);
+    expect([d12.subject, /nothing is charged/.test(d12.text), d12.text.includes('19 Schedule 13D/G filings') && d12.text.includes('14 open-market buys of $100K or more') && d12.text.includes('Founding prices go to $12/month and $99/year'), /\b13 insider/.test(d12.text), /Pause once a year, up to 3 months/.test(d12.text), /months free/.test(d12.text)]).toEqual(['Your Copy trial ends Wednesday', true, true, false, true, false]);
     const yl = await yearlyPeakLine(env, mo, brk);
     expect([/^Founding price \$79\/yr, locked\. Goes to \$99 for new members Feb 1: \S+\/keep\?t=\S+$/.test(yl ?? ''), await yearlyPeakLine(env, { ...(mo as object), interval: 'yearly' } as never, brk), await yearlyPeakLine(env, mo, [{ slug: 'bill-ackman' }])]).toEqual([true, null, null]);
     const tm = (card: boolean) => trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Math.floor(Date.now() / 1000) + 2 * 86400, has_payment_method: card } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 1, 0, 'https://api.test/keep?t=x', 'https://api.test/unsubscribe?t=x', 2);
@@ -5066,10 +5071,10 @@ describe('copybook api', () => {
     expect(sent[0].text).toContain('1 name you own moved in them: DHI.');
     expect(sent[0].text).toContain('Your fastest alert reached you 48 seconds after EDGAR accepted the filing (Warren Buffett 13F).');
     expect(sent[0].text).toContain('alerts for the 2 funds you follow and the 2 names you own');
-    const keep = sent[0].text.match(/Keep Copy yearly: \$79\/year, less than 9 months of monthly, price locked: (\S+)/)![1];
+    const keep = sent[0].text.match(/Keep Copy yearly: \$79\/year, history back to 2013 \(from Dec 31\) · monthly costs \$81\+ even with a pause · founding price locked: (\S+)/)![1];
     expect(sent[0].text).toContain('Or stay monthly at $9/month');
     expect(sent[0].html).toContain(`href="${keep}"`);
-    expect(sent[0].text).not.toContain('founding'); // Copy has no founding price
+    expect(sent[0].text).toContain('founding price locked'); // Copy's founding price (the lead, Nov 11)
     // One unsubscribe, also as the List-Unsubscribe header.
     const unsub = sent[0].text.match(/Unsubscribe from tips and newsletters: (\S+)/)![1];
     expect((sent[0] as unknown as { headers: Record<string, string> }).headers['List-Unsubscribe']).toBe(`<${unsub}>`);

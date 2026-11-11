@@ -1381,6 +1381,23 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'POST' && path === '/portal/card') {
     if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
     if (!m.customer.startsWith('cus_')) return json({ ok: false, error: 'no subscription', code: 'no_subscription' }, 409, h);
+    // { plan: 'monthly' | 'yearly' } (retail, Nov 11): a trial moves to that price first (the trial and its end stay), so
+    // the card form follows a choice the member saw with its amount and date.
+    const want = (await body(req)).plan;
+    let chosen: { interval: string; amount_usd: number; first_charge: string | null } | null = null;
+    if (want !== undefined) {
+      if (want !== 'monthly' && want !== 'yearly') return json({ ok: false, error: 'plan: monthly or yearly', code: 'bad_request' }, 400, h);
+      if (m.status !== 'trialing' || !m.subscription?.startsWith('sub_')) return json({ ok: false, error: 'Only a trial picks its plan here', code: 'not_trialing' }, 409, h);
+      const sub = await stripe(env, 'GET', `subscriptions/${m.subscription}`);
+      const item = sub.items?.data?.[0];
+      const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': `${m.plan}_${want}`, active: true })).data?.[0];
+      if (!item?.id || !price?.id) return json({ ok: false, error: 'plan unavailable', code: 'unavailable' }, 409, h);
+      if (item.price?.id !== price.id) {
+        const { syncSubscription } = await import('./members');
+        await syncSubscription(env, await stripe(env, 'POST', `subscriptions/${m.subscription}`, { 'items[0][id]': item.id, 'items[0][price]': price.id, proration_behavior: 'none' }));
+      }
+      chosen = { interval: want, amount_usd: Number(price.unit_amount ?? 0) / 100, first_charge: m.trial_end ? new Date(m.trial_end * 1000).toISOString().slice(0, 10) : null };
+    }
     const s = await stripe(env, 'POST', 'billing_portal/sessions', {
       customer: m.customer,
       return_url: `${env.SITE_URL}account/?card=added`,
@@ -1389,7 +1406,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       'flow_data[after_completion][type]': 'redirect',
       'flow_data[after_completion][redirect][return_url]': `${env.SITE_URL}account/?card=added`,
     });
-    return json({ ok: true, url: s.url }, 200, h);
+    return json({ ok: true, url: s.url, ...(chosen ? { plan: chosen } : {}) }, 200, h);
   }
 
   // "Switch to yearly" (the welcome page, /account/): the portal's confirm page for the same subscription at the yearly price.
