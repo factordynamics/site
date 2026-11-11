@@ -1287,6 +1287,9 @@ a.hb-row:hover {
   align-items: flex-start;
   padding-top: 12vh;
 }
+[data-theme='dark'] .overlay {
+  background: rgba(3, 6, 12, 0.68);
+}
 .palette {
   width: min(640px, calc(100vw - 24px));
   background: var(--panel);
@@ -1308,36 +1311,91 @@ a.hb-row:hover {
   flex: 1;
   font-size: 16px;
 }
-.palette ul {
-  list-style: none;
-  margin: 0;
-  padding: 6px;
-  max-height: 50vh;
+.palette .results {
+  padding: 6px 8px 10px;
+  max-height: min(64vh, 560px);
   overflow-y: auto;
 }
-.palette li {
+.palette .group + .group {
+  margin-top: 6px;
+}
+.palette .group-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--dim);
+  padding: 10px 10px 6px;
+}
+.palette .hit {
   display: flex;
   gap: 12px;
   align-items: center;
   padding: 8px 10px;
-  border-radius: 8px;
+  min-height: 52px;
+  border-radius: 10px;
   cursor: pointer;
-  white-space: nowrap;
 }
-.palette li.cur {
-  background: var(--hl);
+.palette .hit.cur {
+  background: color-mix(in srgb, var(--acc) 13%, var(--panel));
 }
-.palette .kind {
-  font-size: 12px;
-  width: 56px;
-  color: var(--dim);
+.palette .badge-investor,
+.palette .badge-stock {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: 0 4px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--acc);
+  background: color-mix(in srgb, var(--acc) 14%, transparent);
+}
+.palette .badge-stock {
+  width: 48px;
+  height: 36px;
+  margin: 0;
+  padding: 0 2px;
+  border-radius: 9px;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: var(--fg2);
+  background: var(--raise);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.palette .hit-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .palette .lbl {
   font-weight: 600;
-}
-.palette .sub {
+  font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette .sub {
+  font-size: 13px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette .no-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 12px 14px;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.palette .no-hits b {
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 15px;
 }
 .palette-close {
   border: 0;

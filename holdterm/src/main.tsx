@@ -3,8 +3,8 @@ import '@fontsource/ibm-plex-mono/400.css'
 import './styles.css'
 import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { funds, loadIndex, loadStockIndex, searchNames, type Manager, type StockIndexRow } from './data'
-import { A, navigate, usePath } from './lib'
+import { aggregate, funds, loadBooks, loadIndex, loadStockIndex, searchNames, type Agg, type Manager, type StockIndexRow } from './data'
+import { A, navigate, usd, usePath } from './lib'
 import { dataSlug, fundPath, publicSlug } from './names'
 import { price as PRICE } from './config'
 import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Guide, Home, ISSUES, NotFound, Privacy, Stock, Terms } from './pages'
@@ -98,13 +98,32 @@ function Glass() {
   )
 }
 
-type Hit = { kind: 'stock' | 'investor'; label: string; sub: string; to: string; score: number }
+type Hit = { kind: 'stock' | 'investor'; label: string; sub: string; badge: string; to: string; score: number }
+
+const initials = (firm: string) =>
+  firm
+    .replace(/[^A-Za-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w && !/^(and|of|the|llc|inc|lp|co)$/i.test(w))
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('')
+const owners = (n: number | undefined) => (n === undefined ? 'Stock' : n ? `Held by ${n} of the investors we follow` : 'Not held by the investors we follow')
+const investorHit = (m: Manager, score = 0): Hit => ({
+  kind: 'investor',
+  label: m.firm,
+  badge: initials(m.firm),
+  sub: [m.pm && `Managed by ${m.pm}`, `${usd(m.total_value)} in ${m.position_count} stocks`].filter(Boolean).join(' · '),
+  to: fundPath(m.slug),
+  score,
+})
 
 function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => void }) {
   const [q, setQ] = useState('')
   const [cur, setCur] = useState(0)
   const [stocks, setStocks] = useState<StockIndexRow[]>([])
   const [mgrs, setMgrs] = useState<Manager[]>([])
+  const [held, setHeld] = useState<Agg[]>([])
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (!open) return
@@ -113,40 +132,79 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
     input.current?.focus()
     if (!stocks.length) loadStockIndex().then((d) => setStocks(d.stocks)).catch(() => {})
     if (!mgrs.length) loadIndex().then((ix) => setMgrs(funds(ix))).catch(() => {})
+    // The same counts as the stock pages and Most owned: share classes combined, followed investors only.
+    if (!held.length) loadBooks().then((b) => setHeld(aggregate(b).rows)).catch(() => {})
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
-  const hits = useMemo<Hit[]>(() => {
+  const owned = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const a of held) for (const t of a.classes ?? [a.ticker]) if (t) m.set(t, Math.max(m.get(t) ?? 0, a.holders.length))
+    return m
+  }, [held])
+  const ready = held.length > 0
+  const stockHit = (t: string, n: string, score = 0): Hit => ({
+    kind: 'stock',
+    label: n,
+    badge: t,
+    sub: owners(ready ? owned.get(t) ?? 0 : undefined),
+    to: `/s/${encodeURIComponent(t)}`,
+    score,
+  })
+  const groups = useMemo<[string, Hit[]][]>(() => {
     const s = q.trim().toLowerCase()
-    if (!s) return []
-    const out: Hit[] = []
+    if (!s) {
+      // Before typing: the largest investors and the most widely owned stocks.
+      const inv = [...mgrs].sort((a, b) => b.total_value - a.total_value).slice(0, 3).map((m) => investorHit(m))
+      const st = held
+        .filter((a) => !a.fund && a.ticker)
+        .sort((a, b) => b.holders.length - a.holders.length)
+        .slice(0, 3)
+        .map((a) => stockHit(a.ticker!, a.name))
+      return [
+        ['Largest investors', inv],
+        ['Most owned stocks', st],
+      ]
+    }
+    const inv: Hit[] = []
     for (const m of mgrs) {
       const hay = searchNames(m).toLowerCase()
-      if (hay.includes(s)) out.push({ kind: 'investor', label: m.firm, sub: m.pm ? `PM ${m.pm}` : 'fund', to: fundPath(m.slug), score: m.firm.toLowerCase().startsWith(s) ? 4 : hay.split(/[ |]+/).some((w) => w.startsWith(s)) ? 3 : 1 })
+      if (hay.includes(s)) inv.push(investorHit(m, m.firm.toLowerCase().startsWith(s) ? 4.5 : hay.split(/[ |]+/).some((w) => w.startsWith(s)) ? 3 : 1))
     }
+    const st: Hit[] = []
     for (const r of stocks) {
       const t = r.t.toLowerCase()
       const n = r.n.toLowerCase()
       const sc = t === s ? 10 : t.startsWith(s) ? 5 : n.startsWith(s) ? 4 : n.includes(s) ? 1 : 0
-      if (sc) out.push({ kind: 'stock', label: r.t, sub: `${r.n} · ${r.h} ${r.h === 1 ? "holder" : "holders"}`, to: `/s/${encodeURIComponent(r.t)}`, score: sc + Math.min(r.h, 200) / 400 })
+      if (sc) st.push(stockHit(r.t, r.n, sc + Math.min(owned.get(r.t) ?? 0, 100) / 100))
     }
-    return out.sort((a, b) => b.score - a.score).slice(0, 12)
-  }, [q, stocks, mgrs])
+    const top = (xs: Hit[]) => xs.sort((a, b) => b.score - a.score).slice(0, 6)
+    const g: [string, Hit[]][] = [
+      ['Investors', top(inv)],
+      ['Stocks', top(st)],
+    ]
+    return (g[1][1][0]?.score ?? 0) > (g[0][1][0]?.score ?? 0) ? [g[1], g[0]] : g
+  }, [q, stocks, mgrs, owned, held]) // eslint-disable-line react-hooks/exhaustive-deps
+  const hits = groups.flatMap(([, h]) => h)
   if (!open) return null
   const go = (h?: Hit) => {
-    const to = h?.to ?? (/^[a-z.]{1,6}$/i.test(q.trim()) ? `/s/${encodeURIComponent(q.trim().toUpperCase())}` : null)
-    if (!to) return
+    if (!h) return
     setOpen(false)
-    navigate(to)
+    navigate(h.to)
   }
+  let i = -1
   return (
     <div className="overlay" onClick={() => setOpen(false)}>
-      <div className="palette" onClick={(e) => e.stopPropagation()}>
+      <div className="palette" role="dialog" aria-label="Search" onClick={(e) => e.stopPropagation()}>
         <div className="prompt">
           <Glass />
           <input
             ref={input}
             value={q}
-            placeholder="Search a ticker, company, fund or manager"
-            aria-label="search tickers, companies, funds and managers"
+            placeholder="Search investors or stocks"
+            aria-label="Search investors, companies or tickers"
+            aria-controls="search-results"
+            aria-activedescendant={hits[cur] ? `sr-${cur}` : undefined}
+            role="combobox"
+            aria-expanded="true"
             onChange={(e) => {
               setQ(e.target.value)
               setCur(0)
@@ -164,16 +222,39 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
             Cancel
           </button>
         </div>
-        <ul>
-          {hits.map((h, i) => (
-            <li key={h.to} className={i === cur ? 'cur' : ''} onMouseEnter={() => setCur(i)} onClick={() => go(h)}>
-              <span className={`kind ${h.kind}`}>{h.kind === 'stock' ? 'Stock' : 'Investor'}</span>
-              <span className="lbl">{h.label}</span>
-              <span className="dim sub">{h.sub}</span>
-            </li>
-          ))}
-          {q && !hits.length && <li className="dim">No match{/^[a-z.]{1,6}$/i.test(q.trim()) ? `. Press Enter to try the ticker ${q.trim().toUpperCase()}.` : '.'}</li>}
-        </ul>
+        <div className="results" id="search-results" role="listbox" aria-label="Search results">
+          {groups
+            .filter(([, h]) => h.length)
+            .map(([title, hs]) => (
+              <div className="group" key={title} role="group" aria-label={title}>
+                <div className="group-title" aria-hidden="true">
+                  {title}
+                </div>
+                {hs.map((h) => {
+                  i++
+                  const n = i
+                  return (
+                    <div key={h.to} id={`sr-${n}`} role="option" aria-selected={n === cur} className={`hit${n === cur ? ' cur' : ''}`} onMouseEnter={() => setCur(n)} onClick={() => go(h)}>
+                      <span className={`badge-${h.kind}`} aria-hidden="true">
+                        {h.badge}
+                      </span>
+                      <span className="hit-text">
+                        <span className="lbl">{h.label}</span>
+                        <span className="sub">{h.sub}</span>
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          {q.trim() && !hits.length && (
+            <div className="no-hits">
+              <b>Nothing matches “{q.trim()}”</b>
+              <span>Try a company name such as Apple, a ticker such as MSFT, or an investor such as Berkshire Hathaway.</span>
+            </div>
+          )}
+          {!q.trim() && !hits.length && <div className="no-hits">Loading suggestions…</div>}
+        </div>
       </div>
     </div>
   )
