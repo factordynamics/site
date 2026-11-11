@@ -112,6 +112,9 @@ export function issuerName(n: string | null | undefined): string {
     .replace(/^(.*\b(\S+))\s+\(\2\)$/, '$1')
     .replace(/^(.+?\bETF)\s+.+\bETF$/, '$1')
     .replace(/^Joint Stock (Co|Company)\s+/i, '')
+    // Indonesian legal forms: "Perusahaan Perseroan Persero PT Telekomunikasi Indonesia TBK" -> "Telekomunikasi Indonesia".
+    .replace(/^(Perusahaan\s+Perseroan\s+)?(\(?Persero\)?\s+)?PT\s+(?=\S+\s+\S)/i, '')
+    .replace(/\s+Tbk\.?$/i, '')
   for (let prev = ''; prev !== t; ) {
     prev = t
     t = t.replace(/\s*[\\/]+[a-z]{0,3}[\\/]*$/i, '').replace(/[,\s]+(Inc\.?|Corp\.?|Plc|New|Pub|Sab De Cv|S\.A\.B\. de C\.V\.?)$/i, '')
