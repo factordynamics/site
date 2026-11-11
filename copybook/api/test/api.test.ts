@@ -397,7 +397,12 @@ describe('copybook api', () => {
     const portal = await (await call('/portal', { method: 'POST', token: session.token })).json();
     expect(portal.url).toMatch(/^https:\/\/billing\.stripe\.com\//);
 
+    const meY = (await (await call('/me', { token: session.token })).json()).member;
+    expect([meY.founding_price, meY.yearly_perks]).toEqual([true, true]);
     await webhook({ type: 'customer.subscription.deleted', data: { object: sub('sub_1', 'cus_1', 'canceled', 'year') } });
+    // A cancellation drops the founding price.
+    const meC = (await (await call('/me', { token: session.token })).json()).member;
+    expect([meC.founding_price, meC.yearly_perks]).toEqual([false, false]);
     expect((await call('/csv/warren-buffett.csv', { token: session.token })).status).toBe(402);
     // A link minted before cancelling stops working once the plan ends.
     expect((await call(unusedLink.slice('https://api.test'.length))).status).toBe(402);
@@ -423,6 +428,8 @@ describe('copybook api', () => {
     const ch = await call('/channels', { method: 'PUT', body: { email: false }, token: r.token });
     const me0 = await (await call('/me', { token: r.token })).json();
     const card = await (await call('/portal/card', { method: 'POST', token: r.token })).json();
+    // A Copy subscription from before Feb 1, 2027 holds the founding price; a monthly one has no yearly perks.
+    expect([me0.member.founding_price, me0.member.yearly_perks]).toEqual([true, false]);
     expect([r.delivery, fo.ok, fo.delivery, ch.status, (await ch.json()).delivery, me0.member?.delivery ?? me0.delivery, /^https:\/\/billing\.stripe\.com\//.test(card.url)]).toEqual(['pending_email_confirmation', true, 'pending_email_confirmation', 200, 'pending_email_confirmation', 'pending_email_confirmation', true]);
     for (const [method, path, body] of [['GET', '/keys'], ['POST', '/keys', { name: 'x' }], ['POST', '/channels/test'], ['POST', '/portal'], ['GET', '/seats'], ['POST', '/handoff'], ['POST', '/me/sessions/revoke'], ['GET', '/history/warren-buffett']] as [string, string, unknown?][]) {
       const res = await call(path, { method, body, token: r.token });

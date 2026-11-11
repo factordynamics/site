@@ -1308,7 +1308,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // email_pending), and adds a card (POST /portal/card); API keys, channel tests, the full billing portal, seats, a
   // cross-origin handoff and "sign out everywhere" (which mints a full session) wait for the link. Starting the trial
   // needs no session (POST /checkout).
-  const setup = (req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/') || (req.method === 'POST' && path === '/portal/card') || (!!m.email_pending && ((path === '/channels' && (req.method === 'GET' || req.method === 'PUT')) || (req.method === 'POST' && path === '/alerts')));
+  const setup = (req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/') || (req.method === 'POST' && (path === '/portal/card' || path === '/yearly')) || (!!m.email_pending && ((path === '/channels' && (req.method === 'GET' || req.method === 'PUT')) || (req.method === 'POST' && path === '/alerts')));
   if (PROVISIONAL.has(m) && !setup) {
     return json({ ok: false, error: 'Open the sign-in link we emailed you to do this.', code: 'verify_email', delivery: 'pending_email_confirmation' }, 403, h);
   }
@@ -1388,6 +1388,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       'flow_data[after_completion][redirect][return_url]': `${env.SITE_URL}account/?card=added`,
     });
     return json({ ok: true, url: s.url }, 200, h);
+  }
+
+  // "Switch to yearly" (the welcome page, /account/): the portal's confirm page for the same subscription at the yearly price.
+  if (req.method === 'POST' && path === '/yearly') {
+    if (m.seat_of) return json({ ok: false, error: "Billing is managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
+    const { yearlyPortalUrl } = await import('./revenue');
+    const u = await yearlyPortalUrl(env, m);
+    return u ? json({ ok: true, url: u }, 200, h) : json({ ok: false, error: m.interval === 'yearly' ? 'Already yearly' : 'Nothing to switch', code: m.interval === 'yearly' ? 'already_yearly' : 'no_subscription' }, 409, h);
   }
 
   if (req.method === 'POST' && path === '/portal') {

@@ -528,6 +528,32 @@ export async function yearlyPeakLine(env: Env, m: Member, filings: { slug: strin
   return m.plan === 'copy' ? `Founding price ${money(p.year)}/yr, locked. Goes to $99 for new members Feb 1: ${keep}` : `Switch to yearly: ${money(p.year)}, ${monthsFree(p)}: ${keep}`;
 }
 
+/**
+ * The portal's confirm page for moving a monthly plan (or a monthly trial) to yearly on the same subscription, back to
+ * /account/?kept=yearly. Null when there's nothing to switch (yearly already, inactive, no item or price).
+ */
+export async function yearlyPortalUrl(env: Env, m: Member): Promise<string | null> {
+  const account = `${env.SITE_URL}account/`;
+  if (!PRICES[m.plan] || !isActive(m) || m.interval === 'yearly' || !m.subscription?.startsWith('sub_')) return null;
+  const sub = await stripe(env, 'GET', `subscriptions/${m.subscription}`);
+  const item = sub.items?.data?.[0];
+  const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': `${m.plan}_yearly`, active: true })).data?.[0];
+  if (!item?.id || !price?.id) return null;
+  const s = await stripe(env, 'POST', 'billing_portal/sessions', {
+    customer: m.customer,
+    configuration: env.PORTAL_CONFIGURATION || undefined,
+    return_url: account,
+    'flow_data[type]': 'subscription_update_confirm',
+    'flow_data[subscription_update_confirm][subscription]': m.subscription,
+    'flow_data[subscription_update_confirm][items][0][id]': item.id,
+    'flow_data[subscription_update_confirm][items][0][price]': price.id,
+    'flow_data[subscription_update_confirm][items][0][quantity]': 1,
+    'flow_data[after_completion][type]': 'redirect',
+    'flow_data[after_completion][redirect][return_url]': `${account}?kept=yearly`,
+  });
+  return s.url ?? null;
+}
+
 export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url: URL, method = 'GET'): Promise<Response> {
   const go = (to: string) => Response.redirect(to, 303);
   const account = `${env.SITE_URL}account/`;
@@ -536,24 +562,7 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
   if (!m || !PRICES[m.plan]) return go(account);
   try {
     if (path === '/keep') {
-      if (!isActive(m) || m.interval === 'yearly') return go(account);
-      const sub = await stripe(env, 'GET', `subscriptions/${m.subscription}`);
-      const item = sub.items?.data?.[0];
-      const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': `${m.plan}_yearly`, active: true })).data?.[0];
-      if (!item?.id || !price?.id) return go(account);
-      const s = await stripe(env, 'POST', 'billing_portal/sessions', {
-        customer: m.customer,
-        configuration: env.PORTAL_CONFIGURATION || undefined,
-        return_url: account,
-        'flow_data[type]': 'subscription_update_confirm',
-        'flow_data[subscription_update_confirm][subscription]': m.subscription,
-        'flow_data[subscription_update_confirm][items][0][id]': item.id,
-        'flow_data[subscription_update_confirm][items][0][price]': price.id,
-        'flow_data[subscription_update_confirm][items][0][quantity]': 1,
-        'flow_data[after_completion][type]': 'redirect',
-        'flow_data[after_completion][redirect][return_url]': `${account}?kept=yearly`,
-      });
-      return go(s.url);
+      return go((await yearlyPortalUrl(env, m)) ?? account);
     }
     const plan = p!.s ?? m.plan;
     const customer = m.customer;

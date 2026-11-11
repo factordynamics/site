@@ -14,6 +14,8 @@ export const LOGIN_REQUEST_TTL = 15 * 60;
 export const SESSION_TTL = 30 * 24 * 3600;
 /** A provisional session (signup form, checkout hand-off; the address not yet proven): 72 hours, inside the welcome link's 7 days. */
 export const PROVISIONAL_TTL = 72 * 3600;
+/** New Copy members pay $12/mo or $99/yr from Feb 1, 2027 (00:00 ET); earlier Copy subscriptions keep the founding price. */
+export const FOUNDING_PRICE_UNTIL = Date.UTC(2027, 1, 1, 5);
 
 /**
  * The member as last written in this location, for 60 s (the Cache API sees its own writes at once; a KV read can
@@ -160,6 +162,11 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     source: prev?.source ?? (typeof sub.metadata?.source === 'string' ? sub.metadata.source : undefined),
     ...(prev?.test || typeof sub.metadata?.test === 'string' ? { test: prev?.test ?? sub.metadata.test } : {}),
   };
+  // The founding price (the lead, Nov 11): a Copy subscription created before Feb 1, 2027 keeps it while it stays
+  // subscribed (trialing, active, paused, past due); a cancellation drops it, and a later subscription is priced anew.
+  const live = !['canceled', 'incomplete_expired', 'unpaid'].includes(m.status);
+  m.founding_price = m.plan === 'copy' && live && Number(sub.created ?? 0) * 1000 < FOUNDING_PRICE_UNTIL;
+  m.yearly_perks = ['copy', 'pro', 'fund'].includes(m.plan) && m.interval === 'yearly' && live;
   // A stale event (older subscription) must not overwrite a newer active one.
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
   // A free signup subscribing: the paid member keeps where they came from.
@@ -206,7 +213,7 @@ export function invoiceTrialView(m: Member) {
 
 export function publicView(m: Member) {
   // A Fund seat: billing belongs to the owner, so the site hides the portal for seats.
-  return { delivery: m.email_pending ? ('pending_email_confirmation' as const) : ('active' as const), invoice_trial: invoiceTrialView(m), email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, has_payment_method: m.has_payment_method ?? null, collection: m.collection ?? null, overdue_since: m.overdue_since ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, paused_until: isPaused(m) ? m.paused_until : null, pause_after_trial: pauseScheduled(m) ? { from: m.paused_from, until: m.paused_until } : null, alerts: m.alerts, seat: Boolean(m.seat_of) };
+  return { founding_price: !!m.founding_price, yearly_perks: !!m.yearly_perks, delivery: m.email_pending ? ('pending_email_confirmation' as const) : ('active' as const), invoice_trial: invoiceTrialView(m), email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, has_payment_method: m.has_payment_method ?? null, collection: m.collection ?? null, overdue_since: m.overdue_since ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, paused_until: isPaused(m) ? m.paused_until : null, pause_after_trial: pauseScheduled(m) ? { from: m.paused_from, until: m.paused_until } : null, alerts: m.alerts, seat: Boolean(m.seat_of) };
 }
 
 /**
