@@ -255,8 +255,13 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
   // 13Fs are timed by the email that carried the moves (rows tagged `moves`); older 13F rows timed the first email.
   // Emails held for the daily limit aren't counted as fast (they're reported as email_delayed).
   // 13Fs accepted before the moves fix (sent before it, or their moves sent after it from the backlog) are reported apart.
-  const counted = log.filter((l) => !l.replay && !l.email_delayed && Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves));
-  const rows = counted.filter((l) => !isPre(l));
+  // One row per accession, its first delivery (a later send to another member, e.g. a coalesced one, isn't a second alert).
+  const firsts = new Map<string, LatencyRow>();
+  for (const l of log.filter((l) => !l.replay && !l.email_delayed && Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves)).sort((a, b) => a.sent.localeCompare(b.sent)))
+    if (!firsts.has(l.accession)) firsts.set(l.accession, l);
+  const counted = [...firsts.values()].sort((a, b) => b.sent.localeCompare(a.sent));
+  // Every alert counts in the season's figures; the late 13Fs from before the moves fix are also listed to explain them.
+  const rows = counted;
   const pre = counted.filter(isPre);
   const chRows = ch.filter((c) => Date.parse(c.delivered) >= from);
   const all = spread(rows.map((l) => l.seconds));
@@ -277,7 +282,14 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     p90_seconds: all.p90_seconds,
     p95_seconds: nearest(rows.map((l) => l.seconds), 0.95),
     count: all.count,
-    by_form: group(rows, (l) => family(formOf(l)), (l) => l.seconds),
+    by_form: (() => {
+      const g = group(rows, (l) => family(formOf(l)), (l) => l.seconds) as Record<string, Record<string, unknown>>;
+      // 13F split by acceptance time, not by outcome: the season (each accession once, at its moves email, with how many
+      // took over 15 minutes), and only those accepted after the moves fix.
+      const f13 = rows.filter((l) => family(formOf(l)) === '13F');
+      if (g['13F']) Object.assign(g['13F'], { season: { ...spread(f13.map((l) => l.seconds)), max_seconds: f13.length ? Math.max(...f13.map((l) => l.seconds)) : null, over_15m: f13.filter((l) => l.seconds > 900).length }, since_fix: spread(f13.filter((l) => Date.parse(l.accepted) >= fixAt).map((l) => l.seconds)) });
+      return g;
+    })(),
     moves_fix_at: MOVES_FIX_AT,
     before_moves_fix: { '13F': { ...spread(pre.map((l) => l.seconds)), max_seconds: pre.length ? Math.max(...pre.map((l) => l.seconds)) : null, rows: pre.map((l) => ({ accession: l.accession, manager: l.manager ?? null, slug: l.slug, accepted_at: l.accepted, sent_at: l.sent, seconds: l.seconds, ...(approx(l) ? { sent_approx: true } : {}) })) } },
     by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },

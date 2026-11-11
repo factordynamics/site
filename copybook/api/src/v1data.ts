@@ -826,9 +826,11 @@ ROUTES.push(
     const date = /^\d{4}-\d{2}-\d{2}$/;
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) return v1error('bad_request', 400, `limit must be an integer from 1 to 500 (got ${p.get('limit')}); page with offset.`);
     if (!Number.isInteger(offset) || offset < 0) return v1error('bad_request', 400, `offset must be an integer from 0 (got ${p.get('offset')}).`);
-    if ((kinds && kinds.some((k) => !k)) || (from && !date.test(from)) || (to && !date.test(to))) {
-      return v1error('bad_request', 400, 'form: form4, 13d, 13g (comma-separated); from, to: YYYY-MM-DD filing dates; limit 1-500; offset from 0.');
-    }
+    if (kinds && kinds.some((k) => !k)) return v1error('bad_request', 400, `form must be form4, 13d or 13g, comma-separated (got ${p.get('form')}).`);
+    // A real calendar date: 2026-13-01 and 2026-02-30 are refused, not read as empty ranges.
+    const realDate = (d: string) => date.test(d) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+    for (const [k, v] of [['from', from], ['to', to]] as const) if (v && !(date.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && realDate(v))) return v1error('bad_request', 400, `${k} must be a filing date as YYYY-MM-DD (got ${v}).`);
+    if (from && to && from > to) return v1error('bad_request', 400, `from (${from}) is after to (${to}).`);
     let filerSlug: string | null = null;
     let filerCik: string | null = null;
     const filer = p.get('filer');

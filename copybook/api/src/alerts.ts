@@ -262,6 +262,27 @@ async function emailPressure(env: Env, now: number): Promise<{ room: number; pro
   return { room: await mailRoom(env), projected: Math.ceil((recent / 2) * hoursLeft) };
 }
 
+/** An alert's id for a member's mailed record: a 13F's moves follow-up and an event's details follow-up are their own sends. */
+const mailId = (x: Alert13F | AlertEvent) => ('accession' in x ? `${x.accession}${x.followup ? ':moves' : ''}` : `${x.id}${x.followup ? ':details' : ''}`);
+/**
+ * What this member hasn't been emailed yet (KV mailed:{customer}, ids with the time, 7 days), recorded as mailed now:
+ * whatever path sends it (minute poll, a retry, the coalesced flush, two hosts in a hand-off), one alert is one email.
+ */
+async function unmailed(env: Env, customer: string, filings: Alert13F[], events: AlertEvent[], now: number) {
+  const k = `mailed:${customer}`;
+  const cut = Math.floor(now / 1000) - 7 * 86400;
+  const log = Object.fromEntries(Object.entries(JSON.parse((await env.DB.get(k)) ?? '{}') as Record<string, number>).filter(([, t]) => t >= cut));
+  const fresh = <T extends Alert13F | AlertEvent>(xs: T[]) => xs.filter((x) => !(mailId(x) in log));
+  const out = { filings: fresh(filings), events: fresh(events) };
+  const dupes = filings.length + events.length - out.filings.length - out.events.length;
+  if (out.filings.length || out.events.length) {
+    for (const x of [...out.filings, ...out.events]) log[mailId(x)] = Math.floor(now / 1000);
+    await env.DB.put(k, JSON.stringify(log), { expirationTtl: 8 * 86400 });
+  }
+  if (dupes) await env.DB.put('alerts:dupes-blocked', String(Number((await env.DB.get('alerts:dupes-blocked')) ?? 0) + dupes));
+  return out;
+}
+
 /** Every minute: held alerts whose window has ended go out as one email per member, timed by that send. */
 export async function flushHeld(env: Env, now: number): Promise<Record<string, unknown>> {
   const index = JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>;
@@ -278,9 +299,11 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
     const f = await getFollows(env, m);
     const test = !!m.test || testAddress(m.email);
     if (test && Number((await env.DB.get(testMailKey(c, now))) ?? 0) >= TEST_MAIL_CAP) continue;
+    const u = await unmailed(env, c, w.filings, w.events, now);
+    if (!u.filings.length && !u.events.length) continue;
     if (test) await env.DB.put(testMailKey(c, now), String(Number((await env.DB.get(testMailKey(c, now))) ?? 0) + 1), { expirationTtl: 2 * 86400 });
-    mails.push({ ...alertMail(env, m.email, w.filings, w.events, f, m), test, ids: [...w.filings.map((a) => a.accession), ...w.events.map((e) => e.id)] });
-    sentWith.push(w);
+    mails.push({ ...alertMail(env, m.email, u.filings, u.events, f, m), test, ids: [...u.filings.map((a) => a.accession), ...u.events.map((e) => e.id)] });
+    sentWith.push(u);
   }
   await env.DB.put(HELD, JSON.stringify(index));
   if (!mails.length) return { held_flushed: 0 };
@@ -506,6 +529,11 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
           await env.DB.delete(`mailwin:${m.customer}`);
           if ((heldIndex ??= JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>)[m.customer]) delete heldIndex[m.customer];
         }
+      }
+      // Never the same alert twice to one member (an operator's replay excepted).
+      if (!only) {
+        send = await unmailed(env, m.customer, send.filings, send.events, now);
+        if (!send.filings.length && !send.events.length) continue;
       }
       if (test && !only) await env.DB.put(testMailKey(m.customer, now), String(n + 1), { expirationTtl: 2 * 86400 });
       const am = alertMail(env, m.email, send.filings, send.events, f, m);

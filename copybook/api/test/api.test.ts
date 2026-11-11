@@ -663,7 +663,7 @@ describe('copybook api', () => {
     const mail = sent.find((m) => m.to[0] === 'follows@example.com')!;
     expect(mail.subject).toBe('Buffett Q3: NEW DHI · EXIT BAC · AAPL -$4K');
     // The HTML part lays the moves out as a table, with how much of the position was sold.
-    expect(mail.html).toMatch(/<table[^>]*>.*<th[^>]*>Move<\/th>.*<td[^>]*>Trimmed<\/td><td[^>]*><b>AAPL<\/b><\/td><td[^>]*>-\$4K<\/td><td[^>]*>sold 20%<\/td>/);
+    expect(mail.html).toMatch(/<table[^>]*>.*<th[^>]*>Move<\/th>.*<td[^>]*>Trimmed<\/td><td[^>]*><b>AAPL<\/b><\/td><td[^>]*>-\$4K<\/td><td[^>]*><span style="white-space:nowrap">sold 20%<\/span><\/td>/);
     expect(mail.html).toContain('Accession 0000950123-26-011111, accepted by EDGAR');
     // Total book 20,500: DHI +4,000 is 19.5%; the AAPL trim is 20 shares at $200 = -4,000; BAC exits at its prior $2,000.
     expect(mail.text).toContain('Bought $5K, sold $6K this quarter.');
@@ -929,6 +929,13 @@ describe('copybook api', () => {
     mg.length = 0;
     await at('F6', 25);
     expect(got()).toEqual([['real@example.com', 'sec.gov/F6']]);
+    // The same alert delivered again (a handled list lost in a host hand-off, as Nov 10's 13G at 14:01 and 14:02):
+    // nobody gets it twice.
+    mg.length = 0;
+    sent = [];
+    await at('F6', 26);
+    expect(got()).toEqual([]);
+    expect(await env.DB.get('alerts:dupes-blocked')).toBe('1');
     // A 13G or 13G/A never goes to a test member by email (feed only), and doesn't use up its 5.
     await env.DB.put(`mailn:t:${today}`, '0');
     for (const c of ['r', 't']) await putFollows(c, { investors: ['warren-buffett'], include_13g: true });
@@ -2668,14 +2675,18 @@ describe('copybook api', () => {
     const t = Date.now();
     const row = (acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q3', kind: '13f', accession: acc, accepted: new Date(t - seconds * 1000).toISOString(), sent: new Date(t).toISOString(), seconds, moves: true, ...extra });
     // Newest first, as logged; one replay; one from last season; a 13F timed by its first email (no moves), before the fix.
-    await env.DB.put('alerts:latency', JSON.stringify([row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60, { coverage: 'any_filer', slug: 'whale-rock-capital-management-llc' }), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' }), row('FILED', 30, { moves: undefined })]));
+    // A1 again, to a second member 4 minutes later (a coalesced send): one alert, counted once at its first delivery.
+    await env.DB.put('alerts:latency', JSON.stringify([row('A1', 300, { sent: new Date(t + 260_000).toISOString(), coalesced: true }), row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60, { coverage: 'any_filer', slug: 'whale-rock-capital-management-llc' }), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' }), row('FILED', 30, { moves: undefined })]));
     const d = (channel: string, acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ channel, accession: acc, form: '13F-HR', manager: 'Warren Buffett', accepted: new Date(t - seconds * 1000).toISOString(), delivered: new Date(t).toISOString(), seconds, ...extra });
     await env.DB.put('alerts:latency:ch', JSON.stringify([d('slack', 'A1', 41), d('slack', 'A3', 61), d('slack', 'A2', 101, { form: '4' }), d('discord', 'A1', 43), d('slack', 'OLD', 9, { delivered: '2025-01-02T00:00:00Z' })]));
     const lat = await (await call('/latency')).json();
     expect(lat).toMatchObject({ count: 3, median_seconds: 60, p90_seconds: 100, p95_seconds: 100 });
     // Per form family and per channel (email: acceptance to the mailer; chat: to the first successful post), this season only.
     // An even count's median is the mean of the middle two (40 and 60 -> 50), not the lower one.
-    expect(lat.by_form).toEqual({ '13F': { count: 2, median_seconds: 50, p90_seconds: 60 }, 'Form 4': { count: 1, median_seconds: 100, p90_seconds: 100 } });
+    expect(lat.by_form).toEqual({
+      '13F': { count: 2, median_seconds: 50, p90_seconds: 60, season: { count: 2, median_seconds: 50, p90_seconds: 60, max_seconds: 60, over_15m: 0 }, since_fix: { count: 2, median_seconds: 50, p90_seconds: 60 } },
+      'Form 4': { count: 1, median_seconds: 100, p90_seconds: 100 },
+    });
     expect(lat.by_channel).toEqual({ email: { count: 3, median_seconds: 60, p90_seconds: 100 }, slack: { count: 3, median_seconds: 61, p90_seconds: 101 }, discord: { count: 1, median_seconds: 43, p90_seconds: 43 } });
     // Any filer's 13F is timed too (followed, peers, linked books), tagged apart; untagged rows are curated.
     expect(lat.by_coverage).toEqual({ curated: { count: 2, median_seconds: 70, p90_seconds: 100 }, any_filer: { count: 1, median_seconds: 60, p90_seconds: 60 } });
@@ -3172,6 +3183,11 @@ describe('copybook api', () => {
     r = await v1('/v1/events?limit=2');
     expect(r.body).toMatchObject({ count: 4, next_offset: 2 });
     expect((await v1('/v1/events?form=10k')).status).toBe(400);
+    // Each bad parameter is named; an impossible date is refused, not read as an empty range.
+    for (const [q, name] of [['form=bogus', 'form'], ['from=2026-13-01', 'from'], ['to=2026-02-30', 'to'], ['limit=abc', 'limit'], ['from=2026-11-05&to=2026-11-01', 'from']]) {
+      const r = await v1(`/v1/events?${q}`);
+      expect([r.status, r.body.error.message.startsWith(name)]).toEqual([400, true]);
+    }
 
     // Once the hourly build publishes pre/events.json, /v1/events serves every filing the investor page
     // shows, with EDGAR's detail. Icahn's real CVI 13D/A #41 (0001193125-26-451979), paired with #40.
