@@ -548,28 +548,45 @@ function ChangeCell({ h }: { h: StockHolder }) {
 }
 
 // A reissued CUSIP (ingest's data/cusip_links.json, keyed by the old CUSIP): said once under the name, so a reader
-// doesn't take the switch for funds selling. Nothing shows until the file is served.
-type CusipLink = { new: string; ticker: string | null; name: string | null; quarter: string }
+// doesn't take the switch for funds selling. Keyed on the file only: a link's `ratio` (new shares per old, 1 when
+// share for share) says whether prior shares were adjusted; `held` pairs aren't merged and are shown as filed.
+// Nothing shows until the file is served.
+type CusipLink = { new: string; ticker: string | null; name: string | null; quarter: string; list_quarter?: string; ratio?: number | null }
+/** 0.5 as "1-for-2 reverse split", 3 as "3-for-1 split". */
+const splitWords = (r: number) => (r < 1 ? `1-for-${+(1 / r).toFixed(2)} reverse split` : `${+r.toFixed(2)}-for-1 split`)
 // These two moved from ADS/ADR to ordinary shares, which is how their holders know the change.
 const ADS = new Set(['ASND', 'TEVA'])
 function Reissued({ tickers, name }: { tickers: string[]; name: string }) {
-  const f = useAsync(() => getJSON<{ links: Record<string, CusipLink> }>(`${DATA}cusip_links.json`).catch(() => null), [])
-  const links = Object.entries(f.data?.links ?? {}).filter(([, l]) => l.ticker && tickers.includes(l.ticker))
-  if (!links.length) return null
+  const f = useAsync(() => getJSON<{ links?: Record<string, CusipLink>; held?: Record<string, CusipLink> }>(`${DATA}cusip_links.json`).catch(() => null), [])
+  const mine = (m: Record<string, CusipLink> | undefined) => Object.entries(m ?? {}).filter(([, l]) => l.ticker && tickers.includes(l.ticker))
+  const held = mine(f.data?.held)
+  const links = mine(f.data?.links).filter(([old]) => !f.data?.held?.[old])
+  if (!links.length && !held.length) return null
+  const how = (
+    <Link to="/methodology/#reissued-cusip" className="font-medium text-accent hover:text-accent-2">
+      How we handle it
+    </Link>
+  )
   return (
     <div className="mt-6 space-y-1.5 rounded-xl bg-ink/[0.04] px-4 py-3 text-[14px] leading-relaxed text-ink-2">
       {links.map(([old, l]) => {
         const who = possessive(l.name ?? name)
+        const q = quarterLabel(l.list_quarter ?? l.quarter)
+        const r = l.ratio ?? 1
         return (
           <p key={old}>
-            {ADS.has(l.ticker!) ? `${who} ADS converted to ordinary shares in ${quarterLabel(l.quarter)}, and its CUSIP changed from ${old} to ${l.new}` : `${who} CUSIP changed from ${old} to ${l.new} in ${quarterLabel(l.quarter)}`}
-            ; holders reporting either are counted here, and keeping the shares isn’t a sale.{' '}
-            <Link to="/methodology/#reissued-cusip" className="font-medium text-accent hover:text-accent-2">
-              How we handle it
-            </Link>
+            {r !== 1
+              ? `${who} CUSIP changed from ${old} to ${l.new} with a ${splitWords(r)} in ${q}; prior shares are adjusted.`
+              : `${ADS.has(l.ticker!) ? `${who} ADS converted to ordinary shares in ${q}, and its CUSIP changed from ${old} to ${l.new}` : `${who} CUSIP changed from ${old} to ${l.new} in ${q}`}; holders reporting either are counted here, and keeping the shares isn’t a sale.`}{' '}
+            {how}
           </p>
         )
       })}
+      {held.map(([old, l]) => (
+        <p key={old}>
+          {possessive(l.name ?? name)} CUSIP changed from {old} to {l.new} in {quarterLabel(l.list_quarter ?? l.quarter)}. Positions under each are shown as filed; a fund that moved from the old to the new CUSIP isn’t counted as buying or selling. {how}
+        </p>
+      ))}
     </div>
   )
 }

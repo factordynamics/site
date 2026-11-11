@@ -32,6 +32,11 @@ export type Holding = {
   split?: { ratio: number; from_quarter?: string; to_quarter?: string } | null
   /** The previous quarter's shares as filed, before any split factor. */
   prev_shares_as_filed?: number | null
+  /** Ingest's dollar size of the trade against the quarter before (served books). */
+  value_delta?: number | null
+  /** A stale old-CUSIP line in a book that also has the new one, or a mis-scaled line: kept out of totals. */
+  suspect_duplicate?: boolean
+  suspect_units?: boolean
 }
 
 /** A split ingest actually applied to this row: the compared shares differ from the filed ones. */

@@ -6,7 +6,7 @@ import { needsVerify, ApiError, isFree, openPortal, useMemberState } from '../li
 import { CsvButton } from '../components/CsvButton'
 import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle, type Holding } from '../lib/data'
 import { stockPath } from '../lib/stocks'
-import { diff, holdingKey, loadHistory, type Quarter } from '../lib/history'
+import { diff, heldReissue, holdingKey, loadHistory, type Quarter } from '../lib/history'
 import { checkout, TRIAL_DAYS } from '../config'
 
 export function History() {
@@ -310,7 +310,7 @@ function PositionMatrix({ quarters, sel }: { quarters: Quarter[]; sel: number })
       const now = cells[selCol]
       // Held through the end of the window and not in the selected quarter: exited by then.
       const lastHeld = cells.map(Boolean).lastIndexOf(true)
-      return { k, h, cells, first, held, now, exited: !now && lastHeld < selCol && lastHeld >= 0, max: Math.max(...cells.map((c) => (mode === 'weight' ? c?.weight : c?.shares) ?? 0), 0) }
+      return { k, h, cells, first, held, now, exited: !now && lastHeld < selCol && lastHeld >= 0 && !heldReissue(h.cusip), max: Math.max(...cells.map((c) => (mode === 'weight' ? c?.weight : c?.shares) ?? 0), 0) }
     })
   }, [cols, quarters, sel, mode])
   const shown = useMemo(() => {

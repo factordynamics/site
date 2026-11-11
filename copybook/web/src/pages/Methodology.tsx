@@ -170,7 +170,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
         <div id="reissued-cusip" className="scroll-mt-24">
           <dt>Reissued CUSIP</dt>
           <dd>
-            When an issuer’s CUSIP changes, the old and new CUSIPs count as one position: holders reporting either are counted on the stock page, and a fund that kept its shares hasn’t sold them. See{' '}
+            When an issuer’s CUSIP changes and the SEC’s Official List of Section 13(f) Securities confirms it, the old and new CUSIPs count as one position: holders reporting either are counted on the stock page, and a fund that kept its shares hasn’t sold them. If the change came with a split, such as a 1-for-2 reverse split, prior shares are adjusted to the new units. If the share units can’t be matched, positions are shown as filed under each CUSIP, and a fund that moved from the old to the new isn’t counted as buying or selling. See{' '}
             <a href="#moves">CUSIP changes</a>.
           </dd>
         </div>
