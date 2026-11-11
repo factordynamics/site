@@ -1521,7 +1521,8 @@ function classify(a: Alert13F, rows: Map<string, MoveRow>, failed: import('./ema
   });
 }
 /**
- * The emailed bought and sold totals against the build's (rows the gate held left out of both), each within 10%. Rows
+ * The emailed bought and sold totals against the build's (rows the gate held left out of both), each within 1% of the
+ * build's total for that side or $1M, whichever is larger. Rows
  * already classed count at the build's figure, so a total off only because of a classed row isn't a second error.
  * A total that is off comes back as a row (`why: 'totals'`): disclosed for the split alerts on /status/, else wrong.
  */

@@ -3739,11 +3739,12 @@ describe('copybook api', () => {
     await put('ht', { status: 'trialing', trial_end: trialEnd, plan: 'holdterm' }); // Holdterm: never a Copybook email
     await put('seat_x', { status: 'trialing', trial_end: trialEnd, plan: 'fund', seat_of: 'cus_owner' }); // seats don't pay
     await put('comp', { status: 'trialing', trial_end: trialEnd, comped: true }); // critics: never a revenue email
+    await put('unsub', { status: 'trialing', trial_end: trialEnd, marketing_off: true }); // unsubscribed: still told before the charge
     await put('promo', { plan: 'pro' });
     await put('yearly', { interval: 'yearly' });
 
     await cron(12, at);
-    expect(sent.map((m) => m.to[0])).toEqual(['trial@example.com']);
+    expect(sent.map((m) => m.to[0])).toEqual(['trial@example.com', 'unsub@example.com']);
     // Day 11 of 14: their own numbers, what ends, one button to keep it on yearly.
     expect(sent[0].subject).toBe('Your Copy trial ends in 3 days');
     expect(sent[0].text).toContain('Copybook sent you 7 alerts covering 5 filings.');
@@ -3755,7 +3756,7 @@ describe('copybook api', () => {
     expect(sent[0].html).toContain(`href="${keep}"`);
     expect(sent[0].text).not.toContain('founding'); // Copy has no founding price
     // One unsubscribe, also as the List-Unsubscribe header.
-    const unsub = sent[0].text.match(/Unsubscribe from tips and reminders: (\S+)/)![1];
+    const unsub = sent[0].text.match(/Unsubscribe from tips and newsletters: (\S+)/)![1];
     expect((sent[0] as unknown as { headers: Record<string, string> }).headers['List-Unsubscribe']).toBe(`<${unsub}>`);
     // The button opens a portal page that swaps the trial's item to the yearly price.
     let portal = '';
@@ -3774,6 +3775,7 @@ describe('copybook api', () => {
     sent = [];
     await cron(12, at + 86400_000);
     expect(sent).toHaveLength(0); // once per trial
+    await env.DB.delete('cus:unsub');
 
     // After filing week: monthly payers get the recap with the yearly price; yearly and Holdterm don't.
     await env.DB.put('sent:promo', '41'); // a count from before stats: still reads

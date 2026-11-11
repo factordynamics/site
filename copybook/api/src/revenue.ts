@@ -209,8 +209,8 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
   return {
     to: m.email,
     subject: `Your ${p.name} trial ends in ${daysLeft === 1 ? '1 day' : `${daysLeft} days`}`,
-    text: `Your ${p.name} trial ends on ${ends}.\n\nThis trial so far:\n${got.map((g) => `  ${g}`).join('\n')}\n\nIf it ends, you lose:\n${lose.map((l) => `  - ${l}`).join('\n')}\n\n${cta}: ${keep}\n${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}.\n`}${founding ? `${founding.trim()}\n` : ''}\nTo cancel before you're charged: ${env.SITE_URL}account/ (Manage billing).\n\nUnsubscribe from tips and reminders: ${unsub}${FOOTER}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your ${p.name} trial ends on <b>${ends}</b>.</p><p style="margin-bottom:4px"><b>This trial so far</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p style="margin-bottom:4px"><b>If it ends, you lose</b></p><ul style="margin-top:0;padding-left:20px">${lose.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding.trim())}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}. `}To cancel before you're charged, use Manage billing in <a href="${env.SITE_URL}account/" style="color:#1d4ed8">your account</a>.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and reminders</a></p></div>`,
+    text: `Your ${p.name} trial ends on ${ends}.\n\nThis trial so far:\n${got.map((g) => `  ${g}`).join('\n')}\n\nIf it ends, you lose:\n${lose.map((l) => `  - ${l}`).join('\n')}\n\n${cta}: ${keep}\n${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}.\n`}${founding ? `${founding.trim()}\n` : ''}\nTo cancel before you're charged: ${env.SITE_URL}account/ (Manage billing).\n\nUnsubscribe from tips and newsletters: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your ${p.name} trial ends on <b>${ends}</b>.</p><p style="margin-bottom:4px"><b>This trial so far</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p style="margin-bottom:4px"><b>If it ends, you lose</b></p><ul style="margin-top:0;padding-left:20px">${lose.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding.trim())}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}. `}To cancel before you're charged, use Manage billing in <a href="${env.SITE_URL}account/" style="color:#1d4ed8">your account</a>.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and newsletters</a></p></div>`,
     unsubscribe: unsub,
   };
 }
@@ -319,8 +319,8 @@ export function seasonRecapMail(m: Member, st: MemberStats, sent: number, funds:
   return {
     to: m.email,
     subject: `Your ${season} filing season on Copybook, and ${monthsFree(p)} with yearly`,
-    text: `The ${season} 13F filing season is in. Copybook sent you ${sent} alert${sent === 1 ? '' : 's'}.${median != null ? ` Our median time from EDGAR acceptance to your inbox this season was ${secs(median)}.` : ''}\n\nYour season:\n${got.map((g) => `  - ${g}`).join('\n')}\n\nYou're on ${p.name} monthly: ${money(p.month * 12)} a year. Yearly is ${money(p.year)}: ${monthsFree(p)}.${founding ? ` ${founding}` : ''}\n\n${cta} (you see the amount and confirm on the next page): ${keep}\n\nUnsubscribe from tips and reminders: ${unsub}${FOOTER}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>The ${esc(season)} 13F filing season is in.</p><p style="margin-bottom:4px"><b>Your season</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>You're on ${esc(p.name)} monthly: ${money(p.month * 12)} a year. Yearly is <b>${money(p.year)}</b>: ${monthsFree(p)}.</p><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding)}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">You see the amount and confirm on the next page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and reminders</a></p></div>`,
+    text: `The ${season} 13F filing season is in. Copybook sent you ${sent} alert${sent === 1 ? '' : 's'}.${median != null ? ` Our median time from EDGAR acceptance to your inbox this season was ${secs(median)}.` : ''}\n\nYour season:\n${got.map((g) => `  - ${g}`).join('\n')}\n\nYou're on ${p.name} monthly: ${money(p.month * 12)} a year. Yearly is ${money(p.year)}: ${monthsFree(p)}.${founding ? ` ${founding}` : ''}\n\n${cta} (you see the amount and confirm on the next page): ${keep}\n\nUnsubscribe from tips and newsletters: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>The ${esc(season)} 13F filing season is in.</p><p style="margin-bottom:4px"><b>Your season</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>You're on ${esc(p.name)} monthly: ${money(p.month * 12)} a year. Yearly is <b>${money(p.year)}</b>: ${monthsFree(p)}.</p><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding)}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">You see the amount and confirm on the next page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and newsletters</a></p></div>`,
     unsubscribe: unsub,
   };
 }
@@ -420,7 +420,9 @@ export async function handleWhy(env: Env, req: Request, url: URL): Promise<Respo
 
 /** Daily: trial reminders 3 days out, and once per season the recap for monthly members. */
 export async function runRevenue(env: Env, now: number): Promise<Record<string, unknown>> {
-  const members = (await listMembers(env)).filter((m) => lifecycle(m) && isActive(m) && m.email && !m.marketing_off);
+  // Unsubscribed members still get the trial-ending reminder: it's a notice before a charge, not marketing. The recap
+  // below checks marketing_off itself.
+  const members = (await listMembers(env)).filter((m) => lifecycle(m) && isActive(m) && m.email);
   const mails: Mail[] = [];
   const marks: Member[] = [];
   // The season recap goes out from the day after each 13F deadline, for a week (Q3 2026: from Nov 17).
@@ -656,7 +658,7 @@ export function pausedFilingMail(m: Member, filings: Pick<Alert13F, 'manager' | 
   return {
     to: m.email,
     subject: `${filings[0].manager} filed its ${q(filings[0].quarter)} 13F · resume now to see the moves`,
-    text: `${filings.map((x) => `${x.manager} filed its ${q(x.quarter, true)} 13F (accepted ${at(x)}).`).join('\n')}\n\nYou're paused until ${back}, so the moves aren't in your inbox. Resume now to get them, with your follows and price as you left them (one click, same subscription; billing picks up from your next billing date):\n${resume}\n\nOr stay paused: alerts restart on ${back} and billing resumes then.\n\nUnsubscribe from tips and reminders: ${unsub}${FOOTER}`,
+    text: `${filings.map((x) => `${x.manager} filed its ${q(x.quarter, true)} 13F (accepted ${at(x)}).`).join('\n')}\n\nYou're paused until ${back}, so the moves aren't in your inbox. Resume now to get them, with your follows and price as you left them (one click, same subscription; billing picks up from your next billing date):\n${resume}\n\nOr stay paused: alerts restart on ${back} and billing resumes then.\n\nUnsubscribe from tips and newsletters: ${unsub}${FOOTER}`,
     unsubscribe: unsub,
   };
 }
@@ -677,7 +679,7 @@ export function preseasonMail(env: Env, m: Member, deadline: string, quarter: st
   return {
     to: m.email,
     subject: `${q} 13Fs are due ${due}: get each one minutes after it's filed`,
-    text: `The ${q} 13F filing season peaks in the two weeks before ${due}. Copybook emails each filing minutes after EDGAR accepts it, with the moves in names you own first.\n\n${last}${ask}\n\nYour account: ${env.SITE_URL}account/\nUnsubscribe from tips and reminders: ${unsub}${FOOTER}`,
+    text: `The ${q} 13F filing season peaks in the two weeks before ${due}. Copybook emails each filing minutes after EDGAR accepts it, with the moves in names you own first.\n\n${last}${ask}\n\nYour account: ${env.SITE_URL}account/\nUnsubscribe from tips and newsletters: ${unsub}${FOOTER}`,
     unsubscribe: unsub,
   };
 }

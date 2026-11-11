@@ -127,11 +127,11 @@ export async function handleUnsubscribe(env: Env, req: Request, url: URL): Promi
   const m = p && (await getMember(env, p.c));
   if (!m) return page('<p>This link has expired.</p>');
   if (req.method === 'GET' && url.searchParams.get('confirm') !== '1') {
-    const what = m.status === 'free' ? 'the Copybook weekly' : 'Copybook tips and plan reminders (your alerts and billing emails keep coming)';
+    const what = m.status === 'free' ? 'the Copybook weekly' : "Copybook tips and newsletters (your filing alerts stay on, and we'll still email you before any charge)";
     return page(`<p>Unsubscribe ${m.email} from ${what}?</p><form method="post"><button style="font:inherit;padding:6px 14px">Unsubscribe</button></form>`);
   }
   if (!m.marketing_off) await putMember(env, { ...m, marketing_off: true });
-  return page(`<p>Done: ${m.email} won't get ${m.status === 'free' ? 'the weekly' : 'tips or plan reminders'} any more.</p>`);
+  return page(`<p>Done: ${m.email} won't get ${m.status === 'free' ? 'the weekly' : 'tips or newsletters'} any more.</p>`);
 }
 
 // ---------------------------------------------------------------------------------------------
