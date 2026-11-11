@@ -1,0 +1,6 @@
+# Cloudflare Pages response headers (https://developers.cloudflare.com/pages/configuration/headers/).
+# Vite names every file in /assets/ after a hash of its contents, so a file there never changes: browsers keep it
+# for a year without checking back. Everything else (pages, sw.js, icons, social cards) keeps Pages' default,
+# max-age=0 with revalidation, because those change in place on every deploy.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
