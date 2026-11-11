@@ -16,7 +16,7 @@ const field = 'h-11 w-full rounded-xl bg-paper px-3.5 text-[15px] shadow-[0_0_0_
 
 // The no-card Fund trial (invoice_trial on /fund-request): the API's field names for what it says is missing.
 const ADDRESS = { line1: 'Street address', line2: 'Suite, floor (optional)', city: 'City', state: 'State or region', postal_code: 'Postal code', country: 'Country (2 letters)' } as const
-type Started = { trial_end: string; invoice_on: string; due_on: string; sign_in_email?: string }
+type Started = { trial_end: string; invoice_on: string; due_on: string; sign_in_email?: string; po?: string | null; ap_email?: string | null; email?: string }
 const day = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: iso.length === 10 ? 'UTC' : undefined })
 
 export function Contact() {
@@ -75,7 +75,7 @@ export function Contact() {
       const r = await fetch(`${api}/fund-request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const j = (await r.json().catch(() => null)) as ({ error?: string; code?: string; fields?: string[]; trial?: string } & Partial<Started>) | null
       if (r.ok) {
-        if (invoiceTrial && j?.trial === 'started' && j.trial_end && j.invoice_on && j.due_on) setStarted({ trial_end: j.trial_end, invoice_on: j.invoice_on, due_on: j.due_on, sign_in_email: j.sign_in_email })
+        if (invoiceTrial && j?.trial === 'started' && j.trial_end && j.invoice_on && j.due_on) setStarted({ trial_end: j.trial_end, invoice_on: j.invoice_on, due_on: j.due_on, sign_in_email: j.sign_in_email, po: j.po ?? (form.po.trim() || null), ap_email: j.ap_email ?? (form.ap_email.trim().toLowerCase() || null), email: form.email.trim() })
         return setState('sent')
       }
       const throwaway = j?.code === 'freemail' || j?.code === 'disposable'
@@ -177,6 +177,9 @@ export function Contact() {
                       'Check your inbox to sign in.'
                     )}{' '}
                     The invoice for $1,990 (the founding price, a year) comes on {day(started.invoice_on)}, due {day(started.due_on)}; nothing is charged before then. It’s payable by card, ACH or bank transfer. Cancel before {day(started.invoice_on)} in your account and nothing is owed.
+                    {/* Stripe emails the invoice to the owner; the AP address is only printed on it (payments, 15:15). */}{' '}
+                    The invoice {started.po ? `will show PO ${started.po} and ` : ''}goes to {started.email}
+                    {started.ap_email ? `; ${started.ap_email} is printed on it for your AP team` : ''}.
                   </p>
                 </>
               ) : (
