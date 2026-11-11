@@ -4013,8 +4013,15 @@ describe('copybook api', () => {
     const sj = await (await call('/stocks/NVDA/holders?type=hedge_fund&limit=1', { token: t })).json();
     expect([sj.count, sj.next_offset, sj.holders[0].filer.cik, sj.truncated]).toEqual([2, 1, '0002045724', false]);
     // /v1/changes by ticker reads the same index, with a filer-type cohort.
-    const ch = (await v1('/v1/changes/2026Q2?ticker=NVDA&cohort=hedge_fund')).body;
-    expect([ch.build_id, ch.data.map((r: { filer: { cik: string }; value_delta_usd: number | null }) => [r.filer.cik, r.value_delta_usd])]).toEqual(['gust-3a8c773b', [['0001387322', 900]]]);
+    const ch = (await v1('/v1/changes/2026Q3?ticker=NVDA&cohort=hedge_fund')).body;
+    expect([ch.build_id, ch.data.map((r: { filer: { cik: string }; value_delta_usd: number | null }) => [r.filer.cik, r.value_delta_usd])]).toEqual(['gust-3a8c773b', [['0002045724', 10800], ['0001423053', 5000]]]);
+    // A past quarter by ticker would list only filers whose latest 13F is that quarter (the quant: XOM's 2026Q2 left out
+    // FMR, which has since filed Q3): refused until the per-quarter index ships, on /changes and holders alike.
+    for (const path of ['/v1/changes/2026Q2?ticker=NVDA', '/v1/stocks/NVDA/holders?quarter=2026Q2']) {
+      const past = await v1(path);
+      expect([past.status, past.body.error.code, /\/v1\/bulk\/2026Q2/.test(past.body.error.message), /Nov 23/.test(past.body.error.message)]).toEqual([400, 'quarter_incomplete_by_ticker', true, true]);
+    }
+    expect((await v1('/v1/changes/2026Q2?filer=0001387322')).status).not.toBe(400);
 
     // Bulk exports: listed, then streamed as uploaded.
     expect((await v1('/v1/bulk/2026Q2.csv.gz')).status).toBe(501);
@@ -4176,7 +4183,10 @@ describe('copybook api', () => {
     // BlackRock's Q2 add (+30.9M) is Q2's.
     expect([teva.data.counts.net, teva.data.counts.net_quarter, teva.data.counts.net_by_period]).toEqual([-156138665 + 34000000 - 25000000 + 134699, '2026Q3', { '2026Q3': -156138665 + 34000000 - 25000000 + 134699, '2026Q2': 30857143 }]);
     expect(tch.data.reduce((a: number, r: { value_delta_usd: number }) => a + r.value_delta_usd, 0)).toBe(teva.data.counts.net);
-    expect((await v1('/v1/stocks/TEVA/holders?quarter=2026Q2&current_only=false')).body.data.counts).toMatchObject({ net: 30857143, net_quarter: '2026Q2' });
+    expect((await v1('/v1/stocks/TEVA/holders?quarter=2026Q3&current_only=false')).body.data.counts).toMatchObject({ net: teva.data.counts.net, net_quarter: '2026Q3' });
+    expect((await v1('/v1/stocks/TEVA/holders?quarter=2026Q2')).status).toBe(400);
+    // prev_cusip on every new-code row in the reissue quarter that has a prior, whoever supplied it.
+    expect(tch.data.filter((r: { prev_shares: number | null; change: string }) => r.prev_shares && r.change !== 'exited').every((r: { prev_cusip: string | null }) => r.prev_cusip === '881624209')).toBe(true);
     expect(teva.data.holders.find((r: { filer: { name: string } }) => r.filer.name === 'BlackRock, Inc.').cusip).toBe('881624209');
     // A plain ticker: a price move is no trade. 100 -> 110 shares while the price doubled: +$2,000, not +$12,000.
     await hist.put('hl/037833.json', JSON.stringify({ issuer: '037833', tickers: ['AAPL'], counts: { holders: 1, net: 12000 }, columns: tcols, rows: [

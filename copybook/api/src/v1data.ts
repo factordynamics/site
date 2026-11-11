@@ -739,6 +739,11 @@ export function tradeUsd(r: { change: string | null; shares: number | null; prev
   return Math.round((s - Number(r.prev_shares)) * (v / s));
 }
 
+/** The latest quarter any holder row reports. */
+const latestPeriod = (rows: { period: string | null }[]): string | null => rows.reduce<string | null>((a, r) => (r.period && (!a || r.period > a) ? r.period : a), null);
+/** 400 for a past quarter by ticker (the holder index has each filer's latest book only). */
+const incomplete = (q: string, latest: string) => v1error('quarter_incomplete_by_ticker', 400, `${q} by ticker would list only filers whose latest 13F is ${q}. Past quarters by ticker aren't complete yet; use /v1/bulk/${q} or per-filer /v1/changes/${q}?filer=. By ticker, ${latest} is served now; full coverage is due Nov 23, 2026.`);
+
 /** Shares traded in USD (tradeUsd) per quarter, over every row whose quarter it is: each a quarter's /v1/changes sum. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function netByPeriod(rows: any[]): Record<string, number> {
@@ -786,7 +791,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   const { REISSUED_ISSUER, REISSUED: RE } = await import('./edgar');
   const old = Object.entries(REISSUED_ISSUER).find(([, to]) => to === code)?.[0];
   const reissue = Object.entries(RE).find(([, x]) => x.to.startsWith(code));
-  const reissueTo = reissue?.[1].to ?? null, reissueFrom = reissue?.[0] ?? null;
+  const reissueTo = reissue?.[1].to ?? null, reissueFrom = reissue?.[0] ?? null, linkQ = reissue?.[1].quarter ?? null;
   // Only while the new code's rows lack their priors (most read new): once ingest's rows carry them, nothing to merge.
   const lacking = raw.filter((r) => r.prev_shares == null || r.change === 'new').length;
   if (old && lacking * 2 > raw.length && Object.keys(d.counts?.by_period ?? {}).length <= 1 && new Set(raw.map((r) => r.period ?? d.period)).size <= 1) {
@@ -868,8 +873,12 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       original_accession: h.original_accession || null,
       accepted_at: noMs(h.accepted_at) ?? null,
       // Passed through when the holder index carries them (ingest is adding them); the reissue's CUSIPs otherwise.
-      cusip: h.cusip ?? mainCusip,
-      prev_cusip: h.prev_cusip ?? (reissueFrom && h.merged ? reissueFrom : null),
+      // A reissue: rows before its first new-code quarter hold the old CUSIP; a new-code row in that quarter with a prior
+      // held the old one last quarter (prev_cusip), whoever supplied the prior (ingest or the merge here).
+      cusip: h.cusip ?? (reissueFrom && linkQ && period && period < linkQ ? reissueFrom : mainCusip),
+      prev_cusip:
+        h.prev_cusip ??
+        (reissueFrom && (h.merged || ((h.cusip ?? reissueTo) === reissueTo && linkQ && period === linkQ && Number(h.prev_shares) > 0)) ? reissueFrom : null),
       issuer: h.issuer ?? d.display_name ?? (pcName || null),
       ...(h.suspect_duplicate ? { suspect_duplicate: h.suspect_duplicate } : {}),
     };
@@ -1002,6 +1011,8 @@ ROUTES.push(
     const timing = [`issuer;dur=${Date.now() - t0}`];
     const h = await holdersOf(env, is.code, timing);
     if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
+    const latestQ = latestPeriod(h.rows);
+    if (quarter && latestQ && quarter !== latestQ) return incomplete(quarter, latestQ);
     // Each filer's latest full book: periods differ by filer (a fund that filed its Q3 13F shows Q3).
     const rows = h.rows.filter((r) => keep(r) && (!quarter || r.period === quarter));
     const sp = splitHolders(rows, p.get('include_options') === 'true');
@@ -1221,6 +1232,9 @@ ROUTES.push(
       if (!is) return v1error('not_found', 404, 'No such ticker or CUSIP among 13F holdings.');
       const h = await holdersOf(env, is.code);
       if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
+      // The holder index has each filer's latest book only: a past quarter by ticker would be a survivor subset.
+      const latestQ = latestPeriod(h.rows);
+      if (latestQ && quarter !== latestQ) return incomplete(quarter, latestQ);
       stamp = h.stamp;
       // Sized like the per-filer path: a trade at this filing's own value per share, never the value difference (a
       // price move is no trade: AAPL's +$14.87B row was +$3.58B of shares).

@@ -5,12 +5,26 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.2';
+export const SPEC_REVISION = '2026-11-11.3';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
-export const CHANGELOG: { id: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-past-quarters-by-ticker',
+    date: '2026-11-11',
+    shipped_at: '2026-11-11T13:30:00Z',
+    schema_version: SCHEMA_VERSION,
+    breaking: true,
+    status: 'shipped',
+    changes: [
+      'Incident (Nov 9 to Nov 11 13:30 UTC): GET /v1/changes/{quarter}?ticker= (or cusip=) for a past quarter, and GET /v1/stocks/{stock}/holders?quarter= for one, listed only filers whose latest 13F is that quarter: everyone who has filed since (FMR\'s 2026Q2 XOM trim among them; XOM\'s 2026Q2 listed 1,305 rows) was left out, so flows walked by quarter were wrong. Both now take only the latest quarter any filer reports (today 2026Q3); another returns 400 quarter_incomplete_by_ticker. For past quarters use GET /v1/bulk/{quarter} or per-filer /v1/changes/{quarter}?filer=. Full past-quarter coverage by ticker, from every filing for that quarter, is due Nov 23, 2026.',
+      'Holders `counts.net` is the shares traded in USD (shares bought or sold x each filing\'s price) over `counts.net_quarter`, the latest quarter (or ?quarter=, the same latest quarter), and equals that quarter\'s /v1/changes?ticker= sum. `counts.net_by_period` sums the same by each filer\'s latest filing period: not quarterly flow for any quarter but the latest.',
+      'Holder rows add `suspect_duplicate` {cusip, shares, value} when the same quarter\'s book also lists the security under a reissue\'s other CUSIP (IFP Advisors\' TEVA): one position is kept on the new code, and the stale line is out of every sum. Present only when the holder index carries such a line.',
+      'Rate limits are per account from the next release (Copy Pro: 60 a minute and 20,000 a day across all its keys; Copy Fund: the same per seat). They were briefly per key; no member was affected.',
+    ],
+  },
   {
     id: '2026-11-11-original-accession-reissues',
     date: '2026-11-11',
@@ -240,6 +254,7 @@ export const ERRORS = {
   not_yet_available: 'This option is documented but not served yet.',
   server_error: 'Something went wrong on our side.',
   busy: 'The API is busy; retry after the Retry-After seconds.',
+  quarter_incomplete_by_ticker: "Past quarters by ticker aren't complete yet; use /v1/bulk/{quarter} or per-filer /v1/changes. Full coverage is due Nov 23, 2026.",
 } as const;
 export type ErrorCode = keyof typeof ERRORS;
 

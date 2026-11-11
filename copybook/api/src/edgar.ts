@@ -308,13 +308,14 @@ export function displayCase(name: string): string {
  */
 /** 2026Q3's, as ingest links them (data/cusip_links.json from Nov 11). */
 /** ratio: new shares per old share where the link is also a split (DD 1-for-3: 1/3); the prior's shares are scaled. */
-export const REISSUED: Record<string, { to: string; ticker: string; ratio?: number }> = {
-  '30231G102': { to: '30233Q108', ticker: 'XOM' },
-  '682680103': { to: '30609A109', ticker: 'OKE' },
-  '26614N102': { to: '26614N201', ticker: 'DD', ratio: 1 / 3 },
-  '04351P101': { to: 'K08588103', ticker: 'ASND' }, // ADS to ordinary
-  '881624209': { to: 'M8769Q102', ticker: 'TEVA' }, // ADR to ordinary
-  '811916105': { to: '811927102', ticker: 'SA' },
+/** quarter: the first quarter filed under the new CUSIP. */
+export const REISSUED: Record<string, { to: string; ticker: string; ratio?: number; quarter?: string }> = {
+  '30231G102': { to: '30233Q108', ticker: 'XOM', quarter: '2026Q3' },
+  '682680103': { to: '30609A109', ticker: 'OKE', quarter: '2026Q3' },
+  '26614N102': { to: '26614N201', ticker: 'DD', ratio: 1 / 3, quarter: '2026Q2' },
+  '04351P101': { to: 'K08588103', ticker: 'ASND', quarter: '2026Q2' }, // ADS to ordinary
+  '881624209': { to: 'M8769Q102', ticker: 'TEVA', quarter: '2026Q3' }, // ADR to ordinary
+  '811916105': { to: '811927102', ticker: 'SA', quarter: '2026Q2' },
 };
 /**
  * SEC-confirmed reissues whose units aren't confirmed yet (ingest's `held`): never linked share for share. HON is a
@@ -385,7 +386,8 @@ export async function loadReissues(env: { DATA_URL: string }, now = Date.now()):
         const k = l.ratio == null ? NaN : Number(l.ratio);
         if (l.basis !== 'sec_13f_list' || !ok(from, to) || !l.ticker || !(k > 0) || !l.units_basis || held.some((h) => String(h.old ?? '').toUpperCase() === from)) continue;
         delete HELD[from];
-        REISSUED[from] = { to, ticker: String(l.ticker).toUpperCase(), ...(Math.abs(k - 1) > 1e-6 ? { ratio: k } : {}) };
+        const lq = typeof (l as { quarter?: string }).quarter === 'string' && /^\d{4}Q[1-4]$/.test((l as { quarter: string }).quarter) ? (l as { quarter: string }).quarter : REISSUED[from]?.quarter;
+        REISSUED[from] = { to, ticker: String(l.ticker).toUpperCase(), ...(Math.abs(k - 1) > 1e-6 ? { ratio: k } : {}), ...(lq ? { quarter: lq } : {}) };
       }
       indexReissued();
       reissuesAt = now + 3600_000;
