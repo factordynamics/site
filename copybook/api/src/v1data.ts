@@ -63,7 +63,10 @@ const classFields = (h: any) => ({
   ...(typeof h?.shares_unit === 'string' && h.shares_unit ? { shares_unit: h.shares_unit } : {}),
   ...(['buy', 'sell', 'flat'].includes(h?.net_direction) ? { net_direction: h.net_direction } : {}),
   ...(typeof h?.issuer_cusip6 === 'string' && h.issuer_cusip6 ? { issuer_cusip6: h.issuer_cusip6 } : {}),
-  ...(typeof h?.shares_ratio === 'number' ? { shares_ratio: h.shares_ratio, ratio_source: typeof h.ratio_source === 'string' ? h.ratio_source : null } : {}),
+  // {cusip9: ratio} (ingest, Nov 11: 084670108: 1500, from the 10-K in ratio_source).
+  ...(h?.shares_ratio && typeof h.shares_ratio === 'object' ? { shares_ratio: h.shares_ratio, ratio_source: typeof h.ratio_source === 'string' ? h.ratio_source : null } : {}),
+  // Classes the filer holds that the row's dollars leave out (ingest's classes_held).
+  ...(Array.isArray(h?.classes_held) ? { classes_held: h.classes_held } : {}),
 });
 
 /**
@@ -77,7 +80,7 @@ export function classShape<T>(row: T): T {
   const r = row as any;
   if (!Array.isArray(r?.classes) || r.classes.length < 2) return row;
   const six = r.issuer_cusip6 ?? (typeof r.cusip === 'string' && r.cusip ? r.cusip.slice(0, 6) : null);
-  const oneUnit = typeof r.shares_ratio === 'number' && typeof r.shares_unit === 'string';
+  const oneUnit = !!r.shares_ratio && typeof r.shares_ratio === 'object' && typeof r.shares_unit === 'string' && r.shares != null;
   return { ...r, cusip: null, issuer_cusip6: six, ...(oneUnit ? {} : { shares: null, prev_shares: null, share_change: null }) } as T;
 }
 
@@ -546,7 +549,8 @@ export interface HolderRow {
   shares_unit?: string;
   net_direction?: 'buy' | 'sell' | 'flat';
   issuer_cusip6?: string;
-  shares_ratio?: number;
+  shares_ratio?: Record<string, number>;
+  classes_held?: unknown[];
   ratio_source?: string | null;
   filer: { cik: string; name: string; slug: string | null; type: string | null; curated: boolean | null };
   period: string | null;
@@ -999,7 +1003,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       put_call: h.put_call ? String(h.put_call).toUpperCase() : h.kind === 'calls' ? 'CALL' : h.kind === 'puts' ? 'PUT' : null,
       shares: h.shares,
       prev_shares: h.prev_shares ?? null,
-      share_change: h.prev_shares == null ? null : h.shares - h.prev_shares,
+      share_change: h.prev_shares == null || h.shares == null ? null : h.shares - h.prev_shares,
       value_usd: h.value,
       prev_value_usd: h.prev_value ?? null,
       change: h.change ?? null,
@@ -1009,7 +1013,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       trade_usd_implied: unreliableOf(h) || h.price_outlier || h.suspect_units || (h.value_delta === null && (h.suspect_reason || h.value_basis)) ? null : h.change && h.change !== 'unchanged' ? tradeUsd({ ...h, value_usd: h.value, prev_value_usd: h.prev_value }) : h.change === 'unchanged' ? 0 : null,
       ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, value_change_usd: h.value_change ?? null } : {}),
       // The data run's labels, as published: what value_delta measures, and contract-filed option lines (shares x100).
-      value_delta_basis: h.value_delta_basis === 'trade' || h.value_delta_basis === 'filed_value' ? h.value_delta_basis : null,
+      value_delta_basis: ['trade', 'filed_value', 'net_shares_repriced'].includes(h.value_delta_basis) ? h.value_delta_basis : null,
       ...(typeof h.shares_basis === 'string' ? { shares_basis: h.shares_basis } : {}),
       weight: !h.shares && !h.value ? null : (h.weight ?? (total && h.value != null ? Math.round((h.value / total) * 1e6) / 1e6 : null)),
       accession: h.accession ?? (latest ? c.latest_accession : null) ?? null,

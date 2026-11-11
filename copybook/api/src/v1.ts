@@ -5,7 +5,7 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.14';
+export const SPEC_REVISION = '2026-11-11.15';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /**
@@ -42,6 +42,7 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     changes: [
       'Holdings, holders and changes rows carry `classes[]` (declared in the spec: cusip, ticker, put_call, shares, prev_shares, value, value_delta, value_delta_basis, change, prev_cusip, unreliable) and `shares_unit` whenever the data run publishes them. Invariant: an issuer\'s counts.net = the sum of its /v1/changes rows = the sum of their classes.',
       'A row that sums several classes has `cusip` null and `issuer_cusip6` (it served one class\'s CUSIP, e.g. 084670702 for a BRK A+B row), and null shares, prev_shares and share_change unless `shares_unit` with `shares_ratio` and `ratio_source` state them in one unit.',
+      'A multi-class row stated in one unit carries `shares_unit` (today only "BRK.B"), `shares_ratio` ({cusip9: ratio}, e.g. {"084670108": 1500}) and `ratio_source` (the 10-K accession); `classes_held` lists classes the row\'s dollars leave out; `value_delta_basis` gains `net_shares_repriced` (an exit and new pair across classes repriced at net shares).',
       '`change` gains `mixed`, for a multi-class row whose classes moved in opposite directions, with `net_direction` (buy, sell or flat) for its summed trade. `change` is never derived from the sign of the dollar sum. /v1/changes includes mixed rows by default (change=mixed selects them).',
     ],
   },

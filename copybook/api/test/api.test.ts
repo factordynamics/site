@@ -4615,6 +4615,11 @@ describe('copybook api', () => {
     expect([brkRow.classes, brkRow.shares_unit, brkChange.classes, brkChange.shares_unit]).toEqual([brkClasses, 'mixed', brkClasses, 'mixed']);
     // A blend of classes has no CUSIP of its own and no shares in mixed units; its change is ingest's, not the $ sum's sign.
     for (const r of [brkRow, brkChange]) expect([r.cusip, r.issuer_cusip6, r.shares, r.prev_shares, r.share_change, r.change, r.net_direction]).toEqual([null, '084670', null, null, null, 'mixed', 'buy']);
+    // Ingest's schema-5 BRK row states its shares in BRK.B (shares_ratio per class CUSIP): they pass through, CUSIP still null.
+    await hist.put('hl/084670.json', JSON.stringify({ issuer: '084670', tickers: ['BRK.B'], schema: 5, columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'classes', 'shares_unit', 'shares_ratio', 'ratio_source', 'cusip', 'issuer_cusip6', 'net_direction', 'value_delta', 'value_delta_basis'],
+      rows: [['0000315066', 'FMR LLC', null, 'active', false, '2026Q3', 16000, 12900, 7_000_000, 5_000_000, 'mixed', null, brkClasses, 'BRK.B', { '084670108': 1500 }, '0001193125-26-000001', null, '084670', 'buy', 1_550_000, 'net_shares_repriced']] }));
+    const brk5 = (await v1('/v1/stocks/084670702/holders')).body.data.holders[0];
+    expect([brk5.cusip, brk5.issuer_cusip6, brk5.shares, brk5.prev_shares, brk5.share_change, brk5.shares_unit, brk5.shares_ratio, brk5.value_delta_basis]).toEqual([null, '084670', 16000, 12900, 3100, 'BRK.B', { '084670108': 1500 }, 'net_shares_repriced']);
     // A client pinned to the summed rows (2026-11-09) is told when the pin ends; an unpinned one isn't.
     const hdrs = async (path: string, pin?: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, ...(pin ? { 'copybook-schema-version': pin } : {}) } }), env)).headers;
     for (const path of ['/v1/stocks/084670702/holders', '/v1/changes/2026Q3?cusip=084670702']) {
@@ -5496,7 +5501,7 @@ describe('copybook api', () => {
     for (const row of [...d.holdings, ...d.exited]) {
       for (const k of spec.components.schemas.Position.required) expect(row).toHaveProperty(k);
       // Nothing undocumented; classes and shares_unit only when the data run publishes them.
-      expect(Object.keys(row).sort()).toEqual(Object.keys(spec.components.schemas.Position.properties).filter((k) => !['classes', 'shares_unit', 'shares_ratio', 'ratio_source', 'issuer_cusip6', 'net_direction'].includes(k) || k in row).sort());
+      expect(Object.keys(row).sort()).toEqual(Object.keys(spec.components.schemas.Position.properties).filter((k) => !['classes', 'classes_held', 'shares_unit', 'shares_ratio', 'ratio_source', 'issuer_cusip6', 'net_direction'].includes(k) || k in row).sort());
     }
 
     expect((await v1('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20')).body.error.code).toBe('not_yet_available');
