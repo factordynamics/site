@@ -51,6 +51,10 @@ class AdviserRuleTests(unittest.TestCase):
         picker, broad = {"positions": 25, "top10": 0.62}, {"positions": 400, "top10": 0.2}
         self.assertEqual(classify("6", "Giverny Capital", picker, None, None, wealthy, "long_only")[0], "long_only")
         self.assertEqual(classify("7", "Broad Wealth", broad, None, None, wealthy, "long_only")[0], "wealth")
+        # Check Capital: published hedge_fund by book shape, ADV shows no hedge funds and individual clients: a stock
+        # picker's 18-position book is long_only, not wealth.
+        self.assertEqual(classify("8", "Check Capital", {"positions": 18, "top10": 0.8}, None, None, wealthy, "hedge_fund")[0],
+                         "long_only")
 
     def test_the_reclass_removes_hedge_fund_only_when_form_adv_lists_no_hedge_funds(self):
         # Nov 11 review: ~1 in 5 dropped hedge funds were real (Sphera: no ADV match; Carlson: hedge funds at 20% of RAUM).
