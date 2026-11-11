@@ -127,6 +127,7 @@ RECLASS_CASES = {
     # wrap and separate accounts count as individuals on Form ADV; Empowered Funds is a white-label ETF platform.
     "0001056823": "long_only", "0000823621": "long_only", "0001007524": "long_only", "0001112325": "long_only",
     "0001592828": "index",
+    "0001032814": "long_only",  # Check Capital: published hedge_fund by book shape; an 18-stock value book
     "0001730578": "wealth",     # Vanguard Capital Wealth Advisors (an RIA, not Vanguard; the name rule typed it index)
     "0001404784": "hedge_fund", # Granville Capital, Greensboro NC (ADV CRD 126679: 7 private funds, all hedge, 58% of RAUM)
     # Market makers and prop traders (their 13F is inventory), whatever Form ADV says
@@ -338,12 +339,11 @@ def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int
              common: set[str] | None = None, adviser: dict | None = None, prior: str | None = None) -> tuple[str, str, dict]:
     """(type, basis, type_evidence). A filer becomes hedge_fund only from the hand-checked cases, a name rule or Form
     ADV (hedge funds' gross assets at least half of RAUM, or $1B and more at a quarter of it); Form D, names and book
-    shape alone never add one. A published hedge_fund stays unless Form ADV clearly shows it isn't one, and a filer
-    published as a stock picker (long_only, or a hedge_fund that Form ADV removes) with a concentrated book is long_only,
-    never wealth, whatever the client mix (Akre, Giverny, Semper Augustus; Check Capital, published hedge_fund)."""
+    shape alone never add one. A published hedge_fund stays unless Form ADV clearly shows it isn't one, and a published
+    long_only with a concentrated book stays long_only whatever the client mix (Akre, Giverny, Semper Augustus). Not
+    extended to removed hedge funds: that made 45 small RIAs long_only (Check Capital is hand-checked instead)."""
     kind, basis, ev = _classify(cik, name, s, form_d, common, adviser, prior)
-    if prior in ("long_only", "hedge_fund") and kind == "wealth" and concentrated(s) \
-            and not basis.startswith(("override", "hand", "name")):
+    if prior == "long_only" and kind == "wealth" and concentrated(s) and not basis.startswith(("override", "hand", "name")):
         return "long_only", f"kept: concentrated book ({basis})", ev
     return kind, basis, ev
 
