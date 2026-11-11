@@ -56,8 +56,9 @@ const isEquity = (h: any) => !h.put_call && (h.shares_type ?? h.sh_prn ?? 'SH') 
 function position(h: any, equityTotal: number, allTotal: number) {
   // The equity-book weight: the data run's pct_of_book once it publishes it (ingest item W, next to the renamed
   // trade size delta_pct_of_book), else computed here over SH rows without put/call.
+  // Computed here at full precision, like the other two (the data run's pct_of_book is rounded to 6 decimals).
   const w = 'delta_pct_of_book' in h;
-  const eqw = w ? (h.pct_of_book ?? null) : isEquity(h) && equityTotal > 0 && h.value ? h.value / equityTotal : isEquity(h) ? 0 : null;
+  const eqw = isEquity(h) && equityTotal > 0 && h.value ? h.value / equityTotal : isEquity(h) ? 0 : null;
   // `weight` keeps its meaning until Feb 8, 2027 (90 days' notice, /v1/changelog): value over the book's total, all
   // rows, options included. The data run's per-row weight is that definition until it switches to pct_of_book.
   const allw = !w && h.weight != null ? h.weight : allTotal > 0 && h.value != null ? h.value / allTotal : null;
@@ -85,6 +86,8 @@ function position(h: any, equityTotal: number, allTotal: number) {
     // Point-in-time provenance: filled once the data run publishes it per row.
     source_accession: h.source_accession ?? null,
     first_disclosed_at: h.first_disclosed_at ?? null,
+    // Ingest's unit-error flag, passed through when the data carries it.
+    suspect_units: h.suspect_units === true,
   };
 }
 
@@ -781,7 +784,9 @@ ROUTES.push(
     const limit = Number(p.get('limit') ?? 100);
     const offset = Number(p.get('offset') ?? 0);
     const keep = holderFilter(p);
-    if ((quarter && !QUARTER.test(quarter)) || !keep || !Number.isInteger(limit) || limit < 1 || limit > 1000 || !Number.isInteger(offset) || offset < 0) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) return v1error('bad_request', 400, `limit must be an integer from 1 to 1000 (got ${p.get('limit')}); page with offset.`);
+    if (!Number.isInteger(offset) || offset < 0) return v1error('bad_request', 400, `offset must be an integer from 0 (got ${p.get('offset')}).`);
+    if ((quarter && !QUARTER.test(quarter)) || !keep) {
       return v1error('bad_request', 400, `quarter like 2026Q2; type: ${FILER_TYPES.join(', ')} (comma-separated); cohort: all or curated; current_only: true or false; limit 1-1000; offset from 0.`);
     }
     const t0 = Date.now();

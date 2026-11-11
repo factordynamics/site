@@ -1,14 +1,26 @@
-import type { Env } from './env';
+import { linkBase, type Env } from './env';
 import { authKey, limitHeaders, meter, type ApiKey } from './keys';
 import { secBudget } from './edgar';
 
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
-export const SCHEMA_VERSION = '2026-11-08';
+export const SCHEMA_VERSION = '2026-11-09';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-09-type-enum',
+    date: '2026-11-09',
+    schema_version: '2026-11-09',
+    breaking: true,
+    status: 'shipped',
+    changes: [
+      'Breaking: Filer.`type` values changed. `active` is now `long_only`; `broker` is removed; `wealth`, `insurance` and `sovereign` are added. Every filer has one of the 8 values in the spec.',
+      'This shipped without the 90 days\' notice our versioning policy promises. We\'re sorry; future enum changes will be announced here first.',
+      'schema_version is now 2026-11-09.',
+    ],
+  },
   {
     id: '2026-11-09-weight-equity-only',
     date: '2026-11-09',
@@ -18,7 +30,7 @@ export const CHANGELOG: { id: string; date: string; schema_version: string; brea
     changes: [
       'Breaking, effective Mon Feb 8, 2027 (90 days\' notice): Position.`weight` becomes the equity-only weight (value_usd over the summed value of SH rows without put/call; null for options and PRN rows). Until then `weight` keeps its current meaning: value_usd over the book\'s total, all rows, options included.',
       'Use `weight_equity` for the equity-only weight (stable, available now) or `weight_incl_options` for the current definition (new today, an explicit alias of today\'s `weight`, kept after the switch).',
-      'Holdings responses carry `Deprecation: @1794182400` and `Sunset: Mon, 08 Feb 2027 00:00:00 GMT`, with `Link: <…/v1/changelog>; rel="deprecation"`.',
+      'Holdings responses carry `Deprecation: @1794182400` and `Sunset: Mon, 08 Feb 2027 00:00:00 GMT`, with `Link: <…/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"`.',
     ],
   },
   {
@@ -164,7 +176,8 @@ export const ERRORS = {
 export type ErrorCode = keyof typeof ERRORS;
 
 const base = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'private, no-store' };
-const WEIGHT_DEPRECATION = (url: URL) => ({ deprecation: '@1794182400', sunset: 'Mon, 08 Feb 2027 00:00:00 GMT', link: `<${url.origin}${url.pathname.slice(0, url.pathname.indexOf('/v1/') + 3)}/changelog>; rel="deprecation"`, 'access-control-expose-headers': 'deprecation, sunset, link, retry-after' });
+// The changelog on the base this request came in on (gene's front door keeps its /copybook prefix).
+const WEIGHT_DEPRECATION = (base: string) => ({ deprecation: '@1794182400', sunset: 'Mon, 08 Feb 2027 00:00:00 GMT', link: `<${base}/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"`, 'access-control-expose-headers': 'deprecation, sunset, link, retry-after' });
 
 export function v1json(data: Record<string, unknown>, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify({ schema_version: SCHEMA_VERSION, ...build, ...data }), { status, headers: { ...base, ...headers } });
@@ -218,7 +231,11 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     // Entries that ship when a data upload lands (the backstop sets v1:fixed:{id} once /v1 serves it).
     const fixed = await env.DB.get('v1:fixed:refiled-amendments');
     const data = CHANGELOG.map((c) => (c.id === '2026-11-09-refiled-amendments' && fixed ? { ...c, status: 'shipped' as const } : c));
-    return v1json({ data }, 200, { 'cache-control': 'public, max-age=300' });
+    // ?id= returns one entry (the Deprecation Link points at it).
+    const id = url.searchParams.get('id');
+    const one = id ? data.filter((c) => c.id === id) : data;
+    if (id && !one.length) return v1error('not_found', 404, `No changelog entry ${id}.`);
+    return v1json({ data: one }, 200, { 'cache-control': 'public, max-age=300' });
   }
   const pin = req.headers.get('copybook-schema-version');
   if (pin && !SCHEMA_VERSIONS.includes(pin)) return v1error('bad_request', 400, `Unknown Copybook-Schema-Version ${pin}; served versions: ${SCHEMA_VERSIONS.join(', ')}.`);
@@ -237,7 +254,7 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     const res = await handler({ env, req, url, key: auth.key }, m.slice(1));
     for (const [k, v] of Object.entries(limits)) res.headers.set(k, v);
     // `weight` in positions turns equity-only on Feb 8, 2027 (RFC 9745 Deprecation, RFC 8594 Sunset).
-    if (/\/holdings/.test(path) && res.status === 200) for (const [k, v] of Object.entries(WEIGHT_DEPRECATION(url))) res.headers.set(k, v);
+    if (/\/holdings/.test(path) && res.status === 200) for (const [k, v] of Object.entries(WEIGHT_DEPRECATION(linkBase(env, req, url)))) res.headers.set(k, v);
     return res;
   }
   return v1error('not_found', 404, undefined, limits);

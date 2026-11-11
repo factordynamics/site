@@ -3201,7 +3201,12 @@ describe('copybook api', () => {
     expect(w.map((r: { weight: number | null; weight_incl_options: number | null; weight_equity: number | null }) => [r3(r.weight), r3(r.weight_incl_options), r.weight_equity])).toEqual([[0.667, 0.667, 1], [0.333, 0.333, null]]);
     // Announced with 90 days' notice: the holdings response says when weight changes.
     const wh = (await handleRequest(new Request('https://api.test/v1/filers/warren-buffett/holdings/2025Q2', { headers: { authorization: `Bearer ${key}` } }), env)).headers;
-    expect([wh.get('deprecation'), wh.get('sunset'), wh.get('link')]).toEqual(['@1794182400', 'Mon, 08 Feb 2027 00:00:00 GMT', '<https://api.test/v1/changelog>; rel="deprecation"']);
+    expect([wh.get('deprecation'), wh.get('sunset'), wh.get('link')]).toEqual(['@1794182400', 'Mon, 08 Feb 2027 00:00:00 GMT', '<https://api.test/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"']);
+    // Through gene's front door the link keeps the /copybook prefix (it was missing, so the link returned 401), and it resolves.
+    const viaGene = (await handleRequest(new Request('https://api.test/v1/filers/warren-buffett/holdings/2025Q2', { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env)).headers.get('link');
+    expect(viaGene).toBe('<https://gene.tail70ba3.ts.net/copybook/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"');
+    const entry = await (await handleRequest(new Request('https://api.test/v1/changelog?id=2026-11-09-weight-equity-only'), env)).json();
+    expect(entry.data.map((c: { id: string }) => c.id)).toEqual(['2026-11-09-weight-equity-only']);
     for (const k of spec.components.schemas.Error.required) expect((await v1('/v1/filers/warren-buffett/holdings/2025Q9')).body).toHaveProperty(k);
     expect((await handleRequest(new Request('https://api.test/v1/changelog'), env)).status).toBe(200); // no key needed
     expect((await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '1999-01-01' } }), env)).status).toBe(400);

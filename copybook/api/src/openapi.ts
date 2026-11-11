@@ -12,12 +12,22 @@ function envelope(data: unknown, extra: Record<string, unknown> = {}) {
 }
 
 const json = (schema: unknown, example: unknown) => ({ 'application/json': { schema, example } });
+/** On holdings 200s: the `weight` deprecation (RFC 9745, RFC 8594) and the key's rate limit (IETF RateLimit headers). */
+const HOLDINGS_HEADERS = {
+  Deprecation: { description: 'Always `@1794182400`: Position.`weight` changes meaning on Mon Feb 8, 2027 (see Link).', schema: { type: 'string' } },
+  Sunset: { description: '`Mon, 08 Feb 2027 00:00:00 GMT`: from then `weight` is the equity-only weight.', schema: { type: 'string' } },
+  Link: { description: '`<{base}/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"`, on the base the request came in on.', schema: { type: 'string' } },
+  'RateLimit-Policy': { description: 'Per-minute and per-day limits, e.g. `60;w=60, 10000;w=86400`.', schema: { type: 'string' } },
+  'RateLimit-Limit': { description: 'The limit of the window closest to running out.', schema: { type: 'integer' } },
+  'RateLimit-Remaining': { description: 'Requests left in that window.', schema: { type: 'integer' } },
+  'RateLimit-Reset': { description: 'Seconds until that window resets.', schema: { type: 'integer' } },
+};
 const BUILD = { schema_version: SCHEMA_VERSION, data_built_at: '2026-11-08T21:29:01Z', build_id: '20261108T212901Z' };
 
 const POSITION_EXAMPLE = {
   cusip: '02079K305', ticker: 'GOOGL', issuer: 'ALPHABET INC', title_of_class: 'CAP STK CL A', put_call: null, sector: 'Communication Services',
   shares: 54000000, shares_type: 'SH', value_usd: 9512640000, weight: 0.0367, weight_incl_options: 0.0367, weight_equity: 0.0367, value_scale: null, value_as_filed: null, value_adjusted: null, zero_value: false,
-  change: 'added', prev_shares: 4200000, share_change: 49800000, value_delta_usd: 8770349040, source_accession: null, first_disclosed_at: null,
+  change: 'added', prev_shares: 4200000, share_change: 49800000, value_delta_usd: 8770349040, source_accession: null, first_disclosed_at: null, suspect_units: false,
 };
 
 /** OpenAPI 3.1 description of /v1, served at /v1/openapi.json. */
@@ -104,7 +114,7 @@ export function openapi() {
         Position: {
           type: 'object',
           description: 'One position: info-table rows summed per (CUSIP, put/call).',
-          required: ['cusip', 'ticker', 'issuer', 'title_of_class', 'put_call', 'sector', 'shares', 'shares_type', 'value_usd', 'weight', 'weight_incl_options', 'weight_equity', 'value_scale', 'value_as_filed', 'value_adjusted', 'zero_value', 'change', 'prev_shares', 'share_change', 'value_delta_usd', 'source_accession', 'first_disclosed_at'],
+          required: ['cusip', 'ticker', 'issuer', 'title_of_class', 'put_call', 'sector', 'shares', 'shares_type', 'value_usd', 'weight', 'weight_incl_options', 'weight_equity', 'value_scale', 'value_as_filed', 'value_adjusted', 'zero_value', 'change', 'prev_shares', 'share_change', 'value_delta_usd', 'source_accession', 'first_disclosed_at', 'suspect_units'],
           properties: {
             cusip: { type: 'string', pattern: '^[0-9A-Z]{9}$' },
             ticker: { type: ['string', 'null'], description: 'Mapped from CUSIP; null when unknown' },
@@ -127,7 +137,8 @@ export function openapi() {
             share_change: { type: ['number', 'null'], description: 'shares - prev_shares' },
             value_delta_usd: { type: ['integer', 'null'], description: 'Trade size in whole USD at this filing\'s own value per share: +value for new, -prior value for exited, share_change x value/shares otherwise. A price move alone is 0.' },
             source_accession: { type: ['string', 'null'], description: 'Point-in-time: the accession (original 13F-HR or amendment) this row was disclosed in. Null until point-in-time data is published.' },
-            first_disclosed_at: { type: ['string', 'null'], format: 'date-time', description: 'Point-in-time: EDGAR acceptance datetime (UTC) of source_accession. Null until point-in-time data is published.' },
+            first_disclosed_at: { type: ['string', 'null'], format: 'date-time', description: 'The per-row point-in-time key: EDGAR acceptance datetime (UTC) of source_accession, the filing that first disclosed this row (an amendment-added position gets the amendment\'s time). Use it, not the filing\'s accepted_at, to know when a row was public. Null until point-in-time data is published.' },
+            suspect_units: { type: 'boolean', description: 'True when ingest flags the row\'s value as a likely unit error (e.g. reported in dollars where thousands were meant). Such rows are left out of moves and alerts.' },
           },
         },
         Holdings: {
@@ -238,6 +249,7 @@ export function openapi() {
           responses: {
             '200': {
               description: 'Holdings',
+              headers: HOLDINGS_HEADERS,
               content: json(envelope({ $ref: '#/components/schemas/Holdings' }), {
                 ...BUILD,
                 data: {
@@ -270,6 +282,7 @@ export function openapi() {
           ],
           responses: {
             '200': {
+              headers: HOLDINGS_HEADERS,
               description: 'One Holdings object per quarter on file, oldest first; quarters without a book are in `missing`. When the range is longer than 8 quarters, `next_from` continues it.',
               content: json(envelope({ type: 'array', items: { $ref: '#/components/schemas/Holdings' } }, { missing: { type: 'array', items: { type: 'string' } }, next_from: { type: ['string', 'null'] } }), { ...BUILD, data: [], missing: ['2025Q4'], next_from: null }),
             },
@@ -293,7 +306,7 @@ export function openapi() {
           ],
           responses: {
             '200': {
-              description: 'Holders, largest first',
+              description: 'Holders, largest first. Each row\'s `accepted_at` is filing-level: the EDGAR acceptance of the filer\'s original 13F-HR for that quarter. A position added later by an amendment carries the original\'s time, so it can look disclosed earlier than it was; per-row disclosure times come with `lots[]`. For point-in-time work use the holdings endpoints\' per-row `first_disclosed_at`.',
               content: json(envelope({ type: 'object' }, { count: { type: 'integer', description: 'Position rows after the filters.' }, filers: { type: 'integer', description: 'Distinct filers with a nonzero position among those rows.' }, next_offset: { type: ['integer', 'null'] } }), {
                 ...BUILD,
                 data: { issuer: '829933', ticker: 'SIRI', tickers: ['SIRI'], display_name: 'Sirius XM', cohort: 'all', type: null, counts: { holders: 608, new: 76, added: 153, trimmed: 124, exited: 55, unchanged: 79, no_prior: 176, by_period: { '2026Q3': 64, '2026Q2': 536 } }, truncated: false, holders: [{ filer: { cik: '0001067983', name: 'BERKSHIRE HATHAWAY INC', slug: 'warren-buffett', type: 'active', curated: true }, period: '2026Q2', kind: 'equity', put_call: null, shares: 124807117, prev_shares: 124807117, share_change: 0, value_usd: 3686802237, prev_value_usd: 2880548260, change: 'unchanged', weight: 0.0143, accession: '0000950123-26-008377', accepted_at: '2026-08-14T20:05:04Z' }] },
@@ -455,7 +468,7 @@ export function openapi() {
                     copybook_url: { type: ['string', 'null'] },
                   },
                 },
-                example: { schema_version: '2026-11-08', type: '13d', id: '0001193125-26-451979', accession: '0001193125-26-451979', form: 'SCHEDULE 13D/A', accepted_at: '2026-11-06T21:15:32Z', detected_at: '2026-11-06T21:16:01Z', filer: { slug: 'carl-icahn', name: 'Carl Icahn' }, issuer: 'CVR Energy, Inc.', ticker: 'CVI', action: 'stake_update', details_pending: false, followup: false, shares: null, value_usd: null, avg_price: null, classes: null, percent_of_class: 64.1, shares_after: 71201875, prev_percent_of_class: 70.8, prev_shares_after: 71201875, amendment_no: 41, item4: null, insider: null, insiders: null, sec_url: 'https://www.sec.gov/Archives/edgar/data/921669/000119312526451979/0001193125-26-451979-index.html', copybook_url: 'https://copybook.factordynamics.com/investors/carl-icahn' },
+                example: { schema_version: SCHEMA_VERSION, type: '13d', id: '0001193125-26-451979', accession: '0001193125-26-451979', form: 'SCHEDULE 13D/A', accepted_at: '2026-11-06T21:15:32Z', detected_at: '2026-11-06T21:16:01Z', filer: { slug: 'carl-icahn', name: 'Carl Icahn' }, issuer: 'CVR Energy, Inc.', ticker: 'CVI', action: 'stake_update', details_pending: false, followup: false, shares: null, value_usd: null, avg_price: null, classes: null, percent_of_class: 64.1, shares_after: 71201875, prev_percent_of_class: 70.8, prev_shares_after: 71201875, amendment_no: 41, item4: null, insider: null, insiders: null, sec_url: 'https://www.sec.gov/Archives/edgar/data/921669/000119312526451979/0001193125-26-451979-index.html', copybook_url: 'https://copybook.factordynamics.com/investors/carl-icahn' },
               },
             },
           },
