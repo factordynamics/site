@@ -2449,6 +2449,12 @@ describe('copybook api', () => {
     expect([gb.changed, gb.moves.sold_usd, gb.held.map((h) => [h.ticker, h.reason])]).toEqual([[], 0, [['BKNG', 'unreliable_shares']]]);
     const gsMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'guardcap', slugs: ['guardcap'], manager: 'GuardCap Asset Management', name: 'GuardCap Asset Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0001732008-26-000006', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: gs.moves, tickers: ['BKNG'] }], [], { investors: ['guardcap'], stocks: [], owned: [] } as never);
     expect([/BKNG -\$114\.9M \(share counts don't reconcile; change from filed values/.test(gsMail.text), /3\.3B|BKNG/.test(gsMail.subject), /sold \$114/.test(gsMail.text)]).toEqual([true, false, false]);
+    // An option line filed in contracts (price 100x its underlying's median: BNP's SPY puts, +$16.0B in a book far larger)
+    // passes the size guard, so the 3x band against the underlying's median marks it: shown, never totalled or headlined.
+    const bq2 = [pos('SPY', '78462F103', 100_000, 6_660_000_000, 'Put'), pos('REST', '000000009', 1, 500e9)];
+    const bq3 = [pos('SPY', '78462F103', 340_000, 22_650_000_000, 'Put'), pos('REST', '000000009', 1, 500e9)];
+    const gopt = gateMoves(computeMoves(bq3, bq2, undefined, new Map()), bq2, new Map(), new Map([['78462F103', { cur: 666, prev: 640 }]]));
+    expect([gopt.changed.map((r) => [r.ticker, r.put_call, r.unreliable]), gopt.moves.bought_usd]).toEqual([[['SPY', 'Put', 'value']], 0]);
     // - "value" (price_outlier: BMO's Q3 TEVA filed at about $4,005 a share): the share change, value unavailable.
     const tq2 = [pos('TEVA', '881624209', 971_583, 26_200_000), gbk2[1]];
     const tq3 = [{ ...pos('TEVA', '881624209', 1_130_855, 4_529_000_000), price_outlier: true }, gbk3[1]];

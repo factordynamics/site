@@ -662,7 +662,12 @@ export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Positio
   const before = new Map(prev.map((p) => [posKey(p), p]));
   const held: HeldRow[] = [];
   let marked = false;
-  const changed = r.changed.flatMap((x) => {
+  const changed = r.changed.flatMap((x0) => {
+    // An option line priced over 3x off its underlying's median per share (ingest's band: contracts filed as shares,
+    // BNP's SPY puts read +$16.0B) is a value-side flag: shown by its share change, never in totals or the headline.
+    const cm = consensus.get(x0.cusip)?.cur;
+    const ops = x0.put_call && x0.shares > 0 && x0.value > 0 ? x0.value / x0.shares : null;
+    const x = ops && cm && (ops / cm > OFF_MEDIAN || cm / ops > OFF_MEDIAN) ? { ...x0, price_outlier: true } : x0;
     const prior = before.get(posKey(x));
     const reason = gateRow(x, prior, splits.get(x.cusip) ?? 1, consensus.get(x.cusip));
     const m = reason ? null : markUnreliable(x, prior);
