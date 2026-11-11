@@ -29,6 +29,7 @@ from ingest import build
 from ingest import splits as sp
 from ingest.datasets import prev_quarter
 from ingest.filer_types import signature
+from ingest.bulk import FB_COLUMNS
 from ingest.parse import ABOVE_20K, consensus_prices, debt_cusip, not_common, unit_verdict
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
@@ -74,6 +75,8 @@ CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied pr
 REJECTED: set[tuple[str, str, str]] = set()
 DEBT_LINES: set[tuple[str, str]] = set()  # (issuer6, cik): a debt CUSIP filed as shares, once summed by prefix
 UNCLASSED: dict[str, int] = {}
+FB_KEEP = set(FB_COLUMNS) | {"display_name", "sector"}  # plain full-book columns (bulk.FB_COLUMNS, enrich's labels)
+CLASS_SUM_OFF: list[tuple] = []  # (issuer6, cik, row value_delta, classes' sum): rows held because the two differ
 CLS: dict[tuple, dict] = {}  # (issuer6, cik) -> {cusip: that share class's shares, prior, value, value_delta, changes}
 # A filed conversion ratio between share classes: shares in that class's unit (Berkshire's charter: one Class A share
 # converts into 1,500 Class B). Classes without one (GOOG/GOOGL) have no common share unit.
@@ -159,7 +162,10 @@ def book(rec: dict | None) -> dict | None:
     if not rec or not rec.get("ok"):
         return None
     cols = rec["columns"]
-    rows = [dict(zip(cols, r)) for r in rec.get("rows") or []]
+    # The book's own columns only: a change-column copy (fq/, as gene stores a filer's latest quarter under fb/) must
+    # not carry last build's change, value_delta or unreliable into this one.
+    keep = [i for i, c in enumerate(cols) if c in FB_KEEP]
+    rows = [{cols[i]: r[i] for i in keep} for r in rec.get("rows") or []]
     for h in rows:
         h.setdefault("put_call", None)
         h["shares_type"] = h.get("shares_type") or "SH"
@@ -834,6 +840,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             if multi:
                 for k in cls.values():
                     k["change"] = class_change(k, known)
+                    if k["change"] == "unchanged":
+                        k["value_delta"] = 0  # no shares traded in this class: a price move is never a trade
                 clean = [k for k in cls.values() if not k["side"]]
                 held_n = len(cls) - len(clean)
                 if clean:  # the held classes' dollars are out of the row; the row is counted on the clean ones
@@ -880,7 +888,15 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             m = curated.get(cik) or filers.get(cik) or {}
             fl = FILING.get(cik) or filing(meta[cik])
             if multi and counted is not None and abs(counted - round(sum(k["value_delta"] for k in cls.values() if not k["side"]))) > 1:
-                raise RuntimeError(f"holders: {code} {cik} value_delta {counted} != the sum of its counted classes")
+                # Never served as a trade: held, counted in the run log (one row must not block the whole index).
+                CLASS_SUM_OFF.append((code, cik, counted, round(sum(k["value_delta"] for k in cls.values() if not k["side"]))))
+                for c in [counts] + [lenses[n] for n, kinds in LENSES.items() if kind in kinds]:
+                    if change not in (None, "unknown"):
+                        c["net_by_period"][q] = c["net_by_period"].get(q, 0) - counted
+                        c[change] -= 1
+                        c["unknown"] += 1
+                deltas[cik] = counted = None
+                change, side, reason = "unknown", "both", "class_sum_mismatch"
             if basis is None and counted is not None:
                 basis = "filed_value" if "filed_value" in BASIS.get((code, cik), ()) else "trade"
             single = next((k["cusip"] for k in sorted(cls.values(), key=lambda k: -k["shares"])), None) if not multi else None
@@ -1169,6 +1185,8 @@ def main() -> int:
           + "; ".join(f"{o}->{v['new']} {v.get('ticker')} {v.get('filers')} filers" for o, v in build.cusip_links().items()),
           flush=True)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
+    print(f"moves: multi-class rows held because value_delta != the sum of their classes: {len(CLASS_SUM_OFF)} "
+          f"{CLASS_SUM_OFF[:10]}", flush=True)
     print(f"moves: debt CUSIPs filed as shares kept out of holder rows: {len(DEBT_LINES)} filer-issuer pairs across "
           f"{len({c for c, _ in DEBT_LINES})} issuers", flush=True)
     net_parity(per_quarter)

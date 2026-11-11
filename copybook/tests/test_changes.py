@@ -787,6 +787,13 @@ class ShareClassHoldersTest(unittest.TestCase):
                 self.assertEqual((g["shares"], g["prev_shares"], g["shares_unit"], g["change"], g["net_direction"]),
                                  (None, None, None, "mixed", "sell"))
                 self.assertAlmostEqual(g["value_delta"], 100 * 344.08 - 300 * 340.74, delta=2)
+                # An unchanged class whose line still carries a value_delta (gene's fb/ copy of an older build): no trade.
+                moves.LATEST["0000000003"] = [line("46429B101", "AAA", 100, 100, 1000, 900, "unchanged") | {"value_delta": 55},
+                                              line("46429B200", "BBB", 50, 40, 600, 400, "added")]
+                moves.PERIOD["0000000003"] = "2026Q3"
+                moves.write_holders(shards + [{"cik": "0000000003", "name": "z", "quarter": "2026Q3"}], {}, {}, {})
+                z = row("46429B", "0000000003")
+                self.assertEqual((z["change"], z["value_delta"], z["unreliable"]), ("added", 120, None))
                 x = row("99999X", "0000000002")  # an unlinked exit beside a new line: one position, net shares
                 self.assertEqual((x["change"], x["classes"], x["shares"], x["value_delta_basis"]), ("added", None, 1100, "net_shares_repriced"))
                 self.assertAlmostEqual(x["value_delta"], 100 * 125000 / 1100, delta=1)
