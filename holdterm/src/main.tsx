@@ -276,8 +276,10 @@ function App() {
       if (e.key === 'Escape') return void setSearch(false)
       if (e.key === '/') return void (e.preventDefault(), setSearch(true))
     }
+    const open = () => setSearch(true)
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('holdterm:search', open)
+    return () => (window.removeEventListener('keydown', onKey), window.removeEventListener('holdterm:search', open))
   }, [])
   const section = '/' + (path.split('/')[1] ?? '')
   const isOn = (to: string) => (to === '/' ? path === '/' : section === to || (to === '/funds' && section === '/m') || (to === '/consensus' && section === '/s'))

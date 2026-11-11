@@ -3012,3 +3012,63 @@ p a,
   font-weight: 500;
   vertical-align: 1px;
 }
+
+/* Home: the search, large, beside the headline (under it on phones). */
+.home-search {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(440px, 100%);
+}
+.home-search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 18px;
+  border: 1px solid var(--line2);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--dim);
+  font: 500 16px var(--sans);
+  text-align: left;
+  cursor: text;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 6px 20px rgba(15, 23, 42, 0.06);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.home-search-box:hover {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acc) 16%, transparent);
+}
+.home-search-box svg {
+  color: var(--acc);
+  flex: none;
+}
+.home-starts {
+  display: flex;
+  /* One line whatever the font, so the page below never shifts when Inter loads. */
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: hidden;
+  height: 20px;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 13.5px;
+}
+.home-starts a {
+  color: var(--acc);
+}
+.home-starts a:hover {
+  text-decoration: underline;
+}
+@media (max-width: 720px) {
+  .home-search {
+    width: 100%;
+  }
+  .home-search-box {
+    height: 48px;
+  }
+  .home-starts {
+    display: none;
+  }
+}

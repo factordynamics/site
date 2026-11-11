@@ -354,9 +354,38 @@ export function Home() {
           <h1>What long-term investors are buying and selling</h1>
           <p>13F, 13D/G and Form 4 filings from {roster.funds.length} concentrated, long-term funds, read straight from SEC EDGAR, usually within hours of filing.</p>
         </div>
+        <HomeSearch />
       </div>
       <FirstVisit />
       <HomeBody />
+    </div>
+  )
+}
+/** The site search, front and centre on the home page, with a few common starting points. */
+const STARTS: [string, string][] = [
+  ['Berkshire Hathaway', '/m/berkshire-hathaway'],
+  ['Pershing Square', '/m/pershing-square'],
+  ['Apple', '/s/AAPL'],
+  ['NVIDIA', '/s/NVDA'],
+]
+function HomeSearch() {
+  return (
+    <div className="home-search">
+      <button type="button" className="home-search-box" onClick={() => window.dispatchEvent(new Event('holdterm:search'))}>
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+        <span>Find an investor or a stock</span>
+      </button>
+      <div className="home-starts">
+        <span className="dim">Popular:</span>
+        {STARTS.map(([label, to]) => (
+          <A key={to} to={to}>
+            {label}
+          </A>
+        ))}
+      </div>
     </div>
   )
 }
