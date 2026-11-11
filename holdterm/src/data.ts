@@ -140,7 +140,15 @@ const cache = new Map<string, Promise<unknown>>()
 function get<T>(url: string): Promise<T> {
   let p = cache.get(url) as Promise<T> | undefined
   if (!p) {
-    p = fetch(url).then((r) => (r.ok ? (r.json() as Promise<T>) : Promise.reject(new Error(`${r.status} ${url}`))))
+    // A host that never answers would leave the page loading for good: give up after 20 seconds without a
+    // response, so the page can say so and offer a retry. (Only the wait for the response is timed, not the
+    // download, so a large file on a slow connection still arrives.)
+    const ac = new AbortController()
+    const t = setTimeout(() => ac.abort(), 20_000)
+    p = fetch(url, { signal: ac.signal })
+      .catch((e) => Promise.reject(ac.signal.aborted ? new Error(`timeout ${url}`) : e))
+      .finally(() => clearTimeout(t))
+      .then((r) => (r.ok ? (r.json() as Promise<T>) : Promise.reject(new Error(`${r.status} ${url}`))))
     p.catch(() => cache.delete(url))
     cache.set(url, p)
   }
