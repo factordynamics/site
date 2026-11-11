@@ -418,6 +418,9 @@ function App() {
   )
 }
 
+// Only for Holdterm's own offline page on a reload without a connection (public/sw.js); nothing else is cached.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
