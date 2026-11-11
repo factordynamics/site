@@ -633,7 +633,7 @@ export async function serveFeed(env: Env, token: string, format: 'json' | 'rss',
   }
   const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Copybook alerts</title><link>${xml(env.SITE_URL)}</link><description>Your Copybook alerts: 13F, Form 4 and Schedule 13D/G filings from SEC EDGAR. Not investment advice.</description>
-${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(publicLinks(i.url))}</link><guid isPermaLink="false">${xml(i.id)}</guid><pubDate>${new Date(i.sent ?? i.published).toUTCString()}</pubDate><description><![CDATA[${itemHtml(publicLinks(i.text)).replace(/]]>/g, ']]&gt;')}]]></description></item>`).join('\n')}
+${items.map((i) => `<item><title>${xml(i.title)}</title><link>${xml(publicLinks(i.url))}</link><guid isPermaLink="false">${xml(i.id)}</guid><pubDate>${new Date(i.published ?? i.sent).toUTCString()}</pubDate><description><![CDATA[${itemHtml(publicLinks(i.text)).replace(/]]>/g, ']]&gt;')}]]></description></item>`).join('\n')}
 </channel></rss>`;
   return new Response(rss, { headers: { ...headers, 'content-type': 'application/rss+xml; charset=utf-8' } });
 }

@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { unreliableShares, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { guardShares, unreliableShares, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -1558,17 +1558,28 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
     for (const x of (JSON.parse(raw) as DigestDay).filings) {
       if (!x.moves) continue;
       // A stored row on a line ingest has since flagged (unreliableShares) leaves the feed's moves and totals.
-      const all = movesRows(x.moves);
+      // A stored row sized from share counts the filed values can't support (guardShares) takes the filed-value change:
+      // its own prior value, else the correction's /v1 figure for the line (Mizuho's SPY calls, -$13.3B -> -$58.0M).
+      const v1 = new Map((x.corrected?.rows ?? []).filter((c) => c.v1.change === 'added' || c.v1.change === 'trimmed').map((c) => [posKey({ cusip: c.cusip, put_call: c.put_call }), c.v1.value_delta]));
+      const all = movesRows(x.moves).map((r) => guardShares(r, r.prev_value != null ? r.value - r.prev_value : v1.get(posKey(r))));
       const ch = all.filter((r) => !unreliableShares(r));
       const splits = x.corrected?.rows.length ? await splitsFor(env, x.quarter) : null;
       const adj = splits ? ch.flatMap((r) => splitRestate(r, splits, x.corrected!.rows)) : ch;
       const net = netRenamed({ moves: x.moves, changed: adj });
-      if (ch.length === all.length && net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i])) continue;
+      const stored = movesRows(x.moves);
+      if (ch.length === all.length && net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i] && r === all[i] && all[i].value_delta === stored[i].value_delta)) {
+        // A corrected filing is rendered from its stored copy too: an item frozen with other figures (gene's Mizuho
+        // item read "SPY calls -$13.3B" from a render the day store never kept) takes the stored moves and the correction.
+        if (x.corrected) fixed.set(filingId(x), x);
+        continue;
+      }
       const moves = net.changed === adj ? movesOf(adj) : net.moves;
       // Totals cover every row (the stored lists keep the largest few): a dropped row's figure comes out of them.
       const gone = all.filter((r) => unreliableShares(r));
-      const bought = x.moves.bought_usd - gone.reduce((s, r) => s + Math.max(r.value_delta, 0), 0);
-      const sold = x.moves.sold_usd + gone.reduce((s, r) => s + Math.min(r.value_delta, 0), 0);
+      // A guarded row's stored figure comes out of the totals and its filed-value change goes in.
+      const resized = all.map((r, i) => [stored[i].value_delta, r.value_delta] as const).filter(([a, b]) => a !== b);
+      const bought = x.moves.bought_usd - gone.reduce((s, r) => s + Math.max(r.value_delta, 0), 0) - resized.reduce((s, [a, b]) => s + Math.max(a, 0) - Math.max(b, 0), 0);
+      const sold = x.moves.sold_usd + gone.reduce((s, r) => s + Math.min(r.value_delta, 0), 0) + resized.reduce((s, [a, b]) => s + Math.min(a, 0) - Math.min(b, 0), 0);
       fixed.set(filingId(x), { ...x, moves: { ...moves, bought_usd: bought, sold_usd: sold } });
     }
   }

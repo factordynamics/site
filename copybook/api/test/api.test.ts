@@ -1644,20 +1644,38 @@ describe('copybook api', () => {
       },
       corrected: { at: '2026-11-11T04:36:00Z', rows: [{ cusip: '22788C105', ticker: 'CRWD', name: 'CrowdStrike', put_call: null, emailed: { change: 'added', value_delta: 8549980129 }, v1: { change: 'added', value_delta: 2317407354 } }] },
     };
-    await env.DB.put(`digest:${etDay(tR)}`, JSON.stringify({ filings: [fmr], events: [] }));
+    // Mizuho Markets' Q3 (0001062993-26-005826): gene's feed item froze a render netting the Q2 "CALL" line (479,831) with
+    // the Q3 "Call" line (19,152 at $552.5M) into "SPY calls -$13.3B (sold 96% of the position, 194.7% of book)". The day
+    // store keeps the lines apart, with the correction: the feed item is rendered from those.
+    const opt = (change: string, put_call: string, shares: number, prev_shares: number, value: number, value_delta: number, pct: number) => ({ ...mv(change, 'SPY', '78462F103', shares, prev_shares, value, value_delta), put_call, delta_pct_of_book: pct });
+    const miz = {
+      slug: 'mizuho-markets-americas-llc', slugs: ['mizuho-markets-americas-llc'], manager: 'Mizuho Markets Americas LLC', name: 'MIZUHO MARKETS AMERICAS LLC', quarter: '2026Q3', report_date: '2026-09-30', filing_date: etDay(tR), accession: '0001062993-26-005826', sec_url: 'https://www.sec.gov/x', tickers: [],
+      moves: { bought_usd: 552460839, sold_usd: 610478402, new: [opt('new', 'Call', 19152, 0, 552460839, 552460839, 0.081)], added: [], trimmed: [], exited: [opt('exited', 'CALL', 0, 479831, 0, -610478402, -0.089)] },
+      corrected: { at: '2026-11-11T04:36:00Z', rows: [{ cusip: '78462F103', ticker: 'SPY', name: 'SPDR S&P 500 ETF Trust', put_call: 'CALL', emailed: { change: 'exited', value_delta: -610478402 }, v1: { change: 'trimmed', value_delta: -58017563 } }] },
+    };
+    await env.DB.put(`digest:${etDay(tR)}`, JSON.stringify({ filings: [fmr, miz], events: [] }));
     await putMember('cus_fd', 'fd@example.com', 'active', []);
-    await env.DB.put('feed:cus_fd', JSON.stringify([{ id: '0000315066-26-002964:moves', title: 'as sent', text: 'as sent', url: 'x', published: '2026-11-10T21:00:00Z' }]));
+    await env.DB.put('feed:cus_fd', JSON.stringify([{ id: '0000315066-26-002964:moves', title: 'as sent', text: 'as sent', url: 'x', published: '2026-11-10T21:00:00Z' }, { id: '0001062993-26-005826', title: 'Corrected · Mizuho Markets Americas Q3: NEW WYNN · EXIT COR · SPY calls -$13.3B', text: '  Trimmed: SPY calls -$13.3B (sold 96% of the position, 194.7% of book)', url: 'x', published: '2026-11-09T20:26:17.000Z' }]));
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
       String(u).endsWith('cusip_links.json') ? Response.json({ links: { G39108108: { new: 'G39104107', ticker: 'GTES', basis: 'sec_13f_list', ratio: 1, units_basis: 'holders_1to1' } }, held: [] })
       : String(u).endsWith('splits.json') ? Response.json({ splits: [{ cusip: '22788C105', ticker: 'CRWD', to_quarter: '2026Q3', ratio: 4 }] })
       : real1(u, init));
-    expect(await restateFeeds(env, tR)).toEqual({ feeds: 1, alerts: ['0000315066-26-002964:moves'] });
+    expect(await restateFeeds(env, tR)).toEqual({ feeds: 1, alerts: ['0000315066-26-002964:moves', '0001062993-26-005826'] });
     vi.stubGlobal('fetch', real1);
     vi.useRealTimers();
     const item = (JSON.parse((await env.DB.get('feed:cus_fd'))!) as { text: string }[])[0].text;
     const [body, note] = item.split(/\n\s*Corrected /);
     expect([body.match(/CRWD \+\$[\d.]+[MB]/)?.[0], body.match(/XOM \+\$[\d.]+[MB]/)?.[0], /GTES/.test(body), /EXIT|G39108108|\$8\.5B|\$23\.8B/.test(body)]).toEqual(['CRWD +$2.3B', 'XOM +$1.3B', true, false]);
     expect(note).toMatch(/CRWD was added/);
+    const mi = (JSON.parse((await env.DB.get('feed:cus_fd'))!) as { title: string; text: string }[])[1];
+    expect([/13\.3B|194\.7%|96% of the position/.test(mi.title + mi.text), /SPY calls was trimmed -\$58\.0M/.test(mi.text)]).toEqual([false, true]);
+    // Netted fresh from the filings (Q3 "Call" against Q2 "CALL", case-blind), the trade is the filed values' change,
+    // marked: never 19,152 - 479,831 sh x $28,846 = -$13.3B, 194.7% of a $6.8B book.
+    const pos = (put_call: string, shares: number, value: number) => ({ cusip: '78462F103', issuer: 'SPDR S&P 500 ETF T', ticker: 'SPY', display_name: null, put_call, shares, value, title: 'SPY' });
+    const filler = { cusip: '000000000', issuer: 'BOOK', ticker: 'BK', display_name: null, put_call: null, shares: 1, value: 6_270_000_000, title: 'BK' };
+    const cm = computeMoves([pos('Call', 19152, 552460839), filler] as never, [pos('CALL', 479831, 610478402), filler] as never);
+    const spy = cm.changed.find((r) => r.cusip === '78462F103')!;
+    expect([spy.change, spy.value_delta, spy.unreliable, Math.abs(spy.delta_pct_of_book!) < 0.01]).toEqual(['trimmed', -58017563, 'shares', true]);
     // Nothing more to restate: the feed is left alone.
     expect((await restateFeeds(env, tR)).feeds).toBe(0);
   });

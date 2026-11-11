@@ -103,6 +103,8 @@ export interface MoveRow {
   pct_of_book?: number | null;
   /** The prior quarter's value, when known (guards the size). */
   prev_value?: number | null;
+  /** Which side of the line can't be trusted: "shares" sizes the change from filed values (guardShares). */
+  unreliable?: 'shares' | 'value' | 'both';
   /** A stock split between the two quarters: prev_shares is multiplied by it; prev_shares_as_filed keeps the filed count. */
   split?: number;
   prev_shares_as_filed?: number;
@@ -495,7 +497,7 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     }
     const f = ratio(p, { shares: c.shares, value });
     const ps = Math.round(p.shares * f);
-    if (c.shares !== ps) rows.push(row(named, c.shares > ps ? 'added' : 'trimmed', c.shares, ps, value, c.shares ? ((c.shares - ps) * value) / c.shares : 0, adj(p, f)));
+    if (c.shares !== ps) rows.push(guardShares(row(named, c.shares > ps ? 'added' : 'trimmed', c.shares, ps, value, c.shares ? ((c.shares - ps) * value) / c.shares : 0, { ...adj(p, f), prev_value: p.value }), value - p.value));
   }
   for (const p of before.values()) rows.push(row(p, 'exited', 0, Math.round(p.shares * ratio(p)), 0, -p.value, adj(p, ratio(p))));
   // Unit errors are left out; unusually large moves are tagged. The larger book is the yardstick.
@@ -534,6 +536,19 @@ export const unreliableShares = (x: unknown): boolean => {
   const r = (x ?? {}) as { suspect_units?: unknown; price_outlier?: unknown; suspect_reason?: unknown; value_basis?: unknown };
   return r.suspect_units === true || r.price_outlier === true || r.suspect_reason === 'reissue_ratio_not_applied' || r.value_basis === 'filed_price_outlier';
 };
+
+/**
+ * A trade sized from shares that the filed values can't support: |price x change in shares| over 3x the change in filed
+ * value and over the whole book. The share counts don't reconcile (Mizuho's Q3 SPY calls: 479,831 in Q2, 19,152 in Q3 at
+ * $552M, read as -$13.3B, 194.7% of book), so the change is the filed values' (-$58.0M), marked unreliable "shares".
+ */
+export function guardShares(r: MoveRow, filedDelta: number | null | undefined): MoveRow {
+  if (filedDelta == null || !Number.isFinite(filedDelta) || (r.change !== 'added' && r.change !== 'trimmed') || r.unreliable) return r;
+  const pct = r.delta_pct_of_book ?? r.pct_of_book ?? null;
+  if (pct == null || Math.abs(pct) <= 1 || Math.abs(r.value_delta) <= 3 * Math.abs(filedDelta)) return r;
+  const book = Math.abs(r.value_delta / pct);
+  return { ...r, change: filedDelta >= 0 ? 'added' : 'trimmed', value_delta: Math.round(filedDelta), delta_pct_of_book: book ? filedDelta / book : null, unreliable: 'shares' };
+}
 
 /** A position's key across EDGAR tables and ingest's books: CUSIP and put/call, case-blind. */
 export const posKey = (p: { cusip: string; put_call?: string | null }) => `${p.cusip.toUpperCase()}|${(p.put_call ?? '').toUpperCase()}`;

@@ -509,8 +509,11 @@ const bookPct = (r: MoveRow) => {
   return Math.abs(d) < 0.0005 ? '<0.1%' : `${(Math.abs(d) * 100).toFixed(1)}%`;
 };
 
+/** A change sized from filed values because the share counts don't (guardShares): no share or position figures. */
+const UNRECONCILED = "share counts don't reconcile; change from filed values";
 /** How much of the position itself changed: a trim of 40% of the shares reads differently from 0.4% of the book. */
 function positionChange(label: string, r: MoveRow): string {
+  if (r.unreliable === 'shares') return UNRECONCILED;
   if (label === 'New') return 'new';
   if (label === 'Exited') return 'sold all';
   if (!r.prev_shares) return '';
@@ -521,6 +524,7 @@ function positionChange(label: string, r: MoveRow): string {
 }
 /** "In your names" detail: the trade in shares, then what's held ("sold 135,048 sh (3%), holds 4.38M"). */
 function shareTrade(r: MoveRow): string {
+  if (r.unreliable === 'shares') return UNRECONCILED;
   if (!r.prev_shares) return r.shares ? `${compact(r.shares)} sh` : '';
   if (!r.shares) return `sold all ${compact(r.prev_shares)} sh`;
   const d = r.shares - r.prev_shares;
