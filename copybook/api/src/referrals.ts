@@ -84,6 +84,9 @@ type Reply = { status: number; body: Record<string, unknown> };
  * (14-day trial, card up front), with the referral month applied when `ref` is a member's live code.
  * Without `ref` it is the same checkout the site's Payment Links start, plus the source it carries.
  */
+/** Fund checkout's submit note, as on the Fund Payment Links: the Terms, and the invoice route. */
+const FUND_SUBMIT = "Copybook is made by Factor Dynamics. By subscribing you agree to Copybook's Terms (copybook.factordynamics.com/terms/). To pay by invoice instead, use copybook.factordynamics.com/contact/?topic=fund.";
+
 export async function createCheckout(env: Env, b: Record<string, unknown>): Promise<Reply> {
   const plan = String(b.plan ?? '');
   const interval = String(b.interval ?? '');
@@ -117,7 +120,7 @@ export async function createCheckout(env: Env, b: Record<string, unknown>): Prom
     cancel_url: `${env.SITE_URL}pricing/${ref ? `?ref=${ref}` : ''}`,
     'metadata[copybook]': ref ? 'referral' : 'checkout',
     // The seller on the card statement is the account's name: say whose product it is.
-    'custom_text[submit][message]': 'Copybook is made by Factor Dynamics.',
+    'custom_text[submit][message]': plan === 'fund' ? FUND_SUBMIT : 'Copybook is made by Factor Dynamics.',
     // Pro and Fund: the founding price (amount and deadline) and the tax line. Copy: neither.
     ...(checkoutNote(plan, price.unit_amount, price.recurring?.interval) ? { 'custom_text[after_submit][message]': checkoutNote(plan, price.unit_amount, price.recurring?.interval)! } : {}),
     ...(plan !== 'copy' && Date.now() < FOUNDING_UNTIL ? { 'subscription_data[metadata][founding]': 'true' } : {}),

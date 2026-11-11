@@ -176,18 +176,28 @@ export const MAIL_POLICY =
   "Account emails (sign-in, welcome) are sent even past the alert cap, until Resend itself refuses them; then they go out after the 00:00 UTC reset. Alert emails over the cap wait until 00:00 UTC, marked delayed; chat, feed and webhook alerts go at once. Test and preview mail goes to a test inbox, not by email, through Nov 16.";
 const isTestMail = (m: Mail) => !!m.preview || !!m.test || testAddress(m.to);
 /** The sink's object for one address: unguessable (HMAC of the address), readable at PUBLIC_URL + this key. */
+/** Each critic's aliases (copybook-test-<critic>-<anything>) share the critic's own test inbox. */
+const CRITIC_INBOX: Record<string, string> = {
+  trader: 'copybook-test-trader-f94afc@fldubai.com',
+  retail: 'copybook-test-retail-b00e46@fldubai.com',
+  analyst: 'copybook-test-pro-6dd05f@fldubai.com',
+  quant: 'copybook-test-quant-362d85@fldubai.com',
+  pm: 'copybook-test-pm-f5f4b5@fldubai.com',
+};
+export const sinkOwner = (to: string) => CRITIC_INBOX[to.toLowerCase().match(/^copybook-test-(trader|retail|analyst|quant|pm)-[^@]*@/)?.[1] ?? ''] ?? to.toLowerCase();
 export async function sinkKey(env: Env, to: string): Promise<string> {
   const { hmacHex } = await import('./tokens');
-  return `sink/${(await hmacHex(env.SESSION_SECRET, `sink:${to.toLowerCase()}`)).slice(0, 40)}.json`;
+  return `sink/${(await hmacHex(env.SESSION_SECRET, `sink:${sinkOwner(to)}`)).slice(0, 40)}.json`;
 }
 /** Stores test mail, newest first (40 kept per address), in the public bucket (both hosts write there), else KV. */
 async function sinkMail(env: Env, mails: Mail[]): Promise<void> {
   const by = new Map<string, Mail[]>();
-  for (const m of mails) by.set(m.to.toLowerCase(), [...(by.get(m.to.toLowerCase()) ?? []), m]);
+  // Keyed by inbox (a critic's aliases share theirs); each item names the address it was sent to.
+  for (const m of mails) by.set(sinkOwner(m.to), [...(by.get(sinkOwner(m.to)) ?? []), m]);
   const at = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   for (const [to, ms] of by) {
     const key = await sinkKey(env, to);
-    const add = ms.map((m) => ({ at, subject: m.subject, text: m.text, ...(m.html ? { html: m.html } : {}) }));
+    const add = ms.map((m) => ({ at, to: m.to.toLowerCase(), subject: m.subject, text: m.text, ...(m.html ? { html: m.html } : {}) }));
     const remote = !!(env.CF_API_TOKEN && env.CF_ACCOUNT_ID && env.PUBLIC_BUCKET && env.PUBLIC_URL);
     try {
       const prev = remote

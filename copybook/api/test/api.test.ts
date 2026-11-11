@@ -1500,6 +1500,9 @@ describe('copybook api', () => {
     // The operator gets each test address's inbox URL; real addresses are refused.
     const r = await (await handleRequest(new Request('https://api.test/ops/test-inbox', { method: 'POST', body: JSON.stringify({ emails: ['copybook-test-x@fldubai.com', 'real@example.com'] }), headers: { authorization: 'Bearer health_test_token' } }), env)).json();
     expect(r.inboxes).toEqual([{ email: 'copybook-test-x@fldubai.com', url: expect.stringMatching(new RegExp(`${await sinkKey(env, 'copybook-test-x@fldubai.com')}$`)) }]);
+    // A critic's aliases share the critic's own inbox (the trader's fresh signups land where it already reads).
+    expect(await sinkKey(env, 'Copybook-Test-Trader-Signup7@fldubai.com')).toBe(await sinkKey(env, 'copybook-test-trader-f94afc@fldubai.com'));
+    expect(await sinkKey(env, 'copybook-test-pmprov-1@fldubai.com')).not.toBe(await sinkKey(env, 'copybook-test-pm-f5f4b5@fldubai.com'));
     // A test team's seat invite goes to the sink under the seat's own address, even a real-looking one.
     const { inviteSeat } = await import('../src/seats');
     const owner = { customer: 'cus_tt', email: 'copybook-test-owner@fldubai.com', status: 'active', plan: 'fund', interval: 'month', period_end: 0, subscription: 'sub_tt', alerts: [] } as never;
@@ -1609,6 +1612,11 @@ describe('copybook api', () => {
       const b = await (await signup({ email: `copybook-test-${c}@reader.test` }, `5.5.5.${c.length}${status.length}`)).json();
       expect([c, b.ok, b.token, b.session]).toEqual([c, true, undefined, undefined]);
     }
+    // A paying member's address: the same neutral answer, and one Copy sign-in link (none again within 15 minutes).
+    const paidMails = () => sent.filter((m) => m.to[0] === 'copybook-test-cus_pd@reader.test' && m.subject === 'Your Copybook sign-in link').length;
+    const pd2 = await (await signup({ email: 'copybook-test-cus_pd@reader.test' }, '5.5.6.1')).json();
+    await signup({ email: 'copybook-test-cus_pd@reader.test' }, '5.5.6.2');
+    expect([pd2.sign_in_email, pd2.token, paidMails()]).toEqual(['sent_if_member', undefined, 1]);
     sent = sent.filter((m) => !m.to[0].startsWith('copybook-test-cus_'));
     for (const c of ['cus_pd', 'cus_cx']) for (const k of [`cus:${await env.DB.get(`email:copybook-test-${c}@reader.test`)}`, `cus:${c}`, `email:copybook-test-${c}@reader.test`]) await env.DB.delete(k);
     // Resend refusing (its daily quota): the page is told it's queued for after the 00:00 UTC reset, and is still signed in.
@@ -3978,6 +3986,10 @@ describe('copybook api', () => {
       expect([r.status, `${u.origin}${u.pathname}`, u.searchParams.get('X-Amz-Expires'), u.searchParams.get('X-Amz-SignedHeaders'), !!u.searchParams.get('X-Amz-Signature'), u.searchParams.get('response-content-disposition')])
         .toEqual([302, 'https://acct.r2.cloudflarestorage.com/copybook-history/bulk/2026Q2.csv.gz', '300', 'host', true, 'attachment; filename="copybook-13f-2026Q2.csv.gz"']);
     }
+    // ?redirect=false: the same link as JSON with 200, for Python urllib (it forwards Authorization on a redirect).
+    const asJson = await plain('/v1/bulk/2026Q2.csv.gz?redirect=false');
+    const j = (await asJson.json()).data;
+    expect([asJson.status, asJson.headers.get('location'), j.file, j.auth, j.sha256, j.bytes, new URL(j.url).pathname, Date.parse(j.expires_at) - Date.now() > 250_000]).toEqual([200, null, '2026Q2.csv.gz', 'none', gzSha, 1_200_000, '/copybook-history/bulk/2026Q2.csv.gz', true]);
     expect((await plain('/v1/bulk/2025Q1.csv.gz')).status).toBe(501);
     // A generated response over 1 MB on the Funnel name: written once under dl/ on R2, then a 302 to it presigned for
     // 5 minutes with its own type and filename; R2 refusing the write leaves it to be served here.

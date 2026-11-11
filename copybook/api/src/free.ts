@@ -130,7 +130,20 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
   // a sign-in link saying the follow was saved, at most one an hour. A paying member's follows change only when
   // signed in to Copy, so they are asked to follow there.
   if (cur && cur.status !== 'canceled') {
-    if (cur.status !== 'free') return { status: 200, body: { ok: true, ...(follow ? { following: false, follow: 'sign_in' } : {}) } };
+    // A paying member: the same neutral answer whether or not the address has an account (no enumeration), and a Copy
+    // sign-in link by email under the 15-minute rule (the trader's 11:56 resubmit got nothing at all).
+    if (cur.status !== 'free') {
+      const k = `rl:signin-mail:${cur.customer}`;
+      const last = signedIn === cur.customer ? 'signed-in' : await env.DB.get(k);
+      if (!last) {
+        await env.DB.put(k, new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), { expirationTtl: 15 * 60 });
+        const { loginMail, holdtermLoginMail } = await import('./email');
+        const { LOGIN_REQUEST_TTL } = await import('./members');
+        const token = await signToken(env.SESSION_SECRET, 'login', cur.customer, LOGIN_REQUEST_TTL);
+        await sendMail(env, [cur.plan === 'holdterm' ? holdtermLoginMail(env, cur.email, token, false) : loginMail(env, cur.email, token, false)]);
+      }
+      return { status: 200, body: { ok: true, sign_in_email: 'sent_if_member', ...(follow ? { following: false, follow: 'sign_in' } : {}) } };
+    }
     const r = follow ? await addFollows(cur) : null;
     let signIn: 'sent' | 'not_needed' | 'rate_limited' | 'already_sent' | 'queued' | 'test_inbox' | 'not_sent' = 'not_needed';
     let sentAt: string | null = null;
@@ -176,7 +189,6 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
   // Signed in on this device at once, whatever the email does: a provisional session, good until the member first signs
   // in by an emailed link or subscribes (then the link or checkout gives a full one). Only for an account made just now,
   // so typing someone else's address never signs anyone into an existing account.
-  const { signToken } = await import('./tokens');
   const { PROVISIONAL_TTL } = await import('./members');
   // A cancelled member's address had an account: no session, only the email.
   const session = cur ? null : { token: await signToken(env.SESSION_SECRET, 'session', m.customer, PROVISIONAL_TTL, { s: 'provisional' }), session: 'provisional' };

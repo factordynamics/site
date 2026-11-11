@@ -587,7 +587,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const ip = req.headers.get('cf-connecting-ip') ?? 'unknown';
     const k = `rl:checkout:${ip}`;
     const n = Number((await env.DB.get(k)) ?? 0);
-    if (n >= 30) return json({ ok: false, error: 'too many requests, try again in an hour', code: 'rate_limited' }, 429, { ...h, 'retry-after': '3600' });
+    if (n >= 30) return json({ ok: false, error: 'too many requests, try again in an hour', code: 'rate_limited', retry_after: 3600, retry_after_seconds: 3600, retry_at: new Date(Date.now() + 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z') }, 429, { ...h, 'retry-after': '3600', 'access-control-expose-headers': 'retry-after' });
     await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
     const { createCheckout } = await import('./referrals');
     const r = await createCheckout(env, await body(req));

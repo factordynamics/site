@@ -919,7 +919,11 @@ ROUTES.push(
     const data = (await bulkFiles(env, MIN_BULK_BYTES)).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.bytes, etag: o.etag, sha256: o.sha256, uploaded_at: noMs(o.uploaded.toISOString()), url: `${linkBase(env, req, url)}/v1/${o.key}` }));
     return v1json({ data: data.sort((a: { file: string }, b: { file: string }) => b.file.localeCompare(a.file)) });
   }],
-  ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env }, [file]) => {
+  ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env, req, url }, [file]) => {
+    // ?redirect=false: the download link as JSON (200), for clients that forward Authorization on a redirect (Python
+    // urllib: R2 answers 400). `auth: "none"` for a presigned link (send no Authorization to it); "required" when the file
+    // streams from this API (send the key as usual).
+    const asJson = url.searchParams.get('redirect') === 'false';
     // A 302 to a 5-minute presigned URL on the account's R2 endpoint (a stable, fast host to allowlist), only when the
     // bucket's copy is the listed file (same size and sha256). Otherwise it streams from here and the mirror is redone.
     const { bulkFiles, servedHead, sameFile, mirrorSoon } = await import('./download');
@@ -928,6 +932,7 @@ ROUTES.push(
       if (sameFile(f, await servedHead(env, f.key))) {
         const { presignGet } = await import('./failover');
         const loc = await presignGet(env, f.key, 300, { 'response-content-disposition': `attachment; filename="copybook-13f-${file}"` }).catch(() => null);
+        if (loc && asJson) return v1json({ data: { file, url: loc, auth: 'none', sha256: f.sha256 ?? null, bytes: f.bytes ?? null, expires_at: noMs(new Date(Date.now() + 300_000).toISOString()) } });
         if (loc) return new Response(null, { status: 302, headers: { location: loc, 'cache-control': 'no-store', ...(f.etag ? { etag: `"${f.etag}"` } : {}) } });
       } else mirrorSoon(env, f.key);
     }
@@ -935,6 +940,7 @@ ROUTES.push(
     if (!obj || (obj.size ?? 0) < MIN_BULK_BYTES) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet${obj ? ' (the uploaded file failed its size check and waits to be regenerated)' : ''}. Parquet is coming; csv.gz is live for the quarters GET /v1/bulk lists.`);
     // RFC 9530 Repr-Digest, so a client can check the bytes without the listing (the R2 link sends x-amz-meta-sha256).
     const sha = f?.sha256 ?? obj.customMetadata?.sha256;
+    if (asJson) return v1json({ data: { file, url: `${linkBase(env, req, url)}/v1/bulk/${file}`, auth: 'required', sha256: sha ?? null, bytes: obj.size ?? null, expires_at: null } });
     const digest: Record<string, string> = sha ? { 'repr-digest': `sha-256=:${btoa(String.fromCharCode(...(sha.match(/../g) ?? []).map((h) => parseInt(h, 16))))}:`, 'x-amz-meta-sha256': sha } : {};
     return new Response(obj.body, {
       headers: { ...digest, 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
