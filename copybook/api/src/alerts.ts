@@ -1475,8 +1475,8 @@ const alertClass = (failed: { class?: RowClass }[]): RowClass | 'matched' =>
 /** Alerts accepted from here get correction emails; earlier ones are checked and logged only. */
 export const RECONCILE_MAIL_FROM = '2026-11-11T05:00:00Z';
 const MISMATCH = 0.1;
-/** The reconciliation log (v2: exits read from exited[], put/call case-blind; v1 counted every exit as a fail). */
-const RECONCILED = 'alerts:reconciled:v2';
+/** The reconciliation log (v3: each check classed matched, disclosed, explained or wrong; v2 had no classes). */
+const RECONCILED = 'alerts:reconciled:v3';
 
 /**
  * gene, every 5 minutes: each 13F alert with moves, once ingest's build serves its filing, row by row against the build
@@ -1489,7 +1489,7 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
   const log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
   const done = new Set(log.map((x) => x.accession));
   const found = new Map<string, { a: Alert13F; rows: Map<string, MoveRow>; days: string[] }>();
-  for (let d = 0; d < (only ? 31 : 3); d++) {
+  for (let d = 0; d < (only ? 31 : 4); d++) {
     const day = etDay(now - d * DAY);
     const raw = await env.DB.get(`digest:${day}`);
     if (!raw) continue;
