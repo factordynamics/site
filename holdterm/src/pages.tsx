@@ -1550,7 +1550,7 @@ export function Alerts() {
       <section className="ap-section ap-split">
         <div>
           <h2>A real alert, by email</h2>
-          <p className="dim">This is the email members got for {s ? `${s.filing.manager}’s ${quarterLabel(s.filing.quarter)} 13F` : 'a recent 13F'}, exactly as sent.</p>
+          <p className="dim">This is the alert for {s ? `${s.filing.manager}’s ${quarterLabel(s.filing.quarter)} 13F` : 'a recent 13F'}, built from the filing.</p>
           <ul className="ap-points">
             <li>
               <Check /> <span><b>The headline first.</b> Who filed, what kind of filing, and when.</span>
