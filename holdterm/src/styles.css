@@ -1629,6 +1629,14 @@ a.hb-row:hover {
   .home-filings th:nth-child(3) {
     width: 45%;
   }
+  /* Fund tables have no room to widen the ticker column, so the company name under it wraps to a second line. */
+  .fund-table .row-sub.stock-sub {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.3;
+  }
   /* …and the number columns in those tables shrink to their content, so the name column gets the spare width. */
   .grid:has(.stock-sub) th.num {
     width: 1%;

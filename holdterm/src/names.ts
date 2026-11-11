@@ -78,6 +78,27 @@ export const pmName = (slug: string) => FUNDS[slug]?.pm ?? null
 // "Accenture Plc Ireland").
 const WORDS: Record<string, string> = { Cgi: 'CGI', Adi: 'ADI', Indl: 'Industrial', Hldgs: 'Holdings', Hldg: 'Holding', Intl: 'International', Grp: 'Group', Utd: 'United', Mtns: 'Mountains', Ins: 'Insurance', Cos: 'Companies', Tech: 'Technologies', Svcs: 'Services', Corp: 'Corp', Pptys: 'Properties', Bancorp: 'Bancorp' }
 const KEEP = new Set(['Old', 'Ltd', 'Inc', 'St', 'Mr', 'Dr', 'Jr', 'Sr', 'Mfg', 'Bros'])
+/** 13F security descriptions read as company names: "Zillow Group CL C Cap STK" -> "Zillow Group Class C",
+ * "Liberty Live Holdings Com SHS Ser C" -> "Liberty Live Holdings Series C", "Novartis Sponsored ADR" -> "Novartis".
+ * The share class stays (GOOGL and GOOG are separate lines); the security type, which the ticker already says, goes. */
+function securityWords(s: string): string {
+  return s
+    .replace(/[\s-]+(Uns|S)p(ons?(ored)?)?[\s-]+AD[RS](\s+Part\s+CER)?\b|\s+ADR(\s+REP)?(\s+\d+)?\s+ORD$|(\s*-\s*AD[RS]|\s+AD[RS])+$/gi, '')
+    .replace(/\s+N?\s*Ny Regis(try)?\s+SHS$/i, '')
+    .replace(/\s*-\s*Reg$/i, '')
+    .replace(/\s+Com\s+Non\s+VTG$/i, ' Non-voting')
+    .replace(/\s+Cap\s+STK\b/gi, '')
+    .replace(/\s+Com(\s+SHS)?(?=\s+(CL|Class|Ser)\b|$)/gi, '')
+    .replace(/\s+ORD(?:\s+SHS?|\s+Shares)?\s+(?:CL\s+)?([A-Za-z])$/i, ' Class $1')
+    .replace(/\s+ORD(\s+SHS?|\s+Shares)?(?=\s+(CL|Class)\b|$)/gi, '')
+    .replace(/\s+New(?=\s+(CL|Class)\b)/gi, '')
+    .replace(/\s+(?:CL|Class)\s+([A-Za-z])\b/gi, (_, c: string) => ` Class ${c.toUpperCase()}`)
+    .replace(/\s+(?:Ser|SRS)\s+([A-Za-z])\b/gi, (_, c: string) => ` Series ${c.toUpperCase()}`)
+    .replace(/\s+(Sa|SA|AG|Ag|NV|Ab)$/, '')
+    .replace(/,?\s+Co\.,?\s+Ltd\.?$/, '')
+    .replace(/\bMc([a-z])(?=[a-z]{2})/g, (_, c: string) => `Mc${c.toUpperCase()}`)
+    .replace(/'S\b/g, '’s')
+}
 export function issuerName(n: string | null | undefined): string {
   if (!n) return ''
   // EDGAR leftovers: state tags ("Inc/", "Inc./tx", "Inc \\tx\\"), "Plc New", "Pub", "Sab De Cv", "Joint Stock Co".
@@ -89,6 +110,7 @@ export function issuerName(n: string | null | undefined): string {
   // An all-caps filer name ("BITCOIN DEPOT") reads as shouting: title-case its long words.
   if (n.includes(" ") && t === t.toUpperCase() && /[A-Z]{5,}/.test(t)) t = t.replace(/[A-Z]{4,}/g, (w) => w[0] + w.slice(1).toLowerCase())
   let s = t.replace(/^Coca Cola\b/, 'Coca-Cola').replace(/\s+Public(\s+(Ltd|Limited)(\s+(Co|Company))?)?\.?$/i, '').replace(/\s+(Plc|PLC)\s+(Ireland|Jersey|Bermuda|Jersey\s+Ltd)$/i, '').replace(/\s+(Ireland|Bermuda|Jersey|Cayman Islands)$/i, '').replace(/\s+Ltd\.?\s+Bermuda$/i, '')
+  s = securityWords(s)
   s = s
     .split(' ')
     .map((w) => {
