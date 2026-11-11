@@ -157,6 +157,12 @@ export function apiBase(env: Env, url?: URL): string {
   return (env.API_URL ?? (url ? `${url.origin}/` : 'https://copybook-api.factordynamics.workers.dev/')).replace(/\/+$/, '');
 }
 
+/** The stable public base, gene's Funnel name (FEED_URL): every stored or emailed link (unsubscribe, resume, reasons,
+ * feeds) and the documented /v1 base. Member pages read api.json (the faster quick tunnel) instead. */
+export function stableBase(env: Env, url?: URL): string {
+  return (env.FEED_URL ?? apiBase(env, url)).replace(/\/+$/, '');
+}
+
 /** Base for short-lived links only (a CSV download link, /v1/bulk file URLs): the entry point this request came in on,
  * from the self-hosted front door's x-copybook-public-base (it strips any client copy first). Only known public hosts
  * count, so a client calling Cloudflare directly can't pick the base. Never for stored or emailed links: use apiBase. */

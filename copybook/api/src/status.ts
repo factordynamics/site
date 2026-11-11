@@ -44,7 +44,7 @@ const hourKey = (t: number) => new Date(t).toISOString().slice(0, 13);
 
 let apiBase: { at: number; url: string } | null = null;
 /** The members' API base the site uses (api.json, re-read every 10 minutes). */
-async function membersApi(env: Env, now: number): Promise<string | null> {
+export async function membersApi(env: Env, now: number): Promise<string | null> {
   if (apiBase && now - apiBase.at < 600_000) return apiBase.url;
   if (!env.PUBLIC_URL) return null;
   const r = await fetch(`${env.PUBLIC_URL}api.json`, { signal: AbortSignal.timeout(5000) }).catch(() => null);

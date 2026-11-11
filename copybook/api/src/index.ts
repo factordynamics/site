@@ -8,7 +8,7 @@ import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, previewInbox, sendMail } from './email';
-import { ACTIVE, apiBase, followCounts, logAccess, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
+import { ACTIVE, followCounts, stableBase, logAccess, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, planOf, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
@@ -755,7 +755,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // A member's private alert feed: the token in the path is the only credential, and revocable.
   const feed = path.match(/^\/feed\/([\w-]+)\.(json|rss)$/);
-  if (req.method === 'GET' && feed) return serveFeed(env, feed[1], feed[2] as 'json' | 'rss', `${apiBase(env, url)}${url.pathname}`);
+  if (req.method === 'GET' && feed) return serveFeed(env, feed[1], feed[2] as 'json' | 'rss', `${stableBase(env, url)}${url.pathname}`);
 
   // The data workflow reads which non-curated filers members follow (CIKs only), to back-fill a prior quarter.
   if (req.method === 'GET' && path === '/ingest/followed.json') {
@@ -864,6 +864,12 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   const dl = url.searchParams.get('dl');
   const dlSlug = path.match(/^\/csv\/([a-z0-9-]+)\.csv$/)?.[1];
   if (req.method === 'GET' && dl && dlSlug) {
+    // On the Funnel name a CSV goes to the tunnel with its own single-use link (served here if the tunnel is down).
+    const fwd = await import('./download');
+    if (fwd.viaFunnel(env, req, url)) {
+      const go = await fwd.toTunnel(env, url, null, true);
+      if (go) return go;
+    }
     const p = await verifyToken(env.SESSION_SECRET, dl, 'download');
     const unused = p?.n && p.s === dlSlug && (await env.DB.get(`dl:${p.n}`));
     if (!p || !unused) return json({ ok: false, error: 'download link expired or already used' }, 401, h);
@@ -1060,21 +1066,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       // A seat also sees its team's channel (the Fund owner's), read-only.
       const owner = m.seat_of ? await getMember(env, m.seat_of) : null;
       const team = owner ? { owner, c: await getChannels(env, owner.customer), failing: await getFailures(env, owner.customer) } : undefined;
-      return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), env.FEED_URL ?? apiBase(env, url), await getFailures(env, m.customer), team) }, 200, h);
+      return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), stableBase(env, url), await getFailures(env, m.customer), team) }, 200, h);
     }
     if (req.method === 'PUT' && path === '/channels') {
       // A seat can't save its team's destination (409 already_team_channel); an owner's save clears seats' copies of it.
       const team = m.seat_of ? await getChannels(env, m.seat_of) : undefined;
       const r = await updateChannels(env, m, await body(req), team);
       if (r.ok && channelScope(m) === 'team') await clearSeatDuplicates(env, m);
-      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, env.FEED_URL ?? apiBase(env, url), await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
+      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, stableBase(env, url), await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
     }
     if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, ...(await testChannels(env, m, await getChannels(env, m.customer))) }, 200, h);
     if (path === '/channels/feed' && (req.method === 'POST' || req.method === 'DELETE')) {
       const c = await rotateFeed(env, m, req.method === 'DELETE');
       // A new feed starts with the member's alerts from the last 30 days (at most 20), not empty.
       if (req.method === 'POST') await seedFeed(env, m.customer, await recentFeed(env, m, Date.now()));
-      return json({ ok: true, channels: channelsView(m, c, env.FEED_URL ?? apiBase(env, url), await getFailures(env, m.customer)) }, 200, h);
+      return json({ ok: true, channels: channelsView(m, c, stableBase(env, url), await getFailures(env, m.customer)) }, 200, h);
     }
     return json({ ok: false, error: 'not found' }, 404, h);
   }

@@ -1,5 +1,5 @@
 import { linkBase, type Env } from './env';
-import { authKey, limitHeaders, meter, type ApiKey } from './keys';
+import { authKey, type KeyAuth, limitHeaders, meter, type MeterResult, type ApiKey } from './keys';
 import { secBudget } from './edgar';
 
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
@@ -266,16 +266,33 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
   // The cron sets a per-run SEC budget on this module; a request after it in the same isolate
   // must not inherit a spent one (filing lookups would fail).
   secBudget.left = Math.max(secBudget.left, 30);
-  const auth = await authKey(env, req.headers.get('authorization'));
+  // A download redirected from the Funnel name: its single-use token stands for the key (already metered there).
+  const dl = await import('./download');
+  const redirected = url.searchParams.has('dlt');
+  const auth: KeyAuth = redirected
+    ? ((await dl.redeem<KeyAuth>(env, url)) ?? { ok: false, status: 401, code: 'unauthorized', message: 'This download link is expired or was already used. Request the file again.' })
+    : await authKey(env, req.headers.get('authorization'));
   if (!auth.ok) return v1error(auth.code as ErrorCode, auth.status, auth.message);
-  const r = await meter(env, auth.key.id).hit();
-  const limits = limitHeaders(r);
-  if (!r.allowed) return v1error('rate_limited', 429, undefined, limits);
+  const r: MeterResult | null = redirected ? null : await meter(env, auth.key.id).hit();
+  const limits = r ? limitHeaders(r) : {};
+  if (r && !r.allowed) return v1error('rate_limited', 429, undefined, limits);
+  // On the Funnel name, bulk files and any response over 1 MB answer 302 to the tunnel (served here if it's down).
+  const funnel = !redirected && req.method === 'GET' && dl.viaFunnel(env, req, url);
+  if (funnel && /^\/v1\/bulk\/./.test(path)) {
+    const go = await dl.toTunnel(env, url, auth);
+    if (go) return go;
+  }
   for (const [method, re, handler] of ROUTES) {
     const m = path.match(re);
     if (!m) continue;
     if (req.method !== method) return v1error('bad_request', 405, `Use ${method}.`, limits);
-    const res = await handler({ env, req, url, key: auth.key }, m.slice(1));
+    let res = await handler({ env, req, url, key: auth.key }, m.slice(1));
+    if (funnel && res.ok && res.body) {
+      const buf = await res.arrayBuffer();
+      const go = buf.byteLength > dl.LARGE_BYTES ? await dl.toTunnel(env, url, auth) : null;
+      if (go) return go;
+      res = new Response(buf, res);
+    }
     for (const [k, v] of Object.entries(limits)) res.headers.set(k, v);
     // `weight` in positions turns equity-only on Feb 8, 2027 (RFC 9745 Deprecation, RFC 8594 Sunset).
     if (/\/holdings/.test(path) && res.status === 200) for (const [k, v] of Object.entries(WEIGHT_DEPRECATION(linkBase(env, req, url)))) res.headers.set(k, v);

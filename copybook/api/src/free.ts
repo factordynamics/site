@@ -6,7 +6,7 @@
  */
 import type { Alert13F } from './alerts';
 import { FOOTER, followFiling, previewInbox, sendMail, type Mail } from './email';
-import { apiBase, followCounts, testAddress, type Env, type Member } from './env';
+import { followCounts, stableBase, testAddress, type Env, type Member } from './env';
 import { checkMove, displayCase, UNUSUAL } from './edgar';
 import { changeFollows, type Follows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
 import { bump } from './revenue';
@@ -16,7 +16,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UTM = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
 const etDay = (t: number) => new Date(t - 5 * 3600_000).toISOString().slice(0, 10);
 
-const api = (env: Env) => `${apiBase(env)}/`;
+const api = (env: Env) => `${stableBase(env)}/`;
 
 /** One link that stops the weekly and lifecycle email for this member (alerts and billing email still come). */
 export async function unsubscribeUrl(env: Env, customer: string): Promise<string> {

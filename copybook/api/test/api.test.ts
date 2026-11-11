@@ -3219,6 +3219,44 @@ describe('copybook api', () => {
     expect(gz.headers.get('content-disposition')).toBe('attachment; filename="copybook-13f-2026Q2.csv.gz"');
     const got = new Uint8Array(await gz.arrayBuffer());
     expect([got.length, ...got.slice(0, 4)]).toEqual([1_200_000, 31, 139, 8, 0]);
+
+    // On the Funnel name a bulk file answers 302 to the quick tunnel with a single-use, 5-minute link that needs no
+    // Authorization (clients drop it across hosts); reused or expired gets 401; with the tunnel down, it's served here.
+    const TUN = 'https://quick-tunnel-x.trycloudflare.com/copybook';
+    let tunnelOk = true;
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u) === 'https://pub.test/api.json') return Response.json({ api: `${TUN}/` });
+      if (String(u) === `${TUN}/health?probe=1`) return new Response('{}', { status: tunnelOk ? 200 : 502 });
+      return orig(u, init);
+    });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 11 * 60_000); // past the cached api.json
+    const envF = Object.assign(env, { PUBLIC_URL: 'https://pub.test/' });
+    const viaF = (path: string) => handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), envF);
+    const r302 = await viaF('/v1/bulk/2026Q2.csv.gz');
+    const loc = new URL(r302.headers.get('location')!);
+    expect([r302.status, `${loc.origin}${loc.pathname}`]).toEqual([302, `${TUN}/v1/bulk/2026Q2.csv.gz`]);
+    // The tunnel request: the token alone (gene sees the path without /copybook).
+    const follow = () => handleRequest(new Request(`https://api.test${loc.pathname.replace('/copybook', '')}${loc.search}`), envF);
+    const fetched = await follow();
+    expect([fetched.status, (await fetched.arrayBuffer()).byteLength]).toEqual([200, 1_200_000]);
+    expect((await follow()).status).toBe(401); // single use
+    const late = new URL((await viaF('/v1/bulk/2026Q2.csv.gz')).headers.get('location')!);
+    vi.setSystemTime(Date.now() + 301_000);
+    expect((await handleRequest(new Request(`https://api.test${late.pathname.replace('/copybook', '')}${late.search}`), envF)).status).toBe(401); // expired
+    // A token for one file doesn't open another.
+    const other = new URL((await viaF('/v1/bulk/2026Q2.csv.gz')).headers.get('location')!);
+    expect((await handleRequest(new Request(`https://api.test/v1/bulk/2025Q1.csv.gz${other.search}`), envF)).status).toBe(401);
+    // Small responses stay on the Funnel name; the tunnel down means the file comes straight from here.
+    expect((await viaF('/v1/bulk')).status).toBe(200);
+    tunnelOk = false;
+    vi.setSystemTime(Date.now() + 61_000);
+    const direct = await viaF('/v1/bulk/2026Q2.csv.gz');
+    expect([direct.status, (await direct.arrayBuffer()).byteLength]).toEqual([200, 1_200_000]);
+    vi.useRealTimers();
+    vi.stubGlobal('fetch', orig);
+    Object.assign(env, { PUBLIC_URL: undefined });
   });
 
   it('Copy paid data: the full Flow from R2, a per-stock holder CSV, one CSV across followed funds', async () => {
