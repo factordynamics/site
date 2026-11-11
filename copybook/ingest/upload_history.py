@@ -98,6 +98,16 @@ class Token:
         return self.value
 
 
+def quiet(now: datetime) -> bool:
+    """Inside a COPYBOOK_UPLOAD_QUIET window ("2026-11-11T09:15:00Z/2026-11-11T10:00:00Z", comma-separated): no uploads
+    at all, so gene can be timed with nothing arriving (runner's Funnel probe). Unsent files go next run."""
+    for w in filter(None, (os.environ.get("COPYBOOK_UPLOAD_QUIET") or "").split(",")):
+        a, b = (datetime.fromisoformat(x.strip().replace("Z", "+00:00")) for x in w.split("/"))
+        if a <= now < b:
+            return True
+    return False
+
+
 def edgar_hours(now: datetime) -> bool:
     """Weekdays 11:00-03:00 UTC (EDGAR's 6am-10pm ET) from QUIET_FROM: members' hours on gene."""
     if now < QUIET_FROM or 3 <= now.hour < 11:
@@ -176,6 +186,9 @@ def main() -> int:
     sent = 0
     try:
         for batch in bundles(todo):
+            if quiet(datetime.now(timezone.utc)):
+                print(f"upload: quiet window (COPYBOOK_UPLOAD_QUIET); {len(todo) - sent} files wait for the next run", flush=True)
+                break
             if time.monotonic() - started > UPLOAD_BUDGET_S:
                 print(f"::warning::upload budget reached; {len(todo) - sent} files wait for the next run", flush=True)
                 break
