@@ -4,7 +4,10 @@ import { Skeleton } from '../components/ui'
 import { apiReady } from '../config'
 import { loadLatency, type Latency } from '../lib/account'
 import { useAsync, useTick, useTitle } from '../lib/data'
-import { HOSTING, INCIDENTS } from '../lib/hosting'
+import { HOST_MOVE, HOSTING, INCIDENT_RULE, INCIDENTS } from '../lib/hosting'
+import { DATA, displayName } from '../lib/data'
+import { loadExpected } from '../lib/stocks'
+import { isEdgarDay } from '../lib/calendar.mjs'
 
 // /status/: live state of each part of Copybook, read in the browser from the same public sources the site
 // uses (api.json and latency.json on R2, and the API's /health), rechecked every minute. Nothing is typed in
@@ -81,6 +84,14 @@ export function Status() {
   }, [])
 
   const pr = p.data
+  // Data: freshness from the last data build, and ingest's corrections and incidents (data/changelog.json).
+  const fresh = useAsync(loadExpected, [tick])
+  const log = useAsync(() => fetch(`${DATA}changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ entries: { id: string; date: string; kind: string; title: string }[] }>) : null)), [])
+  const builtAt = fresh.data?.generated_at ? Date.parse(fresh.data.generated_at) : null
+  const lagS = builtAt ? (Date.now() - builtAt) / 1000 : null
+  const filingDay = isEdgarDay(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }))
+  const dataTone: Tone = lagS == null ? (fresh.loading ? 'wait' : 'warn') : filingDay && lagS > 2 * 3600 ? 'warn' : 'up'
+  const dataIssues = (log.data?.entries ?? []).filter((e) => e.kind === 'correction' || e.kind === 'incident')
   const l = lat.data as Lat | null | undefined
   const h = pr?.health ?? null
   const checking = !pr
@@ -106,6 +117,8 @@ export function Status() {
           ? { tone: 'warn', text: 'Filing alerts are delayed' }
           : degraded.length
             ? { tone: 'warn', text: 'Some API routes are degraded' }
+            : lagS != null && dataTone === 'warn'
+              ? { tone: 'warn', text: 'Filing data is behind' }
             : { tone: 'up', text: 'All systems normal' }
 
   return (
@@ -148,6 +161,10 @@ export function Status() {
               >
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
               </Row>
+              <Row name="Filing data" tone={dataTone} state={lagS == null ? 'Not known yet' : `Last data build ${ago(lagS)} ago${dataTone === 'warn' ? ', later than usual for a filing day' : ''}`}>
+                {fresh.data?.latest_13f ? `Newest 13F in the data: ${displayName(fresh.data.latest_13f.manager)}${fresh.data.latest_13f.filing_date ? `, filed ${new Date(`${fresh.data.latest_13f.filing_date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : ''}. ` : ''}
+                Rebuilt about every 20 minutes on filing days; past 2 hours this turns amber.
+              </Row>
               <Row name="Filing pages" tone="up" state="Up">
                 Stock, fund and filing pages are static files, so they stay up when the member API is down.
               </Row>
@@ -166,6 +183,7 @@ export function Status() {
 
       <section className="mt-10 max-w-3xl">
         <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Incidents</h2>
+        <p className="mt-1.5 text-[13.5px] text-ink-3">{INCIDENT_RULE}</p>
         <ol className="mt-3 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
           {INCIDENTS.map(([when, what]) => (
             <li key={when} className="py-3 text-[14px] leading-relaxed">
@@ -175,6 +193,7 @@ export function Status() {
           ))}
         </ol>
         <p className="mt-4 text-[14px] leading-relaxed text-ink-2">{HOSTING.shared}</p>
+        <p className="mt-3 text-[14px] leading-relaxed text-ink-2">{HOST_MOVE}</p>
         <p className="mt-4 text-[14px] leading-relaxed text-ink-2">
           What happens to alerts during each kind of outage is on the{' '}
           <Link to="/speed/#availability" className="font-medium text-accent hover:text-accent-2">
@@ -197,6 +216,31 @@ export function Status() {
           </a>{' '}
           and the API’s <code className="font-mono">/health</code>.
         </p>
+      </section>
+
+      <section className="mt-10 max-w-3xl" aria-labelledby="data">
+        <h2 id="data" className="text-[22px] font-semibold tracking-[-0.02em]">
+          Data
+        </h2>
+        <p className="mt-1.5 text-[13.5px] text-ink-3">Errors in the filing data and how they were fixed, newest first. Each links to its entry in the methodology changelog.</p>
+        {log.loading ? (
+          <Skeleton className="mt-3 h-24 w-full" />
+        ) : dataIssues.length ? (
+          <ol className="mt-3 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
+            {dataIssues.map((e) => (
+              <li key={e.id} className="py-3 text-[14px] leading-relaxed">
+                <span className="num block text-[12.5px] text-ink-3">
+                  {new Date(`${e.date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })} · {e.kind === 'incident' ? 'Incident' : 'Correction'}
+                </span>
+                <Link to={`/methodology/#${e.id}`} className="text-ink-2 hover:text-accent">
+                  {e.title}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-3 text-[14px] text-ink-2">The methodology changelog didn’t load. It’s on the <Link to="/methodology/" className="font-medium text-accent hover:text-accent-2">methodology page</Link>.</p>
+        )}
       </section>
     </div>
   )

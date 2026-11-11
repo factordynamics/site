@@ -44,8 +44,13 @@ export const OUTAGES: [string, string][] = [
 ]
 
 // Newest first, in UTC. Every incident that made member pages or alerts unavailable or slow.
+/** Where the API host is going (no date until the DNS move). */
+export const HOST_MOVE = 'The API host will move to api.copybook.factordynamics.com. Key holders get email and a changelog entry at least 7 days before the old host stops working.'
+/** What the incident list counts. */
+export const INCIDENT_RULE = 'Listed: unplanned outages and slowdowns over 1 minute that affected member pages, the API or alerts. Deploy restarts under 60 seconds aren’t listed.'
 export const INCIDENTS: [string, string][] = [
   ['Nov 9, 2026 · 08:15–09:29 UTC', 'The API was slow and briefly unavailable (restarted six times between 08:17 and 08:46) because an unrelated 1.1 TB job on the same machine saturated its disk. 12 member and API requests reached the API during the window; requests that arrived during a restart failed and weren’t logged. Alerts were not affected (Cloudflare’s poller sends them). Fix: no bulk disk jobs on the host on deadline days, and the watchdog no longer restarts the API while the disk is saturated.'],
+  ['Nov 9, 2026 · 05:41–05:48 UTC', 'Holders and /v1 holders returned 503 “busy” on both hosts. Other pages and alerts were not affected.'],
   ['Nov 9, 2026 · 05:31–05:33 UTC', 'A failed deploy of the API, rolled back. No alerts were missed.'],
   ['Nov 9, 2026 · 05:01–05:28 UTC', 'Member pages and the API were slow or unavailable: network saturation on the API machine. No alerts were missed.'],
   ['Nov 9, 2026 · 03:54–05:01 UTC', 'Member pages (account, My book) and the API were unavailable: the API hit Cloudflare’s daily request quota. The API moved to a dedicated machine. No alerts were missed.'],
