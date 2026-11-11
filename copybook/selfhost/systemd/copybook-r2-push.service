@@ -1,0 +1,7 @@
+[Unit]
+Description=Copybook: copy h/ objects from gene's local R2 to Cloudflare's copybook-history (missing or older there)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/copybook-api/ops/r2-push-run.sh
