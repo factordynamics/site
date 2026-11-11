@@ -45,6 +45,10 @@ export type Holding = {
   suspect_units?: boolean
   /** Ingest's units check: why the share count looks wrong, and whether the implied price is off the market's. */
   suspect_reason?: string | null
+  /** Why ingest held a row out (e.g. "possible_cusip_change"); shown in plain words. */
+  held_reason?: string | null
+  /** "different_security": a note and its common stock, each its own row and never compared. */
+  cusip_pair?: string | null
   price_outlier?: boolean
   value_basis?: string | null
   /** Ingest's verdict on a flagged line: which of its figures can't be trusted. */
@@ -55,7 +59,7 @@ export type Holding = {
 
 /** Which figures of a flagged line can't be trusted: its value ("value"), its share counts ("shares"), or both. */
 export type Flag = 'value' | 'shares' | 'both'
-type Flaggable = { unreliable?: unknown; suspect_units?: boolean | null; suspect_reason?: string | null; change?: string | null; value?: number; shares?: number; prev_value?: number | null; prev_shares?: number | null; filed_price?: number | null }
+type Flaggable = { unreliable?: unknown; suspect_units?: boolean | null; suspect_reason?: string | null; held_reason?: string | null; change?: string | null; value?: number; shares?: number; prev_value?: number | null; prev_shares?: number | null; filed_price?: number | null }
 /** Ingest's `unreliable` kind; a row flagged only by the older fields (suspect_units, change "unknown", a pre-split
  *  count kept under a reissue's new CUSIP) is "both". Null for a clean row, so data without the fields renders as before. */
 export const flagOf = (h: Flaggable): Flag | null =>
@@ -73,7 +77,9 @@ export function flagNote(h: Flaggable): string | null {
   const fresh = h.change === 'new' || !h.prev_shares
   const shares = h.shares == null ? null : fresh ? `${sharesFmt(h.shares)} shares (new)` : `${sharesFmt(h.prev_shares!)} → ${sharesFmt(h.shares)} shares`
   const value = h.value == null ? null : fresh || h.prev_value == null ? money(h.value) : `${money(h.prev_value)} → ${money(h.value)}`
-  const reason = f === 'value' ? 'this filing’s dollar value looks wrong; share change only' : f === 'shares' ? 'share counts don’t reconcile' : reissue ? 'a pre-split count kept under the new CUSIP' : 'share count and value both unreliable'
+  // Ingest's own reason wins, in plain words: "possible_cusip_change" reads "possible CUSIP change" (PM, Nov 11).
+  const held = h.held_reason ? h.held_reason.replace(/_/g, ' ').replace(/\bcusip\b/i, 'CUSIP') : null
+  const reason = held ?? (f === 'value' ? 'this filing’s dollar value looks wrong; share change only' : f === 'shares' ? 'share counts don’t reconcile' : reissue ? 'a pre-split count kept under the new CUSIP' : 'share count and value both unreliable')
   const facts = [shares, value].filter(Boolean).join('; ')
   return facts ? `As filed: ${facts}; ${reason}` : reason.charAt(0).toUpperCase() + reason.slice(1)
 }

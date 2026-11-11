@@ -269,12 +269,12 @@ export function ApiDocs() {
                   <tbody>
                     {op.parameters.map((p) => (
                       <tr key={p.name} className="border-b border-line last:border-0">
-                        <td className="py-2 pr-3 font-mono text-[12.5px]">
+                        <td className="py-2 pr-3 font-mono text-[12.5px] [overflow-wrap:anywhere]">
                           {p.name}
                           {p.required && <span className="text-down">*</span>}
                         </td>
                         <td className="py-2 pr-3 text-ink-3">{p.in}</td>
-                        <td className="py-2 text-ink-2">{docText(p.description)}</td>
+                        <td className="py-2 text-ink-2 [overflow-wrap:anywhere]">{docText(p.description)}</td>
                       </tr>
                     ))}
                   </tbody>

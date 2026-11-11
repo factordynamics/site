@@ -55,7 +55,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
     sections: [
       ['The data', 'Copybook shows information from public SEC EDGAR filings (Forms 13F-HR, 13F-NT, 4 and Schedules 13D and 13G), as filed, with the processing described on our methodology page. Filings can be late, amended or wrong, and our processing can be wrong too. Everything is provided as is, with no warranty of accuracy, completeness or timeliness.'],
       ['Not investment advice', 'Nothing on Copybook is a recommendation to buy or sell a security. A 13F leaves out short positions, most non-US holdings, cash and more, and is filed up to 45 days after the quarter ends. Make your own decisions.'],
-      ['Accounts and plans', 'Paid plans renew automatically until you cancel from Manage billing. A free trial converts to a paid plan at its end unless you cancel before then. After a paid period starts, you keep access until it ends; we don’t refund partial periods unless the law requires it. If we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.'],
+      ['Accounts and plans', 'Paid plans renew automatically until you cancel from Manage billing. A Copy trial started without a card ends on its own at day 14 and nothing is charged; if you add a card, it continues as a paid plan. A Copy Pro or Copy Fund trial converts to a paid plan at its end unless you cancel before then; a Copy Fund trial billed by invoice is invoiced on day 14, net 30. After a paid period starts, you keep access until it ends; we don’t refund partial periods unless the law requires it. If we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.'],
       [
         'Copy Fund',
         <>

@@ -147,7 +147,7 @@ export function Contact() {
             <a href="mailto:hello@factordynamics.com" className="text-accent hover:text-accent-2">
               hello@factordynamics.com
             </a>
-            . We reply within one business day.
+            . We aim to reply within one business day.
           </p>
           <p className="mt-3 text-[13.5px] text-ink-3">
             Copybook is operated by Factor Dynamics. See our <Link to="/terms/" className="underline underline-offset-2 hover:text-ink">terms</Link>, <Link to="/privacy/" className="underline underline-offset-2 hover:text-ink">privacy</Link> and{' '}
@@ -185,7 +185,7 @@ export function Contact() {
               ) : (
                 <>
                   <h2 className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">Thanks, it’s sent.</h2>
-                  <p className="mt-2 text-[15px] text-ink-2">{fund ? 'We’ll reply within one business day with your invoice and team access.' : 'We’ll reply by email, usually within one business day.'}</p>
+                  <p className="mt-2 text-[15px] text-ink-2">{fund ? 'We aim to reply within one business day with your invoice and team access.' : 'We’ll reply by email, usually within one business day.'}</p>
                 </>
               )}
             </div>
@@ -214,7 +214,7 @@ export function Contact() {
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {([
                       [true, 'Start a 14-day trial now', '14-day trial, no card. Invoice on day 14, Net 30.'],
-                      [false, 'Talk to us first', 'We reply within one business day.'],
+                      [false, 'Talk to us first', 'We aim to reply within one business day.'],
                     ] as const).map(([v, t, d]) => (
                       <label key={t} className={`cursor-pointer rounded-xl px-3.5 py-2.5 text-[14px] ${trial === v ? 'bg-ink/[0.04] shadow-[0_0_0_2px_var(--color-ink)]' : 'shadow-[0_0_0_1px_var(--color-line-2)] hover:bg-ink/[0.03]'}`}>
                         <input type="radio" name="start" checked={trial === v} onChange={() => setTrial(v)} className="sr-only" />
@@ -306,7 +306,7 @@ export function Contact() {
                 <Button type="submit" disabled={state === 'sending'}>
                   {state === 'sending' ? 'Sending…' : invoiceTrial ? 'Start the 14-day trial' : fund ? 'Request Fund access' : topic === 'delete' ? 'Request deletion' : 'Send'}
                 </Button>
-                {fund && state !== 'error' && <p className="text-[13px] text-ink-3">{invoiceTrial ? 'Starts at once; your sign-in link comes by email.' : 'We reply within one business day.'}</p>}
+                {fund && state !== 'error' && <p className="text-[13px] text-ink-3">{invoiceTrial ? 'Starts at once; your sign-in link comes by email.' : 'We aim to reply within one business day.'}</p>}
                 {state === 'error' &&
                   (notice ? (
                     <p role="status" className="text-[13.5px] text-ink-2">

@@ -46,7 +46,7 @@ export function ManagerPage() {
       .map((h) => {
         const per = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value || 0) / h.prev_shares : 0
         const delta = h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
-        const note = splitApplied(h) ? `split ${splitRatio(h.split!.ratio)} adjusted` : h.prev_cusip ? 'CUSIP change' : ''
+        const note = splitApplied(h) ? `split ${splitRatio(h.split!.ratio)} adjusted` : h.cusip_pair === 'different_security' ? 'different security, not compared' : h.prev_cusip ? 'CUSIP change' : ''
         return { key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: [h.change, note].filter(Boolean).join(' · '), delta }
       })
       .filter((x) => x.delta !== 0)
@@ -391,7 +391,12 @@ export function ManagerPage() {
                       ) : (
                         !h.issuer.includes('Class') && shareClass(h.title) && <Badge className="shrink-0">{shareClass(h.title)}</Badge>
                       )}
-                      {h.prev_cusip && h.prev_cusip !== h.cusip && (
+                      {h.cusip_pair === 'different_security' && (
+                        <span className="shrink-0" title="A note and its common stock: each is its own position and they aren't compared">
+                          <Badge>different security, not compared</Badge>
+                        </span>
+                      )}
+                      {h.cusip_pair !== 'different_security' && h.prev_cusip && h.prev_cusip !== h.cusip && (
                         <span className="shrink-0" title={`CUSIP change ${h.prev_cusip} → ${h.cusip}: last quarter's position is matched under the old CUSIP`}>
                           <Badge>
                             CUSIP change<span className="hidden font-mono text-[11px] lg:inline"> {h.prev_cusip} → {h.cusip}</span>

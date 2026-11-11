@@ -407,7 +407,7 @@ function Webhook({ c, onSave, note }: { c: Channels; onSave: (b: Put) => Promise
       name={<>Signed webhook{vbadge(c, 'webhook')}</>}
       hint={
         <>
-          A JSON POST to your endpoint for each alert, signed in the <span className="font-mono text-[12px]">Copybook-Signature</span> header (HMAC-SHA256 of <span className="font-mono text-[12px]">t.body</span>). Failed deliveries retry for 12 hours.
+          A JSON POST to your endpoint for each alert, signed in the <span className="font-mono text-[12px]">Copybook-Signature</span> header (HMAC-SHA256 of <span className="font-mono text-[12px]">t.body</span>). Failed deliveries retry 5 times over about 15 hours.
         </>
       }
     >

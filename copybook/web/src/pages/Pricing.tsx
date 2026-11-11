@@ -49,7 +49,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
       { t: 'API keys and docs', d: 'Up to 10 keys, with usage on your account page. 60 requests a minute and 20,000 a day per account, across all its keys. Each Fund seat has its own limit. Bulk file downloads aren’t metered.' },
       { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, as JSON. History: ${HISTORY_EXACT}` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
-      { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
+      { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried 5 times over about 15 hours if it fails.' },
       { t: 'Holders, history and events endpoints', d: 'Every filer holding a stock, a filer’s books across a range of quarters, and Form 4 and 13D/G events, as JSON.' },
       { t: 'Bulk CSV exports', d: 'One gzip CSV per quarter of every filer’s 13F book, covering 2026Q1–Q3. Each file is the filer’s current version, with per-row accepted_at, source_accession, first_disclosed_at and change.' },
       BOOK_PRO,
@@ -102,7 +102,7 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Bulk CSV exports (as filed)', false, false, true, true],
   ['My book lite: superinvestors in your names', false, true, true, true],
   ['Full My book: every 13F filer (holders, crowding, peers), 13F linking, CSV', false, false, true, true],
-  ['New, exited and net trades for all filers in My book (tracked funds today)', false, false, 'by Nov 20', 'by Nov 20'],
+  ['New, exited and net trades in My book for hedge funds and long-only managers (tracked funds today)', false, false, 'by Nov 20', 'by Nov 20'],
   ['Peer overlap', false, false, true, true],
   ['Seats', '1', '1', '1', `${FUND_SEATS}`],
   ['Shared book and peer lists', false, false, false, true],
@@ -454,7 +454,7 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (each filer’s current version, with per-row filing timestamps), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for all filers in My book by Nov 20, as_of point-in-time queries from Nov 30 (per-row filing timestamps are live now), history back to 2013Q2 by Dec 31 (today: ${HISTORY_EXACT.replace(/ History back.*/, '').replace(/\.$/, '')}), and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30. Net-30 invoicing is for Fund; Pro is paid by card, with a full invoice.`,
+                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (each filer’s current version, with per-row filing timestamps), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for hedge funds and long-only managers in My book by Nov 20, as_of point-in-time queries from Nov 30 (per-row filing timestamps are live now), history back to 2013Q2 by Dec 31 (today: ${HISTORY_EXACT.replace(/ History back.*/, '').replace(/\.$/, '')}), and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30. Net-30 invoicing is for Fund; Pro is paid by card, with a full invoice.`,
               ],
               [
                 'How does the free trial work?',

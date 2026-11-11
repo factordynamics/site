@@ -14,7 +14,7 @@ export const checkout = {
 // A tester can pin one browser to another API with localStorage['copybook-api'] = 'https://…' (there is
 // deliberately no URL parameter for it, since a link could then send a session token elsewhere).
 const okBase = (v: unknown): string | null =>
-  typeof v === 'string' && /^https:\/\/(([a-z0-9-]+\.)+(trycloudflare\.com|factordynamics\.com)|gene\.tail70ba3\.ts\.net|copybook-api\.factordynamics\.workers\.dev)(\/[^\s?#]*)?$/i.test(v) ? v.replace(/\/$/, '') : null
+  typeof v === 'string' && /^https:\/\/(([a-z0-9-]+\.)+(trycloudflare\.com|factordynamics\.com)|[a-z0-9-]+\.tail[0-9a-f]+\.ts\.net|copybook-api\.factordynamics\.workers\.dev)(\/[^\s?#]*)?$/i.test(v) ? v.replace(/\/$/, '') : null
 const stored = (k: string) => {
   try {
     return localStorage.getItem(k)
@@ -111,4 +111,4 @@ export const FUND_WHY = 'Why not separate Pro seats? Pro seats don’t share a b
 export const FUND_SEATS = 10
 /** Measured alert-speed figures outside /speed/ (marketing pages). Off until the lead clears speed claims after Nov 16. */
 export const SPEED_CLAIMS = false
-export const BOOK_PRO = { t: 'Full My book', d: 'Your names against every 13F filer (holders, crowding, peers), 13F linking, CSV and API. New, exited and net trades are for tracked funds today; all filers by Nov 20.' }
+export const BOOK_PRO = { t: 'Full My book', d: 'Your names against every 13F filer (holders, crowding, peers), 13F linking and CSV; the same holder data through the API’s holders endpoint. New, exited and net trades are for tracked funds today; hedge funds and long-only managers by Nov 20.' }
