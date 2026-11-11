@@ -506,7 +506,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const p = await pollerStatus(env, Date.now());
       const { total, last_7d } = await (await import('./alerts')).dupesBlocked(env);
       const meter = JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') as { day?: string; used?: number; kinds?: unknown } | null;
-      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null, dupes_blocked: { total, last_7d }, mail_kinds: meter?.day ? { day: meter.day, used: meter.used ?? 0, ...((meter.kinds as object) ?? {}), waiting_now: { retry: (JSON.parse((await env.DB.get('host:mail-retry')) ?? '[]') as unknown[]).length, delayed: (JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as unknown[]).length } } : null }, 200, { 'cache-control': 'no-store' });
+      return json({ ok: true, ...(await thisHost(env)), api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null, dupes_blocked: { total, last_7d }, mail_kinds: meter?.day ? { day: meter.day, used: meter.used ?? 0, ...((meter.kinds as object) ?? {}), waiting_now: { retry: (JSON.parse((await env.DB.get('host:mail-retry')) ?? '[]') as unknown[]).length, delayed: (JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as unknown[]).length } } : null }, 200, { 'cache-control': 'no-store' });
     }
     // Seconds from EDGAR acceptance to handing the alert to the mailer, for the latest alerted filings.
     // Live alerts only (test replays excluded); ?latency=all returns every stored one instead of the latest 10.
@@ -525,7 +525,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // Alerts the per-member sent record stopped from reaching a member twice: total, the last 7 UTC days, per day.
     const dupes_blocked = await (await import('./alerts')).dupesBlocked(env);
     const { pollerStatus } = await import('./failover');
-    return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, dupes_blocked, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: await (async () => {
+    return json({ ok: true, ...(await thisHost(env)), api_build: env.BUILD_SHA?.slice(0, 12) ?? null, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, dupes_blocked, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: await (async () => {
       const { mailQuota, kindsView } = await import('./email');
       const m = (JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? mailQuota) as typeof mailQuota;
       // Alert emails handed to the mailer this UTC day, by hour (both hosts: stats:sent is synced).
@@ -1632,6 +1632,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   return json({ ok: false, error: 'not found' }, 404, h);
 }
 
+/** The host answering this request (gene or cloudflare) and its own mail tally by kind, top level on /health. */
+async function thisHost(env: Env): Promise<{ this_host: string; by_kind: unknown; proxied: false }> {
+  const { mailQuota, kindsView } = await import('./email');
+  const m = (JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? mailQuota) as typeof mailQuota;
+  return { this_host: (await import('./failover')).isCloudflare(env) ? 'cloudflare' : 'gene', by_kind: kindsView(m.used, m.kinds), proxied: false };
+}
+
 /** /health's last read of the public status.json (once a minute per isolate). */
 let STATUS_READ: { at: number; body: unknown } | null = null;
 
@@ -1693,6 +1700,15 @@ async function proxyApi(req: Request, env: Env, base: string): Promise<Response>
     }
     // Never a permanent redirect from this name: clients and feed readers cache those.
     const status = r.status === 301 || r.status === 308 ? 307 : r.status;
+    // /health answered through this Worker names this Worker (the front door that answered) on top of the live host's
+    // body, which stays whole under upstream: a monitor tells a proxied answer from a failed-over one.
+    if (u.pathname === '/health' && r.ok && (r.headers.get('content-type') ?? '').includes('json')) {
+      const b = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+      if (b) {
+        for (const k of ['content-length', 'content-encoding', 'etag']) out.delete(k);
+        return new Response(JSON.stringify({ ...b, ...(await thisHost(env)), proxied: true, upstream: { this_host: b.this_host ?? b.api_host ?? null, by_kind: b.by_kind ?? null, api_build: b.api_build ?? null } }), { status, headers: out });
+      }
+    }
     return new Response(r.body, { status, headers: out });
   } catch {
     return unavailable();

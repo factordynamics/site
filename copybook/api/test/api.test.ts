@@ -2642,6 +2642,7 @@ describe('copybook api', () => {
       if (path.startsWith('/v1/bulk/')) return new Response(null, { status: 302, headers: { location: 'https://r2.example/file.csv.gz?sig=1' } });
       if (path === '/old') return new Response(null, { status: 308, headers: { location: `${LIVE}/new?x=1` } });
       if (path === '/down') throw new Error('connect failed');
+      if (path.startsWith('/health')) return Response.json({ ok: true, this_host: 'gene', by_kind: { real: 2 }, proxied: false, api_host: 'gene', api_build: 'gene00000001' }, { headers: { 'content-length': '999' } });
       return Response.json({ ok: true, path }, { headers: { 'x-ratelimit-remaining': '59' } });
     });
     const wenv0 = { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env;
@@ -2654,6 +2655,12 @@ describe('copybook api', () => {
     expect((await at('/v1/bulk/holdings.csv.gz')).headers.get('location')).toBe('https://r2.example/file.csv.gz?sig=1');
     const old = await at('/old');
     expect([old.status, old.headers.get('location')]).toEqual([307, 'https://copybook-api.factordynamics.workers.dev/new?x=1']);
+    // /health through this Worker names the Worker that answered (the PM: both bodies read the same, gene's), with its
+    // own mail tally, and keeps the live host's under upstream.
+    for (const hp of ['/health', '/health?probe=1']) {
+      const hb = await (await at(hp)).json();
+      expect([hb.this_host, hb.proxied, hb.api_host, hb.upstream, typeof hb.by_kind?.real]).toEqual(['cloudflare', true, 'gene', { this_host: 'gene', by_kind: { real: 2 }, api_build: 'gene00000001' }, 'number']);
+    }
     // The live host unreachable: 503 with Retry-After, not a redirect.
     const down = await at('/v1/down'.replace('/v1', ''));
     expect([down.status, down.headers.get('retry-after'), down.headers.get('location')]).toEqual([503, '30', null]);
@@ -2698,9 +2705,14 @@ describe('copybook api', () => {
     const later = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000);
     const own = await worker.fetch(new Request('https://copybook-api.factordynamics.workers.dev/health'), { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env);
     later.mockRestore();
-    expect([own.status, (await own.json()).ok]).toEqual([200, true]);
+    const ob = await own.json();
+    expect([own.status, ob.ok, ob.this_host, ob.proxied, ob.upstream]).toEqual([200, true, 'cloudflare', false, undefined]);
     vi.stubGlobal('fetch', orig);
-    expect([301, 307, 308]).not.toContain((await worker.fetch(new Request('https://api.test/health'), env)).status);
+    const gh = await worker.fetch(new Request('https://api.test/health'), env);
+    expect([301, 307, 308]).not.toContain(gh.status);
+    const gb = await gh.json();
+    expect([gb.this_host, gb.proxied, typeof gb.by_kind]).toEqual(['gene', false, 'object']);
+    expect((await (await worker.fetch(new Request('https://api.test/health?probe=1'), env)).json()).this_host).toBe('gene');
     // One-click unsubscribe for a member only gene has so far (just signed up; the minute sync copies 40 keys a minute):
     // the Worker reads gene's published copy, records the unsubscribe, and publishes it for gene.
     const r2 = new MemR2();
