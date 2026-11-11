@@ -48,7 +48,7 @@ export function ManagerPage() {
         const per = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value || 0) / h.prev_shares : 0
         // An issuer row over several classes: ingest's own sum of each class at its own price, never summed shares.
         const delta = h.classes?.length ? (h.value_delta ?? 0) : h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
-        const note = splitApplied(h) ? `split ${splitRatio(h.split!.ratio)} adjusted` : h.cusip_pair === 'different_security' ? 'different security, not compared' : h.cusip_pair === 'merged_misfiled' ? 'misfiled CUSIP, treated as common' : h.prev_cusip ? 'CUSIP change' : ''
+        const note = splitApplied(h) ? `split ${splitRatio(h.split!.ratio)} adjusted` : h.cusip_pair === 'different_security' ? 'different security, not compared' : h.cusip_pair === 'merged_misfiled' ? 'misfiled CUSIP, treated as common' : h.cusip_pair === 'possible_cusip_change' ? 'possible CUSIP change' : h.prev_cusip ? 'CUSIP change' : ''
         const move = h.mixed || (h.change as string) === 'mixed' ? mixedLabel(h) : h.change
         return { key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: [move, note].filter(Boolean).join(' · '), sub: h.classes?.length ? h.classes.map(classLine).join(' · ') : undefined, delta }
       })
@@ -399,7 +399,7 @@ export function ManagerPage() {
                           <Badge>different security, not compared</Badge>
                         </span>
                       )}
-                      {h.cusip_pair !== 'different_security' && h.cusip_pair !== 'merged_misfiled' && h.prev_cusip && h.prev_cusip !== h.cusip && (
+                      {!['different_security', 'merged_misfiled', 'possible_cusip_change'].includes(h.cusip_pair ?? '') && h.prev_cusip && h.prev_cusip !== h.cusip && (
                         <span className="shrink-0" title={`CUSIP change ${h.prev_cusip} → ${h.cusip}: last quarter's position is matched under the old CUSIP`}>
                           <Badge>
                             CUSIP change<span className="hidden font-mono text-[11px] lg:inline"> {h.prev_cusip} → {h.cusip}</span>

@@ -25,6 +25,8 @@ import { addCard, switchYearly, ApiError, call, errText, pendingEmail, needsVeri
 import { copyCheckout } from '../lib/attribution'
 
 const ADD_CARD = 'copybook-add-card'
+// The day-12 and trial-ending emails' ?pause=1: open Cancel on the pause offer, once /me has one (after a card is added).
+const PAUSE = 'copybook-pause'
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; back?: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'used'; error: string } | { kind: 'off' } | { kind: 'down' }
 
 export function Account() {
@@ -49,6 +51,7 @@ export function Account() {
     // The Berkshire alert's link for a cardless trial (payments, Nov 11): sign in, then land on the add-card choice.
     const ac = params.get('add_card')
     if (ac === 'yearly' || ac === 'monthly') sessionStorage.setItem(ADD_CARD, ac)
+    if (params.get('pause') === '1') sessionStorage.setItem(PAUSE, '1')
     const run = async () => {
       try {
         let member: Member
@@ -1106,6 +1109,26 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
   const offer = member.pause_after_trial ? null : member.pause_offer
   // Trialing monthly members: the pause starts when the trial ends, so nothing is charged until it's over.
   const afterTrial = Boolean(offer?.starts && Date.parse(String(offer.starts)) > Date.now())
+  const box = useRef<HTMLDivElement>(null)
+  // ?pause=1 (an email's link): open on the offer once there is one; a cardless trial keeps the ask until its card is added.
+  useEffect(() => {
+    if (!offer || sessionStorage.getItem(PAUSE) !== '1') return
+    sessionStorage.removeItem(PAUSE)
+    setOpen(true)
+    const t = setTimeout(() => box.current?.scrollIntoView({ block: 'center' }), 600)
+    return () => clearTimeout(t)
+  }, [offer])
+  const pause = async () => {
+    setBusy('pause')
+    setErr('')
+    try {
+      await pausePlan(reason ?? undefined)
+      onChange(await fetchMe())
+    } catch (e) {
+      setErr(e instanceof ApiError && e.detail ? e.detail : 'The pause didn’t go through. Please try again.')
+      setBusy(null)
+    }
+  }
   if (!open)
     return (
       <button type="button" onClick={() => setOpen(true)} className="mt-3 min-h-9 text-[13px] text-ink-3 underline underline-offset-2 hover:text-ink-2">
@@ -1114,9 +1137,24 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
       </button>
     )
   return (
-    <div className="mt-5 rounded-xl bg-paper p-4 shadow-[0_0_0_1px_var(--color-line)]">
+    <div ref={box} className="mt-5 rounded-xl bg-paper p-4 shadow-[0_0_0_1px_var(--color-line)]">
+      {/* The pause first (lead, Nov 11): one click, no reason needed; cancelling is below it. */}
+      {offer && (
+        <div className="mb-4 border-b border-line pb-4">
+          <p className="text-[14px] font-medium">Take a break instead</p>
+          {afterTrial ? (
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-2">Your trial continues with everything until {member.trial_end ? timeLabel(member.trial_end) : dayLabel(offer.starts!)}. Then no charges and no real-time alerts until {dayLabel(offer.until)}, two weeks before the {offer.quarter ? offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2') : deadlineQuarter(offer.until)} 13F deadline. Your follows and settings stay.</p>
+          ) : (
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-2">No charges and no real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}.{member.digest_live ? ' The weekly digest of your names keeps coming, your' : ' Your'} follows and settings stay, and we’ll email you before it resumes.</p>
+          )}
+          <Button variant="dark" className="mt-3 h-auto! min-h-10 max-w-full whitespace-normal! py-2 text-left leading-snug" disabled={busy !== null} onClick={pause}>
+            {busy === 'pause' ? 'Pausing…' : (offer.label ?? (afterTrial ? 'Pause after your trial' : `Pause until ${dayLabel(offer.until)}`))}
+          </Button>
+          <p className="mt-2 text-[12px] text-ink-3">A monthly plan can pause once every 12 months, for up to 3 months.</p>
+        </div>
+      )}
       <fieldset>
-        <legend className="text-[14px] font-medium">What’s the main reason?</legend>
+        <legend className="text-[14px] font-medium">{offer ? 'Or cancel: what’s the main reason?' : 'What’s the main reason?'}</legend>
         <div className="mt-2 space-y-1.5 text-[14px]">
           {REASONS.map(([k, l]) => (
             <label key={k} className="flex min-h-8 cursor-pointer items-center gap-2.5">
@@ -1130,25 +1168,6 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="What would have made it worth keeping? (optional)" className="mt-3 w-full rounded-xl bg-card px-3 py-2 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]" />
       )}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        {offer && (
-          <Button
-            variant="dark"
-            disabled={!reason || busy !== null}
-            onClick={async () => {
-              setBusy('pause')
-              setErr('')
-              try {
-                await pausePlan(reason!)
-                onChange(await fetchMe())
-              } catch (e) {
-                setErr(e instanceof ApiError && e.detail ? e.detail : 'The pause didn’t go through. Please try again.')
-                setBusy(null)
-              }
-            }}
-          >
-            {busy === 'pause' ? 'Pausing…' : afterTrial ? 'Pause after your trial' : `Pause until ${dayLabel(offer.until)}`}
-          </Button>
-        )}
         <Button
           variant="outline"
           disabled={!reason || busy !== null}
@@ -1169,8 +1188,6 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
           Keep my plan
         </button>
       </div>
-      {offer && afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">Your trial continues with everything until {member.trial_end ? timeLabel(member.trial_end) : dayLabel(offer.starts!)}. Then no charges and no real-time alerts until {dayLabel(offer.until)}, two weeks before the {offer.quarter ? offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2') : deadlineQuarter(offer.until)} 13F deadline. Your follows and settings stay. A monthly plan can pause once a year, for up to 3 months.</p>}
-      {offer && !afterTrial && <p className="mt-3 text-[12.5px] leading-relaxed text-ink-3">A monthly plan can pause once a year, for up to 3 months. Pausing stops charges and real-time alerts until {dayLabel(offer.until)}{offer.quarter ? `, in time for the ${offer.quarter.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1')} 13F season` : ''}. {member.digest_live ? ' The weekly digest of your names keeps coming, your' : ' Your'} follows and settings stay, and we’ll email you before it resumes.</p>}
       {err && <p role="alert" className="mt-2 text-[13px] text-down">{err}</p>}
     </div>
   )

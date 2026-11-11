@@ -35,7 +35,9 @@ export type Member = {
   /** Paying members' referral link and counts; null for seats, Holdterm and free members. */
   referral?: { code: string; url: string; signups: number; paid: number; months_earned: number } | null
   /** Paying monthly members who aren't paused: "Pause until the next season" (until is a date or unix seconds). */
-  pause_offer?: { until: string | number; quarter?: string; deadline?: string | number; starts?: string | number; note?: string } | null
+  /** Null whenever a pause isn't possible (yearly, seats, a cardless trial, a pause in the last 12 months, already paused).
+   *  label: payments' button text, shown as given ("Pause until Feb 2 (keeps your founding price)"); charges_resume: the day billing restarts. */
+  pause_offer?: { until: string | number; quarter?: string; deadline?: string | number; starts?: string | number; note?: string; label?: string | null; charges_resume?: string | number | null } | null
   /** A pause scheduled for the end of the trial (unix seconds): everything stays on until `from`. */
   pause_after_trial?: { from: number; until: number } | null
   /** While paused (unix seconds): access is off, follows and settings are kept. */
