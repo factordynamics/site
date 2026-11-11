@@ -1744,6 +1744,9 @@ export function Stock({ ticker }: { ticker: string }) {
   const tickers = new Set(d.classes.map((c) => c.ticker))
   // Filings by the investors Holdterm follows, as on /filings.
   const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && inRoster(e.slug) && !ownVehicle(e))
+  // When holders' latest 13Fs span quarters, rows from the newest one stand out (fresh filings this season).
+  const holderQs = [...new Set(holders.map((h) => h.quarter))].sort()
+  const freshQ = holderQs.length > 1 ? holderQs[holderQs.length - 1] : undefined
   const holderCols: Col<StockHolder>[] = [
     // Phones show which 13F under the name instead of an "As of" column, so the name has room to show in full.
     {
@@ -1753,16 +1756,17 @@ export function Stock({ ticker }: { ticker: string }) {
       render: (h) => (
         <span className="holder">
           <Firm name={name(h)} strong={inRoster(h.slug)} />
-          <span className="row-sub show-sm">{quarterLabel(h.quarter)} 13F</span>
+          <span className={`row-sub show-sm${h.quarter === freshQ ? ' fresh' : ''}`}>{quarterLabel(h.quarter)} 13F</span>
         </span>
       ),
       sort: (h) => name(h),
     },
     { key: 'w', label: 'Weight', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight, title: 'Share of the investor’s portfolio' },
-    { key: 'c', label: 'This quarter', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} unclear={h.unclear} />, sort: (h) => h.delta_value ?? 0 },
+    // Rows can come from different quarters' 13Fs, so the column says what it compares rather than "This quarter".
+    { key: 'c', label: 'Change', title: 'Compared with the investor’s previous 13F', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} unclear={h.unclear} />, sort: (h) => h.delta_value ?? 0 },
     { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (h) => num(h.shares), sort: (h) => h.shares },
     { key: 'v', label: 'Value', num: true, hideSm: true, render: (h) => usd(h.value), sort: (h) => h.value },
-    { key: 'q', label: 'As of', num: true, hideSm: true, render: (h) => <span className="dim">{quarterLabel(h.quarter)}</span>, sort: (h) => h.quarter, title: 'The quarter of the 13F each row comes from' },
+    { key: 'q', label: 'As of', num: true, hideSm: true, render: (h) => (h.quarter === freshQ ? <span className="qtag">{quarterLabel(h.quarter)}</span> : <span className="dim">{quarterLabel(h.quarter)}</span>), sort: (h) => h.quarter, title: 'The quarter of the 13F each row comes from; the newest are highlighted' },
   ]
   const fundHref = (h: StockHolder) => (inRoster(h.slug) ? fundPath(fundSlug(h.slug)) : null)
   const held = holders.length > 0 || exited.length > 0 || pick(d.options).length > 0
@@ -1825,7 +1829,7 @@ export function Stock({ ticker }: { ticker: string }) {
         )}
       </p>
       <div className="stats" role="list" aria-label="Ownership at a glance">
-        <Stat label="Investors that own it" value={holders.length} sub={holders.length === prevHolders ? `Same as last quarter` : `${holders.length > prevHolders ? 'Up' : 'Down'} from ${prevHolders} last quarter`} />
+        <Stat label="Investors that own it" value={holders.length} sub={holders.length === prevHolders ? `Same as in their previous 13Fs` : `${holders.length > prevHolders ? 'Up' : 'Down'} from ${prevHolders} in their previous 13Fs`} />
         <Stat label="Value they hold" value={usd(value)} sub="In their latest 13Fs" />
         <Stat label="Bought more" value={plural(nNew + cnt('added'), 'investor')} tone={nNew + cnt('added') > 0 ? 'pos' : undefined} sub={`${num(nNew)} new, ${num(cnt('added'))} added`} />
         <Stat label="Sold some or all" value={plural(cnt('trimmed') + exited.length, 'investor')} tone={cnt('trimmed') + exited.length > 0 ? 'neg' : undefined} sub={`${num(cnt('trimmed'))} trimmed, ${num(exited.length)} sold out`} />

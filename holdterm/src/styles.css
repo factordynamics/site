@@ -1727,6 +1727,10 @@ a.hb-row:hover {
   .due.small {
     line-height: 1.6;
   }
+  .row-sub.show-sm.fresh {
+    color: var(--acc);
+    font-weight: 600;
+  }
   .row-sub.show-sm {
     display: block;
     margin-top: 2px;
@@ -1746,6 +1750,9 @@ a.hb-row:hover {
   /* A stock's investors: the name takes the room the hidden columns leave (still at most two lines). */
   .holder .firm {
     max-width: none;
+    /* One long word ("Fondsmaeglerselskab") may break rather than widen the table past the screen. */
+    overflow-wrap: anywhere;
+    -webkit-line-clamp: 3;
   }
   /* Stake and insider filings: the investor's name wraps within a set width, so the company gets the rest. */
   .grid:has(.iss) td .firm {
