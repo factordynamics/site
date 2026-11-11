@@ -13,7 +13,7 @@ import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { loadExpected, seasonStatus, stockPath } from '../lib/stocks'
 import { isReadOnly, refreshFollows, setFollow } from '../lib/follows'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Signup } from '../components/Signup'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
@@ -23,6 +23,7 @@ import { ConfirmEmail } from '../components/ConfirmEmail'
 import { addCard, switchYearly, ApiError, call, errText, pendingEmail, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 import { copyCheckout } from '../lib/attribution'
 
+const ADD_CARD = 'copybook-add-card'
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'used'; error: string } | { kind: 'off' } | { kind: 'down' }
 
 export function Account() {
@@ -44,6 +45,9 @@ export function Account() {
     const kept = params.get('kept') ?? undefined
     // The resume email's link (signed in, ?resumed=1), or Resume now on this page.
     const resumed = params.get('resumed') === '1'
+    // The Berkshire alert's link for a cardless trial (payments, Nov 11): sign in, then land on the add-card choice.
+    const ac = params.get('add_card')
+    if (ac === 'yearly' || ac === 'monthly') sessionStorage.setItem(ADD_CARD, ac)
     const run = async () => {
       try {
         let member: Member
@@ -86,7 +90,7 @@ export function Account() {
         }
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? (e instanceof ApiError && e.code === 'link_used' ? 'That sign-in link was already used. Enter your email for a new one.' : 'That sign-in link has expired. Enter your email for a new one.') : undefined })
       }
-      if (sid || login || upgraded || kept) nav('/account/', { replace: true })
+      if (sid || login || upgraded || kept || ac) nav('/account/', { replace: true })
     }
     run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -257,7 +261,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
               endLabel && !cancelling && !paused && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`
             )}
           </p>
-          {member.plan === 'copy' && member.interval === 'monthly' && member.founding_price === true && member.yearly_perks === false && !member.seat && member.collection !== 'send_invoice' && !cancelling && !paused && <ToYearly />}
+          {member.plan === 'copy' && member.interval === 'monthly' && member.founding_price === true && member.yearly_perks === false && !member.seat && member.collection !== 'send_invoice' && !cancelling && !paused && <ToYearly cardless={trial && member.has_payment_method === false} day={end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })} />}
           {trial && member.has_payment_method === false && !cancelling && <NoCard founding={member.founding_price === true} end={endLabel} day={end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })} />}
           {member.seat ? (
             <p className="mt-4 rounded-xl bg-accent-soft px-3.5 py-2.5 text-[14px] text-accent-2">
@@ -964,12 +968,36 @@ function InvoiceSwitch({ onChange }: { onChange: (m: Member) => void }) {
 }
 
 /** Monthly Copy, trial or paying: the yearly founding price, one click to Stripe's confirm page (POST /yearly). */
-function ToYearly() {
+function ToYearly({ cardless, day }: { cardless: boolean; day?: string }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  // Member-facing: the founding price on both intervals; "Goes to $99" is for prospects only (the lead, Nov 11).
+  // A cardless trial has nothing to switch yet: the line points at the add-card choice, yearly preselected.
+  if (cardless)
+    return (
+      <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-ink-2">
+        <span>
+          Keep Copy at the founding price: add a card{day ? ` before ${day}` : ''}. Yearly ${prices.yearly} or ${prices.monthly}/month.
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            const box = document.getElementById(ADD_CARD)
+            box?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+            box?.querySelector<HTMLInputElement>('input[value=yearly]')?.click()
+            box?.querySelector<HTMLInputElement>('input[value=yearly]')?.focus({ preventScroll: true })
+          }}
+          className="font-medium text-accent hover:text-accent-2"
+        >
+          Add card →
+        </button>
+      </p>
+    )
   return (
     <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-ink-2">
-      <span>Founding price ${prices.yearly}/yr, locked. Goes to $99 for new members Feb 1.</span>
+      <span>
+        Switch to yearly at your founding price: ${prices.yearly}/yr, less than 9 months of monthly.
+      </span>
       <button
         type="button"
         disabled={busy}
@@ -983,7 +1011,7 @@ function ToYearly() {
         }}
         className="font-medium text-accent hover:text-accent-2 disabled:opacity-60"
       >
-        {busy ? 'Opening…' : 'Switch to yearly →'}
+        {busy ? 'Opening…' : 'Switch now →'}
       </button>
       {err && (
         <span role="alert" className="basis-full text-[12.5px] text-down">
@@ -999,14 +1027,28 @@ function ToYearly() {
 function NoCard({ end, day, founding }: { end?: string; day?: string; founding: boolean }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
-  const [plan, setPlan] = useState<'yearly' | 'monthly'>('yearly')
+  const [asked] = useState(() => sessionStorage.getItem(ADD_CARD))
+  const [plan, setPlan] = useState<'yearly' | 'monthly'>(asked === 'monthly' ? 'monthly' : 'yearly')
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!asked) return
+    sessionStorage.removeItem(ADD_CARD)
+    // The setup steps above load after this box: scroll once they've settled, and again if they pushed it away.
+    const go = () => {
+      const r = box.current?.getBoundingClientRect()
+      if (r && (r.top < 0 || r.bottom > innerHeight)) box.current!.scrollIntoView({ block: 'center' })
+      box.current?.querySelector<HTMLInputElement>('input:checked')?.focus({ preventScroll: true })
+    }
+    const t = [setTimeout(go, 600), setTimeout(go, 1800)]
+    return () => t.forEach(clearTimeout)
+  }, [asked])
   const on = day ? ` on ${day}` : ''
   const opts = [
     { id: 'yearly' as const, label: `Yearly $${prices.yearly}${on}`, sub: `History back to 2013${founding ? ' · founding price kept' : ''}` },
     { id: 'monthly' as const, label: `$${prices.monthly}/month${on}`, sub: founding ? 'Founding price kept · cancel anytime' : 'Cancel anytime' },
   ]
   return (
-    <div className="mt-4 rounded-xl bg-accent-soft px-3.5 py-3 text-[14px] text-accent-2">
+    <div ref={box} id={ADD_CARD} className="mt-4 scroll-mt-24 rounded-xl bg-accent-soft px-3.5 py-3 text-[14px] text-accent-2">
       <p>No card on file: without one, the trial simply ends{end ? ` ${end}` : ''}.</p>
       {/* The trial lock, as /pricing/ states it (trader, Nov 11): a trial started before Feb 1 keeps the founding price. */}
       {founding && <p className="mt-1 text-[13px] text-accent-2/85">You started before Feb 1, so the founding price stays: ${prices.monthly}/month or ${prices.yearly}/year, locked while you stay subscribed.</p>}

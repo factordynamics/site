@@ -94,7 +94,6 @@ page(
 )
 const tc = displayName
 page('investors/', 'Investors · Copybook', 'Latest 13F portfolios of legendary value investors, hedge-fund founders, activists and the largest institutions.')
-page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.')
 page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, the last 8 quarters of history, filing alerts and CSV export.')
 page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
 {
@@ -193,6 +192,32 @@ const books = new Map()
       }),
     ))
       if (b) books.set(slug, b)
+}
+// /consensus/'s link preview: the stocks most superinvestors hold, ranked as the page ranks them (holders, then value).
+{
+  const rows = new Map()
+  for (const m of index.managers.filter((x) => x.ok && x.featured)) {
+    for (const h of books.get(m.slug)?.holdings ?? []) {
+      if (!h.value || h.put_call) continue
+      const r = rows.get(h.cusip) ?? { h, n: 0, value: 0 }
+      r.n++
+      r.value += h.value
+      rows.set(h.cusip, r)
+    }
+  }
+  const top = [...rows.values()].sort((a, b) => b.n - a.n || b.value - a.value).slice(0, 3)
+  const image = top.length
+    ? ogCard(dist, 'consensus', {
+        kicker: 'Consensus',
+        title: 'Where great investors agree',
+        sub: 'The stocks the most superinvestors own, from their latest 13Fs',
+        rows: top.map(({ h, n }) => [`${h.ticker ? `${h.ticker} · ` : ''}${shortCo(h.display_name ?? displayName(h.issuer))}`, `held by ${n} superinvestors`]),
+        cta: 'See the list',
+        url: 'copybook.factordynamics.com',
+      })
+    : null
+  if (image) cardsDrawn++
+  page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.', '', image, '', top.length ? `Most held by superinvestors: ${top.map(({ h, n }) => `${h.ticker || shortCo(h.issuer)} (${n})`).join(', ')}.` : null)
 }
 for (const m of index.managers) {
   if (!m.ok) continue
