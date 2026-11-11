@@ -447,7 +447,27 @@ describe('copybook api', () => {
     stripeObjects['checkout/sessions/cs_test_taken'] = { id: 'cs_test_taken', status: 'complete', created: now() - 30, subscription: 'sub_tk', customer_details: { email: 'taken@example.com' } };
     stripeObjects['subscriptions/sub_tk'] = sub('sub_tk', 'cus_tk', 'trialing');
     const taken = await (await call('/session', { body: { checkout_session: 'cs_test_taken' } })).json();
-    expect([taken.ok, taken.code, taken.token]).toEqual([true, 'existing_account', undefined]);
+    // That address already had a subscription, so this second trial is cancelled at once ($0) and never a member.
+    expect([taken.ok, taken.code, taken.token, await env.DB.get('cus:cus_tk')]).toEqual([true, 'trial_used', undefined, null]);
+    // The same at checkout.session.completed (the visitor typed the email at Stripe, any case): blocked, counted, and
+    // the earlier account and its follows are the member.
+    await putMember('cus_rp', 'rp@example.com', 'canceled', []);
+    await env.DB.put('email:rp@example.com', 'cus_rp');
+    await putFollows('cus_rp', { investors: ['irving-kahn'] });
+    stripeObjects['subscriptions/sub_rp2'] = sub('sub_rp2', 'cus_rp2', 'trialing');
+    const blocked0 = Number((await env.DB.get('ops:trial_repeat_blocked')) ?? 0);
+    await webhook({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_rp2', customer: 'cus_rp2', customer_details: { email: 'RP@Example.com' } } } });
+    await webhook({ type: 'customer.subscription.created', data: { object: { ...stripeObjects['subscriptions/sub_rp2'], metadata: { trial_repeat_blocked: 'true' } } } });
+    expect([await env.DB.get('cus:cus_rp2'), await env.DB.get('email:rp@example.com'), Number(await env.DB.get('ops:trial_repeat_blocked')) - blocked0, JSON.parse((await env.DB.get('follows:cus_rp'))!).investors]).toEqual([null, 'cus_rp', 1, ['irving-kahn']]);
+    // A test address keeps its repeat trial (critics walk it again) but still merges into one account: the new record
+    // takes the earlier one's follows, and the earlier one opens it.
+    await putMember('cus_tm1', 'copybook-test-merge@example.com', 'trialing', ['irving-kahn']);
+    await env.DB.put('email:copybook-test-merge@example.com', 'cus_tm1');
+    await putFollows('cus_tm1', { investors: ['irving-kahn'] });
+    stripeObjects['customers/cus_tm2'] = { id: 'cus_tm2', email: 'copybook-test-merge@example.com' };
+    await webhook({ type: 'customer.subscription.created', data: { object: sub('sub_tm2', 'cus_tm2', 'trialing') } });
+    const { getMember: gm } = await import('../src/members');
+    expect([(await gm(env, 'cus_tm2'))?.status, JSON.parse((await env.DB.get('follows:cus_tm2'))!).investors, (await gm(env, 'cus_tm1'))?.customer, await env.DB.get('email:copybook-test-merge@example.com')]).toEqual(['trialing', ['irving-kahn'], 'cus_tm2', 'cus_tm2']);
     // A free signup that then subscribes (the paid record's created_at is the conversion, not the signup), with the
     // subscription's webhook arriving before the return: still that account, so no hand-off (gene, 11:31: one was given).
     expect((await call('/signup', { body: { email: 'conv@example.com' } })).status).toBe(201);

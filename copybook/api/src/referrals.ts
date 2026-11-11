@@ -90,6 +90,40 @@ type Reply = { status: number; body: Record<string, unknown> };
 /** Fund checkout's submit note, as on the Fund Payment Links: the Terms, and the invoice route. */
 const FUND_SUBMIT = "Copybook is made by Factor Dynamics. By subscribing you agree to Copybook's Terms (copybook.factordynamics.com/terms/). To pay by invoice instead, use copybook.factordynamics.com/contact/?topic=fund.";
 
+/**
+ * One free trial per person, at Checkout's completion too (the lead, Nov 11): the visitor types the email at Stripe, so a
+ * trial whose email (or another Stripe customer under it) already had a Copybook subscription is cancelled at once ($0,
+ * nothing charged) and never becomes a member; /session sends them to /account/ to subscribe. Test addresses
+ * (copybook-test-...) are exempt here so critics can walk the trial again; they still merge (carryPriorMember).
+ * Idempotent: the subscription is tagged trial_repeat_blocked before it is cancelled.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function blockRepeatTrial(env: Env, sub: any, emailHint?: string | null): Promise<boolean> {
+  if (sub?.metadata?.trial_repeat_blocked) return true;
+  if (sub?.status !== 'trialing') return false;
+  const customer = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+  const email = (emailHint || (await stripe(env, 'GET', `customers/${customer}`).catch(() => null))?.email || '').trim().toLowerCase();
+  if (!email || testAddress(email)) return false;
+  const prior = await memberByEmail(env, email);
+  let had = !!prior && prior.customer !== customer && prior.status !== 'free' && (!!prior.subscription?.startsWith('sub_') || !!prior.trial_end);
+  if (!had) {
+    try {
+      for (const c of ((await stripe(env, 'GET', 'customers', { email, limit: 10 })).data ?? []) as { id: string }[]) {
+        if (c.id === customer) continue;
+        if ((((await stripe(env, 'GET', 'subscriptions', { customer: c.id, status: 'all', limit: 3 })).data ?? []) as unknown[]).length) had = true;
+      }
+    } catch {
+      // Stripe unreachable: the trial stands.
+    }
+  }
+  if (!had) return false;
+  await stripe(env, 'POST', `subscriptions/${sub.id}`, { 'metadata[trial_repeat_blocked]': 'true' });
+  await stripe(env, 'DELETE', `subscriptions/${sub.id}`).catch((e) => console.log(`trial_repeat_blocked: cancel ${sub.id}: ${e}`));
+  await env.DB.put('ops:trial_repeat_blocked', String(Number((await env.DB.get('ops:trial_repeat_blocked')) ?? 0) + 1));
+  console.log(`trial_repeat_blocked: ${sub.id} (${customer}) for an email with an earlier subscription${prior ? ` (${prior.customer})` : ''}`);
+  return true;
+}
+
 /** Whether this address has had a Copybook subscription: its member record, else any Stripe customer with that email. */
 async function hadSubscription(env: Env, email: string, existing: Member | null): Promise<boolean> {
   if (existing?.subscription?.startsWith('sub_') || existing?.trial_end) return true;

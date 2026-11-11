@@ -30,7 +30,7 @@ function form(params: Record<string, string | number | boolean | undefined>): st
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function stripe(env: Env, method: 'GET' | 'POST', path: string, params: Record<string, string | number | boolean | undefined> = {}): Promise<any> {
+export async function stripe(env: Env, method: 'GET' | 'POST' | 'DELETE', path: string, params: Record<string, string | number | boolean | undefined> = {}): Promise<any> {
   const qs = form(params);
   const url = `https://api.stripe.com/v1/${path}${method === 'GET' && qs ? `?${qs}` : ''}`;
   const res = await fetch(url, {

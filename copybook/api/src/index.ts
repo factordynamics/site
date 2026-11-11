@@ -176,6 +176,7 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
       if (obj.mode === 'subscription' && obj.subscription) {
         const sub = await stripe(env, 'GET', `subscriptions/${obj.subscription}`);
         if (!isOurSubscription(sub)) return ignore('subscription');
+        if (await (await import('./referrals')).blockRepeatTrial(env, sub, obj.customer_details?.email)) break;
         await syncSubscription(env, sub, obj.customer_details?.email);
         await invoiceTerms(sub, obj.custom_fields ?? []);
       }
@@ -184,6 +185,8 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted':
       if (!isOurSubscription(obj)) return ignore('subscription');
+      // A repeat trial (blockRepeatTrial) never becomes a member, whichever event comes first.
+      if (event.type !== 'customer.subscription.deleted' ? await (await import('./referrals')).blockRepeatTrial(env, obj) : !!obj.metadata?.trial_repeat_blocked) break;
       await syncSubscription(env, obj);
       if (event.type === 'customer.subscription.created') await invoiceTerms(obj);
       break;
@@ -1256,6 +1259,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const before = (r: Member | null) => !!r && (!r.created_at || Date.parse(r.created_at) < startedAt);
       const existed = before(freeRec) || (!!prior && prior.customer !== cs.customer && before(prior));
       const sub = await stripe(env, 'GET', `subscriptions/${cs.subscription}`);
+      // A second free trial for this email: cancelled ($0), no member; /account/ offers plain checkout and a sign-in.
+      if (await (await import('./referrals')).blockRepeatTrial(env, sub, cs.customer_details?.email)) return json({ ok: true, code: 'trial_used', sign_in: 'email', member: null, error: "You've already used your free trial. Subscribe to keep Copy: $9/mo or $79/yr (founding price)." }, 200, h);
       const m = await syncSubscription(env, sub, cs.customer_details?.email);
       if (existed) return json({ ok: true, code: 'existing_account', sign_in: 'email', member: null }, 200, h);
       // A new subscriber: signed in on this device, provisionally (the address isn't proven yet), like the signup form.

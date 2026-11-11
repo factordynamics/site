@@ -1,7 +1,7 @@
 import { holdtermLoginMail, loginMail, sendMail } from './email';
 import { isActive, isPaused, pauseScheduled, type Env, type Member } from './env';
 import { stripe } from './stripe';
-import { carryFreeSignup } from './free';
+import { carryFreeSignup, carryPriorMember } from './free';
 import { countTransition, maybeCancelMail, maybeResumeMail, maybeWinback } from './revenue';
 import { noteReferral } from './referrals';
 import { mirrorSeats } from './seats';
@@ -32,8 +32,9 @@ export async function getMember(env: Env, customer: string): Promise<Member | nu
   const raw = (await freshCopy(customer)) ?? (await env.DB.get(`cus:${customer}`));
   if (!raw) return null;
   const m = JSON.parse(raw) as Member & { plan: string };
-  // A free signup who subscribed: one account per email, the paid one. Old sessions and links open it.
-  if (m.status === 'free' && m.converted_to && m.converted_to !== customer) return (await getMember(env, m.converted_to)) ?? m;
+  // One account per email (a free signup who subscribed, or a second checkout under a new Stripe customer): the record
+  // it merged into. Old sessions and links open it.
+  if (m.converted_to && m.converted_to !== customer) return (await getMember(env, m.converted_to)) ?? m;
   // Records from before Copy Pro kept the billing interval in `plan`.
   if (m.plan !== 'copy' && m.plan !== 'pro' && m.plan !== 'fund' && m.plan !== 'holdterm' && m.plan !== 'free') return { ...m, interval: m.plan as Member['interval'], plan: 'copy' };
   return m;
@@ -122,6 +123,9 @@ export async function customerHasCard(env: Env, c: any): Promise<boolean> {
 export async function syncSubscription(env: Env, sub: any, emailHint?: string | null): Promise<Member> {
   const customer = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
   const prev = await getMember(env, customer);
+  // This customer's record was merged into another (one account per email): its other subscription's events never
+  // overwrite the merged member.
+  if (prev && prev.customer !== customer && prev.subscription !== String(sub.id)) return prev;
   let email = (emailHint || prev?.email || '').trim().toLowerCase();
   if (!email) {
     const c = await stripe(env, 'GET', `customers/${customer}`);
@@ -170,7 +174,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
   // A stale event (older subscription) must not overwrite a newer active one.
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
   // A free signup subscribing: the paid member keeps where they came from.
-  if (!prev) Object.assign(m, await carryFreeSignup(env, m), { created_at: m.created_at ?? new Date().toISOString() });
+  if (!prev) Object.assign(m, await carryPriorMember(env, await carryFreeSignup(env, m)), { created_at: m.created_at ?? new Date().toISOString() });
   // Checkout fires several events at once (session completed, subscription created, the return to
   // /session); only the one that claims the welcome sends it.
   if (isActive(m) && !m.welcomed && m.email && (await claim(env, customer, 'welcome', true))) {
@@ -249,7 +253,11 @@ export async function listMembers(env: Env): Promise<Member[]> {
     const page = await env.DB.list({ prefix: 'cus:', cursor });
     for (const k of page.keys) {
       const raw = await env.DB.get(k.name);
-      if (raw) out.push(JSON.parse(raw) as Member);
+      // An alias (merged into another record: converted_to) is not a member of its own: no alerts or emails twice.
+      if (raw) {
+        const m = JSON.parse(raw) as Member;
+        if (!m.converted_to || m.converted_to === m.customer) out.push(m);
+      }
     }
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);

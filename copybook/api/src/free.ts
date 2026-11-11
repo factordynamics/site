@@ -978,6 +978,33 @@ export async function carryFreeSignup(env: Env, m: Member): Promise<Member> {
   };
 }
 
+/**
+ * A second checkout under a new Stripe customer for an email that already has a member (the trader's 19:56 trial lost
+ * \"irving-kahn\"): never a second record. The new member takes the earlier one's follows, channels, source, proven
+ * address and pause history, and the earlier record becomes an alias (converted_to). Test addresses too: their
+ * exemption is from the one-trial rule only (blockRepeatTrial), never from this merge.
+ */
+export async function carryPriorMember(env: Env, m: Member): Promise<Member> {
+  if (!m.email) return m;
+  const prior = await memberByEmail(env, m.email);
+  if (!prior || prior.customer === m.customer || prior.status === 'free' || prior.seat_of) return m;
+  const investors = await mergeFollows(env, prior.customer, m.customer);
+  if (!(await env.DB.get(`channels:${m.customer}`))) {
+    const ch = await env.DB.get(`channels:${prior.customer}`);
+    if (ch) await env.DB.put(`channels:${m.customer}`, ch);
+  }
+  await env.DB.put(`cus:${prior.customer}`, JSON.stringify({ ...prior, converted_to: m.customer }));
+  return {
+    ...m,
+    alerts: Array.isArray(prior.alerts) || Array.isArray(m.alerts) ? [...new Set([...(Array.isArray(m.alerts) ? m.alerts : []), ...(Array.isArray(prior.alerts) ? prior.alerts : []), ...(investors ?? [])])] : (m.alerts ?? prior.alerts),
+    source: m.source ?? prior.source ?? null,
+    created_at: prior.created_at ?? m.created_at,
+    ...(prior.verified ? { verified: true, email_pending: undefined } : {}),
+    ...(prior.paused_at ? { paused_at: prior.paused_at } : {}),
+    welcomed: m.welcomed || prior.welcomed,
+  };
+}
+
 /** The free record's lists into the paid member's (a union). Returns the merged investors, or null with nothing to merge. */
 async function mergeFollows(env: Env, from: string, to: string): Promise<string[] | null> {
   const a = JSON.parse((await env.DB.get(`follows:${from}`)) ?? 'null') as Record<string, unknown> | null;
