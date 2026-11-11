@@ -1370,7 +1370,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!teamOwner(m)) return json({ ok: false, error: m.seat_of ? "Team access is the Copy Fund owner's" : 'Team access is part of Copy Fund', code: m.seat_of ? 'seat' : 'fund_required' }, 403, h);
     if (req.method === 'GET' && path === '/team/access') {
       const t = await teamAccess(env, m, url.searchParams.get('seat'));
-      if (url.searchParams.get('format') === 'csv') return new Response(teamCsv(t.events), { headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="copybook-team-access.csv"', 'cache-control': 'no-store' } });
+      if (url.searchParams.get('format') === 'csv') return new Response(teamCsv(t, url.searchParams.get('part') === 'events' ? 'events' : 'use'), { headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="copybook-team-access.csv"', 'cache-control': 'no-store' } });
       return json({ ok: true, ...t }, 200, h);
     }
     // The owner deletes any key on the team (a seat's or their own); the seat sees it on its own log.
