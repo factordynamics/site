@@ -1676,7 +1676,7 @@ export function Alerts() {
 
       <section className="ap-section">
         <h2>Choose where alerts arrive</h2>
-        <p className="dim">Every plan includes every channel. Pick one or several in your account.</p>
+        <p className="dim">{CHANNEL_LIST.every((c) => c.live === true) ? 'Every channel is included in the price. Pick one or several in your account.' : 'Email is included today. The other channels are on the way, at no extra cost.'}</p>
         <div className="ap-channels">
           {CHANNEL_LIST.map((c) => (
             <div className="ap-channel" key={c.name}>
@@ -2164,7 +2164,7 @@ export function Guide() {
           The top of each <A to="/funds">investor’s page</A> sums up the latest 13F: the quarter it covers, the size of the stock portfolio, how many positions it holds, how much sits in the ten largest, and how much it bought and sold since the quarter before.
         </p>
         <p>
-          Below that, the holdings are sorted by share of the portfolio. The thin double bar shows last quarter’s weight above this quarter’s. The other tabs list the quarter’s buys and sells, options, notes and preferreds (kept out of the stock totals), past 13F filings, and recent 13D/G and Form 4 filings.
+          Below that, the holdings are sorted by share of the portfolio. The thin double bar shows last quarter’s weight above this quarter’s. The other tabs list the quarter’s buys and sells, options, notes and preferreds (kept out of the stock totals), past 13F filings, and recent 5% stakes and insider trades.
         </p>
         <h3>What the labels mean</h3>
         <ul className="pills">
@@ -2185,13 +2185,13 @@ export function Guide() {
       <section>
         <h2>Reading a stock page</h2>
         <p>
-          Each stock page lists the roster investors that own it, ordered by how much of their portfolio it takes up, which says more about conviction than dollar size. It also shows who bought and sold it last quarter and any 5% stakes or insider trades. <A to="/consensus">Most owned</A> combines every investor’s latest 13F, and <A to="/flows">Buys and sells</A> shows the quarter’s busiest stocks.
+          Each stock page lists the investors Holdterm follows that own it, ordered by how much of their portfolio it takes up, which says more about conviction than dollar size. It also shows who bought and sold it last quarter and any 5% stakes or insider trades. <A to="/consensus">Most owned</A> combines every investor’s latest 13F, and <A to="/flows">Buys and sells</A> shows the quarter’s busiest stocks.
         </p>
       </section>
       <section>
-        <h2>Who is on the roster</h2>
+        <h2>Who Holdterm follows</h2>
         <p>
-          Investors are chosen by a published rule, not by fame: at least {usd(rule.min_value, 0)} in US stocks spread over {rule.min_positions} to {rule.max_positions} positions, at least {pct(rule.min_top10, 0)} of it in the ten largest, turnover under {pct(rule.max_turnover, 0)} a quarter, and {rule.min_years} or more years of filings. The full rule, and the funds held back because their filings fail our data checks, are on the <A to="/about">About page</A>.
+          Investors are chosen by a published rule, not by fame: at least {usd(rule.min_value, 0)} in US stocks spread over {rule.min_positions} to {rule.max_positions} positions, at least {pct(rule.min_top10, 0)} of it in the ten largest, no more than {pct(rule.max_turnover, 0)} of the portfolio traded in a quarter, and {rule.min_years} or more years of filings. The full rule, and the funds held back because their filings fail our data checks, are on the <A to="/about">About page</A>.
         </p>
       </section>
       <section className="article-cta">
@@ -2209,6 +2209,8 @@ export function Guide() {
 }
 
 // ---------- about, terms, privacy ----------
+/** Why a fund narrowly missed the rule, in words (screen.py's test names). */
+const MISS: Record<string, string> = { top10: 'too little in its ten largest', top1: 'too much in one stock', turnover: 'trades too much', etf: 'too much in ETFs', positions: 'too many or too few stocks', value: 'too small', years: 'too short a record' }
 export function About() {
   title('About')
   const r = roster.rule as Record<string, number>
@@ -2228,28 +2230,28 @@ export function About() {
         <span id="roster" />
         <h2>How investors are chosen</h2>
         <p>
-          Nobody is hand-picked. The starting universe is every 13F-HR filer in the SEC’s own quarterly{' '}
+          Nobody is hand-picked. Each quarter Holdterm starts from every manager that reports its US stocks to the SEC, using the SEC’s own{' '}
           <a href="https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets" target="_blank" rel="noreferrer">
             Form 13F data sets ↗
           </a>{' '}
-          ({quarterLabel(qOf(roster.period))} filings, {num(roster.screened)} filers with a book of {usd(r.min_value, 0)} or more). Each is screened against one rule, and the roster is whoever passes.
+          ({quarterLabel(qOf(roster.period))} filings: {num(roster.screened)} managers with {usd(r.min_value, 0)} or more). It keeps the ones that pass one rule: a focused portfolio, little trading, at least {r.min_years} years of filings, and a firm that picks stocks rather than a bank or a pension. The details:
         </p>
         <dl className="defs">
           <dt>Size</dt>
           <dd>
-            13F book of at least {usd(r.min_value, 0)}.
+            At least {usd(r.min_value, 0)} in US stocks on its latest 13F.
           </dd>
           <dt>Focus</dt>
           <dd>
-            {r.min_positions} to {r.max_positions} positions; the 10 largest at least {pct(r.min_top10, 0)} of the book; the largest at most {pct(r.max_top1, 0)}; ETFs and index funds at most {pct(r.max_etf, 0)}. T-bill and money-market funds count as cash and are left out of every test.
+            {r.min_positions} to {r.max_positions} stocks, with at least {pct(r.min_top10, 0)} of the portfolio in the ten largest and no more than {pct(r.max_top1, 0)} in any one. No more than {pct(r.max_etf, 0)} in ETFs and index funds. Treasury-bill and money-market funds count as cash and are left out.
           </dd>
           <dt>Patience</dt>
           <dd>
-            Turnover of at most {pct(r.max_turnover, 0)} in the latest quarter: half of everything bought and sold, valued at the quarter’s filed prices, as a share of the book.
+            No more than {pct(r.max_turnover, 0)} of the portfolio traded in the latest quarter, counting half of everything bought and sold at the prices in the filing.
           </dd>
           <dt>Track record</dt>
           <dd>
-            A 13F for the same quarter {r.min_years} years earlier; a predecessor filer counts (Pershing Square Inc. carries Pershing Square Capital Management’s record, and their books are summed in a quarter where both filed).
+            A 13F from the same quarter at least {r.min_years} years earlier. A firm’s earlier filing entity counts: Pershing Square Inc. carries on Pershing Square Capital Management’s record, and in a quarter where both filed their portfolios are added together.
           </dd>
           <dt>Kind of investor</dt>
           <dd>
@@ -2260,21 +2262,28 @@ export function About() {
           </dd>
           <dt>Data checks</dt>
           <dd>
-            On each published book: its total agrees with the 13F cover page, at most 25% of it is notes and bonds, the largest position with share classes combined is within the limit, and the prior quarter is compared with its latest full restatement. A fund that fails is held back until it passes.
+            Every portfolio we publish must add up to the total on its 13F’s cover page, be no more than 25% notes and bonds, and keep its largest position, all share classes together, within the limit. Last quarter is compared with its latest corrected filing, if there is one. A fund that fails is held back until it passes.
           </dd>
           <dt>Stability</dt>
           <dd>
-            A fund already on the roster stays until it misses a test by more than {pct(r.incumbent_buffer, 0)} of the threshold (turnover above {pct(r.max_turnover * (1 + r.incumbent_buffer), 0)}, for example), so the roster doesn’t churn on noise.
+            A fund already on the list stays until it misses a test by more than {pct(r.incumbent_buffer, 0)} (for trading, above {pct(r.max_turnover * (1 + r.incumbent_buffer), 0)} of the portfolio), so the list doesn’t change on noise.
           </dd>
         </dl>
         <p className="article-note">
-          {roster.funds.length + roster.pending.length + roster.held.length} funds pass the screen; {roster.funds.length} are live{roster.pending.length ? `, ${roster.pending.length} are loading` : ''}
-          {roster.held.length ? `, and ${roster.held.length} are held back by the data checks (${roster.held.map((f) => `${firmName(f.slug ?? '', f.firm)}: ${f.fails[0]}`).join('; ')})` : ''} (full list in universe.json, linked below). Closest misses:{' '}
-          {roster.near_misses
-            .slice(0, 8)
-            .map((f) => `${firmName(f.slug ?? '', f.firm)} (${f.fails.join(', ')})`)
-            .join(', ')}
-          . The screen and its output are public:{' '}
+          {num(roster.funds.length + roster.pending.length + roster.held.length)} funds pass. {num(roster.funds.length)} are on Holdterm{roster.pending.length ? `, ${roster.pending.length} are loading` : ''}
+          {roster.held.length ? `, and ${plural(roster.held.length, 'is', 'are')} held back until their filings pass the data checks:` : '.'}
+        </p>
+        {roster.held.length > 0 && (
+          <ul className="plain-list article-note">
+            {roster.held.map((f) => (
+              <li key={f.slug ?? f.firm}>
+                {firmName(f.slug ?? '', f.firm)}: {f.fails[0].replace(/\bbook\b/, 'portfolio total').replace(/\b(\d{4})Q(\d)\b/g, (_, y, q) => quarterLabel(`${y}Q${q}`))}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="article-note">
+          Closest misses: {listing(roster.near_misses.slice(0, 8).map((f) => `${firmName(f.slug ?? '', f.firm)} (${f.fails.map((x) => MISS[x] ?? x).join(', ')})`))}. The rule and its output are public:{' '}
           <a href={`${REPO}/blob/main/holdterm/scripts/screen.py`} target="_blank" rel="noreferrer">
             screen.py ↗
           </a>{' '}
@@ -2282,23 +2291,23 @@ export function About() {
           <a href={`${REPO}/blob/main/holdterm/scripts/universe.json`} target="_blank" rel="noreferrer">
             universe.json ↗
           </a>
-          . Reconstituted when the SEC publishes each quarter’s data set; roster as of {roster.generated_at.slice(0, 10)}.
+          , the full list. The list is redone each time the SEC publishes a quarter’s data; this one is from {date(roster.generated_at.slice(0, 10))}.
         </p>
       </section>
       <section>
         <h2>Where the data comes from</h2>
         <ul className="plain-list">
           <li>
-            Form 13F-HR as filed on SEC EDGAR. Funds file up to 45 days after quarter end, so a 13F is a snapshot, not today’s book. It covers US-listed long positions and listed options only: no shorts, cash, bonds or foreign shares.
+            13F filings on SEC EDGAR. Funds file up to 45 days after the quarter ends, so a 13F is a snapshot, not today’s portfolio. It lists US-listed stocks and options only: no short positions, cash, bonds or foreign shares.
           </li>
           <li>
             Buys and sells are share changes against the fund’s previous 13F, valued at the price implied by the filing. A price move alone is not a trade.
           </li>
           <li>
-            Schedule 13D and 13G (5%+ ownership) and Form 4 where a tracked fund is the filer. Filings on a fund’s own vehicles are labelled “own fund” and left out of feeds by default.
+            Schedule 13D and 13G filings (stakes above 5%) and Form 4 filings (insider trades) made by the investors Holdterm follows. Filings on a fund’s own vehicles are labelled “own fund” and left out of feeds by default.
           </li>
           <li>
-            No market prices: everything comes from SEC filings. Reported price is the filing’s value divided by its share count. Tickers come from CUSIP mapping, with a small sourced fallback file (src/tickers.json); a company that has left the exchange shows its former ticker with a †, and where no ticker exists we show the company name rather than guess.
+            No market prices: everything comes from SEC filings. A stock’s price is the filing’s value divided by its share count. Tickers are matched from the securities identifiers (CUSIPs) in each filing, with a small fallback list that cites a source for each entry (src/tickers.json); a company that has left the exchange shows its former ticker with a †, and where no ticker exists we show the company name rather than guess.
           </li>
           <li>
             Funds are named by firm. A person is shown only when they run the portfolio today.

@@ -2928,6 +2928,12 @@ p a,
 .article .lede + .lede {
   margin-top: 10px;
 }
+/* The About page's held-back funds: a list in the note's size and colour. */
+.article .plain-list.article-note {
+  font-size: 14px;
+  color: var(--dim);
+  gap: 4px;
+}
 .article section p.article-note {
   margin-top: 20px;
   font-size: 14px;
