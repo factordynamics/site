@@ -1176,7 +1176,7 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', realFetch);
   });
 
-  it("Email 2: once, through Mailgun, to real free signups only; follows lead (never an empty state), the paid moment from logged times, a trial button; skipped without a postal address or under 10", async () => {
+  it("Email 2: once, through Mailgun, to real free signups only; follows lead (never an empty state), no speed figures or clock times, a trial button; skipped without a postal address or under 10", async () => {
     const realFetch = globalThis.fetch;
     const mg: URLSearchParams[] = [];
     // Deadline night: Mon Nov 16, 9:30pm ET.
@@ -1248,7 +1248,7 @@ describe('copybook api', () => {
     mg.length = 0;
     sent = [];
     const r = await runEmail2(env, now);
-    expect(r).toMatchObject({ sent: 10, filed_today: 4, biggest: 6, moment: 1 });
+    expect(r).toMatchObject({ sent: 10, filed_today: 4, biggest: 6 });
     expect(mg.map((b) => b.get('to')).sort()).toEqual(Array.from({ length: 10 }, (_, i) => `reader${i}@reader.test`));
     expect(sent).toHaveLength(0);
     const k = mg.find((b) => b.get('to') === 'reader0@reader.test')!;
@@ -1256,13 +1256,12 @@ describe('copybook api', () => {
     // The date of the send; a Kahn follower's email opens on Kahn's filing (his 3 largest moves, not GONE, person and
     // fund, % of fund), one Copy line for every row, the speed line, then the trial button on the first screen.
     const pricingUrl = 'https://refcell.github.io/gust/copybook/pricing/?from=e2&utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-paid&client_reference_id=email_e2-paid';
-    expect(text.startsWith(`13F deadline night, Monday, November 16.\n\nYour follows:\n  Irving Kahn (Kahn Brothers) filed its Q3 13F today: trimmed TRIM −$8.0M (1.0% of fund); added ADDS +$5.0M (0.6% of fund); new position in NEWB +$4.0M (0.5% of fund)\n    https://refcell.github.io/gust/copybook/f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\nGet each 13F as it's filed, with Copy · 14 days free · card required: ${pricingUrl}\n\n`)).toBe(true);
+    expect(text.startsWith(`13F deadline night, Monday, November 16.\n\nYour follows:\n  Irving Kahn (Kahn Brothers) filed its Q3 13F today: trimmed TRIM −$8.0M (1.0% of fund); added ADDS +$5.0M (0.6% of fund); new position in NEWB +$4.0M (0.5% of fund)\n    https://refcell.github.io/gust/copybook/f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows\n\nGet each 13F as it's filed, with Copy · 14 days free · card required: ${pricingUrl}\n\n`)).toBe(true);
     expect(text).not.toMatch(/median|minutes after/);
     expect(text).not.toContain('GONE');
-    // The paid moment in ET clock times, only a send under 5 minutes (First Eagle, not Kahn's 400 s); no durations.
-    expect(text).toContain('\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\nGet each 13F');
-    expect(text).not.toMatch(/later\.|Preview example/);
-    expect(k.get('html')).toMatch(/<\/div><p[^>]*><b>First Eagle filed its 13F at 12:09 pm ET\. Copy members had its moves at 12:11 pm ET\.<\/b><\/p><p[^>]*><a [^>]*>Get each 13F as it's filed, with Copy<\/a><\/p><p[^>]*>14 days free · card required</);
+    // No speed figures or clock times (the lead's rule for Email 2): the trial button follows the follows directly.
+    for (const part of [text, k.get('html')!]) expect(part).not.toMatch(/\d:\d\d [ap]m|Copy members had|Preview example/);
+    expect(k.get('html')).toMatch(/<\/div><p[^>]*><a [^>]*>Get each 13F as it's filed, with Copy<\/a><\/p><p[^>]*>14 days free · card required</);
     // Below: each manager's top sell and top buy (exits count), managers by their largest move.
     expect(text).toContain("The day's biggest moves:\n  Matthew McLennan (First Eagle): sold out of CHRW −$686.0M (1.4% of fund)\n  Matthew McLennan (First Eagle): new position in NVR +$400.1M (0.8% of fund)\n  David Tepper: sold out of TS1 −$500.0M\n  Howard Marks: trimmed HM1 −$300.0M\n");
     expect(text).not.toMatch(/UBER|EXPD|HM2|TS2/);
@@ -1276,7 +1275,7 @@ describe('copybook api', () => {
     expect(k.get('html')).toMatch(/^<div style="display:none[^>]*>Klarman due by Mon Nov 16</);
     // A Klarman follower: one row, expected (never "none filed" or "still due"); the subject is the night's top manager.
     const s5 = mg.find((b) => b.get('to') === 'reader5@reader.test')!;
-    expect(s5.get('text')).toContain("Your follows:\n  Seth Klarman: expected by Fri Nov 20\n\nFirst Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.\n\nGet each 13F as it's filed, with Copy");
+    expect(s5.get('text')).toContain("Your follows:\n  Seth Klarman: expected by Fri Nov 20\n\nGet each 13F as it's filed, with Copy");
     expect(s5.get('text')).not.toMatch(/none filed|still due/i);
     expect(s5.get('subject')).toBe('First Eagle bought $400M of NVR, sold out of CHRW');
     // Pzena filed Q3 on Oct 30 (before this week's records): his top moves, never "still due".
@@ -1287,10 +1286,10 @@ describe('copybook api', () => {
     expect(pz.get('subject')).toBe('Pzena added $352M of GL'); // $351.7M rounds, not truncates
     // Once only.
     expect(await runEmail2(env, now)).toEqual({ status: 'already done' });
-    // A preview before Nov 12 has no filing of its own to quote: First Eagle's logged times, marked as an example.
+    // A preview carries no clock times either.
     mg.length = 0;
     await runEmail2(env, Date.parse('2026-11-11T15:00:00Z'), ['copybook-kahn-e2@fldubai.com']);
-    expect(mg[0].get('text')).toContain('Preview example: First Eagle filed its 13F at 12:09 pm ET. Copy members had its moves at 12:11 pm ET.');
+    expect(mg[0].get('text')).not.toMatch(/\d:\d\d [ap]m|Copy members had/);
     Object.assign(env, { POSTAL_ADDRESS: undefined, MAILGUN_API_KEY: undefined });
     vi.stubGlobal('fetch', realFetch);
   });
@@ -1484,6 +1483,20 @@ describe('copybook api', () => {
     const rb = await r.clone().json();
     expect([rb.welcome, rb.sign_in_email, rb.session]).toEqual(['sent', 'sent', 'provisional']);
     expect((await call('/me', { token: rb.token })).status).toBe(200);
+    // It reads /me and follows only: everything that could hold on to the account waits for the emailed link.
+    for (const [method, path, body] of [['POST', '/handoff'], ['POST', '/me/sessions/revoke'], ['POST', '/keys', { name: 'x' }], ['PUT', '/channels', { email: false }], ['POST', '/portal'], ['GET', '/seats'], ['GET', '/keys']] as [string, string, unknown?][]) {
+      const res = await call(path, { method, body, token: rb.token });
+      expect([path, res.status, (await res.json()).code]).toEqual([path, 403, 'verify_email']);
+    }
+    // An address that already has an account (paid, or cancelled) gets no session from the signup form.
+    for (const [c, status] of [['cus_pd', 'active'], ['cus_cx', 'canceled']]) {
+      await putMember(c, `copybook-test-${c}@reader.test`, status, []);
+      await env.DB.put(`email:copybook-test-${c}@reader.test`, c);
+      const b = await (await signup({ email: `copybook-test-${c}@reader.test` }, `5.5.5.${c.length}${status.length}`)).json();
+      expect([c, b.ok, b.token, b.session]).toEqual([c, true, undefined, undefined]);
+    }
+    sent = sent.filter((m) => !m.to[0].startsWith('copybook-test-cus_'));
+    for (const c of ['cus_pd', 'cus_cx']) for (const k of [`cus:${await env.DB.get(`email:copybook-test-${c}@reader.test`)}`, `cus:${c}`, `email:copybook-test-${c}@reader.test`]) await env.DB.delete(k);
     // Resend refusing (its daily quota): the page is told it's queued for after the 00:00 UTC reset, and is still signed in.
     const em0 = await import('../src/email');
     const used0 = em0.mailQuota.used;
@@ -1505,7 +1518,7 @@ describe('copybook api', () => {
     // A quick resubmit (the trader's address B, 63 s after its welcome) sends no second email: already_sent, with when.
     const n0 = sent.length;
     const quick = await (await signup({ email: 'reader@reader.test' }, '2.2.2.1')).json();
-    expect([quick.sign_in_email, typeof quick.sent_at, sent.length]).toEqual(['already_sent', 'string', n0]);
+    expect([quick.sign_in_email, typeof quick.sent_at, sent.length, quick.token]).toEqual(['already_sent', 'string', n0, undefined]);
     await env.DB.delete(`rl:signin-mail:${await env.DB.get('email:reader@reader.test')}`); // an hour later
     expect(await (await signup({ email: 'reader@reader.test', follow: [{ kind: 'investor', id: 'bill-ackman' }, { kind: 'stock', id: 'hhh' }], source: 'follow:/investors/bill-ackman/' }, '2.2.2.2')).json()).toMatchObject({ ok: true, following: true, follow: 'added', sign_in_email: 'sent' });
     // Signed out, a follow's sign-in link says the follow was saved; at most one an hour.

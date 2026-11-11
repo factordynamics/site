@@ -129,6 +129,9 @@ async function body(req: Request): Promise<Record<string, unknown>> {
   }
 }
 
+/** Members read through a signup's provisional session (the address not yet proven by an emailed link). */
+const PROVISIONAL = new WeakSet<Member>();
+
 /** Member from `Authorization: Bearer <session token>`. Session tokens are never accepted from a URL. */
 async function authed(req: Request, env: Env): Promise<Member | null> {
   const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
@@ -137,7 +140,10 @@ async function authed(req: Request, env: Env): Promise<Member | null> {
   // Signed out everywhere (a Fund owner revoked the seat's sessions): sessions issued before then are refused.
   if (!m || (m.sessions_after && (p!.i ?? p!.x - SESSION_TTL) <= m.sessions_after)) return null;
   // A signup's provisional session: until the member signs in by an emailed link or subscribes.
-  if (p!.s === 'provisional' && (m.verified || m.status !== 'free')) return null;
+  if (p!.s === 'provisional') {
+    if (m.verified || m.status !== 'free') return null;
+    PROVISIONAL.add(m);
+  }
   return m;
 }
 
@@ -1096,6 +1102,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const p = token ? await verifyToken(env.SESSION_SECRET, token, 'session') : null;
     const code = !token ? 'no_session' : !p ? 'invalid_session' : (await getMember(env, p.c)) ? 'invalid_session' : 'member_unavailable';
     return json({ ok: false, error: 'sign in required', code }, 401, h);
+  }
+
+  // A provisional session reads /me and changes follows, nothing else: API keys, channels, the billing portal, seats,
+  // a cross-origin handoff and "sign out everywhere" (which mints a full session) wait for the emailed link. Starting
+  // the trial needs no session (POST /checkout).
+  if (PROVISIONAL.has(m) && !((req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/'))) {
+    return json({ ok: false, error: 'Open the sign-in link we emailed you to do this.', code: 'verify_email' }, 403, h);
   }
 
   // Any member: sign out everywhere. Every session issued before this second stops working at once (a copied token
