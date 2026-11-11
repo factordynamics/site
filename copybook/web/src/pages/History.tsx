@@ -4,7 +4,7 @@ import { ChangeBars } from '../components/charts'
 import { Arrow, Badge, Button, Check, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
 import { needsVerify, ApiError, isFree, openPortal, useMemberState } from '../lib/account'
 import { CsvButton } from '../components/CsvButton'
-import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle, type Holding } from '../lib/data'
+import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle, withOption, type Holding } from '../lib/data'
 import { stockPath } from '../lib/stocks'
 import { diff, heldReissue, holdingKey, loadHistory, type Quarter } from '../lib/history'
 import { checkout, TRIAL_DAYS } from '../config'
@@ -154,7 +154,7 @@ function HistoryBody({ slug, quarters }: { slug: string; quarters: Quarter[] }) 
           sub={prev ? `${quarterLabel(prev.quarter)} to ${quarterLabel(q.quarter)}: shares bought or sold, at quarter-end value` : 'This is the earliest filing on file'}
         >
           {moves.length ? (
-            <ChangeBars items={moves.slice(0, 12).map((x) => ({ key: x.key, label: x.h.ticker || shortName(x.h.issuer), tag: x.change, delta: x.delta }))} />
+            <ChangeBars items={moves.slice(0, 12).map((x) => ({ key: x.key, label: withOption(x.h.ticker || shortName(x.h.issuer), x.h.put_call), tag: x.change, delta: x.delta }))} />
           ) : (
             <p className="text-[14px] text-ink-2">{prev ? `No shares bought or sold since ${quarterLabel(prev.quarter)}.` : 'Pick a later quarter to compare.'}</p>
           )}
@@ -276,7 +276,7 @@ function MoveList({ title, tone, items }: { title: string; tone: 'up' | 'down'; 
             <li key={x.key} className="flex items-center justify-between gap-3 py-2 text-[13.5px]">
               <span className="flex min-w-0 items-baseline gap-2">
                 {x.h.ticker && <span className="font-mono text-[12.5px] font-medium">{x.h.ticker}</span>}
-                <span className="truncate text-ink-2">{x.h.issuer}</span>
+                <span className="truncate text-ink-2">{withOption(x.h.issuer, x.h.put_call)}</span>
               </span>
               <span className="num shrink-0 font-medium">{money(Math.abs(x.delta))}</span>
             </li>
