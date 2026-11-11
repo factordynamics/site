@@ -153,6 +153,8 @@ export const fundTerms = (env: Env) =>
   `The service period is shown on the line item. Renews each year at that price until cancelled. Cancel any time from Manage billing; access runs to the end of the paid year, and partial years aren't refunded. If we discontinue the plan during a prepaid period, we refund the unused part pro rata. ` +
   `Invoices are payable within 30 days. Terms in force on the invoice date: ${env.SITE_URL}terms/`;
 
+/** A net-30 Fund invoice's memo (Stripe allows 500 characters; the full order terms are in the footer). */
+export const fundMemo = (env: Env) => `Copy Fund, up to ${SEAT_LIMIT} seats, founding price $1,990 a year, payable within 30 days. Full order terms below and at ${env.SITE_URL}terms/`;
 /** Every Copybook invoice's footer ends with this (Stripe Tax is off). */
 export const TAX_LINE = 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.';
 /** Subscriptions started before this keep their price while subscribed: their invoices say so. */
@@ -200,12 +202,12 @@ export async function fundInvoice(env: Env, email: string, name?: string, po?: s
   const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': 'fund_yearly', active: true })).data?.[0];
   if (!price) throw new Error('no active fund_yearly price');
   const founding = Date.now() < FOUNDING_UNTIL;
-  const sub = await stripe(env, 'POST', 'subscriptions', { customer, 'items[0][price]': price.id, collection_method: 'send_invoice', days_until_due: 30, description: fundTerms(env), 'metadata[copybook]': 'fund', ...(founding ? { 'metadata[founding]': 'true' } : {}) });
+  const sub = await stripe(env, 'POST', 'subscriptions', { customer, 'items[0][price]': price.id, collection_method: 'send_invoice', days_until_due: 30, description: fundMemo(env), 'metadata[copybook]': 'fund', ...(founding ? { 'metadata[founding]': 'true' } : {}) });
   const terms = await ensureInvoiceTerms(env, sub, 'fund', { company: name, po });
   let inv = await stripe(env, 'GET', `invoices/${sub.latest_invoice}`);
   // A draft takes the terms as its memo, and the customer's footer and fields (set after it was drafted); then it goes out now.
   if (inv.status === 'draft') {
-    await stripe(env, 'POST', `invoices/${inv.id}`, { description: fundTerms(env), footer: terms.footer, ...Object.fromEntries(terms.fields.flatMap((f, i) => [[`custom_fields[${i}][name]`, f.name], [`custom_fields[${i}][value]`, f.value]])) });
+    await stripe(env, 'POST', `invoices/${inv.id}`, { description: fundMemo(env), footer: terms.footer, ...Object.fromEntries(terms.fields.flatMap((f, i) => [[`custom_fields[${i}][name]`, f.name], [`custom_fields[${i}][value]`, f.value]])) });
     inv = await stripe(env, 'POST', `invoices/${inv.id}/finalize`);
   }
   inv = await stripe(env, 'POST', `invoices/${inv.id}/send`);

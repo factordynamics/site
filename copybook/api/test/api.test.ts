@@ -1342,8 +1342,10 @@ describe('copybook api', () => {
     for (const s of ['Copy Fund, up to 10 seats', 'Founding price $1,990 a year for up to 10 seats, whatever number are used, locked for as long as this subscription stays active', 'Terms in force on the invoice date', 'Renews each year at that price until cancelled', 'Cancel any time from Manage billing', 'If we discontinue the plan during a prepaid period, we refund the unused part pro rata.', 'payable within 30 days', `${SITE}terms/`]) expect(footer).toContain(s);
     expect(posted('customers').get('email')).toBe('pm@fund.test');
     expect(Object.fromEntries(['customer', 'items[0][price]', 'collection_method', 'days_until_due', 'metadata[copybook]'].map((k) => [k, posted('subscriptions').get(k)]))).toEqual({ customer: 'cus_fund', 'items[0][price]': 'price_fund_yearly', collection_method: 'send_invoice', days_until_due: '30', 'metadata[copybook]': 'fund' });
-    // The memo is the order terms; the footer adds the tax position (Stripe Tax is off).
-    expect(footer).toBe(`${posted('invoices/in_fund').get('description')} Prices exclude applicable taxes. Copybook does not currently collect sales tax.`);
+    // The memo points to the order terms in the footer (Stripe refuses a memo over 500 characters); the footer adds the tax position.
+    const memo = posted('invoices/in_fund').get('description')!;
+    expect([memo.length <= 500, posted('subscriptions').get('description')!.length <= 500, memo]).toEqual([true, true, expect.stringContaining('Full order terms below')]);
+    expect(footer).toMatch(/payable within 30 days\. Terms in force on the invoice date: \S+ Prices exclude applicable taxes\. Copybook does not currently collect sales tax\.$/);
     expect(posted('invoices/in_fund').get('footer')).toBe(footer);
     // The founding price, the company and the customer's PO print on the invoice (and on the customer's later ones).
     expect([0, 1, 2].map((i) => [posted('invoices/in_fund').get(`custom_fields[${i}][name]`), posted('invoices/in_fund').get(`custom_fields[${i}][value]`)])).toEqual([['Price', 'Founding price, kept while subscribed'], ['Company', 'Example Capital'], ['PO', 'PO-7781']]);
