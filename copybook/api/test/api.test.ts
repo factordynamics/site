@@ -3541,6 +3541,22 @@ describe('copybook api', () => {
     expect((await call('/me', { token: again })).status).toBe(200);
     seat = again;
 
+    // Removing a seat ends access like revoke, and re-inviting the address brings none of it back (the PM's test on
+    // the live API: the old session and key answered 200 a second after the re-invite).
+    const oldKey = (await (await call('/keys', { body: { name: 'seat-remove-test' }, token: seat })).json()).key as string;
+    const keyStatus = async (k: string) => (await handleRequest(new Request('https://api.test/v1/me', { headers: { authorization: `Bearer ${k}` } }), env)).status;
+    expect(await keyStatus(oldKey)).toBe(200);
+    const staleLink = await signToken(env.SESSION_SECRET, 'login', seatId, 600, {}, Date.now() / 1000 - 5);
+    expect((await call('/seats/analyst%40fund.example', { method: 'DELETE', token: owner })).status).toBe(200);
+    expect([(await call('/me', { token: seat })).status, await keyStatus(oldKey)]).toEqual([401, 401]);
+    expect((await call('/seats', { body: { email: 'analyst@fund.example' }, token: owner })).status).toBe(201);
+    expect([(await call('/me', { token: seat })).status, await keyStatus(oldKey)]).toEqual([401, 401]);
+    expect((await call('/session', { body: { login: staleLink } })).status).toBe(401); // a link from before the removal
+    await new Promise((r) => setTimeout(r, 1000)); // the fresh sign-in, a second after the invite
+    seat = (await (await call('/session', { body: { login: await signToken(env.SESSION_SECRET, 'login', seatId, 600) } })).json()).token;
+    expect((await call('/me', { token: seat })).status).toBe(200);
+    expect((await (await call('/keys', { token: seat })).json()).keys).toEqual([]);
+
     // Ten seats at most; the 11th is refused.
     for (const n of [2, 3, 4, 5, 6, 7, 8, 9, 10]) expect((await call('/seats', { body: { email: `s${n}@fund.example` }, token: owner })).status).toBe(201);
     const eleventh = await call('/seats', { body: { email: 's11@fund.example' }, token: owner });

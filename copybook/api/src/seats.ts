@@ -70,7 +70,10 @@ export async function inviteSeat(env: Env, owner: Member, raw: string): Promise<
   if (await env.DB.get(`email:${email}`)) return { ok: false, status: 409, error: 'that email already has a Copybook account; use another address or cancel that account first', code: 'email_taken' };
   const seat: Seat = { id: await seatId(owner.customer, email), email, invited_at: new Date().toISOString() };
   await env.DB.put(`seats:${owner.customer}`, JSON.stringify([...seats, seat]));
-  await putMember(env, mirror(owner, seat));
+  // A seat's id follows from the email, so a re-invited address gets the old id: it starts empty, and every session
+  // issued before this invite (a removed colleague's copied one) stays refused. It signs in fresh from the invite.
+  const gone = Number((await env.DB.get(`seatgone:${seat.id}`)) ?? 0);
+  await putMember(env, { ...mirror(owner, seat), ...(gone ? { sessions_after: gone } : {}) });
   const token = await signToken(env.SESSION_SECRET, 'login', seat.id, LOGIN_TTL);
   await sendMail(env, [seatInviteMail(env, email, owner.email, token)]);
   return { ok: true, seat };
@@ -82,7 +85,14 @@ export async function removeSeat(env: Env, owner: Member, raw: string): Promise<
   const seat = seats.find((s) => s.email === email);
   if (!seat) return false;
   await env.DB.put(`seats:${owner.customer}`, JSON.stringify(seats.filter((s) => s !== seat)));
-  for (const k of [`cus:${seat.id}`, `email:${email}`, `follows:${seat.id}`, `channels:${seat.id}`]) await env.DB.delete(k);
+  // Removal ends access as revoke does: every API key the seat made is deleted and its private feed stops; its
+  // sessions die with its member record (and stay refused if the address is invited again, see inviteSeat).
+  await (await import('./keys')).revokeAll(env, seat.id);
+  // Kept past any session's life: a re-invite refuses every session and sign-in link issued up to now.
+  await env.DB.put(`seatgone:${seat.id}`, String(Math.floor(Date.now() / 1000)), { expirationTtl: 40 * 86400 });
+  const ch = JSON.parse((await env.DB.get(`channels:${seat.id}`)) ?? '{}') as { feed_token?: string };
+  if (ch.feed_token) await env.DB.delete(`feedtok:${ch.feed_token}`);
+  for (const k of [`cus:${seat.id}`, `email:${email}`, `follows:${seat.id}`, `channels:${seat.id}`, `chfail:${seat.id}`, `feed:${seat.id}`]) await env.DB.delete(k);
   return true;
 }
 

@@ -135,7 +135,7 @@ async function authed(req: Request, env: Env): Promise<Member | null> {
   const p = await verifyToken(env.SESSION_SECRET, token, 'session');
   const m = p ? await getMember(env, p.c) : null;
   // Signed out everywhere (a Fund owner revoked the seat's sessions): sessions issued before then are refused.
-  return m && !(m.sessions_after && p!.x - SESSION_TTL <= m.sessions_after) ? m : null;
+  return m && !(m.sessions_after && (p!.i ?? p!.x - SESSION_TTL) <= m.sessions_after) ? m : null;
 }
 
 async function issueSession(env: Env, m: Member) {
@@ -1022,6 +1022,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const p = await verifyToken(env.SESSION_SECRET, b.login, 'login');
       const m = p && (await getMember(env, p.c));
       if (!p || !m) return json({ ok: false, error: 'link expired or invalid' }, 401, h);
+      // A link from before the member's sessions were ended (a removed or signed-out seat's old invite) is dead too.
+      if (m.sessions_after && !((p.i ?? 0) > m.sessions_after)) return json({ ok: false, error: 'This sign-in link is no longer valid. Ask for a new one.', code: 'link_revoked' }, 401, h);
       // Once: the link's nonce is marked used until the link would have expired anyway.
       if (p.n) {
         if (await env.DB.get(`used:${p.n}`)) return json({ ok: false, error: 'This sign-in link was already used. Ask for a new one.', code: 'link_used' }, 401, h);

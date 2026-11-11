@@ -6,6 +6,7 @@ export interface TokenPayload {
   k: TokenKind;
   c: string; // Stripe customer id
   x: number; // expiry, unix seconds
+  i?: number; // issued, unix seconds (tokens signed since Nov 11 2026)
   s?: string; // scope, e.g. the manager slug a download token is for
   n?: string; // nonce for single-use tokens
 }
@@ -35,7 +36,7 @@ export async function hmacHex(secret: string, data: string): Promise<string> {
 export async function signToken(secret: string, kind: TokenKind, customer: string, ttlSeconds: number, extra: { s?: string; n?: string } = {}, now = Date.now() / 1000): Promise<string> {
   // Every sign-in link carries a nonce, so it can be exchanged for a session once (see POST /session).
   if (kind === 'login' && !extra.n) extra = { ...extra, n: b64url(crypto.getRandomValues(new Uint8Array(12))) };
-  const body = b64url(enc.encode(JSON.stringify({ k: kind, c: customer, x: Math.floor(now + ttlSeconds), ...extra })));
+  const body = b64url(enc.encode(JSON.stringify({ k: kind, c: customer, x: Math.floor(now + ttlSeconds), i: Math.floor(now), ...extra })));
   const sig = new Uint8Array(await crypto.subtle.sign('HMAC', await hmacKey(secret), enc.encode(body)));
   return `${body}.${b64url(sig)}`;
 }
