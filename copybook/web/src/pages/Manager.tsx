@@ -2,6 +2,7 @@ import { possessive } from '../lib/names.mjs'
 import { Signup } from '../components/Signup'
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
+import { ClassLines, classLine, mixedLabel } from '../components/ShareClasses'
 import { ChangeBars, Donut, foldSlices, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { Arrow, Badge, Button, Lock, Monogram, NotCounted, Panel, Skeleton, Stat, Ticker } from '../components/ui'
@@ -45,9 +46,11 @@ export function ManagerPage() {
       .filter((h) => !h.put_call && h.change && h.change !== 'unchanged' && !unreliable(h) && !h.suspect_duplicate)
       .map((h) => {
         const per = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value || 0) / h.prev_shares : 0
-        const delta = h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
+        // An issuer row over several classes: ingest's own sum of each class at its own price, never summed shares.
+        const delta = h.classes?.length ? (h.value_delta ?? 0) : h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
         const note = splitApplied(h) ? `split ${splitRatio(h.split!.ratio)} adjusted` : h.cusip_pair === 'different_security' ? 'different security, not compared' : h.cusip_pair === 'merged_misfiled' ? 'misfiled CUSIP, treated as common' : h.prev_cusip ? 'CUSIP change' : ''
-        return { key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: [h.change, note].filter(Boolean).join(' · '), delta }
+        const move = h.mixed || (h.change as string) === 'mixed' ? mixedLabel(h) : h.change
+        return { key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: [move, note].filter(Boolean).join(' · '), sub: h.classes?.length ? h.classes.map(classLine).join(' · ') : undefined, delta }
       })
       .filter((x) => x.delta !== 0)
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
@@ -420,9 +423,14 @@ export function ManagerPage() {
                         {t}
                       </span>
                     ))}
+                    {(h.mixed || (h.change as string) === 'mixed') && <span className="mt-0.5 block text-[12px] leading-snug text-ink-2">{mixedLabel(h)}</span>}
+                    <ClassLines h={h} className="mt-0.5" />
                   </td>
                   <td className="hidden px-3 py-2.5 text-ink-2 md:table-cell">{h.sector}</td>
-                  <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">{sharesFmt(h.shares)}</td>
+                  <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">
+                    {h.shares == null ? <span className="text-ink-3" title="Share classes without a conversion ratio can’t be added up">—</span> : sharesFmt(h.shares)}
+                    {h.shares_unit && <span className="block whitespace-nowrap text-[11.5px] text-ink-3">in {h.shares_unit} shares</span>}
+                  </td>
                   <td className="num px-3 py-2.5 text-right font-medium">{flagOf(h) === 'value' ? <span className="font-normal text-ink-3">n/a</span> : money(h.value)}</td>
                   <td className="px-5 py-2.5 md:px-6">
                     <div className="flex items-center justify-end gap-3">

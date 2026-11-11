@@ -1,3 +1,4 @@
+import type { ShareClass } from '../components/ShareClasses'
 import { useEffect, useState } from 'react'
 import { displayName } from './names.mjs'
 export { displayName }
@@ -58,6 +59,11 @@ export type Holding = {
   unreliable?: Flag | null
   /** The filed value per share, when ingest zeroed the value (price_outlier). */
   filed_price?: number | null
+  /** An issuer row over several share classes (ingest's classes[]): one entry per class with its own trade; shares in
+   *  shares_unit's unit, or null where classes can't be summed; mixed when the classes moved opposite ways. */
+  classes?: ShareClass[] | null
+  shares_unit?: string | null
+  mixed?: boolean | null
 }
 
 /** Which figures of a flagged line can't be trusted: its value ("value"), its share counts ("shares"), or both. */

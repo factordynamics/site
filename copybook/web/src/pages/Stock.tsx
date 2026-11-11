@@ -15,7 +15,8 @@ import { Arrow, Badge, Button, edgeFade, Lock, Monogram, NotCounted, Panel, Skel
 import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, heldLinesNote, NOT_COUNTED } from '../lib/data'
 import { dueLead, stockTitle } from '../lib/titles.mjs'
 import { MARQUEE, possessive, shortName } from '../lib/names.mjs'
-import { aboutET, dayET, fridayAfter, loadExpected, loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, shortDay, stockPath, type ShareClassLine, type StockHolder } from '../lib/stocks'
+import { aboutET, dayET, fridayAfter, loadExpected, loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, shortDay, stockPath, type StockHolder } from '../lib/stocks'
+import { ClassLines, classLine, mixedLabel } from '../components/ShareClasses'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
   new: { label: 'New', tone: 'up' },
@@ -25,34 +26,7 @@ const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }>
   unchanged: { label: 'No change', tone: 'neutral' },
 }
 
-/** "A sold, C bought": the classes of a mixed row by their letter (ticker when the name gives none), untickered sleeves left to the lines below. */
-function mixedLabel(h: StockHolder) {
-  const side = (s: number) => [...new Set((h.classes ?? []).filter((c) => c.ticker && !c.held_reason && Math.sign(c.shares - c.prev_shares) === s).map((c) => c.class ?? c.ticker))].join(' and ')
-  return `mixed (${side(-1)} sold, ${side(1)} bought)`
-}
-const className = (c: ShareClassLine) => c.ticker ?? `CUSIP ${c.cusip}`
 const signed = (n: number, f: (v: number) => string) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${f(Math.abs(n))}`
-/** One share class of a multi-class row: "BRK.A −7,574 sh −$5.66B"; a held class shows what was filed and why, never $. */
-function classLine(c: ShareClassLine) {
-  const d = c.shares - c.prev_shares
-  if (c.held_reason) return `${className(c)} ${c.shares.toLocaleString('en-US')} sh · not counted: ${c.held_reason.replace(/_/g, ' ').replace(/\bcusip\b/i, 'CUSIP')}`
-  if (c.change === 'new' || c.change === 'exited') return `${className(c)} ${c.change} ${signed(d, (v) => v.toLocaleString('en-US'))} sh${c.delta_value != null ? ` ${signed(c.delta_value, money)}` : ''}`
-  if (!d) return `${className(c)} unchanged`
-  return `${className(c)} ${signed(d, (v) => v.toLocaleString('en-US'))} sh${c.delta_value != null ? ` ${signed(c.delta_value, money)}` : ''}`
-}
-/** The per-class lines under a holder row; held classes greyed. */
-function ClassLines({ h, className = '' }: { h: StockHolder; className?: string }) {
-  if (!h.classes?.length) return null
-  return (
-    <span className={`block text-[12px] leading-snug ${className}`}>
-      {h.classes.map((c) => (
-        <span key={c.cusip} className={`num block ${c.held_reason ? 'text-ink-3/70' : 'text-ink-3'}`}>
-          {classLine(c)}
-        </span>
-      ))}
-    </span>
-  )
-}
 
 export function StockPage() {
   const { ticker = '' } = useParams()
