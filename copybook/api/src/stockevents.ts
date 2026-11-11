@@ -388,3 +388,114 @@ export async function precomputeIssuers(env: Env, now: number, season: boolean, 
   await env.DB.put('issuers:checked', JSON.stringify(checked));
   return { names: list.length, due: due.length, refreshed: batch.filter((t) => !r.pending.includes(t)).length, pending: r.pending.length };
 }
+
+/**
+ * Last winter in one stock (Dec 1, 2025 to Jan 31, 2026 by EDGAR filing day), as winter-2025-26.json counts it: Form 4s
+ * whose issuer is the stock with a non-derivative code P by a director or officer, and every Schedule 13D/G on it. Kept
+ * in R2 (winter/2025-26/{TICKER}.json); filled by gene's spare SEC requests (fillWinter), never on a member's request.
+ */
+export interface WinterEvent {
+  ticker: string;
+  kind: 'insider_buy' | 'schedule_13dg';
+  form: string;
+  filed: string;
+  date: string | null;
+  who: string;
+  /** Insider buys: "director", or the officer's title. */
+  role: string | null;
+  value_usd: number | null;
+  /** 13D/G: new_stake or stake_update. */
+  action: string | null;
+  accession: string;
+  url: string;
+}
+interface WinterCache {
+  ticker: string;
+  cik: string | null;
+  entries: FeedEntry[] | null;
+  seen: Record<string, WinterEvent | 0>;
+  done: boolean;
+}
+export const WINTER = { from: '2025-12-01', to: '2026-01-31', key: (t: string) => `winter/2025-26/${t}.json` };
+const inWinter = (e: FeedEntry) => etDate(e.accepted) >= WINTER.from && etDate(e.accepted) <= WINTER.to;
+
+async function winterEvent(ticker: string, cik: string, e: FeedEntry, siblings: string[]): Promise<WinterEvent | 0 | null> {
+  const f4 = e.form.startsWith('4');
+  const ev = f4 ? await form4Event(ticker, cik, e) : await schedule13Event(ticker, cik, e, siblings);
+  if (!ev) return ev;
+  const base = { ticker, form: e.form, filed: etDate(e.accepted), accession: e.accession, url: ev.url };
+  if (!f4) return { ...base, kind: 'schedule_13dg', date: ev.event_date, who: ev.filer_name, role: null, value_usd: null, action: ev.action };
+  const roles = (ev.role ?? '').split(', ').filter(Boolean);
+  // A director or officer only (not a 10% owner alone, nor the company itself as an owner: issuer_cik checked above).
+  if (!ev.codes?.includes('P') || !roles.some((r) => r !== '10% owner')) return 0;
+  const role = roles.includes('Director') ? 'director' : (roles.find((r) => r !== '10% owner') ?? 'officer');
+  return { ...base, kind: 'insider_buy', date: ev.event_date, who: ev.filer_name, role, value_usd: ev.totals?.bought?.value_usd ?? null, action: null };
+}
+
+/** Gene's spare SEC requests: the next followed or owned name's winter, a few filings at a time, until every name is done. */
+export async function fillWinter(env: Env, budget: number): Promise<Record<string, unknown>> {
+  const list = JSON.parse((await env.DB.get('issuers:tickers')) ?? '[]') as string[];
+  const done = new Set(JSON.parse((await env.DB.get('winter:done')) ?? '[]') as string[]);
+  const t = list.find((x) => !done.has(x));
+  if (!t || budget < 4) return { names: list.length, done: done.size };
+  let spent = 0;
+  const can = () => spent < budget && secBudget.left > 1;
+  const obj = await env.HIST.get(WINTER.key(t));
+  const c: WinterCache = obj ? ((await new Response(obj.body).json()) as WinterCache) : { ticker: t, cik: null, entries: null, seen: {}, done: false };
+  const ids = await issuerCiks(env, [t]);
+  if (!ids[t]) c.done = true; // no SEC CIK (an ETF, a fund): nothing to read
+  else {
+    c.cik = ids[t].cik;
+    if (!c.entries) {
+      // EDGAR's company feed, newest first from Jan 31, 2026, back past Dec 1, 2025.
+      const pages = async (type: string, size: number) => {
+        const out: FeedEntry[] = [];
+        for (let p = 0; p < 6; p++) {
+          spent++;
+          const page = await companyFilings(c.cik!, type, size, p * size, '20260131');
+          out.push(...page);
+          if (page.length < size || etDate(page[page.length - 1].accepted) < WINTER.from) break;
+        }
+        return out;
+      };
+      const f4 = await pages('4', 100);
+      const s13 = await pages('SCHEDULE 13', 40);
+      c.entries = [...f4.filter((e) => /^4(\/A)?$/.test(e.form)), ...s13].filter(inWinter);
+    }
+    for (const e of c.entries.filter((x) => !(x.accession in c.seen))) {
+      if (!can()) break;
+      spent++;
+      const r = await winterEvent(t, c.cik!, e, ids[t].tickers).catch(() => null);
+      c.seen[e.accession] = r ?? 0;
+    }
+    c.done = c.entries.every((x) => x.accession in c.seen);
+  }
+  await env.HIST.put(WINTER.key(t), JSON.stringify(c), { httpMetadata: { contentType: 'application/json' } });
+  if (c.done) await env.DB.put('winter:done', JSON.stringify([...done, t]));
+  return { names: list.length, done: done.size + (c.done ? 1 : 0), ticker: t, entries: c.entries?.length ?? 0 };
+}
+
+/** A member's names last winter, from the cache: counts, the events with dollars and dates, and names not read yet. */
+export type WinterPreview = { window: [string, string]; names: number; insider_buys: number; schedule_13dg: number; events: WinterEvent[]; pending: string[] };
+export async function winterPreview(env: Env, tickers: string[]): Promise<WinterPreview | null> {
+  const names = [...new Set(tickers.map((x) => x.toUpperCase()))];
+  if (!names.length) return null;
+  const events: WinterEvent[] = [];
+  const pending: string[] = [];
+  for (const t of names.slice(0, 60)) {
+    const obj = await env.HIST.get(WINTER.key(t));
+    const c = obj ? ((await new Response(obj.body).json()) as WinterCache) : null;
+    if (!c?.done) pending.push(t);
+    else events.push(...Object.values(c.seen).filter((x): x is WinterEvent => !!x));
+  }
+  events.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0) || b.filed.localeCompare(a.filed));
+  return { window: [WINTER.from, WINTER.to], names: names.length, insider_buys: events.filter((e) => e.kind === 'insider_buy').length, schedule_13dg: events.filter((e) => e.kind === 'schedule_13dg').length, events, pending };
+}
+
+/** "MU director bought $7.8M on Jan 13" */
+export function winterLine(e: WinterEvent): string {
+  const d = e.date ?? e.filed;
+  const on = new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const usd = (v: number) => (v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${Math.round(v / 1e3)}K` : `$${Math.round(v)}`);
+  return e.kind === 'insider_buy' ? `${e.ticker} ${e.role} bought${e.value_usd ? ` ${usd(e.value_usd)}` : ''} on ${on}` : `${e.who} filed a ${e.form.replace(/^SC /, 'Schedule ')} on ${e.ticker} on ${on}`;
+}

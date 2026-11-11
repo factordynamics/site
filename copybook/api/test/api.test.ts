@@ -3075,6 +3075,19 @@ describe('copybook api', () => {
     expect([wq.tickers.CSGP.events.length, wq.tickers.CSGP.window]).toEqual([22, quarterStart(Date.now()).replace(/\.\d{3}Z$/, 'Z')]);
     expect((await call('/events?tickers=CSGP&limit=11', { token })).status).toBe(400);
     expect(r.tickers.CSGP.window).toBe(quarterStart(Date.now()).replace(/\.\d{3}Z$/, 'Z'));
+    // Last winter (Dec 1, 2025 to Jan 31, 2026 by filing day), for the day-12 email and /me?include=winter: the CEO's
+    // code-P buy filed in the window counts with its dollars; a grant in the window and a buy filed before it don't.
+    secFiles['company:0001057352:4'] = `<feed>${entry('0001628280-26-052968', '2026-01-13T21:00:00Z')}${entry(acc(1), '2026-01-10T21:00:00Z')}${entry(acc(99), '2025-11-20T21:00:00Z')}</feed>`;
+    await env.DB.put('issuers:tickers', JSON.stringify(['CSGP', 'IVV']));
+    const { fillWinter, winterPreview } = await import('../src/stockevents');
+    for (let i = 0; i < 3; i++) await fillWinter(env, 20);
+    const pv = (await winterPreview(env, ['CSGP', 'IVV']))!;
+    expect([pv.names, pv.insider_buys, pv.schedule_13dg, pv.pending, pv.events.map((e) => [e.ticker, e.kind, e.value_usd, e.accession])]).toEqual([2, 1, 0, [], [['CSGP', 'insider_buy', 2489837, '0001628280-26-052968']]]);
+    const { day12Mail } = await import('../src/revenue');
+    const d12 = day12Mail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Date.UTC(2026, 10, 25, 20) / 1000, has_payment_method: false } as never, 'u', Date.now(), pv);
+    expect(d12.text).toMatch(/Your 2 names had 1 insider buy and 0 13D\/G filings last winter, e\.g\. CSGP (director|.+) bought \$2\.5M on Aug 4\./);
+    const me = await (await call('/me?include=winter', { token })).json();
+    expect(me.member.winter_preview === null || typeof me.member.winter_preview?.names === 'number').toBe(true);
   });
 
   it('GET /events: the window is on the trade date, % change is from P/S lines only (GOOGL: a Jun 29 sale filed Jul 1, gifts into his own trust)', async () => {

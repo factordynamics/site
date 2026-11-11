@@ -4,6 +4,7 @@ import { isActive, isPaused, WORKER_URL, pauseScheduled, testAddress, type Env, 
 import { unsubscribeUrl } from './free';
 import { customerHasCard, getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
 import { SEAT_LIMIT } from './seats';
+import { type WinterPreview, winterLine } from './stockevents';
 import { DEADLINES, deadlineLabel, deadlineMs, inFilingWeek, lastDeadline, nextDeadline, pauseResumesAt } from './seasons';
 import { stripe } from './stripe';
 import { signToken, verifyToken } from './tokens';
@@ -425,7 +426,7 @@ export const WINTER_LINE = 'Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G
  * The day-12 email for a cardless Copy trial between seasons (marketing's plan rev 76): it just ends, nothing charged;
  * what Copy gives from now to February; the founding price; monthly pauses once a year; the free tier stays.
  */
-export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now()): Mail {
+export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now(), preview?: WinterPreview | null): Mail {
   const weekday = new Date(m.trial_end! * 1000).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
   const add = `${env.SITE_URL}account/`;
   const gives = [
@@ -434,18 +435,21 @@ export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now()):
     now < Date.UTC(2026, 11, 5, 11) ? 'The Friday email on Dec 4.' : 'The Friday email, every week.',
     'February\'s 13Fs, each one by email as it\'s filed (due Tue 16 Feb).',
   ];
+  // The member's own names (marketing's rev 73): only when every name is read and something happened.
+  const pv = preview && !preview.pending.length && preview.insider_buys + preview.schedule_13dg > 0 ? preview : null;
+  const mine = pv ? `Your ${pv.names} name${pv.names === 1 ? '' : 's'} had ${pv.insider_buys} insider buy${pv.insider_buys === 1 ? '' : 's'} and ${pv.schedule_13dg} 13D/G filing${pv.schedule_13dg === 1 ? '' : 's'} last winter${pv.events.length ? `, e.g. ${pv.events.slice(0, 2).map(winterLine).join('; ')}` : ''}.` : '';
   const keep = 'Keep Copy at the founding price: $79/yr, locked. Goes to $99 for new members Feb 1. Monthly? Pause once a year, up to 3 months, and it resumes for the next 13F season. Both start once you add a card.';
   const stay = 'The free pages and the free Friday email stay yours.';
   return {
     to: m.email,
     subject: `Your Copy trial ends ${weekday}`,
-    text: `Your Copy trial ends ${weekday}, ${endAt(m.trial_end!)}. No card is on file, so it simply ends and nothing is charged.\n\nFrom now to February, Copy gives you:\n${gives.map((g) => `  - ${g}`).join('\n')}\n\n${WINTER_LINE}\n\n${keep}\nAdd a card: ${add}\n\n${stay}\n\nUnsubscribe from Copybook emails: ${unsub}${FOOTER}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your Copy trial ends <b>${esc(weekday)}, ${esc(endAt(m.trial_end!))}</b>. No card is on file, so it simply ends and nothing is charged.</p><p style="margin-bottom:4px"><b>From now to February, Copy gives you</b></p><ul style="margin-top:0;padding-left:20px">${gives.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>${esc(WINTER_LINE)} <a href="https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/winter-2025-26.json" style="color:#1d4ed8">The filings</a></p><p>${esc(keep)}</p><p><a href="${add}" style="color:#1d4ed8"><b>Add a card</b></a></p><p>${esc(stay)}</p><p style="font-size:12px;color:#6b7280"><a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+    text: `Your Copy trial ends ${weekday}, ${endAt(m.trial_end!)}. No card is on file, so it simply ends and nothing is charged.\n\nFrom now to February, Copy gives you:\n${gives.map((g) => `  - ${g}`).join('\n')}\n\n${WINTER_LINE}${mine ? `\n${mine}` : ''}\n\n${keep}\nAdd a card: ${add}\n\n${stay}\n\nUnsubscribe from Copybook emails: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your Copy trial ends <b>${esc(weekday)}, ${esc(endAt(m.trial_end!))}</b>. No card is on file, so it simply ends and nothing is charged.</p><p style="margin-bottom:4px"><b>From now to February, Copy gives you</b></p><ul style="margin-top:0;padding-left:20px">${gives.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>${esc(WINTER_LINE)} <a href="https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/winter-2025-26.json" style="color:#1d4ed8">The filings</a></p>${mine ? `<p>${esc(mine)}</p>` : ''}<p>${esc(keep)}</p><p><a href="${add}" style="color:#1d4ed8"><b>Add a card</b></a></p><p>${esc(stay)}</p><p style="font-size:12px;color:#6b7280"><a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
     unsubscribe: unsub,
   };
 }
 
-export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: number, owned: number, keep: string, unsub: string, daysLeft = 3): Mail {
+export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: number, owned: number, keep: string, unsub: string, daysLeft = 3, preview?: WinterPreview | null): Mail {
   const p = PRICES[m.plan];
   const plural = (n: number, w: string) => `${n.toLocaleString('en-US')} ${w}${n === 1 ? '' : 's'}`;
   const got = s.n
@@ -468,7 +472,7 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
   const founding = FOUNDING[m.plan] ? ` ${FOUNDING[m.plan]}` : '';
   const ends = endAt(m.trial_end!);
   // A no-card trial (Copy from Nov 11): it ends on its own, so the ask is to add a card, and doing nothing costs nothing.
-  if (m.has_payment_method === false && m.plan === 'copy' && betweenSeasons(m.trial_end!)) return day12Mail(env, m, unsub);
+  if (m.has_payment_method === false && m.plan === 'copy' && betweenSeasons(m.trial_end!)) return day12Mail(env, m, unsub, Date.now(), preview);
   if (m.has_payment_method === false) {
     const add = `${env.SITE_URL}account/`;
     const keepLine = `Add a card to keep ${p.name} (${charge}${yearly ? '' : `, or ${money(p.year)}/year`}): ${add} (Manage billing). The first charge is on ${ends}.`;
@@ -752,7 +756,8 @@ Unsubscribe: ${await unsubscribeUrl(env, m.customer)}${FOOTER}`, unsubscribe: aw
       } else {
         // A card added in Manage billing since the last sync (customer.updated doesn't re-sync): ask only if still none.
         if (m.has_payment_method === false && (await customerHasCard(env, m.customer))) m.has_payment_method = true;
-        mails.push(trialEndingMail(env, m, await memberStats(env, m.customer), f.investors.length, f.owned.length, keep, await unsubscribeUrl(env, m.customer), Math.max(1, Math.ceil(left / 86400_000))));
+        const pv = m.has_payment_method === false && m.plan === 'copy' ? await (await import('./stockevents')).winterPreview(env, [...f.stocks, ...f.owned]).catch(() => null) : null;
+        mails.push(trialEndingMail(env, m, await memberStats(env, m.customer), f.investors.length, f.owned.length, keep, await unsubscribeUrl(env, m.customer), Math.max(1, Math.ceil(left / 86400_000)), pv));
       }
       marks.push({ ...m, trial_reminded: m.trial_end });
     } else if (recap && m.status === 'active' && m.interval === 'monthly' && m.recap_sent !== recap && !m.marketing_off) {

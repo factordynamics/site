@@ -2754,7 +2754,13 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
       email2: () => import('./free').then((x) => x.runEmail2(env, job.at)),
       namesWeekly: () => runWeeklyNames(env, job.at),
       // A quiet minute's leftover SEC requests, keeping 4 for the mailer and GitHub.
-      issuers: () => import('./stockevents').then((x) => x.precomputeIssuers(env, scheduledTime, inFilingWeek(scheduledTime), Math.min(16, secBudget.left - 4))),
+      issuers: () =>
+        import('./stockevents').then(async (x) => {
+          const r = await x.precomputeIssuers(env, scheduledTime, inFilingWeek(scheduledTime), Math.min(16, secBudget.left - 4));
+          // gene only, outside filing week: last winter's events in followed and owned names (the day-12 preview).
+          const gene = !(await import('./failover')).isCloudflare(env);
+          return gene && !inFilingWeek(scheduledTime) ? { ...r, winter: await x.fillWinter(env, Math.min(12, secBudget.left - 4)) } : r;
+        }),
     };
     await step(job.name, run[job.name]);
   }
