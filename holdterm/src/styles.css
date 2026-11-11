@@ -436,6 +436,9 @@ main:focus {
   flex-wrap: wrap;
   gap: 4px 14px;
 }
+.head .meta .due-next {
+  color: var(--fg2);
+}
 .head .meta > span {
   white-space: nowrap;
 }
