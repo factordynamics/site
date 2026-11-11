@@ -211,7 +211,7 @@ function HistoryBody({ slug, quarters }: { slug: string; quarters: Quarter[] }) 
                 const p = prevMap.get(holdingKey(h))
                 const ds = p ? h.shares - p.shares : 0
                 return (
-                  <tr key={holdingKey(h)} className="border-b border-line last:border-0 hover:bg-ink/[0.025]">
+                  <tr key={`${holdingKey(h)}|${h.cusip}`} className="border-b border-line last:border-0 hover:bg-ink/[0.025]">
                     <td className="px-5 py-2.5 md:px-6">
                       <div className="flex min-w-0 items-center gap-2">
                         <Ticker t={h.ticker} className="w-14 shrink-0" />

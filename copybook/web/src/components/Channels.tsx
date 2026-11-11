@@ -26,6 +26,12 @@ type Channels = {
   team?: { discord: string | null; slack: string | null; telegram: { chat_id: string } | null; webhook: { url: string; secret?: string } | null; failing?: Failing } | null
 }
 export type Failing = Partial<Record<'discord' | 'slack' | 'telegram' | 'webhook', { reason: string; since: string }>>
+/** One destination's test result in words. A test address's mail is diverted to the test inbox (`sinked`). */
+export function testResult(k: string, v: string, msg?: string) {
+  if (/^sink(ed)?$|^sunk$/i.test(v) || /\(sunk\)|\bsinked\b/i.test(msg ?? '')) return 'sent to your test inbox'
+  if (msg) return msg
+  return /^2\d\d$|^ok$|^sent$/.test(v) ? (k === 'feed' ? 'added' : 'delivered') : `failed (${v})`
+}
 export const CHANNEL_LABEL = { discord: 'Discord', slack: 'Slack', telegram: 'Telegram', webhook: 'The webhook' } as const
 const sinceLabel = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 type Put = Partial<{ keep_email: boolean; discord: string | null; slack: string | null; telegram: { bot_token: string; chat_id?: string } | null; webhook: string | null; rotate_secret: boolean }>
@@ -78,7 +84,7 @@ export function Channels() {
     try {
       // The API's messages are written for members ("Discord rejected this webhook…"); status codes are the fallback.
       const r = await call<{ results: Record<string, string>; messages?: Record<string, string> }>('/channels/test', { method: 'POST', auth: true })
-      setTest(Object.fromEntries(Object.entries(r.results).map(([k, v]) => [k, r.messages?.[k] ?? (/^2\d\d$|^ok$/.test(v) ? 'delivered' : `failed (${v})`)])))
+      setTest(Object.fromEntries(Object.entries(r.results).map(([k, v]) => [k, testResult(k, v, r.messages?.[k])])))
       // The Copy setup list's last step: a test that reached at least one destination.
       if (Object.values(r.results).some((v) => /^2\d\d$|^ok$/.test(v))) localStorage.setItem('copybook.testOk', '1')
     } catch (e) {
@@ -119,6 +125,11 @@ export function Channels() {
               Also email me alerts
               <span className="text-[12.5px] text-ink-3">{c.keep_email ? 'Email and chat' : 'Chat only, once one works'}</span>
             </label>
+          )}
+          {c && c.scope !== 'team' && !(c.verified ?? []).some((k) => k !== 'feed' && c[k as 'slack' | 'discord' | 'telegram' | 'webhook']) && (
+            <p className="mt-1.5 text-[13px] text-ink-2">
+              <span className="font-medium text-ink">Email: on</span> until a chat channel is connected and verified.
+            </p>
           )}
           {note('keep_email')}
         </div>
@@ -345,7 +356,7 @@ function Telegram({ value, badge, onSave, note }: { value: Channels['telegram'];
       name={<>Telegram{badge}</>}
       hint={
         <>
-          Create a bot with <span className="font-mono text-[12px]">@BotFather</span>, send it a message, then enter its token and your chat id, or <span className="font-mono text-[12px]">@channelname</span> for a channel the bot is in.
+          Create a bot with <span className="font-mono text-[12px]">@BotFather</span>, send it any message, then enter its token. We find your chat id from that message; to post to a channel instead, enter <span className="font-mono text-[12px]">@channelname</span> for a channel the bot is in.
         </>
       }
     >
@@ -376,7 +387,7 @@ function Telegram({ value, badge, onSave, note }: { value: Channels['telegram'];
           <Button size="sm" type="submit" className="h-10">
             Save
           </Button>
-          <p id="tg-chat-hint" className="text-[12px] text-ink-3 sm:col-span-3">Chat id: leave blank, and we find it after you message your bot.</p>
+          <p id="tg-chat-hint" className="text-[12px] text-ink-3 sm:col-span-3">Leave blank: we find it after you message your bot.</p>
         </form>
       )}
       {note}
