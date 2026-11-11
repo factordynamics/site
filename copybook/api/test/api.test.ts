@@ -1341,12 +1341,12 @@ describe('copybook api', () => {
     // The date of the send; a Kahn follower's email opens on Kahn's filing (his 3 largest moves, not GONE, person and
     // fund, % of fund), one Copy line for every row, the speed line, then the trial button on the first screen.
     const pricingUrl = 'https://refcell.github.io/gust/copybook/pricing/?from=e2&utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-paid&client_reference_id=email_e2-paid';
-    expect(text.startsWith(`13F deadline night, Monday, November 16.\n\nYour follows:\n  Irving Kahn (Kahn Brothers) filed its Q3 13F today: trimmed TRIM −$8.0M (1.0% of fund); added ADDS +$5.0M (0.6% of fund); new position in NEWB +$4.0M (0.5% of fund)\n    https://refcell.github.io/gust/copybook/f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows\n\nGet each 13F as it's filed, with Copy · 14 days free · card required: ${pricingUrl}\n\n`)).toBe(true);
+    expect(text.startsWith(`13F deadline night, Monday, November 16.\n\nYour follows:\n  Irving Kahn (Kahn Brothers) filed its Q3 13F today: trimmed TRIM −$8.0M (1.0% of fund); added ADDS +$5.0M (0.6% of fund); new position in NEWB +$4.0M (0.5% of fund)\n    https://refcell.github.io/gust/copybook/f/0001039565-26-000005/?utm_source=email&utm_medium=email&utm_campaign=e2&utm_content=e2-follows\n\nGet each 13F as it's filed, with Copy · 14 days free · no card needed: ${pricingUrl}\n\n`)).toBe(true);
     expect(text).not.toMatch(/median|minutes after/);
     expect(text).not.toContain('GONE');
     // No speed figures or clock times (the lead's rule for Email 2): the trial button follows the follows directly.
     for (const part of [text, k.get('html')!]) expect(part).not.toMatch(/\d:\d\d [ap]m|Copy members had|Preview example/);
-    expect(k.get('html')).toMatch(/<\/div><p[^>]*><a [^>]*>Get each 13F as it's filed, with Copy<\/a><\/p><p[^>]*>14 days free · card required</);
+    expect(k.get('html')).toMatch(/<\/div><p[^>]*><a [^>]*>Get each 13F as it's filed, with Copy<\/a><\/p><p[^>]*>14 days free · no card needed</);
     // Below: each manager's top sell and top buy (exits count), managers by their largest move.
     expect(text).toContain("The day's biggest moves:\n  Matthew McLennan (First Eagle): sold out of CHRW −$686.0M (1.4% of fund)\n  Matthew McLennan (First Eagle): new position in NVR +$400.1M (0.8% of fund)\n  David Tepper: sold out of TS1 −$500.0M\n  Howard Marks: trimmed HM1 −$300.0M\n");
     expect(text).not.toMatch(/UBER|EXPD|HM2|TS2/);
@@ -2074,7 +2074,7 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
     const w = sent[0];
     // Only the allowed claims: the season median with /speed/, and history as served (marketing's audit, Nov 11).
-    expect(w.text).toContain("This email comes once a week. Copy emails each 13F from the funds you follow as it's filed, median under 2 minutes from EDGAR acceptance (live figures: " + SITE + 'speed/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-speed), with 8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV. 14 days free · card required: ' + SITE + 'pricing/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-paid');
+    expect(w.text).toContain("This email comes once a week. Copy emails each 13F from the funds you follow as it's filed, median under 2 minutes from EDGAR acceptance (live figures: " + SITE + 'speed/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-speed), with 8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV. 14 days free · no card needed: ' + SITE + 'pricing/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-paid');
     // The window it covers, by name (Sat Nov 14 02:00 UTC: Fri Nov 6 to Fri Nov 13, ET).
     expect(w.text.startsWith('Superinvestor filings, November 6–13.')).toBe(true);
     expect(w.subject).toBe('In your names: Warren Buffett added $8.8B of GOOGL');
@@ -2086,7 +2086,7 @@ describe('copybook api', () => {
       `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-card\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-follows\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-follows\n  Nvidia's CEO sold $18.6M of NVDA (Nov 6, filed Nov 10), with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
     );
     expect(w.text.indexOf('In your names')).toBeLessThan(w.text.indexOf('Biggest buys'));
-    expect(w.html).toContain('Try Copy · 14 days free · card required');
+    expect(w.html).toContain('Try Copy · 14 days free · no card needed');
     // The footer says why they get it and carries the mailing address; without the address, the Copy ask is dropped.
     expect(w.text).toContain('You get this because you signed up for the free Copybook weekly.');
     expect(w.text).toContain('\n1 Example Way, Suite 2, Austin, TX 78701');
@@ -2585,7 +2585,7 @@ describe('copybook api', () => {
     expect([/\+\$30\.2B/.test(old.text + old.html), old.text.includes('Not counted: EW puts new'), /EW/.test(old.subject)]).toEqual([false, true, false]);
     // Webhooks: the held line only in not_counted, never summable.
     const hook = JSON.parse(webhookPayloads({ SITE_URL: 'https://site.test/' } as Env, [{ slug: 'belvedere', slugs: ['belvedere'], manager: 'Belvedere', name: 'Belvedere', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000011', sec_url: 'https://www.sec.gov/x', moves: { ...ew, new: ew.not_counted!, not_counted: undefined }, tickers: [] } as never], [], Date.now())[0].body).moves;
-    expect([hook.new.length, hook.not_counted.map((r: { ticker: string; change: string | null; value_delta: number | null; counted: boolean; value_change?: number }) => [r.ticker, r.change, r.value_delta, r.counted, r.value_change])]).toEqual([0, [['EW', null, null, false, undefined]]]);
+    expect([hook.new.length, hook.not_counted.map((r: { ticker: string; change: string | null; value_delta: number | null; counted: boolean; value_change?: number }) => [r.ticker, r.change, r.value_delta, r.counted, r.value_change])]).toEqual([0, [['EW', 'new', null, false, undefined]]]);
     // Mizuho Securities USA's ORCL: Q2 under 68389X204, Q3 under 68389X105, one issuer prefix. Without ingest's
     // cusip_mismatch it may be one position: both lines held as a possible CUSIP change, never "NEW ORCL".
     const oq2 = [pos('ORCL', '68389X204', 132_845, 19_500_000), pos('REST', '000000009', 1, 6e9)];

@@ -545,7 +545,7 @@ export function openapi() {
                     filer: { type: 'object', properties: { slug: { type: ['string', 'null'] }, manager: { type: 'string' }, name: { type: 'string' } } },
                     quarter: { type: 'string', description: '13f only' },
                     report_date: { type: 'string', format: 'date', description: '13f only' },
-                    moves: { type: ['object', 'null'], description: "13f only: { bought_usd, sold_usd, new[], added[], trimmed[], exited[] }, each row { cusip, ticker, issuer, shares, prev_shares, value, value_delta, ... }; null when the filing is too large to read live (a followup carries it)." },
+                    moves: { type: ['object', 'null'], description: "13f only: { bought_usd, sold_usd, new[], added[], trimmed[], exited[], not_counted[] }, each row { cusip, ticker, issuer, shares, prev_shares, value, value_delta, ... }. not_counted[]: lines whose filed figures don't reconcile or may be a CUSIP change, never in the other lists or the totals; each has value_delta and delta_pct_of_book null, counted: false, change 'unknown' where it would have read added or trimmed (new and exited stand), and its filed value and prev_value. Sum value_delta over new, added, trimmed and exited only; null when the filing is too large to read live (a followup carries it)." },
                     top_holdings: { type: ['array', 'null'], description: '13f only: largest holdings when there is no prior quarter to compare.' },
                     issuer: { type: 'string', description: 'events only' },
                     ticker: { type: ['string', 'null'] },
