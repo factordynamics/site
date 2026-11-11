@@ -197,6 +197,8 @@ interface LatencyRow {
   sent: string;
   seconds: number;
   replay?: boolean;
+  /** A 13F row timed by the email that carried its moves. */
+  moves?: boolean;
   /** Rows from before the tag are curated managers' (the poll timed only those). */
   coverage?: 'curated' | 'any_filer';
 }
@@ -226,7 +228,8 @@ function spread(xs: number[]) {
  */
 export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = []) {
   const { season, from } = seasonOf(now);
-  const rows = log.filter((l) => !l.replay && Date.parse(l.sent) >= from);
+  // 13Fs are timed by the email that carried the moves (rows tagged `moves`); older 13F rows timed the first email.
+  const rows = log.filter((l) => !l.replay && Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves));
   const chRows = ch.filter((c) => Date.parse(c.delivered) >= from);
   const all = spread(rows.map((l) => l.seconds));
   const FORM: Record<string, string> = { '13f': '13F-HR', form4: '4', '13d': 'SC 13D', '13g': 'SC 13G' };

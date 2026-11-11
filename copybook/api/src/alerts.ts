@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
-import { bookSuspect, companyFilings, computeMoves, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { bookSuspect, companyFilings, computeMoves, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, type Env, type Member } from './env';
 import { getFollows, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -41,6 +41,10 @@ export interface Alert13F {
   extra?: boolean;
   /** Largest holdings, when there is no prior quarter to diff against. */
   top?: MoveRow[];
+  /** Sent before its moves could be computed: the moves follow in a second email (gene computes them from EDGAR). */
+  moves_pending?: boolean;
+  /** Every changed position above $100K (largest first, up to 400): each member's owned and watched moves are named. */
+  changed?: MoveRow[];
   /** A 13F-HR/A of type NEW HOLDINGS: positions added to an earlier quarter's book, often previously confidential. */
   reveal?: { confidential: boolean; amendment_no: number | null; book_total: number | null; rows: MoveRow[] };
   /** The site has a public filing card at /f/{accession}/ for this filing. */
@@ -613,9 +617,9 @@ export async function splitsFor(env: Env, quarter: string): Promise<Set<string>>
   return new Set(SPLITS.list.filter((x) => x.to_quarter === quarter).flatMap((x) => [x.cusip, ...(x.ticker ? [x.ticker] : [])]));
 }
 
-async function priorBook(env: Env, slug: string, reportDate: string): Promise<Position[] | null> {
+async function priorBook(env: Env, slug: string, reportDate: string, maxBytes = 2_000_000): Promise<Position[] | null> {
   const obj = await env.HIST.get(`h/${slug}/${quarterOf(reportDate)}.json`);
-  if (!obj || (obj.size ?? 0) > 2_000_000) return null;
+  if (!obj || (obj.size ?? 0) > maxBytes) return null;
   return ((await new Response(obj.body).json()) as { holdings?: Position[] }).holdings ?? null;
 }
 
@@ -782,6 +786,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
       let moves: Moves | null = null;
       let tickers: string[] = [];
       let top: MoveRow[] | undefined;
+      let changed: MoveRow[] | undefined;
       if (f.holdings) {
         for (const s of slugs) {
           const book = isExtra ? await filerShardBook(env, e.cik, prev[s]) : await priorBook(env, s, prev[s]);
@@ -789,6 +794,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
           const q = quarterOf(f.report_date);
           const r = computeMoves(f.holdings, book, undefined, await splitsFor(env, q), await perShareMedians(env, perShareSuspects(f.holdings, book).slice(0, 6), q));
           moves = r.moves;
+          changed = keepChanged(r.changed);
           // Held positions already carry tickers from last quarter's book; look up only the new ones
           // shown in the email (each lookup scans the securities map, ~0.5 ms of CPU).
           await lookupTickers(env, moves.new);
@@ -817,6 +823,9 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
         accepted: e.accepted,
         moves,
         tickers,
+        ...(changed ? { changed } : {}),
+        // Too big to parse here, or no prior quarter on hand: gene computes the moves from EDGAR within minutes.
+        ...(!moves && !top ? { moves_pending: true } : {}),
         ...(isExtra ? { extra: true } : {}),
         ...(top ? { top } : {}),
         ...(f.holdings && bookSuspect(f.holdings, f.cover_total ?? null) ? { suspect_book: true } : {}),
@@ -831,13 +840,15 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
     await env.DB.put('alerts:periods', JSON.stringify(periods));
   }
   // Curated books too big to diff here get their moves in a follow-up once the data run has them.
-  const later = fresh.filter((f) => !f.moves && !f.extra && !f.reveal);
+  const later = fresh.filter((f) => f.moves_pending);
   if (later.length) await env.DB.put('alerts:pending-moves', JSON.stringify([...JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]'), ...later]));
   const sent = await deliver(env, fresh, [], now);
   // A curated filer filed: refresh the data now, so pages, history and moves follow within ~15 minutes.
   const filed = done.filter((e) => curated[e.cik]);
   const refresh = filed.length && rawPeriods ? await dispatchRefresh(env, 'curated', `filing by ${curated[filed[0].cik][0].slug}`, now, filed[0].accession) : undefined;
-  if (fresh.length) await logLatency(env, fresh.map((f) => (f.reveal ? { ...f, form: '13F-HR/A' } : f)), Date.now());
+  // A 13F is timed by the email that carries its moves: one sent without them is timed when they follow.
+  const timed = fresh.filter((f) => !f.moves_pending);
+  if (timed.length) await logLatency(env, timed.map((f) => (f.reveal ? { ...f, form: '13F-HR/A' } : f)), Date.now());
   return { status: 'checked', filings: fresh.map((f) => `${f.slug} ${f.quarter}${f.moves ? '' : ' (no moves)'}`), ...sent, ...(deferred ? { deferred } : {}), ...(refresh ? { refresh } : {}), ...(errors.length ? { errors } : {}) };
 }
 
@@ -851,7 +862,7 @@ async function logLatency(env: Env, filings: { slug: string; accession: string; 
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
   const add = filings
     .filter((f) => f.accepted)
-    .map((f) => ({ slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}) }));
+    .map((f) => ({ slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', ...((f.kind ?? '13f') === '13f' ? { moves: true } : {}), accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}) }));
   // A filing season's worth: the public /latency page reports the whole season.
   await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 2000)));
 }
@@ -924,7 +935,67 @@ async function pendingFollowups(env: Env, now: number, movesFor = recentMoves(en
   }
   if (wait.length) await env.DB.put('alerts:pending-moves', JSON.stringify(wait));
   else await env.DB.delete('alerts:pending-moves');
-  return ready.length ? { followups: { filings: ready.map((f) => f.slug), ...(await deliver(env, ready, [], now)) } } : {};
+  return sendFollowups(env, ready, now);
+}
+
+/** Sends moves follow-ups once, whichever host computed them first (an R2 claim per filing), and times them. */
+async function sendFollowups(env: Env, ready: Alert13F[], now: number): Promise<Record<string, unknown>> {
+  const { claimOnce } = await import('./failover');
+  const mine: Alert13F[] = [];
+  for (const f of ready) if (await claimOnce(env, `moves/${f.accession}`, now)) mine.push(f);
+  if (!mine.length) return {};
+  const sent = await deliver(env, mine, [], now);
+  await logLatency(env, mine.map((f) => ({ ...f, kind: '13f' })), Date.now());
+  return { followups: { filings: mine.map((f) => f.slug), ...sent } };
+}
+
+/** Changed rows kept on the alert: $100K and up, largest first, at most 400 (owned and watched names come from these). */
+const keepChanged = (rows: MoveRow[]) => rows.filter((r) => Math.abs(r.value_delta) >= 100_000).sort((a, b) => Math.abs(b.value_delta) - Math.abs(a.value_delta)).slice(0, 400);
+
+/**
+ * gene, every minute: moves for 13Fs sent without them (tables too big for Cloudflare's CPU limit, or no prior book in
+ * Cloudflare's R2). gene has no CPU limit: it reads the whole table from EDGAR, the prior quarter from R2 (h/, or a
+ * non-curated filer's baseline) or else from EDGAR, and sends the follow-up. The data run's moves stay the fallback.
+ */
+export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promise<Record<string, unknown>> {
+  const pending = JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[];
+  if (!pending.length) return { pending: 0 };
+  const t0 = Date.now();
+  secBudget.left = Math.max(secBudget.left, 30);
+  const ready: Alert13F[] = [];
+  const failed: string[] = [];
+  for (const p of pending) {
+    if (Date.now() - t0 > budgetMs) break;
+    const cik = p.sec_url.match(/\/edgar\/data\/(\d+)\//)?.[1];
+    if (!cik) continue;
+    try {
+      const f = await fetch13F(cik, p.accession, Infinity);
+      if (!f?.holdings) {
+        failed.push(p.accession);
+        continue;
+      }
+      const prevEnd = prevQuarterEnd(f.report_date);
+      const book = (p.extra ? await filerShardBook(env, cik, prevEnd) : await priorBook(env, p.slug, prevEnd, Infinity)) ?? (await prior13F(cik, f.report_date));
+      if (!book) {
+        failed.push(p.accession);
+        continue;
+      }
+      const q = quarterOf(f.report_date);
+      const r = computeMoves(f.holdings, book, undefined, await splitsFor(env, q), await perShareMedians(env, perShareSuspects(f.holdings, book).slice(0, 6), q));
+      // EDGAR tables carry no tickers: look up every changed row, so owned and watched names match.
+      await lookupTickers(env, [...r.changed, ...r.moves.new, ...r.moves.added, ...r.moves.trimmed, ...r.moves.exited]);
+      ready.push({ ...p, moves: r.moves, changed: keepChanged(r.changed), tickers: [...new Set(r.changed.map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, moves_pending: undefined });
+    } catch (e) {
+      failed.push(`${p.accession}: ${e}`);
+    }
+  }
+  if (!ready.length) return { pending: pending.length, failed };
+  // Take the sent ones off the list as it is now (Cloudflare may have added filings meanwhile).
+  const done = new Set(ready.map((r) => r.accession));
+  const left = (JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).filter((x) => !done.has(x.accession));
+  if (left.length) await env.DB.put('alerts:pending-moves', JSON.stringify(left));
+  else await env.DB.delete('alerts:pending-moves');
+  return { pending: pending.length, ...(await sendFollowups(env, ready, now)), ...(failed.length ? { failed } : {}) };
 }
 
 export async function runBackstop(env: Env, now: number): Promise<Record<string, unknown>> {

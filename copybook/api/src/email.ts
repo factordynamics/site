@@ -202,6 +202,16 @@ const acceptedUtc = (iso: string) => iso.replace('T', ' ').replace(/(\.\d+)?Z$/,
 /** The filing's public card when the site has built it, otherwise the investor page. */
 export const filingUrl = (env: Env, a: Alert13F) => (a.card ? `${env.SITE_URL}f/${a.accession}/` : `${env.SITE_URL}investors/${a.slug}`);
 
+/** Every move in the member's owned and watched names, named and tagged (the capped lists above may not show them). */
+function yourMoves(a: Alert13F, f: Follows): MoveRow[] {
+  const mv = a.moves;
+  if (!mv) return [];
+  const all = [...(a.changed ?? []), ...mv.new, ...mv.added, ...mv.trimmed, ...mv.exited];
+  const seen = new Set<string>();
+  return all.filter((r) => r.ticker && (f.owned.includes(r.ticker) || f.stocks.includes(r.ticker)) && !seen.has(`${r.ticker}:${r.put_call ?? ''}`) && !!seen.add(`${r.ticker}:${r.put_call ?? ''}`));
+}
+const verb = (r: MoveRow) => (!r.prev_shares ? 'new' : !r.shares ? 'exited' : r.shares > r.prev_shares ? 'added' : 'trimmed');
+
 function filingBlock(env: Env, a: Alert13F, f: Follows): string {
   const head = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}: ${quarterLabel(a.quarter)} 13F, filed ${a.filing_date}${a.followup ? ' (position changes)' : ''}`;
   const lines = [head];
@@ -221,17 +231,15 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
       });
       lines.push(`  ${label}: ${parts.join(', ')}`);
     }
-    const owned = a.tickers.filter((t) => f.owned.includes(t)).length;
-    const watched = a.tickers.filter((t) => f.stocks.includes(t) && !f.owned.includes(t)).length;
-    const yours = [owned && `${owned} ${owned === 1 ? 'is a stock' : 'are stocks'} you own`, watched && `${watched} ${watched === 1 ? 'is' : 'are'} on your watchlist`].filter(Boolean);
-    if (yours.length) lines.push(`  Of the positions that changed, ${yours.join(' and ')}.`);
+    const mine = yourMoves(a, f);
+    if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${verb(r)} ${usd(r.value_delta)}${r.shares ? `, ${r.shares.toLocaleString('en-US')} sh` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
   } else if (a.top?.length) {
     lines.push('  No earlier quarter on file for this filer, so no changes yet. Largest holdings:');
     lines.push(`  ${a.top.map((r) => `${r.ticker || r.display_name || r.issuer}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} ${usd(r.value, false)}${flag(r.ticker, f)}`).join(', ')}`);
-  } else if (a.extra) {
-    lines.push('  Holdings are on the filer page below.');
+  } else if (a.moves_pending || !a.extra) {
+    lines.push('  Position changes follow in a second email within minutes.');
   } else {
-    lines.push('  Too many positions to diff on filing. A second email with its position changes follows after the next data refresh, usually within a few hours.');
+    lines.push('  Holdings are on the filer page below.');
   }
   if (a.accepted) lines.push(`  Accession ${a.accession}, accepted by EDGAR ${acceptedUtc(a.accepted)}`);
   lines.push(`  Copybook: ${filingUrl(env, a)}`, `  SEC: ${a.sec_url}`);
@@ -411,11 +419,13 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
     const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}`, usd(r.value_delta), esc(positionChange(label, r)), bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', '% of book'], rows, [2, 4]));
+    const mine = yourMoves(a, f);
+    if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${verb(r)} ${usd(r.value_delta)} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
   } else if (a.top?.length) {
     out.push('<p style="margin:2px 0">No earlier quarter on file for this filer, so no changes yet. Largest holdings:</p>');
     out.push(table(['Stock', 'Value'], a.top.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, usd(r.value, false)]), [1]));
   } else {
-    out.push(`<p style="margin:2px 0">${a.extra ? 'Holdings are on the filer page.' : 'Too many positions to diff on filing. A second email with its position changes follows after the next data refresh, usually within a few hours.'}</p>`);
+    out.push(`<p style="margin:2px 0">${a.moves_pending || !a.extra ? 'Position changes follow in a second email within minutes.' : 'Holdings are on the filer page.'}</p>`);
   }
   out.push(meta(a.slug ? filingUrl(env, a) : null, a.accession, a.accepted, a.sec_url, a.card ? 'Filing card' : 'Copybook page'));
   return out.join('');

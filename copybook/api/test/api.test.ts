@@ -648,9 +648,10 @@ describe('copybook api', () => {
 
     await cron(5);
     expect(sent.map((m) => m.to[0]).sort()).toEqual(['follows@example.com', 'nobody@example.com', 'watcher@example.com']);
-    expect((await (await call('/health')).json()).alert_latency).toHaveLength(2);
+    // Loeb's book can't be diffed here: its email says the moves follow, and it isn't timed until they do.
+    expect((await (await call('/health')).json()).alert_latency).toHaveLength(1);
     const loeb = sent.find((m) => m.to[0] === 'nobody@example.com')!;
-    expect(loeb.text).toContain('A second email with its position changes follows');
+    expect(loeb.text).toContain('Position changes follow in a second email within minutes.');
     expect(loeb.text).not.toContain('warren-buffett');
     const mail = sent.find((m) => m.to[0] === 'follows@example.com')!;
     expect(mail.subject).toBe('Buffett Q3: NEW DHI · EXIT BAC · AAPL -$4K');
@@ -662,14 +663,15 @@ describe('copybook api', () => {
     expect(mail.text).toContain('New: DHI +$4K (18.2% of book) [you own], AAPL calls +$1K (2.3% of book)'); // of the larger (prior) book
     expect(mail.text).toContain('Trimmed: AAPL -$4K (sold 20% of the position, 18.2% of book)');
     expect(mail.text).toContain('Exited: BAC -$2K (9.1% of book)');
-    expect(mail.text).toContain('Of the positions that changed, 1 is a stock you own.');
+    // Every move in the member's names is named and tagged (here DHI, which the member owns).
+    expect(mail.text).toContain('In your names: DHI new +$4K, 40 sh (you own)');
     // Buffett's filing has a public card; Loeb's doesn't yet, so it links the investor page.
     expect(mail.text).toContain('Copybook: https://refcell.github.io/gust/copybook/f/0000950123-26-011111/');
     expect(mail.html).toContain('>Filing card</a>');
     expect(loeb.text).toContain('Copybook: https://refcell.github.io/gust/copybook/investors/dan-loeb');
     expect(sent.find((m) => m.to[0] === 'watcher@example.com')!.text).toContain('Exited: BAC -$2K (9.1% of book) [watchlist]');
     const latency = JSON.parse((await env.DB.get('alerts:latency'))!);
-    expect(latency.map((l: { slug: string }) => l.slug).sort()).toEqual(['dan-loeb', 'warren-buffett']);
+    expect(latency.map((l: { slug: string }) => l.slug)).toEqual(['warren-buffett']);
 
     // Still in the feed next minute, and then in the data run's index: never sent twice.
     sent = [];
@@ -684,7 +686,48 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['nobody@example.com']);
     expect(sent[0].subject).toBe('dan-loeb Q3 changes: NEW MSFT');
     expect(sent[0].text).toContain('New: MSFT +$300.0M (1.2% of book) [watchlist]');
+    // Timed by the email that carries the moves.
+    const timed = JSON.parse((await env.DB.get('alerts:latency'))!);
+    expect(timed.find((l: { slug: string }) => l.slug === 'dan-loeb')?.moves).toBe(true);
     sent = [];
+    await cron(17);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('a 13F too big for the Worker, with no prior book in R2: gene computes its moves from EDGAR and sends them once', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    index = { managers: [{ ok: true, slug: 'dan-loeb', cik: '0001040273', manager: 'Dan Loeb', name: 'Third Point', featured: true, form: '13F-HR', accession: 'dan-loeb-q2', report_date: '2026-06-30', filing_date: '2026-08-14', quarter: '2026Q2' }] };
+    await cron(17);
+    await putMember('n', 'loeb@example.com', 'active', ['dan-loeb']);
+    await putFollows('n', { investors: ['dan-loeb'], stocks: ['AAPL'] });
+    const it13 = (name: string, cusip: string, value: number, shares: number) => `<infoTable><nameOfIssuer>${name}</nameOfIssuer><cusip>${cusip}</cusip><value>${value}</value><sshPrnamt>${shares}</sshPrnamt></infoTable>`;
+    const big = '0000950123-26-044444';
+    const prev = '0000950123-26-000777';
+    const dir = (a: string) => `Archives/edgar/data/1040273/${a.replace(/-/g, '')}/`;
+    secFiles[`${dir(big)}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: 'table.xml', size: '900000' }] } });
+    secFiles[`${dir(big)}primary_doc.xml`] = '<periodOfReport>09-30-2026</periodOfReport>';
+    secFiles[`${dir(big)}table.xml`] = `<informationTable>${it13('MICROSOFT CORP', '594918104', 300000000, 600000)}${it13('APPLE INC', '037833100', 75000000, 300000)}</informationTable>`;
+    // Q2 is not in R2 under h/dan-loeb: it comes from Loeb's original Q2 13F-HR on EDGAR.
+    secFiles['submissions/CIK0001040273.json'] = JSON.stringify({ filings: { recent: { accessionNumber: [big, prev], form: ['13F-HR', '13F-HR'], reportDate: ['2026-09-30', '2026-06-30'] } } });
+    secFiles[`${dir(prev)}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: 't.xml', size: '4000' }] } });
+    secFiles[`${dir(prev)}primary_doc.xml`] = '<periodOfReport>06-30-2026</periodOfReport>';
+    secFiles[`${dir(prev)}t.xml`] = `<informationTable>${it13('APPLE INC', '037833100', 50000000, 200000)}</informationTable>`;
+    secFiles.feed = `<feed><entry><title>13F-HR - THIRD POINT (0001040273) (Filer)</title><updated>${today}T16:05:00-05:00</updated><category scheme="https://www.sec.gov/" label="form type" term="13F-HR"/><id>urn:tag:sec.gov,2008:accession-number=${big}</id></entry></feed>`;
+    await cron(5);
+    expect(sent.map((m) => m.text.includes('Position changes follow in a second email within minutes.'))).toEqual([true]);
+    sent = [];
+
+    const { geneMoves } = await import('../src/alerts');
+    await geneMoves(env, Date.now());
+    expect(sent.map((m) => m.to[0])).toEqual(['loeb@example.com']);
+    expect(sent[0].text).toContain('New: MICROSOFT CORP +$300.0M');
+    // EDGAR's table has no tickers: the added AAPL is looked up, so it's named as the member's watched stock.
+    expect(sent[0].text).toMatch(/In your names: AAPL added \+\$25\.0M, 300,000 sh \(watchlist\)/);
+    expect(JSON.parse((await env.DB.get('alerts:latency'))!).find((l: { slug: string }) => l.slug === 'dan-loeb')?.moves).toBe(true);
+    // Done: neither gene's next minute nor the data run's moves send it again.
+    sent = [];
+    await geneMoves(env, Date.now());
+    recentMoves = [{ accession: big, moves: { bought_usd: 3e8, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] } }];
     await cron(17);
     expect(sent).toHaveLength(0);
   });
@@ -1295,10 +1338,10 @@ describe('copybook api', () => {
       return orig(u, init);
     });
     const at = Date.parse('2026-11-12T15:07:00Z');
-    await env.DB.put('alerts:latency', JSON.stringify([{ slug: 'warren-buffett', accession: 'A1', accepted: '2026-11-12T15:00:00Z', sent: '2026-11-12T15:00:40Z', seconds: 40 }]));
+    await env.DB.put('alerts:latency', JSON.stringify([{ slug: 'warren-buffett', accession: 'A1', accepted: '2026-11-12T15:00:00Z', sent: '2026-11-12T15:00:40Z', seconds: 40, moves: true }]));
     expect(await publishLatency(env, at)).toBe('written');
     expect(await publishLatency(env, at + 60_000)).toBe('unchanged');
-    await env.DB.put('alerts:latency', JSON.stringify([{ slug: 'bill-ackman', accession: 'A2', accepted: '2026-11-12T15:08:00Z', sent: '2026-11-12T15:08:20Z', seconds: 20 }, { slug: 'warren-buffett', accession: 'A1', accepted: '2026-11-12T15:00:00Z', sent: '2026-11-12T15:00:40Z', seconds: 40 }]));
+    await env.DB.put('alerts:latency', JSON.stringify([{ slug: 'bill-ackman', accession: 'A2', accepted: '2026-11-12T15:08:00Z', sent: '2026-11-12T15:08:20Z', seconds: 20, moves: true }, { slug: 'warren-buffett', accession: 'A1', accepted: '2026-11-12T15:00:00Z', sent: '2026-11-12T15:00:40Z', seconds: 40, moves: true }]));
     expect(await publishLatency(env, at + 120_000)).toBe('written');
     vi.stubGlobal('fetch', orig);
     expect(puts.map((p) => [p.url, p.cc])).toEqual(Array(2).fill(['https://api.cloudflare.com/client/v4/accounts/acct/r2/buckets/copybook-public/objects/latency.json', 'public, max-age=60']));
@@ -2287,9 +2330,9 @@ describe('copybook api', () => {
     expect((await (await privateHealth()).json()).business.fund_requests).toBe(3);
 
     const t = Date.now();
-    const row = (acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q3', kind: '13f', accession: acc, accepted: new Date(t - seconds * 1000).toISOString(), sent: new Date(t).toISOString(), seconds, ...extra });
-    // Newest first, as logged; one replay; one from last season.
-    await env.DB.put('alerts:latency', JSON.stringify([row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60, { coverage: 'any_filer', slug: 'whale-rock-capital-management-llc' }), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' })]));
+    const row = (acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ slug: 'warren-buffett', manager: 'Warren Buffett', quarter: '2026Q3', kind: '13f', accession: acc, accepted: new Date(t - seconds * 1000).toISOString(), sent: new Date(t).toISOString(), seconds, moves: true, ...extra });
+    // Newest first, as logged; one replay; one from last season; a 13F timed by its first email (no moves), before the fix.
+    await env.DB.put('alerts:latency', JSON.stringify([row('A1', 40), row('R1', 163146, { replay: true }), row('A2', 100, { kind: 'form4', form: '4' }), row('A3', 60, { coverage: 'any_filer', slug: 'whale-rock-capital-management-llc' }), row('OLD', 5, { sent: '2025-01-02T00:00:00Z' }), row('FILED', 30, { moves: undefined })]));
     const d = (channel: string, acc: string, seconds: number, extra: Record<string, unknown> = {}) => ({ channel, accession: acc, form: '13F-HR', manager: 'Warren Buffett', accepted: new Date(t - seconds * 1000).toISOString(), delivered: new Date(t).toISOString(), seconds, ...extra });
     await env.DB.put('alerts:latency:ch', JSON.stringify([d('slack', 'A1', 41), d('slack', 'A3', 61), d('slack', 'A2', 101, { form: '4' }), d('discord', 'A1', 43), d('slack', 'OLD', 9, { delivered: '2025-01-02T00:00:00Z' })]));
     const lat = await (await call('/latency')).json();
@@ -2320,9 +2363,11 @@ describe('copybook api', () => {
       `<entry><title>13F-HR - ${name} (${cik}) (Filer)</title><updated>${accepted}</updated><category term="13F-HR"/><id>urn:tag:sec.gov,2008:accession-number=${acc}</id></entry>`;
     const filing = (cik: string, acc: string) => {
       const dir = `Archives/edgar/data/${Number(cik)}/${acc.replace(/-/g, '')}/`;
-      secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: 't.xml', size: '900000' }] } });
+      secFiles[`${dir}index.json`] = JSON.stringify({ directory: { item: [{ name: 'primary_doc.xml', size: '5000' }, { name: 't.xml', size: '900' }] } });
       secFiles[`${dir}primary_doc.xml`] = '<periodOfReport>09-30-2026</periodOfReport>';
+      secFiles[`${dir}t.xml`] = '<informationTable><infoTable><nameOfIssuer>APPLE INC</nameOfIssuer><cusip>037833100</cusip><value>2000</value><shrsOrPrnAmt><sshPrnamt>12</sshPrnamt></shrsOrPrnAmt></infoTable></informationTable>';
     };
+    for (const slug of ['warren-buffett', 'dan-loeb']) hist.m.set(`h/${slug}/2026Q2.json`, new TextEncoder().encode(JSON.stringify({ holdings: [{ cusip: '037833100', put_call: null, issuer: 'APPLE INC', ticker: 'AAPL', shares: 10, value: 1500 }] })));
     // A burst: page 1 is 100 unrelated filings from the last 2 minutes; Buffett's is on page 2.
     const noise = (start: number) => Array.from({ length: 100 }, (_, i) => entry('0009' + String(start + i).padStart(6, '0'), `0009999999-26-${String(start + i).padStart(6, '0')}`, at(1))).join('');
     secFiles.feed = `<feed>${noise(0)}</feed>`;

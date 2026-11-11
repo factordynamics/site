@@ -161,7 +161,7 @@ export interface Filing13F {
 }
 
 /** The period and, for books small enough to parse in the Worker, the holdings of one 13F-HR. */
-export async function fetch13F(cik: string, accession: string): Promise<Filing13F | null> {
+export async function fetch13F(cik: string, accession: string, maxBytes = MAX_TABLE_BYTES): Promise<Filing13F | null> {
   const base = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replace(/-/g, '')}/`;
   const dir = await sec(`${base}index.json`);
   if (!dir.ok) return null;
@@ -174,7 +174,7 @@ export async function fetch13F(cik: string, accession: string): Promise<Filing13
   const report_date = `${period[3]}-${period[1]}-${period[2]}`;
   const cover_total = Number(tag(cover, 'tableValueTotal')) || null;
   const table = items.find((i) => i.name.toLowerCase().endsWith('.xml') && i.name !== 'primary_doc.xml');
-  if (!table || Number(table.size) > MAX_TABLE_BYTES) return { report_date, holdings: null, cover_total };
+  if (!table || Number(table.size) > maxBytes) return { report_date, holdings: null, cover_total };
   const res = await sec(`${base}${table.name}`);
   return { report_date, holdings: res.ok ? parseInfoTable(await res.text()) : null, cover_total };
 }
@@ -197,6 +197,20 @@ export async function filings13F(cik: string): Promise<Filed13F[] | null> {
     if (form === '13F-HR' || form === '13F-HR/A') out.push({ accession: r.accessionNumber[i], form, report_date: r.reportDate[i] });
   });
   return out;
+}
+
+/** The quarter-end before a report date (2026-09-30 -> 2026-06-30). */
+export function prevQuarterEnd(reportDate: string): string {
+  const [y, m] = reportDate.split('-').map(Number);
+  const q = Math.ceil(m / 3) - 1;
+  return q === 0 ? `${y - 1}-12-31` : `${y}-${['03-31', '06-30', '09-30'][q - 1]}`;
+}
+
+/** A filer's book for the quarter before `reportDate`, from its original 13F-HR on EDGAR (any size). */
+export async function prior13F(cik: string, reportDate: string): Promise<Position[] | null> {
+  const want = prevQuarterEnd(reportDate);
+  const prev = (await filings13F(cik))?.find((f) => f.form === '13F-HR' && f.report_date === want);
+  return prev ? ((await fetch13F(cik, prev.accession, Infinity))?.holdings ?? null) : null;
 }
 
 export function quarterOf(reportDate: string): string {

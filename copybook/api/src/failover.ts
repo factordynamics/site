@@ -301,6 +301,17 @@ export async function claimSend(env: Env, id: string, now = Date.now()): Promise
   }
 }
 
+/** One send for something either host may send (a moves follow-up): the first claim wins, whichever host. */
+export async function claimOnce(env: Env, id: string, now = Date.now()): Promise<boolean> {
+  if (!syncOn(env)) return true;
+  try {
+    const res = await s3(env, 'PUT', `claims/${id}`, JSON.stringify({ host: host(env), at: iso(now) }), { 'if-none-match': '*' });
+    return res.ok || res.status !== 412;
+  } catch {
+    return true;
+  }
+}
+
 const GENE_POLLED = 'sync/alive-gene-poll.json';
 
 export interface PollerLine {
@@ -358,6 +369,8 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
   if (now - cfLast < BACKUP_AFTER_MS) {
     await env.DB.put('host:poller', JSON.stringify(cf));
     out.poller = 'backup (cloudflare polls)';
+    // 13Fs Cloudflare sent without moves: gene computes them from EDGAR and sends the follow-up.
+    out.moves = await (await import('./alerts')).geneMoves(env, now).catch((e) => `error: ${e}`);
     // While Cloudflare polls, gene's spare minute fills holder rows' EDGAR acceptance times.
     out.accepted = await (await import('./v1data')).fillAccepted(env).catch((e) => `error: ${e}`);
     return out;
@@ -366,6 +379,7 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
   // Cloudflare claims filings while gene has polled recently: written before gene's first send.
   await r2Put(env, GENE_POLLED, JSON.stringify({ last_run_at: iso(now) })).catch((e) => (out.gene_polled = `error: ${e}`));
   Object.assign(out, await run(env));
+  out.moves = await (await import('./alerts')).geneMoves(env, now).catch((e) => `error: ${e}`);
   await env.DB.put('host:poller', JSON.stringify({ host: 'gene', last_run_at: iso(now) } satisfies PollerLine));
   // What this minute wrote goes to Cloudflare now, not next minute.
   try {
