@@ -164,7 +164,7 @@ export function ForFunds() {
         title="Know who owns what you own."
         sub={`Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. ${FUND_SEATS} seats, shared lists, one team channel in Slack, and an annual invoice.`}
         cta={cta}
-        note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 on request. Prepaid and protected: pro-rata refund if we ever discontinue the plan. Prices exclude applicable taxes. Copybook does not currently collect sales tax."
+        note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 available once our entity details are published. Prepaid and protected: pro-rata refund if we ever discontinue the plan. Prices exclude applicable taxes. Copybook does not currently collect sales tax."
       />
 
       <Facts items={[[`${filers}`, '13F filers covered, the latest filing of each'], median != null
@@ -186,9 +186,9 @@ export function ForFunds() {
           ['One team channel', 'Every filing from the funds you follow posts once to your team’s Slack channel as it hits EDGAR, whoever follows the fund, with new, added, trimmed and exited positions inside.'],
           ['Insider and 13D alerts', 'Open-market insider buys over your threshold, cluster buys, and any filer’s new 13D on the stocks you own or watch.'],
           [
-            'Invoice and W-9',
+            'Invoice, net 30',
             <>
-              Annual plan, with a W-9 on request.{' '}
+              Annual plan, invoiced net 30. W-9 available once our entity details are published.{' '}
               {/* The Fund card checkout /pricing/ links (yearly, its default), with the visitor's attribution. */}
               <a href={attributed(plans.fund.links.yearly || plans.fund.links.monthly)} onClick={referredCheckout('fund', 'yearly', attributed(plans.fund.links.yearly || plans.fund.links.monthly))} className="font-medium text-accent hover:text-accent-2">
                 Or start on a card with a {TRIAL_DAYS}-day trial

@@ -74,6 +74,7 @@ function Hero({ managers }: { managers?: Manager[] }) {
                 ) : null
               })}
             </p>
+            {!season && <FundLine />}
           </div>
         </div>
         <LatestFilings managers={managers} />
@@ -130,6 +131,7 @@ function SeasonLead() {
         </Button>
       </div>
       <p className="mt-2.5 text-[12.5px] text-ink-3">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
+      <FundLine />
     </>
   )
 }
@@ -493,6 +495,18 @@ function ChangeArt() {
   )
 }
 
+/** The quiet way in for fund teams, under the hero's trial button: most visitors are individuals. */
+function FundLine() {
+  return (
+    <p className="mt-1.5 text-[12.5px] text-ink-3">
+      Buying for a fund team?{' '}
+      <Link to="/for-funds/" className="font-medium text-ink-2 underline decoration-line-2 underline-offset-4 hover:text-ink hover:decoration-ink">
+        See Copy Fund
+      </Link>
+    </p>
+  )
+}
+
 function CTABand() {
   return (
     <section className="container-x mt-24 md:mt-32">
@@ -512,9 +526,6 @@ function CTABand() {
               Start 14-day free trial
             </Button>
             <p className="text-[13px] text-white/60">Or $79 a year. The latest quarter stays free.</p>
-            <Link to="/for-funds/" className="text-[13px] font-medium text-white/80 underline decoration-white/30 underline-offset-4 hover:text-white">
-              Buying for a fund team? See Copy Fund
-            </Link>
           </div>
         </div>
       </div>
