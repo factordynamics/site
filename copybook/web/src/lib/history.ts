@@ -1,5 +1,6 @@
 import { ApiError, call } from './account'
 import { cleanHolding, DATA, getJSON, type Holding } from './data'
+import { pairReissues } from './reissuePairs.mjs'
 
 // Public quarter index: data/{slug}-history.json (newest first, 50-row top_holdings preview).
 // Full quarters come from the Copy API, GET {api}/holdings/{slug}/{quarter} (Bearer; 401/402 = paywall).
@@ -84,7 +85,11 @@ export async function loadQuarterBook(slug: string, quarter: string) {
     ...cur.holdings.map((h) => ({
       ...h,
       weight: h.weight ?? h.value / total,
-      change: servedBy(cur, prev) ? (trade(h) ? (h.change ?? null) : null) : (moves.get(holdingKey(h))?.change ?? (prev && !heldCusips.has(h.cusip) ? ('unchanged' as const) : null)),
+      change: servedBy(cur, prev)
+        ? trade(h)
+          ? (moves.get(holdingKey(h))?.change ?? (h.change === 'new' || h.change === 'added' || h.change === 'trimmed' ? 'unchanged' : (h.change ?? null)))
+          : null
+        : (moves.get(holdingKey(h))?.change ?? (prev && !heldCusips.has(h.cusip) ? ('unchanged' as const) : null)),
     })),
     ...[...moves.values()].filter((m) => m.change === 'exited').map((m) => ({ ...m.h, shares: 0, value: 0, weight: 0, change: 'exited' as const })),
   ]
@@ -124,8 +129,13 @@ export function diff(curr: Quarter, prev: Quarter): Move[] {
       const per = h.shares ? h.value / h.shares : 0
       out.push({ key: holdingKey(h), h, change: h.change as Move['change'], delta: h.value_delta ?? (h.change === 'new' ? h.value : (h.shares - (h.prev_shares ?? 0)) * per), shares: h.shares, prevShares: h.prev_shares ?? 0 })
     }
-    for (const p of curr.exited ?? []) if (trade(p)) out.push({ key: holdingKey(p), h: { ...p, shares: p.prev_shares ?? 0, value: p.prev_value ?? 0 }, change: 'exited', delta: p.value_delta ?? -(p.prev_value ?? 0), shares: 0, prevShares: p.prev_shares ?? 0 })
-    return out.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    for (const p of curr.exited ?? []) {
+      if (!trade(p)) continue
+      const prevShares = (p.prev_shares ?? 0) * (oldFactor.get(p.cusip) ?? 1)
+      out.push({ key: holdingKey(p), h: { ...p, shares: p.prev_shares ?? 0, value: p.prev_value ?? 0 }, change: 'exited', delta: p.value_delta ?? -(p.prev_value ?? 0), shares: 0, prevShares })
+    }
+    // A book written before a reissue link reads the new code as new and the old as exited: one position.
+    return pairReissues(out).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
   }
   const before = byKey(prev.holdings)
   const after = byKey(curr.holdings)

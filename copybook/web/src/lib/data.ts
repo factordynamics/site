@@ -39,6 +39,9 @@ export type Holding = {
   suspect_units?: boolean
 }
 
+/** "XOM" as "XOM puts" or "XOM calls" for an option row, so an option move never reads as a stock trade. */
+export const withOption = (label: string, putCall?: string | null) => (putCall ? `${label} ${putCall.toLowerCase() === 'put' ? 'puts' : 'calls'}` : label)
+
 /** A split ingest actually applied to this row: the compared shares differ from the filed ones. */
 export const splitApplied = (h: Holding) => Boolean(h.split && h.prev_shares_as_filed != null && h.prev_shares != null && h.prev_shares !== h.prev_shares_as_filed)
 
