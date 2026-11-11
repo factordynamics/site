@@ -2158,6 +2158,7 @@ describe('copybook api', () => {
     await tr({ 'user-agent': chrome, 'sec-purpose': 'prefetch', 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'cross-site' });
     await tr({ 'user-agent': chrome });
     const ops = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
+    expect(ops.track_by_utm_page.visit).toEqual({ 'x|kahn-watch@/investors/irving-kahn/': 1, 'x|seed-season@/season/': 2 });
     expect(ops.track_by_client.trial_click).toMatchObject({ browser: 1, bot: 3, unknown: 1, 'direct|-#browser': 1, 'direct|-#bot': 3 }); // + the earlier call with no User-Agent
     expect(JSON.stringify(ops)).not.toContain('Chrome/130');
     expect(ops.track_by_utm).toEqual({ visit: { 'x|kahn-watch': 1, 'x|seed-season': 2 }, trial_click: { 'direct|-': 5 } });

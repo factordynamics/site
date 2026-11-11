@@ -587,6 +587,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const cls = clientClass(req);
     const byClient = (d[kind].client ??= {});
     byClient[cls] = (byClient[cls] ?? 0) + 1;
+    // By post and page together ("source|content@/page/"), at most 1,000 pairs a day: where each post's readers acted.
+    const byPostPage = (d[kind].utm_page ??= {});
+    const pp = `${uk}@${pk}`;
+    if (pp in byPostPage || Object.keys(byPostPage).length < 1000) byPostPage[pp] = (byPostPage[pp] ?? 0) + 1;
     const byPostClient = (d[kind].utm_client ??= {});
     byPostClient[`${uk}#${cls}`] = (byPostClient[`${uk}#${cls}`] ?? 0) + 1;
     await env.DB.put(key, JSON.stringify(d), { expirationTtl: 400 * 86400 });
@@ -766,6 +770,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const track_by_client: Record<string, Record<string, number>> = {};
     for (const d of Object.values(track) as Record<string, { client?: Record<string, number>; utm_client?: Record<string, number> }>[])
       for (const [kind, x] of Object.entries(d)) for (const [k, n] of Object.entries({ ...(x.client ?? {}), ...(x.utm_client ?? {}) })) (track_by_client[kind] ??= {})[k] = (track_by_client[kind][k] ?? 0) + n;
+    const track_by_utm_page: Record<string, Record<string, number>> = {};
+    for (const d of Object.values(track) as Record<string, { utm_page?: Record<string, number> }>[])
+      for (const [kind, x] of Object.entries(d)) for (const [k, n] of Object.entries(x.utm_page ?? {})) (track_by_utm_page[kind] ??= {})[k] = (track_by_utm_page[kind][k] ?? 0) + n;
     const track_hourly: Record<string, unknown> = {};
     for (let d = 0; d < days; d++) {
       const day = new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
@@ -800,7 +807,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     } catch (e) {
       checkouts.error = { [String(e).slice(0, 120)]: { n: 1 } };
     }
-    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm, track_by_client, track_hourly, checkouts, checkouts_by_client }, 200, h);
+    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm, track_by_client, track_by_utm_page, track_hourly, checkouts, checkouts_by_client }, 200, h);
   }
 
   // Operator: one member's access log (for telling a member whether any session read their book), or an entry for a
