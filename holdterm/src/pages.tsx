@@ -674,14 +674,27 @@ export function Funds() {
               label: 'Investor',
               link: true,
               render: (m) => (
-                <span className="trunc wide-name" title={m.firm}>
-                  <span className="strong">{m.firm}</span>
-                  {m.pm && <span className="dim hide-sm"> · {m.pm}</span>}
-                </span>
+                <>
+                  <span className="trunc wide-name" title={m.firm}>
+                    <span className="strong hide-sm">{m.firm}</span>
+                    <span className="strong show-sm">{shortFirm(m.firm)}</span>
+                    {m.pm && <span className="dim hide-sm"> · {m.pm}</span>}
+                  </span>
+                  {/* Phones: a second line with what the hidden columns say, so each row reads on its own. */}
+                  <span className="row-sub show-sm">
+                    {quarterLabel(m.quarter)} 13F
+                    {isStale(m, all) ? ' · out of date' : ''}
+                    {' · '}
+                    {byCompany(m.top.filter((h) => isStockLine(h) && !isFundLike(h)))
+                      .slice(0, 3)
+                      .map(({ h, label }) => (label && label.includes('+') ? h.ticker : (h.ticker ?? issuerName(h.display_name || h.issuer).split(' ')[0])))
+                      .join(', ')}
+                  </span>
+                </>
               ),
               sort: (m) => m.firm,
             },
-            { key: 'v', label: 'Portfolio', num: true, hideSm: true, render: (m) => usd(longOf(m).v), sort: (m) => longOf(m).v, title: 'Value of its US-listed stocks in its latest 13F; options left out' },
+            { key: 'v', label: 'Portfolio', num: true, render: (m) => usd(longOf(m).v), sort: (m) => longOf(m).v, title: 'Value of its US-listed stocks in its latest 13F; options left out' },
             { key: 'n', label: 'Stocks', num: true, hide: 'md', hideSm: true, render: (m) => longOf(m).n, sort: (m) => longOf(m).n },
             { key: 't', label: 'In top 10', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.top10, 0), sort: (m) => metric.get(m.slug)?.top10 ?? 0, title: 'Share of the portfolio in its ten biggest holdings' },
             { key: 'to', label: 'Traded', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.turnover, 0), sort: (m) => metric.get(m.slug)?.turnover ?? 0, title: 'Last quarter: half of everything bought and sold, as a share of the average portfolio' },
@@ -701,10 +714,10 @@ export function Funds() {
             {
               key: 'q',
               label: 'Latest 13F',
+              hideSm: true,
               render: (m) => (
                 <span>
                   {quarterLabel(m.quarter)} {isStale(m, all) && <span className="badge warn" title="Its latest usable 13F is more than a quarter behind">Out of date</span>}
-                  <span className="dim show-sm"> · {day(m.filing_date)}</span>
                 </span>
               ),
               sort: (m) => m.quarter,
