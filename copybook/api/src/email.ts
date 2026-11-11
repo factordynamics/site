@@ -456,8 +456,9 @@ export interface CorrectionRow {
   put_call: string | null;
   emailed: { change: string; value_delta: number };
   v1: { change: string; value_delta: number };
-  /** An option or bond (PRN) row: logged for review, not mailed. */
-  review?: boolean;
+  /** Reconciliation's verdict: disclosed on /status/, explained (no wrong figure), or wrong (the only one mailed). */
+  class?: 'disclosed' | 'explained' | 'wrong';
+  why?: string;
 }
 
 /** "Correction: Jensen (Jensen Investment Management) APH was trimmed -$15.3M, not added +$36.5M". */

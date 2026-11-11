@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { bookSuspect, companyFilings, computeMoves, filingId, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -1374,7 +1374,7 @@ async function buildRows(env: Env, a: Alert13F): Promise<{ build: string | null;
   return { build: obj.customMetadata?.['build-id'] ?? obj.customMetadata?.build_id ?? q.build_id ?? null, rows };
 }
 /** One position's key across EDGAR tables and ingest's books: CUSIP and put/call ("Call" in one, "CALL" in the other). */
-const rowKey = (r: { cusip: string; put_call?: string | null }) => `${r.cusip.toUpperCase()}|${(r.put_call ?? '').toUpperCase()}`;
+const rowKey = posKey;
 const ratioOf = (r: BuildRow) => (typeof r.split === 'object' ? Number(r.split?.ratio) || 1 : Number(r.split) || 1);
 
 /**
@@ -1430,12 +1430,38 @@ export interface Reconciled {
   checked_at: string;
   build: string | null;
   result: 'pass' | 'fail';
+  /** matched, or its worst failed row: wrong over disclosed over explained. */
+  class?: RowClass | 'matched';
   rows: number;
   failed: import('./email').CorrectionRow[];
   recipients: number;
   /** Correction emails sent (0 for alerts sent before reconciliation began: the /status/ Data entry is their notice). */
   mailed: number;
 }
+
+/**
+ * Season 13F alerts already disclosed on /status/ ("13F alert moves didn't adjust for stock splits", Nov 11): their
+ * split rows are `disclosed`, not mailed again.
+ */
+const DISCLOSED_SPLITS = new Set(['0001697850-26-000004', '0001062993-26-005832', '0000315066-26-002964', '0001171200-26-000023', '0001140361-26-042753', '0001386060-26-000054', '0001088875-26-000074', '0001172661-26-004909', '0001062993-26-005826']);
+type RowClass = 'disclosed' | 'explained' | 'wrong';
+
+/**
+ * Why each failed row failed: `disclosed` (a split row of an alert on /status/), `explained` (a CUSIP change the alert
+ * listed as a new position plus an exit of the same ticker, as McLennan's XOM and OKE, or a difference under $1,000), or
+ * `wrong` (a real error not yet disclosed).
+ */
+function classify(a: Alert13F, rows: Map<string, MoveRow>, failed: import('./email').CorrectionRow[], splits: Map<string, number>): import('./email').CorrectionRow[] {
+  const has = (t: string | null, c: string) => !!t && [...rows.values()].some((x) => x.ticker === t && x.change === c);
+  return failed.map((f) => {
+    if (DISCLOSED_SPLITS.has(a.accession) && (splits.get(f.cusip) ?? 1) !== 1) return { ...f, class: 'disclosed', why: 'split' };
+    if (has(f.ticker, 'new') && has(f.ticker, 'exited')) return { ...f, class: 'explained', why: 'cusip_change' };
+    if (Math.abs(f.emailed.value_delta - f.v1.value_delta) < 1000) return { ...f, class: 'explained', why: 'rounding' };
+    return { ...f, class: 'wrong' };
+  });
+}
+const alertClass = (failed: { class?: RowClass }[]): RowClass | 'matched' =>
+  !failed.length ? 'matched' : failed.some((f) => f.class === 'wrong') ? 'wrong' : failed.some((f) => f.class === 'disclosed') ? 'disclosed' : 'explained';
 
 /** Alerts accepted from here get correction emails; earlier ones are checked and logged only. */
 export const RECONCILE_MAIL_FROM = '2026-11-11T05:00:00Z';
@@ -1474,11 +1500,12 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
       pending++;
       continue;
     }
-    const failed = compareToBuild(rows, b.rows);
+    const failed = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter));
     // Who got it: the delivery log, as /ops/delivery reads it.
     const rec = await deliveryRecord(env, a.accession, now);
     const members = new Map((await listMembers(env)).map((m) => [m.customer, m]));
-    const mailable = failed.filter((x) => !x.review);
+    // Only undisclosed errors are mailed: disclosed ones have their /status/ entry, explained ones aren't wrong figures.
+    const mailable = failed.filter((x) => x.class === 'wrong');
     const to = only?.to ?? (mailable.length && (a.accepted ?? '') >= RECONCILE_MAIL_FROM ? rec.recipients.map((x) => members.get(x.customer)?.email).filter((e): e is string => !!e) : []);
     let mailed = 0;
     if (mailable.length) {
@@ -1499,7 +1526,7 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
         }
       }
     }
-    out.push({ accession: a.accession, slug: a.slug, quarter: a.quarter, accepted: a.accepted ?? null, checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), build: b.build, result: failed.length ? 'fail' : 'pass', rows: rows.size, failed, recipients: rec.counts.members, mailed });
+    out.push({ accession: a.accession, slug: a.slug, quarter: a.quarter, accepted: a.accepted ?? null, checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), build: b.build, result: failed.length ? 'fail' : 'pass', class: alertClass(failed), rows: rows.size, failed, recipients: rec.counts.members, mailed });
   }
   if (out.length && !only?.to) {
     const keep = log.filter((x) => !out.some((o) => o.accession === x.accession));
@@ -1519,9 +1546,7 @@ function compareToBuild(rows: Map<string, MoveRow>, build: Map<string, BuildRow>
     if (v?.change === 'new' && r.change !== 'new' && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
     const got = v ? { change: v.change!, value_delta: Math.round(v.value_delta) } : { change: 'unchanged', value_delta: 0 };
     const bad = got.change !== r.change || Math.sign(got.value_delta) !== Math.sign(r.value_delta) || Math.abs(r.value_delta - got.value_delta) > MISMATCH * Math.abs(got.value_delta);
-    // Options and bond (PRN) rows are sized differently in the two paths (the underlying's value; principal, not
-    // shares): a difference there is logged for review, never mailed as a correction.
-    if (bad) failed.push({ cusip: r.cusip, ticker: r.ticker ?? v?.ticker ?? null, name: r.display_name || r.issuer, put_call: r.put_call, emailed: { change: r.change!, value_delta: r.value_delta }, v1: got, ...(r.put_call || (v as { shares_type?: string } | undefined)?.shares_type === 'PRN' ? { review: true } : {}) });
+    if (bad) failed.push({ cusip: r.cusip, ticker: r.ticker ?? v?.ticker ?? null, name: r.display_name || r.issuer, put_call: r.put_call, emailed: { change: r.change!, value_delta: r.value_delta }, v1: got });
     v = undefined;
   }
   failed.sort((x, y) => Math.abs(y.emailed.value_delta - y.v1.value_delta) - Math.abs(x.emailed.value_delta - x.v1.value_delta));
@@ -1555,15 +1580,15 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
   const page = all.slice(o.offset ?? 0, (o.offset ?? 0) + (o.limit ?? all.length));
   secBudget.left = Math.max(secBudget.left, 200);
   const out: Record<string, unknown>[] = [];
-  const row = (f: import('./email').CorrectionRow) => ({ ticker: f.ticker, cusip: f.cusip, put_call: f.put_call, sent: f.emailed, build: f.v1, ...(f.review ? { review: true } : {}) });
+  const row = (f: import('./email').CorrectionRow) => ({ ticker: f.ticker, cusip: f.cusip, put_call: f.put_call, sent: f.emailed, build: f.v1, class: f.class, ...(f.why ? { why: f.why } : {}) });
   for (const { a, rows } of page) {
     const b = await buildRows(env, a);
     if (!b) {
       out.push({ accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, result: 'no_build' });
       continue;
     }
-    const sent = compareToBuild(rows, b.rows);
-    const item: Record<string, unknown> = { accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, rows: rows.size, as_sent: { result: sent.length ? 'fail' : 'pass', failed: sent.map(row) } };
+    const sent = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter));
+    const item: Record<string, unknown> = { accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, rows: rows.size, as_sent: { result: sent.length ? 'fail' : 'pass', class: alertClass(sent), failed: sent.map(row) } };
     if (o.recompute) {
       try {
         const cik = a.sec_url.match(/\/edgar\/data\/(\d+)\//)?.[1] ?? '';
@@ -1577,8 +1602,8 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
           await lookupTickers(env, raw.changed);
           const g = gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip)));
           const nowRows = alertRows(g.moves);
-          const diff = compareToBuild(nowRows, b.rows);
-          item.now = { result: diff.length ? 'fail' : 'pass', rows: nowRows.size, failed: diff.map(row), held: g.held.map((h) => ({ ticker: h.ticker, cusip: h.cusip, change: h.change, reason: h.reason })) };
+          const diff = classify(a, nowRows, compareToBuild(nowRows, b.rows), new Map());
+          item.now = { result: diff.length ? 'fail' : 'pass', class: alertClass(diff), rows: nowRows.size, failed: diff.map(row), held: g.held.map((h) => ({ ticker: h.ticker, cusip: h.cusip, change: h.change, reason: h.reason })) };
         }
       } catch (e) {
         item.now = { result: `error: ${e}` };
@@ -1587,8 +1612,8 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
     out.push(item);
   }
   const count = (k: 'as_sent' | 'now') => {
-    const xs = out.map((x) => (x[k] as { result?: string; failed?: { review?: boolean }[] } | undefined)).filter(Boolean) as { result: string; failed?: { review?: boolean }[] }[];
-    return { pass: xs.filter((x) => x.result === 'pass').length, fail: xs.filter((x) => x.result === 'fail').length, fail_mailable: xs.filter((x) => x.failed?.some((f) => !f.review)).length, other: xs.filter((x) => x.result !== 'pass' && x.result !== 'fail').length };
+    const xs = out.map((x) => x[k] as { result?: string; class?: string } | undefined).filter(Boolean) as { result: string; class?: string }[];
+    return { ...Object.fromEntries(['matched', 'disclosed', 'explained', 'wrong'].map((c) => [c, xs.filter((x) => x.class === c).length])), other: xs.filter((x) => x.result !== 'pass' && x.result !== 'fail').length };
   };
   return { total: all.length, offset: o.offset ?? 0, checked: out.length, as_sent: count('as_sent'), ...(o.recompute ? { now: count('now') } : {}), no_build: out.filter((x) => x.result === 'no_build').length, alerts: out };
 }
@@ -1600,9 +1625,11 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
     checked: log.length,
     passed: log.filter((x) => x.result === 'pass').length,
     failed: log.filter((x) => x.result === 'fail').length,
+    // What a reader needs: matched, already disclosed on /status/, explained (no wrong figure), and wrong.
+    ...Object.fromEntries((['matched', 'disclosed', 'explained', 'wrong'] as const).map((k) => [k, log.filter((x) => (x.class ?? (x.result === 'pass' ? 'matched' : 'wrong')) === k).length])),
     held_pending: (JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as unknown[]).length,
     since: log.length ? log.reduce((m, x) => (x.checked_at < m ? x.checked_at : m), log[0].checked_at) : null,
-    recent: log.slice(0, 20).map((x) => ({ accession: x.accession, slug: x.slug, quarter: x.quarter, checked_at: x.checked_at, result: x.result, rows: x.rows, failed_rows: x.failed.length, corrections_sent: x.mailed })),
+    recent: log.slice(0, 20).map((x) => ({ accession: x.accession, slug: x.slug, quarter: x.quarter, checked_at: x.checked_at, result: x.result, class: x.class ?? null, rows: x.rows, failed_rows: x.failed.length, corrections_sent: x.mailed })),
   };
 }
 

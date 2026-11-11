@@ -916,7 +916,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     await Promise.race([reconcileMembers(env, [cur], 2000).catch(() => null), new Promise((r) => setTimeout(r, 2000))]);
     m = (await getMember(env, cur.customer)) ?? cur;
   }
-  if (!m) return json({ ok: false, error: 'sign in required' }, 401, h);
+  if (!m) {
+    // invalid_session: forged, expired or revoked; the site signs out only on this. A valid session whose member this host
+    // can't read (sync lag after a failover, a KV hiccup) is member_unavailable, and no token at all is no_session.
+    const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    const p = token ? await verifyToken(env.SESSION_SECRET, token, 'session') : null;
+    const code = !token ? 'no_session' : !p ? 'invalid_session' : (await getMember(env, p.c)) ? 'invalid_session' : 'member_unavailable';
+    return json({ ok: false, error: 'sign in required', code }, 401, h);
+  }
 
   // Any member: sign out everywhere. Every session issued before this second stops working at once (a copied token
   // included); the browser that asked gets a fresh session. API keys are separate and stay until deleted.

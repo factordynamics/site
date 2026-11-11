@@ -303,7 +303,10 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   total *= scale;
   // Trade sizes are measured against the larger of the two books (an exit from a book that shrank).
   const book = Math.max(total, prevTotal);
-  const before = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p]));
+  // One key across EDGAR's table ("Call") and ingest's books ("CALL"); a bond's count is its principal, which ingest's
+  // books keep in principal_amount with shares 0 (Advent's Q3 bonds read as bought from zero).
+  prev = prev.map((p) => (p.shares ? p : { ...p, shares: Number((p as { principal_amount?: number }).principal_amount) || 0 }));
+  const before = new Map(prev.map((p) => [posKey(p), p]));
   const rows: MoveRow[] = [];
   // A split on file (the data run's splits.json, by CUSIP): the prior shares in today's units, as the data run does.
   // Only when the prior is still on the pre-split basis: its value per share sits nearer the ratio than 1 times today's
@@ -332,7 +335,7 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   });
   for (const c of cur) {
     const value = c.value * scale;
-    const k = `${c.cusip}|${c.put_call ?? ''}`;
+    const k = posKey(c);
     const p = before.get(k);
     before.delete(k);
     const named = { ...c, ticker: p?.ticker ?? c.ticker, display_name: p?.display_name ?? c.display_name };
@@ -346,8 +349,8 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   }
   for (const p of before.values()) rows.push(row(p, 'exited', 0, Math.round(p.shares * ratio(p)), 0, -p.value, adj(p, ratio(p))));
   // Unit errors are left out; unusually large moves are tagged. The larger book is the yardstick.
-  const prior = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p.value]));
-  rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(`${r.cusip}|${r.put_call ?? ''}`), splits, medians));
+  const prior = new Map(prev.map((p) => [posKey(p), p.value]));
+  rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(posKey(r)), splits, medians));
   return { moves: movesOf(rows, limit), changed: rows };
 }
 
@@ -369,38 +372,62 @@ export interface HeldRow {
   display_name: string | null;
   put_call: string | null;
   change?: string;
-  reason: 'price_vs_filers' | 'split_basis';
+  reason: 'units' | 'price_vs_filers' | 'split_basis' | 'own_prior';
 }
+
+/** A position's key across EDGAR tables and ingest's books: CUSIP and put/call, case-blind. */
+export const posKey = (p: { cusip: string; put_call?: string | null }) => `${p.cusip.toUpperCase()}|${(p.put_call ?? '').toUpperCase()}`;
+/** Filers report the same quarter-end price, so they agree to rounding: a line over 1.25x off the median is held. */
+export const OFF_FILERS = 1.25;
+/** A unit error (thousands read as dollars) is about 1000x: 100x off is held whatever else is known. */
+export const OFF_UNITS = 100;
+/** Lines under this value skip the cross-filer price check (a few shares' value rounds coarsely). */
+const MIN_PRICE_CHECK_USD = 50_000;
 
 /**
  * The publish gate for one move row, before it is sent: null when it passes, else why it is held.
- * - price_vs_filers: this line's value per share, or the prior line's (either side of a split on file), is over 3x
- *   off other filers' median for that CUSIP and quarter (ingest's rule, on ingest's consensus.json).
- * - split_basis: a split is on file (splits.json) and the row's prior shares aren't in today's units. The prior's own
- *   price says which basis it was filed on: nearer the prior quarter's median (pre-split) or that over the ratio.
+ * - units: this line's or the prior line's value per share is 100x or more off other filers' median or its own prior.
+ * - price_vs_filers: over 1.25x off other filers' median value per share for that CUSIP and quarter (ingest's
+ *   consensus.json); the prior line may sit on either side of a split on file.
+ * - split_basis: a split is on file (splits.json) and the row's prior shares aren't in today's units.
+ * - own_prior: a split not on file yet. The filer's own value per share moved by about an integer k >= 2 and its
+ *   share count by at least k/1.5 the other way (Jensen's APH: $176.32 to $84.30 a share, 614,660 to 1,047,486 sh).
  * Options are not checked (their value is the underlying's).
  */
 export function gateRow(r: MoveRow, prior: { shares: number; value: number } | undefined, k: number, c: Consensus = {}): HeldRow['reason'] | null {
   if (r.put_call) return null;
-  const off = (x: number, m: number) => x / m > OFF_MEDIAN || m / x > OFF_MEDIAN;
+  const off = (x: number, m: number, lim: number) => x / m > lim || m / x > lim;
   const ps = r.shares > 0 && r.value > 0 ? r.value / r.shares : null;
-  if (ps && c.cur && off(ps, c.cur)) return 'price_vs_filers';
-  if (!prior || !(prior.shares > 0) || !(prior.value > 0)) return null;
-  const pps = prior.value / prior.shares;
-  if (c.prev && [1, k].every((s) => off(pps, c.prev! / s))) return 'price_vs_filers';
+  const pps = prior && prior.shares > 0 && prior.value > 0 ? prior.value / prior.shares : null;
+  // The factor the prior's shares were taken at (1, or the split ratio once applied).
+  const f = pps && r.prev_shares > 0 ? r.prev_shares / prior!.shares : 1;
+  if ((ps && c.cur && off(ps, c.cur, OFF_UNITS)) || (pps && c.prev && [1, k].every((s) => off(pps, c.prev! / s, OFF_UNITS))) || (ps && pps && off(pps / f, ps, OFF_UNITS))) return 'units';
+  if (r.value >= MIN_PRICE_CHECK_USD || (prior?.value ?? 0) >= MIN_PRICE_CHECK_USD) {
+    if (ps && c.cur && off(ps, c.cur, OFF_FILERS)) return 'price_vs_filers';
+    if (pps && c.prev && [1, k].every((s) => off(pps, c.prev! / s, OFF_FILERS))) return 'price_vs_filers';
+  }
+  if (!pps) return null;
   const near = (x: number, m: number) => Math.abs(Math.log(x / m));
   const ref = c.prev ? [c.prev, c.prev / k] : ps ? [ps * k, ps] : null;
-  const f = k !== 1 && ref && near(pps, ref[0]) <= near(pps, ref[1]) ? k : 1;
-  if (k !== 1 && ref && Math.abs(r.prev_shares - prior.shares * f) > 0.005 * prior.shares * f) return 'split_basis';
+  const g = k !== 1 && ref && near(pps, ref[0]) <= near(pps, ref[1]) ? k : 1;
+  if (k !== 1 && ref && Math.abs(r.prev_shares - prior!.shares * g) > 0.005 * prior!.shares * g) return 'split_basis';
+  if (ps && r.shares > 0 && r.prev_shares > 0) {
+    const p = pps / f / ps;
+    const up = p >= 1;
+    const kk = Math.round(up ? p : 1 / p);
+    const s = r.shares / r.prev_shares;
+    if (kk >= 2 && Math.abs((up ? p : 1 / p) / kk - 1) <= 0.15 && (up ? s >= kk / 1.5 : s <= 1.5 / kk)) return 'own_prior';
+  }
   return null;
 }
 
 /** computeMoves' result through the publish gate: rows that fail it leave the moves and totals and come back as `held`. */
 export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Position[], splits: Map<string, number>, consensus: Map<string, Consensus>, limit = MOVE_ROWS): { moves: Moves; changed: MoveRow[]; held: HeldRow[] } {
-  const before = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p]));
+  prev = prev.map((p) => (p.shares ? p : { ...p, shares: Number((p as { principal_amount?: number }).principal_amount) || 0 }));
+  const before = new Map(prev.map((p) => [posKey(p), p]));
   const held: HeldRow[] = [];
   const changed = r.changed.filter((x) => {
-    const reason = gateRow(x, before.get(`${x.cusip}|${x.put_call ?? ''}`), splits.get(x.cusip) ?? 1, consensus.get(x.cusip));
+    const reason = gateRow(x, before.get(posKey(x)), splits.get(x.cusip) ?? 1, consensus.get(x.cusip));
     if (reason) held.push({ cusip: x.cusip, ticker: x.ticker, issuer: x.issuer, display_name: x.display_name, put_call: x.put_call, change: x.change, reason });
     return !reason;
   });
@@ -430,7 +457,7 @@ export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
  * sized by shares at this filing's price (+465,409 sh x $162.75 = +$75.7M), or nothing when the shares are the same.
  */
 export function netRenamed(r: { moves: Moves; changed: MoveRow[] }, limit = MOVE_ROWS): { moves: Moves; changed: MoveRow[] } {
-  const key = (x: MoveRow) => (x.ticker ? `${x.ticker}|${x.put_call ?? ''}` : null);
+  const key = (x: MoveRow) => (x.ticker ? `${x.ticker}|${(x.put_call ?? '').toUpperCase()}` : null);
   const exits = new Map<string, MoveRow>();
   for (const x of r.changed) if (x.change === 'exited' && key(x)) exits.set(key(x)!, x);
   if (!exits.size) return r;

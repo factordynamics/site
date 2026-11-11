@@ -1890,6 +1890,25 @@ describe('copybook api', () => {
       }
       expect([who, gateMoves(computeMoves(cur, prev, undefined, SPL), prev, SPL, CONS).held]).toEqual([who, []]);
     }
+    // A split not yet in splits.json (how APH went wrong): the 2x price move passes a wide check, so the own-prior
+    // check holds it (price down ~2x, shares up ~2x), and so does the 1.25x cross-filer check when filers' prices exist.
+    const noSplit = computeMoves(jq3, jq2, undefined, new Map());
+    expect(gateMoves(noSplit, jq2, new Map(), new Map()).held.map((h) => [h.ticker, h.reason])).toEqual([['APH', 'own_prior']]);
+    expect(gateMoves(noSplit, jq2, new Map(), new Map([['032095101', { cur: 84.3, prev: 176.32 }]])).held.map((h) => [h.ticker, h.reason])).toEqual([['APH', 'own_prior']]);
+    // A real 2x price move with the shares unchanged is not held, nor a 20% buy at a price filers agree on.
+    const up = [pos('APH', '032095101', 614_660, 216_753_702), jq2[1]];
+    expect(gateMoves(computeMoves(up, jq2, undefined, new Map()), jq2, new Map(), new Map()).held).toEqual([]);
+    const buy = [pos('APH', '032095101', 737_592, 130_052_221), jq2[1]];
+    expect(gateMoves(computeMoves(buy, jq2, undefined, new Map()), jq2, new Map(), new Map([['032095101', { cur: 176.4, prev: 176.32 }]])).held).toEqual([]);
+    // Off the other filers' quarter-end price by over 1.25x (a 3:2 split the filer applied to its count only) is held.
+    const off = [pos('APH', '032095101', 922_000, 108_376_851), jq2[1]];
+    expect(gateMoves(computeMoves(off, jq2, undefined, new Map()), jq2, new Map(), new Map([['032095101', { cur: 176.4, prev: 176.32 }]])).held.map((h) => h.reason)).toEqual(['price_vs_filers']);
+    // A bond line (PRN) whose prior was stored with shares 0 and its principal: Advent's read "added +$141M" from zero.
+    const bond = (amt: number, value: number) => ({ ...pos('BOND', '00000BND1', 0, value), shares_type: 'PRN', principal_amount: amt });
+    const bp = [bond(140_000_000, 140_150_269), jq2[1]];
+    const bc = [{ ...bond(141_000_000, 141_206_378), shares: 141_000_000 }, jq2[1]];
+    const [b1] = all(computeMoves(bc, bp, undefined, new Map()).moves);
+    expect([b1.change, b1.value_delta > 900_000 && b1.value_delta < 1_100_000]).toEqual(['added', true]); // about $1M of principal, not $141M
   });
 
   it('alert accuracy: held rows go out once the build confirms them; a sent row that disagrees with the build gets a correction email and a corrected feed copy', async () => {
@@ -1929,22 +1948,22 @@ describe('copybook api', () => {
     await env.DB.put(`digest:${day}`, JSON.stringify({ filings: [{ ...base, moves: { bought_usd: 46_579_232, sold_usd: 5_000_000, new: [], added: [row('APH', '032095101', 'added', 1_047_486, 614_660, 88_303_070, 36_487_232), row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_200_000), { ...row('SPY', '78462F103', 'added', 2000, 1000, 1_300_000, 650_000), put_call: 'Call' }, row('BOND', '00000BND1', 'added', 141_206_378, 1, 141_206_378, 141_206_377)], trimmed: [], exited: [row('ORCL', '68389X105', 'exited', 0, 30_000, 0, -5_000_000)] } }], events: [] }));
     await env.DB.put('delivered:cus_j', JSON.stringify([{ day, ids: [ACC] }]));
     const r = await reconcileAlerts(env, now);
-    // MSFT within 10%, the ORCL exit and the SPY call pass; the bond row differs but is logged for review, not mailed.
+    // MSFT within 10%, the ORCL exit and the SPY call pass; APH and the bond (sized from a zero prior, as Advent's was) are wrong.
     expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 5, failed: 2, mailed: 1 }], pending: 0 });
-    expect(sent[0]?.text).not.toContain('BOND');
-    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['copybook-test-j@fldubai.com', 'Correction: Jensen (Jensen Investment Management) APH was trimmed -$15.3M, not added +$36.5M']]);
+    expect(sent[0]?.text).toContain('BOND');
+    expect(sent.map((m) => m.to[0])).toEqual(['copybook-test-j@fldubai.com']);
     const store = JSON.parse((await env.DB.get(`digest:${day}`))!);
-    expect(store.filings[0].corrected.rows.map((x: { ticker: string }) => x.ticker)).toEqual(['APH']);
+    expect(store.filings[0].corrected.rows.map((x: { ticker: string }) => x.ticker)).toEqual(['BOND', 'APH']);
     // Checked once: the next run doesn't mail again; the log feeds latency.json's reconciliation.
     sent = [];
     expect((await reconcileAlerts(env, now)).checked).toEqual([]);
-    // The operator's dry run reads the same stores: the alert fails as sent (APH mailable, the bond for review), and it sends nothing.
+    // The operator's dry run reads the same stores: the alert is wrong as sent (APH and the bond), and it sends nothing.
     const { reconcileDry } = await import('../src/alerts');
     const dry = await reconcileDry(env, now);
-    expect([dry.total, dry.as_sent]).toEqual([1, { pass: 0, fail: 1, fail_mailable: 1, other: 0 }]);
-    expect((dry.alerts as { as_sent: { failed: { ticker: string; review?: boolean }[] } }[])[0].as_sent.failed.map((f) => [f.ticker, !!f.review])).toEqual([['BOND', true], ['APH', false]]);
+    expect([dry.total, dry.as_sent]).toEqual([1, { matched: 0, disclosed: 0, explained: 0, wrong: 1, other: 0 }]);
+    expect((dry.alerts as { as_sent: { failed: { ticker: string; class: string }[] } }[])[0].as_sent.failed.map((f) => [f.ticker, f.class])).toEqual([['BOND', 'wrong'], ['APH', 'wrong']]);
     expect(sent).toHaveLength(0);
-    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', failed_rows: 2, corrections_sent: 1 }] });
+    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, matched: 0, disclosed: 0, explained: 0, wrong: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', class: 'wrong', failed_rows: 2, corrections_sent: 1 }] });
   });
 
   it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {
@@ -3190,6 +3209,9 @@ describe('copybook api', () => {
     const so = await (await call('/me/sessions/revoke', { method: 'POST', token: here })).json();
     expect(so).toMatchObject({ ok: true, member: { email: expect.any(String) } });
     expect([(await call('/me', { token: copied })).status, (await call('/me', { token: here })).status, (await call('/me', { token: so.token })).status]).toEqual([401, 401, 200]);
+    // The site signs out only on invalid_session (revoked, forged, expired); a valid session this host can't place, or none, is not that.
+    const code = async (token: string) => (await (await call('/me', { token })).json()).code;
+    expect([await code(copied), await code(`${here}x`), await code(await signToken(env.SESSION_SECRET, 'session', 'cus_nobody', 600)), await code('')]).toEqual(['invalid_session', 'invalid_session', 'member_unavailable', 'no_session']);
     owner = so.token;
     await new Promise((r) => setTimeout(r, 1000)); // a new session is issued in a later second
     const again = (await (await call('/session', { body: { login: await signToken(env.SESSION_SECRET, 'login', seatId, 600) } })).json()).token;
