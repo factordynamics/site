@@ -4,7 +4,7 @@ import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { aggregate, funds, loadBooks, loadIndex, loadStockIndex, searchNames, type Agg, type Manager, type StockIndexRow } from './data'
 import { A, navigate, usd, usePath } from './lib'
-import { dataSlug, fundPath, publicSlug } from './names'
+import { dataSlug, fundPath, issuerName, publicSlug } from './names'
 import { price as PRICE } from './config'
 import { About, Account, Alerts, CONTACT, Consensus, Filings, Flows, Fund, Funds, Guide, Home, ISSUES, NotFound, Privacy, Stock, Terms } from './pages'
 
@@ -107,7 +107,7 @@ const initials = (firm: string) =>
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join('')
-const owners = (n: number | undefined) => (n === undefined ? 'Stock' : n ? `Held by ${n} of the investors we follow` : 'Not held by the investors we follow')
+const owners = (n: number | undefined) => (n === undefined ? 'Stock' : n ? `Held by ${n} ${n === 1 ? 'investor' : 'investors'} we follow` : 'Not held by the investors we follow')
 const investorHit = (m: Manager, score = 0): Hit => ({
   kind: 'investor',
   label: m.firm,
@@ -140,6 +140,8 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
     return m
   }, [held])
   const ready = held.length > 0
+  // Stock names as the pages show them ("Liberty Live Holdings Series C", not the index's "Com Shs Ser C").
+  const named = useMemo(() => stocks.map((r) => ({ r, name: issuerName(r.n) })), [stocks])
   const stockHit = (t: string, n: string, score = 0): Hit => ({
     kind: 'stock',
     label: n,
@@ -169,11 +171,11 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
       if (hay.includes(s)) inv.push(investorHit(m, m.firm.toLowerCase().startsWith(s) ? 4.5 : hay.split(/[ |]+/).some((w) => w.startsWith(s)) ? 3 : 1))
     }
     const st: Hit[] = []
-    for (const r of stocks) {
+    for (const { r, name } of named) {
       const t = r.t.toLowerCase()
-      const n = r.n.toLowerCase()
+      const n = name.toLowerCase()
       const sc = t === s ? 10 : t.startsWith(s) ? 5 : n.startsWith(s) ? 4 : n.includes(s) ? 1 : 0
-      if (sc) st.push(stockHit(r.t, r.n, sc + Math.min(owned.get(r.t) ?? 0, 100) / 100))
+      if (sc) st.push(stockHit(r.t, name, sc + Math.min(owned.get(r.t) ?? 0, 100) / 100))
     }
     const top = (xs: Hit[]) => xs.sort((a, b) => b.score - a.score).slice(0, 6)
     const g: [string, Hit[]][] = [
@@ -181,7 +183,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
       ['Stocks', top(st)],
     ]
     return (g[1][1][0]?.score ?? 0) > (g[0][1][0]?.score ?? 0) ? [g[1], g[0]] : g
-  }, [q, stocks, mgrs, owned, held]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, named, mgrs, owned, held]) // eslint-disable-line react-hooks/exhaustive-deps
   const hits = groups.flatMap(([, h]) => h)
   if (!open) return null
   const go = (h?: Hit) => {
