@@ -5,7 +5,7 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.18';
+export const SPEC_REVISION = '2026-11-11.19';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /**
@@ -22,6 +22,8 @@ export const SUMMED_PIN = { version: '2026-11-09', sunset: 'Mon, 22 Feb 2027 00:
  * SUMMED_PIN until Feb 22, 2027. Null once it no longer applies. One format: Deprecation @<epoch> (RFC 9745).
  */
 export const PER_CLASS = { at: Date.UTC(2026, 10, 23), deprecation: '@1795392000' };
+/** The per-class row shape's version: an opt-in preview from Nov 21 (once ingest's schema-6 files are on gene), the default on Nov 23. */
+export const PER_CLASS_PREVIEW = { version: '2026-11-23', from: Date.UTC(2026, 10, 21) };
 export function perClassNotice(pinned: boolean, base: string, now = Date.now()): { deprecated_at: string; sunset: string; link: string; headers: Record<string, string> } | null {
   if (now >= (pinned ? SUMMED_PIN.until : PER_CLASS.at)) return null;
   const link = `${base}/v1/changelog?id=${SUMMED_PIN.changelog}`;
@@ -30,6 +32,16 @@ export function perClassNotice(pinned: boolean, base: string, now = Date.now()):
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-per-class-preview',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'announced',
+    changes: [
+      'Preview of the per-class rows: from Sat Nov 21, 2026, a client sending `Copybook-Schema-Version: 2026-11-23` gets holders and /changes rows per full CUSIP (the shape that becomes the default on Mon Nov 23), so integrations can be tested before the switch. Until Nov 21 that header returns 400 bad_request saying when the preview opens.',
+    ],
+  },
   {
     id: '2026-11-11-schema-version-header',
     date: '2026-11-11',
@@ -191,7 +203,7 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     status: 'shipped',
     changes: [
       'Fix: GET /v1/bulk/{file} downloads served an older copy of each export (from Nov 9 01:17 UTC) while GET /v1/bulk listed the newer one; the 2026Q2 file still counted First Eagle\'s book twice. A download now serves exactly the listed file: its link is handed out only when the stored copy has the listed size and sha256, otherwise the file streams from the API.',
-      'Incident (breaking, Nov 11 07:23 to 11:48 UTC): from about 07:23 UTC on Nov 11, GET /v1/filers without `limit` returned only the first 500 filers (of about 8,970), with `next_offset`; it used to return every filer, so a client that loads the list once silently got 5.6% of it. Reverted at 11:48 UTC (gene by 11:55): no `limit` returns every filer again, with no `next_offset`. Paging is opt-in: `limit` (1 to 1000) with `offset`, and `next_offset` only then. If you loaded /v1/filers in that window without paging, load it again.',
+      'Incident (breaking, Nov 11 07:23 to 11:48 UTC): from about 07:23 UTC on Nov 11, GET /v1/filers without `limit` returned only the first 500 filers (of about 8,970), with `next_offset`; it used to return every filer, so a client that loads the list once silently got 5.6% of it. Reverted at 11:48 UTC (on every host by 11:55): no `limit` returns every filer again, with no `next_offset`. Paging is opt-in: `limit` (1 to 1000) with `offset`, and `next_offset` only then. If you loaded /v1/filers in that window without paging, load it again.',
       'JSON responses are served inline again on every host, gzip-compressed when the request sends Accept-Encoding: gzip; only bulk exports and CSVs over 1 MB redirect to a presigned R2 link. Python urllib forwarded Authorization on the redirect, which R2 refuses (400). Never send Authorization to a presigned link.',
       'Positions add `row_type` (`holding` or `exited`; exited rows have shares and value 0), `suspect_units_basis` (`filers`, `own_prior`, `none`) and `suspect_reason` (`cross_filer`, `cross_filer_prior`, `own_prior`), each null until the data run fills it. Bulk CSVs add `row_type`, `prev_shares` and `prev_value` at the end from the next full data run (about 10:00 UTC Nov 11), and hold exactly the rows /v1 serves.',
       'Added `etag` and `sha256` to each GET /v1/bulk entry, read from the stored object. Check a download with sha256sum; `sha256` is null for a file whose digest isn\'t recorded yet, until its next check.',
@@ -471,6 +483,8 @@ async function routeV1(req: Request, env: Env, url: URL, path: string): Promise<
     return v1json({ data: one }, 200, { 'cache-control': 'public, max-age=300' });
   }
   const pin = req.headers.get('copybook-schema-version');
+  // The per-class shape as an opt-in preview (the lead, Nov 11): served once the per-class files are built (Nov 21).
+  if (pin === PER_CLASS_PREVIEW.version) return v1error('bad_request', 400, `Copybook-Schema-Version ${pin} (per-class rows) is a preview available from Sat Nov 21, 2026, and the default from Mon Nov 23. Until then, omit the header for today's rows. See /v1/changelog?id=${SUMMED_PIN.changelog}.`);
   if (pin && !SCHEMA_VERSIONS.includes(pin)) return v1error('bad_request', 400, `Unknown Copybook-Schema-Version ${pin}; served versions: ${SCHEMA_VERSIONS.join(', ')}.`);
   // The cron sets a per-run SEC budget on this module; a request after it in the same isolate
   // must not inherit a spent one (filing lookups would fail).

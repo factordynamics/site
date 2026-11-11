@@ -4707,27 +4707,41 @@ describe('copybook api', () => {
     // A blend of classes has no CUSIP of its own and no shares in mixed units; its change is ingest's, not the $ sum's sign.
     for (const r of [brkRow, brkChange]) expect([r.cusip, r.issuer_cusip6, r.shares, r.prev_shares, r.share_change, r.change, r.net_direction]).toEqual([null, '084670', null, null, null, 'mixed', 'buy']);
     // Ingest's schema-5 BRK row states its shares in BRK.B (shares_ratio per class CUSIP): they pass through, CUSIP still null.
-    await hist.put('hl/084670.json', JSON.stringify({ issuer: '084670', tickers: ['BRK.B'], schema: 5, columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'classes', 'shares_unit', 'shares_ratio', 'ratio_source', 'cusip', 'issuer_cusip6', 'net_direction', 'value_delta', 'value_delta_basis'],
-      rows: [['0000315066', 'FMR LLC', null, 'active', false, '2026Q3', 16000, 12900, 7_000_000, 5_000_000, 'mixed', null, brkClasses, 'BRK.B', { '084670108': 1500 }, '0001193125-26-000001', null, '084670', 'buy', 1_550_000, 'net_shares_repriced']] }));
+    await hist.put('hl/084670.json', JSON.stringify({ issuer: '084670', tickers: ['BRK.B'], schema: 5, columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'classes', 'shares_unit', 'shares_ratio', 'ratio_source', 'cusip', 'issuer_cusip6', 'net_direction', 'value_delta', 'value_delta_basis', 'unreliable', 'unreliable_reason'],
+      rows: [['0000315066', 'FMR LLC', null, 'active', false, '2026Q3', 16000, 12900, 7_000_000, 5_000_000, 'mixed', null, brkClasses, 'BRK.B', { '084670108': 1500 }, '0001193125-26-000001', null, '084670', 'buy', 1_550_000, 'net_shares_repriced', null, null],
+        // A held row (ingest's rule): filed facts, its unreliable class and reason, change unknown, no value change.
+        ['0000102909', 'VANGUARD GROUP INC', null, 'passive', false, '2026Q3', 9_000_000, 4_000, 4_000_000, 3_000_000, 'unknown', null, null, 'BRK.B', null, null, '084670702', '084670', null, null, null, 'shares', 'share count 2,250x the prior quarter']] }));
     const brk5 = (await v1('/v1/stocks/084670702/holders')).body.data.holders[0];
     expect([brk5.cusip, brk5.issuer_cusip6, brk5.shares, brk5.prev_shares, brk5.share_change, brk5.shares_unit, brk5.shares_ratio, brk5.value_delta_basis]).toEqual([null, '084670', 16000, 12900, 3100, 'BRK.B', { '084670108': 1500 }, 'net_shares_repriced']);
     // A client pinned to the summed rows (2026-11-09) is told when the pin ends; an unpinned one isn't.
-    const hdrs = async (path: string, pin?: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, ...(pin ? { 'copybook-schema-version': pin } : {}) } }), env)).headers;
+    let lastBody: any = null;
+    const hdrs = async (path: string, pin?: string) => {
+      const res = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, ...(pin ? { 'copybook-schema-version': pin } : {}) } }), env);
+      lastBody = await res.clone().json().catch(() => null);
+      return res.headers;
+    };
+    let pinnedHolders: any = null;
     // Before Nov 23 every client is warned (unpinned ones break that day), in one format: Deprecation @<epoch>.
     const echoed: (string | null)[] = [];
     for (const path of ['/v1/stocks/084670702/holders', '/v1/changes/2026Q3?cusip=084670702']) {
       for (const pin of ['2026-11-09', undefined]) {
         const hd = await hdrs(path, pin);
         echoed.push(hd.get('copybook-schema-version'));
+        if (pin && path.includes('/holders')) pinnedHolders = lastBody;
         expect([hd.get('deprecation'), hd.get('sunset'), /changelog\?id=2026-11-23-per-class-rows>; rel="deprecation"/.test(hd.get('link') ?? '')]).toEqual(['@1795392000', 'Mon, 22 Feb 2027 00:00:00 GMT', true]);
       }
     }
+    // A held row passes through a pinned summed response as ingest published it: nothing re-derives a direction or dollars.
+    const held = pinnedHolders.data.holders.find((r: { filer: { cik: string } }) => r.filer.cik === '0000102909');
+    expect([held.change, held.unreliable, held.unreliable_reason, held.value_delta_usd, held.net_direction ?? null, held.shares]).toEqual(['unknown', 'shares', 'share count 2,250x the prior quarter', null, null, 9_000_000]);
     // Every /v1 response names the schema it served (the PM, Nov 11): a valid pin or the default (the holders calls
     // above), errors and the spec too; an unknown pin is refused and never echoed. (Unmetered calls: this test is near
     // the 60-a-minute limit.)
     const { SCHEMA_VERSION } = await import('../src/v1');
     const bad = await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '1999-01-01' } }), env);
     const sp = await handleRequest(new Request('https://api.test/v1/openapi.json'), env);
+    const pv = await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '2026-11-23' } }), env);
+    expect([pv.status, /preview available from Sat Nov 21, 2026/.test((await pv.json()).error.message)]).toEqual([400, true]);
     expect([echoed, bad.status, bad.headers.get('copybook-schema-version'), sp.headers.get('copybook-schema-version'), /copybook-schema-version/.test(bad.headers.get('access-control-expose-headers') ?? '')]).toEqual([['2026-11-09', SCHEMA_VERSION, '2026-11-09', SCHEMA_VERSION], 400, SCHEMA_VERSION, SCHEMA_VERSION, true]);
     // Public responses never name a machine or tunnel host (the lead, Nov 11), even when the request came in on gene's
     // Funnel: Link headers, bulk URLs and the spec's servers all use the one public base.

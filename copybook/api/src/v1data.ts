@@ -572,6 +572,8 @@ export interface HolderRow {
   trade_usd_implied: number | null;
   /** Which side of a flagged line can't be trusted (value, shares or both); value_change_usd is the filed-value change. */
   unreliable?: 'value' | 'shares' | 'both';
+  /** Ingest's reason for holding the row, as published. */
+  unreliable_reason?: string;
   value_change_usd?: number | null;
   /** The data run's basis for value_delta_usd: "trade" (shares traded x price) or "filed_value" (change in filed value). */
   value_delta_basis?: 'trade' | 'filed_value' | null;
@@ -1011,7 +1013,8 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       value_delta_usd: unreliableOf(h) ? null : h.value_delta !== undefined ? (h.value_delta ?? null) : h.change && h.change !== 'unchanged' ? tradeUsd({ ...h, value_usd: h.value, prev_value_usd: h.prev_value }) : h.change === 'unchanged' ? 0 : null,
       // Null on a flagged or withheld line: its price is the bad part (Aware Super XOM at $1,854/sh read +$79.4M).
       trade_usd_implied: unreliableOf(h) || h.price_outlier || h.suspect_units || (h.value_delta === null && (h.suspect_reason || h.value_basis)) ? null : h.change && h.change !== 'unchanged' ? tradeUsd({ ...h, value_usd: h.value, prev_value_usd: h.prev_value }) : h.change === 'unchanged' ? 0 : null,
-      ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, value_change_usd: h.value_change ?? null } : {}),
+      // A held row (ingest's rule): its class and reason as published; nothing here re-derives a direction or dollars.
+      ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, ...(typeof h.unreliable_reason === 'string' ? { unreliable_reason: h.unreliable_reason } : {}), value_change_usd: h.value_change ?? null } : {}),
       // The data run's labels, as published: what value_delta measures, and contract-filed option lines (shares x100).
       value_delta_basis: ['trade', 'filed_value', 'net_shares_repriced'].includes(h.value_delta_basis) ? h.value_delta_basis : null,
       ...(typeof h.shares_basis === 'string' ? { shares_basis: h.shares_basis } : {}),
@@ -1404,7 +1407,7 @@ ROUTES.push(
       stamp = h.stamp;
       // Sized like the per-filer path: a trade at this filing's own value per share, never the value difference (a
       // price move is no trade: AAPL's +$14.87B row was +$3.58B of shares).
-      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ ...classFields(r), filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: r.cusip ?? null, prev_cusip: r.prev_cusip ?? null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: r.issuer ?? h.display_name, put_call: r.put_call, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: r.value_delta_usd, value_delta_basis: r.value_delta_basis ?? null, ...(r.shares_basis ? { shares_basis: r.shares_basis } : {}), trade_usd_implied: r.trade_usd_implied, ...(r.unreliable ? { unreliable: r.unreliable, value_change_usd: r.value_change_usd ?? null } : {}), change: r.change, accession: r.accession, original_accession: r.original_accession, accepted_at: r.accepted_at }));
+      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ ...classFields(r), filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: r.cusip ?? null, prev_cusip: r.prev_cusip ?? null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: r.issuer ?? h.display_name, put_call: r.put_call, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: r.value_delta_usd, value_delta_basis: r.value_delta_basis ?? null, ...(r.shares_basis ? { shares_basis: r.shares_basis } : {}), trade_usd_implied: r.trade_usd_implied, ...(r.unreliable ? { unreliable: r.unreliable, ...(r.unreliable_reason ? { unreliable_reason: r.unreliable_reason } : {}), value_change_usd: r.value_change_usd ?? null } : {}), change: r.change, accession: r.accession, original_accession: r.original_accession, accepted_at: r.accepted_at }));
       source = 'stock';
     } else {
       // Across filers: the data run's per-quarter change file (largest moves first).
