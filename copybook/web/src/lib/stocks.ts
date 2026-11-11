@@ -236,8 +236,10 @@ export const dayET = (t: Date | number = Date.now()) => new Date(t).toLocaleDate
 /** Where a tracked fund stands this season, for every "Q3 …" line (fund pages, /account/'s follows):
  *  filed when index.json's latest book is the season's quarter, else its usual day from d/expected.json,
  *  else due by the deadline. Null once the deadline has passed. */
-export function seasonStatus(m: { quarter?: string; filing_date?: string } | undefined, e: Pick<ExpectedSoon, 'expected_date'> | undefined, now = new Date()) {
+export function seasonStatus(m: { quarter?: string; filing_date?: string; status?: string } | undefined, e: Pick<ExpectedSoon, 'expected_date'> | undefined, now = new Date()) {
   const sn = seasonNow(now)
+  // A filer that has stopped filing (status inactive) isn't due anything.
+  if (m?.status === 'inactive') return null
   const Q = `Q${sn.quarter.slice(-1)}`
   if (m?.quarter === sn.quarter && m.filing_date) return { kind: 'filed' as const, day: m.filing_date, text: `${Q} filed ${shortDay(m.filing_date)}` }
   if (now > sn.deadline) return null

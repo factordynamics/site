@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Panel } from '../components/ui'
 import { api } from '../config'
-import { DATA, dateLabel, quarterLabel, useAsync, useTitle } from '../lib/data'
+import { DATA, dateLabel, loadIndex, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { loadSplitLog, stockPath } from '../lib/stocks'
 
 // data/changelog.json from ingest: append-only, newest first; id is a stable anchor.
@@ -187,10 +187,35 @@ const STATUS: Record<string, string> = {
   '2026-11-09-refiled-amendments': 'Status: the public pages and the API’s /v1 books are corrected (checked: First Eagle 2026Q2 $60.75B, JPMorgan Chase 2025Q3 $1,669B). Member 13F history and CSV downloads are being confirmed. Bulk files are built from original filings, so they show each original book rather than the replacement. mislabeled_amendment is announced for the API’s filing.versions, not live yet.',
 }
 
+// Entries that publish with a data run rather than a site deploy: each shows once index.json's types_as_of
+// reaches `from`, the same Pages deploy that serves the new type set. Skipped if changelog.json carries the id.
+const WITH_TYPES: (Entry & { from: string })[] = [
+  {
+    id: '2026-11-14-fund-types-form-adv',
+    from: '2026-11-14',
+    date: '2026-11-14',
+    kind: 'methodology',
+    title: 'Fund types now come from SEC Form ADV',
+    body: 'Each 13F filer’s type (hedge fund, long-only, index, wealth, bank, insurance, pension, sovereign, other) now rests on the adviser’s own Form ADV, matched by CIK or by full legal name, alongside a hand-checked list. A filer is a hedge fund when its hedge funds hold at least half of its regulatory assets, or at least $1 billion and a quarter of them (Schedule D 7.B.1). Gross assets are de-duplicated, so a master fund and its feeders count once (Item 5.D(f)). A filer that was already a hedge fund loses the label only when its Form ADV clearly shows otherwise: hedge funds under 5% of its assets, and private funds that are mostly other kinds, or individual or registered-fund clients. Filers with no Form ADV match keep their earlier type. Advisers whose clients are mostly individuals are wealth managers, except long-only managers with a concentrated book (top ten at least 40% of the book, under 100 positions), who stay long-only. Market makers and proprietary traders (Susquehanna, Jane Street, Virtu, Citadel Securities, IMC, Optiver, Hudson River Trading, Jump, Tower and others) are typed other or bank, because their 13F is trading inventory. Fund-of-funds allocators, OCIOs and private-equity firms are not hedge funds. Book shape and Form D offerings alone never make a hedge fund. Effect: hedge funds go from 1,243 to about 1,336 filers, long-only from 1,554 to about 1,369, wealth from 5,098 to about 5,215, and index from 101 to 66. The hedge-fund and HF + long-only lenses, Flow and the season page use the new types from Nov 14. Earlier quarters are not re-labelled in alerts already sent. Q Global Advisors ($11B) is typed other: it has no Form ADV, which fits an exempt family office, and that is unverified. Every filer’s type_evidence in filer_types.json names the Form ADV figures or the hand check behind it.',
+  },
+  {
+    id: '2026-11-14-inactive-filers',
+    from: '2026-11-14',
+    date: '2026-11-14',
+    kind: 'methodology',
+    title: 'Inactive filers',
+    body: 'A filer with status inactive has stopped filing 13Fs: four or more quarters behind, or closed by hand check (Olstein Capital Management, whose SEC registration was terminated on Jul 10, 2026). It is left out of current-holder counts, Consensus, the tracked and superinvestor counts, and alerts. Its past holdings stay visible: the fund page, its quarter history and the /v1 history still show every quarter it filed.',
+  },
+]
+
 export function Methodology() {
   useTitle('Methodology · Copybook')
   const log = useAsync(() => fetch(`${DATA}changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ updated_at?: string; entries: Entry[] }>) : null)), [])
-  const entries = log.data?.entries ?? []
+  const idx = useAsync(loadIndex, [])
+  const asOf = idx.data?.typesAsOf ?? ''
+  const fromLog = log.data?.entries ?? []
+  const due = WITH_TYPES.filter((e) => asOf >= e.from && !fromLog.some((x) => x.id === e.id))
+  const entries = [...due, ...fromLog].sort((a, b) => b.date.localeCompare(a.date))
   const splits = useAsync(loadSplitLog, [])
   // Sections that load late (splits, changelog) still honour a #hash in the URL.
   const { hash } = useLocation()
