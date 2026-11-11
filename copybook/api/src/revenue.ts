@@ -538,7 +538,7 @@ export async function yearlyPeakLine(env: Env, m: Member, filings: { slug: strin
     return `Keep Copy at the founding price: add a card before ${day(m.trial_end)}. Yearly ${money(p.year)} or ${money(p.month)}/month. Add card: ${keep}`;
   }
   return m.plan === 'copy'
-    ? `Switch to yearly at your founding price: ${money(p.year)}/yr, less than 9 months of monthly. Switch now: ${keep}`
+    ? `Switch to yearly at your founding price: ${money(p.year)}/yr, locked, with history back to 2013 (from Dec 31). Switch now: ${keep}`
     : `Switch to yearly: ${money(p.year)}, ${monthsFree(p)}. Switch now: ${keep}`;
 }
 
