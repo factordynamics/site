@@ -10,7 +10,7 @@ nightly backup has a manifest (`backups/YYYY-MM-DD.manifest.json`: plaintext and
 weekly without the key by `backup-verify.sh` and monthly with it by `restore-check.sh`;
 `setup-service-user.sh` (run once with sudo) moves the service, its state and secrets to a dedicated `copybook` user.
 
-## Option A: fail members over to the Cloudflare Worker (rehearsed Nov 11: serving in under 25 s)
+## Option A: fail members over to the Cloudflare Worker (rehearsed Nov 11: serving in under 25 s, back within about a minute)
 
 Automatic since Nov 11: Cloudflare's minute cron does steps 0–1 itself when both of gene's front doors (api.json's base
 and Funnel) fail /health on 2 checks in a row, and moves members back after 3 healthy minutes
@@ -37,8 +37,12 @@ Rehearsed Wed Nov 11, 16:01–16:08 UTC, by hand with `failover-a.sh`, gene left
   `/health?probe=1` answered from the Worker itself (`api_host cloudflare`, not proxied).
 - `verify.mjs` against the Worker: 16 of 17 pass (sign-in, /me, CORS, forged session, login, checkout return, history,
   csv-link on the public base, CSV, single use, a 32 MB CSV, follows, signed webhook replay and a bad signature). The
-  Pro API-key check failed with 401 on gene too, so it was not the failover.
-- `back` wrote api.json at 16:07:50; by 16:07:53 workers.dev proxied to gene again. Members were on the Worker 6 min 43 s.
+  Pro API-key check failed with 401 on gene too: verify.mjs signed login links without an issued-at, which the API
+  refuses for a member with `sessions_after` set (fixed in b4bb133).
+- Worker requests in the window: 692 (wrangler tail), 475 of them payments' drill pollers.
+- `back` wrote api.json at 16:07:50; the first check at 16:07:53 was proxied to gene, but some Worker isolates kept
+  answering locally until 16:08:51 (each caches api.json for up to 60 s). So fail-back takes up to about a minute.
+  Members were on the Worker 6 min 43 s, plus that minute.
 - Stripe: a no-op update of the webhook endpoint succeeded (16:06:32), so step 2's call works. It wasn't repointed,
   because gene stayed up.
 - Found: while failed over, the Worker didn't honour deletions. A key deleted on gene before the flip, and a seat
