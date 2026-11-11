@@ -389,7 +389,7 @@ function App() {
             ))}
           </nav>
           <div className="top-right">
-            <button className="search-btn" onClick={() => setSearch(true)} aria-label="Search stocks and investors">
+            <button className="search-btn" onClick={() => setSearch(true)} aria-label="Search stocks or investors">
               <Glass />
               <span className="label">Search stocks or investors</span>
             </button>
