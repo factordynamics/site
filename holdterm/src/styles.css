@@ -1619,6 +1619,11 @@ a.hb-row:hover {
     min-width: 100%;
     max-width: none;
   }
+  /* Stake and insider filings: the investor's name wraps within a set width, so the company gets the rest. */
+  .grid:has(.iss) td .firm {
+    display: inline-block;
+    max-width: 112px;
+  }
   /* …and the number columns in those tables shrink to their content, so the name column gets the spare width. */
   .grid:has(.stock-sub) th.num {
     width: 1%;

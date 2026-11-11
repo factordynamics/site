@@ -231,22 +231,46 @@ function ActionTag({ e }: { e: Event }) {
     </span>
   )
 }
+const stakePct = (p: number) => `${p.toFixed(p < 10 ? 2 : 1)}%`
 const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => [
-  { key: 'filed', label: 'Filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, sort: (e) => e.filing_date, width: '84px' },
+  // With an Investor column, phones show the date under the investor's name, so the company gets the width.
+  { key: 'filed', label: 'Filed', hideSm: withWho, render: (e) => <span className="dim num">{date(e.filing_date)}</span>, sort: (e) => e.filing_date, width: '84px' },
   { key: 'form', label: 'Form', hideSm: true, render: (e) => <span className="form">{FORM[e.kind]}</span>, sort: (e) => e.kind },
-  ...(withWho ? [{ key: 'who', label: 'Investor', render: (e: Event) => <FundLink slug={e.slug} name={<Firm name={firmOf(firms, e.slug, e.manager)} />} />, sort: (e: Event) => e.manager } as Col<Event>] : []),
+  ...(withWho ? [{ key: 'who', label: 'Investor', render: (e: Event) => (
+          <>
+            <FundLink slug={e.slug} name={<Firm name={firmOf(firms, e.slug, e.manager)} />} />
+            <span className="row-sub stock-sub show-sm">Filed {date(e.filing_date)}</span>
+          </>
+        ), sort: (e: Event) => e.manager } as Col<Event>] : []),
   {
     key: 'iss',
     label: 'Company',
     render: (e) => (
-      <span className="iss">
-        <StockCell t={ownVehicle(e) ? null : e.ticker} name={issuerName(e.display_name || e.issuer)} former={ownVehicle(e) ? undefined : e.former} />
-        {ownVehicle(e) && <span className="badge">own fund</span>}
-      </span>
+      <>
+        <span className="iss">
+          <StockCell t={ownVehicle(e) ? null : e.ticker} name={issuerName(e.display_name || e.issuer)} former={ownVehicle(e) ? undefined : e.former} />
+          {ownVehicle(e) && <span className="badge">own fund</span>}
+        </span>
+        {/* Phones hide the Stake, Value and Form columns: the company's name and the filing's key figure go on second lines. */}
+        {e.ticker && !ownVehicle(e) && <span className="row-sub stock-sub show-sm">{issuerName(e.display_name || e.issuer)}</span>}
+      </>
     ),
   },
-  { key: 'act', label: 'What happened', render: (e) => <ActionTag e={e} />, sort: (e) => e.action },
-  { key: 'pc', label: 'Stake', num: true, hideSm: true, title: 'Share of the company owned after the filing', render: (e) => (e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 2 : 1)}%` : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
+  {
+    key: 'act',
+    label: 'What happened',
+    render: (e) => {
+      const fig = e.value_usd != null && (e.action === 'buy' || e.action === 'sell') ? usd(e.value_usd) : e.percent_of_class != null && e.kind !== 'form4' ? `Owns ${stakePct(e.percent_of_class)}` : null
+      return (
+        <>
+          <ActionTag e={e} />
+          {fig && <span className="row-sub stock-sub show-sm">{fig}</span>}
+        </>
+      )
+    },
+    sort: (e) => e.action,
+  },
+  { key: 'pc', label: 'Stake', num: true, hideSm: true, title: 'Share of the company owned after the filing', render: (e) => (e.percent_of_class != null ? stakePct(e.percent_of_class) : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
   { key: 'val', label: 'Value', num: true, hideSm: true, render: (e) => (e.value_usd != null ? <span className={e.action === 'sell' ? 'neg' : e.action === 'buy' ? 'pos' : ''}>{usd(e.value_usd)}</span> : <span className="dim">—</span>), sort: (e) => e.value_usd ?? -1 },
   { key: 'sa', label: 'Shares now', num: true, hideSm: true, hide: 'lg', title: 'Shares owned after the filing', render: (e) => num(e.shares_after), sort: (e) => e.shares_after ?? -1 },
   {
