@@ -1048,7 +1048,7 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
     const w = sent[0];
     expect(w.subject).toBe('In your names: Warren Buffett added $8.8B of GOOGL');
-    expect(w.text).toMatch(/From investors you follow:\n  Bill Ackman: /);
+    expect(w.text).toMatch(/From investors you follow:\n(  .*\n    .*\n)*  Bill Ackman: bought HHH/); // and the superinvestor moves in followed stocks (GOOGL)
     // "In your names" first: one public fact per saved name (superinvestors only), then the biggest locked item, named.
     expect(w.text).toContain(
       `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/\n  Nvidia's CEO sold $18.6M of NVDA, with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
