@@ -94,7 +94,8 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
                 <rect x={x} y={pad.t + ih - h} width={cw} height={h} rx={3} className={on ? 'col on' : 'col'} />
                 {(showLabels || on) && (
                   <text x={x + cw / 2} y={pad.t + ih - h - 6} textAnchor="middle" className="vlabel">
-                    {usd(d.value, d.value >= 1e11 ? 0 : 1)}
+                    {/* Whole billions from $100B fit the bars; the highlighted bar matches the line above it ("$103.2B"). */}
+                    {usd(d.value, d.value >= 1e11 && !on ? 0 : 1)}
                   </text>
                 )}
                 {(data.length - 1 - i) % every === 0 && (
