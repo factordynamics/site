@@ -2801,3 +2801,125 @@ p a,
     grid-template-columns: minmax(0, 150px) minmax(40px, 1fr) 60px;
   }
 }
+
+/* ---------- touch screens: finger-sized targets (44px where it matters, 24px minimum anywhere) ---------- */
+@media (pointer: coarse), (max-width: 560px) {
+  :root {
+    --tr: 44px;
+    --th: 40px;
+  }
+  .top nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 14px;
+  }
+  .top-right .btn,
+  .icon-btn,
+  .search-btn {
+    min-height: 40px;
+  }
+  .chip,
+  .ap-tabs button {
+    min-height: 40px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .tabs button {
+    min-height: 44px;
+  }
+  .grid th .sorter {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+  .hb-row {
+    min-height: 44px;
+  }
+  .panel header .right a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+  .foot nav {
+    gap: 0 18px;
+  }
+  .foot nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+  .due {
+    line-height: 2.4;
+  }
+  .more {
+    min-height: 44px;
+  }
+}
+
+/* ---------- phones: sections as a bottom tab bar ---------- */
+.tabbar {
+  display: none;
+}
+@media (max-width: 720px) {
+  .top nav {
+    display: none;
+  }
+  .tabbar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+  }
+  .tabbar a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 52px;
+    border-radius: 10px;
+    color: var(--dim);
+    font-size: 11.5px;
+    font-weight: 500;
+    line-height: 1.1;
+    text-align: center;
+  }
+  .tabbar a.on {
+    color: var(--acc);
+  }
+  .tabbar a.on svg {
+    stroke-width: 2;
+  }
+  .tabbar a:focus-visible {
+    outline: 2px solid var(--acc);
+    outline-offset: -2px;
+  }
+  .foot {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+}
+/* Keyboard users can jump past the header; the link shows only when focused. */
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 100;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--acc);
+  color: var(--on-acc);
+  font-weight: 600;
+}
+.skip:focus {
+  top: 10px;
+  color: var(--on-acc);
+}

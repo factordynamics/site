@@ -48,6 +48,7 @@ export function A({ to, children, className, title }: { to: string; children: Re
       href={to}
       className={className}
       title={title}
+      aria-current={className?.split(' ').includes('on') ? 'page' : undefined}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
         e.preventDefault()
