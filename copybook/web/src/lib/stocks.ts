@@ -1,6 +1,6 @@
 import type { Ev } from '../components/FundNotes'
 import { call } from './account'
-import { BASE, DATA, displayName, getJSON, type Change } from './data'
+import { BASE, displayName, getJSON, type Change } from './data'
 
 // Derived at build time by scripts/stocks.mjs from the curated 13F books, served from the site host.
 const D = `${BASE}d/`
@@ -281,22 +281,6 @@ export const loadFlow = (member = false, v?: number) =>
     return { ...fix(f as FlowPeriod & Flow), periods: (f.periods ?? [f as FlowPeriod]).map(fix) }
   })
 
-/** A fund-type view of one quarter's flow: hedge funds, or hedge funds plus long-only managers. */
-export type LensId = 'hedge' | 'smart'
-export type LensScope = FlowScope & { filed: number; total: number }
-export type FlowLenses = { types_as_of: string; types_sig?: string; generated_at?: string; periods: { quarter: string; splits?: FlowPeriod['splits']; lenses: Partial<Record<LensId, LensScope>> }[] }
-export const LENS_LABEL: Record<LensId, string> = { hedge: 'Hedge funds', smart: 'Hedge funds + long-only' }
-/** data/flow_lenses.json (ingest): the hedge-fund and HF + long-only views on Flow and /season/. Null until the
- *  file exists and unless its types_as_of is index.json's, the set the stock-page lenses were built from in the
- *  same deploy, so all three switch to a new type set together. */
-export const loadFlowLenses = (v?: number) =>
-  Promise.all([getJSON<FlowLenses>(`${DATA}flow_lenses.json${fresh(v)}`).catch(() => null), getJSON<{ types_as_of?: string }>(`${DATA}index.json`).catch(() => null)]).then(([f, idx]): FlowLenses | null => {
-    if (!f?.periods?.length || !f.types_as_of || f.types_as_of !== idx?.types_as_of) return null
-    const fix = (rows: FlowRow[] = []) => rows.map((r) => ({ ...r, new_by: r.new_by ?? [], buyers: (r.buyers ?? []).map(named), sellers: (r.sellers ?? []).map(named) }))
-    const scope = (x?: LensScope): LensScope | undefined =>
-      x && { ...x, bought: fix(x.bought), sold: fix(x.sold), most_buyers: fix(x.most_buyers), most_sellers: fix(x.most_sellers), new_multi: fix(x.new_multi), fresh: fix(x.fresh) }
-    return { ...f, periods: f.periods.map((p) => ({ ...p, lenses: { hedge: scope(p.lenses?.hedge), smart: scope(p.lenses?.smart) } })) }
-  })
 
 /** The page ticker for any share-class ticker (GOOG -> GOOGL). */
 /** "$tsla" -> "TSLA", "BRK-B" -> "BRK.B": how people type tickers, to how 13F data spells them. */
