@@ -16,6 +16,10 @@
    "name": "1832 Asset Management L.P.",
    "type": "long_only"
   },
+  "0001002152": {
+   "name": "COMPASS CAPITAL MANAGEMENT, INC",
+   "type": "wealth"
+  },
   "0001024896": {
    "name": "Cantor Fitzgerald, L. P.",
    "type": "bank"
@@ -26,6 +30,10 @@
   },
   "0001113000": {
    "name": "Kensico Capital Management Corp.",
+   "type": "hedge_fund"
+  },
+  "0001134813": {
+   "name": "STEVENS CAPITAL MANAGEMENT LP",
    "type": "hedge_fund"
   },
   "0001164508": {
@@ -52,12 +60,24 @@
    "name": "King Street Capital Management, L.P.",
    "type": "hedge_fund"
   },
+  "0001269119": {
+   "name": "OPPENHEIMER ASSET MANAGEMENT INC.",
+   "type": "long_only"
+  },
   "0001274419": {
    "name": "Credit Industriel Et Commercial",
    "type": "bank"
   },
+  "0001346824": {
+   "name": "RA CAPITAL MANAGEMENT, L.P.",
+   "type": "hedge_fund"
+  },
   "0001352851": {
    "name": "Magnetar Financial LLC",
+   "type": "hedge_fund"
+  },
+  "0001387508": {
+   "name": "PRELUDE CAPITAL MANAGEMENT, LLC",
    "type": "hedge_fund"
   },
   "0001388391": {
@@ -72,6 +92,10 @@
    "name": "Susquehanna International Group, LLP",
    "type": "other"
   },
+  "0001483859": {
+   "name": "ArrowMark Colorado Holdings LLC",
+   "type": "long_only"
+  },
   "0001491719": {
    "name": "Lombard Odier Asset Management (USA) Corp",
    "type": "long_only"
@@ -84,6 +108,10 @@
    "name": "Wellington Shields & Co., LLC",
    "type": "bank"
   },
+  "0001512397": {
+   "name": "Knighthead Capital Management, LLC",
+   "type": "hedge_fund"
+  },
   "0001512857": {
    "name": "Brevan Howard Capital Management LP",
    "type": "hedge_fund"
@@ -94,6 +122,10 @@
   },
   "0001557017": {
    "name": "Capula Management Ltd",
+   "type": "hedge_fund"
+  },
+  "0001558858": {
+   "name": "Alpha Wave Global, LP",
    "type": "hedge_fund"
   },
   "0001569758": {
@@ -188,6 +220,10 @@
    "name": "Munro Partners",
    "type": "long_only"
   },
+  "0001777813": {
+   "name": "Atreides Management, LP",
+   "type": "hedge_fund"
+  },
   "0001784547": {
    "name": "Woodline Partners LP",
    "type": "hedge_fund"
@@ -196,6 +232,10 @@
    "name": "Polar Capital Holdings Plc",
    "type": "long_only"
   },
+  "0001847772": {
+   "name": "EMC Capital Management",
+   "type": "hedge_fund"
+  },
   "0001861159": {
    "name": "O'Neil Global Advisors, Inc.",
    "type": "long_only"
@@ -203,6 +243,10 @@
   "0001881567": {
    "name": "Clear Street Group Inc.",
    "type": "bank"
+  },
+  "0001890906": {
+   "name": "Allspring Global Investments Holdings, LLC",
+   "type": "long_only"
   },
   "0001895911": {
    "name": "Paralel Advisors LLC",
@@ -253,5 +297,5 @@
    "type": "other"
   }
  },
- "note": "Hand-checked filer types (PM review of the CRWD, APH, SNDK, NVDA, META, APP, VST, ALAB and TTMI hedge-fund holders, 2026-11-09). filer_types.py applies them first; the publish gate fails when filer_types.json disagrees with any of them."
+ "note": "Hand-checked filer types (PM review of the CRWD, APH, SNDK, NVDA, META, APP, VST, ALAB and TTMI hedge-fund holders, 2026-11-09, rev 4; plus filers with no Form ADV match, 2026-11-11). filer_types.py applies them first; the publish gate fails when filer_types.json disagrees with any of them."
 }

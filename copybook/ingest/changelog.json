@@ -2,6 +2,14 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-hedge-fund-adv",
+   "date": "2026-11-11",
+   "kind": "methodology",
+   "title": "Hedge-fund type now requires SEC Form ADV evidence",
+   "body": "A filer is typed hedge_fund only when (1) it is on the hand-checked list, or (2) its adviser's Form ADV (the SEC's monthly registered and exempt-reporting adviser files) shows hedge funds in Schedule D 7.B.1 whose gross assets are at least half of its regulatory AUM, or $1B and more at a quarter of it or more. SEC publishes private-fund gross assets per adviser, not per fund type, so when an adviser also runs other private funds the hedge-fund share is split by fund count and marked as an estimate. Form D filings, names and the shape of the 13F book no longer make a hedge fund on their own; such filers fall back to long_only, wealth or other. Form ADV also types wealth managers (individual clients hold most of the RAUM) and fund complexes (registered investment companies do). Name rules still type banks, brokers, market makers and ETF issuers first. Each filer's record in filer_types.json carries type_evidence with the adviser, its RAUM, hedge-fund count and gross assets. Checked against the PM's 78-row test list (all pass) and random samples of 30 hedge-fund filers (none clearly wrong).",
+   "quarters": []
+  },
+  {
    "id": "2026-11-11-holder-weights",
    "date": "2026-11-11",
    "kind": "correction",

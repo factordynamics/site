@@ -35,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from ingest.adv import load as load_advisers, verdict
 from ingest.datasets import prev_quarter
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
@@ -299,21 +300,30 @@ def shape(book: dict | None, prev: dict | None) -> dict:
 
 
 def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int]] | None = None,
-             common: set[str] | None = None) -> tuple[str, str]:
+             common: set[str] | None = None, adviser: dict | None = None) -> tuple[str, str, dict]:
+    """(type, basis, type_evidence). hedge_fund comes only from the hand-checked cases, a name rule, or
+    Form ADV (hedge funds' gross assets at least half of RAUM, or $1B and more). Form D, names and book
+    shape alone never make a hedge fund: without ADV evidence such filers fall back to long_only."""
+    ev: dict = {}
+    if form_d and (cik in form_d[0]):
+        ev["form_d"] = "files Form D for hedge funds"
     if cik in OVERRIDES:
-        return OVERRIDES[cik], "override"
+        return OVERRIDES[cik], "override", ev | {"source": "hand-checked"}
     for kind, rx in RULES:
         if rx.search(name or ""):
-            return kind, "name"
-    if form_d:
-        ciks, stems = form_d
-        st = stem(name)
-        if cik in ciks:
-            return "hedge_fund", "Form D: files for hedge funds"
-        # A name stem shared by many 13F filers ("ATLAS") identifies nobody. A one-word stem must be 6+
-        # letters and not a word that starts several different Form D fund names ("BERKSHIRE").
-        if st and st in stems and st not in (common or ()) and (" " in st or (len(st) >= 6 and st not in GENERIC)):
-            return "hedge_fund", "Form D: hedge fund or its general partner shares the name"
+            return kind, "name", ev | {"source": "name rule"}
+    if adviser:
+        kind, adv_ev = verdict(adviser)
+        ev |= {"adv": adv_ev}
+        if kind:
+            return kind, f"Form ADV ({kind})", ev
+    kind, basis = shape_type(name, s)
+    if kind == "hedge_fund":
+        kind, basis = "long_only", basis + "; no Form ADV hedge-fund evidence"
+    return kind, basis, ev
+
+
+def shape_type(name: str, s: dict) -> tuple[str, str]:
     if HEDGE_NAME.search(name or ""):
         return "hedge_fund", "name"
     if not s:
@@ -337,6 +347,32 @@ def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int
         # Small diversified books are mostly advisers running client accounts, not fund managers.
         return "wealth", "shape: small diversified book"
     return "long_only", "shape: diversified"
+
+
+def adviser_index(advisers: list[dict]) -> tuple[dict, dict]:
+    """{cik: adviser} and {name stem: adviser} for stems that name exactly one adviser."""
+    by_cik, by_stem, seen = {}, {}, {}
+    for a in advisers:
+        if a["cik"]:
+            by_cik.setdefault(a["cik"], a)
+        for st in {stem(n) for n in a["names"]} - {""}:
+            seen[st] = seen.get(st, 0) + 1
+            by_stem[st] = a
+    return by_cik, {st: a for st, a in by_stem.items() if seen[st] == 1}
+
+
+def adviser_for(cik: str, name: str, index: tuple[dict, dict] | None, common: set[str]) -> dict | None:
+    if not index:
+        return None
+    by_cik, by_stem = index
+    if cik in by_cik:
+        return by_cik[cik]
+    st = stem(name)
+    # A stem shared by several 13F filers identifies nobody (Glenview Trust vs Glenview Capital have
+    # different stems; "ATLAS" alone does not), and a one-word stem must be distinctive.
+    if st in by_stem and st not in common and (" " in st or len(st) >= 6):
+        return by_stem[st]
+    return None
 
 
 def apply_overrides() -> int:
@@ -374,6 +410,11 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001  (types still come from names and shapes)
         print(f"::warning::Form D data sets unavailable: {exc}")
         form_d = None
+    try:
+        index = adviser_index(load_advisers())
+    except Exception as exc:  # noqa: BLE001  (without ADV no filer becomes a hedge fund except hand-checked ones)
+        print(f"::warning::Form ADV data unavailable: {exc}")
+        index = None
     everyone = filers_doc["filers"] + [{"cik": c, "name": m.get("name") or m.get("manager")} for c, m in curated.items()]
     seen: dict[str, int] = {}
     for f in everyone:
@@ -389,8 +430,9 @@ def main() -> int:
         book = read(DATA / "fb" / q / f"{cik}.json") if q else None
         prev = read(DATA / "fb" / prev_quarter(q) / f"{cik}.json") if q else None
         s = shape(book or shard, prev)
-        kind, basis = classify(cik, f.get("name") or "", s, form_d, common)
-        row = {"type": kind, "basis": basis, "display_name": display_name(f.get("name") or "")}
+        adviser = adviser_for(cik, f.get("name") or "", index, common)
+        kind, basis, evidence = classify(cik, f.get("name") or "", s, form_d, common, adviser)
+        row = {"type": kind, "basis": basis, "type_evidence": evidence, "display_name": display_name(f.get("name") or "")}
         if cik in ACTIVISTS:
             row["activist"] = True
         if s.get("aum"):
@@ -399,8 +441,10 @@ def main() -> int:
         counts[kind] = counts.get(kind, 0) + 1
     (DATA / "filer_types.json").write_text(json.dumps({
         "types": list(TYPES), "smart_money": list(SMART),
-        "note": "EDGAR-only: hand overrides, then name rules, then SEC Form D (adviser files for funds of type "
-                "Hedge Fund), then the latest 13F book's shape and turnover. smart_money = hedge_fund + long_only.",
+        "note": "SEC data only: hand-checked cases, then name rules (banks, brokers, ETF issuers, ...), then SEC Form ADV "
+                "(hedge_fund when Schedule D 7.B.1 hedge funds' gross assets are at least half of regulatory AUM or $1B "
+                "and more; wealth or long_only by client type), then the latest 13F book's shape, which never makes a "
+                "hedge fund on its own. type_evidence says which. smart_money = hedge_fund + long_only.",
         "filers": out}, separators=(",", ":")) + "\n")
     for f in filers_doc["filers"]:
         f["type"] = out.get(f["cik"], {}).get("type")
