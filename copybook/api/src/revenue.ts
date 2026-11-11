@@ -530,8 +530,24 @@ export async function yearlyPeakLine(env: Env, m: Member, filings: { slug: strin
   if (!p || m.interval !== 'monthly' || m.seat_of || !isActive(m) || m.comped) return null;
   if (!filings.some((a) => !a.followup && (a.slug === 'warren-buffett' || a.slugs?.includes('warren-buffett')))) return null;
   const keep = `${API(env)}keep?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'keep', m.customer, 14 * 86400))}`;
-  // Copy's founding price (the lead, Nov 11): $79 a year, locked while subscribed; $99 for new members from Feb 1.
-  return m.plan === 'copy' ? `Founding price ${money(p.year)}/yr, locked. Goes to $99 for new members Feb 1: ${keep}` : `Switch to yearly: ${money(p.year)}, ${monthsFree(p)}: ${keep}`;
+  // Copy's founding price (the lead, Nov 11): $79 a year, locked while subscribed, a switch to yearly included
+  // (planPrice); $99 for new members from Feb 1. A trial with no card would just end, so its link adds one (on yearly).
+  if (m.plan === 'copy' && m.status === 'trialing' && m.has_payment_method === false && m.trial_end) {
+    return `Keep Copy yearly · Founding price ${money(p.year)}/yr, locked. Goes to $99 for new members Feb 1. Nothing is charged before ${day(m.trial_end)}. Add a card: ${keep}`;
+  }
+  return m.plan === 'copy'
+    ? `Switch to yearly · Your founding price covers yearly too: ${money(p.year)}/yr, locked, with history back to 2013 (from Dec 31). New members pay $99 from Feb 1. Switch now: ${keep}`
+    : `Switch to yearly: ${money(p.year)}, ${monthsFree(p)}. Switch now: ${keep}`;
+}
+
+/**
+ * The Stripe price a member moves to within their plan. A founding Copy member (founding_price) keeps the founding
+ * price on either interval, a switch to yearly included: `copy_{interval}_founding` once Feb 1's new prices take the
+ * plain lookup keys (the Jan 25 work), the plain key until then.
+ */
+export async function planPrice(env: Env, m: Member, interval: 'monthly' | 'yearly'): Promise<{ id?: string; unit_amount?: number } | undefined> {
+  const find = async (key: string) => (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': key, active: true })).data?.[0];
+  return (m.plan === 'copy' && m.founding_price ? await find(`copy_${interval}_founding`) : undefined) ?? (await find(`${m.plan}_${interval}`));
 }
 
 /**
@@ -543,7 +559,7 @@ export async function yearlyPortalUrl(env: Env, m: Member): Promise<string | nul
   if (!PRICES[m.plan] || !isActive(m) || m.interval === 'yearly' || !m.subscription?.startsWith('sub_')) return null;
   const sub = await stripe(env, 'GET', `subscriptions/${m.subscription}`);
   const item = sub.items?.data?.[0];
-  const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': `${m.plan}_yearly`, active: true })).data?.[0];
+  const price = await planPrice(env, m, 'yearly');
   if (!item?.id || !price?.id) return null;
   const s = await stripe(env, 'POST', 'billing_portal/sessions', {
     customer: m.customer,
@@ -568,6 +584,9 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
   if (!m || !PRICES[m.plan]) return go(account);
   try {
     if (path === '/keep') {
+      // A trial with no card: the account page's add-a-card choice, on yearly (POST /portal/card plan=yearly), signed in
+      // by a fresh 2-minute link. Only the click there changes anything, so a mail scanner's GET switches nothing.
+      if (m.status === 'trialing' && m.has_payment_method === false) return go(`${account}?add_card=yearly&login=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, 120))}`);
       return go((await yearlyPortalUrl(env, m)) ?? account);
     }
     const plan = p!.s ?? m.plan;

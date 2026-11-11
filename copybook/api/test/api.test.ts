@@ -595,6 +595,8 @@ describe('copybook api', () => {
     const st = await handleRequest(new Request('https://api.test/ingest/hl/829933.json', { method: 'PUT', body: '{}', headers: { authorization: `Bearer ${tok}`, 'x-copybook-build-id': 'gust-3a8c773b', 'x-copybook-built-at': '2026-11-09T02:30:00Z' } }), env);
     expect([st.status, hist.meta.get('hl/829933.json')]).toEqual([200, { build_id: 'gust-3a8c773b', built_at: '2026-11-09T02:30:00Z' }]);
     expect(await put('hl/82993.json', tok)).toBe(400);
+    // Past quarters by ticker (ingest's hq/, Nov 23): one file per issuer per quarter, and the quarter's ticker index.
+    expect([await put('hq/2025Q1/084670.json', tok), await put('hq/2025Q1/index.json', tok), await put('hq/2025Q5/084670.json', tok)]).toEqual([200, 200, 400]);
     // Many objects in one request: a manifest line, then their bytes back to back, each with its build.
     const batch = (objects: { key: string; body: string; build_id?: string }[], token = tok, sizes?: number[]) => {
       const enc = new TextEncoder();
@@ -3332,7 +3334,13 @@ describe('copybook api', () => {
     const d12 = trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Date.UTC(2026, 10, 25, 20) / 1000, has_payment_method: false } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 0, 0, 'k', 'u');
     expect([d12.subject, /nothing is charged/.test(d12.text), d12.text.includes('19 Schedule 13D/G filings') && d12.text.includes('14 open-market buys of $100K or more') && d12.text.includes('Founding prices go to $12/month and $99/year'), /\b13 insider/.test(d12.text), /Pause once a year, up to 3 months/.test(d12.text), /months free/.test(d12.text)]).toEqual(['Your Copy trial ends Wednesday', true, true, false, true, false]);
     const yl = await yearlyPeakLine(env, mo, brk);
-    expect([/^Founding price \$79\/yr, locked\. Goes to \$99 for new members Feb 1: \S+\/keep\?t=\S+$/.test(yl ?? ''), await yearlyPeakLine(env, { ...(mo as object), interval: 'yearly' } as never, brk), await yearlyPeakLine(env, mo, [{ slug: 'bill-ackman' }])]).toEqual([true, null, null]);
+    expect([/^Switch to yearly · Your founding price covers yearly too: \$79\/yr, locked, with history back to 2013 \(from Dec 31\)\. New members pay \$99 from Feb 1\. Switch now: \S+\/keep\?t=\S+$/.test(yl ?? ''), await yearlyPeakLine(env, { ...(mo as object), interval: 'yearly' } as never, brk), await yearlyPeakLine(env, mo, [{ slug: 'bill-ackman' }])]).toEqual([true, null, null]);
+    // A cardless trial's line adds a card on yearly, and its link opens that choice signed in (a GET changes nothing).
+    const cardless = await yearlyPeakLine(env, { ...(mo as object), has_payment_method: false, trial_end: Date.UTC(2026, 10, 25, 20) / 1000 } as never, brk);
+    expect(/^Keep Copy yearly · Founding price \$79\/yr, locked\. Goes to \$99 for new members Feb 1\. Nothing is charged before November 25\. Add a card: \S+\/keep\?t=\S+$/.test(cardless ?? '')).toBe(true);
+    await env.DB.put('cus:cus_y', JSON.stringify({ ...(mo as object), has_payment_method: false }));
+    const kept = await handleRequest(new Request(cardless!.split('Add a card: ')[1].replace(/^\S+?\/keep/, 'https://api.test/keep')), env);
+    expect(/account\/\?add_card=yearly&login=/.test(kept.headers.get('location') ?? '')).toBe(true);
     const tm = (card: boolean) => trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Math.floor(Date.now() / 1000) + 2 * 86400, has_payment_method: card } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 1, 0, 'https://api.test/keep?t=x', 'https://api.test/unsubscribe?t=x', 2);
     expect([/add a card/i.test(tm(false).subject), /nothing is charged/.test(tm(false).text), /renews on/.test(tm(false).text), /add a card/i.test(tm(true).subject), /renews on/.test(tm(true).text)]).toEqual([true, true, false, false, true]);
     expect(calls.find((c) => c.path === 'coupons')!.body).toContain('amount_off=3900'); // a month of Pro, off the first year
