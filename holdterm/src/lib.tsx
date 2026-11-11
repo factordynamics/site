@@ -31,7 +31,8 @@ export function navigate(to: string) {
   window.scrollTo(0, 0)
   listeners.forEach((l) => l())
 }
-window.addEventListener('popstate', () => listeners.forEach((l) => l()))
+// Guarded so the build can import the formatters (vite.config.ts) outside a browser.
+if (typeof window !== 'undefined') window.addEventListener('popstate', () => listeners.forEach((l) => l()))
 export function usePath() {
   const [p, set] = useState(location.pathname)
   useEffect(() => {

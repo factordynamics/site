@@ -1214,7 +1214,7 @@ export function Stock({ ticker }: { ticker: string }) {
   }, [])
   const firms = useFirms()
   const [tab, setTab] = useState<STab>('holders')
-  title(`${ticker}: which funds own it`)
+  title(s.data ? `${issuerName(s.data.name)} (${ticker}): who owns it` : `${ticker}: who owns it`)
   if (s.error) return <NotFound what={`no tracked fund reports ${ticker} in its latest 13F`} />
   if (!s.data) return <Loading what={`loading ${ticker}`} />
   const d = s.data

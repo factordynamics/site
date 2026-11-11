@@ -6,6 +6,10 @@ import { defineConfig, type Plugin } from 'vite'
 import { FUNDS, dataSlug, firmName, fundPath, publicSlug } from './src/names'
 import roster from './src/roster.json'
 import TICKERS from './src/tickers.json'
+import { type Book, isStockLine, issuerKey, loadBook, quarterLabel } from './src/data'
+import { issuerName } from './src/names'
+import { usd } from './src/lib'
+import { fundCard, png, siteCard } from './scripts/og'
 
 const SITE = 'https://holdterm.factordynamics.com'
 const DERIVED = 'https://copybook.factordynamics.com/d/'
@@ -27,16 +31,18 @@ const MOVED: Record<string, string> = { '/m': '/funds', '/activity': '/flows', '
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-/** index.html with a page's own title, description, canonical and og tags; null meta makes the 404 page. */
-function page(html: string, path: string, meta: [string, string] | null) {
+/** index.html with a page's own title, description, canonical, og tags and (optionally) its own social card;
+ * null meta makes the 404 page. */
+function page(html: string, path: string, meta: [string, string] | null, image?: string) {
   const [t, d] = meta ?? ['Not found', 'No such page.']
   const title = esc(`${t} · Holdterm`)
   let out = html
-    .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
-    .replace(/(<meta name="description" content=")[^"]*/, `$1${esc(d)}`)
-    .replace(/(<meta property="og:title" content=")[^"]*/, `$1${title}`)
-    .replace(/(<meta property="og:description" content=")[^"]*/, `$1${esc(d)}`)
-  if (meta) return out.replace(/(<link rel="canonical" href=")[^"]*/, `$1${SITE}${esc(path)}`).replace(/(<meta property="og:url" content=")[^"]*/, `$1${SITE}${esc(path)}`)
+    .replace(/(<meta (?:property="og:image"|name="twitter:image") content=")[^"]*/g, (_, p1) => p1 + `${SITE}${image ?? '/og.png'}`)
+    .replace(/<title>[^<]*<\/title>/, () => `<title>${title}</title>`)
+    .replace(/(<meta name="description" content=")[^"]*/, (_, p1) => p1 + `${esc(d)}`)
+    .replace(/(<meta property="og:title" content=")[^"]*/, (_, p1) => p1 + `${title}`)
+    .replace(/(<meta property="og:description" content=")[^"]*/, (_, p1) => p1 + `${esc(d)}`)
+  if (meta) return out.replace(/(<link rel="canonical" href=")[^"]*/, (_, p1) => p1 + `${SITE}${esc(path)}`).replace(/(<meta property="og:url" content=")[^"]*/, (_, p1) => p1 + `${SITE}${esc(path)}`)
   // A 404 points nowhere and asks not to be indexed.
   return out.replace(/\s*<link rel="canonical"[^>]*>/, '').replace(/\s*<meta property="og:url"[^>]*>/, '').replace('</head>', '    <meta name="robots" content="noindex" />\n  </head>')
 }
@@ -49,6 +55,29 @@ function page(html: string, path: string, meta: [string, string] | null) {
  * - _redirects keeps old section and fund URLs working;
  * - sitemap.xml lists the sections and fund pages.
  */
+const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+/** A fund card's numbers and a one-sentence lead, from the book as the fund page shows it. */
+function fundFacts(b: Book) {
+  const live = b.holdings.filter((h) => h.value > 0 && isStockLine(h))
+  if (!live.length || !b.long_value) return null
+  // Share classes of one company count once (GOOGL and GOOG).
+  const by = new Map<string, { name: string; weight: number }>()
+  for (const h of live) {
+    const k = issuerKey(h)
+    const cur = by.get(k)
+    if (cur) cur.weight += h.weight
+    else by.set(k, { name: issuerName(h.display_name || h.issuer).replace(/\s+(class|cl\.?)\s+[a-z]\b.*$/i, ''), weight: h.weight })
+  }
+  const top = [...by.values()].sort((x, y) => y.weight - x.weight).slice(0, 3)
+  const d = b.prev_long_value ? b.long_value / b.prev_long_value - 1 : null
+  const prevQ = b.prev_quarter ? quarterLabel(b.prev_quarter).split(' ')[0] : 'prior quarter'
+  const lead = `Largest holdings: ${top.map((t) => `${t.name} (${(t.weight * 100).toFixed(1)}%)`).join(', ').replace(/, ([^,]*)$/, ' and $1')}.`
+  return {
+    lead,
+    card: { pm: b.pm, quarter: quarterLabel(b.quarter), filed: fmtDay(b.filing_date), value: usd(b.long_value), positions: live.length, change: d == null || !isFinite(d) ? null : { text: `${d >= 0 ? '+' : '−'}${Math.abs(d * 100).toFixed(1)}% vs ${prevQ}`, up: d >= 0 }, top },
+  }
+}
+
 const pages = (): Plugin => ({
   name: 'holdterm-pages',
   apply: 'build',
@@ -56,15 +85,30 @@ const pages = (): Plugin => ({
     const dist = fileURLToPath(new URL('./dist', import.meta.url))
     const html = readFileSync(join(dist, 'index.html'), 'utf8')
     const files = new Map<string, string>()
-    const add = (path: string, meta: [string, string]) => files.set(path, page(html, path, meta))
+    const add = (path: string, meta: [string, string], image?: string) => files.set(path, page(html, path, meta, image))
     for (const [p, m] of Object.entries(SECTIONS)) if (p !== '/') add(p, m)
     writeFileSync(join(dist, 'index.html'), page(html, '/', SECTIONS['/']))
 
     const funds = roster.funds as { slug: string; firm: string }[]
+    writeFileSync(join(dist, 'og.png'), png(siteCard(funds.length)))
+    // Each fund's card and description come from its latest book, read and checked exactly as the page reads
+    // it (src/data.ts). A fund whose book can't be read keeps the site card and a generic description.
+    mkdirSync(join(dist, 'og', 'm'), { recursive: true })
+    const books = new Map<string, Book>()
+    for (let i = 0; i < funds.length; i += 12) await Promise.all(funds.slice(i, i + 12).map((f) => loadBook(f.slug).then((b) => void books.set(f.slug, b), () => undefined)))
     for (const f of funds) {
       const firm = FUNDS[f.slug]?.firm ?? firmName(f.slug, f.firm)
-      add(fundPath(f.slug), [`${firm} 13F portfolio`, `${firm}: latest 13F holdings, quarterly buys and sells, and 13D/G and Form 4 filings, from SEC EDGAR.`])
+      const b = books.get(f.slug)
+      const card = b && fundFacts(b)
+      if (!card) {
+        add(fundPath(f.slug), [`${firm} 13F portfolio`, `${firm}: latest 13F holdings, quarterly buys and sells, and 13D/G and Form 4 filings, from SEC EDGAR.`])
+        continue
+      }
+      const img = `/og/m/${fundPath(f.slug).slice(3)}.png`
+      writeFileSync(join(dist, img), png(fundCard({ ...card.card, firm })))
+      add(fundPath(f.slug), [`${firm} 13F portfolio`, `${firm}’s ${card.card.quarter} 13F: ${card.card.value} in ${card.card.positions} US-listed stocks. ${card.lead} See every holding, what it bought and sold, and its 13D, 13G and Form 4 filings.`], img)
     }
+    console.log(`holdterm-pages: ${books.size} of ${funds.length} fund cards`)
 
     // Stocks: every ticker in Copybook's derived stock index, its other share classes, and the tickers
     // Holdterm resolves itself from a CUSIP (src/tickers.json).
@@ -73,7 +117,7 @@ const pages = (): Plugin => ({
     const { stocks } = (await r.json()) as { stocks: { t: string; n: string; a?: string[] }[] }
     if (stocks.length < 1000) throw new Error(`stocks.json has only ${stocks.length} stocks`)
     const stock = (t: string, n: string) =>
-      /^[A-Z0-9][A-Z0-9.-]{0,11}$/.test(t) && add(`/s/${t}`, [`${t}: which funds own it`, `Which concentrated long-term funds own ${n} (${t}), what they bought and sold, and their 13D/G and Form 4 filings, from SEC EDGAR.`])
+      /^[A-Z0-9][A-Z0-9.-]{0,11}$/.test(t) && add(`/s/${t}`, [n && n !== t ? `${n} (${t}): who owns it` : `${t}: who owns it`, `Which long-term investors own ${n && n !== t ? `${n} (${t})` : t}, what they bought and sold last quarter, and their 5% stakes and insider trades, from SEC EDGAR filings.`])
     for (const s of stocks) for (const t of [s.t, ...(s.a ?? [])]) stock(t, s.n)
     for (const o of Object.values(TICKERS as unknown as Record<string, { ticker?: string; listed?: boolean }>)) if (o?.listed && o.ticker && !files.has(`/s/${o.ticker}`)) stock(o.ticker, o.ticker)
 
