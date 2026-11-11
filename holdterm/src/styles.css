@@ -1432,12 +1432,18 @@ a.hb-row:hover {
   gap: 20px;
 }
 /* The trades and filings panels fill in after the page renders: reserve their full height (table head +
- * 15 or 10 rows) so the panels below them don't jump. */
-.reserve-15 > .body {
-  min-height: calc(var(--th) + 15 * var(--tr) + 18px); /* + body padding */
-}
+ * 10 or 8 rows) so the panels below them don't jump. */
 .reserve-10 > .body {
-  min-height: calc(var(--th) + 10 * var(--tr) + 18px);
+  min-height: calc(var(--th) + 10 * var(--tr) + 18px); /* + body padding */
+}
+.reserve-8 > .body {
+  min-height: calc(var(--th) + 8 * var(--tr) + 18px);
+}
+.home-stats .stat .sub {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 .move {
   white-space: nowrap;

@@ -34,7 +34,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, Bar, BooksProgress, ChangeTag, date, day, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
+import { A, Bar, BooksProgress, ChangeTag, date, day, daysAgo, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -354,7 +354,7 @@ export function Home() {
       <div className="intro">
         <div>
           <h1>What long-term investors are buying and selling</h1>
-          <p>13F, 13D/G and Form 4 filings from {roster.funds.length} concentrated, long-term funds, read straight from SEC EDGAR, usually within hours of filing.</p>
+          <p>See what {roster.funds.length} concentrated, long-term investors own, buy and sell, from the reports they file with the SEC. Updated within hours of each filing.</p>
         </div>
         <HomeSearch />
       </div>
@@ -402,7 +402,7 @@ function HomeBody() {
   // Before three funds have filed this season, lead with the previous quarter's filings instead.
   const lead = seasonFiled.length >= 3 ? s.q : [...new Set(ms.map((m) => m.quarter))].sort().reverse().find((q) => q !== s.q) ?? s.q
   // Every fund's latest 13F, newest first; the trades panel uses the lead quarter only.
-  const filers = useMemo(() => [...ms].sort((a, b) => b.filing_date.localeCompare(a.filing_date) || b.total_value - a.total_value).slice(0, 30), [ms])
+  const filers = useMemo(() => [...ms].sort((a, b) => b.filing_date.localeCompare(a.filing_date) || b.total_value - a.total_value).slice(0, 15), [ms])
   const need = useMemo(() => [...new Set([...filers, ...ms.filter((m) => m.quarter === lead)].map((m) => m.slug))], [filers, ms, lead])
   const books = useLoad(() => (need.length ? loadQuarterBooks(need) : Promise.resolve([] as Book[])), [need.join()])
   if (ix.error) return <Failed error={ix.error} what="the latest filings" />
@@ -434,7 +434,20 @@ function HomeBody() {
     .sort((x, y) => Math.abs(y.h.value_delta!) - Math.abs(x.h.value_delta!))
     // At most four per fund (enough for a fund's sell-outs), so one early filer can't fill the list.
     .filter((x, _, all) => all.filter((y) => y.b.slug === x.b.slug).indexOf(x) < 4)
-    .slice(0, 15)
+    .slice(0, 10)
+  // The quarter so far in plain words. Counted only once every filed book has loaded, so the numbers never change on screen.
+  const leadBooks = (books.data ?? []).filter((b) => b.quarter === lead)
+  const tally = new Map<string, { h: Holding & { label?: string }; buy: number; sell: number }>()
+  for (const b of leadBooks)
+    for (const h of trades(b)) {
+      const t = tally.get(issuerKey(h)) ?? { h, buy: 0, sell: 0 }
+      if (h.change === 'new' || h.change === 'added') t.buy++
+      else if (h.change === 'trimmed' || h.change === 'exited') t.sell++
+      tally.set(issuerKey(h), t)
+    }
+  const most = (k: 'buy' | 'sell') => [...tally.values()].sort((a, b) => b[k] - a[k])[0]
+  const mostBought = most('buy')
+  const mostSold = most('sell')
   const due = ms.filter((m) => m.quarter !== s.q)
   const daysLeft = Math.ceil((Date.parse(s.due) - Date.now()) / 86_400_000)
   const events = (ev.data?.events ?? []).filter((e) => inRoster(e.slug) && !ownVehicle(e))
@@ -451,18 +464,25 @@ function HomeBody() {
         if (h.ticker) cur.label = [...new Set([...(cur.label ?? cur.ticker ?? '').split('+'), h.ticker].filter(Boolean))].join('+')
       } else conv.set(id, { key: id, ticker: h.ticker, former: h.former, name: issuerName(h.display_name || h.issuer), slug: m.slug, firm: m.firm, weight: h.weight })
     }
-  const conviction = [...conv.values()].sort((a, b) => b.weight - a.weight).slice(0, 12)
+  const conviction = [...conv.values()].sort((a, b) => b.weight - a.weight).slice(0, 8)
+  const newStakes = events.filter((e) => e.action === 'new_stake' && daysAgo(e.filing_date) <= 30).length
+  const wait = <span className="dim">…</span>
+  const crowd = (x: typeof mostBought | undefined, k: 'buy' | 'sell') =>
+    !books.data ? wait : x && x[k] > 0 ? <Tick t={x.h.ticker} name={issuerName(x.h.display_name || x.h.issuer)} label={x.h.label} /> : <span className="dim">None yet</span>
+  const crowdSub = (x: typeof mostBought | undefined, k: 'buy' | 'sell') =>
+    books.data && x && x[k] > 0 ? `${issuerName(x.h.display_name || x.h.issuer)}, ${k === 'buy' ? 'bought' : 'sold'} by ${x[k]} of the ${leadBooks.length} who have filed` : 'Across the investors who have filed'
   return (
     <div className="page home">
+      <div className="stats home-stats" aria-label={`${quarterLabel(lead)} so far`}>
+        <Stat label={`${quarterLabel(s.q)} 13Fs filed`} value={`${seasonFiled.length} of ${ms.length}`} sub={<>Due {day(s.due)}{daysLeft > 0 ? `, ${daysLeft} days left` : ''}<Bar value={seasonFiled.length} max={ms.length} /></>} />
+        <Stat label={`Most bought in ${quarterLabel(lead)}`} value={crowd(mostBought, 'buy')} tone={books.data && mostBought?.buy ? 'pos' : undefined} sub={crowdSub(mostBought, 'buy')} />
+        <Stat label={`Most sold in ${quarterLabel(lead)}`} value={crowd(mostSold, 'sell')} tone={books.data && mostSold?.sell ? 'neg' : undefined} sub={crowdSub(mostSold, 'sell')} />
+        <Stat label="New 5% stakes" value={ev.data ? num(newStakes) : wait} sub="Schedule 13D and 13G filings in the last 30 days" />
+      </div>
       <div className="home-grid">
         <Panel
           title="Latest 13F filings"
-          right={
-            <span className="dim">
-              {seasonFiled.length} of {ms.length} filed {quarterLabel(s.q)}
-              <span className="hide-sm"> · due {day(s.due)}{daysLeft > 0 ? `, ${daysLeft} days left` : ' (passed)'}</span>
-            </span>
-          }
+          right={<A to="/funds">All investors →</A>}
         >
           <Grid
             rows={filers}
@@ -535,7 +555,7 @@ function HomeBody() {
           )}
         </Panel>
         <div className="home-side">
-          <Panel className="reserve-15" title={`Largest trades in ${quarterLabel(lead)}`} right={<A to="/flows">All buys and sells →</A>}>
+          <Panel className="reserve-10" title={`Largest trades in ${quarterLabel(lead)}`} right={<A to="/flows">All buys and sells →</A>}>
             {books.data ? (
               <Grid
                 rows={moves}
@@ -548,13 +568,13 @@ function HomeBody() {
                 ]}
               />
             ) : (
-              <Loading what="Loading the largest trades" rows={15} />
+              <Loading what="Loading the largest trades" rows={10} />
             )}
           </Panel>
-          <Panel className="reserve-10" title="Stakes and insider trades, last 30 days" right={<A to="/filings">All filings →</A>}>
+          <Panel className="reserve-8" title="Stakes and insider trades, last 30 days" right={<A to="/filings">All filings →</A>}>
             {ev.data ? (
               <Grid
-                rows={events.slice(0, 10)}
+                rows={events.slice(0, 8)}
                 href={(e) => (e.ticker ? `/s/${e.ticker}` : null)}
                 cols={[
                   { key: 'f', label: 'Filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, width: '72px' },
@@ -565,7 +585,7 @@ function HomeBody() {
                 empty="No filings in the last 30 days."
               />
             ) : (
-              <Loading what="Loading recent filings" rows={10} />
+              <Loading what="Loading recent filings" rows={8} />
             )}
           </Panel>
           <Panel title="Biggest single bets" right={<span className="dim">Largest share of one investor’s portfolio</span>}>
