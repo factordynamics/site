@@ -134,6 +134,12 @@ function offline(dist: string, html: string) {
 </html>
 `
   writeFileSync(join(dist, 'offline.html'), page)
+  // The kill switch (scripts/sw-kill.js): removes the worker visitors already have. See that file.
+  if (process.env.VITE_HOLDTERM_SW === 'off') {
+    writeFileSync(join(dist, 'sw.js'), readFileSync(fileURLToPath(new URL('./scripts/sw-kill.js', import.meta.url)), 'utf8'))
+    console.log('holdterm-pages: sw.js is the KILL SWITCH (VITE_HOLDTERM_SW=off); pages register no worker')
+    return
+  }
   const version = createHash('sha256').update(shell.join('\n') + page).digest('hex').slice(0, 12)
   const sw = readFileSync(join(dist, 'sw.js'), 'utf8').replace('__VERSION__', version).replace('__SHELL__', JSON.stringify(shell))
   if (sw.includes('__')) throw new Error('offline: sw.js placeholders left')
