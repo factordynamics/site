@@ -5,7 +5,7 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.17';
+export const SPEC_REVISION = '2026-11-11.18';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /**
@@ -30,6 +30,16 @@ export function perClassNotice(pinned: boolean, base: string, now = Date.now()):
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-schema-version-header',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Every /v1 response (errors, redirects and the spec too) carries `Copybook-Schema-Version`: the schema actually served, the client\'s pin when it sent a valid one, otherwise the default. Log it to know which row shape you got; after Nov 23 a pinned client reads `2026-11-09` here until Feb 22, 2027.',
+    ],
+  },
   {
     id: '2026-11-11-public-base',
     date: '2026-11-11',
@@ -418,8 +428,28 @@ export const ROUTES: [string, RegExp, Handler][] = [
   ],
 ];
 
-/** /v1: API-key auth, per-key rate limits and usage counting, then the route. */
+/**
+ * /v1, every response: Copybook-Schema-Version names the row shape served (the client's valid pin, else the default),
+ * so clients can log what they got (the PM, Nov 11).
+ */
 export async function handleV1(req: Request, env: Env, url: URL, path: string): Promise<Response> {
+  let res = await routeV1(req, env, url, path);
+  const pin = req.headers.get('copybook-schema-version');
+  const served = pin && SCHEMA_VERSIONS.includes(pin) ? pin : SCHEMA_VERSION;
+  try {
+    res.headers.set('copybook-schema-version', served);
+  } catch {
+    // A fetched response (a presigned redirect) has immutable headers: copy it.
+    res = new Response(res.body, res);
+    res.headers.set('copybook-schema-version', served);
+  }
+  const expose = res.headers.get('access-control-expose-headers');
+  res.headers.set('access-control-expose-headers', expose ? `${expose}, copybook-schema-version` : 'copybook-schema-version');
+  return res;
+}
+
+/** /v1: API-key auth, per-key rate limits and usage counting, then the route. */
+async function routeV1(req: Request, env: Env, url: URL, path: string): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, OPTIONS', 'access-control-allow-headers': 'authorization', 'access-control-max-age': '86400' } });
   }

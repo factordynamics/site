@@ -4694,12 +4694,21 @@ describe('copybook api', () => {
     // A client pinned to the summed rows (2026-11-09) is told when the pin ends; an unpinned one isn't.
     const hdrs = async (path: string, pin?: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, ...(pin ? { 'copybook-schema-version': pin } : {}) } }), env)).headers;
     // Before Nov 23 every client is warned (unpinned ones break that day), in one format: Deprecation @<epoch>.
+    const echoed: (string | null)[] = [];
     for (const path of ['/v1/stocks/084670702/holders', '/v1/changes/2026Q3?cusip=084670702']) {
       for (const pin of ['2026-11-09', undefined]) {
         const hd = await hdrs(path, pin);
+        echoed.push(hd.get('copybook-schema-version'));
         expect([hd.get('deprecation'), hd.get('sunset'), /changelog\?id=2026-11-23-per-class-rows>; rel="deprecation"/.test(hd.get('link') ?? '')]).toEqual(['@1795392000', 'Mon, 22 Feb 2027 00:00:00 GMT', true]);
       }
     }
+    // Every /v1 response names the schema it served (the PM, Nov 11): a valid pin or the default (the holders calls
+    // above), errors and the spec too; an unknown pin is refused and never echoed. (Unmetered calls: this test is near
+    // the 60-a-minute limit.)
+    const { SCHEMA_VERSION } = await import('../src/v1');
+    const bad = await handleRequest(new Request('https://api.test/v1/filers', { headers: { authorization: `Bearer ${key}`, 'copybook-schema-version': '1999-01-01' } }), env);
+    const sp = await handleRequest(new Request('https://api.test/v1/openapi.json'), env);
+    expect([echoed, bad.status, bad.headers.get('copybook-schema-version'), sp.headers.get('copybook-schema-version'), /copybook-schema-version/.test(bad.headers.get('access-control-expose-headers') ?? '')]).toEqual([['2026-11-09', SCHEMA_VERSION, '2026-11-09', SCHEMA_VERSION], 400, SCHEMA_VERSION, SCHEMA_VERSION, true]);
     // Public responses never name a machine or tunnel host (the lead, Nov 11), even when the request came in on gene's
     // Funnel: Link headers, bulk URLs and the spec's servers all use the one public base.
     const viaGene = await handleRequest(new Request('https://api.test/v1/stocks/084670702/holders', { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env);
