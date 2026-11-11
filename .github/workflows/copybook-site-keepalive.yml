@@ -3,7 +3,7 @@ name: Copybook site keepalive
 # GitHub's scheduler drops most of copybook-pages.yml's 10-minute runs (four ran on Nov 10), so the
 # site lagged the data by hours. Like refcell/gust's copybook-keepalive.yml, this uses GITHUB_TOKEN
 # alone (workflow_dispatch is the documented exception it may trigger): one job loops for about
-# 5 hours and every 10 minutes dispatches a Pages build when the published data
+# 5 hours and every 5 minutes dispatches a Pages build when the published data
 # (index.json generated_at) is newer than the live site's (d/coverage.json) and no Pages run is
 # queued or running, then dispatches its successor. The concurrency group keeps one chain; the
 # cron restarts it if it dies.
@@ -42,6 +42,6 @@ jobs:
             else
               echo "$(date -u +%T) data $data, live $live, pages runs going $busy: skip"
             fi
-            sleep 600
+            sleep 300
           done
           gh workflow run copybook-site-keepalive.yml --ref main
