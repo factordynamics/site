@@ -10,7 +10,7 @@ import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
-import { dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
+import { dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle } from '../lib/data'
 import { dueLead, stockTitle } from '../lib/titles.mjs'
 import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
 
@@ -29,6 +29,7 @@ export function StockPage() {
   const s = useAsync(() => loadStock(ticker.toUpperCase()), [ticker])
   // The lens lives in the URL (?funds=all) so a view can be shared; superinvestors by default.
   const [params, setParams] = useSearchParams()
+  const idx = useAsync(loadIndex, [])
   const lens = params.get('funds')
   const view: 'featured' | 'all' | 'hedge' | 'smart' | 'filers' = lens === 'all' || lens === 'filers' || lens === 'smart' || lens === 'hedge' ? lens : 'featured'
   const setView = (k: typeof view) => setParams(k === 'featured' ? {} : { funds: k }, { replace: true })
@@ -285,6 +286,8 @@ export function StockPage() {
           ))}
         </div>
       </div>
+
+      {(view === 'hedge' || view === 'smart') && <p className="mt-2 text-right text-[12.5px] text-ink-3">{typesAsOfLabel(idx.data?.typesAsOf)}</p>}
 
       {sinceRows.length > 0 && (
         <Panel className="mt-4" title="Since the latest 13Fs" sub="Holdings filed after each fund’s 13F, on Form 4 and Schedule 13D/G">

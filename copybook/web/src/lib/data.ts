@@ -107,17 +107,25 @@ function cleanBook(holdings: Holding[]): Holding[] {
   return holdings.map((h) => cleanHolding(h.display_name && (tickers.get(h.display_name)?.size ?? 0) > 1 ? { ...h, display_name: undefined } : h))
 }
 
+/** The date of the published filer-type set behind every hedge-fund and long-only view ("Fund types as of …"):
+ *  index.json types_as_of, which changes only when a new type set publishes. This date (the set first published
+ *  Nov 11) is the fallback while the field is missing; never generated_at. */
+const TYPES_AS_OF = '2026-11-11'
+export const typesAsOfLabel = (iso: string = TYPES_AS_OF) =>
+  `Fund types as of ${new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`
+
 export type IndexData = {
   generated_at: string
   managers: Manager[]
   featured: Manager[]
   totalValue: number
   filerCount: number
+  typesAsOf?: string
 }
 
 export async function loadIndex(): Promise<IndexData> {
   const [idx, uni] = await Promise.all([
-    getJSON<{ generated_at: string; managers: Manager[] }>(`${DATA}index.json`),
+    getJSON<{ generated_at: string; managers: Manager[]; types_as_of?: string }>(`${DATA}index.json`),
     getJSON<{ curated: { slug: string; featured?: boolean }[]; filer_count?: number }>(`${DATA}universe.json`).catch(
       () => ({ curated: [], filer_count: 0 }),
     ),
@@ -140,6 +148,7 @@ export async function loadIndex(): Promise<IndexData> {
     featured: managers.filter((m) => m.featured),
     totalValue: managers.reduce((s, m) => s + (m.total_value ?? 0), 0),
     filerCount: uni.filer_count ?? 0,
+    typesAsOf: /^\d{4}-\d{2}-\d{2}$/.test(idx.types_as_of ?? '') ? idx.types_as_of : undefined,
   }
 }
 
