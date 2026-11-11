@@ -1093,6 +1093,7 @@ ROUTES.push(
     });
   }],
   ['GET', /^\/v1\/events$/, async ({ env, url }) => {
+    const t0 = Date.now();
     const p = url.searchParams;
     const kinds = p.get('form')?.toLowerCase().split(',').map((x) => ({ '4': 'form4', 'form4': 'form4', '13d': '13d', '13g': '13g', 'sc13d': '13d', 'sc13g': '13g' })[x.trim().replace(/[^a-z0-9]/g, '')]);
     const from = p.get('from');
@@ -1170,7 +1171,9 @@ ROUTES.push(
     if (tickers.length) {
       const { stockEvents } = await import('./stockevents');
       // Every filing kept per ticker (not a page of it), so `coverage` describes exactly what is served.
-      const r = await stockEvents(env, tickers, 50, { deadlineMs: 2000 });
+      // EDGAR gets what is left of the 3 s request budget after the reads above, less a second for the rest: a slow
+      // read is finished after the response (pending) instead of turning the whole call into a 503.
+      const r = await stockEvents(env, tickers, 50, { deadlineMs: Math.max(250, Math.min(1500, 2000 - (Date.now() - t0))) });
       pending = r.pending;
       coverage = Object.fromEntries(tickers.map((t) => [t, r.tickers[t] ? { issuer_cik: r.tickers[t].cik, from: r.tickers[t].window, form4_from: r.tickers[t].from?.form4 ?? null, schedule13_from: r.tickers[t].from?.schedule13 ?? null, checked_at: r.tickers[t].checked_at } : null]));
       const have = new Map(curated.map((e) => [e.accession, e]));
