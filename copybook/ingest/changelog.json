@@ -2,6 +2,62 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-amundi-merged-book",
+   "date": "2026-11-11",
+   "kind": "correction",
+   "title": "Amundi's books no longer include Crédit Agricole's own 13F",
+   "body": "From 2024Q4 through 2026Q2, Amundi's quarterly book (CIK 1330387) also contained Crédit Agricole S.A.'s separate 13F (CIK 1191672). Amundi had filed 13F-NT notices in 2020-21 naming Crédit Agricole as its reporting manager. A rule written for Pershing Square, where one filer took over another's reporting, merged the reporter's book into every quarter Amundi also filed itself. Crédit Agricole files its own book in parallel, so its positions were counted twice. Example: 2026Q2 showed $464.9B against $415.6B on Amundi's own filings, 0001172661-26-003278 plus 0001172661-26-004047, after merging 0001172661-26-003711 (+$49.29B, 347 rows). Every 2026Q3 change measured against that quarter was wrong too: Amundi's APH prior read 17,331,344 shares instead of 15,304,334 after the 2-for-1 split, IESC 18,660 instead of 1,552, and CMG 11,331,445 instead of 10,752,786. A reporter's book is now merged in only for a real succession, when the fund's newest notice is later than its last own 13F-HR. Amundi was the only one of the 355 tracked funds affected; all-filer books never merged other filers. The publish gate now fails any book that holds another filer's 13F outside a succession, or rows from an accession that is not one of its own filings.",
+   "filers": [
+    {
+     "cik": "0001330387",
+     "name": "Amundi"
+    },
+    {
+     "cik": "0001191672",
+     "name": "Crédit Agricole S.A."
+    }
+   ],
+   "quarters": [
+    "2024Q4",
+    "2025Q1",
+    "2025Q3",
+    "2025Q4",
+    "2026Q1",
+    "2026Q2",
+    "2026Q3"
+   ]
+  },
+  {
+   "id": "2026-11-11-split-rows",
+   "date": "2026-11-11",
+   "kind": "correction",
+   "title": "Split-adjusted changes on fund pages (Egerton, Fisher)",
+   "body": "Some fund pages showed a 2026Q3 split as a trade because the prior quarter's shares had not been multiplied by the split ratio. Egerton's APH row read added +$492.5M; with 4,866,688 x 2 = 9,733,376 prior shares it is +975,337 shares, about +$82.2M. Fisher's APH read added (7,677 to 15,288); it is a 66-share trim. Fisher's SFBS (165,284 to 324,424) is a trim of 6,144 shares, about -$0.25M. Fisher's MNST (3,202 to 7,279) is an add of 875 shares, about +$0.04M. The causes: curated-only runs re-checked the detected splits against too few holders and dropped APH, MNST, SFBS, MLI and IESC from splits.json, and rows reused from an earlier build kept a stale split field. A split on file now drops only on a full run, and rows are rebuilt without stale fields. The publish gate fails any row that carries a split with an unadjusted prior, and any added or trimmed row whose value per share moved by about a split ratio with no split applied. IESC's 2-for-1 is confirmed by its own 8-K (0001048268-26-000131, Item 8.01, July 31 2026).",
+   "filers": [
+    {
+     "cik": "0001581811",
+     "name": "Egerton Capital (UK) LLP"
+    },
+    {
+     "cik": "0000850529",
+     "name": "Fisher Asset Management"
+    }
+   ],
+   "quarters": [
+    "2026Q3"
+   ]
+  },
+  {
+   "id": "2026-11-11-all-filer-stall",
+   "date": "2026-11-11",
+   "kind": "incident",
+   "title": "All-filer data stalled from Nov 9 to Nov 11",
+   "body": "Every full refresh from Nov 9 about 20:50 UTC to Nov 11 failed the publish gate, so all-filer counts on /season/ (filers filed, the daily chart) and the holder index stayed at their Nov 9 values. Curated fund pages kept updating. The cause: the holder index treated ADRs whose 13F title reads \"AMERICAN DEP\" (QFIN and others) as depositary preferreds and left their holders out, so the gate correctly found fewer holders than the tracked funds alone. ADRs now count as the common stock. Separately, GitHub skipped most of the site's scheduled 10-minute rebuilds; a keepalive now rebuilds the site within 10 minutes of new data, and curated refreshes run every 10 minutes, also while a full refresh is running.",
+   "quarters": [
+    "2026Q3"
+   ]
+  },
+  {
    "id": "2026-11-09-refiled-amendments",
    "date": "2026-11-09",
    "kind": "correction",
@@ -46,7 +102,7 @@
    "date": "2026-11-09",
    "kind": "correction",
    "title": "APH and CRWD flow counts restated for the larger fund list",
-   "body": "The 2026-11-08 split entry gave APH as 11 bought, 9 sold and -$0.08B, but APH's 2-for-1 split was not yet in splits.json, so fund pages and alerts still showed holders as added. APH is now in splits.json, along with IESC 2-for-1 (2026Q3), and split detection requires at least 5 holders at the exact ratio, a median holder ratio of k and a price move of about 1/k. With the 355 tracked funds that have filed 2026Q3 so far, APH is 12 bought, 12 sold, -$0.25B (Solstein's exit of 825 shares is one of the sellers), and CRWD is 9 bought, 8 sold, +$0.70B.",
+   "body": "The 2026-11-08 split entry gave APH as 11 bought, 9 sold and -$0.08B, but APH's 2-for-1 split was not yet in splits.json, so fund pages and alerts still showed holders as added. APH is now in splits.json, along with IESC 2-for-1 (2026Q3), and split detection requires at least 5 holders at the exact ratio, a median holder ratio of k and a price move of about 1/k. Across the tracked funds that had filed 2026Q3 by Nov 9 (82 filings), APH is 12 bought, 12 sold, -$0.25B (Solstein's exit of 825 shares is one of the sellers), and CRWD is 9 bought, 8 sold, +$0.70B.",
    "quarters": [
     "2026Q3"
    ]
