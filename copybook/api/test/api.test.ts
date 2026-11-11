@@ -4631,11 +4631,22 @@ describe('copybook api', () => {
     expect([brk5.cusip, brk5.issuer_cusip6, brk5.shares, brk5.prev_shares, brk5.share_change, brk5.shares_unit, brk5.shares_ratio, brk5.value_delta_basis]).toEqual([null, '084670', 16000, 12900, 3100, 'BRK.B', { '084670108': 1500 }, 'net_shares_repriced']);
     // A client pinned to the summed rows (2026-11-09) is told when the pin ends; an unpinned one isn't.
     const hdrs = async (path: string, pin?: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, ...(pin ? { 'copybook-schema-version': pin } : {}) } }), env)).headers;
+    // Before Nov 23 every client is warned (unpinned ones break that day), in one format: Deprecation @<epoch>.
     for (const path of ['/v1/stocks/084670702/holders', '/v1/changes/2026Q3?cusip=084670702']) {
-      const pinned = await hdrs(path, '2026-11-09');
-      expect([pinned.get('deprecation'), pinned.get('sunset'), /changelog\?id=2026-11-23-per-class-rows>; rel="deprecation"/.test(pinned.get('link') ?? '')]).toEqual(['true', 'Mon, 22 Feb 2027 00:00:00 GMT', true]);
-      expect((await hdrs(path)).get('sunset')).toBeNull();
+      for (const pin of ['2026-11-09', undefined]) {
+        const hd = await hdrs(path, pin);
+        expect([hd.get('deprecation'), hd.get('sunset'), /changelog\?id=2026-11-23-per-class-rows>; rel="deprecation"/.test(hd.get('link') ?? '')]).toEqual(['@1795392000', 'Mon, 22 Feb 2027 00:00:00 GMT', true]);
+      }
     }
+    // From Nov 23 only pinned clients and endpoints are warned, until Feb 22, 2027; then nobody.
+    const { perClassNotice } = await import('../src/v1');
+    const at = (d: string, pinned: boolean) => !!perClassNotice(pinned, 'https://b', Date.parse(d));
+    expect([at('2026-11-22T23:59:59Z', false), at('2026-11-23T00:00:00Z', false), at('2027-02-21T23:59:59Z', true), at('2027-02-22T00:00:00Z', true)]).toEqual([true, false, true, false]);
+    // A webhook body carries the same notice inside the signature; a pinned endpoint keeps it after Nov 23.
+    const { withNotice } = await import('../src/channels');
+    const hook = (sv?: string) => ({ webhook: { url: 'https://h', secret: 's', created: '', ...(sv ? { schema_version: sv } : {}) } });
+    expect(JSON.parse(withNotice(hook(), '{"type":"13f"}', Date.parse('2026-11-12T00:00:00Z'))).deprecation).toEqual({ deprecated_at: '2026-11-23T00:00:00Z', sunset: '2027-02-22T00:00:00Z', link: 'https://copybook-api.factordynamics.workers.dev/v1/changelog?id=2026-11-23-per-class-rows' });
+    expect([withNotice(hook(), '{"type":"13f"}', Date.parse('2026-12-01T00:00:00Z')), 'deprecation' in JSON.parse(withNotice(hook('2026-11-09'), '{"type":"13f"}', Date.parse('2026-12-01T00:00:00Z')))]).toEqual(['{"type":"13f"}', true]);
     expect('classes' in (await v1('/v1/stocks/NVDA/holders')).body.data.holders[0]).toBe(false);
     const nch = (await v1('/v1/changes/2026Q3?ticker=NVDA')).body.data.filter((r: { put_call: string | null }) => !r.put_call);
     // A holder index from before hl/ schema 3 has no held marking: GuardCap's BKNG (646,216 -> 1,304 sh, $121.6M -> $6.7M)

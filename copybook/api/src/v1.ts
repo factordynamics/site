@@ -5,7 +5,7 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.15';
+export const SPEC_REVISION = '2026-11-11.16';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /**
@@ -15,6 +15,18 @@ export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
  * mixed/net_direction. Pinned responses say so with Deprecation and Sunset headers.
  */
 export const SUMMED_PIN = { version: '2026-11-09', sunset: 'Mon, 22 Feb 2027 00:00:00 GMT', until: Date.UTC(2027, 1, 22), changelog: '2026-11-23-per-class-rows' };
+
+/**
+ * The per-class change's deprecation notice (the lead, Nov 11), on holders and changes responses and on webhook
+ * deliveries: everyone until Nov 23 (unpinned clients are the ones that break then), then only clients pinned to
+ * SUMMED_PIN until Feb 22, 2027. Null once it no longer applies. One format: Deprecation @<epoch> (RFC 9745).
+ */
+export const PER_CLASS = { at: Date.UTC(2026, 10, 23), deprecation: '@1795392000' };
+export function perClassNotice(pinned: boolean, base: string, now = Date.now()): { deprecated_at: string; sunset: string; link: string; headers: Record<string, string> } | null {
+  if (now >= (pinned ? SUMMED_PIN.until : PER_CLASS.at)) return null;
+  const link = `${base}/v1/changelog?id=${SUMMED_PIN.changelog}`;
+  return { deprecated_at: '2026-11-23T00:00:00Z', sunset: '2027-02-22T00:00:00Z', link, headers: { Deprecation: PER_CLASS.deprecation, Sunset: SUMMED_PIN.sunset, Link: `<${link}>; rel="deprecation"` } };
+}
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
@@ -29,8 +41,8 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
       '`?group=issuer` (opt-in) returns one row per filer per issuer, summing only dollar fields (value_usd, prev_value_usd, value_delta_usd, value_change_usd); shares fields are null and per-class shares are in classes[].',
       'Every class ticker resolves to its own CUSIP: /v1/stocks/GOOG/holders and /v1/stocks/BRK.A/holders (404 today) return that class\'s rows. A ticker or CUSIP of a class the issuer index lacks returns 404 with `did_you_mean` listing the issuer\'s classes, never another class\'s data.',
       'Bulk files stay per CUSIP. Webhook and alert `moves` rows are keyed by class too, with classes[] on any summed line.',
-      'Pinning: a client that sends `Copybook-Schema-Version: 2026-11-09` keeps today\'s summed holders and changes rows until Mon Feb 22, 2027 (90 days), and its responses carry `Deprecation: true`, `Sunset: Mon, 22 Feb 2027 00:00:00 GMT` and `Link: <…/v1/changelog?id=2026-11-23-per-class-rows>; rel="deprecation"` (sent from today on pinned requests). The pin keeps the row shape only, never the old mispricing (a summed row priced as one trade, e.g. FMR\'s BRK A+B understated by about $5.2B): pinned rows carry per-class dollar sums, `classes[]`, `cusip` null on multi-class rows, and `mixed`/`net_direction`.',
-      'Webhooks: an endpoint saved with `webhook_schema_version: "2026-11-09"` (POST /channels) keeps summed `moves` rows, under the same rules, until Feb 22, 2027.',
+      'Pinning: a client that sends `Copybook-Schema-Version: 2026-11-09` keeps today\'s summed holders and changes rows until Mon Feb 22, 2027 (90 days), and its responses carry `Deprecation: @1795392000` (Nov 23, 2026 00:00Z, RFC 9745), `Sunset: Mon, 22 Feb 2027 00:00:00 GMT` and `Link: <…/v1/changelog?id=2026-11-23-per-class-rows>; rel="deprecation"`. Until Nov 23, unpinned holders and changes responses carry the same three headers, since they are the clients whose rows change that day. The pin keeps the row shape only, never the old mispricing (a summed row priced as one trade, e.g. FMR\'s BRK A+B understated by about $5.2B): pinned rows carry per-class dollar sums, `classes[]`, `cusip` null on multi-class rows, and `mixed`/`net_direction`.',
+      'Webhooks: an endpoint saved with `webhook_schema_version: "2026-11-09"` (PUT /channels; null unpins) keeps summed `moves` rows, under the same rules, until Feb 22, 2027. Deliveries carry the same Deprecation, Sunset and Link headers and, inside the signed body, `deprecation: {deprecated_at, sunset, link}` (receivers often drop headers): every endpoint until Nov 23, pinned endpoints until Feb 22.',
     ],
   },
   {
@@ -464,11 +476,10 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
       res = new Response(body, res);
     }
     for (const [k, v] of Object.entries(limits)) res.headers.set(k, v);
-    // A client pinned to the summed share-class rows: holders and changes warn of the pin's end (the lead, Nov 11).
-    if (pin === SUMMED_PIN.version && (/^\/v1\/stocks\/[^/]+\/holders$/.test(path) || /^\/v1\/changes\//.test(path))) {
-      res.headers.set('Deprecation', 'true');
-      res.headers.set('Sunset', SUMMED_PIN.sunset);
-      res.headers.set('Link', `<${linkBase(env, req, url)}/v1/changelog?id=${SUMMED_PIN.changelog}>; rel="deprecation"`);
+    // Holders and changes rows go per class on Nov 23: every client is warned until then, pinned ones until Feb 22.
+    if (res.status === 200 && (/^\/v1\/stocks\/[^/]+\/holders$/.test(path) || /^\/v1\/changes\//.test(path))) {
+      const n = perClassNotice(pin === SUMMED_PIN.version, linkBase(env, req, url));
+      if (n) for (const [k, v] of Object.entries(n.headers)) res.headers.set(k, v);
     }
     // `weight` in positions turns equity-only on Feb 8, 2027 (RFC 9745 Deprecation, RFC 8594 Sunset).
     if (/\/holdings/.test(path) && res.status === 200) for (const [k, v] of Object.entries(WEIGHT_DEPRECATION(linkBase(env, req, url)))) res.headers.set(k, v);

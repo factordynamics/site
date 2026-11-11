@@ -1,7 +1,8 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { channelFailMail, chatText, feedItems, sendMail, teamDuplicateMail, type FeedItem } from './email';
 import { isPro, type Env, type Member } from './env';
-import { SCHEMA_VERSION } from './v1';
+import { perClassNotice, SCHEMA_VERSION, SUMMED_PIN } from './v1';
+import { WORKER_URL } from './env';
 import { getMember, type Follows } from './members';
 import { listSeats } from './seats';
 import { cleanItem4, countedMoves, filingId, type MoveRow, type Moves } from './edgar';
@@ -555,9 +556,23 @@ interface Retry {
 /** Minutes to wait before attempt 2, 3, …; after the last, the delivery is dropped. */
 const BACKOFF_MIN = [1, 5, 30, 120, 720];
 
+/**
+ * A delivery's per-class deprecation notice (the lead, Nov 11): inside the signed body as `deprecation`, since receivers
+ * often drop headers, for every endpoint until Nov 23 and pinned ones until Feb 22. Bodies that already carry it (a
+ * retry) are left as they are.
+ */
+export function withNotice(c: Channels, body: string, now: number): string {
+  const n = perClassNotice(c.webhook?.schema_version === SUMMED_PIN.version, WORKER_URL, now);
+  if (!n || body.includes('"deprecation":')) return body;
+  return JSON.stringify({ ...JSON.parse(body), deprecation: { deprecated_at: n.deprecated_at, sunset: n.sunset, link: n.link } });
+}
+
+/** The same notice as headers, when the body carries it. */
+const noticeHeaders = (body: string): Record<string, string> => (body.includes('"deprecation":') ? perClassNotice(true, WORKER_URL, 0)!.headers : {});
+
 async function sendWebhook(c: Channels, id: string, body: string) {
   if (!c.webhook) return null; // removed meanwhile: nothing to do
-  return postFull(c.webhook.url, body, { 'copybook-signature': await signature(c.webhook.secret, body), 'copybook-delivery': id });
+  return postFull(c.webhook.url, body, { 'copybook-signature': await signature(c.webhook.secret, body), 'copybook-delivery': id, ...noticeHeaders(body) });
 }
 
 async function queueRetries(env: Env, items: Retry[]): Promise<void> {
@@ -574,10 +589,11 @@ export async function sendWebhooks(env: Env, m: Member, c: Channels, filings: Al
     // The same endpoint gets each alert once, however many members (a Fund team) connected it.
     if (posted.has(`${c.webhook.url}|${p.id}`)) continue;
     posted.add(`${c.webhook.url}|${p.id}`);
-    const r = await sendWebhook(c, p.id, p.body);
+    const body = withNotice(c, p.body, now);
+    const r = await sendWebhook(c, p.id, body);
     if (!r) continue;
     if (/^2\d\d$/.test(r.status)) noteDelivered('webhook', filings.filter((a) => p.id.startsWith(a.accession)), events.filter((e) => p.id.startsWith(e.id)));
-    const next = await settle(env, { customer: m.customer, id: p.id, body: p.body, attempt: 1, next_at: 0 }, r, now, BACKOFF_MIN);
+    const next = await settle(env, { customer: m.customer, id: p.id, body, attempt: 1, next_at: 0 }, r, now, BACKOFF_MIN);
     if (next) failed.push(next);
   }
   await queueRetries(env, failed);
@@ -689,8 +705,8 @@ export async function testChannels(env: Env, m: Member, c: Channels): Promise<{ 
   if (c.webhook && isPro(m)) {
     // Shaped like an alert (type test), with its own delivery id so receivers that deduplicate keep every test.
     const id = `test:${crypto.randomUUID()}`;
-    const body = JSON.stringify({ schema_version: SCHEMA_VERSION, type: 'test', id, accession: null, form: 'TEST', accepted_at: null, detected_at: now, followup: false, filer: { slug: null, name: 'Copybook test' }, sec_url: 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent', copybook_url: env.SITE_URL });
-    out.webhook = await post(c.webhook.url, body, { 'copybook-signature': await signature(c.webhook.secret, body), 'copybook-delivery': id });
+    const body = withNotice(c, JSON.stringify({ schema_version: SCHEMA_VERSION, type: 'test', id, accession: null, form: 'TEST', accepted_at: null, detected_at: now, followup: false, filer: { slug: null, name: 'Copybook test' }, sec_url: 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent', copybook_url: env.SITE_URL }), Date.parse(now));
+    out.webhook = await post(c.webhook.url, body, { 'copybook-signature': await signature(c.webhook.secret, body), 'copybook-delivery': id, ...noticeHeaders(body) });
     await after('webhook', out.webhook);
   }
   if (c.feed_token) {
