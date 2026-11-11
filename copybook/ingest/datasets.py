@@ -43,7 +43,9 @@ CACHE = Path(os.environ.get("COPYBOOK_DATASET_CACHE") or (Path(os.environ.get("R
 PAGE = f"{ARCHIVE_BASE}/data-research/sec-markets-data/form-13f-data-sets"
 COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type")
 # Bump when the fb/ book layout changes: periods seeded by an older format are read again.
-FORMAT = "3"  # 2: shares_type (SH, or PRN where shares is a principal amount); 3: re-filed books not double-counted
+FORMAT = "4"  # 2: shares_type (SH, or PRN where shares is a principal amount); 3: re-filed books not double-counted;
+# 4: per-row source_accession and unit fields (value_as_filed, value_scale, value_adjusted)
+BOOK_COLUMNS = COLUMNS + ("source_accession", "value_as_filed", "value_scale", "value_adjusted")
 DOLLARS_FROM = "2023-01-03"  # VALUE is in $000s for filings before this date (data set readme)
 MONTHS = {m: i + 1 for i, m in enumerate("JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split())}
 csv.field_size_limit(10_000_000)
@@ -228,6 +230,8 @@ def refiled(base_rows: dict, extra_rows: dict) -> bool:
 
 def book(q: str, base: dict, extra: list[dict], books: dict, lines: dict) -> dict:
     merged: dict[tuple, list] = {}
+    filed: dict[tuple, float] = {}  # VALUE as filed, summed like the row
+    first: dict[tuple, str] = {}  # the first of the period's filings that lists the row
     replaced: list[str] = []
     seen: dict = {}
     for f in extra:  # a re-filed full book becomes the base; what it repeats is dropped
@@ -243,13 +247,15 @@ def book(q: str, base: dict, extra: list[dict], books: dict, lines: dict) -> dic
         rows = books.get(f["accession"], {})
         thousands = f["filing_date"] < DOLLARS_FROM
         for key, r in rows.items():
+            filed[key] = filed.get(key, 0) + r[5]
+            first.setdefault(key, f["accession"])
             v = r[5] * (1000 if thousands else 1)
             if key in merged:
                 merged[key][4] += r[4]
                 merged[key][5] += v
             else:
                 merged[key] = r[:5] + [v] + r[6:]
-    rows = list(merged.values())
+    rows = [r + [first[k], filed[k]] for k, r in merged.items()]
     # Same implied-price checks as the live ingest (filing-level, then single lines).
     factor = unit_fix([(r[5], r[4]) for r in rows if not r[3] and r[6] == "SH"])
     for r in rows:
@@ -279,8 +285,9 @@ def book(q: str, base: dict, extra: list[dict], books: dict, lines: dict) -> dic
         "superseded": replaced,
         "mislabeled_amendment": bool(replaced),
         "source": "SEC Form 13F data set",
-        "columns": list(COLUMNS),
-        "rows": [[None, r[0], r[1], r[2], r[3], round(r[4]), round(r[5]), r[6]] for r in rows],
+        "columns": list(BOOK_COLUMNS),
+        "rows": [[None, r[0], r[1], r[2], r[3], round(r[4]), round(r[5]), r[6], r[7], r[8],
+                  float(f"{r[5] / r[8]:.6g}") if r[8] else None, abs(r[5] - r[8]) > 0.5] for r in rows],
     }
 
 

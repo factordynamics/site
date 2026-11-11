@@ -152,6 +152,12 @@ def fill_rows(cache: dict[str, str], started: float) -> tuple[int, int]:
                 r += [first.get((r[ci], (r[pi] or "").lower()), acc), None]
             cols += list(PROV)
             dirty = True
+        if "first_disclosed_at" not in cols:  # data-set books name each row's filing but not its time
+            si = cols.index("source_accession")
+            for r in b.get("rows") or []:
+                r.insert(si + 1, None)
+            cols.insert(si + 1, "first_disclosed_at")
+            dirty = True
         si, fi = cols.index("source_accession"), cols.index("first_disclosed_at")
         for r in b.get("rows") or []:
             if not r[si]:

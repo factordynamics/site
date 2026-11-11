@@ -62,6 +62,21 @@ class AmendmentTest(unittest.TestCase):
                           books, {})
         self.assertEqual((b["total_value"], b["accession"], b["superseded"], b["amendments"]), (455, "r", ["o"], ["s"]))
 
+    def test_data_set_book_rows_carry_unit_fields_and_their_filing(self):
+        # LSV 2026Q1 filed its values in thousands: Mueller (624756102) 161,799 is $161,799,000.
+        from ingest import datasets
+        row = lambda c, n, v: [c, "COM", c, None, n, v, "SH"]
+        o = {(c, "", "SH"): row(c, 1_000_000, 100_000 + i) for i, c in enumerate(["624756102", "B", "C", "D", "E"])}
+        o[("624756102", "", "SH")] = row("624756102", 1_500_000, 161_799)
+        books = {"o": o, "a": {("F", "", "SH"): row("F", 1_000, 50)}}
+        meta = lambda a, d: {"accession": a, "cik": "1", "name": "X", "form": "13F-HR", "filing_date": d}
+        b = datasets.book("2026Q1", meta("o", "2026-05-14"), [meta("a", "2026-06-01")], books, {})
+        rows = {r[3]: dict(zip(b["columns"], r)) for r in b["rows"]}
+        m = rows["624756102"]
+        self.assertEqual((m["value"], m["value_as_filed"], m["value_scale"], m["value_adjusted"], m["source_accession"]),
+                         (161_799_000, 161_799, 1000.0, True, "o"))
+        self.assertEqual(rows["F"]["source_accession"], "a")  # the amendment that added it
+
     def test_lone_additive_amendment_is_not_a_book(self):
         self.assertEqual(pick_filings([f("a", "13F-HR/A", "2025-08-14")], {"a": "NEW HOLDINGS"}), (None, []))
 

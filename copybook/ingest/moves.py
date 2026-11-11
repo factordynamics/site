@@ -37,7 +37,7 @@ MOVE_COLUMNS = ("ticker", "issuer", "cusip", "put_call", "shares", "prev_shares"
 FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type", "prev_shares", "prev_value",
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
                 "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "prev_cusip",
-                "source_accession", "first_disclosed_at")
+                "source_accession", "first_disclosed_at", "value_scale", "value_adjusted")
 
 
 SECS: dict[str, dict] = {}
@@ -112,7 +112,10 @@ def book(rec: dict | None) -> dict | None:
         if not h["put_call"] and h["shares_type"] == "SH" and h.get("shares") and h.get("value"):
             f = consensus_factor(h["value"] / h["shares"], CONS.get((rec.get("quarter"), h.get("cusip"))))
             if f != 1.0:  # a line filed in thousands (or 1000x too large) against every other filer's price
-                h["value_as_filed"], h["value"], h["value_adjusted"] = h["value"], h["value"] * f, True
+                if h.get("value_as_filed") is None:  # the book's own as-filed value wins when it has one
+                    h["value_as_filed"] = h["value"]
+                h["value"], h["value_adjusted"] = h["value"] * f, True
+                h["value_scale"] = float(f"{h['value'] / h['value_as_filed']:.6g}") if h["value_as_filed"] else None
                 FIXED[0] += 1
             q = rec.get("quarter") or ""
             near = CONS.get((q, h.get("cusip"))) or CONS.get((prev_quarter(q) if q else "", h.get("cusip")))

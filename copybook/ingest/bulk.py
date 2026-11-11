@@ -42,7 +42,9 @@ SHARD_KEYS = (
 COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type")
 # The full book (fb/, paid) adds per-row point-in-time provenance: the filing (original or amendment) that first
 # disclosed the row and its EDGAR acceptance time. accepted.py fills them on books written without them.
-FB_COLUMNS = COLUMNS + ("source_accession", "first_disclosed_at")
+# Unit fields: the value as filed, the factor to whole dollars (1000 for a book filed in thousands) and whether a
+# unit fix changed it. Rescaled books written without them are fetched again (has_full_book).
+FB_COLUMNS = COLUMNS + ("source_accession", "first_disclosed_at", "value_as_filed", "value_scale", "value_adjusted")
 
 
 def numeric_cik(cik: str) -> bool:
@@ -66,6 +68,13 @@ def slim(rec: dict, max_rows: int | None = MAX_ROWS, columns: tuple = COLUMNS) -
                 return h.get(k) or rec.get("accession")
             if k == "first_disclosed_at":
                 return h.get(k) or rec.get("accepted_at")
+            if k in ("value_scale", "value_adjusted"):
+                filed, v = h.get("value_as_filed"), h.get("value") or 0
+                if filed is None:
+                    return None
+                if k == "value_adjusted":
+                    return abs(v - filed) > 0.5
+                return float(f"{v / filed:.6g}") if filed else None
             return int(h.get(k) or 0) if k in ("value", "shares") else h.get(k)
 
         out["rows"] = [[cell(h, k) for k in columns] for h in rows[:max_rows]]
@@ -96,6 +105,11 @@ def has_full_book(rec: dict) -> bool:
         return True
     path = full_path(rec)
     if path.exists():
+        if rec.get("values_in_thousands") or (rec.get("unit_fix") or 1.0) != 1.0:
+            try:  # a rescaled book needs its unit fields; one written before them is fetched again
+                return "value_as_filed" in (json.loads(path.read_text()).get("columns") or [])
+            except ValueError:
+                return False
         return True
     if rec.get("truncated"):
         return False
