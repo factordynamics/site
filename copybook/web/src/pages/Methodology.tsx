@@ -168,10 +168,23 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
           <dd>Empty when the CUSIP has no single US listing (many foreign shares, units and warrants) or no mapping yet. The CUSIP and issuer are always shown.</dd>
         </div>
         <div id="reissued-cusip" className="scroll-mt-24">
-          <dt>Reissued CUSIP</dt>
-          <dd>
-            When an issuer’s CUSIP changes and the SEC’s Official List of Section 13(f) Securities confirms it, the old and new CUSIPs count as one position: holders reporting either are counted on the stock page, and a fund that kept its shares hasn’t sold them. If the change came with a split, such as a 1-for-2 reverse split, prior shares are adjusted to the new units. If the share units can’t be matched, positions are shown as filed under each CUSIP, and a fund that moved from the old to the new isn’t counted as buying or selling. See{' '}
-            <a href="#moves">CUSIP changes</a>.
+          <dt>Reissued CUSIPs</dt>
+          <dd className="space-y-2">
+            <p>
+              Sometimes a company’s stock gets a new CUSIP: a re-domicile, a reverse split, an ADS converted to ordinary shares, or a separation. We treat the old and new CUSIP as one position only when the SEC’s Official List of Section 13(f) Securities deletes the old CUSIP in the same list that adds the new one. Units, rights and warrants are never linked.
+            </p>
+            <p>We also check that the share counts line up before linking. A link is applied in one of two ways:</p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>
+                <strong className="font-medium text-ink">Confirmed by filing.</strong> The issuer’s own SEC filing states the ratio, such as Honeywell’s 1-for-2 reverse split (8-K 0000773840-26-000084). Prior-quarter shares are multiplied by that ratio, so a holder who didn’t trade reads as unchanged. A 1:1 re-domicile cited by its 8-K counts too.
+              </li>
+              <li>
+                <strong className="font-medium text-ink">Confirmed by holders.</strong> At least 5 holders, and at least 10% of all holders, report exactly the same share count under the new CUSIP as under the old one. That must be more than at any other ratio, and the median holder’s ratio must be within 1% of 1:1. Holders keep trading through a reissue, so the median carries most of the evidence. For Exxon, 514 of 2,333 holders were at exactly 1:1, with a median of 1.00.
+              </li>
+            </ul>
+            <p>
+              A pair that meets neither test isn’t linked: its holders show an exit under the old CUSIP and a new position under the new one, as filed. A filer that reports its pre-split share count under the new CUSIP is flagged as a likely filing error, and that row shows no buy or sale. The list of links, with each one’s evidence, is in cusip_links.json. See also <a href="#moves">CUSIP changes</a>.
+            </p>
           </dd>
         </div>
       </dl>
