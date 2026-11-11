@@ -1581,8 +1581,8 @@ a.hb-row:hover {
   .grid th {
     font-size: 12px;
   }
-  .fund-stats .stat:nth-child(3),
-  .fund-stats .stat:nth-child(4) {
+  /* Phones keep value, stocks held, bought and sold: two rows of two. */
+  .fund-stats .stat:nth-child(3) {
     display: none;
   }
   .page > .panel .filters[aria-label='sector filter'] {
