@@ -287,7 +287,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
             </p>
           )}
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
-            {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : member.collection === 'send_invoice' && member.invoice_trial ? invoiceTerms(member.invoice_trial) : member.collection === 'send_invoice' ? 'Billed by invoice (Net 30), payable by card, ACH or bank transfer. Each invoice comes by email; nothing is charged to a card.' : member.pause_after_trial ? `Nothing is charged until ${dayLabel(member.pause_after_trial.until)}. Real-time alerts stop when the trial ends and resume then; your follows and settings stay.` : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
+            {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : member.collection === 'send_invoice' && member.invoice_trial ? invoiceTerms(member.invoice_trial) : member.collection === 'send_invoice' ? 'Billed by invoice (Net 30), payable online by card or US bank account (ACH). Each invoice comes by email; nothing is charged to a card.' : member.pause_after_trial ? `Nothing is charged until ${dayLabel(member.pause_after_trial.until)}. Real-time alerts stop when the trial ends and resume then; your follows and settings stay.` : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
           </p>
           {!cancelling && member.interval === 'monthly' && !trial && <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">Monthly plans can pause between seasons{member.digest_live ? '; your names digest keeps coming' : ''}.</p>}
           {!cancelling && member.plan === 'fund' && member.interval === 'yearly' && member.collection !== 'send_invoice' && <InvoiceSwitch onChange={onChange} />}
@@ -774,7 +774,7 @@ const invoiceTerms = (t: NonNullable<Member['invoice_trial']>) =>
     `Invoice trial: $${usd(t.amount).toLocaleString('en-US')} invoice on ${shortDay(t.invoice_on)}${t.invoice_to ? ` to ${t.invoice_to}` : ''}, due ${shortDay(t.due_on)} (Net 30)`,
     t.po && `PO ${t.po}`,
     t.ap_email && `AP ${t.ap_email}`,
-    'payable by card, ACH or bank transfer',
+    'payable online by card or US bank account (ACH)',
     `cancel before ${shortDay(t.invoice_on)} and nothing is owed`,
   ]
     .filter(Boolean)
@@ -843,7 +843,7 @@ function InvoiceSwitch({ onChange }: { onChange: (m: Member) => void }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [done, setDone] = useState(false)
-  if (done) return <p className="mt-3 text-[13px] text-up">Switched: we email each invoice, due in 30 days, payable by card, ACH or bank transfer.</p>
+  if (done) return <p className="mt-3 text-[13px] text-up">Switched: we email each invoice, due in 30 days, payable online by card or US bank account (ACH).</p>
   return (
     <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px]">
       <button

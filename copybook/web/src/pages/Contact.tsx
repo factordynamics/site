@@ -176,7 +176,7 @@ export function Contact() {
                     ) : (
                       'Check your inbox to sign in.'
                     )}{' '}
-                    The invoice for $1,990 (the founding price, a year) comes on {day(started.invoice_on)}, due {day(started.due_on)}; nothing is charged before then. It’s payable by card, ACH or bank transfer. Cancel before {day(started.invoice_on)} in your account and nothing is owed.
+                    The invoice for $1,990 (the founding price, a year) comes on {day(started.invoice_on)}, due {day(started.due_on)}; nothing is charged before then. It’s payable online by card or US bank account (ACH). Cancel before {day(started.invoice_on)} in your account and nothing is owed.
                     {/* Stripe emails the invoice to the owner; the AP address is only printed on it (payments, 15:15). */}{' '}
                     The invoice {started.po ? `will show PO ${started.po} and ` : ''}goes to {started.email}
                     {started.ap_email ? `; ${started.ap_email} is printed on it for your AP team` : ''}.
