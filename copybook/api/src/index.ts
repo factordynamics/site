@@ -290,7 +290,10 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
 export async function buildLatency(env: Env, now: number) {
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
   const ch = JSON.parse((await env.DB.get('alerts:latency:ch')) ?? '[]') as ChannelDelivery[];
-  return latencyReport(log, now, ch);
+  const r = latencyReport(log, now, ch);
+  // The 13F rows are complete once the pre-tag rows were re-timed (/speed/ shows the 13F card from then).
+  if (r.by_form['13F'] && (await env.DB.get('latency:retimed:v1'))) Object.assign(r.by_form['13F'], { complete: true });
+  return r;
 }
 
 /** The last latency.json written by this isolate, so an unchanged report isn't rewritten every minute. */

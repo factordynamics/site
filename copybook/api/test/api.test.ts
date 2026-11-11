@@ -970,7 +970,7 @@ describe('copybook api', () => {
     expect((await call('/history/warren-buffett', { token: s.token })).status).toBe(402);
     // 3 an hour per address: a repeat sends the sign-in link again, the 4th is refused.
     // A filer page's one-field signup from the same address adds the follow (a free member's Friday email leads with it).
-    expect(await (await signup({ email: 'reader@reader.test', follow: { kind: 'investor', id: 'bill-ackman' }, source: 'follow:/investors/bill-ackman/' }, '2.2.2.2')).json()).toEqual({ ok: true, follow: 'added' });
+    expect(await (await signup({ email: 'reader@reader.test', follow: [{ kind: 'investor', id: 'bill-ackman' }, { kind: 'stock', id: 'hhh' }], source: 'follow:/investors/bill-ackman/' }, '2.2.2.2')).json()).toEqual({ ok: true, following: true, follow: 'added' });
     await signup({ email: 'reader@reader.test' }, '3.3.3.3');
     expect((await signup({ email: 'reader@reader.test' }, '4.4.4.4')).status).toBe(429);
     await putMember('paid', 'paid@reader.test', 'active', 'all'); // paying members never get the weekly
@@ -980,7 +980,7 @@ describe('copybook api', () => {
     expect([sixth.status, (await sixth.json()).limit]).toEqual([402, 5]);
     expect((await call('/follows/owned/AAPL', { method: 'POST', token: s.token })).status).toBe(200); // already saved: fine
     await call('/follows/owned/MSFT', { method: 'DELETE', token: s.token });
-    expect((await (await call('/follows', { token: s.token })).json()).follows.stocks).toEqual(['GOOGL', 'HHH', 'NVDA', 'AAPL']); // the stock page stops saying Following
+    expect((await (await call('/follows', { token: s.token })).json()).follows.stocks).toEqual(['HHH', 'GOOGL', 'NVDA', 'AAPL']); // HHH first: followed from the signup form; the stock page stops saying Following
     expect((await (await call('/me', { token: s.token })).json()).member.free_names).toEqual({ names: ['GOOGL', 'HHH', 'NVDA', 'AAPL'], limit: 5, facts: [], hook: null, more: 0 });
     expect((await call('/follows/stocks/TSLA', { method: 'POST', token: s.token })).status).toBe(402); // only owned names
 

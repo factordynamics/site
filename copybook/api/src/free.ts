@@ -41,17 +41,27 @@ export async function handleSignup(env: Env, b: Json, ip: string): Promise<Reply
   const utm = Object.fromEntries(UTM.map((k) => [k, str(b[k], 100)]).filter(([, v]) => v)) as Record<string, string>;
   const source = str(b.source, 60) ?? utm.utm_source ?? null;
   // A filer page's "Follow to get it by email": an investor slug, kept on the free member; its moves lead the Friday email.
-  const fo = b.follow && typeof b.follow === 'object' ? (b.follow as Json) : null;
-  const follow = fo?.kind === 'investor' && typeof fo.id === 'string' && /^[a-z0-9-]{1,80}$/.test(fo.id) ? fo.id : null;
-  if (b.follow !== undefined && b.follow !== null && !follow) return { status: 400, body: { ok: false, error: 'follow: { kind: "investor", id: "<investor slug>" }', code: 'bad_request' } };
-  const addFollow = async (m: Member) => (follow ? (await changeFollows(env, m, { add: { list: 'investors', value: follow, max: FREE_INVESTORS } })).ok : false);
+  // `follow`: an array (one object accepted too) of { kind: investor, id: slug } or { kind: stock, id: ticker }, at most 10.
+  const raw = b.follow === undefined || b.follow === null ? [] : Array.isArray(b.follow) ? b.follow : [b.follow];
+  const follows = raw.map((x) => (x && typeof x === 'object' ? (x as Json) : {})).map((x) =>
+    x.kind === 'investor' && typeof x.id === 'string' && /^[a-z0-9-]{1,80}$/.test(x.id) ? { list: 'investors' as const, value: x.id }
+    : x.kind === 'stock' && typeof x.id === 'string' && /^[A-Za-z][A-Za-z0-9.-]{0,9}$/.test(x.id) ? { list: 'stocks' as const, value: x.id.toUpperCase().replace('-', '.') }
+    : null);
+  if (follows.some((x) => !x) || follows.length > 10) return { status: 400, body: { ok: false, error: 'follow: up to 10 of { kind: "investor", id: "<slug>" } or { kind: "stock", id: "<ticker>" }', code: 'bad_request' } };
+  const follow = follows.length > 0;
+  // True when at least one follow is stored (a repeat follow counts): the page then promises it in the Friday email.
+  const addFollow = async (m: Member) => {
+    let ok = false;
+    for (const x of follows) ok = (await changeFollows(env, m, { add: { list: x!.list, value: x!.value, max: FREE_INVESTORS } })).ok || ok;
+    return ok;
+  };
   const cur = await memberByEmail(env, email);
   // Already a member: nothing to create. Free members get the follow added and their sign-in link again; a paying
   // member's follows change only when signed in (this form has no sign-in), so they are asked to follow there.
   if (cur && cur.status !== 'canceled') {
     const followed = cur.status === 'free' ? await addFollow(cur) : false;
     if (cur.status === 'free') await sendMail(env, [await freeWelcomeMail(env, cur, false)]);
-    return { status: 200, body: { ok: true, ...(follow ? { follow: followed ? 'added' : cur.status === 'free' ? 'limit' : 'sign_in' } : {}) } };
+    return { status: 200, body: { ok: true, ...(follow ? { following: followed, follow: followed ? 'added' : cur.status === 'free' ? 'limit' : 'sign_in' } : {}) } };
   }
   const m: Member = {
     customer: await freeId(email),
@@ -70,7 +80,7 @@ export async function handleSignup(env: Env, b: Json, ip: string): Promise<Reply
   const followed = await addFollow(m);
   if (!isTest(email)) await bump(env, 'signups', m);
   const mail = await sendMail(env, [await freeWelcomeMail(env, m, true)]);
-  return { status: 201, body: { ok: true, created: true, welcome: mail === '200' ? 'sent' : 'not sent', ...(follow ? { follow: followed ? 'added' : 'limit' } : {}) } };
+  return { status: 201, body: { ok: true, created: true, welcome: mail === '200' ? 'sent' : 'not sent', ...(follow ? { following: followed, follow: followed ? 'added' : 'limit' } : {}) } };
 }
 
 async function freeWelcomeMail(env: Env, m: Member, first: boolean): Promise<Mail> {
@@ -436,7 +446,8 @@ export async function runWeekly(env: Env, now: number): Promise<Record<string, u
   }
   const moves = await weeklyMoves(env, now, 7, new Set([...follows.values()].flatMap((f) => f.investors)));
   if (!moves.buys.length && !moves.sells.length) return { status: 'no moves', week };
-  const followedMoves = (f: Follows | undefined) => moves.all.filter((x) => f?.investors.includes(x.slug)).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 8);
+  // Followed investors' moves, and superinvestor moves in followed stocks.
+  const followedMoves = (f: Follows | undefined) => moves.all.filter((x) => f?.investors.includes(x.slug) || (x.featured && f?.stocks.includes(x.ticker))).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 8);
   const weekOf = new Date(now - 6 * 86400_000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
   const mails = await Promise.all(members.map(async (m) => weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), await inYourNames(env, follows.get(m.customer)!.owned.slice(0, FREE_NAMES), moves, now), followedMoves(follows.get(m.customer)))));
   const status = await sendMail(env, mails, { tier: 'low' });
