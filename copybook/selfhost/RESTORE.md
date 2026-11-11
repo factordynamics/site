@@ -21,14 +21,15 @@ Cloudflare's copy already has every secret, and its KV is kept current by the sy
 sessions and follows are there up to about a minute before gene went down. Limit: the free plan's 100k requests/day.
 
 0. One command does step 1 (and pins it so the tunnel watcher leaves it): `failover-a.sh to-worker`; undo with
-   `failover-a.sh back`. Use it also when the quick tunnel nears its 200 in-flight limit (`inflight-sampler.sh` emails
+   `failover-a.sh back`, which first has gene apply the Worker's changes (`POST /ops/sync`) so revocations hold at once. Use it also when the quick tunnel nears its 200 in-flight limit (`inflight-sampler.sh` emails
    hello@ at 100).
 1. Publish `{"api":"https://copybook-api.factordynamics.workers.dev","at":"<iso>"}` to R2 copybook-public `api.json`
    (Cloudflare REST, `CLOUDFLARE_API_TOKEN`). The front ends read it at load. The Worker then serves requests itself
    instead of redirecting (loop guard, 754c32a), within about 60 s. **Never delete `MOVED_TO`:** it is also what makes
    the Worker the `cloudflare` host for the R2 sync and the primary poller.
-2. Point Stripe webhook `we_1UZHeoDSKGGzRqYZUz48mjdU` at `https://copybook-api.factordynamics.workers.dev/webhook`
-   (same signing secret).
+2. Nothing for Stripe: since Nov 11 16:36 UTC the webhook `we_1UZHeoDSKGGzRqYZUz48mjdU` points at
+   `https://copybook-api.factordynamics.workers.dev/webhook`. The Worker forwards it to gene while gene is the live host,
+   and handles it itself while api.json names the Worker, so it follows every failover.
 
 Any Amp thread with Andreas's personal secrets can do this, including an orb.
 
