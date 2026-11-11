@@ -76,7 +76,8 @@ REJECTED: set[tuple[str, str, str]] = set()
 DEBT_LINES: set[tuple[str, str]] = set()  # (issuer6, cik): a debt CUSIP filed as shares, once summed by prefix
 UNCLASSED: dict[str, int] = {}
 FB_KEEP = set(FB_COLUMNS) | {"display_name", "sector"}  # plain full-book columns (bulk.FB_COLUMNS, enrich's labels)
-CLASS_SUM_OFF: list[tuple] = []  # (issuer6, cik, row value_delta, classes' sum): rows held because the two differ
+CLASS_SUM_MAX = 10  # more held class_sum_mismatch rows than this fail the run (lead, Nov 11)
+CLASS_SUM_OFF: list[dict] = []  # (issuer6, cik, row value_delta, classes' sum): rows held because the two differ
 CLS: dict[tuple, dict] = {}  # (issuer6, cik) -> {cusip: that share class's shares, prior, value, value_delta, changes}
 # A filed conversion ratio between share classes: shares in that class's unit (Berkshire's charter: one Class A share
 # converts into 1,500 Class B). Classes without one (GOOG/GOOGL) have no common share unit.
@@ -733,6 +734,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     meta = {s["cik"]: s for s in shards}
     per: dict[str, dict[str, list]] = {}
     CLS.clear()
+    CLASS_SUM_OFF.clear()
     tick: dict[str, dict[str, float]] = {}
     book: dict[str, float] = {}  # cik -> value of its share positions (the weight denominator)
     top10: dict[str, set] = {}  # cik -> issuer codes among its ten largest share positions
@@ -801,6 +803,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
         book[cik] = EQUITY.get(cik) or sum(by_issuer.values())  # the SH book, as on stock pages
         top10[cik] = {k for k, v in sorted(by_issuer.items(), key=lambda kv: -kv[1])[:10] if v > 0}
+    pending, worth = [], {}  # every hl/ and hlf/ file, written only once the class-sum ceiling passes
     out, full = DATA / "hl", DATA / "hlf"
     out.mkdir(exist_ok=True)
     full.mkdir(exist_ok=True)
@@ -889,7 +892,9 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             fl = FILING.get(cik) or filing(meta[cik])
             if multi and counted is not None and abs(counted - round(sum(k["value_delta"] for k in cls.values() if not k["side"]))) > 1:
                 # Never served as a trade: held, counted in the run log (one row must not block the whole index).
-                CLASS_SUM_OFF.append((code, cik, counted, round(sum(k["value_delta"] for k in cls.values() if not k["side"]))))
+                CLASS_SUM_OFF.append({"issuer6": code, "cik": cik, "name": meta[cik].get("name"), "cusips": sorted(cls),
+                                      "value_delta": counted,
+                                      "classes_sum": round(sum(k["value_delta"] for k in cls.values() if not k["side"]))})
                 for c in [counts] + [lenses[n] for n, kinds in LENSES.items() if kind in kinds]:
                     if change not in (None, "unknown"):
                         c["net_by_period"][q] = c["net_by_period"].get(q, 0) - counted
@@ -938,13 +943,29 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         name = f"{code}.json"
         body = {"issuer": code, "tickers": tickers, "counts": counts, **lenses, "columns": cols, "rows_total": len(rows)}
         written.add(name)
-        write(full / name, {**body, "rows": rows})
+        worth[code] = sum(r[8] or 0 for r in rows)
+        pending.append((full / name, {**body, "rows": rows}))
         if tickers:
             keep.add(name)
-            write(out / name, {**body, "rows": rows[:HOLDERS_TOP]})
+            pending.append((out / name, {**body, "rows": rows[:HOLDERS_TOP]}))
             top = {r[0] for r in [r for r in rows if raw[r[0]] > 0][:SITE_TOP]}
             site[code] = [[r[0], r[5], raw[r[0]], r[8], r[11], r[10], deltas[r[0]], int(code in top10.get(r[0], ()))]
                           for r in rows if r[0] in top or r[3] in LENSES["smart"]]
+    # The class-sum ceiling (lead, Nov 11): a few mismatched rows are held (class_sum_mismatch); more than
+    # CLASS_SUM_MAX, or any in a top-100 stock by value, means the class sums are broken: nothing in hl/ is rewritten
+    # (the live index stays) and gate.py fails the run on holders_refused.json.
+    top100 = set(sorted(worth, key=lambda c: -worth[c])[:100])
+    bad_top = [x for x in CLASS_SUM_OFF if x["issuer6"] in top100]
+    refused = DATA / "holders_refused.json"
+    if len(CLASS_SUM_OFF) > CLASS_SUM_MAX or bad_top:
+        write(refused, {"reason": "class_sum_mismatch ceiling", "max": CLASS_SUM_MAX, "rows": CLASS_SUM_OFF[:200],
+                        "top100": bad_top})
+        print(f"::error::moves: {len(CLASS_SUM_OFF)} multi-class rows' value_delta differ from their classes "
+              f"({len(bad_top)} in top-100 stocks): hl/ not rewritten; gate.py fails this run", flush=True)
+        return 0
+    refused.unlink(missing_ok=True)
+    for path, body in pending:
+        write(path, body)
     for p in out.glob("*.json"):
         if p.name not in keep and p.name != "index.json":
             p.unlink()
@@ -1185,8 +1206,9 @@ def main() -> int:
           + "; ".join(f"{o}->{v['new']} {v.get('ticker')} {v.get('filers')} filers" for o, v in build.cusip_links().items()),
           flush=True)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
-    print(f"moves: multi-class rows held because value_delta != the sum of their classes: {len(CLASS_SUM_OFF)} "
-          f"{CLASS_SUM_OFF[:10]}", flush=True)
+    print(f"moves: multi-class rows held because value_delta != the sum of their classes: {len(CLASS_SUM_OFF)}: "
+          + "; ".join(f"{x['issuer6']} {x['cik']} {x['name']} {x['cusips']} row {x['value_delta']:+,} classes "
+                      f"{x['classes_sum']:+,}" for x in CLASS_SUM_OFF[:20]), flush=True)
     print(f"moves: debt CUSIPs filed as shares kept out of holder rows: {len(DEBT_LINES)} filer-issuer pairs across "
           f"{len({c for c, _ in DEBT_LINES})} issuers", flush=True)
     net_parity(per_quarter)

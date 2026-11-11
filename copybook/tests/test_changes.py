@@ -795,6 +795,17 @@ class ShareClassHoldersTest(unittest.TestCase):
                 z = row("46429B", "0000000003")
                 self.assertEqual((z["change"], z["value_delta"], z["unreliable"]), ("added", 120, None))
                 x = row("99999X", "0000000002")  # an unlinked exit beside a new line: one position, net shares
+                # Over the class-sum ceiling the index is not rewritten: the live hl/ stays, gate.py fails the run.
+                before = (P(d) / "hlf" / "084670.json").read_text()
+                moves.CLASS_SUM_MAX, saved_max = -1, moves.CLASS_SUM_MAX
+                try:
+                    moves.LATEST.pop("0000000003")
+                    moves.LATEST["0000315066"] = brk[:1] + goog
+                    moves.write_holders(shards, {}, {}, {})
+                finally:
+                    moves.CLASS_SUM_MAX = saved_max
+                self.assertEqual((P(d) / "hlf" / "084670.json").read_text(), before)
+                self.assertTrue((P(d) / "holders_refused.json").exists())
                 self.assertEqual((x["change"], x["classes"], x["shares"], x["value_delta_basis"]), ("added", None, 1100, "net_shares_repriced"))
                 self.assertAlmostEqual(x["value_delta"], 100 * 125000 / 1100, delta=1)
             finally:

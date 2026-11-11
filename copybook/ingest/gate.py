@@ -529,6 +529,12 @@ def main() -> int:
         print(f"::error::Previously mapped CUSIPs lost their ticker: "
               + ", ".join(f"{c} ({tick_b[c]})" for c in lost[:40]) + "; not publishing.")
         failed = True
+    refused = data / "holders_refused.json"
+    if refused.exists():  # moves.py: the class sums are broken (over the ceiling, or a top-100 stock); hl/ unchanged
+        r = json.loads(refused.read_text())
+        print(f"::error::gate: holder index refused ({len(r.get('rows') or [])} class_sum_mismatch rows, "
+              f"{len(r.get('top100') or [])} in top-100 stocks): {r.get('rows', [])[:5]}", flush=True)
+        failed = True
     return 1 if failed else 0
 
 
