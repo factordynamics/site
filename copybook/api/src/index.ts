@@ -736,7 +736,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const b = await body(req);
     const to = (Array.isArray(b.to) ? b.to : []).map((x: unknown) => String(x).trim().toLowerCase());
     const { runEmail2 } = await import('./free');
-    return json(await runEmail2(env, b.at ? Date.parse(String(b.at)) : Date.now(), to), 200, h);
+    return json(await runEmail2(env, b.at ? Date.parse(String(b.at)) : Date.now(), to, b.dry === true), 200, h);
   }
 
   // Operator: clear Fund seats' copies of their team's destinations (one-off for duplicates saved before the 409).

@@ -749,7 +749,7 @@ const E2_SPEED_FROM = '2026-11-12';
  * Email 2, once: skipped (and recorded why) without a postal address, without Mailgun, under 10 real free signups, or
  * when the season recap can't be read. `preview`: sent only to our inbox and test inboxes, subject marked [Preview].
  */
-export async function runEmail2(env: Env, now: number, preview?: string[]): Promise<Record<string, unknown>> {
+export async function runEmail2(env: Env, now: number, preview?: string[], dry = false): Promise<Record<string, unknown>> {
   const postal = env.POSTAL_ADDRESS?.trim();
   if (!preview && (await env.DB.get('e2:done'))) return { status: 'already done' };
   const skip = async (why: string) => {
@@ -837,6 +837,8 @@ export async function runEmail2(env: Env, now: number, preview?: string[]): Prom
     const mail = email2Mail(env, m.email, { now, season, rows, due: due.length ? due : seasonDue, biggest, moment: momentFor([...rows.filter((r) => r.a).map((r) => r.a!.slug), ...biggest.map((b) => b.slug)]), yours, follows: f.investors.length > 0, unsub, postal: postal || '[postal address: not configured yet]' });
     return preview ? { ...mail, subject: `[Preview] ${mail.subject}` } : mail;
   }));
+  // A dry preview returns the rendered emails (test inboxes only) and sends nothing: no quota spent.
+  if (preview && dry) return { status: 'dry', sent: 0, mails: mails.map((x) => ({ to: x.to, subject: x.subject, text: x.text, html: x.html })) };
   const status = await sendMail(env, mails, preview && !env.MAILGUN_API_KEY ? { preview: true } : { via: 'mailgun', preview: !!preview });
   if (!preview) await env.DB.put('e2:done', JSON.stringify({ at: new Date(now).toISOString(), sent: mails.length, status }));
   return { status, sent: mails.length, filed_today: filedToday.size, biggest: biggest.length, moment: fast.length };
