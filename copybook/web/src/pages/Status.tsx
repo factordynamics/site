@@ -111,7 +111,7 @@ export function Status() {
     : fresh.data?.latest_13f
       ? { manager: fresh.data.latest_13f.manager, at: fresh.data.latest_13f.accepted_at ? `accepted ${utc(fresh.data.latest_13f.accepted_at)}` : `filed ${new Date(`${fresh.data.latest_13f.filing_date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` }
       : null
-  const dataIssues: { id: string; date: string; kind: string; title: string; body?: string; affected?: string }[] = [...DATA_MANUAL, ...(log.data?.entries ?? []).filter((e) => e.kind === 'correction' || e.kind === 'incident')].sort((a, b) => b.date.localeCompare(a.date))
+  const dataIssues: { id: string; date: string; kind: string; title: string; body?: string; affected?: string }[] = [...DATA_MANUAL, ...(log.data?.entries ?? []).filter((e) => e.kind === 'correction' || e.kind === 'incident' || e.id in DATA_ALERTS)].sort((a, b) => b.date.localeCompare(a.date))
   const l = lat.data as Latency | null | undefined
   const h = pr?.health ?? null
   const checking = !pr
@@ -188,8 +188,9 @@ export function Status() {
           ) : (
             <>
               <Row name="Member API" tone={apiTone} state={h ? `Up · answered in ${pr!.ms} ms` : 'Not answering'}>
-                A personal machine, via a temporary Cloudflare quick tunnel · {host(pr!.base)}
-                {pr!.at ? ` · address since ${utc(pr!.at)}` : ''}
+                {/* No tunnel hostname here: it changes, and /status/ is linked from replies. */}
+                A personal machine, via a temporary tunnel; the documented API address is {host(import.meta.env.VITE_API_DOCS_BASE as string)}
+                {pr!.at ? ` · current tunnel since ${utc(pr!.at)}` : ''}
                 {h?.api_up_since ? ` · running since ${utc(h.api_up_since)}` : ''}
               </Row>
               <Row
@@ -374,7 +375,7 @@ export function Status() {
             {dataIssues.map((e) => (
               <li key={e.id} id={e.id} className="scroll-mt-24 py-3 text-[14px] leading-relaxed">
                 <span className="num block text-[12.5px] text-ink-3">
-                  {new Date(`${e.date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })} · {e.kind === 'incident' ? 'Incident' : 'Correction'}
+                  {new Date(`${e.date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })} · {e.kind === 'incident' ? 'Incident' : e.kind === 'methodology' ? 'Method change' : 'Correction'}
                 </span>
                 {e.body ? (
                   <>

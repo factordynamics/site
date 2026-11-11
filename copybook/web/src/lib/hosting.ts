@@ -53,9 +53,11 @@ export const OUTAGES: [string, string][] = [
 /** Where the API host is going (no date until the DNS move). */
 export const HOST_MOVE = 'The API host will move to api.factordynamics.com. Key holders get email and a changelog entry at least 7 days before the old host stops working.'
 /** What the incident list counts. */
-/** /status/ Data section: which alerts each data error reached, by methodology changelog id (payments' records, Nov 11). */
+/** /status/ Data section: which alerts each data error reached, by methodology changelog id (payments' records, Nov 11).
+ *  A methodology entry listed here (a reclassification) also shows in the Data list. */
 export const DATA_ALERTS_NOTE = 'Alert records start Nov 8 (the daily store) and Nov 9 (per-member delivery); earlier alerts are “not recorded”. Every recipient so far was a test or internal inbox, and no correction email went to anyone.'
 export const DATA_ALERTS: Record<string, string> = {
+  '2026-11-11-hedge-fund-adv': 'None: EDGAR accepted no 13F between the reclass (02:31 UTC Nov 11) and its check. From now on, a filer moved from hedge_fund to wealth or other alerts only its followers, like every wealth and other filer.',
   '2026-11-11-row-provenance-suspect-units': 'None: alerts don’t read these fields.',
   '2026-11-11-holder-weights': 'None: alerts don’t use holder lists.',
   '2026-11-11-amundi-merged-book': 'None since Nov 8 (no Amundi 13F alert); earlier not recorded.',
@@ -72,6 +74,14 @@ export const DATA_ALERTS: Record<string, string> = {
 }
 /** Data errors outside ingest's changelog (API bugs), written by hand for /status/'s Data list. */
 export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'incident'; title: string; body: string; affected: string }[] = [
+  {
+    id: 'alert-long-only-stock-match',
+    date: '2026-11-11',
+    kind: 'correction',
+    title: 'Long-only funds’ 13Fs didn’t alert members watching their stocks',
+    body: 'When ingest renamed the filer type “active” to “long_only” (Nov 9, about 06:00 UTC), the alert sender still matched only “hedge_fund” and “active”, so alerts on a stock you own or watch came only from hedge funds. Fixed Nov 11 at 05:36 UTC: long-only managers trigger them again.',
+    affected: 'Yes: from Nov 9 until 05:36 UTC Nov 11, 13F alerts for a watched or owned stock came only from hedge funds; 16 long-only funds’ Q3 filings (e.g. Baillie Gifford, FMR, First Eagle) didn’t alert members who watch those stocks without following the fund. Followers were unaffected, and Form 4 and 13D/G alerts were unaffected.',
+  },
   {
     id: 'alert-bond-priors',
     date: '2026-11-11',
