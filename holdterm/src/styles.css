@@ -3111,7 +3111,7 @@ p a,
 /* Investors: what the less obvious columns mean, above the table. */
 .col-key {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px 28px;
   margin: 2px 0 14px;
   padding: 12px 16px;

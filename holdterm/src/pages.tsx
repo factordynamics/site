@@ -595,6 +595,19 @@ function byCompany(hs: Holding[]) {
   }
   return [...by.values()]
 }
+/** What a table's less obvious columns mean, in a sentence each, above the table (hidden on phones). */
+function ColKey({ items }: { items: [string, string][] }) {
+  return (
+    <dl className="col-key">
+      {items.map(([t, d]) => (
+        <div key={t}>
+          <dt>{t}</dt>
+          <dd>{d}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
 // ---------- funds directory ----------
 export function Funds() {
   title('Investors')
@@ -621,20 +634,13 @@ export function Funds() {
         </div>
       </div>
       <Panel title="All investors" right={<span className="dim hide-sm">Largest portfolio first · click a heading to sort</span>}>
-        <dl className="col-key hide-sm">
-          <div>
-            <dt>Portfolio</dt>
-            <dd>What its US-listed stocks were worth in its latest 13F. Options are left out.</dd>
-          </div>
-          <div>
-            <dt>In top 10</dt>
-            <dd>How much of the portfolio sits in its ten biggest holdings. Higher means more concentrated.</dd>
-          </div>
-          <div>
-            <dt>Traded</dt>
-            <dd>How much of the portfolio it bought and sold last quarter. Lower means more patient.</dd>
-          </div>
-        </dl>
+        <ColKey
+          items={[
+            ['Portfolio', 'What its US-listed stocks were worth in its latest 13F. Options are left out.'],
+            ['In top 10', 'How much of the portfolio sits in its ten biggest holdings. Higher means more concentrated.'],
+            ['Traded', 'How much of the portfolio it bought and sold last quarter. Lower means more patient.'],
+          ]}
+        />
         <Grid
           rank
           rows={ms}
@@ -1166,6 +1172,14 @@ export function Consensus() {
         label="Ways to rank the stocks"
       />
       <Panel title={`${num(list.length)} stocks`}>
+        <ColKey
+          items={[
+            ['Of all investors', `How many of the ${n} investors own it.`],
+            ['Of all money', 'Its share of everything the investors hold combined.'],
+            ['Biggest bet', 'The largest share of any one investor’s portfolio it takes up.'],
+            ['Average bet', 'Its average share of the portfolios that own it.'],
+          ]}
+        />
         <Grid
           rank
           limit={150}
@@ -1175,12 +1189,12 @@ export function Consensus() {
             aggCols.ticker,
             { ...aggCols.name, hideSm: true },
             aggCols.sector,
-            { key: 'h', label: 'Investors', num: true, render: (r) => r.holders.length, sort: (r) => r.holders.length },
-            { key: 'hp', label: 'Share of investors', num: true, hideSm: true, render: (r) => <span className="wcell">{pct(r.holders.length / n, 0)}<Bar value={r.holders.length} max={n} /></span>, sort: (r) => r.holders.length },
+            { key: 'h', label: 'Owners', num: true, render: (r) => r.holders.length, sort: (r) => r.holders.length, title: 'How many of the investors own it' },
+            { key: 'hp', label: 'Of all investors', num: true, hideSm: true, render: (r) => <span className="wcell">{pct(r.holders.length / n, 0)}<Bar value={r.holders.length} max={n} /></span>, sort: (r) => r.holders.length },
             { key: 'v', label: 'Value held', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
-            { key: 'gw', label: 'Share of all', num: true, hideSm: true, render: (r) => pct(r.value / agg.total), sort: (r) => r.value },
-            { key: 'mw', label: 'Top weight', num: true, render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'Largest share of any one investor’s portfolio' },
-            { key: 'aw', label: 'Average weight', num: true, hideSm: true, render: (r) => pct(r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length), 2), sort: (r) => r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length) },
+            { key: 'gw', label: 'Of all money', num: true, hideSm: true, render: (r) => pct(r.value / agg.total), sort: (r) => r.value, title: 'Share of everything the investors hold combined' },
+            { key: 'mw', label: 'Biggest bet', num: true, render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'Largest share of any one investor’s portfolio' },
+            { key: 'aw', label: 'Average bet', num: true, hideSm: true, title: 'Average share of the portfolios that own it', render: (r) => pct(r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length), 2), sort: (r) => r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length) },
             { key: 'who', label: 'Biggest holders', hideSm: true, render: (r) => <Who list={[...r.holders].sort((a, b) => b.weight - a.weight)} max={2} /> },
           ]}
         />
