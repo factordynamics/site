@@ -52,7 +52,7 @@ AGE_SHA256=eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b2c     
 AGE_KEYGEN_SHA256=0a0009db842259d6717f7eeb30acb6b90d2a2eb924c6acd0a0db0ca1f1537899
 CLOUDFLARED_SHA256=1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872 # cloudflared 2026.10.7 linux-amd64 (github.com/cloudflare/cloudflared)
 # sha256 of `git ls-tree -r <commit> -- copybook/selfhost` without *.md, backup.pub and this script (code_hash below).
-SELFHOST_CODE_SHA256=c7d4b94b2f8a77ff6f4840602ff4bba0cc0177c9c83937b2083b971720f7724f
+SELFHOST_CODE_SHA256=57823e80bb4c73c26843f58a35573ecf8d3b50697cda722f8e6161b426b8bd39
 SECRET_KEYS='SESSION_SECRET|STRIPE_WEBHOOK_SECRET|STRIPE_SECRET_KEY|RESEND_API_KEY|HEALTH_TOKEN|CLOUDFLARE_API_TOKEN|CF_API_TOKEN'
 
 run() { if [ "$DRY" = 1 ]; then printf '+ %s\n' "$*"; else "$@"; fi; }
