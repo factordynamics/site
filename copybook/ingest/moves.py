@@ -267,6 +267,8 @@ def write_links(quarter: str | None) -> list[str]:
     for old, v in links.items():
         if (old, v["new"]) in PAIRS:
             v["filers"] = len(PAIRS[(old, v["new"])])
+        v["name"] = v.get("name") or (SECS.get(v["new"]) or SECS.get(old) or {}).get("name")
+        v["ticker"] = v.get("ticker") or (SECS.get(v["new"]) or {}).get("ticker")
     write(DATA / "cusip_links.json", {
         "note": "Reissued CUSIPs, old -> new, with the quarter the new one first appears. From 13F filings only: the "
                 "old CUSIP's holders report the same shares under the new one (filers = how many showed it this run). "
@@ -454,14 +456,22 @@ def prior_books(q: str) -> dict[str, dict]:
     path = PRIOR / f"{q}.json.gz"
     if path.exists():
         try:
-            return json.loads(gzip.decompress(path.read_bytes()))
+            books = json.loads(gzip.decompress(path.read_bytes()))
+            if books:  # an empty cached file (LSV 2026Q1 had no changes on /v1) is refetched
+                print(f"moves: prior quarter {q}: {len(books)} books (cached)", flush=True)
+                return books
         except (OSError, ValueError):
             pass
     from ingest import datasets
     urls = datasets.sets_for(q, datasets.windows())
     if not urls:
+        print(f"::warning::moves: no SEC 13F data set covers {q}; the oldest stored quarter gets no changes", flush=True)
         return {}
     books = {c: b for c, b in datasets.read_period(q, [datasets.fetch_set(u) for u in urls]).items() if b.get("ok")}
+    print(f"moves: prior quarter {q}: {len(books)} books from {len(urls)} SEC data set(s)", flush=True)
+    if not books:
+        print(f"::warning::moves: no books for prior quarter {q}; not cached", flush=True)
+        return books
     PRIOR.mkdir(parents=True, exist_ok=True)
     path.write_bytes(gzip.compress(json.dumps(books, separators=(",", ":")).encode(), 6, mtime=0))
     return books
