@@ -620,7 +620,21 @@ export function Funds() {
           </p>
         </div>
       </div>
-      <Panel title="All investors" right={<span className="dim hide-sm">Sorted by 13F book size</span>}>
+      <Panel title="All investors" right={<span className="dim hide-sm">Largest portfolio first · click a heading to sort</span>}>
+        <dl className="col-key hide-sm">
+          <div>
+            <dt>Portfolio</dt>
+            <dd>What its US-listed stocks were worth in its latest 13F. Options are left out.</dd>
+          </div>
+          <div>
+            <dt>In top 10</dt>
+            <dd>How much of the portfolio sits in its ten biggest holdings. Higher means more concentrated.</dd>
+          </div>
+          <div>
+            <dt>Traded</dt>
+            <dd>How much of the portfolio it bought and sold last quarter. Lower means more patient.</dd>
+          </div>
+        </dl>
         <Grid
           rank
           rows={ms}
@@ -639,13 +653,13 @@ export function Funds() {
               ),
               sort: (m) => m.firm,
             },
-            { key: 'v', label: '13F book', num: true, hideSm: true, render: (m) => usd(longOf(m).v), sort: (m) => longOf(m).v, title: 'long stock positions; options notional excluded' },
-            { key: 'n', label: 'positions', num: true, hideSm: true, render: (m) => longOf(m).n, sort: (m) => longOf(m).n },
-            { key: 't', label: 'top 10', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.top10, 0), sort: (m) => metric.get(m.slug)?.top10 ?? 0, title: 'share of the book in the 10 largest positions' },
-            { key: 'to', label: 'turnover', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.turnover, 0), sort: (m) => metric.get(m.slug)?.turnover ?? 0, title: 'latest quarter: (bought + sold) / 2 / average book' },
+            { key: 'v', label: 'Portfolio', num: true, hideSm: true, render: (m) => usd(longOf(m).v), sort: (m) => longOf(m).v, title: 'Value of its US-listed stocks in its latest 13F; options left out' },
+            { key: 'n', label: 'Stocks', num: true, hideSm: true, render: (m) => longOf(m).n, sort: (m) => longOf(m).n },
+            { key: 't', label: 'In top 10', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.top10, 0), sort: (m) => metric.get(m.slug)?.top10 ?? 0, title: 'Share of the portfolio in its ten biggest holdings' },
+            { key: 'to', label: 'Traded', num: true, hideSm: true, render: (m) => pct(metric.get(m.slug)?.turnover, 0), sort: (m) => metric.get(m.slug)?.turnover ?? 0, title: 'Last quarter: half of everything bought and sold, as a share of the average portfolio' },
             {
               key: 'top',
-              label: 'largest positions',
+              label: 'Biggest holdings',
               hideSm: true,
               render: (m) => (
                 <span className="tks">
@@ -657,16 +671,16 @@ export function Funds() {
             },
             {
               key: 'q',
-              label: 'latest',
+              label: 'Latest 13F',
               render: (m) => (
                 <span>
-                  {quarterLabel(m.quarter)} {isStale(m, all) && <span className="badge warn">stale</span>}
+                  {quarterLabel(m.quarter)} {isStale(m, all) && <span className="badge warn" title="Its latest usable 13F is more than a quarter behind">Out of date</span>}
                   <span className="dim show-sm"> · {day(m.filing_date)}</span>
                 </span>
               ),
               sort: (m) => m.quarter,
             },
-            { key: 'f', label: 'filed', num: true, hideSm: true, render: (m) => <span className="dim">{date(m.filing_date)}</span>, sort: (m) => m.filing_date },
+            { key: 'f', label: 'Filed', num: true, hideSm: true, render: (m) => <span className="dim">{date(m.filing_date)}</span>, sort: (m) => m.filing_date },
           ]}
         />
       </Panel>

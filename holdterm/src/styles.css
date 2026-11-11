@@ -3107,3 +3107,46 @@ p a,
     transition: none;
   }
 }
+
+/* Investors: what the less obvious columns mean, above the table. */
+.col-key {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 28px;
+  margin: 2px 0 14px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--raise);
+}
+.col-key dt {
+  font-weight: 600;
+  font-size: 13.5px;
+  margin-bottom: 2px;
+}
+.col-key dd {
+  margin: 0;
+  color: var(--fg2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+@media (max-width: 1000px) {
+  .col-key {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+/* Phones show only the investor and the latest 13F, so the key has nothing to explain there. */
+@media (max-width: 720px) {
+  .col-key {
+    display: none;
+  }
+}
+/* Narrower desktops: the three biggest holdings on one line instead of five wrapping onto three. */
+@media (max-width: 1100px) {
+  .tks {
+    flex-wrap: nowrap;
+  }
+  .tks > :nth-child(n + 4) {
+    display: none;
+  }
+}
