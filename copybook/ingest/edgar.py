@@ -169,7 +169,8 @@ def amendment_cover(cik: str, accession: str) -> dict:
     no = tag("amendmentNo")
     conf = tag("confDeniedExpired").lower()
     return {"type": tag("amendmentType").upper(), "no": int(no) if no.isdigit() else None,
-            "confidential_treatment_expired": True if conf in ("true", "y") else False if conf in ("false", "n") else None}
+            "confidential_treatment_expired": True if conf in ("true", "y") else False if conf in ("false", "n") else None,
+            "confidential_omitted": tag("isConfidentialOmitted").lower() in ("true", "y")}
 
 
 def amendment_type(cik: str, accession: str) -> str:

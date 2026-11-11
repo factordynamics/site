@@ -1209,6 +1209,41 @@ def baseline(m: dict, i: int) -> dict | None:
     return prev  # quarters two filers both filed are already combined (ingest, share_reporter_books)
 
 
+def prior_note(m: dict, i: int) -> dict:
+    """Why history[i] has no prior book, when the quarter before was filed but empty: {prev_quarter_status,
+    prev_quarter_accession}. confidential_omitted when its cover says isConfidentialOmitted (Norges Bank 2026Q1
+    0001374170-26-000023: 1,507 entries, $864.7B on the cover, one placeholder line in the table), else empty."""
+    from ingest.datasets import prev_quarter
+    hist = m.get("history") or []
+    if i >= len(hist) or baseline(m, i) is not None:
+        return {}
+    pq = prev_quarter(hist[i]["quarter"])
+    gap = next((s for s in m.get("skipped_quarters") or [] if s.get("quarter") == pq and s.get("reason") == "empty"), None)
+    if not gap or not gap.get("accession"):
+        return {}
+    global _AMEND
+    if _AMEND is None:
+        _AMEND = json.loads(AMEND_PATH.read_text()) if AMEND_PATH.exists() else {}
+    cur = _AMEND.get(gap["accession"])
+    if not isinstance(cur, dict) or "confidential_omitted" not in cur:
+        try:
+            cur = (cur if isinstance(cur, dict) else {}) | amendment_cover(str(m["cik"]), gap["accession"])
+        except Exception:  # noqa: BLE001 - the note is optional; the next run retries
+            return {}
+        _AMEND[gap["accession"]] = cur
+        AMEND_PATH.write_text(json.dumps(dict(sorted(_AMEND.items())), separators=(",", ":")) + "\n")
+    return {"prev_quarter_status": "confidential_omitted" if cur.get("confidential_omitted") else "empty",
+            "prev_quarter_accession": gap["accession"]}
+
+
+def with_prior_note(rows: list[dict], note: dict) -> list[dict]:
+    """Each row of a book whose prior quarter is confidential or empty says why its change is null."""
+    if not note:
+        return rows
+    why = "prior_confidential" if note["prev_quarter_status"] == "confidential_omitted" else "prior_empty"
+    return [r | {"prev_reason": why} if r.get("change") is None else r for r in rows]
+
+
 def book_filer(m: dict, q: dict) -> int | str | None:
     """The CIK whose 13F-HR is a quarter's book: the reporting manager's for a 13F-NT quarter, else the fund's."""
     rep = (q.get("reported_by") or {}).get("cik") if q.get("status") in ("notice", "successor") else None
@@ -1231,7 +1266,9 @@ def manager_json(m: dict) -> dict:
     out["prev_accession"] = prev["accession"] if prev else None
     out["prev_total_value"] = prev["total_value"] if prev else None
     out["prev_combined_with"] = prev.get("combined_with") if prev else None
-    rows = with_changes(hist[0] if hist else {"holdings": m["holdings"], "total_value": m.get("total_value")}, prev)
+    note = prior_note(m, 0) if hist else {}
+    out |= note
+    rows = with_prior_note(with_changes(hist[0] if hist else {"holdings": m["holdings"], "total_value": m.get("total_value")}, prev), note)
     out["changes"] = {c: sum(1 for r in rows if r["change"] == c) for c in CHANGE_KINDS}
     out["moves"] = moves(rows)
     out["holdings"] = rows
@@ -1250,7 +1287,7 @@ def compact_row(h: dict) -> dict:
 
 
 V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display_name", "late_disclosure", "parts",
-            "split", "prev_shares_as_filed", "suspect_duplicate", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
+            "split", "prev_shares_as_filed", "suspect_duplicate", "prev_reason", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
 
 
 def v1_position(h: dict) -> dict:
@@ -1329,16 +1366,17 @@ def write_history(m: dict) -> None:
         # A NEW HOLDINGS amendment that re-filed the whole book (mark_refiled): the quarter's book is that refile.
         meta["mislabeled_amendment"] = any(f.get("mislabeled_amendment") for f in q.get("filings") or [])
         prev = baseline(m, i)
-        rows = [compact_row(h) for h in with_changes(q, prev)]
+        note = prior_note(m, i)
+        rows = [compact_row(h) for h in with_prior_note(with_changes(q, prev), note)]
         # `holdings` stays the filed book; positions sold out since the prior quarter go in `exited`.
         body = {
             "slug": m["slug"], "manager": m["manager"], "cik": m["cik"], **meta,
             "prev_quarter": prev["quarter"] if prev else None,
-            "prev_combined_with": prev.get("combined_with") if prev else None,
+            "prev_combined_with": prev.get("combined_with") if prev else None, **note,
             "holdings": [r for r in rows if r["change"] != "exited"],
             "exited": [r for r in rows if r["change"] == "exited"],
         }
-        for fname, doc in ((name, body), (name[:-5] + ".v1.json", v1_holdings(m, q, prev, rows))):
+        for fname, doc in ((name, body), (name[:-5] + ".v1.json", v1_holdings(m, q, prev, rows) | note)):
             text = json.dumps(doc, separators=(",", ":")) + "\n"
             path = folder / fname
             keep.add(fname)
