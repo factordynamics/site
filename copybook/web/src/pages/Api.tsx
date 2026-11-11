@@ -1,4 +1,4 @@
-import { API_OUTAGE, HOST_MOVE } from '../lib/hosting'
+import { API_LIMITS, API_OUTAGE, API_TIMING, API_UNIVERSE, HOST_MOVE } from '../lib/hosting'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Panel, Skeleton } from '../components/ui'
@@ -68,7 +68,13 @@ curl --compressed \\
 # Every 13F holder of a stock, largest first
 curl --compressed \\
   "${base}/v1/stocks/AAPL/holders?type=hedge_fund,long_only&limit=100" \\
-  -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"`,
+  -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"
+
+# A whole quarter as one gzip CSV; check it against the sha256 in /v1/bulk
+curl ${base}/v1/bulk -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"
+curl -L -o 2026Q3.csv.gz ${base}/v1/bulk/2026Q3.csv.gz \\
+  -H "Authorization: Bearer cbk_live_..." -A "my-research/1.0"
+shasum -a 256 2026Q3.csv.gz`,
   python: `import requests
 
 API = "${base}"
@@ -87,7 +93,38 @@ for h in book["holdings"][:10]:
 params = {"type": "hedge_fund,long_only", "limit": 100}
 r = s.get(f"{API}/v1/stocks/AAPL/holders", params=params, timeout=60)
 for row in r.json()["data"]["holders"]:
-    print(row["filer"]["name"], row["period"], row["value_usd"], row["change"])`,
+    print(row["filer"]["name"], row["period"], row["value_usd"], row["change"])
+
+# A whole quarter as one gzip CSV, checked against the sha256 in /v1/bulk
+# (requests drops Authorization on the redirect to the presigned link)
+import hashlib
+files = {f["file"]: f for f in s.get(f"{API}/v1/bulk", timeout=60).json()["data"]}
+h = hashlib.sha256()
+with s.get(f"{API}/v1/bulk/2026Q3.csv.gz", stream=True, timeout=300) as r, open("2026Q3.csv.gz", "wb") as out:
+    r.raise_for_status()
+    for chunk in r.iter_content(1 << 20):
+        h.update(chunk)
+        out.write(chunk)
+assert h.hexdigest() == files["2026Q3.csv.gz"]["sha256"]`,
+  urllib: `import hashlib, json, urllib.request
+
+API = "${base}"
+KEY = {"Authorization": "Bearer cbk_live_...", "User-Agent": "my-research/1.0"}
+
+def get(url, headers):
+    return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=300)
+
+# urllib forwards Authorization on a redirect, which the presigned link refuses,
+# so ask for the link as JSON with redirect=false
+link = json.load(get(f"{API}/v1/bulk/2026Q3.csv.gz?redirect=false", KEY))["data"]
+# auth "none": a presigned link, valid 300 s, that takes no Authorization
+headers = KEY if link["auth"] == "required" else {"User-Agent": KEY["User-Agent"]}
+h = hashlib.sha256()
+with get(link["url"], headers) as r, open("2026Q3.csv.gz", "wb") as out:
+    for chunk in iter(lambda: r.read(1 << 20), b""):
+        h.update(chunk)
+        out.write(chunk)
+assert h.hexdigest() == link["sha256"]`,
 })
 
 const METHOD_TONE: Record<string, 'up' | 'accent' | 'down' | 'neutral'> = { get: 'up', post: 'accent', delete: 'down' }
@@ -101,7 +138,7 @@ export function ApiDocs() {
   // The published /v1 base (api.config.mjs API_DOCS_BASE), never the quick tunnel member pages use.
   const base = import.meta.env.VITE_API_DOCS_BASE as string
   const info = parseInfo(s?.info.description)
-  const [lang, setLang] = useState<'curl' | 'python'>('curl')
+  const [lang, setLang] = useState<'curl' | 'python' | 'urllib'>('curl')
   // Parameters are often $refs into components.parameters; resolve them so the table has names.
   const resolve = (x: Param | { $ref?: string }): Param | null => {
     const ref = (x as { $ref?: string }).$ref
@@ -142,9 +179,9 @@ export function ApiDocs() {
       <div className="mt-12 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Panel title="Quick start" sub={s ? `Version ${s.info.version}` : undefined}>
           <div role="tablist" aria-label="Example language" className="mb-2 flex gap-1 text-[13px]">
-            {(['curl', 'python'] as const).map((k) => (
+            {(['curl', 'python', 'urllib'] as const).map((k) => (
               <button key={k} role="tab" aria-selected={lang === k} onClick={() => setLang(k)} className={`rounded-lg px-3 py-1.5 font-medium ${lang === k ? 'bg-night text-white' : 'text-ink-2 hover:bg-line/60'}`}>
-                {k === 'curl' ? 'curl' : 'Python requests'}
+                {{ curl: 'curl', python: 'Python requests', urllib: 'Python urllib' }[k]}
               </button>
             ))}
           </div>
@@ -153,8 +190,13 @@ export function ApiDocs() {
           </pre>
           <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. {HOST_MOVE} {API_OUTAGE} Live API status: <Link to="/status/" className="text-accent hover:text-accent-2">/status/</Link>.</p>
           <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[13.5px] leading-relaxed text-accent-2">
-            <strong className="font-medium">Send a descriptive User-Agent</strong> that names your app, such as <code className="font-mono text-[12.5px]">my-research/1.0</code>. Full books for the largest filers (T. Rowe Price, Millennium) can take 15–25 s; use the bulk files for whole-universe pulls.
+            <strong className="font-medium">Send a descriptive User-Agent</strong> that names your app, such as <code className="font-mono text-[12.5px]">my-research/1.0</code>.
           </p>
+          <ul className="mt-3 space-y-1.5 text-[13.5px] leading-relaxed text-ink-2">
+            <li><strong className="font-medium text-ink">Timing.</strong> {API_TIMING}</li>
+            <li><strong className="font-medium text-ink">Rate limits.</strong> {API_LIMITS}</li>
+            <li><strong className="font-medium text-ink">Whole universe.</strong> {API_UNIVERSE}</li>
+          </ul>
           <p className="mt-3 text-[13.5px] leading-relaxed text-ink-2">
             <strong className="font-medium text-ink">Holders CSV</strong> (<code className="font-mono text-[12.5px]">/stocks/{'{ticker}'}/holders.csv</code>) matches <code className="font-mono text-[12.5px]">/v1</code> holders: share (SH) positions by default. Add <code className="font-mono text-[12.5px]">?include=options,exited</code> for call and put rows and exits; the <code className="font-mono text-[12.5px]">kind</code> column (equity, calls, puts) and <code className="font-mono text-[12.5px]">change</code> say which, and the <code className="font-mono text-[12.5px]">x-copybook-rows</code> response header lists what’s included. An unknown <code className="font-mono text-[12.5px]">include</code> value returns 400. A 503 busy reply carries <code className="font-mono text-[12.5px]">Retry-After</code>.
           </p>

@@ -5,7 +5,7 @@ import { FUND_SEATS, FUND_WHY, plans, TRIAL_DAYS, trialTerms, SPEED_CLAIMS } fro
 import { attributed, referredCheckout } from '../lib/attribution'
 import { gapLabel, loadLatency } from '../lib/account'
 import { BASE, useAsync, useTitle } from '../lib/data'
-import { HOST_MOVE, HOSTING, VENDOR } from '../lib/hosting'
+import { API_TIMING, API_UNIVERSE, HOST_MOVE, HOSTING, VENDOR } from '../lib/hosting'
 import { HISTORY_EXACT, loadCoverage } from '../lib/stocks'
 
 // Landing pages for the two buyers of the paid data plans: investment teams (Copy Fund) and quants
@@ -347,7 +347,8 @@ export function ForQuants() {
             <li>Up to 10 keys, with usage on your account page.</li>
             <li>60 requests a minute and 20,000 a day per key.</li>
             <li>Signed webhooks for every alert, retried for 12 hours.</li>
-            <li>Full books for the largest filers (T. Rowe Price, Millennium) can take 15–25 s; use the bulk files for whole-universe pulls.</li>
+            <li>{API_TIMING}</li>
+            <li>{API_UNIVERSE}</li>
           </ul>
         </Panel>
         <Panel title="Terms">
