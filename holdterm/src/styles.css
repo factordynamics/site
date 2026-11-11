@@ -22,8 +22,8 @@
   --col: #c7ced8;
   --brand: #ffb224;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.04);
-  --th: 35px; /* table head and row heights, for reserved panel heights */
-  --tr: 35px;
+  --th: 40px; /* table head and row heights, for reserved panel heights */
+  --tr: 42px;
   --r: 12px;
   --sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -688,10 +688,10 @@ table.grid {
 }
 .grid th {
   text-align: left;
-  font-weight: 500;
-  font-size: 12.5px;
+  font-weight: 550;
+  font-size: 13px;
   color: var(--dim);
-  padding: 8px 14px 8px 0;
+  padding: 8px 16px 8px 0;
   height: var(--th);
   border-bottom: 1px solid var(--line);
   position: sticky;
@@ -713,7 +713,7 @@ table.grid {
   font-size: 8px;
 }
 .grid td {
-  padding: 5px 14px 5px 0;
+  padding: 6px 16px 6px 0;
   border-bottom: 1px solid var(--row);
   height: var(--tr);
 }
@@ -733,7 +733,8 @@ table.grid {
 }
 .grid .rank {
   width: 30px;
-  font-size: 12.5px;
+  font-size: 13px;
+  color: var(--dim);
 }
 .grid tr.link {
   cursor: pointer;
