@@ -52,6 +52,14 @@ async function resolve(env: Env, id: string): Promise<FilerRow | null> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const isEquity = (h: any) => !h.put_call && (h.shares_type ?? h.sh_prn ?? 'SH') !== 'PRN';
 
+/**
+ * Ingest's share-class fields, passed through as published when a row carries them (Nov 11): `classes[]` on an issuer
+ * row that sums several share classes (FMR's BRK A and B), one entry per class with its own CUSIP, shares and trade;
+ * `shares_unit`, what the row's shares count. Absent otherwise.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const classFields = (h: any) => ({ ...(Array.isArray(h?.classes) ? { classes: h.classes } : {}), ...(typeof h?.shares_unit === 'string' && h.shares_unit ? { shares_unit: h.shares_unit } : {}) });
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function position(h: any, equityTotal: number, allTotal: number) {
   // The equity-book weight: the data run's pct_of_book once it publishes it (ingest item W, next to the renamed
@@ -63,6 +71,7 @@ function position(h: any, equityTotal: number, allTotal: number) {
   // rows, options included. The data run's per-row weight is that definition until it switches to pct_of_book.
   const allw = !w && h.weight != null ? h.weight : allTotal > 0 && h.value != null ? h.value / allTotal : null;
   return {
+    ...classFields(h),
     cusip: h.cusip,
     ticker: h.ticker ?? null,
     issuer: h.issuer,
@@ -506,6 +515,9 @@ export function splitHolders(rows: HolderRow[], includeOptions: boolean) {
 }
 
 export interface HolderRow {
+  /** Ingest's per-class breakdown and share unit, when published (classFields). */
+  classes?: unknown[];
+  shares_unit?: string;
   filer: { cik: string; name: string; slug: string | null; type: string | null; curated: boolean | null };
   period: string | null;
   kind: string;
@@ -986,6 +998,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       ...(typeof h.price_outlier === 'boolean' ? { price_outlier: h.price_outlier } : {}),
       ...(h.value_basis === 'filed' || h.value_basis === 'filed_price_outlier' ? { value_basis: h.value_basis } : {}),
       ...(h.suspect_reason === 'reissue_ratio_not_applied' ? { suspect_reason: h.suspect_reason } : {}),
+      ...classFields(h),
     };
   };
   const rows = raw.map(toRow);
@@ -1341,7 +1354,7 @@ ROUTES.push(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fl = book.filer as any;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      rows = [...(book.holdings as any[]), ...(book.exited as any[])].filter((h) => h.change).map((h) => ({ filer: { cik: fl.cik, slug: fl.slug, name: fl.name, curated: fl.curated }, ...h }));
+      rows = [...(book.holdings as any[]), ...(book.exited as any[])].filter((h) => h.change).map((h) => ({ ...classFields(h), filer: { cik: fl.cik, slug: fl.slug, name: fl.name, curated: fl.curated }, ...h }));
       stamp = STAMP.get(book);
       source = 'filer';
     } else if (stock) {
@@ -1356,7 +1369,7 @@ ROUTES.push(
       stamp = h.stamp;
       // Sized like the per-filer path: a trade at this filing's own value per share, never the value difference (a
       // price move is no trade: AAPL's +$14.87B row was +$3.58B of shares).
-      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: r.cusip ?? null, prev_cusip: r.prev_cusip ?? null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: r.issuer ?? h.display_name, put_call: r.put_call, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: r.value_delta_usd, value_delta_basis: r.value_delta_basis ?? null, ...(r.shares_basis ? { shares_basis: r.shares_basis } : {}), trade_usd_implied: r.trade_usd_implied, ...(r.unreliable ? { unreliable: r.unreliable, value_change_usd: r.value_change_usd ?? null } : {}), change: r.change, accession: r.accession, original_accession: r.original_accession, accepted_at: r.accepted_at }));
+      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ ...classFields(r), filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: r.cusip ?? null, prev_cusip: r.prev_cusip ?? null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: r.issuer ?? h.display_name, put_call: r.put_call, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: r.value_delta_usd, value_delta_basis: r.value_delta_basis ?? null, ...(r.shares_basis ? { shares_basis: r.shares_basis } : {}), trade_usd_implied: r.trade_usd_implied, ...(r.unreliable ? { unreliable: r.unreliable, value_change_usd: r.value_change_usd ?? null } : {}), change: r.change, accession: r.accession, original_accession: r.original_accession, accepted_at: r.accepted_at }));
       source = 'stock';
     } else {
       // Across filers: the data run's per-quarter change file (largest moves first).
@@ -1366,7 +1379,7 @@ ROUTES.push(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (await new Response(obj.body).json()) as any;
       const types = await filerTypes(env);
-      rows = rowsOf(c).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: normType(types.get(pad(String(h.cik))) ?? h.type) }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ? String(h.put_call).toUpperCase() : null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
+      rows = rowsOf(c).map((h) => ({ ...classFields(h), filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: normType(types.get(pad(String(h.cik))) ?? h.type) }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ? String(h.put_call).toUpperCase() : null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
       source = 'all';
     }
     const curatedCiks = cohort === 'curated' ? new Set((await filers(env)).map((f) => f.cik)) : null;

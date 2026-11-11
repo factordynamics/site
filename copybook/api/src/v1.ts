@@ -5,12 +5,23 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.11';
+export const SPEC_REVISION = '2026-11-11.12';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-share-classes',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Holdings, holders and changes rows carry `classes[]` (one entry per share class of a row that sums several, e.g. a filer\'s BRK.A and BRK.B) and `shares_unit` whenever the data run publishes them, as published. A summed row\'s dollar fields are the sum of its classes; read shares per class.',
+      'Announced for Nov 23, 2026: holders and changes rows keyed by full CUSIP (one row per share class); /v1/stocks/{ticker}/holders resolves every class ticker (GOOG, BRK.A); `?group=issuer` sums only dollar fields across classes.',
+    ],
+  },
   {
     id: '2026-11-11-as-of-offsets',
     date: '2026-11-11',
