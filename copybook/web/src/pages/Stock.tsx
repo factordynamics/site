@@ -104,9 +104,11 @@ export function StockPage() {
   }, [filers, tracked, api])
   const exited = useMemo(() => (d?.exited ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
   const notCounted = useMemo(() => (d?.not_counted ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
-  // Flagged rows never drop out of sight: listed under the moves with their note, valued by what can be trusted.
-  const flaggedRows = useMemo(() => [...tracked, ...exited, ...notCounted].filter((h) => h.flag).sort((a, b) => Math.max(b.value, b.prev_value) - Math.max(a.value, a.prev_value)), [tracked, exited, notCounted])
-  const flagged = flaggedRows.length
+  // Flagged rows never drop out of sight: listed under the moves with their note, valued by what can be trusted. A
+  // value-only flag with no share change (GLD, Rochon: 3.9K → 3.9K) is no move: it stays in the holders table only.
+  const heldRows = useMemo(() => [...tracked, ...exited, ...notCounted].filter((h) => h.flag || h.held_note), [tracked, exited, notCounted])
+  const flaggedRows = useMemo(() => heldRows.filter((h) => h.held_note || !(h.flag === 'value' && h.shares === h.prev_shares && h.change !== 'new' && h.change !== 'exited')).sort((a, b) => Math.max(b.value, b.prev_value) - Math.max(a.value, a.prev_value)), [heldRows])
+  const flagged = heldRows.reduce((n, h) => n + (h.flag ? 1 : 0) + (h.held_lines?.length ?? 0), 0)
   const options = useMemo(() => (d?.options ?? []).filter((o) => scope === 'all' || o.featured), [d, scope])
   const [allMoves, setAllMoves] = useState(false)
   const moves = useMemo(
@@ -411,7 +413,11 @@ export function StockPage() {
                       <QuarterTag q={h.quarter} fresh={multi && h.quarter === d.quarters[0]} />
                       {(h.change === 'new' || h.change === 'exited') && <Badge tone={CHANGE[h.change].tone}>{CHANGE[h.change].label}</Badge>}
                     </span>
-                    <span className="mt-0.5 block text-[12px] leading-snug text-ink-3">{h.note}</span>
+                    {[h.note, h.held_note].filter(Boolean).map((t) => (
+                      <span key={t} className="mt-0.5 block text-[12px] leading-snug text-ink-3">
+                        {t}
+                      </span>
+                    ))}
                   </span>
                   {/* Muted and marked, so a held line never reads as an ordinary trim (trader, Nov 11). */}
                   <span className="shrink-0 pt-0.5">
@@ -468,7 +474,11 @@ export function StockPage() {
                       <span className="min-w-0 max-w-[7.75rem] truncate font-medium sm:max-w-[22rem]">{h.manager}</span>
                       <QuarterTag q={h.quarter} fresh={multi && h.quarter === d!.quarters[0]} />
                     </Link>
-                    {h.note && <span className="mt-0.5 block pl-[34px] text-[12px] leading-snug text-ink-3">{h.note}</span>}
+                    {[h.note, h.held_note].filter(Boolean).map((t) => (
+                      <span key={t} className="mt-0.5 block pl-[34px] text-[12px] leading-snug text-ink-3">
+                        {t}
+                      </span>
+                    ))}
                   </td>
                   <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">
                     {sharesFmt(h.shares)}
@@ -588,7 +598,11 @@ function HolderRow({ h, fresh }: { h: StockHolder; fresh: boolean }) {
             <span className="truncate">{pct(h.weight)} of portfolio</span>
             <QuarterTag q={h.quarter} fresh={fresh} />
           </span>
-          {h.note && <span className="block text-[12px] leading-snug text-ink-3">{h.note}</span>}
+          {[h.note, h.held_note].filter(Boolean).map((t) => (
+            <span key={t} className="block text-[12px] leading-snug text-ink-3">
+              {t}
+            </span>
+          ))}
         </span>
       </Link>
       <span className="flex shrink-0 items-center gap-2">

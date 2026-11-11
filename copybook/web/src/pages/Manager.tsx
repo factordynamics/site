@@ -18,7 +18,7 @@ import { TRIAL_DAYS } from '../config'
 import { track } from '../lib/track'
 import { loadIndex } from '../lib/data'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
-import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, flagNote, flagOf, type ManagerFile } from '../lib/data'
+import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, flagNote, flagOf, heldLinesNote, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -287,7 +287,7 @@ export function ManagerPage() {
           ) : (
             <LockedChanges top={book.rows.slice(0, 6).map((h) => h.ticker || shortName(h.issuer))} />
           )}
-          {f?.prev_quarter && <NotCounted n={(f.holdings || []).filter((h) => !h.put_call && unreliable(h)).length} />}
+          {f?.prev_quarter && <NotCounted n={(f.holdings || []).reduce((n, h) => n + (!h.put_call && unreliable(h) ? 1 : 0) + (h.held_lines?.length ?? 0), 0)} />}
           <p className="mt-5 border-t border-line pt-4 text-[13.5px]">
             <Link to={recapPath(seasonNow().quarter)} className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
               <RecapLabel /> <Arrow className="size-3" />
@@ -390,6 +390,7 @@ export function ManagerPage() {
                         </span>
                       )}
                     </div>
+                    {heldLinesNote(h.held_lines) && <span className="mt-0.5 block text-[12px] leading-snug text-ink-3">{heldLinesNote(h.held_lines)}</span>}
                   </td>
                   <td className="hidden px-3 py-2.5 text-ink-2 md:table-cell">{h.sector}</td>
                   <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">{sharesFmt(h.shares)}</td>

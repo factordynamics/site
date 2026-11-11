@@ -37,7 +37,7 @@ type StatusFile = {
   index_contract?: { ok: boolean; build?: string | null; problems?: string[]; checked_at?: string }
   /** Payments' plain sending policy for account and alert email under the daily cap. */
   mail_quota?: { policy?: string } | null
-  restarts?: { events?: { kind: 'planned' | 'incident'; started_at: string; ended_at?: string | null; title: string; note?: string | null; fix?: string | null }[]; unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; planned_7d?: number; rows?: { at: string; started_at?: string | null; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed' | 'planned'; build?: string | null; prev_build?: string | null; note?: string }[] }
+  restarts?: { events?: { kind: 'planned' | 'incident' | 'unplanned'; started_at: string; ended_at?: string | null; title: string; note?: string | null; fix?: string | null }[]; unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; planned_7d?: number; rows?: { at: string; started_at?: string | null; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed' | 'planned'; build?: string | null; prev_build?: string | null; note?: string }[] }
 }
 const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Brief restart we couldn’t attribute', planned: 'Planned' } as const
 const STATUS_URL = String(import.meta.env.VITE_LATENCY_URL).replace(/latency\.json$/, 'status.json')
@@ -221,6 +221,10 @@ export function Status() {
   const days = st.data?.probe?.daily ?? []
   // A percentage from a few dozen checks misleads: show one only once about a full day (90% of 1,440 minutes) is measured.
   const rs = st.data?.restarts
+  // Drills and incidents, counted apart from restarts: payments' events (none of them a restart) plus planned restarts.
+  const evs = rs?.events ?? []
+  const drills = evs.filter((e) => e.kind === 'planned').length + (rs?.rows ?? []).filter((r) => r.kind === 'planned').length
+  const incidents = evs.length - evs.filter((e) => e.kind === 'planned').length
   // Payments' after-send check of each 13F alert against the published build (latency.json reconciliation).
   // Shown only with payments' breakdown (matched, disclosed, explained, wrong); the bare pass/fail count
   // mostly counted bugs in the check itself.
@@ -451,12 +455,17 @@ export function Status() {
           {DEPLOY_POLICY}
           {Date.now() < Date.parse(DEPLOY_FREEZE.until) && <span className="block font-medium text-ink-2">Now: {DEPLOY_FREEZE.text}</span>}
         </p>
+        {drills + incidents > 0 && (
+          <p className="num mt-2 text-[13.5px] font-medium text-ink-2">
+            {plural(drills, 'drill')} · {plural(incidents, 'incident')}
+          </p>
+        )}
         <ol className="mt-3 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
           {/* Payments' drills and incidents that weren't restarts (status.json restarts.events), newest first, above ours. */}
           {(st.data?.restarts?.events ?? []).map((e) => (
             <li key={`${e.kind}-${e.started_at}`} className="py-3 text-[14px] leading-relaxed">
               <span className="num block text-[12.5px] text-ink-3">
-                {eventWhen(e.started_at, e.ended_at)} · {e.kind === 'planned' ? 'planned' : 'incident'}
+                {eventWhen(e.started_at, e.ended_at)} · {e.kind === 'planned' ? 'planned drill' : e.kind === 'unplanned' ? 'unplanned' : 'incident'}
               </span>
               <span className="text-ink-2">
                 <span className="font-medium text-ink">{e.title}.</span>
@@ -482,7 +491,7 @@ export function Status() {
             <h3 className="mt-6 text-[15px] font-semibold">Restarts, last 7 days</h3>
             <p className="mt-1 text-[13.5px] font-medium text-ink-2">{RESTART_POLICY}</p>
             <p className="mt-1 text-[13.5px] text-ink-3">
-              {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'} · {rs.planned_7d ?? 0} planned · {rs.unplanned_7d} unplanned{rs.short_unconfirmed_7d ? ` · ${rs.short_unconfirmed_7d} brief ${rs.short_unconfirmed_7d === 1 ? 'restart' : 'restarts'} we couldn’t attribute` : ''}; {downTotal(rs.rows)} down in all. A deploy is a new build back up in under 60 seconds. A planned event is one we start on purpose, such as a failover test, and can take longer; it’s listed with its note.
+              {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'} · {plural(rs.planned_7d ?? 0, 'planned restart')} · {plural(rs.unplanned_7d, 'unplanned restart')}{rs.short_unconfirmed_7d ? ` · ${rs.short_unconfirmed_7d} brief ${rs.short_unconfirmed_7d === 1 ? 'restart' : 'restarts'} we couldn’t attribute` : ''}; {downTotal(rs.rows)} down in all. A deploy is a new build back up in under 60 seconds. A planned event is one we start on purpose, such as a failover test, and can take longer; it’s listed with its note.
             </p>
             {rs.rows?.length ? (
               <ol className="mt-2 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">

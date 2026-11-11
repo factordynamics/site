@@ -1,6 +1,6 @@
 import type { Ev } from '../components/FundNotes'
 import { call } from './account'
-import { BASE, displayName, flagNote, flagOf, getJSON, live, unreliable, type Change, type Flag, type Manager } from './data'
+import { BASE, displayName, flagNote, flagOf, getJSON, heldLinesNote, live, unreliable, type Change, type Flag, type HeldLine, type Manager } from './data'
 
 // Derived at build time by scripts/stocks.mjs from the curated 13F books, served from the site host.
 const D = `${BASE}d/`
@@ -27,6 +27,9 @@ export type StockHolder = {
   note?: string | null
   /** Filed value − prior filed value, from ingest on "shares" rows. */
   value_change?: number | null
+  /** Lines ingest held out of this row (data's held_lines) and the grey line saying so, as filed. */
+  held_lines?: HeldLine[]
+  held_note?: string | null
 }
 export type StockOption = { slug: string; manager: string; firm: string; quarter: string; featured: boolean; put_call: string; ticker: string | null; shares: number; value: number; weight: number }
 export type Stock = {
@@ -319,9 +322,10 @@ const named = <T extends { manager: string }>(x: T) => ({ ...x, manager: display
 // exited list for not_counted.
 const settle = (h: StockHolder): StockHolder => {
   const f = flagOf(h)
-  if (!f) return named(h)
+  const held_note = heldLinesNote(h.held_lines)
+  if (!f) return { ...named(h), held_note }
   const known = h.change === 'new' || h.change === 'exited' || (f !== 'both' && h.change !== ('unknown' as string))
-  return { ...named(h), flag: f, note: flagNote(h), change: known ? h.change : null, delta_value: 0 }
+  return { ...named(h), held_note, flag: f, note: flagNote(h), change: known ? h.change : null, delta_value: 0 }
 }
 export const loadStock = (t: string) =>
   getJSON<Stock>(`${D}stocks/${encodeURIComponent(t)}.json${fresh()}`).then((s) => {

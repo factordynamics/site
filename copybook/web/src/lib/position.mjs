@@ -25,6 +25,8 @@ export function addLine(p, h) {
   }
   if (h.price_outlier) p.price_outlier = true
   if (h.value_basis && h.value_basis !== 'filed') p.value_basis = h.value_basis
+  // Lines ingest held out of a counted row (Crosslink CRM 2026Q3: a $4.44 line beside the real one), shown as filed.
+  if (h.held_lines?.length) (p.held_lines ??= []).push(...h.held_lines)
   return p
 }
 
@@ -42,4 +44,5 @@ export const positionFlags = (p) => ({
   ...(p.side ? { unreliable: p.side } : {}),
   ...(p.price_outlier ? { price_outlier: true } : {}),
   ...(p.value_basis ? { value_basis: p.value_basis } : {}),
+  ...(p.held_lines ? { held_lines: p.held_lines } : {}),
 })

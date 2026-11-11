@@ -34,3 +34,11 @@ test('a flagged line shows its reliable side: shares for a mis-valued line, the 
   const opened = addLine(newPosition(true), line({ shares: 1304, value: 6676571, suspect_units: true, suspect_reason: 'cross_filer', unreliable: 'shares' }))
   assert.deepEqual(positionMove(opened), { change: 'new', delta_value: null })
 })
+
+test('lines ingest held out of a counted row stay on it, and the counted trade ignores them', () => {
+  // Crosslink CRM 2026Q3: the real line trimmed 860 shares; a $4.44 line of 2,212,795 shares was held out.
+  const held = { shares: 2212795, value: 9824810, implied_price: 4.44 }
+  const p = addLine(newPosition(true), line({ shares: 135175, value: 21176516, prev_shares: 136035, prev_value: 25393653, held_lines: [held] }))
+  assert.equal(positionMove(p).change, 'trimmed')
+  assert.deepEqual(positionFlags(p), { held_lines: [held] })
+})

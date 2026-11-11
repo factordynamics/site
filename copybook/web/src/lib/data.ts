@@ -13,6 +13,8 @@ export const live = (path: string) => `${DATA}${path}?v=${Math.floor(Date.now() 
 export type Change = 'new' | 'added' | 'trimmed' | 'exited' | 'unchanged'
 
 export type Holding = {
+  /** Lines ingest held out of this counted row, as filed (heldLinesNote). */
+  held_lines?: HeldLine[] | null
   issuer: string
   cusip: string
   ticker: string | null
@@ -77,6 +79,17 @@ export function flagNote(h: Flaggable, short = false): string | null {
   }
   if (h.suspect_reason === 'reissue_ratio_not_applied') return short ? 'Pre-split count' : 'Pre-split count, change not computed'
   return short ? 'Not counted' : NOT_COUNTED
+}
+
+export type HeldLine = { shares: number; value: number; implied_price?: number | null }
+/** Lines ingest held out of a counted row, as filed and with no trade figure: "1 line not counted. As filed: 2,212,795
+ *  shares, $9.8M (≈$4.44/sh)". Null when the row has none. */
+export function heldLinesNote(lines?: HeldLine[] | null): string | null {
+  if (!lines?.length) return null
+  const shares = lines.reduce((t, l) => t + l.shares, 0)
+  const value = lines.reduce((t, l) => t + l.value, 0)
+  const price = shares ? ` (≈$${(value / shares).toFixed(2)}/sh)` : ''
+  return `${lines.length} ${lines.length === 1 ? 'line' : 'lines'} not counted. As filed: ${sharesFmt(shares)} shares, ${money(value)}${price}`
 }
 
 /** "XOM" as "XOM puts" or "XOM calls" for an option row, so an option move never reads as a stock trade. */

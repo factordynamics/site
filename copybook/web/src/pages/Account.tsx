@@ -823,7 +823,16 @@ function InvoiceDetails({ t, onChange }: { t: NonNullable<Member['invoice_trial'
       </label>
       <label className="block text-[12.5px] font-medium text-ink-2">
         AP email (gets a copy, and it’s printed on the invoice)
-        <input type="email" value={ap} onChange={(e) => setAp(e.target.value)} className={`${field} mt-1`} />
+        {/* Wraps instead of scrolling, so a long AP address (46 characters at 390 px) reads in full. */}
+        <textarea
+          value={ap}
+          onChange={(e) => setAp(e.target.value.replace(/\s+/g, ''))}
+          rows={ap.length > 28 ? 2 : 1}
+          inputMode="email"
+          autoComplete="email"
+          spellCheck={false}
+          className={`${field} mt-1 h-auto resize-none break-all py-2 leading-snug`}
+        />
       </label>
       <span className="flex gap-2">
         <Button type="submit" size="sm" disabled={busy}>
