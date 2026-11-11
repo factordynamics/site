@@ -288,15 +288,42 @@ export function Methodology() {
           <section id="alert-checks" className="scroll-mt-24">
             <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert accuracy checks</h2>
             <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">
-              <span className="font-medium text-ink">Before a 13F alert’s moves go out,</span> every move row is checked. Its implied price (value ÷ shares) must be within 3× of other filers’ median for that CUSIP and quarter, and its prior shares must be on the right basis for any split in splits.json. A row that fails goes out named, without figures, as “Moves pending check”, and is left out of the totals. It is re-checked against the published build every 5 minutes and sent in a “checked position changes” email only once it passes.
+              <span className="font-medium text-ink">Before a 13F alert’s moves go out,</span> every move row is checked. A row is held, and the alert says “Moves pending check”, if any of these is true:
             </p>
+            <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15.5px] leading-relaxed text-ink-2">
+              <li>
+                <span className="font-medium text-ink">Units.</span> Its implied price (value ÷ shares) is more than 100× off other filers’ median for that CUSIP, or off its own prior quarter.
+              </li>
+              <li>
+                <span className="font-medium text-ink">Price vs other filers.</span> Its implied price is more than 1.25× off the median that other filers report for the same CUSIP this quarter. Filers report the same quarter-end price, so they agree to rounding. This applies to lines or priors of $50K and up.
+              </li>
+              <li>
+                <span className="font-medium text-ink">Split basis.</span> splits.json lists a split, and the prior quarter’s shares weren’t adjusted by it.
+              </li>
+              <li>
+                <span className="font-medium text-ink">Own prior.</span> On lines of $50K or more, the implied price moved by about a whole number k ≥ 2 and the share count moved by about the same k the other way (a split nobody has listed yet). Bond lines are checked only for a 100× jump against their own prior, because their value per dollar of principal isn’t a share price.
+              </li>
+            </ul>
+            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">A held row is left out of the totals, recomputed through the data build, and sent only once it passes.</p>
             <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">
-              <span className="font-medium text-ink">After it goes out,</span> every 13F alert with moves is compared row by row with the published build (what /v1 serves) once the build has the filing. A row fails on a different direction, a different sign, or a value more than 10% off. Its recipients get “Correction: [fund] [ticker] was [X], not [Y]”, and the feed copy is retitled “Corrected”. Corrections go out for alerts accepted from Nov 11, 05:00 UTC; earlier alerts are checked and logged, and the{' '}
-              <Link to="/status/#data" className="font-medium text-accent hover:text-accent-2">
-                status page
-              </Link>{' '}
-              is their notice. The running count is on the status page.
+              <span className="font-medium text-ink">After it goes out,</span> within 15 minutes of the data build publishing the filing, every emailed row is compared with /v1. A row fails if it is more than 10% off in value or has the wrong sign or direction. Each failure is classed:
             </p>
+            <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15.5px] leading-relaxed text-ink-2">
+              <li>
+                <span className="font-medium text-ink">Disclosed:</span> a split row on an alert already listed on the{' '}
+                <Link to="/status/#data" className="font-medium text-accent hover:text-accent-2">
+                  status page
+                </Link>
+                .
+              </li>
+              <li>
+                <span className="font-medium text-ink">Explained:</span> a CUSIP change shown as a new position plus an exit of the same ticker, or a difference under $1,000.
+              </li>
+              <li>
+                <span className="font-medium text-ink">Wrong:</span> a real error not yet disclosed. Only these get a correction email (“Correction: [fund] [ticker] was [X], not [Y]”), and their feed and archive copies are marked corrected.
+              </li>
+            </ul>
+            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">The running count is on the status page.</p>
           </section>
 
           <section id="changelog" className="scroll-mt-24">

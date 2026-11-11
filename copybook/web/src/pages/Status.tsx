@@ -219,12 +219,12 @@ export function Status() {
                     rec.disclosed > 0 && (
                       <span key="d">
                         {rec.disclosed} wrong,{' '}
-                        <a href="#alert-split-factors" className="font-medium text-accent hover:text-accent-2">
+                        <a href="#data" className="font-medium text-accent hover:text-accent-2">
                           disclosed below
                         </a>
                       </span>
                     ),
-                    rec.explained > 0 && <span key="e">{rec.explained} differ only because of later corrections</span>,
+                    rec.explained > 0 && <span key="e">{rec.explained} explained (a CUSIP change, or under $1,000)</span>,
                     rec.wrong > 0 && <span key="w">{rec.wrong} wrong, under review</span>,
                   ]
                     .filter(Boolean)
