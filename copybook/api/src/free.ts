@@ -72,7 +72,14 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
     if (full.length) {
       const wait = Math.max(1, Math.ceil((Math.max(...full.map((x) => x.w.until)) - t) / 1000));
       const mins = Math.ceil(wait / 60);
-      return { status: 429, body: { ok: false, error: `Too many tries. Please try again in ${mins} minute${mins === 1 ? '' : 's'}.`, code: 'rate_limited', retry_after: wait }, headers: { 'retry-after': String(wait) } };
+      // already_member: the page can say "You're already signed up; use the link we emailed".
+      const known = await memberByEmail(env, email);
+      const already = !!known && known.status !== 'canceled';
+      return {
+        status: 429,
+        body: { ok: false, error: `Too many tries. Please try again in ${mins} minute${mins === 1 ? '' : 's'}.`, code: 'rate_limited', retry_after: wait, retry_after_seconds: wait, retry_at: new Date(t + wait * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'), already_member: already },
+        headers: { 'retry-after': String(wait), 'access-control-expose-headers': 'retry-after' },
+      };
     }
     for (const { k, w } of wins) await env.DB.put(k, JSON.stringify({ n: w.n + 1, until: w.until }), { expirationTtl: Math.max(60, Math.ceil((w.until - t) / 1000)) });
   }
@@ -110,17 +117,24 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
   if (cur && cur.status !== 'canceled') {
     if (cur.status !== 'free') return { status: 200, body: { ok: true, ...(follow ? { following: false, follow: 'sign_in' } : {}) } };
     const r = follow ? await addFollows(cur) : null;
-    let signIn: 'sent' | 'not_needed' | 'rate_limited' = 'not_needed';
+    let signIn: 'sent' | 'not_needed' | 'rate_limited' | 'already_sent' = 'not_needed';
+    let sentAt: string | null = null;
     if (signedIn !== cur.customer) {
+      // One welcome or sign-in email an hour per address: a resubmit within 15 minutes of the last one is
+      // `already_sent` (with when), later in the hour `rate_limited`. Older markers hold '1' (no time).
       const k = `rl:signin-mail:${cur.customer}`;
-      if (await env.DB.get(k)) signIn = 'rate_limited';
-      else {
-        await env.DB.put(k, '1', { expirationTtl: 3600 });
+      const last = await env.DB.get(k);
+      if (last) {
+        sentAt = last === '1' ? null : last;
+        signIn = sentAt && Date.now() - Date.parse(sentAt) < 15 * 60_000 ? 'already_sent' : 'rate_limited';
+      } else {
+        sentAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+        await env.DB.put(k, sentAt, { expirationTtl: 3600 });
         await sendMail(env, [await freeWelcomeMail(env, cur, false, r?.follow === 'added')]);
         signIn = 'sent';
       }
     }
-    return { status: 200, body: { ok: true, sign_in_email: signIn, ...(r ?? {}) } };
+    return { status: 200, body: { ok: true, sign_in_email: signIn, ...(sentAt ? { sent_at: sentAt } : {}), ...(r ?? {}) } };
   }
   const m: Member = {
     customer: await freeId(email),
@@ -139,7 +153,10 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
   const r = follow ? await addFollows(m) : null;
   if (!isTest(email)) await bump(env, 'signups', m);
   const mail = await sendMail(env, [await freeWelcomeMail(env, m, true)]);
-  return { status: 201, body: { ok: true, created: true, welcome: mail === '200' ? 'sent' : 'not sent', ...(r ?? {}) } };
+  // The welcome carries a sign-in link: a resubmit within the hour gets no second email.
+  const sentAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  await env.DB.put(`rl:signin-mail:${m.customer}`, sentAt, { expirationTtl: 3600 });
+  return { status: 201, body: { ok: true, created: true, welcome: mail === '200' ? 'sent' : 'not sent', sent_at: sentAt, ...(r ?? {}) } };
 }
 
 async function freeWelcomeMail(env: Env, m: Member, first: boolean, followSaved = false): Promise<Mail> {

@@ -1471,17 +1471,24 @@ describe('copybook api', () => {
     expect((await call('/history/warren-buffett', { token: s.token })).status).toBe(402);
     // 5 an hour per address, signed out: a repeat sends the sign-in link again (at most one an hour), the 6th is refused.
     // A filer page's one-field signup from the same address adds the follow (a free member's Friday email leads with it).
-    expect(await (await signup({ email: 'reader@reader.test', follow: [{ kind: 'investor', id: 'bill-ackman' }, { kind: 'stock', id: 'hhh' }], source: 'follow:/investors/bill-ackman/' }, '2.2.2.2')).json()).toEqual({ ok: true, following: true, follow: 'added', sign_in_email: 'sent' });
+    // A quick resubmit (the trader's address B, 63 s after its welcome) sends no second email: already_sent, with when.
+    const n0 = sent.length;
+    const quick = await (await signup({ email: 'reader@reader.test' }, '2.2.2.1')).json();
+    expect([quick.sign_in_email, typeof quick.sent_at, sent.length]).toEqual(['already_sent', 'string', n0]);
+    await env.DB.delete(`rl:signin-mail:${await env.DB.get('email:reader@reader.test')}`); // an hour later
+    expect(await (await signup({ email: 'reader@reader.test', follow: [{ kind: 'investor', id: 'bill-ackman' }, { kind: 'stock', id: 'hhh' }], source: 'follow:/investors/bill-ackman/' }, '2.2.2.2')).json()).toMatchObject({ ok: true, following: true, follow: 'added', sign_in_email: 'sent' });
     // Signed out, a follow's sign-in link says the follow was saved; at most one an hour.
     expect(sent.map((m) => m.subject).at(-1)).toBe('Follow saved. Your Copybook sign-in link');
-    for (const ip of ['3.3.3.3', '3.3.3.4', '3.3.3.5']) expect((await signup({ email: 'reader@reader.test' }, ip)).status).toBe(200);
+    for (const ip of ['3.3.3.3', '3.3.3.4']) expect((await signup({ email: 'reader@reader.test' }, ip)).status).toBe(200);
     expect(sent.filter((m) => /sign-in link/.test(m.subject))).toHaveLength(1);
     // Refused tries never extend the window (retail was locked out for good by retrying): 20 minutes on, the wait
     // is 20 minutes shorter, and Retry-After says so. Another address from the same IP still gets in.
     vi.useFakeTimers({ toFake: ['Date'] });
     const t0 = Date.now();
     const first = await signup({ email: 'reader@reader.test' }, '4.4.4.4');
-    expect([first.status, (await first.json()).code]).toEqual([429, 'rate_limited']);
+    const fb = await first.json();
+    expect([first.status, fb.code, fb.already_member, fb.retry_after_seconds === Number(first.headers.get('retry-after')), Math.abs(Date.parse(fb.retry_at) - t0 - fb.retry_after_seconds * 1000) < 1000]).toEqual([429, 'rate_limited', true, true, true]);
+    expect(first.headers.get('access-control-expose-headers')).toContain('retry-after');
     vi.setSystemTime(t0 + 20 * 60_000);
     const again = await signup({ email: 'reader@reader.test' }, '4.4.4.4');
     expect(Number(again.headers.get('retry-after'))).toBeLessThanOrEqual(Number(first.headers.get('retry-after')) - 20 * 60);
