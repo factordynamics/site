@@ -1097,9 +1097,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // the one-trial rule to copybook-test- addresses on POST /checkout, so it can be handed to the gate's testers.
   if (req.method === 'POST' && path === '/ops/gate-token') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
-    const days = Math.min(14, Math.max(1, Number((await body(req)).days ?? 7) || 7));
-    const token = await signToken(env.SESSION_SECRET, 'gate', 'enforce-trial', days * 86400);
-    return json({ ok: true, header: 'x-copybook-gate', token, expires_at: new Date(Date.now() + days * 86400_000).toISOString().replace(/\.\d{3}Z$/, 'Z') }, 200, h);
+    // {hours: 1-336} for a same-day token (the Sunday gate), else {days: 1-14}, default 7.
+    const b = await body(req);
+    const secs = b.hours != null ? Math.min(336, Math.max(1, Number(b.hours) || 1)) * 3600 : Math.min(14, Math.max(1, Number(b.days ?? 7) || 7)) * 86400;
+    const token = await signToken(env.SESSION_SECRET, 'gate', 'enforce-trial', secs);
+    return json({ ok: true, header: 'x-copybook-gate', token, expires_at: new Date(Date.now() + secs * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z') }, 200, h);
   }
 
   if (req.method === 'GET' && path === '/ops/moves-replays') {

@@ -3696,6 +3696,9 @@ describe('copybook api', () => {
     const gt = (gate?: string) => handleRequest(new Request('https://api.test/checkout', { method: 'POST', body: JSON.stringify({ plan: 'copy', interval: 'monthly', email: 'copybook-test-gate-1@example.com' }), headers: { 'content-type': 'application/json', 'cf-connecting-ip': '192.0.2.50', ...(gate ? { 'x-copybook-gate': gate } : {}) } }), env);
     const gtok = (await (await handleRequest(new Request('https://api.test/ops/gate-token', { method: 'POST', body: '{"days":3}', headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json()).token;
     expect((await handleRequest(new Request('https://api.test/ops/gate-token', { method: 'POST', body: '{}' }), env)).status).toBe(404);
+    // A same-day token for the Sunday gate: {hours} wins over days.
+    const sameDay = await (await handleRequest(new Request('https://api.test/ops/gate-token', { method: 'POST', body: '{"hours":12,"days":7}', headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
+    expect(Math.round((Date.parse(sameDay.expires_at) - Date.now()) / 3600_000)).toBe(12);
     const [free, enforced] = [await (await gt()).json(), await (await gt(gtok)).json()];
     expect([free.trial_days, free.gate, enforced.trial_days, enforced.gate]).toEqual([14, undefined, 0, { enforce_trial: true, had_subscription: true }]);
     expect([(await gt('enforce-trial')).status, (await gt(await signToken(env.SESSION_SECRET, 'keep', 'enforce-trial', 60))).status]).toEqual([400, 400]);
