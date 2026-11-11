@@ -4480,6 +4480,15 @@ describe('copybook api', () => {
     // Where net comes from: ingest's index as published, and the build both it and /v1/changes?ticker= read (the quant).
     expect([h.data.counts.net_source, h.data.counts.net_build, h.data.counts.changes_build]).toEqual(['hl', 'gust-3a8c773b', 'gust-3a8c773b']);
     const nch = (await v1('/v1/changes/2026Q3?ticker=NVDA')).body.data.filter((r: { put_call: string | null }) => !r.put_call);
+    // A holder index from before hl/ schema 3 has no held marking: GuardCap's BKNG (646,216 -> 1,304 sh, $121.6M -> $6.7M)
+    // is marked at read time, never served as a -$3.30B trade; a real trim beside it is untouched. Schema 3: as published.
+    const bkng = (schema?: number) => JSON.stringify({ issuer: '09857L', tickers: ['BKNG'], ...(schema ? { schema } : {}), columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'cusip'],
+      rows: [['0001732008', 'GuardCap', null, 'long_only', false, '2026Q3', 1304, 646216, 6_676_571, 121_636_487, 'trimmed', null, '09857L108'], ['0000000077', 'Steady', null, 'long_only', false, '2026Q3', 900, 1000, 4_608_000, 5_120_000, 'trimmed', null, '09857L108']] });
+    const bk = async () => (await v1('/v1/changes/2026Q3?cusip=09857L108')).body.data.map((r: { filer: { name: string }; value_delta_usd: number | null; unreliable?: string; value_change_usd?: number }) => [r.filer.name, r.value_delta_usd, r.unreliable ?? null, r.value_change_usd ?? null]);
+    await hist.put('hl/09857L.json', bkng());
+    expect(await bk()).toEqual(expect.arrayContaining([['GuardCap', null, 'shares', 6_676_571 - 121_636_487], ['Steady', -512_000, null, null]]));
+    await hist.put('hl/09857L.json', bkng(3));
+    expect((await bk()).find((r: unknown[]) => r[0] === 'GuardCap')).toEqual(['GuardCap', expect.any(Number), null, null]);
     expect(nch.reduce((a: number, r: { value_delta_usd: number }) => a + r.value_delta_usd, 0)).toBe(h.data.counts.net);
     expect(h.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0002045724', '0000102909', '0001067983', '0001387322']);
     expect(h.data.options.map((x: { filer: { cik: string; type: string } }) => [x.filer.cik, x.filer.type])).toEqual([['0001423053', 'hedge_fund']]);

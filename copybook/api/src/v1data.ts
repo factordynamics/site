@@ -1,6 +1,6 @@
 import { linkBase, type Env } from './env';
 import { lookupTickers } from './alerts';
-import { cleanItem4, easternToUtc, posKey, fetch13F, fetchFilingMeta, filings13F, SEC_UA, type Filed13F, type FilingMeta } from './edgar';
+import { cleanItem4, easternToUtc, posKey, fetch13F, fetchFilingMeta, filings13F, SEC_UA, type Filed13F, type FilingMeta, unreliableSide } from './edgar';
 import { ROUTES, v1error, v1json, noMs, stampOf, type Stamp } from './v1';
 
 /** Smallest bulk file served: a real quarter is tens of MB gzipped (2026Q2: 69 MB); smaller ones are stubs from a failed run. */
@@ -762,6 +762,24 @@ export function tradeUsd(r: { change: string | null; shares: number | null; prev
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const unreliableOf = (h: any): 'value' | 'shares' | 'both' | null => (h.unreliable === 'value' || h.unreliable === 'shares' || h.unreliable === 'both' ? h.unreliable : null);
 
+/**
+ * A row from a pre-schema-3 holder index, marked as ingest now would: its own flags (unreliableSide), else an add or
+ * trim whose value per share moved over 3x between quarters while the share-sized trade is over 3x the change in filed
+ * value: the share counts are off (GuardCap BKNG 646,216 -> 1,304 sh at $188 -> $5,120: -$3.30B as a trade, -$115M as
+ * filed), so it is "shares": no value_delta, the filed-value change instead.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function legacyMark(h: any): any {
+  if (unreliableOf(h)) return h;
+  let side = unreliableSide(h);
+  const s = Number(h.shares), ps = Number(h.prev_shares), v = Number(h.value), pv = Number(h.prev_value);
+  if (!side && (h.change === 'added' || h.change === 'trimmed') && s > 0 && ps > 0 && v > 0 && pv > 0) {
+    const px = v / s / (pv / ps), trade = (s - ps) * (v / s);
+    if ((px > 3 || px < 1 / 3) && Math.abs(trade) > 3 * Math.abs(v - pv)) side = 'shares';
+  }
+  return side ? { ...h, unreliable: side, value_delta: null, value_change: Number.isFinite(v - pv) ? Math.round(v - pv) : null } : h;
+}
+
 /** The latest quarter any holder row reports. */
 const latestPeriod = (rows: { period: string | null }[]): string | null => rows.reduce<string | null>((a, r) => (r.period && (!a || r.period > a) ? r.period : a), null);
 /** 400 for a past quarter by ticker (the holder index has each filer's latest book only). */
@@ -815,6 +833,9 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d: any = read.d;
   let raw = rowsOf({ columns: d.columns, rows: d.rows ?? d.holders ?? [] });
+  // An index published before hl/ schema 3 has no held marking: its outliers are marked here, so /v1 never serves one as
+  // a trade (GuardCap's BKNG -$3.30B). A no-op once ingest's schema-3 file is in.
+  if (Number(d.schema ?? 0) < 3) raw = raw.map(legacyMark);
   // A reissue (SEC-confirmed) whose new issuer code ingest hasn't merged yet (its index covers one period only: TEVA's
   // M8769Q, Nov 11): merged here with the old code's index at read time. Once ingest merges the pair, this is a no-op.
   const { REISSUED_ISSUER, REISSUED: RE } = await import('./edgar');
