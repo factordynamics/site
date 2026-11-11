@@ -9,7 +9,7 @@ ROOT=$HOME/copybook-api
 OUT=$ROOT/inflight.tsv
 WARN=${WARN:-100}
 # cloudflared's metrics address (fixed to 20241 in the unit from its next restart; read from its log until then).
-port() { journalctl --user -u copybook-tunnel -n 2000 --no-pager -o cat | grep -oE 'metrics server on [0-9.]+:[0-9]+' | tail -1 | awk '{print $4}'; }
+port() { local p; p=$(journalctl --user -u copybook-tunnel -n 2000 --no-pager -o cat 2>/dev/null | grep -oE 'metrics server on [0-9.]+:[0-9]+' | tail -1 | awk '{print $4}'); echo "${p:-127.0.0.1:20241}"; }
 M=http://$(port)/metrics
 set -a; . "$ROOT/secrets.env"; set +a
 get() { curl -s -m 2 "$M" | awk -v k="$1" '$1==k{print int($2); f=1} END{if(!f) print 0}'; }

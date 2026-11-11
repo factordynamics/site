@@ -73,3 +73,32 @@ a VM with the Amp CLI). Inbound ports are not needed: the quick tunnel is outbou
 
 Links already sent in email point at gene's Funnel URL (`API_URL`) and stay broken until gene or
 `https://copybook.factordynamics.com/api/` is back.
+
+## Who can read member data on gene (from Tue Nov 17)
+
+The AI agents that maintain Copybook run as the desktop account `refcell`. From the service-account move
+(`setup-service-user.sh`, steps in `TUE17-STEPS.md`), the API, its cron, deployer, backups, R2 push, quick tunnel and
+watcher run as the system user `copybook`:
+
+- `/var/lib/copybook` and `/var/lib/copybook/copybook-api` (state: KV, Durable Objects, the private R2 copy; hourly
+  backups) are owned by `copybook`, mode 0700; `secrets.env` and the backup key `backup.key` are 0600.
+- Member requests reach the API without passing through `refcell`: the quick tunnel and Funnel's `/copybook` path go
+  straight to `127.0.0.1:8787`.
+- New code runs there only after Andreas approves its commit (deploy gate in `update.sh`), so agents can't deploy code
+  that reads the data.
+- Agents see `/var/lib/copybook-status` (world-readable): shas, unit states, masked job logs, check results, and
+  sessions for the comped test members. They maintain Copybook through the masked `/ops/` endpoints (counts and row
+  IDs); reading a member's book goes through the logged path (`/ops/access-log`).
+- The agents' Cloudflare and Stripe credentials no longer read member data; the session secret and backup key are
+  gone from their environment.
+
+**Acceptance test**, run from the agents' account: `~/copybook-api/ops/acceptance-test.sh`. It tries to read a member
+file, the members store, the private R2 copy, the hourly backups, the backup key, the service's secrets and the API
+process's environment and memory, and needs `Permission denied` for each (a missing file doesn't count). It checks the
+removed credentials are gone or refused (Cloudflare KV and R2 list, Stripe customers), and that `/me` and `/v1` still
+answer 200 for test members. It prints commands and errors only, never file contents.
+
+Run before the move (Nov 11, negative control): every read succeeded and every credential reached member data, so
+each check reported FAIL with a byte count; `/me` and `/v1` returned 200.
+
+Output after the move: recorded here on Tue Nov 17.

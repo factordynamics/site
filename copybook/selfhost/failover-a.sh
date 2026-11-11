@@ -12,7 +12,14 @@ ROOT=$HOME/copybook-api
 WD=https://copybook-api.factordynamics.workers.dev
 PIN=$ROOT/state.api-pinned
 set -a; . "$ROOT/secrets.env"; set +a
+export PATH=$HOME/.local/share/mise/installs/node/26.12.1/bin:$PATH
 put() {
+  # After the service-account move, agents hold only an R2 token scoped to the public bucket (no member data):
+  # R2_PUBLIC_KEY_ID / R2_PUBLIC_SECRET, used over S3. Otherwise the account token over Cloudflare's REST API.
+  if [ -n "${R2_PUBLIC_KEY_ID:-}" ]; then
+    API_BASE=$1 node --no-warnings -e "const {AwsClient}=require('$HOME/copybook-api/ops/node_modules/aws4fetch');new AwsClient({accessKeyId:process.env.R2_PUBLIC_KEY_ID,secretAccessKey:process.env.R2_PUBLIC_SECRET,service:'s3',region:'auto'}).fetch('https://967e13dd88bb23b24662e62cbb6fd84f.r2.cloudflarestorage.com/copybook-public/api.json',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({api:process.env.API_BASE,at:new Date().toISOString().replace(/\\.\\d{3}Z$/,'Z')})}).then(r=>{if(!r.ok)process.exit(1)})" || return 1
+    echo "$(date -u +%FT%TZ) api.json -> $1"; return
+  fi
   curl -sf -m 30 -X PUT -H "Authorization: Bearer $CF_API_TOKEN" -H 'content-type: application/json' \
     --data-binary "$(printf '{"api":"%s","at":"%s"}' "$1" "$(date -u +%FT%TZ)")" \
     https://api.cloudflare.com/client/v4/accounts/967e13dd88bb23b24662e62cbb6fd84f/r2/buckets/copybook-public/objects/api.json -o /dev/null
@@ -22,11 +29,11 @@ case "${1:-status}" in
   to-worker)
     code=$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$WD/health")
     case "$code" in 200|308) ;; *) echo "workers.dev /health is $code (429 = daily quota spent); not failing over"; exit 1;; esac
-    echo "$WD" > "$PIN"; put "$WD"
+    put "$WD"; echo "$WD" > "$PIN"   # pin only once api.json really moved
     for _ in $(seq 36); do [ "$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$WD/health")" = 200 ] && { echo "Worker serving"; exit 0; }; sleep 5; done
     echo "Worker still redirecting after 3 min; check the loop guard"; exit 1 ;;
   back)
-    rm -f "$PIN"; base=$(cat "$ROOT/state.api-published"); put "$base"
+    base=$(cat "$ROOT/state.api-published"); put "$base"; rm -f "$PIN"
     echo "tunnel base $base; /health $(curl -s -m 15 -o /dev/null -w '%{http_code}' "$base/health")" ;;
   status)
     echo "pinned: $(cat "$PIN" 2>/dev/null || echo no)"; curl -s -m 10 https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/api.json; echo ;;

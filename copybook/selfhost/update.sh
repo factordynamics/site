@@ -46,11 +46,26 @@ git fetch -q origin main || { echo "git fetch failed"; exit 0; }
 cur=$(cat "$ROOT/state.deployed-sha" 2>/dev/null || git rev-parse HEAD)
 new=$(git rev-parse origin/main)
 [ "$cur" = "$new" ] && exit 0
-if git diff --quiet "$cur" "$new" -- copybook/api; then
+# The bundle is built from copybook/api and imports holdterm/src (names): both count as API changes.
+if git diff --quiet "$cur" "$new" -- copybook/api holdterm/src; then
   git merge -q --ff-only origin/main 2>/dev/null; echo "$new" > "$ROOT/state.deployed-sha"; exit 0
 fi
 tried=$(cat "$ROOT/state.last-failed" 2>/dev/null || true)
 [ "$tried" = "$new" ] && exit 0
+# Deploy gate (DEPLOY_APPROVAL=1, set by setup-service-user.sh): nothing from a new commit runs here (pnpm install,
+# vitest, build, boot) until Andreas approves its sha, because that code runs as the account that can read member data.
+# Approve (reviewing `git diff <deployed>..<sha> -- copybook/api holdterm/src` first):
+#   echo <full sha> | sudo -u copybook tee -a /var/lib/copybook/copybook-api/deploy.approved
+# Approving a sha approves everything up to it. The pending sha and its diffstat go to the status directory.
+if [ "${DEPLOY_APPROVAL:-0}" = 1 ] && ! grep -qx "$new" "$ROOT/deploy.approved" 2>/dev/null; then
+  if [ "$(cat "$ROOT/state.pending" 2>/dev/null)" != "$new" ]; then
+    echo "$new" > "$ROOT/state.pending"
+    echo "awaiting deploy approval: $(git log -1 --format='%h %s' "$new" | cut -c1-100)"
+    [ -n "${STATUS_DIR:-}" ] && { echo "pending $new (deployed $cur)"; git diff --stat "$cur" "$new" -- copybook/api holdterm/src | tail -25; } > "$STATUS_DIR/deploy-pending.txt"
+  fi
+  exit 0
+fi
+rm -f "${STATUS_DIR:-/nonexistent}/deploy-pending.txt"
 
 echo "deploying $(git log -1 --format='%h %s' "$new" | cut -c1-120)"
 git merge -q --ff-only origin/main 2>/dev/null || [ "$(git rev-parse HEAD)" = "$new" ] || { echo "checkout is not a fast-forward of origin/main; not deploying"; echo "$new" > "$ROOT/state.last-failed"; exit 0; }

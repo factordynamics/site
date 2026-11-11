@@ -8,7 +8,9 @@ set -euo pipefail
 ROOT=$HOME/copybook-api
 export PATH=$HOME/.local/share/mise/installs/node/26.12.1/bin:$ROOT/bin:$PATH
 cd "$ROOT/ops"; set -a; . ../copybook-api.env; . ../secrets.env; set +a
-PREFIX=${PREFIX:-backups/}; NEWPUB=${NEWPUB:-$ROOT/backup.pub.new}
+PREFIX=${PREFIX:-backups/}
+# The new key: from new-backup-key.sh (../backup.pub.new), or made by setup-service-user.sh (status directory).
+NEWPUB=${NEWPUB:-$( [ -f "$ROOT/backup.pub.new" ] && echo "$ROOT/backup.pub.new" || echo /var/lib/copybook-status/backup.pub )}
 new=$(head -1 "$NEWPUB"); [ -n "${COPYBOOK_BACKUP_AGE_KEY:-}" ] || { echo "old key not in env"; exit 1; }
 tmp=$(mktemp -d /dev/shm/cbw.XXXXXX); trap 'rm -rf "$tmp"' EXIT
 (umask 077; printf '%s\n' "$COPYBOOK_BACKUP_AGE_KEY" > "$tmp/old")
@@ -30,7 +32,7 @@ for d in $days; do
   n=$((n + 1))
 done
 echo "re-encrypted $n backups under $PREFIX"
-[ "$PREFIX" = backups/ ] && [ "$NEWPUB" = "$ROOT/backup.pub.new" ] || exit 0
+[ "$PREFIX" = backups/ ] && [ "$NEWPUB" = "$ROOT/backup.pub.new" ] && compgen -G "$ROOT/backups/state-*.tar.age" >/dev/null || exit 0
 h=0
 for f in "$ROOT"/backups/state-*.tar.age; do
   age -d -i "$tmp/old" "$f" | age -r "$new" -o "$f.new" && mv "$f.new" "$f" && h=$((h + 1))

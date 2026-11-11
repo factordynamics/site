@@ -14,6 +14,12 @@ FUNNEL=https://gene.tail70ba3.ts.net/copybook
 DOWN_SINCE=$ROOT/state.tunnel-down-since
 log() { echo "$(date -u +%FT%TZ) $*"; }
 set -a; . "$ROOT/secrets.env"; set +a
+# After the service-account move it runs twice: as the service user with NO_FE=1 (health, api.json, alerts, and the
+# current base copied to $STATUS_DIR), and as the maintainers' account with FE_ONLY=1, which only rewrites the
+# front-end configs on main (it has the git credentials) from $STATUS_DIR/api-published.
+if [ "${FE_ONLY:-0}" = 1 ]; then
+  want=$(cat "${STATUS_DIR:-/var/lib/copybook-status}/api-published" 2>/dev/null); [ -n "$want" ] || exit 0
+else
 alert() { # subject, text
   local body
   body=$(python3 -I -c 'import json,sys;print(json.dumps({"from":"Copybook <copybook@factordynamics.com>","to":["hello@factordynamics.com"],"subject":sys.argv[1],"text":sys.argv[2]}))' "$1" "$2")
@@ -54,6 +60,9 @@ elif [ "$prev" != "$want" ]; then
   else log "api.json upload failed"; fi
 fi
 
+fi
+if [ -n "${STATUS_DIR:-}" ] && [ "${FE_ONLY:-0}" != 1 ]; then cp "$ROOT/state.api-published" "$STATUS_DIR/api-published" 2>/dev/null; fi
+[ "${NO_FE:-0}" = 1 ] && exit 0
 if [ ! -d "$FE/.git" ]; then
   git clone -q --filter=blob:none --sparse https://github.com/factordynamics/site.git "$FE" && git -C "$FE" sparse-checkout set copybook/web holdterm/src || exit 1
 fi
