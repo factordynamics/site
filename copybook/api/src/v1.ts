@@ -19,6 +19,7 @@ export const CHANGELOG: { id: string; date: string; schema_version: string; brea
       'Added `mislabeled_amendment` (boolean or null) to filing, filing.amendments[] and filing.versions[]: true for a 13F-HR/A marked NEW HOLDINGS that re-files the whole book, which replaces the book instead of adding to it. Null when the data run has no filing trail for the quarter.',
       'Position.`value_scale` is filled for rows the data run rescaled (value_usd over value_as_filed, with value_adjusted true); still null on rows it did not mark.',
       'Added Position.`split` ({ ratio, from_quarter, to_quarter } or null) and Position.`prev_shares_as_filed`, as in the CSV: set when a stock split adjusted prev_shares, null otherwise.',
+      'Later the same day: `prev_shares_as_filed` is set on every row with a prior (equal to prev_shares when no split applied), as each book is rebuilt. `mislabeled_amendment` is now true on a NEW HOLDINGS refile the lineage serves in place of the original (McLennan 2026Q2 0001325447-26-000033, HSBC 2025Q4 0000873630-26-000002).',
     ],
   },
   {

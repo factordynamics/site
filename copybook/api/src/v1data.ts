@@ -82,9 +82,9 @@ function position(h: any, equityTotal: number, allTotal: number) {
     zero_value: h.zero_value ?? (h.change !== 'exited' && h.value === 0),
     change: h.change ?? null,
     prev_shares: h.prev_shares ?? null,
-    // As in the CSV (split_ratio, prev_shares_as_filed): set only when a split adjusted prev_shares.
+    // As in the CSV: split only when a split adjusted prev_shares; prev_shares_as_filed on every row with a prior.
     split: h.split?.ratio ? { ratio: h.split.ratio, from_quarter: h.split.from_quarter ?? null, to_quarter: h.split.to_quarter ?? null } : null,
-    prev_shares_as_filed: h.split?.ratio ? (h.prev_shares_as_filed ?? null) : null,
+    prev_shares_as_filed: h.prev_shares_as_filed ?? null,
     share_change: h.share_change ?? null,
     value_delta_usd: h.value_delta ?? null,
     // Point-in-time provenance: filled once the data run publishes it per row.
@@ -317,7 +317,9 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
   const lineage = await versionsFor(env, cik, q.report_date ?? quarterEnd(quarter), q.accession ?? null, merged);
   const replaced = new Set((lineage ?? []).filter((v) => v.status === 'current' && v.form === '13F-HR/A' && v.amendment_type !== 'RESTATEMENT' && lineage!.some((o) => o.status === 'superseded')).map((v) => v.accession));
   const mislabeled = (acc: string | null | undefined) =>
-    !lineage && !trail ? null : replaced.has(acc ?? '') || !!trail?.some((f) => f.accession === acc && f.mislabeled_amendment === true);
+    !lineage && !trail && q.mislabeled_amendment == null
+      ? null
+      : replaced.has(acc ?? '') || !!trail?.some((f) => f.accession === acc && f.mislabeled_amendment === true) || (acc === q.accession && q.mislabeled_amendment === true);
   const versions = lineage?.map((v) => ({ ...v, mislabeled_amendment: mislabeled(v.accession) })) ?? null;
   // Amendments: every 13F-HR/A EDGAR has for the period, whatever its type and including a served
   // restatement (not only those the data run merged); versions[] adds the original.

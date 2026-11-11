@@ -162,7 +162,7 @@ export function openapi() {
               required: ['ratio', 'from_quarter', 'to_quarter'],
               properties: { ratio: { type: 'number', description: 'New shares per old share (25 for a 25-for-1 split; 0.1 for a 1-for-10 reverse split)' }, from_quarter: { type: 'string' }, to_quarter: { type: 'string' } },
             },
-            prev_shares_as_filed: { type: ['number', 'null'], description: 'prev_quarter\'s share count exactly as filed, before the split adjustment. Null when no split applied (prev_shares is then as filed), as in the CSV.' },
+            prev_shares_as_filed: { type: ['number', 'null'], description: 'prev_quarter\'s share count exactly as filed, before any split adjustment: equal to prev_shares when no split applied. Null when there is no prior (a new position) or the data run hasn\'t published it for this book yet.' },
             share_change: { type: ['number', 'null'], description: 'shares - prev_shares' },
             value_delta_usd: { type: ['integer', 'null'], description: 'Trade size in whole USD at this filing\'s own value per share: +value for new, -prior value for exited, share_change x value/shares otherwise. A price move alone is 0.' },
             source_accession: { type: ['string', 'null'], description: 'Point-in-time: the accession (original 13F-HR or amendment) this row was disclosed in. Null until point-in-time data is published.' },
