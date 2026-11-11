@@ -82,11 +82,14 @@ export async function mirrorBulk(env: Env, key: string): Promise<{ key: string; 
   return { key, mirrored: true, bytes: bytes.length, sha256: sha, served: await servedHead(env, key) };
 }
 
-const running = new Set<string>();
-/** One mirror per key at a time, in the background (gene's process keeps it; on Cloudflare the bucket is the store). */
+/** Mirrors started per key, with their start time: a request's background work can be dropped when its response ends,
+ * so a mirror older than its upload timeout no longer blocks a retry. */
+const running = new Map<string, number>();
+const STUCK_MS = 16 * 60_000;
+/** One mirror per key at a time, in the background (on Cloudflare the bucket is the store: nothing to mirror). */
 export function mirrorSoon(env: Env, key: string): void {
-  if (env.MOVED_TO || running.has(key)) return;
-  running.add(key);
+  if (env.MOVED_TO || Date.now() - (running.get(key) ?? 0) < STUCK_MS) return;
+  running.set(key, Date.now());
   mirrorBulk(env, key).catch((e) => console.error(`bulk mirror: ${e}`)).finally(() => running.delete(key));
 }
 
@@ -94,9 +97,9 @@ export function mirrorSoon(env: Env, key: string): void {
  * Listed against served, for every bulk file: size and sha256 must agree (ETags are reported, not compared). A mismatch starts a mirror and is
  * recorded (status.json bulk_check); hello@ hears once per new set of problems.
  */
-export async function checkBulk(env: Env, min: number, now: number): Promise<{ ok: boolean; problems: string[] }> {
+export async function checkBulk(env: Env, min: number, now: number): Promise<{ ok: boolean; problems: string[]; files: unknown[] }> {
   // On Cloudflare the bucket the links sign is this copy's own store: nothing to compare.
-  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.MOVED_TO) return { ok: true, problems: [] };
+  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID || env.MOVED_TO) return { ok: true, problems: [], files: [] };
   const files = await bulkFiles(env, min);
   const rows = [];
   const problems: string[] = [];
@@ -104,8 +107,13 @@ export async function checkBulk(env: Env, min: number, now: number): Promise<{ o
     const s = await servedHead(env, f.key);
     rows.push({ file: f.key.slice(5), listed_bytes: f.bytes, served_bytes: s?.bytes ?? null, etag: f.etag, served_etag: s?.etag ?? null, sha256: f.sha256, served_sha256: s?.sha256 ?? null });
     if (!sameFile(f, s)) {
+      // Repaired here, awaited (the cron minute and the operator's request keep it alive); recorded only if it fails.
+      const fixed = await mirrorBulk(env, f.key).catch((e) => (console.error(`bulk mirror: ${e}`), null));
+      if (fixed && sameFile({ ...f, sha256: fixed.sha256 }, fixed.served)) {
+        rows[rows.length - 1] = { ...rows[rows.length - 1], served_bytes: fixed.served!.bytes, served_etag: fixed.served!.etag, served_sha256: fixed.served!.sha256, sha256: fixed.sha256 };
+        continue;
+      }
       problems.push(`${f.key.slice(5)}: listed ${f.bytes} bytes, served ${s?.bytes ?? 'none'}${s && f.sha256 !== s.sha256 ? ' (sha256 differs)' : ''}`);
-      mirrorSoon(env, f.key);
     }
   }
   const prev = JSON.parse((await env.DB.get('bulk:check')) ?? 'null') as { problems?: string[] } | null;
@@ -114,5 +122,5 @@ export async function checkBulk(env: Env, min: number, now: number): Promise<{ o
     const { sendMail } = await import('./email');
     await sendMail(env, [{ to: env.CONTACT_EMAIL ?? 'hello@factordynamics.com', subject: 'Copybook: a bulk download differs from its listing (re-mirroring)', text: `${problems.join('\n')}\n\nDownloads of these files are served from the API itself until the bucket's copy matches.` }]);
   }
-  return { ok: !problems.length, problems };
+  return { ok: !problems.length, problems, files: rows };
 }
