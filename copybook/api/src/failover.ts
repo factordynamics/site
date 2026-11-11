@@ -367,6 +367,15 @@ export async function claimSend(env: Env, id: string, now = Date.now()): Promise
   }
 }
 
+/** The host that claimed a send, or null when no claim was written (latency rows from before `host`). */
+export async function claimHost(env: Env, id: string): Promise<'cloudflare' | 'gene' | null> {
+  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID) return null;
+  const got = await s3(env, 'GET', `claims/${id}`).catch(() => null);
+  if (!got?.ok) return null;
+  const h = ((await got.json().catch(() => ({}))) as { host?: string }).host;
+  return h === 'cloudflare' || h === 'gene' ? h : null;
+}
+
 /** One send for something either host may send (a moves follow-up): the first claim wins, whichever host. */
 export async function claimOnce(env: Env, id: string, now = Date.now()): Promise<boolean> {
   if (!syncOn(env)) return true;
@@ -398,7 +407,7 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
     out.sync_applied = await apply(env, mine);
     const raw = await r2Get(env, ALIVE);
     const last = raw ? Date.parse((JSON.parse(raw) as { last_run_at: string }).last_run_at) : 0;
-    await r2Put(env, ALIVE, JSON.stringify({ last_run_at: iso(now) }));
+    await r2Put(env, ALIVE, JSON.stringify({ last_run_at: iso(now), build: env.BUILD_SHA?.slice(0, 12) ?? null }));
     if (now - last > GAP_MS) {
       // Back from a gap (or first run): gene may have polled meanwhile. Its handled filings are applied above;
       // one more minute lets gene see this side alive and stop before this side polls.
@@ -417,7 +426,10 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
   let cf: PollerLine | null = null;
   try {
     const raw = await r2Get(env, ALIVE);
-    cf = { host: 'cloudflare', last_run_at: raw ? (JSON.parse(raw) as { last_run_at: string }).last_run_at : null };
+    const alive = raw ? (JSON.parse(raw) as { last_run_at: string; build?: string | null }) : null;
+    cf = { host: 'cloudflare', last_run_at: alive?.last_run_at ?? null };
+    // Cloudflare's build, from its heartbeat, for /health's poller_builds.
+    if (alive?.build && (await env.DB.get('host:cf-build')) !== alive.build) await env.DB.put('host:cf-build', alive.build);
   } catch (e) {
     out.alive = `error: ${e}`;
   }
@@ -467,5 +479,8 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
 export async function pollerStatus(env: Env, now: number) {
   const p = JSON.parse((await env.DB.get('host:poller')) ?? 'null') as PollerLine | null;
   const last = p?.last_run_at ? Date.parse(p.last_run_at) : 0;
-  return { poller_host: p?.host ?? null, poller_last_run: p?.last_run_at ?? null, poller_age_s: last ? Math.max(0, Math.round((now - last) / 1000)) : null, api_host: host(env), api_up_since: iso(BOOT), api_uptime_s: Math.round((now - BOOT) / 1000) };
+  // Each poller's build (commit, 12 characters): this host's own, the other's from its heartbeat (null when unknown).
+  const mine = env.BUILD_SHA?.slice(0, 12) ?? null;
+  const poller_builds = isCloudflare(env) ? { cloudflare: mine, gene: null } : { cloudflare: await env.DB.get('host:cf-build'), gene: mine };
+  return { poller_host: p?.host ?? null, poller_last_run: p?.last_run_at ?? null, poller_age_s: last ? Math.max(0, Math.round((now - last) / 1000)) : null, poller_builds, api_host: host(env), api_up_since: iso(BOOT), api_uptime_s: Math.round((now - BOOT) / 1000) };
 }

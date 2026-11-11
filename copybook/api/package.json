@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --test-scheduled",
-    "deploy": "vitest run test/contract.test.ts && wrangler deploy",
+    "deploy": "vitest run test/contract.test.ts && wrangler deploy --var BUILD_SHA:$(git rev-parse HEAD)",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "stripe-setup": "node scripts/stripe-setup.mjs"

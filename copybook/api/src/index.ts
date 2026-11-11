@@ -196,6 +196,8 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
 
 
 interface LatencyRow {
+  /** The poller that sent it; rows logged before Nov 11 08:00 UTC carry the host of their send claim, or none. */
+  host?: 'cloudflare' | 'gene' | null;
   slug: string;
   manager?: string;
   quarter?: string;
@@ -299,6 +301,7 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     by_coverage: group(rows, (l) => l.coverage ?? 'curated', (l) => l.seconds),
     recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, coverage: l.coverage ?? 'curated', accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
     alerts: rows.map((l) => ({
+      host: l.host ?? null,
       slug: l.slug,
       manager: l.manager ?? null,
       quarter: l.quarter ?? null,
@@ -699,6 +702,28 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const r = await (await import('./alerts')).reconcileAlerts(env, Date.now(), { accession: b.accession!, to: b.to });
     await logAccess(env, req, 'POST /ops/reconcile', [], `reconcile ${b.accession}${b.to ? ` to ${b.to.length} test inbox(es)` : ''}`);
     return json({ ok: true, ...r }, 200, h);
+  }
+
+  // Operator, once: `host` on latency rows logged before it was recorded, from each send's claim (claims/{accession},
+  // claims/moves/{accession} for a 13F timed by its moves follow-up, claims/ev/{accession} for an event). gene claims
+  // every send; Cloudflare only while gene polls, so a row without a claim stays null.
+  if (req.method === 'POST' && path === '/ops/latency-host-backfill') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const { claimHost } = await import('./failover');
+    const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
+    const counts: Record<string, number> = {};
+    for (const l of log) {
+      if (l.host === undefined) {
+        const id = (l.kind ?? '13f') !== '13f' ? `ev/${l.accession}` : l.followup ? `moves/${l.accession}` : l.accession;
+        l.host = await claimHost(env, id);
+      }
+      counts[String(l.host)] = (counts[String(l.host)] ?? 0) + 1;
+    }
+    // Re-read so rows logged meanwhile are kept; this pass only adds the field.
+    const now2 = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];
+    const byKey = new Map(log.map((l) => [`${l.accession}|${l.sent}`, l.host]));
+    await env.DB.put('alerts:latency', JSON.stringify(now2.map((l) => (l.host === undefined && byKey.has(`${l.accession}|${l.sent}`) ? { ...l, host: byKey.get(`${l.accession}|${l.sent}`) } : l))));
+    return json({ ok: true, rows: log.length, by_host: counts }, 200, h);
   }
 
   // Operator: bulk files listed against what their download links serve, re-mirroring any that differ.

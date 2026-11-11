@@ -630,7 +630,7 @@ describe('copybook api', () => {
     expect(mail.text).not.toContain(REST);
     expect(mail.html).toMatch(/<td[^>]*><b>DHI<\/b> \[you own\]<\/td><td[^>]*>40,000,000<\/td><td[^>]*>\$6\.0B<\/td><td[^>]*>19\.0%<\/td>/);
     const lat = JSON.parse((await env.DB.get('alerts:latency'))!);
-    expect(lat[0]).toMatchObject({ accession: NEWH, form: '13F-HR/A', coverage: 'curated' });
+    expect(lat[0]).toMatchObject({ host: 'gene', accession: NEWH, form: '13F-HR/A', coverage: 'curated' }); // this copy isn't the Cloudflare one
 
     // Handled once: the next minute sends nothing.
     sent = [];
@@ -814,8 +814,8 @@ describe('copybook api', () => {
     await putFollows('n', { investors: ['dan-loeb'] });
     // gene serves members (its KV is the test's); Cloudflare's copy polls, with its own KV (empty here) and the real R2.
     const r2 = new MemR2();
-    const gene = { ...env, SYNC: 'on', CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct' };
-    const cf = { ...env, DB: new MemKV(), HIST: r2, MOVED_TO: 'https://gene.test/copybook/', SYNC: 'on', CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct' };
+    const gene = { ...env, SYNC: 'on', CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct', BUILD_SHA: 'aaaaaaaaaaaabbbb' };
+    const cf = { ...env, DB: new MemKV(), HIST: r2, MOVED_TO: 'https://gene.test/copybook/', SYNC: 'on', CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct', BUILD_SHA: 'cccccccccccc1111' };
     // Cloudflare's cron keeps its state in R2 (kv/), reading through to its KV namespace: KV writes cost the free plan's 1,000 a day.
     const { r2kv } = await import('../src/failover');
     const cfStore = r2kv(r2, cf.DB);
@@ -870,7 +870,7 @@ describe('copybook api', () => {
     expect(JSON.parse((await cfStore.get('cus:n'))!).email).toBe('member@example.com');
     await run(cf, min(2));
     expect(await run(gene, min(2))).toMatchObject({ poller: 'backup (cloudflare polls)' });
-    expect((await (await handleRequest(new Request('https://api.test/health'), gene)).json())).toMatchObject({ poller_host: 'cloudflare', poller_last_run: new Date(min(2)).toISOString().replace('.000', ''), api_host: 'gene' });
+    expect((await (await handleRequest(new Request('https://api.test/health'), gene)).json())).toMatchObject({ poller_host: 'cloudflare', poller_last_run: new Date(min(2)).toISOString().replace('.000', ''), api_host: 'gene', poller_builds: { cloudflare: 'cccccccccccc', gene: 'aaaaaaaaaaaa' } });
 
     // A member follows Ackman on gene: Cloudflare's cron has it a minute later.
     await putFollows('n', { investors: ['dan-loeb', 'bill-ackman'] });
