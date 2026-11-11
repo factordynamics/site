@@ -128,6 +128,10 @@ RECLASS_CASES = {
     "0001056823": "long_only", "0000823621": "long_only", "0001007524": "long_only", "0001112325": "long_only",
     "0001592828": "index",
     "0001032814": "long_only",  # Check Capital: published hedge_fund by book shape; an 18-stock value book
+    "0001033475": "long_only",  # Avenir Corp: concentrated value manager (published hedge_fund by book shape)
+    # Q Global Advisors: Forms 3/4 filed with Q Global Capital Management and Geoffrey Raynor, but no Form ADV or Form D
+    # hedge-fund offerings under any of those names, which fits an exempt family office (PM rule, Nov 11).
+    "0001469589": "other",
     "0001730578": "wealth",     # Vanguard Capital Wealth Advisors (an RIA, not Vanguard; the name rule typed it index)
     "0001404784": "hedge_fund", # Granville Capital, Greensboro NC (ADV CRD 126679: 7 private funds, all hedge, 58% of RAUM)
     # Market makers and prop traders (their 13F is inventory), whatever Form ADV says
