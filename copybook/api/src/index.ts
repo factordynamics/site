@@ -304,6 +304,7 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
   // 13Fs accepted before the moves fix (sent before it, or their moves sent after it from the backlog) are reported apart.
   // One row per accession, its first delivery (a later send to another member, e.g. a coalesced one, isn't a second alert).
   const firsts = new Map<string, LatencyRow>();
+  const delayedAcc = new Set(log.filter((l) => l.email_delayed && !l.replay && Date.parse(l.sent) >= from).map((l) => l.accession));
   for (const l of log.filter((l) => !l.replay && !l.email_delayed && Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves)).sort((a, b) => a.sent.localeCompare(b.sent)))
     if (!firsts.has(l.accession)) firsts.set(l.accession, l);
   const counted = [...firsts.values()].sort((a, b) => b.sent.localeCompare(a.sent));
@@ -391,11 +392,13 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
           replay: !!l.replay,
           test: !!l.test,
           email_delayed: !!l.email_delayed,
+          // Some member's email for it waited past the daily email limit (chat, feed and webhooks went at once).
+          delayed_email_limit: delayedAcc.has(l.accession),
         };
       });
       const missRow = (accession: string, slug: string, form: string, accepted: string, detected: string | null, audience: string) => ({
         host: null, slug, manager: null as string | null, quarter: null as string | null, form, coverage: 'curated', accession, accepted_at: iso(accepted), detected_at: iso(detected), email_accepted_at: null, sent_at: null, gap_seconds: null,
-        team_delivered_at: null, first_alert_at: null, moves_sent_at: null, held: 0, released_at: null, missed: true, delay_seconds: null, never: true, audience, in_stats: false, replay: false, test: false, email_delayed: false,
+        team_delivered_at: null, first_alert_at: null, moves_sent_at: null, held: 0, released_at: null, missed: true, delay_seconds: null, never: true, audience, in_stats: false, replay: false, test: false, email_delayed: false, delayed_email_limit: false,
       });
       // Found by the missed-filing detector and never sent (6 hours on, it isn't coming).
       const never = (extra.missed ?? []).filter((m) => !one.has(m.accession) && Date.parse(m.accepted) >= from && now - Date.parse(m.detected_at) > 6 * 3600_000).map((m) => missRow(m.accession, m.cik, m.form, m.accepted, m.detected_at, 'everyone'));
@@ -411,8 +414,10 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
   };
   // Missed rows, apart from the figures: filings no one was alerted to, and filings their followers got but the members
   // watching their tickers didn't (each also has its sent row).
+  // Alerts whose email to some member was queued past the daily email limit: counted on /speed/, not hidden.
+  const delayed_email_limit = delayedAcc.size;
   const missedBy = (aud: string) => report.alerts.filter((a) => a.missed && a.never && 'audience' in a && a.audience === aud).length;
-  return { ...report, missed_never: missedBy('everyone'), missed_stock_watchers: missedBy('stock_watchers') };
+  return { ...report, delayed_email_limit, missed_never: missedBy('everyone'), missed_stock_watchers: missedBy('stock_watchers') };
 }
 export async function buildLatency(env: Env, now: number) {
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as LatencyRow[];

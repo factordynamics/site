@@ -34,6 +34,8 @@ interface ProbeState {
 export interface Restart {
   /** The API's new boot time. */
   at: string;
+  /** When the outage began, for a planned window (\`at\` is when the API was back): /status/ stamps and sorts by it. */
+  started_at?: string;
   prev_up_since: string;
   /** Seconds the probe couldn't reach the API around the restart (0 when no minute check failed). */
   down_seconds: number;
@@ -55,7 +57,7 @@ const PLANNED: { from: string; to: string; row: Restart }[] = [
   {
     from: '2026-11-11T08:53:00Z',
     to: '2026-11-11T08:59:00Z',
-    row: { at: '2026-11-11T08:56:00Z', prev_up_since: '2026-11-11T08:40:00Z', down_seconds: 114, kind: 'planned', build: 'caad4f5b6df5', prev_build: 'caad4f5b6df5', note: 'Planned failover test, 08:53–08:58 UTC. Member pages and the API returned errors for about 2 minutes until access moved to the backup automatically (1 min 54 s). Pages already open kept failing until reloaded. Alerts were not affected.' },
+    row: { started_at: '2026-11-11T08:53:19Z', at: '2026-11-11T08:56:00Z', prev_up_since: '2026-11-11T08:40:00Z', down_seconds: 114, kind: 'planned', build: 'caad4f5b6df5', prev_build: 'caad4f5b6df5', note: 'Planned failover test, 08:53–08:58 UTC. Member pages and the API returned errors for about 2 minutes until access moved to the backup automatically (1 min 54 s). Pages already open kept failing until reloaded. Alerts were not affected.' },
   },
 ];
 /** The restart log as shown: a planned window's rows as its one row, newest first. */

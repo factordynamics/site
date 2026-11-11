@@ -1,10 +1,10 @@
-import { addToFeed, flushChannelLatency, getChannels, runWebhookRetries, sendChats, sendWebhooks } from './channels';
+import { addToFeed, flushChannelLatency, getChannels, getFailures, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
 import { offFilers, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
-import { isActive, isPaused, testAddress, type Env, type Member } from './env';
+import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
 
@@ -261,7 +261,12 @@ async function scoped(env: Env, m: Member, f: Follows): Promise<Member> {
 /** Thu Nov 12 on: 3 (was 5), so Resend's daily room goes to real members. */
 export const TEST_MAIL_CAP = 3;
 const testMailKey = (customer: string, now: number) => `mailn:${customer}:${new Date(now).toISOString().slice(0, 10)}`;
-/** Leading-edge window: when email runs short, a member's first alert goes at once; later ones within it go as one email at its end. */
+/**
+ * Leading-edge window, always on: a member's first alert email goes at once; later ones within COALESCE_BASE_MS go as
+ * one email at its end (flushHeld, every minute), so a burst of filings costs one email a member per window, not one
+ * per filing. While email runs short the window is COALESCE_MS.
+ */
+export const COALESCE_BASE_MS = 2 * 60_000;
 export const COALESCE_MS = 20 * 60_000;
 const HELD = 'mail:held';
 interface Held {
@@ -492,6 +497,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   let digest = 0;
   let held = 0;
   let testCapped = 0;
+  let chatOnly = 0;
   let pressure: { room: number; projected: number } | undefined;
   let heldIndex: Record<string, number> | undefined;
   // Paused members' followed funds that filed a 13F: one "resume now" note per member per ET day.
@@ -534,6 +540,19 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     else if (!only) await rememberDelivered(env, m.customer, now, [...mine.filings.map((a) => `${filingId(a)}`), ...mine.events.map((e) => `${e.id}${e.followup ? ':details' : ''}`)]);
     if (f.digest) digest++;
     else {
+      // A working Discord, Slack, Telegram or webhook destination replaces email, unless the member kept email
+      // (keep_email); then email too, while there's room for it today. Never for a replay or with all destinations failing.
+      if (!only) {
+        const dests = (['discord', 'slack', 'telegram', 'webhook'] as const).filter((d) => !!ch[d] && (d !== 'webhook' || isPro(m)));
+        if (dests.length) {
+          const fails = await getFailures(env, m.customer);
+          pressure ??= await emailPressure(env, now);
+          if (dests.some((d) => !fails[d]) && (!ch.keep_email || pressure.room - mails.length <= 0)) {
+            chatOnly++;
+            continue;
+          }
+        }
+      }
       const test = !!m.test || testAddress(m.email);
       // Test members get no 13G or 13G/A by email (feed, chat and webhooks above only): the most frequent form, and
       // the least worth the shared email budget.
@@ -551,21 +570,20 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
         const open = win && win.until > now;
         pressure ??= await emailPressure(env, now);
         const tight = pressure.room - mails.length <= pressure.projected;
-        if (tight && open) {
-          // Inside this member's window while email is short: held, sent with the window's other alerts at its end.
+        // A 13F's moves follow-up (its first email went without them) is what the member waits for: never held for the
+        // short window, only while email is short.
+        if (open && (tight || !mine.filings.some((a) => a.followup))) {
+          // Inside this member's window: held, sent with the window's other alerts at its end.
           await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ ...win, filings: [...win.filings, ...mine.filings], events: [...win.events, ...evs] }));
           held++;
           continue;
         }
         // Anything still held goes out with this email (the window ended, or email is no longer short).
         if (win && (win.filings.length || win.events.length)) send = { filings: [...win.filings, ...mine.filings], events: [...win.events, ...evs] };
-        if (tight) {
-          await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ until: now + COALESCE_MS, filings: [], events: [] } satisfies Held));
-          (heldIndex ??= JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>)[m.customer] = now + COALESCE_MS;
-        } else if (win) {
-          await env.DB.delete(`mailwin:${m.customer}`);
-          if ((heldIndex ??= JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>)[m.customer]) delete heldIndex[m.customer];
-        }
+        // This email opens the member's next window.
+        const until = now + (tight ? COALESCE_MS : COALESCE_BASE_MS);
+        await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ until, filings: [], events: [] } satisfies Held));
+        (heldIndex ??= JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>)[m.customer] = until;
       }
       // Never the same alert twice to one member (an operator's replay excepted).
       if (!only) {
@@ -585,7 +603,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   for (const p of pausedNotes) await env.DB.put(p.key, '1', { expirationTtl: 2 * 86400 });
-  return { emails: mails.length, digest, mail, ...(held ? { held } : {}), ...(testCapped ? { test_capped: testCapped } : {}), ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
+  return { emails: mails.length, digest, mail, ...(held ? { held } : {}), ...(testCapped ? { test_capped: testCapped } : {}), ...(chatOnly ? { chat_only: chatOnly } : {}), ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }
 
 type Delivered = { day: string; ids: string[] }[];

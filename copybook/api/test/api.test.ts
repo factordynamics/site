@@ -253,10 +253,17 @@ function loginTokenFrom(text: string): string {
   return decodeURIComponent(text.match(/account\/\?login=([^\s]+)/)![1]);
 }
 
+/** Each member's 2-minute email window from an earlier run has ended (tests run polls back to back). */
+async function windowsEnded() {
+  for (const k of (await env.DB.list({ prefix: 'mailwin:' })).keys) await env.DB.delete(k.name);
+  await env.DB.delete('mail:held');
+}
+
 /** Runs the minute cron as if at hh:mm UTC today (hour 3 is the digest hour, so avoided by default), or at a given time. */
 async function cron(minute: number, at?: number) {
   const t = new Date(at ?? Date.now());
   if (at === undefined) t.setUTCHours(t.getUTCHours() === 3 ? 4 : t.getUTCHours(), minute, 0, 0);
+  await windowsEnded();
   let pending: Promise<unknown> = Promise.resolve();
   await worker.scheduled({ scheduledTime: t.getTime() }, env, { waitUntil: (p) => (pending = p) });
   return pending;
@@ -920,7 +927,7 @@ describe('copybook api', () => {
     expect((await cf.DB.list({ prefix: '' })).keys).toEqual([]); // not one KV write on Cloudflare
   });
 
-  it("email budget: Mailgun takes over past Resend's cap; when email is short a member's later alerts within 20 minutes go as one email; test members get 5 a day and no 13G email", async () => {
+  it("email budget: Mailgun takes over past Resend's cap; a member's later alerts within 2 minutes (20 when email is short) go as one email; test members get 5 a day and no 13G email", async () => {
     const today = new Date().toISOString().slice(0, 10);
     const T = Date.parse(`${today}T15:00:00Z`);
     const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, accepted: new Date(T - 60_000).toISOString(), url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: 'Sirius XM', ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: null });
@@ -949,17 +956,25 @@ describe('copybook api', () => {
     expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F1'], ['real@example.com', 'sec.gov/F1']]);
     expect(mg[0].from).toBe(env.EMAIL_FROM);
 
-    // Email runs short (the last two hours' rate would use more than is left today): leading-edge coalescing.
+    // Within 2 minutes of a member's last alert email, the next alert waits for the window's end.
+    mg.length = 0;
+    await at('F8', 2);
+    expect(got()).toEqual([]);
+    await flushHeld(env, T + 3 * 60_000);
+    expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F8'], ['real@example.com', 'sec.gov/F8']]);
+    await env.DB.put(`mailn:t:${today}`, '1');
+
+    // Email runs short (the last two hours' rate would use more than is left today): the window is 20 minutes.
     // Each member's first alert goes at once; the next two wait and go as one email when the 20 minutes end.
     await env.DB.put('stats:sent', JSON.stringify([[Math.floor(T / 3600_000), 400]]));
     mg.length = 0;
-    await at('F2', 2);
+    await at('F2', 4);
     expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F2'], ['real@example.com', 'sec.gov/F2']]);
     mg.length = 0;
-    await at('F3', 3);
-    await at('F4', 5);
+    await at('F3', 5);
+    await at('F4', 7);
     expect(got()).toEqual([]); // chat, feed and webhook would still have had them at once
-    await flushHeld(env, T + 22 * 60_000);
+    await flushHeld(env, T + 25 * 60_000);
     expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F3 sec.gov/F4'], ['real@example.com', 'sec.gov/F3 sec.gov/F4']]);
     // Timed as they went: F3 at about 21 minutes, tagged coalesced.
     const f3 = JSON.parse((await env.DB.get('alerts:latency'))!).filter((l: { accession: string }) => l.accession === 'F3');
@@ -969,16 +984,16 @@ describe('copybook api', () => {
     await env.DB.put('stats:sent', '[]');
     await env.DB.put(`mailn:t:${today}`, '2');
     mg.length = 0;
-    await at('F5', 24);
+    await at('F5', 26);
     expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F5'], ['real@example.com', 'sec.gov/F5']]);
     mg.length = 0;
-    await at('F6', 25);
+    await at('F6', 29);
     expect(got()).toEqual([['real@example.com', 'sec.gov/F6']]);
     // The same alert delivered again (a handled list lost in a host hand-off, as Nov 10's 13G at 14:01 and 14:02):
     // nobody gets it twice.
     mg.length = 0;
     sent = [];
-    await at('F6', 26);
+    await at('F6', 32);
     expect(got()).toEqual([]);
     // Counted for the quant's audit: /health and the status probe carry it.
     const hj = await (await handleRequest(new Request('https://api.test/health'), env)).json();
@@ -990,7 +1005,7 @@ describe('copybook api', () => {
     await env.DB.put(`mailn:t:${today}`, '0');
     for (const c of ['r', 't']) await putFollows(c, { investors: ['warren-buffett'], include_13g: true });
     mg.length = 0;
-    await deliver(env, [], [{ ...ev('F7'), form: 'SCHEDULE 13G/A', kind: '13g', action: 'stake_update', percent_of_class: 5.2 } as never], T + 26 * 60_000);
+    await deliver(env, [], [{ ...ev('F7'), form: 'SCHEDULE 13G/A', kind: '13g', action: 'stake_update', percent_of_class: 5.2 } as never], T + 35 * 60_000);
     expect(got()).toEqual([['real@example.com', 'sec.gov/F7']]);
     expect(await env.DB.get(`mailn:t:${today}`)).toBe('0');
     // Previews, replays and samples: at most 10 a day; the 11th and 12th wait for the reset. The probe and status.json
@@ -3022,6 +3037,16 @@ describe('copybook api', () => {
     expect((await handleRequest(new Request(rotated.json_url), env)).status).toBe(404);
 
     // Chat failures. Discord asks to wait 150 s (429), Slack answers 500 every time, Telegram's bot was removed (404).
+    // keep_email (set above): the email goes too. Without it, a working chat destination replaces email.
+    expect(sent.some((m) => m.to[0] === 'chan@example.com' && /SIRI/.test(m.subject))).toBe(true);
+    await req(copy, 'PUT', '/channels', { keep_email: false });
+    sent = [];
+    posts = [];
+    events = [ev('seed'), ev('C1'), ev('C1x')];
+    await cron(47);
+    expect(by('hooks.slack.com')).toHaveLength(1);
+    expect(sent.filter((m) => m.to[0] === 'chan@example.com' && /SIRI/.test(m.subject))).toEqual([]);
+    await req(copy, 'PUT', '/channels', { keep_email: true });
     const at47 = new Date();
     // Not hour 3 (the digest job's), and the hour of replays below must stay in today's ET day (it ends at 05:00 UTC) for the feed seed.
     at47.setUTCHours([3, 4].includes(at47.getUTCHours()) ? 2 : at47.getUTCHours(), 47, 0, 0);
@@ -3079,7 +3104,7 @@ describe('copybook api', () => {
     expect(items.filter((i: { sent_at: string }) => i.sent_at >= beforeFeed && i.sent_at <= afterFeed)).toEqual([]);
     const feedRes = await handleRequest(new Request(feed2.rss_url), env);
     expect(feedRes.headers.get('cache-control')).toBe('no-store');
-    expect(items.map((i: { id: string }) => i.id).sort()).toEqual(['C1', 'C2', 'C3']);
+    expect(items.map((i: { id: string }) => i.id).sort()).toEqual(['C1', 'C1x', 'C2', 'C3']);
     expect(items.every((i: { sent_at: string | null }) => !!i.sent_at)).toBe(true);
     await req(copy, 'PUT', '/channels', { slack: null, discord: null, telegram: null });
     // With a feed, the test still emails: every alert goes by email too.
