@@ -923,7 +923,8 @@ export function Funds() {
                   <span className="trunc wide-name" title={m.firm}>
                     <span className="strong hide-sm">{m.firm}</span>
                     <span className="strong show-sm">{shortFirm(m.firm)}</span>
-                    {m.pm && <span className="dim hide-sm"> · {m.pm}</span>}
+                    {/* The manager's name never breaks across lines ("Chris / Hohn"); it moves to the second line whole. */}
+                    {m.pm && <span className="dim hide-sm"> · <span className="nowrap">{m.pm}</span></span>}
                   </span>
                   {/* Phones: a second line with what the hidden columns say, so each row reads on its own. */}
                   <span className="row-sub show-sm">

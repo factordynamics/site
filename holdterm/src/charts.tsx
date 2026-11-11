@@ -128,7 +128,7 @@ export function HBars({ rows, fmt = signedUsd, title, labelWidth = 150, inline =
   const max = Math.max(...rows.map((r) => Math.abs(r.value)), 1)
   const signed = rows.some((r) => r.value < 0) && rows.some((r) => r.value > 0)
   return (
-    <ul className={`hbars ${inline ? 'inline' : ''}`} aria-label={title} style={{ ['--lw' as string]: `${labelWidth}px` }}>
+    <ul className={`hbars ${inline ? 'inline' : ''} ${signed ? 'signed' : ''}`} aria-label={title} style={{ ['--lw' as string]: `${labelWidth}px` }}>
       {rows.map((r) => {
         const w = (Math.abs(r.value) / max) * (signed ? 50 : 100)
         const inner = (
