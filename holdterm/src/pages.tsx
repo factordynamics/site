@@ -1259,15 +1259,19 @@ function FlowsSummary({ rows, funds, q }: { rows: Agg[]; funds: number; q: strin
   const netBuy = most((r) => r.net)
   const netSell = most((r) => -r.net)
   const fresh = most((r) => r.newBuyers)
+  const freshLine = fresh && fresh !== buyers && fresh.newBuyers > 1
+  // Whether the sentence just before the selling one is still about the most-bought stock.
+  const lastOnBuyers = !freshLine && !(netBuy && netBuy.net > 0 && netBuy !== buyers)
   if (!buyers) return null
   return (
     <p className="summary">
       {/* One fact per sentence: the most buyers, the most money in, then the same for selling. */}
       {plural(buyers.buyers.length, 'investor')} bought {aggName(buyers)}, more than any other stock
       {fresh === buyers && fresh.newBuyers > 0 ? `, and ${num(fresh.newBuyers)} of them were new to it` : ''}.{' '}
-      {fresh && fresh !== buyers && fresh.newBuyers > 1 && <>The most new positions were in {aggName(fresh)}, {num(fresh.newBuyers)}. </>}
-      {netBuy && netBuy.net > 0 && <>The most money went into {netBuy === buyers ? 'it' : aggName(netBuy)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netBuy.net)}</span> net. </>}
-      {sellers && sellers.sellers.length > 0 && <>{plural(sellers.sellers.length, 'investor')} sold {sellers === buyers ? 'some of it too' : aggName(sellers)}, the most of any stock. </>}
+      {freshLine && <>The most new positions were in {aggName(fresh)}, {num(fresh.newBuyers)}. </>}
+      {/* "it" only right after a sentence about the most-bought stock; after one about another stock it names the wrong one. */}
+      {netBuy && netBuy.net > 0 && <>The most money went into {netBuy === buyers && !freshLine ? 'it' : aggName(netBuy)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netBuy.net)}</span> net. </>}
+      {sellers && sellers.sellers.length > 0 && <>{plural(sellers.sellers.length, 'investor')} sold {sellers === buyers && lastOnBuyers ? 'some of it too' : aggName(sellers)}, the most of any stock. </>}
       {netSell && netSell.net < 0 && <>The most money came out of {aggName(netSell)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netSell.net)}</span> net.</>}
     </p>
   )
