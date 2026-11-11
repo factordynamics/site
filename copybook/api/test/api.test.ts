@@ -786,7 +786,7 @@ describe('copybook api', () => {
     await cron(17);
     expect(sent).toHaveLength(0); // the data run has no moves for Loeb yet
 
-    const mv = (ticker: string, value_delta: number) => ({ ticker, display_name: null, issuer: ticker, cusip: 'X', put_call: null, shares: 1, prev_shares: 0, value: value_delta, value_delta, pct_of_book: 0.012 });
+    const mv = (ticker: string, value_delta: number) => ({ ticker, display_name: null, issuer: ticker, cusip: 'X', put_call: null, shares: 1, prev_shares: 0, value: value_delta, value_delta, delta_pct_of_book: 0.012 });
     recentMoves = [{ accession: big, moves: { bought_usd: 3e8, sold_usd: 0, new: [mv('MSFT', 3e8)], added: [], trimmed: [], exited: [] } }];
     await cron(17);
     expect(sent.map((m) => m.to[0])).toEqual(['nobody@example.com']);
@@ -1719,6 +1719,25 @@ describe('copybook api', () => {
     expect([spy.change, spy.value_delta, spy.unreliable, Math.abs(spy.delta_pct_of_book!) < 0.01]).toEqual(['trimmed', -58017563, 'shares', true]);
     // Nothing more to restate: the feed is left alone.
     expect((await restateFeeds(env, tR)).feeds).toBe(0);
+    // Ingest's options rule: Mizuho's non-standard option lines are "both" in its book. Ingest's side wins: the feed holds
+    // them (no figure, out of the moves and the title) and the correction note says so; MRVL stays.
+    await hist.put('h/mizuho-markets-americas-llc/2026Q3.json', JSON.stringify({ accession: '0001062993-26-005826', holdings: [
+      { cusip: '78462F103', put_call: 'CALL', change: 'trimmed', shares: 19152, value: 552460839, value_delta: null, unreliable: 'both' },
+      { cusip: '78462F103', put_call: 'PUT', change: 'trimmed', shares: 44518, value: 57215045, value_delta: null, unreliable: 'both' },
+      { cusip: '573874104', put_call: null, change: 'added', shares: 5_000_000, value: 615_000_000, value_delta: 476_109_188, value_delta_basis: 'trade' },
+    ] }));
+    expect((await restateFeeds(env, tR)).feeds).toBe(1);
+    const mh = (JSON.parse((await env.DB.get('feed:cus_fd'))!) as { title: string; text: string }[])[1];
+    const [mhBody, mhNote] = mh.text.split(/\n\s*Corrected /);
+    expect([/SPY/.test(mh.title), /SPY calls -\$|SPY puts -\$/.test(mhBody), /SPY calls: share counts don't reconcile in this filing, change not computed/.test(mhBody), /MRVL \+\$476\.1M/.test(mhBody), /58\.0M/.test(mhNote), /SPY calls: share counts don't reconcile in this filing, so no change is computed \(not sold out -\$610\.5M\)/.test(mhNote)]).toEqual([false, false, true, true, false, true]);
+    expect((await restateFeeds(env, tR)).feeds).toBe(0);
+  });
+
+  it('a row with only pct_of_book (the position weight) prints no % of book', async () => {
+    const { alertMail } = await import('../src/email');
+    const r = { change: 'added', ticker: 'AAPL', display_name: null, issuer: 'AAPL', cusip: '037833100', put_call: null, shares: 20, prev_shares: 10, value: 4000, value_delta: 2000, delta_pct_of_book: null, pct_of_book: 0.42 };
+    const m = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'w', slugs: ['w'], manager: 'W', name: 'W', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000009', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: { bought_usd: 2000, sold_usd: 0, new: [], added: [r as never], trimmed: [], exited: [] }, tickers: ['AAPL'] }], [], { investors: ['w'], stocks: [], owned: [] } as never);
+    expect([/42\.0%/.test(m.text), /AAPL \+\$2K? ?\(\+100% shares\)|AAPL \+\$2\.0K \(\+100% shares\)/.test(m.text)]).toEqual([false, true]);
   });
 
   it('launch week: test, critic and preview mail goes to the test-inbox sink, never to Resend', async () => {
@@ -2481,7 +2500,11 @@ describe('copybook api', () => {
     const bq2 = [pos('SPY', '78462F103', 100_000, 6_660_000_000, 'Put'), pos('REST', '000000009', 1, 500e9)];
     const bq3 = [pos('SPY', '78462F103', 340_000, 22_650_000_000, 'Put'), pos('REST', '000000009', 1, 500e9)];
     const gopt = gateMoves(computeMoves(bq3, bq2, undefined, new Map()), bq2, new Map(), new Map([['78462F103', { cur: 666, prev: 640 }]]));
-    expect([gopt.changed.map((r) => [r.ticker, r.put_call, r.change, r.value_delta, r.unreliable]), gopt.moves.bought_usd]).toEqual([[['SPY', 'Put', 'added', 15_990_000_000, 'shares']], 0]);
+    expect([gopt.changed.map((r) => [r.ticker, r.put_call, r.change, r.value_delta, r.unreliable, r.value_delta_basis]), gopt.moves.bought_usd]).toEqual([[['SPY', 'Put', 'added', 15_990_000_000, 'shares', 'filed_value']], 0]);
+    // Ingest's contract filers (BNP: shares x100, shares_basis "contracts", no flag): EDGAR's raw line is still in contracts
+    // here, so the band marks it and it never headlines before the x100 is applied.
+    const gc = gateMoves(computeMoves(bq3, bq2, undefined, new Map()), bq2.map((p) => (p.put_call ? { ...p, shares_basis: 'contracts' } : p)) as never, new Map(), new Map([['78462F103', { cur: 666, prev: 640 }]]));
+    expect([gc.changed.map((r) => r.unreliable), gc.moves.bought_usd]).toEqual([['shares'], 0]);
     const optMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'bnp', slugs: ['bnp'], manager: 'BNP Paribas', name: 'BNP PARIBAS', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000001', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: gopt.moves, tickers: [] }], [], { investors: ['bnp'], stocks: [], owned: [] } as never);
     expect([/SPY|16\.0B/.test(optMail.subject), /SPY puts \+\$16\.0B[^\n]*not in totals/.test(optMail.text), /\+\d+% shares/.test(optMail.text)]).toEqual([false, true, false]);
     // Ingest's own side wins when it gives one; without it, a stock line off its price is "value".
@@ -4388,18 +4411,23 @@ describe('copybook api', () => {
     // is their sum, whatever shares x price implies (a filer's two lines, a capped line); a flagged row is null, marked.
     await hist.put('hl/30233Q.json', JSON.stringify({
       issuer: '30233Q', tickers: ['XOM'], counts: { holders: 3, net: 1_000_000 - 250_000, net_quarter: '2026Q3', net_by_period: { '2026Q3': 750_000 } },
-      columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'unreliable', 'value_change', 'value_delta'],
+      columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'unreliable', 'value_change', 'value_delta', 'value_delta_basis', 'shares_basis'],
       rows: [
-        ['0000000101', 'Two Lines LP', null, 'hedge_fund', false, '2026Q3', 20_000, 10_000, 2_400_000, 1_000_000, 'added', null, null, null, 1_000_000],
-        ['0000000102', 'Capped LP', null, 'hedge_fund', false, '2026Q3', 5_000, 7_500, 600_000, 850_000, 'trimmed', null, null, null, -250_000],
-        ['0000000103', 'Units Off LP', null, 'hedge_fund', false, '2026Q3', 1_304, 646_216, 6_700_000, 121_600_000, 'trimmed', null, 'shares', -114_900_000, 0],
+        ['0000000101', 'Two Lines LP', null, 'hedge_fund', false, '2026Q3', 20_000, 10_000, 2_400_000, 1_000_000, 'added', null, null, null, 1_000_000, 'trade', null],
+        ['0000000102', 'Capped LP', null, 'hedge_fund', false, '2026Q3', 5_000, 7_500, 600_000, 850_000, 'trimmed', null, null, null, -250_000, 'filed_value', null],
+        ['0000000103', 'Units Off LP', null, 'hedge_fund', false, '2026Q3', 1_304, 646_216, 6_700_000, 121_600_000, 'trimmed', null, 'shares', -114_900_000, 0, null, null],
+        ['0000000104', 'Contracts LP', null, 'hedge_fund', false, '2026Q3', 30_000, 10_000, 3_600_000, 1_200_000, 'added', 'Call', null, null, 2_400_000, 'trade', 'contracts'],
       ],
     }), { customMetadata: { build_id: 'gh-43049731351-1', built_at: '2026-11-11T16:20:00.000Z' } });
     const xh = (await v1('/v1/stocks/30233Q/holders?current_only=false')).body.data;
     const xc = (await v1('/v1/changes/2026Q3?cusip=30233Q&limit=100')).body.data as { value_delta_usd: number | null; trade_usd_implied: number; unreliable?: string; value_change_usd?: number; filer: { name: string } }[];
     expect(xc.map((r) => [r.filer.name, r.value_delta_usd, r.unreliable ?? null])).toEqual(expect.arrayContaining([['Two Lines LP', 1_000_000, null], ['Capped LP', -250_000, null], ['Units Off LP', null, 'shares']]));
-    expect(xc.reduce((a, r) => a + (r.value_delta_usd ?? 0), 0)).toBe(xh.counts.net);
+    // net covers share rows (put_call null): the contract-filed call line is labelled but not in it.
+    expect(xc.filter((r) => !(r as { put_call?: string | null }).put_call).reduce((a, r) => a + (r.value_delta_usd ?? 0), 0)).toBe(xh.counts.net);
     expect(xc.find((r) => r.filer.name === 'Two Lines LP')!.trade_usd_implied).toBe(1_200_000); // implied, not summed
+    // The data run's labels pass through: what each value_delta measures, and a contract-filed option line.
+    const lab = xc as unknown as { filer: { name: string }; value_delta_basis: string | null; shares_basis?: string }[];
+    expect(['Two Lines LP', 'Capped LP', 'Units Off LP', 'Contracts LP'].map((n) => { const r = lab.find((x) => x.filer.name === n); return [r?.value_delta_basis, r?.shares_basis ?? null]; })).toEqual([['trade', null], ['filed_value', null], [null, null], ['trade', 'contracts']]);
     expect(xc.find((r) => r.filer.name === 'Units Off LP')!.value_change_usd).toBe(-114_900_000);
     // current_only=false adds the filer whose latest 13F is a year old.
     const every = (await v1('/v1/stocks/NVDA/holders?current_only=false')).body;
@@ -4407,7 +4435,7 @@ describe('copybook api', () => {
     // include_options=true mixes calls and puts into the list.
     const mixed = (await v1('/v1/stocks/NVDA/holders?include_options=true')).body;
     expect([mixed.count, mixed.filers, mixed.data.holders[2].filer.name]).toEqual([5, 5, 'Citadel Advisors LLC']);
-    expect(h.data.holders[0]).toEqual({ filer: { cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', type: 'hedge_fund', curated: false }, period: '2026Q3', kind: 'equity', put_call: null, shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, value_delta_usd: 10800, trade_usd_implied: 10800, prev_value_usd: 6000, change: 'added', weight: null, accession: null, original_accession: null, accepted_at: null, cusip: null, prev_cusip: null, issuer: null });
+    expect(h.data.holders[0]).toEqual({ filer: { cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', type: 'hedge_fund', curated: false }, period: '2026Q3', kind: 'equity', put_call: null, shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, value_delta_usd: 10800, value_delta_basis: null, trade_usd_implied: 10800, prev_value_usd: 6000, change: 'added', weight: null, accession: null, original_accession: null, accepted_at: null, cusip: null, prev_cusip: null, issuer: null });
     // A curated fund's row: its latest 13F, acceptance from the filing cache, weight of its $2,000 book.
     expect(h.data.holders[2]).toMatchObject({ filer: { slug: 'warren-buffett', curated: true }, accession: 'A2', accepted_at: '2026-08-14T20:05:04Z', weight: 0.9 });
     expect(h.data.holders[3]).toMatchObject({ prev_shares: null, share_change: null, change: 'new' });

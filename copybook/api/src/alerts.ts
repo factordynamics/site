@@ -1515,7 +1515,7 @@ function pairStored(rows: MoveRow[]): MoveRow[] {
     const offUnits = ps > 0 && pps > 0 && (ps / pps > 3 || pps / ps > 3);
     const delta = offUnits ? n.value - prevValue : ((n.shares - e.prev_shares) * n.value) / n.shares;
     if (n.shares === e.prev_shares && !offUnits) continue;
-    merged.push({ ...n, ticker: n.ticker ?? e.ticker, display_name: n.display_name ?? e.display_name, change: delta >= 0 ? 'added' : 'trimmed', prev_shares: e.prev_shares, prev_value: prevValue, value_delta: Math.round(delta), delta_pct_of_book: book ? delta / book : null, ...(offUnits ? { unreliable: 'shares' as const } : {}) });
+    merged.push({ ...n, ticker: n.ticker ?? e.ticker, display_name: n.display_name ?? e.display_name, change: delta >= 0 ? 'added' : 'trimmed', prev_shares: e.prev_shares, prev_value: prevValue, value_delta: Math.round(delta), value_delta_basis: offUnits ? 'filed_value' : 'trade', delta_pct_of_book: book ? delta / book : null, ...(offUnits ? { unreliable: 'shares' as const } : {}) });
   }
   return drop.size ? [...rows.filter((r) => !drop.has(r)), ...merged] : rows;
 }
@@ -1588,7 +1588,17 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
       // "Call" against its Q2 "CALL") are one position: netted, sized from filed values when the two quarters' values per
       // share are over 3x apart (calls $1,272 -> $28,846 a share: -$58.0M, not -$13.3B), else as a trade.
       const paired = pairStored(stored);
-      const now1 = paired.map((r) => markUnreliable(guardShares(r, r.prev_value != null ? r.value - r.prev_value : v1.get(posKey(r)))));
+      // Ingest's current flag on each line (its book for the filing; read only for filings with option or marked lines):
+      // ingest's side wins. A line it now holds ("both": Mizuho's non-standard option lines under the options rule)
+      // leaves the moves for the held line, and its correction note says so; an unmarked line takes its side.
+      const book = stored.some((r) => r.put_call || r.unreliable) ? await buildRows(env, x).catch(() => null) : null;
+      const sideOf = (r: MoveRow) => {
+        const s = book ? unreliableSide(book.rows.get(rowKey(r))) : null;
+        return s === 'both' || (s && !r.unreliable) ? { unreliable: s } : undefined;
+      };
+      const now1 = paired.map((r) => markUnreliable(guardShares(r, r.prev_value != null ? r.value - r.prev_value : v1.get(posKey(r))), sideOf(r)));
+      const heldNow = paired.filter((r, i) => !now1[i] && sideOf(r)?.unreliable === 'both').map((r) => ({ cusip: r.cusip, ticker: r.ticker, issuer: r.issuer, display_name: r.display_name, put_call: r.put_call, change: r.change, reason: 'unreliable_shares' as const }));
+      const isHeld = (p: { cusip: string; put_call?: string | null }) => heldNow.some((h) => posKey(h) === posKey(p));
       const ch = now1.filter((r): r is MoveRow => !!r);
       const splits = x.corrected?.rows.length ? await splitsFor(env, x.quarter) : null;
       const adj = splits ? ch.flatMap((r) => splitRestate(r, splits, x.corrected!.rows)) : ch;
@@ -1606,7 +1616,8 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
       const was = stored.map(counts), is = now1.map(counts);
       const bought = x.moves.bought_usd - was.reduce((s, v) => s + Math.max(v, 0), 0) + is.reduce((s, v) => s + Math.max(v, 0), 0);
       const sold = x.moves.sold_usd + was.reduce((s, v) => s + Math.min(v, 0), 0) - is.reduce((s, v) => s + Math.min(v, 0), 0);
-      fixed.set(filingId(x), { ...x, moves: { ...moves, bought_usd: bought, sold_usd: sold } });
+      const held = heldNow.length ? { held: [...(x.held ?? []).filter((h) => !isHeld(h)), ...heldNow], ...(x.corrected ? { corrected: { ...x.corrected, rows: x.corrected.rows.map((c) => (isHeld(c) ? { ...c, v1: { change: 'held', value_delta: 0 } } : c)) } } : {}) } : {};
+      fixed.set(filingId(x), { ...x, moves: { ...moves, bought_usd: bought, sold_usd: sold }, ...held });
     }
   }
   return { feeds: await rewriteFeeds(env, fixed, now), alerts: [...fixed.keys()] };

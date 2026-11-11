@@ -99,12 +99,12 @@ export interface MoveRow {
   filer_value?: boolean;
   /** The trade as a signed fraction of this filing's book (0-1). */
   delta_pct_of_book: number | null;
-  /** Older data-run rows used this name for the trade size. */
-  pct_of_book?: number | null;
   /** The prior quarter's value, when known (guards the size). */
   prev_value?: number | null;
   /** Which side of the line can't be trusted (markUnreliable, guardShares): shown, never in totals or the headline. */
   unreliable?: 'shares' | 'value' | 'both';
+  /** What value_delta measures: shares traded x this filing's price ("trade") or the change in filed value ("filed_value"). */
+  value_delta_basis?: 'trade' | 'filed_value';
   /** On an unreliable "value" row: the filing's own value per share, for "value unavailable (filed at ≈$4,005/sh)". */
   filed_per_share?: number;
   /** A stock split between the two quarters: prev_shares is multiplied by it; prev_shares_as_filed keeps the filed count. */
@@ -481,6 +481,7 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     prev_shares,
     value,
     value_delta: Math.round(delta),
+    value_delta_basis: 'trade' as const,
     delta_pct_of_book: book ? delta / book : null,
     // A bond line (principal, not shares): the gate doesn't compare its value per unit with share prices.
     ...((p as { prn?: boolean }).prn || (p as { shares_type?: string }).shares_type === 'PRN' ? { prn: true } : {}),
@@ -573,7 +574,7 @@ export function markUnreliable(r: MoveRow, prior?: unknown): MoveRow | null {
   if (r.change === 'new' || r.change === 'exited') return { ...r, unreliable: side };
   if (side === 'value') return { ...r, unreliable: 'value', ...(filedPs ? { filed_per_share: filedPs } : {}) };
   const pv = r.prev_value ?? (prior as { value?: number } | undefined)?.value;
-  if (side === 'shares' && pv != null) return { ...r, change: r.value - pv >= 0 ? 'added' : 'trimmed', value_delta: Math.round(r.value - pv), delta_pct_of_book: r.delta_pct_of_book && r.value_delta ? (r.delta_pct_of_book * (r.value - pv)) / r.value_delta : null, unreliable: 'shares' };
+  if (side === 'shares' && pv != null) return { ...r, change: r.value - pv >= 0 ? 'added' : 'trimmed', value_delta: Math.round(r.value - pv), value_delta_basis: 'filed_value', delta_pct_of_book: r.delta_pct_of_book && r.value_delta ? (r.delta_pct_of_book * (r.value - pv)) / r.value_delta : null, unreliable: 'shares' };
   return null;
 }
 
@@ -584,10 +585,12 @@ export function markUnreliable(r: MoveRow, prior?: unknown): MoveRow | null {
  */
 export function guardShares(r: MoveRow, filedDelta: number | null | undefined): MoveRow {
   if (filedDelta == null || !Number.isFinite(filedDelta) || (r.change !== 'added' && r.change !== 'trimmed') || r.unreliable) return r;
-  const pct = r.delta_pct_of_book ?? r.pct_of_book ?? null;
+  // The trade's share of the book only: pct_of_book is the position's weight (Holdterm's "Of portfolio" bug), so a row
+  // without delta_pct_of_book can't be sized against the book and is left as it is.
+  const pct = r.delta_pct_of_book ?? null;
   if (pct == null || Math.abs(pct) <= 1 || Math.abs(r.value_delta) <= 3 * Math.abs(filedDelta)) return r;
   const book = Math.abs(r.value_delta / pct);
-  return { ...r, change: filedDelta >= 0 ? 'added' : 'trimmed', value_delta: Math.round(filedDelta), delta_pct_of_book: book ? filedDelta / book : null, unreliable: 'shares' };
+  return { ...r, change: filedDelta >= 0 ? 'added' : 'trimmed', value_delta: Math.round(filedDelta), value_delta_basis: 'filed_value', delta_pct_of_book: book ? filedDelta / book : null, unreliable: 'shares' };
 }
 
 /** A position's key across EDGAR tables and ingest's books: CUSIP and put/call, case-blind. */

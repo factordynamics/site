@@ -5,12 +5,23 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.5';
+export const SPEC_REVISION = '2026-11-11.6';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-value-delta-basis',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'GET /v1/stocks/{stock}/holders and /v1/changes rows: `value_delta_basis` (`trade`: shares traded x this filing\'s value per share; `filed_value`: the change in reported value), as the data run publishes it, so a trade and a filed-value change are no longer mixed unlabelled. Null on rows from earlier builds. Webhook 13F alert rows carry the same field.',
+      'Option lines a filer reported in contracts carry `shares_basis: "contracts"`: the data run multiplied their shares by 100 and they count normally. Option lines from non-standard filers are `unreliable: "both"`: value_delta_usd null, held, not in net.',
+    ],
+  },
   {
     id: '2026-11-11-cusip-links-quarter',
     date: '2026-11-11',

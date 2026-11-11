@@ -531,9 +531,9 @@ const amount = (r: MoveRow) => {
   return `${d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh`;
 };
 
-/** The trade as a share of this filing's book (the data run renamed it delta_pct_of_book). */
+/** The trade as a share of this filing's book; no % without it (pct_of_book is the position's weight, never a trade size). */
 const bookPct = (r: MoveRow) => {
-  const d = r.delta_pct_of_book ?? r.pct_of_book;
+  const d = r.delta_pct_of_book;
   if (!d) return '';
   return Math.abs(d) < 0.0005 ? '<0.1%' : `${(Math.abs(d) * 100).toFixed(1)}%`;
 };
@@ -588,7 +588,7 @@ function headlineMoves(mv: Moves): string {
   // The largest new position and exit lead when each is at least 0.2% of the book (news whatever its dollars), then
   // the biggest trades by dollars. Below that a new name or exit is just a trade: Fisher's Q3 led with a $57M new
   // name and a $66M exit, under 0.1% of book, over a $4.6B bond rotation.
-  const pct = (r: MoveRow) => (r.delta_pct_of_book ?? r.pct_of_book) == null ? 1 : Math.abs((r.delta_pct_of_book ?? r.pct_of_book)!);
+  const pct = (r: MoveRow) => (r.delta_pct_of_book == null ? 1 : Math.abs(r.delta_pct_of_book));
   const label = (r: MoveRow) => (mv.new.includes(r) ? `NEW ${rowName(r)}` : mv.exited.includes(r) ? `EXIT ${rowName(r)}` : `${rowName(r)} ${usd(r.value_delta)}`) + odd(r);
   // A marked row (markUnreliable) never makes the headline.
   const ok = (rows: MoveRow[]) => rows.filter((r) => !r.unreliable);
@@ -619,14 +619,17 @@ function heldLine(a: Alert13F): string {
   const wait = (a.held ?? []).filter((h) => h.reason !== 'unreliable_shares');
   return [
     wait.length ? `${wait.map((h) => `${name(h)}${h.change ? ` (${h.change})` : ''}: move pending check`).join('; ')}. Figures failed a price check and are left out of this email and its totals; they follow once the full build of the filing confirms them, or within 24 hours marked if the filer's own figures look wrong.` : '',
-    out.length ? `${out.map((h) => `${name(h)}: pre-split count, change not computed`).join('; ')}.` : '',
+    out.length ? `${out.map((h) => `${name(h)}: ${h.put_call ? "share counts don't reconcile in this filing" : 'pre-split count'}, change not computed`).join('; ')}.` : '',
   ].filter(Boolean).join(' ');
 }
 
 /** What the alert said, or what the build has, for one row of a correction. */
 const said = (x: { change: string; value_delta: number }) =>
   x.change === 'total' ? usd(x.value_delta, false) : x.change === 'unchanged' ? 'unchanged' : `${x.change === 'new' ? 'a new position' : x.change === 'exited' ? 'sold out' : x.change} ${usd(x.value_delta)}`;
-const corrLine = (r: CorrectionRow) => `${r.ticker || r.name}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} was ${said(r.v1)}, not ${said(r.emailed)}.`;
+const corrLine = (r: CorrectionRow) =>
+  r.v1.change === 'held'
+    ? `${r.ticker || r.name}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''}: share counts don't reconcile in this filing, so no change is computed (not ${said(r.emailed)}).`
+    : `${r.ticker || r.name}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} was ${said(r.v1)}, not ${said(r.emailed)}.`;
 
 /** One wrong row in a sent 13F alert: what the email said and what the data run's build (and /v1) has. */
 export interface CorrectionRow {
