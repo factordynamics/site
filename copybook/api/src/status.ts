@@ -84,7 +84,7 @@ export async function membersApi(env: Env, now: number): Promise<string | null> 
 }
 
 /** One check of the members' API from Cloudflare: GET {api}/health?probe=1 within 10 s. */
-type Kinds = { day: string; used?: number; real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number; queued?: number; sinked?: number; dropped?: number; dropped_why?: Record<string, number> };
+type Kinds = { day: string; used?: number; real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number; queued?: number; sinked?: number; dropped?: number; dropped_why?: Record<string, number>; waiting_now?: { retry: number; delayed: number } };
 type Probe = { ok: boolean; ms: number; up_since: string | null; build: string | null; host?: string | null; dupes?: { total: number; last_7d: number } | null; mail?: Kinds | null };
 export async function probeOnce(env: Env, now: number): Promise<Probe> {
   const base = await membersApi(env, now);
@@ -258,10 +258,16 @@ async function mailQuotaStatus(env: Env, gene: Kinds | null) {
   for (const w of [m.day === day ? m.kinds?.dropped_why : null, gene?.day === day ? gene.dropped_why : null]) for (const [k, n] of Object.entries(w ?? {})) whyBoth[k] = (whyBoth[k] ?? 0) + n;
   // The host whose counters started first today sets since and before_since.
   const first = [m.day === day ? m.kinds : null, gene?.day === day ? gene : null].filter((k): k is NonNullable<typeof k> => !!k?.since).sort((a, b) => a.since!.localeCompare(b.since!))[0] ?? null;
+  // Mail waiting right now on both hosts (retry: account mail Resend refused; delayed: alerts for after the reset).
+  const here = { retry: (JSON.parse((await env.DB.get('host:mail-retry')) ?? '[]') as unknown[]).length, delayed: (JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as unknown[]).length };
+  const waiting_now = { retry: here.retry + (gene?.waiting_now?.retry ?? 0), delayed: here.delayed + (gene?.waiting_now?.delayed ?? 0) };
   return {
     day,
+    // Both hosts' tallies, as of this file's generated_at. /health shows this same view (and its host's own under this_host).
+    scope: 'both hosts',
     // Resend's own count for the UTC day, account-wide: the later of the two hosts' readings.
     resend_used: used,
+    waiting_now,
     daily_cap: 100,
     reserve_for_account_mail: 15,
     policy: (await import('./email')).MAIL_POLICY,

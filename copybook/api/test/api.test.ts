@@ -1059,7 +1059,7 @@ describe('copybook api', () => {
     expect(em.mailQuota.kinds).toMatchObject({ preview: 10, test: before.test + 10 - before.preview, real: before.real });
     expect(JSON.parse((await env.DB.get('host:mail-delayed'))!).filter((m: { subject: string }) => /preview 1[01]$/.test(m.subject))).toHaveLength(2);
     const probe = await (await handleRequest(new Request('https://api.test/health?probe=1'), env)).json();
-    expect(Object.keys(probe.mail_kinds)).toEqual(['day', 'used', 'real', 'test', 'account', 'preview', 'since', 'used_at_since', 'queued']);
+    expect(Object.keys(probe.mail_kinds)).toEqual(['day', 'used', 'real', 'test', 'account', 'preview', 'since', 'used_at_since', 'queued', 'waiting_now']);
     // The day's Resend count splits into parts that add up to it: what came before the counters started, then by kind.
     const v = em.kindsView(probe.mail_kinds.used, probe.mail_kinds);
     expect([v.before_since + v.real + v.test + v.account + v.other, v.since]).toEqual([probe.mail_kinds.used, probe.mail_kinds.since]);
@@ -1486,6 +1486,19 @@ describe('copybook api', () => {
     const kv = health.kinds;
     expect(kv.before_since + kv.real + kv.test + kv.account + kv.other).toBe(health.used);
     expect(health.by_kind).toEqual(kv);
+    // Outcomes (never reached Resend) are nested, apart from the parts that sum to used.
+    expect(Object.keys(kv.outcomes)).toEqual(['queued', 'sinked', 'dropped_not_sent', 'dropped_why']);
+    // With today's status.json readable, /health shows its both-hosts view (one since, one set of labels, its time),
+    // and this host's own tally under this_host: the analyst saw account 4 / other 0 there against 1 / 3 here.
+    const both = { day: health.day, resend_used: health.used + 3, by_kind: { ...kv, account: kv.account + 3 }, waiting_now: { retry: 0, delayed: 7 } };
+    const real0 = globalThis.fetch;
+    env.PUBLIC_URL = 'https://pub.test/';
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).startsWith('https://pub.test/status.json') ? Response.json({ generated_at: '2026-11-11T11:40:00Z', mail_quota: both }) : real0(u, init)));
+    const h2 = (await (await privateHealth()).json()).mail_quota;
+    vi.stubGlobal('fetch', real0);
+    env.PUBLIC_URL = undefined;
+    expect([h2.scope, h2.as_of, h2.used, h2.kinds, h2.by_kind, h2.waiting_now]).toEqual(['both hosts', '2026-11-11T11:40:00Z', both.resend_used, both.by_kind, both.by_kind, both.waiting_now]);
+    expect([h2.this_host.scope, h2.this_host.used, h2.this_host.kinds]).toEqual(['this host', health.used, kv]);
     env.TEST_MAIL_SINK = 'off';
   });
 

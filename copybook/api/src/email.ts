@@ -78,7 +78,10 @@ export function kindsView(used: number, k: MailKinds | null | undefined) {
   const real = k?.real ?? 0, test = k?.test ?? 0, account = k?.account ?? 0;
   // Counters started without the day's count then (an older build): everything not tallied counts as before them.
   const before = k ? (k.used_at_since ?? Math.max(0, used - real - test - account)) : used;
-  return { real, test, account, preview: k?.preview ?? 0, before_since: before, other: Math.max(0, used - before - real - test - account), since: k?.since ?? null, queued: k?.queued ?? 0, sinked: k?.sinked ?? 0, dropped_not_sent: k?.dropped ?? 0, dropped_why: k?.dropped_why ?? {} };
+  const outcomes = { queued: k?.queued ?? 0, sinked: k?.sinked ?? 0, dropped_not_sent: k?.dropped ?? 0, dropped_why: k?.dropped_why ?? {} };
+  // Sums to used: before_since + real + test + account + other. `outcomes` is what never reached Resend (not in used);
+  // its flat copies stay until Feb 2027.
+  return { real, test, account, preview: k?.preview ?? 0, before_since: before, other: Math.max(0, used - before - real - test - account), since: k?.since ?? null, outcomes, ...outcomes };
 }
 /** Previews, replays and samples to test inboxes: at most this many a day; past it they wait for the reset. */
 export const PREVIEW_DAILY_CAP = 10;

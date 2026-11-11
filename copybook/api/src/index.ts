@@ -499,7 +499,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const p = await pollerStatus(env, Date.now());
       const { total, last_7d } = await (await import('./alerts')).dupesBlocked(env);
       const meter = JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') as { day?: string; used?: number; kinds?: unknown } | null;
-      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null, dupes_blocked: { total, last_7d }, mail_kinds: meter?.day ? { day: meter.day, used: meter.used ?? 0, ...((meter.kinds as object) ?? {}) } : null }, 200, { 'cache-control': 'no-store' });
+      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null, dupes_blocked: { total, last_7d }, mail_kinds: meter?.day ? { day: meter.day, used: meter.used ?? 0, ...((meter.kinds as object) ?? {}), waiting_now: { retry: (JSON.parse((await env.DB.get('host:mail-retry')) ?? '[]') as unknown[]).length, delayed: (JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as unknown[]).length } } : null }, 200, { 'cache-control': 'no-store' });
     }
     // Seconds from EDGAR acceptance to handing the alert to the mailer, for the latest alerted filings.
     // Live alerts only (test replays excluded); ?latency=all returns every stored one instead of the latest 10.
@@ -527,7 +527,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       // kinds and by_kind are the same view, adding up to used: before_since + real + test + account + other.
       const view = kindsView(m.used, m.kinds);
       const waiting = { retry: (JSON.parse((await env.DB.get('host:mail-retry')) ?? '[]') as unknown[]).length, delayed: (JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as unknown[]).length };
-      return { ...m, kinds: view, by_kind: view, waiting_now: waiting, alert_emails_today_by_hour: byHour, daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15, policy: (await import('./email')).MAIL_POLICY };
+      const this_host = { scope: 'this host', used: m.used, kinds: view, waiting_now: waiting };
+      // The figures status.json publishes (both hosts, one since, one set of labels), as of its generated_at; this
+      // host's own tally under this_host. Without a readable status.json for today: this host's view.
+      const pub = env.PUBLIC_URL ? ((await fetch(`${env.PUBLIC_URL}status.json?t=${Date.now()}`, { signal: AbortSignal.timeout(2000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { generated_at?: string; mail_quota?: { day?: string; resend_used: number; by_kind: typeof view; waiting_now: typeof waiting } } | null) : null;
+      const both = pub?.mail_quota?.day === m.day && pub.mail_quota.by_kind ? pub.mail_quota : null;
+      const shown = both ? { scope: 'both hosts', as_of: pub!.generated_at ?? null, used: both.resend_used, kinds: both.by_kind, by_kind: both.by_kind, waiting_now: both.waiting_now } : { ...this_host, by_kind: view };
+      return { ...m, ...shown, this_host, alert_emails_today_by_hour: byHour, daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15, policy: (await import('./email')).MAIL_POLICY };
     })(), moves_queue: await st.movesQueue(env, await st.alertHealth(env, Date.now())), ...business }, 200, h);
   }
 
