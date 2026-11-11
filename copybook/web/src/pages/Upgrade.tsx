@@ -21,7 +21,7 @@ const ADDS: Record<'pro' | 'fund', [string, string][]> = {
     [`${FUND_SEATS} seats`, 'Your team shares one book, one set of follows and one team channel, where each alert posts once.'],
     ['Seat admin', 'Add and remove seats from your account page, sign a departing colleague out everywhere at once and delete their API keys; Remove the seat to end access.'],
     ['Everything in Copy Pro', 'Full My book across every 13F filer, peers, 13F linking, CSV and the API.'],
-    ['Annual invoice', 'Net 30 with a W-9, if your fund pays that way.'],
+    ['Annual invoice', 'Net 30, if your fund pays that way. W-9 available once our entity details are published.'],
   ],
 }
 const dateOf = (v?: number | string | null) => (v == null ? null : new Date(typeof v === 'number' ? v * 1000 : v))
@@ -56,7 +56,7 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
   const other =
     target === 'fund' ? (
       <Paths
-        left={['Pay by invoice', 'Annual invoice, net 30, with a W-9. No account needed; we set up the plan when you reply.', <Button to="/contact/?topic=fund" className="mt-3 w-full">Request an invoice (net 30, W-9)</Button>]}
+        left={['Pay by invoice', 'Annual invoice, net 30. No account needed; we set up the plan when you reply.', <Button to="/contact/?topic=fund" className="mt-3 w-full">Request an invoice (net 30)</Button>]}
         right={['Pay by card', 'Sign in with the email on your Copy plan to switch it to Fund, prorated.', <Button to="/account/" variant="outline" className="mt-3 w-full">Sign in to switch</Button>]}
       />
     ) : (
@@ -94,7 +94,7 @@ function Body({ member, target }: { member: Member | null; target: 'pro' | 'fund
         <Note>You’re on the free Friday email, so there’s no paid plan to switch yet.</Note>
         {target === 'fund' ? (
           <Paths
-            left={['Pay by invoice', 'Annual invoice, net 30, with a W-9. We set up the plan when you reply.', <Button to="/contact/?topic=fund" className="mt-3 w-full">Request an invoice (net 30, W-9)</Button>]}
+            left={['Pay by invoice', 'Annual invoice, net 30. We set up the plan when you reply.', <Button to="/contact/?topic=fund" className="mt-3 w-full">Request an invoice (net 30)</Button>]}
             right={['Pay by card', `Start Copy Fund free for ${TRIAL_DAYS} days.`, <Button to="/pricing/" variant="outline" className="mt-3 w-full">Start {TRIAL_DAYS}-day free trial</Button>]}
           />
         ) : (
@@ -187,9 +187,9 @@ function Change({ member, target }: { member: Member; target: 'pro' | 'fund' }) 
               </div>
               <div className="rounded-xl bg-paper p-4">
                 <p className="text-[14px] font-semibold">Pay by invoice</p>
-                <p className="mt-1 min-h-[2.5em] text-[13px] text-ink-2">Annual invoice, net 30, with a W-9. We set up the plan when you reply.</p>
+                <p className="mt-1 min-h-[2.5em] text-[13px] text-ink-2">Annual invoice, net 30. We set up the plan when you reply.</p>
                 <Button to="/contact/?topic=fund" variant="outline" className="mt-3 w-full">
-                  Request an invoice (net 30, W-9)
+                  Request an invoice (net 30)
                 </Button>
               </div>
             </div>

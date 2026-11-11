@@ -70,7 +70,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
       { t: 'Shared book and peer lists', d: 'One set of follows, watchlist, owned book and peers the whole team works from.' },
       { t: 'One team channel', d: 'Each alert posts once to your team’s Slack channel, whoever follows it.' },
       { t: 'Seat admin', d: 'Add and remove seats from your account page, sign a departing colleague out everywhere at once and delete their API keys; Remove the seat to end access.' },
-      { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 on request.' },
+      { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 available once our entity details are published.' },
     ],
     why: FUND_WHY,
   },
@@ -108,7 +108,7 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['One team Slack channel: each alert posts once', false, false, false, true],
   ['Seat admin: add and remove seats', false, false, false, true],
   ['Revoke a seat’s sessions', false, false, false, true],
-  ['Invoice billing, W-9', false, false, false, true],
+  ['Invoice billing (net 30)', false, false, false, true],
 ]
 
 /** "Warren Buffett buy $26.9M of SIRI between 13Fs": the top between-13F move on the stock or investor page the
@@ -248,6 +248,11 @@ export function Pricing() {
                   <Button to="/upgrade/?plan=fund" variant="dark" className="w-full">
                     Upgrade to Fund
                   </Button>
+                ) : tier.id === 'fund' && cycle === 'monthly' && live ? (
+                  // Monthly is billed by card, so the card trial leads; invoicing (yearly) is the second path below.
+                  <Button href={attributed(link)} onClick={referredCheckout('fund', cycle, attributed(link))} variant="dark" className="w-full">
+                    Start {TRIAL_DAYS}-day free trial
+                  </Button>
                 ) : tier.id === 'fund' ? (
                   // Funds mostly buy by invoice; the card trial stays as a quiet second path.
                   <Button to="/contact/?topic=fund" variant="dark" className="w-full">
@@ -264,15 +269,21 @@ export function Pricing() {
                 <p className={`mt-2.5 min-h-[3.6em] text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>
                   {tier.id === 'fund' ? (
                     <>
-                      {cycle === 'monthly' ? 'Founding price $199/mo. Monthly is billed by card; invoicing (net 30) is yearly. Email' : 'Founding price $1,990/yr, invoiced net 30. W-9 on request. Or email'}{' '}
+                      {cycle === 'monthly' ? 'Founding price $199/mo. Monthly is billed by card; invoicing (net 30) is yearly. Email' : 'Founding price $1,990/yr, invoiced net 30. W-9 available once our entity details are published. Or email'}{' '}
                       <a href="mailto:hello@factordynamics.com" className="underline underline-offset-2 hover:text-ink">
                         hello@factordynamics.com
                       </a>
                       .{' '}
-                      {live && (
-                        <a href={attributed(link)} onClick={referredCheckout('fund', cycle, attributed(link))} className="underline underline-offset-2 hover:text-ink">
-                          Or start a {TRIAL_DAYS}-day trial by card
-                        </a>
+                      {cycle === 'monthly' && live ? (
+                        <Link to="/contact/?topic=fund" className="underline underline-offset-2 hover:text-ink">
+                          Request access / pay by invoice yearly
+                        </Link>
+                      ) : (
+                        live && (
+                          <a href={attributed(link)} onClick={referredCheckout('fund', cycle, attributed(link))} className="underline underline-offset-2 hover:text-ink">
+                            Or start a {TRIAL_DAYS}-day trial by card
+                          </a>
+                        )
                       )}
                     </>
                   ) : plan && mine && !member?.seat && tier.id === 'pro' && mine === 'copy' ? (
@@ -383,7 +394,7 @@ export function Pricing() {
                 'How does the free trial work?',
                 `Every paid plan is free for ${TRIAL_DAYS} days. Stripe takes a card at signup so the plan continues without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then.`,
               ],
-              ['What does the founding price mean?', 'Subscribe to Pro or Fund before December 31 and your price stays at $39/mo ($390/yr) for Pro or $1,990/yr for Fund for as long as you stay subscribed, even if list prices rise.'],
+              ['What does the founding price mean?', 'Subscribe to Pro or Fund, or start a trial, by December 31 and your price stays for as long as you stay subscribed, even if list prices rise: $39/mo or $390/yr for Pro, $199/mo or $1,990/yr for Fund. A trial started by December 31 keeps the founding price even if it converts in January.'],
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [
                 'How fast are filing alerts?',

@@ -31,7 +31,8 @@ export function Contact() {
         topic,
         name: form.name.trim(),
         email: form.email.trim(),
-        message: form.message.trim() || undefined,
+        // "More than 10" has no seat number; it reaches us at the top of the note.
+        message: [fund && form.seats === 'more' ? `Team size: more than ${FUND_SEATS}.` : '', form.message.trim()].filter(Boolean).join('\n') || undefined,
         page: '/contact/',
         website: form.website || undefined,
         ...(fund ? { fund: form.fund.trim(), seats: Number(form.seats) || undefined, invoice: form.invoice, plan_interval: 'yearly' } : {}),
@@ -58,7 +59,7 @@ export function Contact() {
             <>
               <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Pro for up to {FUND_SEATS} seats at a flat price: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-ink-2">
-                {['Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 on request', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.'].map((x) => (
+                {['Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 available once our entity details are published', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.'].map((x) => (
                   <li key={x} className="flex gap-2.5">
                     <Check className="mt-1 shrink-0 text-accent" /> {x}
                   </li>
@@ -139,6 +140,7 @@ export function Contact() {
                           {n === '1' ? '1 person' : `${n} people`}
                         </option>
                       ))}
+                      <option value="more">More than {FUND_SEATS} (tell us in the note)</option>
                     </select>
                   </label>
                 </div>
