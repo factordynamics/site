@@ -2673,7 +2673,7 @@ export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reaso
 
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
 interface Job {
-  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota' | 'email2' | 'namesWeekly';
+  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota' | 'email2' | 'namesWeekly' | 'kahnConfirm';
   at: number;
 }
 
@@ -2735,6 +2735,8 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   if (m % 15 === 0 && (h > 2 || m >= 15) && h >= 2 && h <= 5 && t.getUTCDay() === 6) due.push({ name: 'namesWeekly', at: scheduledTime });
   // Email 2, once: 13F deadline night, Mon Nov 16 9:30pm ET (Tue 02:30 UTC). runEmail2 records it done, sent or skipped.
   if (m === 30 && h === 2 && t.toISOString().slice(0, 10) === '2026-11-17') due.push({ name: 'email2', at: scheduledTime });
+  // Once: Kahn Brothers' filing day, Thu Nov 12 10:00 UTC, unconfirmed trials' confirmation link (retried to 10:55).
+  if (m % 5 === 0 && h === 10 && t.toISOString().slice(0, 10) === '2026-11-12') due.push({ name: 'kahnConfirm', at: scheduledTime });
   // Owned and watched names' insider and 13D/G events: every 10 minutes (each name hourly, 10 minutes in filing week).
   if (m % 10 === 9) due.push({ name: 'issuers', at: scheduledTime });
   const rawQueue = await env.DB.get('jobs:due');
@@ -2753,6 +2755,7 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
       weekly: () => import('./free').then((x) => x.runWeekly(env, job.at)),
       email2: () => import('./free').then((x) => x.runEmail2(env, job.at)),
       namesWeekly: () => runWeeklyNames(env, job.at),
+      kahnConfirm: () => import('./revenue').then((x) => x.runKahnConfirm(env, job.at)),
       // A quiet minute's leftover SEC requests, keeping 4 for the mailer and GitHub.
       issuers: () =>
         import('./stockevents').then(async (x) => {

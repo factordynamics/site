@@ -482,6 +482,25 @@ describe('copybook api', () => {
     expect((await fullCheckout('cs_test_open')).status).toBe(409);
   });
 
+  it("Kahn day: unconfirmed trials with follows get their confirmation link once; confirmed or follow-less ones don't", async () => {
+    const tm = (c: string, extra: Record<string, unknown> = {}) => env.DB.put(`cus:${c}`, JSON.stringify({ customer: c, email: `${c}@reader.test`, status: 'trialing', plan: 'copy', interval: 'monthly', period_end: 0, subscription: `sub_${c}`, alerts: [], welcomed: true, email_pending: true, ...extra }));
+    await tm('kc1');
+    await putFollows('kc1', { investors: ['irving-kahn'] });
+    await tm('kc2');
+    await putFollows('kc2', {});
+    await tm('kc3', { email_pending: undefined });
+    await putFollows('kc3', { stocks: ['AAPL'] });
+    const { runKahnConfirm } = await import('../src/revenue');
+    expect(await runKahnConfirm(env, Date.UTC(2026, 10, 12, 10))).toEqual({ status: 'sent', sent: 1 });
+    expect(sent.map((x) => [x.to[0] ?? x.to, x.subject])).toEqual([['kc1@reader.test', 'Kahn Brothers files today: confirm your email']]);
+    // The link signs the member in, which confirms the address.
+    const login = decodeURIComponent(sent[0].text.match(/login=([^\s]+)/)![1]);
+    expect((await handleRequest(new Request('https://api.test/session', { method: 'POST', body: JSON.stringify({ login }) }), env)).status).toBe(200);
+    expect(JSON.parse((await env.DB.get('cus:kc1'))!).email_pending).toBeUndefined();
+    expect(await runKahnConfirm(env, Date.UTC(2026, 10, 12, 10, 5))).toEqual({ status: 'already done' });
+    expect(sent).toHaveLength(1);
+  });
+
   it('login emails only active members but always answers ok', async () => {
     // subscription.created can arrive before checkout.session.completed: the email comes from the customer.
     stripeObjects['customers/cus_1'] = { id: 'cus_1', email: 'a@example.com' };
@@ -5451,6 +5470,9 @@ describe('copybook api', () => {
 
     expect((await v1('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20')).body.error.code).toBe('not_yet_available');
     expect((await v1('/v1/filers/warren-buffett/holdings/2025Q1?as_of=garbage')).body.error.code).toBe('bad_request');
+    const off = (await v1('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-06-01T16:07:00-04:00')).body.error;
+    expect([off.code, /read as 2025-06-01T20:07:00Z \(UTC\)/.test(off.message)]).toEqual(['not_yet_available', true]);
+    expect((await v1('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-06-01&version=original')).body.error.code).toBe('bad_request');
     // Ignoring as_of would hand back today's answer as a point-in-time one.
     for (const p of ['/v1/stocks/AAPL/holders?as_of=2025-06-01', '/v1/changes/2025Q1?filer=warren-buffett&as_of=2025-06-01', '/v1/filers/warren-buffett/holdings?from=2025Q1&to=2025Q1&as_of=2025-06-01']) {
       const r = await v1(p);

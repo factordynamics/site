@@ -1066,8 +1066,12 @@ ROUTES.push(
     if (url.searchParams.has('as_of')) {
       const t = url.searchParams.get('as_of') ?? '';
       const ok = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2}))?$/.test(t) && !Number.isNaN(Date.parse(/T/.test(t) ? t : `${t}T23:59:59Z`));
-      if (!ok) return v1error('bad_request', 400, 'as_of must be an ISO 8601 date (2025-06-01, meaning 23:59:59Z) or a UTC datetime (2025-06-01T20:07:00Z).');
-      return v1error('not_yet_available', 501, 'as_of (point-in-time reconstruction) is coming; this endpoint currently returns the book as now known, with amendments merged.');
+      if (!ok) return v1error('bad_request', 400, 'as_of must be an ISO 8601 date (2025-06-01, meaning 23:59:59Z) or a datetime with Z or a UTC offset (2025-06-01T20:07:00Z, 2025-06-01T16:07:00-04:00), which is normalised to UTC.');
+      // version picks one filing, as_of the book publicly known at a time: together they'd contradict (draft 2).
+      if (url.searchParams.has('version')) return v1error('bad_request', 400, "as_of and version can't be combined: version picks one filing, as_of the book as publicly known at a time. Pass one.");
+      // A UTC offset is accepted and normalised (2025-06-01T16:07:00-04:00 is 2025-06-01T20:07:00Z), and the reply says so.
+      const utc = new Date(Date.parse(/T/.test(t) ? t : `${t}T23:59:59Z`)).toISOString().replace('.000Z', 'Z');
+      return v1error('not_yet_available', 501, `as_of (point-in-time reconstruction) is coming; this endpoint currently returns the book as now known, with amendments merged. as_of ${t} is read as ${utc} (UTC).`);
     }
     if (qp !== 'latest' && !QUARTER.test(qp)) return v1error('bad_request', 400, 'quarter must look like 2025Q1, or be latest.');
     const f = await resolveAny(env, id);

@@ -5,12 +5,23 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.10';
+export const SPEC_REVISION = '2026-11-11.11';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-as-of-offsets',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'GET /v1/filers/{filer}/holdings/{quarter}: as_of accepts a UTC offset (2025-06-01T16:07:00-04:00) and normalises it to UTC; the reply states the UTC time it read. as_of together with version returns 400 bad_request.',
+      'Spec: `unreliable` documents the marking Copybook applies to rows from a pre-schema-3 holder index (the same three fields as the data run\'s own flags, so a client filters on `unreliable` alone).',
+    ],
+  },
   {
     id: '2026-11-11-held-lines-in-alerts',
     date: '2026-11-11',

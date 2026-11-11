@@ -2,7 +2,7 @@ import type { Alert13F, AlertEvent } from './alerts';
 import { FOOTER, sendMail, type Mail } from './email';
 import { isActive, isPaused, WORKER_URL, pauseScheduled, testAddress, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
-import { customerHasCard, getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
+import { customerHasCard, getFollows, getMember, listMembers, LOGIN_TTL, putMember, syncSubscription } from './members';
 import { SEAT_LIMIT } from './seats';
 import { type WinterPreview, winterLine } from './stockevents';
 import { DEADLINES, deadlineLabel, deadlineMs, inFilingWeek, lastDeadline, nextDeadline, pauseResumesAt } from './seasons';
@@ -720,6 +720,29 @@ export async function handleWhy(env: Env, req: Request, url: URL): Promise<Respo
   const esc = (x: string) => x.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   const send = `<form method="post" action="why"><input type="hidden" name="t" value="${esc(t)}"><input type="hidden" name="r" value="${esc(r)}"><p><label>Anything else we should know? (optional)<br><textarea name="note" rows="4" style="width:100%;font:inherit"></textarea></label></p><button style="font:inherit;padding:6px 14px">Send</button></form>`;
   return page(`Your reason: “${WHY[r]}”. Send it?`, send);
+}
+
+/**
+ * Once, Thu Nov 12 2026 10:00 UTC (6 am ET), before Kahn Brothers files (the lead, Nov 11): every unconfirmed trial
+ * (email_pending) that follows something gets its confirmation link again, so the day's alert can reach it. The link
+ * is the sign-in link itself (7 days), so it is fine to send to an unproven address. Each address is claimed before its
+ * send and the run is recorded done, so a retried or second host's minute sends nothing twice.
+ */
+export async function runKahnConfirm(env: Env, now: number): Promise<Record<string, unknown>> {
+  if (await env.DB.get('kahn-confirm:done')) return { status: 'already done' };
+  const sent: string[] = [];
+  for (const m of await listMembers(env)) {
+    if (!lifecycle(m) || m.status !== 'trialing' || !m.email_pending || !m.email) continue;
+    const f = await getFollows(env, m);
+    if (!f.investors.length && !f.stocks.length && !f.owned.length) continue;
+    if (await env.DB.get(`kahn-confirm:${m.customer}`)) continue;
+    await env.DB.put(`kahn-confirm:${m.customer}`, new Date(now).toISOString(), { expirationTtl: 30 * 86400 });
+    const link = `${env.SITE_URL}account/?login=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, LOGIN_TTL))}`;
+    await sendMail(env, [{ to: m.email, subject: 'Kahn Brothers files today: confirm your email', text: `Kahn Brothers files today. Confirm your email to get the alert:\n${link}\n\nUntil you open it, Copybook sends you nothing.${FOOTER}` }]);
+    sent.push(m.customer);
+  }
+  await env.DB.put('kahn-confirm:done', JSON.stringify({ at: new Date(now).toISOString(), sent: sent.length }));
+  return { status: 'sent', sent: sent.length };
 }
 
 /** Daily: trial reminders 3 days out, and once per season the recap for monthly members. */
