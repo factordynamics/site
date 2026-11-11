@@ -875,7 +875,7 @@ describe('copybook api', () => {
     expect((await cf.DB.list({ prefix: '' })).keys).toEqual([]); // not one KV write on Cloudflare
   });
 
-  it("email budget: Mailgun takes over past Resend's cap; when email is short a member's later alerts within 20 minutes go as one email; test members get 10 a day", async () => {
+  it("email budget: Mailgun takes over past Resend's cap; when email is short a member's later alerts within 20 minutes go as one email; test members get 5 a day and no 13G email", async () => {
     const today = new Date().toISOString().slice(0, 10);
     const T = Date.parse(`${today}T15:00:00Z`);
     const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, accepted: new Date(T - 60_000).toISOString(), url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: 'Sirius XM', ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: null });
@@ -920,12 +920,22 @@ describe('copybook api', () => {
     const f3 = JSON.parse((await env.DB.get('alerts:latency'))!).filter((l: { accession: string }) => l.accession === 'F3');
     expect(f3.some((l: { coalesced?: boolean }) => l.coalesced)).toBe(true);
 
-    // Email is no longer short: at once. A test member past 10 alert emails today gets no more email.
+    // Email is no longer short: at once. A test member's 5th alert email today goes; past 5, no more email.
     await env.DB.put('stats:sent', '[]');
-    await env.DB.put(`mailn:t:${today}`, '10');
+    await env.DB.put(`mailn:t:${today}`, '4');
     mg.length = 0;
     await at('F5', 24);
-    expect(got()).toEqual([['real@example.com', 'sec.gov/F5']]);
+    expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F5'], ['real@example.com', 'sec.gov/F5']]);
+    mg.length = 0;
+    await at('F6', 25);
+    expect(got()).toEqual([['real@example.com', 'sec.gov/F6']]);
+    // A 13G or 13G/A never goes to a test member by email (feed only), and doesn't use up its 5.
+    await env.DB.put(`mailn:t:${today}`, '0');
+    for (const c of ['r', 't']) await putFollows(c, { investors: ['warren-buffett'], include_13g: true });
+    mg.length = 0;
+    await deliver(env, [], [{ ...ev('F7'), form: 'SCHEDULE 13G/A', kind: '13g', action: 'stake_update', percent_of_class: 5.2 } as never], T + 26 * 60_000);
+    expect(got()).toEqual([['real@example.com', 'sec.gov/F7']]);
+    expect(await env.DB.get(`mailn:t:${today}`)).toBe('0');
     vi.stubGlobal('fetch', orig);
   });
 

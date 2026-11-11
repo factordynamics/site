@@ -237,7 +237,8 @@ async function scoped(env: Env, m: Member, f: Follows): Promise<Member> {
 }
 
 /** Test and critic members: at most this many alert emails a UTC day; past it, feed, chat and webhooks only. */
-export const TEST_MAIL_CAP = 10;
+/** Launch week (through Mon Nov 16): 5 a day, so test traffic leaves room for real members. */
+export const TEST_MAIL_CAP = 5;
 const testMailKey = (customer: string, now: number) => `mailn:${customer}:${new Date(now).toISOString().slice(0, 10)}`;
 /** Leading-edge window: when email runs short, a member's first alert goes at once; later ones within it go as one email at its end. */
 export const COALESCE_MS = 20 * 60_000;
@@ -452,13 +453,17 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     if (f.digest) digest++;
     else {
       const test = !!m.test || testAddress(m.email);
+      // Test members get no 13G or 13G/A by email (feed, chat and webhooks above only): the most frequent form, and
+      // the least worth the shared email budget.
+      const evs = test && !only ? mine.events.filter((e) => e.kind !== '13g') : mine.events;
+      if (!mine.filings.length && !evs.length) continue;
       // Test members: at most TEST_MAIL_CAP alert emails a day; past that, the feed, chat and webhooks above only.
       const n = test && !only ? Number((await env.DB.get(testMailKey(m.customer, now))) ?? 0) : 0;
       if (test && !only && n >= TEST_MAIL_CAP) {
         testCapped++;
         continue;
       }
-      let send = { filings: mine.filings, events: mine.events };
+      let send = { filings: mine.filings, events: evs };
       if (!only) {
         const win = JSON.parse((await env.DB.get(`mailwin:${m.customer}`)) ?? 'null') as Held | null;
         const open = win && win.until > now;
@@ -466,12 +471,12 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
         const tight = pressure.room - mails.length <= pressure.projected;
         if (tight && open) {
           // Inside this member's window while email is short: held, sent with the window's other alerts at its end.
-          await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ ...win, filings: [...win.filings, ...mine.filings], events: [...win.events, ...mine.events] }));
+          await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ ...win, filings: [...win.filings, ...mine.filings], events: [...win.events, ...evs] }));
           held++;
           continue;
         }
         // Anything still held goes out with this email (the window ended, or email is no longer short).
-        if (win && (win.filings.length || win.events.length)) send = { filings: [...win.filings, ...mine.filings], events: [...win.events, ...mine.events] };
+        if (win && (win.filings.length || win.events.length)) send = { filings: [...win.filings, ...mine.filings], events: [...win.events, ...evs] };
         if (tight) {
           await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ until: now + COALESCE_MS, filings: [], events: [] } satisfies Held));
           (heldIndex ??= JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>)[m.customer] = now + COALESCE_MS;

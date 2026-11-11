@@ -16,7 +16,7 @@ export const CHANGELOG: { id: string; date: string; schema_version: string; brea
     breaking: false,
     status: 'shipped',
     changes: [
-      'Fix: Position.`suspect_units` is null until ingest\'s cross-filer check has run on the row, then true or false. It used to say false for rows never checked. Typed clients should accept null.',
+      'Correction, widening the type to allow null: Position.`suspect_units` is now boolean or null. It is null until ingest\'s cross-filer check has run on the row, then true or false; it used to say false for rows never checked.',
       'A bad `limit` or `offset` on /v1/events and /v1/changes now names the parameter and the value it got.',
       'The spec declares the X-RateLimit-* headers (the same values as RateLimit-*) and gives /v1/stocks/{stock}/holders rows a schema (HolderRow), with `accepted_at` described as filing-level.',
     ],
