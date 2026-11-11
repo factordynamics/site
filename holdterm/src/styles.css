@@ -1527,11 +1527,18 @@ a.hb-row:hover {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+/* A filing's biggest trade: the stock and what happened on the left, the amount right-aligned on the same line so
+ * the amounts make a column. Only when the cell is too narrow for all three (phones) does the amount take a line
+ * of its own, still right-aligned, so the label always shows ("NVDA Trimmed", then "−$116.1M"). */
 .move {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
   white-space: nowrap;
 }
-.move .tag {
-  margin: 0 6px;
+.move .move-amt {
+  margin-left: auto;
 }
 .due {
   margin-top: 12px;
@@ -1552,17 +1559,6 @@ a.hb-row:hover {
   }
   .top nav a {
     padding: 7px 9px;
-  }
-}
-/* Laptops and phones: the biggest trade takes two lines, the stock and what happened, then the amount, so the
- * label always shows ("NVDA Trimmed", then "−$116.1M") instead of a bare signed number. */
-@media (max-width: 1400px) {
-  .home .move .tag {
-    margin-right: 0;
-  }
-  .home .move .move-amt {
-    display: block;
-    margin-top: 1px;
   }
 }
 @media (max-width: 1180px) {
@@ -1802,6 +1798,11 @@ a.hb-row:hover {
   }
   .home {
     --trade-w: 150px;
+  }
+  /* Every row the same shape on phones: the amount always under the stock and what happened. */
+  .home .move .move-amt {
+    flex-basis: 100%;
+    text-align: right;
   }
   .home .trunc {
     max-width: 104px;
