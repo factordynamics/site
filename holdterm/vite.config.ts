@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react'
+import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -76,6 +77,68 @@ function fundFacts(b: Book) {
     lead,
     card: { pm: b.pm, quarter: quarterLabel(b.quarter), filed: fmtDay(b.filing_date), value: usd(b.long_value), positions: live.length, change: d == null || !isFinite(d) ? null : { text: `${d >= 0 ? '+' : '−'}${Math.abs(d * 100).toFixed(1)}% vs ${prevQ}`, up: d >= 0 }, top },
   }
+}
+
+/** The offline page and the service worker that serves it (public/sw.js): the shell it caches is this build's
+ * script, stylesheet and Latin fonts, and its cache version is a hash of those names and the offline page, so a
+ * deploy that changes either replaces the cache. Served at /offline (Pages drops the .html). */
+function offline(dist: string, html: string) {
+  const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+\.(?:js|css))"/g)].map((m) => m[1])
+  const css = assets.find((a) => a.endsWith('.css'))!
+  const fonts = [...readFileSync(join(dist, css), 'utf8').matchAll(/url\((\/assets\/inter-latin(?:-ext)?-wght-normal-[^)]+\.woff2)\)/g)].map((m) => m[1])
+  const shell = [...new Set([...assets, ...fonts, '/favicon.svg'])]
+  if (assets.length < 2 || fonts.length < 2) throw new Error(`offline: shell incomplete (${shell.join(', ')})`)
+  const theme = html.match(/<script>\s*if \(location\.hostname[\s\S]*?<\/script>/)?.[0] ?? ''
+  const page = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="robots" content="noindex" />
+    ${theme}
+    <title>You’re offline · Holdterm</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="${css}" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-in">
+        <a href="/" class="brand" title="Holdterm home">
+          <svg width="24" height="24" viewBox="0 0 20 20" aria-hidden="true" class="mark"><rect width="20" height="20" rx="5" fill="var(--brand)" /><rect x="4" y="4.5" width="12" height="2.2" rx="1.1" fill="#14161a" /><rect x="4" y="8.9" width="8.5" height="2.2" rx="1.1" fill="#14161a" /><rect x="4" y="13.3" width="5" height="2.2" rx="1.1" fill="#14161a" /></svg>
+          <span class="word">Holdterm</span>
+        </a>
+      </div>
+    </header>
+    <main id="main">
+      <div class="page narrow">
+        <div class="failed" role="alert">
+          <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" class="failed-icon"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8" /><path d="M12 7v6M12 16.5v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+          <div class="failed-text">
+            <h1 style="font-size: 18px; margin: 0 0 6px">You’re offline</h1>
+            <p>Holdterm needs a connection to load the latest SEC filings. This page will reload by itself as soon as your connection is back.</p>
+            <p id="still" hidden>Still offline.</p>
+            <div class="failed-actions"><button class="btn" id="retry">Try again</button></div>
+          </div>
+        </div>
+      </div>
+    </main>
+    <script>
+      addEventListener('online', function () { location.reload() })
+      document.getElementById('retry').onclick = function () {
+        if (navigator.onLine === false) document.getElementById('still').hidden = false
+        else location.reload()
+      }
+    </script>
+  </body>
+</html>
+`
+  writeFileSync(join(dist, 'offline.html'), page)
+  const version = createHash('sha256').update(shell.join('\n') + page).digest('hex').slice(0, 12)
+  const sw = readFileSync(join(dist, 'sw.js'), 'utf8').replace('__VERSION__', version).replace('__SHELL__', JSON.stringify(shell))
+  if (sw.includes('__')) throw new Error('offline: sw.js placeholders left')
+  writeFileSync(join(dist, 'sw.js'), sw)
+  console.log(`holdterm-pages: offline page and sw.js (cache ${version}, ${shell.length} shell files)`)
 }
 
 const pages = (): Plugin => ({
@@ -160,6 +223,7 @@ const pages = (): Plugin => ({
       writeFileSync(f, body)
     }
     writeFileSync(join(dist, '404.html'), page(html, '', null))
+    offline(dist, html)
 
     const redirects = [
       ...Object.entries(MOVED).map(([a, b]) => `${a} ${b} 301`),
