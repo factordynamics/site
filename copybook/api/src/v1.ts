@@ -10,13 +10,14 @@ export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
   {
-    id: '2026-11-11-bulk-served-file',
+    id: '2026-11-11-bulk-file-and-filers-paging',
     date: '2026-11-11',
     schema_version: SCHEMA_VERSION,
     breaking: false,
     status: 'shipped',
     changes: [
       'Fix: GET /v1/bulk/{file} downloads served an older copy of each export (from Nov 9 01:17 UTC) while GET /v1/bulk listed the newer one; the 2026Q2 file still counted First Eagle\'s book twice. A download now serves exactly the listed file: its link is handed out only when the stored copy has the listed size and sha256, otherwise the file streams from the API.',
+      'Fix: GET /v1/filers ignored `limit` and `offset` and returned every filer (about 9,000). It now pages like the other list routes: limit 1 to 1000, default 500, with `next_offset` (null on the last page); `count` stays the total.',
       'Added `etag` and `sha256` to each GET /v1/bulk entry, read from the stored object. Check a download with sha256sum; `sha256` is null for a file whose digest isn\'t recorded yet, until its next check.',
     ],
   },

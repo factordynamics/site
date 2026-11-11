@@ -3912,7 +3912,7 @@ describe('copybook api', () => {
     expect(JSON.parse((await env.DB.get('v1:filers'))!)).toHaveLength(2);
     expect(await env.DB.get('jobs:due')).toBe('[]');
 
-    // /v1/filers streams the precomputed non-curated rows after the curated ones, without parsing them.
+    // /v1/filers lists the precomputed non-curated rows after the curated ones, paged (default limit 500).
     stripeObjects['checkout/sessions/cs_test_cpu'] = { id: 'cs_test_cpu', status: 'complete', created: now(), subscription: 'sub_cpu', customer_details: { email: 'cpu@example.com' } };
     stripeObjects['subscriptions/sub_cpu'] = sub('sub_cpu', 'cus_cpu', 'active', 'month', 'pro_monthly');
     const tk = (await (await call('/session', { body: { checkout_session: 'cs_test_cpu' } })).json()).token;
@@ -3925,6 +3925,10 @@ describe('copybook api', () => {
     expect(all.data.map((f: { slug: string }) => f.slug)).toEqual(['warren-buffett', 'dan-loeb', 'whale-rock-7322', 'x-1']);
     expect((await v1('/v1/filers?curated=false')).data.map((f: { slug: string }) => f.slug)).toEqual(['whale-rock-7322', 'x-1']);
     expect((await v1('/v1/filers?curated=true')).count).toBe(2);
+    const page = await v1('/v1/filers?limit=2&offset=1');
+    expect([page.count, page.next_offset, page.data.map((f: { slug: string }) => f.slug)]).toEqual([4, 3, ['dan-loeb', 'whale-rock-7322']]);
+    expect((await v1('/v1/filers?offset=3')).next_offset).toBeNull();
+    expect((await v1('/v1/filers?limit=1001')).error.code).toBe('bad_request');
     // Dan Loeb was curated after the list was built (the header names only Buffett): listed once, as curated, wherever his row was.
     const stale = (rows: unknown[]) => hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`${rows.length} 0001067983\n${JSON.stringify(rows)}`));
     const loeb = { slug: 'third-point-0273', cik: '0001040273', curated: false };

@@ -251,18 +251,23 @@ export function openapi() {
       '/v1/filers': {
         get: {
           summary: 'Every filer Copybook covers, with its latest 13F and available quarters',
-          description: 'Every 13F filer: curated filers first, then all others. ?curated=true or false filters.',
-          parameters: [{ name: 'curated', in: 'query', required: false, schema: { type: 'string', enum: ['true', 'false'] } }],
+          description: 'Every 13F filer: curated filers first, then all others. ?curated=true or false filters. Paged: `count` is the total, `next_offset` the next page (null on the last).',
+          parameters: [
+            { name: 'curated', in: 'query', required: false, schema: { type: 'string', enum: ['true', 'false'] } },
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 1000, default: 500 } },
+            { name: 'offset', in: 'query', required: false, schema: { type: 'integer', minimum: 0, default: 0 } },
+          ],
           responses: {
             '200': {
               description: 'Filers',
-              content: json(envelope({ type: 'array', items: { $ref: '#/components/schemas/Filer' } }, { count: { type: 'integer' } }), {
+              content: json(envelope({ type: 'array', items: { $ref: '#/components/schemas/Filer' } }, { count: { type: 'integer' }, next_offset: { type: ['integer', 'null'] } }), {
                 ...BUILD,
                 data: [
                   { slug: 'warren-buffett', cik: '0001067983', name: 'Berkshire Hathaway Inc', manager: 'Warren Buffett', featured: true, status: 'current', latest_quarter: '2026Q2', latest_report_date: '2026-06-30', latest_filing_date: '2026-08-14', latest_accession: '0001193125-26-352200', total_value_usd: 259000000000, position_count: 41, history_quarters: ['2026Q2', '2026Q1'], curated: true, type: null },
                   { slug: 'whale-rock-capital-management-llc-7322', cik: '0001387322', name: 'Whale Rock Capital Management LLC', manager: null, featured: false, status: null, latest_quarter: '2026Q2', latest_report_date: '2026-06-30', latest_filing_date: '2026-08-14', latest_accession: null, total_value_usd: null, position_count: 35, history_quarters: ['2026Q2'], curated: false, type: null },
                 ],
                 count: 8964,
+                next_offset: 500,
               }),
             },
             ...errResponses,

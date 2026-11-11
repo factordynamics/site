@@ -1,7 +1,7 @@
 import { linkBase, type Env } from './env';
 import { lookupTickers } from './alerts';
 import { cleanItem4, easternToUtc, fetch13F, fetchFilingMeta, filings13F, SEC_UA, type Filed13F, type FilingMeta } from './edgar';
-import { ROUTES, v1error, v1json, v1prefix, noMs, stampOf, type Stamp } from './v1';
+import { ROUTES, v1error, v1json, noMs, stampOf, type Stamp } from './v1';
 
 /** Smallest bulk file served: a real quarter is tens of MB gzipped (2026Q2: 69 MB); smaller ones are stubs from a failed run. */
 const MIN_BULK_BYTES = 1_000_000;
@@ -426,77 +426,6 @@ export async function issuerCode(env: Env, id: string): Promise<{ code: string; 
 }
 
 /**
- * /v1/filers from the precomputed file ("<count>\n[rows]") without parsing its 3 MB: the envelope and
- * curated rows are written, then the file's rows are piped through natively.
- */
-function streamFilers(body: ReadableStream<Uint8Array>, curated: unknown[]): Response {
-  const enc = new TextEncoder();
-  const Identity = (globalThis as { IdentityTransformStream?: typeof TransformStream }).IdentityTransformStream ?? TransformStream;
-  const { readable, writable } = new Identity<Uint8Array, Uint8Array>();
-  let w = writable.getWriter();
-  (async () => {
-    const reader = body.getReader();
-    // The count line, then the opening bracket of the rows.
-    let head = '';
-    let rest: Uint8Array | null = null;
-    while (rest === null) {
-      const r = await reader.read();
-      if (r.done) throw new Error('pre/v1-filers-rest.txt: no rows');
-      const nl = r.value.indexOf(10);
-      if (nl < 0) head += new TextDecoder().decode(r.value);
-      else {
-        head += new TextDecoder().decode(r.value.subarray(0, nl));
-        rest = r.value.subarray(nl + 1);
-      }
-    }
-    while (!rest.length) {
-      const r = await reader.read();
-      if (r.done) throw new Error('pre/v1-filers-rest.txt: no rows');
-      rest = r.value;
-    }
-    const [count, excluded] = head.trim().split(' ');
-    let n = Number(count);
-    // Filers curated since the precompute ran are still in its rows: drop them (rare; string search, no parse).
-    const left = excluded === undefined ? [] : (curated as { cik: string }[]).map((f) => f.cik).filter((c) => !excluded.split(',').includes(c));
-    let tail: string | null = null;
-    if (left.length) {
-      const dec = new TextDecoder();
-      let text = dec.decode(rest, { stream: true });
-      for (let r = await reader.read(); !r.done; r = await reader.read()) text += dec.decode(r.value, { stream: true });
-      text += dec.decode();
-      for (const cik of left) {
-        const at = text.indexOf(`"cik":"${cik}"`);
-        if (at < 0) continue;
-        const from = text.lastIndexOf('{"slug":', at);
-        const next = text.indexOf(',{"slug":', at);
-        text = next >= 0 ? text.slice(0, from) + text.slice(next + 1) : text.slice(0, from > 1 ? from - 1 : from) + ']';
-        n--;
-      }
-      tail = text;
-    }
-    const cur = JSON.stringify(curated).slice(1, -1);
-    await w.write(enc.encode(`${v1prefix()}"data":[${cur}${cur && n ? ',' : ''}`));
-    if (tail !== null) {
-      // Drop the rows' own "[": their closing "]" closes data.
-      await w.write(enc.encode(tail.slice(1)));
-    } else {
-      // Drop the file's own "[": its closing "]" closes data.
-      if (rest.length > 1) await w.write(rest.subarray(1));
-      reader.releaseLock();
-      w.releaseLock();
-      await body.pipeTo(writable, { preventClose: true });
-      w = writable.getWriter();
-    }
-    await w.write(enc.encode(`,"count":${curated.length + n}}`));
-    await w.close();
-  })().catch((err) => {
-    console.log(`v1 filers stream: ${err}`);
-    w.abort(err).catch(() => {});
-  });
-  return new Response(readable, { headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'private, no-store' } });
-}
-
-/**
  * Filer types in the holder index (and changes/{q}.json), ingest's filer_types.json. Ingest is renaming
  * active to long_only and adding sovereign and insurance; both names match during the switch.
  */
@@ -740,20 +669,33 @@ export function holderFilter(p: URLSearchParams, now = Date.now()): ((r: HolderR
 
 ROUTES.push(
   ['GET', /^\/v1\/filers$/, async ({ env, url }) => {
-    // Curated filers first (with their history), then every other filer the data run parsed.
-    const want = url.searchParams.get('curated');
+    // Curated filers first (with their history), then every other filer the data run parsed; paged like the other
+    // list routes (limit 1-1000, default 500; offset).
+    const p = url.searchParams;
+    const want = p.get('curated');
+    const limit = Number(p.get('limit') ?? 500);
+    const offset = Number(p.get('offset') ?? 0);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) return v1error('bad_request', 400, `limit must be an integer from 1 to 1000 (got ${p.get('limit')}); page with offset.`);
+    if (!Number.isInteger(offset) || offset < 0) return v1error('bad_request', 400, `offset must be an integer from 0 (got ${p.get('offset')}).`);
     const curated = (await filers(env)).map(({ type, ...f }) => ({ ...f, curated: true, ...(type ? { type } : { type: null }) }));
-    if (want === 'true') return v1json({ data: curated, count: curated.length });
-    const pre = await env.HIST.get('pre/v1-filers-rest.txt');
-    if (pre) return streamFilers(pre.body, want === 'false' ? [] : curated);
-    const text = await filersJson(env);
-    if (!text) return v1error('server_error', 503, 'The filer list is unavailable; retry shortly.');
     const seen = new Set(curated.map((f) => f.cik));
-    const rest = ((JSON.parse(text) as { filers: AllFiler[] }).filers ?? [])
-      .filter((f) => f.ok && !seen.has(f.cik))
-      .map((f) => ({ slug: f.slug, cik: f.cik, name: f.name, manager: null, featured: false, status: null, latest_quarter: f.quarter, latest_report_date: f.quarter ? quarterEnd(f.quarter) : null, latest_filing_date: f.filing_date, latest_accession: null, total_value_usd: null, position_count: f.position_count, history_quarters: f.quarter ? [f.quarter] : [], curated: false, type: normType(f.type) }));
-    const data = want === 'false' ? rest : [...curated, ...rest];
-    return v1json({ data, count: data.length });
+    let rest: { cik: string }[] = [];
+    if (want !== 'true') {
+      // The hourly precompute (a count line, then the rows), else the full filer list.
+      const pre = await env.HIST.get('pre/v1-filers-rest.txt');
+      if (pre) {
+        const text = await new Response(pre.body).text();
+        rest = (JSON.parse(text.slice(text.indexOf('\n') + 1)) as { cik: string }[]).filter((f) => !seen.has(f.cik));
+      } else {
+        const text = await filersJson(env);
+        if (!text) return v1error('server_error', 503, 'The filer list is unavailable; retry shortly.');
+        rest = ((JSON.parse(text) as { filers: AllFiler[] }).filers ?? [])
+          .filter((f) => f.ok && !seen.has(f.cik))
+        .map((f) => ({ slug: f.slug, cik: f.cik, name: f.name, manager: null, featured: false, status: null, latest_quarter: f.quarter, latest_report_date: f.quarter ? quarterEnd(f.quarter) : null, latest_filing_date: f.filing_date, latest_accession: null, total_value_usd: null, position_count: f.position_count, history_quarters: f.quarter ? [f.quarter] : [], curated: false, type: normType(f.type) }));;
+      }
+    }
+    const all = want === 'false' ? rest : want === 'true' ? curated : [...curated, ...rest];
+    return v1json({ data: all.slice(offset, offset + limit), count: all.length, next_offset: offset + limit < all.length ? offset + limit : null });
   }],
   ['GET', /^\/v1\/filers\/([^/]+)\/holdings\/([^/]+)$/, async ({ env, url }, [id, qp]) => {
     if (url.searchParams.has('as_of')) {
