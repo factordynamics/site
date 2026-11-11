@@ -227,9 +227,9 @@ const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => 
     ),
   },
   { key: 'act', label: 'What happened', render: (e) => <ActionTag e={e} />, sort: (e) => e.action },
-  { key: 'pc', label: 'Stake', num: true, hideSm: true, render: (e) => (e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 2 : 1)}%` : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
+  { key: 'pc', label: 'Stake', num: true, hideSm: true, title: 'Share of the company owned after the filing', render: (e) => (e.percent_of_class != null ? `${e.percent_of_class.toFixed(e.percent_of_class < 10 ? 2 : 1)}%` : <span className="dim">—</span>), sort: (e) => e.percent_of_class ?? -1 },
   { key: 'val', label: 'Value', num: true, hideSm: true, render: (e) => (e.value_usd != null ? <span className={e.action === 'sell' ? 'neg' : e.action === 'buy' ? 'pos' : ''}>{usd(e.value_usd)}</span> : <span className="dim">—</span>), sort: (e) => e.value_usd ?? -1 },
-  { key: 'sa', label: 'Shares after', num: true, hideSm: true, hide: 'lg', render: (e) => num(e.shares_after), sort: (e) => e.shares_after ?? -1 },
+  { key: 'sa', label: 'Shares now', num: true, hideSm: true, hide: 'lg', title: 'Shares owned after the filing', render: (e) => num(e.shares_after), sort: (e) => e.shares_after ?? -1 },
   {
     key: 'sec',
     label: <span className="sr">SEC filing</span>,
@@ -1229,7 +1229,8 @@ export function Filings() {
   let list = scoped
   if (tab === '13dg') list = list.filter((e) => e.kind !== 'form4')
   if (tab === 'f4') list = list.filter((e) => e.kind === 'form4')
-  const market = ins.data
+  // Every company's open-market insider trades: a tab only once that data exists (insiders.json).
+  const market = ins.data?.length ? ins.data : null
   return (
     <div className="page">
       <div className="head">
@@ -1246,11 +1247,11 @@ export function Filings() {
           ['all', 'All'],
           ['13dg', '5% stakes'],
           ['f4', 'Investor trades'],
-          ['market', 'Company insiders'],
+          ...(market ? ([['market', 'Company insiders']] as [ETab, string][]) : []),
         ]}
         label="Kinds of filing"
       />
-      {tab !== 'market' ? (
+      {tab !== 'market' || !market ? (
         <>
           <div className="filters" role="group" aria-label="filters">
             <button className={own ? 'chip on' : 'chip'} aria-pressed={own} onClick={() => setOwn(!own)}>
@@ -1258,11 +1259,18 @@ export function Filings() {
             </button>
           </div>
           <Panel title={`${list.length} filings`}>
+            <ColKey
+              items={[
+                ['13D and 13G', 'Filed within days of an investor passing 5% of a company. A 13D means it may push for change; a 13G means it stays passive.'],
+                ['Form 4', 'Filed within two business days when an investor that is an insider (a director, an officer or a 10% owner) buys or sells.'],
+                ['Stake', 'The share of the company the investor owns after the filing.'],
+              ]}
+            />
             <Grid rows={list} limit={150} href={(e) => (e.ticker && !ownVehicle(e) ? `/s/${e.ticker}` : null)} cols={eventCols(firms)} />
           </Panel>
         </>
-      ) : market && market.length ? (
-        <Panel title="open-market insider trades · Form 4 codes P and S" right={<span className="dim hide-sm">officers, directors and 10% owners</span>}>
+      ) : (
+        <Panel title="Insider buys and sells on the open market" right={<span className="dim hide-sm">Officers, directors and 10% owners, from Form 4</span>}>
           <Grid<Insider>
             limit={200}
             rows={market}
@@ -1286,10 +1294,6 @@ export function Filings() {
               },
             ]}
           />
-        </Panel>
-      ) : (
-        <Panel title="company insiders">
-          <div className="empty dim">Every company’s open-market insider buys and sells (Form 4 codes P and S) is being built from EDGAR daily indexes. Until it lands, the other tabs cover Form 4 and 13D/G filed by funds.</div>
         </Panel>
       )}
     </div>
