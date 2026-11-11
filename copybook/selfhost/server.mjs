@@ -26,7 +26,8 @@ const server = http.createServer(async (req, res) => {
     }
     const headers = new Headers();
     for (const [k, v] of Object.entries(req.headers)) {
-      if (v == null || k === 'host' || k.startsWith('cf-') || k.startsWith('mf-') || k.startsWith('x-copybook-')) continue;
+      if (v == null || k === 'host' || k.startsWith('cf-') || k.startsWith('mf-') || (k.startsWith('x-copybook-') && k !== 'x-copybook-operator')) continue;
+      // x-copybook-operator passes: only operator-authenticated routes (HEALTH_TOKEN) act on it.
       for (const x of Array.isArray(v) ? v : [v]) headers.append(k, x);
     }
     // Funnel is the only way in (we listen on loopback), and it sets X-Forwarded-For to the client.
