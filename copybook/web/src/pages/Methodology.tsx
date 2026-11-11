@@ -119,6 +119,9 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
         <p>
           <strong className="font-medium text-ink">Splits.</strong> When a stock split between a fund’s two filings, the previous quarter’s shares are multiplied by the split ratio before the comparison, and the row is labelled, for example, “split 2:1 adjusted”. The splits section below lists each one.
         </p>
+        <p id="prior-confidential" className="scroll-mt-24">
+          <strong className="font-medium text-ink">A prior 13F filed without its holdings.</strong> When a fund’s previous 13F was filed with its holdings omitted under confidential treatment (its cover page says so, as Norges Bank’s 2026Q1 13F did: $864.7B on the cover and one placeholder line in the table), or filed empty, there is no prior book to compare with. That quarter’s changes show as unknown rather than all new, and the history page and API say why (prev_quarter_status: confidential_omitted or empty, with the filing’s accession).
+        </p>
         <p>“Since the last 13F” rolls up Form 4 and Schedule 13D/G filings made after a fund’s latest 13F. The newest holding shown is the one in the most recent Form 4, which reports exact shares after each trade; a Schedule 13D/G counts the whole filing group, so it stands in only when there’s no Form 4. Dollar amounts there come from Form 4 open-market purchases and sales (codes P and S) at the prices reported.</p>
       </>
     ),
