@@ -16,6 +16,7 @@ Usage: python gate.py <data dir> [git revision, default HEAD]
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -182,6 +183,24 @@ def foreign_merges(hist: Path) -> list[str]:
     return bad
 
 
+def total_drift(hist: Path, tol: float = 0.001) -> list[str]:
+    """Quarters whose total (after the unit fix) is more than tol off the filed cover totals of the
+    filings they are built from (cover_total sums them for merged and combined books). A warning only:
+    some covers are wrong as filed, and a hard stop could block a filing-week publish."""
+    out = []
+    for folder in sorted(hist.glob("*")) if hist.exists() else []:
+        for p in sorted(folder.glob("*Q?.json")):
+            try:
+                q = json.loads(p.read_text())
+            except ValueError:
+                continue
+            total, cover = q.get("total_value") or 0, q.get("cover_total") or 0
+            if cover and abs(total - cover) > tol * cover:
+                out.append(f"{folder.name} {p.stem} ${total / 1e9:.3f}B vs cover ${cover / 1e9:.3f}B "
+                           f"({100 * (total - cover) / cover:+.2f}%)")
+    return out
+
+
 def book_totals(hist: Path) -> list[str]:
     """Quarters merged from more than one filing of the same filer that look double-counted.
 
@@ -288,6 +307,14 @@ def main() -> int:
     if merged:
         print(f"::error::Another filer's 13F merged into a book: {'; '.join(merged[:20])}; not publishing.")
         failed = True
+    drift = total_drift(data / "h")
+    if drift:
+        print(f"::warning::{len(drift)} books more than 0.1% off their filed cover totals: {'; '.join(drift[:10])}")
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as f:
+                f.write(f"### Books more than 0.1% off their filed cover totals ({len(drift)})\n\n"
+                        + "".join(f"- {d}\n" for d in drift[:200]) + "\n")
     doubled = book_totals(data / "h")
     if doubled:
         print(f"::error::Books larger than their filings: {'; '.join(doubled[:20])}; not publishing.")
