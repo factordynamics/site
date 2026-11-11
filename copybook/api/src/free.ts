@@ -588,7 +588,7 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
   const subject = o.filed.length
     ? `${deadlineNight ? 'Deadline night' : 'Today'}: ${listNames(o.filed.map((f) => lastName(f.who)))} filed. Here's what they did`
     : b0
-      ? `${b0.firm} ${b0.text.replace(/ \([^)]*% of fund\)$/, '').replace(/([+−]\$[\d.]+[KMB])/, '($1)').replace(/\.0([KMB])/, '$1')}${o.biggest.length > 1 ? ` + ${o.biggest.length - 1} more ${deadlineNight ? 'deadline ' : ''}moves` : ''}`
+      ? `${b0.firm} ${b0.text.replace(/ \([^)]*% of fund\)$/, '').replace(/([+−]\$[\d.]+[KMB])/, '($1)').replace(/\.0([KMB])/, '$1')}${o.biggest.length > 1 ? ` + ${o.biggest.length - 1} more ${deadlineNight ? 'deadline ' : ''}move${o.biggest.length > 2 ? 's' : ''}` : ''}`
       : `${deadlineNight ? '13F deadline night' : 'Tonight'}: the biggest superinvestor moves`;
   const pre = o.filed.length ? `${lastName(o.filed[0].who)}: ${three(o.filed[0].a)}` : moment || (big[1] ?? big[0] ?? intro);
   const leadText = lead.length ? `Your follows:\n${lead.map((l) => `  ${l.text}`).join('\n')}` : '';
