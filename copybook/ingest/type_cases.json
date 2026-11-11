@@ -1,5 +1,10 @@
 {
  "filers": {
+  "0000060086": {
+   "name": "Loews Corp",
+   "type": "insurance",
+   "evidence": "Holding company of CNA Financial; its 13F is the group's investment portfolio (no Form ADV)"
+  },
   "0000916542": {
    "name": "Acadian Asset Management LLC",
    "type": "long_only"
@@ -107,6 +112,11 @@
   "0001443689": {
    "name": "Senator Investment Group LP",
    "type": "hedge_fund"
+  },
+  "0001445893": {
+   "name": "CTC LLC",
+   "type": "other",
+   "evidence": "Chicago Trading Company, options market maker; its 13F is trading inventory (no Form ADV)"
   },
   "0001446194": {
    "name": "Susquehanna International Group, LLP",
@@ -283,6 +293,11 @@
   "0001974438": {
    "name": "OneAscent Investment Solutions LLC",
    "type": "wealth"
+  },
+  "0001996244": {
+   "name": "SIH Partners, LLLP",
+   "type": "other",
+   "evidence": "Susquehanna proprietary trading entity; market maker inventory (no Form ADV)"
   },
   "0001997464": {
    "name": "Marex Group Ltd",
