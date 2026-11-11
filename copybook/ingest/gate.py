@@ -148,6 +148,40 @@ def blank_accepted(data: Path) -> tuple[int, int, list[str]]:
     return blank, total, sorted(set(curated_blank))
 
 
+INDEX_TYPES = {"hedge_fund", "long_only", "index", "bank", "insurance", "wealth", "pension", "sovereign", "other"}
+
+
+def index_contract(index: dict) -> list[str]:
+    """index.json against the API's contract (copybook/api/src/contract.ts): every managers[] row typed and well formed,
+    and at least one hedge_fund and one long_only row, the two types that route stock-match alerts."""
+    import re
+    rows = index.get("managers") or []
+    if not rows:
+        return ["managers[] is empty"]
+    bad = []
+    date = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    for m in rows:
+        who, ok = m.get("slug") or m.get("cik") or "?", m.get("ok")
+        checks = [
+            ("slug", isinstance(m.get("slug"), str) and re.fullmatch(r"[a-z0-9-]+", m["slug"])),
+            ("cik", isinstance(m.get("cik"), str) and re.fullmatch(r"\d{1,10}", m["cik"])),
+            ("type", m.get("type") in INDEX_TYPES),
+            ("featured", isinstance(m.get("featured"), bool)),
+            ("ok", isinstance(ok, bool)),
+            ("form", isinstance(m.get("form"), str) and m["form"].startswith("13F-")),
+            ("accession", (m.get("accession") is None and ok is False)
+             or (isinstance(m.get("accession"), str) and re.fullmatch(r"\d{10}-\d{2}-\d{6}", m["accession"]))),
+            ("reported_by", m.get("reported_by") is None or isinstance(m["reported_by"], str)
+             or (isinstance(m["reported_by"], dict) and re.fullmatch(r"\d{1,10}", str(m["reported_by"].get("cik") or "")))),
+        ] + [(k, (m.get(k) is None and ok is False) or (isinstance(m.get(k), str) and date.fullmatch(m[k])))
+             for k in ("report_date", "filing_date")]
+        bad += [f"{who}: {k}={m.get(k)!r}" for k, good in checks if not good]
+    for t in ("hedge_fund", "long_only"):
+        if not any(m.get("type") == t for m in rows):
+            bad.append(f"no managers[] row of type {t}")
+    return bad
+
+
 def provenance(data: Path) -> dict:
     """Full books served by /v1 (fq/ where present, else fb/): rows without source_accession or
     first_disclosed_at, and checked share rows (no notes or options, not exited) whose suspect_units is not
@@ -311,6 +345,10 @@ def main() -> int:
         print(f"::error::pct_of_book does not sum to 1 over equity rows: {', '.join(off[:20])}; not publishing.")
         failed = True
     index = new("index.json") or {}
+    broken = index_contract(index)
+    if broken:
+        print(f"::error::index.json breaks the API contract (alert routing): {'; '.join(broken[:20])}; not publishing.")
+        failed = True
     lagging = [f"{m['slug']} {m.get('quarter')} < {q['quarter']} ({q['reason']} {q.get('accession') or ''})"
                for m in index.get("managers") or [] for q in m.get("skipped_quarters") or []
                if q["report_date"] > (m.get("report_date") or "") and q["reason"] not in ("empty", "notice")]

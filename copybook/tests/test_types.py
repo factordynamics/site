@@ -63,3 +63,16 @@ class AdvFilesTest(unittest.TestCase):
         with mock.patch.object(adv, "get", return_value=page):
             reg, ex = adv.latest_files()
         self.assertEqual((reg.rsplit("/", 1)[-1], ex.rsplit("/", 1)[-1]), ("ia110226-registered.zip", "ia11022026-exempt.zip"))
+
+
+class IndexContractTest(unittest.TestCase):
+    def test_a_renamed_type_fails_the_publish_gate(self):
+        # Nov 9: `active` renamed to `long_only` silently stopped stock-match alerts for two days.
+        from ingest.gate import index_contract
+        row = lambda slug, t: {"slug": slug, "cik": "0001067983", "type": t, "featured": True, "ok": True, "form": "13F-HR",
+                               "accession": "0000950123-26-008123", "report_date": "2026-09-30", "filing_date": "2026-11-14",
+                               "reported_by": None}
+        good = {"managers": [row("a", "hedge_fund"), row("b", "long_only")]}
+        self.assertEqual(index_contract(good), [])
+        self.assertEqual(index_contract({"managers": [row("a", "hedge_fund"), row("b", "active")]}),
+                         ["b: type='active'", "no managers[] row of type long_only"])
