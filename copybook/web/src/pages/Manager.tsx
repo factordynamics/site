@@ -18,7 +18,7 @@ import { TRIAL_DAYS } from '../config'
 import { track } from '../lib/track'
 import { loadIndex } from '../lib/data'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
-import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, type ManagerFile } from '../lib/data'
+import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, NOT_COUNTED, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -37,7 +37,7 @@ export function ManagerPage() {
   // Trades, not price moves: the change in shares, valued at the filing's own per-share value.
   const changes = useMemo(() => {
     return (f?.holdings || [])
-      .filter((h) => !h.put_call && h.change && h.change !== 'unchanged')
+      .filter((h) => !h.put_call && h.change && h.change !== 'unchanged' && !unreliable(h) && !h.suspect_duplicate)
       .map((h) => {
         const per = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value || 0) / h.prev_shares : 0
         const delta = h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
@@ -348,6 +348,15 @@ export function ManagerPage() {
                         <span className="shrink-0" title={`CUSIP change ${h.prev_cusip} → ${h.cusip}: last quarter's position is matched under the old CUSIP`}>
                           <Badge>
                             CUSIP change<span className="hidden font-mono text-[11px] lg:inline"> {h.prev_cusip} → {h.cusip}</span>
+                          </Badge>
+                        </span>
+                      )}
+                      {unreliable(h) && (
+                        <span className="shrink-0" title={[NOT_COUNTED, h.suspect_reason].filter(Boolean).join(': ')}>
+                          <Badge tone="warn">
+                            <span className="sm:hidden">Not counted</span>
+                            <span className="hidden sm:inline lg:hidden">Share count unreliable, not counted</span>
+                            <span className="hidden lg:inline">{NOT_COUNTED}</span>
                           </Badge>
                         </span>
                       )}

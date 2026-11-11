@@ -41,7 +41,16 @@ export type Holding = {
   /** A stale old-CUSIP line in a book that also has the new one, or a mis-scaled line: kept out of totals. */
   suspect_duplicate?: boolean
   suspect_units?: boolean
+  /** Ingest's units check: why the share count looks wrong, and whether the implied price is off the market's. */
+  suspect_reason?: string | null
+  price_outlier?: boolean
+  value_basis?: string | null
 }
+
+/** A row whose share count ingest flags as unreliable (suspect_units, or change "unknown" with no dollar delta):
+ *  never shown as a trade or counted in any total. Read only where present, so older data renders as before. */
+export const unreliable = (h: { suspect_units?: boolean | null; change?: string | null }) => Boolean(h.suspect_units) || h.change === 'unknown'
+export const NOT_COUNTED = 'Share count unreliable in this filing, not counted'
 
 /** "XOM" as "XOM puts" or "XOM calls" for an option row, so an option move never reads as a stock trade. */
 export const withOption = (label: string, putCall?: string | null) => (putCall ? `${label} ${putCall.toLowerCase() === 'put' ? 'puts' : 'calls'}` : label)

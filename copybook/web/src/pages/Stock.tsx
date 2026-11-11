@@ -10,7 +10,7 @@ import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
-import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle } from '../lib/data'
+import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, unreliable, NOT_COUNTED } from '../lib/data'
 import { dueLead, stockTitle } from '../lib/titles.mjs'
 import { possessive } from '../lib/names.mjs'
 import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
@@ -92,7 +92,8 @@ export function StockPage() {
         .filter((r) => !r.put_call && (r.kind === 'equity' || !r.kind))
         .map((r): StockHolder => {
           const m = mine.get(r.filer.slug)
-          return { slug: r.filer.slug, manager: m?.manager ?? displayName(r.filer.name), firm: r.filer.name, quarter: r.period, featured: m?.featured ?? false, shares: r.shares, value: r.value_usd, weight: r.weight ?? 0, prev_shares: r.prev_shares ?? 0, prev_value: r.prev_value_usd ?? 0, delta_value: r.value_usd - (r.prev_value_usd ?? 0), change: r.change }
+          const bad = unreliable(r)
+          return { slug: r.filer.slug, manager: m?.manager ?? displayName(r.filer.name), firm: r.filer.name, quarter: r.period, featured: m?.featured ?? false, shares: r.shares, value: r.value_usd, weight: r.weight ?? 0, prev_shares: r.prev_shares ?? 0, prev_value: r.prev_value_usd ?? 0, delta_value: bad ? 0 : r.value_usd - (r.prev_value_usd ?? 0), change: bad || r.change === 'unknown' ? null : r.change, unreliable: bad }
         })
     return filers.rows.map(
       (r): StockHolder =>
@@ -100,6 +101,7 @@ export function StockPage() {
     )
   }, [filers, tracked, api])
   const exited = useMemo(() => (d?.exited ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
+  const notCounted = useMemo(() => (d?.not_counted ?? []).filter((h) => scope === 'all' || h.featured), [d, scope])
   const options = useMemo(() => (d?.options ?? []).filter((o) => scope === 'all' || o.featured), [d, scope])
   const [allMoves, setAllMoves] = useState(false)
   const moves = useMemo(
@@ -417,6 +419,7 @@ export function StockPage() {
                       <span className="min-w-0 max-w-[7.75rem] truncate font-medium sm:max-w-[22rem]">{h.manager}</span>
                       <QuarterTag q={h.quarter} fresh={multi && h.quarter === d!.quarters[0]} />
                     </Link>
+                    {h.unreliable && <span className="mt-0.5 block pl-[34px] text-[12px] leading-snug text-ink-3">{NOT_COUNTED}</span>}
                   </td>
                   <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">
                     {sharesFmt(h.shares)}
@@ -455,9 +458,9 @@ export function StockPage() {
         )}
       </section>
 
-      {d && (exited.length > 0 || options.length > 0) && (
+      {d && (exited.length > 0 || notCounted.length > 0 || options.length > 0) && (
         <div className="mt-6 grid gap-6 lg:grid-cols-2 [&>*]:min-w-0">
-          {exited.length > 0 && (
+          {(exited.length > 0 || notCounted.length > 0) && (
             <Panel title="Sold out completely" sub="Held it in the previous filing, none in the latest">
               <ul className="divide-y divide-line">
                 {exited.slice(0, 10).map((h) => (
@@ -472,6 +475,12 @@ export function StockPage() {
                     </li>
                   ))}
               </ul>
+              {!exited.length && <p className="text-[14px] text-ink-2">None that we can count.</p>}
+              {notCounted.length > 0 && (
+                <p className="mt-3 border-t border-line pt-3 text-[12.5px] leading-relaxed text-ink-3">
+                  Left out: {notCounted.map((h) => h.manager).join(', ')}. {NOT_COUNTED}.
+                </p>
+              )}
             </Panel>
           )}
           {options.length > 0 && (
@@ -524,6 +533,7 @@ function HolderRow({ h, fresh }: { h: StockHolder; fresh: boolean }) {
             <span className="truncate">{pct(h.weight)} of portfolio</span>
             <QuarterTag q={h.quarter} fresh={fresh} />
           </span>
+          {h.unreliable && <span className="block text-[12px] leading-snug text-ink-3">{NOT_COUNTED}</span>}
         </span>
       </Link>
       <span className="flex shrink-0 items-center gap-2">
@@ -535,6 +545,12 @@ function HolderRow({ h, fresh }: { h: StockHolder; fresh: boolean }) {
 }
 
 function ChangeCell({ h }: { h: StockHolder }) {
+  if (h.unreliable)
+    return (
+      <span className="whitespace-nowrap text-[13px] text-ink-3" title={[NOT_COUNTED, h.suspect_reason].filter(Boolean).join(': ')}>
+        Not counted
+      </span>
+    )
   if (!h.change) return <span className="text-[13px] text-ink-3">—</span>
   if (h.change === 'new' || h.change === 'exited') return <Badge tone={CHANGE[h.change].tone}>{CHANGE[h.change].label}</Badge>
   if (h.change === 'unchanged') return <span className="whitespace-nowrap text-[13px] text-ink-3">No change</span>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { loadManager, pct, quarterLabel, useAsync, type Holding, type ManagerFile } from '../lib/data'
+import { loadManager, pct, quarterLabel, useAsync, unreliable, type Holding, type ManagerFile } from '../lib/data'
 import { setFollow, useFollows } from '../lib/follows'
 import { loadQuarterBook } from '../lib/history'
 import { loadStockIndex, stockPath, tickerText } from '../lib/stocks'
@@ -64,13 +64,14 @@ export function Peers({ names, shared }: { names: string[]; shared?: boolean }) 
       books.map((b) => {
         const hs = b.holdings.filter((h) => h.ticker && mine.has(tickerText(h.ticker)) && !h.put_call)
         const held = hs.filter((h) => h.shares > 0)
+        const counted = held.filter((h) => !unreliable(h))
         return {
           b,
           held: held.sort((x, y) => y.weight - x.weight),
           weight: held.reduce((s, h) => s + h.weight, 0),
-          adding: held.filter((h) => h.change === 'new' || h.change === 'added'),
-          trimming: held.filter((h) => h.change === 'trimmed'),
-          exited: hs.filter((h) => h.change === 'exited'),
+          adding: counted.filter((h) => h.change === 'new' || h.change === 'added'),
+          trimming: counted.filter((h) => h.change === 'trimmed'),
+          exited: hs.filter((h) => h.change === 'exited' && !unreliable(h)),
         }
       }),
     [books, mine],

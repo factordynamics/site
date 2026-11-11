@@ -1,6 +1,6 @@
 import type { Ev } from '../components/FundNotes'
 import { call } from './account'
-import { BASE, displayName, getJSON, type Change } from './data'
+import { BASE, displayName, getJSON, unreliable, type Change } from './data'
 
 // Derived at build time by scripts/stocks.mjs from the curated 13F books, served from the site host.
 const D = `${BASE}d/`
@@ -21,6 +21,9 @@ export type StockHolder = {
   prev_value: number
   delta_value: number
   change: Change | null
+  /** Share count unreliable in this filing (ingest's suspect_units): no change, no dollar move, in no count. */
+  unreliable?: boolean
+  suspect_reason?: string | null
 }
 export type StockOption = { slug: string; manager: string; firm: string; quarter: string; featured: boolean; put_call: string; ticker: string | null; shares: number; value: number; weight: number }
 export type Stock = {
@@ -41,6 +44,8 @@ export type Stock = {
   generated_at: string
   /** Form 4 and 13D/G filings since each fund's latest 13F (scripts/stocks.mjs). */
   since?: (Ev & { slug: string; manager: string; quarter?: string })[]
+  /** Exited rows with an unreliable share count, kept out of the exited list and its count (loadStock). */
+  not_counted?: StockHolder[]
 }
 /** t ticker, n name, s sector, h holders, dh holder change, v combined value, a other share-class tickers. */
 export type StockRef = { t: string; n: string; s: string | null; h: number; dh: number; v: number; a: string[] }
@@ -268,13 +273,20 @@ export const loadSplitLog = () => getJSON<{ splits: SplitLog[] }>(`${D}splits.js
 
 export const loadStockIndex = () => getJSON<{ funds: number; stocks: StockRef[] }>(`${D}stocks.json`)
 const named = <T extends { manager: string }>(x: T) => ({ ...x, manager: displayName(x.manager) })
+// A row ingest flags as unreliable keeps its holding but loses its change and dollar move, so no list, badge or
+// total reads it as a trade; an unreliable exit leaves the exited list for not_counted.
+const settle = (h: StockHolder): StockHolder => (unreliable(h as { suspect_units?: boolean; change?: string | null }) ? { ...named(h), change: null, delta_value: 0, unreliable: true } : named(h))
 export const loadStock = (t: string) =>
-  getJSON<Stock>(`${D}stocks/${encodeURIComponent(t)}.json${fresh()}`).then((s) => ({ ...s, holders: s.holders.map(named), exited: s.exited.map(named), options: s.options.map(named) }))
+  getJSON<Stock>(`${D}stocks/${encodeURIComponent(t)}.json${fresh()}`).then((s) => {
+    const bad = (h: StockHolder) => unreliable(h as { suspect_units?: boolean; change?: string | null })
+    return { ...s, holders: s.holders.map(settle), exited: s.exited.filter((h) => !bad(h)).map(named), not_counted: s.exited.filter(bad).map(settle), options: s.options.map(named) }
+  })
 /** The site's flow.json (top 40 per list), or for members the API's fuller lists, falling back to the site's. */
 export const loadFlow = (member = false, v?: number) =>
   (member ? call<Flow | { flow: Flow }>('/flow', { auth: true }).then((r) => ('flow' in r ? r.flow : r)).catch(() => getJSON<Flow>(`${D}flow.json${fresh(v)}`)) : getJSON<Flow>(`${D}flow.json${fresh(v)}`)).then((f) => {
     const scope = (s: FlowScope): FlowScope => {
-      const fix = (rows: FlowRow[]) => rows.map((r) => ({ ...r, buyers: r.buyers.map(named), sellers: r.sellers.map(named) }))
+      const ok = (m: FlowMove) => !unreliable(m) && m.delta_value != null
+      const fix = (rows: FlowRow[]) => rows.map((r) => ({ ...r, buyers: r.buyers.filter(ok).map(named), sellers: r.sellers.filter(ok).map(named) }))
       return { ...s, bought: fix(s.bought), sold: fix(s.sold), most_buyers: fix(s.most_buyers), most_sellers: fix(s.most_sellers), new_multi: fix(s.new_multi), fresh: fix(s.fresh) }
     }
     const fix = <P extends FlowPeriod>(p: P): P => ({ ...p, recent: p.recent.map(named), featured: scope(p.featured), all: scope(p.all) })
@@ -326,7 +338,7 @@ type HRaw = {
   hedge?: Omit<SmartCounts, 'moves'> & { moves: [string, string, string, Change, number][] }
   rows: [string, string, string, number, number, number, 0 | 1 | 2, number?][]
 }
-const lensBlock = (x: HRaw['smart']): SmartCounts | null => (x ? { ...x, moves: x.moves.map(([slug, name, quarter, change, delta_value]) => ({ slug, name: displayName(name), quarter, change, delta_value })) } : null)
+const lensBlock = (x: HRaw['smart']): SmartCounts | null => (x ? { ...x, moves: x.moves.filter((m) => !unreliable({ change: m[3] }) && m[4] != null).map(([slug, name, quarter, change, delta_value]) => ({ slug, name: displayName(name), quarter, change, delta_value })) } : null)
 export const loadFilerHolders = (t: string) =>
   getJSON<HRaw>(`${D}h/${encodeURIComponent(t)}.json${fresh()}`).then((d) => ({
     /** Every filer holding it: exact from ingest's full-book index when present (the shards undercount large books). */
