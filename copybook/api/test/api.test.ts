@@ -679,6 +679,9 @@ describe('copybook api', () => {
     expect(sent.find((m) => m.to[0] === 'watcher@example.com')!.text).toContain('Exited: BAC -$2K (9.1% of book) [watchlist]');
     const latency = JSON.parse((await env.DB.get('alerts:latency'))!);
     expect(latency.map((l: { slug: string }) => l.slug)).toEqual(['warren-buffett']);
+    // The minute poll's on-time 13F send is a row in /latency's 13F figures (timed by the email with its moves).
+    expect(latency[0]).toMatchObject({ accession: acc, moves: true });
+    expect((await (await call('/latency')).json()).by_form['13F'].count).toBe(1);
 
     // Still in the feed next minute, and then in the data run's index: never sent twice.
     sent = [];
@@ -908,6 +911,22 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', orig);
   });
 
+  it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
+    const day = new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10);
+    const at = (s: number) => new Date(Date.parse(`${day}T15:00:00Z`) + s * 1000).toISOString();
+    const row = (accession: string, seconds: number, extra = {}) => ({ slug: accession, kind: '13f', accession, accepted: at(0), sent: at(seconds), seconds, ...extra });
+    // ONTIME: its first email carried the moves. LATE: the first went without, moves 2 h later. NEVER: no moves sent.
+    // BACK: the backlog, already logged again with its moves after the fix (the old row is a duplicate).
+    await env.DB.put('alerts:latency', JSON.stringify([row('BACK', 30000, { moves: true }), row('ONTIME', 75), row('LATE', 70), row('NEVER', 60), row('BACK', 65), { ...row('G1', 50), kind: '13g' }]));
+    const f = (accession: string, sent: number, extra = {}) => ({ accession, sent_at: at(sent), moves: null, ...extra });
+    await env.DB.put(`digest:${day}`, JSON.stringify({ filings: [f('ONTIME', 75, { moves: { new: [] } }), f('LATE', 70), f('LATE', 7200, { followup: true, moves: { new: [] } }), f('NEVER', 60), f('BACK', 65), f('BACK', 30000, { followup: true, moves: { new: [] } })], events: [] }));
+    const { retimeLatency } = await import('../src/alerts');
+    expect(await retimeLatency(env)).toEqual({ latency_retimed: { kept: 1, retimed: 1, never_moves: 1, dropped_duplicates: 1, tagged_followup: 1 } });
+    const by = Object.fromEntries(JSON.parse((await env.DB.get('alerts:latency'))!).map((l: { accession: string }) => [l.accession, l]));
+    expect([by.ONTIME.moves, by.ONTIME.seconds, by.LATE.seconds, by.LATE.followup, by.NEVER.never_moves, by.BACK.followup, by.G1.kind]).toEqual([true, 75, 7200, true, true, true, '13g']);
+    expect(await retimeLatency(env)).toEqual({}); // once
+  });
+
   it('between-quarter alerts: Form 4 buys/sells and 13D by default, 13G opt-in, fresh only, digest members get one email at night', async () => {
     const today = new Date().toISOString().slice(0, 10);
     const old = new Date(Date.now() - 5 * 86400_000).toISOString().slice(0, 10);
@@ -950,7 +969,8 @@ describe('copybook api', () => {
     expect(s.member).toMatchObject({ plan: 'free', active: false });
     expect((await call('/history/warren-buffett', { token: s.token })).status).toBe(402);
     // 3 an hour per address: a repeat sends the sign-in link again, the 4th is refused.
-    await signup({ email: 'reader@reader.test' }, '2.2.2.2');
+    // A filer page's one-field signup from the same address adds the follow (a free member's Friday email leads with it).
+    expect(await (await signup({ email: 'reader@reader.test', follow: { kind: 'investor', id: 'bill-ackman' }, source: 'follow:/investors/bill-ackman/' }, '2.2.2.2')).json()).toEqual({ ok: true, follow: 'added' });
     await signup({ email: 'reader@reader.test' }, '3.3.3.3');
     expect((await signup({ email: 'reader@reader.test' }, '4.4.4.4')).status).toBe(429);
     await putMember('paid', 'paid@reader.test', 'active', 'all'); // paying members never get the weekly
@@ -964,9 +984,9 @@ describe('copybook api', () => {
     expect((await (await call('/me', { token: s.token })).json()).member.free_names).toEqual({ names: ['GOOGL', 'HHH', 'NVDA', 'AAPL'], limit: 5, facts: [], hook: null, more: 0 });
     expect((await call('/follows/stocks/TSLA', { method: 'POST', token: s.token })).status).toBe(402); // only owned names
 
-    // Friday evening ET (03:42 UTC Saturday): the week's 13F cards, curated filers' Form 4s and 13D/Gs, and company insiders.
+    // Friday evening ET (02:00 UTC Saturday, 9pm ET Friday): the week's 13F cards, curated filers' Form 4s and 13D/Gs, and company insiders.
     sent = [];
-    const sat = Date.UTC(2026, 10, 14, 3, 42);
+    const sat = Date.UTC(2026, 10, 14, 2, 0);
     const inWeek = (daysAgo: number) => new Date(sat - daysAgo * 86400_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
     index = { managers: [{ slug: 'warren-buffett', featured: true }, { slug: 'bill-ackman', featured: true }, { slug: 'carl-icahn', featured: true }, { slug: 'icici', featured: false }, { slug: 'vanguard-group', featured: false }] };
     const row = (change: string, ticker: string, value_delta: number, extra = {}) => ({ ticker, name: ticker, cusip: 'x', change, shares: 1, prev_shares: 0, value_delta, ...extra });
@@ -1028,6 +1048,7 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
     const w = sent[0];
     expect(w.subject).toBe('In your names: Warren Buffett added $8.8B of GOOGL');
+    expect(w.text).toMatch(/From investors you follow:\n  Bill Ackman: /);
     // "In your names" first: one public fact per saved name (superinvestors only), then the biggest locked item, named.
     expect(w.text).toContain(
       `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/\n  Nvidia's CEO sold $18.6M of NVDA, with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
@@ -1138,6 +1159,10 @@ describe('copybook api', () => {
     const tp = JSON.parse((await env.DB.get('cus:cus_tp'))!);
     expect([isActive(tp), isPaused(tp), isPaused(tp, (tEnd + 60) * 1000), isActive({ ...tp, status: 'active', paused_from: null })]).toEqual([true, false, true, false]);
     expect(pauseOffer(tp)).toBeNull(); // already scheduled
+    // Undoing a pause scheduled after a trial: the alerts never stopped, so it says the trial continues, with the end's time.
+    const { resumeConfirmMail } = await import('../src/revenue');
+    const undo = resumeConfirmMail(env, { ...tp, trial_end: Date.parse('2026-11-25T00:46:00Z') / 1000, interval: 'monthly', has_payment_method: true });
+    expect([undo.subject, undo.text.split('\n')[0]]).toEqual(['Pause cancelled: your Copy trial continues', 'Pause cancelled: your Copy trial continues to November 24, 7:46 pm ET, then $9 a month. Your alerts never stopped, and your follows and settings are as they were.']);
     // A cancel replaces the scheduled pause: Stripe's pause is cleared, so resuming later is a plain trial.
     stripeObjects['subscriptions/sub_tp'] = { ...sub('sub_tp', 'cus_tp', 'trialing'), trial_end: tEnd, cancel_at_period_end: true };
     await webhook({ type: 'customer.subscription.updated', data: { object: { ...sub('sub_tp', 'cus_tp', 'trialing'), trial_end: tEnd, cancel_at_period_end: true, pause_collection: { behavior: 'void', resumes_at: tEnd + 70 * 86400 } } } });

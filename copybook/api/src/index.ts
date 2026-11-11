@@ -201,6 +201,10 @@ interface LatencyRow {
   moves?: boolean;
   /** Some of its emails waited for Resend's daily limit to reset. */
   email_delayed?: boolean;
+  /** A 13F timed by a follow-up that carried its moves (the first email went without them). */
+  followup?: boolean;
+  /** A 13F row from before tagging whose moves never went out by email. */
+  never_moves?: boolean;
   /** Timed at a coalesced email's send (a member's later alerts in a window, while email was short). */
   coalesced?: boolean;
   /** Rows from before the tag are curated managers' (the poll timed only those). */
@@ -230,11 +234,21 @@ function spread(xs: number[]) {
  * acceptance to handing the alert to the mailer; chat, webhook and feed are acceptance to the
  * channel's first successful post (KV alerts:latency:ch).
  */
+/** From then (the deploy of 0bf5b8f) a 13F is timed by the email that carries its moves. Filings accepted earlier are left out of the figures. */
+export const MOVES_FIX_AT = '2026-11-11T00:01:00Z';
+
 export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = []) {
   const { season, from } = seasonOf(now);
+  const fixAt = Date.parse(MOVES_FIX_AT);
+  // Before the fix, a 13F whose moves came in a later follow-up (tables too big, or no prior book) is reported apart;
+  // one whose first email carried the moves is timed as usual.
+  const isPre = (l: LatencyRow) => (l.kind ?? '13f') === '13f' && Date.parse(l.accepted) < fixAt && !!l.followup;
   // 13Fs are timed by the email that carried the moves (rows tagged `moves`); older 13F rows timed the first email.
   // Emails held for the daily limit aren't counted as fast (they're reported as email_delayed).
-  const rows = log.filter((l) => !l.replay && !l.email_delayed && Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves));
+  // 13Fs accepted before the moves fix (sent before it, or their moves sent after it from the backlog) are reported apart.
+  const counted = log.filter((l) => !l.replay && !l.email_delayed && Date.parse(l.sent) >= from && ((l.kind ?? '13f') !== '13f' || l.moves));
+  const rows = counted.filter((l) => !isPre(l));
+  const pre = counted.filter(isPre);
   const chRows = ch.filter((c) => Date.parse(c.delivered) >= from);
   const all = spread(rows.map((l) => l.seconds));
   const FORM: Record<string, string> = { '13f': '13F-HR', form4: '4', '13d': 'SC 13D', '13g': 'SC 13G' };
@@ -255,6 +269,8 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     p95_seconds: nearest(rows.map((l) => l.seconds), 0.95),
     count: all.count,
     by_form: group(rows, (l) => family(formOf(l)), (l) => l.seconds),
+    moves_fix_at: MOVES_FIX_AT,
+    before_moves_fix: { '13F': spread(pre.map((l) => l.seconds)) },
     by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },
     by_coverage: group(rows, (l) => l.coverage ?? 'curated', (l) => l.seconds),
     recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, coverage: l.coverage ?? 'curated', accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
@@ -343,6 +359,33 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const missed_recovered = { count: Number((await env.DB.get('missed:count')) ?? 0), recent: (JSON.parse((await env.DB.get('missed:log')) ?? '[]') as unknown[]).slice(0, 10) };
     const { pollerStatus } = await import('./failover');
     return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: { ...(JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? (await import('./email')).mailQuota), daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15 }, moves_queue: { pending: ((JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).map((p) => p.accession)), last: JSON.parse((await env.DB.get('host:moves-last')) ?? 'null') }, ...business }, 200, h);
+  }
+
+  // The site's page counts: visits, signup form views and trial clicks per page and utm_source. Counts only (no
+  // IP, cookie or member stored); 120 a IP an hour. Read with GET /ops/funnel.
+  if (req.method === 'POST' && path === '/track') {
+    const b = await body(req);
+    const kind = String(b.kind ?? '');
+    if (!['visit', 'signup_view', 'trial_click'].includes(kind)) return json({ ok: false, error: 'kind: visit, signup_view or trial_click', code: 'bad_request' }, 400, h);
+    const ip = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for') ?? 'unknown';
+    const k = `rl:track:${ip}`;
+    const n = Number((await env.DB.get(k)) ?? 0);
+    if (n >= 120) return json({ ok: true, counted: false }, 200, h);
+    await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
+    const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().toLowerCase().replace(/[^a-z0-9/_.:-]/g, '').slice(0, max) || null : null);
+    const page = (clean(b.page, 100) ?? '/').split('?')[0];
+    const src = clean(b.utm_source, 60) ?? 'direct';
+    const key = `track:${new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10)}`;
+    const d = JSON.parse((await env.DB.get(key)) ?? '{}') as Record<string, Record<string, Record<string, number>>>;
+    const byPage = ((d[kind] ??= {}).page ??= {});
+    const bySrc = (d[kind].source ??= {});
+    // Bounded: at most 300 pages and 100 sources a day; the rest count as "other".
+    const pk = page in byPage || Object.keys(byPage).length < 300 ? page : 'other';
+    const sk = src in bySrc || Object.keys(bySrc).length < 100 ? src : 'other';
+    byPage[pk] = (byPage[pk] ?? 0) + 1;
+    bySrc[sk] = (bySrc[sk] ?? 0) + 1;
+    await env.DB.put(key, JSON.stringify(d), { expirationTtl: 400 * 86400 });
+    return json({ ok: true, counted: true }, 200, h);
   }
 
   // The site's referral card: whether ?ref= is a live code. Says nothing about whose it is; rate-limited per IP.
@@ -445,6 +488,30 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
 
   // Operator: this week's free email for one free member, now (Friday's issue, previewed).
+  // Operator: a test member's referral code (the front end's end-to-end check). Never a real member's.
+  if (req.method === 'POST' && path === '/ops/ref-code') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const email = String((await body(req)).email ?? '').trim().toLowerCase();
+    const m = testAddress(email) ? await memberByEmail(env, email) : null;
+    if (!m || !(m.test || testAddress(m.email))) return json({ ok: false, error: 'test members only' }, 400, h);
+    const { referralView } = await import('./referrals');
+    return json({ ok: true, referral: await referralView(env, m) }, 200, h);
+  }
+
+  // Operator: the funnel with the site's page counts (POST /track), per ET day.
+  if (req.method === 'GET' && path === '/ops/funnel') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const days = Math.min(31, Math.max(1, Number(url.searchParams.get('days') ?? 7) || 7));
+    const { funnel } = await import('./revenue');
+    const track: Record<string, unknown> = {};
+    for (let d = 0; d < days; d++) {
+      const day = new Date(Date.now() - 5 * 3600_000 - d * 86_400_000).toISOString().slice(0, 10);
+      const t = await env.DB.get(`track:${day}`);
+      if (t) track[day] = JSON.parse(t);
+    }
+    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track }, 200, h);
+  }
+
   // Operator: member counts by status, plan and test flag (counts only; agent sessions are logged).
   if (req.method === 'GET' && path === '/ops/member-counts') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);

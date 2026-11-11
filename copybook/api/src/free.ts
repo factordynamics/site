@@ -7,7 +7,7 @@
 import { FOOTER, previewInbox, sendMail, type Mail } from './email';
 import { apiBase, followCounts, testAddress, type Env, type Member } from './env';
 import { checkMove, displayCase, UNUSUAL } from './edgar';
-import { changeFollows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
+import { changeFollows, type Follows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
 import { bump } from './revenue';
 import { signToken, verifyToken } from './tokens';
 
@@ -40,11 +40,18 @@ export async function handleSignup(env: Env, b: Json, ip: string): Promise<Reply
   }
   const utm = Object.fromEntries(UTM.map((k) => [k, str(b[k], 100)]).filter(([, v]) => v)) as Record<string, string>;
   const source = str(b.source, 60) ?? utm.utm_source ?? null;
+  // A filer page's "Follow to get it by email": an investor slug, kept on the free member; its moves lead the Friday email.
+  const fo = b.follow && typeof b.follow === 'object' ? (b.follow as Json) : null;
+  const follow = fo?.kind === 'investor' && typeof fo.id === 'string' && /^[a-z0-9-]{1,80}$/.test(fo.id) ? fo.id : null;
+  if (b.follow !== undefined && b.follow !== null && !follow) return { status: 400, body: { ok: false, error: 'follow: { kind: "investor", id: "<investor slug>" }', code: 'bad_request' } };
+  const addFollow = async (m: Member) => (follow ? (await changeFollows(env, m, { add: { list: 'investors', value: follow, max: FREE_INVESTORS } })).ok : false);
   const cur = await memberByEmail(env, email);
-  // Already a member: nothing to create. Free members get their sign-in link again; paying members already get more.
+  // Already a member: nothing to create. Free members get the follow added and their sign-in link again; a paying
+  // member's follows change only when signed in (this form has no sign-in), so they are asked to follow there.
   if (cur && cur.status !== 'canceled') {
+    const followed = cur.status === 'free' ? await addFollow(cur) : false;
     if (cur.status === 'free') await sendMail(env, [await freeWelcomeMail(env, cur, false)]);
-    return { status: 200, body: { ok: true } };
+    return { status: 200, body: { ok: true, ...(follow ? { follow: followed ? 'added' : cur.status === 'free' ? 'limit' : 'sign_in' } : {}) } };
   }
   const m: Member = {
     customer: await freeId(email),
@@ -60,9 +67,10 @@ export async function handleSignup(env: Env, b: Json, ip: string): Promise<Reply
     created_at: new Date().toISOString(),
   };
   await putMember(env, m);
+  const followed = await addFollow(m);
   if (!isTest(email)) await bump(env, 'signups', m);
   const mail = await sendMail(env, [await freeWelcomeMail(env, m, true)]);
-  return { status: 201, body: { ok: true, created: true, welcome: mail === '200' ? 'sent' : 'not sent' } };
+  return { status: 201, body: { ok: true, created: true, welcome: mail === '200' ? 'sent' : 'not sent', ...(follow ? { follow: followed ? 'added' : 'limit' } : {}) } };
 }
 
 async function freeWelcomeMail(env: Env, m: Member, first: boolean): Promise<Mail> {
@@ -171,7 +179,7 @@ const MAX_CARDS = 30;
  * lists) and every Form 4 and 13D/G by a curated filer (pre/events.json, the hourly events build).
  * Superinvestors rank first, each fund at most 2 rows, index and broker flow left out.
  */
-export async function weeklyMoves(env: Env, now: number, days = 7): Promise<Week> {
+export async function weeklyMoves(env: Env, now: number, days = 7, followed: Set<string> = new Set()): Promise<Week> {
   const since = now - days * 86400_000;
   const sinceDay = etDay(since);
   const get = async (url: string) => {
@@ -191,7 +199,8 @@ export async function weeklyMoves(env: Env, now: number, days = 7): Promise<Week
   type Card = { accession: string; slug: string; quarter: string; filing_date: string };
   const cards = (((await get(`${env.SITE_URL}d/f/index.json`)) as { cards?: Card[] } | null)?.cards ?? [])
     .filter((c) => c.filing_date >= sinceDay)
-    .sort((a, b) => Number(featured.has(b.slug)) - Number(featured.has(a.slug)) || b.filing_date.localeCompare(a.filing_date))
+    // Investors free members follow first (their moves lead those members' emails), then the superinvestors.
+    .sort((a, b) => Number(followed.has(b.slug)) - Number(followed.has(a.slug)) || Number(featured.has(b.slug)) - Number(featured.has(a.slug)) || b.filing_date.localeCompare(a.filing_date))
     .slice(0, MAX_CARDS);
   type Row = { ticker: string | null; value_delta: number; put_call?: string | null; name?: string; cusip?: string; shares?: number; prev_shares?: number; unusual?: boolean };
   const read = await Promise.all(cards.map((c) => get(`${env.SITE_URL}d/f/${c.accession}.json`)));
@@ -274,6 +283,8 @@ export async function weeklyMoves(env: Env, now: number, days = 7): Promise<Week
 
 /** Free accounts may save this many owned names; the Friday email leads with them. */
 export const FREE_NAMES = 5;
+/** Investors a free account may follow (for the Friday email's "From investors you follow"). */
+export const FREE_INVESTORS = 10;
 /** Insider trades count toward the locked line from the alerts' default threshold up. */
 const INSIDER_MIN_USD = 100_000;
 
@@ -373,7 +384,7 @@ export async function freeTeaser(env: Env, names: string[], now: number): Promis
 
 const LABEL: Record<WeeklyMove['what'], string> = { new: 'new position', added: 'added', trimmed: 'trimmed', exited: 'sold out', bought: 'bought', sold: 'sold' };
 
-export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; sells: WeeklyMove[] }, weekOf: string, unsub: string, yours?: InYourNames): Mail {
+export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; sells: WeeklyMove[] }, weekOf: string, unsub: string, yours?: InYourNames, followed: WeeklyMove[] = []): Mail {
   const line = (x: WeeklyMove) => `${x.manager}: ${LABEL[x.what]} ${x.ticker}, ${x.usd > 0 ? '+' : '−'}${money(x.usd)} (${x.form})${x.unusual ? ` · ${UNUSUAL}` : ''}`;
   // The subject's fallback: the week's biggest superinvestor move, buy or sell.
   const top = [moves.buys[0], moves.sells[0]].filter((x): x is WeeklyMove => !!x).sort((a, b) => Number(b.featured) - Number(a.featured) || Math.abs(b.usd) - Math.abs(a.usd))[0];
@@ -383,6 +394,9 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   const locked = yours?.hook ? `${yours.hook}, with Copy${yours.more ? ` (+${yours.more} more in your names)` : ''}` : null;
   const trial = 'Try Copy free for 14 days';
   // Leads the email: what moved in the names they saved, then what Copy adds. No names yet: how to add them.
+  // Investors they follow (from a filer page's signup): those funds' moves this week, largest first.
+  const followedText = followed.length ? `From investors you follow:\n${followed.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n')}\n\n` : '';
+  const followedHtml = followed.length ? `<h3 style="font-size:15px;margin:18px 0 6px">From investors you follow</h3><ul style="padding-left:18px;margin:0">${followed.map((x) => `<li><a href="${esc(x.url)}" style="color:#1d4ed8">${esc(line(x))}</a></li>`).join('')}</ul>` : '';
   const yoursText = !yours
     ? ''
     : !yours.names
@@ -400,8 +414,8 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   return {
     to,
     subject: lead ? `In your names: ${lead.text.replace(/, which you own( \(.*\))?$/, '')}` : `The week in superinvestor filings: ${top ? `${top.manager} ${LABEL[top.what]} ${top.ticker}` : 'the biggest moves'}`,
-    text: `Superinvestor filings, week of ${weekOf}.\n\n${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nThese came days after the filings. Copy emails each one minutes after EDGAR accepts it, with 13F history and CSV; free for 14 days: ${pricing}\n\nUnsubscribe: ${unsub}${FOOTER}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, week of ${esc(weekOf)}.</p>${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}<p style="margin-top:20px">These came days after the filings. <a href="${pricing}" style="color:#1d4ed8"><b>Copy</b></a> emails each one minutes after EDGAR accepts it, with 13F history and CSV. Free for 14 days.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+    text: `Superinvestor filings, week of ${weekOf}.\n\n${followedText}${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nThese came days after the filings. Copy emails each one minutes after EDGAR accepts it, with 13F history and CSV; free for 14 days: ${pricing}\n\nUnsubscribe: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, week of ${esc(weekOf)}.</p>${followedHtml}${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}<p style="margin-top:20px">These came days after the filings. <a href="${pricing}" style="color:#1d4ed8"><b>Copy</b></a> emails each one minutes after EDGAR accepts it, with 13F history and CSV. Free for 14 days.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
     unsubscribe: unsub,
   };
 }
@@ -412,16 +426,19 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export async function runWeekly(env: Env, now: number): Promise<Record<string, unknown>> {
   const week = etDay(now);
   if ((await env.DB.get('weekly:last')) === week) return { status: 'already sent', week };
-  const moves = await weeklyMoves(env, now);
-  if (!moves.buys.length && !moves.sells.length) return { status: 'no moves', week };
   const members: Member[] = [];
+  const follows = new Map<string, Follows>();
   for (const m of await listMembers(env)) {
     // A free signup who later subscribed: their email now points at the paid member.
     if (m.status !== 'free' || m.marketing_off || !m.email || (await env.DB.get(`email:${m.email}`)) !== m.customer) continue;
     members.push(m);
+    follows.set(m.customer, await getFollows(env, m));
   }
+  const moves = await weeklyMoves(env, now, 7, new Set([...follows.values()].flatMap((f) => f.investors)));
+  if (!moves.buys.length && !moves.sells.length) return { status: 'no moves', week };
+  const followedMoves = (f: Follows | undefined) => moves.all.filter((x) => f?.investors.includes(x.slug)).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 8);
   const weekOf = new Date(now - 6 * 86400_000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
-  const mails = await Promise.all(members.map(async (m) => weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), await inYourNames(env, (await getFollows(env, m)).owned.slice(0, FREE_NAMES), moves, now))));
+  const mails = await Promise.all(members.map(async (m) => weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), await inYourNames(env, follows.get(m.customer)!.owned.slice(0, FREE_NAMES), moves, now), followedMoves(follows.get(m.customer)))));
   const status = await sendMail(env, mails, { tier: 'low' });
   if (status === 'none' || status.split(',').every((s) => s === '200')) await env.DB.put('weekly:last', week);
   return { status, sent: mails.length, buys: moves.buys.length, sells: moves.sells.length };

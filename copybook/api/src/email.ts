@@ -282,7 +282,7 @@ export function loginMail(env: Env, to: string, token: string, welcome: boolean,
     return { to, subject: 'Your Copybook sign-in link', text: `Here is your Copybook sign-in link.\n\nSign in (this link works once, for 15 minutes):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}` };
   }
   const name = m?.plan === 'pro' ? 'Copy Pro' : m?.plan === 'fund' ? 'Copy Fund' : 'Copy';
-  const trial = m?.trial_end ? ` Your free trial runs until ${new Date(m.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}; cancel before then from your account and you're not charged.` : '';
+  const trial = m?.trial_end ? ` Your free trial runs until ${new Date(m.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}, ${new Date(m.trial_end * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).replace(' AM', ' am').replace(' PM', ' pm')} ET; cancel before then from your account and you're not charged.` : '';
   const steps: [string, string, string][] = [
     ['Follow the funds you care about', 'Each 13F, Form 4 and 13D they file reaches you minutes after EDGAR accepts it.', `${env.SITE_URL}investors/`],
     ['Add the names you own', "Paste tickers or a CSV in My book: any superinvestor's move in them is flagged [you own].", `${env.SITE_URL}my-book/`],

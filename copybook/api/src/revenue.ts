@@ -24,6 +24,8 @@ const billable = (m: Member) => lifecycle(m) && !m.test;
 /** Gets lifecycle email (trial, cancel, resume, pause, dunning): test members too, so a gate run sees what a member sees. */
 const lifecycle = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !m.comped && !!PRICES[m.plan];
 const day = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
+/** A trial or period end with its time (Stripe shows the UTC date, so a 7:46 pm ET end reads as the next day there): "November 24, 7:46 pm ET". */
+export const endAt = (unix: number) => `${day(unix)}, ${new Date(unix * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).replace(' AM', ' am').replace(' PM', ' pm')} ET`;
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
 /** Yearly's saving as the pricing page words it (about 3 months free on Copy, 2 on Pro and Fund): no other figure. */
 const monthsFree = (p: { month: number; year: number }) => `about ${Math.round(12 - p.year / p.month)} months free`;
@@ -158,7 +160,7 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
   const cta = yearly ? `Keep ${p.name} (${money(p.year)}/year)` : `Keep ${p.name} yearly: ${money(p.year)}/year, ${monthsFree(p)}`;
   const charge = yearly ? `${money(p.year)}/year` : `${money(p.month)}/month`;
   const founding = FOUNDING[m.plan] ? ` ${FOUNDING[m.plan]}` : '';
-  const ends = day(m.trial_end!);
+  const ends = endAt(m.trial_end!);
   return {
     to: m.email,
     subject: `Your ${p.name} trial ends in ${daysLeft === 1 ? '1 day' : `${daysLeft} days`}`,
@@ -301,7 +303,7 @@ export async function cancelMail(env: Env, m: Member): Promise<Mail> {
   return {
     to: m.email,
     subject: ends ? `Your ${name} plan ends ${day(ends)} · Resume anytime before then` : `Your ${name} plan has ended`,
-    text: `${ends ? `Your ${name} plan is cancelled and ends on ${day(ends)}. Alerts, history and CSV keep working until then${m.status === 'trialing' ? ", and you won't be charged" : ''}.\n\nChanged your mind? Resume with one click, same plan and price, follows kept:\n${resume}` : `Your ${name} plan has ended. Your follows are kept if you come back: ${env.SITE_URL}pricing/`}${ask ? `\n\nOne question: what was the main reason? One click is enough:\n${Object.entries(WHY).map(([k, v]) => `  ${v}: ${base}${k}`).join('\n')}` : ''}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    text: `${ends ? `Your ${name} plan is cancelled and ends on ${endAt(ends)}. Alerts, history and CSV keep working until then${m.status === 'trialing' ? ", and you won't be charged" : ''}.\n\nChanged your mind? Resume with one click, same plan and price, follows kept:\n${resume}` : `Your ${name} plan has ended. Your follows are kept if you come back: ${env.SITE_URL}pricing/`}${ask ? `\n\nOne question: what was the main reason? One click is enough:\n${Object.entries(WHY).map(([k, v]) => `  ${v}: ${base}${k}`).join('\n')}` : ''}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
   };
 }
 
@@ -319,7 +321,7 @@ function resumedMail(env: Env, m: Member): Mail {
   return {
     to: m.email,
     subject: `You've resumed ${name}`,
-    text: `You've resumed ${name}. Nothing ends: alerts, history and CSV carry on, with your follows and settings as they are.\n\n${next ? `${m.status === 'trialing' ? 'Your trial ends' : 'Your plan renews'} on ${day(next)}.` : ''} ${priceLine(m)}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    text: `You've resumed ${name}. Nothing ends: alerts, history and CSV carry on, with your follows and settings as they are.\n\n${next ? `${m.status === 'trialing' ? 'Your trial ends' : 'Your plan renews'} on ${endAt(next)}.` : ''} ${priceLine(m)}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
   };
 }
 
@@ -530,13 +532,22 @@ export function pauseReceiptMail(env: Env, m: Member, at: number, resume: string
   return {
     to: m.email,
     subject: after ? `Your trial continues; then paused until ${until} · no charges until then` : `Paused until ${until} · no charges until then`,
-    text: `${after ? `Your ${p?.name ?? 'Copybook'} trial continues with everything on until ${day(after)}. Then your plan pauses` : `Your ${p?.name ?? 'Copybook'} plan is paused`} until ${until}, two weeks before the next 13F deadline (${deadlineLabel(nextDeadline(at * 1000).date)}).\n\n  - No charges until then; billing resumes on ${until}.\n  - ${priceLine(m)}\n  - Real-time alerts are off while you're paused. If a fund you follow files its 13F while you're paused, we'll email you so you can resume right away.\n  - Resume anytime, one click, same subscription: ${resume}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    text: `${after ? `Your ${p?.name ?? 'Copybook'} trial continues with everything on until ${endAt(after)}. Then your plan pauses` : `Your ${p?.name ?? 'Copybook'} plan is paused`} until ${until}, two weeks before the next 13F deadline (${deadlineLabel(nextDeadline(at * 1000).date)}).\n\n  - No charges until then; billing resumes on ${until}.\n  - ${priceLine(m)}\n  - Real-time alerts are off while you're paused. If a fund you follow files its 13F while you're paused, we'll email you so you can resume right away.\n  - Resume anytime, one click, same subscription: ${resume}\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
   };
 }
 
 /** After a pause ends early: alerts are back, and when the next charge is. */
 export function resumeConfirmMail(env: Env, m: Member): Mail {
   const p = PRICES[m.plan];
+  // A trial with a pause scheduled after it: nothing had stopped, so only the scheduled pause is gone.
+  if (m.status === 'trialing' && m.trial_end) {
+    const price = p ? (m.interval === 'yearly' ? `${money(p.year)} a year` : `${money(p.month)} a month`) : 'your plan';
+    return {
+      to: m.email,
+      subject: `Pause cancelled: your ${p?.name ?? 'Copybook'} trial continues`,
+      text: `Pause cancelled: your ${p?.name ?? 'Copybook'} trial continues to ${endAt(m.trial_end)}, then ${price}${m.has_payment_method === false ? ' once you add a card in your account' : ''}. Your alerts never stopped, and your follows and settings are as they were.\n\nYour account: ${env.SITE_URL}account/${FOOTER}`,
+    };
+  }
   const when = m.period_end ? deadlineLabel(isoDay(m.period_end)) : null;
   return {
     to: m.email,

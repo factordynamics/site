@@ -289,6 +289,55 @@ export async function flushHeld(env: Env, now: number): Promise<Record<string, u
   return { held_flushed: mails.length, status };
 }
 
+/**
+ * Once, on the polling host: 13F latency rows logged before rows were tagged `moves` (Nov 9-11) are re-timed from
+ * the day stores (what went out, and when). A first email that carried the moves keeps its time; otherwise the
+ * follow-up's send, tagged followup; otherwise never_moves. Duplicates of a filing's moves row are dropped.
+ */
+export async function retimeLatency(env: Env): Promise<Record<string, unknown>> {
+  if (await env.DB.get('latency:retimed:v1')) return {};
+  type Row = { kind?: string; accession: string; accepted: string; sent: string; seconds: number; moves?: boolean; followup?: boolean; never_moves?: boolean };
+  const seen = new Map<string, { first?: boolean; followup?: string }>();
+  // The days since rows went untagged (Nov 8-11): few day stores, so the Worker's CPU limit holds.
+  for (let d = 0; d < 5; d++) {
+    const day = JSON.parse((await env.DB.get(`digest:${new Date(Date.now() - 5 * 3600_000 - d * 86_400_000).toISOString().slice(0, 10)}`)) ?? '{"filings":[]}') as { filings: (Alert13F & { sent_at?: string })[] };
+    for (const f of day.filings) {
+      const s = seen.get(f.accession) ?? {};
+      if (f.followup && f.sent_at && (!s.followup || f.sent_at < s.followup)) s.followup = f.sent_at;
+      if (!f.followup && f.moves) s.first = true;
+      seen.set(f.accession, s);
+    }
+  }
+  const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as Row[];
+  const tagged = new Set(log.filter((l) => (l.kind ?? '13f') === '13f' && l.moves).map((l) => l.accession));
+  const n = { kept: 0, retimed: 0, never_moves: 0, dropped_duplicates: 0, tagged_followup: 0 };
+  const out: Row[] = [];
+  for (const l of log) {
+    if ((l.kind ?? '13f') !== '13f') {
+      out.push(l);
+      continue;
+    }
+    const s = seen.get(l.accession);
+    if (l.moves) {
+      // A moves row whose first email had none (the backlog sent after the fix): a follow-up.
+      if (!l.followup && s?.followup && !s.first) (l.followup = true), n.tagged_followup++;
+      out.push(l);
+      continue;
+    }
+    if (tagged.has(l.accession)) {
+      n.dropped_duplicates++;
+      continue;
+    }
+    if (s?.first) out.push({ ...l, moves: true }), n.kept++;
+    else if (s?.followup) out.push({ ...l, moves: true, followup: true, sent: s.followup, seconds: Math.round((Date.parse(s.followup) - Date.parse(l.accepted)) / 1000) }), n.retimed++;
+    else out.push({ ...l, never_moves: true }), n.never_moves++;
+    tagged.add(l.accession);
+  }
+  await env.DB.put('alerts:latency', JSON.stringify(out));
+  await env.DB.put('latency:retimed:v1', JSON.stringify({ at: new Date().toISOString(), ...n }));
+  return { latency_retimed: n };
+}
+
 /** Clears the one-time note once an email carrying it has been handed to the mailer. */
 async function noted(env: Env, m: Member): Promise<void> {
   if (m.alerts_note) await putMember(env, { ...m, alerts_note: undefined });
@@ -948,7 +997,7 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
  * KV alerts:replays (test sends of old filings) are marked and never counted. `coverage`: a curated
  * manager's filing, or any other filer's (followed, a peer, or a member's linked book).
  */
-async function logLatency(env: Env, filings: { slug: string; accession: string; accepted?: string; kind?: string; manager?: string; quarter?: string; form?: string; extra?: boolean; coalesced?: boolean }[], sentAt: number): Promise<void> {
+async function logLatency(env: Env, filings: { slug: string; accession: string; accepted?: string; kind?: string; manager?: string; quarter?: string; form?: string; extra?: boolean; coalesced?: boolean; followup?: boolean }[], sentAt: number): Promise<void> {
   if (!filings.length) return;
   const replays = new Set(JSON.parse((await env.DB.get('alerts:replays')) ?? '[]') as string[]);
   // Emails held for the daily limit: the row is kept but marked, and not counted as fast.
@@ -956,7 +1005,7 @@ async function logLatency(env: Env, filings: { slug: string; accession: string; 
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
   const add = filings
     .filter((f) => f.accepted)
-    .map((f) => ({ slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', ...((f.kind ?? '13f') === '13f' ? { moves: true } : {}), accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}), ...(delayed.has(f.accession) ? { email_delayed: true } : {}), ...(f.coalesced ? { coalesced: true } : {}) }));
+    .map((f) => ({ slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', ...((f.kind ?? '13f') === '13f' ? { moves: true } : {}), accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}), ...(delayed.has(f.accession) ? { email_delayed: true } : {}), ...(f.coalesced ? { coalesced: true } : {}), ...(f.followup ? { followup: true } : {}) }));
   // A filing season's worth: the public /latency page reports the whole season.
   await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 2000)));
 }
@@ -1039,7 +1088,7 @@ async function sendFollowups(env: Env, ready: Alert13F[], now: number): Promise<
   for (const f of ready) if (await claimOnce(env, `moves/${f.accession}`, now)) mine.push(f);
   if (!mine.length) return {};
   const sent = await deliver(env, mine, [], now);
-  await logLatency(env, mine.map((f) => ({ ...f, kind: '13f' })), Date.now());
+  await logLatency(env, mine.map((f) => ({ ...f, kind: '13f', followup: true })), Date.now());
   return { followups: { filings: mine.map((f) => f.slug), ...sent } };
 }
 
@@ -1632,6 +1681,7 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   await step('events_poll', () => runEventPoll(env, scheduledTime));
   await step('mail_retry', async () => (await import('./email')).retryMail(env));
   await step('mail_held', () => flushHeld(env, scheduledTime));
+  await step('latency_retime', () => retimeLatency(env));
   // The missed-filing detector, every 10 minutes whatever else the minute did: it only reads feed
   // pages with the SEC budget the polls left, and the polls send what it finds from the next minute.
   if (t.getUTCMinutes() % 10 === 5) await step('missed', () => runMissedDetector(env, scheduledTime));
@@ -1654,8 +1704,8 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   if (m === 12 && h === 13) due.push({ name: 'ops', at: scheduledTime });
   // The account's daily request budget, hourly: a warning at 70%.
   if (m === 23) due.push({ name: 'quota', at: scheduledTime });
-  // The free weekly: Fridays after EDGAR's day ends (22:00 ET), 03:42 UTC Saturday.
-  if (m === 42 && h === 3 && t.getUTCDay() === 6) due.push({ name: 'weekly', at: scheduledTime });
+  // The free weekly: Saturday 02:00 UTC (9pm ET Friday), so it has Friday's after-close filers and their pages.
+  if (m === 0 && h === 2 && t.getUTCDay() === 6) due.push({ name: 'weekly', at: scheduledTime });
   // Owned and watched names' insider and 13D/G events: every 10 minutes (each name hourly, 10 minutes in filing week).
   if (m % 10 === 9) due.push({ name: 'issuers', at: scheduledTime });
   const rawQueue = await env.DB.get('jobs:due');

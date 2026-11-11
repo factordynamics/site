@@ -81,6 +81,8 @@ export interface Env {
 
 /** What we keep per Stripe customer. */
 export interface Member {
+  /** The subscription has a card (or other payment method) to charge when its trial ends. */
+  has_payment_method?: boolean;
   customer: string;
   email: string;
   status: string;
