@@ -662,7 +662,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             "weight", "accession", "filing_date", "accepted_at", "original_accession"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
-                         "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "by_period": {}}
+                         "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {}, "by_period": {}}
         rows, counts, deltas = [], blank(), {}
         lenses = {name: blank() for name in LENSES}
         for cik, (sh, ps, v, pv, known, delta, unsure) in hs.items():
@@ -681,7 +681,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                     c["top10"] += code in top10.get(cik, ())
                     c["over5pct"] += bool(weight and weight > 0.05)
                 c[change or "no_prior"] += 1
-                c["net"] += round(delta) if known else 0
+                if known:
+                    c["net_by_period"][q] = c["net_by_period"].get(q, 0) + round(delta)
             deltas[cik] = round(delta) if known else None
             m = curated.get(cik) or filers.get(cik) or {}
             fl = FILING.get(cik) or filing(meta[cik])
@@ -692,6 +693,11 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          fl.get("original_accession") or fl["accession"]])
         if not counts["holders"]:
             continue
+        # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period
+        # keeps each quarter's sum, since holders' latest books span quarters during filing season.
+        nq = max((PERIOD.get(cik) or meta[cik].get("quarter") or "" for cik in hs), default=None)
+        for c in [counts] + list(lenses.values()):
+            c["net_quarter"], c["net"] = nq, c["net_by_period"].get(nq, 0)
         rows.sort(key=lambda r: -(r[8] or r[9] or 0))
         tickers = sorted(tick.get(code, {}), key=lambda t: -tick[code][t])
         for t in tickers:
