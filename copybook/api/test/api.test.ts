@@ -1908,7 +1908,10 @@ describe('copybook api', () => {
       { ...row('APH', '032095101', 'trimmed', 1_047_486, 1_229_320, 88_303_070, -15_328_606), prev_shares_as_filed: 614_660, prev_value: 108_376_851, split: { ratio: 2, from_quarter: '2026Q2', to_quarter: '2026Q3' } },
       { ...row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_092_000), prev_value: 240_000_000 },
       { ...row('KO', '191216100', 'unchanged', 10, 10, 700, 0) },
-    ] })));
+      // An option row as the book writes it ("CALL"), and a convertible bond sized from its principal.
+      { ...row('SPY', '78462F103', 'added', 2000, 1000, 1_300_000, 650_000), put_call: 'CALL' },
+      { ...row('BOND', '00000BND1', 'added', 0, 0, 141_206_378, 1_056_109), shares_type: 'PRN' },
+    ], exited: [{ ...row('ORCL', '68389X105', 'exited', 0, 30_000, 0, -5_000_000) }] })));
 
     // A: the gate held APH. Once the build has it and it passes the same gate, a "checked" follow-up carries it.
     await env.DB.put('alerts:pending-check', JSON.stringify([{ ...base, moves: { bought_usd: 10_092_000, sold_usd: 0, new: [], added: [row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_092_000)], trimmed: [], exited: [] }, held: [{ cusip: '032095101', ticker: 'APH', issuer: 'APH', display_name: null, put_call: null, change: 'added', reason: 'split_basis' }] }]));
@@ -1922,10 +1925,13 @@ describe('copybook api', () => {
     // B: the alert as it went out before the fix (APH "added +$36.5M") reconciles against the build: a correction.
     sent = [];
     const day = etDay(now);
-    await env.DB.put(`digest:${day}`, JSON.stringify({ filings: [{ ...base, moves: { bought_usd: 46_579_232, sold_usd: 0, new: [], added: [row('APH', '032095101', 'added', 1_047_486, 614_660, 88_303_070, 36_487_232), row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_200_000)], trimmed: [], exited: [] } }], events: [] }));
+    // The alert as sent: its exit (ORCL) is in the book's exited[]; its option says "Call"; its bond row was sized from shares.
+    await env.DB.put(`digest:${day}`, JSON.stringify({ filings: [{ ...base, moves: { bought_usd: 46_579_232, sold_usd: 5_000_000, new: [], added: [row('APH', '032095101', 'added', 1_047_486, 614_660, 88_303_070, 36_487_232), row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_200_000), { ...row('SPY', '78462F103', 'added', 2000, 1000, 1_300_000, 650_000), put_call: 'Call' }, row('BOND', '00000BND1', 'added', 141_206_378, 1, 141_206_378, 141_206_377)], trimmed: [], exited: [row('ORCL', '68389X105', 'exited', 0, 30_000, 0, -5_000_000)] } }], events: [] }));
     await env.DB.put('delivered:cus_j', JSON.stringify([{ day, ids: [ACC] }]));
     const r = await reconcileAlerts(env, now);
-    expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 2, failed: 1, mailed: 1 }], pending: 0 }); // MSFT within 10%: passes
+    // MSFT within 10%, the ORCL exit and the SPY call pass; the bond row differs but is logged for review, not mailed.
+    expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 5, failed: 2, mailed: 1 }], pending: 0 });
+    expect(sent[0]?.text).not.toContain('BOND');
     expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['copybook-test-j@fldubai.com', 'Correction: Jensen (Jensen Investment Management) APH was trimmed -$15.3M, not added +$36.5M']]);
     const store = JSON.parse((await env.DB.get(`digest:${day}`))!);
     expect(store.filings[0].corrected.rows.map((x: { ticker: string }) => x.ticker)).toEqual(['APH']);
@@ -1933,7 +1939,7 @@ describe('copybook api', () => {
     sent = [];
     expect((await reconcileAlerts(env, now)).checked).toEqual([]);
     expect(sent).toHaveLength(0);
-    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', failed_rows: 1, corrections_sent: 1 }] });
+    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', failed_rows: 2, corrections_sent: 1 }] });
   });
 
   it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {

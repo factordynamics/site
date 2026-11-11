@@ -1367,11 +1367,14 @@ async function buildRows(env: Env, a: Alert13F): Promise<{ build: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const q: any = await new Response(obj.body).json();
   const serves = q.accession === a.accession || (Array.isArray(q.filings) && q.filings.some((x: { accession?: string; role?: string }) => x.accession === a.accession && x.role === 'base'));
-  const holdings = (q.holdings ?? []) as BuildRow[];
+  // Exits are in the book's own exited[] list, not in holdings[].
+  const holdings = [...((q.holdings ?? []) as BuildRow[]), ...((q.exited ?? []) as BuildRow[]).map((h) => ({ ...h, change: h.change ?? 'exited' }))];
   if (!serves || !holdings.some((h) => 'value_delta' in h)) return null;
-  const rows = new Map(holdings.filter((h) => h.change && h.change !== 'unchanged').map((h) => [`${h.cusip}|${h.put_call ?? ''}`, h]));
+  const rows = new Map(holdings.filter((h) => h.change && h.change !== 'unchanged').map((h) => [rowKey(h), h]));
   return { build: obj.customMetadata?.['build-id'] ?? obj.customMetadata?.build_id ?? q.build_id ?? null, rows };
 }
+/** One position's key across EDGAR tables and ingest's books: CUSIP and put/call ("Call" in one, "CALL" in the other). */
+const rowKey = (r: { cusip: string; put_call?: string | null }) => `${r.cusip.toUpperCase()}|${(r.put_call ?? '').toUpperCase()}`;
 const ratioOf = (r: BuildRow) => (typeof r.split === 'object' ? Number(r.split?.ratio) || 1 : Number(r.split) || 1);
 
 /**
@@ -1396,7 +1399,7 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
     const ok: MoveRow[] = [];
     const still: HeldRow[] = [];
     for (const h of a.held!) {
-      const r = b.rows.get(`${h.cusip}|${h.put_call ?? ''}`);
+      const r = b.rows.get(rowKey(h));
       if (!r) continue; // the build shows no move here
       const prior = r.prev_shares ? { shares: r.prev_shares_as_filed ?? r.prev_shares, value: r.prev_value ?? 0 } : undefined;
       const row: MoveRow = { ...r, split: undefined, ticker: r.ticker ?? h.ticker, delta_pct_of_book: r.delta_pct_of_book ?? null };
@@ -1437,6 +1440,8 @@ export interface Reconciled {
 /** Alerts accepted from here get correction emails; earlier ones are checked and logged only. */
 export const RECONCILE_MAIL_FROM = '2026-11-11T05:00:00Z';
 const MISMATCH = 0.1;
+/** The reconciliation log (v2: exits read from exited[], put/call case-blind; v1 counted every exit as a fail). */
+const RECONCILED = 'alerts:reconciled:v2';
 
 /**
  * gene, every 5 minutes: each 13F alert with moves, once ingest's build serves its filing, row by row against the build
@@ -1446,7 +1451,7 @@ const MISMATCH = 0.1;
  * `only`: an operator's run for one accession; `to`: send its correction to these test inboxes instead.
  */
 export async function reconcileAlerts(env: Env, now: number, only?: { accession: string; to?: string[] }): Promise<Record<string, unknown>> {
-  const log = JSON.parse((await env.DB.get('alerts:reconciled')) ?? '[]') as Reconciled[];
+  const log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
   const done = new Set(log.map((x) => x.accession));
   const found = new Map<string, { a: Alert13F; rows: Map<string, MoveRow>; days: string[] }>();
   for (let d = 0; d < (only ? 31 : 3); d++) {
@@ -1456,7 +1461,7 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
     for (const a of (JSON.parse(raw) as DigestDay).filings) {
       if (!a.moves || a.reveal || a.replay_to?.length || (only ? a.accession !== only.accession : done.has(a.accession))) continue;
       const x = found.get(a.accession) ?? { a, rows: new Map<string, MoveRow>(), days: [] };
-      for (const [change, rows] of [['new', a.moves.new], ['added', a.moves.added], ['trimmed', a.moves.trimmed], ['exited', a.moves.exited]] as const) for (const r of rows) x.rows.set(`${r.cusip}|${r.put_call ?? ''}`, { ...r, change });
+      for (const [change, rows] of [['new', a.moves.new], ['added', a.moves.added], ['trimmed', a.moves.trimmed], ['exited', a.moves.exited]] as const) for (const r of rows) x.rows.set(rowKey(r), { ...r, change });
       if (!x.days.includes(day)) x.days.push(day);
       found.set(a.accession, x);
     }
@@ -1471,30 +1476,33 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
     }
     const failed: import('./email').CorrectionRow[] = [];
     for (const r of rows.values()) {
-      let v: BuildRow | undefined = b.rows.get(`${r.cusip}|${r.put_call ?? ''}`);
+      let v: BuildRow | undefined = b.rows.get(rowKey(r));
       // A CUSIP change the alert netted into one move (XOM's Q3 reorganisation): the build keeps the exit and the new line.
       if (!v && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
       if (v?.change === 'new' && r.change !== 'new' && r.ticker && [...b.rows.values()].some((x) => x.ticker === r.ticker && x.change === 'exited')) continue;
       const got = v ? { change: v.change!, value_delta: Math.round(v.value_delta) } : { change: 'unchanged', value_delta: 0 };
       const bad = got.change !== r.change || Math.sign(got.value_delta) !== Math.sign(r.value_delta) || Math.abs(r.value_delta - got.value_delta) > MISMATCH * Math.abs(got.value_delta);
-      if (bad) failed.push({ cusip: r.cusip, ticker: r.ticker ?? v?.ticker ?? null, name: r.display_name || r.issuer, put_call: r.put_call, emailed: { change: r.change!, value_delta: r.value_delta }, v1: got });
+      // Options and bond (PRN) rows are sized differently in the two paths (the underlying's value; principal, not
+      // shares): a difference there is logged for review, never mailed as a correction.
+      if (bad) failed.push({ cusip: r.cusip, ticker: r.ticker ?? v?.ticker ?? null, name: r.display_name || r.issuer, put_call: r.put_call, emailed: { change: r.change!, value_delta: r.value_delta }, v1: got, ...(r.put_call || (v as { shares_type?: string } | undefined)?.shares_type === 'PRN' ? { review: true } : {}) });
       v = undefined;
     }
     failed.sort((x, y) => Math.abs(y.emailed.value_delta - y.v1.value_delta) - Math.abs(x.emailed.value_delta - x.v1.value_delta));
     // Who got it: the delivery log, as /ops/delivery reads it.
     const rec = await deliveryRecord(env, a.accession, now);
     const members = new Map((await listMembers(env)).map((m) => [m.customer, m]));
-    const to = only?.to ?? (failed.length && (a.accepted ?? '') >= RECONCILE_MAIL_FROM ? rec.recipients.map((x) => members.get(x.customer)?.email).filter((e): e is string => !!e) : []);
+    const mailable = failed.filter((x) => !x.review);
+    const to = only?.to ?? (mailable.length && (a.accepted ?? '') >= RECONCILE_MAIL_FROM ? rec.recipients.map((x) => members.get(x.customer)?.email).filter((e): e is string => !!e) : []);
     let mailed = 0;
-    if (failed.length) {
+    if (mailable.length) {
       const { correctionMail, sendMail } = await import('./email');
       const uniq = [...new Set(to)];
       if (uniq.length) {
-        await sendMail(env, uniq.map((t) => correctionMail(env, t, a, failed)), { bulk: true, preview: !!only?.to });
+        await sendMail(env, uniq.map((t) => correctionMail(env, t, a, mailable)), { bulk: true, preview: !!only?.to });
         mailed = uniq.length;
       }
       if (!only?.to) {
-        const corrected = { at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), rows: failed };
+        const corrected = { at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), rows: mailable };
         for (const day of days) {
           const raw = await env.DB.get(`digest:${day}`);
           if (!raw) continue;
@@ -1508,14 +1516,14 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
   }
   if (out.length && !only?.to) {
     const keep = log.filter((x) => !out.some((o) => o.accession === x.accession));
-    await env.DB.put('alerts:reconciled', JSON.stringify([...out, ...keep].slice(0, 500)));
+    await env.DB.put(RECONCILED, JSON.stringify([...out, ...keep].slice(0, 500)));
   }
   return { checked: out.map((x) => ({ accession: x.accession, result: x.result, rows: x.rows, failed: x.failed.length, mailed: x.mailed })), pending };
 }
 
 /** latency.json's `reconciliation`: "alerts reconciled: N of N" on /status/. */
 export async function reconciliation(env: Env): Promise<Record<string, unknown>> {
-  const log = JSON.parse((await env.DB.get('alerts:reconciled')) ?? '[]') as Reconciled[];
+  const log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
   return {
     checked: log.length,
     passed: log.filter((x) => x.result === 'pass').length,
