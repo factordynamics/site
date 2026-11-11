@@ -1531,6 +1531,64 @@ a.hb-row:hover {
     grid-template-columns: 1fr;
   }
 }
+/* Tablets (721-960px): every summary card on one row, rather than four and a lone fifth on fund pages or
+   three and a lone fourth at 721px, with values sized so "27 investors" fits. */
+@media (min-width: 721px) and (max-width: 960px) {
+  .stats {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .stat {
+    padding: 12px 14px;
+  }
+  .stat .value {
+    font-size: 21px;
+  }
+}
+/* …except the home page's cards, whose second lines are sentences: two rows of two below 880px. */
+@media (min-width: 721px) and (max-width: 880px) {
+  .home-stats {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* Tablets and narrow laptops (721-860px): the five sections, search, theme and alerts button share one row.
+   At full spacing the nav ran 49px under the search button at 768px and 96px at 721px. */
+.show-md-nav {
+  display: none;
+}
+@media (min-width: 721px) and (max-width: 860px) {
+  .top-in {
+    gap: 14px;
+    padding: 0 16px;
+  }
+  .top nav a {
+    padding: 7px 8px;
+  }
+  .top-right {
+    gap: 4px;
+  }
+  .top .hide-md-nav {
+    display: none;
+  }
+  .top .show-md-nav {
+    display: inline;
+  }
+}
+@media (min-width: 721px) and (max-width: 780px) {
+  .top-in {
+    gap: 10px;
+  }
+  .top nav {
+    gap: 0;
+  }
+  .top nav a {
+    padding: 7px 6px;
+    font-size: 14px;
+  }
+}
 @media (max-width: 720px) {
   main {
     padding: 14px 12px 28px;
