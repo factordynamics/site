@@ -34,7 +34,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, Bar, BooksProgress, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, TabsSkel, Tick, type SkelCol, usd, useLoad, type Col } from './lib'
+import { A, Bar, BooksProgress, cap, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, TabsSkel, Tick, type SkelCol, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -1429,25 +1429,26 @@ function ConsensusStats({ rows, total, n }: { rows: Agg[]; total: number; n: num
     </div>
   )
 }
-function FilingsSummary({ list, firms }: { list: Event[]; firms: Map<string, string> }) {
+/** The window's filings at a glance, as the other section pages' cards: stakes above 5%, new ones, insider trades
+ * and the latest new stake. */
+function FilingsStats({ list, firms, days }: { list: Event[]; firms: Map<string, string>; days: number }) {
   const stakes = list.filter((e) => e.kind !== 'form4')
   const f4 = list.filter((e) => e.kind === 'form4')
   const newStakes = stakes.filter((e) => e.action === 'new_stake')
-  const buys = f4.filter((e) => e.action === 'buy')
-  const sells = f4.filter((e) => e.action === 'sell')
+  const buys = f4.filter((e) => e.action === 'buy').length
+  const sells = f4.filter((e) => e.action === 'sell').length
   const latestNew = newStakes[0]
   return (
-    <p className="summary">
-      The investors reported {plural(stakes.length, 'stake')} above 5%{newStakes.length ? `, ${num(newStakes.length)} of them new` : ''}, and {plural(f4.length, 'insider filing')}
-      {buys.length || sells.length ? `, including ${listing([buys.length > 0 && plural(buys.length, 'open-market buy'), sells.length > 0 && plural(sells.length, 'sale')])}` : ''}.
-      {latestNew && (
-        <>
-          {' '}
-          The latest new one is {shortFirm(firmOf(firms, latestNew.slug, latestNew.manager))}’s {latestNew.percent_of_class != null ? `${latestNew.percent_of_class.toFixed(1)}% of ` : 'stake in '}
-          {issuerName(latestNew.display_name || latestNew.issuer)}, filed {day(latestNew.filing_date)}.
-        </>
-      )}
-    </p>
+    <div className="stats tick-stats" role="list" aria-label={`Filings in the last ${days} days`}>
+      <Stat label="5% stakes reported" value={num(stakes.length)} sub={`13D and 13G filings, last ${days} days`} />
+      <Stat label="New 5% stakes" value={num(newStakes.length)} tone={newStakes.length ? 'pos' : undefined} sub="A first 13D or 13G on the company" />
+      <Stat label="Insider trades" value={num(f4.length)} sub={buys || sells ? cap(listing([buys > 0 && plural(buys, 'open-market buy'), sells > 0 && plural(sells, 'sale')])) : 'Form 4 filings'} />
+      <Stat
+        label="Latest new stake"
+        value={latestNew ? <Tick t={latestNew.ticker} name={issuerName(latestNew.display_name || latestNew.issuer)} /> : <span className="dim">None</span>}
+        sub={latestNew ? `${shortFirm(firmOf(firms, latestNew.slug, latestNew.manager))}${latestNew.percent_of_class != null ? `, ${latestNew.percent_of_class.toFixed(1)}%` : ''}, filed ${day(latestNew.filing_date)}` : `None in the last ${days} days`}
+      />
+    </div>
   )
 }
 
@@ -1591,7 +1592,7 @@ export function Filings() {
   const [tab, setTab] = useState<ETab>('all')
   const [own, setOwn] = useState(false)
   if (ev.error) return <Failed error={ev.error} what="the latest filings" />
-  if (!ev.data) return <PageLoading what="Loading the latest filings" stats={0} rows={20} />
+  if (!ev.data) return <PageLoading what="Loading the latest filings" stats={4} rows={20} />
   const scoped = ev.data.events.filter((e) => inRoster(e.slug) && (own || !ownVehicle(e)))
   let list = scoped
   if (tab === '13dg') list = list.filter((e) => e.kind !== 'form4')
@@ -1604,9 +1605,9 @@ export function Filings() {
         <div>
           <h1>Stakes and insider trades</h1>
           <p className="lede">Stakes above 5% and insider trades the investors reported in the last {ev.data.window_days} days, between their quarterly 13Fs.</p>
-          <FilingsSummary list={scoped} firms={firms} />
         </div>
       </div>
+      <FilingsStats list={scoped} firms={firms} days={ev.data.window_days} />
       <Tabs<ETab>
         value={tab}
         onChange={setTab}
