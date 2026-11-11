@@ -1603,16 +1603,16 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
     const w = sent[0];
     // Only the allowed claims: the season median with /speed/, and history as served (marketing's audit, Nov 11).
-    expect(w.text).toContain("This email comes once a week. Copy emails each one when it's filed, median under 2 minutes from EDGAR acceptance (live figures: " + SITE + 'speed/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-speed), with 8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV. 14 days free · card required: ' + SITE + 'pricing/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-paid');
+    expect(w.text).toContain("This email comes once a week. Copy emails each 13F from the funds you follow as it's filed, median under 2 minutes from EDGAR acceptance (live figures: " + SITE + 'speed/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-speed), with 8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV. 14 days free · card required: ' + SITE + 'pricing/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-paid');
     // The window it covers, by name (Sat Nov 14 02:00 UTC: Fri Nov 6 to Fri Nov 13, ET).
     expect(w.text.startsWith('Superinvestor filings, November 6–13.')).toBe(true);
     expect(w.subject).toBe('In your names: Warren Buffett added $8.8B of GOOGL');
     // "Your follows" leads: Ackman has no 13F on record this week and isn't on the expected list.
-    expect(w.text).toMatch(/^Superinvestor filings, November 6–13\.\n\nYour follows:\n  Bill Ackman: not filed yet\n    https:\/\/\S+\/investors\/bill-ackman\/\n/);
+    expect(w.text).toMatch(/^Superinvestor filings, November 6–13\.\n\nYour follows:\n  Bill Ackman: not filed yet\n    https:\/\/\S+\/investors\/bill-ackman\/\?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-follows\n/);
     expect(w.text).toMatch(/Also this week from your follows:\n(  .*\n    .*\n)*  Bill Ackman: bought HHH/); // and the superinvestor moves in followed stocks (GOOGL)
     // "In your names" first: one public fact per saved name (superinvestors only), then the biggest locked item, named.
     expect(w.text).toContain(
-      `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/\n  Nvidia's CEO sold $18.6M of NVDA (Nov 6, filed Nov 10), with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
+      `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-card\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-follows\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-follows\n  Nvidia's CEO sold $18.6M of NVDA (Nov 6, filed Nov 10), with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
     );
     expect(w.text.indexOf('In your names')).toBeLessThan(w.text.indexOf('Biggest buys'));
     expect(w.html).toContain('Try Copy · 14 days free · card required');
@@ -1623,10 +1623,14 @@ describe('copybook api', () => {
     Object.assign(env, { POSTAL_ADDRESS: '' });
     const plain = weeklyMail(env, 'reader@reader.test', { buys: [], sells: [] }, 'November 7', 'https://u.test', { names: 1, facts: [], hook: 'X', more: 2 });
     expect([plain.text, plain.html ?? ''].some((t) => /pricing\/|with Copy|Copy emails each/.test(t))).toBe(false);
-    // Superinvestors first, 2 rows per fund at most; no ETFs or index flow; nothing older than the week; no options.
+    // No names saved: the My book line is a Copy ask too, so the plain newsletter leaves it out.
+    const noNames = weeklyMail(env, 'reader@reader.test', { buys: [], sells: [] }, 'November 7', 'https://u.test', { names: 0, facts: [], hook: null, more: 0 });
+    expect([noNames.text, noNames.html ?? ''].some((t) => /my-book|My book/.test(t))).toBe(false);
+    // Superinvestors only (ICICI and other filers never), by dollars, 2 rows per fund at most; no ETFs or index flow;
+    // nothing older than the week; no options. Every site link is tagged for the funnel.
     const buys = w.text.slice(w.text.indexOf('Biggest buys'), w.text.indexOf('Biggest sells'));
-    expect([...buys.matchAll(/^ {2}(\S[^:]*):/gm)].map((m) => m[1])).toEqual(['Warren Buffett', 'Warren Buffett', 'Bill Ackman', 'ICICI Prudential', 'ICICI Prudential']);
-    expect(buys).toContain(`Warren Buffett: added GOOGL, +$8.8B (13F Q3 2026)\n    ${SITE}f/0000950123-26-011111/`);
+    expect([...buys.matchAll(/^ {2}(\S[^:]*):/gm)].map((m) => m[1])).toEqual(['Warren Buffett', 'Warren Buffett', 'Bill Ackman']);
+    expect(buys).toContain(`Warren Buffett: added GOOGL, +$8.8B (13F Q3 2026)\n    ${SITE}f/0000950123-26-011111/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-card`);
     // The body only: the unsubscribe token is random base64 and can contain any of these.
     const body = w.text.slice(0, w.text.indexOf('Unsubscribe:'));
     for (const no of ['X3', 'IVV', ', LLC', 'VVV', 'Vanguard', 'OLDX', 'PUTX', '$77.0B', 'gift', '$50.0K']) expect(body).not.toContain(no);
@@ -1636,7 +1640,8 @@ describe('copybook api', () => {
     const wk = await weeklyMoves(env, sat);
     expect(wk.all.filter((x) => x.slug === 'fisher').map((x) => [x.what, x.ticker, x.usd])).toEqual([['added', 'XOM', 75745316]]);
     // Impossible and flagged moves never show; an all-caps filer name reads normally.
-    expect(w.text).toContain('Guardcap Asset Management: trimmed ILMN, −$16.1M');
+    expect(wk.all.some((x) => x.manager === 'Guardcap Asset Management' && x.ticker === 'ILMN')).toBe(true);
+    expect(w.text).not.toContain('Guardcap'); // a 13F filer, not a superinvestor: not in Biggest buys/sells
     expect(body).not.toMatch(/BKNG|CME|GUARDCAP/);
     vi.stubGlobal('fetch', realFetch);
     const unsub = w.text.match(/Unsubscribe: (\S+)/)![1];

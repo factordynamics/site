@@ -364,12 +364,13 @@ export async function weeklyMoves(env: Env, now: number, days = 7, followed: Set
       stakes.push({ manager: e.manager, slug: e.slug, ticker: e.ticker, form: e.form, pct: e.percent_of_class ?? null, prev: e.prev_percent_of_class ?? null, url: investor(e.slug), featured: isFeatured, accession: e.id });
     }
   }
-  // Superinvestors first, then size; at most 2 rows per fund in each list.
+  // The curated superinvestors only (the email says "Superinvestor filings"), by dollars; at most 2 rows per fund in
+  // each list. A week with few superinvestor moves shows fewer rows, never other filers.
   const rank = (xs: WeeklyMove[], sign: 1 | -1) => {
     const per = new Map<string, number>();
     return xs
-      .filter((x) => Math.sign(x.usd) === sign)
-      .sort((a, b) => Number(b.featured) - Number(a.featured) || Math.abs(b.usd) - Math.abs(a.usd))
+      .filter((x) => x.featured && Math.sign(x.usd) === sign)
+      .sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd))
       .filter((x) => {
         const n = per.get(x.slug) ?? 0;
         per.set(x.slug, n + 1);
@@ -611,6 +612,7 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   const COPY_SPEED = 'median under 2 minutes from EDGAR acceptance';
   const COPY_HISTORY = '8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV';
   const book = `${env.SITE_URL}my-book/`;
+  // My book is part of Copy: its line is a Copy ask, so it goes only with the Copy paragraph (a postal address set).
   const n = (k: number, w: string) => `${k} ${w}${k === 1 ? '' : 's'}`;
   const locked = yours?.hook && postal ? `${yours.hook}, with Copy${yours.more ? ` (+${yours.more} more in your names)` : ''}` : null;
   const trial = 'Try Copy · 14 days free · card required';
@@ -621,24 +623,31 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   const yoursText = !yours
     ? ''
     : !yours.names
-      ? `Save up to ${FREE_NAMES} names you own and this email leads with them: ${book}\n\n`
+      ? postal ? `With Copy, save up to ${FREE_NAMES} names you own in My book and this email leads with them: ${book}\n\n` : ''
       : `In your names:\n${yours.facts.map((f) => `  ${f.text}.\n    ${f.url}`).join('\n') || `  None of your ${n(yours.names, 'name')} moved in superinvestor filings this week.`}\n${locked ? `  ${locked}: ${pricing}\n` : ''}\n`;
   const yoursHtml = !yours
     ? ''
     : !yours.names
-      ? `<p style="background:#f3f4f6;border-radius:10px;padding:12px 14px">Save up to ${FREE_NAMES} names you own in <a href="${book}" style="color:#1d4ed8">My book</a> and this email leads with them.</p>`
+      ? postal ? `<p style="background:#f3f4f6;border-radius:10px;padding:12px 14px">With Copy, save up to ${FREE_NAMES} names you own in <a href="${book}" style="color:#1d4ed8">My book</a> and this email leads with them.</p>` : ''
       : `<div style="background:#f3f4f6;border-radius:10px;padding:12px 14px"><h3 style="font-size:15px;margin:0 0 6px">In your names</h3>${yours.facts.map((f) => `<p style="margin:4px 0"><a href="${f.url}" style="color:#111;text-decoration:none">${esc(f.text)}.</a></p>`).join('') || `<p style="margin:4px 0">None of your ${n(yours.names, 'name')} moved in superinvestor filings this week.</p>`}${locked ? `<p style="margin:8px 0 4px;color:#6b7280">🔒 ${esc(locked)}</p><p style="margin:8px 0 0"><a href="${pricing}" style="display:inline-block;background:#111;color:#fff;padding:8px 16px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px">${trial}</a></p>` : ''}</div>`;
   const lead = yours?.facts[0];
   const row = (x: WeeklyMove) =>
     `<tr><td style="padding:4px 8px 4px 0">${esc(x.manager)}</td><td style="padding:4px 8px;white-space:nowrap"><b>${esc(x.ticker)}</b> ${LABEL[x.what]}</td><td style="padding:4px 8px;text-align:right;white-space:nowrap;color:${x.usd > 0 ? '#047857' : '#b91c1c'}">${x.usd > 0 ? '+' : '−'}${money(x.usd)}</td><td style="padding:4px 0 4px 8px"><a href="${x.url}" style="color:#1d4ed8">${esc(x.form)}</a>${x.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}</td></tr>`;
   const table = (title: string, xs: WeeklyMove[]) => (xs.length ? `<h3 style="font-size:15px;margin:18px 0 6px">${title}</h3><table style="border-collapse:collapse;font-size:14px">${xs.map(row).join('')}</table>` : '');
-  return {
+  // Every site link is tagged, so a trial started from a card or follow counts as the weekly's (not direct_site).
+  const site = env.SITE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const KIND: Record<string, string> = { f: 'weekly-card', investors: 'weekly-follows', 'my-book': 'weekly-mybook' };
+  const tag = (s: string) => s.replace(new RegExp(`(${site}(f|investors)/[\\w-]+/|${site}(my-book)/)(?![?\\w])`, 'g'), (u: string, _a: string, k1?: string, k2?: string) => `${u}?${utm(KIND[(k1 ?? k2)!])}`);
+  return tagged({
     to,
     subject: lead ? `In your names: ${lead.text.replace(/, which you own( \(.*\))?$/, '')}` : `The week in superinvestor filings: ${top ? `${top.manager} ${LABEL[top.what]} ${top.ticker}` : 'the biggest moves'}`,
-    text: `Superinvestor filings, ${weekOf}.\n\n${follows?.text ?? ''}${followedText}${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}${postal ? `\n\nThis email comes once a week. Copy emails each one when it's filed, ${COPY_SPEED} (live figures: ${speed}), with ${COPY_HISTORY}. 14 days free · card required: ${pricing}` : ''}\n\nYou get this because you signed up for the free Copybook weekly. Unsubscribe: ${unsub}${FOOTER}${postal ? `\n${postal}` : ''}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, ${esc(weekOf)}.</p>${follows?.html ?? ''}${followedHtml}${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}${postal ? `<p style="margin-top:20px">This email comes once a week. <a href="${pricing}" style="color:#1d4ed8"><b>Copy</b></a> emails each one when it's filed, ${COPY_SPEED} (<a href="${speed}" style="color:#1d4ed8">live figures</a>), with ${COPY_HISTORY}. <a href="${pricing}" style="color:#1d4ed8">14 days free · card required</a>.</p>` : ''}<p style="color:#6b7280;font-size:12px;margin-top:24px">You get this because you signed up for the free Copybook weekly. Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.${postal ? ` ${esc(postal)}.` : ''} <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+    text: `Superinvestor filings, ${weekOf}.\n\n${follows?.text ?? ''}${followedText}${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}${postal ? `\n\nThis email comes once a week. Copy emails each 13F from the funds you follow as it's filed, ${COPY_SPEED} (live figures: ${speed}), with ${COPY_HISTORY}. 14 days free · card required: ${pricing}` : ''}\n\nYou get this because you signed up for the free Copybook weekly. Unsubscribe: ${unsub}${FOOTER}${postal ? `\n${postal}` : ''}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, ${esc(weekOf)}.</p>${follows?.html ?? ''}${followedHtml}${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}${postal ? `<p style="margin-top:20px">This email comes once a week. <a href="${pricing}" style="color:#1d4ed8"><b>Copy</b></a> emails each 13F from the funds you follow as it's filed, ${COPY_SPEED} (<a href="${speed}" style="color:#1d4ed8">live figures</a>), with ${COPY_HISTORY}. <a href="${pricing}" style="color:#1d4ed8">14 days free · card required</a>.</p>` : ''}<p style="color:#6b7280;font-size:12px;margin-top:24px">You get this because you signed up for the free Copybook weekly. Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.${postal ? ` ${esc(postal)}.` : ''} <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
     unsubscribe: unsub,
-  };
+  });
+  function tagged(m: Mail): Mail {
+    return { ...m, text: tag(m.text), ...(m.html ? { html: tag(m.html) } : {}) };
+  }
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -901,7 +910,8 @@ export async function runWeekly(env: Env, now: number): Promise<Record<string, u
     follows.set(m.customer, await getFollows(env, m));
   }
   const moves = await weeklyMoves(env, now, 7, new Set([...follows.values()].flatMap((f) => f.investors)));
-  if (!moves.buys.length && !moves.sells.length) return { status: 'no moves', week };
+  // Followers are promised their funds' moves in this email: it goes whenever anyone follows a fund.
+  if (!moves.buys.length && !moves.sells.length && ![...follows.values()].some((f) => f.investors.length)) return { status: 'no moves', week };
   // Followed investors' moves, and superinvestor moves in followed stocks.
   // Followed investors lead ("Your follows": each one's 13F in the alert's format, else when it's expected); then their
   // Form 4 and 13D/G trades this week and superinvestor moves in followed stocks.
