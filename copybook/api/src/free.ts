@@ -1025,7 +1025,19 @@ async function mergeFollows(env: Env, from: string, to: string): Promise<string[
  */
 export async function eraseMember(env: Env, email: string): Promise<{ customers: string[]; deleted: number }> {
   const e = email.trim().toLowerCase();
-  const ids = [...new Set([await env.DB.get(`email:${e}`), await freeId(e)].filter((x): x is string => !!x))];
+  // Every record under this email: the indexed one, the free signup, and any earlier record merged into it or left by a
+  // second checkout (carryPriorMember's aliases).
+  const all: string[] = [];
+  let cur: string | undefined;
+  do {
+    const page = await env.DB.list({ prefix: 'cus:', cursor: cur });
+    for (const k of page.keys) {
+      const r = JSON.parse((await env.DB.get(k.name)) ?? 'null') as Member | null;
+      if (r?.email?.trim().toLowerCase() === e) all.push(r.customer);
+    }
+    cur = page.list_complete ? undefined : page.cursor;
+  } while (cur);
+  const ids = [...new Set([await env.DB.get(`email:${e}`), await freeId(e), ...all].filter((x): x is string => !!x))];
   const keys = new Set<string>([`email:${e}`]);
   for (const c of ids) {
     const ch = JSON.parse((await env.DB.get(`channels:${c}`)) ?? '{}') as { feed_token?: string };

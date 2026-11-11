@@ -457,7 +457,7 @@ describe('copybook api', () => {
     stripeObjects['subscriptions/sub_rp2'] = sub('sub_rp2', 'cus_rp2', 'trialing');
     const blocked0 = Number((await env.DB.get('ops:trial_repeat_blocked')) ?? 0);
     await webhook({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_rp2', customer: 'cus_rp2', customer_details: { email: 'RP@Example.com' } } } });
-    await webhook({ type: 'customer.subscription.created', data: { object: { ...stripeObjects['subscriptions/sub_rp2'], metadata: { trial_repeat_blocked: 'true' } } } });
+    await webhook({ type: 'customer.subscription.created', data: { object: { ...(stripeObjects['subscriptions/sub_rp2'] as object), metadata: { trial_repeat_blocked: 'true' } } } });
     expect([await env.DB.get('cus:cus_rp2'), await env.DB.get('email:rp@example.com'), Number(await env.DB.get('ops:trial_repeat_blocked')) - blocked0, JSON.parse((await env.DB.get('follows:cus_rp'))!).investors]).toEqual([null, 'cus_rp', 1, ['irving-kahn']]);
     // A test address keeps its repeat trial (critics walk it again) but still merges into one account: the new record
     // takes the earlier one's follows, and the earlier one opens it.
