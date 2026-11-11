@@ -167,6 +167,13 @@ if __name__ == "__main__":
 class MoveMathTest(unittest.TestCase):
     """CUSIP reissues and mis-scaled filings must not turn into trades."""
 
+    def setUp(self):
+        # Links apply only once their share units checked out on the holders (splits.link_check).
+        checked = {"ratio": 1, "units_basis": "holders_1to1", "basis": "sec_13f_list"}
+        build._LINKS = {o: {"old": o, "new": n} | checked for o, n in
+                        (("30231G102", "30233Q108"), ("682680103", "30609A109"), ("881624209", "M8769Q102"))}
+        self.addCleanup(build.reload_links)
+
     def row(self, cusip, ticker, shares, value, title="COM"):
         return {"issuer": "X", "title": title, "cusip": cusip, "ticker": ticker, "value": float(value),
                 "shares": float(shares), "put_call": None, "shares_type": "SH"}
@@ -192,6 +199,16 @@ class MoveMathTest(unittest.TestCase):
         # A shared ticker alone never links (a SPAC's units and shares): an exit and a new line, as filed.
         cur = {"quarter": "2026Q3", "holdings": [self.row("682680999", "OKE", 1000, 90000, title="COM")]}
         self.assertEqual(sorted(r["change"] for r in build.with_changes(cur, prev)), ["exited", "new"])
+        # Both codes in one book (IFP Advisors 2026Q3 TEVA): the new code continues the old position; the stale old
+        # line is suspect_duplicate with no change, never summed or sold.
+        prev = {"quarter": "2026Q2", "holdings": [self.row("881624209", "TEVA", 143_000, 2.6e6)]}
+        cur = {"quarter": "2026Q3", "holdings": [self.row("881624209", "TEVA", 143_891, 2.9e6),
+                                                 self.row("M8769Q102", "TEVA", 143_876, 2.9e6)]}
+        got = {r["cusip"]: r for r in build.with_changes(cur, prev)}
+        self.assertEqual(len(got), 2)
+        self.assertEqual((got["M8769Q102"]["change"], got["M8769Q102"]["prev_cusip"], got["M8769Q102"]["share_change"]),
+                         ("added", "881624209", 876))
+        self.assertEqual((got["881624209"]["change"], got["881624209"]["suspect_duplicate"]), (None, True))
 
     def test_reissue_link_needs_the_sec_13f_list_and_never_joins_units(self):
         from ingest.moves import on_list

@@ -268,6 +268,9 @@ LIST_PAGE = ("https://www.sec.gov/rules-regulations/staff-guidance/division-inve
 NOT_SHARE = re.compile(r"\bUNITS?\b|\bRIGHTS?\b|\bRTS?\b|\*W\b|\bWTS?\b|WARRANT")
 
 
+LIST_URLS: dict[str, str] = {}  # quarter -> the SEC 13(f) list file read
+
+
 def sec_13f_lists(quarters: list[str]) -> dict[str, dict[str, tuple[str, str]]]:
     """SEC's Official List of Section 13(f) Securities per quarter: {cusip: (status A/D/'', description)}. Lists that
     can't be read are left out."""
@@ -295,6 +298,7 @@ def sec_13f_lists(quarters: list[str]) -> dict[str, dict[str, tuple[str, str]]]:
                 rows[line[:9]] = ("A" if "*A*" in rest else "D" if "*D*" in rest else "",
                                   re.split(r"\s{2,}|\*[AD]\*", rest.strip())[0])
         out[q] = rows
+        LIST_URLS[q] = href if href.startswith("http") else ARCHIVE_BASE + href
     return out
 
 
@@ -336,17 +340,23 @@ def write_links(quarter: str | None) -> list[str]:
             v["filers"] = len(PAIRS[(old, v["new"])])
         v["name"] = v.get("name") or (SECS.get(v["new"]) or SECS.get(old) or {}).get("name")
         v["ticker"] = v.get("ticker") or (SECS.get(v["new"]) or {}).get("ticker")
-    held = {o: v for o, v in links.items() if v.get("units_reason")}
+    for o, v in links.items():
+        v["old"] = o
+        v["list_url"] = LIST_URLS.get(v.get("list_quarter") or "") or v.get("list_url")
+    # Found this run, so not yet unit-checked (the next run's split detection checks it before any book): held.
+    held = {o: v if v.get("units_basis") else v | {"units_reason": v.get("units_reason") or "units unchecked: found "
+            "this run; checked on the holders next run"} for o, v in links.items() if not v.get("units_basis")}
     links = {o: v for o, v in links.items() if o not in held}
     write(DATA / "cusip_links.json", {
-        "note": "Reissued CUSIPs, old -> new, with the quarter the new one first appears. Found in 13F filings (the old "
-                "CUSIP's holders report the same shares under the new one; filers = how many showed it this run) and "
-                "confirmed by the SEC's Official List of Section 13(f) Securities, which deletes the old CUSIP in the "
-                "list that adds the new one (list_quarter). Units, rights and warrants are never linked. Changes, "
-                "holder counts, bulk and /v1 treat the two as one position. Each link's share units are checked on "
-                "the holders first (units_check): a split that came with the new CUSIP (HON 2026Q2 1-for-2) is applied "
-                "as a split; `held` lists SEC-confirmed reissues whose units don't check out, which are not applied.",
-        "links": links, "held": held})
+        "note": "Reissued CUSIPs, old -> new. Found in 13F filings (filers = how many showed it this run) and confirmed "
+                "by the SEC's Official List of Section 13(f) Securities, which deletes the old CUSIP in the list that "
+                "adds the new one (list_quarter, list_url); units, rights and warrants never link. Each link's share "
+                "units are checked on the holders that reported the old CUSIP one quarter and the new one the next "
+                "(units_check): ratio is the prior shares' multiplier, units_basis split_confirmed (a split found on "
+                "the pair, DD 2026Q2 1-for-3) or holders_1to1 (holders at exactly 1:1 outnumber any other ratio). "
+                "Changes, holder counts, bulk and /v1 treat a link as one position. `held` lists SEC-confirmed "
+                "reissues whose units don't check out or weren't checked yet (units_reason); they are not applied.",
+        "links": links, "held": sorted(held.values(), key=lambda v: -(v.get("filers") or 0))})
     build.cusip_links().clear()
     build.cusip_links().update(links)
     build.HELD_LINKS.clear()
@@ -359,7 +369,7 @@ def issuer_rows(rows: list[dict]):
     for r in rows:
         c = linked(r.get("cusip"))
         if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
-                or r.get("price_outlier") or not_common(r.get("title")):
+                or r.get("price_outlier") or r.get("suspect_duplicate") or not_common(r.get("title")):
             continue
         yield c[:6], r
 
@@ -612,6 +622,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         by_issuer: dict[str, float] = {}
         for r in rows:
             c = linked(r.get("cusip"))
+            if r.get("suspect_duplicate"):
+                continue
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
                     or r.get("price_outlier") or not_common(r.get("title")):
                 continue  # preferreds share the common stock's issuer code (BAC 060505682) but aren't its holders

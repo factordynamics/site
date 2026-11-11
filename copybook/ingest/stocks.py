@@ -61,9 +61,12 @@ def positions(book: dict, ratio=None) -> dict[tuple[str, str], dict]:
     ratio(cusip, put_call) scales an earlier quarter's shares for splits since then."""
     cols = book.get("columns") or []
     out: dict[tuple[str, str], dict] = {}
-    for r in book.get("rows") or []:
-        h = dict(zip(cols, r))
+    rows = [dict(zip(cols, r)) for r in book.get("rows") or []]
+    held = {((h.get("cusip") or "").upper(), h.get("put_call") or "") for h in rows}
+    for h in rows:
         cusip = (h.get("cusip") or "").upper()
+        if cusip in LINKS and (LINKS[cusip]["new"], h.get("put_call") or "") in held:
+            continue  # both codes of a reissue in one book (IFP Advisors TEVA): the new one is the position
         cusip = (LINKS.get(cusip) or {}).get("new") or cusip  # reissued CUSIPs (cusip_links.json)
         if len(cusip) < 6 or cusip.startswith("000000"):
             continue

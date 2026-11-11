@@ -170,7 +170,8 @@ def link_check(pairs: list[tuple[dict, dict]], old: str, new: str, split: float 
     other = max(exact(k) for k in RATIOS)
     med = statistics.median(rs)
     ok = bool(split and split != 1) or (at1 >= max(1, 0.1 * len(rs)) and at1 > other)
-    return {"new": new, "holders": len(rs), "exact_at_1": at1, "median_ratio": round(med, 4),
+    return {"new": new, "holders": len(rs), "exact_at_1": at1, "exact_at_ratio": exact(split) if split and split != 1 else at1,
+            "median_ratio": round(med, 4),
             "split_ratio": split if split and split != 1 else None, "units_ok": ok,
             "reason": None if ok else (f"units unconfirmed: median share ratio {med:.3f} over {len(rs)} holders, "
                                        f"{at1} at exactly 1:1, no split found")}

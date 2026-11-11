@@ -605,7 +605,7 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
-STALE = ("split", "prev_shares_as_filed", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip",
+STALE = ("split", "prev_shares_as_filed", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
          "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
@@ -649,8 +649,11 @@ def cusip_links() -> dict[str, dict]:
             doc = json.loads(LINKS_PATH.read_text())
         except (OSError, ValueError):
             doc = {}
-        cand = {o: dict(v) for part in ("held", "links") for o, v in (doc.get(part) or {}).items()
-                if v.get("basis") == "sec_13f_list"}
+        held = doc.get("held") or []
+        if isinstance(held, dict):  # Nov 11 12:0x files: a map keyed by the old CUSIP
+            held = [v | {"old": o} for o, v in held.items()]
+        cand = {v["old"]: dict(v) for v in held if v.get("old") and v.get("basis") == "sec_13f_list"}
+        cand.update({o: dict(v) for o, v in (doc.get("links") or {}).items() if v.get("basis") == "sec_13f_list"})
         for old, v in SEED_LINKS.items():
             cand.setdefault(old, dict(v))
         from ingest.splits import load as split_doc
@@ -658,14 +661,22 @@ def cusip_links() -> dict[str, dict]:
         _LINKS = {}
         HELD_LINKS.clear()
         for o, v in cand.items():
-            v.pop("units_reason", None)
+            v = {k: x for k, x in v.items() if k not in ("units_reason", "ratio", "units_basis", "units_check")}
+            v["old"] = o
             c = checks.get(o)
-            if c and c.get("new") == v["new"]:
-                v["units_check"] = {k: c.get(k) for k in ("to_quarter", "holders", "exact_at_1", "median_ratio",
-                                                         "split_ratio")}
-                if not c.get("units_ok"):
-                    HELD_LINKS[o] = v | {"units_reason": c.get("reason")}
-                    continue
+            if not (c and c.get("new") == v["new"]):
+                HELD_LINKS[o] = v | {"units_reason": "units unchecked: no filer has reported the old CUSIP one "
+                                                     "quarter and the new one the next"}
+                continue
+            v["units_check"] = {k: c.get(k) for k in ("to_quarter", "holders", "exact_at_1", "exact_at_ratio",
+                                                     "median_ratio", "split_ratio")}
+            if not c.get("units_ok"):
+                HELD_LINKS[o] = v | {"units_reason": c.get("reason")}
+                continue
+            # The prior quarter's shares times ratio are this quarter's (DD 1-for-3: 1/3); with_changes applies it
+            # through the split table, which holds the split found on the linked pair.
+            v["ratio"] = c.get("split_ratio") or 1
+            v["units_basis"] = "split_confirmed" if c.get("split_ratio") else "holders_1to1"
             _LINKS[o] = v
     return _LINKS
 
@@ -782,10 +793,13 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     # CUSIP is gone when cusip_links() links the two (never on a shared ticker alone: SPAC units share one).
     renamed: dict[tuple, tuple] = {}
     now_keys = {(h["cusip"], h["put_call"] or "") for h in latest["holdings"]}
-    gone = {k: p for k, p in before.items() if k not in now_keys}
     olds: dict[str, list[str]] = {}
     for old, v in cusip_links().items():
         olds.setdefault(v["new"], []).append(old)
+    # A book that reports both codes of a linked pair (IFP Advisors 2026Q3: a stale 881624209 line of 143,891 sh beside
+    # M8769Q102 143,876 sh): the new code is the position; the old line is suspect_duplicate, with no change, in no sum.
+    dup = {(o, pc) for c, pc in now_keys for o in olds.get(c, ()) if (o, pc) in now_keys}
+    gone = {k: p for k, p in before.items() if k not in now_keys or k in dup}
     for h in latest["holdings"]:
         k = (h["cusip"], h["put_call"] or "")
         if k in before:
@@ -820,6 +834,10 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     for h in latest["holdings"]:
         h = {f: v for f, v in h.items() if f not in STALE}
         k = (h["cusip"], h["put_call"] or "")
+        if k in dup:
+            rows.append(h | {"row_type": "holding", "suspect_duplicate": True} | {f: None for f in CHANGE_FIELDS}
+                        | units(h, None, 1.0, 1.0, q_to, None))
+            continue
         p = before.pop(k, None) or before.pop(renamed.get(k), None)
         if p is not None and p["cusip"] != h["cusip"]:
             h = h | {"prev_cusip": p["cusip"]}
@@ -855,6 +873,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 elif abs(delta) > 1.5 * max(h["value"], p["value"]):  # no trade is worth more than that
                     delta = h["value"] - p["value"]
         rows.append(h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn))
+    for key in dup:  # the duplicate's own prior line is the new code's position, not a sale
+        before.pop(key, None)
     for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):
         prn = p.get("shares_type") == "PRN"
         r = ratio(p)
@@ -1220,7 +1240,7 @@ def compact_row(h: dict) -> dict:
 
 
 V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display_name", "late_disclosure", "parts",
-            "split", "prev_shares_as_filed", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
+            "split", "prev_shares_as_filed", "suspect_duplicate", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
 
 
 def v1_position(h: dict) -> dict:
