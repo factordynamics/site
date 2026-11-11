@@ -180,7 +180,7 @@ export function stableBase(env: Env, url?: URL): string {
  * count, so a client calling Cloudflare directly can't pick the base. Never for stored or emailed links: use apiBase. */
 export function linkBase(env: Env, req: Request, url: URL): string {
   const h = req.headers.get('x-copybook-public-base');
-  return h && /^https:\/\/[a-z0-9-]+\.(trycloudflare\.com|tail70ba3\.ts\.net)\/copybook$/.test(h) ? h : apiBase(env, url);
+  return h && (h === 'https://copybook-api.factordynamics.workers.dev' || /^https:\/\/[a-z0-9-]+\.(trycloudflare\.com|tail70ba3\.ts\.net)\/copybook$/.test(h)) ? h : apiBase(env, url);
 }
 
 /**

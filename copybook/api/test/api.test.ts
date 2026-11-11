@@ -2475,9 +2475,47 @@ describe('copybook api', () => {
     // It follows the runner's api.json (the current tunnel), so emailed links on this hostname survive a tunnel move.
     const orig = globalThis.fetch;
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u) === 'https://pub.test/api.json' ? Response.json({ api: 'https://abc-def.trycloudflare.com/copybook', at: '2026-11-09T05:30:24Z' }) : orig(u, init)));
-    const r = await worker.fetch(new Request('https://copybook-api.factordynamics.workers.dev/resume?t=abc', { method: 'POST' }), { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env);
-    // 307, never 301 or 308: clients and feed readers cache permanent redirects, and the tunnel's name changes.
-    expect([r.status, r.headers.get('location')]).toEqual([307, 'https://abc-def.trycloudflare.com/copybook/resume?t=abc']);
+    // Every API request is answered on this name from the live host, Authorization and body included (the quant: a 307 to
+    // the tunnel lost the API key on the hop and leaked the tunnel's name).
+    const LIVE = 'https://abc-def.trycloudflare.com/copybook';
+    const seen: { url: string; method: string; auth: string | null; proxy: string | null; body: string }[] = [];
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u) === 'https://pub.test/api.json') return Response.json({ api: LIVE, at: '2026-11-09T05:30:24Z' });
+      if (!String(u).startsWith(LIVE)) return orig(u, init);
+      const h = new Headers(init?.headers);
+      seen.push({ url: String(u), method: init?.method ?? 'GET', auth: h.get('authorization'), proxy: h.get('x-copybook-proxy'), body: init?.body ? await new Response(init.body).text() : '' });
+      const path = String(u).slice(LIVE.length);
+      if (path.startsWith('/v1/bulk/')) return new Response(null, { status: 302, headers: { location: 'https://r2.example/file.csv.gz?sig=1' } });
+      if (path === '/old') return new Response(null, { status: 308, headers: { location: `${LIVE}/new?x=1` } });
+      if (path === '/down') throw new Error('connect failed');
+      return Response.json({ ok: true, path }, { headers: { 'x-ratelimit-remaining': '59' } });
+    });
+    const wenv0 = { ...env, MOVED_TO: 'https://gene.tail70ba3.ts.net/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env;
+    const at = (path: string, init?: RequestInit) => worker.fetch(new Request(`https://copybook-api.factordynamics.workers.dev${path}`, { headers: { 'cf-connecting-ip': '203.0.113.7' }, ...init }), wenv0);
+    const me = await at('/v1/me', { headers: { authorization: 'Bearer cbk_live_x', 'cf-connecting-ip': '203.0.113.7' } });
+    expect([me.status, me.headers.get('location'), (await me.json()).path, me.headers.get('x-ratelimit-remaining'), seen.at(-1)!.auth]).toEqual([200, null, '/v1/me', '59', 'Bearer cbk_live_x']);
+    const r = await at('/resume?t=abc', { method: 'POST', body: '{"a":1}', headers: { 'cf-connecting-ip': '203.0.113.7' } });
+    expect([r.status, seen.at(-1)!.url, seen.at(-1)!.method, seen.at(-1)!.body]).toEqual([200, `${LIVE}/resume?t=abc`, 'POST', '{"a":1}']);
+    // A bulk file's own link passes; the live host's redirect to itself comes back on this name, and never permanent.
+    expect((await at('/v1/bulk/holdings.csv.gz')).headers.get('location')).toBe('https://r2.example/file.csv.gz?sig=1');
+    const old = await at('/old');
+    expect([old.status, old.headers.get('location')]).toEqual([307, 'https://copybook-api.factordynamics.workers.dev/new?x=1']);
+    // The live host unreachable: 503 with Retry-After, not a redirect.
+    const down = await at('/v1/down'.replace('/v1', ''));
+    expect([down.status, down.headers.get('retry-after'), down.headers.get('location')]).toEqual([503, '30', null]);
+    // On the live host, the Worker's signed client IP counts for rate limits; a forged one is dropped.
+    const proof = seen.find((x) => x.url.endsWith('/v1/me'))!.proxy!;
+    expect(proof.split(' ')[0]).toBe('203.0.113.7');
+    vi.stubGlobal('fetch', orig);
+    const { fromProxy } = await import('../src/index');
+    const via = async (proxy: string) => {
+      const q = await fromProxy(new Request('https://api.test/signup', { headers: { 'x-copybook-proxy': proxy, 'cf-connecting-ip': '198.51.100.1' } }), env);
+      return [q.headers.get('cf-connecting-ip'), q.headers.get('x-copybook-public-base'), q.headers.get('x-copybook-proxy')];
+    };
+    expect(await via(proof)).toEqual(['203.0.113.7', 'https://copybook-api.factordynamics.workers.dev', null]);
+    expect(await via('203.0.113.7 forged')).toEqual(['198.51.100.1', null, null]);
+    const { hmacHex } = await import('../src/tokens');
+    expect(proof.split(' ')[1]).toBe(await hmacHex(env.SESSION_SECRET, `proxy|203.0.113.7|${Math.floor(Date.now() / 60_000)}`));
     // A private feed is fetched from the live host and answered here (200), so readers keep this name.
     const tok = 'feedtok_abcdefghijklmnopqrstu';
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
@@ -2488,6 +2526,8 @@ describe('copybook api', () => {
     const fr = await worker.fetch(new Request(`https://copybook-api.factordynamics.workers.dev/feed/${tok}.json`), wenv);
     expect([fr.status, fr.headers.get('content-type'), fr.headers.get('location'), (await fr.json()).version]).toEqual([200, 'application/feed+json', null, 'https://jsonfeed.org/version/1.1']);
     // No response from the Worker is a permanent redirect.
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
+      String(u) === 'https://pub.test/api.json' ? Response.json({ api: LIVE }) : String(u).startsWith(LIVE) ? new Response(null, { status: 308, headers: { location: `${LIVE}/x` } }) : orig(u, init));
     for (const [method, path] of [['GET', '/me'], ['POST', '/resume?t=x'], ['GET', '/v1/filers'], ['GET', '/unsubscribe?t=x'], ['HEAD', `/feed/${tok}.rss`], ['GET', '/']]) {
       const res = await worker.fetch(new Request(`https://copybook-api.factordynamics.workers.dev${path}`, { method }), wenv);
       expect([path, [301, 308].includes(res.status)]).toEqual([path, false]);

@@ -1584,10 +1584,76 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   return json({ ok: false, error: 'not found' }, 404, h);
 }
 
+/** The stable public name: clients keep it, and the self-hosted base behind it moves (a quick tunnel rotates). */
+const PUBLIC_API = 'https://copybook-api.factordynamics.workers.dev';
+const HEADER_WAIT_MS = 30_000;
+
+/** The proof a proxied request came through this Worker: the client's IP, signed with the shared session secret per minute. */
+async function proxyProof(env: Env, ip: string, minute = Math.floor(Date.now() / 60_000)): Promise<string> {
+  return hmacHex(env.SESSION_SECRET, `proxy|${ip}|${minute}`);
+}
+
+/**
+ * On the live host: a request this Worker proxied carries x-copybook-proxy (client IP and its proof). Valid, it is
+ * answered as if it came in on the public name (client IP for rate limits, links on the workers.dev base); anything
+ * else has the header dropped, so a client can't claim an IP or a base.
+ */
+export async function fromProxy(req: Request, env: Env): Promise<Request> {
+  const v = req.headers.get('x-copybook-proxy');
+  if (!v) return req;
+  const headers = new Headers(req.headers);
+  headers.delete('x-copybook-proxy');
+  const [ip, sig] = v.split(' ');
+  const m = Math.floor(Date.now() / 60_000);
+  if (ip && sig && env.SESSION_SECRET && (sig === (await proxyProof(env, ip, m)) || sig === (await proxyProof(env, ip, m - 1)))) {
+    headers.set('cf-connecting-ip', ip);
+    headers.set('x-copybook-public-base', PUBLIC_API);
+  }
+  return new Request(req, { headers });
+}
+
+/**
+ * Any API request on the public name, answered here from the live host (the quant: a 307 to the tunnel lost the API key
+ * on the hop, since clients drop Authorization across hosts, and leaked the host name). The live host's own redirects
+ * come back on the public name; others (a bulk file's signed link) pass as they are. Unreachable or slow to answer:
+ * 503 with Retry-After, never a redirect.
+ */
+async function proxyApi(req: Request, env: Env, base: string): Promise<Response> {
+  const u = new URL(req.url);
+  const headers = new Headers(req.headers);
+  for (const k of ['host', 'x-copybook-public-base', 'x-copybook-proxy']) headers.delete(k);
+  const ip = req.headers.get('cf-connecting-ip') ?? 'unknown';
+  headers.set('x-copybook-proxy', `${ip} ${await proxyProof(env, ip)}`);
+  const unavailable = () =>
+    u.pathname === '/v1' || u.pathname.startsWith('/v1/')
+      ? v1error('busy', 503, 'Temporarily unavailable; retry after Retry-After seconds.', { 'retry-after': '30', 'access-control-expose-headers': 'retry-after' })
+      : json({ ok: false, code: 'unavailable', error: 'Temporarily unavailable. Try again in a minute.' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': '30', 'access-control-expose-headers': 'retry-after' });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const sent = fetch(`${base}${u.pathname}${u.search}`, { method: req.method, headers, body: req.method === 'GET' || req.method === 'HEAD' ? undefined : req.body, redirect: 'manual' });
+    const r = await Promise.race([sent, new Promise<null>((res) => (timer = setTimeout(() => res(null), HEADER_WAIT_MS)))]);
+    if (!r) return unavailable();
+    const out = new Headers(r.headers);
+    const loc = r.headers.get('location');
+    if (loc) {
+      const to = new URL(loc, base);
+      const b = new URL(base);
+      if (to.origin === b.origin) out.set('location', `${PUBLIC_API}${to.pathname.startsWith(b.pathname) && b.pathname !== '/' ? to.pathname.slice(b.pathname.replace(/\/+$/, '').length) : to.pathname}${to.search}`);
+    }
+    // Never a permanent redirect from this name: clients and feed readers cache those.
+    const status = r.status === 301 || r.status === 308 ? 307 : r.status;
+    return new Response(r.body, { status, headers: out });
+  } catch {
+    return unavailable();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** A private feed, fetched from the live host and answered here: readers keep this stable name, never a redirect. */
 async function proxyFeed(req: Request, to: string): Promise<Response> {
   try {
-    const r = await fetch(to, { method: 'GET', headers: { accept: req.headers.get('accept') ?? '*/*', 'user-agent': req.headers.get('user-agent') ?? 'copybook-feed-proxy', 'x-copybook-public-base': 'https://copybook-api.factordynamics.workers.dev' }, redirect: 'manual', signal: AbortSignal.timeout(15_000) });
+    const r = await fetch(to, { method: 'GET', headers: { accept: req.headers.get('accept') ?? '*/*', 'user-agent': req.headers.get('user-agent') ?? 'copybook-feed-proxy', 'x-copybook-public-base': PUBLIC_API }, redirect: 'manual', signal: AbortSignal.timeout(15_000) });
     const headers = new Headers({ 'cache-control': 'no-store', 'access-control-allow-origin': '*', 'referrer-policy': 'no-referrer' });
     const ct = r.headers.get('content-type');
     if (ct) headers.set('content-type', ct);
@@ -1625,11 +1691,11 @@ export default {
             ? import('./failover').then((fo) => fo.writeThrough(env, (e) => serve(req, e)))
             : /^\/feed\/[\w-]+\.(json|rss)$/.test(u.pathname) && (req.method === 'GET' || req.method === 'HEAD')
               ? proxyFeed(req, `${b}${u.pathname}${u.search}`)
-              // 307, never 301 or 308: clients and feed readers cache a permanent redirect, and the live host moves.
-              : new Response(null, { status: 307, headers: { location: `${b}${u.pathname}${u.search}`, 'access-control-allow-origin': '*', 'cache-control': 'no-store' } }),
+              // Everything else is answered here from the live host too: no redirect to a moving host name.
+              : proxyApi(req, env, b),
       );
     }
-    return serve(req, env);
+    return fromProxy(req, env).then((r) => serve(r, env));
   },
   async scheduled(event: { scheduledTime?: number }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil(runScheduled(env, event.scheduledTime ?? Date.now()).then((r) => console.log(`cron: ${JSON.stringify(r)}`)));
