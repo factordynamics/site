@@ -9,7 +9,7 @@ import re
 import sys
 import traceback
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +62,11 @@ LITE_HOLDERS = 8
 CACHE_FORMAT = 5  # bump when stored quarters lack fields the build now needs (forces a refetch)
 # Curated refreshes must stay quick, so they keep quarters back to format 3; full runs refetch older ones.
 MIN_CACHE_FORMAT = CACHE_FORMAT if os.environ.get("SCOPE") == "full" else 3
+# Curated runs also refetch up to this many quarters stored in an older format, the last few report periods
+# first: a curated run that restored the cache before a full run saved it would otherwise put the old quarters
+# back, so the full run's refetch alone never sticks.
+UPGRADE = [int(os.environ.get("COPYBOOK_UPGRADE_PER_RUN") or 120)]
+UPGRADE_FROM = [""]  # report dates before this wait until no newer stale quarter is left
 OWN_BOOKS: dict[tuple[str, str], dict] = {}  # (cik, report_date) -> a fund's own book before combining
 SPLITS: dict[str, dict[str, float]] = {}  # cusip -> to_quarter -> ratio; see splits.py
 # (quarter, cusip) -> median value per share over every filer's full book (moves.py writes consensus.json).
@@ -129,6 +134,10 @@ def cached_quarters() -> dict[str, dict]:
             for k in ("slug", "manager", "cik", "prev_quarter", "prev_combined_with", "exited"):
                 q.pop(k, None)
             out[q.get("filing_key") or q["accession"]] = q
+    recent = expected_report_date((datetime.now(timezone.utc) - timedelta(days=92)).isoformat())
+    stale_recent = any((q.get("format") or 0) < CACHE_FORMAT and (q.get("report_date") or "") >= recent
+                       for q in out.values())
+    UPGRADE_FROM[0] = recent if stale_recent else ""
     return out
 
 
@@ -466,7 +475,11 @@ def load_period(cik: str, group: list, cache: dict) -> dict | None:
                     "confidential_treatment_expired": cover["confidential_treatment_expired"]}
         trail.append(row)
     key = "|".join([base.accession] + [m.accession for m in additions])
-    if key in cache:
+    stale = key in cache and (cache[key].get("format") or 0) < CACHE_FORMAT \
+        and (cache[key].get("report_date") or "") >= UPGRADE_FROM[0] and UPGRADE[0] > 0
+    if stale:  # refetched below; counted against this run's budget
+        UPGRADE[0] -= 1
+    if key in cache and not stale:
         q = fix_cached(cache[key])
         return q | {"filings": mark_refiled(trail, q.get("refiled") or [])}
     loaded = load_filing(cik, base)

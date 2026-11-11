@@ -154,3 +154,18 @@ class UnitFieldsTest(unittest.TestCase):
         self.assertEqual(got["A"], (1_005_000.0, float(f"{6_000_000 / 1_005_000:.6g}"), True))
         v1 = build.v1_position(q["holdings"][1])
         self.assertEqual((v1["value_as_filed"], v1["value_scale"], v1["value_adjusted"]), (2_000.0, 1.0, False))
+
+
+class CacheUpgradeTest(unittest.TestCase):
+    def test_curated_runs_refetch_old_format_quarters_within_their_budget(self):
+        # Egerton 2026Q3 cached in format 4 (no value_as_filed): a curated run refetches it instead of reusing it.
+        g = [M(accession="o", form="13F-HR", filing_date="2026-11-10", report_date="2026-09-30", accepted_at="")]
+        old = {"o": {"accession": "o", "format": 4, "report_date": "2026-09-30", "holdings": [], "quarter": "2026Q3"}}
+        fresh = {"accession": "o", "format": build.CACHE_FORMAT, "holdings": [], "quarter": "2026Q3"}
+        with mock.patch.object(build, "load_filing", return_value=fresh) as load, \
+                mock.patch.object(build, "UPGRADE", [1]), mock.patch.object(build, "UPGRADE_FROM", [""]), \
+                mock.patch.object(build, "merge_quarter", side_effect=lambda q, extras: q):
+            build.load_period("1", g, old)
+            self.assertEqual((load.call_count, build.UPGRADE[0]), (1, 0))
+            build.load_period("1", g, old)  # budget spent: the cached quarter is used as before
+            self.assertEqual(load.call_count, 1)
