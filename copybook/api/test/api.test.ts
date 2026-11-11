@@ -1457,18 +1457,19 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => String(u).endsWith('cusip_links.json')
       ? Response.json({
           links: {
-            '12345A101': { new: '12345B107', ticker: 'NEWCO', basis: 'sec_13f_list', units_check: { split_ratio: 1, exact_at_1: 0.98 } },
+            '12345A101': { new: '12345B107', ticker: 'NEWCO', basis: 'sec_13f_list', ratio: 1, units_basis: 'holders_1to1', units_check: { split_ratio: null, exact_at_1: 0.98 } },
             // SEC-listed but no units result (the 11:49 file): a COM -> COM NEW reverse split would net 1:1 into a huge trim.
             '68232V801': { new: '68232V900', ticker: 'ONCY', basis: 'sec_13f_list' },
-            '55555A101': { new: '55555A200', ticker: 'RSPL', basis: 'sec_13f_list', units_check: { split_ratio: 0.1 } },
-            '99999U107': { new: '99999S104', ticker: 'SPAC', basis: 'detected', units_check: { split_ratio: 1 } },
+            '68232V802': { new: '68232V901', ticker: 'ONC2', basis: 'sec_13f_list', units_check: { split_ratio: null } },
+            '55555A101': { new: '55555A200', ticker: 'RSPL', basis: 'sec_13f_list', ratio: 0.1, units_basis: 'split_confirmed' },
+            '99999U107': { new: '99999S104', ticker: 'SPAC', basis: 'detected', ratio: 1, units_basis: 'holders_1to1' },
           },
-          held: { '438516106': { new: '438516205', ticker: 'HON', basis: 'sec_13f_list', units_reason: '0.5x shares, price 0.99x' } },
+          held: [{ old: '438516106', new: '438516205', ticker: 'HON', basis: 'sec_13f_list', units_reason: '0.5x shares, price 0.99x' }],
         })
       : real1(u, init));
     await ed.loadReissues(env, Date.now() + 10 * 86400_000);
     vi.stubGlobal('fetch', real1);
-    expect([ed.REISSUED['12345A101']?.to, ed.REISSUED['68232V801'], ed.REISSUED['99999U107'], ed.REISSUED['55555A101']?.ratio]).toEqual(['12345B107', undefined, undefined, 0.1]);
+    expect([ed.REISSUED['12345A101']?.to, ed.REISSUED['68232V801'], ed.REISSUED['68232V802'], ed.REISSUED['99999U107'], ed.REISSUED['55555A101']?.ratio]).toEqual(['12345B107', undefined, undefined, undefined, 0.1]);
     // Held (HON, NVRI) never link; DD links as its 1-for-3 split.
     expect([ed.REISSUED['438516106'], ed.REISSUED['415864107'], ed.HELD['438516106']?.to, ed.HELD['415864107']?.to, ed.REISSUED['26614N102']?.ratio]).toEqual([undefined, undefined, '438516205', '29390K102', 1 / 3]);
     for (const [old, { to, ticker, ratio }] of Object.entries(ed.REISSUED)) {

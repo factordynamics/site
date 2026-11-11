@@ -352,24 +352,26 @@ export async function loadReissues(env: { DATA_URL: string }, now = Date.now()):
   try {
     const res = await fetch(`${env.DATA_URL}cusip_links.json`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
-      type Link = { new?: string; ticker?: string; basis?: string; units_check?: { split_ratio?: number | null } };
-      const file = (await res.json()) as { links?: Record<string, Link>; held?: Record<string, Link> };
+      type Link = { old?: string; new?: string; ticker?: string; basis?: string; ratio?: number | null; units_basis?: string | null; units_check?: { split_ratio?: number | null } };
+      const file = (await res.json()) as { links?: Record<string, Link>; held?: Link[] | Record<string, Link> };
       const ok = (from: string, to: string) => /^[0-9A-Z]{8}[0-9]$/.test(from) && /^[0-9A-Z]{8}[0-9]$/.test(to);
-      // Held pairs first: ingest's word overrides a hand-coded link (never a 1:1 merge of mismatched units).
-      for (const [old, l] of Object.entries(file.held ?? {})) {
-        const from = old.toUpperCase(), to = String(l.new ?? '').toUpperCase();
+      // Held pairs (an array from Nov 11 12:2x, a map before): ingest's word overrides a hand-coded link, never a 1:1
+      // merge of mismatched or unchecked units.
+      const held = Array.isArray(file.held) ? file.held : Object.entries(file.held ?? {}).map(([o, v]) => ({ ...v, old: o }));
+      for (const l of held) {
+        const from = String(l.old ?? '').toUpperCase(), to = String(l.new ?? '').toUpperCase();
         if (!ok(from, to)) continue;
         delete REISSUED[from];
         HELD[from] = { to, ticker: String(l.ticker ?? HELD[from]?.ticker ?? '').toUpperCase() };
       }
       for (const [old, l] of Object.entries(file.links ?? {})) {
         const from = old.toUpperCase(), to = String(l.new ?? '').toUpperCase();
-        // Only with ingest's units result (units_check): a COM -> COM NEW link without one may be a reverse split, which
-        // netted 1:1 reads as a huge trim (ONCY, BARK, UPLD...). Its split_ratio scales the prior.
-        if (l.basis !== 'sec_13f_list' || !ok(from, to) || !l.ticker || HELD[from] || !l.units_check || typeof l.units_check !== 'object') continue;
-        const k = Number(l.units_check.split_ratio);
-        const ratio = k > 0 && Math.abs(k - 1) > 1e-6 ? k : undefined;
-        REISSUED[from] = { to, ticker: String(l.ticker).toUpperCase(), ...(ratio ? { ratio } : REISSUED[from]?.ratio ? { ratio: REISSUED[from].ratio } : {}) };
+        // Only with ingest's units result (ratio or units_basis): a COM -> COM NEW link without one may be a reverse
+        // split, which netted 1:1 reads as a huge trim (ONCY, BARK, UPLD...). ratio multiplies the prior's shares.
+        const k = Number(l.ratio ?? (l.units_basis ? (l.units_check?.split_ratio ?? 1) : NaN));
+        if (l.basis !== 'sec_13f_list' || !ok(from, to) || !l.ticker || !(k > 0) || held.some((h) => String(h.old ?? '').toUpperCase() === from)) continue;
+        delete HELD[from];
+        REISSUED[from] = { to, ticker: String(l.ticker).toUpperCase(), ...(Math.abs(k - 1) > 1e-6 ? { ratio: k } : {}) };
       }
       indexReissued();
     }
