@@ -34,7 +34,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, Bar, BooksProgress, ChangeTag, date, day, daysAgo, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
+import { A, Bar, BooksProgress, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -145,10 +145,27 @@ function StockCell({ t, name, former, label }: { t: string | null; name: string;
   return <span className="noticker" title="no US ticker for this CUSIP">{name}</span>
 }
 const aggCols = {
-  ticker: { key: 'ticker', label: 'Ticker', render: (r: Agg) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, sort: (r: Agg) => r.ticker ?? r.name, width: '80px' } as Col<Agg>,
+  // Phones hide the Company column, so the ticker cell carries the company name on a second line.
+  ticker: {
+    key: 'ticker',
+    label: 'Ticker',
+    render: (r: Agg) => (
+      <>
+        <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />
+        {r.ticker && <span className="row-sub stock-sub show-sm">{r.name}</span>}
+      </>
+    ),
+    sort: (r: Agg) => r.ticker ?? r.name, width: '80px' } as Col<Agg>,
   name: { key: 'name', label: 'Company', link: true, render: (r: Agg) => <span className="trunc">{r.name}</span>, sort: (r: Agg) => r.name } as Col<Agg>,
   sector: { key: 'sector', label: 'Sector', hideSm: true, hide: 'lg', render: (r: Agg) => <Sector s={r.sector} />, sort: (r: Agg) => r.sector } as Col<Agg>,
 }
+/** A column heading with a shorter form on phones, where every pixel goes to the company name. */
+const sm = (full: string, short: string) => (
+  <>
+    <span className="hide-sm">{full}</span>
+    <span className="show-sm">{short}</span>
+  </>
+)
 const stockHref = (r: { ticker: string | null }) => (r.ticker ? `/s/${encodeURIComponent(r.ticker)}` : null)
 
 function SectorRows({ items }: { items: { sector?: string | null; value: number }[] }) {
@@ -769,7 +786,7 @@ export function Fund({ slug }: { slug: string }) {
   const valuePanel = (
     <Panel title="Portfolio value by quarter" right={<span className="dim hide-sm">Value of US-listed stocks in each 13F</span>}>
       {book.options_value > 0 && hist.some((r) => r.equity_value == null && r.long_value == null) && <div className="dim small">Older quarters as filed, including options.</div>}
-      {hist.length > 1 ? <ValueHistory title={`${book.firm} portfolio value by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.equity_value ?? r.long_value ?? r.total_value }))} /> : <div className="dim empty">Only one quarter on file so far.</div>}
+      {hist.length > 1 ? <ValueHistory title={`${book.firm} portfolio value by quarter`} data={hist.map((r) => ({ label: quarterLabel(r.quarter).replace(' 20', " '"), value: r.equity_value ?? r.long_value ?? r.total_value }))} /> : <Empty title="Only one quarter on file so far" hint="The chart fills in as it files more 13Fs, one each quarter." />}
     </Panel>
   )
   return (
@@ -809,8 +826,8 @@ export function Fund({ slug }: { slug: string }) {
         />
         <Stat label="stocks held" value={live.length} sub={`${stock.filter((x) => x.change === 'new').length} new, ${stock.filter((x) => x.change === 'exited').length} sold out`} />
         <Stat label="in the top 10 holdings" value={pct(top10, 1)} sub={<Bar value={top10} max={1} />} />
-        <Stat label="bought" value={usd(bought)} tone="pos" sub={`Across ${buys.length} positions`} />
-        <Stat label="sold" value={usd(-sold)} tone="neg" sub={`Across ${sells.length} positions`} />
+        <Stat label="bought" value={usd(bought)} tone="pos" sub={`Across ${plural(buys.length, 'position')}`} />
+        <Stat label="sold" value={usd(-sold)} tone="neg" sub={`Across ${plural(sells.length, 'position')}`} />
       </div>
       <Tabs<ITab>
         value={tab}
@@ -829,8 +846,8 @@ export function Fund({ slug }: { slug: string }) {
       {tab === 'filings' && valuePanel}
       <Panel title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Price in filing = reported value ÷ shares</span> : tab === 'options' ? <span className="dim hide-sm">Value of the underlying shares; not counted in the portfolio</span> : tab === 'notes' ? <span className="dim hide-sm">As filed; not counted in the stock portfolio</span> : undefined}>
         {tab === 'holdings' && <HoldingsGrid rows={live} own={(x) => ownHolding(book, x)} />}
-        {tab === 'buys' && <MovesGrid rows={buys} />}
-        {tab === 'sells' && <MovesGrid rows={sells} />}
+        {tab === 'buys' && <MovesGrid rows={buys} empty={movesEmpty(book, 'bought')} />}
+        {tab === 'sells' && <MovesGrid rows={sells} empty={movesEmpty(book, 'sold')} />}
         {tab === 'options' && (
           <Grid
             rows={[...opts].sort((a, c) => c.value - a.value)}
@@ -890,7 +907,19 @@ export function Fund({ slug }: { slug: string }) {
             ]}
           />
         )}
-        {tab === 'events' && <Grid rows={events} cols={eventCols(firms, false)} empty="No 5% stake (13D or 13G) or insider trade (Form 4) filings since its latest 13F." />}
+        {tab === 'events' && (
+          <Grid
+            rows={events}
+            cols={eventCols(firms, false)}
+            empty={
+              <Empty
+                title="No stake or insider filings since its latest 13F"
+                hint="An investor files a 13D or 13G within days of passing 5% of a company, and a Form 4 within two business days when it trades as an insider. They appear here within hours."
+                action={['Get an email when it files', '/alerts']}
+              />
+            }
+          />
+        )}
       </Panel>
       <div className={tab === 'filings' ? '' : 'duo wide'}>
         {tab !== 'filings' && valuePanel}
@@ -937,7 +966,7 @@ function FundSummary({ book, live, buys, sells, top10 }: { book: Book; live: Hol
         <>This is its first 13F on file, so there are no trades to compare.</>
       ) : buys.length || sells.length ? (
         <>
-          {listing([buys[0] && `The biggest buy was ${nameOf(buys[0])}`, sells[0] && `${buys[0] ? 'the' : 'The'} biggest sale ${nameOf(sells[0])}`])}.
+          {listing([buys[0] && `The biggest buy was ${nameOf(buys[0])}`, sells[0] && (buys[0] ? `the biggest sale ${nameOf(sells[0])}` : `The biggest sale was ${nameOf(sells[0])}`)])}.
         </>
       ) : (
         <>It made no trades over the quarter.</>
@@ -982,9 +1011,17 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
     />
   )
 }
-function MovesGrid({ rows }: { rows: Holding[] }) {
+/** Bought and Sold compare a 13F with the one before, so a first filing has nothing to compare. */
+const movesEmpty = (book: Book, what: 'bought' | 'sold') =>
+  book.prev_long_value ? (
+    <Empty title={`It ${what === 'bought' ? 'didn’t buy' : 'didn’t sell'} any stock this quarter`} hint={what === 'bought' ? `It opened no new positions and added no shares to any stock it held in ${quarterLabel(book.prev_quarter ?? '')}.` : `It sold no shares of any stock it held in ${quarterLabel(book.prev_quarter ?? '')}.`} />
+  ) : (
+    <Empty title="This is its first 13F on file" hint="Bought and sold compare each 13F with the quarter before, so they fill in with its next filing." />
+  )
+function MovesGrid({ rows, empty }: { rows: Holding[]; empty?: ReactNode }) {
   return (
     <Grid
+      empty={empty}
       rank
       rows={rows}
       href={stockHref}
@@ -1077,14 +1114,14 @@ export function Flows() {
             { ...aggCols.name, hideSm: true },
             aggCols.sector,
             isBuy
-              ? { key: 'b', label: tab === 'new' ? 'New positions' : 'Investors buying', num: true, title: tab === 'new' ? 'Investors that bought it for the first time' : 'Investors that added shares', render: (r) => <span className="pos">{tab === 'new' ? r.newBuyers : r.buyers.length}</span> }
-              : { key: 's', label: tab === 'exits' ? 'Sold all' : 'Investors selling', num: true, title: tab === 'exits' ? 'Investors that sold every share' : 'Investors that cut shares', render: (r) => <span className="neg">{tab === 'exits' ? exits(r) : r.sellers.length}</span> },
+              ? { key: 'b', label: tab === 'new' ? sm('New positions', 'New') : sm('Investors buying', 'Buyers'), num: true, title: tab === 'new' ? 'Investors that bought it for the first time' : 'Investors that added shares', render: (r) => <span className="pos">{tab === 'new' ? r.newBuyers : r.buyers.length}</span> }
+              : { key: 's', label: tab === 'exits' ? 'Sold all' : sm('Investors selling', 'Sellers'), num: true, title: tab === 'exits' ? 'Investors that sold every share' : 'Investors that cut shares', render: (r) => <span className="neg">{tab === 'exits' ? exits(r) : r.sellers.length}</span> },
             { key: 'w', label: isBuy ? 'Who bought' : 'Who sold', hideSm: true, hide: 'lg', render: (r) => <Who tagQ={tagQ} list={[...(isBuy ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))} /> },
-            { key: 'bv', label: 'Bought', num: true, hideSm: true, hide: 'md', title: 'Value of shares added, at each filing’s price', render: (r) => <span className="pos">{r.buy ? usd(r.buy) : '·'}</span>, sort: (r) => r.buy },
-            { key: 'sv', label: 'Sold', num: true, hideSm: true, hide: 'md', title: 'Value of shares cut, at each filing’s price', render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '·'}</span>, sort: (r) => -r.sell },
+            { key: 'bv', label: 'Bought', num: true, hideSm: true, hide: 'md', title: 'Value of shares added, at each filing’s price', render: (r) => <span className="pos">{r.buy ? usd(r.buy) : '—'}</span>, sort: (r) => r.buy },
+            { key: 'sv', label: 'Sold', num: true, hideSm: true, hide: 'md', title: 'Value of shares cut, at each filing’s price', render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '—'}</span>, sort: (r) => -r.sell },
             {
               key: 'nv',
-              label: 'Net money in',
+              label: sm('Net money in', 'Net'),
               num: true,
               title: 'Bought minus sold',
               render: (r) => (
@@ -1230,9 +1267,9 @@ export function Consensus() {
             aggCols.sector,
             { key: 'h', label: 'Owners', num: true, render: (r) => r.holders.length, sort: (r) => r.holders.length, title: 'How many of the investors own it' },
             { key: 'hp', label: 'Of all investors', num: true, hideSm: true, hide: 'md', render: (r) => <span className="wcell">{pct(r.holders.length / n, 0)}<Bar value={r.holders.length} max={n} /></span>, sort: (r) => r.holders.length },
-            { key: 'v', label: 'Value held', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
+            { key: 'v', label: 'Value held', num: true, hideSm: tab === 'conviction', render: (r) => usd(r.value), sort: (r) => r.value },
             { key: 'gw', label: 'Of all money', num: true, hideSm: true, hide: 'lg', render: (r) => pct(r.value / agg.total), sort: (r) => r.value, title: 'Share of everything the investors hold combined' },
-            { key: 'mw', label: 'Biggest bet', num: true, render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'Largest share of any one investor’s portfolio' },
+            { key: 'mw', label: 'Biggest bet', num: true, hideSm: tab !== 'conviction', render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'Largest share of any one investor’s portfolio' },
             { key: 'aw', label: 'Average bet', num: true, hideSm: true, hide: 'lg', title: 'Average share of the portfolios that own it', render: (r) => pct(r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length), 2), sort: (r) => r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length) },
             { key: 'who', label: 'Biggest holders', hideSm: true, hide: 'lg', render: (r) => <Who list={[...r.holders].sort((a, b) => b.weight - a.weight)} max={2} /> },
           ]}
@@ -1439,13 +1476,11 @@ export function Stock({ ticker }: { ticker: string }) {
         <Stat label="Bought more" value={plural(nNew + cnt('added'), 'investor')} tone={nNew + cnt('added') > 0 ? 'pos' : undefined} sub={`${num(nNew)} new, ${num(cnt('added'))} added`} />
         <Stat label="Sold some or all" value={plural(cnt('trimmed') + exited.length, 'investor')} tone={cnt('trimmed') + exited.length > 0 ? 'neg' : undefined} sub={`${num(cnt('trimmed'))} trimmed, ${num(exited.length)} sold out`} />
       </div>
-      <Panel title="Biggest bets on it" right={<span className="dim hide-sm">Share of each investor’s portfolio</span>}>
-        {holders.length ? (
+      {holders.length > 0 && (
+        <Panel title="Biggest bets on it" right={<span className="dim hide-sm">Share of each investor’s portfolio</span>}>
           <HBars title="Investors with the most of their portfolio in it" fmt={(v) => pct(v, 1)} labelWidth={200} rows={[...holders].sort((a, b) => b.weight - a.weight).slice(0, 6).map((h) => ({ key: h.slug, href: fundHref(h), label: <span title={name(h)}>{shortFirm(name(h))}</span>, value: h.weight }))} />
-        ) : (
-          <div className="empty dim">None of the investors Holdterm follows owns it.</div>
-        )}
-      </Panel>
+        </Panel>
+      )}
       <Tabs<STab>
         value={tab}
         onChange={setTab}
@@ -1458,7 +1493,7 @@ export function Stock({ ticker }: { ticker: string }) {
         label={`${issuerName(d.name)} ownership`}
       />
       <Panel title={STOCK_TAB[tab]}>
-        {tab === 'holders' && <Grid rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty="None of the investors Holdterm follows owns it." />}
+        {tab === 'holders' && <Grid rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty={<Empty title="None of the investors Holdterm follows owns it" hint={`Holdterm follows ${roster.funds.length} concentrated, long-term investors. A stock shows up here once one of them reports it in a 13F.`} action={['See the stocks they own most', '/consensus']} />} />}
         {tab === 'activity' && (
           <Grid
             rows={movers}
@@ -1473,7 +1508,7 @@ export function Stock({ ticker }: { ticker: string }) {
             cols={[holderCols[0], { key: 'pc', label: 'Type', render: (h) => <span className={`tag ${h.put_call === 'CALL' ? 'pos' : 'neg'}`}>{h.put_call === 'CALL' ? 'Call' : 'Put'}</span> }, { key: 'v', label: 'Value of shares', num: true, render: (h) => usd(h.value), sort: (h) => h.value }, holderCols[1]]}
           />
         )}
-        {tab === 'filings' && <Grid rows={events} cols={eventCols(firms)} empty="No 5% stake (13D or 13G) or insider trade (Form 4) filings by these investors in the last 30 days." />}
+        {tab === 'filings' && <Grid rows={events} cols={eventCols(firms)} empty={<Empty title="No stake or insider filings in the last 30 days" hint="None of these investors filed a 13D, 13G or Form 4 on this company in that time." action={['See every recent filing', '/filings']} />} />}
       </Panel>
     </div>
   )

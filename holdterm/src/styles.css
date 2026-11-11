@@ -526,6 +526,39 @@ main:focus {
 .empty {
   padding: 18px 2px;
 }
+.empty-state {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 10px 0 4px;
+  padding: 18px 18px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  background: var(--raise);
+}
+.empty-icon {
+  flex: none;
+  color: var(--dim);
+  margin-top: 1px;
+}
+.empty-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--fg);
+}
+.empty-hint {
+  margin: 4px 0 0;
+  color: var(--fg2);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 62ch;
+}
+.empty-action {
+  display: inline-block;
+  margin-top: 8px;
+  font-weight: 500;
+  color: var(--acc);
+}
 /* Loading: placeholder rows in the shape of a table, no spinner. */
 .loading {
   padding: 2px 0 6px;
@@ -1579,6 +1612,17 @@ a.hb-row:hover {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 230px;
+  }
+  /* A stock's company name never widens its column: it fills whatever the column gets and ends in an ellipsis. */
+  .row-sub.stock-sub {
+    width: 0;
+    min-width: 100%;
+    max-width: none;
+  }
+  /* …and the number columns in those tables shrink to their content, so the name column gets the spare width. */
+  .grid:has(.stock-sub) th.num {
+    width: 1%;
+    white-space: nowrap;
   }
   .noticker {
     max-width: 84px;

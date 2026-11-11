@@ -175,6 +175,26 @@ export function PageLoading({ what = 'Loading', stats = 4, rows = 12, progress }
     </div>
   )
 }
+/** Nothing to list: what that means in a plain sentence, why it can happen, and where to go next. */
+export function Empty({ title, hint, action }: { title: ReactNode; hint?: ReactNode; action?: [string, string] }) {
+  return (
+    <div className="empty-state">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden className="empty-icon">
+        <rect x="4" y="5" width="16" height="14" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M8 10h8M8 14h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+      <div>
+        <p className="empty-title">{title}</p>
+        {hint && <p className="empty-hint">{hint}</p>}
+        {action && (
+          <A to={action[1]} className="empty-action">
+            {action[0]} →
+          </A>
+        )}
+      </div>
+    </div>
+  )
+}
 /** A load that failed: what happened in plain words, a retry, and a way on; the technical reason is tucked away. */
 export function Failed({ error, what = 'this page' }: { error: string; what?: string }) {
   const offline = typeof navigator !== 'undefined' && navigator.onLine === false
@@ -322,7 +342,7 @@ export function Grid<R>({
   initial?: [string, 'asc' | 'desc']
   limit?: number
   rowClass?: (r: R) => string
-  empty?: string
+  empty?: ReactNode
   rank?: boolean
 }) {
   const [sort, setSort] = useState<[string, 'asc' | 'desc'] | undefined>(initial)
@@ -354,7 +374,7 @@ export function Grid<R>({
   }, [rows, sort, cols])
   const visible = sorted.slice(0, shown)
 
-  if (!rows.length) return <div className="empty dim">{empty}</div>
+  if (!rows.length) return typeof empty === 'string' ? <Empty title={empty} /> : <>{empty}</>
   return (
     <div className={`grid-outer ${cue ? 'cue' : ''}`}>
     <div className="grid-wrap" ref={wrap}>
