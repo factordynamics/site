@@ -60,7 +60,7 @@ function Shot({ src, alt, caption }: { src: string; alt: string; caption: string
   )
 }
 
-function Features({ items }: { items: [string, string][] }) {
+function Features({ items }: { items: [string, ReactNode][] }) {
   return (
     <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {items.map(([t, d]) => (
@@ -140,7 +140,21 @@ export function ForFunds() {
           [`${FUND_SEATS} seats, shared lists`, 'Each colleague signs in with their own email and keeps their own alert settings. Follows, the watchlist, the owned book and peers are shared.'],
           ['One team channel', 'Every filing from the funds you follow posts once to your team’s Slack channel as it hits EDGAR, whoever follows the fund, with new, added, trimmed and exited positions inside.'],
           ['Insider and 13D alerts', 'Open-market insider buys over your threshold, cluster buys, and any filer’s new 13D on the stocks you own or watch.'],
-          ['Invoice and W-9', 'Annual plan invoiced net 30, with a W-9 on request. Or start on a card with a 14-day trial.'],
+          [
+            'Invoice and W-9',
+            <>
+              Annual plan, with a W-9 on request.{' '}
+              {/* The Fund card checkout /pricing/ links (yearly, its default), with the visitor's attribution. */}
+              <a href={attributed(plans.fund.links.yearly || plans.fund.links.monthly)} onClick={referredCheckout('fund', 'yearly', attributed(plans.fund.links.yearly || plans.fund.links.monthly))} className="font-medium text-accent hover:text-accent-2">
+                Or start on a card with a {TRIAL_DAYS}-day trial
+              </a>
+              . Pay by invoice (net 30): email{' '}
+              <a href="mailto:hello@factordynamics.com" className="font-medium text-accent hover:text-accent-2">
+                hello@factordynamics.com
+              </a>
+              .
+            </>,
+          ],
         ]}
       />
       <p className="mt-6 max-w-3xl rounded-[var(--radius-card)] bg-ink/[0.04] px-5 py-4 text-[15px] leading-relaxed text-ink-2">
