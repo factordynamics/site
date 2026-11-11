@@ -2,6 +2,20 @@
 
 from __future__ import annotations
 
+import re
+
+# Not the common stock although they share its issuer code: preferreds, notes, warrants and rights.
+# Depositary shares are preferreds only with a preferred's cues (DEP SHS RP1/20 A, 6.5 DEP CUM SR D);
+# ADRs (AMERICAN DEP, DEPOSITARY RECEI) and MLP depositary units are the common.
+_NOT_COMMON = re.compile(r"\bPFD\b|\bPREF|\bNOTE|%|\bWT\b|\bWARRANT|\bRIGHT|\*W\b|\bW EXP\b")
+_DEP_PREFERRED = re.compile(r"\bDEP(OSITARY)?\b.*(\bSHS\b|\bSR\b|\bCUM|\bCM\b|\bCNV|\bCONV|\bREP)|^\d[\d.]* DEP\b")
+_ADR = re.compile(r"\bAMERICAN\b|\bADR|\bADS\b|RECEI|RCPT|\bUNIT")
+
+
+def not_common(title: str | None) -> bool:
+    t = (title or "").upper()
+    return bool(_NOT_COMMON.search(t) or (_DEP_PREFERRED.search(t) and not _ADR.search(t)))
+
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from dataclasses import dataclass, field

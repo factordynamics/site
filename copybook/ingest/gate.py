@@ -20,6 +20,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ingest.parse import not_common  # noqa: E402  (the same rule hl/ uses)
+
 MAX_DROP = 0.005
 TOP_N = 1000
 
@@ -63,7 +66,8 @@ def holder_counts(data: Path, books: dict[str, dict]) -> list[str]:
     for b in books.values():
         for h in b.get("holdings") or []:
             c = h.get("cusip") or ""
-            if len(c) >= 6 and not h.get("put_call") and h.get("shares_type", "SH") != "PRN" and h.get("shares"):
+            if len(c) >= 6 and not h.get("put_call") and h.get("shares_type", "SH") != "PRN" and h.get("shares") \
+                    and not not_common(h.get("title")):
                 tracked.setdefault(c[:6], set()).add(b.get("cik"))
     bad = []
     for code, ciks in tracked.items():

@@ -28,7 +28,7 @@ if str(ROOT) not in sys.path:
 from ingest import build
 from ingest import splits as sp
 from ingest.datasets import prev_quarter
-from ingest.parse import ABOVE_20K, consensus_factor, consensus_prices
+from ingest.parse import ABOVE_20K, consensus_factor, consensus_prices, not_common
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
@@ -52,7 +52,6 @@ def filing(b: dict) -> dict:
             "accepted_at": b.get("accepted_at") or ACCEPTED.get(acc or "")}
 # Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
 LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
-PREFERRED = re.compile(r"\bPFD\b|\bPREF|\bDEP(OSITARY)?\b|\bNOTE|%|\bWT\b|\bWARRANT|\bRIGHT|\*W\b|\bW EXP\b")
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
 CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied price over every filer
 FIXED = [0]
@@ -213,7 +212,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         for r in rows:
             c = (r.get("cusip") or "").upper()
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
-                    or r.get("price_outlier") or PREFERRED.search((r.get("title") or "").upper()):
+                    or r.get("price_outlier") or not_common(r.get("title")):
                 continue  # preferreds share the common stock's issuer code (BAC 060505682) but aren't its holders
             if r.get("suspect_units"):
                 r = r | {"value_delta": 0}

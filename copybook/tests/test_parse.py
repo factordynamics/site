@@ -59,6 +59,14 @@ SAMPLE = """\
 
 
 class ParseTests(unittest.TestCase):
+    def test_adrs_are_common_and_depositary_preferreds_are_not(self):
+        from ingest.parse import not_common
+        # ADR holders (QFIN 88557W "AMERICAN DEP") once fell out of hl/ and s/ as "preferreds".
+        for t in ("AMERICAN DEP", "DEPOSITARY RECEI", "DEPOSITARY UNIT", "SPONSORED ADS", "COM"):
+            self.assertFalse(not_common(t), t)
+        for t in ("DEP SHS RP1/20 A", "6.5 DEP CUM SR D", "7.25%CNV PFD L", "MTNF 0.600% 5/2"):
+            self.assertTrue(not_common(t), t)
+
     def test_parse_keeps_as_filed_dollars_and_split_lines(self):
         rows = parse_info_table(SAMPLE)
         self.assertEqual(len(rows), 3)

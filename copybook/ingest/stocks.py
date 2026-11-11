@@ -29,11 +29,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from ingest.datasets import prev_quarter, stock_period
+from ingest.parse import not_common
 from ingest.splits import load as split_table_doc, ratio_between, table as split_table
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
-DEBT = re.compile(r"\b(NOTES?|BONDS?|DEBT|DBCV|DEB|PFD|PREF\w*|DEP)\b|%", re.I)  # also preferreds (BAC 060505682)
+DEBT = re.compile(r"\b(NOTES?|BONDS?|DEBT|DBCV|DEB)\b", re.I)  # preferreds (BAC 060505682): parse.not_common
 CLASS = re.compile(r"\s+(Class|Series|Cl)\s+[A-Z0-9]+$", re.I)
 KINDS = ("equity", "calls", "puts")
 MIN_FILERS = 1000  # a quarter needs this many full books before stock pages use it
@@ -44,7 +45,7 @@ def kind_of(h: dict) -> str | None:
         return None  # principal-amount notes are not shareholders
     pc = (h.get("put_call") or "").strip().lower() or (h.get("title") or "").strip().lower()
     kind = {"put": "puts", "puts": "puts", "call": "calls", "calls": "calls"}.get(pc, "equity")
-    if kind == "equity" and DEBT.search(h.get("title") or ""):
+    if kind == "equity" and (DEBT.search(h.get("title") or "") or not_common(h.get("title"))):
         return None  # notes and converts are not shareholders
     return kind
 
