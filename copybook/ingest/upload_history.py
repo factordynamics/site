@@ -60,12 +60,14 @@ KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|i
 # Keys the Worker may not accept yet: a failure warns instead of failing the run,
 # and the rest of that kind are skipped until the next run.
 OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/")
-BUNDLE_ENTRIES = 100  # the self-hosted API's rate limit: 100 entries or 20 MB per bundle, one at a time
-BUNDLE_BYTES = 5_000_000  # a 19 MB bundle hit Cloudflare's 100 s tunnel timeout (HTTP 524); plain tars only
-BUNDLE_RAW_BYTES = 20_000_000  # the API's limit per bundle, uncompressed; gzipped it is ~5 MB on the wire
+# Small writes, one bundle at a time: gene's disk is shared with other software, and on Nov 11 one 100-file bundle
+# held the API for 60 s (the API allows up to 100 entries or 20 MB per bundle).
+BUNDLE_ENTRIES = 20
+BUNDLE_BYTES = 1_000_000  # plain tars only
+BUNDLE_RAW_BYTES = 2_000_000  # uncompressed; about 0.5 MB gzipped on the wire
 GZIP = [os.environ.get("COPYBOOK_UPLOAD_GZIP", "1") != "0"]  # cleared when the API refuses a gzipped bundle
 ORDER = ("h/", "hl/", "fb/")  # sent first, in this order
-PROBE_MAX_S = 2.0  # gene's /health slower than this: members are waiting, so the backlog backs off
+PROBE_MAX_S = 1.0  # gene's /health?probe=1 (ms when idle) slower than this: members are waiting, so the backlog backs off
 FRESH_MAX = 60  # files per run in EDGAR hours: a few new filings' h/ books, never the backlog
 QUIET_LEAD_S = 90  # no bundle starts this close to a COPYBOOK_UPLOAD_QUIET window (one bundle takes 3-30 s)
 QUIET_FROM = datetime(2026, 11, 12, 11, tzinfo=timezone.utc)
@@ -153,7 +155,7 @@ def fresh_only(todo: list) -> list:
 def probe() -> float:
     t = time.monotonic()
     try:
-        with urlopen(Request(f"{API}/health", headers={"User-Agent": USER_AGENT}), timeout=10) as resp:
+        with urlopen(Request(f"{API}/health?probe=1", headers={"User-Agent": USER_AGENT}), timeout=10) as resp:
             resp.read()
     except Exception:  # noqa: BLE001 - a failed probe counts as slow
         return 99.0
@@ -207,7 +209,7 @@ def main() -> int:
     todo.sort(key=lambda t: (rank(t[0]), t[0]))
     if edgar_hours(datetime.now(timezone.utc)) and os.environ.get("COPYBOOK_UPLOAD_ANYTIME") != "1":
         held = len(todo)
-        todo = [t for t in todo if t[0] in pair] + [t for t in fresh_only(todo) if t[0] not in pair]
+        todo = fresh_only(todo)  # h/ books of new filings only: no hl/, so no reissue pair can be split
         print(f"upload: EDGAR hours; sending {len(todo)} files of new filings, {held - len(todo)} wait for 03:00 UTC",
               flush=True)
     print(f"upload: {len(todo)} new or changed of {len(files)} files to {API}, one bundle at a time of up to "
