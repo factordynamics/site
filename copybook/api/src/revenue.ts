@@ -416,6 +416,35 @@ export async function switchToInvoice(env: Env, m: Member, f: { company?: string
 }
 
 /** Day 11 of 14: the member's own numbers this trial, what ends with it, and one button to keep it (yearly preselected). */
+/** Copy's quiet stretch: a trial ending between the Q3 13F deadline and February's (Nov 17, 2026 to Feb 1, 2027). */
+const betweenSeasons = (unix: number) => unix * 1000 >= Date.UTC(2026, 10, 17) && unix * 1000 < Date.UTC(2027, 1, 2);
+/** Last winter on EDGAR, the accessions published at /winter-2025-26.json (the trader's re-count, Nov 11). */
+export const WINTER_LINE = 'Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and 18 open-market buys by directors and officers in the 100 stocks they hold most by value.';
+
+/**
+ * The day-12 email for a cardless Copy trial between seasons (marketing's plan rev 76): it just ends, nothing charged;
+ * what Copy gives from now to February; the founding price; monthly pauses once a year; the free tier stays.
+ */
+export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now()): Mail {
+  const weekday = new Date(m.trial_end! * 1000).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
+  const add = `${env.SITE_URL}account/`;
+  const gives = [
+    'Open-market insider buys in your stocks, as they\'re filed.',
+    'Form 4 trades and 13D/G stakes by the funds you follow, and any new 13D or 13G in your stocks.',
+    now < Date.UTC(2026, 11, 5, 11) ? 'The Friday email on Dec 4.' : 'The Friday email, every week.',
+    'February\'s 13Fs, each one by email as it\'s filed (due Tue 16 Feb).',
+  ];
+  const keep = 'Keep Copy at the founding price: $79/yr, locked. Goes to $99 for new members Feb 1. Monthly? Pause once a year, up to 3 months, and it resumes for the next 13F season. Both start once you add a card.';
+  const stay = 'The free pages and the free Friday email stay yours.';
+  return {
+    to: m.email,
+    subject: `Your Copy trial ends ${weekday}`,
+    text: `Your Copy trial ends ${weekday}, ${endAt(m.trial_end!)}. No card is on file, so it simply ends and nothing is charged.\n\nFrom now to February, Copy gives you:\n${gives.map((g) => `  - ${g}`).join('\n')}\n\n${WINTER_LINE}\n\n${keep}\nAdd a card: ${add}\n\n${stay}\n\nUnsubscribe from Copybook emails: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your Copy trial ends <b>${esc(weekday)}, ${esc(endAt(m.trial_end!))}</b>. No card is on file, so it simply ends and nothing is charged.</p><p style="margin-bottom:4px"><b>From now to February, Copy gives you</b></p><ul style="margin-top:0;padding-left:20px">${gives.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>${esc(WINTER_LINE)} <a href="https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/winter-2025-26.json" style="color:#1d4ed8">The filings</a></p><p>${esc(keep)}</p><p><a href="${add}" style="color:#1d4ed8"><b>Add a card</b></a></p><p>${esc(stay)}</p><p style="font-size:12px;color:#6b7280"><a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+    unsubscribe: unsub,
+  };
+}
+
 export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: number, owned: number, keep: string, unsub: string, daysLeft = 3): Mail {
   const p = PRICES[m.plan];
   const plural = (n: number, w: string) => `${n.toLocaleString('en-US')} ${w}${n === 1 ? '' : 's'}`;
@@ -439,6 +468,7 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
   const founding = FOUNDING[m.plan] ? ` ${FOUNDING[m.plan]}` : '';
   const ends = endAt(m.trial_end!);
   // A no-card trial (Copy from Nov 11): it ends on its own, so the ask is to add a card, and doing nothing costs nothing.
+  if (m.has_payment_method === false && m.plan === 'copy' && betweenSeasons(m.trial_end!)) return day12Mail(env, m, unsub);
   if (m.has_payment_method === false) {
     const add = `${env.SITE_URL}account/`;
     const keepLine = `Add a card to keep ${p.name} (${charge}${yearly ? '' : `, or ${money(p.year)}/year`}): ${add} (Manage billing). The first charge is on ${ends}.`;

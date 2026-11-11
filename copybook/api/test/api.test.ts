@@ -3257,6 +3257,9 @@ describe('copybook api', () => {
     // Yearly at the peak: Berkshire's alert carries one switch line for monthly members and monthly trials only.
     const mo = { customer: 'cus_y', email: 'y@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', subscription: 'sub_y' } as never;
     const brk = [{ slug: 'warren-buffett', slugs: ['warren-buffett'] }];
+    // The day-12 email for a cardless Copy trial ending between seasons (plan rev 76): it just ends, nothing charged.
+    const d12 = trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Date.UTC(2026, 10, 25, 20) / 1000, has_payment_method: false } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 0, 0, 'k', 'u');
+    expect([d12.subject, /nothing is charged/.test(d12.text), d12.text.includes('19 Schedule 13D/G filings') && d12.text.includes('18 open-market buys'), /\b13 insider/.test(d12.text), /Pause once a year, up to 3 months/.test(d12.text), /months free/.test(d12.text)]).toEqual(['Your Copy trial ends Wednesday', true, true, false, true, false]);
     const yl = await yearlyPeakLine(env, mo, brk);
     expect([/^Founding price \$79\/yr, locked\. Goes to \$99 for new members Feb 1: \S+\/keep\?t=\S+$/.test(yl ?? ''), await yearlyPeakLine(env, { ...(mo as object), interval: 'yearly' } as never, brk), await yearlyPeakLine(env, mo, [{ slug: 'bill-ackman' }])]).toEqual([true, null, null]);
     const tm = (card: boolean) => trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Math.floor(Date.now() / 1000) + 2 * 86400, has_payment_method: card } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 1, 0, 'https://api.test/keep?t=x', 'https://api.test/unsubscribe?t=x', 2);
