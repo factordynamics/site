@@ -306,8 +306,16 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   const before = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p]));
   const rows: MoveRow[] = [];
   // A split on file (the data run's splits.json, by CUSIP): the prior shares in today's units, as the data run does.
-  const ratio = (cusip: string) => (splits instanceof Map ? (splits.get(cusip) ?? 1) : 1);
-  const adj = (p: Position) => (ratio(p.cusip) === 1 ? {} : { split: ratio(p.cusip), prev_shares_as_filed: p.shares });
+  // Only when the prior is still on the pre-split basis: its value per share sits nearer the ratio than 1 times today's
+  // (a filer that already reported post-split shares, like Amundi's Q2 CRWD, gets no factor). An exit has no price to
+  // compare, so it takes the factor.
+  const ratio = (p: Position, cur?: { shares: number; value: number }) => {
+    const k = splits instanceof Map ? (splits.get(p.cusip) ?? 1) : 1;
+    if (k === 1 || !cur) return k;
+    const rel = p.shares && cur.shares && cur.value ? p.value / p.shares / (cur.value / cur.shares) : 0;
+    return rel && (k > 1 ? rel >= Math.sqrt(k) : rel <= Math.sqrt(k)) ? k : 1;
+  };
+  const adj = (p: Position, k: number) => (k === 1 ? {} : { split: k, prev_shares_as_filed: p.shares });
   const row = (p: Position, change: string, shares: number, prev_shares: number, value: number, delta: number, extra = {}) => ({
     change,
     ticker: p.ticker ?? null,
@@ -332,10 +340,11 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
       rows.push(row(named, 'new', c.shares, 0, value, value));
       continue;
     }
-    const ps = Math.round(p.shares * ratio(p.cusip));
-    if (c.shares !== ps) rows.push(row(named, c.shares > ps ? 'added' : 'trimmed', c.shares, ps, value, c.shares ? ((c.shares - ps) * value) / c.shares : 0, adj(p)));
+    const f = ratio(p, { shares: c.shares, value });
+    const ps = Math.round(p.shares * f);
+    if (c.shares !== ps) rows.push(row(named, c.shares > ps ? 'added' : 'trimmed', c.shares, ps, value, c.shares ? ((c.shares - ps) * value) / c.shares : 0, adj(p, f)));
   }
-  for (const p of before.values()) rows.push(row(p, 'exited', 0, Math.round(p.shares * ratio(p.cusip)), 0, -p.value, adj(p)));
+  for (const p of before.values()) rows.push(row(p, 'exited', 0, Math.round(p.shares * ratio(p)), 0, -p.value, adj(p, ratio(p))));
   // Unit errors are left out; unusually large moves are tagged. The larger book is the yardstick.
   const prior = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p.value]));
   rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(`${r.cusip}|${r.put_call ?? ''}`), splits, medians));

@@ -1792,7 +1792,7 @@ describe('copybook api', () => {
     expect(all(computeMoves(sq3, sq2, undefined, new Set(['000000007'])).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['SPLT', false]]);
     // Jensen's Q3 APH (2-for-1), the sent alert's own row (Nov 10): 614,660 to 1,047,486 sh, $88,303,070. It read "added +$36,487,232";
     // against the split-adjusted 1,229,320 it is a trim of 181,834 sh, about -$15.3M.
-    const jq2 = [pos('APH', '032095101', 614_660, 47_000_000), pos('REST', '000000009', 1, 1e9)];
+    const jq2 = [pos('APH', '032095101', 614_660, 108_376_851), pos('REST', '000000009', 1, 1e9)]; // Q2 as filed: $176.32 a share, pre-split
     const jq3 = [pos('APH', '032095101', 1_047_486, 88_303_070), pos('REST', '000000009', 1, 1e9)];
     const aph = all(computeMoves(jq3, jq2, undefined, new Map([['APH', 1], ['032095101', 2]])).moves)[0];
     expect([aph.change, aph.prev_shares, aph.shares - aph.prev_shares]).toEqual(['trimmed', 1_229_320, -181_834]);
@@ -1800,8 +1800,12 @@ describe('copybook api', () => {
     // With its ratio (splits.json), the prior is in today's units: 1,000 x 10 = 10,000 to 12,000 is +2,000 sh (+$10M), not +11,000.
     const adj = all(computeMoves(sq3, sq2, undefined, new Map([['000000007', 10]])).moves);
     expect(adj.map((r) => [r.ticker, r.change, r.prev_shares, r.prev_shares_as_filed, r.split, r.value_delta])).toEqual([['SPLT', 'added', 10_000, 1000, 10, 10_000_000]]);
+    // A prior already on the post-split basis takes no factor (Amundi's Q2 CRWD: 1,280,592 sh at about $190, Q3 6,281,887 sh
+    // at $264.75): +5,001,295 sh, not a trim against 5,122,368.
+    const am = all(computeMoves([pos('CRWD', '22788C105', 6_281_887, 1_663_129_587), jq3[1]], [pos('CRWD', '22788C105', 1_280_592, 243_312_480), jq2[1]], undefined, new Map([['22788C105', 4]])).moves)[0];
+    expect([am.change, am.prev_shares, am.split]).toEqual(['added', 1_280_592, undefined]);
     // Equal after the split: no move at all.
-    expect(all(computeMoves([pos('APH', '032095101', 1_229_320, 1e8), jq3[1]], jq2, undefined, new Map([['032095101', 2]])).moves)).toEqual([]);
+    expect(all(computeMoves([pos('APH', '032095101', 1_229_320, 103_632_676), jq3[1]], jq2, undefined, new Map([['032095101', 2]])).moves)).toEqual([]);
   });
 
   it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {
