@@ -494,14 +494,20 @@ function EventRow({ e }: { e: Ev }) {
   )
 }
 
-export const loadEvents = (slug: string) => fetch(`${DATA}events/${slug}.json`).then((x) => (x.ok ? (x.json() as Promise<{ events?: Ev[] }>) : null))
+export const loadEvents = (slug: string) => fetch(`${DATA}events/${slug}.json`).then((x) => (x.ok ? (x.json() as Promise<{ events?: Ev[]; latest_13f_quarter?: string | null }>) : null))
 
 /** Between-quarter moves: Form 4 trades and 13D/G stake filings since the latest 13F, rolled up per position. */
-export function SinceLast13F({ slug, quarter, holdings }: { slug: string; quarter?: string; holdings: ManagerFile['holdings'] }) {
+export function SinceLast13F({ slug, quarter, filedOn, holdings }: { slug: string; quarter?: string; filedOn?: string; holdings: ManagerFile['holdings'] }) {
   const r = useAsync(() => loadEvents(slug), [slug])
   const member = useMember()
   const [all, setAll] = useState(false)
-  const events = useMemo(() => withBook(withPrevious((r.data?.events ?? []).filter((e) => !('skip' in e))), holdings), [r.data, holdings])
+  // On filing day the fund's new 13F can land before its events file is rebuilt against it: until then keep only
+  // filings made on or after the new 13F, so an older 13G never reads as news "after" it.
+  const stale = Boolean(r.data?.latest_13f_quarter && quarter && r.data.latest_13f_quarter !== quarter)
+  const events = useMemo(
+    () => withBook(withPrevious((r.data?.events ?? []).filter((e) => !('skip' in e) && !(stale && filedOn && e.filing_date < filedOn))), holdings),
+    [r.data, holdings, stale, filedOn],
+  )
   const positions = useMemo(() => rollUp(events), [events])
   if (!events.length) return null
   const paid = Boolean(member?.active)

@@ -172,7 +172,7 @@ export function ManagerPage() {
         </div>
         {f && !f.filer && (
           <div className="order-first md:order-none">
-            <SinceLast13F slug={f.slug} quarter={f.quarter} holdings={f.holdings} />
+            <SinceLast13F slug={f.slug} quarter={f.quarter} filedOn={f.filing_date} holdings={f.holdings} />
           </div>
         )}
       </div>
