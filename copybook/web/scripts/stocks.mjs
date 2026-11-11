@@ -4,6 +4,7 @@
 // Writes <out>/d/stocks.json (search + directory index), <out>/d/stocks/{TICKER}.json and <out>/d/flow.json.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { getJson, pooled } from './getjson.mjs'
 import { ETF_NAMES } from './etfs.mjs'
 import { isEdgarDay } from '../src/lib/calendar.mjs'
@@ -13,6 +14,33 @@ const out = process.argv[2] || 'dist'
 const base = process.argv[3] || process.env.VITE_DATA_BASE || 'https://refcell.github.io/gust/copybook/data/'
 const read = async (f) =>
   base.startsWith('http') ? await getJson(base + f) : JSON.parse(readFileSync(join(base, f), 'utf8'))
+
+// Every filer's book: ingest's combined parts (fall/, 4 gzip files of {shards: {cik: book}}) one part at a
+// time, so only a quarter of the books is in memory at once; any filer missing from them, or all of them
+// when fall/index.json isn't there, from its own f/{cik}.json. Yields [filer, book], or null for a failed read.
+async function* filerBooks(filers) {
+  const left = new Map(filers.map((f) => [String(f.cik).padStart(10, '0'), f]))
+  const fall = await read('fall/index.json').catch(() => null)
+  for (const part of fall?.parts ?? []) {
+    let shards = null
+    for (let i = 0; i < 3 && !shards; i++) {
+      try {
+        const bytes = base.startsWith('http') ? Buffer.from(await (await fetch(`${base}fall/${part.file}`).then((r) => (r.ok ? r : Promise.reject(new Error(String(r.status)))))).arrayBuffer()) : readFileSync(join(base, 'fall', part.file))
+        shards = JSON.parse(gunzipSync(bytes).toString('utf8')).shards
+      } catch (e) {
+        if (i === 2) console.warn(`fall/${part.file}: ${e.message}; those filers come from f/`)
+      }
+    }
+    for (const [cik, d] of Object.entries(shards ?? {})) {
+      const f = left.get(cik)
+      if (!f) continue
+      left.delete(cik)
+      yield [f, d]
+    }
+  }
+  if (fall) console.log(`filer books: ${filers.length - left.size} from fall/, ${left.size} from f/`)
+  yield* pooled([...left.values()], 48, (f) => read(`f/${f.cik}.json`).then((d) => [f, d], () => null))
+}
 
 const qn = (q) => (q ? Number(q.slice(0, 4)) * 4 + Number(q.slice(5)) - 1 : -1)
 const index = await read('index.json')
@@ -576,7 +604,7 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   const current = new Map()
   const tracked = new Map()
   let read_ok = 0
-  for await (const x of pooled(filers, 48, (f) => read(`f/${f.cik}.json`).then((d) => [f, d], () => null))) {
+  for await (const x of filerBooks(filers)) {
     {
       if (!x || !x[1]?.ok || !Array.isArray(x[1].rows)) continue
       const [f, d] = x
