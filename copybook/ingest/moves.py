@@ -30,7 +30,7 @@ from ingest import splits as sp
 from ingest.datasets import prev_quarter
 from ingest.filer_types import signature
 from ingest.bulk import FB_COLUMNS
-from ingest.parse import ABOVE_20K, consensus_prices, debt_cusip, not_common, unit_verdict
+from ingest.parse import ABOVE_20K, consensus_prices, cusip_check_ok, debt_cusip, not_common, unit_verdict
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
@@ -78,6 +78,7 @@ UNCLASSED: dict[str, int] = {}
 FB_KEEP = set(FB_COLUMNS) | {"display_name", "sector"}  # plain full-book columns (bulk.FB_COLUMNS, enrich's labels)
 CLASS_SUM_MAX = 10  # more held class_sum_mismatch rows than this fail the run (lead, Nov 11)
 CLASS_SUM_OFF: list[dict] = []  # (issuer6, cik, row value_delta, classes' sum): rows held because the two differ
+GATE_OFF: list[dict] = []  # issuers whose counts or net differ from their own rows: hl/ is then not rewritten
 CLS: dict[tuple, dict] = {}  # (issuer6, cik) -> {cusip: that share class's shares, prior, value, value_delta, changes}
 # A filed conversion ratio between share classes: shares in that class's unit (Berkshire's charter: one Class A share
 # converts into 1,500 Class B). Classes without one (GOOG/GOOGL) have no common share unit.
@@ -107,17 +108,47 @@ def class_change(k: dict, known: bool) -> str | None:
 
 
 def issuer_change(clean: list[dict], known: bool) -> str | None:
-    """A multi-class row's change from its counted classes: one word when they agree (prior 0: new; all to 0: exited),
-    "mixed" when they move opposite ways (net_direction then gives the dollar sign)."""
+    """A multi-class row's change from its counted classes' own changes (class_change), so an "unchanged" row never
+    has a class with a trade: one word when they agree (all new: new; all exited: exited), "mixed" when they move
+    opposite ways (net_direction then gives the dollar sign)."""
     if not known:
         return None
-    if sum(k["prev_shares"] for k in clean) <= 0:
+    ch = [k["change"] for k in clean]
+    if all(c == "new" for c in ch):
         return "new"
-    if sum(k["shares"] for k in clean) <= 0:
+    if all(c == "exited" for c in ch):
         return "exited"
-    dirs = {(k["shares"] > k["prev_shares"] + 0.5) - (k["shares"] < k["prev_shares"] - 0.5) for k in clean} - {0}
-    return "unchanged" if not dirs else "mixed" if len(dirs) > 1 else "added" if dirs == {1} else "trimmed"  # quarter -> suspect_units rows that reached write_full with no unreliable class
-FIXED = [0]
+    dirs = {+1 if c in ("new", "added") else -1 if c in ("exited", "trimmed") else 0 for c in ch} - {0}
+    return "unchanged" if not dirs else "mixed" if len(dirs) > 1 else "added" if dirs == {1} else "trimmed"
+
+
+BAND = (0.8, 1.25)  # the options band: a price "matches" another within it
+
+
+def class_holds(cls: dict, known: bool) -> str | None:
+    """Hold share classes that can't be traded as filed (lead and quant, Nov 11), each on its class (side, reason):
+    a class with value and no shares (Boreal Capital files ETF sleeves as 0 SH,
+    $1.3M; the single-line rule's zero_shares). Returns "class_swap" when the filer's classes trade places between
+    quarters (McMill Wealth 2026Q2 13F-HR/A 0002056447-26-000004: 084670108 at $500 a share, 084670702 at $748K):
+    each class's prior price matches the other class's current price and not its own; the whole row is then held."""
+    for k in cls.values():  # option-style and check-digit CUSIPs are held per line (write_holders)
+        if (k["shares"] <= 0 < k["value"]) or (known and k["prev_shares"] <= 0 < k["prev_value"]):
+            k["side"], k["reason"] = "both", k["reason"] if k["side"] else "zero_shares"
+    price = lambda v, s: v / s if s > 0 and v > 0 else None
+    near = lambda a, b: a is not None and b is not None and BAND[0] <= a / b <= BAND[1]
+    ks = [k for k in cls.values() if not k["side"]]
+    for i, a in enumerate(ks):
+        for b in ks[i + 1:]:
+            pa, pb = price(a["prev_value"], a["prev_shares"]), price(b["prev_value"], b["prev_shares"])
+            ca, cb = price(a["value"], a["shares"]), price(b["value"], b["shares"])
+            if near(pa, cb) and near(pb, ca) and not near(pa, ca) and not near(pb, cb):
+                for k in cls.values():
+                    k["side"], k["reason"] = "both", "class_swap"
+                return "class_swap"
+    return None
+
+
+FIXED = [0]  # quarter -> suspect_units rows that reached write_full with no unreliable class
 
 
 def books_of(q: str, b: dict):
@@ -735,6 +766,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     per: dict[str, dict[str, list]] = {}
     CLS.clear()
     CLASS_SUM_OFF.clear()
+    GATE_OFF.clear()
     tick: dict[str, dict[str, float]] = {}
     book: dict[str, float] = {}  # cik -> value of its share positions (the weight denominator)
     top10: dict[str, set] = {}  # cik -> issuer codes among its ten largest share positions
@@ -757,7 +789,12 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             # TEVA at ~$4,005 a share): its shares and change stand (added +159,272), its value stays out of weights
             # and $. "shares" (Guardcap BKNG 2026Q3, Crosslink CRM 2026Q2) or "both": the change is unknown, unless
             # the position is new or gone.
-            side = r.get("unreliable") or ("both" if r.get("suspect_units") else None)  # never a flag without a class
+            # An option-style CUSIP with no putCall (Trivest 2026Q3 MSFT 594918904) or one failing its check digit
+            # (Ashurst MSFT 59491810R) is never a share line or class: held both.
+            bad_code = ("option_cusip_no_putcall" if build.option_code(c)
+                        else "cusip_check_digit" if not cusip_check_ok(c) else None)
+            side = r.get("unreliable") or ("both" if r.get("suspect_units") or bad_code else None)  # never a flag without a class
+            why = bad_code or r.get("suspect_reason") or r.get("option_held") or ("value_rescale_rejected" if r.get("value_rescale") else None) or ("price_outlier" if r.get("price_outlier") else "units")
             if side:
                 r = r | {"value_delta": 0}
             bad_value = side == "value"
@@ -768,7 +805,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             if side:
                 a[10] = side if a[10] in (None, side) else "both"
                 # why it is held, named on the row (Aware Super XOM 2026Q3 at $1,854 a share: cross_filer)
-                a[11] = a[11] or r.get("suspect_reason") or r.get("option_held") or ("value_rescale_rejected" if r.get("value_rescale") else None) or ("price_outlier" if r.get("price_outlier") else "units")
+                a[11] = a[11] or why
             a[7] = a[7] or r.get("prev_cusip")
             # A held reissue (units unconfirmed) whose codes share an issuer prefix (BYND 08862E109 -> 08862E307):
             # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
@@ -788,7 +825,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             t = r.get("ticker") or (SECS.get(c) or {}).get("ticker")
             k = CLS.setdefault((c[:6], cik), {}).setdefault(c, {
                 "cusip": c, "ticker": t, "shares": 0, "prev_shares": 0, "value": 0, "prev_value": 0, "value_delta": 0,
-                "changes": set(), "switch": False, "prev_cusip": None, "basis": set(), "side": None, "price_outlier": False})
+                "changes": set(), "switch": False, "prev_cusip": None, "basis": set(), "side": None, "reason": None,
+                "price_outlier": False})
             for f in ("shares", "prev_shares", "value", "prev_value", "value_delta"):
                 k[f] += r.get(f) or 0
             k["changes"].add(r.get("change"))
@@ -798,6 +836,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 k["basis"].add(r["value_delta_basis"])
             if side:
                 k["side"] = side if k["side"] in (None, side) else "both"
+                k["reason"] = k["reason"] or why
             k["price_outlier"] = k["price_outlier"] or bool(r.get("price_outlier"))
             if t:
                 tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
@@ -841,6 +880,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             multi = len(cls) > 1 and not reissue
             out_sh, out_ps, unit, ratio_of, held_n, basis = sh, ps, None, None, 0, None
             if multi:
+                class_holds(cls, known)
                 for k in cls.values():
                     k["change"] = class_change(k, known)
                     if k["change"] == "unchanged":
@@ -851,6 +891,11 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                     side, reason, bad_value = None, None, False
                     delta = sum(k["value_delta"] for k in clean)
                     change = issuer_change(clean, known) if known and not unsure else change
+                else:  # every class held: the row is held (a held row's classes never reach net)
+                    held = next(k for k in sorted(cls.values(), key=lambda k: -k["value"]))
+                    change = "unknown" if known else None
+                    side = side or ("both" if any(k["side"] == "both" for k in cls.values()) else held["side"])
+                    reason = reason or held["reason"]
                 units = [CLASS_UNITS.get(k["cusip"]) for k in cls.values()]
                 if all(units) and len({u[0] for u in units}) == 1:
                     unit, ratio_of = units[0][0], {k["cusip"]: CLASS_UNITS[k["cusip"]][1] for k in cls.values()}
@@ -928,6 +973,20 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          unit, ratio_of, CLASS_RATIO_SOURCE.get(unit) if unit else None,
                          held_n if multi else None, single, code,
                          None if counted is None else "buy" if counted > 0 else "sell" if counted < 0 else "flat"])
+        # Hard gates (lead, Nov 11): net is exactly the sum of the counted rows, per quarter (a held row and its
+        # classes add nothing), and the change counts are the rows' own tallies. Either off: hl/ is not rewritten.
+        vi, ci = cols.index("value_delta"), cols.index("change")
+        by_q: dict[str, int] = {}
+        for r in rows:
+            if r[vi] is not None:
+                by_q[r[5]] = by_q.get(r[5], 0) + r[vi]
+        tally = {k: 0 for k in ("new", "added", "trimmed", "exited", "unchanged", "mixed", "unknown", "no_prior")}
+        for r in rows:
+            tally[r[ci] or "no_prior"] += 1
+        if {q: v for q, v in counts["net_by_period"].items() if v} != {q: v for q, v in by_q.items() if v} \
+                or any(counts[k] != n for k, n in tally.items()):
+            GATE_OFF.append({"issuer6": code, "net_by_period": counts["net_by_period"], "rows_sum": by_q,
+                             "counts": {k: counts[k] for k in tally}, "rows": tally})
         if not counts["holders"]:
             continue
         # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period
@@ -957,6 +1016,11 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     top100 = set(sorted(worth, key=lambda c: -worth[c])[:100])
     bad_top = [x for x in CLASS_SUM_OFF if x["issuer6"] in top100]
     refused = DATA / "holders_refused.json"
+    if GATE_OFF:
+        write(refused, {"reason": "net or counts differ from the rows", "issuers": GATE_OFF[:200]})
+        print(f"::error::moves: {len(GATE_OFF)} issuers' net or counts differ from their rows "
+              f"(first {GATE_OFF[0]}): hl/ and hlr/ not rewritten; gate.py fails this run", flush=True)
+        return 0
     if len(CLASS_SUM_OFF) > CLASS_SUM_MAX or bad_top:
         write(refused, {"reason": "class_sum_mismatch ceiling", "max": CLASS_SUM_MAX, "rows": CLASS_SUM_OFF[:200],
                         "top100": bad_top})

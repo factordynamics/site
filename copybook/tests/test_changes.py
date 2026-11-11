@@ -815,6 +815,57 @@ class ShareClassHoldersTest(unittest.TestCase):
                     g.update(v)
 
 
+    def test_held_classes_never_reach_net(self):
+        import tempfile
+        from pathlib import Path as P
+        from ingest import moves
+        line = lambda cusip, t, sh, ps, v, pv, ch: {"cusip": cusip, "ticker": t, "title": "COM", "put_call": None,
+                                                    "shares_type": "SH", "shares": sh, "prev_shares": ps, "value": v,
+                                                    "prev_value": pv, "change": ch, "value_delta_basis": "trade",
+                                                    "value_delta": (sh - ps) * v / sh if sh else -pv}
+        books = {
+            # McMill Wealth: Q2 13F-HR/A swapped BRK's CUSIPs (A 6,522 sh at $500, B 3 sh at $748K); Q3 is right.
+            "0002056447": [line("084670108", "BRK.A", 3, 6522, 3 * 747005, 3263544, "trimmed"),
+                           line("084670702", "BRK.B", 6672, 3, 6672 * 497.95, 2246550, "added")],
+            # Trivest MSFT: common plus a call-style CUSIP filed with no putCall: the option line is held, not a class.
+            "0000929638": [line("594918104", "MSFT", 1200, 1000, 1200 * 517.0, 1000 * 495.0, "added"),
+                           line("594918904", "MSFT", 98000, 0, 50264200, 0, "new")],
+            # Boreal Capital: sleeves filed at 0 shares with value beside a priced class, both quarters.
+            "0002080094": [line("46429B689", "A", 160, 160, 14034, 13000, "unchanged"),
+                           line("46429B747", "B", 0, 0, 20432, 19000, "exited") | {"value_delta": 20432}],
+        }
+        saved = (moves.DATA, dict(moves.LATEST), dict(moves.PERIOD), dict(moves.FILING))
+        with tempfile.TemporaryDirectory() as d:
+            moves.DATA = P(d)
+            try:
+                moves.LATEST.clear()
+                moves.LATEST.update(books)
+                moves.PERIOD.update({c: "2026Q3" for c in books})
+                shards = [{"cik": c, "name": c, "quarter": "2026Q3", "accession": "x", "filing_date": "2026-11-10"}
+                          for c in books]
+                moves.write_holders(shards, {}, {}, {})
+                self.assertFalse((P(d) / "holders_refused.json").exists())
+                read = lambda code: json.loads((P(d) / "hlf" / f"{code}.json").read_text())
+                row = lambda code, cik: (lambda b: dict(zip(b["columns"], next(r for r in b["rows"] if r[0] == cik))))(read(code))
+                m = row("084670", "0002056447")
+                self.assertEqual((m["change"], m["value_delta"], m["unreliable"], m["held_reason"]),
+                                 ("unknown", None, "both", "class_swap"))
+                self.assertEqual(read("084670")["counts"]["net"], 0)
+                t = row("594918", "0000929638")
+                self.assertEqual((t["change"], t["classes_held"]), ("added", 1))
+                self.assertAlmostEqual(t["value_delta"], 200 * 517.0, delta=1)
+                self.assertEqual({c["cusip"]: c["unreliable"] for c in t["classes"]}, {"594918104": None, "594918904": "both"})
+                self.assertEqual(read("594918")["counts"]["net"], round(200 * 517.0))
+                b = row("46429B", "0002080094")
+                self.assertEqual((b["change"], b["value_delta"]), ("unchanged", 0))
+                self.assertEqual(moves.CLASS_SUM_OFF, [])
+            finally:
+                moves.DATA = saved[0]
+                for g, v in zip((moves.LATEST, moves.PERIOD, moves.FILING), saved[1:]):
+                    g.clear()
+                    g.update(v)
+
+
 class DebtPairTest(unittest.TestCase):
     def test_note_beside_common_is_not_a_cusip_change(self):
         from ingest import build

@@ -18,6 +18,21 @@ def not_common(title: str | None, cusip: str | None = None) -> bool:
     return bool(_NOT_COMMON.search(t) or (_DEP_PREFERRED.search(t) and not _ADR.search(t))) or debt_cusip(cusip)
 
 
+def cusip_check_ok(cusip: str | None) -> bool:
+    """The 9th character is the CUSIP check digit of the first 8 (Ashurst 2026Q3 MSFT \"59491810R\" fails it)."""
+    c = (cusip or "").upper()
+    if len(c) != 9 or not c[8].isdigit():
+        return False
+    total = 0
+    for i, ch in enumerate(c[:8]):
+        v = int(ch) if ch.isdigit() else ord(ch) - 55 if "A" <= ch <= "Z" else {"*": 36, "@": 37, "#": 38}.get(ch)
+        if v is None:
+            return False
+        v = v * 2 if i % 2 else v
+        total += v // 10 + v % 10
+    return (10 - total % 10) % 10 == int(c[8])
+
+
 def debt_cusip(cusip: str | None) -> bool:
     """A CUSIP whose issue number (characters 7-8) has a letter: a fixed-income issue, never a share class, whatever
     the filer's title or SH/PRN says (Triglav 2026Q2 09857LAW8 and 09857LAV0, Booking notes filed as SH \"Common\" at
