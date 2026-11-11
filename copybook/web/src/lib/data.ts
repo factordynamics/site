@@ -47,8 +47,11 @@ export type Holding = {
   suspect_reason?: string | null
   /** Why ingest held a row out (e.g. "possible_cusip_change"); shown in plain words. */
   held_reason?: string | null
-  /** "different_security": a note and its common stock, each its own row and never compared. */
+  /** "different_security": a note and its common stock, each its own row and never compared. "merged_misfiled": last
+   *  quarter was filed under another CUSIP (filed_cusip, at filed_price) and is matched to this one, counted. */
   cusip_pair?: string | null
+  filed_cusip?: string | null
+  matched_cusip?: string | null
   price_outlier?: boolean
   value_basis?: string | null
   /** Ingest's verdict on a flagged line: which of its figures can't be trusted. */
@@ -82,6 +85,16 @@ export function flagNote(h: Flaggable): string | null {
   const reason = held ?? (f === 'value' ? 'this filing’s dollar value looks wrong; share change only' : f === 'shares' ? 'share counts don’t reconcile' : reissue ? 'a pre-split count kept under the new CUSIP' : 'share count and value both unreliable')
   const facts = [shares, value].filter(Boolean).join('; ')
   return facts ? `As filed: ${facts}; ${reason}` : reason.charAt(0).toUpperCase() + reason.slice(1)
+}
+
+/** A counted row whose prior quarter was filed under another CUSIP at this stock's price (ingest's merged_misfiled):
+ *  "ORCL added 33,082 sh: Q2 was filed under 68389X204 at common's price, treated as common" (the lead, Nov 11). */
+export function misfiledNote(h: Holding, prevQuarter?: string | null): string | null {
+  if (h.cusip_pair !== 'merged_misfiled' || !h.filed_cusip) return null
+  const d = (h.shares ?? 0) - (h.prev_shares ?? 0)
+  const move = h.change && h.change !== 'unchanged' && d ? `${h.change} ${Math.abs(d).toLocaleString('en-US')} sh` : 'unchanged'
+  const q = prevQuarter ? `Q${prevQuarter.slice(-1)}` : 'Last quarter'
+  return `${h.ticker || shortName(h.issuer)} ${move}: ${q} was filed under ${h.filed_cusip} at common’s price, treated as common`
 }
 
 export type HeldLine = { shares: number; value: number; implied_price?: number | null }

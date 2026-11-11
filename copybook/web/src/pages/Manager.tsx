@@ -19,7 +19,7 @@ import { TRIAL_DAYS, TRIAL_LINE } from '../config'
 import { track } from '../lib/track'
 import { loadIndex } from '../lib/data'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
-import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, flagNote, flagOf, heldLinesNote, type ManagerFile } from '../lib/data'
+import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, flagNote, flagOf, heldLinesNote, misfiledNote, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -46,7 +46,7 @@ export function ManagerPage() {
       .map((h) => {
         const per = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value || 0) / h.prev_shares : 0
         const delta = h.change === 'exited' ? -(h.prev_value || 0) : ((h.shares || 0) - (h.prev_shares || 0)) * per
-        const note = splitApplied(h) ? `split ${splitRatio(h.split!.ratio)} adjusted` : h.cusip_pair === 'different_security' ? 'different security, not compared' : h.prev_cusip ? 'CUSIP change' : ''
+        const note = splitApplied(h) ? `split ${splitRatio(h.split!.ratio)} adjusted` : h.cusip_pair === 'different_security' ? 'different security, not compared' : h.cusip_pair === 'merged_misfiled' ? 'misfiled CUSIP, treated as common' : h.prev_cusip ? 'CUSIP change' : ''
         return { key: h.cusip + (h.put_call || ''), label: h.ticker || shortName(h.issuer), tag: [h.change, note].filter(Boolean).join(' · '), delta }
       })
       .filter((x) => x.delta !== 0)
@@ -396,7 +396,7 @@ export function ManagerPage() {
                           <Badge>different security, not compared</Badge>
                         </span>
                       )}
-                      {h.cusip_pair !== 'different_security' && h.prev_cusip && h.prev_cusip !== h.cusip && (
+                      {h.cusip_pair !== 'different_security' && h.cusip_pair !== 'merged_misfiled' && h.prev_cusip && h.prev_cusip !== h.cusip && (
                         <span className="shrink-0" title={`CUSIP change ${h.prev_cusip} → ${h.cusip}: last quarter's position is matched under the old CUSIP`}>
                           <Badge>
                             CUSIP change<span className="hidden font-mono text-[11px] lg:inline"> {h.prev_cusip} → {h.cusip}</span>
@@ -415,7 +415,7 @@ export function ManagerPage() {
                       )}
                     </div>
                     {/* The filed facts and the reason, in grey under the name (one held-row format, PM Nov 11). */}
-                    {[unreliable(h) ? flagNote(h) : null, heldLinesNote(h.held_lines)].filter(Boolean).map((t) => (
+                    {[unreliable(h) ? flagNote(h) : null, heldLinesNote(h.held_lines), misfiledNote(h, f?.prev_quarter)].filter(Boolean).map((t) => (
                       <span key={t} className="mt-0.5 block text-[12px] leading-snug text-ink-3">
                         {t}
                       </span>
