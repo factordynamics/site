@@ -944,9 +944,9 @@ describe('copybook api', () => {
     const f3 = JSON.parse((await env.DB.get('alerts:latency'))!).filter((l: { accession: string }) => l.accession === 'F3');
     expect(f3.some((l: { coalesced?: boolean }) => l.coalesced)).toBe(true);
 
-    // Email is no longer short: at once. A test member's 5th alert email today goes; past 5, no more email.
+    // Email is no longer short: at once. A test member's 3rd alert email today goes; past 3, no more email.
     await env.DB.put('stats:sent', '[]');
-    await env.DB.put(`mailn:t:${today}`, '4');
+    await env.DB.put(`mailn:t:${today}`, '2');
     mg.length = 0;
     await at('F5', 24);
     expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F5'], ['real@example.com', 'sec.gov/F5']]);
@@ -965,13 +965,26 @@ describe('copybook api', () => {
     // The moves queue in status.json's shape.
     expect(Object.keys(hj.moves_queue)).toEqual(['pending', 'oldest_wait_seconds', 'last_fallback_send_at']);
     expect((await (await handleRequest(new Request('https://api.test/health?probe=1'), env)).json()).dupes_blocked).toEqual({ total: 1, last_7d: 1 });
-    // A 13G or 13G/A never goes to a test member by email (feed only), and doesn't use up its 5.
+    // A 13G or 13G/A never goes to a test member by email (feed only), and doesn't use up its 3.
     await env.DB.put(`mailn:t:${today}`, '0');
     for (const c of ['r', 't']) await putFollows(c, { investors: ['warren-buffett'], include_13g: true });
     mg.length = 0;
     await deliver(env, [], [{ ...ev('F7'), form: 'SCHEDULE 13G/A', kind: '13g', action: 'stake_update', percent_of_class: 5.2 } as never], T + 26 * 60_000);
     expect(got()).toEqual([['real@example.com', 'sec.gov/F7']]);
     expect(await env.DB.get(`mailn:t:${today}`)).toBe('0');
+    // Previews, replays and samples: at most 10 a day; the 11th and 12th wait for the reset. The probe and status.json
+    // count today's sends by kind (test includes previews).
+    const em = await import('../src/email');
+    const before = { ...em.mailQuota.kinds! };
+    mg.length = 0;
+    sent = [];
+    const pv = Array.from({ length: 12 }, (_, i) => ({ to: 'copybook-test-x@fldubai.com', subject: `preview ${i}`, text: 'x' }));
+    await em.sendMail(env, pv.slice(0, 10 - before.preview), { preview: true });
+    expect(await em.sendMail(env, pv.slice(10), { preview: true })).toBe('delayed');
+    expect(em.mailQuota.kinds).toMatchObject({ preview: 10, test: before.test + 10 - before.preview, real: before.real });
+    expect(JSON.parse((await env.DB.get('host:mail-delayed'))!).filter((m: { subject: string }) => /preview 1[01]$/.test(m.subject))).toHaveLength(2);
+    const probe = await (await handleRequest(new Request('https://api.test/health?probe=1'), env)).json();
+    expect(Object.keys(probe.mail_kinds)).toEqual(['day', 'real', 'test', 'account', 'preview']);
     vi.stubGlobal('fetch', orig);
   });
 

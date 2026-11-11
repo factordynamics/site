@@ -573,7 +573,7 @@ export async function runEmail2(env: Env, now: number, preview?: string[]): Prom
     const mail = email2Mail(env, m.email, day, filed.map((a) => ({ a })), biggest, season, m.customer.startsWith('preview:') ? `${env.SITE_URL}unsubscribe/` : await unsubscribeUrl(env, m.customer), postal || '[postal address: not configured yet]');
     return preview ? { ...mail, subject: `[Preview] ${mail.subject}` } : mail;
   }));
-  const status = await sendMail(env, mails, preview && !env.MAILGUN_API_KEY ? {} : { via: 'mailgun' });
+  const status = await sendMail(env, mails, preview && !env.MAILGUN_API_KEY ? { preview: true } : { via: 'mailgun', preview: !!preview });
   if (!preview) await env.DB.put('e2:done', JSON.stringify({ at: new Date(now).toISOString(), sent: mails.length, status }));
   return { status, sent: mails.length, filed_today: filedToday.size, biggest: biggest.length };
 }
@@ -705,5 +705,5 @@ export async function previewWeekly(env: Env, email: string, now: number, dry = 
   // A real member's issue names their stocks: the operator gets counts only (their own test inboxes show in full).
   const shown = previewInbox(email) || testAddress(email) ? { subject: mail.subject, in_your_names: yours, text: mail.text } : { customer: m.customer, in_your_names: yours.facts.length, text_chars: mail.text.length };
   if (dry) return { ok: true, sent: false, ...shown };
-  return { ok: true, status: await sendMail(env, [mail]), ...shown };
+  return { ok: true, status: await sendMail(env, [mail], { preview: true }), ...shown };
 }

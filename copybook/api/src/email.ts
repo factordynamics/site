@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { cleanItem4, filingId, UNUSUAL, type MoveRow, type Moves } from './edgar';
-import type { Env, Member } from './env';
+import { testAddress, type Env, type Member } from './env';
 import type { Follows } from './members';
 import { firmName } from '../../../holdterm/src/names';
 
@@ -18,6 +18,8 @@ export interface Mail {
   unsubscribe?: string;
   /** A test or critic member: sent after real members when the day's email budget runs low. */
   test?: boolean;
+  /** A preview, replay or sample to a test inbox: counted against PREVIEW_DAILY_CAP. */
+  preview?: boolean;
   /** Filings and events the email carries: a delayed send is excluded from the latency figures. */
   ids?: string[];
 }
@@ -42,7 +44,11 @@ export const WEEKEND_RESERVE = 10;
 export const isWeekend = (t: number) => [0, 6].includes(new Date(t).getUTCDay());
 const DELAY_MARK = '(delayed: email limit) ';
 /** Usage from Resend's x-resend-daily-quota and x-resend-monthly-quota headers (emails sent, account-wide). */
-export const mailQuota: { day: string; used: number; month: string; monthly: number; delayed: number; mailgun: number; refused?: string } = { day: '', used: 0, month: '', monthly: 0, delayed: 0, mailgun: 0 };
+export const mailQuota: { day: string; used: number; month: string; monthly: number; delayed: number; mailgun: number; refused?: string; kinds?: MailKinds } = { day: '', used: 0, month: '', monthly: 0, delayed: 0, mailgun: 0 };
+/** This host's sends today by kind (both providers): real members, test and critic members, account mail; `preview` (part of test) is previews, replays and samples. */
+export type MailKinds = { real: number; test: number; account: number; preview: number };
+/** Previews, replays and samples to test inboxes: at most this many a day; past it they wait for the reset. */
+export const PREVIEW_DAILY_CAP = 10;
 /** Mailgun's free plan, the overflow when MAILGUN_API_KEY is set: 100 a day, from the same address (factordynamics.com is verified there). */
 export const MAILGUN_DAILY_CAP = 100;
 const mailgunOn = (env: Env) => !!env.MAILGUN_API_KEY;
@@ -68,7 +74,7 @@ async function sendMailgun(env: Env, m: Mail): Promise<number> {
 }
 
 /** Overflow to Mailgun, one by one while it has room; returns what it couldn't send. */
-async function viaMailgun(env: Env, mails: Mail[], statuses: string[], reserve = 0): Promise<Mail[]> {
+async function viaMailgun(env: Env, mails: Mail[], statuses: string[], reserve = 0, sent: (m: Mail) => void = () => {}): Promise<Mail[]> {
   const left: Mail[] = [];
   for (const m of mails) {
     if (mailgunRoom(env) <= reserve) {
@@ -76,8 +82,10 @@ async function viaMailgun(env: Env, mails: Mail[], statuses: string[], reserve =
       continue;
     }
     const st = await sendMailgun(env, m);
-    if (st >= 200 && st < 300) statuses.push('200');
-    else {
+    if (st >= 200 && st < 300) {
+      statuses.push('200');
+      sent(m);
+    } else {
       left.push(m);
       if (st === 429) mailQuota.mailgun = MAILGUN_DAILY_CAP; // its cap: stop trying today
     }
@@ -95,7 +103,7 @@ async function loadMeter(env: Env): Promise<void> {
   if (mailQuota.day === today) return;
   const saved = JSON.parse((await env.DB.get(METER)) ?? 'null') as typeof mailQuota | null;
   const month = today.slice(0, 7);
-  Object.assign(mailQuota, { day: today, used: saved?.day === today ? saved.used : 0, delayed: saved?.day === today ? saved.delayed : 0, mailgun: saved?.day === today ? (saved.mailgun ?? 0) : 0, month, monthly: saved?.month === month ? saved.monthly : 0, refused: undefined });
+  Object.assign(mailQuota, { day: today, used: saved?.day === today ? saved.used : 0, delayed: saved?.day === today ? saved.delayed : 0, mailgun: saved?.day === today ? (saved.mailgun ?? 0) : 0, kinds: saved?.day === today ? saved.kinds : undefined, month, monthly: saved?.month === month ? saved.monthly : 0, refused: undefined });
 }
 
 /** Alerts' room left today across Resend and (when configured) Mailgun. */
@@ -118,9 +126,26 @@ async function delay(env: Env, mails: Mail[]): Promise<void> {
   console.log(`email limit: ${mails.length} delayed to after the reset`);
 }
 
-export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; tier?: Tier; via?: 'mailgun' } = {}): Promise<string> {
+export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; tier?: Tier; via?: 'mailgun'; preview?: boolean } = {}): Promise<string> {
   const tier: Tier = opts.tier ?? (opts.via ? 'low' : opts.bulk ? 'alert' : 'account');
   await loadMeter(env);
+  if (opts.preview) mails = mails.map((m) => ({ ...m, preview: true }));
+  const kinds = (mailQuota.kinds ??= { real: 0, test: 0, account: 0, preview: 0 });
+  const tally = (m: Mail) => {
+    if (m.preview) kinds.preview++;
+    kinds[m.preview || m.test || testAddress(m.to) ? 'test' : tier === 'account' ? 'account' : 'real']++;
+  };
+  // Previews, replays and samples past today's PREVIEW_DAILY_CAP wait for the reset.
+  const previews = mails.filter((m) => m.preview);
+  if (previews.length > Math.max(0, PREVIEW_DAILY_CAP - kinds.preview)) {
+    const over = previews.slice(Math.max(0, PREVIEW_DAILY_CAP - kinds.preview));
+    await delay(env, over);
+    mails = mails.filter((m) => !over.includes(m));
+    if (!mails.length) {
+      await env.DB.put(METER, JSON.stringify(mailQuota));
+      return 'delayed';
+    }
+  }
   // A sample never reaches a member's real address.
   const blocked = mails.filter((m) => SAMPLE.test(m.subject) && !previewInbox(m.to));
   if (blocked.length) console.log(`samples not sent to members: ${blocked.length}`);
@@ -136,7 +161,7 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
   // never takes the alerts' Resend hold (past that, it waits in the reset queue).
   if (opts.via === 'mailgun') {
     if (!mailgunOn(env)) return 'skipped (no MAILGUN_API_KEY)';
-    mails = await viaMailgun(env, mails, statuses);
+    mails = await viaMailgun(env, mails, statuses, 0, tally);
     if (!mails.length) return done();
   }
   if (tier !== 'account') {
@@ -149,7 +174,7 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
       const order = [...mails.filter((m) => !m.test), ...mails.filter((m) => m.test)];
       // Past Resend's share: Mailgun (when configured) for alerts and weekend low-priority mail, then the reset queue.
       const over = order.slice(room);
-      await delay(env, tier === 'alert' || wk ? await viaMailgun(env, over, statuses, wk ? WEEKEND_RESERVE : 0) : over);
+      await delay(env, tier === 'alert' || wk ? await viaMailgun(env, over, statuses, wk ? WEEKEND_RESERVE : 0, tally) : over);
       mails = order.slice(0, room);
       if (!mails.length) return done();
     }
@@ -176,7 +201,7 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
       mailQuota.refused = `${new Date().toISOString()} ${res.status} ${name}`;
       // Refused by Resend (its cap, a rate limit, an outage): Mailgun if configured; then alerts wait for the
       // reset (marked delayed) and account mail retries every minute.
-      const refused = res.status === 429 || res.status >= 500 ? await viaMailgun(env, tier === 'low' ? [] : mails.slice(i, i + 100), statuses) : [];
+      const refused = res.status === 429 || res.status >= 500 ? await viaMailgun(env, tier === 'low' ? [] : mails.slice(i, i + 100), statuses, 0, tally) : [];
       const rest = tier === 'low' ? mails.slice(i, i + 100) : refused;
       if (tier !== 'account' && res.status === 429) await delay(env, rest);
       else if (rest.length && (res.status === 429 || res.status >= 500)) {
@@ -186,6 +211,7 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
       if (rest.length || res.status < 429) statuses.push(String(res.status));
       continue;
     }
+    mails.slice(i, i + 100).forEach(tally);
     statuses.push(String(res.status));
   }
   return done();

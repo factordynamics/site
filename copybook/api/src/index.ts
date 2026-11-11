@@ -381,7 +381,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const { pollerStatus } = await import('./failover');
       const p = await pollerStatus(env, Date.now());
       const { total, last_7d } = await (await import('./alerts')).dupesBlocked(env);
-      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null, dupes_blocked: { total, last_7d } }, 200, { 'cache-control': 'no-store' });
+      const meter = JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') as { day?: string; kinds?: unknown } | null;
+      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null, dupes_blocked: { total, last_7d }, mail_kinds: meter?.kinds ? { day: meter.day, ...(meter.kinds as object) } : null }, 200, { 'cache-control': 'no-store' });
     }
     // Seconds from EDGAR acceptance to handing the alert to the mailer, for the latest alerted filings.
     // Live alerts only (test replays excluded); ?latency=all returns every stored one instead of the latest 10.

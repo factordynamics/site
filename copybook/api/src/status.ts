@@ -19,6 +19,7 @@ interface ProbeState {
   last?: { at: string; ok: boolean; ms: number; up_since: string | null; build: string | null };
   /** The members' API's count of alerts its sent record kept from going out twice (from /health?probe=1). */
   api_dupes?: { total: number; last_7d: number } | null;
+  api_mail?: Kinds | null;
   /** The first failed check of the current outage. */
   fail_since?: string | null;
   restarts: Restart[];
@@ -54,15 +55,16 @@ export async function membersApi(env: Env, now: number): Promise<string | null> 
 }
 
 /** One check of the members' API from Cloudflare: GET {api}/health?probe=1 within 10 s. */
-type Probe = { ok: boolean; ms: number; up_since: string | null; build: string | null; dupes?: { total: number; last_7d: number } | null };
+type Kinds = { day: string; real: number; test: number; account: number; preview: number };
+type Probe = { ok: boolean; ms: number; up_since: string | null; build: string | null; dupes?: { total: number; last_7d: number } | null; mail?: Kinds | null };
 export async function probeOnce(env: Env, now: number): Promise<Probe> {
   const base = await membersApi(env, now);
   const t0 = Date.now();
   if (!base) return { ok: false, ms: 0, up_since: null, build: null };
   try {
     const r = await fetch(`${base}/health?probe=1`, { signal: AbortSignal.timeout(PROBE_MS), headers: { 'user-agent': 'copybook-status-probe' } });
-    const b = r.ok ? ((await r.json()) as { ok?: boolean; api_up_since?: string; api_build?: string | null; dupes_blocked?: { total: number; last_7d: number } }) : null;
-    return { ok: !!b?.ok, ms: Date.now() - t0, up_since: b?.api_up_since ?? null, build: b?.api_build ?? null, dupes: b?.dupes_blocked ?? null };
+    const b = r.ok ? ((await r.json()) as { ok?: boolean; api_up_since?: string; api_build?: string | null; dupes_blocked?: { total: number; last_7d: number }; mail_kinds?: Kinds | null }) : null;
+    return { ok: !!b?.ok, ms: Date.now() - t0, up_since: b?.api_up_since ?? null, build: b?.api_build ?? null, dupes: b?.dupes_blocked ?? null, mail: b?.mail_kinds ?? null };
   } catch {
     return { ok: false, ms: Date.now() - t0, up_since: null, build: null };
   }
@@ -71,6 +73,7 @@ export async function probeOnce(env: Env, now: number): Promise<Probe> {
 /** Adds one check to the state: the hour's counts, the outage start, and a restart when the boot time moved. */
 export function recordProbe(s: ProbeState, now: number, p: Probe): ProbeState {
   if (p.dupes) s.api_dupes = p.dupes;
+  if (p.mail) s.api_mail = p.mail;
   const h = (s.hours[hourKey(now)] ??= [0, 0]);
   h[0] += p.ok ? 1 : 0;
   h[1] += 1;
@@ -144,6 +147,7 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
     // Alerts each host's per-member sent record kept from going out twice: the members' API (gene) and Cloudflare.
     dupes_blocked: { since: dupes.since, api: s.api_dupes ?? null, cloudflare: { total: dupes.total, last_7d: dupes.last_7d } },
     moves_queue: await movesQueue(env, health),
+    mail_quota: await mailQuotaStatus(env, s.api_mail ?? null),
     probe: {
       target: 'members API /health, from Cloudflare cron',
       interval_seconds: 60,
@@ -172,6 +176,27 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
       api_up_since: s.last?.up_since ?? null,
       rows: s.restarts.slice(0, 30),
     },
+  };
+}
+
+/**
+ * Today's email sends (UTC day) by kind, both hosts together: real members, test and critic members (previews, replays
+ * and samples included, also counted on their own against their cap), and account mail; against Resend's daily cap.
+ */
+async function mailQuotaStatus(env: Env, gene: Kinds | null) {
+  const { mailQuota, PREVIEW_DAILY_CAP } = await import('./email');
+  const m = (JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? mailQuota) as typeof mailQuota;
+  const day = new Date().toISOString().slice(0, 10);
+  const add = (k: keyof Omit<Kinds, 'day'>) => (m.day === day ? (m.kinds?.[k] ?? 0) : 0) + (gene?.day === day ? (gene[k] ?? 0) : 0);
+  return {
+    day,
+    resend_used: m.day === day ? m.used : 0,
+    daily_cap: 100,
+    reserve_for_account_mail: 15,
+    by_kind: { real: add('real'), test: add('test'), account: add('account') },
+    previews: { sent: add('preview'), cap_per_host: PREVIEW_DAILY_CAP },
+    test_member_alert_cap: 3,
+    mailgun_used: m.day === day ? m.mailgun : 0,
   };
 }
 

@@ -244,7 +244,8 @@ async function scoped(env: Env, m: Member, f: Follows): Promise<Member> {
 
 /** Test and critic members: at most this many alert emails a UTC day; past it, feed, chat and webhooks only. */
 /** Launch week (through Mon Nov 16): 5 a day, so test traffic leaves room for real members. */
-export const TEST_MAIL_CAP = 5;
+/** Thu Nov 12 on: 3 (was 5), so Resend's daily room goes to real members. */
+export const TEST_MAIL_CAP = 3;
 const testMailKey = (customer: string, now: number) => `mailn:${customer}:${new Date(now).toISOString().slice(0, 10)}`;
 /** Leading-edge window: when email runs short, a member's first alert goes at once; later ones within it go as one email at its end. */
 export const COALESCE_MS = 20 * 60_000;
@@ -564,7 +565,8 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     }
   }
   if (heldIndex) await env.DB.put(HELD, JSON.stringify(heldIndex));
-  const mail = await sendMail(env, mails, { bulk: true });
+  // An operator's replay or preview (`only`) counts against the day's preview cap.
+  const mail = await sendMail(env, mails, { bulk: true, preview: !!only });
   await logSent(env, mails.length, now);
   await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
@@ -685,7 +687,7 @@ export async function runWeeklyNames(env: Env, now: number, only?: string[]): Pr
     mails.push({ ...weeklyNamesMail(env, raw.email, weekOf, mine.filings, mine.events, f, isPaused(raw, now) ? raw.paused_until! : null), test: !!raw.test || testAddress(raw.email) });
   }
   // An operator's preview goes now; the real send is low priority (the weekend budget).
-  const status = await sendMail(env, mails, only ? {} : { tier: 'low' });
+  const status = await sendMail(env, mails, only ? { preview: true } : { tier: 'low' });
   if (!only && (status === 'none' || status.split(',').every((s) => s === '200'))) {
     await env.DB.put('names-weekly:last', week);
     // The front end shows the digest promise once the first real send went out.
@@ -1482,7 +1484,7 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
       const { correctionMail, sendMail } = await import('./email');
       const uniq = [...new Set(to)];
       if (uniq.length) {
-        await sendMail(env, uniq.map((t) => correctionMail(env, t, a, failed)));
+        await sendMail(env, uniq.map((t) => correctionMail(env, t, a, failed)), { bulk: true, preview: !!only?.to });
         mailed = uniq.length;
       }
       if (!only?.to) {
