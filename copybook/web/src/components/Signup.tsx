@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { pricingTo } from '../lib/data'
 import { signupLive, TRIAL_DAYS } from '../config'
-import { ApiError, call, getToken, isFree, isPaying, useMemberState } from '../lib/account'
+import { call, getToken, isFree, isPaying, useMemberState } from '../lib/account'
+import { signupError, signupNote } from './FollowSignup'
 import { utmTags } from '../lib/attribution'
 import { Arrow, Button, Check } from './ui'
 
@@ -12,7 +13,7 @@ import { Arrow, Button, Check } from './ui'
 export function Signup({ source, className = '' }: { source: string; className?: string }) {
   const [email, setEmail] = useState('')
   const [website, setWebsite] = useState('')
-  const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'member' | 'error'; msg?: string }>({ s: 'idle' })
+  const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'member' | 'error'; msg?: string; note?: string | null }>({ s: 'idle' })
   const [slow, setSlow] = useState(false)
   // Hidden only for paying members. Free, cancelled and signed-out readers, and a session whose /me failed,
   // keep the trial button; a free member already gets the Friday email, so the form says so instead.
@@ -40,14 +41,15 @@ export function Signup({ source, className = '' }: { source: string; className?:
               <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-up text-white">
                 <Check className="size-3.5" />
               </span>
-              {state.s === 'done' ? 'You’re in. The first email arrives Friday.' : 'You already have an account.'}
+              {state.s === 'done' ? 'You’re in. The first email arrives Friday.' : 'Welcome back.'}
             </p>
             <p className="mt-1.5 text-[13px] text-ink-2">
-              {state.s === 'done' ? 'Check your inbox for a welcome note with your sign-in link.' : (
+              {state.note ?? (state.s === 'done' ? 'Check your inbox for a welcome note with your sign-in link.' : null)}
+              {state.s === 'member' && (
                 <>
-                  We’ve emailed your sign-in link, or{' '}
+                  {state.note ? ' Or ' : ''}
                   <Link to="/account/" className="font-medium text-accent hover:text-accent-2">
-                    sign in here
+                    {state.note ? 'sign in here' : 'You already have an account: sign in here'}
                   </Link>
                   .
                 </>
@@ -66,7 +68,7 @@ export function Signup({ source, className = '' }: { source: string; className?:
               const t = setTimeout(() => setSlow(true), 1000)
               try {
                 const r = await call<{ ok: boolean; created?: boolean }>('/signup', { body: { email: v, source, website, ...utmTags() } })
-                setState({ s: r.created || website ? 'done' : 'member' })
+                setState({ s: r.created || website ? 'done' : 'member', note: signupNote(r) })
                 // A trial started next from this browser checks out with the same email, so it lands on this account.
                 try {
                   localStorage.setItem('copybook-signup-email', v)
@@ -74,8 +76,7 @@ export function Signup({ source, className = '' }: { source: string; className?:
                   /* storage blocked */
                 }
               } catch (err) {
-                const rate = err instanceof ApiError && err.status === 429
-                setState({ s: 'error', msg: rate ? 'Too many tries. Please try again in an hour.' : err instanceof ApiError && err.status === 400 && err.detail ? err.detail : 'That didn’t go through. Please try again.' })
+                setState({ s: 'error', msg: signupError(err) })
               } finally {
                 clearTimeout(t)
                 setSlow(false)

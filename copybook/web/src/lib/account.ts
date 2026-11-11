@@ -111,11 +111,18 @@ export class ApiError extends Error {
   /** The API's error code and readable message, when the response carried them. */
   code?: string
   detail?: string
-  constructor(status: number, body?: { code?: string; error?: string } | null) {
+  /** A 429's wait, from the body (retry_after, or retry_after_seconds / retry_at as payments may name them). */
+  retryAt?: number
+  /** /signup's already_member or already_sent: when the last sign-in email went. */
+  sentAt?: string
+  constructor(status: number, body?: { code?: string; error?: string; retry_after?: number; retry_after_seconds?: number; retry_at?: string; sent_at?: string; sign_in_sent_at?: string } | null) {
     super(`api ${status}`)
     this.status = status
     this.code = body?.code
     this.detail = body?.error
+    const wait = body?.retry_after_seconds ?? body?.retry_after
+    this.retryAt = body?.retry_at ? Date.parse(body.retry_at) : typeof wait === 'number' ? Date.now() + wait * 1000 : undefined
+    this.sentAt = body?.sign_in_sent_at ?? body?.sent_at
   }
 }
 

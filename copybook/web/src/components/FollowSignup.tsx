@@ -14,13 +14,41 @@ import { Button, Check } from './ui'
 // per-filing email; that is Copy, which the trial link offers. `extra` sits beside the Follow free button
 // (a trial button) and `secondary` makes Follow free the quieter button; `quietLabel` keeps the field's label for screen readers only, where the box already says it.
 export const CAP_MSG = 'Free accounts follow up to 10 investors. Remove one, or start Copy for unlimited follows.'
+
+// What /signup emails, by subject as payments sends them (copybook/api free.ts), so a reader knows what to look for.
+const SUBJECT = { first: "You're on the Copybook weekly", follow: 'Follow saved. Your Copybook sign-in link', link: 'Your Copybook sign-in link' }
+const etTime = (t: number | string) => `${new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).replace(' AM', ' am').replace(' PM', ' pm')} ET`
+export const inboxLine = (subject: string) => `Check your inbox: your sign-in link is in the email “${subject}”.`
+export const alreadyLine = (at?: string) => `You’re already signed up. Your sign-in link is in the email we sent ${at ? `at ${etTime(at)}` : 'within the last hour'}.`
+type SignupRes = { ok: boolean; created?: boolean; code?: string; sent_at?: string; sign_in_sent_at?: string; following?: boolean; follow?: 'added' | 'already' | 'cap_reached' | 'sign_in'; sign_in_email?: 'not_needed' | 'sent' | 'rate_limited' }
+/** The line under a successful /signup: which email holds the sign-in link, or that one went out already. */
+export function signupNote(r: SignupRes): string | null {
+  if (r.created) return inboxLine(SUBJECT.first)
+  if (r.code === 'already_member' || r.code === 'already_sent' || r.sign_in_email === 'rate_limited') return alreadyLine(r.sign_in_sent_at ?? r.sent_at)
+  if (r.sign_in_email === 'sent') return inboxLine(r.follow === 'added' ? SUBJECT.follow : SUBJECT.link)
+  return null
+}
+/** A failed /signup in plain words: the server's own wait on a 429, never a fixed "an hour". */
+export function signupError(err: unknown): string {
+  if (err instanceof ApiError && (err.code === 'already_member' || err.code === 'already_sent')) return alreadyLine(err.sentAt)
+  if (err instanceof ApiError && err.status === 429) {
+    if (!err.retryAt) return err.detail ?? 'Too many tries. Please try again a little later.'
+    const m = Math.max(1, Math.ceil((err.retryAt - Date.now()) / 60_000))
+    return `Too many tries. Try again in ${m} minute${m === 1 ? '' : 's'} (after ${etTime(err.retryAt)}).`
+  }
+  return err instanceof ApiError && err.status === 400 && err.detail ? err.detail : 'That didn’t go through. Please try again.'
+}
 export function FollowSignup({ people, kind = 'investor', label, className = '', onDone, extra, quietLabel = false, secondary = false }: { people: { slug: string; name: string }[]; kind?: 'investor' | 'stock'; label?: string; className?: string; onDone?: () => void; extra?: ReactNode; quietLabel?: boolean; secondary?: boolean }) {
   const [email, setEmail] = useState('')
   const [website, setWebsite] = useState('')
-  const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'error'; following?: boolean; capped?: boolean; mailed?: boolean; msg?: string }>({ s: 'idle' })
+  const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'error'; following?: boolean; capped?: boolean; note?: string | null; msg?: string }>({ s: 'idle' })
+  // Several people (/season/'s next filers): each one a checkbox, all ticked, so the reader sees and picks who they follow.
+  const [off, setOff] = useState<string[]>([])
+  const chosen = people.filter((p) => !off.includes(p.slug))
+  const many = people.length > 1
   const [slow, setSlow] = useState(false)
   useEffect(() => track('signup_view'), [])
-  const who = people.length === 1 ? possessive(people[0].name) : 'their'
+  const who = chosen.length === 1 ? possessive(chosen[0].name) : 'their'
   const got = kind === 'stock' ? `You’ll get superinvestor moves in ${people[0].name} in Friday’s email.` : `You’ll get ${who} moves in Friday’s email.`
   const id = `follow-${people.map((p) => p.slug).join('-').slice(0, 60)}`
 
@@ -41,7 +69,7 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
             </Link>
           </p>
         )}
-        {state.mailed && <p className="mt-2 text-[13px] text-ink-3">We emailed you a sign-in link to manage your follows.</p>}
+        {state.note && <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{state.note}</p>}
         <p className="mt-2 text-[13.5px] leading-relaxed text-ink-2">
           Want each 13F as it’s filed?{' '}
           <Link to={pricingTo()} onClick={() => track('trial_click')} className="font-medium text-accent hover:text-accent-2">
@@ -59,14 +87,15 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
         e.preventDefault()
         const v = email.trim()
         if (!/^\S+@\S+\.\S+$/.test(v)) return setState({ s: 'error', msg: 'Check the email address and try again.' })
+        if (!chosen.length) return setState({ s: 'error', msg: 'Tick at least one investor to follow.' })
         setState({ s: 'sending' })
         const t = setTimeout(() => setSlow(true), 1000)
         try {
-          const r = await call<{ ok: boolean; created?: boolean; following?: boolean; follow?: 'added' | 'already' | 'cap_reached' | 'sign_in'; sign_in_email?: 'not_needed' | 'sent' | 'rate_limited' }>('/signup', {
-            body: { email: v, website, source: `follow:${location.pathname}`, follow: people.map((p) => ({ kind, id: p.slug })), ...utmTags() },
+          const r = await call<SignupRes>('/signup', {
+            body: { email: v, website, source: `follow:${location.pathname}`, follow: chosen.map((p) => ({ kind, id: p.slug })), ...utmTags() },
             auth: Boolean(getToken()),
           })
-          setState({ s: 'done', following: r.following === true, capped: r.follow === 'cap_reached', mailed: r.sign_in_email === 'sent' })
+          setState({ s: 'done', following: r.following === true, capped: r.follow === 'cap_reached', note: signupNote(r) })
           onDone?.()
           try {
             localStorage.setItem('copybook-signup-email', v)
@@ -74,14 +103,31 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
             /* storage blocked */
           }
         } catch (err) {
-          const rate = err instanceof ApiError && err.status === 429
-          setState({ s: 'error', msg: rate ? 'Too many tries. Please try again in an hour.' : err instanceof ApiError && err.status === 400 && err.detail ? err.detail : 'That didn’t go through. Please try again.' })
+          setState({ s: 'error', msg: signupError(err) })
         } finally {
           clearTimeout(t)
           setSlow(false)
         }
       }}
     >
+      {many && (
+        <fieldset className="mb-2.5">
+          <legend className="text-[12.5px] font-medium text-ink-3">Follow free</legend>
+          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5">
+            {people.map((p) => (
+              <label key={p.slug} className="inline-flex items-center gap-2 text-[14px] text-ink">
+                <input
+                  type="checkbox"
+                  checked={!off.includes(p.slug)}
+                  onChange={(e) => setOff((o) => (e.target.checked ? o.filter((x) => x !== p.slug) : [...o, p.slug]))}
+                  className="size-4 accent-[var(--color-accent)]"
+                />
+                {p.name}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       <label htmlFor={id} className={quietLabel ? 'sr-only' : 'text-[12.5px] font-medium text-ink-3'}>
         {label ?? `Follow ${people.length === 1 ? people[0].name : 'them'} free`}
       </label>
@@ -99,8 +145,8 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
           placeholder="you@example.com"
           className="h-10 min-w-[11rem] flex-1 rounded-full bg-paper px-4 text-[14.5px] text-ink shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
         />
-        <Button type="submit" variant={extra || secondary ? 'outline' : 'primary'} disabled={state.s === 'sending'} className="shrink-0">
-          {state.s === 'sending' ? 'Following…' : 'Follow free'}
+        <Button type="submit" variant={extra || secondary ? 'outline' : 'primary'} disabled={state.s === 'sending' || !chosen.length} className="shrink-0">
+          {state.s === 'sending' ? 'Following…' : many ? `Follow ${chosen.length} free` : 'Follow free'}
         </Button>
         {extra}
       </div>
