@@ -1178,9 +1178,25 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
         { key: 't', label: 'Ticker', render: holdingTicker, sort: (r) => r.ticker ?? '', width: '80px' },
         { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge">{r.put_call}</span> : null}{own?.(r) ? <span className="badge">own fund</span> : null}</span>, sort: (r) => r.display_name ?? '' },
         { key: 's', label: 'Sector', hideSm: true, hide: 'lg', render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
-        { key: 'w', label: 'Weight', num: true, render: (r) => (badValue(r.unreliable) ? <AsFiled why={r.unreliable!} /> : pct(r.weight)), sort: (r) => r.weight, title: 'Share of the portfolio' },
+        // Phones show the change under the weight rather than in its own column, so the ticker and company name get
+        // the width (with the # column hidden too, a name like "Seaport Entertainment Group" fits on two lines).
+        {
+          key: 'w',
+          label: 'Weight',
+          num: true,
+          render: (r) => (
+            <>
+              {badValue(r.unreliable) ? <AsFiled why={r.unreliable!} /> : pct(r.weight)}
+              <span className="row-sub show-sm change-sub">
+                <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} />
+              </span>
+            </>
+          ),
+          sort: (r) => r.weight,
+          title: 'Share of the portfolio',
+        },
         { key: 'ws', label: 'Last quarter vs now', hideSm: true, hide: 'lg', render: (r) => (badValue(r.unreliable) ? null : <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />), title: 'Share of the portfolio last quarter (grey) and now' },
-        { key: 'c', label: 'This quarter', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} />, sort: (r) => r.share_change ?? 0 },
+        { key: 'c', label: 'This quarter', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} />, sort: (r) => r.share_change ?? 0 },
         { key: 'sh', label: 'Shares', num: true, hideSm: true, hide: 'md', render: (r) => <Filed held={r.unreliable} fig="shares">{num(r.shares)}</Filed>, sort: (r) => r.shares },
         { key: 'p', label: 'Price in filing', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? r.unreliable ? <AsFiled why={r.unreliable}>{price(r.value / r.shares)}</AsFiled> : price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
         { key: 'v', label: 'Value', num: true, render: (r) => <Filed held={r.unreliable} fig="value">{usd(r.value)}</Filed>, sort: (r) => r.value },
@@ -1207,8 +1223,32 @@ function MovesGrid({ rows, empty }: { rows: Holding[]; empty?: ReactNode }) {
         { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
         { key: 'c', label: 'What changed', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} /> },
         { key: 'sc', label: 'Shares changed', num: true, hideSm: true, hide: 'md', render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
-        { key: 'd', label: 'Trade size', num: true, render: (r) => <span className={(r.value_delta ?? 0) > 0 ? 'pos' : 'neg'}>{signedUsd(r.value_delta)}</span>, sort: (r) => r.value_delta ?? 0 },
-        { key: 'pb', label: <><span className="hide-sm">Trade, % of portfolio</span><span className="show-sm">Trade %</span></>, num: true, render: (r) => <span className={(r.trade_pct ?? 0) > 0 ? 'pos' : 'neg'}>{(r.trade_pct ?? 0) > 0 ? '+' : ''}{pct(r.trade_pct)}</span>, sort: (r) => r.trade_pct ?? 0, title: ((r) => `Trade value ÷ this 13F’s total${r ? `, ${usd(r.value_delta! / r.trade_pct!)}` : ''}`)(rows.find((r) => r.value_delta && r.trade_pct)) },
+        // Phones show the trade's share of the portfolio under its size, as the header's second line says, so the
+        // ticker and company name get the width of a column.
+        {
+          key: 'd',
+          label: (
+            <>
+              <span className="hide-sm">Trade size</span>
+              <span className="show-sm th-two">
+                Trade size
+                <br />% of portfolio
+              </span>
+            </>
+          ),
+          num: true,
+          render: (r) => (
+            <>
+              <span className={(r.value_delta ?? 0) > 0 ? 'pos' : 'neg'}>{signedUsd(r.value_delta)}</span>
+              <span className={`row-sub show-sm ${(r.trade_pct ?? 0) > 0 ? 'pos' : 'neg'}`}>
+                {(r.trade_pct ?? 0) > 0 ? '+' : ''}
+                {pct(r.trade_pct)}
+              </span>
+            </>
+          ),
+          sort: (r) => r.value_delta ?? 0,
+        },
+        { key: 'pb', label: 'Trade, % of portfolio', hideSm: true, num: true, render: (r) => <span className={(r.trade_pct ?? 0) > 0 ? 'pos' : 'neg'}>{(r.trade_pct ?? 0) > 0 ? '+' : ''}{pct(r.trade_pct)}</span>, sort: (r) => r.trade_pct ?? 0, title: ((r) => `Trade value ÷ this 13F’s total${r ? `, ${usd(r.value_delta! / r.trade_pct!)}` : ''}`)(rows.find((r) => r.value_delta && r.trade_pct)) },
         { key: 'w', label: 'Weight now', num: true, hideSm: true, hide: 'lg', render: (r) => pct(r.weight), sort: (r) => r.weight },
       ]}
     />

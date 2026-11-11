@@ -1874,10 +1874,42 @@ a.hb-row:hover {
     overflow-wrap: break-word;
     line-height: 1.3;
   }
-  /* Fund tables' ticker column is narrower than one long word, so their names keep two lines and an ellipsis. */
+  /* Fund holdings and trades tables on phones: no # column (rows are already in size order), and the ticker
+     column takes the width it frees plus whatever the other columns don't need, so a name like "Bright Horizons
+     Family Solutions" shows in full on two lines. Desktop keeps the #. */
+  .fund-table .grid th.rank,
+  .fund-table .grid td.rank {
+    display: none;
+  }
+  .fund-table .grid:has(th.rank) th:nth-child(2) {
+    width: auto !important;
+  }
+  .fund-table .grid:has(th.rank) th:not(:nth-child(2)) {
+    width: 1%;
+    white-space: nowrap;
+  }
+  /* The change pill under a holding's weight: no ellipsis, and the popover of a held badge isn't clipped. */
+  .row-sub.change-sub {
+    max-width: none;
+    overflow: visible;
+    margin-top: 4px;
+  }
+  /* A two-line column head on phones ("Trade size, % of portfolio" over the size and its share). */
+  .grid th .th-two {
+    display: inline-block;
+    line-height: 1.25;
+  }
+  .row-sub.show-sm.pos {
+    color: var(--pos);
+  }
+  .row-sub.show-sm.neg {
+    color: var(--neg);
+  }
+  /* A longer name (0.6% of them, mostly ETF titles as filed) may take a third line, and past that ends in an
+     ellipsis. */
   .fund-table .row-sub.stock-sub {
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     overflow-wrap: normal;
