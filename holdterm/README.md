@@ -30,4 +30,32 @@ remove it from visitors' browsers, don't delete it: build with `VITE_HOLDTERM_SW
 That ships the kill switch (`scripts/sw-kill.js`), which clears its caches, unregisters itself and reloads open
 tabs once; keep the variable set on later deploys until the worker is wanted again.
 
+## Quarterly roster run
+
+Who Holdterm follows comes from one published rule (About, "How investors are chosen"), applied to the SEC's
+quarterly [Form 13F data sets](https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets). When a new
+data set is out, run these in order from `holdterm/`, with the three data set folders and periods as in
+`scripts/screen.py`'s header, and commit all four outputs together so search's reasons match the screen the
+roster came from:
+
+```bash
+SCREEN_ALL=/tmp/screen-all.json python3 -I scripts/screen.py DIR_Q DIR_PRIOR_Q DIR_TWO_YEARS_AGO PERIOD PRIOR_PERIOD OLD_PERIOD > scripts/universe.json
+node scripts/roster.mjs > /tmp/roster-new.json && cp /tmp/roster-new.json src/roster.json
+curl -sf https://refcell.github.io/gust/copybook/data/index.json -o /tmp/index.json
+python3 -I scripts/not-followed.py /tmp/screen-all.json /tmp/index.json > src/not-followed.json
+npm run build
+```
+
+- `scripts/universe.json`: every filer that passes the screen. `SCREEN_ALL` doesn't change it; it also writes every
+  13F-HR filer of the period with the tests it fails.
+- `src/roster.json`: the funds followed, the ones held back by data checks, and near misses.
+- `src/not-followed.json`: why well-known funds aren't followed, for search ("michael burry", "druckenmiller").
+  It covers the funds in Copybook's index.json that aren't followed, the near misses and held-back funds, and the
+  names in `scripts/well-known.json`. It needs the `SCREEN_ALL` file from the same screen, so regenerate it only
+  together with `universe.json`.
+
+A roster run between data sets (only `node scripts/roster.mjs`, when new books are published) doesn't rerun the
+screen and leaves `universe.json` and `not-followed.json` as they are. Search reads held-back reasons and the
+followed list from `src/roster.json` at run time, so its answers stay right.
+
 Keys: `/` or Ctrl+K opens search and Escape closes it; left and right arrows (and Home, End) move between tabs.

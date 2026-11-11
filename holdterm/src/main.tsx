@@ -245,7 +245,14 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
     const hay = (c: NotFollowed) => [firmName(c.s ?? '', c.n), c.n, c.p ?? '', (c.s ?? '').replace(/-/g, ' ')].join(' | ').toLowerCase()
     // The file is from the last screen; a fund the roster has taken on since (a roster run) is followed now.
     const on = new Set(roster.funds.flatMap((f) => [f.cik, f.predecessor]))
-    const m = nf.filers.filter((c) => !on.has(c.c) && (hay(c).includes(s0) || (fs.length > 3 && flat(hay(c)).includes(fs))))
+    // Held-back reasons come from the roster in use, so a roster run that doesn't rerun the screen (it holds back
+    // or takes on funds by data checks) still reads right.
+    const held = new Map(roster.held.map((h) => [h.cik, h]))
+    const list: NotFollowed[] = [
+      ...nf.filers.map((c) => (held.has(c.c) ? { ...c, h: held.get(c.c)!.fails } : c)),
+      ...roster.held.filter((h) => !nf.filers.some((c) => c.c === h.cik)).map((h) => ({ c: h.cik, s: h.slug, n: h.firm, h: h.fails })),
+    ]
+    const m = list.filter((c) => !on.has(c.c) && (hay(c).includes(s0) || (fs.length > 3 && flat(hay(c)).includes(fs))))
     // A whole-word start beats a match inside a word ("smith": Terry Smith before Smithfield).
     return m.find((c) => hay(c).split(/[ |]+/).some((w) => w.startsWith(s0.split(' ')[0]))) ?? m[0]
   }, [nf, s0])
