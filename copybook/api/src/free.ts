@@ -576,8 +576,8 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
     }),
   ];
   const names = o.yours && (o.yours.facts.length || o.yours.hook) ? o.yours : null;
-  const namesText = names ? `In your names:\n${names.facts.map((f) => `  ${f.text}.`).join('\n')}${names.hook ? `${names.facts.length ? '\n' : ''}  ${names.hook}, with Copy${names.more ? ` (+${names.more} more in your names)` : ''}.` : ''}` : '';
-  const namesHtml = names ? `<div style="background:#f3f4f6;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:15px;margin:0 0 4px">In your names</h3>${names.facts.map((f) => `<p style="margin:4px 0">${esc(f.text)}.</p>`).join('')}${names.hook ? `<p style="margin:4px 0">🔒 ${esc(names.hook)}, with Copy${names.more ? ` (+${names.more} more in your names)` : ''}.</p>` : ''}</div>` : '';
+  const namesText = names ? `In your names:\n${names.facts.map((f) => `  ${f.text}.`).join('\n')}${names.hook ? `${names.facts.length ? '\n' : ''}  Copy alerts you minutes after filing: ${names.hook}${names.more ? ` (+${names.more} more in your names)` : ''}.` : ''}` : '';
+  const namesHtml = names ? `<div style="background:#f3f4f6;border-radius:10px;padding:10px 14px;margin:12px 0"><h3 style="font-size:15px;margin:0 0 4px">In your names</h3>${names.facts.map((f) => `<p style="margin:4px 0">${esc(f.text)}.</p>`).join('')}${names.hook ? `<p style="margin:4px 0">🔒 Copy alerts you minutes after filing: ${esc(names.hook)}${names.more ? ` (+${names.more} more in your names)` : ''}.</p>` : ''}</div>` : '';
   const moment = o.moment ? `${o.moment.firm} filed at ${o.moment.filed} ET. Copy members had its moves at ${o.moment.had}. You're reading them ${o.moment.later}.` : '';
   const big = o.biggest.map((b) => `${b.who}: ${b.text}`);
   const bigTitle = deadlineNight ? "The day's biggest moves" : "Today's biggest moves";
