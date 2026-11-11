@@ -1505,10 +1505,15 @@ a.hb-row:hover {
     padding: 7px 9px;
   }
 }
-/* Laptops and phones: the signed, coloured amount carries a trade's direction; the pill would clip it. */
+/* Laptops and phones: the biggest trade takes two lines, the stock and what happened, then the amount, so the
+ * label always shows ("NVDA Trimmed", then "−$116.1M") instead of a bare signed number. */
 @media (max-width: 1400px) {
   .home .move .tag {
-    display: none;
+    margin-right: 0;
+  }
+  .home .move .move-amt {
+    display: block;
+    margin-top: 1px;
   }
 }
 @media (max-width: 1180px) {
@@ -1602,6 +1607,10 @@ a.hb-row:hover {
   /* Long firm and company names truncate on phones instead of widening the table. */
   .trunc.wide-name {
     max-width: 230px;
+  }
+  .due.show-sm {
+    display: block;
+    line-height: 1.6;
   }
   .row-sub.show-sm {
     display: block;
