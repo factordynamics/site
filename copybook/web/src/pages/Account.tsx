@@ -218,7 +218,9 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
 
       {kept === 'yearly' && (
         <p role="status" className="mt-6 flex items-center gap-2 rounded-xl bg-[#e3f1e8] px-4 py-3 text-[14px] text-[#126b3c]">
-          <Check className="size-4 shrink-0" /> You’re on yearly billing now. Stripe is emailing the confirmation.
+          <Check className="size-4 shrink-0" /> You’re on yearly billing now.
+          {/* A trialist's switch keeps the trial: nothing is charged until it ends (payments' P0 fix, Nov 11). */}
+          {member.status === 'trialing' && member.trial_end ? ` Your trial continues: the first $${prices.yearly} is on ${new Date(member.trial_end * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })}.` : ''} Stripe is emailing the confirmation.
         </p>
       )}
 
@@ -967,7 +969,8 @@ function InvoiceSwitch({ onChange }: { onChange: (m: Member) => void }) {
   )
 }
 
-/** Monthly Copy, trial or paying: the yearly founding price, one click to Stripe's confirm page (POST /yearly). */
+/** Monthly Copy, trial or paying: the yearly founding price through payments' POST /yearly only, never the portal's own
+ *  update flow, so a trial keeps its end date ($0 today) and a cardless trial lands on the add-card choice. */
 function ToYearly({ cardless, day }: { cardless: boolean; day?: string }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -996,7 +999,7 @@ function ToYearly({ cardless, day }: { cardless: boolean; day?: string }) {
   return (
     <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-ink-2">
       <span>
-        Switch to yearly at your founding price: ${prices.yearly}/yr, locked, with history back to 2013 (from Dec 31).
+        Your ${prices.monthly}/month founding price is locked. Switch to yearly at ${prices.yearly}/yr, locked, with history back to 2013 (from Dec 31).
       </span>
       <button
         type="button"
