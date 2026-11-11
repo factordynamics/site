@@ -135,7 +135,11 @@ export function Status() {
   // A percentage from a few dozen checks misleads: show one only once about a full day (90% of 1,440 minutes) is measured.
   const rs = st.data?.restarts
   // Payments' after-send check of each 13F alert against the published build (latency.json reconciliation).
-  const rec = (l as { reconciliation?: { checked: number; passed: number; failed: number; held_pending?: number } } | null | undefined)?.reconciliation
+  // Shown only with payments' breakdown (matched, disclosed, explained, wrong); the bare pass/fail count
+  // mostly counted bugs in the check itself.
+  type Rec = { checked: number; matched?: number; disclosed?: number; explained?: number; wrong?: number }
+  const rawRec = (l as { reconciliation?: Rec } | null | undefined)?.reconciliation
+  const rec = rawRec && rawRec.checked > 0 && [rawRec.matched, rawRec.disclosed, rawRec.explained, rawRec.wrong].every((n) => typeof n === 'number') ? (rawRec as Required<Rec>) : null
   const full24 = (pr24?.checks ?? 0) >= 1296
 
   const apiTone: Tone = checking ? 'wait' : h ? 'up' : 'down'
@@ -209,10 +213,28 @@ export function Status() {
                 )}
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
               </Row>
-              {rec && rec.checked > 0 && (
-                <Row name="Alert accuracy" tone={rec.failed ? 'warn' : 'up'} state={`Alerts reconciled: ${rec.passed} of ${rec.checked}`}>
-                  {rec.failed ? `${rec.failed} failed; for alerts accepted from Nov 11, 05:00 UTC, recipients get a correction email. ` : ''}
-                  {rec.held_pending ? `${rec.held_pending} held for a check. ` : ''}Each 13F alert’s moves, compared row by row with the published data.{' '}
+              {rec && (
+                <Row name="Alert accuracy" tone={rec.wrong ? 'warn' : 'up'} state={`Alerts reconciled: ${rec.matched} matched`}>
+                  {[
+                    rec.disclosed > 0 && (
+                      <span key="d">
+                        {rec.disclosed} wrong,{' '}
+                        <a href="#alert-split-factors" className="font-medium text-accent hover:text-accent-2">
+                          disclosed below
+                        </a>
+                      </span>
+                    ),
+                    rec.explained > 0 && <span key="e">{rec.explained} differ only because of later corrections</span>,
+                    rec.wrong > 0 && <span key="w">{rec.wrong} wrong, under review</span>,
+                  ]
+                    .filter(Boolean)
+                    .map((x, i, a) => (
+                      <span key={i}>
+                        {x}
+                        {i < a.length - 1 ? ' · ' : '. '}
+                      </span>
+                    ))}
+                  Each 13F alert’s moves, compared row by row with the published data.{' '}
                   <Link to="/methodology/#alert-checks" className="font-medium text-accent hover:text-accent-2">
                     How
                   </Link>
@@ -350,7 +372,7 @@ export function Status() {
         ) : dataIssues.length ? (
           <ol className="mt-3 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
             {dataIssues.map((e) => (
-              <li key={e.id} className="py-3 text-[14px] leading-relaxed">
+              <li key={e.id} id={e.id} className="scroll-mt-24 py-3 text-[14px] leading-relaxed">
                 <span className="num block text-[12.5px] text-ink-3">
                   {new Date(`${e.date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })} · {e.kind === 'incident' ? 'Incident' : 'Correction'}
                 </span>

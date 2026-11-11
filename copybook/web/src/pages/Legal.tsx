@@ -9,6 +9,7 @@ const UPDATED = 'November 9, 2026'
 const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string][]>> = {
   terms: [['November 11, 2026', 'Accounts and plans: if we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.']],
   security: [
+    ['November 11, 2026', 'Who can see member data: the November 17 payment-key and administrator-access lines moved under From Nov 17; Limits adds what keeps running if the founder is unreachable for a week. Where the machine is: from November 17 a restore from backup needs the founder.'],
     ['November 11, 2026', 'Backups: from November 17 the backup key’s private half is kept offline by the founder; weekly checks without the key and a monthly test restore. Limits: what administrator access the agents’ account has from November 17.'],
     ['November 11, 2026', 'Who can see member data moved to the top and split into Today, From Nov 17, Limits and AI providers; from Nov 17 the agents’ payment key is restricted to billing support.'],
     ['November 11, 2026', 'The API’s own hostname will be api.factordynamics.com, with at least 7 days’ notice before the old host stops working.'],
