@@ -3010,7 +3010,7 @@ describe('copybook api', () => {
     await cron(59);
     expect(JSON.parse(new TextDecoder().decode(hist.m.get('tev/CVI.json')!)).seen['0000921669-26-000412']).toMatchObject({ percent_of_class: 64.1 });
     expect(Number(JSON.parse((await env.DB.get('issuers:checked'))!).CVI)).toBeGreaterThan(Date.now() - 60_000);
-    expect(v1.coverage['BRK.B']).toMatchObject({ issuer_cik: '0001067983', form4_from: '2026-07-15T20:05:00Z' });
+    expect(v1.coverage['BRK.B']).toMatchObject({ issuer_cik: '0001067983', form4_from: '2026-07-15T20:05:00Z', last_try: { result: 'complete' } });
     expect(v1.pending).toEqual([]);
     // A slow EDGAR (the analyst: 4 of 6 polls were 503 busy): the read passes the call's deadline, so the call answers
     // at once from the cache with the ticker pending; the read finishes after the response and is saved, so the next

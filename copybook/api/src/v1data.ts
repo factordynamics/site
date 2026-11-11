@@ -1196,7 +1196,7 @@ ROUTES.push(
       // read is finished after the response (pending) instead of turning the whole call into a 503.
       const r = await stockEvents(env, tickers, 50, { deadlineMs: Math.max(250, Math.min(1500, 2000 - (Date.now() - t0))) });
       pending = r.pending;
-      coverage = Object.fromEntries(tickers.map((t) => [t, r.tickers[t] ? { issuer_cik: r.tickers[t].cik, from: r.tickers[t].window, form4_from: r.tickers[t].from?.form4 ?? null, schedule13_from: r.tickers[t].from?.schedule13 ?? null, checked_at: r.tickers[t].checked_at } : null]));
+      coverage = Object.fromEntries(tickers.map((t) => [t, r.tickers[t] ? { issuer_cik: r.tickers[t].cik, from: r.tickers[t].window, form4_from: r.tickers[t].from?.form4 ?? null, schedule13_from: r.tickers[t].from?.schedule13 ?? null, checked_at: r.tickers[t].checked_at, last_try: r.tickers[t].last_try } : null]));
       const have = new Map(curated.map((e) => [e.accession, e]));
       for (const [t, x] of Object.entries(r.tickers)) {
         for (const e of x.events) {

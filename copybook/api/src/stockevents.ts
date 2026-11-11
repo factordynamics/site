@@ -79,6 +79,10 @@ interface Cached {
   seen: Record<string, StockEvent | 0>;
   /** Every ticker the issuer trades as (BRK.A and BRK.B), for placing a 13D/G on its class. */
   tickers?: string[];
+  /** The latest re-read: when and how it ended (complete, budget, unreadable:{accession}, error:{message}). */
+  last_try?: { at: number; result: string };
+  /** Filings that failed to parse, by accession: tries so far (3 and it's skipped, so one bad filing can't stall a ticker). */
+  failed?: Record<string, number>;
 }
 
 const FRESH_MS = 20 * 60_000;
@@ -221,7 +225,7 @@ const events = (c: Cached) =>
 
 /** Re-reads the issuer's feeds and parses new filings newest first until the window is in. False when the budget ran out. */
 async function refresh(ticker: string, c: Cached, now = Date.now()): Promise<boolean> {
-  if (secBudget.left < 2) return false;
+  if (secBudget.left < 2) return (c.last_try = { at: now, result: 'budget' }), false;
   const since = quarterStart(now);
   // Newest first, a page at a time, until a page ends before the window (or is the feed's last).
   const pages = async (type: string, size: number) => {
@@ -242,18 +246,24 @@ async function refresh(ticker: string, c: Cached, now = Date.now()): Promise<boo
   // Newest first, until the window and each family's minimum are in: older filings beyond them are dropped from the cache.
   for (const e of feed) if (e.accession in c.seen && (c.seen[e.accession] === 0 || room(e))) seen[e.accession] = c.seen[e.accession];
   let complete = true;
+  let result = 'complete';
+  const failed = c.failed ?? {};
   for (let i = 0; i < feed.length; i += 5) {
     const todo = feed.slice(i, i + 5).filter((e) => !(e.accession in seen) && room(e));
     if (todo.length > secBudget.left) {
       complete = false;
+      result = 'budget';
       break;
     }
     const parsed = await Promise.all(todo.map((e) => (isF4(e.form) ? form4Event(ticker, c.cik, e) : schedule13Event(ticker, c.cik, e, c.tickers ?? [ticker])).catch(() => null)));
     todo.forEach((e, j) => {
       if (parsed[j] !== null) seen[e.accession] = parsed[j];
-      else complete = false; // unreadable now: tried again next refresh
+      else if ((failed[e.accession] = (failed[e.accession] ?? 0) + 1) >= 3) seen[e.accession] = 0; // unreadable 3 times: skipped
+      else (complete = false), (result = `unreadable:${e.accession}`); // unreadable now: tried again next refresh
     });
   }
+  c.failed = Object.fromEntries(Object.entries(failed).filter(([a]) => a in seen || feed.some((e) => e.accession === a)));
+  c.last_try = { at: now, result };
   c.seen = seen;
   const oldest = (xs: FeedEntry[]) => xs.filter((e) => e.accession in seen).map((e) => noMs(e.accepted)).sort()[0] ?? null;
   c.from = { form4: oldest(feed.filter((e) => e.form.startsWith('4'))), schedule13: oldest(feed.filter((e) => !e.form.startsWith('4'))) };
@@ -328,10 +338,12 @@ export async function stockEvents(env: Env, tickers: string[], limit: number, op
     const c = left === Infinity ? cache.get(t)! : (structuredClone(cache.get(t)!) as Cached);
     const before = JSON.stringify(c);
     const save = async (ok: boolean) => {
-      if (ok !== false && JSON.stringify(c) !== before) await env.HIST.put(`tev/${t}.json`, JSON.stringify(c));
+      // Partial progress is kept too (a ticker needing more reads than one call's budget gets there over several);
+      // only a complete read moves checked_at and the window.
+      if (JSON.stringify(c) !== before) await env.HIST.put(`tev/${t}.json`, JSON.stringify(c));
       return ok;
     };
-    const read = refresh(t, c).catch(() => false);
+    const read = refresh(t, c).catch((e) => ((c.last_try = { at: Date.now(), result: `error:${String(e).slice(0, 120)}` }), false));
     if (left === Infinity) {
       cache.set(t, c);
       if (!(await save(await read))) pending.push(t);
@@ -349,8 +361,8 @@ export async function stockEvents(env: Env, tickers: string[], limit: number, op
     cache.set(t, c);
     if (!done) pending.push(t);
   }
-  const data: Record<string, { cik: string; checked_at: string | null; from: Cached['from'] | null; window: string | null; events: StockEvent[] }> = {};
-  for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, from: c.from ?? null, window: c.window ?? null, events: (opts.keep ? events(c).filter(opts.keep) : events(c)).slice(0, limit) };
+  const data: Record<string, { cik: string; checked_at: string | null; last_try: { at: string; result: string } | null; from: Cached['from'] | null; window: string | null; events: StockEvent[] }> = {};
+  for (const [t, c] of cache) data[t] = { cik: c.cik, checked_at: c.checked_at ? noMs(new Date(c.checked_at).toISOString()) : null, last_try: c.last_try ? { at: noMs(new Date(c.last_try.at).toISOString())!, result: c.last_try.result } : null, from: c.from ?? null, window: c.window ?? null, events: (opts.keep ? events(c).filter(opts.keep) : events(c)).slice(0, limit) };
   return { tickers: data, pending, unknown };
 }
 
