@@ -627,11 +627,17 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             if r.get("suspect_duplicate"):
                 continue
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
-                    or r.get("price_outlier") or not_common(r.get("title")):
+                    or not_common(r.get("title")):
                 continue  # preferreds share the common stock's issuer code (BAC 060505682) but aren't its holders
             if r.get("suspect_units"):
                 r = r | {"value_delta": 0}
+            # A mis-valued line (BMO 2026Q3 TEVA at ~$4,005 a share, 101x every other filer): its shares still make
+            # it a holder, but its value stays out of weights and $ and its change is unknown.
+            bad_value = bool(r.get("price_outlier"))
+            if bad_value:
+                r = r | {"value": 0, "prev_value": 0, "value_delta": 0}
             a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False])
+            a[6] = a[6] or bad_value
             # A held reissue (units unconfirmed) whose codes share an issuer prefix (BYND 08862E109 -> 08862E307):
             # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
             if r.get("change") in ("new", "exited") and (r.get("cusip") or "").upper() in held_codes:
