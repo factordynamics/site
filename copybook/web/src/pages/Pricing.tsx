@@ -131,7 +131,7 @@ async function fromFact(from: string | null): Promise<string | null> {
 
 /** One welcome line per email that links here (?from=<code>, set by the API's email templates). */
 const EMAIL_FROM: Record<string, string> = {
-  e2: `From the deadline email: start Copy free for ${TRIAL_DAYS} days (card required).`,
+  e2: `From the deadline email: start Copy free for ${TRIAL_DAYS} days (no card needed).`,
 }
 
 export function Pricing() {
@@ -292,9 +292,9 @@ export function Pricing() {
                   ) : plan && mine && !member?.seat && tier.id === 'pro' && mine === 'copy' ? (
                     `Switches your Copy plan to Pro on the same ${member?.interval === 'monthly' ? 'monthly' : 'yearly'} billing, at the founding price, prorated for the rest of this period. You confirm the amount before anything changes.`
                   ) : plan ? (
-                    // Stripe takes a card before the trial starts: said plainly under every paid button, next to Free's "No card needed".
+                    // Said plainly under every paid button: Copy's trial takes no card (Nov 11); Pro's still does.
                     <>
-                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>Card required · charged on day {TRIAL_DAYS + 1} unless you cancel</span>
+                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>{tier.id === 'copy' ? 'No card needed for the trial.' : `Card required · charged on day ${TRIAL_DAYS + 1} unless you cancel`}</span>
                       {referred ? referredTerms(tier.id, cycle) : trialTerms(tier.id)}
                     </>
                   ) : (
@@ -395,7 +395,7 @@ export function Pricing() {
               ],
               [
                 'How does the free trial work?',
-                `Every paid plan is free for ${TRIAL_DAYS} days. Stripe takes a card at signup so the plan continues without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then.`,
+                `Every paid plan is free for ${TRIAL_DAYS} days. Copy’s trial needs no card: add one in your account to keep Copy afterwards, or the trial simply ends. Pro takes a card at signup so it continues without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then.`,
               ],
               ['Can a fund try Copy Fund without a card?', 'Yes. Start a 14-day trial, pay by invoice: no card. On day 14 we email an invoice for $1,990 (the founding price, a year), due in 30 days, payable online by card or US bank account (ACH); cancel before then and nothing is owed. One trial per company. Card trial? Switch to invoice in your account. Monthly Fund is paid by card.'],
               ['What does the founding price mean?', 'Subscribe to Pro or Fund, or start a trial, by December 31 and your price stays for as long as you stay subscribed, even if list prices rise: $39/mo or $390/yr for Pro, $199/mo or $1,990/yr for Fund. A trial started by December 31 keeps the founding price even if it converts in January.'],

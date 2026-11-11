@@ -14,7 +14,7 @@ import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
 import { aboutET, fridayAfter, loadCardSet, loadCards, loadExpected, loadRecap, recapPath, seasonNow, seasonStatus, shortDay, stockPath, usualTime } from '../lib/stocks'
 import { EdgarClosed } from '../components/EdgarClosed'
-import { TRIAL_DAYS } from '../config'
+import { TRIAL_DAYS, TRIAL_LINE } from '../config'
 import { track } from '../lib/track'
 import { loadIndex } from '../lib/data'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
@@ -169,7 +169,7 @@ export function ManagerPage() {
                   Get {possessive(shortFirst(f.manager, f.name))} 13F as it’s filed, {TRIAL_DAYS} days free
                 </Link>
               </div>
-              <p className="mt-1.5 text-[12.5px] text-accent-2/80">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
+              <p className="mt-1.5 text-[12.5px] text-accent-2/80">{TRIAL_LINE}</p>
               <p className="mt-2 text-[13px] text-accent-2/85">{fridayLine(f.manager, q3.day, f.name)}</p>
             </>
           )}

@@ -1,3 +1,4 @@
+import { TRIAL_LINE } from '../config'
 import { getToken } from '../lib/account'
 import { track, useTrackVisit } from '../lib/track'
 import { possessive } from '../lib/names.mjs'
@@ -235,7 +236,7 @@ export function FilingCard() {
                   <Button to={pricingTo()} onClick={() => track('trial_click')} className="mt-3">
                     Start 14-day free trial <Arrow />
                   </Button>
-                  <p className="mt-1.5 text-[12px] text-ink-3">Card required · charged on day 15 unless you cancel</p>
+                  <p className="mt-1.5 text-[12px] text-ink-3">{TRIAL_LINE}</p>
                 </>
               )}
               <div className="mt-4 flex flex-wrap items-center gap-2.5">

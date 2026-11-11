@@ -6,7 +6,7 @@ import { EdgarClosed } from '../components/EdgarClosed'
 import { getToken, loadLatency } from '../lib/account'
 import { FAMOUS, FridayBox } from '../components/FridayBox'
 import { thirteenFStats } from '../lib/latencyStats.mjs'
-import { TRIAL_DAYS } from '../config'
+import { TRIAL_DAYS, TRIAL_LINE } from '../config'
 import { track } from '../lib/track'
 import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
@@ -152,7 +152,7 @@ function SeasonLead() {
               See who’s filed
             </Button>
           </div>
-          <p className="mt-2.5 text-[12.5px] text-ink-3">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
+          <p className="mt-2.5 text-[12.5px] text-ink-3">{TRIAL_LINE}</p>
           <FundLine />
         </>
       )}

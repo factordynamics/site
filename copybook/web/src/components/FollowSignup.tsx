@@ -92,7 +92,7 @@ export function FollowSignup({ people, others = [], collapsed = false, cta, kind
           <Link to={pricingTo()} onClick={() => track('trial_click')} className="font-medium text-accent hover:text-accent-2">
             Try Copy free for {TRIAL_DAYS} days
           </Link>{' '}
-          (card required).
+          (no card needed).
         </p>
       </div>
     )

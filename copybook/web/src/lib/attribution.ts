@@ -1,4 +1,5 @@
 import { apiReady } from '../config'
+import { track } from './track'
 // Carries the landing UTMs to Stripe so on-site sales are attributed like direct links:
 // client_reference_id={source}_{content} (marketing link contract), plus the utm_* fields.
 const KEY = 'copybook-utm'
@@ -110,6 +111,8 @@ export const checkRef = (code: string | null): Promise<boolean> =>
 /** Click handler for a paid Payment Link: with a kept referral code, a checkout that carries it instead. */
 export function referredCheckout(plan: 'copy' | 'pro' | 'fund', interval: 'monthly' | 'yearly', fallback: string) {
   return (e: { preventDefault: () => void }) => {
+    // Every plan button counts as a trial click, with its plan (payments' funnel: /pricing/#copy_monthly).
+    track('trial_click', `${location.pathname}#${plan}_${interval}`)
     const ref = refCode()
     if (!ref) return
     e.preventDefault()

@@ -125,7 +125,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
                 <Link to={pricingTo()} onClick={() => track('trial_click')} className="font-medium text-accent hover:text-accent-2">
                   Start 14-day free trial
                 </Link>{' '}
-                (card required).
+                (no card needed).
               </p>}
               <p className="mt-2 text-[12.5px] text-ink-3">
                 Have an account?{' '}
