@@ -119,6 +119,8 @@ export interface Moves {
   exited: MoveRow[];
   added: MoveRow[];
   trimmed: MoveRow[];
+  /** Held reissues (a CUSIP exchanged, units not 1:1): one line each, no dollar move, outside bought, sold and net. */
+  exchanged?: MoveRow[];
 }
 
 const TAGS = new Map<string, RegExp>();
@@ -305,14 +307,22 @@ export function displayCase(name: string): string {
  * reorganisation: 30231G102 -> 30233Q108. Without the link every Q3 holder reads as "exited XOM" plus a new position.
  */
 /** 2026Q3's, as ingest links them (data/cusip_links.json from Nov 11). */
-export const REISSUED: Record<string, { to: string; ticker: string }> = {
+/** ratio: new shares per old share where the link is also a split (DD 1-for-3: 1/3); the prior's shares are scaled. */
+export const REISSUED: Record<string, { to: string; ticker: string; ratio?: number }> = {
   '30231G102': { to: '30233Q108', ticker: 'XOM' },
   '682680103': { to: '30609A109', ticker: 'OKE' },
-  '438516106': { to: '438516205', ticker: 'HON' },
-  '26614N102': { to: '26614N201', ticker: 'DD' },
+  '26614N102': { to: '26614N201', ticker: 'DD', ratio: 1 / 3 },
   '04351P101': { to: 'K08588103', ticker: 'ASND' }, // ADS to ordinary
   '881624209': { to: 'M8769Q102', ticker: 'TEVA' }, // ADR to ordinary
   '811916105': { to: '811927102', ticker: 'SA' },
+};
+/**
+ * SEC-confirmed reissues whose units don't match (ingest's `held`): never linked share for share. HON's holders hold
+ * exactly 0.5x the shares at the same price per share (an exchange, not a split); NVRI 0.333x. A filer that leaves the
+ * old CUSIP for the new one in the same quarter gets one "CUSIP exchanged" line, no trade.
+ */
+export const HELD: Record<string, { to: string; ticker: string }> = {
+  '438516106': { to: '438516205', ticker: 'HON' },
   '415864107': { to: '29390K102', ticker: 'NVRI' },
 };
 /**
@@ -322,6 +332,8 @@ export const REISSUED: Record<string, { to: string; ticker: string }> = {
 export const REISSUED_ISSUER: Record<string, string> = {};
 const REISSUED_TO = new Map<string, string>();
 function indexReissued(): void {
+  REISSUED_TO.clear();
+  for (const k of Object.keys(REISSUED_ISSUER)) delete REISSUED_ISSUER[k];
   for (const [o, r] of Object.entries(REISSUED)) {
     REISSUED_TO.set(r.to, r.ticker);
     if (o.slice(0, 6) !== r.to.slice(0, 6)) REISSUED_ISSUER[o.slice(0, 6)] = r.to.slice(0, 6);
@@ -340,11 +352,24 @@ export async function loadReissues(env: { DATA_URL: string }, now = Date.now()):
   try {
     const res = await fetch(`${env.DATA_URL}cusip_links.json`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
-      const links = ((await res.json()) as { links?: Record<string, { new?: string; ticker?: string; basis?: string }> }).links ?? {};
-      for (const [old, l] of Object.entries(links)) {
+      type Link = { new?: string; ticker?: string; basis?: string; units_check?: { split_ratio?: number | null } };
+      const file = (await res.json()) as { links?: Record<string, Link>; held?: Record<string, Link> };
+      const ok = (from: string, to: string) => /^[0-9A-Z]{8}[0-9]$/.test(from) && /^[0-9A-Z]{8}[0-9]$/.test(to);
+      // Held pairs first: ingest's word overrides a hand-coded link (never a 1:1 merge of mismatched units).
+      for (const [old, l] of Object.entries(file.held ?? {})) {
         const from = old.toUpperCase(), to = String(l.new ?? '').toUpperCase();
-        if (l.basis !== 'sec_13f_list' || !/^[0-9A-Z]{8}[0-9]$/.test(from) || !/^[0-9A-Z]{8}[0-9]$/.test(to) || !l.ticker || REISSUED[from]) continue;
-        REISSUED[from] = { to, ticker: String(l.ticker).toUpperCase() };
+        if (!ok(from, to)) continue;
+        delete REISSUED[from];
+        HELD[from] = { to, ticker: String(l.ticker ?? HELD[from]?.ticker ?? '').toUpperCase() };
+      }
+      for (const [old, l] of Object.entries(file.links ?? {})) {
+        const from = old.toUpperCase(), to = String(l.new ?? '').toUpperCase();
+        // Only with ingest's units result (units_check): a COM -> COM NEW link without one may be a reverse split, which
+        // netted 1:1 reads as a huge trim (ONCY, BARK, UPLD...). Its split_ratio scales the prior.
+        if (l.basis !== 'sec_13f_list' || !ok(from, to) || !l.ticker || HELD[from] || !l.units_check || typeof l.units_check !== 'object') continue;
+        const k = Number(l.units_check.split_ratio);
+        const ratio = k > 0 && Math.abs(k - 1) > 1e-6 ? k : undefined;
+        REISSUED[from] = { to, ticker: String(l.ticker).toUpperCase(), ...(ratio ? { ratio } : REISSUED[from]?.ratio ? { ratio: REISSUED[from].ratio } : {}) };
       }
       indexReissued();
     }
@@ -354,7 +379,7 @@ export async function loadReissues(env: { DATA_URL: string }, now = Date.now()):
   return Object.keys(REISSUED).length;
 }
 /** Both CUSIPs of every known reissue (old and new). */
-export const isReissued = (cusip?: string | null): boolean => !!cusip && (!!REISSUED[cusip.toUpperCase()] || REISSUED_TO.has(cusip.toUpperCase()));
+export const isReissued = (cusip?: string | null): boolean => !!cusip && (!!REISSUED[cusip.toUpperCase()] || REISSUED_TO.has(cusip.toUpperCase()) || !!HELD[cusip.toUpperCase()] || Object.values(HELD).some((h) => h.to === cusip.toUpperCase()));
 /** The ticker of a reissued CUSIP, old or new: rows without a ticker yet still net (stored moves, the site's cards). */
 export const reissuedTicker = (cusip?: string | null): string | null => (cusip ? (REISSUED[cusip.toUpperCase()]?.ticker ?? REISSUED_TO.get(cusip.toUpperCase()) ?? null) : null);
 /**
@@ -367,7 +392,10 @@ export function linkReissued<T extends { cusip: string }>(prev: T[], cur: { cusi
     const n = REISSUED[p.cusip.toUpperCase()]?.to;
     return n && now.has(n) && !now.has(p.cusip.toUpperCase()) ? n : null;
   };
-  return prev.some(to) ? prev.map((p) => (to(p) ? { ...p, cusip: to(p)! } : p)) : prev;
+  // A link that is also a split carries the prior in today's units (DD: 3 old shares are 1 new).
+  const k = (p: T) => REISSUED[p.cusip.toUpperCase()]?.ratio ?? 1;
+  const sh = (p: T) => (k(p) === 1 ? {} : { shares: Math.round(Number((p as { shares?: number }).shares ?? 0) * k(p)) });
+  return prev.some(to) ? prev.map((p) => (to(p) ? { ...p, ...sh(p), cusip: to(p)! } : p)) : prev;
 }
 
 export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROWS, splits?: Set<string> | Map<string, number>, medians?: Map<string, PerShare>): { moves: Moves; changed: MoveRow[] } {
@@ -383,6 +411,17 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   // books keep in principal_amount with shares 0 (Advent's Q3 bonds read as bought from zero).
   prev = prev.map((p) => (p.shares ? p : { ...p, shares: Number((p as { principal_amount?: number }).principal_amount) || 0 }));
   const before = new Map(prev.map((p) => [posKey(p), p]));
+  // Held reissues: the old CUSIP gone and the new one held is an exchange, kept out of the trades.
+  const curCusips = new Set(cur.map((c) => c.cusip.toUpperCase()));
+  const exch = new Map<string, Position>();
+  for (const p of prev) {
+    const h = HELD[p.cusip.toUpperCase()];
+    if (h && curCusips.has(h.to) && !curCusips.has(p.cusip.toUpperCase())) {
+      exch.set(posKey({ ...p, cusip: h.to }), p);
+      before.delete(posKey(p));
+    }
+  }
+  const exchanged: MoveRow[] = [];
   const rows: MoveRow[] = [];
   // A split on file (the data run's splits.json, by CUSIP): the prior shares in today's units, as the data run does.
   // Only when the prior is still on the pre-split basis: its value per share sits nearer the ratio than 1 times today's
@@ -417,6 +456,12 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     const p = before.get(k);
     before.delete(k);
     const named = { ...c, ticker: p?.ticker ?? c.ticker, display_name: p?.display_name ?? c.display_name };
+    const ex = exch.get(k);
+    if (ex) {
+      const r = row({ ...c, ticker: c.ticker ?? ex.ticker ?? HELD[ex.cusip.toUpperCase()]?.ticker ?? null, display_name: c.display_name ?? ex.display_name }, 'exchanged', c.shares, ex.shares, value, 0, { prev_cusip: ex.cusip });
+      exchanged.push({ ...r, delta_pct_of_book: 0 });
+      continue;
+    }
     if (!p) {
       rows.push(row(named, 'new', c.shares, 0, value, value));
       continue;
@@ -428,7 +473,7 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   for (const p of before.values()) rows.push(row(p, 'exited', 0, Math.round(p.shares * ratio(p)), 0, -p.value, adj(p, ratio(p))));
   // Unit errors are left out; unusually large moves are tagged. The larger book is the yardstick.
   const prior = new Map(prev.map((p) => [posKey(p), p.value]));
-  rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(posKey(r)), splits, medians));
+  rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(posKey(r)), splits, medians), ...exchanged);
   return { moves: movesOf(rows, limit), changed: rows };
 }
 
@@ -542,8 +587,11 @@ export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
     exited: top('exited'),
     added: top('added'),
     trimmed: top('trimmed'),
+    ...(rows.some((r) => r.change === 'exchanged') ? { exchanged: rows.filter((r) => r.change === 'exchanged') } : {}),
   };
 }
+/** "HON: CUSIP exchanged (438516106 → 438516205), not a trade" */
+export const exchangeLine = (r: MoveRow) => `${r.ticker || r.display_name || r.issuer || r.cusip}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''}: CUSIP exchanged (${(r as { prev_cusip?: string }).prev_cusip} → ${r.cusip}), not a trade`;
 
 /**
  * A security whose CUSIP changed (Exxon's Q3 holding-company reorganisation: 30231G102 -> 30233Q108) shows as an exit
@@ -553,6 +601,8 @@ export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
  */
 export function netRenamed(r: { moves: Moves; changed: MoveRow[] }, limit = MOVE_ROWS): { moves: Moves; changed: MoveRow[] } {
   const key = (x: MoveRow) => {
+    // A held pair's two lines are never netted by ticker (HON: 0.5x the shares would read as a 50% trim).
+    if (x.cusip && (HELD[x.cusip.toUpperCase()] || Object.values(HELD).some((h) => h.to === x.cusip.toUpperCase()))) return null;
     const t = x.ticker ?? reissuedTicker(x.cusip);
     return t ? `${t}|${(x.put_call ?? '').toUpperCase()}` : null;
   };

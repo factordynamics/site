@@ -1455,20 +1455,42 @@ describe('copybook api', () => {
     const { compareToBuild } = await import('../src/alerts');
     const real1 = globalThis.fetch;
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => String(u).endsWith('cusip_links.json')
-      ? Response.json({ links: { '12345A101': { new: '12345B107', ticker: 'NEWCO', basis: 'sec_13f_list' }, '99999U107': { new: '99999S104', ticker: 'SPAC', basis: 'detected' } } })
+      ? Response.json({
+          links: {
+            '12345A101': { new: '12345B107', ticker: 'NEWCO', basis: 'sec_13f_list', units_check: { split_ratio: 1, exact_at_1: 0.98 } },
+            // SEC-listed but no units result (the 11:49 file): a COM -> COM NEW reverse split would net 1:1 into a huge trim.
+            '68232V801': { new: '68232V900', ticker: 'ONCY', basis: 'sec_13f_list' },
+            '55555A101': { new: '55555A200', ticker: 'RSPL', basis: 'sec_13f_list', units_check: { split_ratio: 0.1 } },
+            '99999U107': { new: '99999S104', ticker: 'SPAC', basis: 'detected', units_check: { split_ratio: 1 } },
+          },
+          held: { '438516106': { new: '438516205', ticker: 'HON', basis: 'sec_13f_list', units_reason: '0.5x shares, price 0.99x' } },
+        })
       : real1(u, init));
     await ed.loadReissues(env, Date.now() + 10 * 86400_000);
     vi.stubGlobal('fetch', real1);
-    expect([ed.REISSUED['12345A101']?.to, ed.REISSUED['99999U107']]).toEqual(['12345B107', undefined]);
-    for (const [old, { to, ticker }] of Object.entries(ed.REISSUED)) {
+    expect([ed.REISSUED['12345A101']?.to, ed.REISSUED['68232V801'], ed.REISSUED['99999U107'], ed.REISSUED['55555A101']?.ratio]).toEqual(['12345B107', undefined, undefined, 0.1]);
+    // Held (HON, NVRI) never link; DD links as its 1-for-3 split.
+    expect([ed.REISSUED['438516106'], ed.REISSUED['415864107'], ed.HELD['438516106']?.to, ed.HELD['415864107']?.to, ed.REISSUED['26614N102']?.ratio]).toEqual([undefined, undefined, '438516205', '29390K102', 1 / 3]);
+    for (const [old, { to, ticker, ratio }] of Object.entries(ed.REISSUED)) {
       const was = [{ cusip: old, put_call: null, issuer: ticker, shares: 30258016, value: 1_030_000_000 }, other];
-      const now = [{ cusip: to, put_call: null, issuer: ticker, shares: 25784696, value: 900_000_000 }, other];
+      const now = [{ cusip: to, put_call: null, issuer: ticker, shares: Math.round(25784696 * (ratio ?? 1)), value: 900_000_000 }, other];
       const ch = computeMoves(now as never, was as never).changed;
       expect([ticker, ch.map((x) => x.change)]).toEqual([ticker, ['trimmed']]);
       // A build that left the pair unlinked (an exit plus a new line, no tickers) never corrects the trim.
       const build = new Map([[`${to}|`, { cusip: to, ticker: null, change: 'new', value_delta: 900_000_000 }], [`${old}|`, { cusip: old, ticker: null, change: 'exited', value_delta: -1_030_000_000 }]]);
       expect(compareToBuild(new Map([[`${to}|`, { ...ch[0], ticker: null }]]), build as never)).toEqual([]);
     }
+    // DD (26614N102 -> 26614N201, 1-for-3): 3,000 old shares are 1,000 new; holding 1,000 is no trade, 1,200 an add of 200.
+    const dd = (n: number) => computeMoves([{ cusip: '26614N201', put_call: null, issuer: 'DD', shares: n, value: n * 95 }] as never, [{ cusip: '26614N102', put_call: null, issuer: 'DD', shares: 3000, value: 90000 }] as never).changed.map((x) => [x.change, x.prev_shares, x.shares]);
+    expect([dd(1000), dd(1200)]).toEqual([[], [['added', 1000, 1200]]]);
+    // HON (held: 0.5x the shares at the same price): one exchange line, no dollars in bought, sold or net; a real exit
+    // (old code gone, no new) stays an exit.
+    const hon = computeMoves([{ cusip: '438516205', put_call: null, issuer: 'HON', ticker: 'HON', shares: 500, value: 200000 }, other] as never, [{ cusip: '438516106', put_call: null, issuer: 'HON', ticker: 'HON', shares: 1000, value: 200000 }, other] as never);
+    expect([hon.changed.map((x) => [x.change, x.value_delta]), hon.moves.bought_usd, hon.moves.sold_usd, hon.moves.exchanged?.map(ed.exchangeLine)]).toEqual([[['exchanged', 0]], 0, 0, ['HON: CUSIP exchanged (438516106 → 438516205), not a trade']]);
+    expect(netRenamed(hon).changed.map((x) => x.change)).toEqual(['exchanged']);
+    const honStored = [{ change: 'exited', cusip: '438516106', ticker: 'HON', put_call: null, shares: 0, prev_shares: 1000, value: 0, value_delta: -200000 }, { change: 'new', cusip: '438516205', ticker: 'HON', put_call: null, shares: 500, prev_shares: 0, value: 200000, value_delta: 200000 }];
+    expect(netRenamed({ moves: {} as never, changed: honStored as never }).changed.map((x) => x.change)).toEqual(['exited', 'new']);
+    expect(computeMoves([other] as never, [{ cusip: '438516106', put_call: null, issuer: 'HON', shares: 1000, value: 200000 }, other] as never).changed.map((x) => x.change)).toEqual(['exited']);
     // A detection-only pair stays an exit plus a new position.
     expect(computeMoves([{ cusip: '99999S104', put_call: null, issuer: 'S', shares: 10, value: 100 }] as never, [{ cusip: '99999U107', put_call: null, issuer: 'U', shares: 10, value: 100 }] as never).changed.map((x) => x.change).sort()).toEqual(['exited', 'new']);
     // By ticker or the old issuer code, XOM and TEVA resolve to the current issuer (the quant: XOM read the stale 30231G
@@ -3887,7 +3909,7 @@ describe('copybook api', () => {
     // include_options=true mixes calls and puts into the list.
     const mixed = (await v1('/v1/stocks/NVDA/holders?include_options=true')).body;
     expect([mixed.count, mixed.filers, mixed.data.holders[2].filer.name]).toEqual([5, 5, 'Citadel Advisors LLC']);
-    expect(h.data.holders[0]).toEqual({ filer: { cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', type: 'hedge_fund', curated: false }, period: '2026Q3', kind: 'equity', put_call: null, shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, prev_value_usd: 6000, change: 'added', weight: null, accession: null, original_accession: null, accepted_at: null });
+    expect(h.data.holders[0]).toEqual({ filer: { cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', type: 'hedge_fund', curated: false }, period: '2026Q3', kind: 'equity', put_call: null, shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, prev_value_usd: 6000, change: 'added', weight: null, accession: null, original_accession: null, accepted_at: null, cusip: null, prev_cusip: null, issuer: null });
     // A curated fund's row: its latest 13F, acceptance from the filing cache, weight of its $2,000 book.
     expect(h.data.holders[2]).toMatchObject({ filer: { slug: 'warren-buffett', curated: true }, accession: 'A2', accepted_at: '2026-08-14T20:05:04Z', weight: 0.9 });
     expect(h.data.holders[3]).toMatchObject({ prev_shares: null, share_change: null, change: 'new' });
@@ -3931,7 +3953,7 @@ describe('copybook api', () => {
     expect([sj.count, sj.next_offset, sj.holders[0].filer.cik, sj.truncated]).toEqual([2, 1, '0002045724', false]);
     // /v1/changes by ticker reads the same index, with a filer-type cohort.
     const ch = (await v1('/v1/changes/2026Q2?ticker=NVDA&cohort=hedge_fund')).body;
-    expect([ch.build_id, ch.data.map((r: { filer: { cik: string }; value_delta_usd: number | null }) => [r.filer.cik, r.value_delta_usd])]).toEqual(['gust-3a8c773b', [['0001387322', null]]]);
+    expect([ch.build_id, ch.data.map((r: { filer: { cik: string }; value_delta_usd: number | null }) => [r.filer.cik, r.value_delta_usd])]).toEqual(['gust-3a8c773b', [['0001387322', 900]]]);
 
     // Bulk exports: listed, then streamed as uploaded.
     expect((await v1('/v1/bulk/2026Q2.csv.gz')).status).toBe(501);
@@ -4035,9 +4057,28 @@ describe('copybook api', () => {
     const by = Object.fromEntries([...teva.data.holders, ...teva.data.exited].map((r: { filer: { name: string }; change: string; share_change: number | null; period: string }) => [r.filer.name, [r.change, r.share_change, r.period]]));
     expect(by).toEqual({ 'FMR LLC': ['trimmed', -4473320, '2026Q3'], 'Norges Bank': ['added', 1000000, '2026Q3'], 'BlackRock, Inc.': ['added', 1000000, '2026Q2'], 'Barclays PLC': ['exited', -800000, '2026Q3'] });
     expect([teva.data.issuer, teva.filers, teva.exited_count, teva.data.counts.merged_from, teva.data.counts.new ?? 0]).toEqual(['M8769Q', 3, 1, '881624', 0]);
-    // The same view through /v1/changes?ticker=: no new TEVA for a filer that held the ADS.
+    // The same view through /v1/changes?ticker=: no new TEVA for a filer that held the ADS, and the trade sized as shares
+    // sold x this filing's price (-4,473,320 x $34.90 = -$156.1M), not the value difference (-$125.1M); the quant: FMR
+    // read -$4.07M where -$177.1M was right.
     const tch = (await v1('/v1/changes/2026Q3?ticker=TEVA')).body;
-    if (tch.data) expect((tch.data as { filer?: { name: string }; change: string }[]).filter((r) => r.change === 'new').map((r) => r.filer?.name)).not.toContain('FMR LLC');
+    const fmr = tch.data.find((r: { filer: { name: string } }) => r.filer.name === 'FMR LLC');
+    expect(tch.data.filter((r: { change: string }) => r.change === 'new')).toEqual([]);
+    expect(fmr).toMatchObject({ change: 'trimmed', share_change: -4473320, value_delta_usd: -156138665, cusip: 'M8769Q102', prev_cusip: '881624209' });
+    // Holders' net is the same trades: FMR -156.1M, Norges +1M x $34 = +34.0M (BlackRock's Q2 add is not in Q3's changes),
+    // BlackRock +1M x $30.86 = +30.9M, Barclays' exit -25.0M.
+    expect(teva.data.counts.net).toBe(-156138665 + 34000000 + 30857143 - 25000000);
+    expect(teva.data.holders.find((r: { filer: { name: string } }) => r.filer.name === 'BlackRock, Inc.').cusip).toBe('881624209');
+    // A plain ticker: a price move is no trade. 100 -> 110 shares while the price doubled: +$2,000, not +$12,000.
+    await hist.put('hl/037833.json', JSON.stringify({ issuer: '037833', tickers: ['AAPL'], counts: { holders: 1, net: 12000 }, columns: tcols, rows: [
+      ['0000315066', 'FMR LLC', 'fmr-llc', 'long_only', true, '2026Q3', 110, 100, 22000, 10000, 'added'],
+    ] }));
+    hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"TEVA":"881624","AAPL":"037833"}'));
+    const ach = (await v1('/v1/changes/2026Q3?ticker=AAPL')).body;
+    hist.m.set('pre/issuer-cusips.json', new TextEncoder().encode('{"67066G":"67066G104|NVIDIA","037833":"037833100|Apple \\"Inc\\""}'));
+    expect([ach.data[0].value_delta_usd, (await v1('/v1/stocks/AAPL/holders')).body.data.counts.net]).toEqual([2000, 2000]);
+    expect((await v1('/v1/changes/2026Q3?ticker=AAPL')).body.data[0]).toMatchObject({ cusip: '037833100', prev_cusip: null, issuer: 'Apple "Inc"' });
+    hist.m.delete('pre/issuer-cusips.json');
+    hist.m.delete('hl/037833.json');
     if (codes0) hist.m.set('pre/stock-codes.json', codes0);
     else hist.m.delete('pre/stock-codes.json');
   });

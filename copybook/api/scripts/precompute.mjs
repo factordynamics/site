@@ -4,6 +4,7 @@
 // workflow's GitHub OIDC token. Run hourly by .github/workflows/copybook-api-precompute.yml.
 //
 //   pre/stock-codes.json     {"NVDA":"67066G",...}   ticker -> 6-char issuer code (stock_holders.json)
+//   pre/issuer-cusips.json   {"67066G":"67066G104|NVIDIA"}  issuer code -> its largest equity class's CUSIP and name
 //   pre/sec-tickers.json     {"BRK.B":"0001067983"}  ticker -> issuer CIK (SEC company_tickers.json)
 //   pre/v1-filers-rest.txt   "<count> <curated ciks>\n[...]"  /v1/filers rows for every non-curated filer
 //
@@ -29,6 +30,11 @@ const typeOf = (f) => normType(types.filers?.[f.cik]?.type ?? types.filers?.[Str
 
 const codes = {};
 for (const s of stocks.stocks ?? []) if (s.ticker && !(s.ticker in codes)) codes[s.ticker] = s.issuer;
+const cusips = {};
+for (const s of stocks.stocks ?? []) {
+  const c = [...(s.classes ?? [])].sort((a, b) => (b.value ?? 0) - (a.value ?? 0))[0]?.cusip;
+  if (c && !(s.issuer in cusips)) cusips[s.issuer] = `${c}|${s.display_name ?? ''}`;
+}
 const tickers = {};
 for (const v of Object.values(sec)) {
   // SEC writes class tickers with a dash (BRK-B); Copybook uses a dot (BRK.B).
@@ -43,6 +49,7 @@ const rest = (filers.filers ?? [])
 const files = {
   'pre/stock-codes.json': JSON.stringify(codes),
   'pre/sec-tickers.json': JSON.stringify(tickers),
+  'pre/issuer-cusips.json': JSON.stringify(cusips),
   // The header names the curated CIKs left out, so the API can drop a filer curated since this run.
   'pre/v1-filers-rest.txt': `${rest.length} ${[...curated].join(',')}\n${JSON.stringify(rest)}`,
 };

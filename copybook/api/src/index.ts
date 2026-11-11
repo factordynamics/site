@@ -24,7 +24,7 @@ type IngestKind = 'data' | 'flow' | 'pre';
 /** Which workflow may upload a key: the full Flow lists come from the site's Pages workflow, pre/ from the precompute, the rest from the data workflow. */
 function ingestKind(key: string): IngestKind | null {
   if (key === 'flow/full.json') return 'flow';
-  if (/^pre\/(stock-codes|sec-tickers|events)\.json$|^pre\/v1-filers-rest\.txt$/.test(key)) return 'pre';
+  if (/^pre\/(stock-codes|sec-tickers|issuer-cusips|events)\.json$|^pre\/v1-filers-rest\.txt$/.test(key)) return 'pre';
   return SHARD_KEY.test(key) || INGEST_KEY.test(key) ? 'data' : null;
 }
 const INGEST_KEYS_ERROR = 'key must be h/{slug}/{YYYYQn}.json|.csv|.v1.json, h/{slug}/index.json, fb/{YYYYQn}/{cik10}.json, s/{issuer6}.json, hl/{issuer6}.json, v/{cik10}/{accession}.json, changes/{YYYYQn}.json or bulk/{YYYYQn}.csv.gz|.parquet';

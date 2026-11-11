@@ -515,6 +515,9 @@ export interface HolderRow {
   accession: string | null;
   /** The original 13F-HR, the filing accepted_at times (null only until ingest's holder index carries it). */
   original_accession: string | null;
+  cusip?: string | null;
+  prev_cusip?: string | null;
+  issuer?: string | null;
   accepted_at: string | null;
 }
 
@@ -695,6 +698,7 @@ export function mergeReissue(cur: any[], old: any[], period: string | null): any
       n.prev_value = prior.value == null ? null : Number(prior.value);
       const s = Number(n.shares) || 0;
       n.change = n.prev_shares === 0 ? 'new' : s === 0 ? 'exited' : s > n.prev_shares ? 'added' : s < n.prev_shares ? 'trimmed' : 'unchanged';
+      n.merged = true;
       continue;
     }
     // The old CUSIP's exit in the quarter the filer holds the new one: the reissue itself, not a sale.
@@ -702,6 +706,20 @@ export function mergeReissue(cur: any[], old: any[], period: string | null): any
     kept.push(o);
   }
   return [...out, ...kept];
+}
+
+/**
+ * A holder row's trade in whole USD, as the per-filer path sizes it: +value for a new position, -prior value for an
+ * exit, shares bought or sold x this filing's value per share otherwise (0 when unchanged). Null when it can't be sized.
+ */
+export function tradeUsd(r: { change: string | null; shares: number | null; prev_shares: number | null; value_usd?: number | null; prev_value_usd?: number | null; value?: number | null; prev_value?: number | null }): number | null {
+  const v = Number(r.value_usd ?? r.value ?? 0), pv = r.prev_value_usd ?? r.prev_value ?? null;
+  if (r.change === 'new') return Math.round(v);
+  if (r.change === 'exited') return pv == null ? null : -Math.round(Number(pv));
+  if (r.change === 'unchanged') return 0;
+  const s = Number(r.shares) || 0;
+  if (r.prev_shares == null || !s) return null;
+  return Math.round((s - Number(r.prev_shares)) * (v / s));
 }
 
 /** Counts over raw holder rows, as the holder index states them. */
@@ -718,7 +736,7 @@ function countsOf(rows: any[]) {
       if (r.change && r.change in c) c[r.change]++;
       else if (r.prev_shares == null) c.no_prior++;
     }
-    if (r.change && r.change !== 'unchanged') net += (Number(r.value) || 0) - (Number(r.prev_value) || 0);
+    if (r.change && r.change !== 'unchanged') net += tradeUsd(r) ?? 0;
   }
   return { ...c, net: Math.round(net), by_period: by };
 }
@@ -739,20 +757,32 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   let raw = rowsOf({ columns: d.columns, rows: d.rows ?? d.holders ?? [] });
   // A reissue (SEC-confirmed) whose new issuer code ingest hasn't merged yet (its index covers one period only: TEVA's
   // M8769Q, Nov 11): merged here with the old code's index at read time. Once ingest merges the pair, this is a no-op.
-  const { REISSUED_ISSUER } = await import('./edgar');
+  const { REISSUED_ISSUER, REISSUED: RE } = await import('./edgar');
   const old = Object.entries(REISSUED_ISSUER).find(([, to]) => to === code)?.[0];
+  const reissue = Object.entries(RE).find(([, x]) => x.to.startsWith(code));
+  const reissueTo = reissue?.[1].to ?? null, reissueFrom = reissue?.[0] ?? null;
   if (old && Object.keys(d.counts?.by_period ?? {}).length <= 1 && new Set(raw.map((r) => r.period ?? d.period)).size <= 1) {
     const prev = await readHolderIndex(env, old);
     if (prev) {
-      raw = mergeReissue(raw, rowsOf({ columns: prev.d.columns, rows: prev.d.rows ?? prev.d.holders ?? [] }), d.period ?? null);
+      // Rows kept from the old code are positions in the old CUSIP.
+      raw = mergeReissue(raw, rowsOf({ columns: prev.d.columns, rows: prev.d.rows ?? prev.d.holders ?? [] }).map((r) => ({ ...r, cusip: r.cusip ?? reissueFrom })), d.period ?? null);
       d.counts = { ...(d.counts ?? {}), ...countsOf(raw), merged_from: old };
     }
   }
+  // net is the shares traded at each filing's value per share, never the value difference (a price move is no trade).
+  if (d.counts && obj) d.counts = { ...d.counts, net: countsOf(raw).net };
   mark('read');
   const cur = new Map((await filers(env)).map((f) => [f.cik, f]));
   mark('filers');
   const types = await filerTypes(env);
   mark('types');
+  // The issuer's main equity CUSIP (hourly precompute) for rows the index states no CUSIP for.
+  const pc = await env.HIST.get('pre/issuer-cusips.json');
+  const pcText = pc ? await new Response(pc.body).text() : '';
+  const pcAt = pcText.indexOf(`"${code}":"`);
+  const pcVal = pcAt >= 0 ? pcText.slice(pcAt + 9, pcAt + 400).match(/^"((?:[^"\\]|\\.)*)"/) : null;
+  const [pcCusip, pcName] = pcVal ? (JSON.parse(`"${pcVal[1]}"`) as string).split('|') : [];
+  const mainCusip = reissueTo ?? pcCusip ?? null;
   const rows = raw.map((h): HolderRow => {
     const cik = pad(String(h.cik));
     const c = cur.get(cik);
@@ -775,6 +805,10 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       accession: h.accession ?? (latest ? c.latest_accession : null) ?? null,
       original_accession: h.original_accession || null,
       accepted_at: noMs(h.accepted_at) ?? null,
+      // Passed through when the holder index carries them (ingest is adding them); the reissue's CUSIPs otherwise.
+      cusip: h.cusip ?? mainCusip,
+      prev_cusip: h.prev_cusip ?? (reissueFrom && h.merged ? reissueFrom : null),
+      issuer: h.issuer ?? d.display_name ?? (pcName || null),
     };
   });
   // Acceptance for every row with an accession: gene's EDGAR-filled map (any filer), then the curated per-filing
@@ -1121,7 +1155,9 @@ ROUTES.push(
       const h = await holdersOf(env, is.code);
       if (!h) return v1error('not_found', 404, `No 13F filer reports holding ${is.ticker ?? is.code} in its latest book.`);
       stamp = h.stamp;
-      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: h.display_name, put_call: r.put_call, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: r.prev_value_usd == null ? null : r.value_usd - r.prev_value_usd, change: r.change, accession: r.accession, accepted_at: r.accepted_at }));
+      // Sized like the per-filer path: a trade at this filing's own value per share, never the value difference (a
+      // price move is no trade: AAPL's +$14.87B row was +$3.58B of shares).
+      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: r.cusip ?? null, prev_cusip: r.prev_cusip ?? null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: r.issuer ?? h.display_name, put_call: r.put_call, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: tradeUsd(r), change: r.change, accession: r.accession, original_accession: r.original_accession, accepted_at: r.accepted_at }));
       source = 'stock';
     } else {
       // Across filers: the data run's per-quarter change file (largest moves first).

@@ -1,5 +1,5 @@
 import type { Alert13F, AlertEvent } from './alerts';
-import { cleanItem4, filingId, FILER_VALUE, UNUSUAL, type MoveRow, type Moves } from './edgar';
+import { cleanItem4, exchangeLine, filingId, FILER_VALUE, UNUSUAL, type MoveRow, type Moves } from './edgar';
 import { testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
 import { firmName } from '../../../holdterm/src/names';
@@ -632,6 +632,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
       });
       lines.push(`  ${label}: ${parts.join(', ')}`);
     }
+    for (const r of mv.exchanged ?? []) lines.push(`  ${exchangeLine(r)}`);
     if (a.held?.length) lines.push(`  ${heldLine(a)}`);
     const mine = yourMoves(a, f);
     if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
@@ -858,6 +859,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
     const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}`, usd(r.value_delta), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', 'Trade, % of book'], rows, [2, 4]));
+    for (const r of mv.exchanged ?? []) out.push(`<p style="margin:6px 0 2px">${esc(exchangeLine(r))}</p>`);
     if (a.held?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);
     const mine = yourMoves(a, f);
     if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${esc(shareTrade(r))}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
