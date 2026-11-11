@@ -1076,6 +1076,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, ran, own: own.length, done: after.length, own_left: own.filter((t) => !after.includes(t)).length, was_done: done.length }, 200, h);
   }
 
+  // Operator: build a quarter's Parquet bulk export now (gene only), else the newest one missing or behind its CSV.
+  if (req.method === 'POST' && path === '/ops/bulk-parquet') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    if ((await import('./failover')).isCloudflare(env)) return json({ ok: false, error: 'gene only' }, 409, h);
+    const q = (await body(req)).quarter;
+    if (q !== undefined && !/^\d{4}Q[1-4]$/.test(String(q))) return json({ ok: false, error: 'quarter like 2026Q3', code: 'bad_request' }, 400, h);
+    return json({ ok: true, ...(await (await import('./parquet')).buildParquet(env, q as string | undefined)) }, 200, h);
+  }
+
   if (req.method === 'GET' && path === '/ops/moves-replays') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     return json({ ok: true, replays: JSON.parse((await env.DB.get('alerts:moves-replays')) ?? '[]') }, 200, h);

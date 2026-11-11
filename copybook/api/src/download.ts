@@ -31,7 +31,7 @@ export async function toR2(env: Env, body: string, res: Response): Promise<Respo
  * served the bucket's Nov 9 01:17 copy while the listing described gene's newer file. So each file is mirrored to the
  * bucket stamped with its sha256, and a link is handed out only when the bucket's copy has the listed size and sha256.
  */
-export interface BulkFile { key: string; bytes: number; etag: string | null; sha256: string | null; uploaded: Date }
+export interface BulkFile { key: string; bytes: number; etag: string | null; sha256: string | null; uploaded: Date; /** A Parquet's: the sha256 of the CSV it was built from. */ source: string | null }
 export interface Served { bytes: number; etag: string | null; sha256: string | null }
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 export const sha256Hex = async (b: Uint8Array) => hex(await crypto.subtle.digest('SHA-256', b as Uint8Array<ArrayBuffer>));
@@ -48,7 +48,7 @@ export async function bulkFiles(env: Env, min: number): Promise<BulkFile[]> {
       const rec = JSON.parse((await env.DB.get(`bulk:sha:${o.key}`)) ?? 'null') as { etag: string; sha256: string } | null;
       sha = rec?.etag === etag ? rec.sha256 : null;
     }
-    out.push({ key: o.key, bytes: o.size, etag, sha256: sha, uploaded: o.uploaded });
+    out.push({ key: o.key, bytes: o.size, etag, sha256: sha, uploaded: o.uploaded, source: o.customMetadata?.source_sha256 ?? null });
   }
   return out;
 }

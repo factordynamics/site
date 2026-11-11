@@ -654,6 +654,42 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('bulk Parquet: built on gene from the data run\'s CSV, same columns and rows, listed with sha256 and the CSV it came from', async () => {
+    const { parquetReadObjects } = await import('hyparquet');
+    // Over 1 MB gzipped (random filer names don't compress), with the CSV cases a hand parser gets wrong: a quoted comma,
+    // a doubled quote, a newline inside a field, a CRLF line end and empty integers (null, not 0).
+    const head = 'cik,filer_name,quarter,cusip,put_call,shares,value,prev_shares\n';
+    const odd = ['0000000001,"ACME, ""THE"" FUND\nLP",2026Q1,037833100,,5,10,\r\n', '0000000002,Plain LP,2026Q1,67066G104,Call,7,-3,4\n'];
+    const rand = Array.from({ length: 30_000 }, (_, i) => `${String(i + 3).padStart(10, '0')},${[...crypto.getRandomValues(new Uint8Array(24))].map((x) => x.toString(16).padStart(2, '0')).join('')},2026Q1,0000000AA,,${i},${i * 1000},${i - 1}\n`);
+    const csv = head + odd.join('') + rand.join('');
+    const gz = new Uint8Array(await new Response(new Blob([csv]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+    expect(gz.length).toBeGreaterThan(1_000_000);
+    const csvSha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', gz))].map((x) => x.toString(16).padStart(2, '0')).join('');
+    await hist.put('bulk/2026Q1.csv.gz', gz, { customMetadata: { sha256: csvSha } });
+    const op = () => handleRequest(new Request('https://api.test/ops/bulk-parquet', { method: 'POST', body: '{}', headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env);
+    const built = await (await op()).json();
+    expect(built).toMatchObject({ ok: true, file: '2026Q1.parquet', rows: 30_002 });
+    // Once built from this CSV, nothing to do until the CSV changes.
+    expect((await (await op()).json()).file).toBeNull();
+    stripeObjects['checkout/sessions/cs_test_pq'] = { id: 'cs_test_pq', status: 'complete', created: now(), subscription: 'sub_pq', customer_details: { email: 'pq@example.com' } };
+    stripeObjects['subscriptions/sub_pq'] = sub('sub_pq', 'cus_pq', 'active', 'month', 'pro_monthly');
+    const key = (await (await call('/keys', { body: { name: 'k' }, token: (await (await fullCheckout('cs_test_pq')).json()).token })).json()).key;
+    const get = (path: string) => handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
+    const listed = (await (await get('/v1/bulk')).json()).data.find((f: { file: string }) => f.file === '2026Q1.parquet');
+    const pq = await get('/v1/bulk/2026Q1.parquet');
+    const bytes = new Uint8Array(await pq.arrayBuffer());
+    const sha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((x) => x.toString(16).padStart(2, '0')).join('');
+    expect([pq.status, pq.headers.get('content-type'), listed.sha256, listed.built_from_sha256, listed.bytes]).toEqual([200, 'application/vnd.apache.parquet', sha, csvSha, bytes.length]);
+    const rows = await parquetReadObjects({ file: bytes.buffer as ArrayBuffer });
+    expect(rows.length).toBe(30_002);
+    expect(Object.keys(rows[0])).toEqual(['cik', 'filer_name', 'quarter', 'cusip', 'put_call', 'shares', 'value', 'prev_shares']);
+    expect(rows.slice(0, 2)).toEqual([
+      { cik: '0000000001', filer_name: 'ACME, "THE" FUND\nLP', quarter: '2026Q1', cusip: '037833100', put_call: null, shares: 5n, value: 10n, prev_shares: null },
+      { cik: '0000000002', filer_name: 'Plain LP', quarter: '2026Q1', cusip: '67066G104', put_call: 'Call', shares: 7n, value: -3n, prev_shares: 4n },
+    ]);
+    expect([rows[30_001].cik, rows[30_001].value, rows[30_001].filer_name]).toEqual([String(30_002).padStart(10, '0'), 29_999_000n, rand[29_999].split(',')[1]]);
+  });
+
   it('accepts history uploads only from the data workflow, and serves quarters only to members', async () => {
     const pair = (await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify'])) as CryptoKeyPair;
     jwks = { keys: [{ ...(await crypto.subtle.exportKey('jwk', pair.publicKey)), kid: 'test-kid', alg: 'RS256' }] };
@@ -5325,13 +5361,21 @@ describe('copybook api', () => {
     expect((await v1('/v1/changes/2026Q2?filer=warren-buffett&change=exited')).body.count).toBe(1);
     // Across filers: the data run's file; cohort by filer type.
     expect((await v1('/v1/changes/2026Q2')).status).toBe(501);
-    hist.m.set('changes/2026Q2.json', new TextEncoder().encode(JSON.stringify({ columns: ['cik', 'slug', 'filer_name', 'curated', 'type', 'cusip', 'ticker', 'issuer', 'put_call', 'change', 'shares', 'prev_shares', 'value', 'value_delta'], rows: [
-      ['1067983', 'warren-buffett', 'Berkshire', true, 'active', '037833100', 'AAPL', 'APPLE', null, 'trimmed', 10, 20, 1500, -1500],
-      ['1387322', null, 'Whale Rock', false, 'hedge_fund', '67066G104', 'NVDA', 'NVIDIA', null, 'new', 50, 0, 9000, 9000],
-      ['0000102909', null, 'Vanguard', false, 'index', '037833100', 'AAPL', 'APPLE', null, 'added', 1000, 990, 300000, 400],
+    // Ingest's trailing columns, read by name: a held row (unreliable both, change unknown, no dollar change) is listed by
+    // default, and a merged CUSIP pair (Mizuho's ORCL, Q2 filed under the preferred's 68389X204) keeps its filed facts.
+    hist.m.set('changes/2026Q2.json', new TextEncoder().encode(JSON.stringify({ columns: ['cik', 'slug', 'filer_name', 'curated', 'type', 'cusip', 'ticker', 'issuer', 'put_call', 'change', 'shares', 'prev_shares', 'value', 'value_delta', 'unreliable', 'unreliable_reason', 'value_change', 'cusip_pair', 'filed_cusip', 'filed_price', 'matched_cusip'], rows: [
+      ['1067983', 'warren-buffett', 'Berkshire', true, 'active', '037833100', 'AAPL', 'APPLE', null, 'trimmed', 10, 20, 1500, -1500, null, null, null, null, null, null, null],
+      ['1387322', null, 'Whale Rock', false, 'hedge_fund', '67066G104', 'NVDA', 'NVIDIA', null, 'new', 50, 0, 9000, 9000, null, null, null, null, null, null, null],
+      ['0000102909', null, 'Vanguard', false, 'index', '037833100', 'AAPL', 'APPLE', null, 'added', 1000, 990, 300000, 400, null, null, null, null, null, null, null],
+      ['0001062993', null, 'Mizuho', false, 'bank', '68389X105', 'ORCL', 'ORACLE', null, 'added', 100, 98, 14680, 294, null, null, null, 'merged_misfiled', '68389X204', 146.8, '68389X105'],
+      ['0001062993', null, 'Mizuho', false, 'bank', '78462F103', 'SPY', 'SPDR S&P 500', 'Put', 'unknown', 44518, 479831, 57200000, null, 'both', 'option_band', -300000000, null, null, null, null],
     ] })));
     r = await v1('/v1/changes/2026Q2');
-    expect(r.body.data.map((x: { filer: { name: string } }) => x.filer.name)).toEqual(['Whale Rock', 'Berkshire', 'Vanguard']);
+    expect(r.body.data.map((x: { filer: { name: string } }) => x.filer.name)).toEqual(['Whale Rock', 'Berkshire', 'Vanguard', 'Mizuho', 'Mizuho']);
+    expect(r.body.data.slice(3).map((x: Record<string, unknown>) => [x.ticker, x.change, x.value_delta_usd, x.unreliable ?? null, x.unreliable_reason ?? null, x.value_change_usd ?? null, x.cusip_pair ?? null, x.filed_cusip ?? null, x.filed_price ?? null, x.matched_cusip ?? null])).toEqual([
+      ['ORCL', 'added', 294, null, null, null, 'merged_misfiled', '68389X204', 146.8, '68389X105'],
+      ['SPY', 'unknown', null, 'both', 'option_band', -300000000, null, null, null, null],
+    ]);
     expect(r.body.data[0]).toMatchObject({ filer: { cik: '0001387322', type: 'hedge_fund' }, share_change: 50, value_delta_usd: 9000 });
     expect((await v1('/v1/changes/2026Q2?cohort=hedge_fund')).body.data.map((x: { ticker: string }) => x.ticker)).toEqual(['NVDA']);
     expect((await v1('/v1/changes/2026Q2?cohort=curated')).body.data.map((x: { ticker: string }) => x.ticker)).toEqual(['AAPL']);

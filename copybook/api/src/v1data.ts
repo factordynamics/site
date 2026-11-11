@@ -67,6 +67,9 @@ const classFields = (h: any) => ({
   ...(h?.shares_ratio && typeof h.shares_ratio === 'object' ? { shares_ratio: h.shares_ratio, ratio_source: typeof h.ratio_source === 'string' ? h.ratio_source : null } : {}),
   // Classes the filer holds that the row's dollars leave out (ingest's classes_held).
   ...(Array.isArray(h?.classes_held) ? { classes_held: h.classes_held } : {}),
+  // A CUSIP pair ingest resolved (merged_misfiled: a line filed under another class's CUSIP at the matched one's price,
+  // counted as the matched class) or holds (possible_cusip_change), with the filed facts (ingest run 43111249607).
+  ...(typeof h?.cusip_pair === 'string' && h.cusip_pair ? { cusip_pair: h.cusip_pair, filed_cusip: h.filed_cusip ?? null, filed_price: h.filed_price ?? null, matched_cusip: h.matched_cusip ?? null } : {}),
 });
 
 /**
@@ -1197,7 +1200,8 @@ ROUTES.push(
     // object itself (size, ETag, the sha256 stamped at upload); a download link serves exactly these bytes or the file
     // streams from here. Only files that pass a size check: a stub (a failed run) is hidden until regenerated.
     const { bulkFiles } = await import('./download');
-    const data = (await bulkFiles(env, MIN_BULK_BYTES)).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.bytes, etag: o.etag, sha256: o.sha256, uploaded_at: noMs(o.uploaded.toISOString()), url: `${PUBLIC_V1_BASE}/v1/${o.key}` }));
+    // A Parquet names the CSV it was built from (built_from_sha256): equal to that CSV's sha256, same rows and columns.
+    const data = (await bulkFiles(env, MIN_BULK_BYTES)).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.bytes, etag: o.etag, sha256: o.sha256, ...(o.key.endsWith('.parquet') ? { built_from_sha256: o.source } : {}), uploaded_at: noMs(o.uploaded.toISOString()), url: `${PUBLIC_V1_BASE}/v1/${o.key}` }));
     return v1json({ data: data.sort((a: { file: string }, b: { file: string }) => b.file.localeCompare(a.file)) });
   }],
   ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env, url }, [file]) => {
@@ -1218,13 +1222,13 @@ ROUTES.push(
       } else mirrorSoon(env, f.key);
     }
     const obj = await env.HIST.get(`bulk/${file}`);
-    if (!obj || (obj.size ?? 0) < MIN_BULK_BYTES) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet${obj ? ' (the uploaded file failed its size check and waits to be regenerated)' : ''}. Parquet is coming; csv.gz is live for the quarters GET /v1/bulk lists.`);
+    if (!obj || (obj.size ?? 0) < MIN_BULK_BYTES) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet${obj ? ' (the uploaded file failed its size check and waits to be regenerated)' : ''}. Each quarter GET /v1/bulk lists has a .csv.gz and, once built from it (within a day of the CSV), a .parquet.`);
     // RFC 9530 Repr-Digest, so a client can check the bytes without the listing (the R2 link sends x-amz-meta-sha256).
     const sha = f?.sha256 ?? obj.customMetadata?.sha256;
     if (asJson) return v1json({ data: { file, url: `${PUBLIC_V1_BASE}/v1/bulk/${file}`, auth: 'required', sha256: sha ?? null, bytes: obj.size ?? null, expires_at: null } });
     const digest: Record<string, string> = sha ? { 'repr-digest': `sha-256=:${btoa(String.fromCharCode(...(sha.match(/../g) ?? []).map((h) => parseInt(h, 16))))}:`, 'x-amz-meta-sha256': sha } : {};
     return new Response(obj.body, {
-      headers: { ...digest, 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
+      headers: { ...digest, 'content-type': obj.httpMetadata?.contentType ?? (file.endsWith('.parquet') ? 'application/vnd.apache.parquet' : 'application/octet-stream'), 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
     });
   }],
   // The build each store serves (ingest's meta/builds.json), so a client can see a rebuild coming before a 409.
@@ -1376,7 +1380,8 @@ ROUTES.push(
   ['GET', /^\/v1\/changes\/([^/]+)$/, async ({ env, url }, [quarter]) => {
     const p = url.searchParams;
     // mixed: an issuer row whose classes moved in opposite directions (ingest's per-class change; never the sign of the $ sum).
-    const CHANGES = ['new', 'added', 'trimmed', 'exited', 'mixed'];
+    // unknown: a held row (ingest's rule): filed facts, no direction, listed by default like every other row.
+    const CHANGES = ['new', 'added', 'trimmed', 'exited', 'mixed', 'unknown'];
     const want = (p.get('change') ?? CHANGES.join(',')).split(',').map((x) => x.trim());
     const limit = Number(p.get('limit') ?? 100);
     const offset = Number(p.get('offset') ?? 0);
@@ -1385,7 +1390,7 @@ ROUTES.push(
     if (!Number.isInteger(limit) || limit < 1 || limit > 1000) return v1error('bad_request', 400, `limit must be an integer from 1 to 1000 (got ${p.get('limit')}); page with offset.`);
     if (!Number.isInteger(offset) || offset < 0) return v1error('bad_request', 400, `offset must be an integer from 0 (got ${p.get('offset')}).`);
     if (!QUARTER.test(quarter) || want.some((c) => !CHANGES.includes(c)) || !Number.isFinite(minValue) || minValue < 0) {
-      return v1error('bad_request', 400, 'quarter like 2026Q2; change: new, added, trimmed, exited (comma-separated); limit 1-1000; offset from 0; min_value_usd from 0.');
+      return v1error('bad_request', 400, 'quarter like 2026Q2; change: new, added, trimmed, exited, mixed, unknown (comma-separated); limit 1-1000; offset from 0; min_value_usd from 0.');
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: any[];
@@ -1427,7 +1432,7 @@ ROUTES.push(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (await new Response(obj.body).json()) as any;
       const types = await filerTypes(env);
-      rows = rowsOf(c).map((h) => ({ ...classFields(h), filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: normType(types.get(pad(String(h.cik))) ?? h.type) }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ? String(h.put_call).toUpperCase() : null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
+      rows = rowsOf(c).map((h) => ({ ...classFields(h), filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: normType(types.get(pad(String(h.cik))) ?? h.type) }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ? String(h.put_call).toUpperCase() : null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: unreliableOf(h) ? null : h.value_delta, ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, ...(typeof h.unreliable_reason === 'string' ? { unreliable_reason: h.unreliable_reason } : {}), value_change_usd: h.value_change ?? null } : {}), change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
       source = 'all';
     }
     const curatedCiks = cohort === 'curated' ? new Set((await filers(env)).map((f) => f.cik)) : null;

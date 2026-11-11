@@ -2750,7 +2750,7 @@ export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reaso
 
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
 interface Job {
-  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota' | 'email2' | 'namesWeekly' | 'kahnConfirm' | 'winter';
+  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota' | 'email2' | 'namesWeekly' | 'kahnConfirm' | 'winter' | 'parquet';
   at: number;
 }
 
@@ -2822,6 +2822,9 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   // Newly followed names' winter (the lead, Nov 11): every minute after alert polling, busy or not, with what the minute's
   // SEC budget left; not in the deadline windows, when the budget is the alerts'.
   const quietSeason = !DEADLINES.some((d) => scheduledTime >= deadlineMs(d.date) - 3 * 86_400_000 && scheduledTime <= deadlineMs(d.date) + 86_400_000);
+  // Parquet bulk exports (parquet.ts): gene, hourly in the US night (06-10 UTC), one CSV per run whose Parquet is missing
+  // or older than it; ~20 s and ~600 MB for a 1.6M-row quarter, so never in the deadline windows.
+  if (m === 47 && h >= 6 && h <= 10 && !fo.isCloudflare(env) && quietSeason) due.push({ name: 'parquet', at: scheduledTime });
   if (!fo.isCloudflare(env) && quietSeason && secBudget.left > 8) await step('winter_follow', () => import('./stockevents').then((x) => x.fillWinterFollowed(env)));
   const rawQueue = await env.DB.get('jobs:due');
   const queue = [...(JSON.parse(rawQueue ?? '[]') as Job[]), ...due].filter((j, i, all) => all.findIndex((x) => x.name === j.name) === i);
@@ -2849,6 +2852,7 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
       // gene only: last winter's events in members' names (the day-12 preview, /me?include=winter), with a quiet minute's
       // leftover SEC requests. It ran only outside filing week (Nov 9-17) and so read nothing before the Nov 23 emails.
       winter: () => import('./stockevents').then((x) => x.fillWinter(env, Math.min(20, secBudget.left - 6))),
+      parquet: () => import('./parquet').then((x) => x.buildParquet(env)),
     };
     await step(job.name, run[job.name]);
   }

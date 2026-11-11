@@ -5,7 +5,7 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.20';
+export const SPEC_REVISION = '2026-11-11.21';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /**
@@ -32,6 +32,17 @@ export function perClassNotice(pinned: boolean, base: string, now = Date.now()):
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-parquet-bulk',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Bulk exports in Parquet: each quarter /v1/bulk lists as .csv.gz gets a .parquet with the same columns and rows (shares, value, prev_shares and prev_value as INT64, the rest UTF-8 strings, empty as null; snappy), built within a day of its CSV. /v1/bulk lists it with its sha256 and `built_from_sha256`, the CSV it came from.',
+      '/v1/changes lists held lines by default (`change: "unknown"`, with `unreliable`, `unreliable_reason` and `value_change_usd`, across filers too), and every row carries the data run\'s `cusip_pair`, `filed_cusip`, `filed_price` and `matched_cusip` when it pairs a line with another CUSIP.',
+    ],
+  },
   {
     id: '2026-11-11-data-build',
     date: '2026-11-11',
