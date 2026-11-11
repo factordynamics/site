@@ -428,7 +428,7 @@ export const WINTER_LINE = 'Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G
  * The day-12 email for a cardless Copy trial between seasons (marketing's plan rev 76): it just ends, nothing charged;
  * what Copy gives from now to February; the founding price; monthly pauses once a year; the free tier stays.
  */
-export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now(), preview?: WinterPreview | null): Mail {
+export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now(), preview?: WinterPreview | null, keepUrl?: string): Mail {
   const weekday = new Date(m.trial_end! * 1000).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' });
   const add = `${env.SITE_URL}account/`;
   const gives = [
@@ -441,13 +441,15 @@ export function day12Mail(env: Env, m: Member, unsub: string, now = Date.now(), 
   const pv = preview && !preview.pending.length && preview.insider_buys + preview.schedule_13dg > 0 ? preview : null;
   const mine = pv ? `Your ${pv.names} name${pv.names === 1 ? '' : 's'} had ${pv.insider_buys} insider buy${pv.insider_buys === 1 ? '' : 's'} and ${pv.schedule_13dg} 13D/G filing${pv.schedule_13dg === 1 ? '' : 's'} last winter${pv.events.length ? `, e.g. ${pv.events.slice(0, 2).map(winterLine).join('; ')}` : ''}${pv.amendments ? `${pv.events.length ? '; ' : ', '}+ ${pv.amendments} amendment${pv.amendments === 1 ? '' : 's'}${pv.amendments_followed ? ' by funds you follow' : ''}` : ''}.` : '';
   // A cardless trialist is a subscriber: the founding price is what they keep or lose (marketing's rev 82).
+  // Monthly: the pause line with its link (plan, Dec 1), else the rule in words.
+  const pl = keepUrl ? pauseLine(m, keepUrl, now) : null;
   const keep = `Keep Copy. ${COPY_YEARLY}. Monthly? Pause once a year, up to 3 months. Add a card before ${day(m.trial_end!)} to keep the founding price, $9/month or $79/year, for as long as you stay. If the trial ends and you rejoin from Feb 1, it's $12/month or $99/year.`;
   const stay = 'The free pages and the free Friday email stay yours.';
   return {
     to: m.email,
     subject: `Your Copy trial ends ${weekday}`,
-    text: `Your Copy trial ends ${weekday}, ${endAt(m.trial_end!)}. No card is on file, so it simply ends and nothing is charged.\n\nFrom now to February, Copy gives you:\n${gives.map((g) => `  - ${g}`).join('\n')}\n\n${WINTER_LINE}${mine ? `\n${mine}` : ''}\n\n${keep}\nAdd a card: ${add}\n\n${stay}\n\nUnsubscribe from Copybook emails: ${unsub}${FOOTER}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your Copy trial ends <b>${esc(weekday)}, ${esc(endAt(m.trial_end!))}</b>. No card is on file, so it simply ends and nothing is charged.</p><p style="margin-bottom:4px"><b>From now to February, Copy gives you</b></p><ul style="margin-top:0;padding-left:20px">${gives.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>${esc(WINTER_LINE)} <a href="https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/winter-2025-26.json" style="color:#1d4ed8">The filings</a></p>${mine ? `<p>${esc(mine)}</p>` : ''}<p>${esc(keep)}</p><p><a href="${add}" style="color:#1d4ed8"><b>Add a card</b></a></p><p>${esc(stay)}</p><p style="font-size:12px;color:#6b7280"><a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+    text: `Your Copy trial ends ${weekday}, ${endAt(m.trial_end!)}. No card is on file, so it simply ends and nothing is charged.\n\nFrom now to February, Copy gives you:\n${gives.map((g) => `  - ${g}`).join('\n')}\n\n${WINTER_LINE}${mine ? `\n${mine}` : ''}\n\n${keep}\nAdd a card: ${add}\n${pl ? `\n${pl}\n` : ''}\n${stay}\n\nUnsubscribe from Copybook emails: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your Copy trial ends <b>${esc(weekday)}, ${esc(endAt(m.trial_end!))}</b>. No card is on file, so it simply ends and nothing is charged.</p><p style="margin-bottom:4px"><b>From now to February, Copy gives you</b></p><ul style="margin-top:0;padding-left:20px">${gives.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>${esc(WINTER_LINE)} <a href="https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/winter-2025-26.json" style="color:#1d4ed8">The filings</a></p>${mine ? `<p>${esc(mine)}</p>` : ''}<p>${esc(keep)}</p><p><a href="${add}" style="color:#1d4ed8"><b>Add a card</b></a></p>${pl ? `<p style="font-size:14px">${esc(pl.slice(0, pl.lastIndexOf(' ')))} <a href="${pl.slice(pl.lastIndexOf(' ') + 1)}" style="color:#1d4ed8">Pause instead</a></p>` : ''}<p>${esc(stay)}</p><p style="font-size:12px;color:#6b7280"><a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
     unsubscribe: unsub,
   };
 }
@@ -474,8 +476,9 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
   const charge = yearly ? `${money(p.year)}/year` : `${money(p.month)}/month`;
   const founding = FOUNDING[m.plan] ? ` ${FOUNDING[m.plan]}` : '';
   const ends = endAt(m.trial_end!);
+  const pl = pauseLine(m, keep);
   // A no-card trial (Copy from Nov 11): it ends on its own, so the ask is to add a card, and doing nothing costs nothing.
-  if (m.has_payment_method === false && m.plan === 'copy' && betweenSeasons(m.trial_end!)) return day12Mail(env, m, unsub, Date.now(), preview);
+  if (m.has_payment_method === false && m.plan === 'copy' && betweenSeasons(m.trial_end!)) return day12Mail(env, m, unsub, Date.now(), preview, keep);
   if (m.has_payment_method === false) {
     const add = `${env.SITE_URL}account/`;
     const keepLine = `Add a card to keep ${p.name} (${charge}${yearly ? '' : `, or ${money(p.year)}/year`}): ${add} (Manage billing). The first charge is on ${ends}.`;
@@ -490,8 +493,8 @@ export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: numb
   return {
     to: m.email,
     subject: `Your ${p.name} trial ends in ${daysLeft === 1 ? '1 day' : `${daysLeft} days`}`,
-    text: `Your ${p.name} trial ends on ${ends}.\n\nThis trial so far:\n${got.map((g) => `  ${g}`).join('\n')}\n\nIf it ends, you lose:\n${lose.map((l) => `  - ${l}`).join('\n')}\n\n${cta}: ${keep}\n${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}.\n`}${founding ? `${founding.trim()}\n` : ''}\nTo cancel before you're charged: ${env.SITE_URL}account/ (Manage billing).\n\nUnsubscribe from tips and newsletters: ${unsub}${FOOTER}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your ${p.name} trial ends on <b>${ends}</b>.</p><p style="margin-bottom:4px"><b>This trial so far</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p style="margin-bottom:4px"><b>If it ends, you lose</b></p><ul style="margin-top:0;padding-left:20px">${lose.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding.trim())}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}. `}To cancel before you're charged, use Manage billing in <a href="${env.SITE_URL}account/" style="color:#1d4ed8">your account</a>.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and newsletters</a></p></div>`,
+    text: `Your ${p.name} trial ends on ${ends}.\n\nThis trial so far:\n${got.map((g) => `  ${g}`).join('\n')}\n\nIf it ends, you lose:\n${lose.map((l) => `  - ${l}`).join('\n')}\n\n${cta}: ${keep}\n${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}.\n`}${pl ? `${pl}\n` : ''}${founding ? `${founding.trim()}\n` : ''}\nTo cancel before you're charged: ${env.SITE_URL}account/ (Manage billing).\n\nUnsubscribe from tips and newsletters: ${unsub}${FOOTER}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Your ${p.name} trial ends on <b>${ends}</b>.</p><p style="margin-bottom:4px"><b>This trial so far</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p style="margin-bottom:4px"><b>If it ends, you lose</b></p><ul style="margin-top:0;padding-left:20px">${lose.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding.trim())}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">${yearly ? '' : `Or stay monthly at ${charge}: nothing to do, it renews on ${ends}. `}${pl ? `${esc(pl.slice(0, pl.lastIndexOf(' ') - 1))}: <a href="${pl.slice(pl.lastIndexOf(' ') + 1)}" style="color:#1d4ed8">pause instead</a>. ` : ''}To cancel before you're charged, use Manage billing in <a href="${env.SITE_URL}account/" style="color:#1d4ed8">your account</a>.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and newsletters</a></p></div>`,
     unsubscribe: unsub,
   };
 }
@@ -612,6 +615,13 @@ export async function handleKeepResume(env: Env, path: '/keep' | '/resume', url:
   if (!m || !PRICES[m.plan]) return go(account);
   try {
     if (path === '/keep') {
+      // ?to=pause (the trial emails' pause line): /account/'s pause offer, signed in; a cardless trial adds a card on
+      // monthly first. As below, only the member's click there changes anything.
+      if (url.searchParams.get('to') === 'pause') {
+        const login = encodeURIComponent(await signToken(env.SESSION_SECRET, 'login', m.customer, 120));
+        const cardless = m.status === 'trialing' && m.has_payment_method === false;
+        return go(`${account}?${cardless ? 'add_card=monthly&' : ''}pause=1&login=${login}`);
+      }
       // A trial with no card: the account page's add-a-card choice, on yearly (POST /portal/card plan=yearly), signed in
       // by a fresh 2-minute link. Only the click there changes anything, so a mail scanner's GET switches nothing.
       // Any trial: the account page, signed in, where the member's own click switches it (add a card on yearly, or the
@@ -944,12 +954,37 @@ const pauseEnd = (from: number) => {
 /** When a pause chosen now starts: today, or for a monthly trial, the trial's end (the trial keeps everything). */
 const pauseStart = (m: Member, now: number) => (m.status === 'trialing' && m.trial_end && m.trial_end * 1000 > now ? m.trial_end * 1000 : now);
 
-export function pauseOffer(m: Member, now = Date.now()): { until: string; quarter: string; deadline: string; deadline_label: string; note: string; starts: string } | null {
+/** "Feb 2" from a New York day (2027-02-02). */
+const shortDay = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+/**
+ * The Dec 1 "Pause until February" (the lead, Nov 11): /me's pause_offer.label, "Pause until Feb 2 (keeps your founding
+ * price)", the founding part only for a founding-price member; charges_resume is the day billing starts again (= until).
+ */
+export function pauseOffer(m: Member, now = Date.now()): { label: string; until: string; charges_resume: string; quarter: string; deadline: string; deadline_label: string; note: string; starts: string } | null {
   // Never a trial without a card (it just ends), and once per 12 months.
   if (!pausable(m) || (m.status !== 'active' && m.status !== 'trialing') || (m.status === 'trialing' && m.has_payment_method === false) || pauseNextAt(m, now) || isPaused(m, now) || pauseScheduled(m, now)) return null;
   const from = pauseStart(m, now);
   const r = pauseEnd(from);
-  return { until: isoDay(r.at), quarter: r.quarter, deadline: r.deadline, deadline_label: deadlineLabel(r.deadline), note: from > now ? PAUSE_AFTER_TRIAL_NOTE : PAUSE_NOTE, starts: isoDay(Math.floor(from / 1000)) };
+  const until = isoDay(r.at);
+  return { label: `Pause until ${shortDay(until)}${m.founding_price ? ' (keeps your founding price)' : ''}`, until, charges_resume: until, quarter: r.quarter, deadline: r.deadline, deadline_label: deadlineLabel(r.deadline), note: from > now ? PAUSE_AFTER_TRIAL_NOTE : PAUSE_NOTE, starts: isoDay(Math.floor(from / 1000)) };
+}
+
+/**
+ * The trial emails' pause line (day 12 and trial ending), linking to /keep?…&to=pause, which signs the member in on
+ * /account/?pause=1 (a cardless trial: on the monthly add-card choice first, since only a card makes a pause). Monthly
+ * trials only, and never when the yearly pause rule says no. Null: no line.
+ */
+export function pauseLine(m: Member, keep: string, now = Date.now()): string | null {
+  const link = `${keep}${keep.includes('?') ? '&' : '?'}to=pause`;
+  const keeps = m.founding_price ? ', keeps your founding price' : '';
+  if (m.has_payment_method === false) {
+    if (m.interval !== 'monthly' || m.status !== 'trialing' || !m.trial_end || m.trial_end * 1000 <= now || m.plan === 'holdterm' || m.seat_of || pauseNextAt(m, now)) return null;
+    return `Rather pause than go? Add a card on monthly and pause from ${day(m.trial_end)} until ${day(pauseEnd(m.trial_end * 1000).at)}: no charge until then${keeps}. ${link}`;
+  }
+  const o = pauseOffer(m, now);
+  if (!o) return null;
+  return `Rather pause? No charge from ${day(Date.parse(`${o.starts}T12:00:00Z`) / 1000)} until ${day(Date.parse(`${o.until}T12:00:00Z`) / 1000)}${keeps}: ${link}`;
 }
 
 /** Stores the one cancellation question's answer (from /account/ or the email); counted in business.cancel_reasons. */

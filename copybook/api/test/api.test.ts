@@ -3543,6 +3543,31 @@ describe('copybook api', () => {
     expect(/account\/\?add_card=yearly&login=/.test(kept.headers.get('location') ?? '')).toBe(true);
     const tm = (card: boolean) => trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Math.floor(Date.now() / 1000) + 2 * 86400, has_payment_method: card } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 1, 0, 'https://api.test/keep?t=x', 'https://api.test/unsubscribe?t=x', 2);
     expect([/add a card/i.test(tm(false).subject), /nothing is charged/.test(tm(false).text), /renews on/.test(tm(false).text), /add a card/i.test(tm(true).subject), /renews on/.test(tm(true).text)]).toEqual([true, true, false, false, true]);
+    // Dec 1 "Pause until February" (plan): /me's label, and the trial emails' pause line, whose link signs the member in on
+    // /account/?pause=1 (a cardless trial on the monthly add-card choice first; only a card makes a pause).
+    {
+      const { pauseOffer, pauseLine } = await import('../src/revenue');
+      const at = (d: number, h = 15) => Date.UTC(2026, d >= 100 ? 11 : 10, d % 100, h);
+      const act = { customer: 'cus_p', email: 'p@example.com', plan: 'copy', interval: 'monthly', status: 'active', subscription: 'sub_p', founding_price: true } as never;
+      expect(pauseOffer(act, at(101))).toMatchObject({ label: 'Pause until Feb 2 (keeps your founding price)', until: '2027-02-02', charges_resume: '2027-02-02', starts: '2026-12-01' });
+      expect(pauseOffer({ ...(act as object), founding_price: false } as never, at(101))?.label).toBe('Pause until Feb 2');
+      // Chosen Nov 30 by a carded trial ending Dec 14: starts Dec 14, still resumes Feb 2.
+      const tr = { ...(act as object), status: 'trialing', has_payment_method: true, trial_end: at(114, 20) / 1000 } as never;
+      expect(pauseOffer(tr, at(30))).toMatchObject({ starts: '2026-12-14', until: '2027-02-02', label: 'Pause until Feb 2 (keeps your founding price)' });
+      expect(pauseLine(tr, 'https://w/keep?t=k', at(30))).toBe('Rather pause? No charge from December 14 until February 2, keeps your founding price: https://w/keep?t=k&to=pause');
+      const nocard = { ...(tr as object), has_payment_method: false, subscription: 'sub_p' } as never;
+      expect(pauseLine(nocard, 'https://w/keep?t=k', at(30))).toBe('Rather pause than go? Add a card on monthly and pause from December 14 until February 2: no charge until then, keeps your founding price. https://w/keep?t=k&to=pause');
+      // Yearly, or a pause used in the last 12 months: no line.
+      expect([pauseLine({ ...(tr as object), interval: 'yearly' } as never, 'k', at(30)), pauseLine({ ...(nocard as object), paused_at: at(1) / 1000 - 30 * 86400 } as never, 'k', at(30))]).toEqual([null, null]);
+      // The day-12 email carries it, text and a link in the HTML.
+      const d = trialEndingMail(env, { customer: 'cus_t', email: 't@example.com', plan: 'copy', interval: 'monthly', status: 'trialing', trial_end: Date.UTC(2026, 10, 25, 20) / 1000, has_payment_method: false } as never, { n: 0, acc: [], owned: [], fastest: null } as never, 0, 0, 'https://w/keep?t=k', 'u');
+      expect([d.text.includes('Add a card on monthly and pause from November 25 until February 2: no charge until then. https://w/keep?t=k&to=pause'), d.html!.includes('href="https://w/keep?t=k&to=pause"')]).toEqual([true, true]);
+      // Its link: signed in on the pause offer, after the add-card choice when there's no card; opening it changes nothing.
+      const pauseHref = cardless!.split('Add card: ')[1].replace(/^\S+?\/keep/, 'https://api.test/keep') + '&to=pause';
+      expect(/account\/\?add_card=monthly&pause=1&login=/.test((await handleRequest(new Request(pauseHref), env)).headers.get('location') ?? '')).toBe(true);
+      await env.DB.put('cus:cus_y', JSON.stringify({ ...(mo as object), has_payment_method: true }));
+      expect(/account\/\?pause=1&login=/.test((await handleRequest(new Request(pauseHref), env)).headers.get('location') ?? '')).toBe(true);
+    }
     expect(calls.find((c) => c.path === 'coupons')!.body).toContain('amount_off=3900'); // a month of Pro, off the first year
     const cs = calls.find((c) => c.path === 'checkout/sessions')!.body;
     expect(cs).toContain('discounts[0][coupon]=copybook-ref-pro-1mo');
