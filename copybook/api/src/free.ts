@@ -974,7 +974,8 @@ export async function mergeFreeSignup(env: Env, email: string): Promise<Record<s
 }
 
 /** Operator: this week's issue for one free member, sent now (a check of what Friday sends; the week isn't marked sent). `dry` returns the text instead. */
-export async function previewWeekly(env: Env, email: string, now: number, dry = false): Promise<Record<string, unknown>> {
+/** `postal`: render as if the mailing address were this (a string), or absent (false: the plain newsletter). */
+export async function previewWeekly(env: Env, email: string, now: number, dry = false, postal?: string | false): Promise<Record<string, unknown>> {
   const m = await memberByEmail(env, email);
   if (!m || m.status !== 'free') return { ok: false, error: 'no free member with that email' };
   // A preview goes to our inbox or a test inbox only; for a member's address, read it with dry.
@@ -986,7 +987,7 @@ export async function previewWeekly(env: Env, email: string, now: number, dry = 
   const yours = await inYourNames(env, fl.owned.slice(0, FREE_NAMES), moves, now);
   const followed = moves.all.filter((x) => (fl.investors.includes(x.slug) && !/^13F/.test(x.form)) || (x.featured && fl.stocks.includes(x.ticker))).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 8);
   // Before the mailing address is set, a preview shows the issue as it will send, with a marked placeholder for it.
-  const penv = env.POSTAL_ADDRESS?.trim() ? env : { ...env, POSTAL_ADDRESS: '[postal address: not configured yet]' };
+  const penv = postal === false ? { ...env, POSTAL_ADDRESS: '' } : typeof postal === 'string' ? { ...env, POSTAL_ADDRESS: postal } : env.POSTAL_ADDRESS?.trim() ? env : { ...env, POSTAL_ADDRESS: '[postal address: not configured yet]' };
   const mail = weeklyMail(penv, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), yours, followed, await followsSection(env, fl, now));
   // A real member's issue names their stocks: the operator gets counts only (their own test inboxes show in full).
   const shown = previewInbox(email) || testAddress(email) ? { subject: mail.subject, in_your_names: yours, text: mail.text, html: mail.html } : { customer: m.customer, in_your_names: yours.facts.length, text_chars: mail.text.length };

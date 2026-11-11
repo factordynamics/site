@@ -708,7 +708,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const { previewWeekly } = await import('./free');
     const b = await body(req);
     await logAccess(env, req, 'POST /ops/weekly-preview', [await env.DB.get(`email:${String(b.email ?? '').trim().toLowerCase()}`)], 'owned names read for the preview');
-    return json(await previewWeekly(env, String(b.email ?? '').trim().toLowerCase(), Date.now(), b.dry === true), 200, h);
+    return json(await previewWeekly(env, String(b.email ?? '').trim().toLowerCase(), Date.now(), b.dry === true, b.postal === false ? false : typeof b.postal === 'string' ? b.postal.slice(0, 200) : undefined), 200, h);
   }
 
   // Operator: a net-30 Copy Fund order (yearly, founding price); the invoice carries the order terms and is emailed.
