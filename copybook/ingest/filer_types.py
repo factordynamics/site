@@ -121,6 +121,8 @@ RECLASS_CASES = {
     "0001519611": "wealth",     # Cerity Partners OCIO
     "0001159363": "wealth",     # CAZ Investments (access funds for individuals)
     "0001157519": "wealth",     # Okabena Investment Services (multi-family office)
+    "0001335325": "wealth",     # HighVista Strategies (endowment-model OCIO)
+    "0001714498": "long_only",  # AIP (funds of hedge funds)
     "0001080818": "other",      # EnTrust Global (fund of funds)
     "0001560123": "other",      # Catterton (private equity)
 }
