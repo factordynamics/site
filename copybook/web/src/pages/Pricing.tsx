@@ -286,6 +286,10 @@ export function Pricing() {
                 {plan && FOUNDING[tier.id as PlanId] && (
                   <p className="mt-3 rounded-lg bg-accent-soft px-3 py-2 text-[12px] font-medium leading-snug text-accent-2">{FOUNDING[tier.id as PlanId]}</p>
                 )}
+                {/* Pro and Fund checkout show the same line (payments, Nov 11). */}
+                {plan && FOUNDING[tier.id as PlanId] && (
+                  <p className={`mt-2 text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
+                )}
               </div>
               <div className={`relative mt-5 border-t pt-5 ${dark ? 'border-white/10' : 'border-line'}`}>
                 {tier.lead && <p className={`mb-3 text-[12.5px] font-medium ${dark ? 'text-white/70' : 'text-ink-2'}`}>{tier.lead}:</p>}

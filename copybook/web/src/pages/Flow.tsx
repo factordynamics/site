@@ -3,7 +3,8 @@ import { useState } from 'react'
 import { SplitNote } from './Season'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Arrow, AvatarStack, Badge, Lock, Monogram, Panel, Skeleton } from '../components/ui'
-import { dateLabel, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { dateLabel, loadIndex, money, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { HedgeFlow } from '../components/HedgeFlow'
 import { useMember } from '../lib/account'
 import { loadCards, loadFlow, seasonNow, stockPath, type FlowPeriod, type FlowRow, type FlowScope } from '../lib/stocks'
 
@@ -23,6 +24,7 @@ export function Flow() {
   const tick = useTick(120_000, seasonNow().live)
   const f = useAsync(() => loadFlow(paid, tick ? Date.now() : undefined), [paid, tick])
   const cards = useAsync(loadCards, [])
+  const idx = useAsync(loadIndex, [])
   const [limit, setLimit] = useState(40)
   // Lens, period and ranking live in the URL so a view can be shared: ?funds=all&q=2026Q2&tab=sold.
   const [params, setParams] = useSearchParams()
@@ -188,6 +190,8 @@ export function Flow() {
           )}
         </Panel>
       </div>
+
+      <HedgeFlow id="hedge-funds" typesAsOf={idx.data?.typesAsOf} className="mt-6" />
 
       <Signup source="flow" className="mt-6" />
 

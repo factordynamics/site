@@ -139,7 +139,7 @@ export function Speed() {
         )
       )}
 
-      {!loading && <AlertLog rows={all} />}
+      {!loading && <AlertLog rows={all} delayedByLimit={num((d as { delayed_email_limit?: unknown } | null)?.delayed_email_limit)} />}
 
       <section className="mt-10 max-w-3xl">
         <h2 className="text-[15px] font-semibold">How we measure</h2>
@@ -423,6 +423,7 @@ const formKey = (f: string) => (/13D/.test(f) ? '13D' : /13G/.test(f) ? '13G' : 
 const HOST_FROM = '2026-11-11T08:40:00Z'
 const POLLER: Record<string, string> = { cloudflare: 'Cloudflare', server: 'Our server' }
 const formLabel = (f: string) => (/^4(\/A)?$/.test(f) ? `Form ${f}` : f.replace(/^SCHEDULE\s+/, ''))
+const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : null)
 const formGroup = (f: string) => (f.startsWith('13F') ? '13F' : /13[DG]/.test(f) ? '13D/G' : /^4/.test(f) ? 'Form 4' : f)
 const dayET = (t: string) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })
 const NR = <span className="text-ink-3">not recorded</span>
@@ -441,7 +442,7 @@ function Summary({ title, rows }: { title: string; rows: { seconds: number | nul
     </tr>
   )
 }
-function AlertLog({ rows: all }: { rows: Row[] }) {
+function AlertLog({ rows: all, delayedByLimit }: { rows: Row[]; delayedByLimit: number | null }) {
   const [page, setPage] = useState(0)
   const rows = all.slice().sort((a, b) => (b.email_accepted_at ?? b.sent_at ?? b.accepted_at).localeCompare(a.email_accepted_at ?? a.sent_at ?? a.accepted_at))
   const counted = rows.filter((r) => r.counted)
@@ -494,6 +495,14 @@ function AlertLog({ rows: all }: { rows: Row[] }) {
                       <span className="font-medium text-ink">Missed for stock watchers: {watchers.length}</span>
                       {watchers.length ? ` (their followers were alerted; watchers get them in ${coveredAt ? `${new Date(coveredAt).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' })}’s` : 'Friday’s'} email)` : ''}
                       {missed.length > watchers.length ? ` · ${missed.length - watchers.length} other missed` : ''}. Not in the figures above.
+                    </td>
+                  </tr>
+                )}
+                {/* Payments' count of alerts whose email some member got late because the day's email limit was used up. */}
+                {delayedByLimit != null && (
+                  <tr className="border-b border-line last:border-0">
+                    <td colSpan={5} className="py-2 pl-4 pr-4 text-[13px] text-ink-2 sm:px-5">
+                      <span className="font-medium text-ink">Emails delayed by the daily email limit: {delayedByLimit}</span>
                     </td>
                   </tr>
                 )}

@@ -53,6 +53,8 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
 
   const keepEmail = keptEmail || Boolean(ch?.keep_email)
   const connected = Boolean(ch && (ch.discord || ch.slack || ch.telegram || ch.webhook || ch.feed))
+  // A feed doesn't replace email; a chat or webhook does.
+  const chat = Boolean(ch && (ch.discord || ch.slack || ch.telegram || ch.webhook))
   // Keeping email completes step 3 only; the test is its own step, and for email-only members it sends a
   // test email (POST /channels/test).
   const testDone = tested || Boolean(ch?.tested_at)
@@ -91,7 +93,8 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
     {
       done: connected || keepEmail,
       title: 'Connect a channel (or keep email)',
-      body: connected ? 'Alerts reach your chat or feed as well as your inbox.' : keepEmail ? 'Email only. You can add Slack, Discord, Telegram or a feed any time below.' : 'Slack, Discord, Telegram or a private RSS feed, next to email.',
+      // A working chat or webhook replaces alert email unless keep_email is on (payments, Nov 11).
+      body: chat ? (ch?.keep_email ? 'Alerts reach your chat and your inbox.' : 'Alerts go to your chat instead of email. Tick “Also email me alerts” below for both.') : connected ? 'Alerts reach your feed and your inbox.' : keepEmail ? 'Email only. You can add Slack, Discord, Telegram or a feed any time below.' : 'Add Telegram or Slack so alerts never wait on email limits.',
       act: { label: connected ? 'Channels' : 'Connect', href: '#channels' },
       alt:
         connected || keepEmail

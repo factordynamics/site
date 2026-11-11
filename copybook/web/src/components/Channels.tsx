@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ApiError, call, sharedGet } from '../lib/account'
 import { Badge, Button } from './ui'
 
-// Where alerts go besides email: GET/PUT {api}/channels, POST /channels/test, POST/DELETE /channels/feed.
+// Where alerts go: GET/PUT {api}/channels, POST /channels/test, POST/DELETE /channels/feed.
 // Every paid plan gets Slack, Discord, Telegram and a private feed; signed webhooks are Pro and Fund.
 type Channels = {
   discord: string | null
@@ -12,6 +12,8 @@ type Channels = {
   webhook: { url: string; secret: string; created?: number | string } | null
   webhook_available: boolean
   feed: { json_url: string; rss_url: string } | null
+  /** With a working chat or webhook, alerts go there instead of email; true sends email as well (payments, Nov 11). */
+  keep_email?: boolean
   /** 'team' for a Copy Fund owner: these channels post the team's alerts. */
   scope?: 'team' | 'personal'
   /** Destinations that stopped delivering: retries ran out, or the destination was revoked. */
@@ -22,7 +24,7 @@ type Channels = {
 export type Failing = Partial<Record<'discord' | 'slack' | 'telegram' | 'webhook', { reason: string; since: string }>>
 export const CHANNEL_LABEL = { discord: 'Discord', slack: 'Slack', telegram: 'Telegram', webhook: 'The webhook' } as const
 const sinceLabel = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-type Put = Partial<{ discord: string | null; slack: string | null; telegram: { bot_token: string; chat_id: string } | null; webhook: string | null; rotate_secret: boolean }>
+type Put = Partial<{ keep_email: boolean; discord: string | null; slack: string | null; telegram: { bot_token: string; chat_id: string } | null; webhook: string | null; rotate_secret: boolean }>
 
 const field = 'h-10 w-full min-w-0 rounded-xl bg-paper px-3.5 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]'
 const why = (e: unknown) => (e instanceof ApiError && e.code === 'already_team_channel' ? 'Already your team’s channel. Alerts reach it once; no need to add it here.' : e instanceof ApiError && e.detail ? e.detail : 'That didn’t save. Please try again.')
@@ -97,11 +99,24 @@ export function Channels() {
           <h2 className="text-[15px] font-semibold">{c?.scope === 'team' ? 'Where your team’s alerts go' : c?.team ? 'Your own channels' : 'Where alerts go'}</h2>
           <p className="mt-1 text-[14px] text-ink-2">
             {c?.scope === 'team'
-              ? 'Email always. A chat, feed or webhook you add here is your team’s: every alert for the team’s follows posts there once, as it happens. Seats can add their own as well.'
+              ? 'A chat, feed or webhook you add here is your team’s: every alert for the team’s follows posts there once, as it happens. Seats can add their own as well.'
               : c?.team
-                ? 'Email always. Add your own chat, feed or webhook for alerts on your settings, as they happen. The team’s channels come first; the plan owner manages them.'
-                : 'Email always. Add a chat, a feed or a webhook and each alert arrives there as it happens, even if you take the daily email digest.'}
+                ? 'Add your own chat, feed or webhook for alerts on your settings, as they happen. The team’s channels come first; the plan owner manages them.'
+                : 'Add Telegram or Slack so alerts never wait on email limits. Once a chat or webhook works, alerts go there instead of email; if it stops working, email takes over.'}
           </p>
+          {c && c.scope !== 'team' && (
+            <label className="mt-3 flex items-center gap-2.5 text-[14px] text-ink">
+              <input
+                type="checkbox"
+                checked={Boolean(c.keep_email)}
+                onChange={(e) => save('keep_email', { keep_email: e.target.checked })}
+                className="size-4 accent-[var(--color-accent)]"
+              />
+              Also email me alerts
+              <span className="text-[12.5px] text-ink-3">{c.keep_email ? 'Email and chat' : 'Chat only, once one works'}</span>
+            </label>
+          )}
+          {note('keep_email')}
         </div>
         {configured && (
           <Button size="sm" variant="outline" onClick={sendTest}>

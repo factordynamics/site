@@ -7,9 +7,10 @@ import { getToken, isPaying, useMember } from '../lib/account'
 import { track, useTrackVisit } from '../lib/track'
 import { FollowSignup } from '../components/FollowSignup'
 import { FollowButton } from '../components/FollowButton'
+import { HedgeFlow } from '../components/HedgeFlow'
 import { EdgarClosed } from '../components/EdgarClosed'
 import { TRIAL_DAYS } from '../config'
-import { dateFmt, dateLabel, money, NUM, pricingTo, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
+import { dateFmt, dateLabel, loadIndex, money, NUM, pricingTo, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { seasonTitle } from '../lib/titles.mjs'
 import { dayName, isEdgarDay } from '../lib/calendar.mjs'
 import { cap } from '../lib/insiders'
@@ -54,6 +55,7 @@ export function Season() {
   const next = up?.text ?? ''
   useTrackVisit()
   const cards = useAsync(loadCardSet, [])
+  const idx = useAsync(loadIndex, [])
   const member = useMember()
   const paid = Boolean(member?.active)
   const now = useNow()
@@ -246,6 +248,8 @@ export function Season() {
       </div>
 
       {d?.expected && d.expected.length > 0 && <ExpectedPanel list={d.expected} cards={cards.data} now={now} />}
+
+      <HedgeFlow id="hedge-funds" quarter={d?.quarter} typesAsOf={idx.data?.typesAsOf} rows={10} className="mt-6" />
 
       <Signup source="season" className="mt-6" />
 

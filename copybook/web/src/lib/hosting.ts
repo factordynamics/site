@@ -102,6 +102,19 @@ export const DATA_ALERTS: Record<string, string> = {
  *  each one, and the Alerts reconciled line links its classes to them. */
 export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'incident'; title: string; body: string; affected: string; filings?: Record<string, string> }[] = [
   {
+    // Ingest's entry, published as written (Nov 11). Each line of body is its own paragraph.
+    id: 'history-mizuho-fidelity',
+    date: '2026-11-11',
+    kind: 'correction',
+    title: 'History and changes fixed for Mizuho and Fidelity (Nov 11, 10:05 UTC)',
+    body: [
+      'Mizuho Financial Group (CIK 1335730): its 13F-NT notices for 2025Q4 and 2026Q1 name nine Mizuho managers, and we showed Mizuho Bank’s own 13F-HRs (0001104659-26-013759 and -060675) as MFG’s books for those quarters. MFG’s 2026Q2 therefore read 13 new and 3 exited (XLE, SPY, DBA) against Mizuho Bank’s book. Since about Nov 9 to Nov 11 10:05 UTC. Those quarters now show as reported by other managers, and 2026Q2 has no prior to compare.',
+      'Mizuho Securities Co. (CIK 1520309): its 2026Q3 13F-HR 0001520309-26-000006 was compared with MFG’s 2026Q2 book instead of its own, showing 12 new and 7 exited. It now shows no changes, since its 2026Q2 holdings were reported by MFG. Wrong from Nov 4 to Nov 11 10:05 UTC.',
+      'FMR (Fidelity, CIK 315066): its 2025Q2 13F-HR 0000315066-25-002231 was missing, so 2025Q3 compared with 2025Q1 (all 5,363 rows new, 0 exits). 2025Q2 is restored and 2025Q3 compares with it. JPMorgan 2025Q3 and Norges Bank 2024Q3 and 2025Q1 were restored the same way.',
+    ].join('\n'),
+    affected: 'None. No email or stock-match alert was sent for any of these filings.',
+  },
+  {
     id: 'bulk-files-stale',
     date: '2026-11-11',
     kind: 'correction',

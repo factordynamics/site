@@ -451,7 +451,11 @@ export function Status() {
                 {e.body ? (
                   <>
                     <span className="font-medium text-ink-2">{e.title}</span>
-                    <span className="mt-0.5 block text-[13.5px] text-ink-2">{e.body}</span>
+                    {e.body.split('\n').map((l, i) => (
+                      <span key={i} className={`block text-[13.5px] text-ink-2 ${i ? 'mt-1.5' : 'mt-0.5'}`}>
+                        {l}
+                      </span>
+                    ))}
                   </>
                 ) : (
                   <Link to={`/methodology/#${e.id}`} className="text-ink-2 hover:text-accent">

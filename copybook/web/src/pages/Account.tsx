@@ -330,7 +330,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
               {(
                 [
                   ['include_13g', 'Also Schedule 13G filings', 'Passive 5% stakes. Big asset managers file many of these.'],
-                  ['digest', 'One daily digest', 'A single email after EDGAR closes, about 10:30 pm ET, instead of one per filing.'],
+                  ['digest', 'One daily digest', 'A single email after EDGAR closes, about 10:30 pm ET, instead of one per filing. Without it, if several filings land within a couple of minutes, you get them in one email.'],
                   // Shown once the weekly email has gone to a real member (/me digest_live).
                   ...(member.digest_live ? ([['weekly_digest', 'Weekly “Your names this week” email', 'Fridays, about 9:15 pm ET: what the superinvestors did in your names that week.']] as const) : []),
                 ] as const
