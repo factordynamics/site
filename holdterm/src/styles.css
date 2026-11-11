@@ -26,7 +26,6 @@
   --tr: 42px;
   --r: 12px;
   --sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   font-family: var(--sans);
   font-size: 14px;
   line-height: 1.5;
@@ -128,9 +127,6 @@ kbd {
 td.num,
 .stat .value {
   font-variant-numeric: tabular-nums;
-}
-.mono {
-  font-family: var(--mono);
 }
 .dim {
   color: var(--dim);

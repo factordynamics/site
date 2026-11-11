@@ -1,5 +1,4 @@
 import '@fontsource-variable/inter/index.css'
-import '@fontsource/ibm-plex-mono/400.css'
 import './styles.css'
 import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
