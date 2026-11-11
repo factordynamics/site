@@ -254,7 +254,6 @@ export function Pricing() {
           const dark = tier.id === 'copy'
           const plan = tier.id === 'free' ? null : plans[tier.id]
           const price = plan ? (cycle === 'yearly' ? plan.yearly : plan.monthly) : 0
-          const save = plan ? Math.round((1 - plan.yearly / (plan.monthly * 12)) * 100) : 0
           const link = plan ? plan.links[cycle] || plan.links.monthly : ''
           const card = (
             <article
@@ -277,7 +276,7 @@ export function Pricing() {
                 <p className={`relative min-h-[1.5em] text-[13.5px] font-semibold ${dark ? 'text-[#7fe0a6]' : 'text-[#126b3c]'}`}>{referredDeal(tier.id, cycle)}</p>
               ) : (
                 <p className={`relative text-[12.5px] ${cycle === 'yearly' ? 'min-h-[53px]' : 'min-h-[1.5em]'} ${dark ? 'text-white/60' : 'text-ink-3'}`}>
-                  {plan ? (cycle === 'yearly' ? (tier.id === 'copy' ? `Yearly $${plan.yearly}: history back to 2013 (from Dec 31) · monthly costs $${plan.monthly * 9}+ even with a pause · founding price locked` : `About $${Math.round(plan.yearly / 12)} a month · save ${save}% vs monthly`) : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
+                  {plan ? (cycle === 'yearly' ? (tier.id === 'copy' ? `Yearly $${plan.yearly}: history back to 2013 (from Dec 31) · monthly costs $${plan.monthly * 9}+ even with a pause · founding price locked` : `$${plan.yearly.toLocaleString('en-US')}/yr: ${tier.id === 'fund' ? 'one annual invoice for up to 10 seats' : 'one invoice a year'}, ${Math.round(12 - plan.yearly / plan.monthly)} months free ($${(plan.monthly * 12).toLocaleString('en-US')} monthly)`) : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
                   {plan && cycle === 'yearly' && <span className="block text-[11.5px]">Prepaid and protected: pro-rata refund if we ever discontinue the plan.</span>}
                 </p>
               )}
