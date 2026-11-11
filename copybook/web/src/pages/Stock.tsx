@@ -551,9 +551,14 @@ function ChangeCell({ h }: { h: StockHolder }) {
 // doesn't take the switch for funds selling. Keyed on the file only: a link's `ratio` (new shares per old, 1 when
 // share for share) says whether prior shares were adjusted; `held` pairs aren't merged and are shown as filed.
 // Nothing shows until the file is served.
-type CusipLink = { new: string; ticker: string | null; name: string | null; quarter: string; list_quarter?: string; ratio?: number | null }
-/** 0.5 as "1-for-2 reverse split", 3 as "3-for-1 split". */
-const splitWords = (r: number) => (r < 1 ? `1-for-${+(1 / r).toFixed(2)} reverse split` : `${+r.toFixed(2)}-for-1 split`)
+type CusipLink = { new: string; ticker: string | null; name: string | null; quarter: string; list_quarter?: string; ratio?: number | null; units_check?: { cash_per_old_share?: number | null } | null }
+/** 0.5 as "1-for-2 reverse split", 3 as "3-for-1 split"; with cash per old share, a share exchange
+ *  ("1-for-3 share exchange plus $15 cash per old share"), so the value that left as cash doesn't read as selling. */
+const splitWords = (r: number, cash?: number | null) => {
+  const n = r < 1 ? `1-for-${+(1 / r).toFixed(2)}` : `${+r.toFixed(2)}-for-1`
+  if (!cash) return `${n} ${r < 1 ? 'reverse ' : ''}split`
+  return `${r === 1 ? 'one-for-one' : n} share exchange plus $${Number.isInteger(cash) ? cash : cash.toFixed(2)} cash per old share`
+}
 // These two moved from ADS/ADR to ordinary shares, which is how their holders know the change.
 const ADS = new Set(['ASND', 'TEVA'])
 function Reissued({ tickers, name }: { tickers: string[]; name: string }) {
@@ -573,10 +578,11 @@ function Reissued({ tickers, name }: { tickers: string[]; name: string }) {
         const who = possessive(l.name ?? name)
         const q = quarterLabel(l.list_quarter ?? l.quarter)
         const r = l.ratio ?? 1
+        const cash = l.units_check?.cash_per_old_share
         return (
           <p key={old}>
-            {r !== 1
-              ? `${who} CUSIP changed from ${old} to ${l.new} with a ${splitWords(r)} in ${q}; prior shares are adjusted.`
+            {r !== 1 || cash
+              ? `${who} CUSIP changed from ${old} to ${l.new} with a ${splitWords(r, cash)} in ${q}; prior shares are adjusted.`
               : `${ADS.has(l.ticker!) ? `${who} ADS converted to ordinary shares in ${q}, and its CUSIP changed from ${old} to ${l.new}` : `${who} CUSIP changed from ${old} to ${l.new} in ${q}`}; holders reporting either are counted here, and keeping the shares isn’t a sale.`}{' '}
             {how}
           </p>
