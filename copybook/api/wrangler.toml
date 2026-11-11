@@ -27,6 +27,8 @@ PUBLIC_URL = "https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/"
 FEED_URL = "https://gene.tail70ba3.ts.net/copybook"
 SITE_URL = "https://copybook.factordynamics.com/"
 DATA_URL = "https://refcell.github.io/gust/copybook/data/"
+# gene only (never with MOVED_TO): hl/, changes/ and filer views from memory, /track counts buffered (src/hot.ts).
+MEMORY_CACHE = "on"
 ALLOWED_ORIGINS = "https://copybook.factordynamics.com,https://refcell.github.io,https://holdterm.pages.dev,https://holdterm.factordynamics.com"
 # Holdterm, a separate brand on this Worker: its site and billing portal.
 HOLDTERM_SITE_URL = "https://holdterm.factordynamics.com/"

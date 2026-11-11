@@ -62,6 +62,8 @@ export interface Env {
   GITHUB_DISPATCH_TOKEN?: string;
   /** Set (as a secret) only on a retired copy of the API: every request is redirected to this base. */
   MOVED_TO?: string;
+  /** "on" (wrangler.toml): gene serves the data stores from memory and buffers /track counts (hot.ts). */
+  MEMORY_CACHE?: string;
   /** The base for members' private feed URLs (gene's Funnel): feed readers poll every few minutes, off the shared Workers quota. */
   FEED_URL?: string;
   /** The mailing address marketing email must carry (the Friday email, Email 2). Empty: no Copy ask, and Email 2 isn't sent. */

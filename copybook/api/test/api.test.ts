@@ -3093,6 +3093,73 @@ describe('copybook api', () => {
     }
   });
 
+  it('gene slow or down: the Worker serves the last good /v1 answer, marked stale with its old build, only to a key gene accepted', async () => {
+    const orig = globalThis.fetch;
+    let mode: 'ok' | 'slow' | 'down' = 'ok';
+    let n = 0;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      // The same live base as the retired-copy test below (the Worker keeps api.json's base for 5 s).
+      if (String(u).split('?')[0] === 'https://pub.test/api.json') return Response.json({ api: 'https://abc-def.trycloudflare.com/copybook' });
+      if (String(u).startsWith('https://pub.test/')) return orig(u, init);
+      n++;
+      if (mode === 'down') return new Response('{"ok":false}', { status: 502, headers: { 'content-type': 'application/json' } });
+      if (mode === 'slow') await new Promise((r) => setTimeout(r, 1500));
+      return Response.json({ schema_version: '2026-11-09', build_id: `b${n}`, data_build: { hl: `b${n}`, changes: null, filer_view: null }, data: [n] });
+    });
+    const wenv = { ...env, MOVED_TO: 'https://gene.test/copybook/', PUBLIC_URL: 'https://pub.test/' } as Env;
+    const at = (path: string, key = 'Bearer cbk_live_swr') => worker.fetch(new Request(`https://copybook-api.factordynamics.workers.dev${path}`, { headers: { authorization: key } }), wenv);
+    const path = '/v1/stocks/NVDA/holders?limit=5';
+    expect((await (await at(path)).json()).build_id).toBe('b1');
+    await new Promise((r) => setTimeout(r, 20)); // the copy is kept beside the answer
+    mode = 'slow';
+    const t0 = Date.now();
+    const st = await at(path);
+    const sb = await st.json();
+    expect([Date.now() - t0 < 1400, st.status, sb.stale, typeof sb.stale_as_of, sb.build_id, sb.data_build.hl, sb.data, st.headers.get('x-copybook-stale'), Number(st.headers.get('age')) >= 0]).toEqual([true, 200, true, 'string', 'b1', 'b1', [1], '1', true]);
+    // A key gene never accepted waits for gene: the copy is shared by URL, never by key.
+    expect((await (await at(path, 'Bearer cbk_live_never')).json()).stale).toBeUndefined();
+    await new Promise((r) => setTimeout(r, 1600)); // the slow answers land and refresh the copy
+    mode = 'down';
+    const dn = await at(path);
+    const db = await dn.json();
+    expect([dn.status, db.stale, db.build_id === 'b1']).toEqual([200, true, false]);
+    // Per-account answers are never served from a copy.
+    expect((await at('/v1/me')).status).toBe(502);
+    vi.stubGlobal('fetch', orig);
+  });
+
+  it('gene: hl/, changes/ and filer views from memory (a write here drops the copy); /track counts buffered and written before /ops/funnel', async () => {
+    const { hotHist, flushTrack } = await import('../src/hot');
+    let reads = 0;
+    const counting = new Proxy(hist, { get: (t, p) => (p === 'get' ? async (k: string) => (reads++, t.get(k)) : typeof (t as never)[p] === 'function' ? ((t as never)[p] as (...a: unknown[]) => unknown).bind(t) : (t as never)[p]) });
+    const h = hotHist(counting as never);
+    const read = async (k: string) => {
+      const o = await h.get(k);
+      return o ? [await new Response(o.body).text(), o.customMetadata?.build_id ?? null] : null;
+    };
+    await hist.put('hl/HOTHOT.json', '{"a":1}', { customMetadata: { build_id: 'g1' } });
+    expect([await read('hl/HOTHOT.json'), await read('hl/HOTHOT.json'), reads]).toEqual([['{"a":1}', 'g1'], ['{"a":1}', 'g1'], 1]);
+    await h.put('hl/HOTHOT.json', '{"a":2}', { customMetadata: { build_id: 'g2' } });
+    expect([await read('hl/HOTHOT.json'), reads]).toEqual([['{"a":2}', 'g2'], 2]);
+    // Other keys (member data, bulk files) are read each time.
+    await hist.put('bulk/HOT.csv.gz', 'x');
+    await read('bulk/HOT.csv.gz');
+    await read('bulk/HOT.csv.gz');
+    expect(reads).toBe(4);
+    // /track: one hit written, the next two held until the funnel is read.
+    const genv = { ...env, MEMORY_CACHE: 'on' } as Env;
+    const day = `track:${new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10)}`;
+    const hit = () => handleRequest(new Request('https://api.test/track', { method: 'POST', body: JSON.stringify({ kind: 'visit', page: '/hot/', utm_source: 'hottest' }), headers: { 'cf-connecting-ip': '198.51.100.9' } }), genv);
+    const stored = async () => JSON.parse((await env.DB.get(day)) ?? '{}').visit?.source?.hottest ?? 0;
+    await hit();
+    await flushTrack(genv);
+    await hit();
+    await hit();
+    expect(await stored()).toBe(1);
+    const f = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), genv)).json();
+    expect([await stored(), f.track[day.slice(6)].visit.source.hottest]).toEqual([3, 3]);
+  });
+
   it('a retired copy (MOVED_TO) sends every request to the same path on the live host', async () => {
     // It follows the runner's api.json (the current tunnel), so emailed links on this hostname survive a tunnel move.
     const orig = globalThis.fetch;

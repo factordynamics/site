@@ -563,10 +563,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const kind = String(b.kind ?? '');
     if (!['visit', 'signup_view', 'signup_focus', 'signup_submit', 'trial_click'].includes(kind)) return json({ ok: false, error: 'kind: visit, signup_view, signup_focus, signup_submit or trial_click', code: 'bad_request' }, 400, h);
     const ip = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for') ?? 'unknown';
-    const k = `rl:track:${ip}`;
-    const n = Number((await env.DB.get(k)) ?? 0);
-    if (n >= 120) return json({ ok: true, counted: false }, 200, h);
-    await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
+    // gene counts in memory and writes every 5 seconds (hot.ts); the rate limit too.
+    const hot = await import('./hot');
+    if (!(await hot.trackAllowed(env, ip))) return json({ ok: true, counted: false }, 200, h);
     const clean = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().toLowerCase().replace(/[^a-z0-9/_.:-]/g, '').slice(0, max) || null : null);
     const page = (clean(b.page, 100) ?? '/').split('?')[0];
     const src = clean(b.utm_source, 60) ?? 'direct';
@@ -575,7 +574,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // ever includes them; they still do the same reads and writes as a real visit.
     const ops = src === 'opscheck' ? 'ops' : '';
     const key = `track${ops}:${new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10)}`;
-    const d = JSON.parse((await env.DB.get(key)) ?? '{}') as Record<string, Record<string, Record<string, number>>>;
+    const cls = clientClass(req);
+    const at = new Date().toISOString();
+    const apply = (d: Record<string, Record<string, Record<string, number>>>) => {
     const byPage = ((d[kind] ??= {}).page ??= {});
     const bySrc = (d[kind].source ??= {});
     const byPost = (d[kind].utm ??= {});
@@ -587,7 +588,6 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const uk = post in byPost || Object.keys(byPost).length < 300 ? post : 'other';
     byPost[uk] = (byPost[uk] ?? 0) + 1;
     // By client class (clientClass), overall and by post: bots and prefetches told apart from people.
-    const cls = clientClass(req);
     const byClient = (d[kind].client ??= {});
     byClient[cls] = (byClient[cls] ?? 0) + 1;
     // By post and page together ("source|content@/page/"), at most 1,000 pairs a day: where each post's readers acted.
@@ -596,14 +596,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (pp in byPostPage || Object.keys(byPostPage).length < 1000) byPostPage[pp] = (byPostPage[pp] ?? 0) + 1;
     const byPostClient = (d[kind].utm_client ??= {});
     byPostClient[`${uk}#${cls}`] = (byPostClient[`${uk}#${cls}`] ?? 0) + 1;
-    await env.DB.put(key, JSON.stringify(d), { expirationTtl: 400 * 86400 });
+    };
     // By UTC hour too (kind x utm_source|utm_content), kept 30 days, so a read-out can tell before a post from after it.
-    const at = new Date().toISOString();
-    const hk = `track${ops}h:${at.slice(0, 10)}`;
-    const hd = JSON.parse((await env.DB.get(hk)) ?? '{}') as Record<string, Record<string, Record<string, number>>>;
-    const hb = ((hd[at.slice(11, 13)] ??= {})[kind] ??= {});
-    hb[uk] = (hb[uk] ?? 0) + 1;
-    await env.DB.put(hk, JSON.stringify(hd), { expirationTtl: 30 * 86400 });
+    // Its post key is the day's bounded one, so a post past the day's cap counts as "other" here too.
+    const post0 = post;
+    const applyHour = (hd: Record<string, Record<string, Record<string, number>>>) => {
+      const hb = ((hd[at.slice(11, 13)] ??= {})[kind] ??= {});
+      const uk = post0 in hb || Object.keys(hb).length < 300 ? post0 : 'other';
+      hb[uk] = (hb[uk] ?? 0) + 1;
+    };
+    await hot.trackHit(env, { day: key, hour: `track${ops}h:${at.slice(0, 10)}`, apply, applyHour });
     return json({ ok: true, counted: true }, 200, h);
   }
 
@@ -757,6 +759,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'GET' && path === '/ops/funnel') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const days = Math.min(31, Math.max(1, Number(url.searchParams.get('days') ?? 7) || 7));
+    await (await import('./hot')).flushTrack(env);
     const { funnel } = await import('./revenue');
     const track: Record<string, unknown> = {};
     for (let d = 0; d < days; d++) {
@@ -1910,7 +1913,7 @@ export async function fromProxy(req: Request, env: Env): Promise<Request> {
  * come back on the public name; others (a bulk file's signed link) pass as they are. Unreachable or slow to answer:
  * 503 with Retry-After, never a redirect.
  */
-async function proxyApi(req: Request, env: Env, base: string): Promise<Response> {
+async function proxyApi(req: Request, env: Env, base: string, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
   const u = new URL(req.url);
   const headers = new Headers(req.headers);
   for (const k of ['host', 'x-copybook-public-base', 'x-copybook-proxy']) headers.delete(k);
@@ -1921,9 +1924,27 @@ async function proxyApi(req: Request, env: Env, base: string): Promise<Response>
       ? v1error('busy', 503, 'Temporarily unavailable; retry after Retry-After seconds.', { 'retry-after': '30', 'access-control-expose-headers': 'retry-after' })
       : json({ ok: false, code: 'unavailable', error: 'Temporarily unavailable. Try again in a minute.' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': '30', 'access-control-expose-headers': 'retry-after' });
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const wait = (ms: number) => new Promise<null>((res) => (timer = setTimeout(() => res(null), ms)));
+  // Public /v1 reads and /events (stale.ts): gene gets 800 ms, then the last good answer is served, marked stale.
+  const { staleFor, staleAnswer, keepFresh, STALE_WAIT_MS } = await import('./stale');
+  const swr = await staleFor(req, u);
+  const corsFor = () => (u.pathname === '/events' ? cors(allowedOrigin(req.headers.get('origin'), env)) : {});
   try {
     const sent = fetch(`${base}${u.pathname}${u.search}`, { method: req.method, headers, body: req.method === 'GET' || req.method === 'HEAD' ? undefined : req.body, redirect: 'manual' });
-    const r = await Promise.race([sent, new Promise<null>((res) => (timer = setTimeout(() => res(null), HEADER_WAIT_MS)))]);
+    let r = await Promise.race([sent, wait(swr ? STALE_WAIT_MS : HEADER_WAIT_MS)]);
+    if (swr && (!r || r.status >= 500)) {
+      const st = await staleAnswer(swr, corsFor());
+      if (st) {
+        // gene's late answer still refreshes the copy.
+        const late = sent.then((x) => keepFresh(swr, x)).catch(() => undefined);
+        ctx?.waitUntil(late);
+        return st;
+      }
+    }
+    if (!r) {
+      clearTimeout(timer);
+      r = await Promise.race([sent, wait(HEADER_WAIT_MS - STALE_WAIT_MS)]);
+    }
     if (!r) return unavailable();
     const out = new Headers(r.headers);
     const loc = r.headers.get('location');
@@ -1945,9 +1966,15 @@ async function proxyApi(req: Request, env: Env, base: string): Promise<Response>
         return new Response(JSON.stringify({ ...b, ...mine, by_kind: b.by_kind ?? null, by_kind_host: b.this_host ?? b.api_host ?? null, proxy_by_kind: mine.by_kind, proxied: true, upstream: { this_host: b.this_host ?? b.api_host ?? null, by_kind: b.by_kind ?? null, api_build: b.api_build ?? null } }), { status, headers: out });
       }
     }
+    if (swr && r.status === 200 && r.body) {
+      const [mine, kept] = r.body.tee();
+      const k = keepFresh(swr, new Response(kept, { headers: r.headers })).catch(() => undefined);
+      ctx?.waitUntil(k);
+      return new Response(mine, { status, headers: out });
+    }
     return new Response(r.body, { status, headers: out });
   } catch {
-    return unavailable();
+    return (swr ? await staleAnswer(swr, corsFor()).catch(() => null) : null) ?? unavailable();
   } finally {
     clearTimeout(timer);
   }
@@ -1972,7 +1999,7 @@ async function proxyFeed(req: Request, to: string): Promise<Response> {
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx?: { waitUntil(p: Promise<unknown>): void }): Promise<Response> {
     // A retired copy (MOVED_TO set as a secret on Cloudflare's fallback): every request, including links in emails
     // already sent (resume, unsubscribe, why, keep), goes to the same path on the live host. 307 keeps method and body (temporary: the live host moves); private feeds are proxied, not redirected.
     // It follows the API's current public base (the runner's api.json, read at most once a minute), else MOVED_TO,
@@ -2003,10 +2030,11 @@ export default {
             : /^\/feed\/[\w-]+\.(json|rss)$/.test(u.pathname) && (req.method === 'GET' || req.method === 'HEAD')
               ? proxyFeed(req, `${b}${u.pathname}${u.search}`)
               // Everything else is answered here from the live host too: no redirect to a moving host name.
-              : proxyApi(req, env, b),
+              : proxyApi(req, env, b, ctx),
       );
     }
-    const res = await fromProxy(req, env).then((r) => serve(r, env));
+    // gene: the data stores /v1 and /events read come from memory (hot.ts).
+    const res = await fromProxy(req, env).then(async (r) => serve(r, (await import('./hot')).hotEnv(env)));
     // gene: a revocation (a removed seat, a deleted key, ended sessions, an erase) is published to the backup now, not at the
     // next minute, so it holds there within seconds if members are moved to the Worker (the drill: 31 s).
     const rp = new URL(req.url).pathname;
@@ -2017,7 +2045,11 @@ export default {
     return res;
   },
   async scheduled(event: { scheduledTime?: number }, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
-    ctx.waitUntil(runScheduled(env, event.scheduledTime ?? Date.now()).then((r) => console.log(`cron: ${JSON.stringify(r)}`)));
+    // gene: the cron's reads and writes go through the same in-memory stores as requests (a write drops a stale copy),
+    // and buffered /track counts are written every minute even without traffic.
+    const hot = await import('./hot');
+    const e = hot.hotEnv(env);
+    ctx.waitUntil(hot.flushTrack(e).then(() => runScheduled(e, event.scheduledTime ?? Date.now())).then((r) => console.log(`cron: ${JSON.stringify(r)}`)));
   },
 };
 
