@@ -11,7 +11,9 @@ export PATH=$HOME/.local/share/mise/installs/node/26.12.1/bin:$PATH WRANGLER_SEN
 
 fails_file=$ROOT/state.health-fails
 if systemctl --user is-active -q copybook-api.service; then
-  if curl -sf -m 10 -o /dev/null http://127.0.0.1:8787/health; then
+  # ?probe=1: up, boot time and build, from local state only. Plain /health also fetches status.json from r2.dev
+  # (~0.3 s since 4ecebb7), so a slow internet link would read as a hung API.
+  if curl -sf -m 10 -o /dev/null 'http://127.0.0.1:8787/health?probe=1'; then
     echo 0 > "$fails_file"
   else
     n=$(( $(cat "$fails_file" 2>/dev/null || echo 0) + 1 ))
