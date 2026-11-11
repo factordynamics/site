@@ -76,7 +76,7 @@ export const pmName = (slug: string) => FUNDS[slug]?.pm ?? null
 
 // Issuer display names: fix EDGAR abbreviations and casing that leak through ("Cnh Indl", "Pvh",
 // "Accenture Plc Ireland").
-const WORDS: Record<string, string> = { Cgi: 'CGI', Adi: 'ADI', Indl: 'Industrial', Hldgs: 'Holdings', Hldg: 'Holding', Intl: 'International', Grp: 'Group', Utd: 'United', Mtns: 'Mountains', Ins: 'Insurance', Cos: 'Companies', Tech: 'Technologies', Svcs: 'Services', Corp: 'Corp', Pptys: 'Properties', Bancorp: 'Bancorp' }
+const WORDS: Record<string, string> = { Cgi: 'CGI', Gci: 'GCI', Adi: 'ADI', Indl: 'Industrial', Hldgs: 'Holdings', Hldg: 'Holding', Intl: 'International', Grp: 'Group', Utd: 'United', Mtns: 'Mountains', Ins: 'Insurance', Cos: 'Companies', Tech: 'Technologies', Svcs: 'Services', Corp: 'Corp', Pptys: 'Properties', Bancorp: 'Bancorp' }
 const KEEP = new Set(['Old', 'Ltd', 'Inc', 'St', 'Mr', 'Dr', 'Jr', 'Sr', 'Mfg', 'Bros'])
 /** 13F security descriptions read as company names: "Zillow Group CL C Cap STK" -> "Zillow Group Class C",
  * "Liberty Live Holdings Com SHS Ser C" -> "Liberty Live Holdings Series C", "Novartis Sponsored ADR" -> "Novartis".
@@ -94,11 +94,16 @@ function securityWords(s: string): string {
     .replace(/\s+New(?=\s+(CL|Class)\b)/gi, '')
     .replace(/\s+(?:CL|Class)\s+([A-Za-z])\b/gi, (_, c: string) => ` Class ${c.toUpperCase()}`)
     .replace(/\s+(?:Ser|SRS)\s+([A-Za-z])\b/gi, (_, c: string) => ` Series ${c.toUpperCase()}`)
+    // The class or series goes last: "Liberty Cap Series C Gci Group" -> "Liberty Cap Gci Group Series C".
+    .replace(/^(.+?) ((?:Class|Series) [A-Z]) (.+)$/, '$1 $3 $2')
     .replace(/\s+(Sa|SA|AG|Ag|NV|Ab)$/, '')
     .replace(/,?\s+Co\.,?\s+Ltd\.?$/, '')
     .replace(/\bMc([a-z])(?=[a-z]{2})/g, (_, c: string) => `Mc${c.toUpperCase()}`)
     .replace(/'S\b/g, '’s')
+    // Names filed surname first ("Berkley W R"). A general rule would also flip "Carlsberg B A" (Carlsberg A/S class B).
+    .replace(/^(Berkley W R|Fuller H B|Smith a O|Wiley John & Sons|V F)\b/, (m) => INVERTED[m])
 }
+const INVERTED: Record<string, string> = { 'Berkley W R': 'W. R. Berkley', 'Fuller H B': 'H. B. Fuller', 'Smith a O': 'A. O. Smith', 'Wiley John & Sons': 'John Wiley & Sons', 'V F': 'VF' }
 export function issuerName(n: string | null | undefined): string {
   if (!n) return ''
   // EDGAR leftovers: state tags ("Inc/", "Inc./tx", "Inc \\tx\\"), "Plc New", "Pub", "Sab De Cv", "Joint Stock Co".
