@@ -1890,6 +1890,9 @@ describe('copybook api', () => {
     expect(gateMoves(computeMoves(up, jq2, undefined, new Map()), jq2, new Map(), new Map()).held).toEqual([]);
     const buy = [pos('APH', '032095101', 737_592, 130_052_221), jq2[1]];
     expect(gateMoves(computeMoves(buy, jq2, undefined, new Map()), jq2, new Map(), new Map([['032095101', { cur: 176.4, prev: 176.32 }]])).held).toEqual([]);
+    // A 44% fall a fund bought into 4.6x (Davis's Q3 APP) is a trade, not a split: both ratios must sit near k.
+    const appQ2 = [pos('APP', '03831W108', 315_539, 162_720_000), jq2[1]];
+    expect(gateMoves(computeMoves([pos('APP', '03831W108', 1_456_542, 423_020_000), jq2[1]], appQ2, undefined, new Map()), appQ2, new Map(), new Map()).held).toEqual([]);
     // Off the other filers' quarter-end price by over 1.25x (a 3:2 split the filer applied to its count only) is held.
     const off = [pos('APH', '032095101', 922_000, 108_376_851), jq2[1]];
     expect(gateMoves(computeMoves(off, jq2, undefined, new Map()), jq2, new Map(), new Map([['032095101', { cur: 176.4, prev: 176.32 }]])).held.map((h) => h.reason)).toEqual(['price_vs_filers']);

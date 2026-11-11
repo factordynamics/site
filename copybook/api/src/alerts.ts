@@ -1448,14 +1448,23 @@ type RowClass = 'disclosed' | 'explained' | 'wrong';
 
 /**
  * Why each failed row failed: `disclosed` (a split row of an alert on /status/), `explained` (a CUSIP change the alert
- * listed as a new position plus an exit of the same ticker, as McLennan's XOM and OKE, or a difference under $1,000), or
- * `wrong` (a real error not yet disclosed).
+ * listed as a new position plus an exit of the same ticker, as McLennan's XOM and OKE, whose net shares at this quarter's
+ * price come to the build's figure within 10%; or a difference under $1,000), or `wrong` (a real error not yet disclosed).
  */
-function classify(a: Alert13F, rows: Map<string, MoveRow>, failed: import('./email').CorrectionRow[], splits: Map<string, number>): import('./email').CorrectionRow[] {
-  const has = (t: string | null, c: string) => !!t && [...rows.values()].some((x) => x.ticker === t && x.change === c);
+function classify(a: Alert13F, rows: Map<string, MoveRow>, failed: import('./email').CorrectionRow[], splits: Map<string, number>, build: Map<string, BuildRow>): import('./email').CorrectionRow[] {
+  const of = (t: string | null, c: string) => [...rows.values()].filter((x) => !!t && x.ticker === t && x.change === c && !x.put_call);
+  // The pair's real move: share change across the two CUSIPs, at the new line's price (the build's convention).
+  const netted = (t: string | null) => {
+    const [nw, ex] = [of(t, 'new'), of(t, 'exited')];
+    const shares = nw.reduce((s, x) => s + x.shares, 0);
+    if (!nw.length || !ex.length || !shares) return false;
+    const got = (shares - ex.reduce((s, x) => s + x.prev_shares, 0)) * (nw.reduce((s, x) => s + x.value, 0) / shares);
+    const want = [...build.values()].filter((x) => x.ticker === t && !x.put_call).reduce((s, x) => s + (Number(x.value_delta) || 0), 0);
+    return Math.abs(got - want) < 1000 || Math.abs(got - want) <= MISMATCH * Math.abs(want);
+  };
   return failed.map((f) => {
     if (DISCLOSED_SPLITS.has(a.accession) && (splits.get(f.cusip) ?? 1) !== 1) return { ...f, class: 'disclosed', why: 'split' };
-    if (has(f.ticker, 'new') && has(f.ticker, 'exited')) return { ...f, class: 'explained', why: 'cusip_change' };
+    if (!f.put_call && netted(f.ticker)) return { ...f, class: 'explained', why: 'cusip_change' };
     if (Math.abs(f.emailed.value_delta - f.v1.value_delta) < 1000) return { ...f, class: 'explained', why: 'rounding' };
     return { ...f, class: 'wrong' };
   });
@@ -1500,7 +1509,7 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
       pending++;
       continue;
     }
-    const failed = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter));
+    const failed = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter), b.rows);
     // Who got it: the delivery log, as /ops/delivery reads it.
     const rec = await deliveryRecord(env, a.accession, now);
     const members = new Map((await listMembers(env)).map((m) => [m.customer, m]));
@@ -1587,7 +1596,7 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
       out.push({ accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, result: 'no_build' });
       continue;
     }
-    const sent = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter));
+    const sent = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter), b.rows);
     const item: Record<string, unknown> = { accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, rows: rows.size, as_sent: { result: sent.length ? 'fail' : 'pass', class: alertClass(sent), failed: sent.map(row) } };
     if (o.recompute) {
       try {
@@ -1602,7 +1611,7 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
           await lookupTickers(env, raw.changed);
           const g = gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip)));
           const nowRows = alertRows(g.moves);
-          const diff = classify(a, nowRows, compareToBuild(nowRows, b.rows), new Map());
+          const diff = classify(a, nowRows, compareToBuild(nowRows, b.rows), new Map(), b.rows);
           item.now = { result: diff.length ? 'fail' : 'pass', class: alertClass(diff), rows: nowRows.size, failed: diff.map(row), held: g.held.map((h) => ({ ticker: h.ticker, cusip: h.cusip, change: h.change, reason: h.reason })) };
         }
       } catch (e) {

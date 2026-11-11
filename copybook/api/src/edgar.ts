@@ -93,6 +93,8 @@ export interface MoveRow {
   prev_shares: number;
   value: number;
   value_delta: number;
+  /** A bond (PRN) line: shares and prev_shares are principal. */
+  prn?: boolean;
   /** The trade as a signed fraction of this filing's book (0-1). */
   delta_pct_of_book: number | null;
   /** Older data-run rows used this name for the trade size. */
@@ -331,6 +333,8 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     value,
     value_delta: Math.round(delta),
     delta_pct_of_book: book ? delta / book : null,
+    // A bond line (principal, not shares): the gate doesn't compare its value per unit with share prices.
+    ...((p as { prn?: boolean }).prn || (p as { shares_type?: string }).shares_type === 'PRN' ? { prn: true } : {}),
     ...extra,
   });
   for (const c of cur) {
@@ -401,6 +405,8 @@ export function gateRow(r: MoveRow, prior: { shares: number; value: number } | u
   const pps = prior && prior.shares > 0 && prior.value > 0 ? prior.value / prior.shares : null;
   // The factor the prior's shares were taken at (1, or the split ratio once applied).
   const f = pps && r.prev_shares > 0 ? r.prev_shares / prior!.shares : 1;
+  // Bonds: value per $ of principal, not a share price; only a 100x jump against its own prior is held.
+  if (r.prn) return ps && pps && off(pps / f, ps, OFF_UNITS) ? 'units' : null;
   if ((ps && c.cur && off(ps, c.cur, OFF_UNITS)) || (pps && c.prev && [1, k].every((s) => off(pps, c.prev! / s, OFF_UNITS))) || (ps && pps && off(pps / f, ps, OFF_UNITS))) return 'units';
   if (r.value >= MIN_PRICE_CHECK_USD || (prior?.value ?? 0) >= MIN_PRICE_CHECK_USD) {
     if (ps && c.cur && off(ps, c.cur, OFF_FILERS)) return 'price_vs_filers';
@@ -412,11 +418,16 @@ export function gateRow(r: MoveRow, prior: { shares: number; value: number } | u
   const g = k !== 1 && ref && near(pps, ref[0]) <= near(pps, ref[1]) ? k : 1;
   if (k !== 1 && ref && Math.abs(r.prev_shares - prior!.shares * g) > 0.005 * prior!.shares * g) return 'split_basis';
   if (ps && r.shares > 0 && r.prev_shares > 0) {
+    // A split nobody listed: the price fell by about k and the share count rose by about k (or the reverse). Both
+    // ratios must sit near k: a 50% fall that a fund bought into 4x (Davis's APP) is a real trade, not a split.
     const p = pps / f / ps;
     const up = p >= 1;
-    const kk = Math.round(up ? p : 1 / p);
-    const s = r.shares / r.prev_shares;
-    if (kk >= 2 && Math.abs((up ? p : 1 / p) / kk - 1) <= 0.15 && (up ? s >= kk / 1.5 : s <= 1.5 / kk)) return 'own_prior';
+    const pr = up ? p : 1 / p;
+    const kk = Math.round(pr);
+    const sr = up ? r.shares / r.prev_shares : r.prev_shares / r.shares;
+    const dp = Math.abs(Math.log(pr / kk));
+    const big = r.value >= MIN_PRICE_CHECK_USD || (prior?.value ?? 0) >= MIN_PRICE_CHECK_USD;
+    if (big && kk >= 2 && dp <= Math.log(1.15) && dp + Math.abs(Math.log(sr / kk)) <= Math.log(1.25)) return 'own_prior';
   }
   return null;
 }
