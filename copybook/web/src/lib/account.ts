@@ -106,6 +106,12 @@ export function forgetMe() {
   }
 }
 
+export const VERIFY_MSG = 'Open the sign-in link we emailed you to do this.'
+/** 403 verify_email: the session is provisional until the emailed link is opened. */
+export const needsVerify = (e: unknown) => e instanceof ApiError && e.code === 'verify_email'
+/** The error to show next to a control: the API's verify_email text, else the control's own fallback. */
+export const errText = (e: unknown, fallback: string) => (needsVerify(e) ? ((e as ApiError).detail ?? VERIFY_MSG) : fallback)
+
 export class ApiError extends Error {
   status: number
   /** The API's error code and readable message, when the response carried them. */
@@ -126,6 +132,8 @@ export class ApiError extends Error {
     this.retryAt = body?.retry_at ? Date.parse(body.retry_at) : typeof wait === 'number' ? Date.now() + wait * 1000 : undefined
     this.sentAt = body?.sign_in_sent_at ?? body?.sent_at
     this.alreadyMember = body?.already_member === true
+    // A provisional session (signup or checkout hand-off) refused a control: every page shows the reason once.
+    if (body?.code === 'verify_email' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('copybook:verify', { detail: body.error ?? VERIFY_MSG }))
   }
 }
 
@@ -263,8 +271,11 @@ export function adoptSession(token: string) {
   forgetMe()
 }
 
+/** Null when the checkout's address already had an account (code existing_account): no token comes back, so
+ *  the browser keeps the session it has, and the member signs in with the emailed link. */
 export async function startSession(body: { checkout_session: string } | { login: string }) {
-  const r = await call<{ token: string; member: Member }>('/session', { body })
+  const r = await call<{ token?: string; member: Member | null; code?: string }>('/session', { body })
+  if (!r.token) return null
   setToken(r.token)
   return r.member
 }

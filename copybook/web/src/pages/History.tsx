@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ChangeBars } from '../components/charts'
 import { Arrow, Badge, Button, Check, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
-import { ApiError, isFree, openPortal, useMemberState } from '../lib/account'
+import { needsVerify, ApiError, isFree, openPortal, useMemberState } from '../lib/account'
 import { CsvButton } from '../components/CsvButton'
 import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle, type Holding } from '../lib/data'
 import { stockPath } from '../lib/stocks'
@@ -471,8 +471,8 @@ function Paywall({ name, quarters, kind }: { name: string; quarters?: string[]; 
             {kind === 'inactive' ? (
               <Button
                 onClick={() =>
-                  openPortal().catch(() => {
-                    if (checkout.portal) window.location.href = checkout.portal
+                  openPortal().catch((e) => {
+                    if (checkout.portal && !needsVerify(e)) window.location.href = checkout.portal
                   })
                 }
               >

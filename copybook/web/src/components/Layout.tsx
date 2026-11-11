@@ -5,7 +5,7 @@ import { quarterLabel } from '../lib/data'
 import { seasonNow } from '../lib/stocks'
 import { SearchBox } from './Search'
 import { Button, Wordmark } from './ui'
-import { UpdatePrompt } from './UpdatePrompt'
+import { UpdatePrompt, VerifyNotice } from './UpdatePrompt'
 
 const NAV = [
   { to: '/investors/', label: 'Investors' },
@@ -58,6 +58,7 @@ export function Layout() {
   return (
     <div className="flex min-h-dvh flex-col">
       <UpdatePrompt />
+      <VerifyNotice />
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[60] focus:rounded-full focus:bg-ink focus:px-4 focus:py-2 focus:text-white">
         Skip to content
       </a>

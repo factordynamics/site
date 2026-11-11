@@ -54,3 +54,27 @@ export function UpdatePrompt() {
     </div>
   )
 }
+
+// A provisional session (fresh from signup or checkout) asked for something that needs the emailed link: the API's
+// 403 verify_email text, shown once at the foot of the page whichever control asked (lib/account ApiError).
+export function VerifyNotice() {
+  const [msg, setMsg] = useState<string | null>(null)
+  useEffect(() => {
+    const on = (e: Event) => setMsg((e as CustomEvent<string>).detail)
+    window.addEventListener('copybook:verify', on)
+    return () => window.removeEventListener('copybook:verify', on)
+  }, [])
+  if (!msg) return null
+  return (
+    <div role="alert" className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+      <div className="flex items-center gap-3 rounded-full bg-night py-2 pl-4 pr-2 text-[13.5px] text-white shadow-[0_12px_40px_-12px_rgb(12_14_19/0.5)]">
+        <span>{msg}</span>
+        <button type="button" aria-label="Dismiss" onClick={() => setMsg(null)} className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-white/60 hover:bg-white/10 hover:text-white">
+          <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
+            <path d="M2 2l6 6M8 2 2 8" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}

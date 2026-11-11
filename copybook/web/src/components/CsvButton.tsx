@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ApiError, downloadCsv } from '../lib/account'
+import { errText, ApiError, downloadCsv } from '../lib/account'
 import { CopyFeature } from './Signup'
 import { Button } from './ui'
 
@@ -22,7 +22,7 @@ export function CsvButton({ slug, download, label = 'Download CSV', variant = 'd
           .catch((e) => {
             if (e instanceof ApiError && e.status === 401) nav('/account/')
             else if (e instanceof ApiError && e.status === 402) setPaid(true)
-            else alert('The download didn’t start. Please try again.')
+            else alert(errText(e, 'The download didn’t start. Please try again.'))
           })
           .finally(() => setBusy(false))
       }}

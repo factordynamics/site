@@ -19,7 +19,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
 import { ApiStatus, Updating } from '../components/ApiStatus'
-import { ApiError, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { ApiError, errText, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
@@ -45,9 +45,15 @@ export function Account() {
     const run = async () => {
       try {
         let member: Member
-        if (sid?.startsWith('cs_')) member = await startSession({ checkout_session: sid })
-        else if (login) member = await startSession({ login })
-        if (sid || login) member = await fetchMe().catch(() => member)
+        let started: Member | null = null
+        if (sid?.startsWith('cs_')) started = await startSession({ checkout_session: sid })
+        else if (login) started = await startSession({ login })
+        // A checkout for an address that already had an account: keep this browser's session, or ask for the emailed link.
+        if (sid && !started && !getToken()) {
+          nav('/account/', { replace: true })
+          return setState({ kind: 'out', error: 'Your subscription is active. Sign in with the link we emailed you.' })
+        }
+        if (sid || login) member = await fetchMe().catch(() => started as Member)
         else if (getToken()) {
           // The last-known account renders at once, marked updating, so a slow API isn't a blank page.
           const last = cachedFresh() ? null : lastMe()
@@ -241,9 +247,9 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
                     disabled={busy}
                     onClick={() => {
                       setBusy(true)
-                      openPortal().catch(() => {
+                      openPortal().catch((e) => {
                         setBusy(false)
-                        if (checkout.portal) window.location.href = checkout.portal
+                        if (checkout.portal && !needsVerify(e)) window.location.href = checkout.portal
                       })
                     }}
                     className={`font-medium ${label === 'Cancel plan' ? 'text-ink-2 hover:text-down' : 'text-accent hover:text-accent-2'}`}
@@ -267,9 +273,9 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
             disabled={busy}
             onClick={() => {
               setBusy(true)
-              openPortal().catch(() => {
+              openPortal().catch((e) => {
                 setBusy(false)
-                if (checkout.portal) window.location.href = checkout.portal
+                if (checkout.portal && !needsVerify(e)) window.location.href = checkout.portal
               })
             }}
           >
@@ -487,8 +493,8 @@ function SignOutEverywhere() {
           try {
             await signOutEverywhere()
             setMsg({ text: 'Every other session is signed out.', ok: true })
-          } catch {
-            setMsg({ text: 'That didn’t go through. Please try again.', ok: false })
+          } catch (e) {
+            setMsg({ text: errText(e, 'That didn’t go through. Please try again.'), ok: false })
           }
         }}
       >
@@ -811,8 +817,9 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
             setBusy('cancel')
             setErr('')
             await sendCancelReason(reason!, note.trim() || undefined).catch(() => null)
-            openPortal().catch(() => {
+            openPortal().catch((e) => {
               setBusy(null)
+              if (needsVerify(e)) return setErr(errText(e, ''))
               if (checkout.portal) window.location.href = checkout.portal
             })
           }}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { call, isPro, useApiBase, type Member } from '../lib/account'
+import { errText, call, isPro, useApiBase, type Member } from '../lib/account'
 import { Button } from './ui'
 
 // API keys: GET/POST /keys, DELETE /keys/{id} (session auth; Copy members get 403 pro_required).
@@ -58,8 +58,8 @@ export function ApiKeys({ member, focus = false }: { member: Member; focus?: boo
       setCopied(false)
       setName('')
       setKeys((k) => [...(k ?? []), { ...r, requests_today: r.requests_today ?? 0, usage: r.usage ?? [] }])
-    } catch {
-      setError('The key wasn’t created. Please try again.')
+    } catch (e) {
+      setError(errText(e, 'The key wasn’t created. Please try again.'))
     } finally {
       setBusy(false)
     }
@@ -68,7 +68,7 @@ export function ApiKeys({ member, focus = false }: { member: Member; focus?: boo
     if (!confirm(`Revoke “${k.name}”? Requests using it will fail straight away.`)) return
     await call(`/keys/${encodeURIComponent(k.id)}`, { method: 'DELETE', auth: true }).then(
       () => setKeys((l) => (l ?? []).filter((x) => x.id !== k.id)),
-      () => setError('That key wasn’t revoked. Please try again.'),
+      (e) => setError(errText(e, 'That key wasn’t revoked. Please try again.')),
     )
   }
 

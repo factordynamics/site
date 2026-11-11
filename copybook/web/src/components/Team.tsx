@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ApiError, call } from '../lib/account'
+import { errText, ApiError, call } from '../lib/account'
 import { FUND_SEATS } from '../config'
 import { Button } from './ui'
 
@@ -24,7 +24,7 @@ export function Team() {
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   useEffect(() => {
-    call<Seats>('/seats', { auth: true }).then(setS, () => setMsg({ text: 'Your team didn’t load. Refresh to try again.', ok: false }))
+    call<Seats>('/seats', { auth: true }).then(setS, (e) => setMsg({ text: errText(e, 'Your team didn’t load. Refresh to try again.'), ok: false }))
   }, [])
 
   const invite = async () => {
@@ -48,8 +48,8 @@ export function Team() {
     try {
       setS(await call<Seats>(`/seats/${encodeURIComponent(who)}`, { method: 'DELETE', auth: true }))
       window.dispatchEvent(new Event('copybook:setup'))
-    } catch {
-      setMsg({ text: `${who} wasn’t removed. Please try again.`, ok: false })
+    } catch (e) {
+      setMsg({ text: errText(e, `${who} wasn’t removed. Please try again.`), ok: false })
     }
   }
 
@@ -59,8 +59,8 @@ export function Team() {
     try {
       setS(await call<Seats>(`/seats/${encodeURIComponent(who)}/revoke`, { method: 'POST', auth: true }))
       setMsg({ text: `${who} is signed out everywhere.`, ok: true })
-    } catch {
-      setMsg({ text: `${who} wasn’t signed out. Please try again.`, ok: false })
+    } catch (e) {
+      setMsg({ text: errText(e, `${who} wasn’t signed out. Please try again.`), ok: false })
     }
   }
 
