@@ -550,7 +550,7 @@ function HomeBody() {
   const conviction = [...conv.values()].sort((a, b) => b.weight - a.weight).slice(0, 8)
   const newStakes = events.filter((e) => e.action === 'new_stake' && daysAgo(e.filing_date) <= 30).length
   const wait = <span className="dim">…</span>
-  const crowd = (r: Agg | undefined) => (!books.data ? wait : r ? <Tick t={r.ticker} name={aggCo(r)} label={r.label} /> : <span className="dim">None yet</span>)
+  const crowd = (r: Agg | undefined) => (!books.data ? wait : r ? <CoValue r={r} /> : <span className="dim">None yet</span>)
   const crowdSub = (r: Agg | undefined, line: (r: Agg) => string) => (books.data && r ? line(r) : 'Across the investors who have filed')
   return (
     <div className="page home">
@@ -1370,6 +1370,10 @@ export function Flows() {
 const aggCo = (r: Agg) => r.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')
 /** A stock in running text: "Alphabet (GOOGL)". */
 const aggName = (r: Agg) => `${aggCo(r)}${r.ticker ? ` (${r.label ?? r.ticker})` : ''}`
+/** A summary card's answer is the company, linked to its page; the ticker leads the line below it (tkLine), so the
+ * cards read "Alphabet / GOOGL+GOOG · bought by 27 of 183" rather than opening on a ticker. */
+const CoValue = ({ r }: { r: Agg }) => (r.ticker ? <A to={stockHref(r)!} className="tk stat-co" title={`${aggCo(r)} (${r.label ?? r.ticker})`}>{aggCo(r)}</A> : <span className="stat-co">{aggCo(r)}</span>)
+const tkLine = (r: Agg, rest: string) => (r.ticker ? `${r.label ?? r.ticker} · ${rest}` : cap(rest))
 /** The most bought and most sold stock among \`rows\` (an aggregate over \`n\` investors) and how to say each. The home page and
  * Buys & sells both use it, so they always name the same stock with the same count and words. Ties on the count go to
  * the bigger trade, as in the tables' own order (sell is negative). */
@@ -1383,9 +1387,9 @@ export function crowdPicks(rows: Agg[], n: number) {
     bought: bought?.buyers.length ? bought : undefined,
     sold: sold?.sellers.length ? sold : undefined,
     // Counts say "of how many", so a quoted card can't read as everyone, and selling says whether anyone sold out.
-    boughtLine: (r: Agg) => `${aggCo(r)}, bought by ${num(r.buyers.length)} of ${num(n)}${r.newBuyers ? `, ${num(r.newBuyers)} new` : ''}`,
+    boughtLine: (r: Agg) => tkLine(r, `bought by ${num(r.buyers.length)} of ${num(n)}${r.newBuyers ? `, ${num(r.newBuyers)} new` : ''}`),
     soldLine: (r: Agg) =>
-      exits(r) ? `${aggCo(r)}, sold by ${num(r.sellers.length)} of ${num(n)}: ${num(r.sellers.length - exits(r))} trimmed, ${num(exits(r))} sold out` : `${aggCo(r)}, trimmed by ${num(r.sellers.length)} of ${num(n)}, none sold out`,
+      tkLine(r, exits(r) ? `sold by ${num(r.sellers.length)} of ${num(n)}: ${num(r.sellers.length - exits(r))} trimmed, ${num(exits(r))} sold out` : `trimmed by ${num(r.sellers.length)} of ${num(n)}, none sold out`),
   }
 }
 /** The quarter's four answers as cards, like the home page's: most investors buying and selling, most money in and out. */
@@ -1397,13 +1401,13 @@ function FlowsStats({ rows, q, n }: { rows: Agg[]; q: string; n: number }) {
   // The quarter chips just above name the quarter, so the labels stay short enough for two cards a row on phones.
   const scope = q === 'latest' ? ' in each fund’s latest 13F' : ` in ${quarterLabel(q)}`
   const card = (label: string, r: Agg | undefined, ok: boolean, tone: 'pos' | 'neg', sub: (r: Agg) => string) => (
-    <Stat label={label} value={r && ok ? <Tick t={r.ticker} name={aggCo(r)} label={r.label} /> : <span className="dim">None</span>} tone={r && ok ? tone : undefined} sub={r && ok ? sub(r) : undefined} />
+    <Stat label={label} value={r && ok ? <CoValue r={r} /> : <span className="dim">None</span>} tone={r && ok ? tone : undefined} sub={r && ok ? sub(r) : undefined} />
   )
   // A net figure that one investor makes up most of says so, so "+$2.0B into NVIDIA" isn't read as a crowd.
   const net = (r: Agg) => {
     const lead = [...(r.net > 0 ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0]
     const one = lead && Math.abs(lead.delta) > Math.abs(r.net) / 2 ? `, ${shortFirm(lead.manager)} alone ${signedUsd(lead.delta)}` : ''
-    return `${aggCo(r)}, ${signedUsd(r.net)} net${one}`
+    return tkLine(r, `${signedUsd(r.net)} net${one}`)
   }
   return (
     <div className="stats tick-stats" role="list" aria-label={`Buys and sells${scope}`}>
@@ -1436,8 +1440,8 @@ function ConsensusStats({ rows, total, n }: { rows: Agg[]; total: number; n: num
   return (
     <div className="stats tick-stats" role="list" aria-label="The combined portfolio at a glance">
       <Stat label="Held in total" value={usd(total)} sub={`In ${num(rows.length)} stocks and funds`} />
-      <Stat label="Most widely owned" value={<Tick t={wide.ticker} name={aggCo(wide)} label={wide.label} />} sub={`${aggCo(wide)}, by ${num(wide.holders.length)} of ${num(n)} investors`} />
-      <Stat label="Largest holding" value={<Tick t={big[0].ticker} name={aggCo(big[0])} label={big[0].label} />} sub={`${aggCo(big[0])}, ${usd(big[0].value)}, ${pct(big[0].value / (total || 1), 1)} of the total`} />
+      <Stat label="Most widely owned" value={<CoValue r={wide} />} sub={tkLine(wide, `held by ${num(wide.holders.length)} of ${num(n)} investors`)} />
+      <Stat label="Largest holding" value={<CoValue r={big[0]} />} sub={tkLine(big[0], `${usd(big[0].value)}, ${pct(big[0].value / (total || 1), 1)} of the total`)} />
       <Stat label="Ten largest holdings" value={pct(top10, 0)} sub="Of everything held" />
     </div>
   )
