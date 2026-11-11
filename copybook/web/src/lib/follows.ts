@@ -127,9 +127,9 @@ export function setFollow(kind: 'investors' | 'stocks' | 'peers' | 'owned', id: 
   set({ ...state, pending: { ...state.pending, [key]: { want, state: 'saving' } } })
   return enqueue(async () => {
     try {
-      // One item per request ({api}/follows/{slug}, /follows/stocks/{TICKER}); the server serializes
+      // One item per request, with the session (/follows/investors/{slug}, /follows/stocks/{TICKER}); the server serializes
       // writes and answers with the full follows, which the button renders from.
-      const path = kind === 'investors' ? `/follows/${encodeURIComponent(id)}` : `/follows/${kind}/${encodeURIComponent(id)}`
+      const path = `/follows/${kind}/${encodeURIComponent(id)}`
       const r = await call<Res>(path, { method: want ? 'POST' : 'DELETE', auth: true })
       const f = shape(r)
       const ok = f[kind].includes(id) === want

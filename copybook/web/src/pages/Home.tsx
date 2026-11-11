@@ -100,16 +100,16 @@ function SeasonLead() {
     <>
       <h1 className="mt-6 text-[38px] font-semibold leading-[1.04] tracking-[-0.045em] sm:text-[52px] lg:text-[60px]">
         {quarterLabel(sn.quarter).split(' ')[0]} 13Fs are landing now.{' '}
-        <span className="font-serif font-normal italic tracking-[-0.025em] text-accent">Get each one the minute it’s filed.</span>
+        <span className="font-serif font-normal italic tracking-[-0.025em] text-accent">Get each one as it’s filed.</span>
       </h1>
       <div className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2 md:text-[18px]">
         {lat.loading ? (
           <Skeleton className="h-[1.2em] w-4/5" />
         ) : med?.median_seconds != null ? (
           <>
-            Copy emails each superinvestor’s 13F, with what they bought and sold. This season the median 13F alert went out{' '}
+            Copy emails each superinvestor’s 13F, with what they bought and sold.{' '}
             <Link to="/speed/" className="font-medium text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink">
-              {secondsLabel(med.median_seconds)} after EDGAR accepted the filing
+              Median {secondsLabel(med.median_seconds)} from EDGAR to first alert this season
             </Link>
             .
           </>

@@ -135,12 +135,12 @@ export function ManagerPage() {
             {q3.kind === 'expected' && due ? `${q3.text.replace(' expected', ' 13F expected')}, ${usualTime(due)}.` : `${q3.text.replace(' due', ' 13F due')}, the filing deadline.`}
           </p>
           {isPaying(member) ? (
-            <p className="mt-1">Follow to get it by email the minute it’s filed, with its moves inside.</p>
+            <p className="mt-1">Follow to get it by email as it’s filed, with its moves inside.</p>
           ) : (
             <>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Link to={pricingTo()} onClick={() => track('trial_click')} className="inline-flex min-h-10 items-center rounded-full bg-accent px-4.5 py-2 text-[14px] font-medium leading-tight text-white shadow-[0_1px_2px_rgb(12_14_19/0.2)] hover:bg-accent-2">
-                  Get {possessive(shortFirst(f.manager))} 13F the minute it’s filed, {TRIAL_DAYS} days free
+                  Get {possessive(shortFirst(f.manager))} 13F as it’s filed, {TRIAL_DAYS} days free
                 </Link>
               </div>
               {!getToken() && <FollowSignup people={[{ slug: f.slug, name: f.manager }]} label={`Or follow ${f.manager} free`} secondary className="mt-3 text-ink" />}
