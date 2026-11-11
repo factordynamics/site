@@ -608,7 +608,8 @@ def lenses_stale() -> bool:
     """True when hl/ or hedge_flow.json (with fall/, built in the same moves.py run) used another type set than
     filer_types.json, e.g. after hand overrides in a curated run. The curated run then rebuilds them."""
     sig = signature(load())
-    return any((read(p) or {}).get("types_sig") != sig for p in (DATA / "hl" / "index.json", DATA / "hedge_flow.json"))
+    return any((read(p) or {}).get("types_sig") != sig
+               for p in (DATA / "hl" / "index.json", DATA / "hedge_flow.json", DATA / "hlr" / "index.json"))
 
 
 if __name__ == "__main__":

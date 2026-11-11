@@ -5,6 +5,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
+import { createHash } from 'node:crypto'
 import { getJson, pooled } from './getjson.mjs'
 import { ETF_NAMES } from './etfs.mjs'
 import { isEdgarDay } from '../src/lib/calendar.mjs'
@@ -612,6 +613,9 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   const typeOf = (cik, fallback) => ft?.filers?.[String(cik).padStart(10, '0')]?.type ?? fallback ?? null
   const lenses = { smart: new Map(), hedge: new Map() } // page -> {current, older, top10, over5, quarters, moves}
   const lensOf = (k, t) => lenses[k].get(t) ?? lenses[k].set(t, { current: 0, older: 0, top10: 0, over5: 0, quarters: {}, moves: [] }).get(t)
+  // types_sig as ingest computes it (filer_types.signature): sha1 of Python's json.dumps(sorted((cik, type))).
+  const typesSig = ft?.filers ? createHash('sha1').update('[' + Object.entries(ft.filers).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([c, v]) => `[${JSON.stringify(c)}, ${JSON.stringify(v?.type ?? null)}]`).join(', ') + ']').digest('hex').slice(0, 12) : null
+  const typesAsOf = ft?.as_of ?? index.types_as_of ?? null
   const curatedByCik = new Map(index.managers.filter((m) => m.ok).map((m) => [m.cik, m]))
   const pageOf = (h) => (h.cusip && byCusip[h.cusip]) || (h.ticker && byTicker[h.ticker]) || null
   const per = new Map() // page ticker -> rows
@@ -623,7 +627,64 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   const current = new Map()
   const tracked = new Map()
   let read_ok = 0
-  for await (const x of filerBooks(filers)) {
+  // Holder rows from ingest's full-book holder index (hlr/: each issuer's 500 largest holders plus every hedge-fund
+  // and long-only holder, from every filer's full latest book). The top-500 shards below left multi-strategy funds
+  // (Citadel, Millennium, AQR...) off mid- and small-cap pages; they stay only as the fallback.
+  const hlr = await read('hlr/index.json').catch(() => null)
+  const hlIdx = (await read('hl/index.json').catch(() => null))?.tickers ?? {}
+  const gz = async (path) => gunzipSync(base.startsWith('http') ? Buffer.from(await (await fetch(base + path).then((r) => (r.ok ? r : Promise.reject(new Error(`${path}: ${r.status}`))))).arrayBuffer()) : readFileSync(join(base, path)))
+  if (hlr) {
+    const hc = Object.fromEntries(hlr.columns.map((c, j) => [c, j]))
+    const pagesOf = new Map() // issuer6 -> page tickers
+    for (const x of list) {
+      const code = hlIdx[x.t] ?? (x.a ?? []).map((a) => hlIdx[a]).find(Boolean)
+      if (code) (pagesOf.get(code) ?? pagesOf.set(code, []).get(code)).push(x.t)
+    }
+    const byCik = new Map(filers.map((f) => [f.cik, f]))
+    const seen = new Set()
+    for (const part of hlr.parts) {
+      for (const [code, hs] of Object.entries(JSON.parse(await gz(`hlr/${part.file}`)).issuers)) {
+        const pages = pagesOf.get(code)
+        if (!pages) continue
+        for (const r of hs) {
+          const [cik, q, sh, value, w, ch, delta] = [r[hc.cik], r[hc.period], r[hc.shares], r[hc.value], r[hc.weight] ?? 0, r[hc.change], r[hc.value_delta]]
+          if (qn(q) < newest - 2) continue // same freshness rule as the shards below
+          seen.add(cik)
+          const cur = curatedByCik.get(cik)
+          const f = byCik.get(cik)
+          const who = cur ? { slug: cur.slug, name: cur.manager, flag: cur.featured ? 2 : 1 } : { slug: f?.slug ?? null, name: f?.name ?? cik, flag: 0 }
+          const ty = typeOf(cik, f?.type ?? cur?.type)
+          const smart = SMART.has(ty)
+          const hedge = ty === 'hedge_fund'
+          const fresh = qn(q) >= newest - 1
+          for (const t of pages) {
+            for (const [lens, on] of [['smart', smart], ['hedge', hedge]]) {
+              if (!on) continue
+              const x = lensOf(lens, t)
+              if (sh > 0) {
+                if (!fresh) x.older++
+                else {
+                  x.current++
+                  x.quarters[q] = (x.quarters[q] ?? 0) + 1
+                  x.top10 += r[hc.top10] ? 1 : 0
+                  if (w > 0.05) x.over5++
+                }
+              }
+              if (fresh && ch && ch !== 'unchanged' && delta != null) x.moves.push([who.slug, who.name, q, ch, delta])
+            }
+            if (sh <= 0) continue
+            if (fresh) current.set(t, (current.get(t) ?? 0) + 1)
+            if (who.flag) tracked.set(t, (tracked.get(t) ?? 0) + 1)
+            const rows = per.get(t) ?? []
+            rows.push([who.slug, who.name, q, sh, Math.round(value), Number(w.toPrecision(4)), who.flag, (smart ? 1 : 0) | (hedge ? 2 : 0)])
+            per.set(t, rows)
+          }
+        }
+      }
+    }
+    read_ok = seen.size
+  }
+  if (!hlr) for await (const x of filerBooks(filers)) {
     {
       if (!x || !x[1]?.ok || !Array.isArray(x[1].rows)) continue
       const [f, d] = x
@@ -694,7 +755,6 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   }
   // Ingest's holder index: counts over every filer's latest full book. A page whose issuer it covers
   // gets exact holder counts and all-filer changes; ingest's publish gate keeps them >= the tracked funds.
-  const hlIdx = (await read('hl/index.json').catch(() => null))?.tickers ?? {}
   const issuers = new Map() // issuer6 -> pages
   for (const t of per.keys()) {
     const code = hlIdx[t]
@@ -715,7 +775,8 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
   let exact = 0
   for (const [t, rows] of per) {
     rows.sort((a, b) => b[4] - a[4])
-    const top = rows.slice(0, 500)
+    // The 500 largest, plus every hedge-fund and long-only holder so both lens lists are complete.
+    const top = rows.filter((r, i) => i < 500 || r[7])
     rowsOut += top.length
     const h = hlOf.get(t)
     let hlc = null
@@ -731,12 +792,15 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       join(out, 'd', 'h', `${t}.json`),
       JSON.stringify({
         ticker: t,
-        filers: rows.length,
+        filers: hlr && h ? h.counts.holders : rows.length,
         current: current.get(t) ?? 0,
         tracked: tracked.get(t) ?? 0,
-        quarters: quarters.get(t),
-        top10: top10.get(t) ?? 0,
-        over5: over5.get(t) ?? 0,
+        quarters: hlr && h ? h.counts.by_period : quarters.get(t),
+        top10: hlr && h ? h.counts.top10 : (top10.get(t) ?? 0),
+        over5: hlr && h ? h.counts.over5 : (over5.get(t) ?? 0),
+        // The type set the lens codes and counts use (filer_types.json), so a check can prove every file switched.
+        types_as_of: typesAsOf,
+        types_sig: typesSig,
         ...(hlc ? { index: hlc } : {}),
         smart: block(lenses.smart.get(t)),
         hedge: block(lenses.hedge.get(t)),
@@ -760,5 +824,22 @@ console.log(`stocks: ${list.length} pages from ${books.length} funds; flow ${flo
       writeFileSync(sf, JSON.stringify(s))
     } catch {}
   }
-  console.log(`all-filer holders: ${read_ok} filers, ${files} stocks (${exact} with full-book counts), ${rowsOut} rows (500 largest per stock); hedge funds and long-only hold ${lenses.smart.size} stocks, hedge funds ${lenses.hedge.size}`)
+  if (hlr) {
+    const off = []
+    for (const [t, h] of hlOf) {
+      const sum = (b) => Object.entries(b?.by_period ?? {}).filter(([q]) => qn(q) >= newest - 2).reduce((a, [, n]) => a + n, 0)
+      for (const [lens, key] of [['hedge', 'hedge_fund'], ['smart', 'smart']]) {
+        const x = lenses[lens].get(t)
+        const mine = (x?.current ?? 0) + (x?.older ?? 0)
+        if (Math.abs(mine - sum(h[key])) > 1) off.push(`${t} ${lens} ${mine} vs ${sum(h[key])}`)
+      }
+    }
+    const same = hlr.types_sig && hlr.types_sig === typesSig
+    console.log(`lens check: ${off.length} of ${hlOf.size} pages off ingest's holder index by more than 1 (types ${same ? 'match' : `differ: ${hlr.types_sig} vs ${typesSig}`})`)
+    if (off.length) {
+      console.error(`${same ? '::error::' : '::warning::'}stock lens counts differ from hl/: ${off.slice(0, 40).join('; ')}`)
+      if (same) process.exit(1)
+    }
+  }
+  console.log(`all-filer holders: ${read_ok} filers, ${files} stocks (${exact} with full-book counts), ${rowsOut} rows (${hlr ? '500 largest plus every hedge-fund and long-only holder, from full books' : '500 largest from top-500 shards'} per stock); hedge funds and long-only hold ${lenses.smart.size} stocks, hedge funds ${lenses.hedge.size}`)
 }

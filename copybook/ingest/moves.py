@@ -57,6 +57,8 @@ def filing(b: dict) -> dict:
 # Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
 LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
+SITE_TOP = 500  # hlr/: rows per stock for the site's d/h pages (as before, now from full books), plus every
+SITE_PARTS = 4  # hedge-fund and long-only holder, so the lens lists and counts are complete
 CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied price over every filer
 FIXED = [0]
 
@@ -491,13 +493,13 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     out, full = DATA / "hl", DATA / "hlf"
     out.mkdir(exist_ok=True)
     full.mkdir(exist_ok=True)
-    index, keep, written = {}, set(), set()
+    index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
             "weight", "accession", "filing_date", "accepted_at"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "by_period": {}}
-        rows, counts = [], blank()
+        rows, counts, deltas = [], blank(), {}
         lenses = {name: blank() for name in LENSES}
         for cik, (sh, ps, v, pv, known, delta) in hs.items():
             change = None
@@ -515,6 +517,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                     c["over5pct"] += bool(weight and weight > 0.05)
                 c[change or "no_prior"] += 1
                 c["net"] += round(delta) if known else 0
+            deltas[cik] = round(delta) if known else None
             m = curated.get(cik) or filers.get(cik) or {}
             fl = FILING.get(cik) or filing(meta[cik])
             rows.append([cik, meta[cik].get("name"), m.get("slug"), kind, cik in curated,
@@ -534,6 +537,9 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         if tickers:
             keep.add(name)
             write(out / name, {**body, "rows": rows[:HOLDERS_TOP]})
+            top = {r[0] for r in [r for r in rows if r[6] > 0][:SITE_TOP]}
+            site[code] = [[r[0], r[5], r[6], r[8], r[11], r[10], deltas[r[0]], int(code in top10.get(r[0], ()))]
+                          for r in rows if r[0] in top or r[3] in LENSES["smart"]]
     for p in out.glob("*.json"):
         if p.name not in keep and p.name != "index.json":
             p.unlink()
@@ -542,7 +548,31 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             p.unlink()
     write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
                                "types_sig": signature(types), "tickers": dict(sorted(index.items()))})
+    write_site_holders(site, signature(types))
     return len(keep)
+
+
+def write_site_holders(site: dict[str, list], sig: str) -> None:
+    """hlr/{i}.json.gz + hlr/index.json: per issuer with a ticker, the holder rows the site's stock pages list
+    (d/h/{TICKER}.json, stocks.mjs): the SITE_TOP largest holders by value plus every hedge-fund and long-only
+    holder (exits too, for the lens moves), from each filer's full latest book like hl/. Pages used each filer's
+    top-500 public shard before, which left multi-strategy funds out of mid- and small-cap pages."""
+    import gzip
+
+    out = DATA / "hlr"
+    out.mkdir(exist_ok=True)
+    codes = sorted(site)
+    parts = []
+    for i in range(SITE_PARTS):
+        name = f"{i}.json.gz"
+        raw = json.dumps({"issuers": {c: site[c] for c in codes[i::SITE_PARTS]}}, separators=(",", ":")).encode()
+        (out / name).write_bytes(gzip.compress(raw, 9, mtime=0))
+        parts.append({"file": name, "issuers": len(codes[i::SITE_PARTS]), "bytes": (out / name).stat().st_size})
+    write(out / "index.json", {
+        "generated_at": (read(DATA / "index.json") or {}).get("generated_at"), "types_sig": sig,
+        "columns": ["cik", "period", "shares", "value", "weight", "change", "value_delta", "top10"],
+        "note": "Per issuer: its SITE_TOP largest holders plus every hedge_fund and long_only holder, from full books "
+                "(hl/). Rows with shares 0 are exits. For the site build.", "parts": parts})
 
 
 FALL_PARTS = 4

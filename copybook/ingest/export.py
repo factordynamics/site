@@ -32,7 +32,8 @@ MIN_BOOKS = 5000
 PART_RAW = 450_000_000  # uncompressed CSV per part; about 80 MB gzipped (one upload is capped near 100 MB)
 HEADER = ("cik", "filer_name", "quarter", "report_date", "accession", "filing_date", "cusip", "ticker", "issuer",
           "title", "put_call", "shares", "shares_type", "value", "accepted_at", "source_accession", "first_disclosed_at",
-          "change", "row_type", "prev_shares", "prev_value")
+          "change", "row_type", "prev_shares", "prev_value", "value_scale", "value_as_filed", "value_adjusted", "zero_value",
+          "suspect_units", "suspect_units_basis", "suspect_reason")
 # row_type: holding, or exited (sold out: shares and value 0, the old position in prev_shares and prev_value). A sum of
 # shares or a count of holders reads the holding rows only.
 
@@ -58,6 +59,19 @@ def row_type(h: dict) -> str:
     return h.get("row_type") or ("exited" if h.get("change") == "exited" else "holding")
 
 
+def flag(v) -> str:
+    return "" if v is None else "true" if v else "false"
+
+
+def tail(h: dict) -> tuple:
+    """The /v1 holding fields after prev_value, as /v1 serves them (zero_value as the Worker derives it)."""
+    scale = h.get("value_scale")
+    return ("" if scale is None else (int(scale) if scale == int(scale) else scale), num(h.get("value_as_filed")),
+            flag(h.get("value_adjusted")),
+            flag(h.get("zero_value") if h.get("zero_value") is not None else (h.get("change") != "exited" and not h.get("value"))),
+            flag(h.get("suspect_units")), h.get("suspect_units_basis") or "", h.get("suspect_reason") or "")
+
+
 def num(v) -> int | str:
     """A whole number, or empty when there is no prior."""
     return "" if v is None else round(v)
@@ -78,7 +92,7 @@ def rows(quarter: str):
                               h.get("shares_type") or "SH", h.get("value") or 0, b.get("accepted_at") or "",
                               h.get("source_accession") or b.get("accession") or "",
                               h.get("first_disclosed_at") or b.get("accepted_at") or "", h.get("change") or "",
-                              row_type(h), num(h.get("prev_shares")), num(h.get("prev_value")))
+                              row_type(h), num(h.get("prev_shares")), num(h.get("prev_value"))) + tail(h)
             continue
         try:
             b = json.loads(paths[cik].read_text())
@@ -95,7 +109,7 @@ def rows(quarter: str):
                           h.get("put_call") or "", h.get("shares") or 0, h.get("shares_type") or "SH", h.get("value") or 0,
                           b.get("accepted_at") or "", h.get("source_accession") or b.get("accession") or "",
                           h.get("first_disclosed_at") or b.get("accepted_at") or "", h.get("change") or "",
-                          row_type(h), num(h.get("prev_shares")), num(h.get("prev_value")))
+                          row_type(h), num(h.get("prev_shares")), num(h.get("prev_value"))) + tail(h)
 
 
 def export(quarter: str) -> list[Path]:

@@ -362,17 +362,23 @@ class BulkExportTest(unittest.TestCase):
         from ingest import export
         with tempfile.TemporaryDirectory() as d:
             data = Path(d)
-            cols = ["cusip", "shares", "value", "change", "source_accession"]
-            for folder, rows in (("fb", [["78468R622", 10, 1, None, None]]),
-                                 ("fq", [["78468R622", 10, 1000, "added", "0001281761-26-000010"],
-                                         ["111111111", 0, 0, "exited", "0001281761-26-000010"]])):
+            cols = ["cusip", "shares", "value", "change", "source_accession", "value_as_filed", "value_scale",
+                    "value_adjusted", "suspect_units", "suspect_units_basis"]
+            for folder, rows in (("fb", [["78468R622", 10, 1, None, None, 1, None, None, None, None]]),
+                                 ("fq", [["78468R622", 10, 1000, "added", "0001281761-26-000010", 1, 1000.0, True,
+                                          False, "filers"],
+                                         ["111111111", 0, 0, "exited", "0001281761-26-000010", None, None, None,
+                                          None, None]])):
                 (data / folder / "2026Q3").mkdir(parents=True)
                 (data / folder / "2026Q3" / "0001281761.json").write_text(json.dumps(
                     {"ok": True, "cik": "0001281761", "accession": "0001281761-26-000010", "columns": cols, "rows": rows}))
             with mock.patch.object(export, "DATA", data):
-                got = [(r[6], r[13], r[17], r[18]) for r in export.rows("2026Q3")]
-        self.assertEqual(got, [("78468R622", 1000, "added", "holding"), ("111111111", 0, "exited", "exited")])
-        self.assertEqual(export.HEADER[17:], ("change", "row_type", "prev_shares", "prev_value"))
+                got = [(r[6], r[13], r[17], r[18]) + tuple(r[21:]) for r in export.rows("2026Q3")]
+        self.assertEqual(got, [("78468R622", 1000, "added", "holding", 1000, 1, "true", "false", "false", "filers", ""),
+                               ("111111111", 0, "exited", "exited", "", "", "", "false", "", "", "")])
+        self.assertEqual(export.HEADER[17:], ("change", "row_type", "prev_shares", "prev_value", "value_scale",
+                                              "value_as_filed", "value_adjusted", "zero_value", "suspect_units",
+                                              "suspect_units_basis", "suspect_reason"))
 
     def test_exited_rows_are_typed_and_hold_the_old_position_in_prev(self):
         prev = {"quarter": "2026Q2", "holdings": [{"cusip": "111111111", "issuer": "A", "title": "COM", "ticker": "A",
