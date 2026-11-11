@@ -118,11 +118,9 @@ From then on:
   /var/lib/copybook/copybook-api/copybook-api.env with sudo, then approve each sha with
     echo <full sha> | sudo -u copybook tee -a /var/lib/copybook/copybook-api/deploy.approved
 - Backups: the weekly check runs on its own without the private key (Mondays; result in
-  /var/lib/copybook-status/backup-checks.log). Once a month, run the real decrypt drill with your stick (about 2 min):
-    sudo install -o copybook -g copybook -m 0400 /run/media/$USER/<stick>/copybook-backup-key.age /dev/shm/cbk.age
-    sudo -u copybook env HOME=/var/lib/copybook AGE_KEY_FILE=/dev/shm/cbk.age /var/lib/copybook/copybook-api/ops/restore-check.sh
-    sudo rm -f /dev/shm/cbk.age
-  It asks for the passphrase and prints counts only. Any restore from a backup (on gene or another machine) needs
+  /var/lib/copybook-status/backup-checks.log). Once a month, run the real decrypt drill on a machine of your own,
+  never on gene: gene is the machine agents work on, so the private key never goes there. See "Monthly decrypt drill"
+  at the end (about 3 min). Any restore from a backup (on gene or another machine) needs
   you for the same reason (or the trustee's sealed copy, if you made one in step 2b).
 - Optional, unrelated to Copybook: Funnel also forwards public TCP port 8443 to SSH port 22, where nothing listens
   today. To remove it: sudo tailscale funnel --tcp=8443 off
@@ -143,3 +141,43 @@ What still isn't closed, stated plainly:
   a tier that holds non-public positions.
 - The agents' Stripe key can read customers, which payments' work needs.
 - Older agent session logs keep what agents saw then (masked since Nov 11: counts, row IDs, a***@domain).
+
+## Monthly decrypt drill (on your own machine, never gene)
+
+You need a machine of your own with an encrypted disk, with age, Node and Python 3 installed, and wrangler logged in
+to the factordynamics Cloudflare account (`npx wrangler login`). Plug in your stick. In a terminal, set `day` to the
+newest nightly backup (Cloudflare dashboard > R2 > copybook-history > backups/; one a day at about 03:00 UTC) and
+`KEY` to the key file on the stick:
+
+```sh
+day=YYYY-MM-DD KEY=/path/to/stick/copybook-backup-key.age
+```
+
+Then paste this block as it is:
+
+```sh
+d=$(mktemp -d) && cd "$d"
+npx -y wrangler r2 object get "copybook-history/backups/$day.tar.age" --remote --file b.age
+npx -y wrangler r2 object get "copybook-history/backups/$day.manifest.json" --remote --file m.json
+age -d -i "$KEY" -o b.tgz b.age && mkdir st && tar -C st -xzf b.tgz
+python3 - <<'EOF'
+import hashlib, json, os, sqlite3, glob, calendar, time
+m = json.load(open('m.json'))
+now = calendar.timegm(time.strptime(m['at'], '%Y-%m-%dT%H:%M:%SZ')) * 1000
+db = [p for p in glob.glob('st/kv/miniflare-KVNamespaceObject/*.sqlite') if 'metadata' not in p][0]
+c = sqlite3.connect('file:%s?mode=ro' % db, uri=True)
+cnt = lambda p: c.execute("select count(*) from _mf_entries where key like ? and (expiration is null or expiration > ?)", (p + '%', now)).fetchone()[0]
+got = {'plaintext_sha256': hashlib.sha256(open('b.tgz', 'rb').read()).hexdigest(),
+       'files': sum(len(f) for _, _, f in os.walk('st')), 'members': cnt('cus:'), 'keys': cnt(''),
+       'do_files': len(glob.glob('st/do/**/*.sqlite', recursive=True))}
+bad = [k for k in got if got[k] != m[k]]
+print('backup %s: %s' % (m['day'], 'PASS' if not bad else 'FAIL ' + ','.join(bad)),
+      {k: v for k, v in got.items() if k != 'plaintext_sha256'})
+EOF
+cd / && rm -rf "$d"
+```
+
+age asks for the passphrase. The last line is `backup <day>: PASS` with counts only, or `FAIL` naming the fields that
+differ from the manifest: the archive's sha256 and its file, member, key and Durable Object counts. The decrypted
+backup holds member data. It sits in a temp directory for about a minute, and the block's last line deletes it. Tested
+Nov 11 on the 2026-11-11 backup: PASS, with 443 files, 11 members, 393 keys and 47 DO files.

@@ -7,7 +7,8 @@ Masking rule: agent session logs are kept 30+ days, so these scripts print count
 `a***@domain` emails, never raw member rows; checks run only against test members. Keep it that way when editing them.
 Hourly local backups (`update.sh`) and nightly R2 backups (`backup.sh`) are both age-encrypted to `backup.pub`. Each
 nightly backup has a manifest (`backups/YYYY-MM-DD.manifest.json`: plaintext and ciphertext sha256, counts), checked
-weekly without the key by `backup-verify.sh` and monthly with it by `restore-check.sh`;
+weekly without the key by `backup-verify.sh` and monthly with it by Andreas on a machine of his own, never gene
+(TUE17-STEPS.md, "Monthly decrypt drill"; `restore-check.sh` is the launch-week check with the Amp secret);
 `setup-service-user.sh` (run once with sudo) moves the service, its state and secrets to a dedicated `copybook` user.
 
 ## Option A: fail members over to the Cloudflare Worker (rehearsed Nov 11: serving in under 25 s, back within about a minute)
@@ -86,7 +87,9 @@ a VM with the Amp CLI). Inbound ports are not needed: the quick tunnel is outbou
    `node import.mjs r2 <mirror dir>` (2.5 min measured).
 4. KV and Durable Objects: decrypt the newest `backups/*.tar.age` (key `COPYBOOK_BACKUP_AGE_KEY` until Andreas takes the
    service-account move on Nov 17; after that only his passphrase-protected key file on his stick, so this step needs
-   him; see restore-check.sh) and untar into `~/copybook-api/state`. Then bring KV up to the minute from Cloudflare:
+   him: he decrypts it on his own machine with the drill block in TUE17-STEPS.md minus its last line
+   (which deletes it) and copies `b.tgz` from that temp directory to the restore host; the private key never goes
+   to gene) and untar into `~/copybook-api/state`. Then bring KV up to the minute from Cloudflare:
    `node ../site/copybook/api/scripts/kv-export.mjs kv.json && node import.mjs kv kv.json && shred -u kv.json`.
 5. Install the units in `systemd/` (change `copybook-tunnel.service` to `--url http://127.0.0.1:8787`; server.mjs
    accepts the `/copybook` prefix itself), `loginctl enable-linger`, start `copybook-api`, `copybook-tunnel`,
@@ -158,16 +161,17 @@ Output after the move: recorded here on Tue Nov 17.
   sha256 and size; it must be a well-formed age file (v1 header, exactly one X25519 recipient stanza) made for the
   current public key; the newest must be under 30 hours old; and the newest manifest's member and key counts, written
   at backup time from the plaintext, must be plausible against the live store. It can't prove a backup decrypts.
-- **Decrypt drill, monthly, by Andreas** (TUE17-STEPS.md, "From then on"): with his stick and passphrase,
-  `restore-check.sh` decrypts the newest backup, checks it against the manifest's plaintext sha256, opens it in a
-  throwaway store and compares counts. It prints counts only.
+- **Decrypt drill, monthly, by Andreas on a machine of his own** (TUE17-STEPS.md, "Monthly decrypt drill"): he fetches the
+  newest encrypted backup and its manifest from R2, decrypts it there with his stick and passphrase, and checks the
+  archive's sha256 and its file, member, key and Durable Object counts against the manifest. It prints counts only.
+  Gene, the machine agents work on, never holds the private key, not even during a drill.
 - What that costs: any restore from a backup, on gene or another machine (Option B), needs Andreas and his stick, or
   the sealed copy he may give a named trustee (TUE17-STEPS.md, optional step 2b).
 - If Andreas is unreachable: Cloudflare's poller keeps sending alerts, gene keeps serving members while it is up, and
   if gene goes offline an agent moves members to the Worker with Option A (an orb can do it; no step needs gene or
   Andreas). What waits for him: bringing gene back if it is powered off or broken, and any restore from a backup.
-- One honest limit: during a drill, the decrypted key is in the memory of that one run, which runs as `copybook`, for
-  about a minute.
+- One honest limit: during a drill, the decrypted key and backup are in memory and a temp directory on Andreas's own
+  machine for about a minute. Nothing in the drill runs on gene.
 - Until Nov 17 the old private key is also an Amp secret, so agents can recover alone during launch week. On Nov 17
   every R2 backup is re-encrypted to the new key and the Amp secret is deleted.
 
