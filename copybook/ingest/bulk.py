@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ingest.build import WEB, load_period
+from ingest.build import WEB, load_period, quarter_label
 from ingest.edgar import fetch_submissions, get, list_13f, quarter_groups
 from ingest.universe import parse_index, slugify
 
@@ -35,7 +35,7 @@ MAX_ROWS = 500  # public shard cap by value; the full book is in fb/ (paid, R2)
 SHARD_KEYS = (
     "ok", "cik", "name", "form", "accession", "filing_date", "report_date", "quarter",
     "sec_url", "position_count", "total_value", "values_in_thousands", "indexed_date", "error",
-    "filing_key", "amendments", "unit_fix", "accepted_at",
+    "filing_key", "amendments", "unit_fix", "accepted_at", "empty_latest", "backfill_checked",
 )
 # Rows are arrays in this column order to keep 9k shards small.
 # shares is SSHPRNAMT as filed: a share count, or a principal amount where shares_type is PRN.
@@ -121,14 +121,18 @@ def ingest_one(cik: str) -> dict:
     if not metas:
         return {"ok": False, "cik": cik, "error": "no 13F-HR"}
     last_error = "no usable table"
+    empty = None  # a newer 13F-HR that lists no holdings (Presima and Redwood 2026Q2: one "None", $0 line)
     # Latest period whose original (or restated) book parses; falls back one quarter.
     for group in quarter_groups(metas, 2):
         try:
             loaded = load_period(cik, group, {})
             if loaded is None:
                 last_error = f"empty {group[0].report_date}"
+                empty = empty or {"quarter": quarter_label(group[0].report_date), "accession": group[0].accession,
+                                  "filing_date": group[0].filing_date}
                 continue
-            return {"ok": True, "cik": cik, "name": submissions.get("name") or "", **loaded}
+            return {"ok": True, "cik": cik, "name": submissions.get("name") or "", **loaded,
+                    **({"empty_latest": empty} if empty else {})}
         except Exception as exc:
             last_error = str(exc)
     return {"ok": False, "cik": cik, "error": last_error}
@@ -244,7 +248,49 @@ def main() -> int:
             checkpoint()
     checkpoint()
     print(f"bulk: fetched {done}; ok={catalog['holdings_ok']} fail={catalog['holdings_fail']}")
+    print(f"bulk: late filings backfilled: {backfill_late(order, time.monotonic())}", flush=True)
     return 0
+
+
+BACKFILL_BUDGET_S = float(os.environ.get("COPYBOOK_BACKFILL_BUDGET_S", "600"))
+
+
+def backfill_late(order: list[dict], start: float) -> str:
+    """fb/ books for stored quarters a filer filed on EDGAR after the SEC data set that covers them (Nordflint's 2026Q1
+    and Q2, both filed Sep 4, after the Jun-Aug set). Each shard is checked once per set of stored quarters
+    (backfill_checked); only filers missing a stored quarter before their latest are looked up."""
+    stored = sorted(p.name for p in FB.glob("*Q?") if p.is_dir())
+    key = ",".join(stored)
+    looked = added = 0
+    for f in order:
+        if time.monotonic() - start > BACKFILL_BUDGET_S:
+            break
+        dest = OUT / f"{f['cik']}.json"
+        try:
+            rec = json.loads(dest.read_text()) if dest.exists() else None
+        except ValueError:
+            continue
+        if not rec or not rec.get("ok") or not rec.get("quarter") or rec.get("backfill_checked") == key:
+            continue
+        missing = [q for q in stored if q < rec["quarter"] and not (FB / q / f"{f['cik']}.json").exists()]
+        if missing:
+            looked += 1
+            try:
+                subs = fetch_submissions(f["cik"])
+                for group in quarter_groups(list_13f(subs), 8):
+                    q = quarter_label(group[0].report_date)
+                    if q not in missing:
+                        continue
+                    loaded = load_period(f["cik"], group, {})
+                    if loaded:
+                        book = {"ok": True, "cik": f["cik"], "name": subs.get("name") or rec.get("name") or "", **loaded}
+                        write_json(FB / q / f"{f['cik']}.json", slim(book, None, FB_COLUMNS) | {"source": "SEC EDGAR"})
+                        added += 1
+            except Exception as exc:  # noqa: BLE001 - the next run tries again
+                print(f"bulk: backfill {f['cik']}: {exc}", flush=True)
+                continue
+        write_json(dest, rec | {"backfill_checked": key})
+    return f"{added} books for {looked} filers looked up"
 
 
 if __name__ == "__main__":
