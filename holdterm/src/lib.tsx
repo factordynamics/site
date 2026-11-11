@@ -5,7 +5,7 @@ import { booksProgress } from './data'
 export function usd(v: number | null | undefined, digits = 1): string {
   if (v == null || !isFinite(v)) return '—'
   const a = Math.abs(v)
-  const s = v < 0 ? '-' : ''
+  const s = v < 0 ? '−' : ''
   if (a >= 1e12) return `${s}$${(a / 1e12).toFixed(digits)}T`
   if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(digits)}B`
   if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(digits)}M`
@@ -16,8 +16,13 @@ export function usd(v: number | null | undefined, digits = 1): string {
 export const usdAxis = (v: number) => usd(v, 1).replace(/\.0(?=[KMBT])/, '')
 export const price = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 export const signedUsd = (v: number | null | undefined) => (v == null ? '—' : v > 0 ? `+${usd(v)}` : usd(v))
-export const pct = (v: number | null | undefined, d = 2) => (v == null || !isFinite(v) ? '—' : `${(v * 100).toFixed(d)}%`)
-export const num = (v: number | null | undefined) => (v == null ? '—' : Math.round(v).toLocaleString('en-US'))
+/** One decimal by default ("45.2%"); a non-zero share too small to show reads "<0.1%", not "0.0%". */
+export const pct = (v: number | null | undefined, d = 1) => {
+  if (v == null || !isFinite(v)) return '—'
+  const f = (v * 100).toFixed(d)
+  return v !== 0 && Number(f) === 0 ? `${v < 0 ? '−' : ''}<${(10 ** -d).toFixed(d)}%` : `${f.replace('-', '−')}%`
+}
+export const num = (v: number | null | undefined) => (v == null ? '—' : Math.round(v).toLocaleString('en-US').replace('-', '−'))
 export const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 /** "Nov 6" this year, "Nov 6, 2025" before it. */
 export const date = (d: string | null | undefined) => (d ? (d.slice(0, 4) === String(new Date().getUTCFullYear()) ? day(d) : `${day(d)}, ${d.slice(0, 4)}`) : '—')
@@ -254,11 +259,11 @@ export function Tabs<T extends string>({ value, options, onChange, label }: { va
 
 export const CHANGE_LABEL: Record<string, string> = { new: 'New', added: 'Added', trimmed: 'Trimmed', exited: 'Sold out', unchanged: '' }
 export function ChangeTag({ change, share_change, prev_shares }: { change: string | null; share_change?: number | null; prev_shares?: number | null }) {
-  if (!change || change === 'unchanged') return <span className="dim">·</span>
+  if (!change || change === 'unchanged') return <span className="dim">No change</span>
   const tone = change === 'new' || change === 'added' ? 'pos' : 'neg'
   const r = (change === 'added' || change === 'trimmed') && share_change != null && prev_shares ? (share_change / prev_shares) * 100 : null
   // Past +999% a percentage is noise ("+76194.4%"); show the multiple of the old position instead ("×763").
-  const rel = r == null ? '' : Math.abs(r) < 0.05 ? ` ${r > 0 ? '+' : '−'}<0.1%` : r > 999 ? ` ×${Math.round(1 + r / 100).toLocaleString('en-US')}` : ` ${r > 0 ? '+' : ''}${r.toFixed(1)}%`
+  const rel = r == null ? '' : Math.abs(r) < 0.05 ? ` ${r > 0 ? '+' : '−'}<0.1%` : r > 999 ? ` ×${Math.round(1 + r / 100).toLocaleString('en-US')}` : ` ${r > 0 ? '+' : '−'}${Math.abs(r).toFixed(1)}%`
   return (
     <span className={`tag ${tone}`}>
       {CHANGE_LABEL[change]}
