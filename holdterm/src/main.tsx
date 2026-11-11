@@ -23,9 +23,9 @@ const TABS = NAV.filter((n) => n[0] !== '/alerts')
 const BAR: Record<string, [string, string]> = {
   '/': ['Overview', 'M3.5 10.5 10 4l6.5 6.5M5.5 9v7h3.5v-4.5h2V16h3.5V9'],
   '/funds': ['Investors', 'M7 9.2a2.7 2.7 0 1 0 0-5.4 2.7 2.7 0 0 0 0 5.4Zm-4.5 7c0-2.6 2-4.4 4.5-4.4s4.5 1.8 4.5 4.4M13.5 9a2.3 2.3 0 1 0 0-4.6M14.5 11.9c1.8.3 3 1.8 3 4.3'],
-  '/flows': ['Trades', 'M4 7h11l-3-3M16 13H5l3 3'],
+  '/flows': ['Buys & sells', 'M4 7h11l-3-3M16 13H5l3 3'],
   '/consensus': ['Most owned', 'M3.5 16.5h13M5.5 16.5V10M10 16.5V5M14.5 16.5v-8'],
-  '/filings': ['Filings', 'M6 3h6l3.5 3.5V17H6V3Zm6 0v3.5h3.5M8.5 10h4.5M8.5 13h4.5'],
+  '/filings': ['Stakes', 'M6 3h6l3.5 3.5V17H6V3Zm6 0v3.5h3.5M8.5 10h4.5M8.5 13h4.5'],
 }
 
 // Light by default; the choice is kept. index.html applies it before the first paint.
@@ -199,7 +199,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
   const section = '/' + (path.split('/')[1] ?? '')
-  const isOn = (to: string) => (to === '/' ? path === '/' : section === to || (to === '/funds' && section === '/m'))
+  const isOn = (to: string) => (to === '/' ? path === '/' : section === to || (to === '/funds' && section === '/m') || (to === '/consensus' && section === '/s'))
   return (
     <>
       <a

@@ -2923,3 +2923,21 @@ p a,
   top: 10px;
   color: var(--on-acc);
 }
+.crumbs {
+  font-size: 13.5px;
+  color: var(--dim);
+  margin-bottom: -10px;
+}
+.crumbs a {
+  color: var(--acc);
+}
+.crumbs [aria-current] {
+  color: var(--fg2);
+}
+@media (pointer: coarse), (max-width: 560px) {
+  .crumbs a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+  }
+}

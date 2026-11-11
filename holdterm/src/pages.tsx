@@ -58,6 +58,16 @@ const title = (t: string, missing = false) => {
 }
 /** The data host answered "no such file" (or the data checks hold the fund back), unlike a failed request. */
 const missing = (e: string) => /^(404|403|held:)/.test(e)
+/** Where a fund or stock page sits: its section, then the page itself. */
+function Crumbs({ parent, here }: { parent: [string, string]; here: string }) {
+  return (
+    <nav className="crumbs" aria-label="Breadcrumb">
+      <A to={parent[0]}>{parent[1]}</A>
+      <span aria-hidden> › </span>
+      <span aria-current="page">{here}</span>
+    </nav>
+  )
+}
 export const REPO = 'https://github.com/factordynamics/site'
 export const ISSUES = `${REPO}/issues/new?labels=holdterm&title=Holdterm%3A+`
 export const CONTACT = 'hello@factordynamics.com'
@@ -663,6 +673,7 @@ export function Fund({ slug }: { slug: string }) {
   const stale = ix.data ? isStale(book, ix.data.managers.filter((m) => m.ok)) : false
   return (
     <div className="page">
+      <Crumbs parent={['/funds', 'Investors']} here={book.firm} />
       <div className="head">
         <div>
           <h1>
@@ -1114,7 +1125,7 @@ export function Consensus() {
 // ---------- filings: 13D/G and Form 4 ----------
 type ETab = 'all' | '13dg' | 'f4' | 'market'
 export function Filings() {
-  title('13D, 13G and Form 4 filings')
+  title('Stakes and insider trades')
   const ev = useLoad(loadEvents, [])
   const ins = useLoad(loadInsiders, [])
   const firms = useFirms()
@@ -1131,7 +1142,7 @@ export function Filings() {
     <div className="page">
       <div className="head">
         <div>
-          <h1>Stakes and insider filings</h1>
+          <h1>Stakes and insider trades</h1>
           <p className="lede">Schedule 13D and 13G stakes and Form 4 trades the investors filed between 13Fs, over the last {ev.data.window_days} days.</p>
           <FilingsSummary list={scoped} firms={firms} />
         </div>
@@ -1255,6 +1266,7 @@ export function Stock({ ticker }: { ticker: string }) {
   const fundHref = (h: StockHolder) => (inRoster(h.slug) ? fundPath(fundSlug(h.slug)) : null)
   return (
     <div className="page">
+      <Crumbs parent={['/consensus', 'Most owned stocks']} here={issuerName(d.name)} />
       <div className="head">
         <div>
           <h1>{issuerName(d.name)}</h1>

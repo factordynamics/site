@@ -15,11 +15,11 @@ const SITE = 'https://holdterm.factordynamics.com'
 const DERIVED = 'https://copybook.factordynamics.com/d/'
 const SECTIONS: Record<string, [string, string]> = {
   '/': ['What long-term investors buy and sell', 'Every 13F filing, trade, 13D/G and Form 4 from a rule-based roster of concentrated, long-term funds. SEC EDGAR data, no ads.'],
-  '/funds': ['Investors', 'The roster: concentrated, long-term 13F filers chosen by a published rule, with each one’s latest 13F.'],
-  '/flows': ['Buys and sells', 'What the roster bought and sold, stock by stock, from each fund’s latest 13F.'],
-  '/consensus': ['Most owned stocks', 'The stocks the roster owns in common, by number of funds, dollars held and conviction.'],
-  '/filings': ['13D, 13G and Form 4 filings', 'Schedule 13D and 13G stakes and Form 4 trades filed by roster funds between 13Fs.'],
-  '/alerts': ['Email alerts', 'Email alerts when the funds you follow file a 13F, 13D, 13G or Form 4. $3 a month.'],
+  '/funds': ['Investors', 'The concentrated, long-term investors Holdterm follows, chosen by a published rule, with each one’s latest 13F.'],
+  '/flows': ['Buys and sells', 'What long-term investors bought and sold last quarter, stock by stock, from their latest 13F filings.'],
+  '/consensus': ['Most owned stocks', 'The stocks long-term investors own in common, ranked by how many own them, dollars held and the biggest single bets.'],
+  '/filings': ['Stakes and insider trades', 'New 5% stakes (Schedule 13D and 13G) and insider trades (Form 4) filed by long-term investors between their quarterly 13Fs.'],
+  '/alerts': ['Alerts', 'Know within hours when the investors you follow file a 13F, 13D, 13G or Form 4. 7 days free, then $3 a month.'],
   '/account': ['Account', 'Manage Holdterm email alerts.'],
   '/guide': ['How to read Holdterm', 'What 13F, 13D/G and Form 4 filings show, how current they are, and how to read a fund or stock page on Holdterm.'],
   '/about': ['About', 'How Holdterm chooses its roster and reads SEC filings.'],
