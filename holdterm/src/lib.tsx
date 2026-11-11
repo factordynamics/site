@@ -416,7 +416,14 @@ export function TabPanel({ tab, children }: { tab: string; children: ReactNode }
 export const CHANGE_LABEL: Record<string, string> = { new: 'New', added: 'Added', trimmed: 'Trimmed', exited: 'Sold out', unchanged: '' }
 export function ChangeTag({ change, share_change, prev_shares, unclear }: { change: string | null; share_change?: number | null; prev_shares?: number | null; unclear?: boolean }) {
   // Share counts that don't fit across filings: no trade is counted, and the row says why instead of "No change".
-  if (unclear) return <span className="dim" title="The share counts in this 13F and the one before don't fit together, so no trade is counted.">Shares don’t match</span>
+  // Phones say it in one word, so the tag doesn't squeeze the investor's name; the title gives the reason.
+  if (unclear)
+    return (
+      <span className="dim" title="The share counts in this 13F and the one before don't fit together, so no trade is counted.">
+        <span className="hide-sm">Shares don’t match</span>
+        <span className="show-sm">Unclear</span>
+      </span>
+    )
   if (!change || change === 'unchanged') return <span className="dim">No change</span>
   const tone = change === 'new' || change === 'added' ? 'pos' : 'neg'
   const r = (change === 'added' || change === 'trimmed') && share_change != null && prev_shares ? (share_change / prev_shares) * 100 : null
