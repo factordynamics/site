@@ -634,25 +634,83 @@ LINKS_PATH = DATA / "cusip_links.json"  # reissued CUSIPs, old -> new (moves.py 
 _LINKS: dict[str, dict] | None = None
 
 
+HELD_LINKS: dict[str, dict] = {}  # SEC-confirmed reissues whose share units don't check out: never applied
+
+
 def cusip_links() -> dict[str, dict]:
-    """{old_cusip: {new, ticker, quarter, filers, basis}} from cusip_links.json, plus the SEED reissues."""
+    """{old_cusip: {new, ticker, quarter, filers, basis, ...}}: the reissues applied everywhere. Candidates are
+    cusip_links.json's links and held links plus SEED_LINKS, all confirmed by the SEC's Official 13(f) List. One is
+    applied only when its share units check out on the holders (splits.py link checks, run before any book): a split
+    found on the linked pair (HON 2026Q2 1-for-2, applied as a split), or holders at exactly 1:1 (XOM, TEVA ADS to
+    ordinary). Any other goes to HELD_LINKS with units_reason: netting mismatched units would invent trades."""
     global _LINKS
     if _LINKS is None:
         try:
-            _LINKS = {o: v for o, v in (json.loads(LINKS_PATH.read_text()).get("links") or {}).items()
-                      if v.get("basis") == "sec_13f_list"}
+            doc = json.loads(LINKS_PATH.read_text())
         except (OSError, ValueError):
-            _LINKS = {}
+            doc = {}
+        cand = {o: dict(v) for part in ("held", "links") for o, v in (doc.get(part) or {}).items()
+                if v.get("basis") == "sec_13f_list"}
         for old, v in SEED_LINKS.items():
-            _LINKS.setdefault(old, v)
+            cand.setdefault(old, dict(v))
+        from ingest.splits import load as split_doc
+        checks = split_doc().get("links") or {}
+        _LINKS = {}
+        HELD_LINKS.clear()
+        for o, v in cand.items():
+            v.pop("units_reason", None)
+            c = checks.get(o)
+            if c and c.get("new") == v["new"]:
+                v["units_check"] = {k: c.get(k) for k in ("to_quarter", "holders", "exact_at_1", "median_ratio",
+                                                         "split_ratio")}
+                if not c.get("units_ok"):
+                    HELD_LINKS[o] = v | {"units_reason": c.get("reason")}
+                    continue
+            _LINKS[o] = v
     return _LINKS
 
 
-# Reissues found in 2026Q3 (Nov 11 scan of every filer's book: old CUSIP gone, new one held by the same filers
-# with the same shares). Detection in moves.py adds later ones to cusip_links.json on its own.
+def reload_links() -> None:
+    global _LINKS
+    _LINKS = None
+    HELD_LINKS.clear()
+
+
+# Reissues of 2026Q2-Q3 that the SEC's Official 13(f) List confirms (old CUSIP deleted in the list that adds the new
+# one; no units, rights or warrants), found in every filer's books on Nov 11. Seeded so a run applies them before it
+# builds any book. Detection in moves.py adds later ones to cusip_links.json on its own.
 SEED_LINKS = {
-    "30231G102": {"new": "30233Q108", "ticker": "XOM", "quarter": "2026Q3", "basis": "seed"},
-    "682680103": {"new": "30609A109", "ticker": "OKE", "quarter": "2026Q3", "basis": "seed"},
+    "30231G102": {"new": "30233Q108", "ticker": "XOM", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "682680103": {"new": "30609A109", "ticker": "OKE", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "438516106": {"new": "438516205", "ticker": "HON", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "26614N102": {"new": "26614N201", "ticker": "DD", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "881624209": {"new": "M8769Q102", "ticker": "TEVA", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "04351P101": {"new": "K08588103", "ticker": "ASND", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "811916105": {"new": "811927102", "ticker": "SA", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "G5S37H101": {"new": "G5T40M104", "ticker": "MRX", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "Y95308105": {"new": "94352A104", "ticker": "WVE", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "415864107": {"new": "29390K102", "ticker": "NVRI", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "G87264100": {"new": "87877F103", "ticker": "TGLS", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "08862E109": {"new": "08862E307", "ticker": "BYND", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "197641103": {"new": "197914104", "ticker": "CLBK", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "05601U105": {"new": "05601U204", "ticker": "BRCC", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "G39108108": {"new": "G39104107", "ticker": "GTES", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "143658300": {"new": "G2004J103", "ticker": "CCL", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "02462A104": {"new": "02462A203", "ticker": "ABTC", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "682310875": {"new": "68237V103", "ticker": "ONCY", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "89788C104": {"new": "89790E106", "ticker": "TRLV", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "38341P102": {"new": "38341P201", "ticker": "GOSS", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "68622E104": {"new": "68622E203", "ticker": "BARK", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "91544A109": {"new": "91544A208", "ticker": "UPLD", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "14161W105": {"new": "14161W303", "ticker": "CDLX", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "36322Q206": {"new": "G2646Y104", "ticker": "DMRA", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "762093102": {"new": "762093201", "ticker": "RBKB", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "67623L307": {"new": "67623L505", "ticker": "OPAD", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "91702V101": {"new": "91703D100", "ticker": "UROY", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "36254L308": {"new": "36254L407", "ticker": "GTBP", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "09077B104": {"new": "09077B203", "ticker": "BCAB", "quarter": "2026Q2", "basis": "sec_13f_list", "list_quarter": "2026Q2"},
+    "N3144W105": {"new": "G3314M109", "ticker": "XPRO", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
+    "226718104": {"new": "L20675101", "ticker": "CRTO", "quarter": "2026Q3", "basis": "sec_13f_list", "list_quarter": "2026Q3"},
 }
 
 
@@ -720,8 +778,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         if not (known_by and h.get("first_disclosed_at") and h["first_disclosed_at"] > known_by)
     }
     rows = []
-    # Reissued CUSIPs (Exxon 30231G102 -> 30233Q108): a position whose CUSIP is new this quarter
-    # continues one whose CUSIP is gone when both have the same ticker, put/call, type and class.
+    # Reissued CUSIPs (Exxon 30231G102 -> 30233Q108): a position whose CUSIP is new this quarter continues one whose
+    # CUSIP is gone when cusip_links() links the two (never on a shared ticker alone: SPAC units share one).
     renamed: dict[tuple, tuple] = {}
     now_keys = {(h["cusip"], h["put_call"] or "") for h in latest["holdings"]}
     gone = {k: p for k, p in before.items() if k not in now_keys}
@@ -733,17 +791,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         if k in before:
             continue
         pk = next(((o, k[1]) for o in olds.get(h["cusip"], ()) if (o, k[1]) in gone and (o, k[1]) not in renamed.values()), None)
-        if pk:  # a known reissue (cusip_links.json), with or without a ticker
+        if pk:  # a known reissue (cusip_links.json): SEC-confirmed, units checked; a split on it applies below
             renamed[k] = pk
-            continue
-        t = h.get("ticker") or security_ticker(h["cusip"])
-        if not t:
-            continue
-        for pk, p in gone.items():
-            if pk[1] == k[1] and pk not in renamed.values() and (p.get("ticker") or security_ticker(p["cusip"])) == t \
-                    and (p.get("shares_type") or "SH") == (h.get("shares_type") or "SH") and same_class(p, h):
-                renamed[k] = pk
-                break
 
     def ratio(h):
         if not (q_from and q_to) or h.get("shares_type") == "PRN":
@@ -1194,6 +1243,7 @@ def v1_position(h: dict) -> dict:
         "value_scale": h.get("value_scale"),
         "value_as_filed": h.get("value_as_filed"),
         "value_adjusted": h.get("value_adjusted"),
+        "prev_cusip": h.get("prev_cusip"),
     }
     return out | {k: h[k] for k in V1_EXTRA if h.get(k) is not None}
 
@@ -1504,8 +1554,12 @@ def detect_splits(payload: dict) -> int:
                 transitions.setdefault((a["quarter"], b["quarter"]), {})[m["cik"]] = tuple(sp.book_shares(x) for x in pair)
     path = DATA / "securities.json"
     issuers = json.loads(path.read_text()) if path.exists() else {}
+    links = {o: v["new"] for o, v in (cusip_links() | HELD_LINKS).items()}
     SPLITS.clear()
-    SPLITS.update(sp.update(transitions, issuers))
+    SPLITS.update(sp.update(transitions, issuers, links))
+    reload_links()
+    print(f"splits: CUSIP reissues: {len(cusip_links())} applied, {len(HELD_LINKS)} held: "
+          + "; ".join(f"{v.get('ticker') or o} {v['units_reason']}" for o, v in HELD_LINKS.items()), flush=True)
     return sum(len(v) for v in SPLITS.values())
 
 

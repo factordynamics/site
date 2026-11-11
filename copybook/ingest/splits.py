@@ -148,13 +148,46 @@ def issuer_cik(ticker: str | None) -> str | None:
     return _TICKER_CIK.get(ticker.upper().replace(".", "-"))
 
 
-def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], issuers: dict[str, dict]) -> dict:
-    """Detect splits for each (from_quarter, to_quarter), confirm new ones once, save splits.json."""
+def relink(book: dict[str, tuple[float, float]], links: dict[str, str]) -> dict[str, tuple[float, float]]:
+    """A book with reissued CUSIPs (old -> new) under the new one, so a split that came with a new CUSIP is seen."""
+    out: dict[str, tuple[float, float]] = {}
+    for c, (s, v) in book.items():
+        c = links.get(c, c)
+        a, b = out.get(c, (0, 0))
+        out[c] = (a + s, b + v)
+    return out
+
+
+def link_check(pairs: list[tuple[dict, dict]], old: str, new: str, split: float | None) -> dict | None:
+    """Whether a reissue's share units match: holders of old last quarter and new this one. units_ok when a split was
+    found on the linked pair (applied as a split) or holders at exactly 1:1 are at least 10% and outnumber those at
+    any other split ratio. Otherwise the link would net mismatched units (a reverse split without enough holders)."""
+    rs = [b[new][0] / a[old][0] for a, b in pairs if a.get(old, (0, 0))[0] > 0 and b.get(new, (0, 0))[0] > 0]
+    if not rs:
+        return None
+    exact = lambda k: sum(1 for r in rs if abs(r / k - 1) <= EXACT)
+    at1 = exact(1)
+    other = max(exact(k) for k in RATIOS)
+    med = statistics.median(rs)
+    ok = bool(split and split != 1) or (at1 >= max(1, 0.1 * len(rs)) and at1 > other)
+    return {"new": new, "holders": len(rs), "exact_at_1": at1, "median_ratio": round(med, 4),
+            "split_ratio": split if split and split != 1 else None, "units_ok": ok,
+            "reason": None if ok else (f"units unconfirmed: median share ratio {med:.3f} over {len(rs)} holders, "
+                                       f"{at1} at exactly 1:1, no split found")}
+
+
+def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], issuers: dict[str, dict],
+           links: dict[str, str] | None = None) -> dict:
+    """Detect splits for each (from_quarter, to_quarter), confirm new ones once, save splits.json. Reissued CUSIPs
+    (links, old -> new) count as one security, and each link's units are checked (doc["links"])."""
     doc = load()
     known = {(s["cusip"], s["to_quarter"]): s for s in doc.get("splits") or []}
     checked = doc.setdefault("checked", {})
+    link_checks = doc.setdefault("links", {})
+    seen: dict[str, dict] = {}
     for (q_from, q_to), pairs in sorted(transitions.items()):
-        found = detect(list(pairs.values()))
+        found = detect([(relink(a, links), relink(b, links)) for a, b in pairs.values()] if links
+                       else list(pairs.values()))
         stale = [k for k in known if k[1] == q_to and k[0] not in found]
         if stale and len(pairs) < FULL_PAIRS:
             print(f"splits: {q_to} kept {len(stale)} on file not seen in {len(pairs)} filer pairs (a full run rechecks)")
@@ -189,6 +222,14 @@ def update(transitions: dict[tuple[str, str], dict[str, tuple[dict, dict]]], iss
             checked[key] = "accepted"
             print(f"splits: {meta.get('ticker') or cusip} {q_to} ratio {ev['ratio']} "
                   f"({ev['exact_holders']}/{ev['holders']} holders exact, XBRL {xr})")
+        for old, new in (links or {}).items():
+            c = link_check(list(pairs.values()), old, new, (known.get((new, q_to)) or {}).get("ratio"))
+            if c and c["holders"] > (seen.get(old) or {}).get("holders", 0):
+                seen[old] = c | {"to_quarter": q_to, "pairs": len(pairs)}
+    for old, c in seen.items():  # a curated run's few holders never overrule a full run's check
+        prev = link_checks.get(old)
+        if not prev or prev.get("new") != c["new"] or c["pairs"] >= FULL_PAIRS or c["holders"] >= prev.get("holders", 0):
+            link_checks[old] = c
     doc["splits"] = sorted(known.values(), key=lambda s: (s["to_quarter"], s["cusip"]), reverse=True)
     doc["generated_at"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     doc["rule"] = ("A k-for-1 split is detected when filers holding the stock in both quarters cluster at an exact "

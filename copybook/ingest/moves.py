@@ -246,12 +246,20 @@ def collect_reissues(cik: str, rows: list[dict]) -> None:
     for r in rows:
         if r.get("change") == "new" and not r.get("put_call") and (r.get("shares") or 0) > 0:
             new.setdefault(round(r["shares"]), []).append(r)
+    by_ticker = {}
+    for ns in new.values():
+        for n in ns:
+            if word(n)[0]:
+                by_ticker.setdefault(word(n)[0], []).append(n)
     for g in gone:
-        for n in new.get(round(g["prev_shares"]), []):
-            tg, wg = word(g)
-            tn, wn = word(n)
-            # same class only: a SPAC's units or rights becoming ordinary shares is not one position
-            if n["cusip"] != g["cusip"] and ((tg and tg == tn) or (wg and wg == wn)) and build.same_class(g, n):
+        tg, wg = word(g)
+        # the same shares and ticker or issuer word, or the same ticker at any share count (a reverse split that
+        # came with a new CUSIP); same class only: SPAC units or rights becoming ordinary shares are not one position.
+        # Evidence only: write_links links a pair when the SEC's 13(f) list confirms it, and its units are checked.
+        cands = [n for n in new.get(round(g["prev_shares"]), []) if (tg and tg == word(n)[0]) or (wg and wg == word(n)[1])]
+        cands += by_ticker.get(tg, []) if tg else []
+        for n in cands:
+            if n["cusip"] != g["cusip"] and build.same_class(g, n):
                 PAIRS.setdefault((g["cusip"], n["cusip"]), set()).add(cik)
 
 
@@ -306,7 +314,7 @@ def write_links(quarter: str | None) -> list[str]:
     shares in 23 filers' books on Nov 11, but both still trade). Earlier confirmed links stay."""
     quarters = [quarter, prev_quarter(quarter)] if quarter else []
     lists = sec_13f_lists(quarters)
-    links = {o: v for o, v in build.cusip_links().items() if v.get("basis") == "sec_13f_list"}
+    links = {o: v for o, v in (build.cusip_links() | build.HELD_LINKS).items() if v.get("basis") == "sec_13f_list"}
     for o, v in build.SEED_LINKS.items():  # seeds are kept only when the list confirms them (or no list was readable)
         if o not in links and (not lists or on_list(o, v["new"], lists)):
             links[o] = v | {"basis": "sec_13f_list", "list_quarter": on_list(o, v["new"], lists) if lists else None}
@@ -328,15 +336,21 @@ def write_links(quarter: str | None) -> list[str]:
             v["filers"] = len(PAIRS[(old, v["new"])])
         v["name"] = v.get("name") or (SECS.get(v["new"]) or SECS.get(old) or {}).get("name")
         v["ticker"] = v.get("ticker") or (SECS.get(v["new"]) or {}).get("ticker")
+    held = {o: v for o, v in links.items() if v.get("units_reason")}
+    links = {o: v for o, v in links.items() if o not in held}
     write(DATA / "cusip_links.json", {
         "note": "Reissued CUSIPs, old -> new, with the quarter the new one first appears. Found in 13F filings (the old "
                 "CUSIP's holders report the same shares under the new one; filers = how many showed it this run) and "
                 "confirmed by the SEC's Official List of Section 13(f) Securities, which deletes the old CUSIP in the "
                 "list that adds the new one (list_quarter). Units, rights and warrants are never linked. Changes, "
-                "holder counts, bulk and /v1 treat the two as one position.",
-        "links": links})
+                "holder counts, bulk and /v1 treat the two as one position. Each link's share units are checked on "
+                "the holders first (units_check): a split that came with the new CUSIP (HON 2026Q2 1-for-2) is applied "
+                "as a split; `held` lists SEC-confirmed reissues whose units don't check out, which are not applied.",
+        "links": links, "held": held})
     build.cusip_links().clear()
     build.cusip_links().update(links)
+    build.HELD_LINKS.clear()
+    build.HELD_LINKS.update(held)
     return added
 
 

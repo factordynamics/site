@@ -50,10 +50,9 @@ def kind_of(h: dict) -> str | None:
     return kind
 
 
-try:
-    LINKS = json.loads((DATA / "cusip_links.json").read_text()).get("links") or {}
-except (OSError, ValueError):
-    from ingest.build import SEED_LINKS as LINKS
+from ingest.build import cusip_links  # noqa: E402 - reissues whose units checked out (held ones never merge)
+
+LINKS = cusip_links()
 
 
 def positions(book: dict, ratio=None) -> dict[tuple[str, str], dict]:

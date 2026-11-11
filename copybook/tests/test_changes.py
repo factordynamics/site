@@ -183,11 +183,14 @@ class MoveMathTest(unittest.TestCase):
         self.assertEqual(rows[0]["prev_shares_as_filed"], 31468114)  # no split: the filed prior, equal to prev_shares
         self.assertAlmostEqual(rows[0]["value_delta"], 465409 * 5197180970 / 31933523, delta=1)
 
-    def test_reissue_links_across_free_text_titles_but_not_to_a_preferred(self):
+    def test_reissue_links_only_through_cusip_links(self):
+        # ONEOK 682680103 -> 30609A109 (SEC 13(f) list, 2026Q3), across free-text titles.
         prev = {"quarter": "2026Q2", "holdings": [self.row("682680103", "OKE", 1000, 80000, title="cs")]}
+        cur = {"quarter": "2026Q3", "holdings": [self.row("30609A109", "OKE", 1000, 90000, title="COM")]}
+        self.assertEqual([(r["change"], r.get("prev_cusip")) for r in build.with_changes(cur, prev)],
+                         [("unchanged", "682680103")])
+        # A shared ticker alone never links (a SPAC's units and shares): an exit and a new line, as filed.
         cur = {"quarter": "2026Q3", "holdings": [self.row("682680999", "OKE", 1000, 90000, title="COM")]}
-        self.assertEqual([r["change"] for r in build.with_changes(cur, prev)], ["unchanged"])
-        cur = {"quarter": "2026Q3", "holdings": [self.row("682680999", "OKE", 1000, 90000, title="PFD SER A")]}
         self.assertEqual(sorted(r["change"] for r in build.with_changes(cur, prev)), ["exited", "new"])
 
     def test_reissue_link_needs_the_sec_13f_list_and_never_joins_units(self):
