@@ -14,7 +14,8 @@ import { loadRecap, stockPath, type PctRow, type RecapMove, type SeasonRow } fro
 // Everyone sees the top 5 of each list; members see the full lists.
 
 const FREE = 5
-const signed = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`
+// A word joiner keeps the sign on the same line as the amount.
+const signed = (v: number) => `${v >= 0 ? '+' : '−'}\u2060${money(Math.abs(v))}`
 const CHANGE: Record<RecapMove['change'], string> = { new: 'New', added: 'Added', trimmed: 'Trimmed', exited: 'Exited' }
 const dueLabel = (iso: string) => new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
 

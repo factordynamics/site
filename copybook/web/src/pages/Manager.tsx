@@ -118,7 +118,8 @@ export function ManagerPage() {
         )}
         {f && (
           <div className="flex flex-wrap gap-2">
-            <FollowButton kind="investor" id={f.slug} name={f.manager} />
+            {/* Signed out on a tracked fund, the Friday email box below is the one follow action. */}
+            {(f.filer || getToken()) && <FollowButton kind="investor" id={f.slug} name={f.manager} />}
             <Button href={f.sec_url} variant="outline" size="sm">
               View filing on SEC
             </Button>
@@ -147,7 +148,12 @@ export function ManagerPage() {
           }
           title={`Get ${possessive(f.manager)} moves free, in Friday’s email`}
           people={[{ slug: f.slug, name: f.manager }]}
-          trial={`Want ${possessive(shortFirst(f.manager))} 13F the minute it’s filed? Copy emails it with its moves, checked on EDGAR every minute.`}
+          trial={
+            q3 && q3.kind === 'expected' && due?.expected_date
+              ? copyGap(due.expected_date, due.time_et)
+              : `Want ${possessive(shortFirst(f.manager))} 13F as it’s filed? Copy emails it with its moves, checked on EDGAR every minute.`
+          }
+          solid
         />
       )}
       {f && q3 && q3.kind !== 'filed' && getToken() && (
@@ -518,6 +524,14 @@ function RecapLabel() {
 const shortFirst = (n: string) => (/^[A-Z][a-z]+ [A-Z][a-z]+$/.test(n) ? n.split(' ')[1] : n)
 
 /** When a free follower gets a filing made on `day`: Friday's email, N days later. */
+/** "Copy: alert on Mon Nov 16 ~4 pm ET, 4 days before Friday's email." Until the fund files (expected.json). */
+function copyGap(day: string, timeEt: number) {
+  const fr = fridayAfter(day)
+  const h = Math.round(timeEt / 60)
+  const at = `~${((h + 11) % 12) + 1} ${h < 12 ? 'am' : 'pm'} ET`
+  return `Copy: alert on ${shortDay(day)} ${at}, ${fr.days === 0 ? 'hours before' : `${fr.days} ${fr.days === 1 ? 'day' : 'days'} before`} Friday’s email.`
+}
+
 function fridayLine(name: string, day: string) {
   const fr = fridayAfter(day)
   const when = fr.days === 0 ? 'the same evening' : `${fr.days} ${fr.days === 1 ? 'day' : 'days'} later`

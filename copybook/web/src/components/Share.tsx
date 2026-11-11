@@ -5,7 +5,8 @@ import { Button } from './ui'
 /** The page URL to share: this page's address without tracking or someone else's referral, plus `code` as ?ref=. */
 export function shareUrl(url: string, code: string | null | undefined) {
   const u = new URL(url, window.location.origin)
-  for (const k of [...u.searchParams.keys()]) if (k === 'ref' || k.startsWith('utm_')) u.searchParams.delete(k)
+  // The bare page (retail, Nov 11): no ?nb=, ?from=, utm_ or someone else's ?ref=; a paying member's own code only.
+  u.search = ''
   if (code) u.searchParams.set('ref', code)
   return u.toString()
 }

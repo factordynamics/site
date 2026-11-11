@@ -27,10 +27,16 @@ export function Signup({ source, className = '' }: { source: string; className?:
       <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between md:gap-10">
         <div className="min-w-0 max-w-xl">
           <h2 id={`${id}-title`} className="text-[16px] font-semibold tracking-[-0.01em]">
-            Get the Friday top moves free
+            Every Friday: the week’s biggest superinvestor buys and sells. Free.
           </h2>
-          <p className="mt-1 text-[13.5px] text-ink-2">The week’s five biggest buys and sells by the investors we track, from SEC filings. Or start Copy and get each filing by email, checked on EDGAR every minute.</p>
-          <Button to={pricingTo()} className="mt-4">
+          <p className="mt-1 text-[13.5px] text-ink-2">
+            From SEC filings, with the investors you follow first.{' '}
+            <Link to="/weekly/" className="font-medium text-accent hover:text-accent-2">
+              See a sample email
+            </Link>
+            . Or start Copy for each 13F as it’s filed.
+          </p>
+          <Button to={pricingTo()} variant="outline" className="mt-4">
             Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
         </div>

@@ -124,7 +124,8 @@ export function Weekly() {
   const ed = w.data?.[which]
   const lead = ed && [...ed.buys, ...ed.sells].sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd))[0]
   // "From investors you follow" leads each email: shown here as if you followed this edition's biggest mover.
-  const followed = lead && ed ? [...ed.buys, ...ed.sells].filter((x) => x.slug === lead.slug).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 3) : []
+  // One fund in the edition: the example would repeat the lists below, so it's left out.
+  const followed = lead && ed && ed.funds.length > 1 ? [...ed.buys, ...ed.sells].filter((x) => x.slug === lead.slug).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 3) : []
   return (
     <div className="container-x max-w-3xl pt-12 md:pt-16">
       <p className="text-[13px] font-medium text-accent">The free Friday email</p>
@@ -155,7 +156,7 @@ export function Weekly() {
                 {followed.map((x) => (
                   <p key={`f-${x.accession}-${x.ticker}`} className="mt-1 text-[14px] text-ink-2">
                     {x.manager}: {LABEL[x.what]} <b className="font-medium text-ink">{x.ticker}</b>
-                    {x.company ? ` (${x.company})` : ''}, <span className={`num font-medium ${x.usd > 0 ? 'text-up' : 'text-down'}`}>{x.usd > 0 ? '+' : '−'}{money(Math.abs(x.usd))}</span>
+                    {x.company ? ` (${x.company})` : ''}, <span className={`num whitespace-nowrap font-medium ${x.usd > 0 ? 'text-up' : 'text-down'}`}>{x.usd > 0 ? '+' : '−'}{money(Math.abs(x.usd))}</span>
                     {x.pct != null ? `, ${bookPct(x.pct)} of portfolio` : ''}
                   </p>
                 ))}
@@ -181,7 +182,7 @@ export function Weekly() {
           <h2 className="text-[16px] font-semibold tracking-[-0.01em]">Get it every Friday, free</h2>
           <FollowSignup
             people={[
-              { slug: 'warren-buffett', name: 'Warren Buffett' },
+              { slug: 'warren-buffett', name: 'Berkshire Hathaway (Warren Buffett)' },
               { slug: 'bill-ackman', name: 'Bill Ackman' },
               { slug: 'stanley-druckenmiller', name: 'Stanley Druckenmiller' },
               { slug: 'seth-klarman', name: 'Seth Klarman' },

@@ -968,7 +968,8 @@ const NonTrade = ({ n, ticker }: { n: number; ticker: string }) => (
   </Link>
 )
 
-const signed = (v: number) => `${v >= 0 ? '+' : '−'}${money(Math.abs(v))}`
+// A word joiner keeps the sign on the same line as the amount.
+const signed = (v: number) => `${v >= 0 ? '+' : '−'}\u2060${money(Math.abs(v))}`
 
 function Import({ link = true }: { link?: boolean }) {
   const [text, setText] = useState('')

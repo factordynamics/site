@@ -13,7 +13,7 @@ import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, Lock, Monogram, NotCounted, Panel, Skeleton, Stat } from '../components/ui'
 import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, NOT_COUNTED } from '../lib/data'
 import { dueLead, stockTitle } from '../lib/titles.mjs'
-import { possessive } from '../lib/names.mjs'
+import { MARQUEE, possessive } from '../lib/names.mjs'
 import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
@@ -95,7 +95,7 @@ export function StockPage() {
           const m = mine.get(r.filer.slug)
           const f = flagOf(r)
           const change = r.change === 'unknown' || (f === 'both' && r.change !== 'new' && r.change !== 'exited') ? null : r.change
-          return { slug: r.filer.slug, manager: m?.manager ?? displayName(r.filer.name), firm: r.filer.name, quarter: r.period, featured: m?.featured ?? false, shares: r.shares, value: r.value_usd, weight: r.weight ?? 0, prev_shares: r.prev_shares ?? 0, prev_value: r.prev_value_usd ?? 0, delta_value: f ? 0 : r.value_usd - (r.prev_value_usd ?? 0), change, ...(f ? { flag: f, note: flagNote({ ...r, value: r.value_usd }) } : {}) }
+          return { slug: r.filer.slug, manager: m?.manager ?? displayName(r.filer.name), firm: r.filer.name, quarter: r.period, featured: m?.featured ?? false, shares: r.shares, value: r.value_usd, weight: r.weight ?? 0, prev_shares: r.prev_shares ?? 0, prev_value: r.prev_value_usd ?? 0, delta_value: f ? 0 : r.value_usd - (r.prev_value_usd ?? 0), change, ...(f ? { flag: f, note: flagNote({ ...r, value: r.value_usd, prev_value: r.prev_value_usd }) } : {}) }
         })
     return filers.rows.map(
       (r): StockHolder =>
@@ -213,7 +213,8 @@ export function StockPage() {
         </div>
         {/* Rendered before the data arrives (a placeholder for Follow), so nothing below moves when it does. */}
         <div className="flex flex-col items-start gap-3 sm:items-end">
-          {d ? <FollowButton kind="stock" id={d.ticker} name={d.ticker} size="md" /> : <Skeleton className="h-10 w-28 rounded-full" />}
+          {/* Signed out, the Friday email box below is the one follow action. */}
+          {!d ? <Skeleton className="h-10 w-28 rounded-full" /> : getToken() ? <FollowButton kind="stock" id={d.ticker} name={d.ticker} size="md" /> : null}
           <Share text={`Who owns $${d?.ticker ?? ticker.toUpperCase()}: the superinvestors and funds holding ${d?.name ?? 'it'}, from 13F filings`} />
         </div>
       </header>
@@ -225,9 +226,18 @@ export function StockPage() {
         <FridayBox
           className="mt-5 max-w-2xl"
           kind="stock"
+          top={
+            supHolders.length ? (
+              <p className="mb-2 text-[13.5px] font-medium text-accent-2">
+                {supHolders.length} {supHolders.length === 1 ? 'superinvestor holds' : 'superinvestors hold'} {d.ticker}
+                {supHolders.length > 1 ? `, including ${star(supHolders).manager}` : `: ${star(supHolders).manager}`}
+              </p>
+            ) : undefined
+          }
           title={`Get superinvestor moves in ${d.ticker} free, in Friday’s email`}
           people={[{ slug: d.ticker, name: d.ticker }]}
-          trial={`Want the moves in ${d.ticker} the minute they’re filed? Copy emails each 13F as it’s filed, checked on EDGAR every minute.`}
+          trial={supHolders.length ? `Copy: an alert whenever ${supHolders.length === 1 ? 'it' : 'one of them'} trades ${d.ticker}, as the 13F is filed.` : `Want the moves in ${d.ticker} as they’re filed? Copy emails each 13F as it’s filed, checked on EDGAR every minute.`}
+          solid
         />
       )}
 
@@ -379,7 +389,7 @@ export function StockPage() {
               {moves
                 .filter((h) => !bigMoves.includes(h))
                 .slice(0, 6)
-                .map((h) => `${h.manager} ${CHANGE[h.change ?? ""]?.label.toLowerCase() ?? h.change} ${h.delta_value >= 0 ? '+' : '−'}${money(Math.abs(h.delta_value))}`)
+                .map((h) => `${h.manager} ${CHANGE[h.change ?? ""]?.label.toLowerCase() ?? h.change} ${h.delta_value >= 0 ? '+' : '−'}\u2060${money(Math.abs(h.delta_value))}`)
                 .join(' · ')}
               {moves.length - bigMoves.length > 6 && ` · ${moves.length - bigMoves.length - 6} more`}
             </p>
@@ -404,8 +414,7 @@ export function StockPage() {
                     <span className="mt-0.5 block text-[12px] leading-snug text-ink-3">{h.note}</span>
                   </span>
                   {/* Muted and marked, so a held line never reads as an ordinary trim (trader, Nov 11). */}
-                  <span className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
-                    <span className="num text-[13px] text-ink-3">{flagMove(h)}</span>
+                  <span className="shrink-0 pt-0.5">
                     <NotCountedPill />
                   </span>
                 </li>
@@ -590,19 +599,8 @@ function HolderRow({ h, fresh }: { h: StockHolder; fresh: boolean }) {
   )
 }
 
-/** A flagged row's move from what can be trusted: the share change ("value"), the change in filed value ("shares"),
- *  or nothing ("both"). Shown beside the row, never added to a total. */
-function flagMove(h: StockHolder) {
-  if (h.flag === 'value' && h.prev_shares) {
-    const r = (h.shares - h.prev_shares) / h.prev_shares
-    return `${r > 0 ? '+' : r < 0 ? '−' : ''}${pct(Math.abs(r), 0)} shares`
-  }
-  if (h.flag === 'shares' && (h.value || h.prev_value)) {
-    const v = h.value_change ?? h.value - h.prev_value
-    return `${v > 0 ? '+' : v < 0 ? '−' : ''}${money(Math.abs(v))} filed value`
-  }
-  return 'not counted'
-}
+/** The best-known holder (MARQUEE order), else the largest. */
+const star = (hs: StockHolder[]) => [...hs].sort((a, b) => (MARQUEE.indexOf(a.slug) + 1 || 99) - (MARQUEE.indexOf(b.slug) + 1 || 99) || b.value - a.value)[0]
 
 function NotCountedPill() {
   return (
@@ -613,27 +611,14 @@ function NotCountedPill() {
 }
 
 function ChangeCell({ h }: { h: StockHolder }) {
-  // "both": no change shown (NEW and EXITED keep their badges); "value": the share change; "shares": the change in
-  // filed value, since the share counts don't reconcile. The row's note says which.
-  if (h.flag === 'both' && h.change !== 'new' && h.change !== 'exited')
+  // A held line shows no trade, $ or %: the pill, with the filed facts on the row's second line (h.note). NEW and
+  // EXITED keep their badges.
+  if (h.flag && h.change !== 'new' && h.change !== 'exited')
     return (
-      <span className="whitespace-nowrap text-[13px] text-ink-3" title={h.note ?? undefined}>
-        Not counted
-      </span>
-    )
-  // A flagged line's move is muted and marked, never green or red: it isn't counted in any total.
-  if (h.flag && (h.change === 'added' || h.change === 'trimmed' || h.change === 'unchanged')) {
-    const r = h.flag === 'shares' ? (h.prev_value ? (h.value - h.prev_value) / h.prev_value : 0) : h.prev_shares ? (h.shares - h.prev_shares) / h.prev_shares : 0
-    return (
-      <span className="flex flex-col items-end gap-1" title={h.note ?? undefined}>
-        <span className="num whitespace-nowrap text-[13px] text-ink-3">
-          {r > 0 ? '+' : r < 0 ? '−' : ''}
-          {pct(Math.abs(r), 0)}
-        </span>
+      <span title={h.note ?? undefined}>
         <NotCountedPill />
       </span>
     )
-  }
   if (!h.change) return <span className="text-[13px] text-ink-3">—</span>
   if (h.change === 'new' || h.change === 'exited') return <Badge tone={CHANGE[h.change].tone}>{CHANGE[h.change].label}</Badge>
   if (h.change === 'unchanged') return <span className="whitespace-nowrap text-[13px] text-ink-3">No change</span>

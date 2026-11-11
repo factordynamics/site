@@ -5,7 +5,7 @@ import { Signup } from '../components/Signup'
 import { Arrow, AvatarStack, Badge, Button, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { getToken, isPaying, loadLatency, useMember } from '../lib/account'
 import { track, useTrackVisit } from '../lib/track'
-import { FridayBox } from '../components/FridayBox'
+import { FAMOUS, FridayBox } from '../components/FridayBox'
 import { FollowButton } from '../components/FollowButton'
 import { HedgeFlow } from '../components/HedgeFlow'
 import { EdgarClosed } from '../components/EdgarClosed'
@@ -46,14 +46,6 @@ const TrialButton = () => (
   </Button>
 )
 
-// The free Friday email's default follows on /season/: names a newcomer knows, changeable before signing up.
-const FAMOUS = [
-  { slug: 'warren-buffett', name: 'Warren Buffett' },
-  { slug: 'bill-ackman', name: 'Bill Ackman' },
-  { slug: 'stanley-druckenmiller', name: 'Stanley Druckenmiller' },
-  { slug: 'seth-klarman', name: 'Seth Klarman' },
-]
-
 export function Season() {
   // Re-read every two minutes while the season is live, so an open tab follows each build.
   const tick = useTick(120_000, seasonNow().live)
@@ -69,7 +61,7 @@ export function Season() {
   const todayEt = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
   const kahn = soon.data?.expected.find((x) => x.slug === 'irving-kahn' && x.expected_date && x.expected_date >= todayEt)
   const trialLine = [
-    'Want each 13F the minute it’s filed?',
+    'Want each 13F as it’s filed?',
     med?.median_seconds != null && med.median_seconds < 120 ? 'Median alert under 2 minutes after the SEC publishes the filing.' : 'Copy emails you each one with its moves, checked on EDGAR every minute.',
     kahn && `${displayName(kahn.manager)} files ${weekday(kahn.expected_date!, todayEt)}.`,
   ]

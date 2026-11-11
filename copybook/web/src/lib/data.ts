@@ -53,7 +53,7 @@ export type Holding = {
 
 /** Which figures of a flagged line can't be trusted: its value ("value"), its share counts ("shares"), or both. */
 export type Flag = 'value' | 'shares' | 'both'
-type Flaggable = { unreliable?: unknown; suspect_units?: boolean | null; suspect_reason?: string | null; change?: string | null; value?: number; shares?: number; filed_price?: number | null }
+type Flaggable = { unreliable?: unknown; suspect_units?: boolean | null; suspect_reason?: string | null; change?: string | null; value?: number; shares?: number; prev_value?: number | null; prev_shares?: number | null; filed_price?: number | null }
 /** Ingest's `unreliable` kind; a row flagged only by the older fields (suspect_units, change "unknown", a pre-split
  *  count kept under a reissue's new CUSIP) is "both". Null for a clean row, so data without the fields renders as before. */
 export const flagOf = (h: Flaggable): Flag | null =>
@@ -61,16 +61,20 @@ export const flagOf = (h: Flaggable): Flag | null =>
 /** A flagged row: never in a page's dollar totals or biggest-moves lists. */
 export const unreliable = (h: Flaggable) => flagOf(h) != null
 export const NOT_COUNTED = 'Share count unreliable in this filing, not counted'
-const perShare = (x: number) => (x >= 100 ? Math.round(x).toLocaleString('en-US') : x.toFixed(2))
 /** The line a flagged row shows in place of its trade or dollar figure; `short` for a narrow badge. */
 export function flagNote(h: Flaggable, short = false): string | null {
   const f = flagOf(h)
   if (!f) return null
+  // The filed facts, never a computed trade (PM ruling, Nov 11): an analyst sees what happened, with no number to copy.
   if (f === 'value') {
-    const px = h.filed_price || (h.shares && h.value ? h.value / h.shares : 0)
-    return short ? 'Value unavailable' : `Value unavailable${px ? ` (filed at ≈$${perShare(px)}/sh)` : ''}`
+    if (short) return 'Dollar value looks wrong'
+    const moved = h.prev_shares != null && h.shares != null && h.change !== 'new' ? `: ${sharesFmt(h.prev_shares)} → ${sharesFmt(h.shares)} shares` : ''
+    return `This filing’s dollar value looks wrong; share change only${moved}`
   }
-  if (f === 'shares') return short ? 'Shares don’t reconcile' : 'Share counts don’t reconcile; change from filed values'
+  if (f === 'shares') {
+    if (short) return 'Shares don’t reconcile'
+    return h.prev_value ? `As filed: ${money(h.prev_value)} → ${money(h.value)}; share counts don’t reconcile` : 'Share counts don’t reconcile'
+  }
   if (h.suspect_reason === 'reissue_ratio_not_applied') return short ? 'Pre-split count' : 'Pre-split count, change not computed'
   return short ? 'Not counted' : NOT_COUNTED
 }
