@@ -243,6 +243,9 @@ function spread(xs: number[]) {
 /** From then (the deploy of 0bf5b8f) a 13F is timed by the email that carries its moves. Filings accepted earlier are left out of the figures. */
 const MOVES_FIX_AT = '2026-11-11T00:01:00Z';
 
+/** A row re-timed from a day store, whose send time was the minute's start (up to 60 s before the real send): stamped on a whole minute. */
+const approx = (l: LatencyRow) => /T\d\d:\d\d:00\.000Z$/.test(l.sent);
+
 export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = []) {
   const { season, from } = seasonOf(now);
   const fixAt = Date.parse(MOVES_FIX_AT);
@@ -276,7 +279,7 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
     count: all.count,
     by_form: group(rows, (l) => family(formOf(l)), (l) => l.seconds),
     moves_fix_at: MOVES_FIX_AT,
-    before_moves_fix: { '13F': { ...spread(pre.map((l) => l.seconds)), max_seconds: pre.length ? Math.max(...pre.map((l) => l.seconds)) : null, rows: pre.map((l) => ({ accession: l.accession, manager: l.manager ?? null, slug: l.slug, accepted_at: l.accepted, sent_at: l.sent, seconds: l.seconds })) } },
+    before_moves_fix: { '13F': { ...spread(pre.map((l) => l.seconds)), max_seconds: pre.length ? Math.max(...pre.map((l) => l.seconds)) : null, rows: pre.map((l) => ({ accession: l.accession, manager: l.manager ?? null, slug: l.slug, accepted_at: l.accepted, sent_at: l.sent, seconds: l.seconds, ...(approx(l) ? { sent_approx: true } : {}) })) } },
     by_channel: { email: all, ...group(chRows, (c) => c.channel, (c) => c.seconds) },
     by_coverage: group(rows, (l) => l.coverage ?? 'curated', (l) => l.seconds),
     recent: rows.slice(0, 20).map((l) => ({ form: formOf(l), manager: l.manager ?? null, slug: l.slug, coverage: l.coverage ?? 'curated', accession: l.accession, accepted_at: l.accepted, delivered_at: l.sent, seconds: l.seconds, channel: 'email' })),
@@ -290,6 +293,7 @@ export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDeliver
       accepted_at: l.accepted,
       sent_at: l.sent,
       gap_seconds: l.seconds,
+      ...(approx(l) ? { sent_approx: true } : {}),
     })),
   };
 }
@@ -986,21 +990,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       // A seat also sees its team's channel (the Fund owner's), read-only.
       const owner = m.seat_of ? await getMember(env, m.seat_of) : null;
       const team = owner ? { owner, c: await getChannels(env, owner.customer), failing: await getFailures(env, owner.customer) } : undefined;
-      return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), apiBase(env, url), await getFailures(env, m.customer), team) }, 200, h);
+      return json({ ok: true, channels: channelsView(m, await getChannels(env, m.customer), env.FEED_URL ?? apiBase(env, url), await getFailures(env, m.customer), team) }, 200, h);
     }
     if (req.method === 'PUT' && path === '/channels') {
       // A seat can't save its team's destination (409 already_team_channel); an owner's save clears seats' copies of it.
       const team = m.seat_of ? await getChannels(env, m.seat_of) : undefined;
       const r = await updateChannels(env, m, await body(req), team);
       if (r.ok && channelScope(m) === 'team') await clearSeatDuplicates(env, m);
-      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, apiBase(env, url), await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
+      return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, env.FEED_URL ?? apiBase(env, url), await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
     }
     if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, ...(await testChannels(env, m, await getChannels(env, m.customer))) }, 200, h);
     if (path === '/channels/feed' && (req.method === 'POST' || req.method === 'DELETE')) {
       const c = await rotateFeed(env, m, req.method === 'DELETE');
       // A new feed starts with the member's alerts from the last 30 days (at most 20), not empty.
       if (req.method === 'POST') await seedFeed(env, m.customer, await recentFeed(env, m, Date.now()));
-      return json({ ok: true, channels: channelsView(m, c, apiBase(env, url), await getFailures(env, m.customer)) }, 200, h);
+      return json({ ok: true, channels: channelsView(m, c, env.FEED_URL ?? apiBase(env, url), await getFailures(env, m.customer)) }, 200, h);
     }
     return json({ ok: false, error: 'not found' }, 404, h);
   }

@@ -23,6 +23,8 @@ crons = ["* * * * *"]
 CF_ACCOUNT_ID = "967e13dd88bb23b24662e62cbb6fd84f"
 PUBLIC_BUCKET = "copybook-public"
 PUBLIC_URL = "https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/"
+# Members' private feed URLs point at gene's Funnel, so feed polling stays off the Workers quota.
+FEED_URL = "https://gene.tail70ba3.ts.net/copybook"
 SITE_URL = "https://copybook.factordynamics.com/"
 DATA_URL = "https://refcell.github.io/gust/copybook/data/"
 ALLOWED_ORIGINS = "https://copybook.factordynamics.com,https://refcell.github.io,https://holdterm.pages.dev,https://holdterm.factordynamics.com"

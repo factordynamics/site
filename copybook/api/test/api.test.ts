@@ -732,7 +732,7 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['loeb@example.com']);
     expect(sent[0].text).toContain('New: MICROSOFT CORP +$300.0M');
     // EDGAR's table has no tickers: the added AAPL is looked up, so it's named as the member's watched stock.
-    expect(sent[0].text).toMatch(/In your names: AAPL added \+\$25\.0M, 300,000 sh \(watchlist\)/);
+    expect(sent[0].text).toMatch(/In your names: AAPL added \+\$25\.0M, bought 100,000 sh \(\+50%\), holds 300K \(watchlist\)/);
     expect(JSON.parse((await env.DB.get('alerts:latency'))!).find((l: { slug: string }) => l.slug === 'dan-loeb')?.moves).toBe(true);
     // Done: neither gene's next minute nor the data run's moves send it again.
     sent = [];
@@ -2109,9 +2109,18 @@ describe('copybook api', () => {
     const moves = { bought_usd: 19.2e9, sold_usd: 4.1e9, new: [row('DHI', 3564, 0, 580504, 580504, 0.0000019)], added: [row('GOOGL', 78791167, 54249798, 28157599351, 8770349040, 0.0293)], trimmed: [row('BAC', 1, 2, 1, -1.7e9, -0.006), row('COF', 5, 12, 5, -832.6e6, -0.003)], exited: [row('STZ', 0, 1, 0, -94.9e6, -0.0003)] };
     const a = { slug: 'warren-buffett', slugs: ['warren-buffett'], manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', accession: '0001193125-26-352200', sec_url: 'https://www.sec.gov/x', accepted: '2026-08-14T20:05:04Z', moves, tickers: [] };
     const m = alertMail(env, 'x@example.com', [a], [], { investors: [], stocks: [], owned: [], peers: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true });
-    expect(m.subject).toBe('Buffett Q2: NEW DHI · EXIT STZ · GOOGL +$8.8B');
+    // A $581K new name (<0.1% of book) isn't headline news: the biggest trades by dollars lead.
+    expect(m.subject).toBe('Buffett Q2: GOOGL +$8.8B · BAC -$1.7B · COF -$832.6M');
     expect(m.text).toContain('Bought $19.2B, sold $4.1B this quarter.');
     expect(m.text).toContain('Added: GOOGL +$8.8B (+45% shares, 2.9% of book)');
+    // A trim that leaves a sliver says ">99%"; a 10x add reads as share counts; a truncated name loses " in".
+    const r2 = (o: Record<string, unknown>) => ({ display_name: null, put_call: null, cusip: 'X', value: 1e8, delta_pct_of_book: 0.01, ...o });
+    const fisher = { ...a, manager: 'Fisher Asset Management', moves: { bought_usd: 5e9, sold_usd: 4e9, new: [r2({ ticker: 'FCOM', issuer: 'FCOM', shares: 10, prev_shares: 0, value_delta: 56.9e6, delta_pct_of_book: 0.0002 }), r2({ ticker: null, issuer: 'CRINETICS PHARMACEUTICALS IN', display_name: 'Crinetics Pharmaceuticals in', shares: 10, prev_shares: 0, value_delta: 13.6e6, delta_pct_of_book: 0.00005 })], added: [r2({ ticker: 'TLT', issuer: 'TLT', shares: 59.2e6, prev_shares: 44294, value_delta: 4.6e9 })], trimmed: [r2({ ticker: 'IEF', issuer: 'IEF', shares: 9e6, prev_shares: 12e6, value_delta: -3.1e9 }), r2({ ticker: 'IEX', issuer: 'IEX', shares: 1553, prev_shares: 748815, value_delta: -150e6 })], exited: [r2({ ticker: 'FN', issuer: 'FN', shares: 0, prev_shares: 10, value_delta: -66.3e6, delta_pct_of_book: -0.0002 })] } };
+    const fm = alertMail(env, 'x@example.com', [fisher as never], [], { investors: [], stocks: [], owned: [] } as never);
+    expect(fm.subject).toBe('Fisher Asset Management Q2: TLT +$4.6B · IEF -$3.1B · IEX -$150.0M');
+    expect(fm.text).toContain('TLT +$4.6B (44K → 59.2M sh');
+    expect(fm.text).toContain('IEX -$150.0M (sold >99% of the position');
+    expect(fm.text).toContain('Crinetics Pharmaceuticals +$13.6M');
     expect(m.text).toContain('New: DHI +$581K (<0.1% of book)');
     // The trader owns GOOGL; the retail critic owns COF and DHI and watches BAC: tagged in text and HTML.
     const f = { investors: [], stocks: ['GOOGL', 'COF', 'DHI', 'BAC'], owned: ['GOOGL', 'COF', 'DHI'], peers: [], onboarded: true, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100_000, cluster_buys: true, any_13d: true };

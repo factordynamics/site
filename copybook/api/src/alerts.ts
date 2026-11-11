@@ -387,7 +387,8 @@ export async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEve
   // Everything goes in the day's digest store; digest members get it from there tonight.
   const key = `digest:${etDay(now)}`;
   const day = JSON.parse((await env.DB.get(key)) ?? '{"filings":[],"events":[]}') as DigestDay;
-  const sent_at = new Date(now).toISOString();
+  // The real time, not the minute's start: rows re-timed from this store were up to a minute early (Acadian, Vulcan).
+  const sent_at = new Date().toISOString();
   day.filings.push(...filings.map((a) => ({ ...a, sent_at })));
   day.events.push(...events.map((e) => ({ ...e, sent_at })));
   day.late = [...(day.late ?? []), ...late];

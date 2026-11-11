@@ -61,6 +61,8 @@ export interface Env {
   GITHUB_DISPATCH_TOKEN?: string;
   /** Set (as a secret) only on a retired copy of the API: every request is redirected to this base. */
   MOVED_TO?: string;
+  /** The base for members' private feed URLs (gene's Funnel): feed readers poll every few minutes, off the shared Workers quota. */
+  FEED_URL?: string;
   /** The mailing address marketing email must carry (the Friday email, Email 2). Empty: no Copy ask, and Email 2 isn't sent. */
   POSTAL_ADDRESS?: string;
   /** The commit this copy runs (gene's deployer sets it from state.deployed-sha): /health's api_build, so /status/ tells a deploy from a crash. */

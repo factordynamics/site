@@ -325,7 +325,10 @@ function flag(ticker: string | null, f: Follows): string {
 
 const MOVE_LABELS = [['New', 'new'], ['Added', 'added'], ['Trimmed', 'trimmed'], ['Exited', 'exited']] as const;
 
-const rowName = (r: MoveRow) => (r.ticker || r.display_name || r.issuer || r.cusip) + (r.put_call ? ` ${r.put_call.toLowerCase()}s` : '');
+// A name cut off at 13F's 30 characters ("CRINETICS PHARMACEUTICALS IN") loses the stray fragment of its legal suffix.
+const rowName = (r: MoveRow) => (r.ticker || (r.display_name || r.issuer || r.cusip).replace(/\s+(in|cor|corpo|incor|hl|hld)$/i, '')) + (r.put_call ? ` ${r.put_call.toLowerCase()}s` : '');
+/** 4,380,656 as "4.38M", 44,294 as "44K". */
+const compact = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toPrecision(3)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n.toLocaleString('en-US'));
 /** " · Unusual size · check the filing" after a large but real move. */
 const odd = (r: MoveRow) => (r.unusual ? ` · ${UNUSUAL}` : '');
 
@@ -342,7 +345,18 @@ function positionChange(label: string, r: MoveRow): string {
   if (label === 'Exited') return 'sold all';
   if (!r.prev_shares) return '';
   const p = ((r.shares - r.prev_shares) / r.prev_shares) * 100;
-  return label === 'Trimmed' ? `sold ${Math.abs(p).toFixed(0)}%` : `+${p.toFixed(0)}% shares`;
+  // A trim that leaves a sliver isn't "sold 100%"; a position grown 10x or more reads better as share counts.
+  if (label === 'Trimmed') return r.shares > 0 && p <= -99.5 ? 'sold >99%' : `sold ${Math.abs(p).toFixed(0)}%`;
+  return p >= 1000 ? `${compact(r.prev_shares)} → ${compact(r.shares)} sh` : `+${p.toFixed(0)}% shares`;
+}
+/** "In your names" detail: the trade in shares, then what's held ("sold 135,048 sh (3%), holds 4.38M"). */
+function shareTrade(r: MoveRow): string {
+  if (!r.prev_shares) return r.shares ? `${compact(r.shares)} sh` : '';
+  if (!r.shares) return `sold all ${compact(r.prev_shares)} sh`;
+  const d = r.shares - r.prev_shares;
+  const pct = Math.abs(d / r.prev_shares) * 100;
+  const pctText = pct >= 1000 ? '' : ` (${d > 0 ? '+' : ''}${pct < 1 ? pct.toFixed(1) : pct.toFixed(0)}%)`;
+  return `${d > 0 ? 'bought' : 'sold'} ${Math.abs(d).toLocaleString('en-US')} sh${pctText}, holds ${compact(r.shares)}`;
 }
 
 /** Short name for subjects: a person's surname ("Buffett"), else the firm without its legal suffix. */
@@ -365,13 +379,14 @@ export function shortName(manager: string): string {
  */
 function headlineMoves(mv: Moves): string {
   const big = (rows: MoveRow[]) => [...rows].sort((a, b) => Math.abs(b.value_delta) - Math.abs(a.value_delta));
-  return [
-    ...big(mv.new).slice(0, 1).map((r) => `NEW ${rowName(r)}${odd(r)}`),
-    ...big(mv.exited).slice(0, 1).map((r) => `EXIT ${rowName(r)}${odd(r)}`),
-    ...big([...mv.added, ...mv.trimmed]).map((r) => `${rowName(r)} ${usd(r.value_delta)}${odd(r)}`),
-  ]
-    .slice(0, 3)
-    .join(' · ');
+  // The largest new position and exit lead when each is at least 0.2% of the book (news whatever its dollars), then
+  // the biggest trades by dollars. Below that a new name or exit is just a trade: Fisher's Q3 led with a $57M new
+  // name and a $66M exit, under 0.1% of book, over a $4.6B bond rotation.
+  const pct = (r: MoveRow) => (r.delta_pct_of_book ?? r.pct_of_book) == null ? 1 : Math.abs((r.delta_pct_of_book ?? r.pct_of_book)!);
+  const label = (r: MoveRow) => (mv.new.includes(r) ? `NEW ${rowName(r)}` : mv.exited.includes(r) ? `EXIT ${rowName(r)}` : `${rowName(r)} ${usd(r.value_delta)}`) + odd(r);
+  const news = [...big(mv.new).slice(0, 1), ...big(mv.exited).slice(0, 1)].filter((r) => pct(r) >= 0.002);
+  const rest = big([...mv.new, ...mv.exited, ...mv.added, ...mv.trimmed]).filter((r) => !news.includes(r));
+  return [...news, ...rest].slice(0, 3).map(label).join(' · ');
 }
 
 const acceptedUtc = (iso: string) => iso.replace('T', ' ').replace(/(\.\d+)?Z$/, ' UTC');
@@ -409,7 +424,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
       lines.push(`  ${label}: ${parts.join(', ')}`);
     }
     const mine = yourMoves(a, f);
-    if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${verb(r)} ${usd(r.value_delta)}${r.shares ? `, ${r.shares.toLocaleString('en-US')} sh` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
+    if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
   } else if (a.top?.length) {
     lines.push('  No earlier quarter on file for this filer, so no changes yet. Largest holdings:');
     lines.push(`  ${a.top.map((r) => `${r.ticker || r.display_name || r.issuer}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} ${usd(r.value, false)}${flag(r.ticker, f)}`).join(', ')}`);
@@ -600,7 +615,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}`, usd(r.value_delta), esc(positionChange(label, r)), bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', 'Trade, % of book'], rows, [2, 4]));
     const mine = yourMoves(a, f);
-    if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${verb(r)} ${usd(r.value_delta)} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
+    if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${esc(shareTrade(r))}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
   } else if (a.top?.length) {
     out.push('<p style="margin:2px 0">No earlier quarter on file for this filer, so no changes yet. Largest holdings:</p>');
     out.push(table(['Stock', 'Value'], a.top.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, usd(r.value, false)]), [1]));
