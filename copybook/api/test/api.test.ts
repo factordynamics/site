@@ -1780,15 +1780,20 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
     resendUsed = 0;
     await cron(7);
-    // With the 80% note to hello@ (once a day).
-    expect(sent.map((m) => m.subject)).toEqual([`Paused until ${deadlineLabel(until)} · no charges until then`, "Copybook: 100% of this day's email sends used (100 of 100)"]);
+    // The 80% note to hello@ is ops mail: with under 50 left it is dropped, never taking alert or account room.
+    expect(sent.map((m) => m.subject)).toEqual([`Paused until ${deadlineLabel(until)} · no charges until then`]);
+    expect((await import('../src/email')).mailQuota.kinds?.dropped).toBeGreaterThan(0);
     const { sendMail: send, mailQuota, retryMail } = await import('../src/email');
     resendUsed = 82;
     mailQuota.used = 82; // room for 3 more alerts (100 less the 15 kept for account mail)
     sent = [];
     expect(await send(env, [{ to: 'a@example.com', subject: 'alert', text: 'x' }, { to: 'b@example.com', subject: 'alert', text: 'x' }], { bulk: true })).toBe('200');
-    // Over the alerts' share: real members first, a test member waits; nothing is dropped.
+    // Under 50 left, a test member's alert is dropped (never queued: it can't take tomorrow's room either); the real one goes.
+    const dropped0 = mailQuota.kinds?.dropped ?? 0;
     expect(await send(env, [{ to: 't@fldubai.com', subject: 'alert T', text: 'x', test: true, ids: ['acc-t'] }, { to: 'c@example.com', subject: 'alert C', text: 'x', ids: ['acc-c'] }], { bulk: true })).toBe('200');
+    expect(mailQuota.kinds?.dropped).toBe(dropped0 + 1);
+    // Over the alerts' share (15 kept for account mail): a real member's alert waits for the reset; sign-in mail still goes.
+    expect(await send(env, [{ to: 'e@example.com', subject: 'alert E', text: 'x', ids: ['acc-e'] }], { bulk: true })).toBe('delayed');
     expect(await send(env, [{ to: 'd@example.com', subject: 'Sign in', text: 'x' }])).toBe('200');
     expect(sent.map((m) => m.to[0])).toEqual(['a@example.com', 'b@example.com', 'c@example.com', 'd@example.com']);
     // After the reset it goes out, marked as delayed.
@@ -1798,8 +1803,8 @@ describe('copybook api', () => {
     mailQuota.used = 0;
     sent = [];
     await retryMail(env);
-    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['t@fldubai.com', '(delayed: email limit) alert T']]);
-    expect(JSON.parse((await env.DB.get('host:mail-delayed-ids'))!)).toEqual(['acc-t']);
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['e@example.com', '(delayed: email limit) alert E']]);
+    expect(JSON.parse((await env.DB.get('host:mail-delayed-ids'))!)).toEqual(['acc-e']);
     resendUsed = 0;
     mailQuota.used = 0;
     vi.stubGlobal('fetch', orig);

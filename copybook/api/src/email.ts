@@ -47,7 +47,13 @@ const DELAY_MARK = '(delayed: email limit) ';
 export const mailQuota: { day: string; used: number; month: string; monthly: number; delayed: number; mailgun: number; refused?: string; kinds?: MailKinds } = { day: '', used: 0, month: '', monthly: 0, delayed: 0, mailgun: 0 };
 /** This host's sends today by kind (both providers): real members, test and critic members, account mail; `preview` (part of test) is previews, replays and samples. */
 /** Sends by kind from `since` (this host's first counted send of the UTC day); used_at_since: Resend's day count then. */
-export type MailKinds = { real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number };
+export type MailKinds = { real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number; dropped?: number };
+/**
+ * Test, preview and ops mail (notices to our own inbox) send only while Resend has more than this left today; past it
+ * they are dropped (counted in kinds.dropped), never queued, so they can't take alert or account room (MAIL_RESERVE 15
+ * for account mail, 35 for alerts).
+ */
+export const NONMEMBER_FLOOR = 50;
 /**
  * One day's Resend count split so it adds up: before_since (sent before these counters started) + real + test + account
  * + other (counted by Resend after since but by no host's tally: another host's lost write, or another sender) = used.
@@ -57,7 +63,7 @@ export function kindsView(used: number, k: MailKinds | null | undefined) {
   const real = k?.real ?? 0, test = k?.test ?? 0, account = k?.account ?? 0;
   // Counters started without the day's count then (an older build): everything not tallied counts as before them.
   const before = k ? (k.used_at_since ?? Math.max(0, used - real - test - account)) : used;
-  return { real, test, account, preview: k?.preview ?? 0, before_since: before, other: Math.max(0, used - before - real - test - account), since: k?.since ?? null };
+  return { real, test, account, preview: k?.preview ?? 0, before_since: before, other: Math.max(0, used - before - real - test - account), since: k?.since ?? null, dropped_not_sent: k?.dropped ?? 0 };
 }
 /** Previews, replays and samples to test inboxes: at most this many a day; past it they wait for the reset. */
 export const PREVIEW_DAILY_CAP = 10;
@@ -171,6 +177,22 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
   const blocked = mails.filter((m) => SAMPLE.test(m.subject) && !previewInbox(m.to));
   if (blocked.length) console.log(`samples not sent to members: ${blocked.length}`);
   mails = mails.filter((m) => !blocked.includes(m));
+  // Test, preview and ops mail first in line to go: past NONMEMBER_FLOOR left today, dropped. A test member's sign-in
+  // and billing mail (account tier) still sends; a notice to our inbox doesn't.
+  const ours = (m: Mail) => m.to === (env.CONTACT_EMAIL ?? 'hello@factordynamics.com') || m.to === 'hello@factordynamics.com';
+  const nonMember = (m: Mail) => !!m.preview || ours(m) || (tier !== 'account' && (!!m.test || testAddress(m.to)));
+  // Each provider keeps NONMEMBER_FLOOR for members: Resend's room above it, plus Mailgun's when it's configured.
+  let spare = Math.max(0, MAIL_DAILY_CAP - NONMEMBER_FLOOR - mailQuota.used) + (mailgunOn(env) ? Math.max(0, MAILGUN_DAILY_CAP - NONMEMBER_FLOOR - mailQuota.mailgun) : 0);
+  const dropped = mails.filter((m) => nonMember(m) && spare-- <= 0);
+  if (dropped.length) {
+    kinds.dropped = (kinds.dropped ?? 0) + dropped.length;
+    console.log(`email: ${dropped.length} test/preview/ops dropped (Resend ${mailQuota.used} of ${MAIL_DAILY_CAP} used; non-member mail stops at ${NONMEMBER_FLOOR} left)`);
+    mails = mails.filter((m) => !dropped.includes(m));
+    if (!mails.length) {
+      await env.DB.put(METER, JSON.stringify(mailQuota));
+      return 'dropped';
+    }
+  }
   if (!mails.length) return blocked.length ? 'blocked' : 'none';
   const statuses: string[] = [];
   const done = async () => {
