@@ -1492,7 +1492,15 @@ export function Alerts() {
 const when = (v: number | string | null | undefined) => {
   if (v == null) return ''
   const d = typeof v === 'number' ? new Date(v < 1e12 ? v * 1000 : v) : new Date(v)
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+/** The member's plan in a sentence, with the tone of its status pill. */
+function planLine(m: { status: string; active: boolean; period_end?: number | string | null; cancel_at_period_end?: boolean }): { pill: string; tone: 'pos' | 'neg' | 'acc'; text: string } {
+  const end = when(m.period_end)
+  if (!m.active) return { pill: m.status === 'canceled' ? 'Canceled' : 'Inactive', tone: 'neg', text: 'Alerts are off. Start a new plan to turn them back on; what you follow is kept.' }
+  if (m.cancel_at_period_end) return { pill: 'Ending', tone: 'neg', text: `Alerts stop on ${end || 'the end of this period'}. Resume any time in billing.` }
+  if (m.status === 'trialing') return { pill: 'Free trial', tone: 'acc', text: `Your free trial ends on ${end || 'its last day'}, then $${PRICE.monthly} a month unless you cancel.` }
+  return { pill: 'Active', tone: 'pos', text: end ? `Renews on ${end}.` : 'Your plan is active.' }
 }
 export function Account() {
   title('Account')
@@ -1517,18 +1525,22 @@ export function Account() {
     if (member?.active) follows().then(setF).catch(() => {})
   }, [member])
   if (!api) return null
-  if (pending) return <Loading what="signing you in" />
+  if (pending) return <Loading what="Signing you in" />
   if (!member)
     return (
-      <div className="page narrow">
-        <h1>Account</h1>
-        <Panel title="Sign in">
+      <div className="page acct-signin">
+        <div className="acct-card">
+          <AppIcon size={40} />
+          <h1>Sign in to Holdterm</h1>
+          <p className="dim">For alert members. We’ll email you a link that signs you in; there’s no password.</p>
           {(problem || err) && <div className="notice warn">{problem || err}</div>}
           {sent ? (
-            <div>If {email} has an active plan, a sign-in link is on its way. It works for 7 days.</div>
+            <div className="notice" role="status">
+              <b>Check your inbox.</b> If {email} has a Holdterm plan, a sign-in link is on its way. It works once, for 15 minutes.
+            </div>
           ) : (
             <form
-              className="prompt-form"
+              className="acct-form"
               onSubmit={(e) => {
                 e.preventDefault()
                 setProblem(null)
@@ -1538,45 +1550,31 @@ export function Account() {
                 )
               }}
             >
-              <label htmlFor="email" className="sr">
-                email
-              </label>
-              <input id="email" type="email" required placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <button className="btn">Email me a link</button>
+              <label htmlFor="email">Email address</label>
+              <input id="email" type="email" required autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <button className="btn big-btn">Email me a sign-in link</button>
             </form>
           )}
-          <p className="dim small">
-            No account yet? <A to="/alerts">Start a {PRICE.trialDays}-day free trial</A>. To manage or cancel billing, use the <a href={checkout.portal}>Stripe billing portal ↗</a>
+          <p className="small acct-foot">
+            New to alerts? <A to="/alerts">Start a {PRICE.trialDays}-day free trial</A>
+            <br />
+            <span className="dim">To change or cancel billing without signing in, use the </span>
+            <a href={checkout.portal}>Stripe billing portal</a>
+            <span className="dim">.</span>
           </p>
-        </Panel>
+        </div>
       </div>
     )
-  const ms = ix.data ? funds(ix.data) : []
-  const on = new Set(f?.investors ?? [])
-  const toggle = (slug: string) => setFollow('investors', slug, !on.has(slug)).then(setF, () => {})
-  const ends = member.cancel_at_period_end || member.status === 'canceled'
+  const plan = planLine(member)
   return (
-    <div className="page narrow">
-      <h1>Account</h1>
-      {problem && <div className="notice warn">{problem}</div>}
-      {welcome && (
-        <Panel title="You’re in">
-          <p>
-            Alerts are on. Follow nobody and you get every roster fund; or pick funds below, and use <span className="acc">+ Follow</span> on any fund or stock page.
-          </p>
-        </Panel>
-      )}
-      <div className="stats">
-        <Stat label="email" value={<span className="small">{member.email}</span>} />
-        <Stat label="plan" value={member.active ? 'alerts' : member.status} tone={member.active ? 'pos' : 'neg'} sub={member.period_end ? `${ends ? 'ends' : member.status === 'trialing' ? 'trial ends' : 'renews'} ${when(member.period_end)}` : undefined} />
-        <Stat label="following" value={on.size || 'all'} sub={on.size ? (on.size === 1 ? 'fund' : 'funds') : 'every roster fund'} />
-      </div>
-      <div className="filters">
-        <button className="chip" onClick={() => openPortal().catch((e: Error) => setProblem(e.message))}>
-          Manage billing ↗
-        </button>
+    <div className="page acct">
+      <header className="acct-head">
+        <div>
+          <h1>Your alerts</h1>
+          <p className="lede">Signed in as {member.email}</p>
+        </div>
         <button
-          className="chip"
+          className="btn ghost"
           onClick={() => {
             signOut()
             setMember(null)
@@ -1584,59 +1582,169 @@ export function Account() {
         >
           Sign out
         </button>
+      </header>
+      {problem && <div className="notice warn">{problem}</div>}
+      {welcome && (
+        <div className="notice acct-welcome" role="status">
+          <b>You’re in, and alerts are on.</b> Follow nobody and you hear about every investor Holdterm tracks, or choose investors and stocks below. You can also use <b>Follow</b> on any investor or stock page.
+        </div>
+      )}
+      <div className="acct-grid">
+        <section className="acct-box">
+          <div className="acct-box-head">
+            <h2>Plan</h2>
+            <span className={`tag ${plan.tone}`}>{plan.pill}</span>
+          </div>
+          <p>{plan.text}</p>
+          <div className="acct-actions">
+            {member.active ? (
+              <button className="btn ghost" onClick={() => openPortal().catch((e: Error) => setProblem(e.message))}>
+                Manage billing
+              </button>
+            ) : (
+              <A to="/alerts" className="btn">
+                See plans
+              </A>
+            )}
+          </div>
+        </section>
+        <section className="acct-box">
+          <div className="acct-box-head">
+            <h2>Where alerts go</h2>
+          </div>
+          <ul className="acct-channels">
+            <li>
+              <span>
+                <b>Email</b>
+                <span className="dim">{member.email}</span>
+              </span>
+              <span className={`tag ${member.active ? 'pos' : 'dim'}`}>{member.active ? 'On' : 'Off'}</span>
+            </li>
+            {[
+              ['Phone and browser push', channels.push],
+              ['Discord, Slack and Telegram', channels.chat],
+              ['Private RSS feed', channels.chat],
+            ].map(([name, live]) => (
+              <li key={String(name)}>
+                <span>
+                  <b>{name}</b>
+                </span>
+                <span className="tag">{live ? 'Available' : 'Coming soon'}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
       {member.active && (
         <>
-          <Panel title="funds you get alerts for" right={<span className="dim">none selected = all</span>}>
-            <div className="checks">
-              {ms.map((m) => (
-                <label key={m.slug} className={on.has(m.slug) ? 'on' : ''}>
-                  <input type="checkbox" checked={on.has(m.slug)} onChange={() => toggle(m.slug)} />
-                  {m.firm}
-                </label>
-              ))}
+          <FundFollows ms={ix.data ? funds(ix.data) : null} f={f} setF={setF} />
+          <section className="acct-box">
+            <div className="acct-box-head">
+              <h2>Stocks you follow</h2>
             </div>
-          </Panel>
-          <Panel title="stocks you follow" right={<span className="dim">13D/G and Form 4 by any tracked fund</span>}>
+            <p className="dim">Get an alert when any investor Holdterm tracks files a 13D, 13G or Form 4 on these companies.</p>
             <StockFollows f={f} setF={setF} />
-          </Panel>
+          </section>
         </>
       )}
     </div>
   )
 }
+/** Investors you get alerts for: the ones you follow as removable chips, and a search to add more. */
+function FundFollows({ ms, f, setF }: { ms: Manager[] | null; f: Follows | null; setF: (f: Follows) => void }) {
+  const [q, setQ] = useState('')
+  const on = new Set(f?.investors ?? [])
+  const toggle = (slug: string) => setFollow('investors', slug, !on.has(slug)).then(setF, () => {})
+  const byFirm = new Map((ms ?? []).map((m) => [m.slug, m]))
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const hits = (ms ?? []).filter((m) => !on.has(m.slug) && words.every((w) => `${m.firm} ${m.pm ?? ''} ${m.name}`.toLowerCase().includes(w))).slice(0, words.length ? 12 : 8)
+  return (
+    <section className="acct-box">
+      <div className="acct-box-head">
+        <h2>Investors you follow</h2>
+        <span className="dim small">{on.size ? `${on.size} of ${ms?.length ?? '…'}` : `All ${ms?.length ?? ''}`}</span>
+      </div>
+      <p className="dim">{on.size ? 'You get alerts for these investors’ 13F, 13D, 13G and Form 4 filings.' : 'You’re following nobody yet, so you get alerts for every investor Holdterm tracks. Add investors to hear only about them.'}</p>
+      {!!on.size && (
+        <ul className="acct-chips" aria-label="Investors you follow">
+          {[...on].map((slug) => (
+            <li key={slug}>
+              <A to={fundPath(slug)}>{byFirm.get(slug)?.firm ?? slug}</A>
+              <button aria-label={`Stop following ${byFirm.get(slug)?.firm ?? slug}`} onClick={() => toggle(slug)}>
+                <span aria-hidden>×</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <label htmlFor="fund-q" className="acct-label">
+        Add an investor
+      </label>
+      <input id="fund-q" className="acct-input" type="search" placeholder="Search by firm or manager, e.g. Berkshire" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
+      {!ms ? (
+        <Loading what="Loading investors" rows={4} />
+      ) : (
+        <ul className="acct-results" aria-label={words.length ? 'Matching investors' : 'Largest investors'}>
+          {hits.map((m) => (
+            <li key={m.slug}>
+              <span className="acct-result-name">
+                <A to={fundPath(m.slug)}>{m.firm}</A>
+                <span className="dim small">{[m.pm, `${usd(m.total_value)} portfolio`].filter(Boolean).join(' · ')}</span>
+              </span>
+              <button className="btn ghost small-btn" disabled={!f} onClick={() => toggle(m.slug)}>
+                Follow
+              </button>
+            </li>
+          ))}
+          {!hits.length && <li className="dim">No investor matches “{q.trim()}”.</li>}
+        </ul>
+      )}
+    </section>
+  )
+}
 function StockFollows({ f, setF }: { f: Follows | null; setF: (f: Follows) => void }) {
   const [t, setT] = useState('')
+  const [bad, setBad] = useState(false)
   const list = f?.stocks ?? []
   return (
     <div>
-      <div className="tks">
-        {list.map((x) => (
-          <span key={x} className="chip on">
-            <Tick t={x} />
-            <button className="linkish" aria-label={`unfollow ${x}`} onClick={() => setFollow('stocks', x, false).then(setF, () => {})}>
-              ×
-            </button>
-          </span>
-        ))}
-        {!list.length && <span className="dim">none yet</span>}
-      </div>
+      {!!list.length && (
+        <ul className="acct-chips" aria-label="Stocks you follow">
+          {list.map((x) => (
+            <li key={x}>
+              <A to={stockHref({ ticker: x })!}>{x}</A>
+              <button aria-label={`Stop following ${x}`} onClick={() => setFollow('stocks', x, false).then(setF, () => {})}>
+                <span aria-hidden>×</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <form
-        className="prompt-form"
+        className="acct-add"
         onSubmit={(e) => {
           e.preventDefault()
           const v = t.trim().toUpperCase()
-          if (/^[A-Z][A-Z0-9.-]{0,9}$/.test(v) && !list.includes(v)) setFollow('stocks', v, true).then(setF, () => {})
-          setT('')
+          const ok = /^[A-Z][A-Z0-9.-]{0,9}$/.test(v)
+          setBad(!ok)
+          if (ok && !list.includes(v)) setFollow('stocks', v, true).then(setF, () => {})
+          if (ok) setT('')
         }}
       >
-        <label htmlFor="tk" className="sr">
-          add a ticker
+        <label htmlFor="tk" className="acct-label">
+          Add a stock by ticker
         </label>
-        <span className="acc" aria-hidden>
-          +
-        </span>
-        <input id="tk" placeholder="ticker" value={t} onChange={(e) => setT(e.target.value)} />
+        <div>
+          <input id="tk" className="acct-input" placeholder="e.g. AAPL" value={t} onChange={(e) => setT(e.target.value)} autoComplete="off" aria-invalid={bad} aria-describedby={bad ? 'tk-err' : undefined} />
+          <button className="btn" disabled={!f}>
+            Add
+          </button>
+        </div>
+        {bad && (
+          <p id="tk-err" className="neg small" role="alert">
+            Enter a ticker such as AAPL or BRK.B.
+          </p>
+        )}
       </form>
     </div>
   )
@@ -1833,63 +1941,61 @@ export function About() {
   title('About')
   const r = roster.rule as Record<string, number>
   return (
-    <div className="page narrow prose">
-      <h1>about</h1>
-      <Panel title="what this is">
-        <p>Holdterm is a fast, keyboard-first reader for the SEC filings of concentrated, long-term investment managers: every fund’s 13F book, what changed this quarter, what the group owns in common, and the 13D, 13G and Form 4 filings between quarters.</p>
-        <p>
-          There are no ads. The site is free; the one paid product is <A to="/alerts">email alerts</A> at ${PRICE.monthly} a month. Holdterm is run by Factor Dynamics.
+    <article className="page narrow article">
+      <header className="article-head">
+        <p className="eyebrow">About</p>
+        <h1>About Holdterm</h1>
+        <p className="lede">
+          Holdterm follows {roster.funds.length} concentrated, long-term investors through the filings they must make with the SEC: what each one owns, what changed this quarter, what they own in common, and the 5% stakes and insider trades they report between quarters.
         </p>
-      </Panel>
-      <Panel title="who is on the roster" className="anchor">
+        <p className="lede">
+          The site is free, with no ads. The one paid product is <A to="/alerts">alerts</A>, at ${PRICE.monthly} a month. Holdterm is run by Factor Dynamics.
+        </p>
+      </header>
+      <section className="anchor">
         <span id="roster" />
+        <h2>How investors are chosen</h2>
         <p>
           Nobody is hand-picked. The starting universe is every 13F-HR filer in the SEC’s own quarterly{' '}
           <a href="https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets" target="_blank" rel="noreferrer">
             Form 13F data sets ↗
           </a>{' '}
-          ({quarterLabel(qOf(roster.period))} filings, {num(roster.screened)} filers with a book of {usd(r.min_value, 0)} or more). Each is screened against one rule, and the roster is whoever passes:
+          ({quarterLabel(qOf(roster.period))} filings, {num(roster.screened)} filers with a book of {usd(r.min_value, 0)} or more). Each is screened against one rule, and the roster is whoever passes.
         </p>
-        <table className="grid rule">
-          <tbody>
-            <tr>
-              <td>size</td>
-              <td>13F book of at least {usd(r.min_value, 0)}</td>
-            </tr>
-            <tr>
-              <td>focus</td>
-              <td>
-                {r.min_positions} to {r.max_positions} positions; the 10 largest at least {pct(r.min_top10, 0)} of the book; the largest at most {pct(r.max_top1, 0)}; ETFs and index funds at most {pct(r.max_etf, 0)}. T-bill and money-market funds count as cash and are left out of every test
-              </td>
-            </tr>
-            <tr>
-              <td>patience</td>
-              <td>turnover of at most {pct(r.max_turnover, 0)} in the latest quarter: shares bought and sold, valued at the quarter’s filed prices, ÷ 2 ÷ book</td>
-            </tr>
-            <tr>
-              <td>record</td>
-              <td>a 13F for the same quarter {r.min_years} years earlier; a predecessor filer counts (Pershing Square Inc. carries Pershing Square Capital Management’s record, and their books are summed in a quarter where both filed)</td>
-            </tr>
-            <tr>
-              <td>type</td>
-              <td>
-                investment managers, and companies whose 13F is a concentrated portfolio of outside stocks (Berkshire Hathaway, Icahn, Cincinnati Financial, Graham Holdings) are in. Out: banks, brokers, pensions, endowments and foundations; private-equity and venture sponsors and companies whose 13F lists strategic stakes; sector specialists (biotech, real estate, energy infrastructure); funds of ETFs. The {Object.keys(EXCLUSIONS).length} type exclusions are listed one by one, with the reason for each, in{' '}
+        <dl className="defs">
+          <dt>Size</dt>
+          <dd>
+            13F book of at least {usd(r.min_value, 0)}.
+          </dd>
+          <dt>Focus</dt>
+          <dd>
+            {r.min_positions} to {r.max_positions} positions; the 10 largest at least {pct(r.min_top10, 0)} of the book; the largest at most {pct(r.max_top1, 0)}; ETFs and index funds at most {pct(r.max_etf, 0)}. T-bill and money-market funds count as cash and are left out of every test.
+          </dd>
+          <dt>Patience</dt>
+          <dd>
+            Turnover of at most {pct(r.max_turnover, 0)} in the latest quarter: half of everything bought and sold, valued at the quarter’s filed prices, as a share of the book.
+          </dd>
+          <dt>Track record</dt>
+          <dd>
+            A 13F for the same quarter {r.min_years} years earlier; a predecessor filer counts (Pershing Square Inc. carries Pershing Square Capital Management’s record, and their books are summed in a quarter where both filed).
+          </dd>
+          <dt>Kind of investor</dt>
+          <dd>
+            Investment managers, and companies whose 13F is a concentrated portfolio of outside stocks (Berkshire Hathaway, Icahn, Cincinnati Financial, Graham Holdings) are in. Out: banks, brokers, pensions, endowments and foundations; private-equity and venture sponsors and companies whose 13F lists strategic stakes; sector specialists (biotech, real estate, energy infrastructure); funds of ETFs. The {Object.keys(EXCLUSIONS).length} type exclusions are listed one by one, with the reason for each, in{' '}
                 <a href={`${REPO}/blob/main/holdterm/scripts/roster-exclusions.json`} target="_blank" rel="noreferrer">
                   roster-exclusions.json ↗
-                </a>
-              </td>
-            </tr>
-            <tr>
-              <td>data checks</td>
-              <td>on each published book: its total agrees with the 13F cover page, at most 25% of it is notes and bonds, the largest position with share classes combined is within the limit, and the prior quarter is compared with its latest full restatement. A fund that fails is held back until it passes</td>
-            </tr>
-            <tr>
-              <td>stability</td>
-              <td>a fund already on the roster stays until it misses a test by more than {pct(r.incumbent_buffer, 0)} of the threshold (turnover above {pct(r.max_turnover * (1 + r.incumbent_buffer), 0)}, for example), so the roster doesn’t churn on noise</td>
-            </tr>
-          </tbody>
-        </table>
-        <p className="dim small">
+                </a>.
+          </dd>
+          <dt>Data checks</dt>
+          <dd>
+            On each published book: its total agrees with the 13F cover page, at most 25% of it is notes and bonds, the largest position with share classes combined is within the limit, and the prior quarter is compared with its latest full restatement. A fund that fails is held back until it passes.
+          </dd>
+          <dt>Stability</dt>
+          <dd>
+            A fund already on the roster stays until it misses a test by more than {pct(r.incumbent_buffer, 0)} of the threshold (turnover above {pct(r.max_turnover * (1 + r.incumbent_buffer), 0)}, for example), so the roster doesn’t churn on noise.
+          </dd>
+        </dl>
+        <p className="article-note">
           {roster.funds.length + roster.pending.length + roster.held.length} funds pass the screen; {roster.funds.length} are live{roster.pending.length ? `, ${roster.pending.length} are loading` : ''}
           {roster.held.length ? `, and ${roster.held.length} are held back by the data checks (${roster.held.map((f) => `${firmName(f.slug ?? '', f.firm)}: ${f.fails[0]}`).join('; ')})` : ''} (full list in universe.json, linked below). Closest misses:{' '}
           {roster.near_misses
@@ -1906,40 +2012,38 @@ export function About() {
           </a>
           . Reconstituted when the SEC publishes each quarter’s data set; roster as of {roster.generated_at.slice(0, 10)}.
         </p>
-      </Panel>
-      <Panel title="data">
-        <ul className="list">
+      </section>
+      <section>
+        <h2>Where the data comes from</h2>
+        <ul className="plain-list">
           <li>
-            <span className="dim" aria-hidden>•</span> Form 13F-HR as filed on SEC EDGAR. Funds file up to 45 days after quarter end, so a 13F is a snapshot, not today’s book. It covers US-listed long positions and listed options only: no shorts, cash, bonds or foreign shares.
+            Form 13F-HR as filed on SEC EDGAR. Funds file up to 45 days after quarter end, so a 13F is a snapshot, not today’s book. It covers US-listed long positions and listed options only: no shorts, cash, bonds or foreign shares.
           </li>
           <li>
-            <span className="dim" aria-hidden>•</span> Buys and sells are share changes against the fund’s previous 13F, valued at the price implied by the filing. A price move alone is not a trade.
+            Buys and sells are share changes against the fund’s previous 13F, valued at the price implied by the filing. A price move alone is not a trade.
           </li>
           <li>
-            <span className="dim" aria-hidden>•</span> Schedule 13D and 13G (5%+ ownership) and Form 4 where a tracked fund is the filer. Filings on a fund’s own vehicles are labelled “own fund” and left out of feeds by default.
+            Schedule 13D and 13G (5%+ ownership) and Form 4 where a tracked fund is the filer. Filings on a fund’s own vehicles are labelled “own fund” and left out of feeds by default.
           </li>
           <li>
-            <span className="dim" aria-hidden>•</span> No market prices: everything comes from SEC filings. Reported price is the filing’s value divided by its share count. Tickers come from CUSIP mapping, with a small sourced fallback file (src/tickers.json); a company that has left the exchange shows its former ticker with a †, and where no ticker exists we show the company name rather than guess.
+            No market prices: everything comes from SEC filings. Reported price is the filing’s value divided by its share count. Tickers come from CUSIP mapping, with a small sourced fallback file (src/tickers.json); a company that has left the exchange shows its former ticker with a †, and where no ticker exists we show the company name rather than guess.
           </li>
           <li>
-            <span className="dim" aria-hidden>•</span> Funds are named by firm. A person is shown only when they run the portfolio today.
+            Funds are named by firm. A person is shown only when they run the portfolio today.
           </li>
         </ul>
-      </Panel>
-      <Panel title="contact and corrections">
+      </section>
+      <section>
+        <h2>Contact and corrections</h2>
         <p>
           Email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> for anything: a wrong number, ticker or name (send the page link and we’ll check it against the SEC filing), billing, or deleting your data. You can also <a href={ISSUES}>open a GitHub issue ↗</a>. Manage or cancel a subscription in the <a href={checkout.portal}>Stripe billing portal ↗</a>.
         </p>
-      </Panel>
-      <Panel title="Keyboard shortcuts">
-        <p>
-          <kbd>/</kbd> search · <kbd>g</kbd> then <kbd>h</kbd> <kbd>f</kbd> <kbd>c</kbd> <kbd>m</kbd> <kbd>d</kbd> <kbd>e</kbd> to jump · <kbd>j</kbd>/<kbd>k</kbd> and <kbd>enter</kbd> in tables · <kbd>1</kbd>-<kbd>5</kbd> tabs · <kbd>?</kbd> help
-        </p>
-      </Panel>
-      <Panel title="not advice">
+      </section>
+      <section>
+        <h2>Not investment advice</h2>
         <p>Information only, not investment advice. Filings can be amended, late or wrong; check the linked SEC document before relying on a number.</p>
-      </Panel>
-    </div>
+      </section>
+    </article>
   )
 }
 export function Terms() {
@@ -2007,7 +2111,7 @@ export function NotFound({ what = 'There’s no page at this address' }: { what?
         </A>
       </div>
       <p className="dim">
-        Looking for a stock or fund? Press <kbd>/</kbd> to search.
+        Looking for a stock or an investor? Use the search at the top of the page.
       </p>
     </div>
   )
