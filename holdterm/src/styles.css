@@ -1625,12 +1625,15 @@ a.hb-row:hover {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 20px;
-  align-items: start;
+  align-items: stretch;
 }
+/* Both columns end on one line: the last panel in each takes up the difference (two columns only; below
+ * 1100px the columns are display: contents). */
 .home-main,
 .home-side {
   display: grid;
   gap: 20px;
+  grid-template-rows: auto 1fr;
 }
 /* The trades and filings panels fill in after the page renders: reserve their full height (table head +
  * 10 or 12 rows, 8 in one column) so the panels below them don't jump. */
