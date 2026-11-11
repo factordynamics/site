@@ -562,7 +562,7 @@ function HomeBody() {
   return (
     <div className="page home">
       <div className="stats home-stats" role="list" aria-label={`${quarterLabel(lead)} so far`}>
-        <Stat label={`${quarterLabel(s.q)} 13Fs filed`} value={`${seasonFiled.length} of ${ms.length}`} sub={<>Due {day(s.due)}{daysLeft > 0 ? `, ${daysLeft} days left` : ''}<Bar value={seasonFiled.length} max={ms.length} /></>} />
+        <Stat label={`${quarterLabel(s.q)} 13Fs filed`} value={`${seasonFiled.length} of ${ms.length}`} sub={<>{daysLeft < 0 ? `Were due ${day(s.due)}` : `Due ${day(s.due)}${daysLeft > 1 ? `, ${daysLeft} days left` : daysLeft === 1 ? ', 1 day left' : ', today'}`}<Bar value={seasonFiled.length} max={ms.length} /></>} />
         <Stat label={`Most bought in ${quarterLabel(lead)}`} value={crowd(mostBought, 'buy')} tone={books.data && mostBought?.buy ? 'pos' : undefined} sub={crowdSub(mostBought, 'buy')} />
         <Stat label={`Most sold in ${quarterLabel(lead)}`} value={crowd(mostSold, 'sell')} tone={books.data && mostSold?.sell ? 'neg' : undefined} sub={crowdSub(mostSold, 'sell')} />
         <Stat label="New 5% stakes" value={ev.data ? num(newStakes) : wait} sub="Schedule 13D and 13G filings in the last 30 days" />
@@ -625,12 +625,12 @@ function HomeBody() {
           />
           {due.length > 0 && (
             <div className="due small show-sm">
-              {plural(due.length, 'investor')} still to file for {quarterLabel(s.q)}, due {day(s.due)}. <A to="/funds?show=due">See who →</A>
+              {daysLeft < 0 ? `${plural(due.length, 'investor')} ${due.length === 1 ? 'hasn’t' : 'haven’t'} filed for ${quarterLabel(s.q)} yet. It was due ${day(s.due)}.` : `${plural(due.length, 'investor')} still to file for ${quarterLabel(s.q)}, due ${day(s.due)}.`} <A to="/funds?show=due">See who →</A>
             </div>
           )}
           {due.length > 0 && (
             <div className="due small hide-sm">
-              <span className="dim">Still to file ({due.length}):</span>{' '}
+              <span className="dim">{daysLeft < 0 ? 'Not filed yet' : 'Still to file'} ({due.length}):</span>{' '}
               {due
                 .sort((a, b) => b.total_value - a.total_value)
                 .slice(0, 14)
