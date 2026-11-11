@@ -834,7 +834,7 @@ Unsubscribe: ${await unsubscribeUrl(env, m.customer)}${FOOTER}`, unsubscribe: aw
       } else {
         // A card added in Manage billing since the last sync (customer.updated doesn't re-sync): ask only if still none.
         if (m.has_payment_method === false && (await customerHasCard(env, m.customer))) m.has_payment_method = true;
-        const pv = m.has_payment_method === false && m.plan === 'copy' ? await (await import('./stockevents')).winterPreview(env, [...f.stocks, ...f.owned]).catch(() => null) : null;
+        const pv = m.has_payment_method === false && m.plan === 'copy' ? await (await import('./stockevents')).winterPreview(env, [...f.stocks, ...f.owned], f.investors).catch(() => null) : null;
         mails.push(trialEndingMail(env, m, await memberStats(env, m.customer), f.investors.length, f.owned.length, keep, await unsubscribeUrl(env, m.customer), Math.max(1, Math.ceil(left / 86400_000)), pv));
       }
       marks.push({ ...m, trial_reminded: m.trial_end });

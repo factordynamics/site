@@ -1,7 +1,7 @@
 import { addToFeed, flushChannelLatency, getChannels, getFailures, runWebhookRetries, sendChats, sendWebhooks } from './channels';
 import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue, yearlyPeakLine } from './revenue';
-import { inFilingWeek } from './seasons';
+import { DEADLINES, deadlineMs, inFilingWeek } from './seasons';
 import { alertMail, digestMail, FOOTER, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
 import { guardShares, markUnreliable, unreliableSide, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
@@ -2698,7 +2698,7 @@ export async function dispatchRefresh(env: Env, scope: 'curated' | 'full', reaso
 
 /** One cron, every minute; hourly work runs in the same invocation as that minute's poll so state writes never race. */
 interface Job {
-  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota' | 'email2' | 'namesWeekly' | 'kahnConfirm';
+  name: 'backstop' | 'events' | 'digest' | 'watch' | 'revenue' | 'weekly' | 'issuers' | 'seasonal' | 'ops' | 'quota' | 'email2' | 'namesWeekly' | 'kahnConfirm' | 'winter';
   at: number;
 }
 
@@ -2764,6 +2764,9 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   if (m % 5 === 0 && h === 10 && t.toISOString().slice(0, 10) === '2026-11-12') due.push({ name: 'kahnConfirm', at: scheduledTime });
   // Owned and watched names' insider and 13D/G events: every 10 minutes (each name hourly, 10 minutes in filing week).
   if (m % 10 === 9) due.push({ name: 'issuers', at: scheduledTime });
+  // Last winter's events for members' names: gene, every 5 minutes, except from 3 days before a 13F deadline to the day
+  // after, when the SEC budget is the alerts'.
+  if (m % 5 === 4 && !fo.isCloudflare(env) && !DEADLINES.some((d) => scheduledTime >= deadlineMs(d.date) - 3 * 86_400_000 && scheduledTime <= deadlineMs(d.date) + 86_400_000)) due.push({ name: 'winter', at: scheduledTime });
   const rawQueue = await env.DB.get('jobs:due');
   const queue = [...(JSON.parse(rawQueue ?? '[]') as Job[]), ...due].filter((j, i, all) => all.findIndex((x) => x.name === j.name) === i);
   if (!busy && queue.length) {
@@ -2785,10 +2788,11 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
       issuers: () =>
         import('./stockevents').then(async (x) => {
           const r = await x.precomputeIssuers(env, scheduledTime, inFilingWeek(scheduledTime), Math.min(16, secBudget.left - 4));
-          // gene only, outside filing week: last winter's events in followed and owned names (the day-12 preview).
-          const gene = !(await import('./failover')).isCloudflare(env);
-          return gene && !inFilingWeek(scheduledTime) ? { ...r, winter: await x.fillWinter(env, Math.min(12, secBudget.left - 4)) } : r;
+          return r;
         }),
+      // gene only: last winter's events in members' names (the day-12 preview, /me?include=winter), with a quiet minute's
+      // leftover SEC requests. It ran only outside filing week (Nov 9-17) and so read nothing before the Nov 23 emails.
+      winter: () => import('./stockevents').then((x) => x.fillWinter(env, Math.min(20, secBudget.left - 6))),
     };
     await step(job.name, run[job.name]);
   }

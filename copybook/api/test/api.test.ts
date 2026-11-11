@@ -3150,6 +3150,24 @@ describe('copybook api', () => {
     expect(d12.text).toMatch(/Your 2 names had 1 insider buy and 0 13D\/G filings last winter, e\.g\. CSGP (director|.+) bought \$2\.5M on Jan 13\./);
     const me = await (await call('/me?include=winter', { token })).json();
     expect(me.member.winter_preview === null || typeof me.member.winter_preview?.names === 'number').toBe(true);
+    // A followed investor's own 13D/G last winter (Icahn's, Pzena's) comes from the published winter list, by manager.
+    const orig = globalThis.fetch;
+    const pub = (env as unknown as { PUBLIC_URL?: string }).PUBLIC_URL;
+    (env as unknown as { PUBLIC_URL?: string }).PUBLIC_URL = 'https://pub.test/';
+    index = { managers: [{ slug: 'warren-buffett', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc' }] };
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
+      String(u) === 'https://pub.test/winter-2025-26.json'
+        ? Response.json({ schedule_13dg: { filings: [{ manager: 'Warren Buffett', form: 'SCHEDULE 13G/A', filed: '2025-12-15', accession: '0000950170-25-000001', subject_company: 'SIRIUS XM HOLDINGS INC.', subject_cik: '0000908937', filer: 'BERKSHIRE HATHAWAY INC' }, { manager: 'Nobody Followed', form: 'SCHEDULE 13D', filed: '2025-12-16', accession: 'x', subject_company: 'X', subject_cik: '1', filer: 'X' }] } })
+        : orig(u, init));
+    try {
+      const pi = (await winterPreview(env, ['CSGP'], ['warren-buffett']))!;
+      expect([pi.insider_buys, pi.schedule_13dg, pi.events.map((e) => [e.kind, e.who, e.ticker, e.action])]).toEqual([1, 1, [['insider_buy', expect.any(String), 'CSGP', null], ['schedule_13dg', 'Warren Buffett', 'SIRIUS XM HOLDINGS INC.', 'stake_update']]]);
+      // An investor alone, no names saved, still has a preview.
+      expect((await winterPreview(env, [], ['warren-buffett']))?.schedule_13dg).toBe(1);
+    } finally {
+      vi.stubGlobal('fetch', orig);
+      (env as unknown as { PUBLIC_URL?: string }).PUBLIC_URL = pub;
+    }
   });
 
   it('GET /events: the window is on the trade date, % change is from P/S lines only (GOOGL: a Jun 29 sale filed Jul 1, gifts into his own trust)', async () => {

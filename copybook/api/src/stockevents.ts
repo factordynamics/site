@@ -440,6 +440,21 @@ async function winterEvent(ticker: string, cik: string, e: FeedEntry, siblings: 
 
 /** Gene's spare SEC requests: the next followed or owned name's winter, a few filings at a time, until every name is done. */
 export async function fillWinter(env: Env, budget: number): Promise<Record<string, unknown>> {
+  // Several names a run, until the run's budget is spent (one a run left members' names pending for days).
+  const out: Record<string, unknown>[] = [];
+  let left = budget;
+  for (let i = 0; i < 8 && left >= 4 && secBudget.left > 1; i++) {
+    const before = secBudget.left;
+    const r = await fillWinterOne(env, left);
+    left -= Math.max(1, before - secBudget.left, Number(r.spent ?? 0));
+    out.push(r);
+    if (!r.ticker) break;
+  }
+  const last = out[out.length - 1] ?? {};
+  return { names: last.names, done: last.done, read: out.filter((r) => r.ticker).map((r) => r.ticker) };
+}
+
+async function fillWinterOne(env: Env, budget: number): Promise<Record<string, unknown>> {
   const list = JSON.parse((await env.DB.get('issuers:tickers')) ?? '[]') as string[];
   const done = new Set(JSON.parse((await env.DB.get('winter:done')) ?? '[]') as string[]);
   const t = list.find((x) => !done.has(x));
@@ -478,21 +493,49 @@ export async function fillWinter(env: Env, budget: number): Promise<Record<strin
   }
   await env.HIST.put(WINTER.key(t), JSON.stringify(c), { httpMetadata: { contentType: 'application/json' } });
   if (c.done) await env.DB.put('winter:done', JSON.stringify([...done, t]));
-  return { names: list.length, done: done.size + (c.done ? 1 : 0), ticker: t, entries: c.entries?.length ?? 0 };
+  return { names: list.length, done: done.size + (c.done ? 1 : 0), ticker: t, entries: c.entries?.length ?? 0, spent };
 }
 
 /** A member's names last winter, from the cache: counts, the events with dollars and dates, and names not read yet. */
 export type WinterPreview = { window: [string, string]; names: number; insider_buys: number; schedule_13dg: number; events: WinterEvent[]; pending: string[] };
-export async function winterPreview(env: Env, tickers: string[]): Promise<WinterPreview | null> {
+/**
+ * Followed investors' own 13D/G filings last winter (Icahn's, Pzena's), from the published winter list
+ * (PUBLIC_URL winter-2025-26.json, the one /pricing/'s "19" links), its managers matched to slugs by the data run's
+ * index.json. Kept per isolate for an hour.
+ */
+let winterList: { at: number; rows: { slug: string; e: WinterEvent }[] } | null = null;
+async function investorWinter(env: Env, investors: string[]): Promise<WinterEvent[]> {
+  if (!investors.length || !env.PUBLIC_URL) return [];
+  if (!winterList || Date.now() - winterList.at > 3600_000) {
+    const [w, idx] = await Promise.all([
+      fetch(`${env.PUBLIC_URL}winter-2025-26.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<{ schedule_13dg?: { filings?: { manager: string; form: string; filed: string; accession: string; subject_company: string; subject_cik: string; filer: string }[] } } | null>,
+      fetch(`${env.DATA_URL}index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<{ managers?: { slug: string; manager?: string }[] } | null>,
+    ]);
+    if (!w?.schedule_13dg?.filings || !idx?.managers) return [];
+    const slugOf = new Map(idx.managers.filter((x) => x.manager).map((x) => [x.manager!.toLowerCase(), x.slug]));
+    winterList = {
+      at: Date.now(),
+      rows: w.schedule_13dg.filings.flatMap((f) => {
+        const slug = slugOf.get(f.manager.toLowerCase());
+        const e: WinterEvent = { ticker: f.subject_company, kind: 'schedule_13dg', form: f.form, filed: f.filed, date: null, who: f.manager, role: null, value_usd: null, action: /\/A$/.test(f.form) ? 'stake_update' : 'new_stake', accession: f.accession, url: `https://www.sec.gov/Archives/edgar/data/${Number(f.subject_cik)}/${f.accession.replace(/-/g, '')}/` };
+        return slug ? [{ slug, e }] : [];
+      }),
+    };
+  }
+  const want = new Set(investors);
+  return winterList.rows.filter((r) => want.has(r.slug)).map((r) => r.e);
+}
+
+export async function winterPreview(env: Env, tickers: string[], investors: string[] = []): Promise<WinterPreview | null> {
   const names = [...new Set(tickers.map((x) => x.toUpperCase()))];
-  if (!names.length) return null;
-  const events: WinterEvent[] = [];
+  if (!names.length && !investors.length) return null;
+  const events: WinterEvent[] = (await investorWinter(env, investors).catch(() => [])).slice();
   const pending: string[] = [];
   for (const t of names.slice(0, 60)) {
     const obj = await env.HIST.get(WINTER.key(t));
     const c = obj ? ((await new Response(obj.body).json()) as WinterCache) : null;
     if (!c?.done) pending.push(t);
-    else events.push(...Object.values(c.seen).filter((x): x is WinterEvent => !!x));
+    else events.push(...Object.values(c.seen).filter((x): x is WinterEvent => !!x && !events.some((y) => y.accession === x.accession)));
   }
   events.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0) || b.filed.localeCompare(a.filed));
   return { window: [WINTER.from, WINTER.to], names: names.length, insider_buys: events.filter((e) => e.kind === 'insider_buy').length, schedule_13dg: events.filter((e) => e.kind === 'schedule_13dg').length, events, pending };

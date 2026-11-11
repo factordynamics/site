@@ -1351,7 +1351,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // True once Saturday's "Your names this week" first went to a real member.
     const DIGEST_LIVE = (await env.DB.get('names-weekly:live')) !== null;
     // ?include=winter: the member's names last winter (Dec 2025-Jan 2026), for the pause flow and the trial pages.
-    const winter = url.searchParams.get('include')?.split(',').includes('winter') ? { winter_preview: await (await import('./stockevents')).winterPreview(env, await getFollows(env, m).then((f) => [...f.stocks, ...f.owned])) } : {};
+    const winter = url.searchParams.get('include')?.split(',').includes('winter') ? { winter_preview: await (await import('./stockevents')).winterPreview(env, ...(await getFollows(env, m).then((f) => [[...f.stocks, ...f.owned], f.investors] as [string[], string[]]))) } : {};
     return json({ ok: true, member: { ...publicView(m), ...owner, ...winter, pause_offer: pauseOffer(m), digest_live: DIGEST_LIVE, channels_failing: failView(await getFailures(env, m.customer)), referral: await referralView(env, m), ...free } }, 200, { ...h, 'cache-control': 'no-store' });
   }
 
