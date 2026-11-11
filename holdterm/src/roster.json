@@ -2042,7 +2042,7 @@
    "turnover": 0.1688,
    "predecessor": null,
    "fails": [
-    "66% of the 13F is notes and bonds"
+    "66% of its 13F is notes and bonds, not stocks"
    ]
   },
   {
@@ -2056,7 +2056,7 @@
    "turnover": 0.0501,
    "predecessor": null,
    "fails": [
-    "2026Q2 compares against an amendment that a later full restatement replaced"
+    "its Q2 2026 13F was amended and then refiled, so this quarter’s changes can’t be worked out reliably yet"
    ]
   },
   {
@@ -2070,7 +2070,7 @@
    "turnover": 0.1521,
    "predecessor": null,
    "fails": [
-    "book $28.82B disagrees with its 13F cover page ($1.26B)"
+    "its holdings add up to $28.82B, but its 13F cover page says $1.26B"
    ]
   },
   {
@@ -2084,7 +2084,7 @@
    "turnover": 0.1948,
    "predecessor": null,
    "fails": [
-    "70% of the 13F is notes and bonds"
+    "70% of its 13F is notes and bonds, not stocks"
    ]
   },
   {
@@ -2098,7 +2098,7 @@
    "turnover": 0.0207,
    "predecessor": null,
    "fails": [
-    "largest position 80% with share classes combined"
+    "its largest position is 80% of the portfolio, counting all share classes"
    ]
   }
  ],
