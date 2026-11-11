@@ -1130,6 +1130,35 @@ TOP_FIELDS = ("issuer", "title", "cusip", "ticker", "display_name", "sector", "v
               "share_change", "value_delta", "delta_pct_of_book", "split")
 
 
+COUNT_DEFINITIONS = {
+    "filers": "13F filers with holdings on file: every filer whose latest 13F-HR parsed, plus every tracked fund",
+    "tracked": "Tracked funds with a 13F for the newest quarter any of them filed or the quarter before; "
+               "excludes inactive funds and funds whose holdings another manager reports",
+    "superinvestors": "Featured superinvestors, excluding inactive ones",
+}
+
+
+def coverage_counts(managers: list[dict]) -> dict:
+    """The one set of coverage numbers every page and the API show (index.json `counts`)."""
+    qn = lambda q: int(q[:4]) * 4 + int(q[5]) - 1 if q else -1
+    live = [m for m in managers if m.get("ok") and (m.get("total_value") or 0) > 0
+            and m.get("status") not in ("inactive", "reported_by_other")]
+    newest = max((qn(m.get("quarter")) for m in live), default=-1)
+    try:
+        catalog = json.loads((DATA / "filers.json").read_text()).get("filers") or []
+    except (OSError, ValueError):
+        catalog = []
+    cik = lambda c: str(c).lstrip("0")
+    filers = {cik(f["cik"]) for f in catalog if f.get("ok") and f.get("cik")} | {cik(m["cik"]) for m in managers if m.get("cik")}
+    return {
+        "filers": len(filers),
+        "tracked": sum(1 for m in live if qn(m.get("quarter")) >= newest - 1),
+        "superinvestors": sum(1 for m in managers if m.get("featured") and m.get("ok") is not False
+                              and m.get("status") != "inactive"),
+        "definitions": COUNT_DEFINITIONS,
+    }
+
+
 def write_json(payload: dict) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     slim_managers = []
@@ -1149,6 +1178,8 @@ def write_json(payload: dict) -> None:
         entry["long_value"] = round(sum(h["value"] for h in hs if not h.get("put_call")))
         entry["options_value"] = round(sum(h["value"] for h in hs if h.get("put_call")))
         entry["long_positions"] = sum(1 for h in hs if not h.get("put_call"))
+        # Every filing behind the latest book (original, amendments, superseded), so /f/{accession} finds the fund.
+        entry["filing_accessions"] = [f["accession"] for f in m.get("filings") or [] if f.get("accession")]
         if m.get("ok"):
             entry["top"] = [{k: h[k] for k in TOP_FIELDS if k in h} for h in m["holdings"][:8]]
         slim_managers.append(entry)
@@ -1161,6 +1192,7 @@ def write_json(payload: dict) -> None:
                 "disclaimer": payload["disclaimer"],
                 "filed_count": payload["filed_count"],
                 "manager_count": payload["manager_count"],
+                "counts": coverage_counts(slim_managers),
                 "copycat_total_value": payload["copycat"]["total_value"],
                 "managers": slim_managers,
                 "copycat_top": [{k: h[k] for k in TOP_FIELDS if k in h} for h in payload["copycat"]["holdings"][:20]],
