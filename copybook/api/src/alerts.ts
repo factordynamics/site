@@ -874,13 +874,18 @@ async function filerShardBook(env: Env, cik: string, reportDate: string): Promis
   return shardPositions({ columns: d.columns, rows: d.rows });
 }
 
+let secMap: { at: number; text: string } | null = null;
 /** Tickers and names for CUSIPs from the public securities map, without parsing all of it. */
 export async function lookupTickers(env: Env, rows: { cusip: string; ticker: string | null; display_name: string | null }[]): Promise<void> {
   const missing = rows.filter((r) => !r.ticker);
   if (!missing.length) return;
-  const res = await fetch(`${env.DATA_URL}securities.json`, { cf: { cacheTtl: 86400 } } as RequestInit);
-  if (!res.ok) return;
-  const text = await res.text();
+  // Kept per isolate for an hour: gene's restater names stored rows every 5 minutes, and gene has no edge cache.
+  if (!secMap || Date.now() - secMap.at > 3600_000) {
+    const res = await fetch(`${env.DATA_URL}securities.json`, { cf: { cacheTtl: 86400 } } as RequestInit);
+    if (!res.ok) return;
+    secMap = { at: Date.now(), text: await res.text() };
+  }
+  const text = secMap.text;
   for (const r of missing) {
     const i = text.indexOf(`"${r.cusip}":{`);
     if (i < 0) continue;
@@ -892,6 +897,20 @@ export async function lookupTickers(env: Env, rows: { cusip: string; ticker: str
       /* leave the issuer name */
     }
   }
+}
+
+/**
+ * Names an alert's shown rows from the ticker map (the lead, Nov 11): a row without a ticker takes the map's ticker and
+ * name, so a filer's truncated nameOfIssuer ("Aperture Ac", "Drugs Made in America Acquis") shows only when the map has
+ * no entry. Every list the email and feed name (moves, exchanged, not counted, held, the Corrected line), largest first,
+ * at most `cap` rows (each lookup scans the map: Cloudflare's CPU).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function nameRows(env: Env, m: Moves | undefined, extra: any[] = [], cap = 40): Promise<void> {
+  type Named = { cusip: string; ticker: string | null; display_name: string | null; value?: number; value_delta?: number | null };
+  const all = [...(m ? [...m.new, ...m.added, ...m.trimmed, ...m.exited, ...(m.exchanged ?? []), ...(m.not_counted ?? [])] : []), ...extra] as Named[];
+  const rows = all.filter((r) => r && !r.ticker && r.cusip).sort((a, b) => Math.abs(b.value_delta ?? b.value ?? 0) - Math.abs(a.value_delta ?? a.value ?? 0)).slice(0, cap);
+  await lookupTickers(env, rows);
 }
 
 const prevQuarter = (q: string) => (q.endsWith('Q1') ? `${Number(q.slice(0, 4)) - 1}Q4` : `${q.slice(0, 5)}${Number(q[5]) - 1}`);
@@ -1138,6 +1157,8 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
           r = g;
           held = g.held;
           moves = r.moves;
+          // Every shown row named from the map, exits and held lines too (only new rows were looked up above).
+          await nameRows(env, moves, g.held);
           changed = keepChanged(r.changed);
           // Watchers match on every row, held ones too: they get the alert with "TICKER: move pending check".
           tickers = [...new Set([...r.changed, ...g.held].map((x) => x.ticker).filter((t): t is string => !!t))];
@@ -1584,6 +1605,10 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
     if (!raw) continue;
     for (const x of (JSON.parse(raw) as DigestDay).filings) {
       if (!x.moves) continue;
+      // Rows stored before every shown row was named ("Aperture Ac"): named from the ticker map, the Corrected line's too.
+      const corr = (x.corrected?.rows ?? []).filter((c) => !c.ticker).map((c) => ({ c, r: { cusip: c.cusip, ticker: null as string | null, display_name: null as string | null } }));
+      await nameRows(env, x.moves, [...(x.held ?? []), ...corr.map((y) => y.r)], 80);
+      for (const y of corr) if (y.r.ticker) Object.assign(y.c, { ticker: y.r.ticker, name: y.r.display_name ?? y.c.name });
       // A stored row on a line ingest has since flagged goes by its reliable side (markUnreliable): "both" on an add or
       // trim leaves the feed; "value" and "shares" stay, marked, out of the totals and the headline.
       // A stored row sized from share counts the filed values can't support (guardShares) takes the filed-value change:

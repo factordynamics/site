@@ -482,6 +482,15 @@ describe('copybook api', () => {
     expect((await fullCheckout('cs_test_open')).status).toBe(409);
   });
 
+  it('alert rows are named from the ticker map, exits and held lines too; the filer\'s name only without a map entry', async () => {
+    const { nameRows } = await import('../src/alerts');
+    const row = (cusip: string, issuer: string, value_delta: number) => ({ cusip, issuer, ticker: null, display_name: null, put_call: null, shares: 0, prev_shares: 10, value: 0, value_delta });
+    const moves = { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [row('23331A109', 'D R HORTON IN', -9e6)], not_counted: [row('999999999', 'UNMAPPED AC', -1e6)] };
+    const held = [row('037833100', 'APPLE IN', -5e6)];
+    await nameRows(env, moves as never, held);
+    expect([moves.exited[0].ticker, held[0].ticker, moves.not_counted[0].ticker, moves.not_counted[0].display_name]).toEqual(['DHI', 'AAPL', null, null]);
+  });
+
   it("Kahn day: unconfirmed trials with follows get their confirmation link once; confirmed or follow-less ones don't", async () => {
     const tm = (c: string, extra: Record<string, unknown> = {}) => env.DB.put(`cus:${c}`, JSON.stringify({ customer: c, email: `${c}@reader.test`, status: 'trialing', plan: 'copy', interval: 'monthly', period_end: 0, subscription: `sub_${c}`, alerts: [], welcomed: true, email_pending: true, ...extra }));
     await tm('kc1');
