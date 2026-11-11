@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useTitle } from '../lib/data'
+import { FUND_SEATS } from '../config'
 import { HOSTING, SUBPROCESSORS } from '../lib/hosting'
 
 const UPDATED = 'November 9, 2026'
 // Material changes to /privacy/ and /security/, newest first. Every material edit adds a line here, and the
 // newest date is the page's "Last updated".
 const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string][]>> = {
-  terms: [['November 11, 2026', 'Accounts and plans: if we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.']],
+  terms: [['November 11, 2026', 'Copy Fund: the founding price kept while subscribed, up to 10 seats at a flat price, net 30 invoicing on request, an uploaded book kept confidential and deleted on request with written confirmation, 60 days’ notice of price changes and a reminder 30 days before an annual renewal.'], ['November 11, 2026', 'Accounts and plans: if we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.']],
   security: [
     ['November 11, 2026', 'Who can see member data: the November 17 payment-key and administrator-access lines moved under From Nov 17; Limits adds what keeps running if the founder is unreachable for a week. Where the machine is: from November 17 a restore from backup needs the founder.'],
     ['November 11, 2026', 'Backups: from November 17 the backup key’s private half is kept offline by the founder; weekly checks without the key and a monthly test restore. Limits: what administrator access the agents’ account has from November 17.'],
@@ -51,6 +52,20 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['The data', 'Copybook shows information from public SEC EDGAR filings (Forms 13F-HR, 13F-NT, 4 and Schedules 13D and 13G), as filed, with the processing described on our methodology page. Filings can be late, amended or wrong, and our processing can be wrong too. Everything is provided as is, with no warranty of accuracy, completeness or timeliness.'],
       ['Not investment advice', 'Nothing on Copybook is a recommendation to buy or sell a security. A 13F leaves out short positions, most non-US holdings, cash and more, and is filed up to 45 days after the quarter ends. Make your own decisions.'],
       ['Accounts and plans', 'Paid plans renew automatically until you cancel from Manage billing. A free trial converts to a paid plan at its end unless you cancel before then. After a paid period starts, you keep access until it ends; we don’t refund partial periods unless the law requires it. If we discontinue a paid plan during a prepaid period, we refund the unused part pro rata.'],
+      [
+        'Copy Fund',
+        <>
+          <p>If your team subscribes to Copy Fund, these commitments are part of these terms:</p>
+          <ul className="mt-2.5 list-disc space-y-1.5 pl-5">
+            <li>Price: your founding price stays the same for as long as the subscription continues without a break.</li>
+            <li>Seats: up to {FUND_SEATS} seats at one flat price. Adding or removing a seat doesn’t change what you pay.</li>
+            <li>Invoicing: annual plans can be invoiced, payable net 30, on request to {email}.</li>
+            <li>Your book: a book your team uploads or links is confidential to your team. We never share it and never use it in aggregates or anyone else’s figures, and we delete it on request and confirm the deletion in writing. A book linked to a public 13F filing is public through the filing itself.</li>
+            <li>Price changes: we give at least 60 days’ notice by email before any price change takes effect for your subscription.</li>
+            <li>Renewal: we email the account owner at least 30 days before an annual renewal.</li>
+          </ul>
+        </>,
+      ],
       ['API use', 'API keys are for you, or for your organization’s internal research, models and tools. You may use the results in your own work and share individual findings with attribution. You may not resell, sublicense or redistribute the API’s data in bulk, build a competing data service from it, or share keys outside your plan’s seats. Respect the rate limits.'],
       ['Data after you cancel', 'Data you downloaded or fetched through the API while your subscription was active may be kept and used for your internal purposes after you cancel, under the same limits. New requests stop when the subscription ends.'],
       ['API changes', <>We version the API. Breaking changes are announced at least 90 days ahead on the <Link to="/api/#changelog" className="font-medium text-accent hover:text-accent-2">API changelog</Link>; additive changes, such as new fields or endpoints, can ship at any time.</>],
