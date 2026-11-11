@@ -1,4 +1,5 @@
 import { seatInviteMail, sendMail } from './email';
+import { testAddress } from './env';
 import { isActive, type Env, type Member } from './env';
 import { getMember, LOGIN_TTL, putMember } from './members';
 import { signToken } from './tokens';
@@ -75,7 +76,8 @@ export async function inviteSeat(env: Env, owner: Member, raw: string): Promise<
   const gone = Number((await env.DB.get(`seatgone:${seat.id}`)) ?? 0);
   await putMember(env, { ...mirror(owner, seat), ...(gone ? { sessions_after: gone } : {}) });
   const token = await signToken(env.SESSION_SECRET, 'login', seat.id, LOGIN_TTL);
-  await sendMail(env, [seatInviteMail(env, email, owner.email, token)]);
+  // A test team's seats (the owner is a test address) get their mail in the sink, keyed by the seat's address.
+  await sendMail(env, [{ ...seatInviteMail(env, email, owner.email, token), ...(testAddress(owner.email) ? { test: true } : {}) }]);
   return { ok: true, seat };
 }
 

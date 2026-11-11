@@ -84,7 +84,7 @@ export async function membersApi(env: Env, now: number): Promise<string | null> 
 }
 
 /** One check of the members' API from Cloudflare: GET {api}/health?probe=1 within 10 s. */
-type Kinds = { day: string; used?: number; real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number };
+type Kinds = { day: string; used?: number; real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number; queued?: number; sinked?: number; dropped?: number; dropped_why?: Record<string, number> };
 type Probe = { ok: boolean; ms: number; up_since: string | null; build: string | null; host?: string | null; dupes?: { total: number; last_7d: number } | null; mail?: Kinds | null };
 export async function probeOnce(env: Env, now: number): Promise<Probe> {
   const base = await membersApi(env, now);
@@ -251,8 +251,11 @@ async function mailQuotaStatus(env: Env, gene: Kinds | null) {
   const { mailQuota, PREVIEW_DAILY_CAP, kindsView } = await import('./email');
   const m = (JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? mailQuota) as typeof mailQuota;
   const day = new Date().toISOString().slice(0, 10);
-  const add = (k: 'real' | 'test' | 'account' | 'preview') => (m.day === day ? (m.kinds?.[k] ?? 0) : 0) + (gene?.day === day && gene.since ? (gene[k] ?? 0) : 0);
+  const add = (k: 'real' | 'test' | 'account' | 'preview' | 'queued' | 'sinked' | 'dropped') => (m.day === day ? (m.kinds?.[k] ?? 0) : 0) + (gene?.day === day && gene.since ? (gene[k] ?? 0) : 0);
   const used = Math.max(m.day === day ? m.used : 0, gene?.day === day ? (gene.used ?? 0) : 0);
+  // Dropped mail by reason, both hosts.
+  const whyBoth: Record<string, number> = {};
+  for (const w of [m.day === day ? m.kinds?.dropped_why : null, gene?.day === day ? gene.dropped_why : null]) for (const [k, n] of Object.entries(w ?? {})) whyBoth[k] = (whyBoth[k] ?? 0) + n;
   // The host whose counters started first today sets since and before_since.
   const first = [m.day === day ? m.kinds : null, gene?.day === day ? gene : null].filter((k): k is NonNullable<typeof k> => !!k?.since).sort((a, b) => a.since!.localeCompare(b.since!))[0] ?? null;
   return {
@@ -264,7 +267,7 @@ async function mailQuotaStatus(env: Env, gene: Kinds | null) {
     policy: (await import('./email')).MAIL_POLICY,
     // Adds up to resend_used: before_since + real + test + account + other (see kindsView). Both hosts' tallies, from the
     // earlier host's `since`.
-    by_kind: { ...kindsView(used, first ? { ...first, real: add('real'), test: add('test'), account: add('account'), preview: add('preview') } : null) },
+    by_kind: { ...kindsView(used, first ? { ...first, real: add('real'), test: add('test'), account: add('account'), preview: add('preview'), queued: add('queued'), sinked: add('sinked'), dropped: add('dropped'), dropped_why: whyBoth } : null) },
     previews: { sent: add('preview'), cap_per_host: PREVIEW_DAILY_CAP },
     test_member_alert_cap: 3,
     mailgun_used: m.day === day ? m.mailgun : 0,

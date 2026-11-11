@@ -523,7 +523,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       // Alert emails handed to the mailer this UTC day, by hour (both hosts: stats:sent is synced).
       const day0 = Math.floor(Date.now() / 86400_000) * 24;
       const byHour = Object.fromEntries((JSON.parse((await env.DB.get('stats:sent')) ?? '[]') as [number, number][]).filter(([hr]) => hr >= day0).map(([hr, n]) => [`${String(hr - day0).padStart(2, '0')}h`, n]));
-      return { ...m, by_kind: kindsView(m.used, m.kinds), alert_emails_today_by_hour: byHour, daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15, policy: (await import('./email')).MAIL_POLICY };
+      // kinds and by_kind are the same view, adding up to used: before_since + real + test + account + other.
+      const view = kindsView(m.used, m.kinds);
+      const waiting = { retry: (JSON.parse((await env.DB.get('host:mail-retry')) ?? '[]') as unknown[]).length, delayed: (JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]') as unknown[]).length };
+      return { ...m, kinds: view, by_kind: view, waiting_now: waiting, alert_emails_today_by_hour: byHour, daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15, policy: (await import('./email')).MAIL_POLICY };
     })(), moves_queue: await st.movesQueue(env, await st.alertHealth(env, Date.now())), ...business }, 200, h);
   }
 
@@ -855,8 +858,19 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const b = await body(req);
     const { sinkKey, SINK_UNTIL } = await import('./email');
-    const list = (Array.isArray(b.emails) ? b.emails : []).filter((e): e is string => typeof e === 'string' && testAddress(e.trim().toLowerCase())).slice(0, 50);
-    const inboxes = await Promise.all(list.map(async (e) => ({ email: e.trim().toLowerCase(), url: `${env.PUBLIC_URL ?? ''}${await sinkKey(env, e.trim())}` })));
+    // Test addresses, and seats of a test team (whatever their address).
+    const testSeat = async (e: string) => {
+      const m = await memberByEmail(env, e);
+      return !!m?.seat_of && testAddress((await getMember(env, m.seat_of))?.email ?? '');
+    };
+    const raw = (Array.isArray(b.emails) ? b.emails : []).filter((e): e is string => typeof e === 'string').map((e) => e.trim().toLowerCase()).slice(0, 50);
+    const list = (await Promise.all(raw.map(async (e) => (testAddress(e) || (await testSeat(e)) ? e : null)))).filter((e): e is string => !!e);
+    // Each inbox: its URL in the public bucket, and what KV kept when a bucket write failed.
+    const inboxes = await Promise.all(list.map(async (e) => {
+      const key = await sinkKey(env, e);
+      const kept = JSON.parse((await env.DB.get(key)) ?? 'null') as { items?: unknown[] } | null;
+      return { email: e, url: `${env.PUBLIC_URL ?? ''}${key}`, ...(env.CF_API_TOKEN && kept?.items?.length ? { kept_in_kv: kept.items } : {}) };
+    }));
     return json({ ok: true, until: new Date(SINK_UNTIL).toISOString(), inboxes }, 200, h);
   }
 
@@ -1029,7 +1043,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const token = await signToken(env.SESSION_SECRET, 'login', m.customer, LOGIN_REQUEST_TTL);
       // A Holdterm member only ever hears from Holdterm; a sign-in started on Holdterm gets a Holdterm link.
       const holdterm = m.plan === 'holdterm' || b.brand === 'holdterm' || /holdterm/.test(origin ?? '');
-      await sendMail(env, [holdterm ? holdtermLoginMail(env, m.email, token, false) : loginMail(env, m.email, token, false)]);
+      const mail = holdterm ? holdtermLoginMail(env, m.email, token, false) : loginMail(env, m.email, token, false);
+      // A seat on a test team: its sign-in link goes to the sink too.
+      const testTeam = m.seat_of ? testAddress((await getMember(env, m.seat_of))?.email ?? '') : false;
+      await sendMail(env, [{ ...mail, ...(testTeam ? { test: true } : {}) }]);
     }
     return json({ ok: true }, 200, h);
   }

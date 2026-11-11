@@ -47,7 +47,22 @@ const DELAY_MARK = '(delayed: email limit) ';
 export const mailQuota: { day: string; used: number; month: string; monthly: number; delayed: number; mailgun: number; refused?: string; kinds?: MailKinds } = { day: '', used: 0, month: '', monthly: 0, delayed: 0, mailgun: 0 };
 /** This host's sends today by kind (both providers): real members, test and critic members, account mail; `preview` (part of test) is previews, replays and samples. */
 /** Sends by kind from `since` (this host's first counted send of the UTC day); used_at_since: Resend's day count then. */
-export type MailKinds = { real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number; dropped?: number };
+export type MailKinds = { real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number; dropped?: number; queued?: number; sinked?: number; dropped_why?: Record<string, number> };
+/**
+ * Every mail handed to sendMail ends in one counted state: sent (real, test or account above), queued (waiting for
+ * Resend: the 00:00 UTC reset or the every-minute retry), sinked (a test inbox) or dropped (counted by reason).
+ */
+const kindsToday = () => (mailQuota.kinds ??= { real: 0, test: 0, account: 0, preview: 0, since: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), used_at_since: mailQuota.used });
+function counted(what: 'queued' | 'sinked', n: number): void {
+  if (n) kindsToday()[what] = (kindsToday()[what] ?? 0) + n;
+}
+function droppedFor(why: string, n: number): void {
+  if (!n) return;
+  const k = kindsToday();
+  k.dropped = (k.dropped ?? 0) + n;
+  (k.dropped_why ??= {})[why] = (k.dropped_why[why] ?? 0) + n;
+  console.log(`email: ${n} dropped (${why})`);
+}
 /**
  * Test, preview and ops mail (notices to our own inbox) send only while Resend has more than this left today; past it
  * they are dropped (counted in kinds.dropped), never queued, so they can't take alert or account room (MAIL_RESERVE 15
@@ -63,7 +78,7 @@ export function kindsView(used: number, k: MailKinds | null | undefined) {
   const real = k?.real ?? 0, test = k?.test ?? 0, account = k?.account ?? 0;
   // Counters started without the day's count then (an older build): everything not tallied counts as before them.
   const before = k ? (k.used_at_since ?? Math.max(0, used - real - test - account)) : used;
-  return { real, test, account, preview: k?.preview ?? 0, before_since: before, other: Math.max(0, used - before - real - test - account), since: k?.since ?? null, dropped_not_sent: k?.dropped ?? 0 };
+  return { real, test, account, preview: k?.preview ?? 0, before_since: before, other: Math.max(0, used - before - real - test - account), since: k?.since ?? null, queued: k?.queued ?? 0, sinked: k?.sinked ?? 0, dropped_not_sent: k?.dropped ?? 0, dropped_why: k?.dropped_why ?? {} };
 }
 /** Previews, replays and samples to test inboxes: at most this many a day; past it they wait for the reset. */
 export const PREVIEW_DAILY_CAP = 10;
@@ -147,6 +162,7 @@ async function delay(env: Env, mails: Mail[]): Promise<void> {
   for (const m of mails) for (const id of m.ids ?? []) ids.add(id);
   await env.DB.put(DELAYED_IDS, JSON.stringify([...ids].slice(-500)));
   mailQuota.delayed += mails.length;
+  counted('queued', mails.filter((m) => !m.subject.startsWith(DELAY_MARK)).length);
   console.log(`email limit: ${mails.length} delayed to after the reset`);
 }
 
@@ -175,11 +191,15 @@ async function sinkMail(env: Env, mails: Mail[]): Promise<void> {
         ? ((await fetch(`${env.PUBLIC_URL}${key}?t=${Date.now()}`, { signal: AbortSignal.timeout(5000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null)) as { items?: unknown[] } | null)
         : (JSON.parse((await env.DB.get(key)) ?? 'null') as { items?: unknown[] } | null);
       const body = JSON.stringify({ address: to, note: 'Copybook test inbox: mail to this test address during launch week (Nov 11-16), not sent by email.', items: [...add, ...(prev?.items ?? [])].slice(0, 40) });
-      if (remote) {
-        await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/r2/buckets/${env.PUBLIC_BUCKET}/objects/${key}`, { method: 'PUT', headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json', 'cache-control': 'no-store' }, body });
-      } else await env.DB.put(key, body, { expirationTtl: 8 * 86400 });
+      const put = remote
+        ? await fetch(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/r2/buckets/${env.PUBLIC_BUCKET}/objects/${key}`, { method: 'PUT', headers: { authorization: `Bearer ${env.CF_API_TOKEN}`, 'content-type': 'application/json', 'cache-control': 'no-store' }, body, signal: AbortSignal.timeout(8000) })
+        : null;
+      // A failed bucket write keeps the mail in KV (GET /ops/test-inbox reads it there too), never silently lost.
+      if (put && !put.ok) console.log(`sink: bucket PUT ${put.status}, kept in KV`);
+      if (!put?.ok) await env.DB.put(key, body, { expirationTtl: 8 * 86400 });
     } catch (e) {
-      console.log(`sink: ${String(e).slice(0, 120)}`);
+      console.log(`sink: ${String(e).slice(0, 120)}, kept in KV`);
+      await env.DB.put(key, JSON.stringify({ address: to, items: add }), { expirationTtl: 8 * 86400 }).catch(() => {});
     }
   }
   console.log(`email: ${mails.length} test/preview to the sink, not sent`);
@@ -189,19 +209,23 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
   const tier: Tier = opts.tier ?? (opts.via ? 'low' : opts.bulk ? 'alert' : 'account');
   await loadMeter(env);
   if (opts.preview) mails = mails.map((m) => ({ ...m, preview: true }));
+  // `since`: the first send counted today (Resend's `used` counts the whole UTC day, account-wide; these count from here).
+  // Kinds an older build started without `since` (so they couldn't be read against `used`) start over here.
+  if (mailQuota.kinds && (!mailQuota.kinds.since || mailQuota.kinds.used_at_since === undefined)) mailQuota.kinds = undefined;
+  const kinds = kindsToday();
   // Launch week: test, critic and preview mail goes to the sink, never to a provider (Space ruling, Nov 11).
   if (env.TEST_MAIL_SINK !== 'off' && Date.now() < SINK_UNTIL) {
     const sunk = mails.filter(isTestMail);
     if (sunk.length) {
       await sinkMail(env, sunk);
+      counted('sinked', sunk.length);
       mails = mails.filter((m) => !sunk.includes(m));
-      if (!mails.length) return 'sunk';
+      if (!mails.length) {
+        await env.DB.put(METER, JSON.stringify(mailQuota));
+        return 'sunk';
+      }
     }
   }
-  // `since`: the first send counted today (Resend's `used` counts the whole UTC day, account-wide; these count from here).
-  // Kinds an older build started without `since` (so they couldn't be read against `used`) start over here.
-  if (mailQuota.kinds && (!mailQuota.kinds.since || mailQuota.kinds.used_at_since === undefined)) mailQuota.kinds = undefined;
-  const kinds = (mailQuota.kinds ??= { real: 0, test: 0, account: 0, preview: 0, since: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), used_at_since: mailQuota.used });
   const tally = (m: Mail) => {
     if (m.preview) kinds.preview++;
     kinds[m.preview || m.test || testAddress(m.to) ? 'test' : tier === 'account' ? 'account' : 'real']++;
@@ -219,7 +243,7 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
   }
   // A sample never reaches a member's real address.
   const blocked = mails.filter((m) => SAMPLE.test(m.subject) && !previewInbox(m.to));
-  if (blocked.length) console.log(`samples not sent to members: ${blocked.length}`);
+  droppedFor('sample_to_member', blocked.length);
   mails = mails.filter((m) => !blocked.includes(m));
   // Test, preview and ops mail first in line to go: past NONMEMBER_FLOOR left today, dropped. A test member's sign-in
   // and billing mail (account tier) still sends; a notice to our inbox doesn't.
@@ -229,7 +253,7 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
   let spare = Math.max(0, MAIL_DAILY_CAP - NONMEMBER_FLOOR - mailQuota.used) + (mailgunOn(env) ? Math.max(0, MAILGUN_DAILY_CAP - NONMEMBER_FLOOR - mailQuota.mailgun) : 0);
   const dropped = mails.filter((m) => nonMember(m) && spare-- <= 0);
   if (dropped.length) {
-    kinds.dropped = (kinds.dropped ?? 0) + dropped.length;
+    droppedFor('test_or_ops_past_floor', dropped.length);
     console.log(`email: ${dropped.length} test/preview/ops dropped (Resend ${mailQuota.used} of ${MAIL_DAILY_CAP} used; non-member mail stops at ${NONMEMBER_FLOOR} left)`);
     mails = mails.filter((m) => !dropped.includes(m));
     if (!mails.length) {
@@ -247,7 +271,11 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
   // A one-off batch (Email 2): Mailgun while it has room for the day; the rest goes on as low-priority mail, so it
   // never takes the alerts' Resend hold (past that, it waits in the reset queue).
   if (opts.via === 'mailgun') {
-    if (!mailgunOn(env)) return 'skipped (no MAILGUN_API_KEY)';
+    if (!mailgunOn(env)) {
+      droppedFor('no_mailgun_key', mails.length);
+      await env.DB.put(METER, JSON.stringify(mailQuota));
+      return 'skipped (no MAILGUN_API_KEY)';
+    }
     mails = await viaMailgun(env, mails, statuses, 0, tally);
     if (!mails.length) return done();
   }
@@ -267,15 +295,20 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
     }
   }
   if (!env.RESEND_API_KEY) {
-    console.log(`email skipped (no RESEND_API_KEY): ${mails.length}`);
+    droppedFor('no_resend_key', mails.length);
+    await env.DB.put(METER, JSON.stringify(mailQuota));
     return 'skipped';
   }
   for (let i = 0; i < mails.length; i += 100) {
     const batch = mails.slice(i, i + 100).map((m) => ({ from: m.from ?? env.EMAIL_FROM, to: [m.to], subject: m.subject, text: m.text, ...((m.replyTo ?? env.CONTACT_EMAIL) ? { reply_to: m.replyTo ?? env.CONTACT_EMAIL } : {}), ...(m.html ? { html: m.html } : {}), ...(m.unsubscribe ? { headers: { 'List-Unsubscribe': `<${oneClick(m.unsubscribe)}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } } : {}) }));
+    // A network failure is an outage: the mail waits like a 5xx, never lost with a thrown error.
     const res = await fetch('https://api.resend.com/emails/batch', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(batch),
+    }).catch((e) => {
+      console.log(`resend fetch failed: ${String(e).slice(0, 80)}`);
+      return new Response('{"name":"network_error"}', { status: 503 });
     });
     // Resend's error can quote an address: the log keeps its error name only.
     if (res.headers.has('x-resend-daily-quota')) mailQuota.used = Number(res.headers.get('x-resend-daily-quota'));
@@ -294,7 +327,11 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
       else if (rest.length && (res.status === 429 || res.status >= 500)) {
         const q = JSON.parse((await env.DB.get(RETRY)) ?? '[]') as (Mail & { first: string })[];
         await env.DB.put(RETRY, JSON.stringify([...q, ...rest.map((m) => ({ ...m, first: (m as { first?: string }).first ?? new Date().toISOString() }))].slice(-200)));
+        // A retry refused again is the same mail, already counted.
+        counted('queued', rest.filter((m) => !(m as { first?: string }).first).length);
       }
+      // Any other refusal (a 4xx: a bad address, a rejected sender) won't succeed on a retry: dropped, with Resend's reason.
+      if (res.status < 429 || (res.status > 429 && res.status < 500)) droppedFor(`resend_${res.status}_${name}`, mails.slice(i, i + 100).length);
       if (rest.length || res.status < 429) statuses.push(String(res.status));
       continue;
     }
@@ -331,8 +368,14 @@ export async function retryMail(env: Env): Promise<Record<string, unknown>> {
   }
   const raw = await env.DB.get(RETRY);
   if (!raw) return out;
-  const q = (JSON.parse(raw) as (Mail & { first: string })[]).filter((m) => Date.now() - Date.parse(m.first) < 2 * 86_400_000);
+  const all = JSON.parse(raw) as (Mail & { first: string })[];
+  const q = all.filter((m) => Date.now() - Date.parse(m.first) < 2 * 86_400_000);
   await env.DB.delete(RETRY);
+  if (all.length > q.length) {
+    await loadMeter(env);
+    droppedFor('retry_expired_2d', all.length - q.length);
+    await env.DB.put(METER, JSON.stringify(mailQuota));
+  }
   if (!q.length) return out;
   // A refusal puts them back on the list (sendMail does that), so nothing is lost.
   const status = await sendMail(env, q);
