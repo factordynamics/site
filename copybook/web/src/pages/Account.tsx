@@ -4,6 +4,7 @@ import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
 import { Channels, FailingBanner } from '../components/Channels'
 import { Team } from '../components/Team'
+import { MyAccess, TeamAccess } from '../components/AccessLog'
 import { FundSetup } from '../components/FundSetup'
 import { UpgradePro } from '../components/UpgradePro'
 import { FreeNames } from '../components/FreeNames'
@@ -363,8 +364,10 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
       {member.active && member.plan === 'copy' && !member.seat && !member.cancel_at_period_end && <UpgradePro member={member} className="mt-5" />}
       {member.active && member.referral && <Referral r={member.referral} />}
       {member.active && member.plan === 'fund' && !member.seat && <Team />}
+      {member.active && member.plan === 'fund' && !member.seat && <TeamAccess />}
       {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
       {member.active && <ApiKeys member={member} focus={focus} />}
+      <MyAccess />
 
       {(member.active || paused) && status === 'ready' && follows.onboarded && !editing && (
         <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
