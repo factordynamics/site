@@ -551,7 +551,7 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
-STALE = ("split", "prev_shares_as_filed", "suspect_units", "suspect_units_basis", "suspect_reason", "prev_cusip",
+STALE = ("split", "prev_shares_as_filed", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip",
          "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
@@ -626,7 +626,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     principal amounts and never count as shares (share_change null).
     """
     if prev is None:  # no prior quarter: the cross-filer check still runs on each share line
-        return [{f: v for f, v in h.items() if f not in STALE} | {f: None for f in CHANGE_FIELDS}
+        return [{f: v for f, v in h.items() if f not in STALE} | {f: None for f in CHANGE_FIELDS} | {"row_type": "holding"}
                 | units(h, None, 1.0, 1.0, latest.get("quarter"), None) for h in latest["holdings"]]
     eq = latest.get("equity_value") or sum(h["value"] for h in latest["holdings"] if is_equity(h)) or None
     q_from, q_to = prev.get("quarter"), latest.get("quarter")
@@ -690,7 +690,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
             if abs(math.log(was / now_px)) < abs(math.log(was / (now_px * r))):
                 r = 1.0
         if h.get("late_disclosure"):
-            rows.append(h | units(h, p, r, k, q_to, q_from) | extra(p, "disclosed_later", 0, None, r, prn))
+            rows.append(h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, "disclosed_later", 0, None, r, prn))
             continue
         now = amount(h)
         if p is None:
@@ -712,7 +712,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                     h = h | {"suspect_units": True}
                 elif abs(delta) > 1.5 * max(h["value"], p["value"]):  # no trade is worth more than that
                     delta = h["value"] - p["value"]
-        rows.append(h | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn))
+        rows.append(h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn))
     for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):
         prn = p.get("shares_type") == "PRN"
         r = ratio(p)
@@ -723,6 +723,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 "title": p["title"],
                 "cusip": p["cusip"],
                 "ticker": p.get("ticker") or ticker_for(p["cusip"]),
+                "row_type": "exited",  # sold out: shares and value 0, the old position in prev_shares/prev_value
                 "value": 0,
                 "shares": 0,
                 "put_call": p["put_call"],

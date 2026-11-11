@@ -32,7 +32,9 @@ MIN_BOOKS = 5000
 PART_RAW = 450_000_000  # uncompressed CSV per part; about 80 MB gzipped (one upload is capped near 100 MB)
 HEADER = ("cik", "filer_name", "quarter", "report_date", "accession", "filing_date", "cusip", "ticker", "issuer",
           "title", "put_call", "shares", "shares_type", "value", "accepted_at", "source_accession", "first_disclosed_at",
-          "change")
+          "change", "row_type", "prev_shares", "prev_value")
+# row_type: holding, or exited (sold out: shares and value 0, the old position in prev_shares and prev_value). A sum of
+# shares or a count of holders reads the holding rows only.
 
 
 def curated_books(quarter: str) -> dict[str, dict]:
@@ -52,6 +54,15 @@ def curated_books(quarter: str) -> dict[str, dict]:
     return out
 
 
+def row_type(h: dict) -> str:
+    return h.get("row_type") or ("exited" if h.get("change") == "exited" else "holding")
+
+
+def num(v) -> int | str:
+    """A whole number, or empty when there is no prior."""
+    return "" if v is None else round(v)
+
+
 def rows(quarter: str):
     curated = curated_books(quarter)
     paths = {p.stem: p for p in (DATA / "fb" / quarter).glob("*.json")}
@@ -66,7 +77,8 @@ def rows(quarter: str):
                               h.get("put_call") or "", h.get("shares") or h.get("principal_amount") or 0,
                               h.get("shares_type") or "SH", h.get("value") or 0, b.get("accepted_at") or "",
                               h.get("source_accession") or b.get("accession") or "",
-                              h.get("first_disclosed_at") or b.get("accepted_at") or "", h.get("change") or "")
+                              h.get("first_disclosed_at") or b.get("accepted_at") or "", h.get("change") or "",
+                              row_type(h), num(h.get("prev_shares")), num(h.get("prev_value")))
             continue
         try:
             b = json.loads(paths[cik].read_text())
@@ -82,7 +94,8 @@ def rows(quarter: str):
             yield head + (h.get("cusip") or "", h.get("ticker") or "", h.get("issuer") or "", h.get("title") or "",
                           h.get("put_call") or "", h.get("shares") or 0, h.get("shares_type") or "SH", h.get("value") or 0,
                           b.get("accepted_at") or "", h.get("source_accession") or b.get("accession") or "",
-                          h.get("first_disclosed_at") or b.get("accepted_at") or "", h.get("change") or "")
+                          h.get("first_disclosed_at") or b.get("accepted_at") or "", h.get("change") or "",
+                          row_type(h), num(h.get("prev_shares")), num(h.get("prev_value")))
 
 
 def export(quarter: str) -> list[Path]:

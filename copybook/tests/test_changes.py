@@ -357,5 +357,13 @@ class BulkExportTest(unittest.TestCase):
                 (data / folder / "2026Q3" / "0001281761.json").write_text(json.dumps(
                     {"ok": True, "cik": "0001281761", "accession": "0001281761-26-000010", "columns": cols, "rows": rows}))
             with mock.patch.object(export, "DATA", data):
-                got = [(r[6], r[13], r[17]) for r in export.rows("2026Q3")]
-        self.assertEqual(got, [("78468R622", 1000, "added"), ("111111111", 0, "exited")])
+                got = [(r[6], r[13], r[17], r[18]) for r in export.rows("2026Q3")]
+        self.assertEqual(got, [("78468R622", 1000, "added", "holding"), ("111111111", 0, "exited", "exited")])
+        self.assertEqual(export.HEADER[17:], ("change", "row_type", "prev_shares", "prev_value"))
+
+    def test_exited_rows_are_typed_and_hold_the_old_position_in_prev(self):
+        prev = {"quarter": "2026Q2", "holdings": [{"cusip": "111111111", "issuer": "A", "title": "COM", "ticker": "A",
+                                                    "value": 5e6, "shares": 1e5, "put_call": None, "shares_type": "SH"}]}
+        rows = build.with_changes({"quarter": "2026Q3", "holdings": []}, prev)
+        self.assertEqual([(r["row_type"], r["shares"], r["value"], r["prev_shares"], r["prev_value"]) for r in rows],
+                         [("exited", 0, 0, 1e5, 5e6)])

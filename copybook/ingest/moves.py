@@ -34,7 +34,7 @@ WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
 TOP = 10
 MOVE_COLUMNS = ("ticker", "issuer", "cusip", "put_call", "shares", "prev_shares", "value", "value_delta", "change")
-FULL_COLUMNS = ("ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type", "prev_shares", "prev_value",
+FULL_COLUMNS = ("row_type", "ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type", "prev_shares", "prev_value",
                 "change", "share_change", "value_delta", "pct_of_book", "delta_pct_of_book", "prev_shares_as_filed",
                 "split_ratio", "value_as_filed", "price_outlier", "suspect_units", "suspect_units_basis", "suspect_reason", "prev_cusip",
                 "source_accession", "first_disclosed_at", "value_scale", "value_adjusted")

@@ -2,6 +2,13 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-row-type",
+   "date": "2026-11-11",
+   "kind": "methodology",
+   "title": "row_type on every holdings row: holding or exited",
+   "body": "Full books (/v1 holdings) and the bulk files list a filer's sold-out positions next to its holdings, so the quarter's exits can be read from one file. Every row now carries row_type: holding, or exited. An exited row has shares 0 and value 0; the position it replaced is in prev_shares and prev_value, and change is exited. Exited rows are not part of the book total, so total_value_usd is the sum of the holding rows. Sum shares or count holders over row_type holding only. Bulk files gain three columns at the end: row_type, prev_shares and prev_value. From the first full run after 08:00 UTC on Nov 11."
+  },
+  {
    "id": "2026-11-11-bulk-equals-v1",
    "date": "2026-11-11",
    "kind": "correction",
