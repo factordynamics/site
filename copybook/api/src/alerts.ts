@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { offFilers, reissuedTicker, isReissued, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -1854,6 +1854,18 @@ export function compareToBuild(rows: Map<string, MoveRow>, build: Map<string, Bu
     // that hasn't linked it (TEVA's ADS to ordinary, Nov 11) lists an exit plus a new line, and must never correct an
     // add or trim into either.
     if (isReissued(r.cusip) && (!v || v.change === 'new' || v.change === 'exited')) continue;
+    // A linked pair the build does list as one position: a split link (DD 1-for-3) compares split-adjusted shares, the
+    // build's prior possibly still in old units; a one-for-one link isn't checked for direction or value (no false
+    // "corrected" note).
+    if (v && isReissued(r.cusip)) {
+      const k = reissueRatio(r.cusip);
+      if (k === 1) continue;
+      const vp = Number(v.prev_shares ?? 0), rp = Number(r.prev_shares ?? 0), vs = Number(v.shares ?? 0);
+      if (vs === Number(r.shares) && (Math.abs(rp - Math.round(vp * k)) <= 1 || Math.abs(rp - vp) <= 1)) continue;
+      const adj = Math.abs(rp - vp) <= 1 ? vp : Math.round(vp * k);
+      failed.push({ cusip: r.cusip, ticker: r.ticker ?? v.ticker ?? null, name: r.display_name || r.issuer, put_call: r.put_call, emailed: { change: r.change!, value_delta: r.value_delta }, v1: { change: !vs ? 'exited' : vs > adj ? 'added' : vs < adj ? 'trimmed' : 'unchanged', value_delta: Math.round(v.value_delta) } });
+      continue;
+    }
     // A row the build doesn't list can't be confirmed either way: never read as "unchanged" (retail, Nov 11: real exits
     // were "corrected" to unchanged when a build left its exits out).
     if (!v) continue;

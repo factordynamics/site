@@ -317,13 +317,21 @@ export const REISSUED: Record<string, { to: string; ticker: string; ratio?: numb
   '811916105': { to: '811927102', ticker: 'SA' },
 };
 /**
- * SEC-confirmed reissues whose units don't match (ingest's `held`): never linked share for share. HON's holders hold
- * exactly 0.5x the shares at the same price per share (an exchange, not a split); NVRI 0.333x. A filer that leaves the
- * old CUSIP for the new one in the same quarter gets one "CUSIP exchanged" line, no trade.
+ * SEC-confirmed reissues whose units aren't confirmed yet (ingest's `held`): never linked share for share. HON is a
+ * 1-for-2 reverse split done the day of the HONA spin-off (8-K 0000773840-26-000084, Ex. 99.1): it links at 0.5 once
+ * ingest's file gives it ratio 0.5 with units_basis split_confirmed. NVRI 0.333x, unconfirmed. Until linked, a filer that
+ * leaves the old CUSIP for the new one in the same quarter gets one "CUSIP exchanged" line, no trade.
  */
 export const HELD: Record<string, { to: string; ticker: string }> = {
   '438516106': { to: '438516205', ticker: 'HON' },
   '415864107': { to: '29390K102', ticker: 'NVRI' },
+};
+/** The hand-coded lists: every load of ingest's file starts again from these, so a link the file drops is dropped here. */
+const BASE = { reissued: JSON.stringify(REISSUED), held: JSON.stringify(HELD) };
+/** A linked CUSIP's ratio (new shares per old share; 1 when one-for-one or not linked), by either side. */
+export const reissueRatio = (cusip?: string | null): number => {
+  const c = (cusip ?? '').toUpperCase();
+  return REISSUED[c]?.ratio ?? Object.values(REISSUED).find((x) => x.to === c)?.ratio ?? 1;
 };
 /**
  * Old issuer code -> current one, where a reissue changed the 6-character issuer (XOM 30231G -> 30233Q, TEVA 881624 ->
@@ -347,8 +355,9 @@ let reissuesAt = 0;
  * only add: a missing or unreadable file leaves the known ones.
  */
 export async function loadReissues(env: { DATA_URL: string }, now = Date.now()): Promise<number> {
-  if (now - reissuesAt < 3600_000) return Object.keys(REISSUED).length;
-  reissuesAt = now;
+  if (now < reissuesAt) return Object.keys(REISSUED).length;
+  // A failed read retries in 5 minutes; a good one holds for the hour.
+  reissuesAt = now + 300_000;
   try {
     const res = await fetch(`${env.DATA_URL}cusip_links.json`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
@@ -358,6 +367,10 @@ export async function loadReissues(env: { DATA_URL: string }, now = Date.now()):
       // Held pairs (an array from Nov 11 12:2x, a map before): ingest's word overrides a hand-coded link, never a 1:1
       // merge of mismatched or unchecked units.
       const held = Array.isArray(file.held) ? file.held : Object.entries(file.held ?? {}).map(([o, v]) => ({ ...v, old: o }));
+      for (const k of Object.keys(REISSUED)) delete REISSUED[k];
+      for (const k of Object.keys(HELD)) delete HELD[k];
+      Object.assign(REISSUED, JSON.parse(BASE.reissued), {});
+      Object.assign(HELD, JSON.parse(BASE.held));
       for (const l of held) {
         const from = String(l.old ?? '').toUpperCase(), to = String(l.new ?? '').toUpperCase();
         if (!ok(from, to)) continue;
@@ -366,14 +379,16 @@ export async function loadReissues(env: { DATA_URL: string }, now = Date.now()):
       }
       for (const [old, l] of Object.entries(file.links ?? {})) {
         const from = old.toUpperCase(), to = String(l.new ?? '').toUpperCase();
-        // Only with ingest's units result (ratio or units_basis): a COM -> COM NEW link without one may be a reverse
-        // split, which netted 1:1 reads as a huge trim (ONCY, BARK, UPLD...). ratio multiplies the prior's shares.
-        const k = Number(l.ratio ?? (l.units_basis ? (l.units_check?.split_ratio ?? 1) : NaN));
-        if (l.basis !== 'sec_13f_list' || !ok(from, to) || !l.ticker || !(k > 0) || held.some((h) => String(h.old ?? '').toUpperCase() === from)) continue;
+        // Only with ingest's units result, ratio and units_basis both: a COM -> COM NEW link without one may be a reverse
+        // split, which netted 1:1 reads as a huge trim (ONCY, BARK, UPLD...). A units_basis alone never means 1:1. ratio
+        // multiplies the prior's shares.
+        const k = l.ratio == null ? NaN : Number(l.ratio);
+        if (l.basis !== 'sec_13f_list' || !ok(from, to) || !l.ticker || !(k > 0) || !l.units_basis || held.some((h) => String(h.old ?? '').toUpperCase() === from)) continue;
         delete HELD[from];
         REISSUED[from] = { to, ticker: String(l.ticker).toUpperCase(), ...(Math.abs(k - 1) > 1e-6 ? { ratio: k } : {}) };
       }
       indexReissued();
+      reissuesAt = now + 3600_000;
     }
   } catch {
     // keep the known links

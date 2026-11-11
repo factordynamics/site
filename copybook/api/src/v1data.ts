@@ -680,7 +680,9 @@ async function readHolderIndex(env: Env, code: string): Promise<{ d: any; obj: u
  * prior quarter, and real exits.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function mergeReissue(cur: any[], old: any[], period: string | null): any[] {
+export function mergeReissue(cur: any[], old: any[], period: string | null, ratio = 1): any[] {
+  // The old code's shares in the new code's units (DD 1-for-3: ratio 1/3).
+  const sh = (x: unknown) => (x == null ? null : Math.round(Number(x) * ratio));
   const key = (r: { cik: unknown; put_call?: string | null; kind?: string | null }) => `${Number(r.cik)}|${String(r.put_call ?? (r.kind && r.kind !== 'equity' ? r.kind : '')).toUpperCase()}`;
   const byKey = new Map(cur.map((r) => [key(r), r]));
   const out = cur.map((r) => ({ ...r }));
@@ -697,7 +699,7 @@ export function mergeReissue(cur: any[], old: any[], period: string | null): any
     // position, on the new code, inheriting the old line's prior; the stale line is flagged, never summed.
     if (op && np && op === np && o.change !== 'exited' && Number(o.shares) > 0) {
       if (o.prev_shares != null && (n.prev_shares == null || n.change === 'new')) {
-        n.prev_shares = Number(o.prev_shares);
+        n.prev_shares = sh(o.prev_shares);
         n.prev_value = o.prev_value == null ? null : Number(o.prev_value);
         const s = Number(n.shares) || 0;
         n.change = n.prev_shares === 0 ? 'new' : s > n.prev_shares ? 'added' : s < n.prev_shares ? 'trimmed' : 'unchanged';
@@ -709,16 +711,16 @@ export function mergeReissue(cur: any[], old: any[], period: string | null): any
     const noPrior = n.prev_shares == null || n.change === 'new' || (Number(n.prev_shares) === 0 && n.change !== 'exited');
     const prior = op && np && op === np && o.change === 'exited' ? { shares: o.prev_shares, value: o.prev_value } : op && np && op < np && Number(o.shares) > 0 ? { shares: o.shares, value: o.value } : null;
     if (noPrior && prior && prior.shares != null) {
-      n.prev_shares = Number(prior.shares);
+      n.prev_shares = sh(prior.shares);
       n.prev_value = prior.value == null ? null : Number(prior.value);
       const s = Number(n.shares) || 0;
       n.change = n.prev_shares === 0 ? 'new' : s === 0 ? 'exited' : s > n.prev_shares ? 'added' : s < n.prev_shares ? 'trimmed' : 'unchanged';
       n.merged = true;
       continue;
     }
-    // The old CUSIP's exit in the quarter the filer holds the new one: the reissue itself, not a sale.
-    if (o.change === 'exited' && op === np) continue;
-    kept.push(o);
+    // The filer holds the new code: that row is its one position. Its old-code line (an earlier quarter's holding, or the
+    // old CUSIP's exit in the reissue quarter) is never a second row or an exit (the analyst: Sound Shore read trimmed
+    // and exited).
   }
   return [...out, ...kept];
 }
@@ -735,6 +737,15 @@ export function tradeUsd(r: { change: string | null; shares: number | null; prev
   const s = Number(r.shares) || 0;
   if (r.prev_shares == null || !s) return null;
   return Math.round((s - Number(r.prev_shares)) * (v / s));
+}
+
+/** Shares traded in USD (tradeUsd) per quarter, over every row whose quarter it is: each a quarter's /v1/changes sum. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function netByPeriod(rows: any[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of rows) if (r.period) out[r.period] = (out[r.period] ?? 0) + (r.change && r.change !== 'unchanged' ? (tradeUsd(r) ?? 0) : 0);
+  for (const k of Object.keys(out)) out[k] = Math.round(out[k]);
+  return out;
 }
 
 /** Counts over raw holder rows, as the holder index states them. */
@@ -776,7 +787,9 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   const old = Object.entries(REISSUED_ISSUER).find(([, to]) => to === code)?.[0];
   const reissue = Object.entries(RE).find(([, x]) => x.to.startsWith(code));
   const reissueTo = reissue?.[1].to ?? null, reissueFrom = reissue?.[0] ?? null;
-  if (old && Object.keys(d.counts?.by_period ?? {}).length <= 1 && new Set(raw.map((r) => r.period ?? d.period)).size <= 1) {
+  // Only while the new code's rows lack their priors (most read new): once ingest's rows carry them, nothing to merge.
+  const lacking = raw.filter((r) => r.prev_shares == null || r.change === 'new').length;
+  if (old && lacking * 2 > raw.length && Object.keys(d.counts?.by_period ?? {}).length <= 1 && new Set(raw.map((r) => r.period ?? d.period)).size <= 1) {
     // The old code's holder index, else its single-quarter snapshot (s/): whichever has more rows. Ingest's runs rewrite
     // the old code's hl/ with only the lines still filed under it once they apply the link (TEVA, Nov 11 12:2x: 1 row),
     // which would leave every Q3 filer without its prior.
@@ -786,27 +799,36 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
     const snap: any = snapObj ? await new Response(snapObj.body).json() : null;
     const rowsOfIdx = (x: any) => (x ? rowsOf({ columns: x.columns, rows: x.rows ?? x.holders ?? [] }).map((r) => ({ ...r, period: r.period ?? x.period ?? null })) : []);
     const fromHl = rowsOfIdx(hl?.d), fromSnap = rowsOfIdx(snap);
-    const useSnap = fromSnap.length > fromHl.length;
-    const oldRows = useSnap ? fromSnap : fromHl;
+    // Both: the old code's hl/ rows (a Q3 holding still filed under it, Migdal's 39.4M TEVA ADS, is current), and the
+    // snapshot for every other filer.
+    const inHl = new Set(fromHl.map((r) => Number(r.cik)));
+    const extra = fromSnap.filter((r) => !inHl.has(Number(r.cik)));
+    const useSnap = extra.length > 0;
+    const oldRows = [...fromHl, ...extra];
     // The new code's one period (the index's, else its rows').
     const np: string | null = d.period ?? raw.find((r) => r.period)?.period ?? null;
     if (oldRows.length) {
       // Rows kept from the old code are positions in the old CUSIP.
-      raw = mergeReissue(raw, oldRows.map((r) => ({ ...r, cusip: r.cusip ?? reissueFrom })), d.period ?? null);
+      raw = mergeReissue(raw, oldRows.map((r) => ({ ...r, cusip: r.cusip ?? reissueFrom })), d.period ?? null, reissue?.[1].ratio ?? 1);
       // From a snapshot, the old code's holders that didn't carry into the new code stay as they were: holders on the
       // snapshot's quarter with no change (never an inferred exit: about 100 of 247 were false on TEVA). Exits count only
       // from ingest's own rows, so they are pending until its merged index lands (counts.exits_pending).
-      if (useSnap && np) raw = raw.map((r) => (r.cusip === reissueFrom && r.period && r.period < np && r.change !== 'exited' ? { ...r, change: null, prev_shares: null, prev_value: null } : r));
+      if (useSnap && np) raw = raw.filter((r) => !(r.cusip === reissueFrom && r.change === 'exited')).map((r) => (r.cusip === reissueFrom && r.period && r.period < np ? { ...r, change: null, prev_shares: null, prev_value: null } : r));
       d.counts = {
         ...(d.counts ?? {}),
         ...countsOf(raw),
         merged_from: [old],
-        ...(useSnap ? { merged_via: 'snapshot', exits_pending: true, note: `Merged with the old issuer code's ${oldRows[0]?.period ?? 'prior'} snapshot until ingest publishes the merged index: holders still on that quarter show no change, and exits since are not counted yet.` } : {}),
+        ...(useSnap ? { merged_via: 'snapshot', exits_pending: true, note: `Merged with the old issuer code's ${snap?.period ?? 'prior'} snapshot until ingest publishes the merged index: holders still on that quarter show no change, and exits since are not counted yet.` } : {}),
       };
     }
   }
-  // net is the shares traded at each filing's value per share, never the value difference (a price move is no trade).
-  if (d.counts && obj) d.counts = { ...d.counts, net: countsOf(raw).net };
+  // net is the shares traded at each filing's value per share, never the value difference (a price move is no trade),
+  // for one quarter: the latest any filer reports (the sum of /v1/changes for it). By quarter in net_by_period.
+  if (d.counts && obj) {
+    const nbp = netByPeriod(raw);
+    const q = Object.keys(nbp).sort().at(-1) ?? d.period ?? null;
+    d.counts = { ...d.counts, net: q ? (nbp[q] ?? 0) : 0, net_quarter: q, net_by_period: nbp };
+  }
   mark('read');
   const cur = new Map((await filers(env)).map((f) => [f.cik, f]));
   mark('filers');
@@ -983,6 +1005,10 @@ ROUTES.push(
     // Each filer's latest full book: periods differ by filer (a fund that filed its Q3 13F shows Q3).
     const rows = h.rows.filter((r) => keep(r) && (!quarter || r.period === quarter));
     const sp = splitHolders(rows, p.get('include_options') === 'true');
+    // ?quarter= picks the quarter counts.net covers (default: the latest any filer reports).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nbp = (h.counts as any)?.net_by_period as Record<string, number> | undefined;
+    if (quarter && nbp) h.counts = { ...h.counts, net: nbp[quarter] ?? 0, net_quarter: quarter };
     const data = { issuer: h.issuer, ...(is.superseded_by ? { superseded_by: is.superseded_by } : {}), ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit), options: sp.options, exited: sp.exited };
     return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { 'server-timing': timing.join(', ') });
   }],

@@ -1492,6 +1492,26 @@ describe('copybook api', () => {
     const honStored = [{ change: 'exited', cusip: '438516106', ticker: 'HON', put_call: null, shares: 0, prev_shares: 1000, value: 0, value_delta: -200000 }, { change: 'new', cusip: '438516205', ticker: 'HON', put_call: null, shares: 500, prev_shares: 0, value: 200000, value_delta: 200000 }];
     expect(netRenamed({ moves: {} as never, changed: honStored as never }).changed.map((x) => x.change)).toEqual(['exited', 'new']);
     expect(computeMoves([other] as never, [{ cusip: '438516106', put_call: null, issuer: 'HON', shares: 1000, value: 200000 }, other] as never).changed.map((x) => x.change)).toEqual(['exited']);
+    // DD in reconciliation: the build's prior in old units (3,000) against the alert's 1,000 is the same position, no
+    // correction; a build with other shares is one, judged on split-adjusted shares.
+    const ddRow = { cusip: '26614N201', ticker: 'DD', put_call: null, change: 'added', shares: 1200, prev_shares: 1000, value_delta: 19000 };
+    const ddBuild = (shares: number) => new Map([['26614N201|', { cusip: '26614N201', ticker: 'DD', change: 'added', shares, prev_shares: 3000, value_delta: 9 }]]);
+    expect(compareToBuild(new Map([['26614N201|', ddRow]]) as never, ddBuild(1200) as never)).toEqual([]);
+    expect(compareToBuild(new Map([['26614N201|', ddRow]]) as never, ddBuild(900) as never).map((x) => x.v1.change)).toEqual(['trimmed']);
+    // The loader: ratio and units_basis both; a link the next file drops is dropped; a failed read retries in 5 minutes.
+    const fileWith = (links: Record<string, unknown>) => async (u: string, init?: RequestInit) => (String(u).endsWith('cusip_links.json') ? Response.json({ links, held: [] }) : real1(u, init));
+    const t1 = Date.now() + 20 * 86400_000;
+    vi.stubGlobal('fetch', fileWith({ '12345A101': { new: '12345B107', ticker: 'NEWCO', basis: 'sec_13f_list', units_basis: 'holders_1to1' }, '77777A101': { new: '77777A200', ticker: 'KEEP', basis: 'sec_13f_list', ratio: 1, units_basis: 'holders_1to1' } }));
+    await ed.loadReissues(env, t1);
+    expect([ed.REISSUED['12345A101'], ed.REISSUED['77777A101']?.to, ed.REISSUED['881624209']?.to]).toEqual([undefined, '77777A200', 'M8769Q102']);
+    vi.stubGlobal('fetch', async () => { throw new Error('down'); });
+    await ed.loadReissues(env, t1 + 3600_000);
+    vi.stubGlobal('fetch', fileWith({}));
+    await ed.loadReissues(env, t1 + 3600_000 + 240_000);
+    expect(ed.REISSUED['77777A101']?.to).toBe('77777A200');
+    await ed.loadReissues(env, t1 + 3600_000 + 310_000);
+    expect(ed.REISSUED['77777A101']).toBeUndefined();
+    vi.stubGlobal('fetch', real1);
     // A detection-only pair stays an exit plus a new position.
     expect(computeMoves([{ cusip: '99999S104', put_call: null, issuer: 'S', shares: 10, value: 100 }] as never, [{ cusip: '99999U107', put_call: null, issuer: 'U', shares: 10, value: 100 }] as never).changed.map((x) => x.change).sort()).toEqual(['exited', 'new']);
     // By ticker or the old issuer code, XOM and TEVA resolve to the current issuer (the quant: XOM read the stale 30231G
@@ -4106,19 +4126,41 @@ describe('copybook api', () => {
     // Ingest's run rewrote the old code's hl/ with the one line still filed under it (Nov 11 12:2x): the old Q2 snapshot
     // (s/881624) carries the priors instead. Holders that didn't carry over stay Q2 holders with no change, never an
     // inferred exit (the lead: ~100 of 247 inferred TEVA exits were false); exits are pending until ingest's merged index.
-    const hl0 = hist.m.get('hl/881624.json'), rest0 = hist.m.get('pre/v1-filers-rest.txt');
-    await hist.put('hl/881624.json', JSON.stringify({ issuer: '881624', columns: tcols, rows: [['0001999999', 'Lone Filer', null, 'other', false, '2026Q2', 10, 10, 300, 300, 'unchanged']] }));
+    // The old code's remaining hl/ row is current: Migdal's Q3 13F still files 39.4M ADS under 881624209 (the quant).
+    const hl0 = hist.m.get('hl/881624.json'), rest0 = hist.m.get('pre/v1-filers-rest.txt'), new0 = hist.m.get('hl/M8769Q.json');
+    await hist.put('hl/881624.json', JSON.stringify({ issuer: '881624', columns: tcols, rows: [['0001178913', 'Migdal Insurance', null, 'insurance', false, '2026Q3', 39422212, 38900000, 1340000000, 1320000000, 'added']] }));
+    // Ingest's own Q3 rows with priors (Sound Shore, Sumitomo) beside the ones lacking them (the analyst: both read as a
+    // holding plus an exit).
+    await hist.put('hl/M8769Q.json', JSON.stringify({ issuer: 'M8769Q', tickers: ['TEVA'], counts: { holders: 7, by_period: { '2026Q3': 7 } }, columns: tcols, rows: [
+      ['0000315066', 'FMR LLC', 'fmr-llc', 'long_only', true, '2026Q3', 25784696, null, 900000000, null, 'new'],
+      ['0001364742', 'Norges Bank', null, 'sovereign', false, '2026Q3', 5000000, null, 170000000, null, 'new'],
+      ['0001669055', 'IFP Advisors', null, 'wealth', false, '2026Q3', 143876, null, 5000000, null, 'new'],
+      ['0000713676', 'PNC Financial', null, 'bank', false, '2026Q3', 1200, null, 42000, null, 'new'],
+      ['0001000001', 'Sound Shore', null, 'long_only', false, '2026Q3', 3673882, 3804497, 128000000, 130000000, 'trimmed'],
+      ['0001000002', 'Sumitomo Mitsui Trust', null, 'bank', false, '2026Q3', 769408, 769408, 26800000, 26300000, 'unchanged'],
+      ['0001000003', 'New Buyer', null, 'other', false, '2026Q3', 100, null, 3500, null, 'new'],
+    ] }));
     await hist.put('s/881624.json', JSON.stringify({ issuer: '881624', period: '2026Q2', prev_period: '2026Q1', columns: ['cik', 'name', 'slug', 'kind', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'accession'], holders: [
       ['0000315066', 'FMR LLC', 'fmr-llc', 'equity', 30258016, 33132795, 1025141579, 997959810, 'trimmed', 'F2'],
       ['0001364743', 'BlackRock, Inc.', null, 'equity', 70000000, 69000000, 2160000000, 2000000000, 'added', 'B2'],
       ['0000312069', 'Barclays PLC', null, 'equity', 800000, 900000, 25000000, 27000000, 'trimmed', 'X2'],
+      ['0000713676', 'PNC Financial', null, 'equity', 1000, 900, 31000, 27000, 'added', 'P2'],
+      ['0001000001', 'Sound Shore', null, 'equity', 3804497, 3800000, 130000000, 120000000, 'added', 'S2'],
+      ['0001000002', 'Sumitomo Mitsui Trust', null, 'equity', 769408, 769408, 26300000, 24000000, 'unchanged', 'T2'],
+      ['0001669055', 'IFP Advisors', null, 'equity', 140000, 130000, 4600000, 4000000, 'added', 'I2'],
+      ['0001000004', 'Old Exit LP', null, 'equity', 0, 500, 0, 15000, 'exited', 'O2'],
     ] }));
     hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`2 \n${JSON.stringify([{ slug: 'barclays-plc', cik: '0000312069', name: 'Barclays PLC', manager: null, featured: false, status: null, latest_quarter: '2026Q3' }, { slug: 'blackrock', cik: '0001364743', name: 'BlackRock, Inc.', manager: null, featured: false, status: null, latest_quarter: '2026Q2' }])}`));
     const snapV = (await v1('/v1/stocks/TEVA/holders?current_only=false')).body;
     const bySnap = Object.fromEntries([...snapV.data.holders, ...snapV.data.exited].map((r: { filer: { name: string }; change: string; share_change: number | null; period: string }) => [r.filer.name, [r.change, r.share_change, r.period]]));
     expect([bySnap['FMR LLC'], bySnap['BlackRock, Inc.'], bySnap['Barclays PLC'], snapV.exited_count, snapV.data.counts.merged_via, snapV.data.counts.exits_pending, snapV.data.counts.merged_from]).toEqual([['trimmed', -4473320, '2026Q3'], [null, null, '2026Q2'], [null, null, '2026Q2'], 0, 'snapshot', true, ['881624']]);
     expect(snapV.data.counts.note).toMatch(/2026Q2 snapshot/);
+    // One row per filer, none an exit: a Q3 holding under either code is current.
+    const rowsOf2 = [...snapV.data.holders, ...snapV.data.exited] as { filer: { name: string; cik: string } }[];
+    expect(rowsOf2.length).toBe(new Set(rowsOf2.map((r) => r.filer.cik)).size);
+    expect([bySnap['Sound Shore'], bySnap['Sumitomo Mitsui Trust'], bySnap['PNC Financial'], bySnap['IFP Advisors'], bySnap['Migdal Insurance'], bySnap['Old Exit LP']]).toEqual([['trimmed', -130615, '2026Q3'], ['unchanged', 0, '2026Q3'], ['added', 200, '2026Q3'], ['added', 3876, '2026Q3'], ['added', 522212, '2026Q3'], undefined]);
     hist.m.delete('s/881624.json');
+    if (new0) hist.m.set('hl/M8769Q.json', new0);
     if (hl0) hist.m.set('hl/881624.json', hl0);
     if (rest0) hist.m.set('pre/v1-filers-rest.txt', rest0);
     else hist.m.delete('pre/v1-filers-rest.txt');
@@ -4129,9 +4171,12 @@ describe('copybook api', () => {
     const fmr = tch.data.find((r: { filer: { name: string } }) => r.filer.name === 'FMR LLC');
     expect(tch.data.filter((r: { change: string }) => r.change === 'new')).toEqual([]);
     expect(fmr).toMatchObject({ change: 'trimmed', share_change: -4473320, value_delta_usd: -156138665, cusip: 'M8769Q102', prev_cusip: '881624209' });
-    // Holders' net is the same trades: FMR -156.1M, Norges +1M x $34 = +34.0M (BlackRock's Q2 add is not in Q3's changes),
-    // BlackRock +1M x $30.86 = +30.9M, Barclays' exit -25.0M.
-    expect(teva.data.counts.net).toBe(-156138665 + 34000000 + 30857143 - 25000000 + 134699);
+    // Holders' net covers one quarter, the latest (the quant: XOM's mixed Q2 and Q3 to -$3.15B where Q3's changes sum to
+    // +$3.13B), and equals that quarter's /v1/changes sum: FMR -156.1M, Norges +34.0M, Barclays' exit -25.0M, IFP +0.13M.
+    // BlackRock's Q2 add (+30.9M) is Q2's.
+    expect([teva.data.counts.net, teva.data.counts.net_quarter, teva.data.counts.net_by_period]).toEqual([-156138665 + 34000000 - 25000000 + 134699, '2026Q3', { '2026Q3': -156138665 + 34000000 - 25000000 + 134699, '2026Q2': 30857143 }]);
+    expect(tch.data.reduce((a: number, r: { value_delta_usd: number }) => a + r.value_delta_usd, 0)).toBe(teva.data.counts.net);
+    expect((await v1('/v1/stocks/TEVA/holders?quarter=2026Q2&current_only=false')).body.data.counts).toMatchObject({ net: 30857143, net_quarter: '2026Q2' });
     expect(teva.data.holders.find((r: { filer: { name: string } }) => r.filer.name === 'BlackRock, Inc.').cusip).toBe('881624209');
     // A plain ticker: a price move is no trade. 100 -> 110 shares while the price doubled: +$2,000, not +$12,000.
     await hist.put('hl/037833.json', JSON.stringify({ issuer: '037833', tickers: ['AAPL'], counts: { holders: 1, net: 12000 }, columns: tcols, rows: [
