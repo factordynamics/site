@@ -1433,7 +1433,7 @@ const ratioOf = (r: BuildRow) => (typeof r.split === 'object' ? Number(r.split?.
  * for them (alerts accepted before RECONCILE_MAIL_FROM are never mailed); any queued one is dropped.
  */
 export async function scrubFalseCorrections(env: Env, now: number): Promise<Record<string, unknown> | null> {
-  const FLAG = 'alerts:scrub-unchanged:v1';
+  const FLAG = 'alerts:scrub-unchanged:v2';
   if (await env.DB.get(FLAG)) return null;
   const bogus = (r: import('./email').CorrectionRow) => r.v1.change === 'unchanged' && r.v1.value_delta === 0;
   const n = { stores: 0, verdicts: 0, feeds: 0, queued_mail: 0, accessions: new Set<string>() };
@@ -1465,22 +1465,32 @@ export async function scrubFalseCorrections(env: Env, now: number): Promise<Reco
     n.verdicts++;
   }
   if (n.verdicts) await env.DB.put(RECONCILED, JSON.stringify(log));
-  // Feeds keep their own copy of each item: rebuilt from the scrubbed day stores.
+  // Feeds keep their own copy of each item: rebuilt from the scrubbed day stores, with reissued CUSIPs netted (an
+  // "EXIT XOM · NEW XOM" pair reads as the one add or trim it was) and today's display names ("Fidelity (FMR)").
   const fixed = new Map<string, Alert13F>();
+  const rows = (m: Moves) => [...m.new.map((r) => ({ ...r, change: 'new' })), ...m.added.map((r) => ({ ...r, change: 'added' })), ...m.trimmed.map((r) => ({ ...r, change: 'trimmed' })), ...m.exited.map((r) => ({ ...r, change: 'exited' }))] as MoveRow[];
   for (let d = 0; d < 31; d++) {
     const raw = await env.DB.get(`digest:${etDay(now - d * DAY)}`);
-    if (raw) for (const x of (JSON.parse(raw) as DigestDay).filings) if (n.accessions.has(x.accession)) fixed.set(filingId(x), x);
+    if (!raw) continue;
+    for (const x of (JSON.parse(raw) as DigestDay).filings) {
+      const ch = x.moves ? rows(x.moves) : [];
+      const net = x.moves ? netRenamed({ moves: x.moves, changed: ch }) : null;
+      const renamed = !!net && net.changed !== ch;
+      if (!n.accessions.has(x.accession) && !renamed) continue;
+      fixed.set(filingId(x), renamed ? { ...x, moves: { ...net!.moves, bought_usd: x.moves!.bought_usd, sold_usd: x.moves!.sold_usd } } : x);
+    }
   }
   for (const m of await listMembers(env)) {
     const key = `feed:${m.customer}`;
     const raw = await env.DB.get(key);
-    if (!raw || !raw.includes('Corrected')) continue;
+    if (!raw) continue;
     let hit = false;
     const out = (JSON.parse(raw) as FeedItem[]).map((i) => {
       const a = fixed.get(i.id);
-      if (!a || !i.title.startsWith('Corrected · ')) return i;
-      hit = true;
+      if (!a) return i;
       const [fresh] = feedItems(env, [a], [], now, true);
+      if (fresh.title === i.title && fresh.text === i.text) return i;
+      hit = true;
       return { ...i, title: fresh.title, text: fresh.text };
     });
     if (hit) {
