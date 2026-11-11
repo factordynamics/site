@@ -8,6 +8,11 @@
    "name": "Tudor Investment Corp. Et Al",
    "type": "hedge_fund"
   },
+  "0000932724": {
+   "name": "Gabelli & Co Investment Advisers, Inc.",
+   "type": "hedge_fund",
+   "evidence": "Form ADV CRD 137024: 10 hedge funds, $771M gross assets, 52% of $1.48B RAUM (Gabelli's merger-arbitrage partnerships)"
+  },
   "0000934639": {
    "name": "Maverick Capital Ltd",
    "type": "hedge_fund"
@@ -15,6 +20,11 @@
   "0000944388": {
    "name": "1832 Asset Management L.P.",
    "type": "long_only"
+  },
+  "0000947996": {
+   "name": "Olstein Capital Management, L.P.",
+   "type": "long_only",
+   "evidence": "Adviser to the Olstein Funds (registered funds, EDGAR CIK 944690); no current Form ADV in the SEC adviser file"
   },
   "0001002152": {
    "name": "COMPASS CAPITAL MANAGEMENT, INC",
@@ -27,6 +37,11 @@
   "0001054587": {
    "name": "Sculptor Capital LP",
    "type": "hedge_fund"
+  },
+  "0001097278": {
+   "name": "Advent Capital Management",
+   "type": "long_only",
+   "evidence": "Form ADV CRD 113013: $8.8B RAUM, mostly institutional convertible-securities accounts; one hedge fund at 4%"
   },
   "0001113000": {
    "name": "Kensico Capital Management Corp.",
@@ -297,5 +312,5 @@
    "type": "other"
   }
  },
- "note": "Hand-checked filer types (PM review of the CRWD, APH, SNDK, NVDA, META, APP, VST, ALAB and TTMI hedge-fund holders, 2026-11-09, rev 4; plus filers with no Form ADV match, 2026-11-11). filer_types.py applies them first; the publish gate fails when filer_types.json disagrees with any of them."
+ "note": "Hand-checked filer types (PM review of the CRWD, APH, SNDK, NVDA, META, APP, VST, ALAB and TTMI hedge-fund holders, 2026-11-09, rev 4; plus filers with no Form ADV match, and Gabelli & Co, Olstein and Advent from Form ADV, 2026-11-11). filer_types.py applies them first; the publish gate fails when filer_types.json disagrees with any of them."
 }

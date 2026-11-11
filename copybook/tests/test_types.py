@@ -48,6 +48,20 @@ class AdviserRuleTests(unittest.TestCase):
         wealthy = adviser(6.4e9, 1, 2.2e9, {"Hedge": 1, "Other": 1}, individuals=4e9)
         self.assertEqual(classify("0000904793", "SANTA MONICA PARTNERS LP", {}, form_d, None, wealthy)[0], "wealth")
 
+    def test_the_reclass_removes_hedge_fund_only_when_form_adv_lists_no_hedge_funds(self):
+        # Nov 11 review: ~1 in 5 dropped hedge funds were real (Sphera: no ADV match; Carlson: hedge funds at 20% of RAUM).
+        carlson = adviser(711e6, 2, 145e6, {"Hedge": 2, "Other": 3})
+        self.assertEqual(classify("1", "Sphera Management", {}, prior="hedge_fund")[0], "hedge_fund")
+        self.assertEqual(classify("2", "Carlson Capital", {}, None, None, carlson, "hedge_fund")[0], "hedge_fund")
+        self.assertNotEqual(classify("2", "Carlson Capital", {}, None, None, carlson, "long_only")[0], "hedge_fund")
+        no_hedge = adviser(842e6, 0, 0, {}, individuals=600e6)  # Stone House: wealth book, no hedge funds
+        self.assertEqual(classify("3", "Stone House", {}, None, None, no_hedge, "hedge_fund")[0], "wealth")
+        # Cresset: 14 hedge funds among 145 private funds, under 1% of a $79B wealth book.
+        cresset = adviser(78.9e9, 14, 6.7e9, {"Hedge": 14, "PE": 25, "VC": 43, "Other": 63}, individuals=70e9)
+        self.assertEqual(classify("4", "Cresset Asset Management", {}, None, None, cresset, "hedge_fund")[0], "wealth")
+        # JAT: no private funds on its ADV and no client-type verdict, so nothing shows it isn't a hedge fund.
+        self.assertEqual(classify("5", "JAT Capital Mgmt", {}, None, None, adviser(228e6, 0, 0), "hedge_fund")[0], "hedge_fund")
+
     def test_shape_alone_never_makes_a_hedge_fund(self):
         shape = {"positions": 40, "top10": 0.6, "options": 0.2, "etf": 0.0, "turnover": 0.9, "aum": 2e9}
         kind, basis, _ = classify("0009999999", "Concentrated Options LP", shape)

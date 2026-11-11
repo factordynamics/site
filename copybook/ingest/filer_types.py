@@ -319,7 +319,7 @@ def shape(book: dict | None, prev: dict | None) -> dict:
 
 
 def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int]] | None = None,
-             common: set[str] | None = None, adviser: dict | None = None) -> tuple[str, str, dict]:
+             common: set[str] | None = None, adviser: dict | None = None, prior: str | None = None) -> tuple[str, str, dict]:
     """(type, basis, type_evidence). hedge_fund comes only from the hand-checked cases, a name rule, Form ADV
     (hedge funds' gross assets at least half of RAUM, or $1B and more at a quarter of it), or, for a filer with no
     Form ADV match, its own Form D hedge-fund offerings. Name matches to Form D and book shape alone never make a
@@ -337,12 +337,21 @@ def classify(cik: str, name: str, s: dict, form_d: tuple[set[str], dict[str, int
     if adviser:
         kind, adv_ev = verdict(adviser)
         ev |= {"adv": adv_ev}
+        # The reclass adds hedge_fund freely but removes a published hedge_fund only when the matched adviser's Form ADV
+        # clearly shows it isn't one: hedge funds under 5% of its book, and private funds of other kinds (Cresset,
+        # Patient Square) or a book of individuals or registered funds (Stone House). Carlson, Tensile and NEXTBio run
+        # hedge funds below the reclass share; JAT and Vennlight report no private funds at all. They stay.
+        clearly_not = (adv_ev.get("hedge_share") or 0) < 0.05 and (adviser["private_funds"] or kind in ("wealth", "long_only"))
+        if kind != "hedge_fund" and prior == "hedge_fund" and not clearly_not:
+            return "hedge_fund", "kept: Form ADV doesn't show it isn't a hedge fund", ev
         if kind:
             return kind, f"Form ADV ({kind})", ev
     elif "form_d" in ev:
         # No Form ADV adviser under this CIK or name, but the filer itself files Form D for hedge funds (by CIK, not
         # a shared name): Santa Monica Partners, Raffles Associates, LRT Capital.
         return "hedge_fund", "Form D (filer's own hedge-fund offerings; no Form ADV match)", ev
+    elif prior == "hedge_fund":  # no Form ADV match: nothing shows it isn't one (Sphera, Harspring, Chesapeake)
+        return "hedge_fund", "kept: no Form ADV match", ev
     kind, basis = shape_type(name, s)
     if kind == "hedge_fund":
         kind, basis = "long_only", basis + "; no Form ADV hedge-fund evidence"
@@ -458,7 +467,8 @@ RECLASS = os.environ.get("COPYBOOK_TYPES_RECLASS") == "1"
 def main() -> int:
     if "--overrides" in sys.argv:
         return apply_overrides()
-    published = type_counts((read(DATA / "filer_types.json") or {}).get("filers") or {})
+    published_types = (read(DATA / "filer_types.json") or {}).get("filers") or {}
+    published = type_counts(published_types)
     if not RECLASS:
         write_guard("kept", "reclass off (COPYBOOK_TYPES_RECLASS unset)", published, None, [])
         return apply_overrides()
@@ -494,7 +504,8 @@ def main() -> int:
         prev = read(DATA / "fb" / prev_quarter(q) / f"{cik}.json") if q else None
         s = shape(book or shard, prev)
         adviser = adviser_for(cik, f.get("name") or "", index, common)
-        kind, basis, evidence = classify(cik, f.get("name") or "", s, form_d, common, adviser)
+        kind, basis, evidence = classify(cik, f.get("name") or "", s, form_d, common, adviser,
+                                         (published_types.get(cik) or {}).get("type"))
         row = {"type": kind, "basis": basis, "type_evidence": evidence, "display_name": display_name(f.get("name") or "")}
         if cik in ACTIVISTS:
             row["activist"] = True
