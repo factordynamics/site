@@ -571,7 +571,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     # Reissued CUSIPs (Exxon 30231G102 -> 30233Q108): a position whose CUSIP is new this quarter
     # continues one whose CUSIP is gone when both have the same ticker, put/call, type and class.
     renamed: dict[tuple, tuple] = {}
-    gone = {k: p for k, p in before.items() if not any((h["cusip"], h["put_call"] or "") == k for h in latest["holdings"])}
+    now_keys = {(h["cusip"], h["put_call"] or "") for h in latest["holdings"]}
+    gone = {k: p for k, p in before.items() if k not in now_keys}
     for h in latest["holdings"]:
         k = (h["cusip"], h["put_call"] or "")
         t = h.get("ticker") or security_ticker(h["cusip"])
