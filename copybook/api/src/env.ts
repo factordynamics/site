@@ -53,6 +53,10 @@ export interface Env {
   /** HMAC key for login and session tokens. */
   SESSION_SECRET: string;
   RESEND_API_KEY?: string;
+  /** Mailgun overflow (free plan, factordynamics.com already verified there). Off when unset. */
+  MAILGUN_API_KEY?: string;
+  MAILGUN_DOMAIN?: string;
+  MAILGUN_BASE?: string;
   /** Fine-grained GitHub PAT (refcell/gust only, Actions: read and write) to dispatch the data refresh. */
   GITHUB_DISPATCH_TOKEN?: string;
   /** Set (as a secret) only on a retired copy of the API: every request is redirected to this base. */

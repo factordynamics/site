@@ -201,6 +201,8 @@ interface LatencyRow {
   moves?: boolean;
   /** Some of its emails waited for Resend's daily limit to reset. */
   email_delayed?: boolean;
+  /** Timed at a coalesced email's send (a member's later alerts in a window, while email was short). */
+  coalesced?: boolean;
   /** Rows from before the tag are curated managers' (the poll timed only those). */
   coverage?: 'curated' | 'any_filer';
 }

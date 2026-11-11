@@ -854,6 +854,60 @@ describe('copybook api', () => {
     expect((await cf.DB.list({ prefix: '' })).keys).toEqual([]); // not one KV write on Cloudflare
   });
 
+  it("email budget: Mailgun takes over past Resend's cap; when email is short a member's later alerts within 20 minutes go as one email; test members get 10 a day", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const T = Date.parse(`${today}T15:00:00Z`);
+    const ev = (id: string) => ({ id, slug: 'warren-buffett', manager: 'Warren Buffett', form: '4', kind: 'form4', action: 'buy', filing_date: today, accepted: new Date(T - 60_000).toISOString(), url: `https://www.sec.gov/${id}`, issuer: 'SIRIUS XM', display_name: 'Sirius XM', ticker: 'SIRI', shares: 1000, value_usd: 25000, avg_price: 25, shares_after: null, percent_of_class: null });
+    const { deliver, flushHeld } = await import('../src/alerts');
+    const at = (id: string, min: number) => deliver(env, [], [ev(id) as never], T + min * 60_000);
+    await putMember('r', 'real@example.com', 'active', ['warren-buffett']);
+    await putFollows('r', { investors: ['warren-buffett'] });
+    await putMember('t', 'copybook-test-x@fldubai.com', 'active', ['warren-buffett']);
+    await putFollows('t', { investors: ['warren-buffett'] });
+    const mg: { to: string; from: string; subject: string; text: string }[] = [];
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u) === 'https://mg.test/v3/factordynamics.com/messages') {
+        const b = new URLSearchParams(String(init?.body));
+        mg.push({ to: b.get('to')!, from: b.get('from')!, subject: b.get('subject')!, text: b.get('text')! });
+        return Response.json({ id: 'x' });
+      }
+      return orig(u, init);
+    });
+    Object.assign(env, { MAILGUN_API_KEY: 'k', MAILGUN_BASE: 'https://mg.test' });
+    const got = () => [...sent.map((m) => ({ to: m.to[0], text: m.text })), ...mg].filter((m) => m.to !== env.CONTACT_EMAIL).map((m) => [m.to, (m.text.match(/sec\.gov\/F\d/g) ?? []).join(' ')]); // not the 80% note
+
+    // Resend has hit its cap (429): the alerts go through Mailgun, from the same address.
+    resendUsed = 100;
+    await at('F1', 1);
+    expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F1'], ['real@example.com', 'sec.gov/F1']]);
+    expect(mg[0].from).toBe(env.EMAIL_FROM);
+
+    // Email runs short (the last two hours' rate would use more than is left today): leading-edge coalescing.
+    // Each member's first alert goes at once; the next two wait and go as one email when the 20 minutes end.
+    await env.DB.put('stats:sent', JSON.stringify([[Math.floor(T / 3600_000), 400]]));
+    mg.length = 0;
+    await at('F2', 2);
+    expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F2'], ['real@example.com', 'sec.gov/F2']]);
+    mg.length = 0;
+    await at('F3', 3);
+    await at('F4', 5);
+    expect(got()).toEqual([]); // chat, feed and webhook would still have had them at once
+    await flushHeld(env, T + 22 * 60_000);
+    expect(got().sort()).toEqual([['copybook-test-x@fldubai.com', 'sec.gov/F3 sec.gov/F4'], ['real@example.com', 'sec.gov/F3 sec.gov/F4']]);
+    // Timed as they went: F3 at about 21 minutes, tagged coalesced.
+    const f3 = JSON.parse((await env.DB.get('alerts:latency'))!).filter((l: { accession: string }) => l.accession === 'F3');
+    expect(f3.some((l: { coalesced?: boolean }) => l.coalesced)).toBe(true);
+
+    // Email is no longer short: at once. A test member past 10 alert emails today gets no more email.
+    await env.DB.put('stats:sent', '[]');
+    await env.DB.put(`mailn:t:${today}`, '10');
+    mg.length = 0;
+    await at('F5', 24);
+    expect(got()).toEqual([['real@example.com', 'sec.gov/F5']]);
+    vi.stubGlobal('fetch', orig);
+  });
+
   it('between-quarter alerts: Form 4 buys/sells and 13D by default, 13G opt-in, fresh only, digest members get one email at night', async () => {
     const today = new Date().toISOString().slice(0, 10);
     const old = new Date(Date.now() - 5 * 86400_000).toISOString().slice(0, 10);

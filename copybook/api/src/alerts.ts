@@ -5,7 +5,7 @@ import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, sendMail } from './email';
 import { bookSuspect, companyFilings, computeMoves, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, testAddress, type Env, type Member } from './env';
-import { getFollows, listMembers, putMember, type Follows } from './members';
+import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
 
 /** A filing dated more than this many days ago never triggers an email, whatever the data says. */
@@ -233,6 +233,62 @@ async function scoped(env: Env, m: Member, f: Follows): Promise<Member> {
   return next;
 }
 
+/** Test and critic members: at most this many alert emails a UTC day; past it, feed, chat and webhooks only. */
+export const TEST_MAIL_CAP = 10;
+const testMailKey = (customer: string, now: number) => `mailn:${customer}:${new Date(now).toISOString().slice(0, 10)}`;
+/** Leading-edge window: when email runs short, a member's first alert goes at once; later ones within it go as one email at its end. */
+export const COALESCE_MS = 20 * 60_000;
+const HELD = 'mail:held';
+interface Held {
+  until: number;
+  filings: Alert13F[];
+  events: AlertEvent[];
+}
+
+/**
+ * Whether the day's email budget is tight: what both providers can still send against the projection for the rest
+ * of the UTC day (the alert emails of the last two hours, at that rate). While it covers the projection, every alert
+ * email goes at once.
+ */
+async function emailPressure(env: Env, now: number): Promise<{ room: number; projected: number }> {
+  const { mailRoom } = await import('./email');
+  const hour = Math.floor(now / 3600_000);
+  const recent = (JSON.parse((await env.DB.get('stats:sent')) ?? '[]') as [number, number][]).filter(([h]) => h >= hour - 1).reduce((a, [, n]) => a + n, 0);
+  const hoursLeft = 24 - (now % 86_400_000) / 3600_000;
+  return { room: await mailRoom(env), projected: Math.ceil((recent / 2) * hoursLeft) };
+}
+
+/** Every minute: held alerts whose window has ended go out as one email per member, timed by that send. */
+export async function flushHeld(env: Env, now: number): Promise<Record<string, unknown>> {
+  const index = JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>;
+  const due = Object.entries(index).filter(([, until]) => until <= now).map(([c]) => c);
+  if (!due.length) return {};
+  const mails = [];
+  const sentWith: { filings: Alert13F[]; events: AlertEvent[] }[] = [];
+  for (const c of due) {
+    const w = JSON.parse((await env.DB.get(`mailwin:${c}`)) ?? 'null') as Held | null;
+    await env.DB.delete(`mailwin:${c}`);
+    delete index[c];
+    const m = await getMember(env, c);
+    if (!w || !m?.email || (!w.filings.length && !w.events.length) || !isActive(m)) continue;
+    const f = await getFollows(env, m);
+    const test = !!m.test || testAddress(m.email);
+    if (test && Number((await env.DB.get(testMailKey(c, now))) ?? 0) >= TEST_MAIL_CAP) continue;
+    if (test) await env.DB.put(testMailKey(c, now), String(Number((await env.DB.get(testMailKey(c, now))) ?? 0) + 1), { expirationTtl: 2 * 86400 });
+    mails.push({ ...alertMail(env, m.email, w.filings, w.events, f, m), test, ids: [...w.filings.map((a) => a.accession), ...w.events.map((e) => e.id)] });
+    sentWith.push(w);
+  }
+  await env.DB.put(HELD, JSON.stringify(index));
+  if (!mails.length) return { held_flushed: 0 };
+  const status = await sendMail(env, mails, { bulk: true });
+  await logSent(env, mails.length, now);
+  // Coalesced emails are timed as they went: a row per item at this send, tagged coalesced.
+  const sentAt = Date.now();
+  await logLatency(env, sentWith.flatMap((w) => w.filings.filter((a) => !a.moves_pending).map((a) => ({ ...a, kind: '13f', coalesced: true }))), sentAt);
+  await logLatency(env, sentWith.flatMap((w) => w.events.filter((e) => !e.followup).map((e) => ({ slug: e.slug || e.subject_tickers?.join(',') || '', manager: e.manager, form: e.form, kind: e.kind, accession: e.id, accepted: e.accepted, extra: !e.slug, coalesced: true }))), sentAt);
+  return { held_flushed: mails.length, status };
+}
+
 /** Clears the one-time note once an email carrying it has been handed to the mailer. */
 async function noted(env: Env, m: Member): Promise<void> {
   if (m.alerts_note) await putMember(env, { ...m, alerts_note: undefined });
@@ -266,7 +322,7 @@ export async function deliverTo(env: Env, e: AlertEvent, only: Set<string>, now:
   return deliver(env, [], [e], now, only);
 }
 
-async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], now: number, only?: Set<string>): Promise<{ emails: number; digest: number; mail: string; late?: number }> {
+export async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEvent[], now: number, only?: Set<string>): Promise<{ emails: number; digest: number; mail: string; late?: number }> {
   if (!filings.length && !allEvents.length) return { emails: 0, digest: 0, mail: 'none' };
   if (only) return fanOut(env, filings, allEvents, now, [], only);
   // Old filings are never presented as news: they go to tonight's digest as "earlier filings".
@@ -299,6 +355,10 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
   // by several members, such as a Fund team's Slack, gets each alert once.
   const posted = new Set<string>();
   let digest = 0;
+  let held = 0;
+  let testCapped = 0;
+  let pressure: { room: number; projected: number } | undefined;
+  let heldIndex: Record<string, number> | undefined;
   // Paused members' followed funds that filed a 13F: one "resume now" note per member per ET day.
   const pausedNotes: { m: Member; key: string }[] = [];
   const news = filings.filter((x) => !x.followup && !x.reveal);
@@ -336,16 +396,47 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
     else if (!only) await rememberDelivered(env, m.customer, now, [...mine.filings.map((a) => `${a.accession}${a.followup ? ':moves' : ''}`), ...mine.events.map((e) => `${e.id}${e.followup ? ':details' : ''}`)]);
     if (f.digest) digest++;
     else {
-      mails.push({ ...alertMail(env, m.email, mine.filings, mine.events, f, m), test: !!m.test || testAddress(m.email), ids: [...mine.filings.map((a) => a.accession), ...mine.events.map((e) => e.id)] });
+      const test = !!m.test || testAddress(m.email);
+      // Test members: at most TEST_MAIL_CAP alert emails a day; past that, the feed, chat and webhooks above only.
+      const n = test && !only ? Number((await env.DB.get(testMailKey(m.customer, now))) ?? 0) : 0;
+      if (test && !only && n >= TEST_MAIL_CAP) {
+        testCapped++;
+        continue;
+      }
+      let send = { filings: mine.filings, events: mine.events };
+      if (!only) {
+        const win = JSON.parse((await env.DB.get(`mailwin:${m.customer}`)) ?? 'null') as Held | null;
+        const open = win && win.until > now;
+        pressure ??= await emailPressure(env, now);
+        const tight = pressure.room - mails.length <= pressure.projected;
+        if (tight && open) {
+          // Inside this member's window while email is short: held, sent with the window's other alerts at its end.
+          await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ ...win, filings: [...win.filings, ...mine.filings], events: [...win.events, ...mine.events] }));
+          held++;
+          continue;
+        }
+        // Anything still held goes out with this email (the window ended, or email is no longer short).
+        if (win && (win.filings.length || win.events.length)) send = { filings: [...win.filings, ...mine.filings], events: [...win.events, ...mine.events] };
+        if (tight) {
+          await env.DB.put(`mailwin:${m.customer}`, JSON.stringify({ until: now + COALESCE_MS, filings: [], events: [] } satisfies Held));
+          (heldIndex ??= JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>)[m.customer] = now + COALESCE_MS;
+        } else if (win) {
+          await env.DB.delete(`mailwin:${m.customer}`);
+          if ((heldIndex ??= JSON.parse((await env.DB.get(HELD)) ?? '{}') as Record<string, number>)[m.customer]) delete heldIndex[m.customer];
+        }
+      }
+      if (test && !only) await env.DB.put(testMailKey(m.customer, now), String(n + 1), { expirationTtl: 2 * 86400 });
+      mails.push({ ...alertMail(env, m.email, send.filings, send.events, f, m), test, ids: [...send.filings.map((a) => a.accession), ...send.events.map((e) => e.id)] });
       notes.push(m);
     }
   }
+  if (heldIndex) await env.DB.put(HELD, JSON.stringify(heldIndex));
   const mail = await sendMail(env, mails, { bulk: true });
   await logSent(env, mails.length, now);
   await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   for (const p of pausedNotes) await env.DB.put(p.key, '1', { expirationTtl: 2 * 86400 });
-  return { emails: mails.length, digest, mail, ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
+  return { emails: mails.length, digest, mail, ...(held ? { held } : {}), ...(testCapped ? { test_capped: testCapped } : {}), ...(pausedNotes.length ? { paused_notes: pausedNotes.length } : {}), ...(chats.length ? { chats: chats.join(', ') } : {}), ...(late.length ? { late: late.length } : {}) };
 }
 
 type Delivered = { day: string; ids: string[] }[];
@@ -857,14 +948,15 @@ export async function runPoll(env: Env, now: number): Promise<Record<string, unk
  * KV alerts:replays (test sends of old filings) are marked and never counted. `coverage`: a curated
  * manager's filing, or any other filer's (followed, a peer, or a member's linked book).
  */
-async function logLatency(env: Env, filings: { slug: string; accession: string; accepted?: string; kind?: string; manager?: string; quarter?: string; form?: string; extra?: boolean }[], sentAt: number): Promise<void> {
+async function logLatency(env: Env, filings: { slug: string; accession: string; accepted?: string; kind?: string; manager?: string; quarter?: string; form?: string; extra?: boolean; coalesced?: boolean }[], sentAt: number): Promise<void> {
+  if (!filings.length) return;
   const replays = new Set(JSON.parse((await env.DB.get('alerts:replays')) ?? '[]') as string[]);
   // Emails held for the daily limit: the row is kept but marked, and not counted as fast.
   const delayed = new Set(JSON.parse((await env.DB.get((await import('./email')).DELAYED_IDS)) ?? '[]') as string[]);
   const log = JSON.parse((await env.DB.get('alerts:latency')) ?? '[]') as unknown[];
   const add = filings
     .filter((f) => f.accepted)
-    .map((f) => ({ slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', ...((f.kind ?? '13f') === '13f' ? { moves: true } : {}), accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}), ...(delayed.has(f.accession) ? { email_delayed: true } : {}) }));
+    .map((f) => ({ slug: f.slug, manager: f.manager || undefined, quarter: f.quarter, form: f.form ?? '13F-HR', kind: f.kind ?? '13f', ...((f.kind ?? '13f') === '13f' ? { moves: true } : {}), accession: f.accession, accepted: f.accepted, coverage: f.extra ? 'any_filer' : 'curated', sent: new Date(sentAt).toISOString(), seconds: Math.round((sentAt - Date.parse(f.accepted!)) / 1000), ...(replays.has(f.accession) ? { replay: true } : {}), ...(delayed.has(f.accession) ? { email_delayed: true } : {}), ...(f.coalesced ? { coalesced: true } : {}) }));
   // A filing season's worth: the public /latency page reports the whole season.
   await env.DB.put('alerts:latency', JSON.stringify([...add, ...log].slice(0, 2000)));
 }
@@ -1539,6 +1631,7 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   await step('poll', () => runPoll(env, scheduledTime));
   await step('events_poll', () => runEventPoll(env, scheduledTime));
   await step('mail_retry', async () => (await import('./email')).retryMail(env));
+  await step('mail_held', () => flushHeld(env, scheduledTime));
   // The missed-filing detector, every 10 minutes whatever else the minute did: it only reads feed
   // pages with the SEC budget the polls left, and the polls send what it finds from the next minute.
   if (t.getUTCMinutes() % 10 === 5) await step('missed', () => runMissedDetector(env, scheduledTime));
