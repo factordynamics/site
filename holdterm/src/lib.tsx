@@ -91,7 +91,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): { data?: T; e
   }, deps)
   return s
 }
-export function Loading({ what = 'loading', rows = 6 }: { what?: string; rows?: number }) {
+export function Loading({ what = 'Loading', rows = 6 }: { what?: string; rows?: number }) {
   return (
     <div className="loading" role="status">
       <span className="sr">{what}</span>
@@ -199,7 +199,7 @@ export function Grid<R>({
   initial,
   limit,
   rowClass,
-  empty = 'no rows',
+  empty = 'Nothing to show yet.',
   rank = false,
 }: {
   cols: Col<R>[]
@@ -301,7 +301,7 @@ export function Grid<R>({
     </div>
       {sorted.length > shown && (
         <button className="more" onClick={() => setShown(Infinity)}>
-          show all {sorted.length} rows ↓
+          Show all {sorted.length}
         </button>
       )}
     </div>

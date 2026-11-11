@@ -132,9 +132,9 @@ function StockCell({ t, name, former, label }: { t: string | null; name: string;
   return <span className="noticker" title="no US ticker for this CUSIP">{name}</span>
 }
 const aggCols = {
-  ticker: { key: 'ticker', label: 'ticker', render: (r: Agg) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, sort: (r: Agg) => r.ticker ?? r.name, width: '80px' } as Col<Agg>,
-  name: { key: 'name', label: 'company', link: true, render: (r: Agg) => <span className="trunc">{r.name}</span>, sort: (r: Agg) => r.name } as Col<Agg>,
-  sector: { key: 'sector', label: 'sector', hideSm: true, render: (r: Agg) => <Sector s={r.sector} />, sort: (r: Agg) => r.sector } as Col<Agg>,
+  ticker: { key: 'ticker', label: 'Ticker', render: (r: Agg) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, sort: (r: Agg) => r.ticker ?? r.name, width: '80px' } as Col<Agg>,
+  name: { key: 'name', label: 'Company', link: true, render: (r: Agg) => <span className="trunc">{r.name}</span>, sort: (r: Agg) => r.name } as Col<Agg>,
+  sector: { key: 'sector', label: 'Sector', hideSm: true, render: (r: Agg) => <Sector s={r.sector} />, sort: (r: Agg) => r.sector } as Col<Agg>,
 }
 const stockHref = (r: { ticker: string | null }) => (r.ticker ? `/s/${encodeURIComponent(r.ticker)}` : null)
 
@@ -413,7 +413,7 @@ function HomeBody() {
     <div className="page home">
       <div className="home-grid">
         <Panel
-          title="latest 13F filings"
+          title="Latest 13F filings"
           right={
             <span className="dim">
               {seasonFiled.length} of {ms.length} filed {quarterLabel(s.q)}
@@ -425,13 +425,13 @@ function HomeBody() {
             rows={filers}
             href={(m) => fundPath(m.slug)}
             cols={[
-              { key: 'f', label: 'filed', render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
+              { key: 'f', label: 'Filed', render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
               { key: 'm', label: 'Investor', link: true, render: (m) => <Firm name={m.firm} strong /> },
-              { key: 'q', label: 'qtr', hideSm: true, render: (m) => <span className={m.quarter === s.q ? 'tag acc' : 'dim'}>{quarterLabel(m.quarter)}</span> },
-              { key: 'v', label: 'book', num: true, hideSm: true, width: '76px', render: (m) => usd(bySlug.get(m.slug)?.long_value ?? m.total_value) },
+              { key: 'q', label: 'Quarter', hideSm: true, render: (m) => <span className={m.quarter === s.q ? 'tag acc' : 'dim'}>{quarterLabel(m.quarter)}</span> },
+              { key: 'v', label: 'Portfolio', num: true, hideSm: true, width: '76px', render: (m) => usd(bySlug.get(m.slug)?.long_value ?? m.total_value) },
               {
                 key: 'd',
-                label: 'vs prior qtr',
+                label: 'Change',
                 num: true,
                 hideSm: true,
                 render: (m) => {
@@ -443,13 +443,13 @@ function HomeBody() {
               },
               {
                 key: 'mv',
-                label: 'largest trade',
+                label: 'Biggest trade',
                 // Fixed so the column keeps its width when the books arrive (no layout shift).
                 width: 'var(--trade-w)',
                 render: (m) => {
                   const b = bySlug.get(m.slug)
                   const h = b && biggest(b)
-                  if (!h) return <span className="dim">{b ? 'no trades' : '…'}</span>
+                  if (!h) return <span className="dim">{b ? 'No trades' : '…'}</span>
                   return (
                     <span className="move">
                       <StockCell t={h.ticker} name={h.display_name || h.issuer} former={h.former} label={h.label} /> <span className={`tag ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(h)}</span> <span className={`num ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{signedUsd(h.value_delta)}</span>
@@ -458,11 +458,11 @@ function HomeBody() {
                 },
               },
             ]}
-            empty={`no ${quarterLabel(lead)} 13Fs yet`}
+            empty={`No ${quarterLabel(lead)} 13Fs yet.`}
           />
           {due.length > 0 && (
             <div className="due small">
-              <span className="dim">Not filed yet ({due.length}):</span>{' '}
+              <span className="dim">Still to file ({due.length}):</span>{' '}
               {due
                 .sort((a, b) => b.total_value - a.total_value)
                 .slice(0, 14)
@@ -482,48 +482,48 @@ function HomeBody() {
           )}
         </Panel>
         <div className="home-side">
-          <Panel className="reserve-15" title={`Largest trades in ${quarterLabel(lead)}`} right={<A to="/flows">All buys &amp; sells →</A>}>
+          <Panel className="reserve-15" title={`Largest trades in ${quarterLabel(lead)}`} right={<A to="/flows">All buys and sells →</A>}>
             {books.data ? (
               <Grid
                 rows={moves}
                 href={(x) => stockHref(x.h)}
                 cols={[
-                  { key: 't', label: 'stock', render: (x) => <StockCell t={x.h.ticker} name={x.h.display_name || x.h.issuer} former={x.h.former} label={x.h.label} />, width: '72px' },
+                  { key: 't', label: 'Stock', render: (x) => <StockCell t={x.h.ticker} name={x.h.display_name || x.h.issuer} former={x.h.former} label={x.h.label} />, width: '72px' },
                   { key: 'f', label: 'Investor', link: true, render: (x) => <Firm name={x.b.firm} /> },
                   { key: 'a', label: '', render: (x) => <span className={`tag ${x.h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(x.h)}</span> },
-                  { key: 'v', label: '$ traded', num: true, render: (x) => <span className={x.h.value_delta! > 0 ? 'pos' : 'neg'}>{signedUsd(x.h.value_delta)}</span> },
+                  { key: 'v', label: 'Trade size', num: true, render: (x) => <span className={x.h.value_delta! > 0 ? 'pos' : 'neg'}>{signedUsd(x.h.value_delta)}</span> },
                 ]}
               />
             ) : (
               <Loading what="reading the books" />
             )}
           </Panel>
-          <Panel className="reserve-10" title="13D/G and Form 4, last 30 days" right={<A to="/filings">All filings →</A>}>
+          <Panel className="reserve-10" title="Stakes and insider trades, last 30 days" right={<A to="/filings">All filings →</A>}>
             {ev.data ? (
               <Grid
                 rows={events.slice(0, 10)}
                 href={(e) => (e.ticker ? `/s/${e.ticker}` : null)}
                 cols={[
-                  { key: 'f', label: 'filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, width: '72px' },
+                  { key: 'f', label: 'Filed', render: (e) => <span className="dim num">{date(e.filing_date)}</span>, width: '72px' },
                   { key: 'w', label: 'Investor', render: (e) => <Firm name={firmOf(firms, e.slug, e.manager)} /> },
-                  { key: 't', label: 'stock', render: (e) => <StockCell t={e.ticker} name={issuerName(e.display_name || e.issuer)} former={e.former} /> },
+                  { key: 't', label: 'Stock', render: (e) => <StockCell t={e.ticker} name={issuerName(e.display_name || e.issuer)} former={e.former} /> },
                   { key: 'a', label: '', render: (e) => <ActionTag e={e} /> },
                 ]}
-                empty="no filings in the last 30 days"
+                empty="No filings in the last 30 days."
               />
             ) : (
               <Loading />
             )}
           </Panel>
-          <Panel title="highest conviction" right={<span className="dim">Largest share of one fund’s book</span>}>
+          <Panel title="Biggest single bets" right={<span className="dim">Largest share of one investor’s portfolio</span>}>
             <Grid
               rank
               rows={conviction}
               href={(r) => stockHref(r)}
               cols={[
-                { key: 't', label: 'stock', render: (r) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, width: '72px' },
+                { key: 't', label: 'Stock', render: (r) => <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />, width: '72px' },
                 { key: 'f', label: 'Investor', render: (r) => <A to={fundPath(r.slug)}><Firm name={r.firm} /></A> },
-                { key: 'w', label: 'weight', num: true, render: (r) => pct(r.weight, 1) },
+                { key: 'w', label: 'Weight', num: true, render: (r) => pct(r.weight, 1) },
               ]}
             />
           </Panel>
@@ -927,20 +927,21 @@ export function Flows() {
             {x === 'latest' ? 'Each fund’s latest' : quarterLabel(x)}
           </button>
         ))}
-        <span className="dim">· {fundsN} funds{tagQ && ` (${mix.map(([x, n]) => `${n} ${quarterLabel(x)}`).join(' + ')})`}</span>
+        <span className="dim">· {fundsN} investors{tagQ && ` (${mix.map(([x, n]) => `${n} ${quarterLabel(x)}`).join(' + ')})`}</span>
       </div>
       <Tabs<ATab>
         value={tab}
         onChange={setTab}
         options={[
-          ['buyers', 'most buyers'],
-          ['buy$', 'net dollars'],
-          ['new', 'new positions'],
-          ['sellers', 'most sellers'],
-          ['exits', 'sold out'],
+          ['buyers', 'Most buyers'],
+          ['buy$', 'Most money in'],
+          ['new', 'New positions'],
+          ['sellers', 'Most sellers'],
+          ['exits', 'Sold out'],
         ]}
+        label="Ways to rank the quarter's trades"
       />
-      <Panel title={`${num(list.length)} stocks`} right={<span className="dim hide-sm">Trade size = share change × filed price; a price move alone counts as 0</span>}>
+      <Panel title={`${num(list.length)} stocks`} right={<span className="dim hide-sm">A trade is the change in shares at the filing’s price; a price move alone isn’t a trade</span>}>
         <Grid
           rank
           limit={100}
@@ -951,14 +952,14 @@ export function Flows() {
             { ...aggCols.name, hideSm: true },
             aggCols.sector,
             isBuy
-              ? { key: 'b', label: tab === 'new' ? 'new' : 'buyers', num: true, render: (r) => <span className="pos">{tab === 'new' ? r.newBuyers : r.buyers.length}</span> }
-              : { key: 's', label: tab === 'exits' ? 'sold out' : 'sellers', num: true, render: (r) => <span className="neg">{tab === 'exits' ? exits(r) : r.sellers.length}</span> },
-            { key: 'w', label: isBuy ? 'who bought' : 'who sold', hideSm: true, render: (r) => <Who tagQ={tagQ} list={[...(isBuy ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))} /> },
-            { key: 'bv', label: 'bought', num: true, hideSm: true, render: (r) => <span className="pos">{r.buy ? usd(r.buy) : '·'}</span>, sort: (r) => r.buy },
-            { key: 'sv', label: 'sold', num: true, hideSm: true, render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '·'}</span>, sort: (r) => -r.sell },
+              ? { key: 'b', label: tab === 'new' ? 'New buyers' : 'Buyers', num: true, render: (r) => <span className="pos">{tab === 'new' ? r.newBuyers : r.buyers.length}</span> }
+              : { key: 's', label: tab === 'exits' ? 'Sold out' : 'Sellers', num: true, render: (r) => <span className="neg">{tab === 'exits' ? exits(r) : r.sellers.length}</span> },
+            { key: 'w', label: isBuy ? 'Who bought' : 'Who sold', hideSm: true, render: (r) => <Who tagQ={tagQ} list={[...(isBuy ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))} /> },
+            { key: 'bv', label: 'Bought', num: true, hideSm: true, render: (r) => <span className="pos">{r.buy ? usd(r.buy) : '·'}</span>, sort: (r) => r.buy },
+            { key: 'sv', label: 'Sold', num: true, hideSm: true, render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '·'}</span>, sort: (r) => -r.sell },
             {
               key: 'nv',
-              label: 'net',
+              label: 'Net',
               num: true,
               render: (r) => (
                 <span className="netcell">
@@ -1077,10 +1078,11 @@ export function Consensus() {
         value={tab}
         onChange={setTab}
         options={[
-          ['owners', 'most funds'],
-          ['value', 'most dollars'],
-          ['conviction', 'highest conviction'],
+          ['owners', 'Most investors'],
+          ['value', 'Most money'],
+          ['conviction', 'Biggest single bets'],
         ]}
+        label="Ways to rank the stocks"
       />
       <Panel title={`${num(list.length)} stocks`}>
         <Grid
@@ -1092,13 +1094,13 @@ export function Consensus() {
             aggCols.ticker,
             { ...aggCols.name, hideSm: true },
             aggCols.sector,
-            { key: 'h', label: 'funds', num: true, render: (r) => r.holders.length, sort: (r) => r.holders.length },
-            { key: 'hp', label: 'of roster', num: true, hideSm: true, render: (r) => <span className="wcell">{pct(r.holders.length / n, 0)}<Bar value={r.holders.length} max={n} /></span>, sort: (r) => r.holders.length },
-            { key: 'v', label: 'held', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
-            { key: 'gw', label: '% combined', num: true, hideSm: true, render: (r) => pct(r.value / agg.total), sort: (r) => r.value },
-            { key: 'mw', label: 'max weight', num: true, render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'largest weight in any one book' },
-            { key: 'aw', label: 'avg weight', num: true, hideSm: true, render: (r) => pct(r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length), 2), sort: (r) => r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length) },
-            { key: 'who', label: 'largest holders', hideSm: true, render: (r) => <Who list={[...r.holders].sort((a, b) => b.weight - a.weight)} max={2} /> },
+            { key: 'h', label: 'Investors', num: true, render: (r) => r.holders.length, sort: (r) => r.holders.length },
+            { key: 'hp', label: 'Share of investors', num: true, hideSm: true, render: (r) => <span className="wcell">{pct(r.holders.length / n, 0)}<Bar value={r.holders.length} max={n} /></span>, sort: (r) => r.holders.length },
+            { key: 'v', label: 'Value held', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
+            { key: 'gw', label: 'Share of all', num: true, hideSm: true, render: (r) => pct(r.value / agg.total), sort: (r) => r.value },
+            { key: 'mw', label: 'Top weight', num: true, render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'Largest share of any one investor’s portfolio' },
+            { key: 'aw', label: 'Average weight', num: true, hideSm: true, render: (r) => pct(r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length), 2), sort: (r) => r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length) },
+            { key: 'who', label: 'Biggest holders', hideSm: true, render: (r) => <Who list={[...r.holders].sort((a, b) => b.weight - a.weight)} max={2} /> },
           ]}
         />
       </Panel>
@@ -1135,11 +1137,12 @@ export function Filings() {
         value={tab}
         onChange={setTab}
         options={[
-          ['all', 'all'],
-          ['13dg', '13D / 13G'],
-          ['f4', 'Form 4 filings'],
-          ['market', 'company insiders'],
+          ['all', 'All'],
+          ['13dg', '5% stakes'],
+          ['f4', 'Investor trades'],
+          ['market', 'Company insiders'],
         ]}
+        label="Kinds of filing"
       />
       {tab !== 'market' ? (
         <>
