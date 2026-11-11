@@ -479,6 +479,10 @@ main:focus {
   font-size: 15px;
   margin: 0 0 6px;
 }
+/* A one-line caveat under the lede, such as which quarters a combined page is built from. */
+.head .head-note {
+  margin: -2px 0 0;
+}
 .intro {
   margin-bottom: 20px;
   display: flex;

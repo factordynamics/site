@@ -29,6 +29,7 @@ export type Holding = {
   change: Change
   share_change: number | null
   value_delta: number | null
+  suspect_units?: boolean
   pct_of_book: number | null
   /** Share counts break between this filing and the last; the trade is the change in reported value. */
   shares_break?: boolean
@@ -206,8 +207,9 @@ const TICKER_KEY = new Map<string, string>()
  * (one trust issues many funds) and preferreds or notes keep their full CUSIP. */
 export function issuerKey(h: KeyLine & { put_call?: string | null }) {
   if (!h.cusip) return h.ticker || h.issuer
-  // Issue numbers 90 and 95 are option CUSIPs (calls and puts); untickered lines filed under one are not the stock.
-  const optionCusip = !h.ticker && /^(90|95)$/.test(h.cusip.slice(6, 8))
+  // Issue numbers 90 and 95 are option CUSIPs (calls and puts); untickered lines filed under one are not the stock,
+  // unless the line says it is common stock (Intermede's Q2 Amazon: "COM" under 023135906, no put or call).
+  const optionCusip = !h.ticker && /^(90|95)$/.test(h.cusip.slice(6, 8)) && !/\bCOM(MON)?\b/i.test(h.title ?? '')
   if (optionCusip || isWarrant(h) || isFundLike({ sector: h.sector, issuer: h.issuer, title: h.title ?? '' }) || isSenior(h)) return h.cusip
   const base = OVERRIDE[h.cusip]?.same_as ?? h.cusip.slice(0, 6)
   if (!h.ticker) return base
@@ -535,7 +537,7 @@ export async function loadBooks(): Promise<Book[]> {
   return books.filter((b): b is Book => Boolean(b))
 }
 
-export type Who = { slug: string; manager: string; weight: number; change: Change; delta: number; quarter: string }
+export type Who = { slug: string; manager: string; weight: number; value: number; change: Change; delta: number; quarter: string }
 export type Agg = {
   key: string
   ticker: string | null
@@ -608,9 +610,11 @@ export function aggregate(books: Book[], rank: Book[] = books): { rows: Agg[]; t
       if (a.sector === 'Unclassified' && h.sector) a.sector = h.sector
       const value = ls.reduce((x, l) => x + l.value, 0)
       const weight = ls.reduce((x, l) => x + l.weight, 0)
-      const d = ls.reduce((x, l) => x + (l.value_delta ?? 0), 0)
+      // A line Copybook flags as having share counts that don't fit across filings (suspect_units) has no reliable
+      // trade, so it adds nothing to the buys and sells; the holding itself still counts.
+      const d = ls.reduce((x, l) => x + (l.suspect_units ? 0 : (l.value_delta ?? 0)), 0)
       const change: Change = value <= 0 ? 'exited' : ls.every((l) => l.change === 'new') ? 'new' : d > 0 ? 'added' : d < 0 ? 'trimmed' : 'unchanged'
-      const who: Who = { slug: b.slug, manager: b.firm, weight, change, delta: d, quarter: b.quarter }
+      const who: Who = { slug: b.slug, manager: b.firm, weight, value, change, delta: d, quarter: b.quarter }
       if (value > 0) {
         a.value += value
         total += value

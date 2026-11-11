@@ -1313,7 +1313,7 @@ export function Flows() {
             ? `${num(fundsN)} investors: ${num(mix[0][1])} have filed for ${quarterLabel(tagQ)}, and the other ${num(fundsN - mix[0][1])} are shown with ${mix.length === 2 ? `their ${quarterLabel(mix[1][0])} 13F` : 'an earlier 13F'}.${leadTop?.buyers.length ? ` Among those ${num(mix[0][1])}, the most bought is ${aggName(leadTop)}, by ${num(leadTop.buyers.length)}.` : ''}`
             : `${plural(fundsN, 'investor')}, each with its latest 13F.`}
       </p>
-      <FlowsStats rows={rows} q={q} />
+      <FlowsStats rows={rows} q={q} n={fundsN} />
       <Tabs<ATab>
         value={tab}
         onChange={setTab}
@@ -1378,7 +1378,7 @@ const aggCo = (r: Agg) => r.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.
 /** A stock in running text: "Alphabet (GOOGL)". */
 const aggName = (r: Agg) => `${aggCo(r)}${r.ticker ? ` (${r.label ?? r.ticker})` : ''}`
 /** The quarter's four answers as cards, like the home page's: most investors buying and selling, most money in and out. */
-function FlowsStats({ rows, q }: { rows: Agg[]; q: string }) {
+function FlowsStats({ rows, q, n }: { rows: Agg[]; q: string; n: number }) {
   const top = (cmp: (a: Agg, b: Agg) => number) => [...rows].sort(cmp)[0] as Agg | undefined
   // Ties on the count go to the bigger trade, as in the tabs' own order (sell is negative).
   const buyers = top((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)
@@ -1391,13 +1391,21 @@ function FlowsStats({ rows, q }: { rows: Agg[]; q: string }) {
   const card = (label: string, r: Agg | undefined, ok: boolean, tone: 'pos' | 'neg', sub: (r: Agg) => string) => (
     <Stat label={label} value={r && ok ? <Tick t={r.ticker} name={aggCo(r)} label={r.label} /> : <span className="dim">None</span>} tone={r && ok ? tone : undefined} sub={r && ok ? sub(r) : undefined} />
   )
-  const by = (n: number, extra: number, word: string) => `by ${plural(n, 'investor')}${extra ? `, ${num(extra)} ${word}` : ''}`
+  // Counts say "of how many", so a quoted card can't read as everyone, and selling says whether anyone sold out.
+  const bought = (r: Agg) => `${aggCo(r)}, bought by ${num(r.buyers.length)} of ${num(n)}${r.newBuyers ? `, ${num(r.newBuyers)} new` : ''}`
+  const sold = (r: Agg) => (exits(r) ? `${aggCo(r)}, sold by ${num(r.sellers.length)} of ${num(n)}, ${num(exits(r))} sold out` : `${aggCo(r)}, trimmed by ${num(r.sellers.length)} of ${num(n)}, none sold out`)
+  // A net figure that one investor makes up most of says so, so "+$2.0B into NVIDIA" isn't read as a crowd.
+  const net = (r: Agg) => {
+    const lead = [...(r.net > 0 ? r.buyers : r.sellers)].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0]
+    const one = lead && Math.abs(lead.delta) > Math.abs(r.net) / 2 ? `, ${shortFirm(lead.manager)} alone ${signedUsd(lead.delta)}` : ''
+    return `${aggCo(r)}, ${signedUsd(r.net)} net${one}`
+  }
   return (
     <div className="stats tick-stats" role="list" aria-label={`Buys and sells${scope}`}>
-      {card('Most bought', buyers, !!buyers?.buyers.length, 'pos', (r) => `${aggCo(r)}, ${by(r.buyers.length, r.newBuyers, 'new')}`)}
-      {card('Biggest net buy', netBuy, (netBuy?.net ?? 0) > 0, 'pos', (r) => `${aggCo(r)}, ${signedUsd(r.net)} net`)}
-      {card('Most sold', sellers, !!sellers?.sellers.length, 'neg', (r) => `${aggCo(r)}, ${by(r.sellers.length, exits(r), 'sold out')}`)}
-      {card('Biggest net sale', netSell, (netSell?.net ?? 0) < 0, 'neg', (r) => `${aggCo(r)}, ${signedUsd(r.net)} net`)}
+      {card('Most bought', buyers, !!buyers?.buyers.length, 'pos', bought)}
+      {card('Biggest net buy', netBuy, (netBuy?.net ?? 0) > 0, 'pos', net)}
+      {card('Most sold', sellers, !!sellers?.sellers.length, 'neg', sold)}
+      {card('Biggest net sale', netSell, (netSell?.net ?? 0) < 0, 'neg', net)}
     </div>
   )
 }
@@ -1501,7 +1509,10 @@ export function Consensus() {
       />
     )
   const n = books.data.length
-  const base = sector ? agg.rows.filter((r) => r.sector === sector) : agg.rows
+  // Only what someone still holds: a stock every holder sold out of has a row (its sellers) but no owners.
+  const held = agg.rows.filter((r) => r.holders.length)
+  const base = sector ? held.filter((r) => r.sector === sector) : held
+  const mixQ = [...new Set(books.data.map((b) => b.quarter))].sort().reverse().map((x) => [x, books.data!.filter((b) => b.quarter === x).length] as const)
   const list = [...base].sort(tab === 'owners' ? (a, b) => b.holders.length - a.holders.length || b.value - a.value : tab === 'value' ? (a, b) => b.value - a.value : (a, b) => b.maxWeight - a.maxWeight)
   const mix = sectorMix(agg.rows)
   return (
@@ -1510,9 +1521,12 @@ export function Consensus() {
         <div>
           <h1>Most owned stocks</h1>
           <p className="lede">Every stock and fund in all {n} investors’ latest 13Fs, combined, with options and notes left out.</p>
+          {mixQ.length > 1 && (
+            <p className="dim small head-note">From each investor’s latest 13F: {listing(mixQ.map(([x, k]) => `${num(k)} for ${quarterLabel(x)}`))}. Holdings are valued as of each 13F’s quarter end.</p>
+          )}
         </div>
       </div>
-      <ConsensusStats rows={agg.rows} total={agg.total} n={n} />
+      <ConsensusStats rows={held} total={agg.total} n={n} />
       <Panel title="By sector" right={<span className="dim hide-sm">Choose a sector to filter</span>}>
         <StackBar parts={mix.map((m) => ({ label: m.sector, value: m.value, color: SECTOR_COLOR[m.sector] ?? '#bab0ac' }))} />
         <div className="filters" role="group" aria-label="sector filter">
@@ -1562,7 +1576,7 @@ export function Consensus() {
             { key: 'gw', label: 'Of all money', num: true, hideSm: true, hide: 'lg', render: (r) => pct(r.value / agg.total), sort: (r) => r.value, title: 'Share of everything the investors hold combined' },
             { key: 'mw', label: 'Biggest bet', num: true, hideSm: tab !== 'conviction', render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'Largest share of any one investor’s portfolio' },
             { key: 'aw', label: 'Average bet', num: true, hideSm: true, hide: 'lg', title: 'Average share of the portfolios that own it', render: (r) => pct(r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length), 2), sort: (r) => r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length) },
-            { key: 'who', label: 'Biggest holders', hideSm: true, hide: 'lg', render: (r) => <Who list={[...r.holders].sort((a, b) => b.weight - a.weight)} max={2} /> },
+            { key: 'who', label: 'Biggest holders', hideSm: true, hide: 'lg', render: (r) => <Who list={[...r.holders].sort((a, b) => b.value - a.value)} max={2} /> },
           ]}
         />
       </Panel>
