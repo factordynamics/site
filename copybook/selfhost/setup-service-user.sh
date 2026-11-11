@@ -235,8 +235,8 @@ fi
 
 echo "== 11. sudo from the maintainers' account ($SRC_USER) needs the password every time (no cached credential)"
 # The account keeps its sudo rights (Andreas uses it), but a sudo he types no longer leaves a 5-minute ticket that
-# other processes on that terminal could reuse. Its NOPASSWD rules (reboot, display brightness, DNS preset, browser
-# theme colour, time zone) read no files.
+# other processes on that terminal could reuse. Its five password-free rules (display, DNS, theme,
+# timezone and reboot) read no files.
 if [ "$DRY" = 1 ]; then echo "+ /etc/sudoers.d/zz-copybook-maintainers: Defaults:$SRC_USER timestamp_timeout=0"; else
   t=/etc/sudoers.d/.zz-copybook-maintainers.tmp   # names with a dot are never read by sudo
   printf '# Copybook service-account move: every sudo by %s needs the password.\nDefaults:%s timestamp_timeout=0\n' "$SRC_USER" "$SRC_USER" > "$t"

@@ -1,6 +1,6 @@
 # Restoring the member API off gene
 
-gene (Andreas's desktop) runs the copybook-api Worker in workerd via Miniflare. These are its runtime files; the live
+gene (a self-hosted machine) runs the copybook-api Worker in workerd via Miniflare. These are its runtime files; the live
 copy is `~/copybook-api/ops` on gene. Alerts don't depend on gene: Cloudflare's cron is the primary poller.
 
 Masking rule: agent session logs are kept 30+ days, so these scripts print counts, booleans, opaque ids and
@@ -43,11 +43,11 @@ empty directory on gene, secrets from Amp secrets only, scratch port, no cron or
 | boot to /health | 1 s |
 | 19-check verify | 1 s |
 
-Not covered by the rehearsal: getting a machine with an Amp runner (the long pole; minutes for a desktop that already
+Not covered by the rehearsal: getting a machine with an Amp runner (the long pole; minutes for a machine that already
 has one), installing Node 22+, `age` and `cloudflared` there, step 5 (units, tunnel) and step 6 (webhook repoint).
 Realistic total with a ready machine: 30–60 min of agent time.
 
-Needs a Linux machine with Node 22+ and outbound internet, reachable by an Amp thread (a runner on another desktop, or
+Needs a Linux machine with Node 22+ and outbound internet, reachable by an Amp thread (a runner on another machine, or
 a VM with the Amp CLI). Inbound ports are not needed: the quick tunnel is outbound.
 
 1. Secrets from Amp personal secrets into `~/copybook-api/secrets.env` (mode 600): `SESSION_SECRET` ←
@@ -76,7 +76,7 @@ Links already sent in email point at gene's Funnel URL (`API_URL`) and stay brok
 
 ## Who can read member data on gene (from Tue Nov 17)
 
-The AI agents that maintain Copybook run as the desktop account `refcell`. From the service-account move
+The AI agents that maintain Copybook run as the machine's main user account `refcell`. From the service-account move
 (`setup-service-user.sh`, steps in `TUE17-STEPS.md`), the API, its cron, deployer, backups, R2 push, quick tunnel and
 watcher run as the system user `copybook`:
 
@@ -88,8 +88,8 @@ watcher run as the system user `copybook`:
   holds it can forge a payment event). Both are rotated during the move, because agents held the old values; the
   Worker on Cloudflare gets the same new values.
 - `refcell` keeps password sudo (Andreas uses it), but from the move every sudo needs the password with no cached
-  credential (`/etc/sudoers.d/zz-copybook-maintainers`, `timestamp_timeout=0`), and its few NOPASSWD rules (reboot,
-  display brightness, DNS preset, browser theme colour, time zone) read no files. A deliberately malicious agent could
+  credential (`/etc/sudoers.d/zz-copybook-maintainers`, `timestamp_timeout=0`), and its five password-free rules (display,
+  DNS, theme, timezone and reboot) read no files. A deliberately malicious agent could
   still capture the password when Andreas types it in that account; a separate admin account would close that.
 - Member requests reach the API without passing through `refcell`: the quick tunnel and Funnel's `/copybook` path go
   straight to `127.0.0.1:8787`.

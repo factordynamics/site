@@ -9,7 +9,7 @@ Two hosts run the same Worker bundle, with one state.
 - `MOVED_TO` is set, so every HTTP request to it 308-redirects to the current base in `api.json` (cached up to 60 s), else to `MOVED_TO`. When `api.json` names the Worker itself (a failover), it serves the request instead. Its cron never fetches its own URL. Never delete `MOVED_TO`: it also makes this copy the `cloudflare` host for the sync and the poller.
 - Links in email and feeds use `API_URL` = this hostname, so they keep working wherever gene's base moves.
 
-**gene** (Andreas's desktop) serves **members, `/v1`, the Stripe webhook and ingest** through the front doors below. It is also the **backup poller**.
+**gene** (a self-hosted machine) serves **members, `/v1`, the Stripe webhook and ingest** through the front doors below. It is also the **backup poller**.
 
 - **What runs there:** workerd (Miniflare) as the user systemd service `copybook-api.service`. State lives in `~/copybook-api/state`.
 - **Deploys:** pushing to `main` deploys to gene (`copybook-api-update.timer`: fast-forward, vitest, rebuild, restart). Cloudflare needs `npx wrangler deploy`.
