@@ -33,7 +33,7 @@ EMAIL_FROM = "Copybook <copybook@factordynamics.com>"
 # Our inbox (forwards to the owner): reply-to on every email, and where fund/support/delete requests go.
 CONTACT_EMAIL = "hello@factordynamics.com"
 # Links in email (resume, unsubscribe, feeds, CSV) go straight to gene, which serves members.
-API_URL = "https://gene.tail70ba3.ts.net/copybook/"
+API_URL = "https://copybook-api.factordynamics.workers.dev/"
 SYNC = "on"
 # bpc_... printed by scripts/stripe-setup.mjs (portal_configuration).
 # GitHub Actions OIDC workflow_ref allowed to PUT /ingest/.
