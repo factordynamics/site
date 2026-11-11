@@ -10,6 +10,7 @@ import { useTrackVisit } from '../lib/track'
 import { FridayBox } from '../components/FridayBox'
 import { CsvButton } from '../components/CsvButton'
 import { FollowButton } from '../components/FollowButton'
+import { useFollows } from '../lib/follows'
 import { Share } from '../components/Share'
 import { FundNotice, SinceLast13F, fundStatus } from '../components/FundNotes'
 import { aboutET, fridayAfter, loadCardSet, loadCards, loadExpected, loadRecap, recapPath, seasonNow, seasonStatus, shortDay, stockPath, usualTime } from '../lib/stocks'
@@ -30,6 +31,8 @@ export function ManagerPage() {
   const [view, setView] = useState<'shares' | 'options'>('shares')
   const f = m.data
   const member = useMember()
+  const { follows } = useFollows()
+  const followed = Boolean(f && follows.investors.includes(f.slug))
   useTitle(f ? investorTitle({ who: f.manager, quarter: f.quarter, value: book.total, positions: book.rows.length }) : undefined)
   const plan = mapPlan(book.rows, 20)
   const slices = foldSlices(book.sectors, 10)
@@ -161,7 +164,7 @@ export function ManagerPage() {
             {q3.kind === 'expected' && due ? `${q3.text.replace(' expected', ' 13F expected')}, ${usualTime(due)}.` : `${q3.text.replace(' due', ' 13F due')}, the filing deadline.`}
           </p>
           {isPaying(member) ? (
-            <p className="mt-1">Follow to get it by email as it’s filed, with its moves inside.</p>
+            !followed && <p className="mt-1">Follow to get it by email as it’s filed, with its moves inside.</p>
           ) : (
             <>
               <div className="mt-3 flex flex-wrap items-center gap-2">

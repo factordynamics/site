@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { pricingTo } from '../lib/data'
 import { ApiError, getToken, lastMe, needsVerify, pendingEmail } from '../lib/account'
-import { ConfirmEmail } from './ConfirmEmail'
+import { ConfirmEmail, ResendLink } from './ConfirmEmail'
 import { isCap, isPaywall, setFollow, useFollows } from '../lib/follows'
 import { track } from '../lib/track'
 import { CAP_MSG, FollowSignup } from './FollowSignup'
 
-type Props = { kind: 'investor' | 'stock'; id: string; name: string; size?: 'sm' | 'md'; className?: string }
+type Props = { kind: 'investor' | 'stock'; id: string; name: string; size?: 'sm' | 'md'; className?: string; /** Resend under the toggle, for a narrow table cell. */ stack?: boolean }
 
 /** Follow an investor or a stock. Members toggle in place; everyone else gets a short upsell. */
-export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Props) {
+export function FollowButton({ kind, id, name, size = 'sm', className = '', stack = false }: Props) {
   const { status, follows, pending } = useFollows()
   const [open, setOpen] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)
@@ -44,6 +44,13 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
   // API holds for the link says that instead. Never a toggle that silently reverts (trader, Nov 11).
   const [confirm, setConfirm] = useState<'saved' | 'follow' | null>(null)
   const pend = pendingEmail(lastMe())
+  // The "Saved…" note is a toast that leaves on its own (it covered the card below at 390); the toggle itself keeps
+  // saying alerts wait for the email ("Following · confirm email" and Resend) until the link is opened (trader, Nov 11).
+  useEffect(() => {
+    if (confirm !== 'saved') return
+    const t = setTimeout(() => setConfirm(null), 6000)
+    return () => clearTimeout(t)
+  }, [confirm])
   const save = (want: boolean) =>
     setFollow(kind === 'investor' ? 'investors' : 'stocks', id, want).then(() => setConfirm(want && pendingEmail(lastMe()) ? 'saved' : null)).catch((e) => {
       if (needsVerify(e) && pendingEmail(lastMe())) return setConfirm('follow')
@@ -93,7 +100,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
 
   const h = size === 'sm' ? 'h-8 px-3.5 text-[13px]' : 'h-10 px-4.5 text-sm'
   return (
-    <div ref={wrap} className={`relative inline-flex ${className}`}>
+    <div ref={wrap} className={`relative inline-flex ${stack ? 'flex-col items-end gap-1' : 'items-center gap-2'} ${className}`}>
       <button
         type="button"
         onClick={click}
@@ -106,8 +113,16 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
         }`}
       >
         {saving ? <Spinner /> : on ? <CheckIcon /> : <PlusIcon />}
-        {saving ? (p.want ? 'Saving…' : 'Removing…') : on ? (owned ? 'You own this' : 'Following') : 'Follow'}
+        {saving ? (p.want ? 'Saving…' : 'Removing…') : on ? (owned ? 'You own this' : pend && !stack ? 'Following · confirm email' : 'Following') : 'Follow'}
       </button>
+      {on && pend && !saving &&
+        (stack ? (
+          <span className="whitespace-nowrap text-[12px] text-[#7a4b06]">
+            Confirm email · <ResendLink email={pend} />
+          </span>
+        ) : (
+          <ResendLink email={pend} />
+        ))}
       {confirm && pend && <ConfirmEmail email={pend} kind={confirm} className="absolute right-0 top-full z-10 mt-1.5 w-[300px] shadow-[0_6px_16px_-6px_rgb(12_14_19/0.2)] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:z-50 max-sm:w-auto" />}
       {p?.state === 'error' && (
         <span role="alert" className={`absolute right-0 top-full z-10 mt-1.5 flex items-center gap-1.5 ${p.note ? 'w-[280px] whitespace-normal max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:z-50 max-sm:w-auto max-sm:px-3.5 max-sm:py-3' : 'whitespace-nowrap'} rounded-lg bg-card px-2.5 py-1.5 text-[12.5px] text-down shadow-[0_0_0_1px_var(--color-line),0_6px_16px_-6px_rgb(12_14_19/0.2)]`}>

@@ -1,5 +1,5 @@
 import { Signup } from '../components/Signup'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { dayET, edgarClosed, shortDay, loadCoverage, loadExpected, loadSeason, nextFiler, nextUp, seasonNow, timeLeft } from '../lib/stocks'
 import { EdgarClosed } from '../components/EdgarClosed'
@@ -400,11 +400,11 @@ function FeaturedSection({ featured }: { featured?: Manager[] }) {
   )
 }
 
-export function ManagerCard({ m }: { m: Manager }) {
+export function ManagerCard({ m, action }: { m: Manager; action?: ReactNode }) {
   const top = (m.top || []).slice(0, 3)
   const topW = top.reduce((s, h) => s + h.weight, 0)
-  return (
-    <Link to={`/investors/${m.slug}/`} className="group flex flex-col rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[0_0_0_1px_var(--color-line-2),0_12px_30px_-14px_rgb(12_14_19/0.25)]">
+  const card = (
+    <Link to={`/investors/${m.slug}/`} className={`group flex flex-col rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)] transition-shadow hover:shadow-[0_0_0_1px_var(--color-line-2),0_12px_30px_-14px_rgb(12_14_19/0.25)] ${action ? 'h-full pb-16' : ''}`}>
       <div className="flex items-center gap-3">
         <Monogram name={m.manager} size={40} />
         <div className="min-w-0 flex-1">
@@ -433,6 +433,14 @@ export function ManagerCard({ m }: { m: Manager }) {
         {top.length > 0 && <span className="text-ink-3">· top 3 = {pct(topW, 0)}</span>}
       </div>
     </Link>
+  )
+  return action ? (
+    <div className="relative">
+      {card}
+      <div className="absolute bottom-5 left-5">{action}</div>
+    </div>
+  ) : (
+    card
   )
 }
 

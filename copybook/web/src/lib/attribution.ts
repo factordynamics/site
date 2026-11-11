@@ -143,7 +143,7 @@ let opening = false
  *  the page the trial came from as `source`), then Stripe's session URL. Never a Payment Link href: those skip payments'
  *  one-trial-per-person check and make a Stripe session whenever anything loads them (Nov 11's bot sessions). Only if
  *  the API can't start one does the click fall back to the Payment Link, so a buyer is never stuck. */
-export function copyCheckout(interval: 'monthly' | 'yearly', from = new URLSearchParams(location.search).get('from')) {
+export function copyCheckout(interval: 'monthly' | 'yearly', from = new URLSearchParams(location.search).get('from'), typed?: string) {
   return (e?: { preventDefault: () => void }) => {
     e?.preventDefault()
     if (opening) return
@@ -152,7 +152,7 @@ export function copyCheckout(interval: 'monthly' | 'yearly', from = new URLSearc
     const ref = refCode()
     const tags = utmTags() as Record<string, string>
     const page = from && /^[A-Za-z0-9.-]{1,60}$/.test(from) ? from : null
-    const email = knownEmail()
+    const email = typed?.trim() || knownEmail()
     const body = { plan: 'copy', interval, ...(ref ? { ref } : {}), ...(email ? { email } : {}), ...(page ? { source: `from-${page}` } : tags.utm_source ? { source: tags.utm_source } : {}), utm_source: tags.utm_source, utm_content: tags.utm_content, landing: location.pathname }
     apiReady
       .then((base) => fetch(`${base}/checkout`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) }))

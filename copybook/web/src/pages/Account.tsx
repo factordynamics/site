@@ -21,8 +21,9 @@ import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS,
 import { ApiStatus, Updating } from '../components/ApiStatus'
 import { ConfirmEmail } from '../components/ConfirmEmail'
 import { addCard, switchYearly, ApiError, call, errText, pendingEmail, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { copyCheckout } from '../lib/attribution'
 
-type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
+type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'used'; error: string } | { kind: 'off' } | { kind: 'down' }
 
 export function Account() {
   const [params] = useSearchParams()
@@ -79,6 +80,10 @@ export function Account() {
         // A failing API keeps the last-known account on screen (the status banner says why).
         if (apiDown() && getToken() && lastMe()) return setState({ kind: 'in', member: lastMe()!, welcome: false, stale: false })
         if (apiDown()) return setState({ kind: 'down' })
+        if (e instanceof ApiError && e.code === 'trial_used') {
+          nav('/account/', { replace: true })
+          return setState({ kind: 'used', error: e.detail ?? `You’ve already used your free trial. Subscribe to keep Copy: $${prices.monthly}/mo or $${prices.yearly}/yr (founding price).` })
+        }
         setState({ kind: 'out', error: sid ? 'We couldn’t confirm that checkout. If you were charged, sign in to Stripe billing below or refresh in a minute.' : login ? (e instanceof ApiError && e.code === 'link_used' ? 'That sign-in link was already used. Enter your email for a new one.' : 'That sign-in link has expired. Enter your email for a new one.') : undefined })
       }
       if (sid || login || upgraded || kept) nav('/account/', { replace: true })
@@ -113,6 +118,7 @@ export function Account() {
       {state.kind === 'in' && <Updating show={Boolean(state.stale)} className="mb-4" />}
       {state.kind === 'in' && <SignedIn member={state.member} welcome={state.welcome} upgraded={state.upgraded} kept={state.kept} resumed={state.resumed} focus={state.focus} onOut={() => setState({ kind: 'out' })} onChange={(member) => setState((s) => ({ kind: 'in', member, welcome: false, resumed: s.kind === 'in' && Boolean(s.member.paused_until) && !member.paused_until }))} />}
       {state.kind === 'out' && <SignedOut error={state.error} />}
+      {state.kind === 'used' && <TrialUsed error={state.error} />}
       {state.kind === 'off' && <NotOpen />}
       <p className="mt-10 text-[13px] leading-relaxed text-ink-3">{DATA_TERMS}</p>
     </div>
@@ -251,8 +257,8 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
               endLabel && !cancelling && !paused && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`
             )}
           </p>
-          {member.plan === 'copy' && member.interval === 'monthly' && !member.seat && member.collection !== 'send_invoice' && !cancelling && !paused && <ToYearly />}
-          {trial && member.has_payment_method === false && !cancelling && <NoCard end={endLabel} day={end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })} />}
+          {member.plan === 'copy' && member.interval === 'monthly' && member.founding_price === true && member.yearly_perks === false && !member.seat && member.collection !== 'send_invoice' && !cancelling && !paused && <ToYearly />}
+          {trial && member.has_payment_method === false && !cancelling && <NoCard founding={member.founding_price === true} end={endLabel} day={end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })} />}
           {member.seat ? (
             <p className="mt-4 rounded-xl bg-accent-soft px-3.5 py-2.5 text-[14px] text-accent-2">
               Part of {member.owner ? `${member.owner}’s` : 'your team’s'} Copy Fund plan. Billing and seats are managed by the plan owner.
@@ -571,6 +577,66 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
         </Button>
         <SignOutEverywhere />
       </div>
+    </>
+  )
+}
+
+/** Back from a checkout whose address already had a trial: payments cancelled the $0 subscription. Plain checkout
+ *  with that address (POST /checkout answers trial_days 0 for it), yearly preselected. */
+function TrialUsed({ error }: { error: string }) {
+  const [email, setEmail] = useState(() => lastMe()?.email ?? '')
+  const [plan, setPlan] = useState<'yearly' | 'monthly'>('yearly')
+  return (
+    <>
+      <header>
+        <p className="text-[13px] font-medium text-accent">Copy</p>
+        <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Subscribe to keep Copy.</h1>
+      </header>
+      <p role="status" className="mt-6 rounded-xl bg-[#f6ead2] px-4 py-3 text-[14px] text-[#7a5410]">
+        {error}
+      </p>
+      <form
+        className="mt-8 max-w-lg rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]"
+        onSubmit={(e) => {
+          e.preventDefault()
+          copyCheckout(plan, 'trial-used', email)()
+        }}
+      >
+        <fieldset className="grid gap-2 sm:grid-cols-2">
+          <legend className="sr-only">Plan</legend>
+          {(
+            [
+              ['yearly', `Yearly $${prices.yearly}`, 'History back to 2013 · founding price locked'],
+              ['monthly', `$${prices.monthly}/month`, 'Founding price locked · cancel anytime'],
+            ] as const
+          ).map(([id, label, sub]) => (
+            <label key={id} className={`flex cursor-pointer items-start gap-2.5 rounded-lg px-3 py-2.5 shadow-[0_0_0_1px_var(--color-line)] ${plan === id ? 'shadow-[0_0_0_2px_var(--color-accent)]' : ''}`}>
+              <input type="radio" name="used-plan" value={id} checked={plan === id} onChange={() => setPlan(id)} className="mt-1 accent-[var(--color-accent)]" />
+              <span>
+                <span className="block text-[14px] font-medium">{label}</span>
+                <span className="block text-[12.5px] text-ink-3">{sub}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <label htmlFor="used-email" className="mt-4 block text-[13px] font-medium text-ink-2">
+          The email you used at checkout
+        </label>
+        <input
+          id="used-email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          className="mt-1.5 h-11 w-full rounded-full bg-paper px-4 text-[15px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]"
+        />
+        <Button type="submit" className="mt-4 w-full">
+          Subscribe
+        </Button>
+        <p className="mt-2 text-[12.5px] text-ink-3">Charged today by Stripe. Cancel anytime from your account.</p>
+      </form>
     </>
   )
 }
@@ -928,21 +994,42 @@ function ToYearly() {
   )
 }
 
-/** A Copy trial with no card: it simply ends on its date unless a card is added (POST /portal/card). */
-function NoCard({ end, day }: { end?: string; day?: string }) {
+/** A Copy trial with no card: it simply ends on its date unless a card is added (POST /portal/card). The member picks
+ *  the price first, yearly preselected (retail and the trader, Nov 11); payments moves the trial to it before the form. */
+function NoCard({ end, day, founding }: { end?: string; day?: string; founding: boolean }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [plan, setPlan] = useState<'yearly' | 'monthly'>('yearly')
+  const on = day ? ` on ${day}` : ''
+  const opts = [
+    { id: 'yearly' as const, label: `Yearly $${prices.yearly}${on}`, sub: `History back to 2013${founding ? ' · founding price kept' : ''}` },
+    { id: 'monthly' as const, label: `$${prices.monthly}/month${on}`, sub: founding ? 'Founding price kept · cancel anytime' : 'Cancel anytime' },
+  ]
   return (
     <div className="mt-4 rounded-xl bg-accent-soft px-3.5 py-3 text-[14px] text-accent-2">
       <p>No card on file: without one, the trial simply ends{end ? ` ${end}` : ''}.</p>
+      {/* The trial lock, as /pricing/ states it (trader, Nov 11): a trial started before Feb 1 keeps the founding price. */}
+      {founding && <p className="mt-1 text-[13px] text-accent-2/85">You started before Feb 1, so the founding price stays: ${prices.monthly}/month or ${prices.yearly}/year, locked while you stay subscribed.</p>}
+      <fieldset className="mt-3 grid gap-2 sm:grid-cols-2">
+        <legend className="sr-only">Plan after the trial</legend>
+        {opts.map((o) => (
+          <label key={o.id} className={`flex cursor-pointer items-start gap-2.5 rounded-lg bg-card px-3 py-2.5 text-ink shadow-[0_0_0_1px_var(--color-line)] ${plan === o.id ? 'shadow-[0_0_0_2px_var(--color-accent)]' : ''}`}>
+            <input type="radio" name="card-plan" value={o.id} checked={plan === o.id} onChange={() => setPlan(o.id)} className="mt-1 accent-[var(--color-accent)]" />
+            <span>
+              <span className="block text-[14px] font-medium">{o.label}</span>
+              <span className="block text-[12.5px] text-ink-3">{o.sub}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
       <Button
         size="sm"
-        className="mt-2.5"
+        className="mt-3"
         disabled={busy}
         onClick={() => {
           setBusy(true)
           setErr('')
-          addCard().catch((e) => {
+          addCard(plan).catch((e) => {
             setBusy(false)
             setErr(errText(e, 'That didn’t open. Please try again.'))
           })

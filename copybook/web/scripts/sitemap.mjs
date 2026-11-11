@@ -21,6 +21,7 @@ const urls = [
   ['pricing/'],
   ['about/'],
   ['methodology/'],
+  ['winter-2025-26/'],
   ['speed/'],
   ['api/'],
   ['contact/'],

@@ -83,7 +83,7 @@ for (const path of ['/investors/', '/pricing/', '/security/']) {
   await check('Back', path)
 }
 // Pages read from d/ files that the links above don't reach (a null in splits.json blanked /methodology/).
-for (const path of ['/methodology/', '/api/', '/flow/', '/weekly/']) {
+for (const path of ['/methodology/', '/api/', '/flow/', '/weekly/', '/winter-2025-26/']) {
   await page.goto(`${origin}${path}`)
   await check('Direct', path)
 }

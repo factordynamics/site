@@ -167,6 +167,7 @@ page('for-funds/', 'Copybook for investment teams: My book, peer overlap and 13F
 page('for-quants/', 'Copybook API for quants: 13F, Form 4 and 13D/G as JSON · Copy Pro', 'Every 13F filer’s latest holdings as JSON, with the EDGAR accession and acceptance time of every filing; holders by stock, Form 4 and 13D/G events and bulk CSV files. From $39/month.')
 page('my-book/', 'My book · Copybook', 'Your stocks through the eyes of every 13F filer: who holds them, who bought and sold this season, and every Form 4 and 13D.')
 page('methodology/', 'Methodology · Copybook', 'How Copybook reads SEC 13F, Form 4 and Schedule 13D/G filings: amendments, unit fixes, options, tickers, refresh cadence, and a changelog of every data correction.')
+page('winter-2025-26/', 'Last winter between 13F seasons: the filings · Copybook', 'The 19 Schedule 13D/G filings by superinvestors and 14 insider buys of $100K or more in their top stocks, Dec 1, 2025 to Jan 31, 2026, each linked to SEC EDGAR.')
 page('api/', 'API · Copybook', 'The Copybook API: 13F, Form 4 and Schedule 13D/G data from SEC EDGAR as JSON, for Copy Pro and Copy Fund.')
 page('contact/', 'Contact · Copybook', 'Request Copy Fund access for your team, ask a question, or ask us to delete your data.')
 page('terms/', 'Terms of use · Copybook', 'The terms for using Copybook, its paid plans and its API.')

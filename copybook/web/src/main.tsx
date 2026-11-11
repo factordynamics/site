@@ -26,6 +26,7 @@ const ForFunds = lazy(() => import('./pages/Personas').then((m) => ({ default: m
 const ForQuants = lazy(() => import('./pages/Personas').then((m) => ({ default: m.ForQuants })))
 const About = lazy(() => import('./pages/About').then((m) => ({ default: m.About })))
 const Methodology = lazy(() => import('./pages/Methodology').then((m) => ({ default: m.Methodology })))
+const Winter = lazy(() => import('./pages/Winter').then((m) => ({ default: m.Winter })))
 const ApiDocs = lazy(() => import('./pages/Api').then((m) => ({ default: m.ApiDocs })))
 const Contact = lazy(() => import('./pages/Contact').then((m) => ({ default: m.Contact })))
 const Legal = lazy(() => import('./pages/Legal').then((m) => ({ default: m.Legal })))
@@ -100,6 +101,7 @@ Promise.all([handoff, fontsReady]).then(() =>
             <Route path="status" element={<Status />} />
             <Route path="about" element={<About />} />
             <Route path="methodology" element={<Methodology />} />
+            <Route path="winter-2025-26" element={<Winter />} />
             <Route path="f/:accession" element={<FilingCard />} />
             <Route path="speed" element={<Speed />} />
             <Route path="latency" element={<Navigate to="/speed/" replace />} />

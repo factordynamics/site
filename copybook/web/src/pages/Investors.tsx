@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import { Monogram, Skeleton } from '../components/ui'
 import { shortName, loadIndex, money, pct, quarterLabel, useAsync, type Manager } from '../lib/data'
 import { ManagerCard } from './Home'
+import { FollowButton } from '../components/FollowButton'
+import { getToken } from '../lib/account'
 
 type Sort = 'value' | 'name' | 'positions' | 'recent'
 
@@ -90,7 +92,7 @@ export function Investors() {
       {!idx.loading && tab === 'featured' && (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {list.map((m) => (
-            <ManagerCard key={m.slug} m={m} />
+            <ManagerCard key={m.slug} m={m} action={getToken() ? <FollowButton kind="investor" id={m.slug} name={m.manager} /> : undefined} />
           ))}
         </div>
       )}
@@ -102,6 +104,8 @@ export function Investors() {
 
 function FundTable({ list }: { list: Manager[] }) {
   const [n, setN] = useState(60)
+  // Signed-in members ("Pick funds" lands here) follow from the list itself (trader, Nov 11).
+  const follow = Boolean(getToken())
   return (
     <div className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
       <table className="w-full text-[14px]">
@@ -109,9 +113,10 @@ function FundTable({ list }: { list: Manager[] }) {
           <tr className="border-b border-line text-left text-[12.5px] text-ink-3">
             <th className="px-4 py-3 font-medium md:px-5">Fund</th>
             <th className="hidden px-4 py-3 font-medium md:table-cell">Largest position</th>
-            <th className="px-4 py-3 text-right font-medium">Portfolio</th>
+            <th className={`px-4 py-3 text-right font-medium ${follow ? 'hidden sm:table-cell' : ''}`}>Portfolio</th>
             <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">Positions</th>
             <th className="hidden px-4 py-3 text-right font-medium md:table-cell md:pr-5">Quarter</th>
+            {follow && <th className="px-4 py-3 text-right font-medium md:pr-5"><span className="sr-only">Follow</span></th>}
           </tr>
         </thead>
         <tbody>
@@ -121,8 +126,10 @@ function FundTable({ list }: { list: Manager[] }) {
               <tr key={m.slug} className="border-b border-line last:border-0 hover:bg-ink/[0.025]">
                 <td className="px-4 py-3 md:px-5">
                   <Link to={`/investors/${m.slug}/`} className="flex items-center gap-3">
-                    <Monogram name={m.manager} size={30} />
-                    <span className="min-w-0">
+                    <span className={follow ? 'hidden sm:block' : ''}>
+                      <Monogram name={m.manager} size={30} />
+                    </span>
+                    <span className={`min-w-0 ${follow ? 'max-w-[8rem] sm:max-w-none' : ''}`}>
                       <span className="block truncate font-medium">{m.manager}</span>
                       {m.name !== m.manager && <span className="block truncate text-[12.5px] text-ink-3">{m.name}</span>}
                     </span>
@@ -137,9 +144,14 @@ function FundTable({ list }: { list: Manager[] }) {
                     '—'
                   )}
                 </td>
-                <td className="num px-4 py-3 text-right font-medium">{money(m.total_value)}</td>
+                <td className={`num px-4 py-3 text-right font-medium ${follow ? 'hidden sm:table-cell' : ''}`}>{money(m.total_value)}</td>
                 <td className="num hidden px-4 py-3 text-right text-ink-2 sm:table-cell">{m.position_count?.toLocaleString('en-US')}</td>
                 <td className="hidden px-4 py-3 text-right text-ink-2 md:table-cell md:pr-5">{quarterLabel(m.quarter)}</td>
+                {follow && (
+                  <td className="px-4 py-3 text-right md:pr-5">
+                    <FollowButton kind="investor" id={m.slug} name={m.manager} stack />
+                  </td>
+                )}
               </tr>
             )
           })}

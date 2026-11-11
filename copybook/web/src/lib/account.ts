@@ -9,6 +9,10 @@ export type Member = {
   has_payment_method?: boolean
   /** "pending_email_confirmation" until the emailed link is opened: follows and channels save, nothing is delivered. */
   delivery?: 'pending_email_confirmation' | 'active'
+  /** A Copy subscription from before Feb 1, 2027: $9/$79, kept while subscribed (a pause keeps it). */
+  founding_price?: boolean
+  /** Yearly Copy, Pro or Fund: history back to 2013 from Dec 31. */
+  yearly_perks?: boolean
   /** The product: copy, pro or fund. Older records read as copy. */
   plan: 'copy' | 'pro' | 'fund' | string
   interval?: 'monthly' | 'yearly' | 'unknown'
@@ -302,7 +306,9 @@ export function adoptSession(token: string) {
 /** Null when the checkout's address already had an account (code existing_account): no token comes back, so
  *  the browser keeps the session it has, and the member signs in with the emailed link. */
 export async function startSession(body: { checkout_session: string } | { login: string }) {
-  const r = await call<{ token?: string; member: Member | null; code?: string; session?: string }>('/session', { body })
+  const r = await call<{ token?: string; member: Member | null; code?: string; session?: string; error?: string }>('/session', { body })
+  // A repeat trial: payments cancelled the new $0 subscription at completion (one free trial per person).
+  if (r.code === 'trial_used') throw new ApiError(409, { code: r.code, error: r.error })
   if (!r.token) return null
   setToken(r.token, r.session === 'provisional' ? (r.member?.email ?? null) : null)
   return r.member
@@ -351,8 +357,9 @@ export const sendCancelReason = (reason: CancelReason, note?: string) => call<{ 
 export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email }, timeout: 15_000 })
 /** Stripe's confirm page for the same subscription at the yearly price (POST /yearly); it returns to /account/?kept=yearly. */
 export const switchYearly = () => call<{ url: string }>('/yearly', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
-/** Stripe's add-a-card form (POST /portal/card); it returns to /account/?card=added. */
-export const addCard = () => call<{ url: string }>('/portal/card', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
+/** Stripe's add-a-card form (POST /portal/card); it returns to /account/?card=added. With a plan, a trial moves to
+ *  that price first (its end date unchanged). */
+export const addCard = (plan?: 'monthly' | 'yearly') => call<{ url: string }>('/portal/card', { method: 'POST', auth: true, ...(plan ? { body: { plan } } : {}) }).then((r) => (window.location.href = r.url))
 /** The address waiting on its sign-in link: /me's delivery, else this device's provisional session. */
 export const pendingEmail = (m?: Member | null) => (m?.delivery === 'pending_email_confirmation' ? m.email : null) ?? provisionalEmail()
 export const openPortal = () => call<{ url: string }>('/portal', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))

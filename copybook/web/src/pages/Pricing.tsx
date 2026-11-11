@@ -77,7 +77,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
 ]
 
 const FOUNDING: Partial<Record<PlanId, string>> = {
-  copy: 'Founding price: $9/month or $79/year, locked while you stay subscribed (a pause keeps it). From Feb 1, 2027, new members pay $12/month or $99/year.',
+  copy: 'Founding price: $9/month or $79/year, locked while you stay subscribed (a pause keeps it). From Feb 1, 2027, new members pay $12/month or $99/year. Start your trial before Feb 1 and the founding price stays.',
   pro: 'Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay subscribed. Start a trial by Dec 31 and the founding price stays, even if it converts in January.',
   fund: 'Founding price: subscribe before Dec 31 and keep $199/mo or $1,990/yr for as long as you stay subscribed. Start a trial by Dec 31 and the founding price stays, even if it converts in January.',
 }
@@ -183,19 +183,19 @@ export function Pricing() {
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Copy emails you when they do.</p>
             <p className="mt-3 text-[14px] leading-relaxed text-ink-3">
-              {/* Payments' accession list (definitions and every filing), served from our own domain: public/d/. */}
+              {/* Marketing's rev 78 sentence with payments' recount (purchases dated in the window, $100K and up): public/d/winter-2025-26.json, shown at /winter-2025-26/. */}
               Last winter (Dec 2025–Jan 2026):{' '}
-              <a href={`${import.meta.env.BASE_URL}d/winter-2025-26.json`} className="font-medium text-accent underline underline-offset-2">
+              <Link to="/winter-2025-26/#filings-13dg" className="font-medium text-accent underline underline-offset-2">
                 19
-              </a>{' '}
-              Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and{' '}
-              <a href={`${import.meta.env.BASE_URL}d/winter-2025-26.json`} className="font-medium text-accent underline underline-offset-2">
-                18
-              </a>{' '}
-              open-market buys by directors and officers in the 100 stocks they hold most by value.
+              </Link>{' '}
+              Schedule 13D/G filings by the superinvestors we follow (4 new stakes), and{' '}
+              <Link to="/winter-2025-26/#insider-buys" className="font-medium text-accent underline underline-offset-2">
+                14
+              </Link>{' '}
+              open-market buys of $100K or more by directors and officers in the 100 stocks they hold most by value.
             </p>
             <p className="mt-4 text-[14px] font-medium leading-relaxed">
-              Yearly ${plans.copy.yearly}: less than 9 months of monthly. Monthly? Pause once a year, up to 3 months, and keep your founding price. {TRIAL_DAYS} days free, no card needed.
+              Yearly ${plans.copy.yearly}: history back to 2013 (from Dec 31) · monthly costs ${plans.copy.monthly * 9}+ even with a pause · founding price locked. Monthly? Pause once a year, up to 3 months, and keep your founding price. {TRIAL_DAYS} days free, no card needed.
             </p>
           </div>
           <FeatureList
@@ -243,7 +243,7 @@ export function Pricing() {
           {(['monthly', 'yearly'] as const).map((c) => (
             <button key={c} role="tab" aria-selected={cycle === c} onClick={() => setCycle(c)} className={`rounded-full px-4 py-1.5 ${cycle === c ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
               {c === 'monthly' ? 'Monthly' : 'Yearly'}
-              {c === 'yearly' && <span className="ml-1.5 text-[12px] font-medium text-up">${copy.yearly}/yr: less than 9 months of monthly</span>}
+              {c === 'yearly' && <span className="ml-1.5 text-[12px] font-medium text-up">${copy.yearly}/yr · history to 2013</span>}
             </button>
           ))}
         </div>
@@ -277,7 +277,7 @@ export function Pricing() {
                 <p className={`relative min-h-[1.5em] text-[13.5px] font-semibold ${dark ? 'text-[#7fe0a6]' : 'text-[#126b3c]'}`}>{referredDeal(tier.id, cycle)}</p>
               ) : (
                 <p className={`relative text-[12.5px] ${cycle === 'yearly' ? 'min-h-[53px]' : 'min-h-[1.5em]'} ${dark ? 'text-white/60' : 'text-ink-3'}`}>
-                  {plan ? (cycle === 'yearly' ? (tier.id === 'copy' ? `$${plan.yearly}/yr: less than 9 months of monthly · history back to 2013 (from Dec 31)` : `About $${Math.round(plan.yearly / 12)} a month · save ${save}% vs monthly`) : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
+                  {plan ? (cycle === 'yearly' ? (tier.id === 'copy' ? `Yearly $${plan.yearly}: history back to 2013 (from Dec 31) · monthly costs $${plan.monthly * 9}+ even with a pause · founding price locked` : `About $${Math.round(plan.yearly / 12)} a month · save ${save}% vs monthly`) : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
                   {plan && cycle === 'yearly' && <span className="block text-[11.5px]">Prepaid and protected: pro-rata refund if we ever discontinue the plan.</span>}
                 </p>
               )}
@@ -344,7 +344,7 @@ export function Pricing() {
                   ) : plan ? (
                     // Said plainly under every paid button: Copy's trial takes no card (Nov 11); Pro's still does.
                     <>
-                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>{tier.id === 'copy' ? TRIAL_LINE : `Card required · charged on day ${TRIAL_DAYS + 1} unless you cancel`}</span>
+                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>{tier.id === 'copy' ? `${TRIAL_LINE} One free trial per person.` : `Card required · charged on day ${TRIAL_DAYS + 1} unless you cancel`}</span>
                       {referred ? referredTerms(tier.id, cycle) : trialTerms(tier.id)}
                     </>
                   ) : (

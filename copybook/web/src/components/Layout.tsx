@@ -24,6 +24,8 @@ export function Layout() {
   // Only paying members (active, trialing or paused on Copy or above) lose the trial button; a free or
   // cancelled member keeps it, with Account beside it.
   const paying = signedIn && isPaying(member)
+  // While a stored session's /me loads, show neither: a trialing or paid member never sees "Try Copy free" flash.
+  const cta = !(getToken() && member === undefined)
   const sn = seasonNow()
   // During a 13F season the tracker sits after Flow.
   const base = sn.live ? [...NAV.slice(0, 2), { to: '/season/', label: `${quarterLabel(sn.quarter).split(' ')[0]} season` }, ...NAV.slice(2)] : NAV
@@ -89,9 +91,11 @@ export function Layout() {
                 Account
               </Link>
             )}
-            <Button to={paying ? '/account/' : '/pricing/'} size="sm" variant="dark" className="hidden sm:inline-flex">
-              {paying ? 'Account' : 'Try Copy free'}
-            </Button>
+            {cta && (
+              <Button to={paying ? '/account/' : '/pricing/'} size="sm" variant="dark" className="hidden sm:inline-flex">
+                {paying ? 'Account' : 'Try Copy free'}
+              </Button>
+            )}
             <button
               type="button"
               className="-mr-2 inline-flex size-10 items-center justify-center rounded-full text-ink md:hidden"
@@ -115,9 +119,11 @@ export function Layout() {
                 </NavLink>
               ))}
             </nav>
-            <Button to={paying ? '/account/' : '/pricing/'} variant="dark" className="mt-4 w-full">
-              {paying ? 'Account' : 'Try Copy free'}
-            </Button>
+            {cta && (
+              <Button to={paying ? '/account/' : '/pricing/'} variant="dark" className="mt-4 w-full">
+                {paying ? 'Account' : 'Try Copy free'}
+              </Button>
+            )}
             {signedIn && !paying && (
               <Button to="/account/" variant="outline" className="mt-2 w-full">
                 Account
