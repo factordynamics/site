@@ -2,6 +2,13 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-unit-fields-prev-as-filed",
+   "date": "2026-11-11",
+   "kind": "methodology",
+   "title": "value_as_filed, value_scale and value_adjusted on every tracked fund's row; prev_shares_as_filed always set; mislabeled_amendment per quarter",
+   "body": "Tracked funds' books now keep each row's value exactly as filed (value_as_filed), the factor that turned it into whole dollars (value_scale: 1000 for a book filed in thousands, 1 for one filed in dollars, or a line-level fix such as a single line filed 1000x too large) and value_adjusted (true when value_usd differs from the filed value). Example: LSV 2026Q1 Mueller Industries (624756102) filed 161,799 and is served as $161,799,000, so value_scale is 1000. Rows stored before this change are refetched from EDGAR on the next full run; until then the three fields stay null. prev_shares_as_filed is now the prior quarter's filed share count on every row with a prior, equal to prev_shares when no split applied, so it has one meaning (Amundi CRWD 2026Q3 had it null). Each quarter's book and its /v1 filing block carry mislabeled_amendment: true when a 13F-HR/A labeled NEW HOLDINGS re-filed the whole book and replaced the original (Matthew McLennan / First Eagle 2026Q2, 0001325447-26-000033; HSBC 2025Q4, 0000873630-26-000002); each amendment in filing.amendments carries the same flag."
+  },
+  {
    "id": "2026-11-11-row-provenance-suspect-units",
    "date": "2026-11-11",
    "kind": "correction",

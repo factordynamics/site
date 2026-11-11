@@ -122,3 +122,20 @@ class RowProvenanceTest(unittest.TestCase):
         self.assertEqual(got["0000000001"]["rows"][0][-2:], ["0000000001-26-000001", "2026-11-12T21:05:00Z"])
         self.assertEqual([r[-2:] for r in got["0000000002"]["rows"]],
                          [["0000000002-26-000001", "2026-08-14T20:00:00Z"], ["0000000002-26-000009", "2026-09-30T13:00:00Z"]])
+
+
+class UnitFieldsTest(unittest.TestCase):
+    def test_value_scale_and_adjusted_per_row_survive_an_amendment_merge(self):
+        # A book filed in thousands (scale 1000) with one line filed in dollars (rescaled back, scale 1),
+        # plus a NEW HOLDINGS amendment filed in dollars that adds to the first line.
+        row = lambda c, v, filed: {"cusip": c, "put_call": None, "shares_type": "SH", "shares": 10.0, "value": v,
+                                   "value_as_filed": filed}
+        base = {"accession": "o", "holdings": [row("A", 5_000_000.0, 5_000.0), row("B", 2_000.0, 2_000.0)]}
+        add = {"accession": "a", "holdings": [row("A", 1_000_000.0, 1_000_000.0)]}
+        q = build.merge_quarter(base, [add])
+        build.stamp_units([{"history": [q]}])
+        got = {h["cusip"]: (h["value_as_filed"], h["value_scale"], h["value_adjusted"]) for h in q["holdings"]}
+        self.assertEqual(got["B"], (2_000.0, 1.0, False))
+        self.assertEqual(got["A"], (1_005_000.0, float(f"{6_000_000 / 1_005_000:.6g}"), True))
+        v1 = build.v1_position(q["holdings"][1])
+        self.assertEqual((v1["value_as_filed"], v1["value_scale"], v1["value_adjusted"]), (2_000.0, 1.0, False))

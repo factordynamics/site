@@ -158,6 +158,7 @@ class MoveMathTest(unittest.TestCase):
         # Fisher's XOM: the trade is the share change at Q3's price (+465,409 sh x $162.75 = +$75.7M),
         # not the change in reported value ($5.20B - $4.30B = +$894.9M, mostly the price move).
         self.assertEqual(rows[0]["share_change"], 465409)
+        self.assertEqual(rows[0]["prev_shares_as_filed"], 31468114)  # no split: the filed prior, equal to prev_shares
         self.assertAlmostEqual(rows[0]["value_delta"], 465409 * 5197180970 / 31933523, delta=1)
 
     def test_line_far_off_the_cross_filer_price_is_suspect(self):

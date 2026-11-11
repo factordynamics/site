@@ -59,7 +59,7 @@ _SUBS: dict[str, dict] = {}
 INACTIVE_AFTER = 4  # quarters behind the expected period before a filer is retired
 _AMEND: dict[str, str] | None = None
 LITE_HOLDERS = 8
-CACHE_FORMAT = 4  # bump when stored quarters lack fields the build now needs (forces a refetch)
+CACHE_FORMAT = 5  # bump when stored quarters lack fields the build now needs (forces a refetch)
 # Curated refreshes must stay quick, so they keep quarters back to format 3; full runs refetch older ones.
 MIN_CACHE_FORMAT = CACHE_FORMAT if os.environ.get("SCOPE") == "full" else 3
 OWN_BOOKS: dict[tuple[str, str], dict] = {}  # (cik, report_date) -> a fund's own book before combining
@@ -383,7 +383,25 @@ def fix_with_consensus(managers: list[dict]) -> int:
     return n
 
 
-SUMMED = ("value", "shares", "principal_amount", "vote_sole", "vote_shared", "vote_none", "lines")
+def stamp_units(managers: list[dict]) -> int:
+    """value_scale (value_usd / value_as_filed: 1000 for a book filed in thousands) and value_adjusted (a unit fix
+    changed the value) on every row of every quarter, after all unit checks. Rows stored before value_as_filed
+    was kept leave all three null. Returns the rows whose value differs from their filed value."""
+    n = 0
+    for m in managers:
+        for q in m.get("history") or []:
+            for h in q["holdings"]:
+                filed = h.get("value_as_filed")
+                if filed is None:
+                    h.pop("value_scale", None), h.pop("value_adjusted", None)
+                    continue
+                h["value_scale"] = float(f"{h['value'] / filed:.6g}") if filed else None
+                h["value_adjusted"] = abs(h["value"] - filed) > 0.5
+                n += h["value_adjusted"]
+    return n
+
+
+SUMMED = ("value", "value_as_filed", "shares", "principal_amount", "vote_sole", "vote_shared", "vote_none", "lines")
 
 
 def add_row(rows: dict, h: dict, layer: dict | None = None) -> None:
@@ -551,7 +569,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     amendment disclosed get change "disclosed_later" and no trade size.
 
     Splits: the prior quarter's shares are multiplied by the split ratio (splits.py);
-    prev_shares is adjusted and prev_shares_as_filed keeps the filed number.
+    prev_shares is adjusted and prev_shares_as_filed keeps the filed number. Without a split prev_shares_as_filed
+    is still the prior's filed share count (then equal to prev_shares), so the field has one meaning.
 
     value_delta is the trade in dollars at this filing's own value per share (new:
     +value, exited: -prior value), so price moves alone are 0. delta_pct_of_book is
@@ -601,8 +620,9 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         }
         if prn:
             out["prev_principal_amount"] = amount(p) if p else 0
-        if p and r != 1.0:
+        if p and not prn:
             out["prev_shares_as_filed"] = p["shares"]
+        if p and r != 1.0:
             out["split"] = {"ratio": r, "from_quarter": q_from, "to_quarter": q_to}
         return out
 
@@ -706,6 +726,7 @@ def load_filing(cik: str, meta) -> dict | None:
     xml = fetch_info_table(cik, meta.accession)
     rows = parse_info_table(xml)
     holdings = aggregate_holdings(rows)
+    as_filed = {id(h): h.value for h in holdings}  # the value column as filed, before any unit fix
     cover_total = table_value_total(fetch_primary_doc(cik, meta.accession))
     raw_total = sum(h.value for h in holdings)
     thousands = looks_like_thousands(raw_total, cover_total)
@@ -748,6 +769,7 @@ def load_filing(cik: str, meta) -> dict | None:
                 "cusip": h.cusip,
                 "ticker": h.ticker,
                 "value": h.value,
+                "value_as_filed": as_filed[id(h)],
                 # Principal-amount rows (notes) are never shares: shares 0, amount in principal_amount.
                 "shares": 0 if h.shares_type == "PRN" else h.shares,
                 "put_call": h.put_call,
@@ -858,6 +880,8 @@ def ingest() -> dict:
 
     fixed = fix_with_consensus([m for m in managers_out if m.get("ok")])
     print(f"consensus unit check: rescaled {fixed} lines", flush=True)
+    print(f"unit fields: {stamp_units([m for m in managers_out if m.get('ok')])} rows rescaled from their filed value",
+          flush=True)
     ok = [m for m in managers_out if m.get("ok")]
     featured = featured_ciks()
     for m in managers_out:
@@ -978,7 +1002,7 @@ def manager_json(m: dict) -> dict:
 def compact_row(h: dict) -> dict:
     """Whole-dollar values and share counts, 6-digit weights: keeps full books small on Pages."""
     ints = ("value", "shares", "prev_shares", "prev_value", "share_change", "principal_amount",
-            "prev_principal_amount", "prev_shares_as_filed")
+            "prev_principal_amount", "prev_shares_as_filed", "value_as_filed")
     fracs = ("weight", "pct_of_book", "prev_weight", "notional_pct_of_book", "delta_pct_of_book")
     return {
         k: (round(v) if k in ints and isinstance(v, float) else round(v, 6) if k in fracs and isinstance(v, float) else v)
@@ -1007,6 +1031,9 @@ def v1_position(h: dict) -> dict:
         "value_delta_usd": h.get("value_delta"),
         "source_accession": h.get("source_accession"),
         "first_disclosed_at": h.get("first_disclosed_at"),
+        "value_scale": h.get("value_scale"),
+        "value_as_filed": h.get("value_as_filed"),
+        "value_adjusted": h.get("value_adjusted"),
     }
     return out | {k: h[k] for k in V1_EXTRA if h.get(k) is not None}
 
@@ -1026,9 +1053,11 @@ def v1_holdings(m: dict, q: dict, prev: dict | None, rows: list[dict]) -> dict:
             "amendments": [
                 {"accession": f["accession"], "filed_on": f["filing_date"], "accepted_at": f.get("accepted_at"),
                  "amendment_type": f.get("amendment_type"), "amendment_no": f.get("amendment_no"),
-                 "confidential_treatment_expired": f.get("confidential_treatment_expired"), "role": f["role"]}
+                 "confidential_treatment_expired": f.get("confidential_treatment_expired"), "role": f["role"],
+                 "mislabeled_amendment": bool(f.get("mislabeled_amendment"))}
                 for f in trail if f["form"] != "13F-HR"
             ],
+            "mislabeled_amendment": any(f.get("mislabeled_amendment") for f in trail),
             "versions": trail,
         },
         "status": q.get("status"),
@@ -1057,6 +1086,8 @@ def write_history(m: dict) -> None:
         keep.add(name)
         meta = {k: v for k, v in q.items() if k not in {"holdings", "truncated", "refiled"}}
         meta["long_value"] = round(sum(h["value"] for h in q["holdings"] if not h.get("put_call")))
+        # A NEW HOLDINGS amendment that re-filed the whole book (mark_refiled): the quarter's book is that refile.
+        meta["mislabeled_amendment"] = any(f.get("mislabeled_amendment") for f in q.get("filings") or [])
         prev = baseline(m, i)
         rows = [compact_row(h) for h in with_changes(q, prev)]
         # `holdings` stays the filed book; positions sold out since the prior quarter go in `exited`.
