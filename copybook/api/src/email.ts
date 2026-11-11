@@ -46,7 +46,18 @@ const DELAY_MARK = '(delayed: email limit) ';
 /** Usage from Resend's x-resend-daily-quota and x-resend-monthly-quota headers (emails sent, account-wide). */
 export const mailQuota: { day: string; used: number; month: string; monthly: number; delayed: number; mailgun: number; refused?: string; kinds?: MailKinds } = { day: '', used: 0, month: '', monthly: 0, delayed: 0, mailgun: 0 };
 /** This host's sends today by kind (both providers): real members, test and critic members, account mail; `preview` (part of test) is previews, replays and samples. */
-export type MailKinds = { real: number; test: number; account: number; preview: number; since?: string };
+/** Sends by kind from `since` (this host's first counted send of the UTC day); used_at_since: Resend's day count then. */
+export type MailKinds = { real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number };
+/**
+ * One day's Resend count split so it adds up: before_since (sent before these counters started) + real + test + account
+ * + other (counted by Resend after since but by no host's tally: another host's lost write, or another sender) = used.
+ * Previews are a subset of test.
+ */
+export function kindsView(used: number, k: MailKinds | null | undefined) {
+  const real = k?.real ?? 0, test = k?.test ?? 0, account = k?.account ?? 0;
+  const before = k ? (k.used_at_since ?? 0) : used;
+  return { real, test, account, preview: k?.preview ?? 0, before_since: before, other: Math.max(0, used - before - real - test - account), since: k?.since ?? null };
+}
 /** Previews, replays and samples to test inboxes: at most this many a day; past it they wait for the reset. */
 export const PREVIEW_DAILY_CAP = 10;
 /** Mailgun's free plan, the overflow when MAILGUN_API_KEY is set: 100 a day, from the same address (factordynamics.com is verified there). */
@@ -137,7 +148,9 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
   await loadMeter(env);
   if (opts.preview) mails = mails.map((m) => ({ ...m, preview: true }));
   // `since`: the first send counted today (Resend's `used` counts the whole UTC day, account-wide; these count from here).
-  const kinds = (mailQuota.kinds ??= { real: 0, test: 0, account: 0, preview: 0, since: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') });
+  // Kinds an older build started without `since` (so they couldn't be read against `used`) start over here.
+  if (mailQuota.kinds && !mailQuota.kinds.since) mailQuota.kinds = undefined;
+  const kinds = (mailQuota.kinds ??= { real: 0, test: 0, account: 0, preview: 0, since: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), used_at_since: mailQuota.used });
   const tally = (m: Mail) => {
     if (m.preview) kinds.preview++;
     kinds[m.preview || m.test || testAddress(m.to) ? 'test' : tier === 'account' ? 'account' : 'real']++;

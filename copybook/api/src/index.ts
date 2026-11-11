@@ -481,8 +481,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const { pollerStatus } = await import('./failover');
       const p = await pollerStatus(env, Date.now());
       const { total, last_7d } = await (await import('./alerts')).dupesBlocked(env);
-      const meter = JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') as { day?: string; kinds?: unknown } | null;
-      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null, dupes_blocked: { total, last_7d }, mail_kinds: meter?.kinds ? { day: meter.day, ...(meter.kinds as object) } : null }, 200, { 'cache-control': 'no-store' });
+      const meter = JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') as { day?: string; used?: number; kinds?: unknown } | null;
+      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null, dupes_blocked: { total, last_7d }, mail_kinds: meter?.day ? { day: meter.day, used: meter.used ?? 0, ...((meter.kinds as object) ?? {}) } : null }, 200, { 'cache-control': 'no-store' });
     }
     // Seconds from EDGAR acceptance to handing the alert to the mailer, for the latest alerted filings.
     // Live alerts only (test replays excluded); ?latency=all returns every stored one instead of the latest 10.
@@ -501,7 +501,14 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     // Alerts the per-member sent record stopped from reaching a member twice: total, the last 7 UTC days, per day.
     const dupes_blocked = await (await import('./alerts')).dupesBlocked(env);
     const { pollerStatus } = await import('./failover');
-    return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, dupes_blocked, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: { ...(JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? (await import('./email')).mailQuota), daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15 }, moves_queue: await st.movesQueue(env, await st.alertHealth(env, Date.now())), ...business }, 200, h);
+    return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, dupes_blocked, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: await (async () => {
+      const { mailQuota, kindsView } = await import('./email');
+      const m = (JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? mailQuota) as typeof mailQuota;
+      // Alert emails handed to the mailer this UTC day, by hour (both hosts: stats:sent is synced).
+      const day0 = Math.floor(Date.now() / 86400_000) * 24;
+      const byHour = Object.fromEntries((JSON.parse((await env.DB.get('stats:sent')) ?? '[]') as [number, number][]).filter(([hr]) => hr >= day0).map(([hr, n]) => [`${String(hr - day0).padStart(2, '0')}h`, n]));
+      return { ...m, by_kind: kindsView(m.used, m.kinds), alert_emails_today_by_hour: byHour, daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15 };
+    })(), moves_queue: await st.movesQueue(env, await st.alertHealth(env, Date.now())), ...business }, 200, h);
   }
 
   // The site's page counts: visits, signup form views and trial clicks per page, utm_source and post (utm_source|utm_content). Counts only (no

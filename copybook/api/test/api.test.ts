@@ -1005,7 +1005,10 @@ describe('copybook api', () => {
     expect(em.mailQuota.kinds).toMatchObject({ preview: 10, test: before.test + 10 - before.preview, real: before.real });
     expect(JSON.parse((await env.DB.get('host:mail-delayed'))!).filter((m: { subject: string }) => /preview 1[01]$/.test(m.subject))).toHaveLength(2);
     const probe = await (await handleRequest(new Request('https://api.test/health?probe=1'), env)).json();
-    expect(Object.keys(probe.mail_kinds)).toEqual(['day', 'real', 'test', 'account', 'preview', 'since']);
+    expect(Object.keys(probe.mail_kinds)).toEqual(['day', 'used', 'real', 'test', 'account', 'preview', 'since', 'used_at_since']);
+    // The day's Resend count splits into parts that add up to it: what came before the counters started, then by kind.
+    const v = em.kindsView(probe.mail_kinds.used, probe.mail_kinds);
+    expect([v.before_since + v.real + v.test + v.account + v.other, v.since]).toEqual([probe.mail_kinds.used, probe.mail_kinds.since]);
     vi.stubGlobal('fetch', orig);
   });
 
