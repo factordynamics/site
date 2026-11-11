@@ -235,7 +235,7 @@ function spread(xs: number[]) {
  * channel's first successful post (KV alerts:latency:ch).
  */
 /** From then (the deploy of 0bf5b8f) a 13F is timed by the email that carries its moves. Filings accepted earlier are left out of the figures. */
-export const MOVES_FIX_AT = '2026-11-11T00:01:00Z';
+const MOVES_FIX_AT = '2026-11-11T00:01:00Z';
 
 export function latencyReport(log: LatencyRow[], now: number, ch: ChannelDelivery[] = []) {
   const { season, from } = seasonOf(now);

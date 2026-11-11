@@ -911,6 +911,11 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', orig);
   });
 
+  it("the entry module exports only functions and the handler (workerd refuses to boot on any other export, as gene's deployer did for 1e2f84a)", async () => {
+    const mod = await import('../src/index');
+    expect(Object.entries(mod).filter(([k, v]) => k !== 'default' && typeof v !== 'function').map(([k]) => k)).toEqual([]);
+  });
+
   it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
     const day = new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10);
     const at = (s: number) => new Date(Date.parse(`${day}T15:00:00Z`) + s * 1000).toISOString();
