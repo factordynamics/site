@@ -460,16 +460,22 @@ const STARTS: [string, string][] = [
   ['Apple', '/s/AAPL'],
   ['NVIDIA', '/s/NVDA'],
 ]
+/** A search field that opens the site search, with `q` already typed when given. */
+function SearchBox({ q = '', label = 'Find an investor or a stock' }: { q?: string; label?: string }) {
+  return (
+    <button type="button" className="home-search-box" onClick={() => window.dispatchEvent(new CustomEvent('holdterm:search', { detail: q }))}>
+      <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
+        <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+      <span>{label}</span>
+    </button>
+  )
+}
 function HomeSearch() {
   return (
     <div className="home-search">
-      <button type="button" className="home-search-box" onClick={() => window.dispatchEvent(new Event('holdterm:search'))}>
-        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true">
-          <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-        <span>Find an investor or a stock</span>
-      </button>
+      <SearchBox />
       <div className="home-starts">
         <span className="dim">Popular:</span>
         {STARTS.map(([label, to]) => (
@@ -919,7 +925,7 @@ export function Fund({ slug }: { slug: string }) {
     return /^held:/.test(b.error) ? (
       <NotFound what="This investor’s latest 13F is held back while its numbers are checked against the filing’s cover page. It will be back once they match" />
     ) : missing(b.error) && !inRoster(slug) ? (
-      <NotFound what="Holdterm doesn’t follow an investor at this address. It may have been renamed or left the list of investors Holdterm follows" />
+      <NotFound what="Holdterm doesn’t follow an investor at this address. It may have been renamed or left the list of investors Holdterm follows" q={slug.replace(/-\d+$/, '').replace(/-/g, ' ')} />
     ) : (
       <Failed error={b.error} what="this portfolio" />
     )
@@ -1770,7 +1776,7 @@ export function Stock({ ticker }: { ticker: string }) {
   const firms = useFirms(!s.data)
   const [tab, setTab] = useState<STab>('holders')
   title(s.data ? `${issuerName(s.data.name)} (${ticker}): who owns it` : `${ticker}: who owns it`)
-  if (s.error) return missing(s.error) ? <NotFound what={`None of the investors Holdterm follows reports ${ticker} in its latest 13F`} /> : <Failed error={s.error} what={ticker} />
+  if (s.error) return missing(s.error) ? <NotFound what={`None of the investors Holdterm follows reports ${ticker} in its latest 13F`} q={ticker} /> : <Failed error={s.error} what={ticker} />
   if (!s.data) return <PageLoading what={`Loading ${ticker}`} stats={4} rows={12} />
   const d = s.data
   // A successor filer's stock line compares against its own standalone prior 13F; the fund's book
@@ -2801,7 +2807,8 @@ export function Privacy() {
   )
 }
 
-export function NotFound({ what = 'There’s no page at this address' }: { what?: string }) {
+/** `q`: the ticker or name the address asked for, which the search box opens with. */
+export function NotFound({ what = 'There’s no page at this address', q }: { what?: string; q?: string }) {
   title('Not found', true)
   return (
     <div className="page narrow">
@@ -2811,8 +2818,13 @@ export function NotFound({ what = 'There’s no page at this address' }: { what?
           <p className="lede">{what.charAt(0).toUpperCase() + what.slice(1)}.</p>
         </div>
       </div>
+      {/* The search first, already holding what the address asked for, so a typo or an old link is one tap from the
+          right page; then the main sections. */}
+      <div className="nf-search">
+        <SearchBox q={q} label={q ? `Search for “${q}”` : 'Find an investor or a stock'} />
+      </div>
       <div className="filters">
-        <A to="/" className="btn">
+        <A to="/" className="btn ghost">
           Go to the overview
         </A>
         <A to="/funds" className="btn ghost">
@@ -2822,9 +2834,6 @@ export function NotFound({ what = 'There’s no page at this address' }: { what?
           Most owned stocks
         </A>
       </div>
-      <p className="dim">
-        Looking for a stock or an investor? Use the search at the top of the page.
-      </p>
     </div>
   )
 }
