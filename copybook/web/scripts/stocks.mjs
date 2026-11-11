@@ -119,8 +119,8 @@ for (const b of books) {
   // Rank of each position in this fund's share book (1 = largest), for "top 10" crowding counts.
   const rank = new Map([...per.entries()].filter(([, p]) => p.shares > 0).sort((a, z) => z[1].value - a[1].value).map(([k], i) => [k, i + 1]))
   for (const [k, p] of per) {
-    const { change, delta_value } = positionMove(p)
-    stocks.get(k).holders.push({ ...who, rank: rank.get(k) ?? null, shares: p.shares, value: r0(p.value), weight: p.value / total, prev_shares: p.prev_shares, prev_value: r0(p.prev_value), delta_value, change, ...positionFlags(p) })
+    const { change, delta_value, value_change } = positionMove(p)
+    stocks.get(k).holders.push({ ...who, rank: rank.get(k) ?? null, shares: p.shares, value: r0(p.value), weight: p.value / total, prev_shares: p.prev_shares, prev_value: r0(p.prev_value), delta_value, change, ...(value_change != null ? { value_change } : {}), ...positionFlags(p) })
   }
 }
 
