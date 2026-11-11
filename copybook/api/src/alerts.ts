@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { offFilers, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -160,7 +160,7 @@ export const etDay = (t: number) => new Date(t - 5 * 3600_000).toISOString().sli
 // ---------------------------------------------------------------------------------------------
 // Targeting and delivery
 
-import { STOCK_ALERT_TYPES, checkIndex } from './contract';
+import { NO_STOCK_ALERT_TYPES, checkIndex } from './contract';
 export type FilerMeta = Record<string, { featured?: boolean; type?: string | null }>;
 
 /**
@@ -170,9 +170,11 @@ export type FilerMeta = Record<string, { featured?: boolean; type?: string | nul
  * superinvestors stand in for active managers.
  */
 function stockAlerts(meta: FilerMeta, slug: string): boolean {
+  // meta holds tracked funds only (index.json); untracked filers that members follow alert their followers alone.
   const m = meta[slug];
   if (!m) return false;
-  return m.type ? STOCK_ALERT_TYPES.has(m.type) : !!m.featured;
+  if (m.featured) return true;
+  return m.type ? !NO_STOCK_ALERT_TYPES.has(m.type) : false;
 }
 
 /**
@@ -1473,6 +1475,8 @@ export interface Reconciled {
   result: 'pass' | 'fail';
   /** One of ALERT_CLASSES: its worst failed row (rows before totals), matched, or no_rows. */
   class?: AlertClass;
+  /** Emailed rows the after-send cross-filer check found off other filers' price (marked "shown as filed"). */
+  filer_value?: string[];
   rows: number;
   failed: import('./email').CorrectionRow[];
   recipients: number;
@@ -1485,6 +1489,8 @@ export interface Reconciled {
  * split rows are `disclosed`, not mailed again.
  */
 const DISCLOSED_SPLITS = new Set(['0001697850-26-000004', '0001062993-26-005832', '0000315066-26-002964', '0001171200-26-000023', '0001140361-26-042753', '0001386060-26-000054', '0001088875-26-000074', '0001172661-26-004909', '0001062993-26-005826']);
+/** Other alerts named in a /status/ Data entry (Nov 11): Advent's bonds sized from zero, Mizuho Markets' SPY options. */
+const DISCLOSED_ENTRIES = new Set(['0001140361-26-042650', '0001062993-26-005826']);
 type RowClass = 'disclosed' | 'explained' | 'wrong';
 /** One verdict per checked alert (latency.json reconciliation counts each). */
 export const ALERT_CLASSES = ['matched', 'disclosed', 'disclosed_totals', 'explained', 'wrong', 'wrong_totals', 'no_rows'] as const;
@@ -1510,6 +1516,7 @@ function classify(a: Alert13F, rows: Map<string, MoveRow>, failed: import('./ema
     if (DISCLOSED_SPLITS.has(a.accession) && (splits.get(f.cusip) ?? 1) !== 1) return { ...f, class: 'disclosed', why: 'split' };
     if (!f.put_call && netted(f.ticker)) return { ...f, class: 'explained', why: 'cusip_change' };
     if (Math.abs(f.emailed.value_delta - f.v1.value_delta) < 1000) return { ...f, class: 'explained', why: 'rounding' };
+    if (DISCLOSED_ENTRIES.has(a.accession)) return { ...f, class: 'disclosed', why: 'status_entry' };
     return { ...f, class: 'wrong' };
   });
 }
@@ -1522,7 +1529,8 @@ function totalRows(a: Alert13F, sent: Moves[], failed: import('./email').Correct
   const skip = new Set(held.map((h) => rowKey(h)));
   const rows = [...build.entries()].filter(([k]) => !skip.has(k)).map(([, v]) => Number(v.value_delta) || 0);
   const want = { bought: rows.reduce((s, x) => s + Math.max(x, 0), 0), sold: rows.reduce((s, x) => s - Math.min(x, 0), 0) };
-  const off = (x: number, y: number) => Math.abs(x - y) > Math.max(1000, MISMATCH * Math.abs(y));
+  // Tighter than rows: over 1% or $1M, whichever is larger (Acadian's split alert was $203M off, 0.03%, and is disclosed).
+  const off = (x: number, y: number) => Math.abs(x - y) > Math.max(1e6, 0.01 * Math.abs(y));
   const out: import('./email').CorrectionRow[] = [];
   for (const k of ['bought', 'sold'] as const) {
     // Every emailed version (first send, follow-ups): the one furthest from the build, if it's off both as sent and
@@ -1533,14 +1541,22 @@ function totalRows(a: Alert13F, sent: Moves[], failed: import('./email').Correct
         return off(m[`${k}_usd`], want[k]) && off(adj, want[k]);
       })
       .sort((x, y) => Math.abs(y[`${k}_usd`] - want[k]) - Math.abs(x[`${k}_usd`] - want[k]))[0];
-    if (bad) out.push({ cusip: `total:${k}`, ticker: null, name: `Total ${k}`, put_call: null, emailed: { change: 'total', value_delta: Math.round(bad[`${k}_usd`]) }, v1: { change: 'total', value_delta: Math.round(want[k]) }, class: DISCLOSED_SPLITS.has(a.accession) ? 'disclosed' : 'wrong', why: 'totals' });
+    if (bad) out.push({ cusip: `total:${k}`, ticker: null, name: `Total ${k}`, put_call: null, emailed: { change: 'total', value_delta: Math.round(bad[`${k}_usd`]) }, v1: { change: 'total', value_delta: Math.round(want[k]) }, class: DISCLOSED_SPLITS.has(a.accession) || DISCLOSED_ENTRIES.has(a.accession) ? 'disclosed' : 'wrong', why: 'totals' });
   }
   return out;
 }
-const alertClass = (failed: { class?: RowClass; why?: string }[], rows = 1): AlertClass => {
+/**
+ * One class per alert. A /status/ Data entry decides an alert it names: the split entry's alerts are `disclosed`
+ * (a wrong row) or `disclosed_totals` (rows right, totals off by any amount, even under the tolerance).
+ */
+const alertClass = (failed: { class?: RowClass; why?: string }[], rows = 1, accession = ''): AlertClass => {
   const has = (c: RowClass, totals: boolean) => failed.some((f) => f.class === c && (f.why === 'totals') === totals);
   if (!rows) return 'no_rows';
-  return has('wrong', false) ? 'wrong' : has('disclosed', false) ? 'disclosed' : has('wrong', true) ? 'wrong_totals' : has('disclosed', true) ? 'disclosed_totals' : failed.length ? 'explained' : 'matched';
+  if (has('wrong', false)) return 'wrong';
+  if (has('disclosed', false)) return 'disclosed';
+  if (has('wrong', true)) return 'wrong_totals';
+  if (has('disclosed', true) || DISCLOSED_SPLITS.has(accession)) return 'disclosed_totals';
+  return failed.length ? 'explained' : 'matched';
 };
 
 /** Alerts accepted from here get correction emails; earlier ones are checked and logged only. */
@@ -1584,6 +1600,24 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
     }
     const byRow = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter), b.rows);
     const failed = rows.size ? [...byRow, ...totalRows(a, sent, byRow, b.rows, a.held)] : byRow;
+    // The 1.25x cross-filer price check on every emailed row (Cloudflare, the primary poller, sends without it): a row
+    // whose own value per share is off other filers' is marked in the archive "shown as filed". No email: the figure is
+    // what the filer reported, and it matches the published data.
+    const filerValue = await filerValueRows(env, a, rows);
+    if (filerValue.length) {
+      const keys = new Set(filerValue.map((r) => rowKey(r)));
+      for (const day of days) {
+        const raw = await env.DB.get(`digest:${day}`);
+        if (!raw) continue;
+        const store = JSON.parse(raw) as DigestDay;
+        let hit = false;
+        for (const x of store.filings) {
+          if (x.accession !== a.accession || !x.moves) continue;
+          for (const list of [x.moves.new, x.moves.added, x.moves.trimmed, x.moves.exited]) for (const r of list) if (keys.has(rowKey(r)) && !r.filer_value) (r.filer_value = true), (hit = true);
+        }
+        if (hit) await env.DB.put(`digest:${day}`, JSON.stringify(store), { expirationTtl: 31 * 86400 });
+      }
+    }
     // Who got it: the delivery log, as /ops/delivery reads it.
     const rec = await deliveryRecord(env, a.accession, now);
     const members = new Map((await listMembers(env)).map((m) => [m.customer, m]));
@@ -1609,13 +1643,21 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
         }
       }
     }
-    out.push({ accession: a.accession, slug: a.slug, quarter: a.quarter, accepted: a.accepted ?? null, checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), build: b.build, result: failed.length ? 'fail' : 'pass', class: alertClass(failed, rows.size), rows: rows.size, failed, recipients: rec.counts.members, mailed });
+    out.push({ accession: a.accession, slug: a.slug, quarter: a.quarter, accepted: a.accepted ?? null, checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), build: b.build, result: failed.length ? 'fail' : 'pass', class: alertClass(failed, rows.size, a.accession), rows: rows.size, failed, ...(filerValue.length ? { filer_value: filerValue.map((r) => r.ticker ?? r.cusip) } : {}), recipients: rec.counts.members, mailed });
   }
   if (out.length && !only?.to) {
     const keep = log.filter((x) => !out.some((o) => o.accession === x.accession));
     await env.DB.put(RECONCILED, JSON.stringify([...out, ...keep].slice(0, 500)));
   }
   return { checked: out.map((x) => ({ accession: x.accession, result: x.result, rows: x.rows, failed: x.failed.length, mailed: x.mailed })), pending };
+}
+
+/** Emailed stock rows over 1.25x off the median price other filers report for the CUSIP this quarter (gene only). */
+async function filerValueRows(env: Env, a: Alert13F, rows: Map<string, MoveRow>): Promise<MoveRow[]> {
+  const list = [...rows.values()].filter((r) => r.change !== 'exited');
+  if (!list.length) return [];
+  const cons = await consensusFor(env, a.quarter, list.map((r) => r.cusip));
+  return list.filter((r) => offFilers(r, cons.get(r.cusip)));
 }
 
 /** Alerted rows against the build's: the rows that differ in direction, sign, or by over 10% in value, largest first. */
@@ -1673,7 +1715,7 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
     }
     const byRow = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter), b.rows);
     const sent = rows.size ? [...byRow, ...totalRows(a, versions, byRow, b.rows, a.held)] : byRow;
-    const item: Record<string, unknown> = { accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, rows: rows.size, as_sent: { result: sent.length ? 'fail' : 'pass', class: alertClass(sent, rows.size), failed: sent.map(row) } };
+    const item: Record<string, unknown> = { accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, rows: rows.size, as_sent: { result: sent.length ? 'fail' : 'pass', class: alertClass(sent, rows.size, a.accession), filer_value: (await filerValueRows(env, a, rows)).map((r) => r.ticker ?? r.cusip), failed: sent.map(row) } };
     if (o.recompute) {
       try {
         const cik = a.sec_url.match(/\/edgar\/data\/(\d+)\//)?.[1] ?? '';
@@ -1715,6 +1757,8 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
     failed: log.filter((x) => x.result === 'fail').length,
     // What a reader needs: matched, already disclosed on /status/, explained (no wrong figure), and wrong.
     ...Object.fromEntries(ALERT_CLASSES.map((k) => [k, log.filter((x) => (x.class ?? (x.result === 'pass' ? 'matched' : 'wrong')) === k).length])),
+    // Emailed rows the after-send cross-filer check marked "shown as filed".
+    filer_value_rows: log.reduce((n, x) => n + (x.filer_value?.length ?? 0), 0),
     held_pending: (JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as unknown[]).length,
     since: log.length ? log.reduce((m, x) => (x.checked_at < m ? x.checked_at : m), log[0].checked_at) : null,
     // Every row the gate held: still held (outcome null), then how each ended.
@@ -1722,7 +1766,7 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
       ...(JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as Alert13F[]).flatMap((a) => (a.held ?? []).map((h): HeldEnd => ({ accession: a.accession, ticker: h.ticker ?? null, cusip: h.cusip, rule: h.reason, held_at: a.accepted ?? a.filing_date, released_at: null, outcome: null }))),
       ...(JSON.parse((await env.DB.get(HELD_LOG)) ?? '[]') as HeldEnd[]),
     ],
-    recent: log.map((x) => ({ accession: x.accession, slug: x.slug, quarter: x.quarter, checked_at: x.checked_at, result: x.result, class: x.class ?? null, rows: x.rows, failed_rows: x.failed.length, corrections_sent: x.mailed })),
+    recent: log.map((x) => ({ accession: x.accession, slug: x.slug, quarter: x.quarter, checked_at: x.checked_at, result: x.result, class: x.class ?? null, rows: x.rows, failed_rows: x.failed.length, filer_value_rows: x.filer_value?.length ?? 0, corrections_sent: x.mailed })),
   };
 }
 

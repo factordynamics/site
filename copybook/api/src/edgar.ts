@@ -392,6 +392,16 @@ export const OFF_UNITS = 100;
 const MIN_PRICE_CHECK_USD = 50_000;
 
 /**
+ * The after-send check's cross-filer test on a row as emailed: its value per share over 1.25x off the median other
+ * filers report this quarter (stock lines of $50K or more). The figure is as filed; true means the filer's looks wrong.
+ */
+export function offFilers(r: MoveRow, c?: Consensus): boolean {
+  if (r.put_call || r.prn || !c?.cur || r.shares <= 0 || r.value < MIN_PRICE_CHECK_USD) return false;
+  const ps = r.value / r.shares;
+  return ps / c.cur > OFF_FILERS || c.cur / ps > OFF_FILERS;
+}
+
+/**
  * The publish gate for one move row, before it is sent: null when it passes, else why it is held.
  * - units: this line's or the prior line's value per share is 100x or more off other filers' median or its own prior.
  * - price_vs_filers: over 1.25x off other filers' median value per share for that CUSIP and quarter (ingest's

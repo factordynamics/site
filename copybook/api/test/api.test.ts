@@ -1927,12 +1927,15 @@ describe('copybook api', () => {
     // Off the other filers' quarter-end price by over 1.25x (a 3:2 split the filer applied to its count only) is held.
     const off = [pos('APH', '032095101', 922_000, 108_376_851), jq2[1]];
     expect(gateMoves(computeMoves(off, jq2, undefined, new Map()), jq2, new Map(), new Map([['032095101', { cur: 176.4, prev: 176.32 }]])).held.map((h) => h.reason)).toEqual(['price_vs_filers']);
-    // Stock-match 13F alerts come from hedge funds and long-only managers (ingest's type names since Nov 9), not banks.
+    // Stock-match 13F alerts come from every tracked fund whatever ingest types it (Olstein, Gabelli and Advent were
+    // retyped long_only -> wealth on Nov 11), except banks, index funds, insurers, pensions and sovereign funds; an
+    // untracked filer (not in index.json's meta) alerts only its followers.
     {
       const f = { investors: [], stocks: ['APH'], owned: [], onboarded: true } as never;
       const fl = (slug: string) => ({ slug, slugs: [slug], tickers: ['APH'], accession: slug }) as never;
-      const got = forMember({ alerts: 'followed' } as never, f, [fl('lo'), fl('hf'), fl('bk')], [], { lo: { type: 'long_only' }, hf: { type: 'hedge_fund' }, bk: { type: 'bank' } });
-      expect(got.filings.map((x: { slug: string }) => x.slug)).toEqual(['lo', 'hf']);
+      const meta = { lo: { type: 'long_only' }, hf: { type: 'hedge_fund' }, wl: { type: 'wealth' }, ot: { type: 'other' }, bk: { type: 'bank' }, ix: { type: 'index' }, fb: { type: 'bank', featured: true } };
+      const got = forMember({ alerts: 'followed' } as never, f, ['lo', 'hf', 'wl', 'ot', 'bk', 'ix', 'fb', 'untracked'].map(fl), [], meta);
+      expect(got.filings.map((x: { slug: string }) => x.slug)).toEqual(['lo', 'hf', 'wl', 'ot', 'fb']);
     }
     // A bond line (PRN) whose prior was stored with shares 0 and its principal: Advent's read "added +$141M" from zero.
     const bond = (amt: number, value: number) => ({ ...pos('BOND', '00000BND1', 0, value), shares_type: 'PRN', principal_amount: amt });
@@ -1949,7 +1952,8 @@ describe('copybook api', () => {
     const accepted = new Date(now - 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
     await putMember('cus_j', 'copybook-test-j@fldubai.com', 'active', ['jensen']);
     await putFollows('cus_j', { investors: ['jensen'] });
-    consensusQ = { '2026Q3': { '032095101': 84.3 }, '2026Q2': { '032095101': 176.32 } };
+    // MSFT's emailed $512.88 a share is 1.28x the $400 other filers report: the after-send check marks it.
+    consensusQ = { '2026Q3': { '032095101': 84.3, '594918104': 400 }, '2026Q2': { '032095101': 176.32 } };
     const ACC = '0001171200-26-000023';
     const base = { slug: 'jensen', slugs: ['jensen'], manager: 'Jensen', name: 'Jensen Investment Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: accepted.slice(0, 10), accession: ACC, sec_url: 'https://www.sec.gov/Archives/edgar/data/1171200/x-index.html', accepted, tickers: [] };
     const row = (ticker: string, cusip: string, change: string, shares: number, prev_shares: number, value: number, value_delta: number) => ({ change, ticker, display_name: null, issuer: ticker, cusip, put_call: null, shares, prev_shares, value, value_delta, delta_pct_of_book: value_delta / 3.2e9 });
@@ -2015,6 +2019,9 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['copybook-test-j@fldubai.com']);
     const store = JSON.parse((await env.DB.get(`digest:${day}`))!);
     expect(store.filings[0].corrected.rows.map((x: { ticker: string | null; name: string }) => x.ticker ?? x.name)).toEqual(['BOND', 'APH']);
+    // The after-send cross-filer check: MSFT is marked "shown as filed" in the archive, never mailed (it is as filed).
+    expect(store.filings[0].moves.added.map((x: { ticker: string; filer_value?: boolean }) => [x.ticker, !!x.filer_value])).toEqual([['APH', false], ['MSFT', true], ['SPY', false], ['BOND', false]]);
+    expect(sent[0]?.text).not.toContain('MSFT');
     // Checked once: the next run doesn't mail again; the log feeds latency.json's reconciliation.
     sent = [];
     expect((await reconcileAlerts(env, now)).checked).toEqual([]);
@@ -2024,7 +2031,7 @@ describe('copybook api', () => {
     expect([dry.total, dry.as_sent]).toEqual([1, { matched: 0, disclosed: 0, disclosed_totals: 0, explained: 0, wrong: 1, wrong_totals: 0, no_rows: 0, other: 0 }]);
     expect((dry.alerts as { as_sent: { failed: { ticker: string | null; cusip: string; class: string }[] } }[])[0].as_sent.failed.map((f) => [f.ticker ?? f.cusip, f.class])).toEqual([['BOND', 'wrong'], ['APH', 'wrong'], ['total:bought', 'disclosed']]);
     expect(sent).toHaveLength(0);
-    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, matched: 0, disclosed: 0, explained: 0, wrong: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', class: 'wrong', failed_rows: 3, corrections_sent: 1 }] });
+    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, matched: 0, disclosed: 0, explained: 0, wrong: 1, filer_value_rows: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', class: 'wrong', failed_rows: 3, filer_value_rows: 1, corrections_sent: 1 }] });
   });
 
   it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {

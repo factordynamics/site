@@ -11,6 +11,13 @@ export const FILER_TYPES = ['hedge_fund', 'long_only', 'index', 'bank', 'insuran
 /** Filer types whose 13F moves alert members who watch or own the stock without following the fund. */
 export const STOCK_ALERT_TYPES: ReadonlySet<string> = new Set(['hedge_fund', 'long_only']);
 
+/**
+ * Institutions whose books would flood stock watchers (a bank's or index sponsor's 13F changes most of its lines each
+ * quarter). Every other tracked fund keeps stock-match alerts whatever ingest types it (wealth, other: Gabelli,
+ * Olstein and Advent were retyped from long-only on Nov 11), so a reclassification can't silently stop them.
+ */
+export const NO_STOCK_ALERT_TYPES: ReadonlySet<string> = new Set(['bank', 'index', 'insurance', 'pension', 'sovereign']);
+
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 
