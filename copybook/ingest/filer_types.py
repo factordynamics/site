@@ -398,8 +398,13 @@ def apply_overrides() -> int:
     return 0
 
 
+# The Form ADV reclass is published only once accepted (PM test list 100%, 30-filer sample, checked on a full run's
+# output): until COPYBOOK_TYPES_RECLASS=1, full runs keep the last published types plus the hand-checked cases.
+RECLASS = os.environ.get("COPYBOOK_TYPES_RECLASS") == "1"
+
+
 def main() -> int:
-    if "--overrides" in sys.argv:
+    if "--overrides" in sys.argv or not RECLASS:
         return apply_overrides()
     filers_doc = read(DATA / "filers.json") or {"filers": []}
     curated = {m["cik"]: m for m in (read(DATA / "index.json") or {}).get("managers") or []}
@@ -413,8 +418,9 @@ def main() -> int:
     try:
         index = adviser_index(load_advisers())
     except Exception as exc:  # noqa: BLE001  (without ADV no filer becomes a hedge fund except hand-checked ones)
-        print(f"::warning::Form ADV data unavailable: {exc}")
-        index = None
+        # Without ADV no filer but the hand-checked ones would be a hedge fund: keep the published types instead.
+        print(f"::warning::Form ADV data unavailable ({exc!r}); keeping the last published types")
+        return apply_overrides()
     everyone = filers_doc["filers"] + [{"cik": c, "name": m.get("name") or m.get("manager")} for c, m in curated.items()]
     seen: dict[str, int] = {}
     for f in everyone:
