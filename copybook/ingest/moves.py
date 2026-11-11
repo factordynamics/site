@@ -1368,6 +1368,23 @@ def main() -> int:
             if r.get("unreliable") or r.get("suspect_units") or r.get("price_outlier"):
                 row[9], row[14], row[17] = "unknown", None, None
             per_quarter.setdefault(q, []).append(row)
+    # Log only (lead, Nov 11; the fund-page fix is the weekend window): curated-fund lines hl/ holds but the fund page
+    # ({slug}.json, build.py) counts as a trade, by reason, with the $ the page shows.
+    gap: dict[str, list] = {}
+    for cik in curated:
+        if cik not in LATEST or cik not in HLQ:
+            continue
+        for r0, r1 in zip(LATEST[cik], align(cik, LATEST[cik])):
+            if r0.get("change") in TRADES and not (r0.get("unreliable") or r0.get("suspect_units") or r0.get("price_outlier")) \
+                    and r1.get("unreliable") and r0.get("shares_type") != "PRN":
+                g = gap.setdefault(r1.get("held_reason") or "units", [0, 0, []])
+                g[0] += 1
+                g[1] += abs(r0.get("value_delta") or 0)
+                g[2].append((abs(r0.get("value_delta") or 0), curated[cik].get("slug"), r0.get("cusip"), r0.get("change")))
+    print(f"moves: curated lines held in hl/ but counted on their fund page: {sum(g[0] for g in gap.values())}; by reason: "
+          + "; ".join(f"{k} {g[0]} lines |$| {g[1]:,.0f} (largest: " + ", ".join(
+              f"{sl} {c} {ch} {v:,.0f}" for v, sl, c, ch in sorted(g[2], reverse=True)[:5]) + ")"
+              for k, g in sorted(gap.items(), key=lambda kv: -kv[1][1])), flush=True)
     off = parity_gate(per_quarter)
     print(f"moves: parity gate: {len(NETQ) - len(off)}/{len(NETQ)} issuers' hl/ net = the sum of their counted "
           f"changes/ rows; off: {off[:5]}", flush=True)
