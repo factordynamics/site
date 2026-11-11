@@ -1202,7 +1202,7 @@ describe('copybook api', () => {
     await env.DB.put('alerts:pending-moves', '[]');
     expect((await buildStatus(env, min(8), s)).alerts_13f.state).toBe('ok');
     // Drills and incidents that weren't restarts are listed too (the 16:01 backup revocation, with its fix).
-    expect(st.restarts.events.map((e: { kind: string; started_at: string }) => `${e.kind} ${e.started_at.slice(11, 16)}`)).toEqual(['planned 16:48', 'incident 16:01', 'planned 16:01']);
+    expect(st.restarts.events.map((e: { kind: string; started_at: string }) => `${e.kind} ${e.started_at.slice(11, 16)}`)).toEqual(['planned 16:48', 'incident 16:01', 'planned 16:01', 'incident 15:06']);
   });
 
   it("Friday email: 'Your follows' leads (a followed 13F in the alert's format, its 10 largest rows; else the expected date); the welcome names the follow; weekend budget", async () => {
