@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from './config'
+import { api, apiReady, rereadApi } from './config'
 import { A } from './lib'
 
 // Paid alerts account, against the alerts API (POST /session, /login, /portal; GET /me; GET/PUT /follows).
@@ -28,7 +28,12 @@ async function call<T>(path: string, init: { method?: string; body?: unknown; au
     if (!t) throw new Error('sign in again')
     headers.Authorization = `Bearer ${t}`
   }
-  const r = await fetch(api + path, { method: init.method ?? (init.body !== undefined ? 'POST' : 'GET'), headers, body: init.body !== undefined ? JSON.stringify(init.body) : undefined }).catch(() => null)
+  // The base comes from api.json at load (config.ts); wait for it, and if the host is unreachable, re-read it once
+  // in case the tunnel moved or a failover pinned another host since the page opened.
+  await apiReady
+  const send = () => fetch(api + path, { method: init.method ?? (init.body !== undefined ? 'POST' : 'GET'), headers, body: init.body !== undefined ? JSON.stringify(init.body) : undefined }).catch(() => null)
+  let r = await send()
+  if (!r && (await rereadApi())) r = await send()
   // Over quota (429), down (5xx) or unreachable: the rest of the site still works; say so in plain words.
   if (!r || r.status === 429 || r.status >= 500) throw new Error(UNAVAILABLE)
   if (r.status === 401 && init.auth) signOut()
