@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from 'react'
+import { Component, type MouseEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { initials } from '../lib/data'
 
@@ -137,6 +137,26 @@ export function NotCounted({ n, className = 'mt-3' }: { n: number; className?: s
       </Link>
     </p>
   )
+}
+
+/** Keeps one bad section (a null in a data file) from blanking the page: it shows a line in its place instead.
+ *  data-boundary-error lets the smoke test fail the build on it. */
+export class Boundary extends Component<{ children: ReactNode; full?: boolean }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  componentDidCatch(e: unknown) {
+    console.error(e)
+  }
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <p data-boundary-error className={`text-[14px] text-ink-3 ${this.props.full ? 'container-x py-16' : ''}`}>
+        This part of the page didn’t load. Refresh to try again.
+      </p>
+    )
+  }
 }
 
 export function Skeleton({ className = '' }: { className?: string }) {

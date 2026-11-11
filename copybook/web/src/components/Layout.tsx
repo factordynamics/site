@@ -4,7 +4,7 @@ import { getToken, isPaying, useMemberState } from '../lib/account'
 import { quarterLabel } from '../lib/data'
 import { seasonNow } from '../lib/stocks'
 import { SearchBox } from './Search'
-import { Button, Wordmark } from './ui'
+import { Boundary, Button, Wordmark } from './ui'
 import { UpdatePrompt, VerifyNotice } from './UpdatePrompt'
 
 const NAV = [
@@ -129,7 +129,9 @@ export function Layout() {
       <main id="main" className="flex-1">
         {/* Lazy pages: the footer stays below the fold while their code loads. */}
         <Suspense fallback={<div className="min-h-screen" />}>
-          <Outlet />
+          <Boundary key={pathname} full>
+            <Outlet />
+          </Boundary>
         </Suspense>
       </main>
       <Footer />

@@ -269,7 +269,7 @@ export function edgarClosed(now = Date.now()) {
   return CLOSED.find((c) => now >= Date.parse(`${c.day}T05:00:00Z`) && now < Date.parse(c.until)) ?? null
 }
 
-export type SplitLog = { ticker: string; name: string; quarter: string; ratio: string; treatment: 'adjusted' | 'excluded' | 'not treated'; holders: number; share_ratio: number; price_ratio: number; xbrl_shares_ratio: number | null; source: string }
+export type SplitLog = { ticker: string; name: string; quarter: string; ratio: string; treatment: 'adjusted' | 'excluded' | 'not treated'; holders: number | null; share_ratio: number | null; price_ratio: number | null; xbrl_shares_ratio: number | null; source: string }
 export const loadSplitLog = () => getJSON<{ splits: SplitLog[] }>(`${D}splits.json`).then((d) => d.splits)
 
 export const loadStockIndex = () => getJSON<{ funds: number; stocks: StockRef[] }>(`${D}stocks.json`)

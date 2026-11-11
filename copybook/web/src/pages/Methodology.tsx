@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Panel } from '../components/ui'
+import { Boundary, Panel } from '../components/ui'
 import { api } from '../config'
 import { DATA, dateLabel, loadIndex, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { HISTORY_EXACT, loadSplitLog, stockPath } from '../lib/stocks'
@@ -234,6 +234,9 @@ const WITH_TYPES: (Entry & { from: string })[] = [
   },
 ]
 
+/** A ratio in the splits table: "—" when the row has none (issuer-filing rows carry no price ratio or holder count). */
+const ratioCell = (r: number | null | undefined) => (r == null ? '—' : r >= 0.1 ? r.toFixed(2) : String(+r.toPrecision(2)))
+
 export function Methodology() {
   useTitle('Methodology · Copybook')
   const log = useAsync(() => fetch(`${DATA}changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ updated_at?: string; entries: Entry[] }>) : null)), [])
@@ -272,7 +275,9 @@ export function Methodology() {
           {SECTIONS.map((s) => (
             <section key={s.id} id={s.id} className="scroll-mt-24">
               <h2 className="text-[22px] font-semibold tracking-[-0.02em]">{s.title}</h2>
-              <div className="prose-cb mt-3 space-y-3 text-[15.5px] leading-relaxed text-ink-2 [&_li]:pl-1 [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5">{s.body}</div>
+              <div className="prose-cb mt-3 space-y-3 text-[15.5px] leading-relaxed text-ink-2 [&_li]:pl-1 [&_ol]:list-decimal [&_ol]:space-y-1.5 [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:space-y-1.5 [&_ul]:pl-5">
+                <Boundary>{s.body}</Boundary>
+              </div>
             </section>
           ))}
 
@@ -290,6 +295,7 @@ export function Methodology() {
               </ul>
             </div>
             <Panel className="mt-4">
+              <Boundary>
               {!splits.data ? (
                 <p className="text-[14px] text-ink-3">Loading…</p>
               ) : (
@@ -317,18 +323,19 @@ export function Methodology() {
                           </td>
                           <td className="px-3 py-2 text-ink-2">{quarterLabel(x.quarter)}</td>
                           <td className={`px-3 py-2 ${x.treatment === 'excluded' ? 'text-[#8a5a0b]' : 'text-ink-2'}`}>{x.treatment === 'adjusted' ? 'Adjusted' : x.treatment === 'excluded' ? 'Not counted' : 'Not treated'}
-                            <span className="block text-[12px] text-ink-3">{x.source.startsWith('Ingest') ? 'Pipeline' : 'Holder check'}</span>
+                            <span className="block text-[12px] text-ink-3">{/issuer filing/i.test(x.source ?? '') ? 'Issuer filing' : (x.source ?? '').startsWith('Ingest') ? 'Pipeline' : 'Holder check'}</span>
                           </td>
-                          <td className="num px-3 py-2 text-right">{x.holders}</td>
-                          <td className="num px-3 py-2 text-right">{x.share_ratio.toFixed(2)}</td>
-                          <td className="num px-3 py-2 text-right">{x.price_ratio.toFixed(2)}</td>
-                          <td className="num px-5 py-2 text-right text-ink-3 md:px-6">{x.xbrl_shares_ratio != null ? x.xbrl_shares_ratio.toFixed(2) : '—'}</td>
+                          <td className="num px-3 py-2 text-right">{x.holders ?? '—'}</td>
+                          <td className="num px-3 py-2 text-right">{ratioCell(x.share_ratio)}</td>
+                          <td className="num px-3 py-2 text-right">{ratioCell(x.price_ratio)}</td>
+                          <td className="num px-5 py-2 text-right text-ink-3 md:px-6">{ratioCell(x.xbrl_shares_ratio)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
+              </Boundary>
             </Panel>
             <p className="mt-2 text-[13px] text-ink-3">Ratios are medians across holders that reported the stock in both quarters: shares now ÷ shares before, and price per share now ÷ before. XBRL shares is the company’s own shares-outstanding change, where reported.</p>
           </section>

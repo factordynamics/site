@@ -47,6 +47,8 @@ async function check(label, path) {
     return fail(`${label}: ${len ? 'page content missing' : 'blank root'} at ${page.url()}`)
   }
   if (errors.length) return fail(`${label}: page error: ${errors.splice(0).join(' | ')}`)
+  // A section that threw is caught by its error boundary, so it shows no page error: look for its fallback.
+  if (await page.locator('[data-boundary-error]').count()) return fail(`${label}: a section failed to render at ${page.url()}`)
   console.log(`✓ ${label} ${new URL(page.url()).pathname}`)
 }
 // Click a visible in-site link to the path, as a reader would (header, body or footer).
@@ -79,6 +81,11 @@ await go('Fund page', '/investors/', 'main a[href^="/investors/"][href$="/"]:not
 for (const path of ['/investors/', '/pricing/', '/security/']) {
   await page.goBack()
   await check('Back', path)
+}
+// Pages read from d/ files that the links above don't reach (a null in splits.json blanked /methodology/).
+for (const path of ['/methodology/', '/api/', '/flow/', '/weekly/']) {
+  await page.goto(`${origin}${path}`)
+  await check('Direct', path)
 }
 
 await browser.close()
