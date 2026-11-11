@@ -2567,7 +2567,7 @@ p a,
 }
 .ap-cta {
   display: grid;
-  grid-template-columns: 1fr minmax(300px, 440px);
+  grid-template-columns: 1fr minmax(280px, 360px);
   gap: 32px;
   align-items: center;
   background: var(--acc-soft);
@@ -2654,17 +2654,36 @@ p a,
 .ap-inbox .ap-note-top {
   color: var(--fg2);
 }
-.ap-inbox .ap-note-body {
-  color: var(--fg2);
-  -webkit-line-clamp: 2;
-}
-.ap-soon {
-  margin: 14px 0 0;
-  color: var(--fg2);
+.ap-inbox .ap-note-title {
   font-size: 14px;
+  line-height: 1.35;
 }
-.ap-soon .tag {
-  margin-right: 6px;
+/* One line of preview under each subject, as a mail app shows it, so the subjects carry the inbox. */
+.ap-inbox .ap-note-body {
+  color: var(--dim);
+  -webkit-line-clamp: 1;
+  margin-top: 3px;
+}
+/* The channels still to come: a dashed card next to the ones included today. */
+.ap-channel.ap-channel-soon {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line2);
+  box-shadow: none;
+}
+.ap-channel-soon p {
+  color: var(--dim);
+}
+.ap-cta-act {
+  display: grid;
+  gap: 10px;
+  max-width: 360px;
+  width: 100%;
+  justify-self: end;
+}
+.ap-cta-act p {
+  margin: 0;
+  text-align: center;
 }
 /* Phone lock screen with push notifications. */
 .ap-phone {
@@ -2967,6 +2986,10 @@ p a,
   }
   .ap-cta {
     padding: 22px 18px;
+  }
+  .ap-cta-act {
+    max-width: none;
+    justify-self: stretch;
   }
   .ap-fields,
   .ap-sl-fields {
