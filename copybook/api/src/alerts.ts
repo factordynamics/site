@@ -37,6 +37,9 @@ export interface Alert13F {
   tickers: string[];
   /** The moves for a filing already alerted without them. */
   followup?: boolean;
+  /** An operator's hand-off replay: only these (test) members get it, timed from `replay_at`, never in latency.json. */
+  replay_to?: string[];
+  replay_at?: string;
   /** A non-curated filer: only members who follow it get it, never "every investor". */
   extra?: boolean;
   /** Largest holdings, when there is no prior quarter to diff against. */
@@ -1089,11 +1092,23 @@ async function pendingFollowups(env: Env, now: number, movesFor = recentMoves(en
 async function sendFollowups(env: Env, ready: Alert13F[], now: number): Promise<Record<string, unknown>> {
   const { claimOnce } = await import('./failover');
   const mine: Alert13F[] = [];
-  for (const f of ready) if (await claimOnce(env, `moves/${f.accession}`, now)) mine.push(f);
-  if (!mine.length) return {};
+  const replays: Record<string, unknown>[] = [];
+  for (const f of ready) {
+    if (f.replay_to?.length) {
+      if (!(await claimOnce(env, `moves/replay/${f.accession}/${f.replay_at}`, now))) continue;
+      const r = await deliver(env, [f], [], now, new Set(f.replay_to));
+      const sent = Date.now();
+      const row = { accession: f.accession, queued_at: f.replay_at, sent_at: new Date(sent).toISOString(), seconds: f.replay_at ? Math.round((sent - Date.parse(f.replay_at)) / 1000) : null, members: f.replay_to.length, emails: r.emails, mail: r.mail };
+      await env.DB.put('alerts:moves-replays', JSON.stringify([row, ...(JSON.parse((await env.DB.get('alerts:moves-replays')) ?? '[]') as unknown[])].slice(0, 50)));
+      replays.push(row);
+      continue;
+    }
+    if (await claimOnce(env, `moves/${f.accession}`, now)) mine.push(f);
+  }
+  if (!mine.length) return replays.length ? { replays } : {};
   const sent = await deliver(env, mine, [], now);
   await logLatency(env, mine.map((f) => ({ ...f, kind: '13f', followup: true })), Date.now());
-  return { followups: { filings: mine.map((f) => f.slug), ...sent } };
+  return { followups: { filings: mine.map((f) => f.slug), ...sent }, ...(replays.length ? { replays } : {}) };
 }
 
 /** Changed rows kept on the alert: $100K and up, largest first, at most 400 (owned and watched names come from these). */
@@ -1142,8 +1157,9 @@ export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promi
   if (failed.length) await env.DB.put('host:moves-last', JSON.stringify({ at: new Date(now).toISOString(), failed }));
   if (!ready.length) return { pending: pending.length, failed };
   // Take the sent ones off the list as it is now (Cloudflare may have added filings meanwhile).
-  const done = new Set(ready.map((r) => r.accession));
-  const left = (JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).filter((x) => !done.has(x.accession));
+  const key = (x: Alert13F) => `${x.accession}|${x.replay_at ?? ''}`;
+  const done = new Set(ready.map(key));
+  const left = (JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).filter((x) => !done.has(key(x)));
   if (left.length) await env.DB.put('alerts:pending-moves', JSON.stringify(left));
   else await env.DB.delete('alerts:pending-moves');
   return { pending: pending.length, ...(await sendFollowups(env, ready, now)), ...(failed.length ? { failed } : {}) };

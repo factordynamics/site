@@ -290,7 +290,7 @@ export const WHY: Record<string, string> = {
   feature: 'Missing a feature I need',
   alerts: 'Alerts too slow or too noisy',
   temporary: 'Only needed it for a while',
-  seasonal: 'Seasonal: nothing happens between filings',
+  seasonal: 'Only need it in filing season',
   other: 'Something else',
 };
 
@@ -442,10 +442,13 @@ export async function businessSummary(env: Env, now: number) {
     if (m.cancel_at_period_end) cancelling++;
   }
   const reasons: Record<string, number> = {};
+  // Real members' reasons only: test and comped members' (reviewers' runs) never count as churn.
+  const real = new Set(members.filter((m) => billable(m)).map((m) => m.customer));
   let cursor: string | undefined;
   do {
     const page = await env.DB.list({ prefix: 'why:', cursor });
     for (const k of page.keys) {
+      if (!real.has(k.name.slice(4))) continue;
       const r = (JSON.parse((await env.DB.get(k.name)) ?? 'null') as { reason?: string } | null)?.reason;
       if (r) reasons[r] = (reasons[r] ?? 0) + 1;
     }

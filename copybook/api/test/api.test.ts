@@ -740,6 +740,23 @@ describe('copybook api', () => {
     recentMoves = [{ accession: big, moves: { bought_usd: 3e8, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] } }];
     await cron(17);
     expect(sent).toHaveLength(0);
+
+    // The operator's hand-off replay (FMR's): test members only, to them alone, timed apart from live latency.
+    await putMember('t', 'copybook-test-replay@fldubai.com', 'active', ['dan-loeb']);
+    await putFollows('t', { investors: ['dan-loeb'], stocks: [] });
+    const rq = (b: Record<string, unknown>) => handleRequest(new Request('https://api.test/ops/moves-requeue', { method: 'POST', body: JSON.stringify(b), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env);
+    expect((await rq({ accessions: [big], replay_to: ['n'] })).status).toBe(400);
+    expect(await (await rq({ accessions: [big], replay_to: ['t'] })).json()).toMatchObject({ ok: true, queued: [big] });
+    const logged = JSON.parse((await env.DB.get('alerts:latency'))!).length;
+    await geneMoves(env, Date.now());
+    expect(sent.map((m) => m.to[0])).toEqual(['copybook-test-replay@fldubai.com']);
+    expect(sent[0].text).toContain('New: MICROSOFT CORP +$300.0M');
+    expect(JSON.parse((await env.DB.get('alerts:latency'))!).length).toBe(logged);
+    const rp = await (await handleRequest(new Request('https://api.test/ops/moves-replays', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
+    expect(rp.replays).toMatchObject([{ accession: big, members: 1, emails: 1 }]);
+    sent = [];
+    await geneMoves(env, Date.now());
+    expect(sent).toHaveLength(0);
   });
 
   it('two pollers: Cloudflare polls, gene backs it up; member changes and handled filings sync both ways; a filing both see is sent once', async () => {
@@ -3241,6 +3258,10 @@ describe('copybook api', () => {
     expect(sent[0].text).not.toContain('One question');
     for (const k of ['cus:told', 'why:told', 'email:told@example.com']) await env.DB.delete(k);
 
+    // A reviewer's reason on a test member (retail's 01:44 "Reviewer test") is never churn.
+    await env.DB.put('cus:cus_rv', JSON.stringify({ customer: 'cus_rv', email: 'copybook-test-rv@fldubai.com', status: 'active', plan: 'copy', interval: 'monthly', subscription: 'sub_rv', alerts: [], comped: true, test: true }));
+    await env.DB.put('why:cus_rv', JSON.stringify({ reason: 'seasonal', via: 'email', at: new Date().toISOString() }));
+
     const pub = await (await call('/health')).json();
     expect(pub).not.toHaveProperty('business');
     expect(pub).not.toHaveProperty('fund_requests');
@@ -3248,6 +3269,7 @@ describe('copybook api', () => {
     const b = (await (await privateHealth()).json()).business;
     // Holdterm counts as its own plan in the business numbers (its cancel too), though it gets no Copybook email.
     expect(b).toMatchObject({ trials: 2, cancellations_scheduled: 2, fund_seats: 1, comped: 2, cancel_reasons: { price: 1 } });
+    expect(b.cancel_reasons).toEqual({ price: 1 });
     expect(b.by_plan).toEqual({ copy_monthly: 3, holdterm_monthly: 1 });
     expect(JSON.stringify(b)).not.toMatch(/@/);
   });

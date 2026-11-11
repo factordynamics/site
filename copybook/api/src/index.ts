@@ -591,22 +591,37 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
 
   // Operator: 13Fs already alerted without moves (before moves_pending existed) go back on gene's moves queue.
+  // With replay_to (test members only): a hand-off replay of an already-sent 13F, to those members alone, timed from
+  // now (GET /ops/moves-replays) and never logged as live latency.
   if (req.method === 'POST' && path === '/ops/moves-requeue') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
-    const want = new Set(((await body(req)).accessions as string[] | undefined) ?? []);
+    const b = await body(req);
+    const want = new Set((b.accessions as string[] | undefined) ?? []);
+    const replayTo = Array.isArray(b.replay_to) ? (b.replay_to as string[]) : null;
+    if (replayTo) {
+      for (const c of replayTo) {
+        const m = await getMember(env, c);
+        if (!m || !(m.test || testAddress(m.email))) return json({ ok: false, error: `replay_to: test members only (${c})`, code: 'bad_request' }, 400, h);
+      }
+    }
+    const replayAt = new Date().toISOString();
     const pending = JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[];
-    const have = new Set(pending.map((p) => p.accession));
+    const have = new Set(replayTo ? [] : pending.map((p) => p.accession));
     for (let d = 0; d < 7 && want.size > have.size; d++) {
       const day = JSON.parse((await env.DB.get(`digest:${etDay(Date.now() - d * 86_400_000)}`)) ?? '{"filings":[]}') as { filings: Alert13F[] };
       for (const f of day.filings) {
-        if (!want.has(f.accession) || have.has(f.accession) || f.followup || f.moves) continue;
+        if (!want.has(f.accession) || have.has(f.accession) || f.followup || (f.moves && !replayTo)) continue;
         const { sent_at: _s, ...a } = f;
-        pending.push({ ...a, moves_pending: true });
+        pending.push({ ...a, moves: null, moves_pending: true, ...(replayTo ? { replay_to: replayTo, replay_at: replayAt } : {}) });
         have.add(f.accession);
       }
     }
     await env.DB.put('alerts:pending-moves', JSON.stringify(pending));
-    return json({ ok: true, queued: [...want].filter((a) => have.has(a)), not_found: [...want].filter((a) => !have.has(a)) }, 200, h);
+    return json({ ok: true, queued: [...want].filter((a) => have.has(a)), not_found: [...want].filter((a) => !have.has(a)), ...(replayTo ? { replay_at: replayAt } : {}) }, 200, h);
+  }
+  if (req.method === 'GET' && path === '/ops/moves-replays') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    return json({ ok: true, replays: JSON.parse((await env.DB.get('alerts:moves-replays')) ?? '[]') }, 200, h);
   }
 
   if (req.method === 'POST' && path === '/ops/deliver') {
