@@ -250,3 +250,34 @@ class MoveMathTest(unittest.TestCase):
         self.assertTrue(r["suspect_units"])
         self.assertAlmostEqual(r["value_delta"], 6.7e6 - 121.6e6, delta=1)
         self.assertNotIn("BKNG", [m["ticker"] for m in (build.moves([r]) or {}).get("trimmed", [])])
+
+
+class HedgeFlowTest(unittest.TestCase):
+    def test_hedge_fund_flow_counts_only_hedge_funds_that_filed_both_quarters(self):
+        import json, tempfile
+        from pathlib import Path
+        from unittest import mock
+        from ingest import moves
+        row = lambda sh, ps, v, pv, ch: {"cusip": "123456101", "ticker": "XYZ", "title": "COM", "put_call": None,
+                                         "shares_type": "SH", "shares": sh, "prev_shares": ps, "value": v,
+                                         "prev_value": pv, "change": ch, "value_delta": v - pv, "share_change": sh - ps}
+        latest = {"A": [row(100, 0, 1000, 0, "new")],          # hedge fund, filed Q3: new
+                  "B": [row(20, 50, 200, 500, "trimmed")],     # hedge fund, filed Q3: trimmed
+                  "C": [row(30, 30, 300, 300, "unchanged")],   # hedge fund, Q3 not filed yet (latest is Q2)
+                  "D": [row(900, 0, 9000, 0, "new")]}          # long-only: not in the lens
+        types = {k: {"type": "hedge_fund"} for k in "ABC"} | {"D": {"type": "long_only"}}
+        shards = [{"cik": k, "quarter": "2026Q2" if k == "C" else "2026Q3", "name": k} for k in "ABCD"]
+        with tempfile.TemporaryDirectory() as d, \
+                mock.patch.multiple(moves, DATA=Path(d), LATEST=latest, PERIOD={}, FILING={}, SECS={},
+                                    EQUITY={"A": 2000, "B": 1000, "C": 600, "D": 10_000}):
+            moves.write_hedge_flow(shards, types, {})
+            doc = json.loads((Path(d) / "hedge_flow.json").read_text())
+        q3 = doc["periods"][0]
+        x = q3["stocks"]["XYZ"]
+        self.assertEqual((q3["quarter"], q3["funds_filed"]), ("2026Q3", 2))
+        self.assertEqual((x["buyers"], x["sellers"], x["breadth"], x["new_count"], x["exited_count"]), (1, 1, 0, 1, 0))
+        self.assertEqual((x["holders"], x["holders_prev"], x["holder_change"]), (2, 1, 1))
+        self.assertEqual(x["filed_of_prev_holders"], [1, 2])  # B filed; C held it in Q2 and has not filed Q3
+        self.assertEqual((x["bought_usd"], x["sold_usd"], x["net_usd"], x["gross_usd"]), (1000, -300, 700, 1300))
+        self.assertEqual(x["median_pct_of_book"], 0.35)  # A 1000/2000, B 200/1000
+        self.assertIn("XYZ", q3["lists"]["holder_change_up"])

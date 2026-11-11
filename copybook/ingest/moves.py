@@ -204,6 +204,154 @@ def write_changes(per_quarter: dict[str, list[list]]) -> None:
             "columns": list(CHANGE_COLUMNS), "rows": rows[:CHANGES_MAX]})
 
 
+HF_TOP = 100  # tickers per ranking in hedge_flow.json
+RECENT_HOURS = 72  # recent_filings.json: hedge-fund 13F filings accepted in this window
+RECENT_MOVES = 10  # largest moves per filing
+
+
+def median(xs: list[float]) -> float | None:
+    xs = sorted(xs)
+    if not xs:
+        return None
+    m = len(xs) // 2
+    return xs[m] if len(xs) % 2 else (xs[m - 1] + xs[m]) / 2
+
+
+def issuer_rows(rows: list[dict]):
+    """(issuer6, row) for share lines a holder count can use: no options, notes, preferreds or mis-scaled lines."""
+    for r in rows:
+        c = (r.get("cusip") or "").upper()
+        if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
+                or r.get("price_outlier") or not_common(r.get("title")):
+            continue
+        yield c[:6], r
+
+
+def write_hedge_flow(shards: list[dict], types: dict, curated: dict) -> tuple[int, int]:
+    """hedge_flow.json (public): per report period, every hedge_fund filer (filer_types.json) that filed it and the
+    quarter before, per stock. recent_filings.json (public): hedge-fund 13F filings accepted in the last
+    RECENT_HOURS hours with their largest moves. Returns (periods, recent filings)."""
+    meta = {s["cik"]: s for s in shards}
+    hf = [c for c in LATEST if (types.get(c) or {}).get("type") == "hedge_fund"]
+    period_of = lambda c: PERIOD.get(c) or (meta.get(c) or {}).get("quarter")
+    agg: dict[str, dict[str, dict[str, list]]] = {}  # period -> issuer6 -> cik -> [shares, prev, value, prev_value, delta]
+    names: dict[str, dict[str, float]] = {}  # issuer6 -> ticker -> value
+    cusip_of: dict[str, str] = {}  # issuer6 -> a CUSIP, for its display name
+    known: set[str] = set()  # filers whose latest book has a prior quarter on file (changes known)
+    for cik in hf:
+        q = period_of(cik)
+        if not q:
+            continue
+        for code, r in issuer_rows(LATEST[cik]):
+            if r.get("suspect_units"):
+                r = r | {"value_delta": 0}
+            a = agg.setdefault(q, {}).setdefault(code, {}).setdefault(cik, [0, 0, 0, 0, 0, r.get("change") is not None])
+            a[0] += r.get("shares") or 0
+            a[1] += r.get("prev_shares") or 0
+            a[2] += r.get("value") or 0
+            a[3] += r.get("prev_value") or 0
+            a[4] += r.get("value_delta") or 0
+            if r.get("change") is not None:
+                known.add(cik)
+            cusip_of.setdefault(code, r.get("cusip") or "")
+            t = r.get("ticker") or (SECS.get(r.get("cusip") or "") or {}).get("ticker")
+            if t:
+                names.setdefault(code, {})[t] = names.setdefault(code, {}).get(t, 0) + (r.get("value") or 0)
+    periods = sorted(agg, reverse=True)[:2]
+    out = {}
+    for q in periods:
+        pq = prev_quarter(q)
+        filed = {c for c in known if period_of(c) == q}
+        stocks = {}
+        for code, hs in agg[q].items():
+            t = max(names[code], key=names[code].get) if names.get(code) else None
+            if not t:
+                continue
+            both = {c: x for c, x in hs.items() if x[5]}  # filed both quarters: a known change
+            buyers = [c for c, x in both.items() if x[0] > x[1] + 0.5]
+            sellers = [c for c, x in both.items() if x[0] < x[1] - 0.5]
+            if not buyers and not sellers:
+                continue
+            held_prev = sum(1 for x in both.values() if x[1] > 0)
+            # Hedge funds that held it last quarter and have not filed this one yet: their latest book is pq.
+            waiting = sum(1 for c, x in agg.get(pq, {}).get(code, {}).items() if x[0] > 0 and period_of(c) == pq)
+            holders = [c for c, x in both.items() if x[0] > 0]  # same funds as holders_prev, so the change adds up
+            stocks[t] = {
+                "ticker": t,
+                "name": (SECS.get(cusip_of.get(code) or "") or {}).get("name"),
+                "issuer6": code,
+                "buyers": len(buyers), "sellers": len(sellers), "breadth": len(buyers) - len(sellers),
+                "new_count": sum(1 for c in buyers if both[c][1] <= 0),
+                "exited_count": sum(1 for c in sellers if both[c][0] <= 0),
+                "holders": len(holders), "holders_prev": held_prev,
+                "holder_change": len(holders) - held_prev,
+                "median_pct_of_book": (lambda m: round(m, 6) if m is not None else None)(
+                    median([hs[c][2] / EQUITY[c] for c in holders if EQUITY.get(c)])),
+                "bought_usd": round(sum(both[c][4] for c in buyers)),
+                "sold_usd": round(sum(both[c][4] for c in sellers)),
+                "net_usd": round(sum(x[4] for x in both.values())),
+                "gross_usd": round(sum(abs(x[4]) for x in both.values())),
+                # "Filed N of M hedge funds that held it last quarter"
+                "filed_of_prev_holders": [held_prev, held_prev + waiting],
+            }
+        rank = lambda key, cond=lambda s: True, rev=True: [s["ticker"] for s in sorted(
+            (s for s in stocks.values() if cond(s)), key=key, reverse=rev)][:HF_TOP]
+        lists = {
+            "breadth_up": rank(lambda s: (s["breadth"], s["net_usd"]), lambda s: s["breadth"] > 0),
+            "breadth_down": rank(lambda s: (s["breadth"], s["net_usd"]), lambda s: s["breadth"] < 0, False),
+            "new_3plus": rank(lambda s: (s["new_count"], s["bought_usd"]), lambda s: s["new_count"] >= 3),
+            "exited_3plus": rank(lambda s: (s["exited_count"], -s["sold_usd"]), lambda s: s["exited_count"] >= 3),
+            "holder_change_up": rank(lambda s: (s["holder_change"], s["net_usd"]), lambda s: s["holder_change"] > 0),
+            "holder_change_down": rank(lambda s: (s["holder_change"], s["net_usd"]), lambda s: s["holder_change"] < 0, False),
+            "net_bought": rank(lambda s: s["net_usd"], lambda s: s["net_usd"] > 0),
+            "net_sold": rank(lambda s: s["net_usd"], lambda s: s["net_usd"] < 0, False),
+        }
+        keep = {t for v in lists.values() for t in v}
+        out[q] = {"quarter": q, "prev_quarter": pq, "funds_filed": len(filed),
+                  "funds_total": sum(1 for c in hf if period_of(c) in (q, pq)),
+                  "lists": lists, "stocks": {t: stocks[t] for t in sorted(keep)}}
+    write(DATA / "hedge_flow.json", {
+        "generated_at": (read(DATA / "index.json") or {}).get("generated_at"),
+        "note": "Hedge funds (filer_types.json type hedge_fund) across every 13F filer, per report period, counting only "
+                "funds that filed the period and the quarter before. Split-adjusted; options, notes and mis-scaled lines "
+                "left out. breadth = buyers - sellers; filed_of_prev_holders = [N, M]: N of the M hedge funds that held "
+                "it last quarter have filed this one. Lists name the top tickers; stocks has each one's figures.",
+        "periods": [out[q] for q in periods]})
+    # Filings accepted in the last RECENT_HOURS hours.
+    from datetime import datetime, timedelta, timezone
+    since = (datetime.now(timezone.utc) - timedelta(hours=RECENT_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    recent = []
+    for cik in hf:
+        f = FILING.get(cik) or {}
+        at = f.get("accepted_at") or ""
+        if at < since:
+            continue
+        rows = [r for r in LATEST[cik] if r.get("change") in ("new", "added", "trimmed", "exited")
+                and not r.get("put_call") and r.get("shares_type") != "PRN" and not r.get("price_outlier")
+                and not r.get("suspect_units")]
+        rows.sort(key=lambda r: -abs(r.get("value_delta") or 0))
+        eq = EQUITY.get(cik)
+        m = curated.get(cik) or {}
+        recent.append({
+            "cik": cik, "name": (meta.get(cik) or {}).get("name") or m.get("name"), "slug": m.get("slug"),
+            "curated": cik in curated, "quarter": period_of(cik), "accession": f.get("accession"),
+            "accepted_at": at, "has_prior": any(r.get("change") is not None for r in LATEST[cik]),
+            "moves": [{"ticker": r.get("ticker") or (SECS.get(r.get("cusip") or "") or {}).get("ticker"),
+                       "cusip": r.get("cusip"), "issuer": r.get("issuer"), "change": r["change"],
+                       "share_change": int(round(r.get("share_change") or 0)),
+                       "value_delta": int(round(r.get("value_delta") or 0)),
+                       "pct_of_book": round((r.get("value") or 0) / eq, 6) if eq else None,
+                       "prev_pct_of_book": round((r.get("prev_value") or 0) / eq, 6) if eq else None}
+                      for r in rows[:RECENT_MOVES]]})
+    recent.sort(key=lambda x: x["accepted_at"], reverse=True)
+    write(DATA / "recent_filings.json", {
+        "generated_at": (read(DATA / "index.json") or {}).get("generated_at"), "since": since, "hours": RECENT_HOURS,
+        "note": "Hedge-fund 13F-HR filings accepted since `since` (EDGAR acceptance, UTC), newest first, each with its "
+                "largest moves against its prior quarter (split-adjusted; pct_of_book over the filer's share book).",
+        "filings": recent})
+    return len(periods), len(recent)
+
+
 def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) -> int:
     """hl/{issuer6}.json: every 13F filer holding the stock in its latest full book (never the top-500
     public shard), with the period of that book and its change against the filer's prior quarter.
@@ -420,6 +568,8 @@ def main() -> int:
             if b.get("equity_value"):
                 EQUITY[cik] = round(b["equity_value"])
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
+    print("moves: hedge_flow.json %d periods, recent_filings.json %d filings" % write_hedge_flow(shards, types, curated),
+          flush=True)
     print(f"moves: {write_combined_shards()} shards in fall/ for the site build", flush=True)
     print(f"moves: {with_prev}/{n} filers have a prior quarter on file; {FIXED[0]} lines rescaled by the "
           f"cross-filer unit check; changes for "

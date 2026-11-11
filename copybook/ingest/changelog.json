@@ -2,6 +2,13 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-hedge-fund-flow",
+   "date": "2026-11-11",
+   "kind": "methodology",
+   "title": "Hedge-fund flow across every 13F filer (hedge_flow.json) and the last 72 hours of hedge-fund filings (recent_filings.json)",
+   "body": "hedge_flow.json covers, per report period, every filer typed hedge_fund (SEC Form ADV evidence or the hand-checked list; see 2026-11-11-hedge-fund-adv), counting only funds that filed that period and the quarter before. Per stock: buyers, sellers and breadth (buyers - sellers); new and exited counts; hedge-fund holders now and last quarter among those funds and the change; the median % of the share book among holders; $ bought, $ sold, net and gross, split-adjusted; and filed_of_prev_holders [N, M], meaning N of the M hedge funds that held it last quarter have filed this one. Options, notes, preferreds and lines flagged suspect_units or price_outlier are left out. Each ranking lists its top 100 tickers. recent_filings.json lists hedge-fund 13F-HR filings accepted in the last 72 hours (EDGAR acceptance time), newest first, each with its 10 largest moves: ticker, change, share change, $ change and % of book before and after. Both are rebuilt in every run that rebuilds the holder index."
+  },
+  {
    "id": "2026-11-11-unit-fields-prev-as-filed",
    "date": "2026-11-11",
    "kind": "methodology",
