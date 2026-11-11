@@ -16,6 +16,7 @@ import form4BuffettGift from './fixtures/form4-brk-buffett-gift.txt?raw';
 import sc13dBrkA from './fixtures/sc13da-brk-class-a.xml?raw';
 import { quarterStart } from '../src/seasons';
 import { computeMoves, displayCase, gateMoves } from '../src/edgar';
+import { forMember } from '../src/alerts';
 import { runSeasonal } from '../src/revenue';
 import { signToken } from '../src/tokens';
 import { pauseResumesAt, deadlineMs, deadlineLabel } from '../src/seasons';
@@ -1896,6 +1897,13 @@ describe('copybook api', () => {
     // Off the other filers' quarter-end price by over 1.25x (a 3:2 split the filer applied to its count only) is held.
     const off = [pos('APH', '032095101', 922_000, 108_376_851), jq2[1]];
     expect(gateMoves(computeMoves(off, jq2, undefined, new Map()), jq2, new Map(), new Map([['032095101', { cur: 176.4, prev: 176.32 }]])).held.map((h) => h.reason)).toEqual(['price_vs_filers']);
+    // Stock-match 13F alerts come from hedge funds and long-only managers (ingest's type names since Nov 9), not banks.
+    {
+      const f = { investors: [], stocks: ['APH'], owned: [], onboarded: true } as never;
+      const fl = (slug: string) => ({ slug, slugs: [slug], tickers: ['APH'], accession: slug }) as never;
+      const got = forMember({ alerts: 'followed' } as never, f, [fl('lo'), fl('hf'), fl('bk')], [], { lo: { type: 'long_only' }, hf: { type: 'hedge_fund' }, bk: { type: 'bank' } });
+      expect(got.filings.map((x: { slug: string }) => x.slug)).toEqual(['lo', 'hf']);
+    }
     // A bond line (PRN) whose prior was stored with shares 0 and its principal: Advent's read "added +$141M" from zero.
     const bond = (amt: number, value: number) => ({ ...pos('BOND', '00000BND1', 0, value), shares_type: 'PRN', principal_amount: amt });
     const bp = [bond(140_000_000, 140_150_269), jq2[1]];

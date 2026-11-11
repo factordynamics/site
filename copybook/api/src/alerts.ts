@@ -160,8 +160,11 @@ export const etDay = (t: number) => new Date(t - 5 * 3600_000).toISOString().sli
 // ---------------------------------------------------------------------------------------------
 // Targeting and delivery
 
-/** Filer types whose moves in a stock are worth an alert to someone who only watches or owns that stock. */
-const STOCK_ALERT_TYPES = new Set(['hedge_fund', 'active']);
+/**
+ * Filer types whose moves in a stock are worth an alert to someone who only watches or owns that stock: hedge funds
+ * and long-only managers (/v1's smart_money). `active` is long_only's name before ingest's Nov 9 rename.
+ */
+const STOCK_ALERT_TYPES = new Set(['hedge_fund', 'long_only', 'active']);
 export type FilerMeta = Record<string, { featured?: boolean; type?: string | null }>;
 
 /**
