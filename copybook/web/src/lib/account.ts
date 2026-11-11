@@ -375,6 +375,8 @@ export type ApiHolder = {
   weight: number | null
   put_call?: string | null
   suspect_units?: boolean
+  suspect_reason?: string | null
+  unreliable?: 'value' | 'shares' | 'both' | null
 }
 /** A page of up to 1,000 holders, largest first; `truncated` while only the public top 25 is on the server. */
 export const loadHolders = (t: string, type: string | null, offset: number) =>

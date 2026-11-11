@@ -1,6 +1,6 @@
 import type { Ev } from '../components/FundNotes'
 import { call } from './account'
-import { BASE, displayName, getJSON, unreliable, type Change } from './data'
+import { BASE, displayName, flagNote, flagOf, getJSON, unreliable, type Change, type Flag } from './data'
 
 // Derived at build time by scripts/stocks.mjs from the curated 13F books, served from the site host.
 const D = `${BASE}d/`
@@ -21,9 +21,10 @@ export type StockHolder = {
   prev_value: number
   delta_value: number
   change: Change | null
-  /** Share count unreliable in this filing (ingest's suspect_units): no change, no dollar move, in no count. */
-  unreliable?: boolean
-  suspect_reason?: string | null
+  /** A line ingest flags (loadStock): which figures can't be trusted, and the line shown for it. It has no dollar
+   *  move and counts toward no dollar total; NEW and EXITED keep their labels. */
+  flag?: Flag
+  note?: string | null
 }
 export type StockOption = { slug: string; manager: string; firm: string; quarter: string; featured: boolean; put_call: string; ticker: string | null; shares: number; value: number; weight: number }
 export type Stock = {
@@ -273,13 +274,20 @@ export const loadSplitLog = () => getJSON<{ splits: SplitLog[] }>(`${D}splits.js
 
 export const loadStockIndex = () => getJSON<{ funds: number; stocks: StockRef[] }>(`${D}stocks.json`)
 const named = <T extends { manager: string }>(x: T) => ({ ...x, manager: displayName(x.manager) })
-// A row ingest flags as unreliable keeps its holding but loses its change and dollar move, so no list, badge or
-// total reads it as a trade; an unreliable exit leaves the exited list for not_counted.
-const settle = (h: StockHolder): StockHolder => (unreliable(h as { suspect_units?: boolean; change?: string | null }) ? { ...named(h), change: null, delta_value: 0, unreliable: true } : named(h))
+// A flagged row keeps its holding but no dollar move, so no total or biggest-moves list counts it. Its change label
+// stays when the flag leaves it known: NEW and EXITED always; added or trimmed when only the value ("value") or only
+// the share counts ("shares", change from filed values) are off. A gone position whose change is unknown leaves the
+// exited list for not_counted.
+const settle = (h: StockHolder): StockHolder => {
+  const f = flagOf(h)
+  if (!f) return named(h)
+  const known = h.change === 'new' || h.change === 'exited' || (f !== 'both' && h.change !== ('unknown' as string))
+  return { ...named(h), flag: f, note: flagNote(h), change: known ? h.change : null, delta_value: 0 }
+}
 export const loadStock = (t: string) =>
   getJSON<Stock>(`${D}stocks/${encodeURIComponent(t)}.json${fresh()}`).then((s) => {
-    const bad = (h: StockHolder) => unreliable(h as { suspect_units?: boolean; change?: string | null })
-    return { ...s, holders: s.holders.map(settle), exited: s.exited.filter((h) => !bad(h)).map(named), not_counted: s.exited.filter(bad).map(settle), options: s.options.map(named) }
+    const gone = (h: StockHolder) => (h.change as string) === 'unknown'
+    return { ...s, holders: s.holders.map(settle), exited: s.exited.filter((h) => !gone(h)).map(settle), not_counted: s.exited.filter(gone).map(settle), options: s.options.map(named) }
   })
 /** The site's flow.json (top 40 per list), or for members the API's fuller lists, falling back to the site's. */
 export const loadFlow = (member = false, v?: number) =>

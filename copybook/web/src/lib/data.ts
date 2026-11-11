@@ -45,12 +45,35 @@ export type Holding = {
   suspect_reason?: string | null
   price_outlier?: boolean
   value_basis?: string | null
+  /** Ingest's verdict on a flagged line: which of its figures can't be trusted. */
+  unreliable?: Flag | null
+  /** The filed value per share, when ingest zeroed the value (price_outlier). */
+  filed_price?: number | null
 }
 
-/** A row whose share count ingest flags as unreliable (suspect_units, or change "unknown" with no dollar delta):
- *  never shown as a trade or counted in any total. Read only where present, so older data renders as before. */
-export const unreliable = (h: { suspect_units?: boolean | null; change?: string | null }) => Boolean(h.suspect_units) || h.change === 'unknown'
+/** Which figures of a flagged line can't be trusted: its value ("value"), its share counts ("shares"), or both. */
+export type Flag = 'value' | 'shares' | 'both'
+type Flaggable = { unreliable?: unknown; suspect_units?: boolean | null; suspect_reason?: string | null; change?: string | null; value?: number; shares?: number; filed_price?: number | null }
+/** Ingest's `unreliable` kind; a row flagged only by the older fields (suspect_units, change "unknown", a pre-split
+ *  count kept under a reissue's new CUSIP) is "both". Null for a clean row, so data without the fields renders as before. */
+export const flagOf = (h: Flaggable): Flag | null =>
+  h.unreliable === 'value' || h.unreliable === 'shares' || h.unreliable === 'both' ? h.unreliable : h.suspect_units || h.change === 'unknown' || h.suspect_reason === 'reissue_ratio_not_applied' ? 'both' : null
+/** A flagged row: never in a page's dollar totals or biggest-moves lists. */
+export const unreliable = (h: Flaggable) => flagOf(h) != null
 export const NOT_COUNTED = 'Share count unreliable in this filing, not counted'
+const perShare = (x: number) => (x >= 100 ? Math.round(x).toLocaleString('en-US') : x.toFixed(2))
+/** The line a flagged row shows in place of its trade or dollar figure; `short` for a narrow badge. */
+export function flagNote(h: Flaggable, short = false): string | null {
+  const f = flagOf(h)
+  if (!f) return null
+  if (f === 'value') {
+    const px = h.filed_price || (h.shares && h.value ? h.value / h.shares : 0)
+    return short ? 'Value unavailable' : `Value unavailable${px ? ` (filed at ≈$${perShare(px)}/sh)` : ''}`
+  }
+  if (f === 'shares') return short ? 'Shares don’t reconcile' : 'Share counts don’t reconcile; change from filed values'
+  if (h.suspect_reason === 'reissue_ratio_not_applied') return short ? 'Pre-split count' : 'Pre-split count, change not computed'
+  return short ? 'Not counted' : NOT_COUNTED
+}
 
 /** "XOM" as "XOM puts" or "XOM calls" for an option row, so an option move never reads as a stock trade. */
 export const withOption = (label: string, putCall?: string | null) => (putCall ? `${label} ${putCall.toLowerCase() === 'put' ? 'puts' : 'calls'}` : label)

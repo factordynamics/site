@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { ChangeBars, Donut, foldSlices, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
-import { Arrow, Badge, Button, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
+import { Arrow, Badge, Button, Lock, Monogram, NotCounted, Panel, Skeleton, Stat, Ticker } from '../components/ui'
 import { getToken, isPaying, useMember } from '../lib/account'
 import { useTrackVisit } from '../lib/track'
 import { FollowSignup } from '../components/FollowSignup'
@@ -18,7 +18,7 @@ import { TRIAL_DAYS } from '../config'
 import { track } from '../lib/track'
 import { loadIndex } from '../lib/data'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
-import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, NOT_COUNTED, type ManagerFile } from '../lib/data'
+import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, flagNote, flagOf, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -264,6 +264,7 @@ export function ManagerPage() {
           ) : (
             <LockedChanges top={book.rows.slice(0, 6).map((h) => h.ticker || shortName(h.issuer))} />
           )}
+          {f?.prev_quarter && <NotCounted n={(f.holdings || []).filter((h) => !h.put_call && unreliable(h)).length} />}
           <p className="mt-5 border-t border-line pt-4 text-[13.5px]">
             <Link to={recapPath(seasonNow().quarter)} className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
               <RecapLabel /> <Arrow className="size-3" />
@@ -352,11 +353,10 @@ export function ManagerPage() {
                         </span>
                       )}
                       {unreliable(h) && (
-                        <span className="shrink-0" title={[NOT_COUNTED, h.suspect_reason].filter(Boolean).join(': ')}>
+                        <span className="shrink-0" title={flagNote(h) ?? undefined}>
                           <Badge tone="warn">
-                            <span className="sm:hidden">Not counted</span>
-                            <span className="hidden sm:inline lg:hidden">Share count unreliable, not counted</span>
-                            <span className="hidden lg:inline">{NOT_COUNTED}</span>
+                            <span className="lg:hidden">{flagNote(h, true)}</span>
+                            <span className="hidden lg:inline">{flagNote(h)}</span>
                           </Badge>
                         </span>
                       )}
@@ -369,7 +369,7 @@ export function ManagerPage() {
                   </td>
                   <td className="hidden px-3 py-2.5 text-ink-2 md:table-cell">{h.sector}</td>
                   <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">{sharesFmt(h.shares)}</td>
-                  <td className="num px-3 py-2.5 text-right font-medium">{money(h.value)}</td>
+                  <td className="num px-3 py-2.5 text-right font-medium">{flagOf(h) === 'value' ? <span className="font-normal text-ink-3">n/a</span> : money(h.value)}</td>
                   <td className="px-5 py-2.5 md:px-6">
                     <div className="flex items-center justify-end gap-3">
                       <div className="hidden h-1.5 w-24 rounded-full bg-ink/[0.05] sm:block">

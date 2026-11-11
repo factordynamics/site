@@ -1,5 +1,5 @@
 import { ApiError, call } from './account'
-import { cleanHolding, DATA, getJSON, live, type Holding } from './data'
+import { cleanHolding, DATA, getJSON, live, type Holding, unreliable } from './data'
 import { pairReissues } from './reissuePairs.mjs'
 
 // Public quarter index: data/{slug}-history.json (newest first, 50-row top_holdings preview).
@@ -67,7 +67,7 @@ async function loadQuarter(slug: string, q: HistoryQuarter): Promise<Quarter> {
 }
 
 // Ingest's own change on a served row; a stale duplicate or mis-scaled line is no trade.
-const trade = (h: Holding) => !h.suspect_duplicate && !h.suspect_units
+const trade = (h: Holding) => !h.suspect_duplicate && !unreliable(h)
 
 /**
  * One fund's book for an earlier quarter, shaped like its latest file: each holding carries its change

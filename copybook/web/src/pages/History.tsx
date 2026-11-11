@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ChangeBars } from '../components/charts'
-import { Arrow, Badge, Button, Check, Lock, Monogram, Panel, Skeleton, Stat, Ticker } from '../components/ui'
+import { Arrow, Badge, Button, Check, Lock, Monogram, NotCounted, Panel, Skeleton, Stat, Ticker } from '../components/ui'
 import { needsVerify, ApiError, isFree, openPortal, useMemberState } from '../lib/account'
 import { CsvButton } from '../components/CsvButton'
-import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle, withOption, type Holding } from '../lib/data'
+import { dateLabel, loadIndex, money, pct, quarterLabel, sharesFmt, shortName, useAsync, useTitle, withOption, unreliable, type Holding } from '../lib/data'
 import { stockPath } from '../lib/stocks'
 import { diff, heldReissue, holdingKey, loadHistory, type Quarter } from '../lib/history'
 import { checkout, TRIAL_DAYS } from '../config'
@@ -158,6 +158,7 @@ function HistoryBody({ slug, quarters }: { slug: string; quarters: Quarter[] }) 
           ) : (
             <p className="text-[14px] text-ink-2">{prev ? `No shares bought or sold since ${quarterLabel(prev.quarter)}.` : 'Pick a later quarter to compare.'}</p>
           )}
+          {prev && <NotCounted n={q.holdings.filter((h) => !h.put_call && unreliable(h)).length} />}
         </Panel>
         <Panel title="Opened and closed" sub={prev ? `New and exited positions in ${quarterLabel(q.quarter)}` : undefined}>
           <MoveList title="New" tone="up" items={moves.filter((x) => x.change === 'new')} />

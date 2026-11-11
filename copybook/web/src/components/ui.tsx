@@ -127,6 +127,18 @@ export function Stat({ label, value, sub }: { label: string; value: ReactNode; s
   )
 }
 
+/** Under a page's dollar totals: how many flagged lines (ingest's unreliable rows) were left out, and why. */
+export function NotCounted({ n, className = 'mt-3' }: { n: number; className?: string }) {
+  if (!n) return null
+  return (
+    <p className={`${className} text-[12.5px] leading-relaxed text-ink-3`}>
+      <Link to="/methodology/#unreliable" className="underline decoration-line-2 underline-offset-2 hover:text-accent">
+        {n.toLocaleString('en-US')} {n === 1 ? 'line' : 'lines'} with unreliable filings not counted
+      </Link>
+    </p>
+  )
+}
+
 export function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-md bg-ink/[0.06] ${className}`} />
 }
