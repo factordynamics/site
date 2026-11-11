@@ -33,7 +33,7 @@ export interface Restart {
   down_seconds: number;
   /** deploy: a new build (gene's BUILD_SHA changed) with a gap under 60 s, excluded from the unplanned count.
    *  unplanned: the same build (watchdog or crash), or a gap of 60 s or more. short_unconfirmed: under 60 s, build unknown. */
-  kind: 'deploy' | 'unplanned' | 'short_unconfirmed';
+  kind: 'deploy' | 'unplanned' | 'short_unconfirmed' | 'planned';
   build?: string | null;
   prev_build?: string | null;
   /** An operator's label for a restart the probe couldn't classify. */
@@ -41,6 +41,15 @@ export interface Restart {
 }
 
 const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
+/** Restarts we caused on purpose: a restart booting in the window is `planned`, with the note, and not counted unplanned. */
+const PLANNED: { from: string; to: string; note: string }[] = [
+  // The runner stopped gene's API to test automatic failover A: api.json went to the Worker at 08:55:13 and back at 08:58:13.
+  { from: '2026-11-11T08:53:00Z', to: '2026-11-11T08:59:00Z', note: 'Planned failover test, about 2 min, members moved to the backup automatically' },
+];
+const planned = (r: Restart): Restart => {
+  const p = PLANNED.find((x) => r.at >= x.from && r.at < x.to);
+  return p ? { ...r, kind: 'planned', note: p.note } : r;
+};
 const hourKey = (t: number) => new Date(t).toISOString().slice(0, 13);
 
 let apiBase: { at: number; url: string } | null = null;
@@ -143,7 +152,7 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
     return { day, uptime: n ? Math.round((ok / n) * 1e5) / 1e5 : null, checks: n, failed: n - ok };
   });
   const week = now - 7 * 86400_000;
-  const recent = s.restarts.filter((r) => Date.parse(r.at) >= week);
+  const recent = s.restarts.filter((r) => Date.parse(r.at) >= week).map(planned);
   const fresh = JSON.parse((await env.DB.get('status:fresh')) ?? 'null') as { data_built_at: string | null; build_id: string | null; last_13f: { slug: string; manager: string; accession: string; accepted_at: string } | null } | null;
   // Written by Cloudflare's cron at the end of its run, which runs this only while it is the poller.
   const poller = { host: 'cloudflare', last_run_at: iso(Date.now()) };
@@ -191,8 +200,9 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
       unplanned_7d: recent.filter((r) => r.kind === 'unplanned').length,
       deploys_7d: recent.filter((r) => r.kind === 'deploy').length,
       short_unconfirmed_7d: recent.filter((r) => r.kind === 'short_unconfirmed').length,
+      planned_7d: recent.filter((r) => r.kind === 'planned').length,
       api_up_since: s.last?.up_since ?? null,
-      rows: s.restarts.slice(0, 30),
+      rows: s.restarts.slice(0, 30).map(planned),
     },
   };
 }
