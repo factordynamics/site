@@ -500,7 +500,21 @@ const rowName = (r: MoveRow) => (r.ticker || (r.display_name || r.issuer || r.cu
 /** 4,380,656 as "4.38M", 44,294 as "44K". */
 const compact = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toPrecision(3)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n.toLocaleString('en-US'));
 /** " · Unusual size · check the filing" after a large but real move. */
-const odd = (r: MoveRow) => `${r.unusual ? ` · ${UNUSUAL}` : ''}${r.filer_value ? ` · ${FILER_VALUE}` : ''}`;
+const odd = (r: MoveRow) => `${r.unusual ? ` · ${UNUSUAL}` : ''}${r.filer_value ? ` · ${FILER_VALUE}` : ''}${unreliableNote(r) ? ` · ${unreliableNote(r)}` : ''}`;
+
+/** A marked row's note (markUnreliable): what can't be trusted, and that it isn't in the totals. */
+function unreliableNote(r: MoveRow): string {
+  if (r.unreliable === 'value') return `value unavailable${r.filed_per_share ? ` (filed at ≈$${r.filed_per_share >= 100 ? Math.round(r.filed_per_share).toLocaleString('en-US') : r.filed_per_share.toFixed(2)}/sh)` : ''}, not in totals`;
+  if (r.unreliable === 'shares') return (r.change === 'new' || r.change === 'exited' ? "share counts don't reconcile" : "change from filed values") + ', not in totals';
+  if (r.unreliable === 'both') return 'share count unreliable in this filing, not in totals';
+  return '';
+}
+/** A row's size: dollars, or the share change when its value can't be trusted ("TEVA +159,272 sh"). */
+const amount = (r: MoveRow) => {
+  if (r.unreliable !== 'value' || r.change === 'new' || r.change === 'exited') return usd(r.value_delta);
+  const d = r.shares - r.prev_shares;
+  return `${d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh`;
+};
 
 /** The trade as a share of this filing's book (the data run renamed it delta_pct_of_book). */
 const bookPct = (r: MoveRow) => {
@@ -561,8 +575,10 @@ function headlineMoves(mv: Moves): string {
   // name and a $66M exit, under 0.1% of book, over a $4.6B bond rotation.
   const pct = (r: MoveRow) => (r.delta_pct_of_book ?? r.pct_of_book) == null ? 1 : Math.abs((r.delta_pct_of_book ?? r.pct_of_book)!);
   const label = (r: MoveRow) => (mv.new.includes(r) ? `NEW ${rowName(r)}` : mv.exited.includes(r) ? `EXIT ${rowName(r)}` : `${rowName(r)} ${usd(r.value_delta)}`) + odd(r);
-  const news = [...big(mv.new).slice(0, 1), ...big(mv.exited).slice(0, 1)].filter((r) => pct(r) >= 0.002);
-  const rest = big([...mv.new, ...mv.exited, ...mv.added, ...mv.trimmed]).filter((r) => !news.includes(r));
+  // A marked row (markUnreliable) never makes the headline.
+  const ok = (rows: MoveRow[]) => rows.filter((r) => !r.unreliable);
+  const news = [...big(ok(mv.new)).slice(0, 1), ...big(ok(mv.exited)).slice(0, 1)].filter((r) => pct(r) >= 0.002);
+  const rest = big(ok([...mv.new, ...mv.exited, ...mv.added, ...mv.trimmed])).filter((r) => !news.includes(r));
   return [...news, ...rest].slice(0, 3).map(label).join(' · ');
 }
 
@@ -588,7 +604,7 @@ function heldLine(a: Alert13F): string {
   const wait = (a.held ?? []).filter((h) => h.reason !== 'unreliable_shares');
   return [
     wait.length ? `${wait.map((h) => `${name(h)}${h.change ? ` (${h.change})` : ''}: move pending check`).join('; ')}. Figures failed a price check and are left out of this email and its totals; they follow once the full build of the filing confirms them, or within 24 hours marked if the filer's own figures look wrong.` : '',
-    out.length ? `${out.map((h) => `${name(h)}: share count unreliable in this filing, not counted`).join('; ')}.` : '',
+    out.length ? `${out.map((h) => `${name(h)}: pre-split count, change not computed`).join('; ')}.` : '',
   ].filter(Boolean).join(' ');
 }
 
@@ -637,7 +653,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
       const parts = rows.map((r) => {
         const pos = label === 'Trimmed' || label === 'Added' ? positionChange(label, r) : '';
         const bits = [pos && (label === 'Trimmed' ? `${pos} of the position` : pos), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean);
-        return `${rowName(r)} ${usd(r.value_delta)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}${odd(r)}`;
+        return `${rowName(r)} ${amount(r)}${bits.length ? ` (${bits.join(', ')})` : ''}${flag(r.ticker, f)}${odd(r)}`;
       });
       lines.push(`  ${label}: ${parts.join(', ')}`);
     }
@@ -818,6 +834,7 @@ export function digestMail(env: Env, to: string, day: string, filings: Alert13F[
 export function weeklyNamesMail(env: Env, to: string, weekOf: string, filings: Alert13F[], events: AlertEvent[], f: Follows, pausedUntil: number | null): Mail {
   const top3 = (a: Alert13F) =>
     MOVE_LABELS.flatMap(([label, k]) => (a.moves?.[k] ?? []).map((r) => ({ label, r })))
+      .filter(({ r }) => !r.unreliable)
       .sort((x, y) => Math.abs(y.r.value_delta) - Math.abs(x.r.value_delta))
       .slice(0, 3)
       .map(({ label, r }) => `${label.toLowerCase()} ${rowName(r)} ${usd(r.value_delta)}`)
@@ -868,7 +885,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     out.push(table(['Stock', 'Shares', 'Value', '% of book'], a.reveal.rows.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, r.shares.toLocaleString('en-US'), usd(r.value, false), bookPct(r)]), [1, 2, 3]));
   } else if (mv) {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
-    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}`, usd(r.value_delta), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, bookPct(r)]));
+    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}${unreliableNote(r) ? `<br><span style="color:#b45309;font-size:12px">${esc(unreliableNote(r))}</span>` : ''}`, amount(r), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, r.unreliable === 'value' ? '' : bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', 'Trade, % of book'], rows, [2, 4]));
     for (const r of mv.exchanged ?? []) out.push(`<p style="margin:6px 0 2px">${esc(exchangeLine(r))}</p>`);
     if (a.held?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);

@@ -2346,14 +2346,17 @@ describe('copybook api', () => {
     expect(g.exited.map((r) => [r.ticker, !!r.unusual])).toEqual([['SPY', true], ['QQQ', false]]);
     const mail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'michael-burry', slugs: ['michael-burry'], manager: 'Michael Burry', name: 'Scion Asset Management', quarter: '2023Q3', report_date: '2023-09-30', filing_date: '2023-11-14', accession: '0000905148-23-001400', sec_url: 'https://www.sec.gov/x', accepted: '2023-11-14T21:00:00Z', moves: m3, tickers: ['SPY', 'QQQ'] }], [], { investors: ['michael-burry'], stocks: [], owned: [] } as never);
     expect(mail.text).toMatch(/SPY puts -\$886\.6M \([^)]*51\.0% of book\) · Unusual size · check the filing, QQQ puts -\$738\.8M \([^)]*\)(?! ·)/);
-    // GuardCap Q3 2026: BKNG split 25-for-1 in Q2; its Q2 row is right (~$188 a share) and its Q3 row isn't (~$5,120,
-    // when other filers report ~$162). 27x off its own prior quarter is under 100x, so the cross-filer median drops it.
+    // GuardCap Q3 2026: its BKNG share counts don't reconcile (646,216 -> 1,304 sh, while the filed value went $121.6M ->
+    // $6.7M). The trade at this filing's price would be -$3.3B, over 3x the change in filed value and over the whole
+    // book, so it is the filed values' change (-$115.0M), marked unreliable "shares" and kept out of the totals.
     const gq2 = [pos('BKNG', '09857L108', 646216, 121_636_487), pos('ILMN', '452327109', 740132, 100_000_000), pos('REST', '000000009', 1, 1_250_000_000)];
     const gq3 = [pos('BKNG', '09857L108', 1304, 6_676_571), pos('ILMN', '452327109', 679878, 92_000_000), pos('REST', '000000009', 1, 1_366_000_000)];
     const med = new Map([['09857L108', { cur: 162, prev: 178 }]]);
-    expect(all(computeMoves(gq3, gq2, undefined, undefined, med).moves).map((r) => r.ticker)).toEqual(['ILMN']);
-    // Without other filers to compare, 27x is sent, tagged: a real 5x rally or 80% fall must never vanish.
-    expect(all(computeMoves(gq3, gq2).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['BKNG', true], ['ILMN', false]]);
+    for (const m of [med, undefined]) {
+      const gm = computeMoves(gq3, gq2, undefined, undefined, m);
+      expect(all(gm.moves).map((r) => [r.ticker, r.value_delta, r.unreliable ?? null])).toEqual([['BKNG', 6_676_571 - 121_636_487, 'shares'], ['ILMN', expect.any(Number), null]]);
+      expect(gm.moves.sold_usd).toBe(-all(gm.moves).find((r) => r.ticker === 'ILMN')!.value_delta);
+    }
     // A real 6x rally that other filers agree with: sent, tagged. 100x or more: a unit error, dropped either way.
     const rq2 = [pos('RALY', '000000005', 1000, 1_000_000), pos('REST', '000000009', 1, 1e9)];
     const rq3 = [pos('RALY', '000000005', 1500, 9_000_000), pos('REST', '000000009', 1, 1e9)];
@@ -2417,12 +2420,27 @@ describe('copybook api', () => {
     const gbk3 = [pos('BKNG', '09857L108', 1_304, 6_700_000), pos('REST', '000000009', 1, 1e9)];
     const bk = computeMoves(gbk3, gbk2, undefined, new Map());
     expect(gateMoves(bk, gbk2, new Map(), new Map()).changed.map((r) => [r.ticker, r.change])).toEqual([['BKNG', 'trimmed']]);
-    for (const flagged of [[{ ...gbk2[0], suspect_units: true }, gbk2[1]], [{ ...gbk2[0], price_outlier: true }, gbk2[1]]]) {
-      const g = gateMoves(computeMoves(gbk3, flagged as never, undefined, new Map()), flagged as never, new Map(), new Map());
-      expect([g.changed, g.moves.bought_usd, g.moves.sold_usd, g.held.map((h) => [h.ticker, h.reason])]).toEqual([[], 0, 0, [['BKNG', 'unreliable_shares']]]);
-    }
+    // Flagged, it goes by the reliable side (the analyst, Nov 11), never into the totals or the headline:
+    // - "shares" (ingest's unreliable field): the change in filed value, $121.6M -> $6.7M, a cut of about $115M;
+    // - "both" (suspect_units before ingest's field lands): held, "pre-split count, change not computed".
+    const sh = [{ ...gbk2[0], suspect_units: true, unreliable: 'shares' }, gbk2[1]];
+    const gs = gateMoves(computeMoves(gbk3, sh as never, undefined, new Map()), sh as never, new Map(), new Map());
+    expect([gs.changed.map((r) => [r.ticker, r.change, r.value_delta, r.unreliable]), gs.moves.bought_usd, gs.moves.sold_usd, gs.held]).toEqual([[['BKNG', 'trimmed', -114_900_000, 'shares']], 0, 0, []]);
+    const both = [{ ...gbk2[0], suspect_units: true }, gbk2[1]];
+    const gb = gateMoves(computeMoves(gbk3, both as never, undefined, new Map()), both as never, new Map(), new Map());
+    expect([gb.changed, gb.moves.sold_usd, gb.held.map((h) => [h.ticker, h.reason])]).toEqual([[], 0, [['BKNG', 'unreliable_shares']]]);
+    const gsMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'guardcap', slugs: ['guardcap'], manager: 'GuardCap Asset Management', name: 'GuardCap Asset Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0001732008-26-000006', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: gs.moves, tickers: ['BKNG'] }], [], { investors: ['guardcap'], stocks: [], owned: [] } as never);
+    expect([/BKNG -\$114\.9M \(share counts don't reconcile; change from filed values/.test(gsMail.text), /3\.3B|BKNG/.test(gsMail.subject), /sold \$114/.test(gsMail.text)]).toEqual([true, false, false]);
+    // - "value" (price_outlier: BMO's Q3 TEVA filed at about $4,005 a share): the share change, value unavailable.
+    const tq2 = [pos('TEVA', '881624209', 971_583, 26_200_000), gbk2[1]];
+    const tq3 = [{ ...pos('TEVA', '881624209', 1_130_855, 4_529_000_000), price_outlier: true }, gbk3[1]];
+    const gv = gateMoves(computeMoves(tq3 as never, tq2, undefined, new Map()), tq2, new Map(), new Map());
+    expect([gv.changed.map((r) => [r.ticker, r.unreliable, r.shares - r.prev_shares]), gv.moves.bought_usd, gv.held]).toEqual([[['TEVA', 'value', 159_272]], 0, []]);
+    const gvMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'bmo', slugs: ['bmo'], manager: 'Bank of Montreal', name: 'BANK OF MONTREAL', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-10', accession: 'b1', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-10T21:00:00Z', moves: gv.moves, tickers: ['TEVA'] }], [], { investors: ['bmo'], stocks: [], owned: [] } as never);
+    expect(gvMail.text).toMatch(/TEVA \+159,272 sh \(.*\) · value unavailable \(filed at ≈\$4,005\/sh\), not in totals/);
+    expect(/TEVA/.test(gvMail.subject)).toBe(false);
     const gmail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'guardcap', slugs: ['guardcap'], manager: 'GuardCap Asset Management', name: 'GuardCap Asset Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0001732008-26-000006', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] }, held: [{ cusip: '09857L108', ticker: 'BKNG', issuer: 'BKNG', display_name: null, put_call: null, change: 'trimmed', reason: 'unreliable_shares' }], tickers: ['BKNG'] }], [], { investors: ['guardcap'], stocks: [], owned: [] } as never);
-    expect([gmail.text.includes('BKNG: share count unreliable in this filing, not counted.'), /pending check|3\.3B|3,3/.test(`${gmail.subject} ${gmail.text}`)]).toEqual([true, false]);
+    expect([gmail.text.includes('BKNG: pre-split count, change not computed.'), /pending check|3\.3B|3,3/.test(`${gmail.subject} ${gmail.text}`)]).toEqual([true, false]);
     // A real 2x price move with the shares unchanged is not held, nor a 20% buy at a price filers agree on.
     const up = [pos('APH', '032095101', 614_660, 216_753_702), jq2[1]];
     expect(gateMoves(computeMoves(up, jq2, undefined, new Map()), jq2, new Map(), new Map()).held).toEqual([]);
@@ -2511,14 +2529,32 @@ describe('copybook api', () => {
     const goog = { ...base, slug: 'mizuho', slugs: ['mizuho'], manager: 'Mizuho', name: 'Mizuho Securities USA', accession: MZ, moves: { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] }, held: [{ cusip: '02079K107', ticker: 'GOOG', issuer: 'GOOG', display_name: null, put_call: null, change: 'added', reason: 'price_vs_filers' }] };
     await env.DB.put('alerts:pending-check', JSON.stringify([goog]));
     sent = [];
-    expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: MZ, passed: 0, held: 0 }] });
+    // suspect_units without ingest's `unreliable` side reads as "both" (the analyst): it waits, then after 7 days still
+    // flagged it is not counted, with nothing sent.
+    expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: MZ, passed: 0, held: 1 }] });
+    const wk = now + 7 * 24 * 3600_000 + 60_000;
+    expect(await checkHeld(env, wk)).toMatchObject({ checked: [{ accession: MZ, passed: 0, held: 0 }] });
     expect([sent, await env.DB.get('alerts:pending-check')]).toEqual([[], null]);
     expect((await reconciliation(env)).held).toEqual([
-      { accession: MZ, ticker: 'GOOG', cusip: '02079K107', rule: 'price_vs_filers', held_at: accepted, released_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), outcome: 'not_counted' },
+      { accession: MZ, ticker: 'GOOG', cusip: '02079K107', rule: 'price_vs_filers', held_at: accepted, released_at: new Date(wk).toISOString().replace(/\.\d{3}Z$/, 'Z'), outcome: 'not_counted' },
       expect.objectContaining({ accession: ACA, ticker: 'CMPX', rule: 'own_prior', outcome: 'released_after_1d' }),
       expect.objectContaining({ accession: ACC, ticker: 'APH', outcome: 'passed' }),
     ]);
     sent = [];
+    // Released on correction: the same held row, once a later build (or a 13F-HR/A) clears the flag and the line
+    // passes the gate, goes out in the checked follow-up instead of staying not counted.
+    hist.m.set('h/mizuho/2026Q3.json', new TextEncoder().encode(JSON.stringify({ accession: MZ, quarter: '2026Q3', holdings: [{ ...row('GOOG', '02079K107', 'added', 1_734_262, 829_083, 260_365_000, 135_896_000), prev_value: 124_469_000 }] })));
+    await env.DB.put('alerts:pending-check', JSON.stringify([goog]));
+    sent = [];
+    expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: MZ, passed: 1, held: 0 }] });
+    expect(sent.map((m) => m.subject).join(' ')).toMatch(/Mizuho/);
+    // Newport's HON (reissue_ratio_not_applied, "both"): held, never sized.
+    hist.m.set('h/mizuho/2026Q3.json', new TextEncoder().encode(JSON.stringify({ accession: MZ, quarter: '2026Q3', holdings: [{ ...row('GOOG', '02079K107', 'added', 1_734_262, 829_083, 260_365_000, 135_896_000), prev_value: 124_469_000, suspect_reason: 'reissue_ratio_not_applied' }] })));
+    await env.DB.put('alerts:pending-check', JSON.stringify([goog]));
+    sent = [];
+    expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: MZ, passed: 0, held: 1 }] });
+    expect(sent).toEqual([]);
+    await env.DB.delete('alerts:pending-check');
 
     // B: the alert as it went out before the fix (APH "added +$36.5M") reconciles against the build: a correction.
     sent = [];

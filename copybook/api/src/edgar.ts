@@ -103,8 +103,10 @@ export interface MoveRow {
   pct_of_book?: number | null;
   /** The prior quarter's value, when known (guards the size). */
   prev_value?: number | null;
-  /** Which side of the line can't be trusted: "shares" sizes the change from filed values (guardShares). */
+  /** Which side of the line can't be trusted (markUnreliable, guardShares): shown, never in totals or the headline. */
   unreliable?: 'shares' | 'value' | 'both';
+  /** On an unreliable "value" row: the filing's own value per share, for "value unavailable (filed at ≈$4,005/sh)". */
+  filed_per_share?: number;
   /** A stock split between the two quarters: prev_shares is multiplied by it; prev_shares_as_filed keeps the filed count. */
   split?: number;
   prev_shares_as_filed?: number;
@@ -287,6 +289,11 @@ export const FILER_VALUE = "Filer's reported value looks wrong; shown as filed";
 export function guardRows<T extends MoveRow>(rows: T[], book: number | null, prevValue: (r: T) => number | null | undefined, splits?: Set<string> | Map<string, number>, medians?: Map<string, PerShare>): T[] {
   const out: T[] = [];
   for (const r of rows) {
+    // A line ingest flagged goes to the gate as it is, which marks it by its reliable side (never a silent drop).
+    if (unreliableSide(r)) {
+      out.push(r);
+      continue;
+    }
     const c = checkMove({ ...r, prev_value: prevValue(r) ?? r.prev_value ?? null }, book, !!splits && (splits.has(r.cusip) || (!!r.ticker && splits.has(r.ticker))), r.put_call ? {} : (medians?.get(r.cusip) ?? {}));
     if (c.verdict === 'drop') continue;
     out.push(c.verdict === 'unusual' ? { ...r, value_delta: c.value_delta, ...(c.value_delta !== r.value_delta && book ? { delta_pct_of_book: c.value_delta / book } : {}), unusual: true } : r);
@@ -477,6 +484,8 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     delta_pct_of_book: book ? delta / book : null,
     // A bond line (principal, not shares): the gate doesn't compare its value per unit with share prices.
     ...((p as { prn?: boolean }).prn || (p as { shares_type?: string }).shares_type === 'PRN' ? { prn: true } : {}),
+    // Ingest's flags on this line (a book or build row), for the gate to mark by the reliable side (markUnreliable).
+    ...Object.fromEntries((['unreliable', 'price_outlier', 'suspect_units', 'suspect_reason', 'value_basis'] as const).filter((k) => (p as unknown as Record<string, unknown>)[k] != null).map((k) => [k, (p as unknown as Record<string, unknown>)[k]])),
     ...extra,
   });
   for (const c of cur) {
@@ -497,6 +506,8 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     }
     const f = ratio(p, { shares: c.shares, value });
     const ps = Math.round(p.shares * f);
+    // A trade whose shares the filed values can't support is sized from them (guardShares; Mizuho's SPY calls,
+    // Guardcap's BKNG) and marked, before the unit checks below would drop it or tag it unusual.
     if (c.shares !== ps) rows.push(guardShares(row(named, c.shares > ps ? 'added' : 'trimmed', c.shares, ps, value, c.shares ? ((c.shares - ps) * value) / c.shares : 0, { ...adj(p, f), prev_value: p.value }), value - p.value));
   }
   for (const p of before.values()) rows.push(row(p, 'exited', 0, Math.round(p.shares * ratio(p)), 0, -p.value, adj(p, ratio(p))));
@@ -532,10 +543,37 @@ export interface HeldRow {
  * pre-split count kept under the new CUSIP (reissue_ratio_not_applied): its share count can't size a trade. Guardcap's
  * Q2 BKNG (646,216 sh at about $188 a share) against its Q3 1,304 sh read as a $3.30B sale.
  */
-export const unreliableShares = (x: unknown): boolean => {
-  const r = (x ?? {}) as { suspect_units?: unknown; price_outlier?: unknown; suspect_reason?: unknown; value_basis?: unknown };
-  return r.suspect_units === true || r.price_outlier === true || r.suspect_reason === 'reissue_ratio_not_applied' || r.value_basis === 'filed_price_outlier';
-};
+export const unreliableShares = (x: unknown): boolean => unreliableSide(x) !== null;
+
+/**
+ * Which side of a flagged line can't be trusted (the analyst, Nov 11): "value" (mis-priced, e.g. BMO's TEVA at about
+ * $4,005 a share: the share change stands), "shares" (a unit error, e.g. Guardcap's BKNG: the change in filed value
+ * stands) or "both" (a pre-split count kept under a new CUSIP, e.g. Newport's HON: nothing can be computed). Ingest's
+ * `unreliable` when it carries one; until then price_outlier reads as value and the other flags as both.
+ */
+export function unreliableSide(x: unknown): 'value' | 'shares' | 'both' | null {
+  const r = (x ?? {}) as { unreliable?: unknown; suspect_units?: unknown; price_outlier?: unknown; suspect_reason?: unknown; value_basis?: unknown };
+  if (r.unreliable === 'value' || r.unreliable === 'shares' || r.unreliable === 'both') return r.unreliable;
+  if (r.price_outlier === true || r.value_basis === 'filed_price_outlier') return 'value';
+  if (r.suspect_units === true || r.suspect_reason === 'reissue_ratio_not_applied') return 'both';
+  return null;
+}
+
+/**
+ * A row on a flagged line, marked by its reliable side, or null to hold it ("both", unless new or exited). It shows in
+ * the alert but never counts toward the totals or the headline (movesOf, headlineMoves). "shares" takes the change in
+ * filed value (prev_value needed, else it is held); "value" keeps the share change, with the filed price for the note.
+ */
+export function markUnreliable(r: MoveRow, prior?: unknown): MoveRow | null {
+  const side = unreliableSide(prior) ?? unreliableSide(r);
+  if (!side || r.unreliable === side) return r;
+  const filedPs = r.shares > 0 && r.value > 0 ? r.value / r.shares : null;
+  if (r.change === 'new' || r.change === 'exited') return { ...r, unreliable: side };
+  if (side === 'value') return { ...r, unreliable: 'value', ...(filedPs ? { filed_per_share: filedPs } : {}) };
+  const pv = r.prev_value ?? (prior as { value?: number } | undefined)?.value;
+  if (side === 'shares' && pv != null) return { ...r, change: r.value - pv >= 0 ? 'added' : 'trimmed', value_delta: Math.round(r.value - pv), delta_pct_of_book: r.delta_pct_of_book && r.value_delta ? (r.delta_pct_of_book * (r.value - pv)) / r.value_delta : null, unreliable: 'shares' };
+  return null;
+}
 
 /**
  * A trade sized from shares that the filed values can't support: |price x change in shares| over 3x the change in filed
@@ -581,8 +619,10 @@ export function offFilers(r: MoveRow, c?: Consensus): boolean {
  * Options are otherwise not checked (their value is the underlying's).
  */
 export function gateRow(r: MoveRow, prior: { shares: number; value: number } | undefined, k: number, c: Consensus = {}): HeldRow['reason'] | null {
-  // Either line flagged by ingest: never a trade, options included (never released; named "not counted").
-  if (unreliableShares(r) || unreliableShares(prior)) return 'unreliable_shares';
+  // Either line flagged by ingest: by its reliable side (markUnreliable); only "both" on an add or trim is held.
+  // Ingest's flag on the prior line first: a row the size guard marked "shares" is still held when ingest says "both".
+  const side = unreliableSide(prior) ?? unreliableSide(r);
+  if (side) return side === 'both' && r.change !== 'new' && r.change !== 'exited' ? 'unreliable_shares' : null;
   if (r.put_call) return null;
   const off = (x: number, m: number, lim: number) => x / m > lim || m / x > lim;
   const ps = r.shares > 0 && r.value > 0 ? r.value / r.shares : null;
@@ -621,12 +661,16 @@ export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Positio
   prev = linkReissued(prev.map((p) => (p.shares ? p : { ...p, shares: Number((p as { principal_amount?: number }).principal_amount) || 0 })), r.changed.filter((x) => x.change !== 'exited'));
   const before = new Map(prev.map((p) => [posKey(p), p]));
   const held: HeldRow[] = [];
-  const changed = r.changed.filter((x) => {
-    const reason = gateRow(x, before.get(posKey(x)), splits.get(x.cusip) ?? 1, consensus.get(x.cusip));
-    if (reason) held.push({ cusip: x.cusip, ticker: x.ticker, issuer: x.issuer, display_name: x.display_name, put_call: x.put_call, change: x.change, reason });
-    return !reason;
+  let marked = false;
+  const changed = r.changed.flatMap((x) => {
+    const prior = before.get(posKey(x));
+    const reason = gateRow(x, prior, splits.get(x.cusip) ?? 1, consensus.get(x.cusip));
+    const m = reason ? null : markUnreliable(x, prior);
+    if (m !== x) marked = true;
+    if (!m) held.push({ cusip: x.cusip, ticker: x.ticker, issuer: x.issuer, display_name: x.display_name, put_call: x.put_call, change: x.change, reason: reason ?? 'unreliable_shares' });
+    return m ? [m] : [];
   });
-  return held.length ? { moves: movesOf(changed, limit), changed, held } : { ...r, held };
+  return held.length || marked ? { moves: movesOf(changed, limit), changed, held } : { ...r, held };
 }
 
 export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
@@ -635,9 +679,11 @@ export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
       .filter((r) => r.change === c)
       .sort((a, b) => Math.abs(b.value_delta) - Math.abs(a.value_delta))
       .slice(0, limit);
+  // A marked row (unreliable) shows but never counts toward the totals.
+  const counted = rows.filter((r) => !r.unreliable);
   return {
-    bought_usd: rows.reduce((s, r) => s + Math.max(r.value_delta, 0), 0),
-    sold_usd: rows.reduce((s, r) => s - Math.min(r.value_delta, 0), 0),
+    bought_usd: counted.reduce((s, r) => s + Math.max(r.value_delta, 0), 0),
+    sold_usd: counted.reduce((s, r) => s - Math.min(r.value_delta, 0), 0),
     new: top('new'),
     exited: top('exited'),
     added: top('added'),

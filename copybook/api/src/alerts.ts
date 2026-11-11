@@ -3,7 +3,7 @@ import { refreshBooks } from './book';
 import { countAlerts, logSent, pausedFilingMail, resumeUrl, runRevenue } from './revenue';
 import { inFilingWeek } from './seasons';
 import { alertMail, digestMail, type FeedItem, feedItems, holdtermAlertMail, type Mail, sendMail, weeklyNamesMail } from './email';
-import { guardShares, unreliableShares, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
+import { guardShares, markUnreliable, unreliableSide, offFilers, reissuedTicker, isReissued, reissueRatio, loadReissues, bookSuspect, companyFilings, computeMoves, filingId, posKey, gateMoves, gateRow, movesOf, netRenamed, type Consensus, type HeldRow, perShareSuspects, type PerShare, displayCase, guardRows, fetch13F, fetchFilingMeta, fetchForm4, prevQuarterEnd, prior13F, fetchSchedule13, latestFilings, previousSchedule13, quarterOf, secBudget, type FeedEntry, type FilingMeta, type Form4Class, type MoveRow, type Moves, type Position } from './edgar';
 import { isActive, isPaused, isPro, testAddress, type Env, type Member } from './env';
 import { getFollows, getMember, listMembers, putMember, type Follows } from './members';
 import { unsubscribeUrl } from './free';
@@ -1557,29 +1557,30 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
     if (!raw) continue;
     for (const x of (JSON.parse(raw) as DigestDay).filings) {
       if (!x.moves) continue;
-      // A stored row on a line ingest has since flagged (unreliableShares) leaves the feed's moves and totals.
+      // A stored row on a line ingest has since flagged goes by its reliable side (markUnreliable): "both" on an add or
+      // trim leaves the feed; "value" and "shares" stay, marked, out of the totals and the headline.
       // A stored row sized from share counts the filed values can't support (guardShares) takes the filed-value change:
       // its own prior value, else the correction's /v1 figure for the line (Mizuho's SPY calls, -$13.3B -> -$58.0M).
       const v1 = new Map((x.corrected?.rows ?? []).filter((c) => c.v1.change === 'added' || c.v1.change === 'trimmed').map((c) => [posKey({ cusip: c.cusip, put_call: c.put_call }), c.v1.value_delta]));
-      const all = movesRows(x.moves).map((r) => guardShares(r, r.prev_value != null ? r.value - r.prev_value : v1.get(posKey(r))));
-      const ch = all.filter((r) => !unreliableShares(r));
+      const stored = movesRows(x.moves);
+      const now1 = stored.map((r) => markUnreliable(guardShares(r, r.prev_value != null ? r.value - r.prev_value : v1.get(posKey(r)))));
+      const ch = now1.filter((r): r is MoveRow => !!r);
       const splits = x.corrected?.rows.length ? await splitsFor(env, x.quarter) : null;
       const adj = splits ? ch.flatMap((r) => splitRestate(r, splits, x.corrected!.rows)) : ch;
       const net = netRenamed({ moves: x.moves, changed: adj });
-      const stored = movesRows(x.moves);
-      if (ch.length === all.length && net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i] && r === all[i] && all[i].value_delta === stored[i].value_delta)) {
+      if (now1.every((r, i) => r === stored[i]) && net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i])) {
         // A corrected filing is rendered from its stored copy too: an item frozen with other figures (gene's Mizuho
         // item read "SPY calls -$13.3B" from a render the day store never kept) takes the stored moves and the correction.
         if (x.corrected) fixed.set(filingId(x), x);
         continue;
       }
       const moves = net.changed === adj ? movesOf(adj) : net.moves;
-      // Totals cover every row (the stored lists keep the largest few): a dropped row's figure comes out of them.
-      const gone = all.filter((r) => unreliableShares(r));
-      // A guarded row's stored figure comes out of the totals and its filed-value change goes in.
-      const resized = all.map((r, i) => [stored[i].value_delta, r.value_delta] as const).filter(([a, b]) => a !== b);
-      const bought = x.moves.bought_usd - gone.reduce((s, r) => s + Math.max(r.value_delta, 0), 0) - resized.reduce((s, [a, b]) => s + Math.max(a, 0) - Math.max(b, 0), 0);
-      const sold = x.moves.sold_usd + gone.reduce((s, r) => s + Math.min(r.value_delta, 0), 0) + resized.reduce((s, [a, b]) => s + Math.min(a, 0) - Math.min(b, 0), 0);
+      // Totals cover every row (the stored lists keep the largest few): each changed row's stored figure comes out and
+      // what it counts now goes in (nothing, once dropped or marked).
+      const counts = (r: MoveRow | null) => (!r || r.unreliable ? 0 : r.value_delta);
+      const diff = stored.map((r, i) => [counts(r), counts(now1[i])] as const).filter(([a, b]) => a !== b);
+      const bought = x.moves.bought_usd - diff.reduce((s, [a, b]) => s + Math.max(a, 0) - Math.max(b, 0), 0);
+      const sold = x.moves.sold_usd + diff.reduce((s, [a, b]) => s + Math.min(a, 0) - Math.min(b, 0), 0);
       fixed.set(filingId(x), { ...x, moves: { ...moves, bought_usd: bought, sold_usd: sold } });
     }
   }
@@ -1622,10 +1623,17 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
       }
       const prior = r.prev_shares ? { shares: r.prev_shares_as_filed ?? r.prev_shares, value: r.prev_value ?? 0 } : undefined;
       const row: MoveRow = { ...r, split: undefined, ticker: r.ticker ?? h.ticker, delta_pct_of_book: r.delta_pct_of_book ?? null };
-      // A line the build flags (suspect_units, price_outlier, a reissue ratio not applied) is never released, marked or
-      // not: its share count can't size a trade (the lead, Nov 11: Guardcap's BKNG -$3.30B).
-      if (h.reason === 'unreliable_shares' || unreliableShares(r)) {
-        end(a, h, 'not_counted');
+      // A line the build flags goes by its reliable side (the analyst, Nov 11): "value" or "shares" out now, marked and
+      // never in the totals; "both" (a pre-split count) waits, and is not counted once the 7 days are up. A held row whose
+      // flag the build has cleared (an amendment, a later run) goes through the gate as any other: released when it passes.
+      const side = unreliableSide(r);
+      if (side) {
+        const m = markUnreliable(row);
+        if (m) {
+          ok.push(m);
+          end(a, h, 'passed');
+        } else if (now - Date.parse(a.accepted ?? a.filing_date) >= 7 * DAY) end(a, h, 'not_counted');
+        else still.push(h);
         continue;
       }
       const why = gateRow(row, prior, ratioOf(r), cons.get(r.cusip));
