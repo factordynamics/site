@@ -44,20 +44,12 @@ export function Speed() {
   const tick = useTick(60_000, true)
   const lat = useAsync(loadLatency, [tick])
   const d = lat.data
-  // Until 13F rows are complete, the histogram and the latest-alerts table leave them out too.
-  const alerts = ((d?.alerts ?? []) as Alert[]).filter((a) => f13Ready(d) || !a.form.startsWith('13F'))
+  // Until 13F rows are complete, the histogram leaves them out too.
   const timed = seasonGaps(d).filter((a) => f13Ready(d) || !a.form.startsWith('13F'))
   const gaps = timed.map((a) => a.seconds)
   const overall = gapStats(gaps)
-  // 13G alerts are opt-in and outnumber the rest, so the latest-alerts table leaves them out unless asked.
-  const is13G = (form: string) => /13G/.test(form)
-  const optIn = timed.filter((a) => is13G(a.form)).length
-  const [show13G, setShow13G] = useState(false)
-  const lateIds = new Set(((d as { before_moves_fix?: Record<string, { rows?: { accession: string }[] }> } | null | undefined)?.before_moves_fix?.['13F']?.rows ?? []).map((r) => r.accession))
-  const latest = ((d?.log?.length ? d.log : alerts) as Alert[])
-    .filter((a) => (f13Ready(d) || !a.form.startsWith('13F')) && (show13G || !is13G(a.form)))
-    .sort((a, b) => b.sent_at.localeCompare(a.sent_at))
-    .slice(0, 20)
+  // 13G alerts are opt-in and outnumber the rest.
+  const optIn = timed.filter((a) => /13G/.test(a.form)).length
   const median = overall.median_seconds
   const p90 = overall.p90_seconds
   const season = d?.season ?? seasonNow().quarter
@@ -134,70 +126,7 @@ export function Speed() {
         )
       )}
 
-      {!empty && !loading && (
-        <section className="mt-6">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 className="text-[15px] font-semibold">Latest alerts</h2>
-              <p className="mt-1 text-[13px] text-ink-3">The 20 most recent{show13G ? '' : ' 13F, 13D and Form 4'}, New York time.</p>
-            </div>
-            {optIn > 0 && (
-              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-2">
-                <input type="checkbox" checked={show13G} onChange={(e) => setShow13G(e.target.checked)} className="size-4 accent-[var(--color-accent)]" />
-                Show 13G (opt-in)
-              </label>
-            )}
-          </div>
-          <div className="mt-3 overflow-x-auto rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" tabIndex={0} role="region" aria-label="Latest alerts and their latency">
-            <table className="w-full text-[13.5px]">
-              <thead>
-                <tr className="border-b border-line text-left text-[12px] text-ink-3">
-                  <th className="py-2.5 pl-4 pr-2 font-medium sm:px-5">Filer</th>
-                  <th className="px-3 py-2.5 font-medium">Form</th>
-                  <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Channel</th>
-                  <th className="hidden px-3 py-2.5 font-medium sm:table-cell">EDGAR accepted</th>
-                  <th className="hidden px-3 py-2.5 font-medium sm:table-cell">Delivered</th>
-                  <th className="py-2.5 pl-2 pr-4 text-right font-medium sm:px-5">Seconds</th>
-                </tr>
-              </thead>
-              <tbody>
-                {latest.map((a) => (
-                  <tr key={a.accession + a.sent_at} className="border-b border-line last:border-0">
-                    <td className="py-2.5 pl-4 pr-2 sm:px-5">
-                      <Link to={`/investors/${a.slug}/`} className="font-medium hover:text-accent">
-                        {displayName(a.manager)}
-                      </Link>
-                      {a.quarter && (
-                        <>
-                          {' '}
-                          <span className="ml-0.5 whitespace-nowrap text-[11.5px] text-ink-3">{quarterLabel(a.quarter)}</span>
-                        </>
-                      )}
-                      {lateIds.has(a.accession) && ' '}
-                      {lateIds.has(a.accession) && (
-                        <a href="#before-fix" className="ml-0.5 inline-block whitespace-nowrap rounded-full bg-[#fbecd3] px-2 py-0.5 text-[11.5px] font-medium text-[#7a4b00] hover:underline">
-                          moves late, fixed Nov 11
-                        </a>
-                      )}
-                      <span className="num block text-[11.5px] text-ink-3 sm:hidden">accepted {time(a.accepted_at)}</span>
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-ink-2">
-                      <span className="sm:hidden">{/^4(\/A)?$/.test(a.form) ? `Form ${a.form}` : a.form.replace(/^SCHEDULE\s+/, '')}</span>
-                      <span className="hidden sm:inline">{/^4(\/A)?$/.test(a.form) ? `Form ${a.form}` : a.form}</span>
-                    </td>
-                    <td className="hidden whitespace-nowrap px-3 py-2.5 text-ink-2 sm:table-cell">{CHANNELS.find(([k]) => k === (a.channel ?? 'email'))?.[1] ?? a.channel}</td>
-                    <td className="num hidden whitespace-nowrap px-3 py-2.5 text-ink-2 sm:table-cell">{time(a.accepted_at)}</td>
-                    <td className="num hidden whitespace-nowrap px-3 py-2.5 text-ink-2 sm:table-cell">{time(a.sent_at)}</td>
-                    <td className="num py-2.5 pl-2 pr-4 text-right font-medium sm:px-5" title={gapLabel(a.gap_seconds)}>
-                      {Math.round(a.gap_seconds).toLocaleString('en-US')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+      {!loading && <AlertLog d={d} />}
 
       <section className="mt-10 max-w-3xl">
         <h2 className="text-[15px] font-semibold">How we measure</h2>
@@ -413,5 +342,212 @@ function BeforeFix({ d }: { d: Latency | null | undefined }) {
         </ul>
       )}
     </div>
+  )
+}
+
+// Every alert this season, newest first, paged: no row is picked or left out (13G, missed filings, replays and
+// tests included). Per row: EDGAR acceptance, detection, first email, first team-channel delivery and the poller
+// that sent it (payments' latency.json alerts[] fields); a time the log doesn't have reads "not recorded". The
+// summaries leave out replays and tests, and count missed filings by their eventual delay.
+const PAGE = 50
+type LogRow = Alert & {
+  host?: string | null
+  detected_at?: string | null
+  email_accepted_at?: string | null
+  team_delivered_at?: string | null
+  first_alert_at?: string | null
+  moves_sent_at?: string | null
+  held?: boolean | null
+  released_at?: string | null
+  missed?: boolean | null
+  delay_seconds?: number | null
+  never?: boolean | null
+  replay?: boolean | null
+  test?: boolean | null
+  url?: string | null
+}
+const POLLER: Record<string, string> = { cloudflare: 'Cloudflare', server: 'Our server' }
+const formLabel = (f: string) => (/^4(\/A)?$/.test(f) ? `Form ${f}` : f.replace(/^SCHEDULE\s+/, ''))
+const formGroup = (f: string) => (f.startsWith('13F') ? '13F' : /13[DG]/.test(f) ? '13D/G' : /^4/.test(f) ? 'Form 4' : f)
+const dayET = (t: string) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })
+const NR = <span className="text-ink-3">not recorded</span>
+const at = (t?: string | null) => (t ? time(t) : NR)
+function Summary({ title, rows }: { title: string; rows: { seconds: number | null }[] }) {
+  const v = rows.filter((r) => r.seconds != null).map((r) => r.seconds!)
+  const st = gapStats(v)
+  const never = rows.length - v.length
+  return (
+    <tr className="border-b border-line last:border-0">
+      <td className="py-2 pl-4 pr-2 sm:px-5">{title}</td>
+      <td className="num px-2 py-2 text-right sm:px-3">{rows.length.toLocaleString('en-US')}</td>
+      <td className="num px-2 py-2 text-right sm:px-3">{st.median_seconds != null ? gapLabel(st.median_seconds) : '—'}</td>
+      <td className="num px-2 py-2 text-right sm:px-3">{st.p90_seconds != null ? gapLabel(st.p90_seconds) : '—'}</td>
+      <td className="num py-2 pl-2 pr-4 text-right sm:px-5">{never ? `never (${never})` : v.length ? gapLabel(Math.max(...v)) : '—'}</td>
+    </tr>
+  )
+}
+function AlertLog({ d }: { d: Latency | null | undefined }) {
+  const [page, setPage] = useState(0)
+  const x = d as (Latency & { before_moves_fix?: Record<string, { rows?: { accession: string; seconds: number }[] }> }) | null | undefined
+  const late = new Map((x?.before_moves_fix?.['13F']?.rows ?? []).map((r) => [r.accession, r.seconds]))
+  const rows = ((d?.log?.length ? d.log : (d?.alerts ?? [])) as LogRow[]).slice().sort((a, b) => (b.email_accepted_at ?? b.sent_at ?? b.accepted_at).localeCompare(a.email_accepted_at ?? a.sent_at ?? a.accepted_at))
+  // Seconds to the alert that counts: a 13F's moves (the late pre-fix ones by their moves email), a missed
+  // filing's eventual delay, null when it never went out.
+  const secs = (r: LogRow): number | null => (r.never ? null : r.missed && r.delay_seconds != null ? r.delay_seconds : (late.get(r.accession) ?? r.gap_seconds))
+  const counted = rows.filter((r) => !r.replay && !r.test).map((r) => ({ ...r, seconds: secs(r) }))
+  const acc = counted.map((r) => r.accepted_at).sort()
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE))
+  const p = Math.min(page, pages - 1)
+  const shown = rows.slice(p * PAGE, p * PAGE + PAGE)
+  const flagged = rows.length - counted.length
+  const pollers = [...new Set(counted.map((r) => r.host ?? ''))]
+  return (
+    <section id="alerts" className="mt-6 scroll-mt-24">
+      <h2 className="text-[15px] font-semibold">Every alert this season</h2>
+      <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-ink-3">
+        Timed from EDGAR’s acceptance of the filing, to the second, not from when we noticed it. EDGAR accepts filings from 6 am to 10 pm ET on business days; one accepted after 5:30 pm ET carries the next business day’s filing date, but is still timed from its acceptance.
+      </p>
+      {rows.length === 0 ? (
+        <p className="mt-3 text-[14px] text-ink-2">No live alerts yet this season. Each one is listed here once it goes out.</p>
+      ) : (
+        <>
+          <div className="mt-3 overflow-x-auto rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" tabIndex={0} role="region" aria-label="Alert speed by form and poller">
+            <table className="w-full text-[13.5px]">
+              <caption className="px-4 pt-3 text-left text-[12.5px] text-ink-3 sm:px-5">
+                {counted.length.toLocaleString('en-US')} alerts, EDGAR accepted {dayET(acc[0])}
+                {dayET(acc[0]) === dayET(acc[acc.length - 1]) ? '' : ` – ${dayET(acc[acc.length - 1])}`}
+                {flagged ? `; ${flagged} ${flagged === 1 ? 'replay or test' : 'replays and tests'} listed below but not counted` : ''}.
+              </caption>
+              <thead>
+                <tr className="border-b border-line text-left text-[12px] text-ink-3">
+                  <th className="py-2.5 pl-4 pr-2 font-medium sm:px-5">Alerts</th>
+                  <th className="whitespace-nowrap px-2 py-2.5 sm:px-3 text-right font-medium">Count</th>
+                  <th className="whitespace-nowrap px-2 py-2.5 sm:px-3 text-right font-medium">Median</th>
+                  <th className="whitespace-nowrap px-2 py-2.5 sm:px-3 text-right font-medium">90th pct</th>
+                  <th className="py-2.5 pl-2 pr-4 text-right font-medium sm:px-5">Slowest</th>
+                </tr>
+              </thead>
+              <tbody>
+                <Summary title="All" rows={counted} />
+                {['13F', '13D/G', 'Form 4'].map((g) => {
+                  const r = counted.filter((a) => formGroup(a.form) === g)
+                  return r.length ? <Summary key={g} title={g} rows={r} /> : null
+                })}
+                {pollers.map((h) => (
+                  <Summary key={h || 'none'} title={h === 'cloudflare' ? 'Sent by Cloudflare' : h === 'server' ? 'Sent by our server' : h ? 'Sent by another poller' : 'Poller not recorded'} rows={counted.filter((a) => (a.host ?? '') === h)} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]" tabIndex={0} role="region" aria-label="Every alert this season and its latency">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-line text-left text-[12px] text-ink-3">
+                  <th className="py-2.5 pl-4 pr-2 font-medium sm:px-5">Filer</th>
+                  <th className="px-3 py-2.5 font-medium">Form</th>
+                  <th className="hidden px-3 py-2.5 font-medium lg:table-cell">EDGAR accepted (ET)</th>
+                  <th className="hidden px-3 py-2.5 font-medium lg:table-cell">Detected</th>
+                  <th className="hidden px-3 py-2.5 font-medium lg:table-cell">First email</th>
+                  <th className="hidden px-3 py-2.5 font-medium lg:table-cell">Team channel</th>
+                  <th className="hidden px-3 py-2.5 font-medium lg:table-cell">Poller</th>
+                  <th className="py-2.5 pl-2 pr-4 text-right font-medium sm:px-5">Seconds</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((a) => {
+                  const sec = secs(a)
+                  const f13 = a.form.startsWith('13F')
+                  const moves = f13 && (a.moves_sent_at || late.has(a.accession)) ? (a.moves_sent_at ? time(a.moves_sent_at) : `${gapLabel(late.get(a.accession)!)} after acceptance`) : null
+                  return (
+                    <tr key={a.accession + (a.sent_at ?? '')} className={`border-b border-line last:border-0 ${a.replay || a.test ? 'text-ink-3' : ''}`}>
+                      <td className="py-2.5 pl-4 pr-2 align-top sm:px-5">
+                        <Link to={`/investors/${a.slug}/`} className="font-medium hover:text-accent">
+                          {displayName(a.manager)}
+                        </Link>
+                        {a.quarter && (
+                          <>
+                            {' '}
+                            <span className="ml-0.5 whitespace-nowrap text-[11.5px] text-ink-3">{quarterLabel(a.quarter)}</span>
+                          </>
+                        )}
+                        {a.missed && (
+                          <>
+                            {' '}
+                            <span className="ml-0.5 inline-block whitespace-nowrap rounded-full bg-[#fde2e2] px-2 py-0.5 text-[11.5px] font-medium text-[#8a1c1c]">{a.never ? 'missed, never sent' : 'missed, sent late'}</span>
+                          </>
+                        )}
+                        {(a.replay || a.test) && (
+                          <>
+                            {' '}
+                            <span className="ml-0.5 inline-block whitespace-nowrap rounded-full bg-ink/[0.06] px-2 py-0.5 text-[11.5px] font-medium text-ink-2">{a.replay ? 'replay' : 'test'}, not counted</span>
+                          </>
+                        )}
+                        {late.has(a.accession) && (
+                          <>
+                            {' '}
+                            <a href="#before-fix" className="ml-0.5 inline-block whitespace-nowrap rounded-full bg-[#fbecd3] px-2 py-0.5 text-[11.5px] font-medium text-[#7a4b00] hover:underline">
+                              moves late, fixed Nov 11
+                            </a>
+                          </>
+                        )}
+                        <span className="num block text-[11.5px] text-ink-3">
+                          {a.url ? (
+                            <a href={a.url} className="hover:text-accent">
+                              {a.accession}
+                            </a>
+                          ) : f13 ? (
+                            <Link to={`/f/${a.accession}/`} className="hover:text-accent">
+                              {a.accession}
+                            </Link>
+                          ) : (
+                            a.accession
+                          )}
+                        </span>
+                        {f13 && (
+                          <span className="num block text-[11.5px] text-ink-3">
+                            first alert {a.first_alert_at ? time(a.first_alert_at) : 'not recorded'} · moves {a.held ? `pending check, released ${a.released_at ? time(a.released_at) : 'not yet'}` : (moves ?? 'not recorded')}
+                          </span>
+                        )}
+                        <span className="num block text-[11.5px] text-ink-3 lg:hidden">
+                          accepted {time(a.accepted_at)} · emailed {a.email_accepted_at || a.sent_at ? time((a.email_accepted_at ?? a.sent_at)!) : 'not recorded'} · {a.host ? POLLER[a.host] ?? a.host : 'poller not recorded'}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2.5 align-top text-ink-2">{formLabel(a.form)}</td>
+                      <td className="num hidden whitespace-nowrap px-3 py-2.5 align-top text-ink-2 lg:table-cell">{time(a.accepted_at)}</td>
+                      <td className="num hidden whitespace-nowrap px-3 py-2.5 align-top text-ink-2 lg:table-cell">{at(a.detected_at)}</td>
+                      <td className="num hidden whitespace-nowrap px-3 py-2.5 align-top text-ink-2 lg:table-cell">{a.never ? 'never' : at(a.email_accepted_at ?? a.sent_at)}</td>
+                      <td className="num hidden whitespace-nowrap px-3 py-2.5 align-top text-ink-2 lg:table-cell">{at(a.team_delivered_at)}</td>
+                      <td className="hidden whitespace-nowrap px-3 py-2.5 align-top text-ink-2 lg:table-cell">{a.host ? POLLER[a.host] ?? a.host : NR}</td>
+                      <td className="num py-2.5 pl-2 pr-4 text-right align-top font-medium sm:px-5" title={sec != null ? gapLabel(sec) : 'never sent'}>
+                        {sec != null ? Math.round(sec).toLocaleString('en-US') : 'never'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-3">
+            <span className="num">
+              {(p * PAGE + 1).toLocaleString('en-US')}–{(p * PAGE + shown.length).toLocaleString('en-US')} of {rows.length.toLocaleString('en-US')}, newest first. The same rows are in{' '}
+              <a href={import.meta.env.VITE_LATENCY_URL} className="font-medium text-accent hover:text-accent-2">
+                latency.json
+              </a>
+              .
+            </span>
+            {pages > 1 && (
+              <span className="flex gap-2">
+                <button type="button" disabled={p === 0} onClick={() => setPage(p - 1)} className="rounded-full px-3 py-1 font-medium text-accent hover:bg-ink/5 disabled:text-ink-3 disabled:hover:bg-transparent">
+                  Newer
+                </button>
+                <button type="button" disabled={p >= pages - 1} onClick={() => setPage(p + 1)} className="rounded-full px-3 py-1 font-medium text-accent hover:bg-ink/5 disabled:text-ink-3 disabled:hover:bg-transparent">
+                  Older
+                </button>
+              </span>
+            )}
+          </div>
+        </>
+      )}
+    </section>
   )
 }
