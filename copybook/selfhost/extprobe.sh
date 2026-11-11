@@ -11,7 +11,7 @@ if [ "$mode" = funnel ]; then
 else
   B=$TUN/copybook; R=()
 fi
-tok() { node -e "const {createHmac}=require('node:crypto');const b=Buffer.from(JSON.stringify({k:'session',c:process.argv[1],x:Math.floor(Date.now()/1000+900)})).toString('base64url');console.log(b+'.'+createHmac('sha256',process.env.SESSION_SECRET).update(b).digest('base64url'))" "$1"; }
+tok() { node -e "const {createHmac}=require('node:crypto');const b=Buffer.from(JSON.stringify({k:'session',c:process.argv[1],i:Math.floor(Date.now()/1000),x:Math.floor(Date.now()/1000+900)})).toString('base64url');console.log(b+'.'+createHmac('sha256',process.env.SESSION_SECRET).update(b).digest('base64url'))" "$1"; }
 T=$(tok cus_VanPqWjIrbVUMU); P=$(tok cus_VanP6vPTeg2lHw)
 O='origin: https://copybook.factordynamics.com'
 KEY=$(curl -s "${R[@]}" -m 60 -X POST "$B/keys" -H "Authorization: Bearer $P" -H "$O" -H 'content-type: application/json' -d '{"name":"latency-probe"}')

@@ -4,7 +4,7 @@ const B = process.argv[2] ?? 'https://gene.tail70ba3.ts.net/copybook';
 const ORIGIN = 'https://copybook.factordynamics.com';
 const env = process.env;
 const b64 = (b) => Buffer.from(b).toString('base64url');
-const sign = (kind, c, ttl) => { const body = b64(JSON.stringify({ k: kind, c, x: Math.floor(Date.now() / 1000 + ttl) })); return `${body}.${b64(createHmac('sha256', env.SESSION_SECRET).update(body).digest())}`; };
+const sign = (kind, c, ttl) => { const body = b64(JSON.stringify({ k: kind, c, i: Math.floor(Date.now() / 1000), x: Math.floor(Date.now() / 1000 + ttl) })); return `${body}.${b64(createHmac('sha256', env.SESSION_SECRET).update(body).digest())}`; };
 const call = async (path, { method, body, token, headers = {} } = {}) => {
   const r = await fetch(`${B}${path}`, { method: method ?? (body ? 'POST' : 'GET'), body: body == null ? undefined : typeof body === 'string' ? body : JSON.stringify(body), headers: { origin: ORIGIN, ...(body && typeof body !== 'string' ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers }, redirect: 'manual' });
   return r;

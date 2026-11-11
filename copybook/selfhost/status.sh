@@ -27,5 +27,5 @@ journalctl --user -u copybook-api-update -u copybook-api-backup -u copybook-r2-p
 journalctl --user -u copybook-api --since -2h --no-pager -o short-iso | grep -E 'cron|failed|rror|Started|Stopped|listening' | tail -80 | mask | w api.log
 journalctl --user -u copybook-tunnel -n 400 --no-pager -o cat | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | tail -1 | w tunnel-url
 # Sessions for the comped test members (Copy and Pro), valid 2 h: for checks run from the maintainers' account.
-tok() { node -e "const {createHmac}=require('node:crypto');const b=Buffer.from(JSON.stringify({k:'session',c:process.argv[1],x:Math.floor(Date.now()/1000+7200)})).toString('base64url');console.log(b+'.'+createHmac('sha256',process.env.SESSION_SECRET).update(b).digest('base64url'))" "$1"; }
+tok() { node -e "const {createHmac}=require('node:crypto');const b=Buffer.from(JSON.stringify({k:'session',c:process.argv[1],i:Math.floor(Date.now()/1000),x:Math.floor(Date.now()/1000+7200)})).toString('base64url');console.log(b+'.'+createHmac('sha256',process.env.SESSION_SECRET).update(b).digest('base64url'))" "$1"; }
 printf 'TEST_COPY_SESSION=%s\nTEST_PRO_SESSION=%s\n' "$(tok cus_VanPqWjIrbVUMU)" "$(tok cus_VanP6vPTeg2lHw)" | w test-sessions.env
