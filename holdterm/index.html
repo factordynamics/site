@@ -7,18 +7,21 @@
     <script>
       if (location.hostname === 'holdterm.pages.dev') location.replace('https://holdterm.factordynamics.com' + location.pathname + location.search)
       try {
-        if (localStorage.getItem('holdterm-theme') === 'dark') document.documentElement.dataset.theme = 'dark'
+        if (localStorage.getItem('holdterm-theme') === 'dark') {
+          document.documentElement.dataset.theme = 'dark'
+          document.querySelector('meta[name=theme-color]').content = '#151b23'
+        }
       } catch {}
     </script>
     <title>Holdterm · What long-term investors buy and sell</title>
-    <meta name="description" content="13F books, quarterly buys and sells, consensus holdings and 13D/G and Form 4 filings for a rule-based roster of concentrated, long-term funds. SEC EDGAR data, no ads. Email alerts for $3/month." />
+    <meta name="description" content="See what concentrated, long-term investors own, buy and sell, from their 13F, 13D/G and Form 4 filings with the SEC. Free to read, no ads. Alerts for $3 a month." />
     <link rel="canonical" href="https://holdterm.factordynamics.com/" />
     <meta property="og:url" content="https://holdterm.factordynamics.com/" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Holdterm" />
     <meta property="og:title" content="Holdterm · What long-term investors buy and sell" />
-    <meta property="og:description" content="Every roster fund’s 13F book, what it bought and sold, and its 13D/G and Form 4 filings. SEC EDGAR data, no ads." />
+    <meta property="og:description" content="See what concentrated, long-term investors own, buy and sell, from their 13F, 13D/G and Form 4 filings with the SEC. Free to read, no ads." />
     <meta property="og:image" content="https://holdterm.factordynamics.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />

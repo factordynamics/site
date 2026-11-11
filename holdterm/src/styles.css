@@ -2930,6 +2930,9 @@ p a,
 }
 .crumbs a {
   color: var(--acc);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--acc) 45%, transparent);
+  text-underline-offset: 3px;
 }
 .crumbs [aria-current] {
   color: var(--fg2);

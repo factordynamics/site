@@ -14,7 +14,7 @@ import { fundCard, png, siteCard } from './scripts/og'
 const SITE = 'https://holdterm.factordynamics.com'
 const DERIVED = 'https://copybook.factordynamics.com/d/'
 const SECTIONS: Record<string, [string, string]> = {
-  '/': ['What long-term investors buy and sell', 'Every 13F filing, trade, 13D/G and Form 4 from a rule-based roster of concentrated, long-term funds. SEC EDGAR data, no ads.'],
+  '/': ['What long-term investors buy and sell', 'See what concentrated, long-term investors own, buy and sell, from their 13F, 13D/G and Form 4 filings with the SEC. Free to read, no ads.'],
   '/funds': ['Investors', 'The concentrated, long-term investors Holdterm follows, chosen by a published rule, with each one’s latest 13F.'],
   '/flows': ['Buys and sells', 'What long-term investors bought and sold last quarter, stock by stock, from their latest 13F filings.'],
   '/consensus': ['Most owned stocks', 'The stocks long-term investors own in common, ranked by how many own them, dollars held and the biggest single bets.'],
@@ -22,7 +22,7 @@ const SECTIONS: Record<string, [string, string]> = {
   '/alerts': ['Alerts', 'Know within hours when the investors you follow file a 13F, 13D, 13G or Form 4. 7 days free, then $3 a month.'],
   '/account': ['Account', 'Manage Holdterm email alerts.'],
   '/guide': ['How to read Holdterm', 'What 13F, 13D/G and Form 4 filings show, how current they are, and how to read a fund or stock page on Holdterm.'],
-  '/about': ['About', 'How Holdterm chooses its roster and reads SEC filings.'],
+  '/about': ['About', 'How Holdterm chooses the investors it follows and reads their SEC filings.'],
   '/terms': ['Terms', 'Holdterm terms of service.'],
   '/privacy': ['Privacy', 'Holdterm privacy policy.'],
 }

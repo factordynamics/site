@@ -15,7 +15,7 @@ const NAV: [string, string, string][] = [
   ['/funds', 'Investors', 'm'],
   ['/flows', 'Buys & sells', 'f'],
   ['/consensus', 'Most owned', 'c'],
-  ['/filings', 'Stakes & insiders', 'd'],
+  ['/filings', 'Stakes', 'd'],
   ['/alerts', 'Alerts', 'e'],
 ]
 const TABS = NAV.filter((n) => n[0] !== '/alerts')

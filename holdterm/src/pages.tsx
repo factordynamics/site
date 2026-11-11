@@ -677,7 +677,7 @@ export function Fund({ slug }: { slug: string }) {
       <div className="head">
         <div>
           <h1>
-            {book.firm} {!inRoster(slug) && <span className="badge">not on the roster</span>} {stale && <span className="badge warn">stale: latest usable 13F is {quarterLabel(book.quarter)}</span>}
+            {book.firm} {!inRoster(slug) && <span className="badge">Not one of the investors Holdterm follows</span>} {stale && <span className="badge warn">Latest usable 13F is for {quarterLabel(book.quarter)}</span>}
           </h1>
           {book.pm && <p className="lede">Portfolio manager {book.pm}</p>}
           <div className="meta">
@@ -763,14 +763,24 @@ export function Fund({ slug }: { slug: string }) {
           <Grid
             rows={[...hist].reverse()}
             cols={[
-              { key: 'q', label: 'Quarter', render: (r) => quarterLabel(r.quarter) },
-              { key: 'rd', label: 'Holdings as of', render: (r) => date(r.report_date) },
+              {
+                key: 'q',
+                label: 'Quarter',
+                // On phones the quarter is the filing link; the View filing column is hidden there.
+                render: (r) => (
+                  <a href={r.sec_url} target="_blank" rel="noreferrer" className="acc" aria-label={`${quarterLabel(r.quarter)} 13F on SEC EDGAR`}>
+                    {quarterLabel(r.quarter)}
+                  </a>
+                ),
+              },
+              { key: 'rd', label: 'Holdings as of', hideSm: true, render: (r) => date(r.report_date) },
               { key: 'fd', label: 'Filed', render: (r) => date(r.filing_date) },
               { key: 'v', label: 'Portfolio value', num: true, render: (r) => usd(r.equity_value ?? r.total_value) },
               { key: 'n', label: 'Positions', num: true, render: (r) => r.position_count },
               {
                 key: 's',
                 label: <span className="sr">SEC filing</span>,
+                hideSm: true,
                 render: (r) => (
                   <a href={r.sec_url} target="_blank" rel="noreferrer" className="ext">
                     View filing ↗
