@@ -5,12 +5,25 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.7';
+export const SPEC_REVISION = '2026-11-11.8';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-held-lines-in-alerts',
+    date: '2026-11-11',
+    shipped_at: '2026-11-11T18:51:00Z',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Webhook 13F payloads (77e8b62, a5599cb, 6bae423): a line that isn\'t counted is only in `moves.not_counted[]`, never in new, added, trimmed or exited, and never in bought_usd, sold_usd or a headline. Such a line\'s filed figures don\'t reconcile (share counts, values, an option line without a reliable side) or it may be a CUSIP change (an exit and a new line under one issuer prefix in one filing). Each not_counted row has `counted: false`, `value_delta: null` and `delta_pct_of_book: null`, and `change: "unknown"` where it would have read added or trimmed (new and exited stand). Its filed `value` and `prev_value` stay; there is no `value_change` field. Sum value_delta over new, added, trimmed and exited only. Alerts stored before this render the same way.',
+      'Alert emails and feed items show the same lines on one "Not counted:" line with their filed facts, never a $ trade.',
+      'GET /v1/filers/{filer}/holdings/{quarter}: a malformed as_of returns 400 bad_request (a well-formed one still returns 501 not_yet_available until Nov 30, 2026).',
+    ],
+  },
   {
     id: '2026-11-11-as-of-refused',
     date: '2026-11-11',

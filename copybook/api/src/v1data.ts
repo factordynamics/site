@@ -1062,6 +1062,9 @@ ROUTES.push(
   }],
   ['GET', /^\/v1\/filers\/([^/]+)\/holdings\/([^/]+)$/, async ({ env, url }, [id, qp]) => {
     if (url.searchParams.has('as_of')) {
+      const t = url.searchParams.get('as_of') ?? '';
+      const ok = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2}))?$/.test(t) && !Number.isNaN(Date.parse(/T/.test(t) ? t : `${t}T23:59:59Z`));
+      if (!ok) return v1error('bad_request', 400, 'as_of must be an ISO 8601 date (2025-06-01, meaning 23:59:59Z) or a UTC datetime (2025-06-01T20:07:00Z).');
       return v1error('not_yet_available', 501, 'as_of (point-in-time reconstruction) is coming; this endpoint currently returns the book as now known, with amendments merged.');
     }
     if (qp !== 'latest' && !QUARTER.test(qp)) return v1error('bad_request', 400, 'quarter must look like 2025Q1, or be latest.');

@@ -86,7 +86,7 @@ export function openapi() {
           in: 'query',
           required: false,
           description:
-            'NOT YET SERVED (returns 501 not_yet_available). Planned semantics: an ISO 8601 date or UTC datetime; the response is the book exactly as it was publicly known at that instant, i.e. only rows whose first_disclosed_at <= as_of, taken from the original 13F-HR and any amendments accepted by then (a RESTATEMENT amendment replaces the book from its acceptance; a NEW HOLDINGS amendment adds rows). Without as_of the book is the latest known, amendments merged.',
+            'NOT YET SERVED (returns 501 not_yet_available; a malformed value returns 400 bad_request). Live Nov 30, 2026, on this endpoint only (holders and changes return 400 as_of_not_supported until Dec 14). The book for this period as publicly known at T: an ISO 8601 UTC datetime, or a date alone meaning T23:59:59Z that day (EDGAR dates a filing accepted after 17:30 ET to the next business day, so a date-only T can include filings whose filing_date is the next day; pass a datetime for exact cuts). A lot is visible when accepted_at <= T < superseded_at: a NEW HOLDINGS amendment adds lots to existing rows (each row\'s lots[] lists them, oldest first) and can add rows; a RESTATEMENT, or a NEW HOLDINGS amendment that re-files the whole book (mislabeled_amendment), replaces the book from its acceptance. first_disclosed_at is the earliest accepted_at among the row\'s lots at T, superseded lots included. 404 not_yet_filed when no version of the period was accepted by T. Responses carry Copybook-As-Of (the effective time, min(T, now), as a full datetime) and Copybook-Epoch (the accepted_at of the book served). Without as_of: the book as now known, byte-identical to as_of=now except build_id and data_built_at.',
           schema: { type: 'string', format: 'date-time' },
         },
       },
@@ -259,7 +259,7 @@ export function openapi() {
                       accession: { type: 'string' },
                       filed_on: { type: ['string', 'null'], format: 'date' },
                       accepted_at: { type: ['string', 'null'], format: 'date-time', description: 'UTC' },
-                      amendment_type: { type: ['string', 'null'], enum: ['NEW HOLDINGS', 'RESTATEMENT', null], description: 'From the amendment cover page: NEW HOLDINGS adds rows, RESTATEMENT replaces the book' },
+                      amendment_type: { type: ['string', 'null'], enum: ['NEW HOLDINGS', 'RESTATEMENT', null], description: 'From the amendment cover page: NEW HOLDINGS adds lots to existing rows and can add rows (a NEW HOLDINGS that re-files the whole book replaces it, mislabeled_amendment), RESTATEMENT replaces the book' },
                       amendment_no: { type: ['integer', 'null'] },
                       confidential_treatment_expired: { type: ['boolean', 'null'], description: 'True when the amendment discloses positions whose confidential treatment was denied or expired (backdated disclosure)' },
                       mislabeled_amendment: { type: ['boolean', 'null'], description: 'True for a 13F-HR/A marked NEW HOLDINGS that re-files the whole book (it replaces the book instead of adding to it). Null when the data run has no filing trail for the quarter.' },
