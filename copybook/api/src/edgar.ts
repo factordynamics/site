@@ -95,6 +95,8 @@ export interface MoveRow {
   value_delta: number;
   /** A bond (PRN) line: shares and prev_shares are principal. */
   prn?: boolean;
+  /** Held 24 hours because the filer's own value per share looks wrong (units, price vs filers), then sent as filed. */
+  filer_value?: boolean;
   /** The trade as a signed fraction of this filing's book (0-1). */
   delta_pct_of_book: number | null;
   /** Older data-run rows used this name for the trade size. */
@@ -275,6 +277,7 @@ export function perShareSuspects(cur: Position[], prev: Position[]): string[] {
 
 /** The tag a large but real move carries in emails, chat posts and the weekly. */
 export const UNUSUAL = 'Unusual size · check the filing';
+export const FILER_VALUE = "Filer's reported value looks wrong; shown as filed";
 
 /** Applies checkMove to rows: drops unit errors, tags and resizes the rest (`unusual: true`). */
 export function guardRows<T extends MoveRow>(rows: T[], book: number | null, prevValue: (r: T) => number | null | undefined, splits?: Set<string> | Map<string, number>, medians?: Map<string, PerShare>): T[] {

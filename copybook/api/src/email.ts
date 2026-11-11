@@ -1,5 +1,5 @@
 import type { Alert13F, AlertEvent } from './alerts';
-import { cleanItem4, filingId, UNUSUAL, type MoveRow, type Moves } from './edgar';
+import { cleanItem4, filingId, FILER_VALUE, UNUSUAL, type MoveRow, type Moves } from './edgar';
 import { testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
 import { firmName } from '../../../holdterm/src/names';
@@ -363,7 +363,7 @@ const rowName = (r: MoveRow) => (r.ticker || (r.display_name || r.issuer || r.cu
 /** 4,380,656 as "4.38M", 44,294 as "44K". */
 const compact = (n: number) => (n >= 1e6 ? `${+(n / 1e6).toPrecision(3)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n.toLocaleString('en-US'));
 /** " · Unusual size · check the filing" after a large but real move. */
-const odd = (r: MoveRow) => (r.unusual ? ` · ${UNUSUAL}` : '');
+const odd = (r: MoveRow) => `${r.unusual ? ` · ${UNUSUAL}` : ''}${r.filer_value ? ` · ${FILER_VALUE}` : ''}`;
 
 /** The trade as a share of this filing's book (the data run renamed it delta_pct_of_book). */
 const bookPct = (r: MoveRow) => {
@@ -445,7 +445,7 @@ function heldLine(a: Alert13F): string {
 
 /** What the alert said, or what the build has, for one row of a correction. */
 const said = (x: { change: string; value_delta: number }) =>
-  x.change === 'unchanged' ? 'unchanged' : `${x.change === 'new' ? 'a new position' : x.change === 'exited' ? 'sold out' : x.change} ${usd(x.value_delta)}`;
+  x.change === 'total' ? usd(x.value_delta, false) : x.change === 'unchanged' ? 'unchanged' : `${x.change === 'new' ? 'a new position' : x.change === 'exited' ? 'sold out' : x.change} ${usd(x.value_delta)}`;
 const corrLine = (r: CorrectionRow) => `${r.ticker || r.name}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} was ${said(r.v1)}, not ${said(r.emailed)}.`;
 
 /** One wrong row in a sent 13F alert: what the email said and what the data run's build (and /v1) has. */
@@ -714,7 +714,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     out.push(table(['Stock', 'Shares', 'Value', '% of book'], a.reveal.rows.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, r.shares.toLocaleString('en-US'), usd(r.value, false), bookPct(r)]), [1, 2, 3]));
   } else if (mv) {
     out.push(`<p style="margin:2px 0">Bought ${usd(mv.bought_usd, false)}, sold ${usd(mv.sold_usd, false)} this quarter.</p>`);
-    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}`, usd(r.value_delta), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, bookPct(r)]));
+    const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}`, usd(r.value_delta), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', 'Trade, % of book'], rows, [2, 4]));
     if (a.held?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);
     const mine = yourMoves(a, f);

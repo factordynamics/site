@@ -1387,11 +1387,18 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
   const ready: Alert13F[] = [];
   const wait: Alert13F[] = [];
   const log: Record<string, unknown>[] = [];
+  // Each held row's end, for latency.json's reconciliation.held (no member data).
+  const ended: HeldEnd[] = [];
+  const end = (a: Alert13F, h: HeldRow, outcome: HeldEnd['outcome']) =>
+    ended.push({ accession: a.accession, ticker: h.ticker ?? null, cusip: h.cusip, rule: h.reason, held_at: a.accepted ?? a.filing_date, released_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), outcome });
   for (const a of queue) {
     const b = await buildRows(env, a);
     if (!b) {
       if (now - Date.parse(a.accepted ?? a.filing_date) < 7 * DAY) wait.push(a);
-      else log.push({ accession: a.accession, result: 'expired', rows: a.held!.length });
+      else {
+        log.push({ accession: a.accession, result: 'expired', rows: a.held!.length });
+        for (const h of a.held!) end(a, h, 'expired');
+      }
       continue;
     }
     const cons = await consensusFor(env, a.quarter, a.held!.map((h) => h.cusip));
@@ -1399,18 +1406,36 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
     const still: HeldRow[] = [];
     for (const h of a.held!) {
       const r = b.rows.get(rowKey(h));
-      if (!r) continue; // the build shows no move here
+      if (!r) {
+        end(a, h, 'dropped'); // the build shows no move here
+        continue;
+      }
       const prior = r.prev_shares ? { shares: r.prev_shares_as_filed ?? r.prev_shares, value: r.prev_value ?? 0 } : undefined;
       const row: MoveRow = { ...r, split: undefined, ticker: r.ticker ?? h.ticker, delta_pct_of_book: r.delta_pct_of_book ?? null };
       const why = r.suspect_units ? 'units' : gateRow(row, prior, ratioOf(r), cons.get(r.cusip));
-      // own_prior can't tell a real trade (a quant fund doubling shares as the price halves) from a split nobody has
-      // listed. A day after acceptance with the build agreeing and still no split in splits.json, it goes out.
-      if (!why || (why === 'own_prior' && now - Date.parse(a.accepted ?? a.filing_date) >= DAY)) ok.push(row);
-      else still.push(h);
+      const day = now - Date.parse(a.accepted ?? a.filing_date) >= DAY;
+      if (!why) {
+        ok.push(row);
+        end(a, h, 'passed');
+      } else if (why === 'own_prior' && day) {
+        // own_prior can't tell a real trade (a quant fund doubling shares as the price halves) from a split nobody
+        // has listed. A day after acceptance with the build agreeing and still no split in splits.json, it goes out.
+        ok.push(row);
+        end(a, h, 'released_after_1d');
+      } else if ((why === 'units' || why === 'price_vs_filers') && day) {
+        // The filer's own value per share looks wrong (Mizuho Securities' Q3): after a day it goes out as filed,
+        // marked, in the email, the feed and the archive; never dropped silently.
+        ok.push({ ...row, filer_value: true });
+        end(a, h, 'shown_as_filed');
+      } else still.push(h);
     }
     log.push({ accession: a.accession, build: b.build, passed: ok.length, held: still.length, dropped: a.held!.length - ok.length - still.length });
     if (ok.length) ready.push({ ...a, moves: movesOf(ok), changed: ok, tickers: [...new Set(ok.map((x) => x.ticker).filter((t): t is string => !!t))], followup: true, checked: true, held: undefined, moves_pending: undefined, sent_at: undefined });
     if (still.length && now - Date.parse(a.accepted ?? a.filing_date) < 7 * DAY) wait.push({ ...a, held: still });
+  }
+  if (ended.length) {
+    const prev = JSON.parse((await env.DB.get(HELD_LOG)) ?? '[]') as HeldEnd[];
+    await env.DB.put(HELD_LOG, JSON.stringify([...ended, ...prev].slice(0, 2000)));
   }
   const done = new Set(queue.map((x) => x.accession));
   const added = (JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as Alert13F[]).filter((x) => !done.has(x.accession));
@@ -1423,6 +1448,18 @@ export async function checkHeld(env: Env, now: number): Promise<Record<string, u
   return { pending: queue.length, checked: log, ...(sent ? { sent } : {}) };
 }
 
+/** How each row the publish gate held ended (KV alerts:held-log, newest first): latency.json reconciliation.held. */
+const HELD_LOG = 'alerts:held-log';
+interface HeldEnd {
+  accession: string;
+  ticker: string | null;
+  cusip: string;
+  rule: HeldRow['reason'];
+  held_at: string;
+  released_at: string | null;
+  outcome: 'passed' | 'released_after_1d' | 'shown_as_filed' | 'dropped' | 'expired' | null;
+}
+
 /** One reconciliation check, newest first in KV alerts:reconciled (latency.json's `reconciliation`). */
 export interface Reconciled {
   accession: string;
@@ -1432,8 +1469,8 @@ export interface Reconciled {
   checked_at: string;
   build: string | null;
   result: 'pass' | 'fail';
-  /** matched, or its worst failed row: wrong over disclosed over explained. */
-  class?: RowClass | 'matched';
+  /** One of ALERT_CLASSES: its worst failed row (rows before totals), matched, or no_rows. */
+  class?: AlertClass;
   rows: number;
   failed: import('./email').CorrectionRow[];
   recipients: number;
@@ -1447,6 +1484,9 @@ export interface Reconciled {
  */
 const DISCLOSED_SPLITS = new Set(['0001697850-26-000004', '0001062993-26-005832', '0000315066-26-002964', '0001171200-26-000023', '0001140361-26-042753', '0001386060-26-000054', '0001088875-26-000074', '0001172661-26-004909', '0001062993-26-005826']);
 type RowClass = 'disclosed' | 'explained' | 'wrong';
+/** One verdict per checked alert (latency.json reconciliation counts each). */
+export const ALERT_CLASSES = ['matched', 'disclosed', 'disclosed_totals', 'explained', 'wrong', 'wrong_totals', 'no_rows'] as const;
+type AlertClass = (typeof ALERT_CLASSES)[number];
 
 /**
  * Why each failed row failed: `disclosed` (a split row of an alert on /status/), `explained` (a CUSIP change the alert
@@ -1471,14 +1511,41 @@ function classify(a: Alert13F, rows: Map<string, MoveRow>, failed: import('./ema
     return { ...f, class: 'wrong' };
   });
 }
-const alertClass = (failed: { class?: RowClass }[]): RowClass | 'matched' =>
-  !failed.length ? 'matched' : failed.some((f) => f.class === 'wrong') ? 'wrong' : failed.some((f) => f.class === 'disclosed') ? 'disclosed' : 'explained';
+/**
+ * The emailed bought and sold totals against the build's (rows the gate held left out of both), each within 10%. Rows
+ * already classed count at the build's figure, so a total off only because of a classed row isn't a second error.
+ * A total that is off comes back as a row (`why: 'totals'`): disclosed for the split alerts on /status/, else wrong.
+ */
+function totalRows(a: Alert13F, sent: Moves[], failed: import('./email').CorrectionRow[], build: Map<string, BuildRow>, held: HeldRow[] = []): import('./email').CorrectionRow[] {
+  const skip = new Set(held.map((h) => rowKey(h)));
+  const rows = [...build.entries()].filter(([k]) => !skip.has(k)).map(([, v]) => Number(v.value_delta) || 0);
+  const want = { bought: rows.reduce((s, x) => s + Math.max(x, 0), 0), sold: rows.reduce((s, x) => s - Math.min(x, 0), 0) };
+  const off = (x: number, y: number) => Math.abs(x - y) > Math.max(1000, MISMATCH * Math.abs(y));
+  const out: import('./email').CorrectionRow[] = [];
+  for (const k of ['bought', 'sold'] as const) {
+    // Every emailed version (first send, follow-ups): the one furthest from the build, if it's off both as sent and
+    // with the classed rows at the build's figures.
+    const bad = sent
+      .filter((m) => {
+        const adj = failed.reduce((s, f) => s + (k === 'bought' ? Math.max(f.v1.value_delta, 0) - Math.max(f.emailed.value_delta, 0) : Math.min(f.emailed.value_delta, 0) - Math.min(f.v1.value_delta, 0)), m[`${k}_usd`]);
+        return off(m[`${k}_usd`], want[k]) && off(adj, want[k]);
+      })
+      .sort((x, y) => Math.abs(y[`${k}_usd`] - want[k]) - Math.abs(x[`${k}_usd`] - want[k]))[0];
+    if (bad) out.push({ cusip: `total:${k}`, ticker: null, name: `Total ${k}`, put_call: null, emailed: { change: 'total', value_delta: Math.round(bad[`${k}_usd`]) }, v1: { change: 'total', value_delta: Math.round(want[k]) }, class: DISCLOSED_SPLITS.has(a.accession) ? 'disclosed' : 'wrong', why: 'totals' });
+  }
+  return out;
+}
+const alertClass = (failed: { class?: RowClass; why?: string }[], rows = 1): AlertClass => {
+  const has = (c: RowClass, totals: boolean) => failed.some((f) => f.class === c && (f.why === 'totals') === totals);
+  if (!rows) return 'no_rows';
+  return has('wrong', false) ? 'wrong' : has('disclosed', false) ? 'disclosed' : has('wrong', true) ? 'wrong_totals' : has('disclosed', true) ? 'disclosed_totals' : failed.length ? 'explained' : 'matched';
+};
 
 /** Alerts accepted from here get correction emails; earlier ones are checked and logged only. */
 export const RECONCILE_MAIL_FROM = '2026-11-11T05:00:00Z';
 const MISMATCH = 0.1;
-/** The reconciliation log (v3: each check classed matched, disclosed, explained or wrong; v2 had no classes). */
-const RECONCILED = 'alerts:reconciled:v3';
+/** The reconciliation log (v4: classes include totals and no_rows; v3 compared rows only). */
+const RECONCILED = 'alerts:reconciled:v4';
 
 /**
  * gene, every 5 minutes: each 13F alert with moves, once ingest's build serves its filing, row by row against the build
@@ -1490,14 +1557,15 @@ const RECONCILED = 'alerts:reconciled:v3';
 export async function reconcileAlerts(env: Env, now: number, only?: { accession: string; to?: string[] }): Promise<Record<string, unknown>> {
   const log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
   const done = new Set(log.map((x) => x.accession));
-  const found = new Map<string, { a: Alert13F; rows: Map<string, MoveRow>; days: string[] }>();
+  const found = new Map<string, { a: Alert13F; rows: Map<string, MoveRow>; days: string[]; sent: Moves[] }>();
   for (let d = 0; d < (only ? 31 : 4); d++) {
     const day = etDay(now - d * DAY);
     const raw = await env.DB.get(`digest:${day}`);
     if (!raw) continue;
     for (const a of (JSON.parse(raw) as DigestDay).filings) {
       if (!a.moves || a.reveal || a.replay_to?.length || (only ? a.accession !== only.accession : done.has(a.accession))) continue;
-      const x = found.get(a.accession) ?? { a, rows: new Map<string, MoveRow>(), days: [] };
+      const x = found.get(a.accession) ?? { a, rows: new Map<string, MoveRow>(), days: [], sent: [] };
+      x.sent.push(a.moves);
       for (const [change, rows] of [['new', a.moves.new], ['added', a.moves.added], ['trimmed', a.moves.trimmed], ['exited', a.moves.exited]] as const) for (const r of rows) x.rows.set(rowKey(r), { ...r, change });
       if (!x.days.includes(day)) x.days.push(day);
       found.set(a.accession, x);
@@ -1505,13 +1573,14 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
   }
   const out: Reconciled[] = [];
   let pending = 0;
-  for (const { a, rows, days } of found.values()) {
+  for (const { a, rows, days, sent } of found.values()) {
     const b = await buildRows(env, a);
     if (!b) {
       pending++;
       continue;
     }
-    const failed = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter), b.rows);
+    const byRow = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter), b.rows);
+    const failed = rows.size ? [...byRow, ...totalRows(a, sent, byRow, b.rows, a.held)] : byRow;
     // Who got it: the delivery log, as /ops/delivery reads it.
     const rec = await deliveryRecord(env, a.accession, now);
     const members = new Map((await listMembers(env)).map((m) => [m.customer, m]));
@@ -1537,7 +1606,7 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
         }
       }
     }
-    out.push({ accession: a.accession, slug: a.slug, quarter: a.quarter, accepted: a.accepted ?? null, checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), build: b.build, result: failed.length ? 'fail' : 'pass', class: alertClass(failed), rows: rows.size, failed, recipients: rec.counts.members, mailed });
+    out.push({ accession: a.accession, slug: a.slug, quarter: a.quarter, accepted: a.accepted ?? null, checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), build: b.build, result: failed.length ? 'fail' : 'pass', class: alertClass(failed, rows.size), rows: rows.size, failed, recipients: rec.counts.members, mailed });
   }
   if (out.length && !only?.to) {
     const keep = log.filter((x) => !out.some((o) => o.accession === x.accession));
@@ -1576,14 +1645,15 @@ const alertRows = (m: Moves, into = new Map<string, MoveRow>()) => {
  * EDGAR, the prior book as gene reads it, splits, netting and the publish gate. Paged with offset and limit.
  */
 export async function reconcileDry(env: Env, now: number, o: { offset?: number; limit?: number; recompute?: boolean; days?: number } = {}): Promise<Record<string, unknown>> {
-  const found = new Map<string, { a: Alert13F; rows: Map<string, MoveRow> }>();
+  const found = new Map<string, { a: Alert13F; rows: Map<string, MoveRow>; versions: Moves[] }>();
   for (let d = 0; d < (o.days ?? 31); d++) {
     const raw = await env.DB.get(`digest:${etDay(now - d * DAY)}`);
     if (!raw) continue;
     for (const a of (JSON.parse(raw) as DigestDay).filings) {
       if (!a.moves || a.reveal || a.replay_to?.length) continue;
-      const x = found.get(a.accession) ?? { a, rows: new Map<string, MoveRow>() };
+      const x = found.get(a.accession) ?? { a, rows: new Map<string, MoveRow>(), versions: [] };
       alertRows(a.moves, x.rows);
+      x.versions.push(a.moves);
       found.set(a.accession, x);
     }
   }
@@ -1592,14 +1662,15 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
   secBudget.left = Math.max(secBudget.left, 200);
   const out: Record<string, unknown>[] = [];
   const row = (f: import('./email').CorrectionRow) => ({ ticker: f.ticker, cusip: f.cusip, put_call: f.put_call, sent: f.emailed, build: f.v1, class: f.class, ...(f.why ? { why: f.why } : {}) });
-  for (const { a, rows } of page) {
+  for (const { a, rows, versions } of page) {
     const b = await buildRows(env, a);
     if (!b) {
       out.push({ accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, result: 'no_build' });
       continue;
     }
-    const sent = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter), b.rows);
-    const item: Record<string, unknown> = { accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, rows: rows.size, as_sent: { result: sent.length ? 'fail' : 'pass', class: alertClass(sent), failed: sent.map(row) } };
+    const byRow = classify(a, rows, compareToBuild(rows, b.rows), await splitsFor(env, a.quarter), b.rows);
+    const sent = rows.size ? [...byRow, ...totalRows(a, versions, byRow, b.rows, a.held)] : byRow;
+    const item: Record<string, unknown> = { accession: a.accession, slug: a.slug, accepted: a.accepted ?? null, rows: rows.size, as_sent: { result: sent.length ? 'fail' : 'pass', class: alertClass(sent, rows.size), failed: sent.map(row) } };
     if (o.recompute) {
       try {
         const cik = a.sec_url.match(/\/edgar\/data\/(\d+)\//)?.[1] ?? '';
@@ -1613,8 +1684,9 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
           await lookupTickers(env, raw.changed);
           const g = gateMoves(netRenamed(raw), book, await splitsFor(env, q), await consensusFor(env, q, raw.changed.map((x) => x.cusip)));
           const nowRows = alertRows(g.moves);
-          const diff = classify(a, nowRows, compareToBuild(nowRows, b.rows), new Map(), b.rows);
-          item.now = { result: diff.length ? 'fail' : 'pass', class: alertClass(diff), rows: nowRows.size, failed: diff.map(row), held: g.held.map((h) => ({ ticker: h.ticker, cusip: h.cusip, change: h.change, reason: h.reason })) };
+          const nowByRow = classify(a, nowRows, compareToBuild(nowRows, b.rows), new Map(), b.rows);
+          const diff = nowRows.size ? [...nowByRow, ...totalRows(a, [g.moves], nowByRow, b.rows, g.held)] : nowByRow;
+          item.now = { result: diff.length ? 'fail' : 'pass', class: alertClass(diff, nowRows.size), rows: nowRows.size, failed: diff.map(row), held: g.held.map((h) => ({ ticker: h.ticker, cusip: h.cusip, change: h.change, reason: h.reason })) };
         }
       } catch (e) {
         item.now = { result: `error: ${e}` };
@@ -1624,7 +1696,7 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
   }
   const count = (k: 'as_sent' | 'now') => {
     const xs = out.map((x) => x[k] as { result?: string; class?: string } | undefined).filter(Boolean) as { result: string; class?: string }[];
-    return { ...Object.fromEntries(['matched', 'disclosed', 'explained', 'wrong'].map((c) => [c, xs.filter((x) => x.class === c).length])), other: xs.filter((x) => x.result !== 'pass' && x.result !== 'fail').length };
+    return { ...Object.fromEntries(ALERT_CLASSES.map((c) => [c, xs.filter((x) => x.class === c).length])), other: xs.filter((x) => x.result !== 'pass' && x.result !== 'fail').length };
   };
   return { total: all.length, offset: o.offset ?? 0, checked: out.length, as_sent: count('as_sent'), ...(o.recompute ? { now: count('now') } : {}), no_build: out.filter((x) => x.result === 'no_build').length, alerts: out };
 }
@@ -1637,10 +1709,15 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
     passed: log.filter((x) => x.result === 'pass').length,
     failed: log.filter((x) => x.result === 'fail').length,
     // What a reader needs: matched, already disclosed on /status/, explained (no wrong figure), and wrong.
-    ...Object.fromEntries((['matched', 'disclosed', 'explained', 'wrong'] as const).map((k) => [k, log.filter((x) => (x.class ?? (x.result === 'pass' ? 'matched' : 'wrong')) === k).length])),
+    ...Object.fromEntries(ALERT_CLASSES.map((k) => [k, log.filter((x) => (x.class ?? (x.result === 'pass' ? 'matched' : 'wrong')) === k).length])),
     held_pending: (JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as unknown[]).length,
     since: log.length ? log.reduce((m, x) => (x.checked_at < m ? x.checked_at : m), log[0].checked_at) : null,
-    recent: log.slice(0, 20).map((x) => ({ accession: x.accession, slug: x.slug, quarter: x.quarter, checked_at: x.checked_at, result: x.result, class: x.class ?? null, rows: x.rows, failed_rows: x.failed.length, corrections_sent: x.mailed })),
+    // Every row the gate held: still held (outcome null), then how each ended.
+    held: [
+      ...(JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as Alert13F[]).flatMap((a) => (a.held ?? []).map((h): HeldEnd => ({ accession: a.accession, ticker: h.ticker ?? null, cusip: h.cusip, rule: h.reason, held_at: a.accepted ?? a.filing_date, released_at: null, outcome: null }))),
+      ...(JSON.parse((await env.DB.get(HELD_LOG)) ?? '[]') as HeldEnd[]),
+    ],
+    recent: log.map((x) => ({ accession: x.accession, slug: x.slug, quarter: x.quarter, checked_at: x.checked_at, result: x.result, class: x.class ?? null, rows: x.rows, failed_rows: x.failed.length, corrections_sent: x.mailed })),
   };
 }
 

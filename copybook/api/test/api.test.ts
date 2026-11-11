@@ -1952,6 +1952,23 @@ describe('copybook api', () => {
     expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: ACA, passed: 0, held: 1 }] });
     expect(await checkHeld(env, now + 24 * 3600_000)).toMatchObject({ checked: [{ accession: ACA, passed: 1, held: 0 }] });
     expect(await env.DB.get('alerts:pending-check')).toBeNull();
+    // A row held because the filer's own value looks wrong (Mizuho Securities' GOOG at $150 against filers' $341) is
+    // never dropped: a day on it goes out as filed, marked, and the held list says so.
+    const MZ = '0001062993-26-005832';
+    hist.m.set('h/mizuho/2026Q3.json', new TextEncoder().encode(JSON.stringify({ accession: MZ, quarter: '2026Q3', holdings: [{ ...row('GOOG', '02079K107', 'added', 1_734_262, 829_083, 260_365_000, 165_000_000), prev_value: 294_800_000, suspect_units: true }] })));
+    await putFollows('cus_j', { investors: ['jensen', 'mizuho'] });
+    const goog = { ...base, slug: 'mizuho', slugs: ['mizuho'], manager: 'Mizuho', name: 'Mizuho Securities USA', accession: MZ, moves: { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] }, held: [{ cusip: '02079K107', ticker: 'GOOG', issuer: 'GOOG', display_name: null, put_call: null, change: 'added', reason: 'price_vs_filers' }] };
+    await env.DB.put('alerts:pending-check', JSON.stringify([goog]));
+    sent = [];
+    expect(await checkHeld(env, now)).toMatchObject({ checked: [{ accession: MZ, passed: 0, held: 1 }] });
+    expect(sent).toHaveLength(0);
+    expect(await checkHeld(env, now + 24 * 3600_000)).toMatchObject({ checked: [{ accession: MZ, passed: 1, held: 0 }] });
+    expect(sent[0]?.text).toContain("Added: GOOG +$165.0M (+109% shares, 5.2% of book) · Filer's reported value looks wrong; shown as filed");
+    expect((await reconciliation(env)).held).toEqual([
+      { accession: MZ, ticker: 'GOOG', cusip: '02079K107', rule: 'price_vs_filers', held_at: accepted, released_at: new Date(now + 24 * 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z'), outcome: 'shown_as_filed' },
+      expect.objectContaining({ accession: ACA, ticker: 'CMPX', rule: 'own_prior', outcome: 'released_after_1d' }),
+      expect.objectContaining({ accession: ACC, ticker: 'APH', outcome: 'passed' }),
+    ]);
     sent = [];
 
     // B: the alert as it went out before the fix (APH "added +$36.5M") reconciles against the build: a correction.
@@ -1961,22 +1978,25 @@ describe('copybook api', () => {
     await env.DB.put(`digest:${day}`, JSON.stringify({ filings: [{ ...base, moves: { bought_usd: 46_579_232, sold_usd: 5_000_000, new: [], added: [row('APH', '032095101', 'added', 1_047_486, 614_660, 88_303_070, 36_487_232), row('MSFT', '594918104', 'added', 519_677, 500_000, 266_542_333, 10_200_000), { ...row('SPY', '78462F103', 'added', 2000, 1000, 1_300_000, 650_000), put_call: 'Call' }, row('BOND', '00000BND1', 'added', 141_206_378, 1, 141_206_378, 141_206_377)], trimmed: [], exited: [row('ORCL', '68389X105', 'exited', 0, 30_000, 0, -5_000_000)] } }], events: [] }));
     await env.DB.put('delivered:cus_j', JSON.stringify([{ day, ids: [ACC] }]));
     const r = await reconcileAlerts(env, now);
-    // MSFT within 10%, the ORCL exit and the SPY call pass; APH and the bond (sized from a zero prior, as Advent's was) are wrong.
-    expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 5, failed: 2, mailed: 1 }], pending: 0 });
+    // MSFT within 10%, the ORCL exit and the SPY call pass; APH and the bond (sized from a zero prior, as Advent's was) are
+    // wrong; the emailed bought total ($46.6M against the build's $11.8M, still off with APH and the bond at its figures) is
+    // off too, but this accession's totals are already disclosed on /status/ (the split alerts), so it isn't mailed again.
+    expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 5, failed: 3, mailed: 1 }], pending: 0 });
     expect(sent[0]?.text).toContain('BOND');
+    expect(sent[0]?.text).not.toContain('Total bought');
     expect(sent.map((m) => m.to[0])).toEqual(['copybook-test-j@fldubai.com']);
     const store = JSON.parse((await env.DB.get(`digest:${day}`))!);
-    expect(store.filings[0].corrected.rows.map((x: { ticker: string }) => x.ticker)).toEqual(['BOND', 'APH']);
+    expect(store.filings[0].corrected.rows.map((x: { ticker: string | null; name: string }) => x.ticker ?? x.name)).toEqual(['BOND', 'APH']);
     // Checked once: the next run doesn't mail again; the log feeds latency.json's reconciliation.
     sent = [];
     expect((await reconcileAlerts(env, now)).checked).toEqual([]);
     // The operator's dry run reads the same stores: the alert is wrong as sent (APH and the bond), and it sends nothing.
     const { reconcileDry } = await import('../src/alerts');
     const dry = await reconcileDry(env, now);
-    expect([dry.total, dry.as_sent]).toEqual([1, { matched: 0, disclosed: 0, explained: 0, wrong: 1, other: 0 }]);
-    expect((dry.alerts as { as_sent: { failed: { ticker: string; class: string }[] } }[])[0].as_sent.failed.map((f) => [f.ticker, f.class])).toEqual([['BOND', 'wrong'], ['APH', 'wrong']]);
+    expect([dry.total, dry.as_sent]).toEqual([1, { matched: 0, disclosed: 0, disclosed_totals: 0, explained: 0, wrong: 1, wrong_totals: 0, no_rows: 0, other: 0 }]);
+    expect((dry.alerts as { as_sent: { failed: { ticker: string | null; cusip: string; class: string }[] } }[])[0].as_sent.failed.map((f) => [f.ticker ?? f.cusip, f.class])).toEqual([['BOND', 'wrong'], ['APH', 'wrong'], ['total:bought', 'disclosed']]);
     expect(sent).toHaveLength(0);
-    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, matched: 0, disclosed: 0, explained: 0, wrong: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', class: 'wrong', failed_rows: 2, corrections_sent: 1 }] });
+    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, matched: 0, disclosed: 0, explained: 0, wrong: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', class: 'wrong', failed_rows: 3, corrections_sent: 1 }] });
   });
 
   it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {
