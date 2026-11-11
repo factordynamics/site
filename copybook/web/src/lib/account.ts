@@ -10,6 +10,8 @@ export type Member = {
   interval?: 'monthly' | 'yearly' | 'unknown'
   /** `send_invoice` when the plan is billed by invoice (Net 30) instead of a card. */
   collection?: 'charge_automatically' | 'send_invoice' | null
+  /** A Copy Fund trial billed by invoice: when the invoice comes, when it's due, and what prints on it. */
+  invoice_trial?: { invoice_on: string; due_on: string; amount?: number | null; currency?: string; po?: string | null; ap_email?: string | null; invoice_to?: string | null } | null
   trial_end?: number | null
   period_end?: number | string | null
   /** Cancelled in the billing portal: access continues until cancel_at (unix seconds). */

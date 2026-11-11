@@ -120,6 +120,18 @@ export function Account() {
 
 function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = false, onOut, onChange }: { member: Member; welcome: boolean; upgraded?: string; kept?: string; resumed?: boolean; focus?: boolean; onOut: () => void; onChange: (m: Member) => void }) {
   const [busy, setBusy] = useState(false)
+  // The billing portal opens in this tab; when neither the API's portal session nor the fallback link can open, say so.
+  const [portalErr, setPortalErr] = useState('')
+  const portal = () => {
+    setBusy(true)
+    setPortalErr('')
+    openPortal().catch((e) => {
+      setBusy(false)
+      if (needsVerify(e)) return
+      if (checkout.portal) window.location.href = checkout.portal
+      else setPortalErr(errText(e, 'The billing portal didn’t open. Please try again, or email us.'))
+    })
+  }
   const { status, follows } = useFollows()
   const [editing, setEditing] = useState(false)
   const cancelling = Boolean(member.cancel_at_period_end)
@@ -245,13 +257,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
                     key={label}
                     type="button"
                     disabled={busy}
-                    onClick={() => {
-                      setBusy(true)
-                      openPortal().catch((e) => {
-                        setBusy(false)
-                        if (checkout.portal && !needsVerify(e)) window.location.href = checkout.portal
-                      })
-                    }}
+                    onClick={portal}
                     className={`font-medium ${label === 'Cancel plan' ? 'text-ink-2 hover:text-down' : 'text-accent hover:text-accent-2'}`}
                   >
                     {label}
@@ -271,21 +277,21 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
             variant="dark"
             className="mt-5"
             disabled={busy}
-            onClick={() => {
-              setBusy(true)
-              openPortal().catch((e) => {
-                setBusy(false)
-                if (checkout.portal && !needsVerify(e)) window.location.href = checkout.portal
-              })
-            }}
+            onClick={portal}
           >
             {busy ? 'Opening…' : cancelling ? 'Resume plan' : 'Manage billing'} <Arrow />
           </Button>
+          {portalErr && (
+            <p role="alert" className="mt-2 text-[13px] text-down">
+              {portalErr}
+            </p>
+          )}
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
-            {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : member.pause_after_trial ? `Nothing is charged until ${dayLabel(member.pause_after_trial.until)}. Real-time alerts stop when the trial ends and resume then; your follows and settings stay.` : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
+            {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : member.collection === 'send_invoice' && member.invoice_trial ? invoiceTerms(member.invoice_trial) : member.collection === 'send_invoice' ? 'Billed by invoice (Net 30), payable by card, ACH or bank transfer. Each invoice comes by email; nothing is charged to a card.' : member.pause_after_trial ? `Nothing is charged until ${dayLabel(member.pause_after_trial.until)}. Real-time alerts stop when the trial ends and resume then; your follows and settings stay.` : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
           </p>
           {!cancelling && member.interval === 'monthly' && !trial && <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">Monthly plans can pause between seasons{member.digest_live ? '; your names digest keeps coming' : ''}.</p>}
           {!cancelling && member.plan === 'fund' && member.interval === 'yearly' && member.collection !== 'send_invoice' && <InvoiceSwitch onChange={onChange} />}
+          {!cancelling && member.collection === 'send_invoice' && member.invoice_trial && <InvoiceDetails t={member.invoice_trial} onChange={onChange} />}
           {!cancelling && <Leave member={member} onChange={onChange} />}
             </>
           )}
@@ -361,7 +367,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
       </div>
 
       {member.active && member.plan === 'copy' && !member.seat && !member.cancel_at_period_end && <UpgradePro member={member} className="mt-5" />}
-      {member.active && member.referral && <Referral r={member.referral} />}
+      {member.active && member.referral && member.plan !== 'fund' && <Referral r={member.referral} />}
       {member.active && member.plan === 'fund' && !member.seat && <Team />}
       {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
       {member.active && <ApiKeys member={member} focus={focus} />}
@@ -759,6 +765,80 @@ const REASONS: [CancelReason, string][] = [
 
 /** Leaving: one question, then Pause until the next season (monthly members) ahead of cancelling in the portal. */
 /** A Fund owner on yearly billing moves the card subscription or trial to an invoice, Net 30 (POST /account/invoice). */
+const shortDay = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+// `amount` is Stripe's integer cents (199000 for the founding Fund year).
+const usd = (a?: number | null) => (a != null ? a / 100 : 1990)
+/** The plan line for a Copy Fund trial billed by invoice (payments' /me invoice_trial). */
+const invoiceTerms = (t: NonNullable<Member['invoice_trial']>) =>
+  [
+    `Invoice trial: $${usd(t.amount).toLocaleString('en-US')} invoice on ${shortDay(t.invoice_on)}${t.invoice_to ? ` to ${t.invoice_to}` : ''}, due ${shortDay(t.due_on)} (Net 30)`,
+    t.po && `PO ${t.po}`,
+    t.ap_email && `AP ${t.ap_email}`,
+    'payable by card, ACH or bank transfer',
+    `cancel before ${shortDay(t.invoice_on)} and nothing is owed`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+/** Edit what prints on the invoice (POST /account/invoice with po and ap_email; an empty field clears it). */
+function InvoiceDetails({ t, onChange }: { t: NonNullable<Member['invoice_trial']>; onChange: (m: Member) => void }) {
+  const [open, setOpen] = useState(false)
+  const [po, setPo] = useState(t.po ?? '')
+  const [ap, setAp] = useState(t.ap_email ?? '')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const field = 'h-9 w-full rounded-lg bg-paper px-3 text-[13.5px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]'
+  if (!open)
+    return (
+      <p className="mt-2 text-[13.5px]">
+        <button type="button" onClick={() => setOpen(true)} className="font-medium text-accent hover:text-accent-2">
+          Edit PO and AP email
+        </button>
+        {msg?.ok && <span className="ml-3 text-[12.5px] text-up">{msg.text}</span>}
+      </p>
+    )
+  return (
+    <form
+      className="mt-3 grid gap-3 rounded-xl bg-ink/[0.03] p-3.5 sm:grid-cols-[1fr_1.4fr_auto] sm:items-end"
+      onSubmit={(e) => {
+        e.preventDefault()
+        setBusy(true)
+        setMsg(null)
+        call<{ member?: Member }>('/account/invoice', { method: 'POST', body: { po: po.trim(), ap_email: ap.trim() }, auth: true })
+          .then((r) => {
+            if (r.member) onChange(r.member)
+            setOpen(false)
+            setMsg({ text: 'Saved. The invoice will print these.', ok: true })
+          })
+          .catch((e) => setMsg({ text: errText(e, e instanceof ApiError && e.detail ? e.detail : 'That didn’t save. Please try again, or email us.'), ok: false }))
+          .finally(() => setBusy(false))
+      }}
+    >
+      <label className="block text-[12.5px] font-medium text-ink-2">
+        PO number
+        <input value={po} onChange={(e) => setPo(e.target.value)} maxLength={140} className={`${field} mt-1`} />
+      </label>
+      <label className="block text-[12.5px] font-medium text-ink-2">
+        AP email (printed on the invoice)
+        <input type="email" value={ap} onChange={(e) => setAp(e.target.value)} className={`${field} mt-1`} />
+      </label>
+      <span className="flex gap-2">
+        <Button type="submit" size="sm" disabled={busy}>
+          {busy ? 'Saving…' : 'Save'}
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </span>
+      {msg && !msg.ok && (
+        <p role="alert" className="text-[12.5px] text-down sm:col-span-3">
+          {msg.text}
+        </p>
+      )}
+    </form>
+  )
+}
+
 function InvoiceSwitch({ onChange }: { onChange: (m: Member) => void }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
