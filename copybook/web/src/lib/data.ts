@@ -5,6 +5,10 @@ export { displayName }
 export const BASE = import.meta.env.BASE_URL
 // Data can live on another origin (VITE_DATA_BASE); GitHub Pages serves it with CORS *.
 export const DATA: string = import.meta.env.VITE_DATA_BASE || `${BASE}data/`
+/** A file that changes the moment a fund files (index.json, a fund's book, its history and events). Pages serves
+ *  JSON with max-age=600 and its CDN ignores the query string, so the CDN copy can trail a publish by up to 10
+ *  minutes; the two-minute bucket keeps the browser from holding its own copy for another 10 on top. */
+export const live = (path: string) => `${DATA}${path}?v=${Math.floor(Date.now() / 120_000)}`
 
 export type Change = 'new' | 'added' | 'trimmed' | 'exited' | 'unchanged'
 
@@ -133,7 +137,7 @@ export type IndexData = {
 
 export async function loadIndex(): Promise<IndexData> {
   const [idx, uni] = await Promise.all([
-    getJSON<{ generated_at: string; managers: Manager[]; types_as_of?: string }>(`${DATA}index.json`),
+    getJSON<{ generated_at: string; managers: Manager[]; types_as_of?: string }>(live('index.json')),
     getJSON<{ curated: { slug: string; featured?: boolean }[]; filer_count?: number }>(`${DATA}universe.json`).catch(
       () => ({ curated: [], filer_count: 0 }),
     ),
@@ -186,7 +190,7 @@ async function loadFiler(slug: string): Promise<ManagerFile> {
     cik = all.filers.find((f) => f.slug === slug && f.ok !== false)?.cik
     if (!cik) throw new Error(`404 ${slug}`)
   }
-  const idx = await getJSON<{ managers: Manager[] }>(`${DATA}index.json`)
+  const idx = await getJSON<{ managers: Manager[] }>(live('index.json'))
   const curated = idx.managers.find((m) => m.ok && m.cik.replace(/^0+/, '') === cik!.replace(/^0+/, ''))
   if (curated) throw new CuratedRedirect(curated.slug)
   const f = await getJSON<Shard>(`${DATA}f/${cik.padStart(10, '0')}.json`)
@@ -233,8 +237,8 @@ async function loadFiler(slug: string): Promise<ManagerFile> {
 export async function loadManager(slug: string): Promise<ManagerFile> {
   await loadSectors().catch(() => null)
   // Curated slugs never end in the "-NNNN" CIK suffix that every filers.json slug carries.
-  if (/-\d{1,4}$/.test(slug) && !(await getJSON<{ managers: Manager[] }>(`${DATA}index.json`)).managers.some((m) => m.slug === slug)) return loadFiler(slug)
-  const m = await getJSON<ManagerFile>(`${DATA}${slug}.json`)
+  if (/-\d{1,4}$/.test(slug) && !(await getJSON<{ managers: Manager[] }>(live('index.json'))).managers.some((m) => m.slug === slug)) return loadFiler(slug)
+  const m = await getJSON<ManagerFile>(live(`${slug}.json`))
   return {
     ...m,
     manager: displayName(m.manager),

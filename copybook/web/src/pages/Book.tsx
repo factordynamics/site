@@ -10,7 +10,7 @@ import { useSearch } from '../components/Search'
 import { Arrow, Badge, Button, edgeFade, Lock, Panel, Skeleton, Stat } from '../components/ui'
 import { ApiStatus, Updating } from '../components/ApiStatus'
 import { ApiError, apiDown, getToken, needsReauth, isFree, isPro, lastEvents, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
-import { DATA, getJSON, quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle, type Manager } from '../lib/data'
+import { getJSON, live, quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle, type Manager } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
 import { accNo, cap, issuerLatest, pctChange, whenLabel, type Latest } from '../lib/insiders'
 import { loadFilerHolders, loadStock, resolveTicker, stockPath, type Stock, type StockHolder } from '../lib/stocks'
@@ -599,7 +599,7 @@ function LiteBook({ member }: { member: Member }) {
   const [params, setParams] = useSearchParams()
   const asked = params.get('funds')
   const lens: LiteLens = asked === 'tracked' || asked === 'super' ? asked : 'smart'
-  const types = useAsync(() => getJSON<{ managers: Manager[] }>(`${DATA}index.json`).then((d) => new Map(d.managers.map((m) => [m.slug, m.type ?? '']))), [])
+  const types = useAsync(() => getJSON<{ managers: Manager[] }>(live('index.json')).then((d) => new Map(d.managers.map((m) => [m.slug, m.type ?? '']))), [])
   const linkedOnly = useMemo(() => {
     const manual = new Set(follows.owned_manual ?? [])
     return new Set((follows.book?.tickers ?? []).filter((t) => !manual.has(t)))

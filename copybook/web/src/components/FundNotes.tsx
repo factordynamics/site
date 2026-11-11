@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMember } from '../lib/account'
-import { DATA, pricingTo, dateLabel, displayName, shareClass as shareClassOf, money, pct, quarterLabel, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
+import { live, pricingTo, dateLabel, displayName, shareClass as shareClassOf, money, pct, quarterLabel, sharesFmt, useAsync, type ManagerFile } from '../lib/data'
 import { stockPath } from '../lib/stocks'
 import { Badge, Lock, Panel } from './ui'
 
@@ -494,7 +494,7 @@ function EventRow({ e }: { e: Ev }) {
   )
 }
 
-export const loadEvents = (slug: string) => fetch(`${DATA}events/${slug}.json`).then((x) => (x.ok ? (x.json() as Promise<{ events?: Ev[]; latest_13f_quarter?: string | null }>) : null))
+export const loadEvents = (slug: string) => fetch(live(`events/${slug}.json`)).then((x) => (x.ok ? (x.json() as Promise<{ events?: Ev[]; latest_13f_quarter?: string | null }>) : null))
 
 /** Between-quarter moves: Form 4 trades and 13D/G stake filings since the latest 13F, rolled up per position. */
 export function SinceLast13F({ slug, quarter, filedOn, holdings }: { slug: string; quarter?: string; filedOn?: string; holdings: ManagerFile['holdings'] }) {

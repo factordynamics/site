@@ -1,5 +1,5 @@
 import { ApiError, call } from './account'
-import { cleanHolding, DATA, getJSON, type Holding } from './data'
+import { cleanHolding, DATA, getJSON, live, type Holding } from './data'
 import { pairReissues } from './reissuePairs.mjs'
 
 // Public quarter index: data/{slug}-history.json (newest first, 50-row top_holdings preview).
@@ -44,7 +44,7 @@ const loadLinks = () =>
 
 /** Every quarter, newest first, each with its full book. */
 export async function loadHistory(slug: string) {
-  const [idx] = await Promise.all([getJSON<HistoryIndex>(`${DATA}${slug}-history.json`), loadLinks()])
+  const [idx] = await Promise.all([getJSON<HistoryIndex>(live(`${slug}-history.json`)), loadLinks()])
   const quarters = await Promise.all(idx.history.map((q) => loadQuarter(slug, q)))
   quarters.sort((a, b) => b.quarter.localeCompare(a.quarter))
   return { manager: idx.manager, cik: idx.cik, quarters }
@@ -74,7 +74,7 @@ const trade = (h: Holding) => !h.suspect_duplicate && !h.suspect_units
  * against the quarter before, and exits are rows with no shares. Null when that quarter isn't on file.
  */
 export async function loadQuarterBook(slug: string, quarter: string) {
-  const [idx] = await Promise.all([getJSON<HistoryIndex>(`${DATA}${slug}-history.json`).catch(() => null), loadLinks()])
+  const [idx] = await Promise.all([getJSON<HistoryIndex>(live(`${slug}-history.json`)).catch(() => null), loadLinks()])
   const at = idx?.history.find((q) => q.quarter === quarter)
   if (!idx || !at) return null
   const before = idx.history.filter((q) => q.quarter < quarter).sort((a, b) => b.quarter.localeCompare(a.quarter))[0]
