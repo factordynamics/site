@@ -23,7 +23,15 @@ type Health = {
   degraded?: (string | { route?: string; path?: string; note?: string; status?: string })[] | null
 }
 type Probe = { base: string; at: string | null; health: Health | null; ms: number | null }
-type Lat = Latency & { uptime_7d?: number | null; availability_7d?: number | null }
+
+type Window = { uptime: number | null; checks: number; failed: number }
+/** Payments' status.json, written by Cloudflare's cron every minute: 13F alert health and the API probe. */
+type StatusFile = {
+  generated_at?: string
+  alerts_13f?: { state: 'ok' | 'amber'; reasons?: string[]; pending_moves?: number; oldest_pending_seconds?: number | null; reset_queue?: number }
+  probe?: { target?: string; interval_seconds?: number; '24h'?: Window; '7d'?: Window; daily?: (Window & { day: string })[] }
+}
+const STATUS_URL = String(import.meta.env.VITE_LATENCY_URL).replace(/latency\.json$/, 'status.json')
 
 const API_JSON = import.meta.env.VITE_API_JSON_URL as string
 const POLLER_LATE_S = 5 * 60
@@ -76,6 +84,7 @@ export function Status() {
   const tick = useTick(60_000, true)
   const p = useAsync(probe, [tick])
   const lat = useAsync(loadLatency, [tick])
+  const st = useAsync(() => fetch(`${STATUS_URL}?m=${Math.floor(Date.now() / 60_000)}`).then((r) => (r.ok ? (r.json() as Promise<StatusFile>) : null)).catch(() => null), [tick])
   // Re-render the "N s ago" lines between checks.
   const [, setNow] = useState(0)
   useEffect(() => {
@@ -92,7 +101,7 @@ export function Status() {
   const filingDay = isEdgarDay(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }))
   const dataTone: Tone = lagS == null ? (fresh.loading ? 'wait' : 'warn') : filingDay && lagS > 2 * 3600 ? 'warn' : 'up'
   const dataIssues = (log.data?.entries ?? []).filter((e) => e.kind === 'correction' || e.kind === 'incident')
-  const l = lat.data as Lat | null | undefined
+  const l = lat.data as Latency | null | undefined
   const h = pr?.health ?? null
   const checking = !pr
 
@@ -102,10 +111,17 @@ export function Status() {
   const pollerHost = (last && (last.x === h?.poller_last_run ? h?.poller_host : l?.poller_host)) ?? h?.poller_host ?? l?.poller_host
   const pollerAge = last ? (Date.now() - last.t) / 1000 : null
   const pollerTone: Tone = pollerAge == null ? (lat.loading && checking ? 'wait' : 'warn') : pollerAge < POLLER_LATE_S ? 'up' : 'down'
+  // Payments' 13F health signal: amber while a 13F waits over 10 minutes for its moves or alert email is held.
+  const a13 = st.data?.alerts_13f
+  const alertsTone: Tone = pollerTone === 'up' && a13?.state === 'amber' ? 'warn' : pollerTone
+  const pr24 = st.data?.probe?.['24h']
+  const pr7 = st.data?.probe?.['7d']
+  const days = st.data?.probe?.daily ?? []
+  // A percentage from a few dozen checks misleads: show one only once about a full day (90% of 1,440 minutes) is measured.
+  const full24 = (pr24?.checks ?? 0) >= 1296
 
   const apiTone: Tone = checking ? 'wait' : h ? 'up' : 'down'
   const degraded = (h?.degraded ?? []).map((d) => (typeof d === 'string' ? d : [d.route ?? d.path, d.note ?? d.status].filter(Boolean).join(': ')))
-  const uptime = l?.uptime_7d ?? l?.availability_7d ?? null
 
   const overall: { tone: Tone; text: string } = checking
     ? { tone: 'wait', text: 'Checking…' }
@@ -113,7 +129,7 @@ export function Status() {
       ? { tone: 'down', text: 'Alerts and member pages are down' }
       : apiTone === 'down'
         ? { tone: 'down', text: 'Member pages and the API are unavailable. Filing alerts still go out.' }
-        : pollerTone === 'down'
+        : pollerTone === 'down' || alertsTone === 'warn'
           ? { tone: 'warn', text: 'Filing alerts are delayed' }
           : degraded.length
             ? { tone: 'warn', text: 'Some API routes are degraded' }
@@ -150,15 +166,27 @@ export function Status() {
           ) : (
             <>
               <Row name="Member API" tone={apiTone} state={h ? `Up · answered in ${pr!.ms} ms` : 'Not answering'}>
-                Dedicated machine via Cloudflare Tunnel · {host(pr!.base)}
+                A personal machine, via a temporary Cloudflare quick tunnel · {host(pr!.base)}
                 {pr!.at ? ` · address since ${utc(pr!.at)}` : ''}
                 {h?.api_up_since ? ` · running since ${utc(h.api_up_since)}` : ''}
               </Row>
               <Row
                 name="Filing alerts"
-                tone={pollerTone}
-                state={pollerAge == null ? 'No recent poller run on record' : `EDGAR poller last ran ${ago(pollerAge)} ago · ${pollerHost === 'cloudflare' ? 'Cloudflare' : 'backup'}`}
+                tone={alertsTone}
+                state={pollerAge == null ? 'No recent poller run on record' : `${alertsTone === 'warn' ? '13F alerts delayed · ' : ''}EDGAR poller last ran ${ago(pollerAge)} ago · ${pollerHost === 'cloudflare' ? 'Cloudflare' : 'backup'}`}
               >
+                {a13 && (
+                  <span className="block">
+                    13F alert health: {a13.state === 'amber' ? 'delayed' : 'normal'} · 13F moves pending: {a13.pending_moves ?? 0}.{' '}
+                    {a13.pending_moves === 1
+                      ? `One 13F alert is waiting for its moves${a13.oldest_pending_seconds ? ` (${ago(a13.oldest_pending_seconds)} so far)` : ''}. `
+                      : a13.pending_moves
+                        ? `${a13.pending_moves} 13F alerts are waiting for their moves${a13.oldest_pending_seconds ? `, the oldest for ${ago(a13.oldest_pending_seconds)}` : ''}. `
+                        : ''}
+                    {a13.reset_queue ? `${a13.reset_queue} alert ${a13.reset_queue === 1 ? 'email is' : 'emails are'} held until the daily sending limit resets. ` : ''}
+                    {!a13.pending_moves && !a13.reset_queue && a13.reasons?.length ? `${a13.reasons.join('; ')}. ` : ''}
+                  </span>
+                )}
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
               </Row>
               <Row name="Filing data" tone={dataTone} state={lagS == null ? 'Not known yet' : `Last data build ${ago(lagS)} ago${dataTone === 'warn' ? ', later than usual for a filing day' : ''}`}>
@@ -173,8 +201,31 @@ export function Status() {
                   {degraded.join(' · ')}
                 </Row>
               )}
-              <Row name="Uptime, last 7 days" tone={uptime == null ? 'none' : uptime >= (uptime <= 1 ? 0.999 : 99.9) ? 'up' : 'warn'} state={uptime == null ? 'Not measured yet' : pct(uptime)}>
-                {uptime == null ? 'A measured 7-day figure appears here once the API publishes it. There is no uptime SLA.' : 'Member API, as measured by the API host. There is no uptime SLA.'}
+              <Row
+                name="Member API uptime"
+                tone={!full24 ? 'none' : (pr7?.uptime ?? 0) >= 0.999 ? 'up' : 'warn'}
+                state={!full24 ? 'Not measured yet' : `${pct(pr24!.uptime ?? 0)} last 24 h (${pr24!.checks.toLocaleString('en-US')} checks) · ${pct(pr7!.uptime ?? 0)} last 7 days (${pr7!.checks.toLocaleString('en-US')} checks)`}
+              >
+                {full24 && pr7 ? (
+                  <>
+                    <span className="mt-2 flex items-end gap-1.5" aria-label="Uptime by day, oldest first">
+                      {days.map((d) => (
+                        <span key={d.day} className="flex w-9 flex-col items-center gap-1">
+                          <span
+                            title={d.checks ? `${d.day}: ${pct(d.uptime ?? 0)} of ${d.checks} checks` : `${d.day}: not measured`}
+                            className={`h-7 w-full rounded-[5px] ${!d.checks ? 'bg-ink/10' : (d.uptime ?? 0) >= 0.999 ? 'bg-up/80' : (d.uptime ?? 0) >= 0.99 ? 'bg-[#d98a00]/80' : 'bg-down/80'}`}
+                          />
+                          <span className="num text-[11px] text-ink-3">{new Date(`${d.day}T12:00:00Z`).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', timeZone: 'UTC' })}</span>
+                        </span>
+                      ))}
+                    </span>
+                    <span className="mt-2 block">
+                      Checked every minute from Cloudflare against the API’s /health since {new Date(`${days.find((d) => d.checks)?.day ?? st.data!.generated_at!.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}; {pr7.failed} of {pr7.checks.toLocaleString('en-US')} checks failed. Grey days weren’t measured. There is no uptime SLA.
+                    </span>
+                  </>
+                ) : (
+                  `Checked every minute from Cloudflare against the API’s /health${pr24?.checks ? `: ${pr24.checks.toLocaleString('en-US')} checks so far` : ''}. Figures appear once a full 24 hours is measured. There is no uptime SLA.`
+                )}
               </Row>
             </>
           )}
@@ -185,10 +236,15 @@ export function Status() {
         <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Incidents</h2>
         <p className="mt-1.5 text-[13.5px] text-ink-3">{INCIDENT_RULE}</p>
         <ol className="mt-3 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
-          {INCIDENTS.map(([when, what]) => (
+          {INCIDENTS.map(([when, what, link]) => (
             <li key={when} className="py-3 text-[14px] leading-relaxed">
               <span className="num block text-[12.5px] text-ink-3">{when}</span>
               <span className="text-ink-2">{what}</span>
+              {link && (
+                <Link to={link} className="ml-1.5 font-medium text-accent hover:text-accent-2">
+                  See them
+                </Link>
+              )}
             </li>
           ))}
         </ol>
@@ -213,6 +269,10 @@ export function Status() {
           ,{' '}
           <a href={import.meta.env.VITE_LATENCY_URL} className="font-mono text-accent hover:text-accent-2">
             latency.json
+          </a>{' '}
+          ,{' '}
+          <a href={STATUS_URL} className="font-mono text-accent hover:text-accent-2">
+            status.json
           </a>{' '}
           and the API’s <code className="font-mono">/health</code>.
         </p>

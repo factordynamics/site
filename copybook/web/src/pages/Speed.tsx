@@ -194,10 +194,15 @@ export function Speed() {
         )}
         <h3 className="mt-5 text-[15px] font-semibold">Incidents</h3>
         <ol className="mt-2 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
-          {INCIDENTS.map(([when, what]) => (
+          {INCIDENTS.map(([when, what, link]) => (
             <li key={when} className="py-3 text-[14px] leading-relaxed">
               <span className="num block text-[12.5px] text-ink-3">{when}</span>
               <span className="text-ink-2">{what}</span>
+              {link && (
+                <Link to={link} className="ml-1.5 font-medium text-accent hover:text-accent-2">
+                  See them
+                </Link>
+              )}
             </li>
           ))}
         </ol>
@@ -302,12 +307,12 @@ type Before = { count: number; median_seconds: number | null; p90_seconds?: numb
 function BeforeFix({ d }: { d: Latency | null | undefined }) {
   const x = d as (Latency & { moves_fix_at?: string; before_moves_fix?: Record<string, Before> }) | null | undefined
   const b = x?.before_moves_fix?.['13F']
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(() => window.location.hash === '#before-fix')
   if (!b?.count) return null
   const day = x?.moves_fix_at ? new Date(x.moves_fix_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : null
   const slow = b.max_seconds != null ? `slowest ${gapLabel(b.max_seconds)}` : b.p90_seconds != null ? `90th percentile ${gapLabel(b.p90_seconds)}` : ''
   return (
-    <div className="mt-3 text-[13px] leading-relaxed text-ink-2">
+    <div id="before-fix" className="mt-3 scroll-mt-24 text-[13px] leading-relaxed text-ink-2">
       Before a fix{day ? ` on ${day}` : ''}, {b.count} 13F {b.count === 1 ? 'alert' : 'alerts'} sent {b.count === 1 ? 'its' : 'their'} moves late (median {b.median_seconds != null ? gapLabel(b.median_seconds) : '—'}
       {slow ? `, ${slow}` : ''}).{' '}
       {b.rows?.length ? (

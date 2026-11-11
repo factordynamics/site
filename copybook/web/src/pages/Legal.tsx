@@ -8,7 +8,8 @@ const UPDATED = 'November 9, 2026'
 // newest date is the page's "Last updated".
 const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string][]>> = {
   security: [
-    ['November 11, 2026', 'What else runs on it: the API machine is the founder’s home desktop and also runs his other personal projects, under the same operating-system account as the API.'],
+    ['November 11, 2026', 'Host description shortened; the disclosure is unchanged.'],
+    ['November 11, 2026', 'What else runs on it: the API runs on a personal machine, under an account shared with other software that can technically read its data files.'],
     ['November 11, 2026', 'Who can see member data: Copybook is maintained by AI coding agents on Amp; the MDR terms and their exceptions are quoted, and agent requests that run through the founder’s personal Claude and Grok subscriptions go under those providers’ consumer terms.'],
     ['November 11, 2026', 'Hosting: the API is reached through a temporary Cloudflare quick tunnel until it has its own hostname. Hourly local snapshots are now encrypted. Sign-in and Fund invite link lifetimes added.'],
     ['November 11, 2026', 'Recovery: the rebuild from encrypted backups was rehearsed (about 7 minutes to restore, 30–60 minutes end to end); the standby move is not yet rehearsed.'],
