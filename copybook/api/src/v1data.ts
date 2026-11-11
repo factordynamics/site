@@ -1,7 +1,7 @@
 import { PUBLIC_V1_BASE, type Env } from './env';
 import { lookupTickers } from './alerts';
 import { cleanItem4, easternToUtc, posKey, fetch13F, fetchFilingMeta, filings13F, SEC_UA, type Filed13F, type FilingMeta, unreliableSide } from './edgar';
-import { ROUTES, v1error, v1json, noMs, stampOf, type Stamp } from './v1';
+import { ROUTES, v1error, v1json, noMs, stampOf, served, buildsManifest, STORES, type Read, type Stamp } from './v1';
 
 /** Smallest bulk file served: a real quarter is tens of MB gzipped (2026Q2: 69 MB); smaller ones are stubs from a failed run. */
 const MIN_BULK_BYTES = 1_000_000;
@@ -438,14 +438,14 @@ async function versionHoldings(env: Env, cik: string, v: Version): Promise<any[]
 }
 
 /** The book as it stood at one filing (?version=original or an accession), or an error response. */
-async function versionBook(env: Env, book: Record<string, unknown>, version: string): Promise<Response> {
+async function versionBook(env: Env, book: Record<string, unknown>, version: string, quarter: string): Promise<Response> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const filing = book.filing as any;
   const versions = filing.versions as Version[] | null;
   if (!versions) return v1error('server_error', 503, 'EDGAR filing list unavailable; retry shortly.');
   const v = version === 'original' ? versions.find((x) => x.form === '13F-HR') : versions.find((x) => x.accession === version);
   if (!v) return v1error('not_found', 404, `No such filing for this period; see filing.versions (${versions.map((x) => x.accession).join(', ')}).`);
-  if (v.status === 'current' && !versions.some((x) => x.status === 'merged')) return v1json({ ...(STAMP.get(book) ?? {}), data: { ...book, version: v.accession } });
+  if (v.status === 'current' && !versions.some((x) => x.status === 'merged')) return served(env, [{ store: 'filer_view', stamp: STAMP.get(book), quarter }], { ...(STAMP.get(book) ?? {}), data: { ...book, version: v.accession } });
   const rows = await versionHoldings(env, filing.filer_cik, v);
   if (!rows) return v1error('not_yet_available', 501, `The book as filed in ${v.accession} is too large to read live; it is served once the data run publishes superseded books.`);
   const equityTotal = rows.filter(isEquity).reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
@@ -1131,7 +1131,7 @@ ROUTES.push(
     if (!book) return v1error('not_found', 404, `No ${qp} 13F for ${f.row.slug}; latest is ${latestOf(f) ?? 'none'}.`);
     const version = url.searchParams.get('version');
     if (version && version !== 'original' && !/^\d{10}-\d{2}-\d{6}$/.test(version)) return v1error('bad_request', 400, 'version is original or an accession like 0001104659-26-097200.');
-    return version ? versionBook(env, book, version) : v1json({ ...(STAMP.get(book) ?? {}), data: book });
+    return version ? versionBook(env, book, version, quarter!) : served(env, [{ store: 'filer_view', stamp: STAMP.get(book), quarter }], { ...(STAMP.get(book) ?? {}), data: book });
   }],
   ['GET', /^\/v1\/filers\/([^/]+)\/holdings$/, async ({ env, url }, [id]) => {
     const from = url.searchParams.get('from') ?? '';
@@ -1144,19 +1144,23 @@ ROUTES.push(
     const last = quarters[quarters.length - 1];
     const data = [];
     const missing = [];
+    const reads: Read[] = [];
     for (const q of quarters) {
       if (f.curated && !f.row.history_quarters.includes(q) && q !== f.row.latest_quarter) {
         missing.push(q);
         continue;
       }
       const b = await bookFor(env, f, q);
-      if (b) data.push(b);
+      if (b) {
+        data.push(b);
+        reads.push({ store: 'filer_view', stamp: STAMP.get(b), quarter: q });
+      }
       else missing.push(q);
     }
     // At most 8 quarters per call; `next_from` continues the range.
     // Books read from different builds: the response names the oldest (each changes when its source is re-uploaded).
     const stamps = data.map((b) => STAMP.get(b)).filter((x): x is Stamp => !!x).sort((a, b) => (a.data_built_at ?? '').localeCompare(b.data_built_at ?? ''));
-    return v1json({ ...(stamps[0] ?? {}), data, missing, next_from: last < to ? nextQuarter(last) : null });
+    return served(env, reads, { ...(stamps[0] ?? {}), data, missing, next_from: last < to ? nextQuarter(last) : null });
   }],
   ['GET', /^\/v1\/stocks\/([^/]+)\/holders$/, async ({ env, url }, [id]) => {
     const p = url.searchParams;
@@ -1186,7 +1190,7 @@ ROUTES.push(
     if (quarter && nbp) h.counts = { ...h.counts, net: nbp[quarter] ?? 0, net_quarter: quarter };
     if ((p.get('current_only') ?? 'true') === 'true' && h.counts_current) h.counts = { ...h.counts, ...h.counts_current };
     const data = { issuer: h.issuer, ...(is.superseded_by ? { superseded_by: is.superseded_by } : {}), ticker: is.ticker ?? h.tickers[0] ?? null, tickers: h.tickers, display_name: h.display_name, cohort: p.get('cohort') ?? 'all', type: p.get('type') ?? null, counts: h.counts && h.pending?.length ? { ...h.counts, pending: h.pending.length } : h.counts, truncated: h.truncated, holders: sp.holders.slice(offset, offset + limit).map(classShape), options: sp.options.map(classShape), exited: sp.exited.map(classShape), ...(h.pending?.length ? { pending: h.pending.filter((r) => keep(r)).map(classShape) } : {}) };
-    return v1json({ ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, 200, { 'server-timing': timing.join(', ') });
+    return served(env, [{ store: 'hl', stamp: h.stamp }], { ...(h.stamp ?? {}), data, count: sp.count, filers: sp.filers, options_count: sp.options_count, exited_count: sp.exited_count, next_offset: offset + limit < sp.count ? offset + limit : null }, { 'server-timing': timing.join(', ') });
   }],
   ['GET', /^\/v1\/bulk$/, async ({ env }) => {
     // Persistent per-quarter exports of every filer's book, uploaded by the data run. Every field comes from the stored
@@ -1222,6 +1226,12 @@ ROUTES.push(
     return new Response(obj.body, {
       headers: { ...digest, 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
     });
+  }],
+  // The build each store serves (ingest's meta/builds.json), so a client can see a rebuild coming before a 409.
+  ['GET', /^\/v1\/meta\/builds$/, async ({ env }) => {
+    const m = await buildsManifest(env, true);
+    const stores = Object.fromEntries(STORES.map((s) => [s, m?.stores?.[s] ? { build_id: m.stores[s]!.build_id, built_at: noMs(m.stores[s]!.built_at) } : null]));
+    return v1json({ data: { stores, quarters: m?.quarters ?? [], published: !!m } });
   }],
   ['GET', /^\/v1\/events$/, async ({ env, url }) => {
     const t0 = Date.now();
@@ -1426,6 +1436,7 @@ ROUTES.push(
       .filter((r) => want.includes(r.change) && Math.abs(r.value_delta_usd ?? r.value_usd ?? 0) >= minValue)
       .filter((r) => cohort === 'all' || (curatedCiks ? curatedCiks.has(r.filer.cik) : r.filer.type === cohort))
       .sort((a, b) => Math.abs(b.value_delta_usd ?? 0) - Math.abs(a.value_delta_usd ?? 0));
-    return v1json({ ...(stamp ?? {}), data: out.slice(offset, offset + limit).map(classShape), quarter, count: out.length, next_offset: offset + limit < out.length ? offset + limit : null });
+    const store = source === 'filer' ? 'filer_view' : source === 'stock' ? 'hl' : 'changes';
+    return served(env, [{ store, stamp, quarter }], { ...(stamp ?? {}), data: out.slice(offset, offset + limit).map(classShape), quarter, count: out.length, next_offset: offset + limit < out.length ? offset + limit : null });
   }],
 );

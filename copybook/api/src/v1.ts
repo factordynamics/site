@@ -5,7 +5,7 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.19';
+export const SPEC_REVISION = '2026-11-11.20';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 /**
@@ -32,6 +32,16 @@ export function perClassNotice(pinned: boolean, base: string, now = Date.now()):
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-data-build',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Every /v1 response carries `data_build`: the build each data store was read at, `{hl, changes, filer_view}` (holder index, cross-filer changes, filer books), null for a store it didn\'t read. A response whose reads come from mixed builds (a store older than the build now served, mid-rebuild) answers 409 `data_rebuilding` with Retry-After instead of stale rows. GET /v1/meta/builds lists the build each store serves.',
+    ],
+  },
   {
     id: '2026-11-11-per-class-preview',
     date: '2026-11-11',
@@ -382,6 +392,76 @@ export function stampOf(o: { uploaded?: Date; customMetadata?: Record<string, st
   return id || at ? { build_id: id, data_built_at: at } : undefined;
 }
 
+/**
+ * The three stores a /v1 response can read (the analyst's stale filer-view P1, Nov 11): `hl` the holder index
+ * (hl/{issuer6}.json: holders, /changes?ticker=), `changes` the cross-filer change files (changes/{YYYYQn}.json),
+ * `filer_view` the filer books (h/{slug}/{YYYYQn}.json, fb/{YYYYQn}/{cik10}.json: holdings, /changes?filer=).
+ */
+export type Store = 'hl' | 'changes' | 'filer_view';
+export const STORES: Store[] = ['hl', 'changes', 'filer_view'];
+/** One object a response read: its store, its build (stampOf) and, for changes and filer views, its quarter. */
+export type Read = { store: Store; stamp?: Stamp; quarter?: string | null };
+/**
+ * Ingest's gate (the producer side) publishes meta/builds.json once a run's uploads are all in: per store, the build
+ * now served, and the quarters that run rebuilt (every hl/ object, and the changes and filer views of those quarters,
+ * carry that build). Absent, the API can't tell a stale object from a current one and checks only within a response.
+ */
+export type BuildsManifest = { quarters?: string[]; stores?: Partial<Record<Store, { build_id: string; built_at: string }>> };
+export const BUILDS_KEY = 'meta/builds.json';
+let manifest: { at: number; m: BuildsManifest | null } = { at: 0, m: null };
+/** The manifest, read from R2 at most once a minute per isolate. */
+export async function buildsManifest(env: Env, fresh = false): Promise<BuildsManifest | null> {
+  if (!fresh && Date.now() - manifest.at < 60_000) return manifest.m;
+  const obj = await env.HIST.get(BUILDS_KEY);
+  let m: BuildsManifest | null = null;
+  try {
+    m = obj ? ((await new Response(obj.body).json()) as BuildsManifest) : null;
+  } catch {
+    m = null;
+  }
+  manifest = { at: Date.now(), m };
+  return m;
+}
+export const REBUILD_RETRY = 300;
+
+/**
+ * A /v1 body from reads of the three stores: `data_build` names the build each store was read at (the newest when a
+ * range read several quarters), and reads from mixed builds answer 409 data_rebuilding with Retry-After rather than
+ * stale rows. Mixed: two stores at different ingest builds within the response, or an object older than the build
+ * the manifest says that store serves for its quarter (an object the run didn't re-upload yet, or missed).
+ */
+export async function served(env: Env, reads: Read[], body: Record<string, unknown>, headers: Record<string, string> = {}): Promise<Response> {
+  const got = reads.filter((r): r is Read & { stamp: Stamp } => !!r.stamp?.build_id);
+  const newest = (s: Store) => got.filter((r) => r.store === s).sort((a, b) => (b.stamp.data_built_at ?? '').localeCompare(a.stamp.data_built_at ?? ''))[0]?.stamp.build_id ?? null;
+  const data_build = Object.fromEntries(STORES.map((s) => [s, newest(s)])) as Record<Store, string | null>;
+  const m = await buildsManifest(env);
+  const gated = (r: Read) => r.store === 'hl' || (!!r.quarter && !!m?.quarters?.includes(r.quarter));
+  // Ids ingest named (not an upload time, r2-…): two stores at different ones in one response.
+  const named = got.filter((r) => !r.stamp.build_id!.startsWith('r2-') && (!m || gated(r)));
+  const ids = new Map<Store, string>();
+  for (const r of named) if (!ids.has(r.store)) ids.set(r.store, r.stamp.build_id!);
+  let bad: { store: Store; read: Stamp; current: { build_id: string; built_at: string } | null } | null = null;
+  if (new Set(ids.values()).size > 1) {
+    const [s] = [...ids.keys()];
+    bad = { store: s, read: named.find((r) => r.store === s)!.stamp, current: null };
+  }
+  for (const r of got) {
+    const cur = m?.stores?.[r.store];
+    if (bad || !cur || !gated(r) || r.stamp.build_id === cur.build_id) continue;
+    if ((r.stamp.data_built_at ?? '') < noMs(cur.built_at)!) bad = { store: r.store, read: r.stamp, current: { build_id: cur.build_id, built_at: noMs(cur.built_at)! } };
+  }
+  if (bad) {
+    const what = bad.current ? `is at build ${bad.read.build_id}, older than the ${bad.current.build_id} it now serves` : `was read at build ${bad.read.build_id}, while another store in this response is at ${[...ids.values()].find((x) => x !== bad!.read.build_id)}`;
+    return v1json(
+      { data_build, error: { code: 'data_rebuilding', message: `The data is being rebuilt: ${bad.store} ${what}. Retry after ${REBUILD_RETRY} s rather than mixing builds.`, store: bad.store, read: bad.read, current: bad.current }, retry_after_seconds: REBUILD_RETRY },
+      409,
+      { ...headers, 'retry-after': String(REBUILD_RETRY) },
+    );
+  }
+  return v1json({ ...body, data_build }, 200, headers);
+}
+const NO_BUILD: Record<Store, null> = { hl: null, changes: null, filer_view: null };
+
 /** When the served data was built, from the data run's index (KV v1:build, refreshed hourly). */
 let build: { data_built_at: string | null; build_id: string | null } = { data_built_at: null, build_id: null };
 
@@ -397,6 +477,7 @@ export const ERRORS = {
   not_yet_available: 'This option is documented but not served yet.',
   as_of_not_supported: 'as_of is not supported on this endpoint yet; it would be ignored, so the request is refused.',
   server_error: 'Something went wrong on our side.',
+  data_rebuilding: 'The stores this response reads are mid-rebuild (mixed builds); retry after the Retry-After seconds rather than read stale rows.',
   busy: 'The API is busy; retry after the Retry-After seconds.',
   quarter_incomplete_by_ticker: "Past quarters by ticker aren't complete yet; use /v1/bulk/{quarter} or per-filer /v1/changes. Full coverage is due Nov 23, 2026.",
 } as const;
@@ -407,12 +488,12 @@ const base = { 'content-type': 'application/json', 'access-control-allow-origin'
 const WEIGHT_DEPRECATION = (base: string) => ({ deprecation: '@1794182400', sunset: 'Mon, 08 Feb 2027 00:00:00 GMT', link: `<${base}/v1/changelog?id=2026-11-09-weight-equity-only>; rel="deprecation"`, 'access-control-expose-headers': 'deprecation, sunset, link, retry-after' });
 
 export function v1json(data: Record<string, unknown>, status = 200, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify({ schema_version: SCHEMA_VERSION, ...build, ...data }), { status, headers: { ...base, ...headers } });
+  return new Response(JSON.stringify({ schema_version: SCHEMA_VERSION, ...build, data_build: NO_BUILD, ...data }), { status, headers: { ...base, ...headers } });
 }
 
 /** The start of a /v1 JSON body, up to the comma before the payload: for streamed responses. */
 export function v1prefix(): string {
-  return JSON.stringify({ schema_version: SCHEMA_VERSION, ...build }).slice(0, -1) + ',';
+  return JSON.stringify({ schema_version: SCHEMA_VERSION, ...build, data_build: NO_BUILD }).slice(0, -1) + ',';
 }
 
 export function v1error(code: ErrorCode, status: number, message?: string, headers: Record<string, string> = {}): Response {
@@ -494,9 +575,9 @@ async function routeV1(req: Request, env: Env, url: URL, path: string): Promise<
   if (!auth.ok) return v1error(auth.code as ErrorCode, auth.status, auth.message);
   // Limits are per account (Copy Pro: every key together) or per seat (Copy Fund: the owner is one seat), never per key;
   // each key still counts its own use for the keys list. A bulk file download (its redirect to R2) isn't metered: only
-  // the listing is.
+  // the listing is. Nor is /v1/meta/builds, which clients poll to see a rebuild coming.
   const scope = auth.member.plan === 'fund' ? 'seat' : 'account';
-  const metered = !/^\/v1\/bulk\/[^/]+$/.test(path);
+  const metered = !/^\/v1\/(bulk\/[^/]+|meta\/builds)$/.test(path);
   const r: MeterResult | null = metered ? await meter(env, `acct:${auth.member.customer}`).hit() : null;
   const limits = r ? limitHeaders(r) : {};
   if (r && !r.allowed) {

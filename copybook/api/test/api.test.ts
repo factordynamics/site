@@ -4775,6 +4775,15 @@ describe('copybook api', () => {
     expect([h.data.counts.net, h.data.counts.net_quarter, h.data.counts.net_by_period, h.data.counts.net_by_period_incomplete]).toEqual([10800, '2026Q3', { '2026Q3': 10800, '2026Q2': null }, ['2026Q2']]);
     // Where net comes from: ingest's index as published, and the build both it and /v1/changes?ticker= read (the quant).
     expect([h.data.counts.net_source, h.data.counts.net_build, h.data.counts.changes_build]).toEqual(['hl', 'gust-3a8c773b', 'gust-3a8c773b']);
+    // data_build names the build each store was read at; once the data run publishes a newer holder-index build, an
+    // object it hasn't re-uploaded answers 409 data_rebuilding with Retry-After, never stale rows (the analyst's P1).
+    expect(h.data_build).toEqual({ hl: 'gust-3a8c773b', changes: null, filer_view: null });
+    await hist.put('meta/builds.json', JSON.stringify({ quarters: ['2026Q3'], stores: { hl: { build_id: 'gh-2', built_at: '2026-11-12T00:20:00.000Z' } } }));
+    expect((await v1('/v1/meta/builds')).body.data).toEqual({ stores: { hl: { build_id: 'gh-2', built_at: '2026-11-12T00:20:00Z' }, changes: null, filer_view: null }, quarters: ['2026Q3'], published: true });
+    const rebuilt = await handleRequest(new Request('https://api.test/v1/stocks/NVDA/holders', { headers: { authorization: `Bearer ${key}` } }), env);
+    expect([rebuilt.status, rebuilt.headers.get('retry-after'), await rebuilt.json()]).toMatchObject([409, '300', { error: { code: 'data_rebuilding', store: 'hl', read: { build_id: 'gust-3a8c773b' }, current: { build_id: 'gh-2' } }, data_build: { hl: 'gust-3a8c773b' } }]);
+    hist.m.delete('meta/builds.json');
+    expect((await v1('/v1/meta/builds')).body.data.published).toBe(false);
     // Ingest's share-class fields pass through as published, on holders and changes rows (FMR's BRK A and B, summed).
     const brkClasses = [{ cusip: '084670108', ticker: 'BRK.A', shares: 10, prev_shares: 8, value_delta: 1_500_000 }, { cusip: '084670702', ticker: 'BRK.B', shares: 1000, prev_shares: 900, value_delta: 50_000 }];
     await hist.put('hl/084670.json', JSON.stringify({ issuer: '084670', tickers: ['BRK.B'], schema: 3, columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'classes', 'shares_unit', 'cusip', 'net_direction'],
