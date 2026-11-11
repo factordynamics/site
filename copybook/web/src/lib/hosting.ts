@@ -57,6 +57,8 @@ export const HOST_MOVE = 'The API host will move to api.factordynamics.com. Key 
  *  A methodology entry listed here (a reclassification) also shows in the Data list. */
 export const DATA_ALERTS_NOTE = 'Alert records start Nov 8 (the daily store) and Nov 9 (per-member delivery); earlier alerts are “not recorded”. Every recipient so far was a test or internal inbox, and no correction email went to anyone.'
 export const DATA_ALERTS: Record<string, string> = {
+  '2026-11-11-wealth-shape-published': 'None so far (no 13F has been accepted since the change). From now on, 3 tracked funds retyped from long-only to wealth (Gabelli & Co Investment Advisers, Robert Olstein, Advent Capital) alert only their followers, not members who just watch a stock they trade.',
+  '2026-11-11-filer-types-without-adv': 'None: EDGAR accepted no 13F between 03:45 and 06:36 UTC on Nov 11 (it doesn’t accept filings from 22:00 to 06:00 ET), so no alert was decided on the misread types. Every type in use when the next 13F arrives comes from the corrected data.',
   '2026-11-11-hedge-fund-adv': 'None: EDGAR accepted no 13F between the reclass (02:31 UTC Nov 11) and its check. From now on, a filer moved from hedge_fund to wealth or other alerts only its followers, like every wealth and other filer.',
   '2026-11-11-row-provenance-suspect-units': 'None: alerts don’t read these fields.',
   '2026-11-11-holder-weights': 'None: alerts don’t use holder lists.',
