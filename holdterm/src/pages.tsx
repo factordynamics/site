@@ -525,15 +525,16 @@ function HomeBody() {
     .slice(0, 10)
   // The quarter so far in plain words. Counted only once every filed book has loaded, so the numbers never change on screen.
   const leadBooks = (books.data ?? []).filter((b) => b.quarter === lead)
-  const tally = new Map<string, { h: Holding & { label?: string }; buy: number; sell: number }>()
+  const tally = new Map<string, { h: Holding & { label?: string }; buy: number; sell: number; out: number; buyV: number; sellV: number }>()
   for (const b of leadBooks)
     for (const h of trades(b)) {
-      const t = tally.get(issuerKey(h)) ?? { h, buy: 0, sell: 0 }
-      if (h.change === 'new' || h.change === 'added') t.buy++
-      else if (h.change === 'trimmed' || h.change === 'exited') t.sell++
+      const t = tally.get(issuerKey(h)) ?? { h, buy: 0, sell: 0, out: 0, buyV: 0, sellV: 0 }
+      if (h.change === 'new' || h.change === 'added') (t.buy++, (t.buyV += h.value_delta ?? 0))
+      else if (h.change === 'trimmed' || h.change === 'exited') (t.sell++, (t.sellV -= h.value_delta ?? 0), h.change === 'exited' && t.out++)
       tally.set(issuerKey(h), t)
     }
-  const most = (k: 'buy' | 'sell') => [...tally.values()].sort((a, b) => b[k] - a[k])[0]
+  // Ties on the count go to the bigger trade, as on Buys & sells, so both pages name the same stock.
+  const most = (k: 'buy' | 'sell') => [...tally.values()].sort((a, b) => b[k] - a[k] || (k === 'buy' ? b.buyV - a.buyV : b.sellV - a.sellV))[0]
   const mostBought = most('buy')
   const mostSold = most('sell')
   const due = ms.filter((m) => m.quarter !== s.q)
@@ -558,7 +559,10 @@ function HomeBody() {
   const crowd = (x: typeof mostBought | undefined, k: 'buy' | 'sell') =>
     !books.data ? wait : x && x[k] > 0 ? <Tick t={x.h.ticker} name={issuerName(x.h.display_name || x.h.issuer)} label={x.h.label} /> : <span className="dim">None yet</span>
   const crowdSub = (x: typeof mostBought | undefined, k: 'buy' | 'sell') =>
-    books.data && x && x[k] > 0 ? `${issuerName(x.h.display_name || x.h.issuer)}, ${k === 'buy' ? 'bought' : 'sold'} by ${x[k]} of the ${leadBooks.length} who have filed` : 'Across the investors who have filed'
+    // Worded as on Buys & sells: selling with no sell-outs is trimming.
+    books.data && x && x[k] > 0
+      ? `${issuerName(x.h.display_name || x.h.issuer)}, ${k === 'buy' ? 'bought' : x.out ? 'sold' : 'trimmed'} by ${x[k]} of ${leadBooks.length} that have filed${k === 'sell' && x.out ? `, ${x.out} sold out` : ''}`
+      : 'Across the investors who have filed'
   return (
     <div className="page home">
       <div className="stats home-stats" role="list" aria-label={`${quarterLabel(lead)} so far`}>
