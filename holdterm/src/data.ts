@@ -625,6 +625,17 @@ function etfName(h: Holding) {
   // An issuer that is already an ETF keeps its own name: "Jensen Quality Growth ETF", not "… ETF Jensen Quality ETF".
   return `${brand} ${cls} ETF`.replace(/\s+/g, ' ').replace(/^(.+?\bETF)\s+.+\bETF$/, '$1')
 }
+/** Each multi-class company's tickers, main class first: the order the build picks for canonical URLs (the class
+ * the investors hold the most of, every fund's latest 13F), written into every page by vite.config.ts. A label
+ * that lists share classes uses it everywhere, so it never depends on which funds have filed or loaded. */
+const CLASS_POS = new Map<string, number>()
+if (typeof document !== 'undefined')
+  try {
+    for (const g of JSON.parse(document.getElementById('ht-classes')?.textContent || '[]') as string[][]) g.forEach((t, i) => CLASS_POS.set(t, i))
+  } catch {}
+/** Share-class tickers in that order; a company the build didn't see ranks by `value` (dollars held), then A to Z. */
+export const classOrder = (tickers: Iterable<string>, value?: Map<string, number>) =>
+  [...new Set(tickers)].sort((x, y) => (CLASS_POS.get(x) ?? 99) - (CLASS_POS.get(y) ?? 99) || (value?.get(y) ?? 0) - (value?.get(x) ?? 0) || (x < y ? -1 : 1))
 /** Rolls the latest books up by company: share classes of one issuer (same 6-character CUSIP prefix,
  * e.g. GOOGL and GOOG) count as one stock, shown under its most-held ticker. Options are excluded.
  * `rank` (default: `books`) decides which class is most held, so a filtered subset keeps the site-wide label. */
@@ -653,13 +664,6 @@ export function aggregate(books: Book[], rank: Book[] = books): { rows: Agg[]; t
         a.classes = new Set()
       }
       for (const l of ls) if (l.ticker) a.classes!.add(l.ticker)
-      if (a.classes!.size) {
-        const cv = classValue.get(key)
-        const ranked = [...a.classes!].sort((x, y) => (cv?.get(y) ?? 0) - (cv?.get(x) ?? 0))
-        a.ticker = ranked[0]
-        a.label = ranked.join('+')
-        if (ranked.length > 1) a.name = a.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')
-      }
       if (a.sector === 'Unclassified' && h.sector) a.sector = h.sector
       const value = ls.reduce((x, l) => x + l.value, 0)
       const weight = ls.reduce((x, l) => x + l.weight, 0)
@@ -682,6 +686,17 @@ export function aggregate(books: Book[], rank: Book[] = books): { rows: Agg[]; t
       }
       a.net += d
     }
+  }
+  // Ticker and label list every class `rank` holds, in the site-wide order (classOrder), so a quarter's subset
+  // labels a company exactly as Most owned and the canonical URL do, whichever funds have filed.
+  for (const [key, a] of m) {
+    const cv = classValue.get(key)
+    const ranked = classOrder([...(cv?.keys() ?? []), ...a.classes!], cv)
+    if (!ranked.length) continue
+    a.classes = new Set(ranked)
+    a.ticker = ranked[0]
+    a.label = ranked.join('+')
+    if (ranked.length > 1) a.name = a.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')
   }
   return { rows: [...m.values()], total }
 }

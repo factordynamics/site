@@ -3,6 +3,7 @@ import { api, channels, checkout, price as PRICE, SITE } from './config'
 import { AppIcon, ChatPreviews, EmailPreview, InboxPreview, loadLatestTitle, loadSamples, PushPreview, SampleSources } from './alert-previews'
 import {
   aggregate,
+  classOrder,
   funds,
   inRoster,
   isStale,
@@ -513,6 +514,8 @@ function HomeBody() {
         if (cur.change !== h.change) cur.change = cur.value_delta > 0 ? (cur.change === 'new' && h.change === 'new' ? 'new' : 'added') : cur.value > 0 ? 'trimmed' : 'exited'
       }
     }
+    // Classes in the site-wide order, main class first, as on every other page (classOrder).
+    for (const h of by.values()) if (h.label?.includes('+')) [h.ticker] = (h.label = classOrder(h.label.split('+')).join('+')).split('+')
     return [...by.values()]
   }
   const biggest = (b: Book) => [...trades(b)].sort((x, y) => Math.abs(y.value_delta!) - Math.abs(x.value_delta!))[0]
@@ -526,7 +529,7 @@ function HomeBody() {
   // The quarter so far in plain words. Counted only once every filed book has loaded, so the numbers never change on screen.
   const leadBooks = (books.data ?? []).filter((b) => b.quarter === lead)
   // Most bought and most sold come from the same function and the same rows as Buys & sells' quarter view.
-  const picks = crowdPicks(books.data ? aggregate(leadBooks).rows : [], leadBooks.length)
+  const picks = crowdPicks(books.data ? aggregate(leadBooks, books.data).rows : [], leadBooks.length)
   const due = ms.filter((m) => m.quarter !== s.q)
   const daysLeft = daysUntil(s.due)
   const events = (ev.data?.events ?? []).filter((e) => inRoster(e.slug) && !ownVehicle(e))
@@ -543,6 +546,7 @@ function HomeBody() {
         if (h.ticker) cur.label = [...new Set([...(cur.label ?? cur.ticker ?? '').split('+'), h.ticker].filter(Boolean))].join('+')
       } else conv.set(id, { key: id, ticker: h.ticker, former: h.former, name: issuerName(h.display_name || h.issuer), slug: m.slug, firm: m.firm, weight: h.weight })
     }
+  for (const c of conv.values()) if (c.label?.includes('+')) [c.ticker] = (c.label = classOrder(c.label.split('+')).join('+')).split('+')
   const conviction = [...conv.values()].sort((a, b) => b.weight - a.weight).slice(0, 8)
   const newStakes = events.filter((e) => e.action === 'new_stake' && daysAgo(e.filing_date) <= 30).length
   const wait = <span className="dim">…</span>
@@ -745,7 +749,7 @@ function byCompany(hs: Holding[]) {
     const k = issuerKey(h)
     const cur = by.get(k)
     if (!cur) by.set(k, { h, label: h.ticker ?? undefined })
-    else if (h.ticker && !cur.label?.split('+').includes(h.ticker)) cur.label = [cur.label, h.ticker].filter(Boolean).join('+')
+    else if (h.ticker && !cur.label?.split('+').includes(h.ticker)) cur.label = classOrder([...(cur.label?.split('+') ?? []), h.ticker]).join('+')
   }
   return [...by.values()]
 }
@@ -857,7 +861,7 @@ export function Funds() {
                     {' · '}
                     {byCompany(m.top.filter((h) => isStockLine(h) && !isFundLike(h)))
                       .slice(0, 3)
-                      .map(({ h, label }) => (label && label.includes('+') ? h.ticker : (h.ticker ?? issuerName(h.display_name || h.issuer).split(' ')[0])))
+                      .map(({ h, label }) => (label && label.includes('+') ? label.split('+')[0] : (h.ticker ?? issuerName(h.display_name || h.issuer).split(' ')[0])))
                       .join(', ')}
                   </span>
                 </>
@@ -876,7 +880,7 @@ export function Funds() {
               render: (m) => (
                 <span className="tks">
                   {byCompany(m.top.filter((h) => isStockLine(h) && !isFundLike(h))).slice(0, 5).map(({ h, label }) => (
-                    <StockCell key={h.cusip} t={h.ticker} former={h.former} label={label} name={issuerName(h.display_name || h.issuer).split(' ').slice(0, 2).join(' ')} />
+                    <StockCell key={h.cusip} t={label?.split('+')[0] ?? h.ticker} former={h.former} label={label} name={issuerName(h.display_name || h.issuer).split(' ').slice(0, 2).join(' ')} />
                   ))}
                 </span>
               ),
@@ -1231,7 +1235,7 @@ export function Flows() {
   const q = picked ?? (nb && (books.data ?? []).filter((b) => b.quarter === sq).length * 2 >= nb ? sq : 'latest')
   const quarters = useMemo(() => [...new Set((books.data ?? []).map((b) => b.quarter))].sort().reverse(), [books.data])
   // Flows are stock picks: ETFs, index and T-bill funds are left out.
-  const rows = useMemo(() => (books.data ? (q === 'latest' ? aggregate(books.data) : aggregate(books.data.filter((b) => b.quarter === q))).rows.filter((r) => !r.fund) : []), [books.data, q])
+  const rows = useMemo(() => (books.data ? (q === 'latest' ? aggregate(books.data) : aggregate(books.data.filter((b) => b.quarter === q), books.data)).rows.filter((r) => !r.fund) : []), [books.data, q])
   if (books.error) return <Failed error={books.error} what="this quarter’s trades" />
   if (!books.data)
     return (
@@ -1268,7 +1272,7 @@ export function Flows() {
   const mix = quarters.map((x) => [x, books.data!.filter((b) => b.quarter === x).length] as const)
   const tagQ = q === 'latest' && mix.length > 1 ? mix[0][0] : undefined
   // The newest quarter on its own, as the home page counts it, so the two pages' "most bought" can be told apart.
-  const leadTop = tagQ ? crowdPicks(aggregate(books.data.filter((b) => b.quarter === tagQ)).rows, mix[0][1]).bought : undefined
+  const leadTop = tagQ ? crowdPicks(aggregate(books.data.filter((b) => b.quarter === tagQ), books.data).rows, mix[0][1]).bought : undefined
   const exits = (r: Agg) => r.sellers.filter((s) => s.change === 'exited').length
   let list: Agg[]
   if (tab === 'buyers') list = rows.filter((r) => r.buyers.length).sort((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)
