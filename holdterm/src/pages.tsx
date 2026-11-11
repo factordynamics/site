@@ -1585,6 +1585,7 @@ function planLine(m: Member): { pill: string; tone: 'pos' | 'neg' | 'acc'; text:
     return m.has_payment_method === false
       ? { pill: 'Free trial', tone: 'acc', text: `Your free trial ends on ${end || 'its last day'}. Add a card in billing before then to keep alerts on at ${price}.` }
       : { pill: 'Free trial', tone: 'acc', text: `Your free trial ends on ${end || 'its last day'}, then ${price} unless you cancel.` }
+  if (m.has_payment_method === false) return { pill: 'Card needed', tone: 'neg', text: `No card is on file, so the ${end ? `renewal on ${end}` : 'next renewal'} will fail. Add one in billing to keep alerts on at ${price}.` }
   return { pill: 'Active', tone: 'pos', text: end ? `Renews on ${end} at ${price}.` : 'Your plan is active.' }
 }
 export function Account() {
