@@ -513,6 +513,9 @@ class MoveMathTest(unittest.TestCase):
             r = build.with_changes({"quarter": "2026Q2", "holdings": [cur]},
                                    {"quarter": "2026Q1", "holdings": [self.row("79466L302", "CRM", 136035, 25393653)]})[0]
             self.assertEqual((r["change"], r["share_change"], r.get("unreliable")), ("trimmed", -860, None))
+            # The held line stays in the filed total, out of the counted one.
+            self.assertEqual(build.apply_weights({"holdings": [cur]})["total_value"], 21176516 + 9824810)
+            self.assertEqual(build.counted([r])[0], 21176516)
             self.assertAlmostEqual(r["value_delta"], -860 * 21176516 / 135175, delta=1)
             # Summed before the check (a stored quarter not refetched yet): priced between scales, so both, not shares.
             summed = self.row("79466L302", "CRM", 2347970, 31001326) | {"lines": 2}

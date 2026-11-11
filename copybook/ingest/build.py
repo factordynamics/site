@@ -366,7 +366,9 @@ def apply_weights(q: dict) -> dict:
         else:
             h["pct_of_book"] = None
             h["notional_pct_of_book"] = pct
-    q["total_value"] = sum(h["value"] for h in hs)
+    # The filed total keeps lines held out of a position (held_lines: Crosslink 2026Q2's $4.44 line under CRM's
+    # CUSIP): held, never counted or weighted, but part of what the filer reported.
+    q["total_value"] = sum(h["value"] + sum(x.get("value") or 0 for x in h.get("held_lines") or []) for h in hs)
     q["equity_value"] = eq
     q["options_notional"] = sum(h["value"] for h in hs if h.get("put_call"))
     q["prn_value"] = sum(h["value"] for h in hs if h.get("shares_type") == "PRN" and not h.get("put_call"))

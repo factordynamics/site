@@ -183,6 +183,11 @@ for (const st of stocks.values()) {
   }
 }
 mkdirSync(join(out, 'd'), { recursive: true })
+// quality.json (lines the units guard held, for /status/) beside the other site data files, as /d/quality.json.
+{
+  const qy = await read('quality.json').catch(() => null)
+  if (qy) writeFileSync(join(out, 'd', 'quality.json'), JSON.stringify(qy))
+}
 writeFileSync(join(out, 'd', 'splits.json'), JSON.stringify({ generated_at: index.generated_at, note: 'Every row has every key. holders and price_ratio may be null: a split or reissue confirmed by an issuer filing (8-K) rather than by holders has no holder count or price ratio; xbrl_shares_ratio may be null too.', splits: splitLog.sort((a, b) => b.quarter.localeCompare(a.quarter) || (a.ticker ?? '').localeCompare(b.ticker ?? '')) }))
 
 const list = []
