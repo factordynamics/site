@@ -83,6 +83,7 @@ let chatReplies: Record<string, { status: number; body?: unknown }[]>;
 let shards: Record<string, unknown>;
 let events: unknown[];
 let recentMoves: unknown[];
+let resendUsed = 0;
 let gh: { method: string; url: string; body?: string }[];
 let ghQueued: number;
 let jwks: unknown = { keys: [] };
@@ -141,12 +142,18 @@ beforeEach(async () => {
   await env.DB.put('alerts:ciks', JSON.stringify(Object.fromEntries([['0001067983', 'warren-buffett'], ['0001040273', 'dan-loeb'], ['0001336528', 'bill-ackman'], ['0001061768', 'seth-klarman']].map(([cik, slug]) => [cik, [{ slug, manager: slug, name: slug, cik, featured: true }]]))));
   events = [];
   recentMoves = [];
+  resendUsed = 0;
+  (await import('../src/email')).mailQuota.day = '';
   gh = [];
   ghQueued = 0;
   vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
     const url = String(input);
     if (url === 'https://api.resend.com/emails/batch') {
-      sent.push(...JSON.parse(String(init?.body)));
+      // Resend's daily quota: refuses everything once `resendUsed` reaches 100.
+      const batch = JSON.parse(String(init?.body)) as unknown[];
+      if (resendUsed + batch.length > 100) return Response.json({ name: 'daily_quota_exceeded' }, { status: 429, headers: { 'x-resend-daily-quota': String(resendUsed) } });
+      resendUsed += batch.length;
+      sent.push(...(batch as typeof sent));
       await new Promise((r) => setTimeout(r, 10)); // slow enough for concurrent webhooks to overlap
       return new Response('{"data":[]}', { status: 200 });
     }
@@ -1164,6 +1171,25 @@ describe('copybook api', () => {
     expect(sent[0].text).toContain(`Your next charge is on ${deadlineLabel(nextCharge)}`);
     expect((await (await call('/me', { token })).json()).member).toMatchObject({ active: true, paused_until: null });
     expect(posted.at(-1)).toBe('pause_collection=');
+    // Nov 10: alerts used Resend's 100 a day, so the pause receipt was refused and lost. It's now sent again
+    // by the minute cron once Resend accepts mail, and bulk mail stops 15 short of the cap to leave room for it.
+    resendUsed = 100;
+    sent = [];
+    expect((await call('/pause', { body: {}, token })).status).toBe(200);
+    expect(sent).toHaveLength(0);
+    resendUsed = 0;
+    await cron(7);
+    expect(sent.map((m) => m.subject)).toEqual([`Paused until ${deadlineLabel(until)} · no charges until then`]);
+    const { sendMail: send, mailQuota } = await import('../src/email');
+    resendUsed = 84;
+    mailQuota.used = 84;
+    sent = [];
+    expect(await send(env, [{ to: 'a@example.com', subject: 'alert', text: 'x' }, { to: 'b@example.com', subject: 'alert', text: 'x' }], { bulk: true })).toBe('200');
+    expect(await send(env, [{ to: 'c@example.com', subject: 'alert', text: 'x' }], { bulk: true })).toBe('quota');
+    expect(await send(env, [{ to: 'd@example.com', subject: 'Sign in', text: 'x' }])).toBe('200');
+    expect(sent.map((m) => m.to[0])).toEqual(['a@example.com', 'd@example.com']);
+    resendUsed = 0;
+    mailQuota.used = 0;
     vi.stubGlobal('fetch', orig);
 
     // One cancellation-reason answer from /account/, counted in the business summary.

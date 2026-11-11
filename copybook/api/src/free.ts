@@ -422,7 +422,7 @@ export async function runWeekly(env: Env, now: number): Promise<Record<string, u
   }
   const weekOf = new Date(now - 6 * 86400_000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
   const mails = await Promise.all(members.map(async (m) => weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), await inYourNames(env, (await getFollows(env, m)).owned.slice(0, FREE_NAMES), moves, now))));
-  const status = await sendMail(env, mails);
+  const status = await sendMail(env, mails, { bulk: true });
   if (status === 'none' || status.split(',').every((s) => s === '200')) await env.DB.put('weekly:last', week);
   return { status, sent: mails.length, buys: moves.buys.length, sells: moves.sells.length };
 }

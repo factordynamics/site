@@ -340,7 +340,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       notes.push(m);
     }
   }
-  const mail = await sendMail(env, mails);
+  const mail = await sendMail(env, mails, { bulk: true });
   await logSent(env, mails.length, now);
   await flushChannelLatency(env, !only);
   if (mail.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
@@ -404,7 +404,7 @@ export async function runDigest(env: Env, now: number): Promise<{ emails: number
       if (f.digest) notes.push(m);
     }
   }
-  const status = await sendMail(env, mails);
+  const status = await sendMail(env, mails, { bulk: true });
   await logSent(env, mails.length, now);
   if (status.split(',').every((s) => s === '200')) for (const m of notes) await noted(env, m);
   return { emails: mails.length, status };
@@ -1536,6 +1536,7 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   secBudget.left = Number(env.SEC_BUDGET ?? 40);
   await step('poll', () => runPoll(env, scheduledTime));
   await step('events_poll', () => runEventPoll(env, scheduledTime));
+  await step('mail_retry', async () => (await import('./email')).retryMail(env));
   // The missed-filing detector, every 10 minutes whatever else the minute did: it only reads feed
   // pages with the SEC budget the polls left, and the polls send what it finds from the next minute.
   if (t.getUTCMinutes() % 10 === 5) await step('missed', () => runMissedDetector(env, scheduledTime));

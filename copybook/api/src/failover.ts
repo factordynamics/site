@@ -344,6 +344,8 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
     out.sync_published = await publish(env, written, now).catch((e) => `error: ${e}`);
     return out;
   }
+  // gene serves sign-in, pause and resume: what Resend refused here is retried here.
+  Object.assign(out, await (await import('./email')).retryMail(env).catch((e) => ({ mail_retry: `error: ${e}` })));
   // Cloudflare's heartbeat. gene polls only on a heartbeat it read and found stale: failing to read it (gene's link,
   // or Cloudflare's API) is never a reason to poll, since Cloudflare may be polling fine.
   let cf: PollerLine | null = null;
