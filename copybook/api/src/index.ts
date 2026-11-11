@@ -1028,6 +1028,24 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, ...r }, 200, h);
   }
 
+  // Operator: last winter's fill (gene only; filing week leaves the 5-minute job few quiet minutes). GET: progress;
+  // POST {budget}: one fill now, at most 40 SEC requests.
+  if (path === '/ops/winter' && (req.method === 'GET' || req.method === 'POST')) {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const own = JSON.parse((await env.DB.get('issuers:tickers')) ?? '[]') as string[];
+    const done = JSON.parse((await env.DB.get('winter:done')) ?? '[]') as string[];
+    let ran: unknown = null;
+    if (req.method === 'POST') {
+      if ((await import('./failover')).isCloudflare(env)) return json({ ok: false, error: 'gene only' }, 409, h);
+      const { secBudget } = await import('./edgar');
+      const budget = Math.min(40, Math.max(4, Number((await body(req)).budget ?? 20)));
+      secBudget.left = budget + 2;
+      ran = await (await import('./stockevents')).fillWinter(env, budget);
+    }
+    const after = JSON.parse((await env.DB.get('winter:done')) ?? '[]') as string[];
+    return json({ ok: true, ran, own: own.length, done: after.length, own_left: own.filter((t) => !after.includes(t)).length, was_done: done.length }, 200, h);
+  }
+
   if (req.method === 'GET' && path === '/ops/moves-replays') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     return json({ ok: true, replays: JSON.parse((await env.DB.get('alerts:moves-replays')) ?? '[]') }, 200, h);
