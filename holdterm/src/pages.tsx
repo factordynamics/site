@@ -1764,12 +1764,24 @@ export function Stock({ ticker }: { ticker: string }) {
   // Filings by the investors Holdterm follows, as on /filings.
   const events = (ev.data?.events ?? []).filter((e) => e.ticker && tickers.has(e.ticker) && inRoster(e.slug) && !ownVehicle(e))
   const holderCols: Col<StockHolder>[] = [
-    { key: 'm', label: 'Investor', link: true, render: (h) => <Firm name={name(h)} strong={inRoster(h.slug)} />, sort: (h) => name(h) },
+    // Phones show which 13F under the name instead of an "As of" column, so the name has room to show in full.
+    {
+      key: 'm',
+      label: 'Investor',
+      link: true,
+      render: (h) => (
+        <span className="holder">
+          <Firm name={name(h)} strong={inRoster(h.slug)} />
+          <span className="row-sub show-sm">{quarterLabel(h.quarter)} 13F</span>
+        </span>
+      ),
+      sort: (h) => name(h),
+    },
     { key: 'w', label: 'Weight', num: true, render: (h) => pct(h.weight), sort: (h) => h.weight, title: 'Share of the investor’s portfolio' },
     { key: 'c', label: 'This quarter', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} unclear={h.unclear} />, sort: (h) => h.delta_value ?? 0 },
     { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (h) => num(h.shares), sort: (h) => h.shares },
     { key: 'v', label: 'Value', num: true, hideSm: true, render: (h) => usd(h.value), sort: (h) => h.value },
-    { key: 'q', label: 'As of', num: true, render: (h) => <span className="dim">{quarterLabel(h.quarter).replace(' 20', " '")}</span>, sort: (h) => h.quarter },
+    { key: 'q', label: 'As of', num: true, hideSm: true, render: (h) => <span className="dim">{quarterLabel(h.quarter)}</span>, sort: (h) => h.quarter, title: 'The quarter of the 13F each row comes from' },
   ]
   const fundHref = (h: StockHolder) => (inRoster(h.slug) ? fundPath(fundSlug(h.slug)) : null)
   const held = holders.length > 0 || exited.length > 0 || pick(d.options).length > 0

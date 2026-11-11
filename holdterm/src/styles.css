@@ -1744,6 +1744,10 @@ a.hb-row:hover {
     min-width: 100%;
     max-width: none;
   }
+  /* A stock's investors: the name takes the room the hidden columns leave (still at most two lines). */
+  .holder .firm {
+    max-width: none;
+  }
   /* Stake and insider filings: the investor's name wraps within a set width, so the company gets the rest. */
   .grid:has(.iss) td .firm {
     display: inline-block;
