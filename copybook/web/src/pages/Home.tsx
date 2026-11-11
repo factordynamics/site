@@ -1,9 +1,10 @@
 import { Signup } from '../components/Signup'
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { dayET, edgarClosed, shortDay, loadCoverage, loadExpected, loadSeason, nextUp, seasonNow, timeLeft } from '../lib/stocks'
+import { dayET, edgarClosed, shortDay, loadCoverage, loadExpected, loadSeason, nextFiler, nextUp, seasonNow, timeLeft } from '../lib/stocks'
 import { EdgarClosed } from '../components/EdgarClosed'
-import { loadLatency } from '../lib/account'
+import { getToken, loadLatency } from '../lib/account'
+import { FAMOUS, FridayBox } from '../components/FridayBox'
 import { thirteenFStats } from '../lib/latencyStats.mjs'
 import { TRIAL_DAYS } from '../config'
 import { track } from '../lib/track'
@@ -96,7 +97,10 @@ function SeasonLead() {
   const lat = useAsync(() => loadLatency().catch(() => null), [])
   const soon = useAsync(loadExpected, [])
   const med = lat.data ? thirteenFStats(lat.data) : null
-  const next = soon.data ? nextUp(soon.data.expected, dayET()).text : ''
+  const up = soon.data ? nextUp(soon.data.expected, dayET()) : null
+  const next = up?.text ?? ''
+  const filer = soon.data ? nextFiler(soon.data.expected, dayET()) : null
+  const fast = med?.median_seconds != null && med.median_seconds < 120
   const closed = edgarClosed()
   return (
     <>
@@ -110,26 +114,49 @@ function SeasonLead() {
           <Skeleton className="h-[1.2em] w-4/5" />
         ) : (
           <>
-            Copy emails each superinvestor’s 13F, with what they bought and sold. {med?.median_seconds != null && med.median_seconds < 120 ? 'Median alert under 2 minutes after the SEC publishes the filing. ' : ''}Every alert is timed on the{' '}
+            Copy emails each superinvestor’s 13F, with what they bought and sold. {fast ? 'Median alert under 2 minutes after the SEC publishes the filing. ' : ''}Every alert is timed on the{' '}
             <Link to="/speed/" className="font-medium text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink">
               speed page
             </Link>
             , slow ones included.
           </>
         )}
-        {next && <p className="mt-2 text-[15.5px] text-ink">Next up: {next}.</p>}
+        {next && getToken() && <p className="mt-2 text-[15.5px] text-ink">Next up: {next}.</p>}
       </div>
       <EdgarClosed className="mt-4 max-w-xl" />
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Button to={pricingTo()} size="lg" onClick={() => track('trial_click')}>
-          Start {TRIAL_DAYS}-day free trial <Arrow />
-        </Button>
-        <Button to="/season/" variant="outline" size="lg">
-          See who’s filed
-        </Button>
-      </div>
-      <p className="mt-2.5 text-[12.5px] text-ink-3">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
-      <FundLine />
+      {/* Signed out (the X bio link): the free Friday email first, then the trial with the gated speed line and the
+          next filer, as on /season/. Post A: /season/'s trial-first box showed 151 times with 0 signups. */}
+      {!getToken() ? (
+        <FridayBox
+          className="mt-6 max-w-xl"
+          title="Every Friday: the week’s biggest superinvestor buys and sells. Free."
+          people={FAMOUS}
+          others={up?.people ?? []}
+          collapsed
+          trial={[
+            'Want each 13F as it’s filed?',
+            fast ? 'Median alert under 2 minutes after the SEC publishes the filing.' : 'Copy emails you each one with its moves, checked on EDGAR every minute.',
+            filer && `Next filer: ${filer.name}, ${filer.day}.`,
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          solid
+          after={<FundLine />}
+        />
+      ) : (
+        <>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Button to={pricingTo()} size="lg" onClick={() => track('trial_click')}>
+              Start {TRIAL_DAYS}-day free trial <Arrow />
+            </Button>
+            <Button to="/season/" variant="outline" size="lg">
+              See who’s filed
+            </Button>
+          </div>
+          <p className="mt-2.5 text-[12.5px] text-ink-3">Card required, nothing charged before day {TRIAL_DAYS + 1}.</p>
+          <FundLine />
+        </>
+      )}
     </>
   )
 }
