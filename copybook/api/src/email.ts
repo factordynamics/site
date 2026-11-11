@@ -460,13 +460,28 @@ export function loginMail(env: Env, to: string, token: string, welcome: boolean,
   }
   const name = m?.plan === 'pro' ? 'Copy Pro' : m?.plan === 'fund' ? 'Copy Fund' : 'Copy';
   const trial = m?.trial_end ? ` Your free trial runs until ${new Date(m.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}, ${new Date(m.trial_end * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).replace(' AM', ' am').replace(' PM', ' pm')} ET; cancel before then from your account and you're not charged.` : '';
-  const steps: [string, string, string][] = [
-    ['Follow the funds you care about', 'Each 13F, Form 4 and 13D they file reaches you minutes after EDGAR accepts it.', `${env.SITE_URL}investors/`],
-    ['Add the names you own', "Paste tickers or a CSV in My book: any superinvestor's move in them is flagged [you own].", `${env.SITE_URL}my-book/`],
-    ['Connect a channel', 'Slack, Discord, Telegram or a private RSS feed, next to email. Under Alerts in your account.', `${env.SITE_URL}account/`],
-  ];
-  const text = `Welcome to ${name}.${trial}\n\nYou're signed in on the device you subscribed from. Open this link to confirm your address: it turns on alert channels, API keys and billing, and signs you in on any other device (it works once, for 7 days):\n${link}\n\nThen three steps, two minutes:\n${steps.map(([t, d, u], i) => `${i + 1}. ${t}: ${u}\n   ${d}`).join('\n')}\n\nYour plan also includes 8 quarters of 13F history and CSV export on every investor page.${FOOTER}`;
-  const html = `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Welcome to ${name}.${esc(trial)}</p><p>You're signed in on the device you subscribed from. Open this link to confirm your address: it turns on alert channels, API keys and billing, and signs you in on any other device (it works once, for 7 days).</p><p><a href="${link}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600">Sign in to Copybook</a></p><p>Then three steps, two minutes:</p><ol style="padding-left:20px">${steps.map(([t, d, u]) => `<li style="margin:0 0 10px"><a href="${u}" style="color:#1d4ed8;font-weight:600">${t}</a><br><span style="color:#374151">${esc(d)}</span></li>`).join('')}</ol><p style="color:#374151">Your plan also includes 8 quarters of 13F history and CSV export on every investor page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.</p></div>`;
+  // A Fund trial billed by invoice (no card): the invoice's dates, amount, PO and recipients, and the team's first steps.
+  const inv = m?.collection === 'send_invoice' && m.plan === 'fund' && m.trial_end ? m : null;
+  const day = (t: number) => new Date(t * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
+  const terms = inv
+    ? ` Your 14-day trial runs until ${day(inv.trial_end!)}. On that day we issue the invoice for the year${inv.invoice_terms?.amount ? `, $${(inv.invoice_terms.amount / 100).toLocaleString('en-US')}` : ''}, due ${day(inv.trial_end! + 30 * 86400)} (Net 30)${inv.invoice_terms?.po ? `, with your PO ${inv.invoice_terms.po}` : ''}. It goes to ${to}${inv.invoice_terms?.ap_email ? `, with a copy to ${inv.invoice_terms.ap_email}` : ''}, with a Pay online link (card or US bank account). Cancel before ${day(inv.trial_end!)} and nothing is owed.`
+    : trial;
+  const steps: [string, string, string][] = inv
+    ? [
+        ['Invite your team (up to 10)', 'Each seat gets its own sign-in, alerts and API keys. Under Team in your account.', `${env.SITE_URL}account/`],
+        ['Bring in your book', "Paste tickers or a CSV in My book: any superinvestor's move in them is flagged [you own].", `${env.SITE_URL}my-book/`],
+        ['Connect a team channel', 'Slack, Discord, Telegram or a signed webhook, for the whole team. Under Alerts in your account.', `${env.SITE_URL}account/`],
+      ]
+    : [
+        ['Follow the funds you care about', 'Each 13F, Form 4 and 13D they file reaches you minutes after EDGAR accepts it.', `${env.SITE_URL}investors/`],
+        ['Add the names you own', "Paste tickers or a CSV in My book: any superinvestor's move in them is flagged [you own].", `${env.SITE_URL}my-book/`],
+        ['Connect a channel', 'Slack, Discord, Telegram or a private RSS feed, next to email. Under Alerts in your account.', `${env.SITE_URL}account/`],
+      ];
+  const signIn = inv
+    ? 'Open this link to sign in and confirm your address: it turns on seats, alert channels and API keys (it works once, for 7 days):'
+    : "You're signed in on the device you subscribed from. Open this link to confirm your address: it turns on alert channels, API keys and billing, and signs you in on any other device (it works once, for 7 days):";
+  const text = `Welcome to ${name}.${terms}\n\n${signIn}\n${link}\n\nThen three steps, two minutes:\n${steps.map(([t, d, u], i) => `${i + 1}. ${t}: ${u}\n   ${d}`).join('\n')}\n\nYour plan also includes 8 quarters of 13F history and CSV export on every investor page.${FOOTER}`;
+  const html = `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>Welcome to ${name}.${esc(terms)}</p><p>${esc(signIn.replace(/:$/, '.'))}</p><p><a href="${link}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600">Sign in to Copybook</a></p><p>Then three steps, two minutes:</p><ol style="padding-left:20px">${steps.map(([t, d, u]) => `<li style="margin:0 0 10px"><a href="${u}" style="color:#1d4ed8;font-weight:600">${t}</a><br><span style="color:#374151">${esc(d)}</span></li>`).join('')}</ol><p style="color:#374151">Your plan also includes 8 quarters of 13F history and CSV export on every investor page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.</p></div>`;
   return { to, subject: `Welcome to ${name}: three steps to your first alert`, text, html };
 }
 

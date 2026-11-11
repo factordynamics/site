@@ -130,6 +130,9 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     // A no-card trial ends without a charge unless a card is added (Holdterm's and the gate's links).
     has_payment_method: !!(sub.default_payment_method || sub.default_source),
     collection: String(sub.collection_method ?? 'charge_automatically'),
+    ...(sub.collection_method === 'send_invoice'
+      ? { invoice_terms: { amount: Number(sub.items?.data?.[0]?.price?.unit_amount ?? sub.plan?.amount ?? 0) || null, po: sub.metadata?.po || null, ap_email: sub.metadata?.ap_email || null } }
+      : {}),
     period_end: Number(sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? 0),
     subscription: String(sub.id),
     // New members get alerts for the funds they follow and active managers' moves in stocks they own or watch.
@@ -186,9 +189,16 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
   return m;
 }
 
+/** A Fund owner's invoice trial, as /account/ shows it: the invoice date and due date (Net 30), amount in cents, PO, AP. */
+export function invoiceTrialView(m: Member) {
+  if (m.seat_of || m.collection !== 'send_invoice' || m.status !== 'trialing' || !m.trial_end) return null;
+  const day = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+  return { invoice_on: day(m.trial_end), due_on: day(m.trial_end + 30 * 86400), amount: m.invoice_terms?.amount ?? null, currency: 'usd', po: m.invoice_terms?.po ?? null, ap_email: m.invoice_terms?.ap_email ?? null, invoice_to: m.email };
+}
+
 export function publicView(m: Member) {
   // A Fund seat: billing belongs to the owner, so the site hides the portal for seats.
-  return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, has_payment_method: m.has_payment_method ?? null, collection: m.collection ?? null, overdue_since: m.overdue_since ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, paused_until: isPaused(m) ? m.paused_until : null, pause_after_trial: pauseScheduled(m) ? { from: m.paused_from, until: m.paused_until } : null, alerts: m.alerts, seat: Boolean(m.seat_of) };
+  return { invoice_trial: invoiceTrialView(m), email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, has_payment_method: m.has_payment_method ?? null, collection: m.collection ?? null, overdue_since: m.overdue_since ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, paused_until: isPaused(m) ? m.paused_until : null, pause_after_trial: pauseScheduled(m) ? { from: m.paused_from, until: m.paused_until } : null, alerts: m.alerts, seat: Boolean(m.seat_of) };
 }
 
 /**

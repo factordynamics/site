@@ -1437,7 +1437,7 @@ describe('copybook api', () => {
       if (path === 'prices') return Response.json({ data: [{ id: 'price_fund_yearly' }] });
       if (path === 'subscriptions' && init?.method === 'POST') {
         const t = Math.floor(Date.now() / 1000);
-        return Response.json({ id: `sub_it${n}`, customer: body.get('customer'), status: 'trialing', trial_end: t + 14 * 86400, created: t, collection_method: 'send_invoice', days_until_due: 30, current_period_end: t + 14 * 86400, metadata: { copybook: 'fund' }, items: { data: [{ price: { id: 'price_fund_yearly', lookup_key: 'fund_yearly', unit_amount: 199000, recurring: { interval: 'year' } } }] } });
+        return Response.json({ id: `sub_it${n}`, customer: body.get('customer'), status: 'trialing', trial_end: t + 14 * 86400, created: t, collection_method: 'send_invoice', days_until_due: 30, current_period_end: t + 14 * 86400, metadata: { copybook: 'fund', ...(body.get('metadata[po]') ? { po: body.get('metadata[po]') } : {}), ...(body.get('metadata[ap_email]') ? { ap_email: body.get('metadata[ap_email]') } : {}) }, items: { data: [{ price: { id: 'price_fund_yearly', lookup_key: 'fund_yearly', unit_amount: 199000, recurring: { interval: 'year' } } }] } });
       }
       return Response.json({ id: 'x' });
     });
@@ -1479,7 +1479,20 @@ describe('copybook api', () => {
     const { getMember } = await import('../src/members');
     const m = (await getMember(env, 'cus_it1'))!;
     expect([m.email, m.plan, m.status, m.collection, isActive(m)]).toEqual(['coo@acme-cap.test', 'fund', 'trialing', 'send_invoice', true]);
-    expect(sent.slice(before).filter((x) => x.to[0] === 'coo@acme-cap.test').length).toBe(1);
+    const welcome = sent.slice(before).filter((x) => x.to[0] === 'coo@acme-cap.test');
+    expect(welcome.length).toBe(1);
+    // The welcome says what the invoice will be and who gets it, and starts with the team; no card wording.
+    const inv1 = new Date((Date.now() / 1000 + 14 * 86400) * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
+    expect([welcome[0].text.includes('$1,990'), welcome[0].text.includes('PO PO-55'), welcome[0].text.includes('a copy to ap@acme-cap.test'), welcome[0].text.includes(`Cancel before ${inv1} and nothing is owed`), /1\. Invite your team \(up to 10\)/.test(welcome[0].text), /not charged|subscribed from/.test(welcome[0].text)]).toEqual([true, true, true, true, true, false]);
+    // /me: the invoice trial as /account/ shows it (amount in cents).
+    const { publicView } = await import('../src/members');
+    expect(publicView(m).invoice_trial).toEqual({ invoice_on: new Date(m.trial_end! * 1000).toISOString().slice(0, 10), due_on: new Date((m.trial_end! + 30 * 86400) * 1000).toISOString().slice(0, 10), amount: 199000, currency: 'usd', po: 'PO-55', ap_email: 'ap@acme-cap.test', invoice_to: 'coo@acme-cap.test' });
+    // Day 14: the finalized invoice's copy goes to AP once, with its links; a $0 invoice gets none.
+    const revA = await import('../src/revenue');
+    const apBefore = sent.length;
+    const fin = { id: 'in_ap1', customer: 'cus_it1', number: 'CB-0042', amount_due: 199000, due_date: Math.floor(Date.now() / 1000) + 30 * 86400, hosted_invoice_url: 'https://invoice.stripe.com/i/ap', invoice_pdf: 'https://pay.stripe.com/invoice/ap/pdf' };
+    expect([await revA.apCopy(env, fin), await revA.apCopy(env, fin), await revA.apCopy(env, { ...fin, id: 'in_zero', amount_due: 0 })]).toEqual([expect.stringMatching(/^sent/), 'already', 'nothing due']);
+    expect(sent.slice(apBefore).map((x) => [x.to[0], x.subject.includes('$1,990.00'), x.text.includes('https://invoice.stripe.com/i/ap'), x.text.includes('PO: PO-55')])).toEqual([['ap@acme-cap.test', true, true, true]]);
     // One invoice trial per company domain.
     const again = await go({ email: 'cfo@acme-cap.test', fund: 'Acme Capital', billing_address: address }, '7.7.7.4');
     expect([again.status, (await again.json()).code]).toEqual([409, 'trial_used']);

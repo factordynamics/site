@@ -313,6 +313,8 @@ export async function fundInvoiceTrial(env: Env, f: InvoiceTrialForm, now = Date
       'metadata[copybook]': 'fund',
       'metadata[invoice_trial]': 'true',
       'metadata[source]': 'invoice_trial',
+      ...(f.po ? { 'metadata[po]': f.po } : {}),
+      ...(f.ap_email ? { 'metadata[ap_email]': f.ap_email } : {}),
       ...(now < FOUNDING_UNTIL ? { 'metadata[founding]': 'true' } : {}),
       ...(/^copybook-test-/.test(email) ? { 'metadata[test]': 'invoice-trial' } : {}),
     });
@@ -329,6 +331,28 @@ export async function fundInvoiceTrial(env: Env, f: InvoiceTrialForm, now = Date
     await env.DB.delete(lock);
     throw e;
   }
+}
+
+/**
+ * A finalized Fund invoice's copy for the AP email on file (the subscription's, as the invoice prints it): number,
+ * amount, due date, Pay online and PDF links. Once per invoice; a $0 invoice (a trial's start) gets none.
+ */
+export async function apCopy(env: Env, inv: { id?: string; customer?: string; number?: string | null; amount_due?: number; due_date?: number | null; hosted_invoice_url?: string | null; invoice_pdf?: string | null }): Promise<string> {
+  if (!inv.id || !inv.customer || !inv.amount_due) return 'nothing due';
+  const m = await getMember(env, inv.customer);
+  const ap = m?.invoice_terms?.ap_email;
+  if (!m || !ap) return 'no ap email';
+  if (await env.DB.get(`apcopy:${inv.id}`)) return 'already';
+  const due = inv.due_date ? new Date(inv.due_date * 1000).toISOString().slice(0, 10) : 'on receipt';
+  const amount = `$${(inv.amount_due / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  const status = await sendMail(env, [{
+    to: ap,
+    replyTo: env.CONTACT_EMAIL,
+    subject: `Invoice ${inv.number ?? ''} from Factor Dynamics (Copybook): ${amount} due ${due}`.replace('  ', ' '),
+    text: `A copy for your accounts payable team of the Copy Fund invoice sent to ${m.email}.\n\nInvoice: ${inv.number ?? inv.id}\nAmount due: ${amount} (USD)\nDue: ${due} (Net 30)${m.invoice_terms?.po ? `\nPO: ${m.invoice_terms.po}` : ''}\n\nPay online (card or US bank account): ${inv.hosted_invoice_url ?? `${env.SITE_URL}account/`}\nPDF: ${inv.invoice_pdf ?? 'on the payment page'}\n\nQuestions about this invoice: reply to this email.${FOOTER}`,
+  }]);
+  await env.DB.put(`apcopy:${inv.id}`, new Date().toISOString(), { expirationTtl: 400 * 86400 });
+  return `sent ${status}`;
 }
 
 /** Access paused for an unpaid invoice (past its due date): the owner and seats lose access until it's paid. */
@@ -382,7 +406,7 @@ export async function switchToInvoice(env: Env, m: Member, f: { company?: string
   if (m.seat_of || m.plan !== 'fund') return { ok: false, code: 'fund_owner_only', error: 'Only a Copy Fund owner can switch to invoice billing.' };
   if (m.interval !== 'yearly') return { ok: false, code: 'monthly_card_only', error: 'Copy Fund monthly is paid by card. Switch to yearly to pay by invoice.' };
   if (!isActive(m)) return { ok: false, code: 'subscription_inactive', error: 'No active Copy Fund subscription.' };
-  const sub = await stripe(env, 'POST', `subscriptions/${m.subscription}`, { collection_method: 'send_invoice', days_until_due: 30, 'metadata[invoice]': 'true', 'payment_settings[payment_method_types][0]': 'card', 'payment_settings[payment_method_types][1]': 'us_bank_account' });
+  const sub = await stripe(env, 'POST', `subscriptions/${m.subscription}`, { collection_method: 'send_invoice', days_until_due: 30, 'metadata[invoice]': 'true', ...(f.po !== undefined ? { 'metadata[po]': f.po ?? '' } : {}), ...(f.ap_email !== undefined ? { 'metadata[ap_email]': f.ap_email ?? '' } : {}), 'payment_settings[payment_method_types][0]': 'card', 'payment_settings[payment_method_types][1]': 'us_bank_account' });
   await ensureInvoiceTerms(env, sub, 'fund', f);
   await syncSubscription(env, sub);
   const list = JSON.parse((await env.DB.get('invtrial:customers')) ?? '[]') as string[];

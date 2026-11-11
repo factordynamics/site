@@ -96,6 +96,8 @@ export interface Member {
   has_payment_method?: boolean;
   /** Stripe's collection method: send_invoice for Copy Fund billed by invoice (Net 30). */
   collection?: string;
+  /** Billed by invoice: the yearly amount (cents), and the PO and AP email the invoice prints (subscription metadata). */
+  invoice_terms?: { amount: number | null; po: string | null; ap_email: string | null };
   /** An invoice past its due date: access is paused (owner and seats) until it's paid. */
   overdue_since?: string;
   customer: string;

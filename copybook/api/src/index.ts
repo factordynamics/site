@@ -190,6 +190,7 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
     case 'invoice.paid':
     case 'invoice.payment_failed':
     case 'invoice.overdue':
+    case 'invoice.finalized':
       if (!(await isOurInvoice(env, obj))) return ignore('invoice');
   }
   switch (event.type) {
@@ -197,6 +198,11 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
       const { rewardReferrer } = await import('./referrals');
       console.log(`referral: ${await rewardReferrer(env, obj)}`);
       if (typeof obj.customer === 'string') console.log(`overdue: ${await (await import('./revenue')).clearOverdue(env, obj.customer)}`);
+      break;
+    }
+    // A Fund invoice (Net 30) issued: Stripe emails the owner; the AP address on file gets a copy with the same links.
+    case 'invoice.finalized': {
+      if (typeof obj.customer === 'string' && obj.collection_method === 'send_invoice') console.log(`ap copy: ${await (await import('./revenue')).apCopy(env, obj)}`);
       break;
     }
     // An invoice (Copy Fund, Net 30) past its due date: access pauses for the owner and seats, with an email.
@@ -1040,7 +1046,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       if (!test && env.CONTACT_EMAIL) await sendMail(env, [leadNoticeMail(env, { ...lead, message: `${lead.message ?? ''}\n[invoice trial: ${r?.state ?? 'error'}]`.trim() }, id)]);
       if (!r) return json({ ok: false, error: "We couldn't start the trial just now. We've got your request and will email you today.", code: 'server_error', id }, 502, h);
       // po and ap_email as the invoice will print them, so the confirmation can say so (null when not given).
-      if (r.state === 'started') return json({ ok: true, id, trial: 'started', trial_end: r.trial_end, invoice_on: r.invoice_on, due_on: r.due_on, sign_in_email: r.sign_in_email, po: str(b.po, 140), ap_email: str(b.ap_email, 200)?.toLowerCase() ?? null }, 200, h);
+      // A test address (copybook-test-) also gets its test inbox's read URL, where the sign-in email lands (the PM).
+      const inbox = testAddress(email) ? { test_inbox: `${env.PUBLIC_URL ?? ''}${await (await import('./email')).sinkKey(env, email)}` } : {};
+      if (r.state === 'started') return json({ ok: true, id, trial: 'started', trial_end: r.trial_end, invoice_on: r.invoice_on, due_on: r.due_on, sign_in_email: r.sign_in_email, po: str(b.po, 140), ap_email: str(b.ap_email, 200)?.toLowerCase() ?? null, ...inbox }, 200, h);
       if (r.state === 'already_member') return json({ ok: false, id, code: 'already_member', error: 'This address already has a Copybook subscription. Sign in, or switch to invoice billing in your account.' }, 409, h);
       if (r.state === 'domain_used') return json({ ok: false, id, code: 'trial_used', error: 'Your company has already had a Copy Fund trial. We have your request and will email you to set up an invoice.' }, 409, h);
       return json({ ok: false, id, code: 'freemail', error: 'Use your work email: an invoice trial goes to a company address.' }, 400, h);
@@ -1287,7 +1295,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const { switchToInvoice } = await import('./revenue');
     const b = await body(req);
     const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 140) : null);
-    const r = await switchToInvoice(env, m, { company: str(b.company), po: str(b.po), ap_email: str(b.ap_email) });
+    if (str(b.ap_email) && !EMAIL.test(str(b.ap_email)!.toLowerCase())) return json({ ok: false, error: 'ap_email: an email address', code: 'bad_request', fields: ['ap_email'] }, 400, h);
+    // PO and AP email update the invoice (custom fields) and its AP copy; an account already on invoice billing keeps it.
+    const r = await switchToInvoice(env, m, { company: str(b.company), po: str(b.po), ap_email: str(b.ap_email)?.toLowerCase() ?? null });
     return r.ok ? json({ ok: true, collection: r.collection, member: publicView((await getMember(env, m.customer)) ?? m) }, 200, h) : json(r, r.code === 'subscription_inactive' ? 402 : 403, h);
   }
 
