@@ -497,7 +497,7 @@ async function routeV1(req: Request, env: Env, url: URL, path: string): Promise<
   // each key still counts its own use for the keys list. A bulk file download (its redirect to R2) isn't metered: only
   // the listing is.
   const scope = auth.member.plan === 'fund' ? 'seat' : 'account';
-  const metered = !/^\/v1\/bulk\/[^/]+$/.test(path);
+  const metered = !/^\/v1\/bulk\/(pit\/)?[^/]+$/.test(path);
   const r: MeterResult | null = metered ? await meter(env, `acct:${auth.member.customer}`).hit() : null;
   const limits = r ? limitHeaders(r) : {};
   if (r && !r.allowed) {

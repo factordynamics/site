@@ -343,7 +343,7 @@ const STAMP = new WeakMap<object, Stamp>();
  * is the book as stored (lots[] always present); the echo is in headers (Copybook-As-Of, Copybook-Epoch). Nothing accepted
  * after T may be served (invariant 3): 500 rather than leak.
  */
-async function asOfBook(env: Env, id: string, qp: string, t: string): Promise<Response> {
+async function asOfBook(env: Env, id: string, qp: string, t: string, withSuperseded = false): Promise<Response> {
   const pit = await import('./pit');
   if (qp !== 'latest' && !QUARTER.test(qp)) return v1error('bad_request', 400, 'quarter must look like 2025Q1, or be latest.');
   const f = await resolveAny(env, id);
@@ -367,7 +367,10 @@ async function asOfBook(env: Env, id: string, qp: string, t: string): Promise<Re
     book = o ? ((await new Response(o.body).json()) as Record<string, unknown>) : null;
   }
   if (!book) return v1error('server_error', 503, `The ${at.quarter} book at ${at.epoch} is not readable right now; retry shortly.`);
-  const out = pit.withLots(book as { holdings?: unknown[]; exited?: unknown[] });
+  // superseded[]: rows a RESTATEMENT or refile dropped at or before T, only on ?include_superseded=true.
+  const { superseded, ...rest } = book as { superseded?: { superseded_at?: string }[] };
+  const dropped = (superseded ?? []).filter((r) => !!r.superseded_at && pit.ms(r.superseded_at) <= T);
+  const out = pit.withLots({ ...rest, ...(withSuperseded ? { superseded: dropped } : {}) } as { holdings?: unknown[]; exited?: unknown[] });
   const leaks = pit.leaksAfter(out as never, T);
   if (leaks.length) {
     console.log(`as_of leak guard: ${f.row.slug} ${at.quarter} T=${echo} epoch=${at.epoch}: ${leaks.join(',')}`);
@@ -1165,7 +1168,7 @@ ROUTES.push(
       if (!ok) return v1error('bad_request', 400, 'as_of must be an ISO 8601 date (2025-06-01, meaning 23:59:59Z) or a datetime with Z or a UTC offset (2025-06-01T20:07:00Z, 2025-06-01T16:07:00-04:00), which is normalised to UTC.');
       // version picks one filing, as_of the book publicly known at a time: together they'd contradict (draft 2).
       if (url.searchParams.has('version')) return v1error('bad_request', 400, "as_of and version can't be combined: version picks one filing, as_of the book as publicly known at a time. Pass one.");
-      return asOfBook(env, id, qp, t);
+      return asOfBook(env, id, qp, t, url.searchParams.get('include_superseded') === 'true');
     }
     if (qp !== 'latest' && !QUARTER.test(qp)) return v1error('bad_request', 400, 'quarter must look like 2025Q1, or be latest.');
     const f = await resolveAny(env, id);
@@ -1237,10 +1240,11 @@ ROUTES.push(
     // object itself (size, ETag, the sha256 stamped at upload); a download link serves exactly these bytes or the file
     // streams from here. Only files that pass a size check: a stub (a failed run) is hidden until regenerated.
     const { bulkFiles } = await import('./download');
-    const data = (await bulkFiles(env, MIN_BULK_BYTES)).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.slice(5, 11), bytes: o.bytes, etag: o.etag, sha256: o.sha256, uploaded_at: noMs(o.uploaded.toISOString()), url: `${PUBLIC_V1_BASE}/v1/${o.key}` }));
+    // Books (bulk/{Q}.csv.gz) and point-in-time lots (bulk/pit/{Q}.csv.gz, one row per lot; as_of draft 2), by `kind`.
+    const data = (await bulkFiles(env, MIN_BULK_BYTES)).filter((o) => /^bulk\/(pit\/)?\d{4}Q[1-4]\./.test(o.key)).map((o) => ({ file: o.key.slice('bulk/'.length), quarter: o.key.match(/\d{4}Q[1-4]/)![0], kind: o.key.startsWith('bulk/pit/') ? 'pit' : 'books', bytes: o.bytes, etag: o.etag, sha256: o.sha256, uploaded_at: noMs(o.uploaded.toISOString()), url: `${PUBLIC_V1_BASE}/v1/${o.key}` }));
     return v1json({ data: data.sort((a: { file: string }, b: { file: string }) => b.file.localeCompare(a.file)) });
   }],
-  ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env, url }, [file]) => {
+  ['GET', /^\/v1\/bulk\/((?:pit\/)?\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env, url }, [file]) => {
     // ?redirect=false: the download link as JSON (200), for clients that forward Authorization on a redirect (Python
     // urllib: R2 answers 400). `auth: "none"` for a presigned link (send no Authorization to it); "required" when the file
     // streams from this API (send the key as usual).
@@ -1252,7 +1256,7 @@ ROUTES.push(
     if (f && env.CF_API_TOKEN && env.CF_ACCOUNT_ID) {
       if (sameFile(f, await servedHead(env, f.key))) {
         const { presignGet } = await import('./failover');
-        const loc = await presignGet(env, f.key, 300, { 'response-content-disposition': `attachment; filename="copybook-13f-${file}"` }).catch(() => null);
+        const loc = await presignGet(env, f.key, 300, { 'response-content-disposition': `attachment; filename="copybook-13f-${file.replace('/', '-')}"` }).catch(() => null);
         if (loc && asJson) return v1json({ data: { file, url: loc, auth: 'none', sha256: f.sha256 ?? null, bytes: f.bytes ?? null, expires_at: noMs(new Date(Date.now() + 300_000).toISOString()) } });
         if (loc) return new Response(null, { status: 302, headers: { location: loc, 'cache-control': 'no-store', ...(f.etag ? { etag: `"${f.etag}"` } : {}) } });
       } else mirrorSoon(env, f.key);
@@ -1264,7 +1268,7 @@ ROUTES.push(
     if (asJson) return v1json({ data: { file, url: `${PUBLIC_V1_BASE}/v1/bulk/${file}`, auth: 'required', sha256: sha ?? null, bytes: obj.size ?? null, expires_at: null } });
     const digest: Record<string, string> = sha ? { 'repr-digest': `sha-256=:${btoa(String.fromCharCode(...(sha.match(/../g) ?? []).map((h) => parseInt(h, 16))))}:`, 'x-amz-meta-sha256': sha } : {};
     return new Response(obj.body, {
-      headers: { ...digest, 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
+      headers: { ...digest, 'content-type': obj.httpMetadata?.contentType ?? 'application/octet-stream', 'content-disposition': `attachment; filename="copybook-13f-${file.replace('/', '-')}"`, ...(obj.size != null ? { 'content-length': String(obj.size) } : {}), 'cache-control': 'private, max-age=3600', 'access-control-allow-origin': '*' },
     });
   }],
   ['GET', /^\/v1\/events$/, async ({ env, url }) => {

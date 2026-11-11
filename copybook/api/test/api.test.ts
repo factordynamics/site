@@ -4891,7 +4891,7 @@ describe('copybook api', () => {
     const gzSha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', gzBytes))].map((x) => x.toString(16).padStart(2, '0')).join('');
     hist.meta.set('bulk/2026Q2.csv.gz', { sha256: gzSha }); // stamped at upload
     hist.m.set('bulk/2025Q1.csv.gz', new Uint8Array(1440)); // a stub from a failed run: hidden, and 501 like a missing file
-    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', bytes: 1_200_000, etag: null, sha256: gzSha, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz' }]);
+    expect((await v1('/v1/bulk')).body.data).toEqual([{ file: '2026Q2.csv.gz', quarter: '2026Q2', kind: 'books', bytes: 1_200_000, etag: null, sha256: gzSha, uploaded_at: '1970-01-01T00:00:00Z', url: 'https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz' }]);
     const bulkVia = await (await handleRequest(new Request('https://api.test/v1/bulk', { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env)).json();
     expect(bulkVia.data[0].url).toBe('https://copybook-api.factordynamics.workers.dev/v1/bulk/2026Q2.csv.gz');
     expect((await v1('/v1/bulk/2025Q1.csv.gz')).status).toBe(501);
@@ -5711,6 +5711,17 @@ describe('copybook api', () => {
     const early = await asof('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-01');
     const latest = await asof('/v1/filers/warren-buffett/holdings/latest?as_of=2025-05-20');
     expect([early.status, early.body.error.code, latest.status, latest.h.get('copybook-epoch')]).toEqual([404, 'not_yet_filed', 200, '2025-05-15T20:05:12Z']);
+    // include_superseded: rows a restatement dropped at or before T, with their last lots; never without the flag.
+    hist.m.set('pit/0001067983/2025Q1/20250515T200512Z.json', new TextEncoder().encode(JSON.stringify({ ...epochBook, superseded: [{ cusip: '037833100', superseded_at: '2025-05-15T20:05:12Z', lots: [{ accession: '0000950123-25-005701', accepted_at: '2025-05-15T20:05:12Z' }] }, { cusip: '191216100', superseded_at: '2025-08-14T20:10:02Z' }] })));
+    const plain = (await asof('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20')).body.data;
+    const sup = (await asof('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20&include_superseded=true')).body.data;
+    expect(['superseded' in plain, sup.superseded.map((r: { cusip: string }) => r.cusip)]).toEqual([false, ['037833100']]);
+    // Point-in-time bulk: one row per lot, listed as kind pit beside the books, downloadable like them.
+    const pitGz = new Uint8Array(1_100_000);
+    hist.m.set('bulk/pit/2025Q1.csv.gz', pitGz);
+    const listing = (await asof('/v1/bulk')).body.data.find((x: { file: string }) => x.file === 'pit/2025Q1.csv.gz');
+    const dl = await handleRequest(new Request('https://api.test/v1/bulk/pit/2025Q1.csv.gz', { headers: { authorization: `Bearer ${key}` } }), env);
+    expect([listing?.quarter, listing?.kind, dl.status, dl.headers.get('content-disposition')]).toEqual(['2025Q1', 'pit', 200, 'attachment; filename="copybook-13f-pit-2025Q1.csv.gz"']);
     // Invariant 3: an epoch book naming a filing accepted after T is never served.
     hist.m.set('pit/0001067983/2025Q1/20250515T200512Z.json', new TextEncoder().encode(JSON.stringify({ ...epochBook, holdings: [{ ...epochBook.holdings[0], lots: [{ accession: '0000950123-25-008361', accepted_at: '2025-08-14T20:10:02Z' }] }] })));
     const leak = await asof('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20');

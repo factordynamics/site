@@ -146,8 +146,8 @@ export function latestAt(lineage: { cik: string; index: PitIndex }[], T: number)
  * Invariant 3, the last line before a response: nothing accepted after T in a served book (filing versions,
  * amendments, rows' lots). Returns the offending accessions; the route answers 500 when any.
  */
-export function leaksAfter(book: { filing?: { versions?: { accession: string; accepted_at: string }[]; amendments?: { accession: string; accepted_at: string }[] }; holdings?: { lots?: { accession: string; accepted_at: string }[] }[]; exited?: { lots?: { accession: string; accepted_at: string }[] }[] }, T: number): string[] {
-  const seen = [...(book.filing?.versions ?? []), ...(book.filing?.amendments ?? []), ...[...(book.holdings ?? []), ...(book.exited ?? [])].flatMap((r) => r.lots ?? [])];
+export function leaksAfter(book: { filing?: { versions?: { accession: string; accepted_at: string }[]; amendments?: { accession: string; accepted_at: string }[] }; holdings?: { lots?: { accession: string; accepted_at: string }[] }[]; exited?: { lots?: { accession: string; accepted_at: string }[] }[]; superseded?: { lots?: { accession: string; accepted_at: string }[] }[] }, T: number): string[] {
+  const seen = [...(book.filing?.versions ?? []), ...(book.filing?.amendments ?? []), ...[...(book.holdings ?? []), ...(book.exited ?? []), ...(book.superseded ?? [])].flatMap((r) => r.lots ?? [])];
   return [...new Set(seen.filter((x) => ms(x.accepted_at) > T).map((x) => x.accession))];
 }
 
