@@ -434,9 +434,17 @@ export function funds(ix: Index): Manager[] {
 }
 
 /** Every roster fund's latest full book. */
+/** How many of the investors' 13F books have arrived, for pages that need all of them (see BooksProgress). */
+export const booksProgress = { done: 0, total: 0 }
 export async function loadBooks(): Promise<Book[]> {
   const ms = funds(await loadIndex())
-  const books = await Promise.all(ms.map((m) => loadBook(m.slug).catch(() => null)))
+  let done = 0
+  const tick = () => {
+    booksProgress.done = ++done
+    booksProgress.total = ms.length
+    window.dispatchEvent(new Event('holdterm:books'))
+  }
+  const books = await Promise.all(ms.map((m) => loadBook(m.slug).catch(() => null).finally(tick)))
   return books.filter((b): b is Book => Boolean(b))
 }
 

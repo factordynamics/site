@@ -3073,3 +3073,37 @@ p a,
     display: none;
   }
 }
+
+/* Pages built from every investor's 13F show how many have arrived. */
+.books-progress {
+  margin: 4px 0 18px;
+  max-width: 520px;
+}
+.books-progress-text {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.books-progress-text .dim {
+  white-space: nowrap;
+}
+.books-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bar-bg);
+  overflow: hidden;
+}
+.books-progress-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--acc);
+  transition: width 0.2s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .books-progress-bar i {
+    transition: none;
+  }
+}

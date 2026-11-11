@@ -33,7 +33,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, Bar, ChangeTag, date, day, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
+import { A, Bar, BooksProgress, ChangeTag, date, day, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -964,7 +964,7 @@ export function Flows() {
   // Flows are stock picks: ETFs, index and T-bill funds are left out.
   const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q), books.data).rows.filter((r) => !r.fund) : []), [books.data, q])
   if (books.error) return <Failed error={books.error} what="this quarter’s trades" />
-  if (!books.data) return <PageLoading what="Loading this quarter’s trades" stats={0} rows={20} />
+  if (!books.data) return <PageLoading what="Loading this quarter’s trades" stats={0} rows={20} progress={<BooksProgress what="Comparing each investor’s latest 13F with the quarter before" />} />
   const fundsN = q === 'latest' ? books.data.length : books.data.filter((b) => b.quarter === q).length
   // In "latest" mode the books span quarters: say how many of each, and tag the newest quarter's funds.
   const mix = quarters.map((x) => [x, books.data!.filter((b) => b.quarter === x).length] as const)
@@ -1113,7 +1113,7 @@ export function Consensus() {
   const [sector, setSector] = useState<string | null>(null)
   const agg = useMemo(() => (books.data ? aggregate(books.data) : null), [books.data])
   if (books.error) return <Failed error={books.error} what="the most owned stocks" />
-  if (!agg || !books.data) return <PageLoading what="Loading the most owned stocks" stats={0} rows={20} />
+  if (!agg || !books.data) return <PageLoading what="Loading the most owned stocks" stats={0} rows={20} progress={<BooksProgress what="Adding up every investor’s latest 13F" />} />
   const n = books.data.length
   const base = sector ? agg.rows.filter((r) => r.sector === sector) : agg.rows
   const list = [...base].sort(tab === 'owners' ? (a, b) => b.holders.length - a.holders.length || b.value - a.value : tab === 'value' ? (a, b) => b.value - a.value : (a, b) => b.maxWeight - a.maxWeight)

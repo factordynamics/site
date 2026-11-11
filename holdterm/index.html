@@ -18,6 +18,20 @@
     <link rel="canonical" href="https://holdterm.factordynamics.com/" />
     <meta property="og:url" content="https://holdterm.factordynamics.com/" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- SEC data hosts: connect early. The section pages wait on the investor index, so start it before the app script;
+         fund and stock pages render from their own files first, so they leave the bandwidth to those. -->
+    <link rel="preconnect" href="https://refcell.github.io" crossorigin="anonymous" />
+    <link rel="preconnect" href="https://copybook.factordynamics.com" crossorigin="anonymous" />
+    <script>
+      if (/^\/(funds|flows|consensus|filings)?\/?$/.test(location.pathname)) {
+        var l = document.createElement('link')
+        l.rel = 'preload'
+        l.as = 'fetch'
+        l.crossOrigin = 'anonymous'
+        l.href = 'https://refcell.github.io/gust/copybook/data/index.json'
+        document.head.appendChild(l)
+      }
+    </script>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Holdterm" />
     <meta property="og:title" content="Holdterm · What long-term investors buy and sell" />

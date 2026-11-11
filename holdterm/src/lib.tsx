@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { booksProgress } from './data'
 
 // ---------- formatting ----------
 export function usd(v: number | null | undefined, digits = 1): string {
@@ -116,8 +117,29 @@ export function Loading({ what = 'Loading', rows = 8, quiet = false }: { what?: 
     </div>
   )
 }
+/** For pages built from every investor's 13F: how many have arrived, so a slow connection shows movement. */
+export function BooksProgress({ what }: { what: string }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const on = () => tick((n) => n + 1)
+    window.addEventListener('holdterm:books', on)
+    return () => window.removeEventListener('holdterm:books', on)
+  }, [])
+  const { done, total } = booksProgress
+  return (
+    <div className="books-progress" aria-hidden>
+      <div className="books-progress-text">
+        <span>{what}</span>
+        <span className="dim">{total ? `${done} of ${total} portfolios` : 'Starting…'}</span>
+      </div>
+      <div className="books-progress-bar">
+        <i style={{ width: `${total ? (done / total) * 100 : 2}%` }} />
+      </div>
+    </div>
+  )
+}
 /** A whole page while its data loads: title, summary, stat cards and a table, in the page's own layout. */
-export function PageLoading({ what = 'Loading', stats = 4, rows = 12 }: { what?: string; stats?: number; rows?: number }) {
+export function PageLoading({ what = 'Loading', stats = 4, rows = 12, progress }: { what?: string; stats?: number; rows?: number; progress?: ReactNode }) {
   return (
     <div className="page page-loading" role="status" aria-live="polite">
       <span className="sr">{what}…</span>
@@ -126,6 +148,7 @@ export function PageLoading({ what = 'Loading', stats = 4, rows = 12 }: { what?:
         <span className="skel skel-line" />
         <span className="skel skel-line short" />
       </div>
+      {progress}
       {stats > 0 && (
         <div className="stats" aria-hidden>
           {Array.from({ length: stats }, (_, i) => (
