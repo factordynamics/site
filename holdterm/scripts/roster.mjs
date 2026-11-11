@@ -23,23 +23,24 @@ const row = (f, m) => {
 //  - at most 25% of the book in principal amounts (notes and bonds): a bond book is not a stock portfolio,
 //  - the largest position, share classes combined (BH + BH.A), at most the screen's max_weight,
 //  - the prior quarter's comparison uses its latest full restatement (no later amendment marked superseded).
+// The About page shows each reason as written, so they are plain sentences.
 const INCUMBENT = new Set(JSON.parse(readFileSync(new URL('./incumbents.json', import.meta.url))).ciks.map(cik))
 async function dataChecks(slug, ck) {
   const b = await fetch(`${BASE}${slug}.json`).then((r) => r.json())
   const fails = []
   const total = b.total_value || 0
-  if (b.cover_total && (total > 1.5 * b.cover_total || total < b.cover_total / 1.5)) fails.push(`book $${(total / 1e9).toFixed(2)}B disagrees with its 13F cover page ($${(b.cover_total / 1e9).toFixed(2)}B)`)
-  if (total && (b.prn_value || 0) / total > 0.25) fails.push(`${Math.round(((b.prn_value || 0) / total) * 100)}% of the 13F is notes and bonds`)
+  if (b.cover_total && (total > 1.5 * b.cover_total || total < b.cover_total / 1.5)) fails.push(`its holdings add up to $${(total / 1e9).toFixed(2)}B, but its 13F cover page says $${(b.cover_total / 1e9).toFixed(2)}B`)
+  if (total && (b.prn_value || 0) / total > 0.25) fails.push(`${Math.round(((b.prn_value || 0) / total) * 100)}% of its 13F is notes and bonds, not stocks`)
   const by = new Map()
   for (const h of b.holdings) if (!h.put_call && h.value > 0 && h.shares_type !== 'PRN') by.set(h.cusip.slice(0, 6), (by.get(h.cusip.slice(0, 6)) ?? 0) + h.value)
   const eq = [...by.values()].reduce((x, v) => x + v, 0)
   const top = eq ? Math.max(...by.values()) / eq : 0
-  if (top > universe.rule.max_top1 * (INCUMBENT.has(ck) ? 1 + universe.rule.incumbent_buffer : 1)) fails.push(`largest position ${Math.round(top * 100)}% with share classes combined`)
+  if (top > universe.rule.max_top1 * (INCUMBENT.has(ck) ? 1 + universe.rule.incumbent_buffer : 1)) fails.push(`its largest position is ${Math.round(top * 100)}% of the portfolio, counting all share classes`)
   if (b.prev_quarter) {
     const h = await fetch(`${BASE}${slug}-history.json`).then((r) => (r.ok ? r.json() : { history: [] }))
     const prev = h.history.find((r) => r.quarter === b.prev_quarter)
     const base = prev?.filings?.find((f) => f.role === 'base')
-    if (base && prev.filings.some((f) => f.role === 'superseded' && f.accepted_at > base.accepted_at && /NEW HOLDINGS/i.test(f.amendment_type ?? ''))) fails.push(`${b.prev_quarter} compares against an amendment that a later full restatement replaced`)
+    if (base && prev.filings.some((f) => f.role === 'superseded' && f.accepted_at > base.accepted_at && /NEW HOLDINGS/i.test(f.amendment_type ?? ''))) fails.push(`its ${b.prev_quarter.slice(4)} ${b.prev_quarter.slice(0, 4)} 13F was amended and then refiled, so this quarter’s changes can’t be worked out reliably yet`)
   }
   return fails
 }

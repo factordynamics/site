@@ -2277,7 +2277,7 @@ export function About() {
           <ul className="plain-list article-note">
             {roster.held.map((f) => (
               <li key={f.slug ?? f.firm}>
-                {firmName(f.slug ?? '', f.firm)}: {f.fails[0].replace(/\bbook\b/, 'portfolio total').replace(/\b(\d{4})Q(\d)\b/g, (_, y, q) => quarterLabel(`${y}Q${q}`))}
+                {firmName(f.slug ?? '', f.firm)}: {f.fails[0]}
               </li>
             ))}
           </ul>
