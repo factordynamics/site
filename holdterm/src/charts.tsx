@@ -28,7 +28,9 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
   const [ref, W] = useWidth<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
   const H = 228
-  const pad = { l: 62, r: 6, t: 22, b: 62 }
+  // Phones: no rotated axis title (the panel title says what is measured), so the columns get the width.
+  const narrow = W > 0 && W < 480
+  const pad = { l: narrow ? 46 : 62, r: 6, t: 22, b: narrow ? 44 : 62 }
   const max = Math.max(...data.map((d) => d.value), 1)
   const step = niceStep(max / 4)
   const iw = Math.max(0, W - pad.l - pad.r)
@@ -40,6 +42,9 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
   const ticks: number[] = []
   for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v)
   const showLabels = bw >= 44
+  // Quarter labels need about 40px each; when columns are narrower, label every second (or third) one,
+  // always including the latest.
+  const every = Math.max(1, Math.ceil(40 / Math.max(bw, 1)))
   const sel = hover ?? data.length - 1
   const d0 = data[sel]
   const p0 = data[sel - 1]?.value
@@ -59,9 +64,11 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
       {W > 0 && (
         <svg width={W} height={H} role="img" aria-label={title}>
           <title>{title}</title>
-          <text x={12} y={pad.t + ih / 2} textAnchor="middle" transform={`rotate(-90 12 ${pad.t + ih / 2})`} className="axis-title">
-            Portfolio value
-          </text>
+          {!narrow && (
+            <text x={12} y={pad.t + ih / 2} textAnchor="middle" transform={`rotate(-90 12 ${pad.t + ih / 2})`} className="axis-title">
+              Portfolio value
+            </text>
+          )}
           {ticks.map((v) => {
             const y = Math.round(pad.t + ih - (v / top) * ih) + 0.5
             return (
@@ -81,7 +88,7 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
             const delta = prev ? d.value / prev - 1 : null
             const on = i === sel
             return (
-              <g key={d.label} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} tabIndex={0} onFocus={() => setHover(i)} onBlur={() => setHover(null)} aria-label={`${d.label}: ${usd(d.value)}${delta != null ? `, ${delta >= 0 ? 'up' : 'down'} ${Math.abs(delta * 100).toFixed(1)}%` : ''}`}>
+              <g key={d.label} role="img" onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} tabIndex={0} onFocus={() => setHover(i)} onBlur={() => setHover(null)} aria-label={`${d.label}: ${usd(d.value)}${delta != null ? `, ${delta >= 0 ? 'up' : 'down'} ${Math.abs(delta * 100).toFixed(1)}%` : ''}`}>
                 <rect x={pad.l + i * bw} y={pad.t} width={bw} height={ih} fill="transparent" />
                 <rect x={x} y={pad.t + ih - h} width={cw} height={h} rx={3} className={on ? 'col on' : 'col'} />
                 {(showLabels || on) && (
@@ -89,9 +96,11 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
                     {usd(d.value, d.value >= 1e11 ? 0 : 1)}
                   </text>
                 )}
-                <text x={x + cw / 2} y={pad.t + ih + 17} textAnchor="middle" className="axis">
-                  {bw < 52 ? d.label.replace(/^Q(\d) '(\d\d)$/, '$1Q$2') : d.label}
-                </text>
+                {(data.length - 1 - i) % every === 0 && (
+                  <text x={x + cw / 2} y={pad.t + ih + 17} textAnchor="middle" className={on ? 'axis acc' : 'axis'}>
+                    {d.label}
+                  </text>
+                )}
                 {delta != null && (showLabels || on) && (
                   <text x={x + cw / 2} y={pad.t + ih + 33} textAnchor="middle" className={`axis ${delta >= 0 ? 'pos' : 'neg'}`}>
                     {delta >= 0 ? '+' : '−'}
@@ -101,9 +110,11 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
               </g>
             )
           })}
-          <text x={pad.l + iw / 2} y={H - 4} textAnchor="middle" className="axis-title">
-            Quarter, with the change from the quarter before
-          </text>
+          {!narrow && (
+            <text x={pad.l + iw / 2} y={H - 4} textAnchor="middle" className="axis-title">
+              Quarter, with the change from the quarter before
+            </text>
+          )}
         </svg>
       )}
     </div>
