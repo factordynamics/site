@@ -50,6 +50,12 @@ def kind_of(h: dict) -> str | None:
     return kind
 
 
+try:
+    LINKS = json.loads((DATA / "cusip_links.json").read_text()).get("links") or {}
+except (OSError, ValueError):
+    from ingest.build import SEED_LINKS as LINKS
+
+
 def positions(book: dict, ratio=None) -> dict[tuple[str, str], dict]:
     """(issuer code, kind) -> summed shares/value plus the classes behind it, for one filer.
 
@@ -59,6 +65,7 @@ def positions(book: dict, ratio=None) -> dict[tuple[str, str], dict]:
     for r in book.get("rows") or []:
         h = dict(zip(cols, r))
         cusip = (h.get("cusip") or "").upper()
+        cusip = (LINKS.get(cusip) or {}).get("new") or cusip  # reissued CUSIPs (cusip_links.json)
         if len(cusip) < 6 or cusip.startswith("000000"):
             continue
         kind = kind_of(h)

@@ -594,13 +594,40 @@ def amount(h: dict) -> float:
 COMMON = re.compile(r"\b(COM|COMMON|CMN|SHS|ORD|ORDINARY|CL\s?[A-C]|CLASS\s?[A-C]|CAP STK|STOCK)\b")
 
 
+NOT_COMMON = re.compile(r"%|\b(PFD|PREF\w*|DEP\w*|NOTES?|WTS?|WARRANTS?|RTS?|RIGHTS?|UNITS?|DEB\w*|BONDS?)\b")
+
+
 def same_class(a: dict, b: dict) -> bool:
-    """Same security class across a CUSIP change: equal titles, or both common stock (never a preferred)."""
+    """Same security class across a CUSIP change of one ticker: equal titles, or neither a preferred, note, warrant,
+    right or unit. Titles are free text (XOM 2026Q3 came as "cs", "EQUITY", "XOM", "EXXONMOBIL HOLDINGS CORP" or a
+    date beside "COM"), so a common-stock word isn't required; share classes carry their own tickers."""
     ta, tb = (a.get("title") or "").upper().strip(), (b.get("title") or "").upper().strip()
-    if ta == tb:
-        return True
-    pref = lambda t: "PFD" in t or "PREF" in t or "DEP" in t or "NOTE" in t or "%" in t
-    return bool(COMMON.search(ta) and COMMON.search(tb)) and not pref(ta) and not pref(tb)
+    return ta == tb or not (NOT_COMMON.search(ta) or NOT_COMMON.search(tb))
+
+
+LINKS_PATH = DATA / "cusip_links.json"  # reissued CUSIPs, old -> new (moves.py detects and writes it)
+_LINKS: dict[str, dict] | None = None
+
+
+def cusip_links() -> dict[str, dict]:
+    """{old_cusip: {new, ticker, quarter, filers, basis}} from cusip_links.json, plus the SEED reissues."""
+    global _LINKS
+    if _LINKS is None:
+        try:
+            _LINKS = json.loads(LINKS_PATH.read_text()).get("links") or {}
+        except (OSError, ValueError):
+            _LINKS = {}
+        for old, v in SEED_LINKS.items():
+            _LINKS.setdefault(old, v)
+    return _LINKS
+
+
+# Reissues found in 2026Q3 (Nov 11 scan of every filer's book: old CUSIP gone, new one held by the same filers
+# with the same shares). Detection in moves.py adds later ones to cusip_links.json on its own.
+SEED_LINKS = {
+    "30231G102": {"new": "30233Q108", "ticker": "XOM", "quarter": "2026Q3", "basis": "seed"},
+    "682680103": {"new": "30609A109", "ticker": "OKE", "quarter": "2026Q3", "basis": "seed"},
+}
 
 
 def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: str | None) -> dict:
@@ -670,10 +697,19 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     renamed: dict[tuple, tuple] = {}
     now_keys = {(h["cusip"], h["put_call"] or "") for h in latest["holdings"]}
     gone = {k: p for k, p in before.items() if k not in now_keys}
+    olds: dict[str, list[str]] = {}
+    for old, v in cusip_links().items():
+        olds.setdefault(v["new"], []).append(old)
     for h in latest["holdings"]:
         k = (h["cusip"], h["put_call"] or "")
+        if k in before:
+            continue
+        pk = next(((o, k[1]) for o in olds.get(h["cusip"], ()) if (o, k[1]) in gone and (o, k[1]) not in renamed.values()), None)
+        if pk:  # a known reissue (cusip_links.json), with or without a ticker
+            renamed[k] = pk
+            continue
         t = h.get("ticker") or security_ticker(h["cusip"])
-        if k in before or not t:
+        if not t:
             continue
         for pk, p in gone.items():
             if pk[1] == k[1] and pk not in renamed.values() and (p.get("ticker") or security_ticker(p["cusip"])) == t \

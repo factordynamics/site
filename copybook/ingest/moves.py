@@ -222,10 +222,64 @@ def median(xs: list[float]) -> float | None:
     return xs[m] if len(xs) % 2 else (xs[m - 1] + xs[m]) / 2
 
 
+def linked(cusip: str) -> str:
+    """A reissued CUSIP's new one (cusip_links.json), so a filer still on the old CUSIP counts under the stock."""
+    c = (cusip or "").upper()
+    return (build.cusip_links().get(c) or {}).get("new") or c
+
+
+PAIRS: dict[tuple[str, str], set] = {}  # (old, new) -> filers whose rows show the reissue
+MIN_LINK_FILERS = 10
+
+
+def collect_reissues(cik: str, rows: list[dict]) -> None:
+    """Evidence for a reissue in one filer's changes: a row linked by ticker (prev_cusip), or an exited line and a
+    new line with the same shares and the same ticker or issuer name."""
+    for r in rows:
+        if r.get("prev_cusip") and not r.get("put_call"):
+            PAIRS.setdefault((r["prev_cusip"], r["cusip"]), set()).add(cik)
+    word = lambda r: (r.get("ticker") or "", ((r.get("issuer") or "").upper().split() or [""])[0])
+    gone = [r for r in rows if r.get("change") == "exited" and not r.get("put_call") and (r.get("prev_shares") or 0) > 0]
+    if not gone:
+        return
+    new = {}
+    for r in rows:
+        if r.get("change") == "new" and not r.get("put_call") and (r.get("shares") or 0) > 0:
+            new.setdefault(round(r["shares"]), []).append(r)
+    for g in gone:
+        for n in new.get(round(g["prev_shares"]), []):
+            tg, wg = word(g)
+            tn, wn = word(n)
+            if n["cusip"] != g["cusip"] and ((tg and tg == tn) or (wg and wg == wn)):
+                PAIRS.setdefault((g["cusip"], n["cusip"]), set()).add(cik)
+
+
+def write_links(quarter: str | None) -> list[str]:
+    """cusip_links.json: every reissue seen in at least MIN_LINK_FILERS filers' books, plus earlier ones."""
+    links = dict(build.cusip_links())
+    added = []
+    for (old, new), ciks in sorted(PAIRS.items(), key=lambda kv: -len(kv[1])):
+        if len(ciks) < MIN_LINK_FILERS or old in links or old == new:
+            continue
+        links[old] = {"new": new, "ticker": (SECS.get(new) or {}).get("ticker"), "quarter": quarter,
+                      "basis": "detected"}
+        added.append(old)
+    for old, v in links.items():
+        if (old, v["new"]) in PAIRS:
+            v["filers"] = len(PAIRS[(old, v["new"])])
+    write(DATA / "cusip_links.json", {
+        "note": "Reissued CUSIPs, old -> new, with the quarter the new one first appears. From 13F filings only: the "
+                "old CUSIP's holders report the same shares under the new one (filers = how many showed it this run). "
+                "Changes, holder counts, bulk and /v1 treat the two as one position.",
+        "links": links})
+    build.cusip_links().update(links)
+    return added
+
+
 def issuer_rows(rows: list[dict]):
     """(issuer6, row) for share lines a holder count can use: no options, notes, preferreds or mis-scaled lines."""
     for r in rows:
-        c = (r.get("cusip") or "").upper()
+        c = linked(r.get("cusip"))
         if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
                 or r.get("price_outlier") or not_common(r.get("title")):
             continue
@@ -471,7 +525,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     for cik, rows in LATEST.items():
         by_issuer: dict[str, float] = {}
         for r in rows:
-            c = (r.get("cusip") or "").upper()
+            c = linked(r.get("cusip"))
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
                     or r.get("price_outlier") or not_common(r.get("title")):
                 continue  # preferreds share the common stock's issuer code (BAC 060505682) but aren't its holders
@@ -665,6 +719,7 @@ def main() -> int:
         with_prev += 1
         fill_provenance(rows, shard)
         cik = shard["cik"]
+        collect_reissues(cik, rows)
         for r in rows:
             if r["change"] in ("new", "added", "trimmed", "exited") and r.get("shares_type") != "PRN" \
                     and not r.get("price_outlier") and not r.get("suspect_units"):
@@ -690,6 +745,10 @@ def main() -> int:
             FILING[cik] = filing(b)
             if b.get("equity_value"):
                 EQUITY[cik] = round(b["equity_value"])
+    added = write_links(max((s.get("quarter") or "" for s in shards), default=None))
+    print(f"moves: CUSIP reissues: {len(build.cusip_links())} linked ({', '.join(added) or 'none'} new this run): "
+          + "; ".join(f"{o}->{v['new']} {v.get('ticker')} {v.get('filers')} filers" for o, v in build.cusip_links().items()),
+          flush=True)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
     print("moves: hedge_flow.json %d periods, recent_filings.json %d filings" % write_hedge_flow(shards, types, curated),
           flush=True)

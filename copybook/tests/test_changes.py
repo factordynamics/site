@@ -174,6 +174,13 @@ class MoveMathTest(unittest.TestCase):
         self.assertEqual(rows[0]["prev_shares_as_filed"], 31468114)  # no split: the filed prior, equal to prev_shares
         self.assertAlmostEqual(rows[0]["value_delta"], 465409 * 5197180970 / 31933523, delta=1)
 
+    def test_reissue_links_across_free_text_titles_but_not_to_a_preferred(self):
+        prev = {"quarter": "2026Q2", "holdings": [self.row("682680103", "OKE", 1000, 80000, title="cs")]}
+        cur = {"quarter": "2026Q3", "holdings": [self.row("682680999", "OKE", 1000, 90000, title="COM")]}
+        self.assertEqual([r["change"] for r in build.with_changes(cur, prev)], ["unchanged"])
+        cur = {"quarter": "2026Q3", "holdings": [self.row("682680999", "OKE", 1000, 90000, title="PFD SER A")]}
+        self.assertEqual(sorted(r["change"] for r in build.with_changes(cur, prev)), ["exited", "new"])
+
     def test_line_far_off_the_cross_filer_price_is_suspect(self):
         # AllianceBernstein 2026Q2 KLAC: $1,472 a share against a $301.71 median across filers.
         prev = {"quarter": "2026Q1", "holdings": [self.row("482480100", "KLAC", 7_000_000, 7e9)]}
