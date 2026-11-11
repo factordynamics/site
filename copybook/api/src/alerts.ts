@@ -598,7 +598,7 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       const am0 = alertMail(env, m.email, send.filings, send.events, f, m);
       // Berkshire's 13F (Nov 16): monthly members and monthly trials get one line to switch to yearly.
       const yl = replay ? null : await yearlyPeakLine(env, m, send.filings);
-      const ylHtml = yl ? `<p style="margin:12px 0">${yl.replace(/ (Switch now|Add a card): (https:\/\/\S+)$/, (_, w: string, u: string) => ` <a href="${u}" style="color:#1d4ed8">${w === 'Add a card' ? 'Add a card' : 'Switch to yearly'}</a>`)}</p>` : '';
+      const ylHtml = yl ? `<p style="margin:12px 0">${yl.replace(/ (Switch now|Add card): (https:\/\/\S+)$/, (_, w: string, u: string) => ` <a href="${u}" style="color:#1d4ed8">${w} →</a>`)}</p>` : '';
       const foot = am0.html ? am0.html.lastIndexOf('<p style="margin-top:24px') : -1;
       const am = yl ? { ...am0, text: am0.text.replace(FOOTER, `\n\n${yl}${FOOTER}`), html: am0.html && foot >= 0 ? am0.html.slice(0, foot) + ylHtml + am0.html.slice(foot) : am0.html } : am0;
       mails.push({ ...am, ...(replay ? { subject: `Replay (test): ${am.subject}` } : {}), test, ids: [...send.filings.map((a) => a.accession), ...send.events.map((e) => e.id)] });

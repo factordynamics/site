@@ -530,13 +530,14 @@ export async function yearlyPeakLine(env: Env, m: Member, filings: { slug: strin
   if (!p || m.interval !== 'monthly' || m.seat_of || !isActive(m) || m.comped) return null;
   if (!filings.some((a) => !a.followup && (a.slug === 'warren-buffett' || a.slugs?.includes('warren-buffett')))) return null;
   const keep = `${API(env)}keep?t=${encodeURIComponent(await signToken(env.SESSION_SECRET, 'keep', m.customer, 14 * 86400))}`;
-  // Copy's founding price (the lead, Nov 11): $79 a year, locked while subscribed, a switch to yearly included
-  // (planPrice); $99 for new members from Feb 1. A trial with no card would just end, so its link adds one (on yearly).
+  // Copy's founding price (the lead's ruling, Nov 11): a founding member keeps it on both intervals while subscribed, a
+  // switch to yearly included (planPrice). "$99 for new members" is for prospects only, never in a member's line.
+  // A trial with no card would just end: its link opens the add-a-card form with yearly preselected (/keep routes it).
   if (m.plan === 'copy' && m.status === 'trialing' && m.has_payment_method === false && m.trial_end) {
-    return `Keep Copy yearly · Founding price ${money(p.year)}/yr, locked. Goes to $99 for new members Feb 1. Nothing is charged before ${day(m.trial_end)}. Add a card: ${keep}`;
+    return `Keep Copy at the founding price: add a card before ${day(m.trial_end)}. Yearly ${money(p.year)} or ${money(p.month)}/month. Add card: ${keep}`;
   }
   return m.plan === 'copy'
-    ? `Switch to yearly · Your founding price covers yearly too: ${money(p.year)}/yr, locked, with history back to 2013 (from Dec 31). New members pay $99 from Feb 1. Switch now: ${keep}`
+    ? `Switch to yearly at your founding price: ${money(p.year)}/yr, less than 9 months of monthly. Switch now: ${keep}`
     : `Switch to yearly: ${money(p.year)}, ${monthsFree(p)}. Switch now: ${keep}`;
 }
 
