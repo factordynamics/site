@@ -443,6 +443,17 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
 
   // Operator: this week's free email for one free member, now (Friday's issue, previewed).
+  // Operator: member counts by status, plan and test flag (counts only; agent sessions are logged).
+  if (req.method === 'GET' && path === '/ops/member-counts') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const counts: Record<string, number> = {};
+    for (const m of await listMembers(env)) {
+      const k = `${m.test || testAddress(m.email ?? '') ? 'test' : 'real'}:${m.status}:${m.plan}${m.status === 'free' && m.marketing_off ? ':marketing_off' : ''}`;
+      counts[k] = (counts[k] ?? 0) + 1;
+    }
+    return json({ ok: true, counts }, 200, h);
+  }
+
   if (req.method === 'POST' && path === '/ops/weekly-preview') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const { previewWeekly } = await import('./free');
