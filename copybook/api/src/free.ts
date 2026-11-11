@@ -1000,7 +1000,9 @@ export async function eraseMember(env: Env, email: string): Promise<{ customers:
     for (const k of JSON.parse((await env.DB.get(`apikeys:${c}`)) ?? '[]') as { hash: string }[]) keys.add(`apikey:${k.hash}`);
     const code = await env.DB.get(`refcode:${c}`);
     if (code) keys.add(`ref:${code}`);
-    for (const p of ['cus:', 'follows:', 'channels:', 'chfail:', 'feed:', 'sent:', 'stats:', 'why:', 'refcode:', 'refs:', 'seats:', 'apikeys:', 'delivered:', 'pausenote:']) {
+    // A Fund owner's team history (its seats' access logs, current and removed) goes with the owner.
+    for (const k of [`seats:${c}`, `seatsgone:${c}`]) for (const st of JSON.parse((await env.DB.get(k)) ?? '[]') as { id?: string }[]) if (st.id) keys.add(`acl:${st.id}`);
+    for (const p of ['cus:', 'follows:', 'channels:', 'chfail:', 'feed:', 'sent:', 'stats:', 'why:', 'refcode:', 'refs:', 'seats:', 'apikeys:', 'delivered:', 'pausenote:', 'acl:', 'access:', 'seatsgone:']) {
       let cursor: string | undefined;
       do {
         const page = await env.DB.list({ prefix: `${p}${c}`, cursor });

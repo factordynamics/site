@@ -205,6 +205,8 @@ export async function logAccess(env: Env, req: Request | null, route: string, cu
     const k = `access:${c}`;
     const log = JSON.parse((await env.DB.get(k)) ?? '[]') as unknown[];
     await env.DB.put(k, JSON.stringify([...log, { at, who: by, route, customer: c, ...(note ? { note } : {}) }].slice(-500)));
+    // The member's own access log shows it too ("Access to your account": operator, route, reason).
+    await (await import('./accesslog')).logEvent(env, c, { kind: 'operator', by: 'operator', detail: route, ...(note ? { reason: note } : {}), at }, null);
   }
 }
 

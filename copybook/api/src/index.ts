@@ -4,6 +4,7 @@ import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } fr
 import { verifyGithubOidc } from './oidc';
 import { type ChannelDelivery, channelScope, channelsView, failView, clearSeatDuplicates, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
+import { logEvent, meAccess, teamAccess, teamCsv, teamOwner } from './accesslog';
 import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
@@ -688,6 +689,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const m = testAddress(email) ? await memberByEmail(env, email) : null;
     if (!m || !(m.test || testAddress(m.email))) return json({ ok: false, error: 'test members only' }, 400, h);
     const { referralView } = await import('./referrals');
+    await logAccess(env, req, 'POST /ops/ref-code', [m.customer], 'referral code read');
     return json({ ok: true, referral: await referralView(env, m) }, 200, h);
   }
 
@@ -715,13 +717,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     if (req.method === 'POST') {
       const b = await body(req);
-      const c = typeof b.customer === 'string' && /^(cus_\w+|free_\w+)$/.test(b.customer) ? b.customer : null;
+      const c = typeof b.customer === 'string' && /^(cus_\w+|free_\w+|seat_\w+)$/.test(b.customer) ? b.customer : null;
       if (!c || typeof b.route !== 'string') return json({ ok: false, error: 'customer (row ID) and route' }, 400, h);
       await logAccess(env, req, b.route.slice(0, 120), [c], typeof b.note === 'string' ? b.note.slice(0, 300) : undefined, typeof b.who === 'string' ? b.who.slice(0, 120) : undefined, typeof b.at === 'string' && !Number.isNaN(Date.parse(b.at)) ? new Date(b.at).toISOString() : undefined);
       return json({ ok: true }, 200, h);
     }
     const c = url.searchParams.get('customer') ?? '';
-    return json({ ok: true, customer: c, entries: JSON.parse((await env.DB.get(`access:${c}`)) ?? '[]') }, 200, h);
+    const entries = JSON.parse((await env.DB.get(`access:${c}`)) ?? '[]');
+    // The read itself is logged after it, so it shows from the next read on.
+    if (/^(cus_\w+|free_\w+|seat_\w+)$/.test(c)) await logAccess(env, req, 'GET /ops/access-log', [c], 'access log read');
+    return json({ ok: true, customer: c, entries }, 200, h);
   }
 
   // Operator: member counts by status, plan and test flag (counts only; agent sessions are logged).
@@ -750,6 +755,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const email = String(b.email ?? '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ ok: false, error: 'email required', code: 'bad_request' }, 400, h);
     const { fundInvoice } = await import('./revenue');
+    await logAccess(env, req, 'POST /ops/fund-invoice', [await env.DB.get(`email:${email}`)], 'Fund invoice drafted');
     return json({ ok: true, ...(await fundInvoice(env, email, b.name ? String(b.name).slice(0, 120) : undefined, b.po ? String(b.po).slice(0, 30) : undefined)) }, 200, h);
   }
 
@@ -1111,6 +1117,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
         if (await env.DB.get(`used:${p.n}`)) return json({ ok: false, error: 'This sign-in link was already used. Ask for a new one.', code: 'link_used' }, 401, h);
         await env.DB.put(`used:${p.n}`, '1', { expirationTtl: Math.max(60, Math.ceil(p.x - Date.now() / 1000)) });
       }
+      await logEvent(env, m.customer, { kind: 'sign_in', by: 'self', detail: 'email link' }, req);
       return json(await issueSession(env, m), 200, h);
     }
     if (typeof b.checkout_session === 'string' && /^cs_(test|live)_[A-Za-z0-9]+$/.test(b.checkout_session)) {
@@ -1137,6 +1144,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       if (existed) return json({ ok: true, code: 'existing_account', sign_in: 'email', member: null }, 200, h);
       // A new subscriber: signed in on this device, provisionally (the address isn't proven yet), like the signup form.
       const { PROVISIONAL_TTL } = await import('./members');
+      await logEvent(env, m.customer, { kind: 'sign_in', by: 'self', detail: 'checkout' }, req);
       return json({ ok: true, token: await signToken(env.SESSION_SECRET, 'session', m.customer, PROVISIONAL_TTL, { s: 'provisional' }), session: 'provisional', member: publicView(m) }, 200, h);
     }
     return json({ ok: false, error: 'login or checkout_session required' }, 400, h);
@@ -1356,6 +1364,29 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
 
   // Copy Fund seats: the owner invites teammates by email; each gets their own sign-in link.
+  // The access log: every member's own (sign-ins, keys, changes, downloads, operator access), and a Fund owner's team.
+  if (req.method === 'GET' && path === '/me/access') return json({ ok: true, ...(await meAccess(env, m)) }, 200, h);
+  if (path === '/team/access' || path.startsWith('/team/keys/')) {
+    if (!teamOwner(m)) return json({ ok: false, error: m.seat_of ? "Team access is the Copy Fund owner's" : 'Team access is part of Copy Fund', code: m.seat_of ? 'seat' : 'fund_required' }, 403, h);
+    if (req.method === 'GET' && path === '/team/access') {
+      const t = await teamAccess(env, m, url.searchParams.get('seat'));
+      if (url.searchParams.get('format') === 'csv') return new Response(teamCsv(t.events), { headers: { ...h, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="copybook-team-access.csv"', 'cache-control': 'no-store' } });
+      return json({ ok: true, ...t }, 200, h);
+    }
+    // The owner deletes any key on the team (a seat's or their own); the seat sees it on its own log.
+    const tk = path.match(/^\/team\/keys\/(key_[a-z0-9]{16})$/);
+    if (req.method === 'DELETE' && tk) {
+      for (const s of [{ id: m.customer }, ...(await listSeats(env, m.customer))]) {
+        const k = (await listKeys(env, s.id)).find((x) => x.id === tk[1]);
+        if (!k || !(await revokeKey(env, s.id, k.id))) continue;
+        await logEvent(env, s.id, { kind: 'key_deleted', by: s.id === m.customer ? 'self' : 'owner', key: { id: k.id, name: k.name } }, req);
+        return json({ ok: true }, 200, h);
+      }
+      return json({ ok: false, error: 'no such key on this team' }, 404, h);
+    }
+    return json({ ok: false, error: 'not found' }, 404, h);
+  }
+
   if (path === '/seats' || path.startsWith('/seats/')) {
     if (m.seat_of) return json({ ok: false, error: "Seats are managed by your team's Copy Fund owner", code: 'seat' }, 403, h);
     if (m.plan !== 'fund') return json({ ok: false, error: 'Seats are part of Copy Fund', code: 'fund_required' }, 403, h);
@@ -1365,16 +1396,24 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       if (!EMAIL.test(email)) return json({ ok: false, error: 'invalid email', code: 'bad_request' }, 400, h);
       const r = await inviteSeat(env, m, email);
       if (!r.ok) return json({ ok: false, error: r.error, code: r.code }, r.status, h);
+      await logEvent(env, r.seat.id, { kind: 'invite', by: 'owner' }, req);
       return json({ ok: true, ...seatsView(m, await listSeats(env, m.customer)) }, 201, h);
     }
     const revoke = path.match(/^\/seats\/([^/]+)\/revoke$/);
     if (req.method === 'POST' && revoke) {
+      const s = (await listSeats(env, m.customer)).find((x) => x.email === decodeURIComponent(revoke[1]).trim().toLowerCase());
       if (!(await revokeSeatSessions(env, m, decodeURIComponent(revoke[1])))) return json({ ok: false, error: 'no such seat' }, 404, h);
+      await logEvent(env, s?.id, { kind: 'revoke', by: 'owner', detail: 'signed out everywhere; API keys deleted' }, req);
       return json({ ok: true, revoked_at: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), ...seatsView(m, await listSeats(env, m.customer)) }, 200, h);
     }
     const del = path.match(/^\/seats\/([^/]+)$/);
     if (req.method === 'DELETE' && del) {
+      const s = (await listSeats(env, m.customer)).find((x) => x.email === decodeURIComponent(del[1]).trim().toLowerCase());
       if (!(await removeSeat(env, m, decodeURIComponent(del[1])))) return json({ ok: false, error: 'no such seat' }, 404, h);
+      if (s) {
+        await logEvent(env, s.id, { kind: 'removal', by: 'owner' }, req);
+        await (await import('./accesslog')).noteSeatRemoved(env, m.customer, s);
+      }
       return json({ ok: true, ...seatsView(m, await listSeats(env, m.customer)) }, 200, h);
     }
     return json({ ok: false, error: 'not found' }, 404, h);
@@ -1391,13 +1430,19 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (req.method === 'PUT' && path === '/channels') {
       // A seat can't save its team's destination (409 already_team_channel); an owner's save clears seats' copies of it.
       const team = m.seat_of ? await getChannels(env, m.seat_of) : undefined;
-      const r = await updateChannels(env, m, await body(req), team);
+      const b = await body(req);
+      const r = await updateChannels(env, m, b, team);
       if (r.ok && channelScope(m) === 'team') await clearSeatDuplicates(env, m);
+      if (r.ok) {
+        const what = ['discord', 'slack', 'telegram', 'webhook', 'keep_email', 'email'].filter((k) => b[k] !== undefined);
+        if (what.length) await logEvent(env, m.customer, { kind: what.includes('webhook') ? 'webhook_change' : 'channel_change', by: 'self', detail: what.join(', ') }, req);
+      }
       return r.ok ? json({ ok: true, channels: channelsView(m, r.channels, stableBase(env, url), await getFailures(env, m.customer)) }, 200, h) : json({ ok: false, error: r.error, code: r.code }, r.code === 'pro_required' ? 403 : r.code === 'already_team_channel' ? 409 : 400, h);
     }
     if (req.method === 'POST' && path === '/channels/test') return json({ ok: true, ...(await testChannels(env, m, await getChannels(env, m.customer))) }, 200, h);
     if (path === '/channels/feed' && (req.method === 'POST' || req.method === 'DELETE')) {
       const c = await rotateFeed(env, m, req.method === 'DELETE');
+      await logEvent(env, m.customer, { kind: 'channel_change', by: 'self', detail: req.method === 'DELETE' ? 'private feed removed' : 'private feed link made' }, req);
       // A new feed starts with the member's alerts from the last 30 days (at most 20), not empty.
       if (req.method === 'POST') await seedFeed(env, m.customer, await recentFeed(env, m, Date.now()));
       return json({ ok: true, channels: channelsView(m, c, stableBase(env, url), await getFailures(env, m.customer)) }, 200, h);
@@ -1496,11 +1541,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const made = await createKey(env, m, name);
       if (!made) return json({ ok: false, error: `at most ${MAX_KEYS} keys; revoke one first` }, 400, h);
       const { id, prefix, created } = made.record;
+      await logEvent(env, m.customer, { kind: 'key_created', by: 'self', key: { id, name } }, req);
       return json({ ok: true, key: made.key, id, name, prefix, created }, 201, h);
     }
     const del = path.match(/^\/keys\/(key_[a-z0-9]{16})$/);
     if (req.method === 'DELETE' && del) {
-      return (await revokeKey(env, m.customer, del[1])) ? json({ ok: true }, 200, h) : json({ ok: false, error: 'no such key' }, 404, h);
+      const k = (await listKeys(env, m.customer)).find((x) => x.id === del[1]);
+      if (!k || !(await revokeKey(env, m.customer, del[1]))) return json({ ok: false, error: 'no such key' }, 404, h);
+      await logEvent(env, m.customer, { kind: 'key_deleted', by: 'self', key: { id: k.id, name: k.name } }, req);
+      return json({ ok: true }, 200, h);
     }
     return json({ ok: false, error: 'not found' }, 404, h);
   }
@@ -1518,6 +1567,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const n = crypto.randomUUID();
     await env.DB.put(`dl:${n}`, '1', { expirationTtl: DOWNLOAD_TTL });
     const token = await signToken(env.SESSION_SECRET, 'download', m.customer, DOWNLOAD_TTL, { s: link[1], n });
+    await logEvent(env, m.customer, { kind: 'csv_download', by: 'self', detail: link[1] }, req);
     return json({ ok: true, url: `${linkBase(env, req, url)}/csv/${link[1]}.csv?dl=${token}` }, 200, h);
   }
 
@@ -1646,14 +1696,17 @@ async function proxyProof(env: Env, ip: string, minute = Math.floor(Date.now() /
  */
 export async function fromProxy(req: Request, env: Env): Promise<Request> {
   const v = req.headers.get('x-copybook-proxy');
-  if (!v) return req;
+  if (!v && !req.headers.has('x-copybook-country')) return req;
   const headers = new Headers(req.headers);
   headers.delete('x-copybook-proxy');
-  const [ip, sig] = v.split(' ');
+  // The country is only ever this Worker's word (after a valid proof), never a client's.
+  headers.delete('x-copybook-country');
+  const [ip, sig, country] = (v ?? '').split(' ');
   const m = Math.floor(Date.now() / 60_000);
   if (ip && sig && env.SESSION_SECRET && (sig === (await proxyProof(env, ip, m)) || sig === (await proxyProof(env, ip, m - 1)))) {
     headers.set('cf-connecting-ip', ip);
     headers.set('x-copybook-public-base', PUBLIC_API);
+    if (country && /^[A-Z][A-Z0-9]$/.test(country)) headers.set('x-copybook-country', country);
   }
   return new Request(req, { headers });
 }
@@ -1669,7 +1722,9 @@ async function proxyApi(req: Request, env: Env, base: string): Promise<Response>
   const headers = new Headers(req.headers);
   for (const k of ['host', 'x-copybook-public-base', 'x-copybook-proxy']) headers.delete(k);
   const ip = req.headers.get('cf-connecting-ip') ?? 'unknown';
-  headers.set('x-copybook-proxy', `${ip} ${await proxyProof(env, ip)}`);
+  // The client's country rides after the proof (the access log shows it; never the IP).
+  const country = (req as { cf?: { country?: string } }).cf?.country;
+  headers.set('x-copybook-proxy', `${ip} ${await proxyProof(env, ip)}${country && /^[A-Z][A-Z0-9]$/.test(country) ? ` ${country}` : ''}`);
   const unavailable = () =>
     u.pathname === '/v1' || u.pathname.startsWith('/v1/')
       ? v1error('busy', 503, 'Temporarily unavailable; retry after Retry-After seconds.', { 'retry-after': '30', 'access-control-expose-headers': 'retry-after' })

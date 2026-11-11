@@ -349,6 +349,7 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     if (!m) continue;
     if (req.method !== method) return v1error('bad_request', 405, `Use ${method}.`, limits);
     let res = await handler({ env, req, url, key: auth.key }, m.slice(1));
+    if (!metered && res.status < 400) await (await import('./accesslog')).logEvent(env, auth.member.customer, { kind: 'bulk_download', by: 'self', detail: m[1], key: { id: auth.key.id, name: auth.key.name } }, req);
     // Text only: a gzip bulk file served here (R2 signing unset) must stay bytes.
     if (funnel && res.ok && res.body && /csv/.test(res.headers.get('content-type') ?? '')) {
       const body = await res.text();

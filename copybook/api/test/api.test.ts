@@ -3998,6 +3998,31 @@ describe('copybook api', () => {
     expect((await call('/seats', { token: seat })).status).toBe(403);
     expect((await call('/keys', { body: { name: 'seat key' }, token: seat })).status).toBe(201);
 
+    // The access log. A seat's sign-in (with Cloudflare's country, never an IP), key made and deleted show on the
+    // owner's Team access; the seat can't read it; the owner can delete a seat's key; an operator read shows on the
+    // member's own "Access to your account", with its reason.
+    const seatIdA = (await env.DB.get('email:analyst@fund.example'))!;
+    const de = await handleRequest(new Request('https://api.test/session', { method: 'POST', body: JSON.stringify({ login: await signToken(env.SESSION_SECRET, 'login', seatIdA, 600) }), headers: { origin: 'https://refcell.github.io', 'cf-ipcountry': 'DE' } }), env);
+    expect(de.status).toBe(200);
+    const tmp = await (await call('/keys', { body: { name: 'temp' }, token: seat })).json();
+    expect((await call(`/keys/${tmp.id}`, { method: 'DELETE', token: seat })).status).toBe(200);
+    const ta = await (await call('/team/access', { token: owner })).json();
+    type Ev = { seat: string; kind: string; by: string; country: string | null; key?: { name: string } };
+    expect(ta.events.filter((e: Ev) => e.seat === 'analyst@fund.example').map((e: Ev) => [e.kind, e.by, e.key?.name ?? e.country])).toEqual([
+      ['key_deleted', 'self', 'temp'], ['key_created', 'self', 'temp'], ['sign_in', 'self', 'DE'], ['key_created', 'self', 'seat key'], ['sign_in', 'self', null], ['invite', 'owner', null],
+    ]);
+    expect(ta.seats.map((r: { email: string; role: string; status: string; key_count: number; last_sign_in: string | null }) => [r.email, r.role, r.status, r.key_count, !!r.last_sign_in])).toEqual([['pm@fund.example', 'owner', 'owner', 0, true], ['analyst@fund.example', 'seat', 'active', 1, true]]);
+    expect([(await call('/team/access', { token: seat })).status, (await call('/me/access', { token: seat })).status]).toEqual([403, 200]);
+    const csv = await (await call('/team/access?seat=analyst%40fund.example&format=csv', { token: owner })).text();
+    expect([csv.split('\n')[0], csv.split('\n').length - 2, csv.includes(',sign_in,self,DE,')]).toEqual(['at,seat,kind,by,country,detail,key_id,key_name,reason', 6, true]);
+    const teamSeatKey = ta.seats[1].keys[0].id as string;
+    expect((await call(`/team/keys/${teamSeatKey}`, { method: 'DELETE', token: owner })).status).toBe(200);
+    const own = await (await call('/me/access', { token: seat })).json();
+    expect([own.keys, own.events[0]]).toEqual([[], expect.objectContaining({ kind: 'key_deleted', by: 'owner', key: { id: teamSeatKey, name: 'seat key' } })]);
+    expect((await call('/keys', { body: { name: 'seat key' }, token: seat })).status).toBe(201);
+    await handleRequest(new Request('https://api.test/ops/access-log', { method: 'POST', body: JSON.stringify({ customer: 'cus_fund', route: 'GET /ops/book', note: 'support: invoice question' }), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env);
+    expect((await (await call('/me/access', { token: owner })).json()).operator).toEqual([expect.objectContaining({ kind: 'operator', by: 'operator', detail: 'GET /ops/book', reason: 'support: invoice question' })]);
+
     // Slack is the team's: the owner connects the team channel, and a seat that connects the same one too
     // still gets each alert once there; the seat's own Discord gets its copy. Seats see the team channel read-only.
     const teamSlack = 'https://hooks.slack.com/services/T000/B000/teamchannel0001';
