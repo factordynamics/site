@@ -4,7 +4,7 @@ import { isPro, type Env, type Member } from './env';
 import { SCHEMA_VERSION } from './v1';
 import { getMember, type Follows } from './members';
 import { listSeats } from './seats';
-import { cleanItem4, filingId } from './edgar';
+import { cleanItem4, countedMoves, filingId, type Moves } from './edgar';
 import { hmacHex } from './tokens';
 
 /**
@@ -466,6 +466,15 @@ export async function signature(secret: string, body: string, t = Math.floor(Dat
 }
 
 /** The signed JSON body for one alert. */
+/**
+ * A webhook's moves: held lines only in not_counted (whenever the alert was stored), each with value_delta null and
+ * `counted: false`, so no client sums one; a \"shares\" line keeps its filed values (value, prev_value, value_change).
+ */
+function hookMoves(m: Moves): Moves {
+  const c = countedMoves(m);
+  return c.not_counted?.length ? { ...c, not_counted: c.not_counted.map((r) => ({ ...r, value_delta: null as unknown as number, delta_pct_of_book: null, counted: false, ...(r.unreliable === 'shares' && r.prev_value != null ? { value_change: Math.round(r.value - r.prev_value) } : {}) })) } : c;
+}
+
 export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEvent[], detectedAt: number): { id: string; body: string }[] {
   const detected_at = new Date(detectedAt).toISOString().replace(/\.\d{3}Z$/, 'Z');
   const page = (slug: string) => (slug ? `${env.SITE_URL}investors/${slug}` : null);
@@ -481,7 +490,7 @@ export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEven
       quarter: a.quarter,
       report_date: a.report_date,
       followup: !!a.followup,
-      moves: a.moves,
+      moves: a.moves ? hookMoves(a.moves) : a.moves,
       top_holdings: a.top ?? null,
       sec_url: a.sec_url,
       copybook_url: page(a.slug),

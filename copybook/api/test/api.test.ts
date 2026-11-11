@@ -12,6 +12,7 @@ import { MeterLogic } from '../src/keys';
 import { getFollows, MemberFollows } from '../src/members';
 import { guardDataRun, resolveFollowedFilers, runDigest } from '../src/alerts';
 import { alertMail } from '../src/email';
+import { webhookPayloads } from '../src/channels';
 import { hmacHex } from '../src/tokens';
 import form4Len from './fixtures/form4-len.xml?raw';
 import durableQ2 from './fixtures/durable-q2-shard.json';
@@ -2582,6 +2583,9 @@ describe('copybook api', () => {
     // An alert stored before this change (marked rows inside the lists) renders the same way.
     const old = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'belvedere', slugs: ['belvedere'], manager: 'Belvedere', name: 'Belvedere', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000011', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: { ...ew, new: ew.not_counted!, not_counted: undefined }, tickers: [] }], [], { investors: ['belvedere'], stocks: [], owned: [] } as never);
     expect([/\+\$30\.2B/.test(old.text + old.html), old.text.includes('Not counted: EW puts new'), /EW/.test(old.subject)]).toEqual([false, true, false]);
+    // Webhooks: the held line only in not_counted, never summable.
+    const hook = JSON.parse(webhookPayloads({ SITE_URL: 'https://site.test/' } as Env, [{ slug: 'belvedere', slugs: ['belvedere'], manager: 'Belvedere', name: 'Belvedere', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000011', sec_url: 'https://www.sec.gov/x', moves: { ...ew, new: ew.not_counted!, not_counted: undefined }, tickers: [] } as never], [], Date.now())[0].body).moves;
+    expect([hook.new.length, hook.not_counted.map((r: { ticker: string; value_delta: number | null; counted: boolean }) => [r.ticker, r.value_delta, r.counted])]).toEqual([0, [['EW', null, false]]]);
     // Mizuho Securities USA's ORCL: Q2 under 68389X204, Q3 under 68389X105, one issuer prefix. Without ingest's
     // cusip_mismatch it may be one position: both lines held as a possible CUSIP change, never "NEW ORCL".
     const oq2 = [pos('ORCL', '68389X204', 132_845, 19_500_000), pos('REST', '000000009', 1, 6e9)];
