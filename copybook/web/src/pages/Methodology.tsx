@@ -21,6 +21,18 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     ),
   },
   {
+    id: 'coverage',
+    title: 'Coverage',
+    body: (
+      <ul>
+        <li>History: the last 8 quarters (most from 2024Q3) for the managers we track closely; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31.</li>
+        <li>Bulk files (the API’s /v1/bulk): 2026Q1–Q3 so far.</li>
+        <li>A few filers reach further back. Each fund’s 13F history button, and history_quarters in the API, lists exactly the quarters it has.</li>
+        <li>Point-in-time books (the API’s as_of) are announced for Nov 30; until then each book is as known today (see Amendments).</li>
+      </ul>
+    ),
+  },
+  {
     id: 'refresh',
     title: 'Refresh',
     body: (
@@ -295,7 +307,7 @@ export function Methodology() {
                 <span className="font-medium text-ink">Units.</span> Its implied price (value ÷ shares) is more than 100× off other filers’ median for that CUSIP, or off its own prior quarter.
               </li>
               <li>
-                <span className="font-medium text-ink">Price vs other filers.</span> Its implied price is more than 1.25× off the median that other filers report for the same CUSIP this quarter. Filers report the same quarter-end price, so they agree to rounding. This applies to lines or priors of $50K and up. It runs before send on our main server; Cloudflare’s poller, which sends most alerts first, skips it because of its CPU limits. Held rows are re-checked against other filers’ prices before they go out.
+                <span className="font-medium text-ink">Price vs other filers.</span> Its implied price is more than 1.25× off the median that other filers report for the same CUSIP this quarter. Filers report the same quarter-end price, so they agree to rounding. This applies to lines or priors of $50K and up. It runs before send on our main server; Cloudflare’s poller, which sends most alerts first, skips it because of its CPU limits. Held rows are re-checked against other filers’ prices before they go out, and since Nov 11 every alert gets this check after sending too, on our main server: a row that fails it is marked “Filer’s reported value looks wrong; shown as filed” in the archive.
               </li>
               <li>
                 <span className="font-medium text-ink">Split basis.</span> splits.json lists a split, and the prior quarter’s shares weren’t adjusted by it.
@@ -310,7 +322,7 @@ export function Methodology() {
             </p>
             <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15.5px] leading-relaxed text-ink-2">
               <li>
-                <span className="font-medium text-ink">Matched:</span> every row agrees within 10%, and both totals within 1% (or $1M).
+                <span className="font-medium text-ink">Matched:</span> every row agrees within 10%, both totals agree within 1% of the corrected total or $1M (whichever is larger), and no Data entry names the alert.
               </li>
               <li>
                 <span className="font-medium text-ink">Explained:</span> rows differ only because of a CUSIP change (shown as a new position plus an exit of the same ticker) or by under $1,000.
@@ -319,7 +331,7 @@ export function Methodology() {
                 <span className="font-medium text-ink">With wrong figures:</span> at least one row is more than 10% off in value, or has the wrong sign or direction.
               </li>
               <li>
-                <span className="font-medium text-ink">With only the totals off:</span> every row agrees, but the emailed bought or sold total differs from the corrected total by more than 1% of it or $1M, whichever is larger.
+                <span className="font-medium text-ink">Totals only:</span> every row agrees, but the emailed bought or sold total differs from the corrected total. If a /status/ Data entry names the alert, it counts as disclosed at any size (this season’s four were off by 0.03–0.8%).
               </li>
               <li>
                 <span className="font-medium text-ink">No move rows:</span> the alert had none to check.
@@ -330,7 +342,7 @@ export function Methodology() {
               <Link to="/status/#data" className="font-medium text-accent hover:text-accent-2">
                 status page Data entry
               </Link>{' '}
-              names its filing, whatever the cause; until then it is <span className="font-medium text-ink">undisclosed</span>. For alerts accepted from Nov 11, 05:00 UTC, the recipients of an undisclosed alert get a correction email (“Correction: [fund] [ticker] was [X], not [Y]”), and its feed and archive copies are marked corrected.
+              names its filing, whatever the cause and at any size; until then it is <span className="font-medium text-ink">undisclosed</span>. A totals-only difference counts as undisclosed only if a side is off by more than 1% of the corrected total or $1M, whichever is larger. For alerts accepted from Nov 11, 05:00 UTC, the recipients of an undisclosed alert get a correction email (“Correction: [fund] [ticker] was [X], not [Y]”), and its feed and archive copies are marked corrected.
             </p>
             <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">The running count is on the status page.</p>
           </section>

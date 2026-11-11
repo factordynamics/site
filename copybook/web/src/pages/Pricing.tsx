@@ -36,7 +36,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
       { t: 'Telegram, Discord, Slack and RSS delivery', d: 'Each alert in your chat or reader as it happens, as well as by email.' },
       { t: 'Insider buys and any filer’s 13D', d: 'On stocks you own or watch: open-market insider buys over a threshold you set, cluster buys by 3+ insiders, and a new 13D or 13G by anyone.' },
-      { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and 8 quarters of history with CSV.' },
+      { t: 'Every move, every quarter', d: 'All buys and sells, the full filing-season flow, and the last 8 quarters of history (most from 2024Q3) with CSV for the managers we track closely.' },
     ],
   },
   {
@@ -46,17 +46,17 @@ const tiers = (filers: string, curated: number): Tier[] => [
     lead: 'Everything in Copy, plus',
     now: [
       { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
-      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, with its latest holdings as JSON; 8 quarters of history for the ${curated} we track closely, back to 2013 by Dec 31.` },
+      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, as JSON. History: the last 8 quarters (most from 2024Q3) for the ${curated} managers we track closely; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31.` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
       { t: 'Holders, history and events endpoints', d: 'Every filer holding a stock, a filer’s books across a range of quarters, and Form 4 and 13D/G events, as JSON.' },
-      { t: 'Bulk CSV exports', d: 'One gzip CSV per quarter of every filer’s 13F book, built from original filings: no restatements, amendments or point-in-time columns yet, so a re-filed book shows its original.' },
+      { t: 'Bulk CSV exports', d: 'One gzip CSV per quarter of every filer’s 13F book (2026Q1–Q3 so far), built from original filings: no restatements, amendments or point-in-time columns yet, so a re-filed book shows its original.' },
       BOOK_PRO,
       { t: 'Peer overlap', d: 'Up to 12 funds you benchmark against: how much their books overlap, the names they share, and what they did in yours.' },
     ],
     soon: [
       { t: 'Point-in-time history', d: 'An as_of parameter with per-row amendment lots, so a backtest sees only what was public. By Nov 30.' },
-      { t: 'History back to 2013', d: 'By Dec 31; 8 quarters today.' },
+      { t: 'History back to 2013Q2', d: 'By Dec 31, 2026. Today: the last 8 quarters (most from 2024Q3) for the managers we track closely, at least the latest quarter for every other filer.' },
       { t: 'Parquet bulk files', d: 'Next to the CSVs. No date yet.' },
     ],
   },
@@ -92,7 +92,7 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
   ['Every move and full flow', false, true, true, true],
   ['Slack, Discord, Telegram and RSS delivery', false, true, true, true],
   ['Insider buys and any filer’s 13D on your stocks', false, true, true, true],
-  ['8 quarters of history and CSV', false, true, true, true],
+  ['the last 8 quarters of history (most from 2024Q3) and CSV', false, true, true, true],
   ['API keys, filer and holdings endpoints', false, false, true, true],
   ['Holders, history and events endpoints', false, false, true, true],
   ['Point-in-time history', false, false, 'by Nov 30', 'by Nov 30'],
@@ -368,7 +368,7 @@ export function Pricing() {
               ],
               [
                 'What’s live in Pro and Fund today?',
-                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (as originally filed), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for all filers in My book by Nov 20, point-in-time history (as_of) by Nov 30, history back to 2013 by Dec 31, and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.`,
+                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (as originally filed), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for all filers in My book by Nov 20, point-in-time history (as_of) by Nov 30, history back to 2013Q2 by Dec 31 (today: the last 8 quarters, most from 2024Q3, for the managers we track closely, and at least the latest quarter for every other filer), and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.`,
               ],
               [
                 'How does the free trial work?',

@@ -79,6 +79,14 @@ export const DATA_ALERTS: Record<string, string> = {
  *  each one, and the Alerts reconciled line links its classes to them. */
 export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'incident'; title: string; body: string; affected: string; filings?: Record<string, string> }[] = [
   {
+    id: 'bulk-files-stale',
+    date: '2026-11-11',
+    kind: 'correction',
+    title: 'Copy Pro bulk downloads served an older copy of each file',
+    body: 'From Nov 9 01:17 UTC until Nov 11 07:39 UTC, Copy Pro bulk downloads (GET /v1/bulk/{file}) served an older copy of each quarterly export, not the file the listing described: the listing read our main server’s store, but the download link pointed at a Cloudflare copy that hadn’t been updated since Nov 9. The 2026Q2 file counted First Eagle’s book twice ($120.7B against $60.8B), and every file missed rows added after Nov 9 (Q1 1.6 MB short, Q2 1.7 MB, Q3 8.1 MB). Fixed: each download now serves exactly the listed file, the listing shows each file’s sha256, and an hourly check compares it with what is served.',
+    affected: 'None: bulk files don’t feed alerts or the site.',
+  },
+  {
     id: 'alert-long-only-stock-match',
     date: '2026-11-11',
     kind: 'correction',

@@ -115,7 +115,7 @@ export function ManagerPage() {
             )}
             {Boolean(f.history_quarters?.length) && (
               <Button to={`/investors/${f.slug}/history/`} variant="outline" size="sm">
-                13F history
+                13F history since {quarterLabel([...f.history_quarters!].sort()[0])}
               </Button>
             )}
             {member?.active && !f.filer && <CsvButton slug={f.slug} variant="outline" />}

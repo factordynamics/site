@@ -94,7 +94,7 @@ page(
 const tc = displayName
 page('investors/', 'Investors · Copybook', 'Latest 13F portfolios of legendary value investors, hedge-fund founders, activists and the largest institutions.')
 page('consensus/', 'Consensus · Copybook', 'Where great investors agree: one combined book from the latest 13F filings of the superinvestors we follow.')
-page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, full history, filing alerts and CSV export.')
+page('pricing/', 'Pricing · Copybook', 'The latest quarter is free. Copy adds quarter-over-quarter changes, the last 8 quarters of history, filing alerts and CSV export.')
 page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
 {
   // /speed/'s share card (scripts/cards.mjs): the season's median and p90, or the waiting state.
