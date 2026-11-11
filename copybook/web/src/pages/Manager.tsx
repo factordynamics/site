@@ -377,10 +377,7 @@ export function ManagerPage() {
                       )}
                       {unreliable(h) && (
                         <span className="shrink-0" title={flagNote(h) ?? undefined}>
-                          <Badge tone="warn">
-                            <span className="lg:hidden">{flagNote(h, true)}</span>
-                            <span className="hidden lg:inline">{flagNote(h)}</span>
-                          </Badge>
+                          <Badge tone="warn">⚠ not counted</Badge>
                         </span>
                       )}
                       {splitApplied(h) && (
@@ -389,7 +386,12 @@ export function ManagerPage() {
                         </span>
                       )}
                     </div>
-                    {heldLinesNote(h.held_lines) && <span className="mt-0.5 block text-[12px] leading-snug text-ink-3">{heldLinesNote(h.held_lines)}</span>}
+                    {/* The filed facts and the reason, in grey under the name (one held-row format, PM Nov 11). */}
+                    {[unreliable(h) ? flagNote(h) : null, heldLinesNote(h.held_lines)].filter(Boolean).map((t) => (
+                      <span key={t} className="mt-0.5 block text-[12px] leading-snug text-ink-3">
+                        {t}
+                      </span>
+                    ))}
                   </td>
                   <td className="hidden px-3 py-2.5 text-ink-2 md:table-cell">{h.sector}</td>
                   <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">{sharesFmt(h.shares)}</td>

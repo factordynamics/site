@@ -63,22 +63,19 @@ export const flagOf = (h: Flaggable): Flag | null =>
 /** A flagged row: never in a page's dollar totals or biggest-moves lists. */
 export const unreliable = (h: Flaggable) => flagOf(h) != null
 export const NOT_COUNTED = 'Share count unreliable in this filing'
-/** The line a flagged row shows in place of its trade or dollar figure; `short` for a narrow badge. */
-export function flagNote(h: Flaggable, short = false): string | null {
+/** The line a flagged row shows in place of its trade or dollar figure. One format for
+ *  every held row (PM, Nov 11): the filed facts, then the reason, never a computed trade: "As filed: 646,216 → 1,304
+ *  shares; $121.6M → $6.7M; share counts don't reconcile". */
+export function flagNote(h: Flaggable): string | null {
   const f = flagOf(h)
   if (!f) return null
-  // The filed facts, never a computed trade (PM ruling, Nov 11): an analyst sees what happened, with no number to copy.
-  if (f === 'value') {
-    if (short) return 'Dollar value looks wrong'
-    const moved = h.prev_shares != null && h.shares != null && h.change !== 'new' ? `: ${sharesFmt(h.prev_shares)} → ${sharesFmt(h.shares)} shares` : ''
-    return `This filing’s dollar value looks wrong; share change only${moved}`
-  }
-  if (f === 'shares') {
-    if (short) return 'Shares don’t reconcile'
-    return h.prev_value ? `As filed: ${money(h.prev_value)} → ${money(h.value)}; share counts don’t reconcile` : 'Share counts don’t reconcile'
-  }
-  if (h.suspect_reason === 'reissue_ratio_not_applied') return short ? 'Pre-split count' : 'Pre-split count, change not computed'
-  return short ? 'Not counted' : NOT_COUNTED
+  const reissue = h.suspect_reason === 'reissue_ratio_not_applied'
+  const fresh = h.change === 'new' || !h.prev_shares
+  const shares = h.shares == null ? null : fresh ? `${sharesFmt(h.shares)} shares (new)` : `${sharesFmt(h.prev_shares!)} → ${sharesFmt(h.shares)} shares`
+  const value = h.value == null ? null : fresh || h.prev_value == null ? money(h.value) : `${money(h.prev_value)} → ${money(h.value)}`
+  const reason = f === 'value' ? 'this filing’s dollar value looks wrong; share change only' : f === 'shares' ? 'share counts don’t reconcile' : reissue ? 'a pre-split count kept under the new CUSIP' : 'share count and value both unreliable'
+  const facts = [shares, value].filter(Boolean).join('; ')
+  return facts ? `As filed: ${facts}; ${reason}` : reason.charAt(0).toUpperCase() + reason.slice(1)
 }
 
 export type HeldLine = { shares: number; value: number; implied_price?: number | null }
