@@ -249,7 +249,7 @@ export function ManagerPage() {
               {!paid && changes.length > 4 && (
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent-soft px-4 py-3">
                   <p className="flex items-center gap-2 text-[13.5px] text-accent-2">
-                    <Lock /> {changes.length - 4} more buys and sells, plus 8 quarters of history, with Copy
+                    <Lock /> {changes.length - 4} more buys and sells{historyNote(f)}, with Copy
                   </p>
                   <Button to={pricingTo()} size="sm">
                     Start 14-day free trial
@@ -512,4 +512,11 @@ function Provenance({ f }: { f: ManagerFile & { reported_by?: { slug?: string; n
       )}
     </p>
   )
+}
+
+/** "plus 4 quarters of history (since Q4 2025)": this filer's own history_quarters, the history button's source. */
+function historyNote(f?: { history_quarters?: string[] }) {
+  const q = [...new Set(f?.history_quarters ?? [])].sort()
+  if (q.length < 2) return ''
+  return `, plus ${q.length} quarters of history (since ${quarterLabel(q[0])})`
 }

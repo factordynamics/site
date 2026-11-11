@@ -4,7 +4,7 @@ import { Badge, Button, Panel, Skeleton } from '../components/ui'
 import { ApiStatus } from '../components/ApiStatus'
 import { probe } from '../lib/account'
 import { useAsync, useTitle } from '../lib/data'
-import { loadCoverage } from '../lib/stocks'
+import { loadCoverage, trackedPhrase } from '../lib/stocks'
 
 // Renders the build's copy of the OpenAPI document (scripts/cards.mjs fetches {api}/v1/openapi.json), so new endpoints appear here with each build.
 type Op = { summary?: string; description?: string; parameters?: { name: string; in: string; required?: boolean; description?: string; schema?: { type?: string } }[]; responses?: Record<string, { description?: string }> }
@@ -68,7 +68,7 @@ export function ApiDocs() {
           </Button>
         </div>
         <p className="mt-4 text-[14px] text-ink-3">
-          Coverage: {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers. History: the last 8 quarters (most from 2024Q3) for the {cov.data?.curated ?? 348} managers we track closely; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31 (<Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">coverage</Link>). Coming: the as_of parameter with per-row amendment lots by Nov 30, Parquet bulk files with no date yet. Use is covered by our{' '}
+          Coverage: {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers. History: the last 8 quarters (most from 2024Q3) for {trackedPhrase(cov.data)}; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31 (<Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">coverage</Link>). Coming: the as_of parameter with per-row amendment lots by Nov 30, Parquet bulk files with no date yet. Use is covered by our{' '}
           <Link to="/terms/" className="font-medium text-accent hover:text-accent-2">
             terms
           </Link>

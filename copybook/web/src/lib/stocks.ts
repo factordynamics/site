@@ -298,7 +298,10 @@ export async function resolveTicker(t: string) {
 export const stockPath = (t: string) => `/stocks/${encodeURIComponent(t)}/`
 
 /** Coverage for copy: filers with a parsed latest 13F, and the managers we track closely. */
-export const loadCoverage = () => getJSON<{ filers: number; curated: number; superinvestors?: number }>(`${D}coverage.json`).catch(() => ({ filers: 8968, curated: 348 }))
+/** d/coverage.json. in_api: every fund we track closely, as /v1 serves them; curated: those with a current 13F (/season/). */
+export const loadCoverage = () => getJSON<{ filers: number; curated: number; in_api?: number; superinvestors?: number }>(`${D}coverage.json`).catch(() => null)
+/** "the 355 managers we track closely", or without a number until coverage.json loads. */
+export const trackedPhrase = (c: { curated: number; in_api?: number } | null | undefined) => `the ${c ? `${(c.in_api ?? c.curated).toLocaleString('en-US')} ` : ''}managers we track closely`
 
 /** Every 13F filer's latest position in a stock (scripts/stocks.mjs, d/h/{TICKER}.json): the 500 largest, plus counts. */
 export type FilerHolder = { slug: string; name: string; quarter: string; shares: number; value: number; weight: number; tier: 0 | 1 | 2; smart: boolean; hedge: boolean }

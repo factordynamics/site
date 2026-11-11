@@ -5,14 +5,14 @@ import { Button, Check } from '../components/ui'
 import { attributed, checkRef, referredCheckout, refCode, utmTags } from '../lib/attribution'
 import { useMember } from '../lib/account'
 import { money, useAsync, useTitle } from '../lib/data'
-import { loadCoverage, loadStock } from '../lib/stocks'
+import { loadCoverage, loadStock, trackedPhrase } from '../lib/stocks'
 import { loadEvents } from '../components/FundNotes'
 import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
 type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean; why?: string }
 
-const tiers = (filers: string, curated: number): Tier[] => [
+const tiers = (filers: string, curated: string): Tier[] => [
   {
     id: 'free',
     who: 'For reading what great investors own.',
@@ -31,7 +31,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
     now: [
       { t: 'Moves between 13Fs', d: 'Form 4 trades and 13D stakes by the funds you follow, checked on EDGAR every minute: holdings per share class, % of the class before → after, threshold crossings and the 13D’s Item 4.' },
       { t: 'My book', d: 'Your names, who owns them among the superinvestors, and alerts when that changes.' },
-      { t: 'An email when they file', d: `We check EDGAR every minute. Alerts, moves and history cover the ${curated} managers we track closely, and the list is growing.` },
+      { t: 'An email when they file', d: `We check EDGAR every minute. Alerts, moves and history cover ${curated}, and the list is growing.` },
       { t: 'The moves inside the email', d: 'New, added, trimmed and exited positions, with dollars and share of the book.' },
       { t: 'Follow investors and stocks', d: 'Tell us what you own or watch, and hear when an active manager trades it.' },
       { t: 'Telegram, Discord, Slack and RSS delivery', d: 'Each alert in your chat or reader as it happens, as well as by email.' },
@@ -46,7 +46,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
     lead: 'Everything in Copy, plus',
     now: [
       { t: 'API keys and docs', d: 'Up to 10 keys, 60 requests a minute and 20,000 a day each, with usage on your account page.' },
-      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, as JSON. History: the last 8 quarters (most from 2024Q3) for the ${curated} managers we track closely; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31.` },
+      { t: 'Filer and holdings endpoints', d: `Every 13F filer, ${filers}, as JSON. History: the last 8 quarters (most from 2024Q3) for ${curated}; at least the latest quarter for every other filer; back to 2013Q2 by Dec 31.` },
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
       { t: 'Holders, history and events endpoints', d: 'Every filer holding a stock, a filer’s books across a range of quarters, and Form 4 and 13D/G events, as JSON.' },
@@ -144,7 +144,7 @@ export function Pricing() {
   useTitle('Pricing · Copybook')
   const cov = useAsync(loadCoverage, [])
   const filers = cov.data ? cov.data.filers.toLocaleString('en-US') : '8,900+'
-  const curated = cov.data?.curated ?? 348
+  const curated = trackedPhrase(cov.data)
   const TIERS = tiers(filers, curated)
   const COMPARE = compare(filers)
   // A friend's referral link: Copy and Pro show the first charge with the free month taken off.

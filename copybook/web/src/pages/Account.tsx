@@ -514,7 +514,7 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
           <h2 className="text-[15px] font-semibold">What Copy adds</h2>
         </div>
         <ul className="mt-4 space-y-2.5 text-[14px] text-ink-2">
-          {['An email for each 13F, Form 4 and 13D, checked on EDGAR every minute, with the moves inside', 'Follow investors and the stocks you own or watch, and see who holds them in My book', '8 quarters of history for the funds we track closely, with CSV export'].map((t) => (
+          {['An email for each 13F, Form 4 and 13D, checked on EDGAR every minute, with the moves inside', 'Follow investors and the stocks you own or watch, and see who holds them in My book', 'Up to 8 quarters of history for the funds we track closely, with CSV export'].map((t) => (
             <li key={t} className="flex gap-2.5">
               <Check className="mt-0.5 shrink-0 text-accent" /> {t}
             </li>
@@ -631,7 +631,7 @@ function NotOpen() {
       <header>
         <p className="text-[13px] font-medium text-accent">Account</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">Copy opens with the Q3 filings.</h1>
-        <p className="mt-3 text-[17px] text-ink-2">Quarter-over-quarter changes, 8 quarters of 13F history and CSV export, and filing-day alerts. Meanwhile, the free Friday email has the week’s top moves.</p>
+        <p className="mt-3 text-[17px] text-ink-2">Quarter-over-quarter changes, up to 8 quarters of 13F history and CSV export, and filing-day alerts. Meanwhile, the free Friday email has the week’s top moves.</p>
       </header>
       <Signup source="account" className="mt-8" />
     </>

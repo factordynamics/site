@@ -237,6 +237,9 @@ list.sort((a, b) => b.h - a.h || b.v - a.v)
     JSON.stringify({
       filers: c?.filers ?? all.size,
       curated: c?.tracked ?? live.filter((m) => qn(m.quarter) >= newest - 1).length,
+      // Every fund we track closely that /v1 serves with history (index.json's curated list), for pages that
+      // describe the API or history; "curated" above is /season/'s count of those with a current 13F.
+      in_api: index.managers.filter((m) => m.ok).length,
       superinvestors: c?.superinvestors ?? SUPER_TOTAL,
       ...(c?.definitions ? { definitions: c.definitions } : {}),
       generated_at: index.generated_at,
