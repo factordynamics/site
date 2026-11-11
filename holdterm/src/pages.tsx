@@ -154,7 +154,8 @@ const aggCols = {
     render: (r: Agg) => (
       <>
         <StockCell t={r.ticker} name={r.name} former={r.former} label={r.label} />
-        {r.ticker && <span className="row-sub stock-sub show-sm">{r.name}</span>}
+        {/* Phones show one ticker for combined share classes (GOOGL), so the second line says the others are in it. */}
+        {r.ticker && <span className="row-sub stock-sub show-sm">{r.label?.includes('+') ? `${r.name}, ${r.label.split('+').length === 2 ? 'both' : 'all'} classes` : r.name}</span>}
       </>
     ),
     sort: (r: Agg) => r.ticker ?? r.name, width: '80px' } as Col<Agg>,
@@ -1163,15 +1164,22 @@ export function Flows() {
           <FlowsSummary rows={rows} funds={fundsN} q={q} />
         </div>
       </div>
-      <div className="filters" role="group" aria-label="quarter">
-        <span className="dim">Quarter</span>
+      {/* One row of quarter chips on every width; the count under it says, in words, which 13F each investor is shown with. */}
+      <div className="filters quarter-pick" role="group" aria-label="Quarter">
+        <span className="dim hide-sm">Quarter</span>
         {['latest', ...quarters].map((x) => (
           <button key={x} className={q === x ? 'chip on' : 'chip'} aria-pressed={q === x} onClick={() => setQ(x)}>
-            {x === 'latest' ? 'Each fund’s latest' : quarterLabel(x)}
+            {x === 'latest' ? sm('Each fund’s latest', 'Latest') : quarterLabel(x)}
           </button>
         ))}
-        <span className="dim">· {fundsN} investors{tagQ && ` (${mix.map(([x, n]) => `${n} ${quarterLabel(x)}`).join(' + ')})`}</span>
       </div>
+      <p className="dim small quarter-note">
+        {q !== 'latest'
+          ? `${plural(fundsN, 'investor')} filed for ${quarterLabel(q)}.`
+          : tagQ
+            ? `${num(fundsN)} investors: ${num(mix[0][1])} have filed for ${quarterLabel(tagQ)}, and the other ${num(fundsN - mix[0][1])} are shown with ${mix.length === 2 ? `their ${quarterLabel(mix[1][0])} 13F` : 'an earlier 13F'}.`
+            : `${plural(fundsN, 'investor')}, each with its latest 13F.`}
+      </p>
       <Tabs<ATab>
         value={tab}
         onChange={setTab}
