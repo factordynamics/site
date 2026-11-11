@@ -3649,6 +3649,52 @@ p a,
   font-size: 13.5px;
   line-height: 1.45;
 }
+/* The filings table's key to its tags: one line until opened. */
+.tag-key {
+  margin: 0 0 12px;
+  font-size: 13.5px;
+}
+.tag-key summary {
+  cursor: pointer;
+  color: var(--acc);
+  font-weight: 500;
+  width: fit-content;
+  padding: 4px 0;
+}
+.tag-key dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 10px 24px;
+  margin: 8px 0 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--raise);
+}
+.tag-key dl > div {
+  display: grid;
+  grid-template-columns: 124px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.tag-key dt {
+  margin: 0;
+}
+/* The key sits on the raised grey, so the neutral tags take the line colour to stay visible as pills. */
+.tag-key .tag:not(.pos):not(.neg) {
+  background: var(--line);
+}
+.tag-key dd {
+  margin: 0;
+  color: var(--fg2);
+  line-height: 1.45;
+}
+@media (max-width: 640px) {
+  /* Phones: each tag over its meaning, so the explanation gets the full width. */
+  .tag-key dl > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
 @media (max-width: 1000px) {
   .col-key {
     grid-template-columns: 1fr;
