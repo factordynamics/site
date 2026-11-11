@@ -58,7 +58,7 @@ export function Contact() {
             <>
               <p className="mt-4 text-[17px] leading-relaxed text-ink-2">Copy Fund is everything in Pro for up to {FUND_SEATS} seats at a flat price: each seat signs in on its own, and the team shares one book, watchlist and peer list. The API, signed webhooks and Slack alerts are included.</p>
               <ul className="mt-6 space-y-2.5 text-[15px] text-ink-2">
-                {['Founding price $1,990/yr, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 on request', 'Your uploaded book stays private to your team'].map((x) => (
+                {['Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay subscribed', 'Invoiced yearly, net 30', 'W-9 on request', 'Your uploaded book stays private to your team', 'Prices exclude applicable taxes. Copybook does not currently collect sales tax.'].map((x) => (
                   <li key={x} className="flex gap-2.5">
                     <Check className="mt-1 shrink-0 text-accent" /> {x}
                   </li>
@@ -126,14 +126,20 @@ export function Contact() {
                 </label>
               </div>
               {fund && (
-                <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem]">
+                <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
                   <label className="block text-[13px] font-medium text-ink-2">
                     Fund or firm
                     <input required value={form.fund} onChange={set('fund')} autoComplete="organization" className={`${field} mt-1.5`} />
                   </label>
                   <label className="block text-[13px] font-medium text-ink-2">
-                    Seats
-                    <input type="number" min={1} max={FUND_SEATS} value={form.seats} onChange={set('seats')} className={`${field} mt-1.5`} />
+                    Team size (flat price, up to {FUND_SEATS})
+                    <select value={form.seats} onChange={set('seats')} className={`${field} mt-1.5`}>
+                      {Array.from({ length: FUND_SEATS }, (_, i) => String(i + 1)).map((n) => (
+                        <option key={n} value={n}>
+                          {n === '1' ? '1 person' : `${n} people`}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
               )}
@@ -153,6 +159,7 @@ export function Contact() {
                 <Button type="submit" disabled={state === 'sending'}>
                   {state === 'sending' ? 'Sending…' : fund ? 'Request Fund access' : topic === 'delete' ? 'Request deletion' : 'Send'}
                 </Button>
+                {fund && state !== 'error' && <p className="text-[13px] text-ink-3">We reply within one business day.</p>}
                 {state === 'error' && (
                   <p role="alert" className="text-[13.5px] text-down">
                     {err || 'That didn’t send. Please try again in a moment.'}

@@ -512,6 +512,9 @@ function CTABand() {
               Start 14-day free trial
             </Button>
             <p className="text-[13px] text-white/60">Or $79 a year. The latest quarter stays free.</p>
+            <Link to="/for-funds/" className="text-[13px] font-medium text-white/80 underline decoration-white/30 underline-offset-4 hover:text-white">
+              Buying for a fund team? See Copy Fund
+            </Link>
           </div>
         </div>
       </div>

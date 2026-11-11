@@ -107,6 +107,7 @@ function VendorSummary() {
         {row('From Nov 17, 2026', list(VENDOR.nov17))}
         {row('What we don’t have', <><span className="font-medium text-ink">{VENDOR.noCert}</span> {VENDOR.training}</>)}
         {row('If the founder is unreachable', VENDOR.founder)}
+        {row('Legal entity', 'Details to be published.')}
       </dl>
       <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-4 text-[14px]">
         <Link to="/security/questionnaire/" className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
@@ -163,7 +164,7 @@ export function ForFunds() {
         title="Know who owns what you own."
         sub={`Your book next to every 13F filer: who holds your names, how crowded they are, and how the funds you benchmark against are positioned. ${FUND_SEATS} seats, shared lists, one team channel in Slack, and an annual invoice.`}
         cta={cta}
-        note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 on request. Prepaid and protected: pro-rata refund if we ever discontinue the plan."
+        note="Founding price $1,990/yr for teams that subscribe before Dec 31, kept for as long as you stay. Invoiced net 30; W-9 on request. Prepaid and protected: pro-rata refund if we ever discontinue the plan. Prices exclude applicable taxes. Copybook does not currently collect sales tax."
       />
 
       <Facts items={[[`${filers}`, '13F filers covered, the latest filing of each'], median != null

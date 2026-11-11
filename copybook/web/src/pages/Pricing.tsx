@@ -77,7 +77,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
 
 const FOUNDING: Partial<Record<PlanId, string>> = {
   pro: 'Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay subscribed.',
-  fund: 'Founding price: subscribe before Dec 31 and keep $1,990/yr for as long as you stay subscribed.',
+  fund: 'Founding price: subscribe before Dec 31 and keep $199/mo or $1,990/yr for as long as you stay subscribed.',
 }
 
 // What each plan includes. true = included, false = not, 'soon' = coming (no date), 'by …' = coming by that date, string = shown as is.
@@ -214,7 +214,7 @@ export function Pricing() {
                 <h2 className="text-[17px] font-semibold">{plan?.name ?? 'Free'}</h2>
                 {dark && <span className="whitespace-nowrap rounded-full bg-accent px-2.5 py-0.5 text-[12px] font-medium text-white">Recommended</span>}
               </div>
-              <p className={`relative mt-1 min-h-[2.75em] text-[13.5px] leading-snug ${dark ? 'text-white/65' : 'text-ink-3'}`}>{tier.who}</p>
+              <p className={`relative mt-1 min-h-[2.75em] text-[13.5px] leading-snug ${dark ? 'text-white/65' : 'text-ink-3'}`}>{tier.id === 'fund' && cycle === 'monthly' ? tier.who.replace(', one invoice.', ' at a flat price.') : tier.who}</p>
               <p className="relative mt-5 flex items-baseline gap-1.5">
                 <span className="num text-[40px] font-semibold tracking-[-0.04em]">${price.toLocaleString('en-US')}</span>
                 <span className={`text-[14px] ${dark ? 'text-white/60' : 'text-ink-3'}`}>{plan ? (cycle === 'yearly' ? 'per year' : 'per month') : 'forever'}</span>
@@ -260,7 +260,7 @@ export function Pricing() {
                 <p className={`mt-2.5 min-h-[3.6em] text-[11.5px] leading-snug ${dark ? 'text-white/55' : 'text-ink-3'}`}>
                   {tier.id === 'fund' ? (
                     <>
-                      Founding price $1,990/yr, invoiced net 30. W-9 on request. Or email{' '}
+                      {cycle === 'monthly' ? 'Founding price $199/mo. Monthly is billed by card; invoicing (net 30) is yearly. Email' : 'Founding price $1,990/yr, invoiced net 30. W-9 on request. Or email'}{' '}
                       <a href="mailto:hello@factordynamics.com" className="underline underline-offset-2 hover:text-ink">
                         hello@factordynamics.com
                       </a>
