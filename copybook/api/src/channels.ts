@@ -55,6 +55,7 @@ function testMessage(dest: Dest, status: string): string {
   if (/^2\d\d$/.test(status)) return 'Delivered';
   if (status === '404' || status === '410') return dest === 'telegram' ? 'Telegram rejected this chat (wrong chat id, or the bot was removed)' : `${label} rejected this ${dest === 'webhook' ? 'URL' : 'webhook'} (deleted or wrong URL)`;
   if (status === '401' || status === '403') return dest === 'telegram' ? 'Telegram rejected this bot (token revoked, or the bot was blocked or removed from the chat)' : `${label} refused it (access revoked)`;
+  if (dest === 'telegram' && status === '400') return "Telegram couldn't find this chat (check the chat id, and that the bot is in the chat)";
   if (status === '429') return `${label} is rate limiting; try again in a minute`;
   return /^\d+$/.test(status) ? `${label} answered HTTP ${status}` : `No answer from ${label}`;
 }
@@ -309,11 +310,50 @@ const post = async (url: string, body: unknown, headers: Record<string, string> 
 /** Discord unfurls every link; the SEC's in <…> so only the Copybook link (card or investor page) previews. */
 const discordText = (text: string) => text.replace(/(?<!<)(https:\/\/www\.sec\.gov\/[^\s>]+)/g, '<$1>');
 
+/** Telegram's limit per message, in characters. */
+const TG_MAX = 4096;
+const tgLine = (l: string) => l.replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[ch]!).replace(/https?:\/\/[^\s<"]+/g, (u) => `<a href="${u}">${u}</a>`);
+/**
+ * An alert as Telegram messages: HTML (<, > and & escaped, links as <a href>), split at line ends so every part stays
+ * under Telegram's 4,096 characters (a longer alert goes as several messages, none cut). Each part keeps its plain text
+ * for the fallback. A single line longer than a message is cut into pieces first.
+ */
+export function telegramParts(text: string, max = TG_MAX): { html: string; plain: string }[] {
+  const lines = text.split('\n').flatMap((l) => (tgLine(l).length <= max ? [l] : (l.match(new RegExp(`[^]{1,${Math.floor(max / 6)}}`, 'g')) ?? [])));
+  const out: { html: string; plain: string }[] = [];
+  let h: string[] = [];
+  let p: string[] = [];
+  let len = 0;
+  for (const l of lines) {
+    const x = tgLine(l);
+    if (h.length && len + 1 + x.length > max) {
+      out.push({ html: h.join('\n'), plain: p.join('\n') });
+      [h, p, len] = [[], [], 0];
+    }
+    len += (h.length ? 1 : 0) + x.length;
+    h.push(x);
+    p.push(l);
+  }
+  if (h.length) out.push({ html: h.join('\n'), plain: p.join('\n') });
+  return out;
+}
+
 /** One chat message to one destination, built from the member's current settings (a retry follows a fixed URL). */
 async function sendChat(c: Channels, dest: Exclude<Dest, 'webhook'>, text: string) {
   if (dest === 'discord' && c.discord) return postFull(c.discord, { content: discordText(text).slice(0, 1990), allowed_mentions: { parse: [] } });
   if (dest === 'slack' && c.slack) return postFull(c.slack, { text });
-  if (dest === 'telegram' && c.telegram) return postFull(`https://api.telegram.org/bot${c.telegram.bot_token}/sendMessage`, { chat_id: c.telegram.chat_id, text: text.slice(0, 4000), disable_web_page_preview: true });
+  if (dest === 'telegram' && c.telegram) {
+    const url = `https://api.telegram.org/bot${c.telegram.bot_token}/sendMessage`;
+    let r: Awaited<ReturnType<typeof postFull>> | null = null;
+    for (const p of telegramParts(text)) {
+      r = await postFull(url, { chat_id: c.telegram.chat_id, text: p.html, parse_mode: 'HTML', disable_web_page_preview: true });
+      // A 400 can be Telegram refusing the markup ("can't parse entities"): that part again as plain text. A second
+      // 400 is the chat (Bad Request: chat not found).
+      if (r.status === '400') r = await postFull(url, { chat_id: c.telegram.chat_id, text: p.plain, disable_web_page_preview: true });
+      if (!/^2\d\d$/.test(r.status)) break;
+    }
+    return r;
+  }
   return null; // removed meanwhile
 }
 
