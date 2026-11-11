@@ -102,6 +102,8 @@ function position(h: any, equityTotal: number, allTotal: number) {
     // What the unit check compared against, and why a row was flagged (enums declared in the spec; null until set).
     suspect_units_basis: ['filers', 'own_prior', 'none'].includes(h.suspect_units_basis) ? h.suspect_units_basis : null,
     suspect_reason: ['cross_filer', 'cross_filer_prior', 'own_prior'].includes(h.suspect_reason) ? h.suspect_reason : null,
+    // Why `change` is null: the prior 13F-HR was filed with no holdings (confidential, or empty). Null otherwise.
+    prev_reason: ['prior_confidential', 'prior_empty'].includes(h.prev_reason) ? h.prev_reason : null,
   };
 }
 
@@ -362,6 +364,9 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
       versions,
     },
     prev_quarter: q.prev_quarter ?? null,
+    // The prior quarter's 13F-HR filed with no holdings (Norges Bank's 2026Q1, isConfidentialOmitted): its status and accession.
+    prev_quarter_status: ['confidential_omitted', 'empty'].includes(q.prev_quarter_status) ? q.prev_quarter_status : null,
+    prev_quarter_accession: typeof q.prev_quarter_accession === 'string' ? q.prev_quarter_accession : null,
     total_value_usd: Math.round(q.total_value ?? holdings.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0)),
     position_count: q.position_count ?? holdings.length,
     // A public shard holds the top 500 positions by value until the full book is in R2.

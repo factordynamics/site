@@ -5,12 +5,26 @@ import { secBudget } from './edgar';
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
 /** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
-export const SPEC_REVISION = '2026-11-11.4';
+export const SPEC_REVISION = '2026-11-11.5';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-cusip-links-quarter',
+    date: '2026-11-11',
+    shipped_at: '2026-11-11T14:30:00Z',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'cusip_links.json (public data file): `quarter` now means the first quarter in which filers report the new CUSIP (equal to `units_check.to_quarter`, e.g. DD and HON 2026Q2). It previously held the quarter of the run that detected the link (2026Q3 on every link). The SEC list\'s quarter stays in `list_quarter`. Each link now also carries `old`, `ratio`, `units_basis` (split_confirmed or holders_1to1), `units_check` with its evidence, and `list_url`, and the file has `generated` and a `held` array.',
+      'GET /v1/filers/{filer}/holdings/{quarter}: `prev_quarter_status` (confidential_omitted or empty) and `prev_quarter_accession` when the prior quarter\'s 13F-HR was filed with no holdings; each position\'s `prev_reason` (prior_confidential or prior_empty) where `change` is null for that reason. Null otherwise.',
+      'GET /v1/stocks/{stock}/holders: counts follow current_only (by default the current filers `holders[]` lists, so `count` = `counts.holders`), with `holders_all` and `not_current`; `net`, `net_quarter` and `net_by_period` are the data run\'s, as published, and `net` equals the sum of that quarter\'s /v1/changes?ticker= share rows. Rows may carry `price_outlier`, `value_basis`, `suspect_reason` (reissue_ratio_not_applied) and a boolean `suspect_duplicate` from the data run.',
+      'GET /v1/events?tickers=: a ticker whose feeds were not re-read within the call is served from its last read and listed in `pending`; the read finishes after the response, so the next call serves it. After a 503 `busy`, retry after Retry-After.',
+    ],
+  },
   {
     id: '2026-11-11-past-quarters-by-ticker',
     date: '2026-11-11',
