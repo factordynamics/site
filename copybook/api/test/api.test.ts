@@ -2160,7 +2160,7 @@ describe('copybook api', () => {
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
     const w = sent[0];
     // Only the allowed claims: the season median with /speed/, and history as served (marketing's audit, Nov 11).
-    expect(w.text).toContain("This email comes once a week. Copy emails each 13F from the funds you follow as it's filed, median under 2 minutes from EDGAR acceptance (live figures: " + SITE + 'speed/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-speed), with 8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV. 14 days free · no card needed: ' + SITE + 'pricing/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-paid');
+    expect(w.text).toContain(`Every Q3 13F so far, and who's due by Monday's 5:30pm ET deadline: ${SITE}season/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-season\n\nThis email comes once a week. Copy emails each 13F from the funds you follow as it's filed. Median alert under 2 minutes after the SEC publishes the filing; every alert is timed on the speed page, slow ones included: ${SITE}speed/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-speed. History: 8 quarters (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV.\n\nBetween seasons Copy keeps going. Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and 14 open-market buys of $100K or more by directors and officers in the 100 stocks they hold most by value: ${SITE}winter-2025-26/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-winter\n\nFounding price $79/yr, locked. Goes to $99 for new members Feb 1. 14 days free, no card needed. One free trial per person: ${SITE}pricing/?utm_source=weekly&utm_medium=email&utm_campaign=13f-q3-2026&utm_content=weekly-paid\n\nYou get this`);
     // The window it covers, by name (Sat Nov 14 02:00 UTC: Fri Nov 6 to Fri Nov 13, ET).
     expect(w.text.startsWith('Superinvestor filings, November 6–13.')).toBe(true);
     expect(w.subject).toBe('In your names: Warren Buffett added $8.8B of GOOGL');
@@ -2180,6 +2180,18 @@ describe('copybook api', () => {
     Object.assign(env, { POSTAL_ADDRESS: '' });
     const plain = weeklyMail(env, 'reader@reader.test', { buys: [], sells: [] }, 'November 7', 'https://u.test', { names: 1, facts: [], hook: 'X', more: 2 });
     expect([plain.text, plain.html ?? ''].some((t) => /pricing\/|with Copy|Copy emails each/.test(t))).toBe(false);
+    // The season line is content: it stays in the plain newsletter. Who filed Friday is named; after the deadline the
+    // link is the season's own page and the deadline goes.
+    expect(plain.text).toContain("\n\nEvery Q3 13F so far, and who's due by Monday's 5:30pm ET deadline: ");
+    const fri = weeklyMail(env, 'reader@reader.test', { buys: [], sells: [] }, 'November 13', 'https://u.test', undefined, [], null, ["Seth Klarman's Baupost", "Howard Marks's Oaktree"], Date.UTC(2026, 10, 14, 2));
+    expect(fri.text).toContain("Filed Friday: Seth Klarman's Baupost and Howard Marks's Oaktree. Every Q3 13F so far, and who's due by Monday's 5:30pm ET deadline: ");
+    const after = weeklyMail(env, 'reader@reader.test', { buys: [], sells: [] }, 'November 20', 'https://u.test', undefined, [], null, [], Date.UTC(2026, 10, 21, 2));
+    expect(after.text).toMatch(/\n\nEvery Q3 13F so far: \S+\/season\/2026q3\/\?utm_source=weekly&\S+weekly-season\n/);
+    // Filed Friday reads EDGAR's acceptance in New York: Klarman's Fri 4:10pm ET counts, Marks's Thursday doesn't.
+    const { filedFriday } = await import('../src/free');
+    await env.DB.put('wk13f:seth-klarman', JSON.stringify({ slug: 'seth-klarman', quarter: '2026Q3', filing_date: '2026-11-13', accepted: '2026-11-13T21:10:00Z' }));
+    await env.DB.put('wk13f:howard-marks', JSON.stringify({ slug: 'howard-marks', quarter: '2026Q3', filing_date: '2026-11-12', accepted: '2026-11-12T21:10:00Z' }));
+    expect(await filedFriday(env, Date.UTC(2026, 10, 14, 2))).toEqual(["Seth Klarman's Baupost"]);
     // No names saved: the My book line is a Copy ask too, so the plain newsletter leaves it out.
     const noNames = weeklyMail(env, 'reader@reader.test', { buys: [], sells: [] }, 'November 7', 'https://u.test', { names: 0, facts: [], hook: null, more: 0 });
     expect([noNames.text, noNames.html ?? ''].some((t) => /my-book|My book/.test(t))).toBe(false);

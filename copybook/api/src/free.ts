@@ -641,7 +641,24 @@ export function weekWindow(now: number): string {
 
 const LABEL: Record<WeeklyMove['what'], string> = { new: 'new position', added: 'added', trimmed: 'trimmed', exited: 'sold out', bought: 'bought', sold: 'sold' };
 
-export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; sells: WeeklyMove[] }, weekOf: string, unsub: string, yours?: InYourNames, followed: WeeklyMove[] = [], follows?: { text: string; html: string } | null): Mail {
+/** The Q3 2026 season (marketing, Nov 11): the funds named when they file on the Friday of the email, and the deadline. */
+const SEASON = { quarter: '2026Q3', label: 'Q3', deadline: Date.parse('2026-11-16T22:30:00Z'), named: [['seth-klarman', "Seth Klarman's Baupost"], ['howard-marks', "Howard Marks's Oaktree"]] as const };
+/** The funds in SEASON.named whose Q3 13F EDGAR accepted on the Friday (ET) of the email sent at `now`. */
+export async function filedFriday(env: Env, now: number): Promise<string[]> {
+  const et = (t: number) => new Date(t - 5 * 3600_000).toISOString().slice(0, 10);
+  // The Friday the issue covers: the email sends Saturday 02:00 UTC, still Friday in New York.
+  const fri = et(now);
+  const rows = new Map((await (await import('./v1data')).filers(env)).map((f) => [f.slug, f]));
+  const out: string[] = [];
+  for (const [slug, name] of SEASON.named) {
+    const a = JSON.parse((await env.DB.get(`wk13f:${slug}`)) ?? 'null') as Alert13F | null;
+    const at = a && a.quarter === SEASON.quarter ? (a.accepted ? et(Date.parse(a.accepted)) : a.filing_date) : rows.get(slug)?.latest_quarter === SEASON.quarter ? rows.get(slug)!.latest_filing_date : null;
+    if (at === fri) out.push(name);
+  }
+  return out;
+}
+
+export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; sells: WeeklyMove[] }, weekOf: string, unsub: string, yours?: InYourNames, followed: WeeklyMove[] = [], follows?: { text: string; html: string } | null, friday: string[] = [], now = Date.now()): Mail {
   // The mailing address marketing email must carry: without it, no Copy ask (a plain newsletter).
   const postal = env.POSTAL_ADDRESS?.trim() || null;
   const line = (x: WeeklyMove) => `${siteName(x.slug) ?? x.manager}: ${LABEL[x.what]} ${x.ticker}, ${x.usd > 0 ? '+' : '−'}${money(x.usd)} (${x.form})${x.unusual ? ` · ${UNUSUAL}` : ''}`;
@@ -650,9 +667,22 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   const utm = (content: string) => `utm_source=weekly&utm_medium=email&utm_campaign=${WEEKLY_CAMPAIGN}&utm_content=${content}`;
   const pricing = `${env.SITE_URL}pricing/?${utm('weekly-paid')}`;
   const speed = `${env.SITE_URL}speed/?${utm('weekly-speed')}`;
-  // The only speed and history claims marketing allows (lead, Nov 11): the season median with /speed/, and history as served.
-  const COPY_SPEED = 'median under 2 minutes from EDGAR acceptance';
-  const COPY_HISTORY = '8 quarters of 13F history (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV';
+  const winter = `${env.SITE_URL}winter-2025-26/?${utm('weekly-winter')}`;
+  // Content, not a Copy ask, so it goes with or without the postal address: who filed Friday, and the season page.
+  const due = now < SEASON.deadline;
+  const season = `${env.SITE_URL}${due ? 'season/' : 'season/2026q3/'}?${utm('weekly-season')}`;
+  const filedLine = friday.length ? `Filed Friday: ${friday.join(' and ')}. ` : '';
+  const seasonText = `${filedLine}Every ${SEASON.label} 13F so far${due ? ", and who's due by Monday's 5:30pm ET deadline" : ''}: ${season}`;
+  const seasonHtml = `<p style="margin-top:18px">${esc(filedLine)}<a href="${season}" style="color:#1d4ed8">Every ${SEASON.label} 13F so far${due ? ", and who's due by Monday's 5:30pm ET deadline" : ''}</a>.</p>`;
+  // The Copy ask (marketing, Nov 11): the sanctioned speed and history lines, last winter's counts, and the prospect's
+  // founding line. runWeekly sends only to free members; a paid member would need the member line, never "goes to $99".
+  const COPY_TEXT = [
+    `This email comes once a week. Copy emails each 13F from the funds you follow as it's filed. Median alert under 2 minutes after the SEC publishes the filing; every alert is timed on the speed page, slow ones included: ${speed}. History: 8 quarters (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV.`,
+    `Between seasons Copy keeps going. Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and 14 open-market buys of $100K or more by directors and officers in the 100 stocks they hold most by value: ${winter}`,
+    `Founding price $79/yr, locked. Goes to $99 for new members Feb 1. 14 days free, no card needed. One free trial per person: ${pricing}`,
+  ].join('\n\n');
+  const a = (href: string, t: string) => `<a href="${href}" style="color:#1d4ed8">${t}</a>`;
+  const COPY_HTML = `<p style="margin-top:20px">This email comes once a week. ${a(pricing, '<b>Copy</b>')} emails each 13F from the funds you follow as it's filed. Median alert under 2 minutes after the SEC publishes the filing; every alert is timed on ${a(speed, 'the speed page')}, slow ones included. History: 8 quarters (from 2024Q3) for the managers we track closely, back to 2013Q2 by Dec 31, and CSV.</p><p>Between seasons Copy keeps going. Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and ${a(winter, '14 open-market buys of $100K or more by directors and officers in the 100 stocks they hold most by value')}.</p><p>Founding price $79/yr, locked. Goes to $99 for new members Feb 1. ${a(pricing, '14 days free, no card needed')}. One free trial per person.</p>`;
   const book = `${env.SITE_URL}my-book/`;
   // My book is part of Copy: its line is a Copy ask, so it goes only with the Copy paragraph (a postal address set).
   const n = (k: number, w: string) => `${k} ${w}${k === 1 ? '' : 's'}`;
@@ -683,8 +713,8 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   return tagged({
     to,
     subject: lead ? `In your names: ${lead.text.replace(/, which you own( \(.*\))?$/, '')}` : `The week in superinvestor filings: ${top ? `${siteName(top.slug) ?? top.manager} ${LABEL[top.what]} ${top.ticker}` : 'the biggest moves'}`,
-    text: `Superinvestor filings, ${weekOf}.\n\n${follows?.text ?? ''}${followedText}${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}${postal ? `\n\nThis email comes once a week. Copy emails each 13F from the funds you follow as it's filed, ${COPY_SPEED} (live figures: ${speed}), with ${COPY_HISTORY}. 14 days free · no card needed: ${pricing}` : ''}\n\nYou get this because you signed up for the free Copybook weekly. Unsubscribe: ${unsub}${FOOTER}${postal ? `\n${postal}` : ''}`,
-    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, ${esc(weekOf)}.</p>${follows?.html ?? ''}${followedHtml}${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}${postal ? `<p style="margin-top:20px">This email comes once a week. <a href="${pricing}" style="color:#1d4ed8"><b>Copy</b></a> emails each 13F from the funds you follow as it's filed, ${COPY_SPEED} (<a href="${speed}" style="color:#1d4ed8">live figures</a>), with ${COPY_HISTORY}. <a href="${pricing}" style="color:#1d4ed8">14 days free · no card needed</a>.</p>` : ''}<p style="color:#6b7280;font-size:12px;margin-top:24px">You get this because you signed up for the free Copybook weekly. Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.${postal ? ` ${esc(postal)}.` : ''} <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
+    text: `Superinvestor filings, ${weekOf}.\n\n${follows?.text ?? ''}${followedText}${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\n${seasonText}${postal ? `\n\n${COPY_TEXT}` : ''}\n\nYou get this because you signed up for the free Copybook weekly. Unsubscribe: ${unsub}${FOOTER}${postal ? `\n${postal}` : ''}`,
+    html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, ${esc(weekOf)}.</p>${follows?.html ?? ''}${followedHtml}${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}${seasonHtml}${postal ? COPY_HTML : ''}<p style="color:#6b7280;font-size:12px;margin-top:24px">You get this because you signed up for the free Copybook weekly. Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.${postal ? ` ${esc(postal)}.` : ''} <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
     unsubscribe: unsub,
   });
   function tagged(m: Mail): Mail {
@@ -936,7 +966,8 @@ export async function runWeekly(env: Env, now: number): Promise<Record<string, u
   const ctx = await followContext(env, [...follows.values()].flatMap((f) => f.investors));
   const followedMoves = (f: Follows | undefined) => moves.all.filter((x) => (f?.investors.includes(x.slug) && !/^13F/.test(x.form)) || (x.featured && f?.stocks.includes(x.ticker))).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 8);
   const weekOf = weekWindow(now);
-  const mails = await Promise.all(members.map(async (m) => weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), await inYourNames(env, follows.get(m.customer)!.owned.slice(0, FREE_NAMES), moves, now), followedMoves(follows.get(m.customer)), await followsSection(env, follows.get(m.customer)!, now, ctx))));
+  const friday = await filedFriday(env, now);
+  const mails = await Promise.all(members.map(async (m) => weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), await inYourNames(env, follows.get(m.customer)!.owned.slice(0, FREE_NAMES), moves, now), followedMoves(follows.get(m.customer)), await followsSection(env, follows.get(m.customer)!, now, ctx), friday, now)));
   await env.DB.put('weekly:tried', week, { expirationTtl: 8 * 86400 });
   const status = await sendMail(env, mails, { tier: 'low' });
   if (status === 'none' || status.split(',').every((s) => s === '200')) await env.DB.put('weekly:last', week);
@@ -1083,8 +1114,8 @@ export async function previewWeekly(env: Env, email: string, now: number, dry = 
   const yours = await inYourNames(env, fl.owned.slice(0, FREE_NAMES), moves, now);
   const followed = moves.all.filter((x) => (fl.investors.includes(x.slug) && !/^13F/.test(x.form)) || (x.featured && fl.stocks.includes(x.ticker))).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 8);
   // Before the mailing address is set, a preview shows the issue as it will send, with a marked placeholder for it.
-  const penv = postal === false ? { ...env, POSTAL_ADDRESS: '' } : typeof postal === 'string' ? { ...env, POSTAL_ADDRESS: postal } : env.POSTAL_ADDRESS?.trim() ? env : { ...env, POSTAL_ADDRESS: '[postal address: not configured yet]' };
-  const mail = weeklyMail(penv, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), yours, followed, await followsSection(env, fl, now));
+  const penv = postal === false ? { ...env, POSTAL_ADDRESS: '' } : typeof postal === 'string' ? { ...env, POSTAL_ADDRESS: postal } : env.POSTAL_ADDRESS?.trim() ? env : { ...env, POSTAL_ADDRESS: '[POSTAL ADDRESS: Andreas, due Fri Nov 13 9pm ET]' };
+  const mail = weeklyMail(penv, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), yours, followed, await followsSection(env, fl, now), await filedFriday(env, now), now);
   // A real member's issue names their stocks: the operator gets counts only (their own test inboxes show in full).
   const shown = previewInbox(email) || testAddress(email) ? { subject: mail.subject, in_your_names: yours, text: mail.text, html: mail.html } : { customer: m.customer, in_your_names: yours.facts.length, text_chars: mail.text.length };
   if (dry) return { ok: true, sent: false, ...shown };
