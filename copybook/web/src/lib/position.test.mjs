@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addLine, newPosition, positionFlags, positionMove } from './position.mjs'
+import { readFileSync } from 'node:fs'
+import { addLine, classPosition, newPosition, positionFlags, positionMove } from './position.mjs'
 
 const line = (o) => ({ shares: 0, value: 0, prev_shares: 0, prev_value: 0, ...o })
 
@@ -41,4 +42,44 @@ test('lines ingest held out of a counted row stay on it, and the counted trade i
   const p = addLine(newPosition(true), line({ shares: 135175, value: 21176516, prev_shares: 136035, prev_value: 25393653, held_lines: [held] }))
   assert.equal(positionMove(p).change, 'trimmed')
   assert.deepEqual(positionFlags(p), { held_lines: [held] })
+})
+
+// Ingest's holder files for Berkshire (BRK.A/BRK.B, a filed 1:1,500 ratio) and Alphabet (GOOGL/GOOG, no ratio), as
+// published Nov 11 with classes[]: each multi-class row rebuilt from its classes must give ingest's own figures.
+const fixture = (code) => JSON.parse(readFileSync(new URL(`./fixtures/hl-${code}.json`, import.meta.url)))
+test('a multi-class position matches ingest’s hl/ rows: $ per class, shares in the filed unit or not summed, mixed', () => {
+  let n = 0
+  for (const code of ['084670', '02079K']) {
+    const d = fixture(code)
+    const rows = d.rows.map((r) => Object.fromEntries(d.columns.map((c, j) => [c, r[j]])))
+    for (const r of rows.filter((r) => r.classes && r.change && r.change !== 'unknown')) {
+      const lines = r.classes.map((k) => ({ ...k, value_delta: k.value_delta ?? 0, display_name: null }))
+      const p = classPosition(lines, true, { unit: r.shares_unit, ratio: r.shares_ratio })
+      assert.equal(p.delta_value, r.value_delta, `${code} ${r.name}`)
+      assert.equal(Boolean(p.mixed), r.change === 'mixed', `${code} ${r.name}`)
+      assert.equal(p.change, r.change === 'mixed' ? { buy: 'added', sell: 'trimmed' }[r.net_direction] : r.change, `${code} ${r.name}`)
+      if (r.shares == null) assert.equal(p.shares_summable, false)
+      else assert.deepEqual([p.shares, p.shares_unit], [r.shares, 'BRK.B'])
+      n++
+    }
+  }
+  assert.ok(n >= 40, `only ${n} rows checked`)
+})
+
+test('a held class keeps its facts and reason but no dollars; the position counts the clean classes', () => {
+  // FMR 2026Q3 BRK: A -7,574 (~$747K a share) and B -802,720 (~$498): about -$6.06B, not summed shares at a blended price.
+  const A = { ticker: 'BRK.A', cusip: '084670108', display_name: 'Berkshire Hathaway Class A', shares: 6959, prev_shares: 14533, value: 5198407795, prev_value: 0, value_delta: -5657815870 }
+  const B = { ticker: 'BRK.B', cusip: '084670702', display_name: 'Berkshire Hathaway Class B', shares: 9597287, prev_shares: 10400007, value: 4778969198, prev_value: 0, value_delta: -399714435 }
+  const ratio = { '084670108': 1500, '084670702': 1 }
+  const both = classPosition([A, B], true, { unit: 'BRK.B', ratio })
+  assert.deepEqual([both.change, both.delta_value, both.shares, both.prev_shares, both.mixed], ['trimmed', -6057530305, 6959 * 1500 + 9597287, 14533 * 1500 + 10400007, undefined])
+  // B bought while A sold: mixed, signed by the net; a held B leaves A alone counted.
+  const mixed = classPosition([A, { ...B, shares: 12000000, value_delta: 1197000000 }], true, { unit: 'BRK.B', ratio })
+  assert.deepEqual([mixed.change, mixed.mixed, mixed.delta_value], ['trimmed', true, -5657815870 + 1197000000])
+  const held = classPosition([A, { ...B, unreliable: 'shares', held_reason: 'class_swap' }], true)
+  assert.deepEqual([held.change, held.delta_value, held.classes_held, held.shares_summable], ['trimmed', -5657815870, 1, false])
+  assert.deepEqual(held.classes.map((c) => [c.class, c.delta_value, c.held_reason]), [['A', -5657815870, null], ['B', null, 'class_swap']])
+  // A sleeve with value but no shares either quarter is held as zero_shares, never a $43M "exit".
+  const sleeve = classPosition([A, { ticker: null, cusip: '02079K404', shares: 0, prev_shares: 0, value: 43390000, value_delta: 43390000 }], true)
+  assert.deepEqual([sleeve.delta_value, sleeve.classes[1].held_reason], [-5657815870, 'zero_shares'])
 })

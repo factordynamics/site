@@ -15,7 +15,7 @@ import { Arrow, Badge, Button, edgeFade, Lock, Monogram, NotCounted, Panel, Skel
 import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, heldLinesNote, NOT_COUNTED } from '../lib/data'
 import { dueLead, stockTitle } from '../lib/titles.mjs'
 import { MARQUEE, possessive, shortName } from '../lib/names.mjs'
-import { aboutET, dayET, fridayAfter, loadExpected, loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, shortDay, stockPath, type StockHolder } from '../lib/stocks'
+import { aboutET, dayET, fridayAfter, loadExpected, loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, shortDay, stockPath, type ShareClassLine, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
   new: { label: 'New', tone: 'up' },
@@ -23,6 +23,35 @@ const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }>
   trimmed: { label: 'Trimmed', tone: 'down' },
   exited: { label: 'Exited', tone: 'down' },
   unchanged: { label: 'No change', tone: 'neutral' },
+}
+
+/** "A sold, C bought": the classes of a mixed row by their letter (ticker when the name gives none), untickered sleeves left to the lines below. */
+function mixedLabel(h: StockHolder) {
+  const side = (s: number) => [...new Set((h.classes ?? []).filter((c) => c.ticker && !c.held_reason && Math.sign(c.shares - c.prev_shares) === s).map((c) => c.class ?? c.ticker))].join(' and ')
+  return `mixed (${side(-1)} sold, ${side(1)} bought)`
+}
+const className = (c: ShareClassLine) => c.ticker ?? `CUSIP ${c.cusip}`
+const signed = (n: number, f: (v: number) => string) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${f(Math.abs(n))}`
+/** One share class of a multi-class row: "BRK.A −7,574 sh −$5.66B"; a held class shows what was filed and why, never $. */
+function classLine(c: ShareClassLine) {
+  const d = c.shares - c.prev_shares
+  if (c.held_reason) return `${className(c)} ${c.shares.toLocaleString('en-US')} sh · not counted: ${c.held_reason.replace(/_/g, ' ').replace(/\bcusip\b/i, 'CUSIP')}`
+  if (c.change === 'new' || c.change === 'exited') return `${className(c)} ${c.change} ${signed(d, (v) => v.toLocaleString('en-US'))} sh${c.delta_value != null ? ` ${signed(c.delta_value, money)}` : ''}`
+  if (!d) return `${className(c)} unchanged`
+  return `${className(c)} ${signed(d, (v) => v.toLocaleString('en-US'))} sh${c.delta_value != null ? ` ${signed(c.delta_value, money)}` : ''}`
+}
+/** The per-class lines under a holder row; held classes greyed. */
+function ClassLines({ h, className = '' }: { h: StockHolder; className?: string }) {
+  if (!h.classes?.length) return null
+  return (
+    <span className={`block text-[12px] leading-snug ${className}`}>
+      {h.classes.map((c) => (
+        <span key={c.cusip} className={`num block ${c.held_reason ? 'text-ink-3/70' : 'text-ink-3'}`}>
+          {classLine(c)}
+        </span>
+      ))}
+    </span>
+  )
 }
 
 export function StockPage() {
@@ -274,7 +303,7 @@ export function StockPage() {
             />
             <Stat label={`Filed ${quarterLabel(sq)} so far`} value={filers ? num(filedSq) : '—'} sub={filers ? `of ${num(filers.cur)}; the rest are on earlier quarters` : undefined} />
             <Stat label="Superinvestors among them" value={d ? featuredCount : '—'} sub={d ? `${d.holders.length} of the funds we track closely` : undefined} />
-            <Stat label="Largest holder" value={holders[0] ? <span className="block truncate text-[20px]">{holders[0].manager}</span> : '—'} sub={holders[0] ? `${sharesFmt(holders[0].shares)} shares · ${quarterLabel(holders[0].quarter)}` : undefined} />
+            <Stat label="Largest holder" value={holders[0] ? <span className="block truncate text-[20px]">{holders[0].manager}</span> : '—'} sub={holders[0] ? [holders[0].shares_summable === false ? null : `${sharesFmt(holders[0].shares)} ${holders[0].shares_unit ? `${holders[0].shares_unit} ` : ''}shares`, quarterLabel(holders[0].quarter)].filter(Boolean).join(' · ') : undefined} />
           </>
         ) : (
           <>
@@ -399,7 +428,8 @@ export function StockPage() {
               items={shownMoves.slice(0, 14).map((h) => ({
                 key: h.slug,
                 label: h.manager,
-                tag: [quarterLabel(h.quarter), h.change === 'new' || h.change === 'exited' ? CHANGE[h.change].label.toLowerCase() : ''].filter(Boolean).join(' · '),
+                tag: [quarterLabel(h.quarter), h.mixed ? mixedLabel(h) : h.change === 'new' || h.change === 'exited' ? CHANGE[h.change].label.toLowerCase() : ''].filter(Boolean).join(' · '),
+                sub: h.classes?.length ? h.classes.map(classLine).join(' · ') : undefined,
                 delta: h.delta_value,
               }))}
             />
@@ -414,7 +444,7 @@ export function StockPage() {
               {moves
                 .filter((h) => !bigMoves.includes(h))
                 .slice(0, 6)
-                .map((h) => `${h.manager} ${CHANGE[h.change ?? ""]?.label.toLowerCase() ?? h.change} ${h.delta_value >= 0 ? '+' : '−'}\u2060${money(Math.abs(h.delta_value))}`)
+                .map((h) => `${h.manager} ${h.mixed ? 'mixed' : (CHANGE[h.change ?? ""]?.label.toLowerCase() ?? h.change)} ${h.delta_value >= 0 ? '+' : '−'}\u2060${money(Math.abs(h.delta_value))}`)
                 .join(' · ')}
               {moves.length - bigMoves.length > 6 && ` · ${moves.length - bigMoves.length - 6} more`}
             </p>
@@ -502,9 +532,11 @@ export function StockPage() {
                         {t}
                       </span>
                     ))}
+                    <ClassLines h={h} className="mt-0.5 pl-[34px]" />
                   </td>
                   <td className="num hidden px-3 py-2.5 text-right text-ink-2 sm:table-cell">
-                    {sharesFmt(h.shares)}
+                    {h.shares_summable === false ? <span className="text-ink-3" title="Share classes without a conversion ratio can’t be added up">—</span> : sharesFmt(h.shares)}
+                    {h.shares_unit && <span className="block whitespace-nowrap text-[11.5px] text-ink-3">in {h.shares_unit} shares</span>}
                     {newer.get(h.slug) && newer.get(h.slug)!.to !== h.shares && (
                       <span className="block whitespace-nowrap text-[11.5px] text-ink-3">
                         {sharesFmt(newer.get(h.slug)!.to)} as of {dateLabel(newer.get(h.slug)!.asOf)}
@@ -626,10 +658,12 @@ function HolderRow({ h, fresh }: { h: StockHolder; fresh: boolean }) {
               {t}
             </span>
           ))}
+          {h.mixed && <span className="block text-[12px] leading-snug text-ink-2">{mixedLabel(h)}</span>}
+          <ClassLines h={h} />
         </span>
       </Link>
       <span className="flex shrink-0 items-center gap-2">
-        <ChangeCell h={h} />
+        <ChangeCell h={h} compact />
         <span className="num w-16 text-right font-medium">{h.flag === 'value' ? <span className="font-normal text-ink-3">n/a</span> : money(h.value)}</span>
       </span>
     </li>
@@ -647,7 +681,7 @@ function NotCountedPill() {
   )
 }
 
-function ChangeCell({ h }: { h: StockHolder }) {
+function ChangeCell({ h, compact = false }: { h: StockHolder; compact?: boolean }) {
   // A held line shows no trade, $ or %: the pill, with the filed facts on the row's second line (h.note). NEW and
   // EXITED keep their badges.
   if (h.flag && h.change !== 'new' && h.change !== 'exited')
@@ -659,6 +693,14 @@ function ChangeCell({ h }: { h: StockHolder }) {
   if (!h.change) return <span className="text-[13px] text-ink-3">—</span>
   if (h.change === 'new' || h.change === 'exited') return <Badge tone={CHANGE[h.change].tone}>{CHANGE[h.change].label}</Badge>
   if (h.change === 'unchanged') return <span className="whitespace-nowrap text-[13px] text-ink-3">No change</span>
+  // Several classes: mixed says which way each went; without a common share unit the change is in dollars.
+  if (h.mixed || h.shares_summable === false)
+    return (
+      <span className={`num block text-[13px] font-medium ${h.delta_value > 0 ? 'text-up' : 'text-down'}`}>
+        <span className="whitespace-nowrap">{signed(h.delta_value, money)}</span>
+        {h.mixed && !compact && <span className="ml-auto block max-w-[7.5rem] text-[11.5px] font-normal leading-snug text-ink-3 sm:max-w-none">{mixedLabel(h)}</span>}
+      </span>
+    )
   const r = h.prev_shares ? (h.shares - h.prev_shares) / h.prev_shares : 0
   return (
     <span className={`num whitespace-nowrap text-[13px] font-medium ${r > 0 ? 'text-up' : 'text-down'}`}>

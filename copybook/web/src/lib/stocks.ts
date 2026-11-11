@@ -30,7 +30,18 @@ export type StockHolder = {
   /** Lines ingest held out of this row (data's held_lines) and the grey line saying so, as filed. */
   held_lines?: HeldLine[]
   held_note?: string | null
+  /** A position over several share classes (scripts/stocks.mjs, once ingest's hl/ carries classes[]): one entry per
+   *  class with its own trade; a held class has held_reason and no delta_value. */
+  classes?: ShareClassLine[]
+  classes_held?: number
+  /** Shares and prev_shares are in this class's unit (BRK.B: one BRK.A counts 1,500). */
+  shares_unit?: string | null
+  /** False when the classes have no filed conversion ratio (GOOGL and GOOG): shares can't be added up. */
+  shares_summable?: boolean
+  /** Classes moved opposite ways; change follows the net dollars. */
+  mixed?: boolean
 }
+export type ShareClassLine = { ticker: string | null; cusip: string; class: string | null; shares: number; prev_shares: number; change: string | null; delta_value: number | null; held_reason: string | null }
 export type StockOption = { slug: string; manager: string; firm: string; quarter: string; featured: boolean; put_call: string; ticker: string | null; shares: number; value: number; weight: number }
 export type Stock = {
   ticker: string

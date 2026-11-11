@@ -301,6 +301,7 @@ export function ChangeBars({ items, names = false }: { items: { key: string; lab
             {it.delta >= 0 ? '+' : '−'}
             {money(Math.abs(it.delta))}
           </span>
+          {it.sub && <span className="col-span-4 -mt-1.5 text-[11.5px] leading-snug text-ink-3 [overflow-wrap:anywhere]">{it.sub}</span>}
         </li>
       ))}
     </ul>

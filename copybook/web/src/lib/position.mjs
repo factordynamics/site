@@ -46,3 +46,33 @@ export const positionFlags = (p) => ({
   ...(p.value_basis ? { value_basis: p.value_basis } : {}),
   ...(p.held_lines ? { held_lines: p.held_lines } : {}),
 })
+
+/** A position over several share classes (BRK.A and BRK.B, GOOGL and GOOG), the way ingest's hl/ rows carry it
+ *  (classes[]): one entry per 13F line, each with its own trade at its own price (the line's value_delta). A held
+ *  class (flagged) keeps its facts and reason but no dollars; the position counts the clean classes only. Shares add
+ *  up only through ingest's filed conversion ratio (`ratio`, CUSIP -> shares of `unit`, e.g. one BRK.A = 1,500 BRK.B),
+ *  else they can't be summed. Clean classes moving opposite ways are "mixed" and the change follows the net dollars.
+ *  `lines` are the fund's share lines (no options); returns the fields that replace the rolled-up ones. */
+export function classPosition(lines, hadPrev, { unit = null, ratio = null } = {}) {
+  const letter = (h) => /\bClass\s+([A-Z])\b/.exec(h.display_name ?? '')?.[1] ?? null
+  const classes = lines.map((h) => {
+    const ps = h.prev_shares ?? 0
+    // A line with no shares either quarter (T. Rowe's Alphabet depositary sleeves, value but 0 shares) is held, as ingest holds it.
+    const zero = h.shares <= 0 && ps <= 0
+    const held = zero || Boolean(h.unreliable || h.suspect_units || h.price_outlier || h.change === 'unknown')
+    const price = h.shares ? h.value / h.shares : ps ? (h.prev_value ?? 0) / ps : 0
+    const change = !hadPrev ? null : held ? 'unknown' : h.shares <= 0 ? 'exited' : ps <= 0 ? 'new' : h.shares > ps + 0.5 ? 'added' : h.shares < ps - 0.5 ? 'trimmed' : 'unchanged'
+    const delta = !hadPrev || held ? null : change === 'unchanged' ? 0 : Math.round(h.value_delta ?? (h.shares - ps) * price)
+    return { ticker: h.ticker ?? null, cusip: h.cusip, class: letter(h), shares: h.shares, prev_shares: ps, change, delta_value: delta, held_reason: held ? (zero ? 'zero_shares' : (h.held_reason ?? h.suspect_reason ?? 'unreliable')) : null }
+  })
+  const clean = classes.filter((c) => !c.held_reason)
+  const sum = (k, xs) => xs.reduce((a, c) => a + c[k], 0)
+  const units = ratio && lines.every((h) => ratio[h.cusip]) ? (k) => Math.round(lines.reduce((a, h) => a + (h[k] ?? 0) * ratio[h.cusip], 0)) : null
+  const out = { classes, classes_held: classes.length - clean.length, shares_unit: units ? unit : null, ...(units ? { shares: units('shares'), prev_shares: units('prev_shares') } : { shares_summable: false }) }
+  if (!hadPrev || !clean.length) return out // nothing counted: the rolled-up move (unknown when every class is held) stands
+  const delta = sum('delta_value', clean)
+  const dirs = new Set(clean.map((c) => (c.shares > c.prev_shares + 0.5 ? 1 : c.shares < c.prev_shares - 0.5 ? -1 : 0)).filter(Boolean))
+  const mixed = dirs.size > 1
+  const change = sum('prev_shares', clean) <= 0 ? 'new' : sum('shares', clean) <= 0 ? 'exited' : mixed ? (delta > 0 ? 'added' : delta < 0 ? 'trimmed' : 'unchanged') : dirs.has(1) ? 'added' : dirs.has(-1) ? 'trimmed' : 'unchanged'
+  return { ...out, change, delta_value: change === 'unchanged' && !mixed ? 0 : delta, ...(mixed ? { mixed: true } : {}) }
+}

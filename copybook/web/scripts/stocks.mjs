@@ -10,7 +10,7 @@ import { getJson, pooled } from './getjson.mjs'
 import { ETF_NAMES } from './etfs.mjs'
 import { isEdgarDay } from '../src/lib/calendar.mjs'
 import { displayName, renamed } from '../src/lib/names.mjs'
-import { addLine, newPosition, positionFlags, positionMove } from '../src/lib/position.mjs'
+import { addLine, classPosition, newPosition, positionFlags, positionMove } from '../src/lib/position.mjs'
 
 const out = process.argv[2] || 'dist'
 const base = process.argv[3] || process.env.VITE_DATA_BASE || 'https://refcell.github.io/gust/copybook/data/'
@@ -68,6 +68,8 @@ for (let i = 0; i < current.length; i += 16) {
   for (const b of books) for (const h of b.holdings) if (h.display_name && (tickersOf.get(h.display_name)?.size ?? 0) > 2) h.display_name = null
 }
 
+// A holder's own share lines over several classes, kept off the written JSON (a symbol key isn't serialised).
+const CLASS_LINES = Symbol('class lines')
 const tc = (s) => (/[a-z]/.test(s) ? s : s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()))
 const baseName = (n) => n.replace(/\s+(Class|Cl)\s+[A-Z]\b.*$/i, '').replace(/\s+(Ordinary Shares|Common Stock|Shs)$/i, '').trim()
 const r0 = (x) => Math.round(x)
@@ -98,6 +100,7 @@ for (const b of books) {
   // One weight everywhere: % of the equity (SH) book, without option notional or PRN (ingest's pct_of_book).
   const total = b.equity_value || b.total_value || 1
   const per = new Map() // issuer key -> this fund's rolled-up position
+  const lines = new Map() // issuer key -> its share lines, for positions over several share classes
   for (const h of b.holdings) {
     const k = issuerKey(h)
     let s = stocks.get(k)
@@ -115,12 +118,17 @@ for (const b of books) {
       continue
     }
     per.set(k, addLine(per.get(k) ?? newPosition(b.prev_quarter != null), h))
+    ;(lines.get(k) ?? lines.set(k, []).get(k)).push(h)
   }
   // Rank of each position in this fund's share book (1 = largest), for "top 10" crowding counts.
   const rank = new Map([...per.entries()].filter(([, p]) => p.shares > 0).sort((a, z) => z[1].value - a[1].value).map(([k], i) => [k, i + 1]))
   for (const [k, p] of per) {
     const { change, delta_value, value_change, value_delta_basis } = positionMove(p)
-    stocks.get(k).holders.push({ ...who, rank: rank.get(k) ?? null, shares: p.shares, value: r0(p.value), weight: p.value / total, prev_shares: p.prev_shares, prev_value: r0(p.prev_value), delta_value, value_delta_basis: value_delta_basis ?? null, change, ...(value_change != null ? { value_change } : {}), ...positionFlags(p) })
+    const ls = lines.get(k)
+    // Share classes, not a reissued CUSIP merged by its ticker: two or more tickers under one issuer code.
+    const tk = ls.filter((h) => h.ticker)
+    const own = new Set(tk.map((h) => h.ticker)).size > 1 && new Set(ls.map((h) => h.cusip.slice(0, 6))).size === 1 ? { lines: ls, hadPrev: p.had_prev } : null
+    stocks.get(k).holders.push({ ...who, ...(own ? { [CLASS_LINES]: own } : {}), rank: rank.get(k) ?? null, shares: p.shares, value: r0(p.value), weight: p.value / total, prev_shares: p.prev_shares, prev_value: r0(p.prev_value), delta_value, value_delta_basis: value_delta_basis ?? null, change, ...(value_change != null ? { value_change } : {}), ...positionFlags(p) })
   }
 }
 
@@ -193,11 +201,32 @@ writeFileSync(join(out, 'd', 'splits.json'), JSON.stringify({ generated_at: inde
 const list = []
 const byTicker = {}
 mkdirSync(join(out, 'd', 'stocks'), { recursive: true })
+const hlTickers = (await read('hl/index.json').catch(() => null))?.tickers ?? {}
 for (const s of stocks.values()) {
   if (!s.classes.size) continue // no public ticker: private, bonds, unmapped
   const classes = [...s.classes.values()].sort((a, b) => b.value - a.value)
   const ticker = classes[0].ticker
   if (byTicker[ticker]) continue
+  // A fund holding several share classes (BRK.A and BRK.B, GOOGL and GOOG): a line per class, each traded at its own
+  // price, shares in ingest's filed unit or not summed, "mixed" when classes move opposite ways. Only once ingest's
+  // holder file for the issuer carries classes[] (its conversion ratio comes from there); older data renders as before.
+  if (s.holders.some((h) => h[CLASS_LINES])) {
+    const code = classes.map((c) => hlTickers[c.ticker]).find(Boolean)
+    const hl = code ? await read(`hl/${code}.json`).catch(() => null) : null
+    const col = Object.fromEntries((hl?.columns ?? []).map((c, j) => [c, j]))
+    if (col.classes != null) {
+      const withRatio = hl.rows.find((r) => r[col.shares_unit] && r[col.shares_ratio])
+      const unit = withRatio ? { unit: withRatio[col.shares_unit], ratio: withRatio[col.shares_ratio] } : {}
+      for (const h of s.holders) {
+        const own = h[CLASS_LINES]
+        if (!own) continue
+        const c = classPosition(own.lines, own.hadPrev, unit)
+        // Counted on its clean classes: the held ones carry their reason in classes[], not as a flag on the row.
+        if (c.classes_held && c.classes_held < c.classes.length) for (const k of ['unreliable', 'suspect_units', 'suspect_reason', 'price_outlier']) delete h[k]
+        Object.assign(h, c)
+      }
+    }
+  }
   const holders = s.holders.filter((h) => h.shares > 0).sort((a, b) => b.value - a.value)
   // Sold-out positions, plus flagged ones gone from the book whose trade is unknown (they carry suspect_units).
   const exited = s.holders.filter((h) => h.change === 'exited' || (h.change === 'unknown' && h.shares === 0)).sort((a, b) => (a.delta_value ?? 0) - (b.delta_value ?? 0))
