@@ -114,6 +114,8 @@ export interface MoveRow {
   suspect_units?: boolean;
   /** A real but unusually large move: shown with "Unusual size · check the filing". */
   unusual?: boolean;
+  /** One of an exit and a new line under one issuer prefix (holdCusipPairs): maybe one position, so not counted. */
+  cusip_pair?: boolean;
 }
 
 export interface Moves {
@@ -516,7 +518,7 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   for (const p of before.values()) rows.push(row(p, 'exited', 0, Math.round(p.shares * ratio(p)), 0, -p.value, adj(p, ratio(p))));
   // Unit errors are left out; unusually large moves are tagged. The larger book is the yardstick.
   const prior = new Map(prev.map((p) => [posKey(p), p.value]));
-  rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(posKey(r)), splits, medians), ...exchanged);
+  rows.splice(0, rows.length, ...holdCusipPairs([...guardRows(rows, book, (r) => prior.get(posKey(r)), splits, medians), ...exchanged]));
   return { moves: movesOf(rows, limit), changed: rows };
 }
 
@@ -687,7 +689,27 @@ export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Positio
   return held.length || marked ? { moves: movesOf(changed, limit), changed, held } : { ...r, held };
 }
 
-export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
+/**
+ * An exit and a new line in one filing under one issuer prefix (the CUSIP's first 6 characters) and option type, one of
+ * each: maybe one position filed under the wrong class (Mizuho Securities USA's ORCL, Q2 68389X204 -> Q3 68389X105,
+ * ingest's cusip_mismatch) or a real class switch (GOOG/GOOGL, ingest's class_switch). Alerts are built before ingest
+ * can tell, so both lines are held: under "Not counted" as a possible CUSIP change, never headlined or totalled.
+ */
+export function holdCusipPairs(rows: MoveRow[]): MoveRow[] {
+  const key = (r: MoveRow) => `${r.cusip.slice(0, 6).toUpperCase()}|${(r.put_call ?? '').toUpperCase()}`;
+  const open = (r: MoveRow) => (r.change === 'new' || r.change === 'exited') && !r.unreliable && !r.prn;
+  const n = new Map<string, { new: number; exited: number }>();
+  for (const r of rows.filter(open)) {
+    const c = n.get(key(r)) ?? { new: 0, exited: 0 };
+    c[r.change as 'new' | 'exited']++;
+    n.set(key(r), c);
+  }
+  const pairs = new Set([...n].filter(([, c]) => c.new === 1 && c.exited === 1).map(([k]) => k));
+  return pairs.size ? rows.map((r) => (open(r) && pairs.has(key(r)) ? { ...r, unreliable: 'both' as const, cusip_pair: true } : r)) : rows;
+}
+
+export function movesOf(rows0: MoveRow[], limit = MOVE_ROWS): Moves {
+  const rows = holdCusipPairs(rows0);
   // A marked row (unreliable) is never listed as a trade: it goes under "Not counted" with its filed facts (the lead,
   // Nov 11 17:12: no held row shows a $ size, and none is filed under Added or Trimmed by its value's direction).
   const top = (c: string) =>
@@ -713,7 +735,9 @@ const notCounted = (rows: MoveRow[], shown: MoveRow[]) => {
   return out.length ? { not_counted: out } : {};
 };
 /** Moves stored before marked rows left the lists: each marked row moves from new/added/trimmed/exited to not_counted. */
-export function countedMoves(m: Moves): Moves {
+export function countedMoves(m0: Moves): Moves {
+  const paired = holdCusipPairs([...m0.new, ...m0.added, ...m0.trimmed, ...m0.exited]);
+  const m = paired.some((r) => r.cusip_pair) ? { ...m0, new: paired.filter((r) => r.change === 'new'), added: paired.filter((r) => r.change === 'added'), trimmed: paired.filter((r) => r.change === 'trimmed'), exited: paired.filter((r) => r.change === 'exited') } : m0;
   const all = [m.new, m.added, m.trimmed, m.exited].flat();
   if (!all.some((r) => r.unreliable)) return m;
   const keep = (rows: MoveRow[]) => rows.filter((r) => !r.unreliable);

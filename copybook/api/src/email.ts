@@ -593,7 +593,8 @@ export function shortName(manager: string): string {
  * "NEW DHI · EXIT STZ · GOOGL +$8.8B": the largest new position and the largest exit (a new name
  * or a full exit is the news, whatever its size), then the largest adds and trims by dollars.
  */
-function headlineMoves(mv: Moves): string {
+function headlineMoves(mv0: Moves): string {
+  const mv = countedMoves(mv0); // stored moves too: a held or possibly re-coded line never leads
   const big = (rows: MoveRow[]) => [...rows].sort((a, b) => Math.abs(b.value_delta) - Math.abs(a.value_delta));
   // The largest new position and exit lead when each is at least 0.2% of the book (news whatever its dollars), then
   // the biggest trades by dollars. Below that a new name or exit is just a trade: Fisher's Q3 led with a $57M new
@@ -632,15 +633,18 @@ function heldLine(a: Alert13F): string {
   ].filter(Boolean).join(' ');
 }
 /** Why a line isn't counted, in a few words. */
-const notCountedWhy = (x: { unreliable?: string; put_call: string | null; reason?: string }) =>
-  x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'both' && x.put_call ? "filed figures don't reconcile" : x.unreliable === 'shares' || x.put_call ? "share counts don't reconcile" : 'pre-split count';
+const notCountedWhy = (x: { unreliable?: string; put_call: string | null; reason?: string; cusip_pair?: boolean }) =>
+  x.cusip_pair ? 'possible CUSIP change' : x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'both' && x.put_call ? "filed figures don't reconcile" : x.unreliable === 'shares' || x.put_call ? "share counts don't reconcile" : 'pre-split count';
 /**
  * A marked row's filed facts, never a computed trade in $: "value as filed fell from $121.6M to $6.7M" (shares side),
  * "+159,272 sh" (value side), "new, 3.9M sh, value as filed $30.2B", "sold all 646K sh, value as filed was $121.6M".
  */
 function heldFacts(r: MoveRow): string {
   if (r.change === 'new') return `new, ${compact(r.shares)} sh${r.value ? `, value as filed ${usd(r.value, false)}` : ''}`;
-  if (r.change === 'exited') return `sold all${r.prev_shares ? ` ${compact(r.prev_shares)} sh` : ''}${r.prev_value ? `, value as filed was ${usd(r.prev_value, false)}` : ''}`;
+  if (r.change === 'exited') {
+    const was = r.prev_value ?? (r.value_delta < 0 ? -r.value_delta : null); // an exit's delta is minus its filed value
+    return `sold all${r.prev_shares ? ` ${compact(r.prev_shares)} sh` : ''}${was ? `, value as filed was ${usd(was, false)}` : ''}`;
+  }
   if (r.unreliable === 'shares') return filedFacts(r);
   const d = r.shares - (r.prev_shares ?? 0);
   const ps = r.filed_per_share;

@@ -1606,7 +1606,9 @@ export async function restateFeeds(env: Env, now: number): Promise<{ feeds: numb
       if (paired === stored && now1.every((r, i) => r === stored[i]) && net.changed === adj && adj.length === ch.length && adj.every((r, i) => r === ch[i])) {
         // A corrected filing is rendered from its stored copy too: an item frozen with other figures (gene's Mizuho
         // item read "SPY calls -$13.3B" from a render the day store never kept) takes the stored moves and the correction.
-        if (x.corrected) fixed.set(filingId(x), x);
+        // Every stored item is re-rendered with today's rules (held lines on one "Not counted" line, possible CUSIP
+        // changes held): rewriteFeeds writes only the items whose text changes.
+        fixed.set(filingId(x), x);
         continue;
       }
       const moves = net.changed === adj ? movesOf(adj) : net.moves;

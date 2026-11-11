@@ -1217,7 +1217,7 @@ describe('copybook api', () => {
       return realFetch(u, init);
     });
     // Kahn's Q3 13F went out with 12 changed rows: the Friday email keeps the 10 largest (K2 to K11).
-    const row = (t: string, change: string, v: number) => ({ ticker: t, display_name: null, issuer: t, cusip: 'X', put_call: null, shares: 10, prev_shares: 5, value: Math.abs(v), value_delta: v, change });
+    const row = (t: string, change: string, v: number) => ({ ticker: t, display_name: null, issuer: t, cusip: `${t}00X100`, put_call: null, shares: 10, prev_shares: 5, value: Math.abs(v), value_delta: v, change });
     const changed = Array.from({ length: 12 }, (_, i) => row(`K${i}`, i % 2 ? 'added' : 'trimmed', (i % 2 ? 1 : -1) * (i + 1) * 1e6));
     const kahn = { slug: 'irving-kahn', slugs: ['irving-kahn'], manager: 'Irving Kahn', name: 'Kahn Brothers', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-12', accession: '0001039565-26-000005', sec_url: 'https://www.sec.gov/k', accepted: new Date(Date.now() - 86400_000).toISOString(), tickers: [], changed,
       moves: { bought_usd: 36e6, sold_usd: 42e6, new: [], added: changed.filter((r) => r.change === 'added').slice(-5), trimmed: changed.filter((r) => r.change === 'trimmed').slice(-5), exited: [] } };
@@ -1292,7 +1292,7 @@ describe('copybook api', () => {
     });
     const { runEmail2 } = await import('../src/free');
     // Kahn filed today: 4 changed rows, of which Email 2 shows the 3 largest.
-    const row = (t: string, change: string, v: number) => ({ ticker: t, display_name: null, issuer: t, cusip: 'X', put_call: null, shares: 10, prev_shares: 5, value: Math.abs(v), value_delta: v, change, delta_pct_of_book: v / 800e6 });
+    const row = (t: string, change: string, v: number) => ({ ticker: t, display_name: null, issuer: t, cusip: `${t}00X100`, put_call: null, shares: 10, prev_shares: 5, value: Math.abs(v), value_delta: v, change, delta_pct_of_book: v / 800e6 });
     const kahn = { slug: 'irving-kahn', slugs: ['irving-kahn'], manager: 'Irving Kahn', name: 'Kahn Brothers', quarter: '2026Q3', report_date: '2026-09-30', filing_date: day, accession: '0001039565-26-000005', sec_url: 'https://www.sec.gov/k', accepted: new Date(now).toISOString(),
       moves: { bought_usd: 9e6, sold_usd: 8e6, new: [row('NEWB', 'new', 4e6)], added: [row('ADDS', 'added', 5e6)], trimmed: [row('TRIM', 'trimmed', -8e6)], exited: [row('GONE', 'exited', -1e6)] } };
     const { deliver } = await import('../src/alerts');
@@ -2571,7 +2571,14 @@ describe('copybook api', () => {
     expect([/\+\$30\.2B/.test(ewMail.text + ewMail.html + ewMail.subject), /New:/.test(ewMail.text), /EW/.test(ewMail.subject), ewMail.text.includes("Not counted: EW puts new, 3.9M sh, value as filed $30.2B (filed figures don't reconcile)."), ew.bought_usd]).toEqual([false, false, false, true, 2e6]);
     // An alert stored before this change (marked rows inside the lists) renders the same way.
     const old = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'belvedere', slugs: ['belvedere'], manager: 'Belvedere', name: 'Belvedere', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000011', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: { ...ew, new: ew.not_counted!, not_counted: undefined }, tickers: [] }], [], { investors: ['belvedere'], stocks: [], owned: [] } as never);
-    expect([/\+\$30\.2B/.test(old.text + old.html), old.text.includes('Not counted: EW puts new')]).toEqual([false, true]);
+    expect([/\+\$30\.2B/.test(old.text + old.html), old.text.includes('Not counted: EW puts new'), /EW/.test(old.subject)]).toEqual([false, true, false]);
+    // Mizuho Securities USA's ORCL: Q2 under 68389X204, Q3 under 68389X105, one issuer prefix. Without ingest's
+    // cusip_mismatch it may be one position: both lines held as a possible CUSIP change, never "NEW ORCL".
+    const oq2 = [pos('ORCL', '68389X204', 132_845, 19_500_000), pos('REST', '000000009', 1, 6e9)];
+    const oq3 = [pos('ORCL', '68389X105', 165_927, 45_000_000), pos('REST', '000000009', 1, 6e9)];
+    const om = computeMoves(oq3, oq2);
+    const orclMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'mizuho', slugs: ['mizuho'], manager: 'Mizuho Securities USA', name: 'Mizuho Securities USA', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0001062993-26-005832', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: om.moves, tickers: [] }], [], { investors: ['mizuho'], stocks: [], owned: [] } as never);
+    expect([om.moves.new.length, om.moves.exited.length, om.moves.bought_usd, om.moves.sold_usd, /ORCL/.test(orclMail.subject), /New:|Exited:/.test(orclMail.text), /Not counted: ORCL new, 166K sh, value as filed \$45\.0M \(possible CUSIP change\); ORCL sold all 133K sh, value as filed was \$19\.5M \(possible CUSIP change\)\./.test(orclMail.text)]).toEqual([0, 0, 0, 0, false, false, true]);
     // - "value" (price_outlier: BMO's Q3 TEVA filed at about $4,005 a share): the share change, value unavailable.
     const tq2 = [pos('TEVA', '881624209', 971_583, 26_200_000), gbk2[1]];
     const tq3 = [{ ...pos('TEVA', '881624209', 1_130_855, 4_529_000_000), price_outlier: true }, gbk3[1]];
