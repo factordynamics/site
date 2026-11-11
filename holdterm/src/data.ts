@@ -76,6 +76,8 @@ export type Event = {
   kind: 'form4' | '13d' | '13g'
   action: string
   filing_date: string
+  accepted_at?: string
+  amendment_no?: number | null
   event_date: string | null
   url: string
   issuer: string
@@ -90,8 +92,9 @@ export type Event = {
   shares_after: number | null
   percent_of_class: number | null
   change_vs_13f: number | null
-  /** The same investor's previous 13D/G stake in this company, from the events file (set by loadEvents). */
+  /** The same investor's previous 13D/G stake in this company and its share count, from the events file (set by loadEvents). */
   prev_percent?: number
+  prev_shares?: number | null
 }
 export type HistoryRow = { quarter: string; report_date: string; filing_date: string; total_value: number; long_value?: number; equity_value?: number; position_count: number; status: string; sec_url: string }
 export type StockHolder = {
@@ -355,13 +358,18 @@ export const loadEvents = () => get<{ updated_at: string; window_days: number; e
 /** Each 13D/G stake update gets the investor's previous stake in the same company, when the file has it, so a
  * page can say "Cut from 70.8%" instead of "Stake update". */
 function prevStakes(events: Event[]) {
-  const stakes = events.filter((e) => e.kind !== 'form4' && e.percent_of_class != null && (e.cusip || e.ticker)).sort((a, b) => a.filing_date.localeCompare(b.filing_date))
-  const last = new Map<string, number>()
+  // Oldest first. Two amendments can share a filing day (T. Rowe filed CABA's 5th and 6th on Nov 6), so the SEC's
+  // acceptance time, then the amendment number, decides which came first.
+  const at = (e: Event) => e.accepted_at || e.filing_date
+  const stakes = events
+    .filter((e) => e.kind !== 'form4' && e.percent_of_class != null && (e.cusip || e.ticker))
+    .sort((a, b) => at(a).localeCompare(at(b)) || (a.amendment_no ?? 0) - (b.amendment_no ?? 0))
+  const last = new Map<string, Event>()
   for (const e of stakes) {
     const k = `${e.slug}|${e.cusip || e.ticker}`
     const p = last.get(k)
-    if (p != null && p !== e.percent_of_class) e.prev_percent = p
-    last.set(k, e.percent_of_class!)
+    if (p && p.percent_of_class !== e.percent_of_class) (e.prev_percent = p.percent_of_class!), (e.prev_shares = p.shares_after)
+    last.set(k, e)
   }
 }
 export const loadFundEvents = (slug: string) => get<{ events: Event[] }>(`${DATA}events/${slug}.json`).catch(() => ({ events: [] as Event[] }))
@@ -559,7 +567,8 @@ function etfName(h: Holding) {
   if (h.ticker && ETF_NAMES[h.ticker]) return ETF_NAMES[h.ticker]
   const brand = issuerName(h.issuer.replace(/\s+(ETF\s+)?(TR|TRUST|FD T|FDS?|EXCH TRADED FD TR.*|EXCHANGE TRADED FD.*|SER(IES)? TR.*|INC)\b.*$/i, '')).replace(/^Ishares\b/, 'iShares')
   const cls = h.title.replace(/\bETF\b/i, '').trim().toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase())
-  return `${brand} ${cls} ETF`.replace(/\s+/g, ' ')
+  // An issuer that is already an ETF keeps its own name: "Jensen Quality Growth ETF", not "… ETF Jensen Quality ETF".
+  return `${brand} ${cls} ETF`.replace(/\s+/g, ' ').replace(/^(.+?\bETF)\s+.+\bETF$/, '$1')
 }
 /** Rolls the latest books up by company: share classes of one issuer (same 6-character CUSIP prefix,
  * e.g. GOOGL and GOOG) count as one stock, shown under its most-held ticker. Options are excluded.

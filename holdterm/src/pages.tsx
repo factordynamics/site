@@ -216,12 +216,17 @@ const ACTION: Record<string, [string, string]> = {
   stake_update: ['Stake update', ''],
   below_threshold: ['Sold below 5%', 'neg'],
 }
+const OTHER_WHY = 'Form 4 with no open-market purchase or sale: a gift, award, conversion, distribution or a holdings report'
 function ActionTag({ e }: { e: Event }) {
-  // A stake update with the investor's previous stake says which way it went.
-  const [label, tone] = e.action === 'stake_update' && e.prev_percent != null && e.percent_of_class != null ? [`${e.percent_of_class < e.prev_percent ? 'Cut' : 'Raised'} from ${stakePct(e.prev_percent)}`, e.percent_of_class < e.prev_percent ? 'neg' : 'pos'] : (ACTION[e.action] ?? [e.action, ''])
-  const why = e.action === 'other' ? 'Form 4 with no open-market purchase or sale: a gift, award, conversion, distribution or a holdings report' : undefined
+  // A stake update with the investor's previous stake gives the old figure. Whether it bought or sold comes from the
+  // share counts, not the percentage: a percentage also moves when the company issues or buys back shares.
+  const was = e.action === 'stake_update' && e.prev_percent != null ? stakePct(e.prev_percent) : null
+  const dir = was && e.prev_shares != null && e.shares_after != null && e.shares_after !== e.prev_shares ? (e.shares_after > e.prev_shares ? 'pos' : 'neg') : ''
+  const same = was && !dir && e.prev_shares != null && e.shares_after === e.prev_shares
+  const [label, tone] = was ? [dir === 'pos' ? `Bought, was ${was}` : dir === 'neg' ? `Sold, was ${was}` : same ? `Same shares, was ${was}` : `Was ${was}`, dir] : (ACTION[e.action] ?? [e.action, ''])
+  const why = was && !dir ? (same ? 'Same number of shares: the percentage moved because the company’s share count changed' : undefined) : e.action === 'other' ? OTHER_WHY : undefined
   // Phones get the short form of the two long labels, so the action column fits.
-  const short = label === ACTION[e.action]?.[0] ? { new_stake: 'New 5%+', stake_update: 'Update' }[e.action as string] : undefined
+  const short = label === ACTION[e.action]?.[0] ? { new_stake: 'New 5%+', stake_update: 'Update' }[e.action as string] : same ? `Was ${was}` : undefined
   return (
     <span className={`tag ${tone}`} title={why}>
       {short ? (
@@ -1303,7 +1308,13 @@ function FlowsSummary({ rows, lead }: { rows: Agg[]; funds: number; q: string; l
   if (!buyers) return null
   return (
     <p className="summary">
-      {/* One fact per sentence: the most buyers, the most money in, then the same for selling. */}
+      {/* While the newest quarter is still coming in, its answer leads, so the first name matches the home page; then
+          one fact per sentence across each fund's latest 13F: the most buyers, the most money in, the same for selling. */}
+      {leadTop && leadTop.buyers.length > 0 && (
+        <>
+          Among the {num(lead!.n)} investors that have filed for {quarterLabel(lead!.q)}, the most bought is {aggName(leadTop)}, by {num(leadTop.buyers.length)}. Across each fund’s latest 13F,{' '}
+        </>
+      )}
       {plural(buyers.buyers.length, 'investor')} bought {aggName(buyers)}, more than any other stock
       {fresh === buyers && fresh.newBuyers > 0 ? `, and ${num(fresh.newBuyers)} of them were new to it` : ''}.{' '}
       {freshLine && <>The most new positions were in {aggName(fresh)}, {num(fresh.newBuyers)}. </>}
@@ -1311,13 +1322,6 @@ function FlowsSummary({ rows, lead }: { rows: Agg[]; funds: number; q: string; l
       {netBuy && netBuy.net > 0 && <>The most money went into {netBuy === buyers && !freshLine ? 'it' : aggName(netBuy)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netBuy.net)}</span> net. </>}
       {sellers && sellers.sellers.length > 0 && <>{plural(sellers.sellers.length, 'investor')} sold {sellers === buyers && lastOnBuyers ? 'some of it too' : aggName(sellers)}, the most of any stock. </>}
       {netSell && netSell.net < 0 && <>The most money came out of {aggName(netSell)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netSell.net)}</span> net.</>}
-      {/* These counts mix quarters; the home page counts only the newest one. Say so, with the newest quarter's answer. */}
-      {leadTop && leadTop.buyers.length > 0 && (
-        <>
-          {' '}
-          Counting only the {num(lead!.n)} investors that have filed for {quarterLabel(lead!.q)}, the most bought is {aggName(leadTop)}, by {num(leadTop.buyers.length)}.
-        </>
-      )}
     </p>
   )
 }
