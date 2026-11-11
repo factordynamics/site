@@ -226,7 +226,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
         <section className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between">
             <h2 className="text-[15px] font-semibold">Plan</h2>
-            <Badge tone={cancelling || paused ? 'warn' : trial ? 'accent' : member.active ? 'up' : 'warn'}>{paused ? 'Paused' : cancelling ? 'Cancelled' : trial ? 'Free trial' : member.active ? 'Active' : member.status}</Badge>
+            <Badge tone={cancelling || paused ? 'warn' : trial ? 'accent' : member.active ? 'up' : 'warn'}>{paused ? 'Paused' : cancelling ? 'Cancelled' : trial ? (member.collection === 'send_invoice' ? 'Invoice trial' : 'Free trial') : member.active ? 'Active' : member.status}</Badge>
           </div>
           <p className="mt-3 text-[14px] text-ink-2">{member.email}</p>
           <p className="mt-1 text-[14px] text-ink-2">
@@ -286,6 +286,8 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
               {portalErr}
             </p>
           )}
+          {/* Adding a card in the portal doesn't change collection_method (payments, Nov 11). */}
+          {member.collection === 'send_invoice' && !cancelling && <p className="mt-2 text-[12.5px] text-ink-3">Your invoice stays Net 30 even if you add a card.</p>}
           <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
             {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : member.collection === 'send_invoice' && member.invoice_trial ? invoiceTerms(member.invoice_trial) : member.collection === 'send_invoice' ? 'Billed by invoice (Net 30), payable online by card or US bank account (ACH). Each invoice comes by email; nothing is charged to a card.' : member.pause_after_trial ? `Nothing is charged until ${dayLabel(member.pause_after_trial.until)}. Real-time alerts stop when the trial ends and resume then; your follows and settings stay.` : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
           </p>
@@ -774,7 +776,7 @@ const invoiceTerms = (t: NonNullable<Member['invoice_trial']>) =>
     // amount is in cents; records from before payments' 17:00 build read null until the hourly re-sync, so no amount then.
     `Invoice trial: ${t.amount != null ? `$${(t.amount / 100).toLocaleString('en-US')} invoice` : 'invoice'} on ${shortDay(t.invoice_on)}${t.invoice_to ? ` to ${t.invoice_to}` : ''}, due ${shortDay(t.due_on)} (Net 30)`,
     t.po && `PO ${t.po}`,
-    t.ap_email && `AP ${t.ap_email} gets a copy`,
+    t.ap_email && `AP ${t.ap_email} gets a copy, and it’s printed on the invoice`,
     'payable online by card or US bank account (ACH)',
     `cancel before ${shortDay(t.invoice_on)} and nothing is owed`,
   ]
@@ -788,7 +790,7 @@ function InvoiceDetails({ t, onChange }: { t: NonNullable<Member['invoice_trial'
   const [ap, setAp] = useState(t.ap_email ?? '')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
-  const field = 'h-9 w-full rounded-lg bg-paper px-3 text-[13.5px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]'
+  const field = 'h-10 w-full rounded-lg bg-paper px-3 text-[14px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none focus:shadow-[0_0_0_2px_var(--color-accent)]'
   if (!open)
     return (
       <p className="mt-2 text-[13.5px]">
@@ -800,7 +802,7 @@ function InvoiceDetails({ t, onChange }: { t: NonNullable<Member['invoice_trial'
     )
   return (
     <form
-      className="mt-3 grid gap-3 rounded-xl bg-ink/[0.03] p-3.5 sm:grid-cols-[1fr_1.4fr_auto] sm:items-end"
+      className="mt-3 grid max-w-xl gap-3 rounded-xl bg-ink/[0.03] p-3.5"
       onSubmit={(e) => {
         e.preventDefault()
         setBusy(true)
@@ -809,7 +811,7 @@ function InvoiceDetails({ t, onChange }: { t: NonNullable<Member['invoice_trial'
           .then((r) => {
             if (r.member) onChange(r.member)
             setOpen(false)
-            setMsg({ text: 'Saved. The invoice will print these.', ok: true })
+            setMsg({ text: 'Saved. AP gets a copy, and it’s printed on the invoice.', ok: true })
           })
           .catch((e) => setMsg({ text: errText(e, e instanceof ApiError && e.detail ? e.detail : 'That didn’t save. Please try again, or email us.'), ok: false }))
           .finally(() => setBusy(false))
@@ -820,7 +822,7 @@ function InvoiceDetails({ t, onChange }: { t: NonNullable<Member['invoice_trial'
         <input value={po} onChange={(e) => setPo(e.target.value)} maxLength={140} className={`${field} mt-1`} />
       </label>
       <label className="block text-[12.5px] font-medium text-ink-2">
-        AP email (printed on the invoice)
+        AP email (gets a copy, and it’s printed on the invoice)
         <input type="email" value={ap} onChange={(e) => setAp(e.target.value)} className={`${field} mt-1`} />
       </label>
       <span className="flex gap-2">

@@ -32,12 +32,12 @@ type StatusFile = {
   probe?: { target?: string; interval_seconds?: number; '24h'?: Window; '7d'?: Window; daily?: (Window & { day: string })[] }
   /** 13F alerts waiting on the API machine's moves fallback; the wait counts from EDGAR acceptance. */
   moves_queue?: { pending: number; oldest_wait_seconds: number | null; last_fallback_send_at?: string | null } | null
-  freshness?: { last_13f?: { manager: string; accepted_at: string } | null }
+  freshness?: { last_13f?: { manager: string; accepted_at: string } | null; backup_takeover?: { at?: string; cloudflare_last_run_at?: string; seconds?: number | null } | null }
   /** Payments' check that the index.json fields alert routing reads are present and hold known values. */
   index_contract?: { ok: boolean; build?: string | null; problems?: string[]; checked_at?: string }
   /** Payments' plain sending policy for account and alert email under the daily cap. */
   mail_quota?: { policy?: string } | null
-  restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; planned_7d?: number; rows?: { at: string; started_at?: string | null; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed' | 'planned'; build?: string | null; prev_build?: string | null; note?: string }[] }
+  restarts?: { events?: { kind: 'planned' | 'incident'; started_at: string; ended_at?: string | null; title: string; note?: string | null; fix?: string | null }[]; unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; planned_7d?: number; rows?: { at: string; started_at?: string | null; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed' | 'planned'; build?: string | null; prev_build?: string | null; note?: string }[] }
 }
 const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Brief restart we couldn’t attribute', planned: 'Planned' } as const
 const STATUS_URL = String(import.meta.env.VITE_LATENCY_URL).replace(/latency\.json$/, 'status.json')
@@ -99,6 +99,7 @@ const HELD_REASON: Record<string, string> = {
   price_outlier: 'value far off the filed price',
   reissue_ratio_not_applied: 'pre-split share counts',
   unreliable_both: 'shares and value both unreliable',
+  value_rescale_rejected: 'value units that don’t reconcile either way',
 }
 
 const plural = (n: number, w: string) => `${n.toLocaleString('en-US')} ${w}${n === 1 ? '' : 's'}`
@@ -156,6 +157,14 @@ function HeldRows({ q }: { q: Quality }) {
       )}
     </Row>
   )
+}
+
+/** "Nov 11, 2026 · 16:01–16:08 UTC" for an event window. */
+const eventWhen = (a: string, b?: string | null) => {
+  const d = new Date(a)
+  const day = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+  const t = (x: Date) => x.toISOString().slice(11, 16)
+  return `${day} · ${t(d)}${b ? `–${t(new Date(b))}` : ''} UTC`
 }
 
 export function Status() {
@@ -333,6 +342,8 @@ export function Status() {
                   </span>
                 )}
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
+                {/* Measured in payments' backup-poller drill (status.json freshness.backup_takeover). */}
+                {st.data?.freshness?.backup_takeover?.seconds ? ` In a drill, the backup poller took over within ${Math.ceil(st.data.freshness.backup_takeover.seconds / 60)} min.` : ''}
                 {st.data?.mail_quota?.policy && <span className="mt-1.5 block text-[12.5px] leading-relaxed text-ink-3">Email: {st.data.mail_quota.policy}</span>}
               </Row>
               {rec && (
@@ -439,6 +450,19 @@ export function Status() {
           {Date.now() < Date.parse(DEPLOY_FREEZE.until) && <span className="block font-medium text-ink-2">Now: {DEPLOY_FREEZE.text}</span>}
         </p>
         <ol className="mt-3 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
+          {/* Payments' drills and incidents that weren't restarts (status.json restarts.events), newest first, above ours. */}
+          {(st.data?.restarts?.events ?? []).map((e) => (
+            <li key={`${e.kind}-${e.started_at}`} className="py-3 text-[14px] leading-relaxed">
+              <span className="num block text-[12.5px] text-ink-3">
+                {eventWhen(e.started_at, e.ended_at)} · {e.kind === 'planned' ? 'planned' : 'incident'}
+              </span>
+              <span className="text-ink-2">
+                <span className="font-medium text-ink">{e.title}.</span>
+                {e.note ? ` ${e.note.replace(/\.?$/, '.')}` : ''}
+                {e.fix ? ` Fixed in ${e.fix}.` : ''}
+              </span>
+            </li>
+          ))}
           {INCIDENTS.map(([when, what, link]) => (
             <li key={when} className="py-3 text-[14px] leading-relaxed">
               <span className="num block text-[12.5px] text-ink-3">{when}</span>

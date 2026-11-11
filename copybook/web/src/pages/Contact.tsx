@@ -179,7 +179,7 @@ export function Contact() {
                     The invoice for $1,990 (the founding price, a year) comes on {day(started.invoice_on)}, due {day(started.due_on)}; nothing is charged before then. It’s payable online by card or US bank account (ACH). Cancel before {day(started.invoice_on)} in your account and nothing is owed.
                     {/* Stripe emails the invoice to the owner; from 17:00 Nov 11 the AP address gets a copy when it's finalized (payments). */}{' '}
                     The invoice {started.po ? `will show PO ${started.po} and ` : ''}goes to {started.email}
-                    {started.ap_email ? `, with a copy to ${started.ap_email} for your AP team` : ''}.
+                    {started.ap_email ? `; your AP team (${started.ap_email}) gets a copy, and it’s printed on the invoice` : ''}.
                   </p>
                 </>
               ) : (
@@ -276,18 +276,18 @@ export function Contact() {
                       </label>
                     ))}
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4">
                     <label className="block text-[13px] font-medium text-ink-2">
                       PO number (optional)
                       <input value={form.po} onChange={set('po')} className={`${field} mt-1.5`} />
                     </label>
                     <label className="block text-[13px] font-medium text-ink-2">
-                      Accounts payable email (optional)
+                      Accounts payable email (optional; AP gets a copy, and it’s printed on the invoice)
                       <input type="email" value={form.ap_email} onChange={set('ap_email')} aria-invalid={invalid('ap_email')} className={`${field} mt-1.5`} />
                       {hintFor('ap_email')}
                     </label>
                   </div>
-                  <p className="text-[12.5px] leading-relaxed text-ink-3">Both print on the invoice, and AP gets a copy of the invoice when it’s issued. $1,990 a year at the founding price, invoiced on day 14, Net 30. Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
+                  <p className="text-[12.5px] leading-relaxed text-ink-3">Both are printed on the invoice, and AP gets a copy. $1,990 a year at the founding price, invoiced on day 14, Net 30, payable online by card or US bank account (ACH). Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
                 </fieldset>
               )}
               {fund && !invoiceTrial && (
