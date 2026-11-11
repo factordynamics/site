@@ -859,7 +859,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
             "price_outlier", "value_basis", "unreliable", "value_delta", "value_delta_basis", "held_reason", "classes",
             "shares_unit", "shares_ratio", "ratio_source", "classes_held", "cusip", "issuer_cusip6", "net_direction",
-            "cusip_pair", "filed_cusip", "filed_price", "matched_cusip"]
+            "cusip_pair", "filed_cusip", "filed_price", "matched_cusip", "shares_basis"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0, "mixed": 0, "unknown": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {}, "by_period": {}}
@@ -982,7 +982,9 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          unit, ratio_of, CLASS_RATIO_SOURCE.get(unit) if unit else None,
                          held_n if multi else None, single, code,
                          None if counted is None else "buy" if counted > 0 else "sell" if counted < 0 else "flat",
-                         *((PAIRS.get((code, cik)) or {}).get(f) for f in ("cusip_pair", "filed_cusip", "filed_price", "matched_cusip"))])
+                         *((PAIRS.get((code, cik)) or {}).get(f) for f in ("cusip_pair", "filed_cusip", "filed_price", "matched_cusip")),
+                         # shares as filed; summed over classes through a filed ratio: converted; else null (no shares)
+                         None if out_sh is None else "converted" if unit else "as_filed"])
         # Hard gates (lead, Nov 11): net is exactly the sum of the counted rows, per quarter (a held row and its
         # classes add nothing), and the change counts are the rows' own tallies. Either off: hl/ is not rewritten.
         vi, ci = cols.index("value_delta"), cols.index("change")

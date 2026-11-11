@@ -581,6 +581,7 @@ class MoveMathTest(unittest.TestCase):
             # The merge is shown, never silent (lead, Nov 11): the misfiled CUSIP, its filed price and the matched one.
             self.assertEqual([(x["cusip_pair"], x["filed_cusip"], x["filed_price"], x["matched_cusip"]) for x in r],
                              [("merged_misfiled", "68389X204", round(19_500_000 / 132845, 4), "68389X105")])
+            self.assertEqual(r[0]["shares_basis"], "as_filed")
             # Priced 1.3x common (inside 1.5x, outside the 0.8-1.25 band): held as a possible CUSIP change, no trade.
             r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("68389X105", "ORCL", 165927, 21_000_000)]},
                                    {"quarter": "2026Q2", "holdings": [self.row("68389X204", "ORCL", 132845, 132845 * 190.5)]})
@@ -790,10 +791,12 @@ class ShareClassHoldersTest(unittest.TestCase):
                                  ("trimmed", "BRK.B", 6959 * 1500 + 9597287, None, "084670", "sell"))
                 self.assertEqual([(c["ticker"], c["change"]) for c in b["classes"]], [("BRK.A", "trimmed"), ("BRK.B", "trimmed")])
                 self.assertEqual(b["shares_ratio"], {"084670108": 1500.0, "084670702": 1.0})
+                self.assertEqual(b["shares_basis"], "converted")
                 g = row("02079K", "0000315066")  # no conversion ratio: shares null, the classes carry the counts
                 # GOOGL bought, GOOG sold: mixed, the dollar sum's sign in net_direction; no summed share counts
                 self.assertEqual((g["shares"], g["prev_shares"], g["shares_unit"], g["change"], g["net_direction"]),
                                  (None, None, None, "mixed", "sell"))
+                self.assertIsNone(g["shares_basis"])
                 self.assertAlmostEqual(g["value_delta"], 100 * 344.08 - 300 * 340.74, delta=2)
                 # An unchanged class whose line still carries a value_delta (gene's fb/ copy of an older build): no trade.
                 moves.LATEST["0000000003"] = [line("46429B101", "AAA", 100, 100, 1000, 900, "unchanged") | {"value_delta": 55},

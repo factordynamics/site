@@ -1059,6 +1059,9 @@ def hold(r: dict, quarter: str | None) -> dict:
     """A flagged line shows only its reliable side and no trade in $ (value_delta 0, out of every total):
     "value": change and share_change stand; "shares": share_change null, value_change = filed value - prior filed
     value; "both": change null (unknown), share_change null. new, exited and disclosed_later keep their change."""
+    # What the shares column counts (analyst, Nov 11: null on BKNG and Allianz option rows): the filed shares
+    # ("as_filed"), an option line filed in contracts x100 ("contracts"), or a note's principal ("principal").
+    r = r | {"shares_basis": r.get("shares_basis") or ("principal" if r.get("shares_type") == "PRN" else "as_filed")}
     side = unreliable_side(r, quarter)
     if side is None:
         return r
