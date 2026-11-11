@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, channels, checkout, price as PRICE, SITE } from './config'
-import { AppIcon, ChatPreviews, EmailPreview, loadLatestTitle, loadSamples, PushPreview, SampleSources } from './alert-previews'
+import { AppIcon, ChatPreviews, EmailPreview, InboxPreview, loadLatestTitle, loadSamples, PushPreview, SampleSources } from './alert-previews'
 import {
   aggregate,
   funds,
@@ -70,8 +70,10 @@ function Crumbs({ parent, here }: { parent: [string, string]; here: string }) {
   )
 }
 export const REPO = 'https://github.com/factordynamics/site'
-export const ISSUES = `${REPO}/issues/new?labels=holdterm&title=Holdterm%3A+`
 export const CONTACT = 'hello@factordynamics.com'
+/** "Report a data error": an email with the page's address filled in, so no account is needed. */
+export const reportError = (path: string) =>
+  `mailto:${CONTACT}?subject=${encodeURIComponent('Holdterm data error')}&body=${encodeURIComponent(`Page: ${SITE.replace(/\/$/, '')}${path}\n\nWhat looks wrong:\n`)}`
 const qOf = (period: string) => {
   // "30-JUN-2026" -> "2026Q2"
   const m = ['MAR', 'JUN', 'SEP', 'DEC'].indexOf(period.slice(3, 6))
@@ -209,16 +211,17 @@ const ACTION: Record<string, [string, string]> = {
   buy: ['Bought', 'pos'],
   sell: ['Sold', 'neg'],
   mixed: ['Mixed', ''],
-  other: ['No trade', 'dim'],
+  other: ['Not a trade', 'dim'],
   new_stake: ['New 5%+ stake', 'pos'],
   stake_update: ['Stake update', ''],
-  below_threshold: ['Below 5%', 'neg'],
+  below_threshold: ['Sold below 5%', 'neg'],
 }
 function ActionTag({ e }: { e: Event }) {
-  const [label, tone] = ACTION[e.action] ?? [e.action, '']
+  // A stake update with the investor's previous stake says which way it went.
+  const [label, tone] = e.action === 'stake_update' && e.prev_percent != null && e.percent_of_class != null ? [`${e.percent_of_class < e.prev_percent ? 'Cut' : 'Raised'} from ${stakePct(e.prev_percent)}`, e.percent_of_class < e.prev_percent ? 'neg' : 'pos'] : (ACTION[e.action] ?? [e.action, ''])
   const why = e.action === 'other' ? 'Form 4 with no open-market purchase or sale: a gift, award, conversion, distribution or a holdings report' : undefined
   // Phones get the short form of the two long labels, so the action column fits.
-  const short = { new_stake: 'New 5%+', stake_update: 'Update' }[e.action as string]
+  const short = label === ACTION[e.action]?.[0] ? { new_stake: 'New 5%+', stake_update: 'Update' }[e.action as string] : undefined
   return (
     <span className={`tag ${tone}`} title={why}>
       {short ? (
@@ -261,7 +264,7 @@ const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => 
     key: 'act',
     label: 'What happened',
     render: (e) => {
-      const fig = e.value_usd != null && (e.action === 'buy' || e.action === 'sell') ? usd(e.value_usd) : e.percent_of_class != null && e.kind !== 'form4' ? `Owns ${stakePct(e.percent_of_class)}` : null
+      const fig = e.value_usd != null && (e.action === 'buy' || e.action === 'sell') ? usd(e.value_usd) : e.action === 'below_threshold' ? 'Now under 5%' : e.percent_of_class != null && e.kind !== 'form4' ? `Owns ${stakePct(e.percent_of_class)}` : null
       return (
         <>
           <ActionTag e={e} />
@@ -398,7 +401,11 @@ export function Home() {
       <div className="intro">
         <div>
           <h1>What long-term investors are buying and selling</h1>
-          <p>See what {roster.funds.length} concentrated, long-term investors own, buy and sell, from the reports they file with the SEC. Updated within hours of each filing.</p>
+          <p>
+            <span className="hide-sm">See what {roster.funds.length} concentrated, long-term investors own, buy and sell, from the reports they file with the SEC. Updated within hours of each filing.</span>
+            {/* Phones: the same promise in one short line, so a first-time visitor knows what the site is. */}
+            <span className="show-sm">What {roster.funds.length} long-term investors own, buy and sell, from their SEC filings.</span>
+          </p>
         </div>
         <HomeSearch />
       </div>
@@ -1185,6 +1192,8 @@ export function Flows() {
   // In "latest" mode the books span quarters: say how many of each, and tag the newest quarter's funds.
   const mix = quarters.map((x) => [x, books.data!.filter((b) => b.quarter === x).length] as const)
   const tagQ = q === 'latest' && mix.length > 1 ? mix[0][0] : undefined
+  // The newest quarter on its own, as the home page counts it, so the two pages' "most bought" can be told apart.
+  const leadRows = tagQ ? aggregate(books.data.filter((b) => b.quarter === tagQ), books.data).rows.filter((r) => !r.fund) : []
   const exits = (r: Agg) => r.sellers.filter((s) => s.change === 'exited').length
   let list: Agg[]
   if (tab === 'buyers') list = rows.filter((r) => r.buyers.length).sort((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)
@@ -1200,7 +1209,7 @@ export function Flows() {
         <div>
           <h1>Buys and sells</h1>
           <p className="lede">What the investors bought and sold, comparing each fund’s latest 13F with the one before.</p>
-          <FlowsSummary rows={rows} funds={fundsN} q={q} />
+          <FlowsSummary rows={rows} funds={fundsN} q={q} lead={tagQ ? { q: tagQ, n: mix[0][1], rows: leadRows } : undefined} />
         </div>
       </div>
       {/* One row of quarter chips on every width; the count under it says, in words, which 13F each investor is shown with. */}
@@ -1280,7 +1289,7 @@ export function Flows() {
 
 /** A stock in running text: "Alphabet (GOOGL)". */
 const aggName = (r: Agg) => `${r.name.replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')}${r.ticker ? ` (${r.label ?? r.ticker})` : ''}`
-function FlowsSummary({ rows, funds, q }: { rows: Agg[]; funds: number; q: string }) {
+function FlowsSummary({ rows, lead }: { rows: Agg[]; funds: number; q: string; lead?: { q: string; n: number; rows: Agg[] } }) {
   const most = (f: (r: Agg) => number) => [...rows].sort((a, b) => f(b) - f(a))[0]
   const buyers = most((r) => r.buyers.length)
   const sellers = most((r) => r.sellers.length)
@@ -1290,6 +1299,7 @@ function FlowsSummary({ rows, funds, q }: { rows: Agg[]; funds: number; q: strin
   const freshLine = fresh && fresh !== buyers && fresh.newBuyers > 1
   // Whether the sentence just before the selling one is still about the most-bought stock.
   const lastOnBuyers = !freshLine && !(netBuy && netBuy.net > 0 && netBuy !== buyers)
+  const leadTop = lead && [...lead.rows].sort((a, b) => b.buyers.length - a.buyers.length || b.buy - a.buy)[0]
   if (!buyers) return null
   return (
     <p className="summary">
@@ -1301,6 +1311,13 @@ function FlowsSummary({ rows, funds, q }: { rows: Agg[]; funds: number; q: strin
       {netBuy && netBuy.net > 0 && <>The most money went into {netBuy === buyers && !freshLine ? 'it' : aggName(netBuy)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netBuy.net)}</span> net. </>}
       {sellers && sellers.sellers.length > 0 && <>{plural(sellers.sellers.length, 'investor')} sold {sellers === buyers && lastOnBuyers ? 'some of it too' : aggName(sellers)}, the most of any stock. </>}
       {netSell && netSell.net < 0 && <>The most money came out of {aggName(netSell)}, <span style={{ whiteSpace: 'nowrap' }}>{signedUsd(netSell.net)}</span> net.</>}
+      {/* These counts mix quarters; the home page counts only the newest one. Say so, with the newest quarter's answer. */}
+      {leadTop && leadTop.buyers.length > 0 && (
+        <>
+          {' '}
+          Counting only the {num(lead!.n)} investors that have filed for {quarterLabel(lead!.q)}, the most bought is {aggName(leadTop)}, by {num(leadTop.buyers.length)}.
+        </>
+      )}
     </p>
   )
 }
@@ -1511,7 +1528,7 @@ export function Filings() {
         <>
           <div className="filters" role="group" aria-label="filters">
             <button className={own ? 'chip on' : 'chip'} aria-pressed={own} onClick={() => setOwn(!own)}>
-              Include filings on their own funds
+              Show filings on funds they run
             </button>
           </div>
           <Panel title={`${list.length} filings`}>
@@ -1640,11 +1657,11 @@ export function Stock({ ticker }: { ticker: string }) {
               <Sector s={d.sector} full />
             </span>
           </div>
-          {held && <p className="activity-line">{ev.data ? <ActivityLine events={events} days={ev.data.window_days} name={(e) => firmOf(firms, e.slug, e.manager)} open={() => (setTab('filings'), document.querySelector('.tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))} /> : '\u00a0'}</p>}
+          {held && events.length > 0 && <p className="activity-line">{ev.data ? <ActivityLine events={events} days={ev.data.window_days} name={(e) => firmOf(firms, e.slug, e.manager)} open={() => (setTab('filings'), document.querySelector('.tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))} /> : '\u00a0'}</p>}
           {/* One plain line on where the numbers come from; the CUSIP 13Fs use is in its tooltip. */}
           {held && (
             <div className="meta">
-              <span title={`CUSIP ${d.classes.map((c) => `${c.cusip}${d.classes.length > 1 ? ` (${c.ticker})` : ''}`).join(', ')}`}>From these investors’ latest 13F filings with the SEC</span>
+              <span title={`CUSIP ${d.classes.map((c) => `${c.cusip}${d.classes.length > 1 ? ` (${c.ticker})` : ''}`).join(', ')}`}>{quarterMix(holders)}</span>
             </div>
           )}
         </div>
@@ -1730,6 +1747,15 @@ export function Stock({ ticker }: { ticker: string }) {
 }
 
 const FORM: Record<Event['kind'], string> = { '13d': '13D', '13g': '13G', form4: 'Form 4' }
+/** Where a stock page's numbers come from, naming the quarters when its holders' latest 13Fs differ:
+ * "From each investor’s latest 13F with the SEC: 12 for Q3 2026, 31 for Q2 2026". */
+function quarterMix(holders: StockHolder[]) {
+  const by = new Map<string, number>()
+  for (const h of holders) by.set(h.quarter, (by.get(h.quarter) ?? 0) + 1)
+  const qs = [...by].sort((a, b) => b[0].localeCompare(a[0]))
+  if (qs.length < 2) return `From each investor’s latest 13F with the SEC${qs.length ? `, for ${quarterLabel(qs[0][0])}` : ''}`
+  return `From each investor’s latest 13F with the SEC: ${qs.map(([q, n]) => `${num(n)} for ${quarterLabel(q)}`).join(', ')}`
+}
 /** The newest 13D/G or Form 4 on a stock in one sentence, with a count of the rest. */
 function ActivityLine({ events, days, name, open }: { events: Event[]; days: number; name: (e: Event) => string; open: () => void }) {
   const e = events[0]
@@ -1781,6 +1807,8 @@ export function Alerts() {
   const r = useLoad(loadSamples, [])
   const s = r.data
   const link = yearly ? checkout.yearly : checkout.monthly
+  const live = CHANNEL_LIST.filter((c) => c.live === true)
+  const soon = CHANNEL_LIST.filter((c) => c.live !== true)
   const plan = (
     <div className="ap-plan">
       <div className="filters" role="group" aria-label="Billing period">
@@ -1793,7 +1821,10 @@ export function Alerts() {
       </div>
       <div className="price">
         <span className="big">${yearly ? PRICE.yearly : PRICE.monthly}</span>
-        <span className="dim">/{yearly ? 'year' : 'month'} after a {PRICE.trialDays}-day free trial</span>
+        <span className="dim">
+          /{yearly ? 'year' : 'month'}
+          {yearly && ` ($${(PRICE.yearly / 12).toFixed(2)} a month)`} after a {PRICE.trialDays}-day free trial
+        </span>
       </div>
       <a className="btn big-btn" href={link}>
         Start your free trial
@@ -1808,27 +1839,36 @@ export function Alerts() {
       <section className="ap-hero">
         <div className="ap-hero-text">
           <p className="eyebrow">Holdterm Alerts</p>
-          <h1>Know the moment your investors make a move</h1>
-          <p className="lede">When a fund you follow files a 13F, 13D, 13G or Form 4, you get a plain-English summary within hours: what it bought, what it sold and how much. By email, on your phone or in your team’s chat.</p>
+          <h1>{channels.push ? 'Know when your investors make a move' : 'An email when your investors make a move'}</h1>
+          {/* Say only what ships: email today; push and chat join the sentence as they go live. */}
+          <p className="lede">
+            When a fund you follow reports its portfolio, a new 5% stake or an insider trade to the SEC, you get a plain-English summary within hours of the filing: what it bought, what it sold and how much.{' '}
+            {channels.push && channels.chat ? 'By email, on your phone or in your team’s chat.' : channels.push ? 'By email or on your phone.' : channels.chat ? 'By email or in your team’s chat.' : ''}
+          </p>
           {plan}
         </div>
-        <div className="ap-hero-art">{s ? <PushPreview s={s} /> : <div className="ap-phone ap-skeleton" aria-hidden />}</div>
+        <div className="ap-hero-art">{s ? channels.push ? <PushPreview s={s} /> : <InboxPreview s={s} /> : <div className={`${channels.push ? 'ap-phone' : 'ap-inbox'} ap-skeleton`} aria-hidden />}</div>
       </section>
 
       <section className="ap-section">
-        <h2>Choose where alerts arrive</h2>
-        <p className="dim">{CHANNEL_LIST.every((c) => c.live === true) ? 'Every channel is included in the price. Pick one or several in your account.' : 'Email is included today. The other channels are on the way, at no extra cost.'}</p>
+        <h2>{live.length > 1 ? 'Choose where alerts arrive' : 'Where alerts arrive'}</h2>
+        <p className="dim">{soon.length ? (live.length > 1 ? 'These are included in the price. Pick one or several in your account.' : 'Alerts come by email.') : 'Every channel is included in the price. Pick one or several in your account.'}</p>
         <div className="ap-channels">
-          {CHANNEL_LIST.map((c) => (
+          {live.map((c) => (
             <div className="ap-channel" key={c.name}>
               <div className="ap-channel-head">
                 <b>{c.name}</b>
-                {c.live === true ? <span className="tag pos-tag">Included</span> : <span className="tag">Coming soon</span>}
+                <span className="tag pos-tag">Included</span>
               </div>
               <p>{c.what}</p>
             </div>
           ))}
         </div>
+        {soon.length > 0 && (
+          <p className="ap-soon">
+            <span className="tag">Coming soon</span> {soon.map((c) => c.name).join(', ').replace(/, ([^,]*)$/, ' and $1')}, at no extra cost.
+          </p>
+        )}
       </section>
 
       <section className="ap-section ap-split">
@@ -1856,13 +1896,15 @@ export function Alerts() {
         {s ? <EmailPreview s={s} /> : r.error ? <Failed error={r.error} what="the sample alert" /> : <Loading what="Building the sample email" />}
       </section>
 
-      <section className="ap-section ap-split reverse">
-        <div>
-          <h2>Or straight into your chat</h2>
-          <p className="dim">The same alerts, formatted for each app, so a team or an investing club sees every filing together.</p>
-        </div>
-        {s ? <ChatPreviews s={s} /> : <Loading what="Building the previews" rows={6} />}
-      </section>
+      {channels.chat && (
+        <section className="ap-section ap-split reverse">
+          <div>
+            <h2>Or straight into your chat</h2>
+            <p className="dim">The same alerts, formatted for each app, so a team or an investing club sees every filing together.</p>
+          </div>
+          {s ? <ChatPreviews s={s} /> : <Loading what="Building the previews" rows={6} />}
+        </section>
+      )}
 
       <section className="ap-section ap-cta">
         <div>
@@ -2458,7 +2500,7 @@ export function About() {
       <section>
         <h2>Contact and corrections</h2>
         <p>
-          Email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> for anything: a wrong number, ticker or name (send the page link and we’ll check it against the SEC filing), billing, or deleting your data. You can also <a href={ISSUES}>open a GitHub issue ↗</a>. Manage or cancel a subscription in the <a href={checkout.portal}>Stripe billing portal ↗</a>.
+          Email <a href={`mailto:${CONTACT}`}>{CONTACT}</a> for anything: a wrong number, ticker or name (send the page link and we’ll check it against the SEC filing), billing, or deleting your data. Manage or cancel a subscription in the <a href={checkout.portal}>Stripe billing portal ↗</a>.
         </p>
       </section>
       <section>
@@ -2502,8 +2544,7 @@ export function Terms() {
       <section>
         <h2>Changes and contact</h2>
         <p>
-          We may change these terms; material changes to paid plans are emailed to subscribers first. Questions or corrections: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>, or{' '}
-          <a href={ISSUES}>open an issue on GitHub ↗</a>.
+          We may change these terms; material changes to paid plans are emailed to subscribers first. Questions or corrections: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
         </p>
       </section>
     </article>

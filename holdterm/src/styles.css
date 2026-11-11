@@ -1765,7 +1765,9 @@ a.hb-row:hover {
     margin: 0;
   }
   .intro p {
-    display: none;
+    margin: 4px 0 0;
+    font-size: 14px;
+    line-height: 1.4;
   }
   /* Phones: one compact row (short copy, button, close), so the filings table stays above the fold. */
   .upsell {
@@ -2169,14 +2171,25 @@ p a,
     padding: 9px 11px;
     flex: none;
   }
-  .tabs.fade-right {
-    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
-  }
-  .tabs.fade-left {
+  /* More tabs to the right: an arrow on a fade at the edge (.tabs-more); to the left, a fade alone. */
+  .tabs.fade-left,
+  .tabs.fade-both {
     mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent);
   }
-  .tabs.fade-both {
-    mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  .tabs-more {
+    position: sticky;
+    right: 0;
+    flex: none;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    width: 44px;
+    margin-right: -1px;
+    padding-right: 4px;
+    color: var(--fg2);
+    background: linear-gradient(to right, transparent, var(--bg) 55%);
+    cursor: pointer;
   }
 }
 /* ---------- stock page header ---------- */
@@ -2401,6 +2414,53 @@ p a,
   height: 1100px;
   border: 0;
   background: #f4f5f7;
+}
+/* An inbox of alert emails (the hero while email is the only channel). */
+.ap-inbox {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.1);
+}
+.ap-inbox.ap-skeleton {
+  height: 330px;
+}
+.ap-inbox-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 14px;
+}
+.ap-inbox-row {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+.ap-inbox-row + .ap-inbox-row {
+  border-top: 1px solid var(--line);
+}
+.ap-inbox-row .ap-icon {
+  border-radius: 7px;
+}
+.ap-inbox .ap-note-top {
+  color: var(--fg2);
+}
+.ap-inbox .ap-note-body {
+  color: var(--fg2);
+  -webkit-line-clamp: 2;
+}
+.ap-soon {
+  margin: 14px 0 0;
+  color: var(--fg2);
+  font-size: 14px;
+}
+.ap-soon .tag {
+  margin-right: 6px;
 }
 /* Phone lock screen with push notifications. */
 .ap-phone {
