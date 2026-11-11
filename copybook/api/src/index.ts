@@ -608,7 +608,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const email = String(b.email ?? '').trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ ok: false, error: 'email required', code: 'bad_request' }, 400, h);
     const { fundInvoice } = await import('./revenue');
-    return json({ ok: true, ...(await fundInvoice(env, email, b.name ? String(b.name).slice(0, 120) : undefined)) }, 200, h);
+    return json({ ok: true, ...(await fundInvoice(env, email, b.name ? String(b.name).slice(0, 120) : undefined, b.po ? String(b.po).slice(0, 30) : undefined)) }, 200, h);
   }
 
   // Operator: "Your names this week" for the given test inboxes only (members' real addresses are dropped).

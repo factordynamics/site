@@ -1279,15 +1279,17 @@ describe('copybook api', () => {
     const go = (b: unknown, token = env.HEALTH_TOKEN) => handleRequest(new Request('https://api.test/ops/fund-invoice', { method: 'POST', body: JSON.stringify(b), headers: { authorization: `Bearer ${token}` } }), env);
     expect((await go({ email: 'pm@fund.test' }, 'wrong')).status).toBe(404);
     expect((await go({ email: 'nope' })).status).toBe(400);
-    const r = await (await go({ email: 'PM@fund.test', name: 'Example Capital' })).json();
+    const r = await (await go({ email: 'PM@fund.test', name: 'Example Capital', po: 'PO-7781' })).json();
     expect(r).toMatchObject({ ok: true, customer: 'cus_fund', subscription: 'sub_fund', invoice: 'in_fund', number: 'CB-0001', due_date: '2025-12-12', hosted_invoice_url: 'https://invoice.stripe.com/i/x' });
     const posted = (p: string) => calls.find((c) => c.method === 'POST' && c.path === p)!.body;
     const footer = posted('customers').get('invoice_settings[footer]')!;
     // The order terms: the seats, the locked founding price, renewal and cancellation, net 30, and /terms/.
-    for (const s of ['Copy Fund, 10 seats', 'Founding price $1,990 a year, locked for as long as this subscription stays active', 'Renews each year at that price until cancelled', 'Cancel any time from Manage billing', 'payable within 30 days', `${SITE}terms/`]) expect(footer).toContain(s);
+    for (const s of ['Copy Fund, up to 10 seats', 'Founding price $1,990 a year for up to 10 seats, whatever number are used, locked for as long as this subscription stays active', 'Terms in force on the invoice date', 'Renews each year at that price until cancelled', 'Cancel any time from Manage billing', 'payable within 30 days', `${SITE}terms/`]) expect(footer).toContain(s);
     expect(posted('customers').get('email')).toBe('pm@fund.test');
     expect(Object.fromEntries(['customer', 'items[0][price]', 'collection_method', 'days_until_due', 'metadata[copybook]'].map((k) => [k, posted('subscriptions').get(k)]))).toEqual({ customer: 'cus_fund', 'items[0][price]': 'price_fund_yearly', collection_method: 'send_invoice', days_until_due: '30', 'metadata[copybook]': 'fund' });
     expect(posted('invoices/in_fund').get('description')).toBe(footer);
+    // The customer's PO prints on the invoice.
+    expect([posted('invoices/in_fund').get('custom_fields[0][name]'), posted('invoices/in_fund').get('custom_fields[0][value]')]).toEqual(['PO', 'PO-7781']);
     expect(calls.map((c) => `${c.method} ${c.path}`).slice(-3)).toEqual(['POST invoices/in_fund', 'POST invoices/in_fund/finalize', 'POST invoices/in_fund/send']);
     vi.stubGlobal('fetch', orig);
   });

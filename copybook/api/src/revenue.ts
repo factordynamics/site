@@ -149,9 +149,9 @@ const FOUNDING: Record<string, string> = { pro: 'Your founding price stays at $3
  * invoices carry them in the footer (Stripe's customer default), and a net-30 invoice also in its memo.
  */
 export const fundTerms = (env: Env) =>
-  `Order terms: Copy Fund, ${SEAT_LIMIT} seats (add and remove them on ${env.SITE_URL}account/). Founding price $1,990 a year, locked for as long as this subscription stays active. ` +
-  `Renews each year at that price until cancelled. Cancel any time from Manage billing; access runs to the end of the paid year, and partial years aren't refunded. ` +
-  `Invoices are payable within 30 days. Terms: ${env.SITE_URL}terms/`;
+  `Order terms: Copy Fund, up to ${SEAT_LIMIT} seats (manage them at ${env.SITE_URL}account/). Founding price $1,990 a year for up to ${SEAT_LIMIT} seats, whatever number are used, locked for as long as this subscription stays active. ` +
+  `The service period is shown on the line item. Renews each year at that price until cancelled. Cancel any time from Manage billing; access runs to the end of the paid year, and partial years aren't refunded. ` +
+  `Invoices are payable within 30 days. Terms in force on the invoice date: ${env.SITE_URL}terms/`;
 
 /** A Fund customer's invoice footer: the order terms, set once (a Fund checkout or net-30 order). */
 export async function ensureFundTerms(env: Env, customer: string): Promise<'set' | 'already'> {
@@ -165,7 +165,8 @@ export async function ensureFundTerms(env: Env, customer: string): Promise<'set'
  * Operator: a team that buys Copy Fund by invoice. A yearly Fund subscription billed net 30 (the webhook makes the
  * member as for a checkout); its first invoice carries the order terms as memo and footer and is emailed now.
  */
-export async function fundInvoice(env: Env, email: string, name?: string) {
+/** A net-30 yearly Fund order, invoiced now; `po`: the customer's purchase order, printed on the invoice as "PO". */
+export async function fundInvoice(env: Env, email: string, name?: string, po?: string) {
   const found = (await stripe(env, 'GET', 'customers', { email, limit: 1 })).data?.[0];
   const customer: string = found?.id ?? (await stripe(env, 'POST', 'customers', { email, name, 'invoice_settings[footer]': fundTerms(env) })).id;
   if (found) await ensureFundTerms(env, customer);
@@ -175,7 +176,7 @@ export async function fundInvoice(env: Env, email: string, name?: string) {
   let inv = await stripe(env, 'GET', `invoices/${sub.latest_invoice}`);
   // A draft takes the terms as its memo too (a finalized one already has them in the footer); then it goes out now.
   if (inv.status === 'draft') {
-    await stripe(env, 'POST', `invoices/${inv.id}`, { description: fundTerms(env) });
+    await stripe(env, 'POST', `invoices/${inv.id}`, { description: fundTerms(env), ...(po ? { 'custom_fields[0][name]': 'PO', 'custom_fields[0][value]': po } : {}) });
     inv = await stripe(env, 'POST', `invoices/${inv.id}/finalize`);
   }
   inv = await stripe(env, 'POST', `invoices/${inv.id}/send`);
