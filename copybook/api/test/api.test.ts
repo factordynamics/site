@@ -428,6 +428,15 @@ describe('copybook api', () => {
     const ch = await call('/channels', { method: 'PUT', body: { email: false }, token: r.token });
     const me0 = await (await call('/me', { token: r.token })).json();
     const card = await (await call('/portal/card', { method: 'POST', token: r.token })).json();
+    // Reads answer before the link (the lead, Nov 11): insider events, history; nothing is delivered until it's opened.
+    secFiles['company:0000723125:4'] = '<feed></feed>';
+    const ev = await call('/events?tickers=MU&window=quarter', { token: r.token });
+    const hi = await call('/history/warren-buffett', { token: r.token });
+    expect([ev.status, hi.status === 403]).toEqual([200, false]);
+    const ackman = { slug: 'bill-ackman', slugs: ['bill-ackman'], manager: 'Bill Ackman', name: 'Pershing Square', quarter: '2026Q3', report_date: '2026-09-30', filing_date: new Date().toISOString().slice(0, 10), accession: '0001336528-26-000099', sec_url: 'https://www.sec.gov/x', accepted: new Date().toISOString(), moves: { bought_usd: 5e6, sold_usd: 0, new: [], added: [{ ticker: 'HHH', display_name: null, issuer: 'HHH', cusip: '44267T102', put_call: null, shares: 10, prev_shares: 5, value: 1e7, value_delta: 5e6, change: 'added' }], trimmed: [], exited: [] } };
+    const before = sent.length;
+    await (await import('../src/alerts')).deliver(env, [ackman as never], [], Date.now());
+    expect(sent.slice(before).filter((x) => x.to.includes('fast@example.com'))).toEqual([]);
     // A pasted book saves too (the trader, Nov 11); linking a 13F filer waits for the link.
     const bk = await call('/book/import', { method: 'POST', body: { text: 'CRM, MU' }, token: r.token });
     const bkc = await call('/book/import', { method: 'POST', body: { cik: '0001067983' }, token: r.token });
@@ -435,7 +444,7 @@ describe('copybook api', () => {
     // A Copy subscription from before Feb 1, 2027 holds the founding price; a monthly one has no yearly perks.
     expect([me0.member.founding_price, me0.member.yearly_perks]).toEqual([true, false]);
     expect([r.delivery, fo.ok, fo.delivery, ch.status, (await ch.json()).delivery, me0.member?.delivery ?? me0.delivery, /^https:\/\/billing\.stripe\.com\//.test(card.url)]).toEqual(['pending_email_confirmation', true, 'pending_email_confirmation', 200, 'pending_email_confirmation', 'pending_email_confirmation', true]);
-    for (const [method, path, body] of [['GET', '/keys'], ['POST', '/keys', { name: 'x' }], ['POST', '/channels/test'], ['POST', '/portal'], ['GET', '/seats'], ['POST', '/handoff'], ['POST', '/me/sessions/revoke'], ['GET', '/history/warren-buffett']] as [string, string, unknown?][]) {
+    for (const [method, path, body] of [['GET', '/keys'], ['POST', '/keys', { name: 'x' }], ['POST', '/channels/test'], ['POST', '/portal'], ['GET', '/seats'], ['POST', '/handoff'], ['POST', '/me/sessions/revoke']] as [string, string, unknown?][]) {
       const res = await call(path, { method, body, token: r.token });
       expect([path, res.status, (await res.json()).code]).toEqual([path, 403, 'verify_email']);
     }

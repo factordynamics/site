@@ -1327,11 +1327,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: 'sign in required', code }, 401, h);
   }
 
-  // A provisional session reads /me and saves follows (a pasted or CSV book too; linking a 13F waits), channels and its alert scope (delivery waits for the emailed link:
+  // A provisional session reads (below) and saves follows (a pasted or CSV book too; linking a 13F waits), channels and its alert scope (delivery waits for the emailed link:
   // email_pending), and adds a card (POST /portal/card); API keys, channel tests, the full billing portal, seats, a
   // cross-origin handoff and "sign out everywhere" (which mints a full session) wait for the link. Starting the trial
   // needs no session (POST /checkout).
-  const setup = (req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/') || (req.method === 'POST' && (path === '/portal/card' || path === '/yearly' || path === '/book/import')) || (!!m.email_pending && ((path === '/channels' && (req.method === 'GET' || req.method === 'PUT')) || (req.method === 'POST' && path === '/alerts')));
+  // Reads too (the lead, Nov 11): a no-card trial needs only an email, so gating its reads on the click protects nothing;
+  // /events, history, holdings and CSV links answer, and only delivery (email, chat, webhooks) waits for the link. API
+  // keys and seats stay behind it.
+  const read = (req.method === 'GET' && !/^\/(keys|seats)(\/|$)/.test(path)) || (req.method === 'POST' && path.startsWith('/csv-link/'));
+  const setup = read || (req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/') || (req.method === 'POST' && (path === '/portal/card' || path === '/yearly' || path === '/book/import')) || (!!m.email_pending && ((path === '/channels' && (req.method === 'GET' || req.method === 'PUT')) || (req.method === 'POST' && path === '/alerts')));
   if (PROVISIONAL.has(m) && !setup) {
     return json({ ok: false, error: 'Open the sign-in link we emailed you to do this.', code: 'verify_email', delivery: 'pending_email_confirmation' }, 403, h);
   }
