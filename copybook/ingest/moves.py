@@ -67,6 +67,9 @@ HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) i
 SITE_TOP = 500  # hlr/: rows per stock for the site's d/h pages (as before, now from full books), plus every
 SITE_PARTS = 4  # hedge-fund and long-only holder, so the lens lists and counts are complete
 CONS: dict[tuple[str, str], float] = {}  # (quarter, cusip) -> median implied price over every filer
+# (cik, quarter, cusip): lines a curated book refused to rescale x1000 (build.fix_with_consensus: its cover total equals
+# the lines as filed). The fb/ copy has no cover total, so it follows that verdict (Mizuho Securities USA 2026Q3 ON, AKAM).
+REJECTED: set[tuple[str, str, str]] = set()
 FIXED = [0]
 
 
@@ -122,6 +125,8 @@ def book(rec: dict | None) -> dict | None:
         h["ticker"] = h.get("ticker") or (SECS.get(h.get("cusip") or "") or {}).get("ticker")
         if not h["put_call"] and h["shares_type"] == "SH" and h.get("shares") and h.get("value"):
             f = consensus_factor(h["value"] / h["shares"], CONS.get((rec.get("quarter"), h.get("cusip"))))
+            if (rec.get("cik"), rec.get("quarter"), h.get("cusip")) in REJECTED:
+                f, h["price_outlier"], h["value_rescale"] = 1.0, True, "rejected"
             if f != 1.0:  # a line filed in thousands (or 1000x too large) against every other filer's price
                 if h.get("value_as_filed") is None:  # the book's own as-filed value wins when it has one
                     h["value_as_filed"] = h["value"]
@@ -948,6 +953,9 @@ def main() -> int:
         return 0
     build.SPLITS.clear()
     build.SPLITS.update(sp.table())
+    for m in (read(DATA / "index.json") or {}).get("managers") or []:
+        b = read(DATA / f"{m.get('slug')}.json") or {}
+        REJECTED.update((m["cik"], b.get("quarter"), h["cusip"]) for h in b.get("holdings") or [] if h.get("value_rescale") == "rejected")
     SECS.update(read(DATA / "securities.json") or {})
     ACCEPTED.update(read(DATA / "accepted.json") or {})
     shards = [s for p in sorted((DATA / "f").glob("*.json")) if (s := read(p))]

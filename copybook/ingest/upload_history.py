@@ -66,7 +66,9 @@ BUNDLE_ENTRIES = 20
 BUNDLE_BYTES = 1_000_000  # plain tars only
 BUNDLE_RAW_BYTES = 2_000_000  # uncompressed; about 0.5 MB gzipped on the wire
 GZIP = [os.environ.get("COPYBOOK_UPLOAD_GZIP", "1") != "0"]  # cleared when the API refuses a gzipped bundle
-ORDER = ("h/", "bulk/", "hl/", "fb/")  # sent first, in this order (bulk early: few, large files)
+# Sent first, in this order: new filings' h/ books (fresh_only), then the holder index (what /v1 ticker views and net
+# read: on Nov 11 a reshape of every h/ book queued 26k files ahead of it), then the rest (bulk early: few, large files).
+ORDER = ("hl/", "h/", "bulk/", "fb/")
 PROBE_MAX_S = 1.0  # gene's /health?probe=1 (ms when idle) slower than this: members are waiting, so the backlog backs off
 FRESH_MAX = 60  # files per run in EDGAR hours: a few new filings' h/ books, never the backlog
 QUIET_LEAD_S = 90  # no bundle starts this close to a COPYBOOK_UPLOAD_QUIET window (one bundle takes 3-30 s)
@@ -213,7 +215,9 @@ def main() -> int:
             if manifest.get(key) != digest:
                 todo.append((key, path, digest))
     pair = link_files(root)
-    rank = lambda key: pair[key] - 2 if key in pair else next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
+    first = {k for k, _, _ in fresh_only(todo)}
+    rank = lambda key: -4 if key in first else pair[key] - 2 if key in pair else \
+        next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
     todo.sort(key=lambda t: (rank(t[0]), t[0]))
     if edgar_hours(datetime.now(timezone.utc)) and os.environ.get("COPYBOOK_UPLOAD_ANYTIME") != "1":
         held = len(todo)
