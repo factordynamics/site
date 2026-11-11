@@ -349,6 +349,8 @@ export const resumePlan = () => call<{ ok: boolean }>('/pause', { method: 'DELET
 export const sendCancelReason = (reason: CancelReason, note?: string) => call<{ ok: boolean }>('/cancel-reason', { body: { reason, ...(note ? { note } : {}) }, auth: true })
 /** Throws when the sign-in email can't be queued (a 5xx or no answer in 15 s), so the form can say so. */
 export const requestLogin = (email: string) => call<{ ok: boolean }>('/login', { body: { email }, timeout: 15_000 })
+/** Stripe's confirm page for the same subscription at the yearly price (POST /yearly); it returns to /account/?kept=yearly. */
+export const switchYearly = () => call<{ url: string }>('/yearly', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
 /** Stripe's add-a-card form (POST /portal/card); it returns to /account/?card=added. */
 export const addCard = () => call<{ url: string }>('/portal/card', { method: 'POST', auth: true }).then((r) => (window.location.href = r.url))
 /** The address waiting on its sign-in link: /me's delivery, else this device's provisional session. */

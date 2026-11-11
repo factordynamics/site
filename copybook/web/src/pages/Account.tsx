@@ -17,10 +17,10 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Signup } from '../components/Signup'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
-import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
+import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS, prices } from '../config'
 import { ApiStatus, Updating } from '../components/ApiStatus'
 import { ConfirmEmail } from '../components/ConfirmEmail'
-import { addCard, ApiError, call, errText, pendingEmail, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { addCard, switchYearly, ApiError, call, errText, pendingEmail, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
@@ -251,6 +251,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
               endLabel && !cancelling && !paused && ` · ${trial ? `trial ends ${endLabel}` : member.active ? `renews ${endLabel}` : `ends ${endLabel}`}`
             )}
           </p>
+          {member.plan === 'copy' && member.interval === 'monthly' && !member.seat && member.collection !== 'send_invoice' && !cancelling && !paused && <ToYearly />}
           {trial && member.has_payment_method === false && !cancelling && <NoCard end={endLabel} day={end?.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })} />}
           {member.seat ? (
             <p className="mt-4 rounded-xl bg-accent-soft px-3.5 py-2.5 text-[14px] text-accent-2">
@@ -889,6 +890,37 @@ function InvoiceSwitch({ onChange }: { onChange: (m: Member) => void }) {
       </button>
       {err && (
         <span role="alert" className="text-[12.5px] text-down">
+          {err}
+        </span>
+      )}
+    </p>
+  )
+}
+
+/** Monthly Copy, trial or paying: the yearly founding price, one click to Stripe's confirm page (POST /yearly). */
+function ToYearly() {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13.5px] text-ink-2">
+      <span>Founding price ${prices.yearly}/yr, locked. Goes to $99 for new members Feb 1.</span>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true)
+          setErr('')
+          switchYearly().catch((e) => {
+            setBusy(false)
+            setErr(e instanceof ApiError && (e.code === 'already_yearly' || e.code === 'no_subscription') ? 'Nothing to switch on this plan.' : errText(e, 'That didn’t open. Please try again.'))
+          })
+        }}
+        className="font-medium text-accent hover:text-accent-2 disabled:opacity-60"
+      >
+        {busy ? 'Opening…' : 'Switch to yearly →'}
+      </button>
+      {err && (
+        <span role="alert" className="basis-full text-[12.5px] text-down">
           {err}
         </span>
       )}

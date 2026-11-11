@@ -10,7 +10,7 @@ import { FollowButton } from '../components/FollowButton'
 import { HedgeFlow } from '../components/HedgeFlow'
 import { EdgarClosed } from '../components/EdgarClosed'
 import { checkoutEnabled, plans, TRIAL_DAYS, TRIAL_LINE } from '../config'
-import { attributed, referredCheckout } from '../lib/attribution'
+import { copyCheckout } from '../lib/attribution'
 import { dateFmt, dateLabel, displayName, loadIndex, money, NUM, pricingTo, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { seasonTitle } from '../lib/titles.mjs'
 import { thirteenFStats } from '../lib/latencyStats.mjs'
@@ -41,13 +41,11 @@ const dueLabel = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' })
 
 
-// /season/'s trial buttons open Copy monthly's Payment Link directly, skipping /pricing/ (trader, Nov 11), with the
-// visitor's utm and client_reference_id (…-from-season); /pricing/ only if checkout isn't configured.
-const seasonCheckout = () => (checkoutEnabled() && plans.copy.links.monthly ? attributed(plans.copy.links.monthly, 'season') : undefined)
-const trialProps = () => {
-  const href = seasonCheckout()
-  return href ? { href, onClick: referredCheckout('copy', 'monthly', href) } : { to: pricingTo(), onClick: () => track('trial_click') }
-}
+// /season/'s trial buttons go straight to Copy monthly's Checkout through POST /checkout (trader, Nov 11; the lead:
+// never the Payment Link, which skips the one-trial check), with the utm and source from-season; /pricing/ only if
+// checkout isn't configured.
+const seasonCheckout = () => checkoutEnabled() && Boolean(plans.copy.links.monthly)
+const trialProps = () => (seasonCheckout() ? { onClick: copyCheckout('monthly', 'season') } : { to: pricingTo(), onClick: () => track('trial_click') })
 
 const TrialButton = () => (
   <Button {...trialProps()} className="shrink-0">

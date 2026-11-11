@@ -1,4 +1,4 @@
-import { apiReady } from '../config'
+import { apiReady, checkout } from '../config'
 import { track } from './track'
 // Carries the landing UTMs to Stripe so on-site sales are attributed like direct links:
 // client_reference_id={source}_{content} (marketing link contract), plus the utm_* fields.
@@ -47,6 +47,17 @@ export function utmTags() {
   }
 }
 
+/** A signed-in free or cancelled member checks out with their account's email, so the plan lands on the same account
+ *  (and payments' one-trial-per-person check sees it); else the address this browser signed up with. */
+function knownEmail(): string | null {
+  try {
+    const last = JSON.parse(localStorage.getItem('copybook-me-last') ?? 'null') as { member?: { email?: string; active?: boolean } } | null
+    return last?.member?.email && !last.member.active && localStorage.getItem('copybook-session') ? last.member.email : localStorage.getItem('copybook-signup-email')
+  } catch {
+    return null
+  }
+}
+
 /** A Stripe Payment Link with the visitor's attribution attached, and the page the trial came from (`from`: the
  *  ?from= that /pricing/ was opened with, or the page itself, as on /season/), so a trial started from Buffett's
  *  page records it: client_reference_id direct_site-from-warren-buffett, or x_season-from-warren-buffett. */
@@ -59,14 +70,8 @@ export function attributed(link: string, from = new URLSearchParams(location.sea
     t = null
   }
   const u = new URL(link)
-  // A signed-in free or cancelled member checks out with their account's email, so the plan lands on the same account.
-  try {
-    const last = JSON.parse(localStorage.getItem('copybook-me-last') ?? 'null') as { member?: { email?: string; active?: boolean } } | null
-    const email = last?.member?.email && !last.member.active && localStorage.getItem('copybook-session') ? last.member.email : localStorage.getItem('copybook-signup-email')
-    if (email) u.searchParams.set('prefilled_email', email)
-  } catch {
-    /* storage blocked */
-  }
+  const email = knownEmail()
+  if (email) u.searchParams.set('prefilled_email', email)
   const via = from && /^[A-Za-z0-9.-]{1,60}$/.test(from) ? `-from-${clean(from)}` : ''
   u.searchParams.set('client_reference_id', `${t ? `${clean(t.source)}_${clean(t.content || 'none')}` : 'direct_site'}${via}`)
   if (t) {
@@ -130,5 +135,36 @@ export function referredCheckout(plan: 'copy' | 'pro' | 'fund', interval: 'month
       .catch(() => {
         window.location.href = fallback
       })
+  }
+}
+
+let opening = false
+/** Click handler for every Copy trial button: POST /checkout (Copy, with the referral code, the utm, the landing page and
+ *  the page the trial came from as `source`), then Stripe's session URL. Never a Payment Link href: those skip payments'
+ *  one-trial-per-person check and make a Stripe session whenever anything loads them (Nov 11's bot sessions). Only if
+ *  the API can't start one does the click fall back to the Payment Link, so a buyer is never stuck. */
+export function copyCheckout(interval: 'monthly' | 'yearly', from = new URLSearchParams(location.search).get('from')) {
+  return (e?: { preventDefault: () => void }) => {
+    e?.preventDefault()
+    if (opening) return
+    opening = true
+    track('trial_click', `${location.pathname}#copy_${interval}`)
+    const ref = refCode()
+    const tags = utmTags() as Record<string, string>
+    const page = from && /^[A-Za-z0-9.-]{1,60}$/.test(from) ? from : null
+    const email = knownEmail()
+    const body = { plan: 'copy', interval, ...(ref ? { ref } : {}), ...(email ? { email } : {}), ...(page ? { source: `from-${page}` } : tags.utm_source ? { source: tags.utm_source } : {}), utm_source: tags.utm_source, utm_content: tags.utm_content, landing: location.pathname }
+    apiReady
+      .then((base) => fetch(`${base}/checkout`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) }))
+      .then((r) => (r.ok ? (r.json() as Promise<{ url: string; referral: { applied: boolean } | null }>) : Promise.reject(new Error(String(r.status)))))
+      .then((r) => {
+        if (r.referral && !r.referral.applied) localStorage.removeItem(REF)
+        window.location.href = r.url
+      })
+      .catch(() => {
+        const link = checkout[interval] || checkout.monthly
+        if (link) window.location.href = attributed(link, page)
+      })
+      .finally(() => setTimeout(() => (opening = false), 3000))
   }
 }

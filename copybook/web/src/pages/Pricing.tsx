@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Fragment, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button, Check } from '../components/ui'
-import { attributed, checkRef, referredCheckout, refCode, utmTags } from '../lib/attribution'
+import { attributed, checkRef, copyCheckout, referredCheckout, refCode, utmTags } from '../lib/attribution'
 import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { thirteenFStats } from '../lib/latencyStats.mjs'
 import { displayName, money, useAsync, useTitle } from '../lib/data'
@@ -309,7 +309,7 @@ export function Pricing() {
                     Start a trial, pay by invoice
                   </Button>
                 ) : live ? (
-                  <Button href={attributed(link)} onClick={referredCheckout(tier.id as 'copy' | 'pro', cycle, attributed(link))} variant={dark ? 'primary' : 'dark'} className="w-full">
+                  <Button {...(tier.id === 'copy' ? { onClick: copyCheckout(cycle) } : { href: attributed(link), onClick: referredCheckout('pro', cycle, attributed(link)) })} variant={dark ? 'primary' : 'dark'} className="w-full">
                     Start {TRIAL_DAYS}-day free trial
                   </Button>
                 ) : (

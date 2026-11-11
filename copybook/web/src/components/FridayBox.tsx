@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { TRIAL_DAYS, TRIAL_LINE } from '../config'
 import { pricingTo } from '../lib/data'
 import { track } from '../lib/track'
-import { referredCheckout } from '../lib/attribution'
+import { copyCheckout } from '../lib/attribution'
 import { FollowSignup } from './FollowSignup'
 import { Arrow, Button } from './ui'
 
@@ -19,7 +19,7 @@ export const FAMOUS = [
   { slug: 'seth-klarman', name: 'Seth Klarman' },
 ]
 
-export function FridayBox({ title, people, others, collapsed = false, kind = 'investor', trial, checkout, top, after, className = '' }: { title: string; people: { slug: string; name: string }[]; others?: { slug: string; name: string }[]; collapsed?: boolean; kind?: 'investor' | 'stock'; trial: ReactNode; checkout?: string; top?: ReactNode; after?: ReactNode; className?: string }) {
+export function FridayBox({ title, people, others, collapsed = false, kind = 'investor', trial, checkout, top, after, className = '' }: { title: string; people: { slug: string; name: string }[]; others?: { slug: string; name: string }[]; collapsed?: boolean; kind?: 'investor' | 'stock'; trial: ReactNode; checkout?: boolean; top?: ReactNode; after?: ReactNode; className?: string }) {
   return (
     <div className={`rounded-xl bg-accent-soft px-4 py-3.5 text-[15px] leading-snug text-accent-2 ${className}`}>
       {top}
@@ -31,8 +31,8 @@ export function FridayBox({ title, people, others, collapsed = false, kind = 'in
       <div className="mt-4 border-t border-accent/20 pt-4">
         <p className="text-[14px] text-ink-2">{trial}</p>
         {/* One solid button per box: the free email's. The trial stays outline (retail, Nov 11). */}
-        {/* `checkout`: a Payment Link to open directly (/season/), skipping /pricing/. */}
-        <Button {...(checkout ? { href: checkout, onClick: referredCheckout('copy', 'monthly', checkout) } : { to: pricingTo(), onClick: () => track('trial_click') })} variant="outline" className="mt-2.5 shrink-0">
+        {/* `checkout`: straight to Copy monthly's Checkout through POST /checkout (/season/), skipping /pricing/. */}
+        <Button {...(checkout ? { onClick: copyCheckout('monthly', 'season') } : { to: pricingTo(), onClick: () => track('trial_click') })} variant="outline" className="mt-2.5 shrink-0">
           Start {TRIAL_DAYS}-day free trial
         </Button>
         <p className="mt-1.5 text-[12.5px] text-ink-3">{TRIAL_LINE}</p>
