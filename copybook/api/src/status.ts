@@ -32,6 +32,8 @@ export interface Restart {
   kind: 'deploy' | 'unplanned' | 'short_unconfirmed';
   build?: string | null;
   prev_build?: string | null;
+  /** An operator's label for a restart the probe couldn't classify. */
+  note?: string;
 }
 
 const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -119,7 +121,8 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
   const week = now - 7 * 86400_000;
   const recent = s.restarts.filter((r) => Date.parse(r.at) >= week);
   const fresh = JSON.parse((await env.DB.get('status:fresh')) ?? 'null') as { data_built_at: string | null; build_id: string | null; last_13f: { slug: string; manager: string; accession: string; accepted_at: string } | null } | null;
-  const poller = JSON.parse((await env.DB.get('host:poller')) ?? 'null') as { host: string; last_run_at: string | null } | null;
+  // Written by Cloudflare's cron, which runs this only while it is the poller.
+  const poller = { host: 'cloudflare', last_run_at: iso(Math.floor(now / 60_000) * 60_000) };
   return {
     ok: true,
     generated_at: iso(Math.floor(now / 60_000) * 60_000),

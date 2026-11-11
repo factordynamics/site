@@ -433,13 +433,16 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
       if (mine.filings.length || mine.events.length) mails.push({ ...holdtermAlertMail(env, raw.email, mine.filings, mine.events), test: !!raw.test || testAddress(raw.email), ids: [...mine.filings.map((a) => a.accession), ...mine.events.map((e) => e.id)] });
       continue;
     }
-    const f = await getFollows(env, raw);
+    // An operator's hand-off replay (test members only): the filer counts as followed, and it goes by email alone.
+    const replay = !!only && filings.some((a) => a.replay_to?.includes(raw.customer));
+    const f0 = await getFollows(env, raw);
+    const f = replay ? { ...f0, investors: [...new Set([...f0.investors, ...filings.flatMap((a) => a.slugs)])] } : f0;
     const m = await scoped(env, raw, f);
     const mine = forMember(m, f, filings, events, meta);
     if (!mine.filings.length && !mine.events.length) continue;
     await countAlerts(env, m.customer, mine.filings, mine.events, f.owned, now, !!only);
     // Chat, feed and webhook get every alert as it happens, whatever the email schedule.
-    const ch = await getChannels(env, m.customer);
+    const ch = replay ? ({} as Awaited<ReturnType<typeof getChannels>>) : await getChannels(env, m.customer);
     if (ch.discord || ch.slack || ch.telegram) chats.push(...Object.entries(await sendChats(env, m.customer, ch, mine.filings, mine.events, f, now, posted)).map(([k, v]) => `${k} ${v}`));
     if (ch.webhook) await sendWebhooks(env, m, ch, mine.filings, mine.events, now, posted);
     if (ch.feed_token) await addToFeed(env, m, ch, mine.filings, mine.events, now);
@@ -478,7 +481,8 @@ async function fanOut(env: Env, filings: Alert13F[], events: AlertEvent[], now: 
         }
       }
       if (test && !only) await env.DB.put(testMailKey(m.customer, now), String(n + 1), { expirationTtl: 2 * 86400 });
-      mails.push({ ...alertMail(env, m.email, send.filings, send.events, f, m), test, ids: [...send.filings.map((a) => a.accession), ...send.events.map((e) => e.id)] });
+      const am = alertMail(env, m.email, send.filings, send.events, f, m);
+      mails.push({ ...am, ...(replay ? { subject: `Replay (test): ${am.subject}` } : {}), test, ids: [...send.filings.map((a) => a.accession), ...send.events.map((e) => e.id)] });
       notes.push(m);
     }
   }

@@ -742,14 +742,15 @@ describe('copybook api', () => {
     expect(sent).toHaveLength(0);
 
     // The operator's hand-off replay (FMR's): test members only, to them alone, timed apart from live latency.
-    await putMember('t', 'copybook-test-replay@fldubai.com', 'active', ['dan-loeb']);
-    await putFollows('t', { investors: ['dan-loeb'], stocks: [] });
+    // The test member needn't follow the filer: a replay counts it as followed, by email only.
+    await putMember('t', 'copybook-test-replay@fldubai.com', 'active', []);
+    await putFollows('t', { investors: [], stocks: [] });
     const rq = (b: Record<string, unknown>) => handleRequest(new Request('https://api.test/ops/moves-requeue', { method: 'POST', body: JSON.stringify(b), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env);
     expect((await rq({ accessions: [big], replay_to: ['n'] })).status).toBe(400);
     expect(await (await rq({ accessions: [big], replay_to: ['t'] })).json()).toMatchObject({ ok: true, queued: [big] });
     const logged = JSON.parse((await env.DB.get('alerts:latency'))!).length;
     await geneMoves(env, Date.now());
-    expect(sent.map((m) => m.to[0])).toEqual(['copybook-test-replay@fldubai.com']);
+    expect(sent.map((m) => [m.to[0], m.subject.startsWith('Replay (test): ')])).toEqual([['copybook-test-replay@fldubai.com', true]]);
     expect(sent[0].text).toContain('New: MICROSOFT CORP +$300.0M');
     expect(JSON.parse((await env.DB.get('alerts:latency'))!).length).toBe(logged);
     const rp = await (await handleRequest(new Request('https://api.test/ops/moves-replays', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
