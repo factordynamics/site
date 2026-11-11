@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Resvg } from '@resvg/resvg-js'
-import { displayName } from '../src/lib/names.mjs'
+import { displayName, possessive } from '../src/lib/names.mjs'
 import { dayName, isEdgarDay } from '../src/lib/calendar.mjs'
 import { recapFilers, recapTitle } from '../src/lib/titles.mjs'
 import { getJson } from './getjson.mjs'
@@ -117,12 +117,12 @@ for (let i = 0; i < recent.length; i += 16) {
     writeFileSync(join(out, 'd', 'f', `${c.accession}.json`), JSON.stringify(c))
     const png = new Resvg(svg(c), { font: { fontFiles, loadSystemFonts: false, defaultFontFamily: 'Geist' }, fitTo: { mode: 'width', value: 1200 } }).render().asPng()
     writeFileSync(join(out, 'og', 'f', `${c.accession}.png`), png)
-    const title = `${c.manager}’s ${qLabel(c.quarter)} 13F: top moves · Copybook`
+    const title = `${possessive(c.manager)} ${qLabel(c.quarter)} 13F: top moves · Copybook`
     const top = moves.slice(0, 3).map((m) => `${m.change === 'new' ? 'new' : m.change} ${m.ticker || m.name} ${m.value_delta >= 0 ? '+' : '−'}${money(m.value_delta)}`)
     const desc = `${c.manager} filed a ${qLabel(c.quarter)} 13F on ${dLabel(c.filing_date)}: ${top.join(', ')}. Bought ${money(c.bought_usd)}, sold ${money(c.sold_usd)}, from the SEC filing.`
     // A hash of the image bytes, so X and Slack refetch the card when a rebuild changes its numbers.
     const img = `${SITE}og/f/${c.accession}.png?v=${createHash('sha1').update(png).digest('hex').slice(0, 10)}`
-    const alt = `${c.manager}’s ${qLabel(c.quarter)} 13F: bought ${money(c.bought_usd)}, sold ${money(c.sold_usd)}${top.length ? `; top moves ${top.join(', ')}` : ''}`
+    const alt = `${possessive(c.manager)} ${qLabel(c.quarter)} 13F: bought ${money(c.bought_usd)}, sold ${money(c.sold_usd)}${top.length ? `; top moves ${top.join(', ')}` : ''}`
     const html = shell
       // Function replacers only: descriptions hold dollar amounts like "$1.7B", which a replacement
       // string would read as the $1 backreference.

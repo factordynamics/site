@@ -8,6 +8,8 @@ type Touch = { source: string; content?: string; campaign?: string; medium?: str
 const clean = (s: string) => s.replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 90)
 
 /** Record the latest campaign touch (or external referrer) for 30 days. Call once on load. */
+const SESSION_KEY = 'copybook-utm-first'
+
 export function captureAttribution() {
   try {
     const q = new URLSearchParams(location.search)
@@ -20,6 +22,9 @@ export function captureAttribution() {
       if (host && host !== location.hostname) touch = { source: host, content: 'referral', exp: Date.now() + 30 * DAY }
     }
     if (touch) localStorage.setItem(KEY, JSON.stringify(touch))
+    // The post that brought the reader this session wins over later landings in the same session, so a
+    // signup on a second page still credits it.
+    if (touch && !sessionStorage.getItem(SESSION_KEY)) sessionStorage.setItem(SESSION_KEY, JSON.stringify(touch))
   } catch {
     // Storage blocked: checkout links stay unattributed.
   }
@@ -28,7 +33,7 @@ export function captureAttribution() {
 /** The landing campaign's utm_* tags (or the external referrer as utm_source), for POST /signup. */
 export function utmTags() {
   try {
-    const t = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Touch | null
+    const t = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? localStorage.getItem(KEY) ?? 'null') as Touch | null
     if (!t || Date.now() > t.exp) return {}
     const out: Record<string, string> = { utm_source: t.source }
     if (t.medium) out.utm_medium = t.medium

@@ -4,6 +4,7 @@ import { TRIAL_DAYS } from '../config'
 import { ApiError, call } from '../lib/account'
 import { utmTags } from '../lib/attribution'
 import { pricingTo } from '../lib/data'
+import { possessive } from '../lib/names.mjs'
 import { track } from '../lib/track'
 import { Button, Check } from './ui'
 
@@ -17,7 +18,7 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
   const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'error'; following?: boolean; msg?: string }>({ s: 'idle' })
   const [slow, setSlow] = useState(false)
   useEffect(() => track('signup_view'), [])
-  const who = people.length === 1 ? `${people[0].name}’s` : 'their'
+  const who = people.length === 1 ? possessive(people[0].name) : 'their'
   const got = kind === 'stock' ? `You’ll get superinvestor moves in ${people[0].name} in Friday’s email.` : `You’ll get ${who} moves in Friday’s email.`
   const id = `follow-${people.map((p) => p.slug).join('-').slice(0, 60)}`
 
@@ -34,7 +35,8 @@ export function FollowSignup({ people, kind = 'investor', label, className = '',
           Want each 13F as it’s filed?{' '}
           <Link to={pricingTo()} onClick={() => track('trial_click')} className="font-medium text-accent hover:text-accent-2">
             Try Copy free for {TRIAL_DAYS} days
-          </Link>
+          </Link>{' '}
+          (card required).
         </p>
       </div>
     )

@@ -1,4 +1,4 @@
-import { loadFilers, loadIndex, useAsync, useTitle } from '../lib/data'
+import { loadFilers, loadIndex, quarterLabel, useAsync, useTitle } from '../lib/data'
 import { Link } from 'react-router-dom'
 import { Onboarding } from '../components/Onboarding'
 import { ApiKeys } from '../components/ApiKeys'
@@ -11,7 +11,7 @@ import { CopySetup } from '../components/CopySetup'
 import { dayLabel, Paused, timeLabel } from '../components/Paused'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
-import { stockPath } from '../lib/stocks'
+import { loadExpected, shortDay, stockPath } from '../lib/stocks'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { WaitlistForm } from '../components/Waitlist'
@@ -471,8 +471,9 @@ function Free({ member, onOut }: { member: Member; onOut: () => void }) {
       <header>
         <p className="text-[13px] font-medium text-accent">Account</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em]">You’re on the free Friday email.</h1>
-        <p className="mt-3 text-[17px] text-ink-2">Every Friday evening: the week’s five biggest buys and sells by the investors we track, from SEC filings. Sent to {member.email}.</p>
+        <p className="mt-3 text-[17px] text-ink-2">Every Friday evening: moves by the investors and stocks you follow first, then the week’s five biggest buys and sells by the investors we track, from SEC filings. Sent to {member.email}.</p>
       </header>
+      <FreeFollows />
       <FreeNames className="mt-10" />
       <section className="mt-5 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between">
@@ -800,4 +801,35 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
 function deadlineQuarter(until: string | number) {
   const m = new Date(typeof until === 'number' ? until * 1000 : `${until}T12:00:00Z`).getUTCMonth() + 1
   return `Q${[4, 1, 2, 3][Math.floor((((m - 2) % 12) + 12) % 12 / 3)]}`
+}
+
+// A free member's followed investors, each with when its next 13F is expected (d/expected.json). Their
+// moves lead the Friday email; a per-filing email is Copy.
+function FreeFollows() {
+  const { follows, status } = useFollows()
+  const idx = useAsync(loadIndex, [])
+  const soon = useAsync(loadExpected, [])
+  if (status !== 'ready' || !follows.investors.length) return null
+  const q = soon.data ? quarterLabel(soon.data.quarter).split(' ')[0] : ''
+  const name = (slug: string) => idx.data?.managers.find((m) => m.slug === slug)?.manager ?? soon.data?.expected.find((x) => x.slug === slug)?.manager ?? slug
+  return (
+    <section className="mt-10 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)]">
+      <h2 className="text-[15px] font-semibold">Investors you follow</h2>
+      <ul className="mt-3 divide-y divide-line">
+        {follows.investors.map((slug) => {
+          const e = soon.data?.expected.find((x) => x.slug === slug)
+          return (
+            <li key={slug} className="py-2.5 text-[14px]">
+              <Link to={`/investors/${slug}/`} className="font-medium hover:text-accent">
+                {name(slug)}
+              </Link>
+              <span className="block text-[13px] text-ink-3">
+                {e?.expected_date ? `${q} expected ${shortDay(e.expected_date)} · ` : ''}moves in Friday’s email
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
 }

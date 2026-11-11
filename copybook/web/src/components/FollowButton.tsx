@@ -118,7 +118,8 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
                 Or get each 13F as it’s filed, with Copy. We check EDGAR every minute.{' '}
                 <Link to={pricingTo()} onClick={() => track('trial_click')} className="font-medium text-accent hover:text-accent-2">
                   Start 14-day free trial
-                </Link>
+                </Link>{' '}
+                (card required).
               </p>}
               <p className="mt-2 text-[12.5px] text-ink-3">
                 Have an account?{' '}

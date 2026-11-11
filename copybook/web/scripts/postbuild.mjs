@@ -4,6 +4,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getJson } from './getjson.mjs'
+import { ogCard } from './ogcard.mjs'
 import { displayName } from '../src/lib/names.mjs'
 import { API, API_JSON_URL } from '../api.config.mjs'
 import { dueLead, investorTitle, seasonTitle, stockTitle } from '../src/lib/titles.mjs'
@@ -17,9 +18,12 @@ const shell = readFileSync(join(dist, 'index.html'), 'utf8').replace('</head>', 
 const SITE = process.env.VITE_SITE || 'https://copybook.factordynamics.com/'
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
-function page(path, title, desc, extra = '', image = null, body = '') {
+function page(path, title, desc, extra = '', image = null, body = '', alt = null) {
   let html = shell
     .replaceAll(`${SITE}og.png`, () => image ?? `${SITE}og.png`)
+    // A page's own preview card says what it shows, for screen readers on X and Slack.
+    .replace(/(<meta property="og:image:alt" content=")[^"]*/, (m, p) => (alt ? p + esc(alt) : m))
+    .replace('<meta property="og:image:alt"', (m) => (alt ? `<meta name="twitter:image:alt" content="${esc(alt)}" />\n    ${m}` : m))
     // Function replacers only: a replacement string reads "$1.7B" in a description as the $1 backreference.
     .replace(/<title>.*?<\/title>/, () => `<title>${esc(title)}</title>`)
     .replace(/(<meta name="description" content=")[^"]*/, (_, p) => p + esc(desc))
@@ -47,6 +51,23 @@ const usd = (v) => (v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${(v /
 const qLabel = (q) => (q ? q.replace(/^(\d{4})Q(\d)$/, 'Q$2 $1') : 'latest')
 const dayLabel = (iso) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 const num = (v) => Number(v ?? 0).toLocaleString('en-US')
+// "often 10–11 am ET" from a superinvestor's last filing times (New York minutes after midnight), as the page says it.
+const hour = (m) => ({ h: ((Math.floor(m / 60) + 11) % 12) + 1, pm: m >= 720 })
+function usualTime(e) {
+  const [a, b] = e.time_range ?? [e.time_et, e.time_et]
+  const s = hour(a)
+  const t = hour(b)
+  const word = e.pattern === 'usually' ? 'usually' : 'often'
+  if (s.h === t.h && s.pm === t.pm) return `${word} around ${s.h} ${s.pm ? 'pm' : 'am'} ET`
+  return `${word} ${s.h}${s.pm === t.pm ? '' : s.pm ? ' pm' : ' am'}–${t.h} ${t.pm ? 'pm' : 'am'} ET`
+}
+const shortDay = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '')
+let cardsDrawn = 0
+// "Flagstar Bank, National Association" -> "Flagstar Bank" for a card row.
+const shortCo = (n) => { let s = String(n); for (let i = 0; i < 3; i++) s = s.replace(/,?\s+(National Association|Spons(ored)? ADR|ADR|Inc\.?|Corp(oration)?\.?|Co\.?|Ltd\.?|PLC|AG|N\.?V\.?|S\.?A\.?|Holdings?|Group)$/i, ''); return s.trim() }
+// Stocks with their own preview card, at most this many per build (memory and build time).
+const STOCK_CARDS = 150
+let stockCards = 0
 const readDist = (...p) => {
   try {
     return JSON.parse(readFileSync(join(dist, ...p), 'utf8'))
@@ -190,13 +211,30 @@ for (const m of index.managers) {
     .slice(0, 10)
     .map((x) => [x.ticker ? link(`stocks/${x.ticker}/`, x.ticker) : '', ht(x.display_name ?? tc(x.issuer)), usd(x.value), ht(total ? pct1(x.value / total) : ''), ht(CHANGE[x.change] ?? '')])
   const desc = `${firm !== who ? `${who} (${firm})` : who}: the ${qLabel(m.quarter)} 13F${m.filing_date ? `, filed ${dayLabel(m.filing_date)}` : ''}${total ? `, ${usd(total)} across ${num(count)} positions` : ''}.${top.length ? ` Top holdings: ${top.join(', ')}.` : ''} Buys, sells and sector mix, straight from the SEC filing.`
+  // Its link preview: when a superinvestor still has to file this quarter, the day it's expected and the
+  // free follow; otherwise its latest 13F's size and top holdings.
+  const exp = seasonData?.expected?.find((e) => e.slug === m.slug && !e.filed && !e.placeholder && e.expected_date)
+  const sq = seasonData ? qLabel(seasonData.quarter).split(' ')[0] : ''
+  const topH = (longs ?? []).slice().sort((p, q) => q.value - p.value).slice(0, 3).map((h) => [`${h.ticker ? `${h.ticker} · ` : ''}${shortCo(h.display_name ?? tc(h.issuer))}`, total ? `${pct1(h.value / total)} of the book` : usd(h.value)])
+  const cardAlt = exp ? `${sq} 13F expected ${shortDay(exp.expected_date)}, ${usualTime(exp)}. Follow free.` : `${qLabel(m.quarter)} 13F: ${total ? usd(total) : ''} across ${num(count)} positions.`
+  // Featured superinvestors only: each render loads the fonts natively, and a few hundred in one loop run the build out of memory.
+  const card = !m.featured ? null : ogCard(dist, `investors/${m.slug}`, {
+    kicker: exp ? `${sq} 13F expected` : `${qLabel(m.quarter)} 13F`,
+    title: who,
+    sub: exp ? `Expected ${shortDay(exp.expected_date)}, ${usualTime(exp)}` : `${total ? `${usd(total)} across ` : ''}${num(count)} positions${m.filing_date ? `, filed ${dayLabel(m.filing_date)}` : ''}`,
+    rows: topH,
+    cta: 'Follow free',
+    url: 'copybook.factordynamics.com',
+  })
+  if (card) cardsDrawn++
   page(
     `investors/${m.slug}/`,
     title,
     desc,
     ld({ '@graph': [{ '@type': 'Dataset', name: `${who} 13F holdings, ${qLabel(m.quarter)}`, description: desc, url: `${SITE}investors/${m.slug}/`, creator: ORG, isBasedOn: m.sec_url ?? EDGAR.url, dateModified: m.filing_date ?? built, temporalCoverage: m.report_date ?? undefined, about: { '@type': 'Organization', name: firm }, isAccessibleForFree: true }, crumbs(['Investors', 'investors/'], [who, `investors/${m.slug}/`])] }),
-    null,
+    card,
     pre(`${who}’s 13F portfolio`, desc, `<h2>Top holdings, ${qLabel(m.quarter)}</h2>`, table(['Stock', 'Company', 'Value', 'Weight', 'Change'], topRows), `<p>${link(`investors/${m.slug}/history/`, `${who}’s 13F history`)} · ${link('season/', 'This 13F season')} · ${link('investors/', 'All investors')}</p>`),
+    card && `${who}: ${cardAlt}`
   )
   page(`investors/${m.slug}/history/`, `${who} 13F history · Copybook`, `${who}: eight quarters of 13F holdings, buys and sells across quarters, with CSV export.`)
   redirect(`managers/${m.slug}.html`, `investors/${m.slug}/`)
@@ -272,12 +310,27 @@ try {
     const desc = all
       ? `${due ? `${due}${due.endsWith('…') ? '' : '.'} ` : ''}${s.n} (${s.t}): ${sup ? `${num(sup)} of the superinvestors we follow ${sup === 1 ? 'holds' : 'hold'} it, ` : ''}with ${num(hedge)} hedge funds and ${num(all)} 13F filers in all.${h?.index ? ` Across all ${num(all)} filers' latest 13Fs, ${num(h.index.new)} opened a position and ${num(h.index.exited)} sold out.` : ''} Largest holders and who bought and sold, from SEC EDGAR.`
       : `${s.n} (${s.t}): which of the investors we track hold it, who bought and sold it in the latest 13F filings, and how the holder count changed.`
+    // A link preview for the stocks people share: three or more superinvestors hold it, or a fund filed a
+    // Form 4 or 13D/G since the 13Fs. The rest keep the site's card.
+    const since = sf?.since ?? []
+    let card = null
+    if (stockCards < STOCK_CARDS && (supH.length >= 5 || (since.length && supH.length >= 2))) {
+      stockCards++
+      const moveRow = (e) => [
+        displayName(e.manager),
+        e.kind === 'form4' ? `${e.action === 'buy' ? 'bought' : e.action === 'sell' ? 'sold' : 'traded'}${e.value_usd ? ` ${usd(Math.abs(e.value_usd))}` : ''} · Form 4` : e.percent_of_class != null ? `${Number(e.percent_of_class).toFixed(1)}% stake · ${String(e.form).replace(/^SCHEDULE /i, '')}` : String(e.form),
+      ]
+      const rows = [...since.slice().sort((a, b) => b.filing_date.localeCompare(a.filing_date)).slice(0, 2).map(moveRow), ...supH.slice(0, 3).map((x) => [displayName(x.manager), `holds ${usd(x.value)}`])].slice(0, 3)
+      const counts = tc2?.filers ? [sup ? `${num(sup)} superinvestor${sup === 1 ? '' : 's'}` : '', tc2.hedge ? `${num(tc2.hedge)} hedge funds` : '', `${num(tc2.filers)} 13F filers`].filter(Boolean).join(' · ') : s.n
+      card = ogCard(dist, `stocks/${s.t}`, { kicker: since.length ? 'Since the latest 13Fs' : 'Who owns it', title: `Who owns ${s.t}?`, sub: counts, rows, cta: `Follow ${s.t} free`, url: 'copybook.factordynamics.com' })
+      cardsDrawn++
+    }
     page(
       `stocks/${s.t}/`,
       title,
       desc,
       ld({ '@graph': [{ '@type': 'Dataset', name: `${s.n} (${s.t}) 13F holders`, description: desc, url: `${SITE}stocks/${s.t}/`, creator: ORG, isBasedOn: EDGAR.url, dateModified: h?.generated_at ?? built, about: { '@type': 'Corporation', name: s.n, tickerSymbol: s.t }, variableMeasured: ['13F holders', 'hedge fund holders', 'shares held', 'value held'], isAccessibleForFree: true }, crumbs(['Stocks', 'consensus/'], [s.t, `stocks/${s.t}/`])] }),
-      null,
+      card,
       pre(
         `${s.n} (${s.t}): who owns it`,
         desc,
@@ -298,13 +351,14 @@ try {
         table(['Filer', '13F', 'Value'], (h?.rows ?? []).slice(0, 10).map(([slug, name, quarter, , value]) => [link(`investors/${slug}/`, tc(name)), ht(qLabel(quarter)), usd(value)])),
         `<p>${link(`season/${(seasonData?.quarter ?? '').toLowerCase()}/`, `${seasonQ} 13F recap`)} · ${link('season/', 'This 13F season')} · ${link('consensus/', 'Consensus')}</p>`,
       ),
+      card && `Who owns ${s.t}? ${s.n} on Copybook`
     )
     st++
   }
 } catch {
   // No stock index: build without stock pages.
 }
-console.log(`wrote ${st} stock pages`)
+console.log(`wrote ${st} stock pages; ${cardsDrawn} link-preview cards so far`)
 redirect('copycat.html', 'consensus/')
 redirect('pricing.html', 'pricing/')
 mkdirSync(join(dist, 'latency'), { recursive: true })

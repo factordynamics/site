@@ -31,3 +31,6 @@ export function displayName(s) {
     })
     .join('')
 }
+
+/** "Irving Kahn’s", "Boston Partners’": the possessive by how the name ends. */
+export const possessive = (name) => (/s$/i.test(name) ? `${name}’` : `${name}’s`)

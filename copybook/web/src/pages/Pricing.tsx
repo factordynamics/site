@@ -256,18 +256,17 @@ export function Pricing() {
                       .{' '}
                       {live && (
                         <a href={attributed(link)} onClick={referredCheckout('fund', cycle, attributed(link))} className="underline underline-offset-2 hover:text-ink">
-                          Or start a {TRIAL_DAYS}-day card trial
+                          Or start a {TRIAL_DAYS}-day trial by card
                         </a>
                       )}
                     </>
                   ) : plan && mine && !member?.seat && tier.id === 'pro' && mine === 'copy' ? (
                     `Switches your Copy plan to Pro on the same ${member?.interval === 'monthly' ? 'monthly' : 'yearly'} billing, at the founding price, prorated for the rest of this period. You confirm the amount before anything changes.`
-                  ) : plan && referred ? (
-                    referredTerms(tier.id, cycle)
                   ) : plan ? (
+                    // Stripe takes a card before the trial starts: said plainly under every paid button, next to Free's "No card needed".
                     <>
-                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>{TRIAL_DAYS} days free · card required · cancel before day {TRIAL_DAYS + 1}</span>
-                      {trialTerms(tier.id)}
+                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>Card required · charged on day {TRIAL_DAYS + 1} unless you cancel</span>
+                      {referred ? referredTerms(tier.id, cycle) : trialTerms(tier.id)}
                     </>
                   ) : (
                     'Free forever. Upgrade when you want alerts and history.'

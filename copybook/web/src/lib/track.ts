@@ -26,7 +26,7 @@ export function track(kind: Kind, page = location.pathname) {
       fetch(`${base}/track`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind, page, utm_source: tags.utm_source ?? null }),
+        body: JSON.stringify({ kind, page, utm_source: tags.utm_source ?? null, utm_content: tags.utm_content ?? null }),
         keepalive: true,
       }),
     )

@@ -1,3 +1,4 @@
+import { possessive } from '../lib/names.mjs'
 import { Signup } from '../components/Signup'
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
@@ -118,7 +119,7 @@ export function ManagerPage() {
               </Button>
             )}
             {member?.active && !f.filer && <CsvButton slug={f.slug} variant="outline" />}
-            {card ? <Share copyOnly /> : <Share text={`${f.manager}’s portfolio from the ${quarterLabel(f.quarter)} 13F`} />}
+            {card ? <Share copyOnly /> : <Share text={`${possessive(f.manager)} portfolio from the ${quarterLabel(f.quarter)} 13F`} />}
           </div>
         )}
       </header>
@@ -128,7 +129,7 @@ export function ManagerPage() {
           <span className="font-medium">
             {quarterLabel(soon.data.quarter).split(' ')[0]} 13F expected {shortDay(due.expected_date!)}, {usualTime(due)}.
           </span>{' '}
-          {isPaying(member) ? 'Follow to get it by email, with its moves inside.' : `Follow free: ${f.manager}’s moves land in Friday’s email. Or get the 13F as it’s filed, with Copy. We check EDGAR every minute.`}
+          {isPaying(member) ? 'Follow to get it by email, with its moves inside.' : `Follow free: ${possessive(f.manager)} moves land in Friday’s email. Or get the 13F as it’s filed, with Copy. We check EDGAR every minute.`}
           {!getToken() && <FollowSignup people={[{ slug: f.slug, name: f.manager }]} label={`Follow ${f.manager} free`} className="mt-3 text-ink" />}
         </div>
       )}

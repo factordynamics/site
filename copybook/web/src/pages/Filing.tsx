@@ -1,5 +1,6 @@
 import { getToken } from '../lib/account'
-import { useTrackVisit } from '../lib/track'
+import { track, useTrackVisit } from '../lib/track'
+import { possessive } from '../lib/names.mjs'
 import { FollowSignup } from '../components/FollowSignup'
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -7,7 +8,7 @@ import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { Signup } from '../components/Signup'
 import { Arrow, Badge, Button, Monogram, Panel, Skeleton } from '../components/ui'
-import { BASE, dateLabel, getJSON, loadManager, money, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
+import { BASE, dateLabel, pricingTo, getJSON, loadManager, money, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { useFollows } from '../lib/follows'
 import { loadStockIndex, stockPath, tickerText } from '../lib/stocks'
 
@@ -62,7 +63,7 @@ export function FilingCard() {
       .map((h) => ({ h, delta: (h as { value_delta?: number }).value_delta ?? (h.shares ? (h.shares - (h.prev_shares ?? 0)) * (h.value / h.shares) : -(h.prev_value ?? 0)) }))
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
   }, [book.data, d, tag])
-  useTitle(d ? `${d.manager}’s ${quarterLabel(d.quarter)} 13F: top moves · Copybook` : undefined)
+  useTitle(d ? `${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F: top moves · Copybook` : undefined)
 
   if (c.error)
     return (
@@ -171,7 +172,7 @@ export function FilingCard() {
                   </ul>
                   {yours.length > 8 && (
                     <Link to={`/investors/${d.slug}/`} className="mt-2 inline-block text-[13px] text-accent hover:text-accent-2">
-                      {yours.length - 8} more of your names on {d.manager}’s page
+                      {yours.length - 8} more of your names on {possessive(d.manager)} page
                     </Link>
                   )}
                 </section>
@@ -205,9 +206,19 @@ export function FilingCard() {
         <aside className="space-y-6">
           {d && <ShareCard d={d} />}
           {d && (
-            <Panel title={`Get ${d.manager}’s next 13F by email`}>
-              <p className="text-[14px] leading-relaxed text-ink-2">Follow with Copy and the next filing lands in your inbox, checked on EDGAR every minute, with every new, added, trimmed and exited position inside.</p>
-              {!getToken() && <FollowSignup people={[{ slug: d.slug, name: d.manager }]} className="mt-4" />}
+            <Panel title={getToken() ? `Get ${possessive(d.manager)} next 13F by email` : `Get ${possessive(d.manager)} moves in Friday’s free email`}>
+              {getToken() ? (
+                <p className="text-[14px] leading-relaxed text-ink-2">Follow with Copy and the next filing lands in your inbox, checked on EDGAR every minute, with every new, added, trimmed and exited position inside.</p>
+              ) : (
+                <>
+                  <FollowSignup people={[{ slug: d.slug, name: d.manager }]} />
+                  <p className="mt-4 border-t border-line pt-4 text-[13.5px] leading-relaxed text-ink-2">Want each 13F by email as it’s filed? That’s Copy. We check EDGAR every minute.</p>
+                  <Button to={pricingTo()} onClick={() => track('trial_click')} className="mt-3">
+                    Start 14-day free trial <Arrow />
+                  </Button>
+                  <p className="mt-1.5 text-[12px] text-ink-3">Card required · charged on day 15 unless you cancel</p>
+                </>
+              )}
               <div className="mt-4 flex flex-wrap items-center gap-2.5">
                 {getToken() && <FollowButton kind="investor" id={d.slug} name={d.manager} size="md" />}
                 <Button to={`/investors/${d.slug}/`} variant="outline">
@@ -229,10 +240,10 @@ function ShareCard({ d }: { d: Card }) {
     .slice(0, 3)
     .map((m) => `${m.change === 'new' ? 'New' : m.change[0].toUpperCase() + m.change.slice(1)} ${m.ticker ? `$${m.ticker}` : m.name} ${m.value_delta >= 0 ? '+' : '−'}${money(Math.abs(m.value_delta))}`)
     .join('\n')
-  const text = `${d.manager}’s ${quarterLabel(d.quarter)} 13F is out:\n${top}`
+  const text = `${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F is out:\n${top}`
   return (
     <Panel title="Share this filing" sub="The card image is attached automatically on X, LinkedIn, Slack and iMessage">
-      <img src={`${BASE}og/f/${d.accession}.png`} alt={`${d.manager}’s ${quarterLabel(d.quarter)} 13F card: top moves`} width={1200} height={630} className="w-full rounded-xl shadow-[0_0_0_1px_var(--color-line)]" />
+      <img src={`${BASE}og/f/${d.accession}.png`} alt={`${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F card: top moves`} width={1200} height={630} className="w-full rounded-xl shadow-[0_0_0_1px_var(--color-line)]" />
       <Share className="mt-4" url={url} text={text} linkedin />
     </Panel>
   )
