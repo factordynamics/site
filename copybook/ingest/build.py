@@ -639,7 +639,8 @@ def cusip_links() -> dict[str, dict]:
     global _LINKS
     if _LINKS is None:
         try:
-            _LINKS = json.loads(LINKS_PATH.read_text()).get("links") or {}
+            _LINKS = {o: v for o, v in (json.loads(LINKS_PATH.read_text()).get("links") or {}).items()
+                      if v.get("basis") == "sec_13f_list"}
         except (OSError, ValueError):
             _LINKS = {}
         for old, v in SEED_LINKS.items():

@@ -255,28 +255,85 @@ def collect_reissues(cik: str, rows: list[dict]) -> None:
                 PAIRS.setdefault((g["cusip"], n["cusip"]), set()).add(cik)
 
 
+LIST_PAGE = ("https://www.sec.gov/rules-regulations/staff-guidance/division-investment-management-frequently-asked-"
+             "questions/official-list-section-13f-securities")
+NOT_SHARE = re.compile(r"\bUNITS?\b|\bRIGHTS?\b|\bRTS?\b|\*W\b|\bWTS?\b|WARRANT")
+
+
+def sec_13f_lists(quarters: list[str]) -> dict[str, dict[str, tuple[str, str]]]:
+    """SEC's Official List of Section 13(f) Securities per quarter: {cusip: (status A/D/'', description)}. Lists that
+    can't be read are left out."""
+    from ingest.edgar import ARCHIVE_BASE, get
+    try:
+        page = get(LIST_PAGE).decode("utf-8", "replace")
+    except Exception as e:  # noqa: BLE001
+        print(f"::warning::moves: SEC 13(f) list page: {e}", flush=True)
+        return {}
+    out = {}
+    for q in quarters:
+        name = f"13flist{q.lower()}"
+        href = next((h for h in re.findall(r'href="([^"]*' + name + r'[^"]*\.txt)"', page)), None)
+        if not href:
+            continue
+        try:
+            text = get(href if href.startswith("http") else ARCHIVE_BASE + href).decode("latin-1")
+        except Exception as e:  # noqa: BLE001
+            print(f"::warning::moves: SEC 13(f) list {q}: {e}", flush=True)
+            continue
+        rows = {}
+        for line in text.splitlines():
+            if len(line) > 40 and re.match(r"^[0-9A-Z]{9}", line):
+                rest = line[40:]
+                rows[line[:9]] = ("A" if "*A*" in rest else "D" if "*D*" in rest else "",
+                                  re.split(r"\s{2,}|\*[AD]\*", rest.strip())[0])
+        out[q] = rows
+    return out
+
+
+def on_list(old: str, new: str, lists: dict) -> str | None:
+    """The list quarter in which SEC deleted old and added new, neither a unit, right or warrant; else None."""
+    for q, rows in sorted(lists.items(), reverse=True):
+        a, b = rows.get(old), rows.get(new)
+        if a and b and a[0] == "D" and b[0] == "A" and not NOT_SHARE.search(a[1]) and not NOT_SHARE.search(b[1]):
+            return q
+    return None
+
+
 def write_links(quarter: str | None) -> list[str]:
-    """cusip_links.json: every reissue seen in at least MIN_LINK_FILERS filers' books, plus earlier ones."""
-    # Links detected for this quarter are re-checked each run (a stricter rule drops ones it no longer finds);
-    # seeds and earlier quarters' links stay.
-    links = {o: v for o, v in build.cusip_links().items()
-             if v.get("basis") != "detected" or v.get("quarter") != quarter or len(PAIRS.get((o, v["new"]), ())) >= MIN_LINK_FILERS}
-    added = []
+    """cusip_links.json: reissues seen in at least MIN_LINK_FILERS filers' books that the SEC's Official 13(f) List
+    confirms (old CUSIP deleted in the list that adds the new one, the link's quarter or the one before; no units,
+    rights or warrants). A detected pair without that confirmation is never linked (SPAC units became their class A
+    shares in 23 filers' books on Nov 11, but both still trade). Earlier confirmed links stay."""
+    quarters = [quarter, prev_quarter(quarter)] if quarter else []
+    lists = sec_13f_lists(quarters)
+    links = {o: v for o, v in build.cusip_links().items() if v.get("basis") == "sec_13f_list"}
+    for o, v in build.SEED_LINKS.items():  # seeds are kept only when the list confirms them (or no list was readable)
+        if o not in links and (not lists or on_list(o, v["new"], lists)):
+            links[o] = v | {"basis": "sec_13f_list", "list_quarter": on_list(o, v["new"], lists) if lists else None}
+    added, refused = [], []
     for (old, new), ciks in sorted(PAIRS.items(), key=lambda kv: -len(kv[1])):
         if len(ciks) < MIN_LINK_FILERS or old in links or old == new:
             continue
+        lq = on_list(old, new, lists) if lists else None
+        if not lq:
+            refused.append(f"{old}->{new}")
+            continue
         links[old] = {"new": new, "ticker": (SECS.get(new) or {}).get("ticker"), "quarter": quarter,
-                      "basis": "detected"}
+                      "basis": "sec_13f_list", "list_quarter": lq}
         added.append(old)
+    print(f"moves: CUSIP reissues not on the SEC 13(f) list (not linked): {len(refused)}: {', '.join(refused[:40])}",
+          flush=True)
     for old, v in links.items():
         if (old, v["new"]) in PAIRS:
             v["filers"] = len(PAIRS[(old, v["new"])])
         v["name"] = v.get("name") or (SECS.get(v["new"]) or SECS.get(old) or {}).get("name")
         v["ticker"] = v.get("ticker") or (SECS.get(v["new"]) or {}).get("ticker")
     write(DATA / "cusip_links.json", {
-        "note": "Reissued CUSIPs, old -> new, with the quarter the new one first appears. From 13F filings only: the "
-                "old CUSIP's holders report the same shares under the new one (filers = how many showed it this run). "
-                "Changes, holder counts, bulk and /v1 treat the two as one position.",
+        "note": "Reissued CUSIPs, old -> new, with the quarter the new one first appears. Found in 13F filings (the old "
+                "CUSIP's holders report the same shares under the new one; filers = how many showed it this run) and "
+                "confirmed by the SEC's Official List of Section 13(f) Securities, which deletes the old CUSIP in the "
+                "list that adds the new one (list_quarter). Units, rights and warrants are never linked. Changes, "
+                "holder counts, bulk and /v1 treat the two as one position.",
         "links": links})
     build.cusip_links().clear()
     build.cusip_links().update(links)

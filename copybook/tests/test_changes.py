@@ -190,6 +190,17 @@ class MoveMathTest(unittest.TestCase):
         cur = {"quarter": "2026Q3", "holdings": [self.row("682680999", "OKE", 1000, 90000, title="PFD SER A")]}
         self.assertEqual(sorted(r["change"] for r in build.with_changes(cur, prev)), ["exited", "new"])
 
+    def test_reissue_link_needs_the_sec_13f_list_and_never_joins_units(self):
+        from ingest.moves import on_list
+        lists = {"2026Q3": {"30231G102": ("D", "COM"), "30233Q108": ("A", "COM SHS"),
+                            "G4365S128": ("", "UNIT 01/20/2031"), "G4365S102": ("A", "ORD USD CL A"),
+                            "46438R105": ("", "SHS")}}
+        self.assertEqual(on_list("30231G102", "30233Q108", lists), "2026Q3")
+        self.assertIsNone(on_list("G4365S128", "G4365S102", lists))  # SPAC unit and its class A both still trade
+        self.assertIsNone(on_list("46438R105", "46438R204", lists))  # new CUSIP on no list
+        lists["2026Q3"]["G4365S128"] = ("D", "UNIT 01/20/2031")
+        self.assertIsNone(on_list("G4365S128", "G4365S102", lists))  # units never link, even when deleted
+
     def test_line_far_off_the_cross_filer_price_is_suspect(self):
         # AllianceBernstein 2026Q2 KLAC: $1,472 a share against a $301.71 median across filers.
         prev = {"quarter": "2026Q1", "holdings": [self.row("482480100", "KLAC", 7_000_000, 7e9)]}
