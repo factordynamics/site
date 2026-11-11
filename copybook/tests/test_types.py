@@ -76,3 +76,35 @@ class IndexContractTest(unittest.TestCase):
         self.assertEqual(index_contract(good), [])
         self.assertEqual(index_contract({"managers": [row("a", "hedge_fund"), row("b", "active")]}),
                          ["b: type='active'", "no managers[] row of type long_only"])
+
+
+class TypesGuardTest(unittest.TestCase):
+    def test_a_full_run_keeps_the_published_types_when_a_type_moves_over_ten_percent(self):
+        # Nov 11 03:45: a run that could not read Form ADV published 88 hedge funds instead of 1,243.
+        import json
+        import tempfile
+        from unittest import mock
+        from ingest import filer_types as ft
+        from ingest.gate import type_drift
+
+        self.assertEqual([d["type"] for d in type_drift({"hedge_fund": 1243, "long_only": 1554, "sovereign": 19},
+                                                         {"hedge_fund": 831, "long_only": 1700, "sovereign": 22})],
+                         ["hedge_fund"])  # -33% fails; +9.4% and +3 sovereigns pass
+        self.assertEqual(type_drift({"wealth": 100}, {"wealth": 100, "pension": 11})[0]["type"], "pension")
+        with tempfile.TemporaryDirectory() as d:
+            data = Path(d)
+            ciks = [f"{i:010d}" for i in range(40)]
+            published = {c: {"type": "hedge_fund" if i < 20 else "long_only"} for i, c in enumerate(ciks)}
+            (data / "f").mkdir()
+            (data / "filer_types.json").write_text(json.dumps({"filers": published}))
+            (data / "filers.json").write_text(json.dumps({"filers": [{"cik": c, "name": f"Fund {c}"} for c in ciks]}))
+            patches = dict(DATA=data, RECLASS=True, form_d_hedge=lambda: None, load_advisers=lambda: [],
+                           adviser_index=lambda a: {}, adviser_for=lambda *a: None, shape=lambda *a: {},
+                           classify=lambda *a: ("long_only", "shape", "test"))
+            for accepted, want in ((False, "hedge_fund"), (True, "long_only")):
+                with mock.patch.multiple(ft, TYPES_ACCEPTED=accepted, **patches):
+                    ft.main()
+                got = json.loads((data / "filer_types.json").read_text())["filers"][ciks[0]]["type"]
+                guard = json.loads((data / "types_guard.json").read_text())
+                self.assertEqual((got, guard["status"]), (want, "accepted" if accepted else "held"))
+            self.assertEqual(guard["moved"][0], {"type": "hedge_fund", "published": 20, "candidate": 0, "change_pct": -100.0})

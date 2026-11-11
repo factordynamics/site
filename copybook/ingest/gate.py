@@ -26,6 +26,27 @@ from ingest.parse import not_common  # noqa: E402  (the same rule hl/ uses)
 
 MAX_DROP = 0.005
 TOP_N = 1000
+# Filer types: no type's count may move more than 10% (and more than 10 filers, so the 19 sovereigns don't trip it on
+# two new filers) from the published set, except in a run dispatched with the accepted-reclass flag.
+TYPES_MAX_MOVE, TYPES_MIN_FILERS = 0.10, 10
+TYPES_ACCEPTED = os.environ.get("COPYBOOK_TYPES_ACCEPTED") == "1"
+
+
+def type_counts(filers: dict) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for row in filers.values():
+        out[str(row.get("type"))] = out.get(str(row.get("type")), 0) + 1
+    return out
+
+
+def type_drift(published: dict[str, int], candidate: dict[str, int]) -> list[dict]:
+    """Types whose filer count moved beyond the limit: [{type, published, candidate, change_pct}]."""
+    moved = []
+    for t in sorted(set(published) | set(candidate)):
+        b, a = published.get(t, 0), candidate.get(t, 0)
+        if abs(a - b) > max(TYPES_MAX_MOVE * b, TYPES_MIN_FILERS):
+            moved.append({"type": t, "published": b, "candidate": a, "change_pct": round(100 * (a - b) / b, 1) if b else None})
+    return moved
 
 
 def books(read) -> dict[str, dict]:
@@ -361,6 +382,14 @@ def main() -> int:
         print(f"::error::All-filer holder counts below the tracked funds holding the stock: {'; '.join(short[:20])}; "
               f"not publishing.")
         failed = True
+    live_types, new_types = (live("filer_types.json") or {}).get("filers"), (new("filer_types.json") or {}).get("filers")
+    if live_types and new_types:
+        drift = type_drift(type_counts(live_types), type_counts(new_types))
+        if drift and not TYPES_ACCEPTED:  # filer_types.py holds such a set back; this catches any other path
+            print(f"::error::Filer type counts moved more than {TYPES_MAX_MOVE:.0%} from the published set without the "
+                  f"accepted-reclass flag: " + "; ".join(f"{d['type']} {d['published']} -> {d['candidate']}" for d in drift)
+                  + "; not publishing.")
+            failed = True
     wrong = reviewed_types(data)
     if wrong:
         print(f"::error::Filer types differ from the reviewed cases: {'; '.join(wrong[:20])}; not publishing.")

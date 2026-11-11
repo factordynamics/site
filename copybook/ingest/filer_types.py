@@ -37,6 +37,7 @@ if str(ROOT) not in sys.path:
 
 from ingest.adv import load as load_advisers, verdict
 from ingest.datasets import prev_quarter
+from ingest.gate import TYPES_ACCEPTED, TYPES_MAX_MOVE, TYPES_MIN_FILERS, type_counts, type_drift
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
@@ -375,6 +376,17 @@ def adviser_for(cik: str, name: str, index: tuple[dict, dict] | None, common: se
     return None
 
 
+def write_guard(status: str, reason: str, published: dict, candidate: dict | None, moved: list) -> None:
+    """data/types_guard.json: what the last full run did with filer types. status: published (new types within the
+    limit), accepted (published under the accepted-reclass flag), held (the published types were kept: the candidate
+    set moved too far or Form ADV could not be read; alert), kept (the classifier did not run)."""
+    from datetime import datetime, timezone
+    (DATA / "types_guard.json").write_text(json.dumps({
+        "checked_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "status": status, "reason": reason,
+        "limit_pct": round(100 * TYPES_MAX_MOVE), "limit_min_filers": TYPES_MIN_FILERS,
+        "published_counts": published, "candidate_counts": candidate, "moved": moved}, indent=1) + "\n")
+
+
 def apply_overrides() -> int:
     """Curated runs: the hand overrides and reviewed cases on top of the last full run's filer_types.json,
     so a change to them is live (and passes the gate) without waiting for a full run."""
@@ -404,7 +416,11 @@ RECLASS = os.environ.get("COPYBOOK_TYPES_RECLASS") == "1"
 
 
 def main() -> int:
-    if "--overrides" in sys.argv or not RECLASS:
+    if "--overrides" in sys.argv:
+        return apply_overrides()
+    published = type_counts((read(DATA / "filer_types.json") or {}).get("filers") or {})
+    if not RECLASS:
+        write_guard("kept", "reclass off (COPYBOOK_TYPES_RECLASS unset)", published, None, [])
         return apply_overrides()
     filers_doc = read(DATA / "filers.json") or {"filers": []}
     curated = {m["cik"]: m for m in (read(DATA / "index.json") or {}).get("managers") or []}
@@ -419,7 +435,8 @@ def main() -> int:
         index = adviser_index(load_advisers())
     except Exception as exc:  # noqa: BLE001  (without ADV no filer becomes a hedge fund except hand-checked ones)
         # Without ADV no filer but the hand-checked ones would be a hedge fund: keep the published types instead.
-        print(f"::warning::Form ADV data unavailable ({exc!r}); keeping the last published types")
+        print(f"::error::Form ADV data unavailable ({exc!r}); keeping the last published types")
+        write_guard("held", f"Form ADV unavailable: {exc!r}"[:300], published, None, [])
         return apply_overrides()
     everyone = filers_doc["filers"] + [{"cik": c, "name": m.get("name") or m.get("manager")} for c, m in curated.items()]
     seen: dict[str, int] = {}
@@ -445,6 +462,15 @@ def main() -> int:
             row["aum"] = round(s["aum"])
         out[cik] = row
         counts[kind] = counts.get(kind, 0) + 1
+    moved = type_drift(published, counts) if published else []
+    if moved and not TYPES_ACCEPTED:
+        print(f"::error::filer types: candidate counts moved more than {TYPES_MAX_MOVE:.0%} from the published set ("
+              + "; ".join(f"{d['type']} {d['published']} -> {d['candidate']}" for d in moved)
+              + "); keeping the published types. Dispatch with accept_types once the reclass is accepted.")
+        write_guard("held", "type counts moved beyond the limit", published, counts, moved)
+        return apply_overrides()
+    write_guard("accepted" if moved else "published", "accepted reclass flag" if moved else "within the limit",
+                published, counts, moved)
     (DATA / "filer_types.json").write_text(json.dumps({
         "types": list(TYPES), "smart_money": list(SMART),
         "note": "SEC data only: hand-checked cases, then name rules (banks, brokers, ETF issuers, ...), then SEC Form ADV "
