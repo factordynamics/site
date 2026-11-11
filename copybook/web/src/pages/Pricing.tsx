@@ -77,6 +77,7 @@ const tiers = (filers: string, curated: string): Tier[] => [
 ]
 
 const FOUNDING: Partial<Record<PlanId, string>> = {
+  copy: 'Founding price: $9/month or $79/year, locked while you stay subscribed (a pause keeps it). From Feb 1, 2027, new members pay $12/month or $99/year.',
   pro: 'Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay subscribed. Start a trial by Dec 31 and the founding price stays, even if it converts in January.',
   fund: 'Founding price: subscribe before Dec 31 and keep $199/mo or $1,990/yr for as long as you stay subscribed. Start a trial by Dec 31 and the founding price stays, even if it converts in January.',
 }
@@ -171,7 +172,7 @@ export function Pricing() {
   const hook = useAsync(() => (EMAIL_FROM[params.get('from') ?? ''] ? Promise.resolve(null) : fromFact(params.get('from'))), [params.get('from')])
   const copy = plans.copy
   // Between seasons (marketing's plan rev 69): what Copy does from the November deadline to February's 13Fs. Last
-  // winter's counts are payments' (EDGAR full index): "filings", as 15 of the 19 are amendments.
+  // winter's counts return once payments confirms the corrected figures, with links to their accession lists.
   const between = (
       <section id="between-seasons" className="scroll-mt-24 rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)] -order-1 md:order-last md:col-span-full md:mt-6 md:p-8" aria-labelledby="between">
         <div className="grid gap-6 md:grid-cols-[1fr_1.15fr] md:gap-12">
@@ -181,9 +182,8 @@ export function Pricing() {
               {Date.now() < Date.parse('2026-11-17T05:00:00Z') ? 'After Monday, Copy keeps working.' : 'Between 13F seasons, Copy keeps working.'}
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Copy emails you when they do.</p>
-            <p className="mt-3 text-[14px] leading-relaxed text-ink-3">Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow, and 13 open-market insider buys in the 100 stocks they hold most.</p>
             <p className="mt-4 text-[14px] font-medium leading-relaxed">
-              Yearly ${plans.copy.yearly}: less than 9 months of monthly. Monthly? Pause once a year, up to 3 months, and it resumes for the next 13F season. {TRIAL_DAYS} days free, no card needed.
+              Yearly ${plans.copy.yearly}: less than 9 months of monthly. Monthly? Pause once a year, up to 3 months, and keep your founding price. {TRIAL_DAYS} days free, no card needed.
             </p>
           </div>
           <FeatureList
@@ -265,7 +265,7 @@ export function Pricing() {
                 <p className={`relative min-h-[1.5em] text-[13.5px] font-semibold ${dark ? 'text-[#7fe0a6]' : 'text-[#126b3c]'}`}>{referredDeal(tier.id, cycle)}</p>
               ) : (
                 <p className={`relative text-[12.5px] ${cycle === 'yearly' ? 'min-h-[53px]' : 'min-h-[1.5em]'} ${dark ? 'text-white/60' : 'text-ink-3'}`}>
-                  {plan ? (cycle === 'yearly' ? (tier.id === 'copy' ? `$${plan.yearly}/yr: less than 9 months of monthly · founding price locked · history back to 2013 (from Dec 31)` : `About $${Math.round(plan.yearly / 12)} a month · save ${save}% vs monthly`) : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
+                  {plan ? (cycle === 'yearly' ? (tier.id === 'copy' ? `$${plan.yearly}/yr: less than 9 months of monthly · history back to 2013 (from Dec 31)` : `About $${Math.round(plan.yearly / 12)} a month · save ${save}% vs monthly`) : `Or $${plan.yearly.toLocaleString('en-US')} a year`) : 'No card needed'}
                   {plan && cycle === 'yearly' && <span className="block text-[11.5px]">Prepaid and protected: pro-rata refund if we ever discontinue the plan.</span>}
                 </p>
               )}
@@ -450,7 +450,7 @@ export function Pricing() {
                 `Every paid plan is free for ${TRIAL_DAYS} days. Copy needs no card: add one before day ${TRIAL_DAYS + 1} to keep it, or the trial simply ends and nothing is charged. Pro and Fund take a card at signup so they continue without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then (a fund can start by invoice instead, below).`,
               ],
               ['Can a fund try Copy Fund without a card?', 'Yes. Start a 14-day trial, pay by invoice: no card. On day 14 we email an invoice for $1,990 (the founding price, a year), due in 30 days, payable online by card or US bank account (ACH); cancel before then and nothing is owed. One trial per company. Card trial? Switch to invoice in your account. Monthly Fund is paid by card.'],
-              ['What does the founding price mean?', 'Subscribe to Pro or Fund, or start a trial, by December 31 and your price stays for as long as you stay subscribed, even if list prices rise: $39/mo or $390/yr for Pro, $199/mo or $1,990/yr for Fund. A trial started by December 31 keeps the founding price even if it converts in January.'],
+              ['What does the founding price mean?', 'Copy: $9/month or $79/year, locked while you stay subscribed (a pause keeps it); from Feb 1, 2027, new members pay $12/month or $99/year. Pro and Fund: subscribe, or start a trial, by December 31 and your price stays for as long as you stay subscribed, even if list prices rise: $39/mo or $390/yr for Pro, $199/mo or $1,990/yr for Fund. A trial started by December 31 keeps the founding price even if it converts in January.'],
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [
                 'How fast are filing alerts?',
@@ -472,7 +472,7 @@ export function Pricing() {
               ],
               ['Do you show live prices or returns?', 'No. Values are what the fund reported at quarter end. We don’t re-price holdings or estimate performance.'],
               ['How are options shown?', 'Calls and puts are listed apart from shares. A 13F reports options at the value of the underlying shares, so we label them as notional and leave them out of portfolio weights and holder counts.'],
-              ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for. Monthly plans with a card can also pause instead: once a year, for up to 3 months, and it resumes for the next 13F season.'],
+              ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for. Monthly plans with a card can also pause instead: once a year, for up to 3 months, and keep your founding price.'],
               ['Is this investment advice?', 'No. Copybook shows public filings. 13F omits short positions, most non-US holdings and cash, so a portfolio here is never the whole picture.'],
             ] as [string, ReactNode][]
           ).map(([q, a]) => (
