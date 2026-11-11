@@ -209,7 +209,7 @@ function card(eyebrow: string, title: string, summary: string, body: string, cta
 <h1 style="margin:6px 0 0;font:700 21px/1.3 ${FONT};color:${C.ink};letter-spacing:-0.2px">${esc(title)}</h1>
 <p style="margin:8px 0 0;font:400 15px/1.55 ${FONT};color:${C.ink2}">${esc(summary)}</p>
 ${body}
-<div style="margin-top:22px">${cta}&nbsp;&nbsp;<a href="${esc(sec)}" style="font:500 14px/1 ${FONT};color:${C.acc};text-decoration:none">Read the SEC filing&nbsp;›</a></div>
+<div style="margin-top:22px">${cta}&nbsp; <a href="${esc(sec)}" style="display:inline-block;padding:10px 0;white-space:nowrap;font:500 14px/1 ${FONT};color:${C.acc};text-decoration:none">Read the SEC filing&nbsp;›</a></div>
 </td></tr></table></td></tr>`
 }
 function frame(site: string, preheader: string, cards: string, note: string) {
