@@ -11,9 +11,9 @@ type Kind = 'visit' | 'signup_view' | 'trial_click'
 
 export function track(kind: Kind, page = location.pathname) {
   if (getToken()) return
-  if (kind === 'visit') {
+  if (kind !== 'trial_click') {
     try {
-      const k = `copybook-seen:${page}`
+      const k = `copybook-${kind}:${page}`
       if (sessionStorage.getItem(k)) return
       sessionStorage.setItem(k, '1')
     } catch {

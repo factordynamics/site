@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Signup } from '../components/Signup'
 import { Badge, Panel, Skeleton } from '../components/ui'
@@ -8,7 +9,8 @@ import { seasonNow } from '../lib/stocks'
 
 // /speed/: the public alert latency log (the API's latency.json on R2). Every live alert this season, from EDGAR
 // acceptance to delivery, with medians and 90th percentiles per form type and, once the delivery log
-// records them, per channel. Re-read every minute while open. Nothing is hand-picked.
+// records them, per channel. Re-read every minute while open. Every live alert counts; 13F alerts sent before
+// the moves fix (latency.json before_moves_fix) are shown separately under the 13F card.
 
 type Alert = Latency['alerts'][number]
 // The summary's order: what members buy first.
@@ -60,7 +62,7 @@ export function Speed() {
         <p className="text-[13px] font-medium text-accent">Speed</p>
         <h1 className="mt-3 text-[38px] font-semibold leading-[1.05] tracking-[-0.04em] md:text-h1">From EDGAR to you, timed.</h1>
         <p className="mt-4 text-[17px] leading-relaxed text-ink-2">
-          {empty ? 'No live alerts timed yet. Once they go out, every live alert this season appears here' : 'Every live alert this filing season'}: when EDGAR accepted the filing, when we delivered it, and the gap in seconds. Nothing is picked out; the raw log is public at{' '}
+          {empty ? 'No live alerts timed yet. Once they go out, every live alert this season appears here' : 'Every live alert this filing season'}: when EDGAR accepted the filing, when we delivered it, and the gap in seconds. Every live alert is counted; 13F alerts from before the Nov 11 fix are listed separately. The raw log is public at{' '}
           <a href={import.meta.env.VITE_LATENCY_URL} className="font-mono text-[15px] text-accent hover:text-accent-2">
             latency.json
           </a>
@@ -85,6 +87,7 @@ export function Speed() {
           )
         })}
       </section>
+      <BeforeFix d={d} />
       <p className="mt-3 text-[13px] text-ink-3">
         All alert types: median {median != null ? gapLabel(median) : '—'}
         {p90 != null ? `, 90th percentile ${gapLabel(p90)}` : ''}, {(d?.count ?? 0).toLocaleString('en-US')} alerts in the {quarterLabel(season)} season so far. We check EDGAR every minute.
@@ -289,6 +292,42 @@ function ThirteenF({ label, d, all, loading }: { label: string; d: Latency | nul
         </>
       ) : (
         <p className="mt-2 text-[14px] leading-snug text-ink-2">13F timings are being re-logged after a logging fix; back shortly.</p>
+      )}
+    </div>
+  )
+}
+
+// 13F alerts sent before the fix that timed them to the email carrying the moves: disclosed, not dropped.
+type Before = { count: number; median_seconds: number | null; p90_seconds?: number | null; max_seconds?: number | null; rows?: { manager: string; accepted_at: string; seconds: number }[] }
+function BeforeFix({ d }: { d: Latency | null | undefined }) {
+  const x = d as (Latency & { moves_fix_at?: string; before_moves_fix?: Record<string, Before> }) | null | undefined
+  const b = x?.before_moves_fix?.['13F']
+  const [open, setOpen] = useState(false)
+  if (!b?.count) return null
+  const day = x?.moves_fix_at ? new Date(x.moves_fix_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : null
+  const slow = b.max_seconds != null ? `slowest ${gapLabel(b.max_seconds)}` : b.p90_seconds != null ? `90th percentile ${gapLabel(b.p90_seconds)}` : ''
+  return (
+    <div className="mt-3 text-[13px] leading-relaxed text-ink-2">
+      Before a fix{day ? ` on ${day}` : ''}, {b.count} 13F {b.count === 1 ? 'alert' : 'alerts'} sent {b.count === 1 ? 'its' : 'their'} moves late (median {b.median_seconds != null ? gapLabel(b.median_seconds) : '—'}
+      {slow ? `, ${slow}` : ''}).{' '}
+      {b.rows?.length ? (
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="font-medium text-accent hover:text-accent-2">
+          {open ? 'Hide them' : 'See them'}
+        </button>
+      ) : (
+        <a href={import.meta.env.VITE_LATENCY_URL} className="font-medium text-accent hover:text-accent-2">
+          See them in latency.json
+        </a>
+      )}
+      {open && b.rows && (
+        <ul className="mt-2 divide-y divide-line rounded-xl bg-card px-4 shadow-[var(--shadow-card)]">
+          {b.rows.map((r) => (
+            <li key={r.manager + r.accepted_at} className="flex justify-between gap-3 py-2">
+              <span className="truncate">{r.manager}</span>
+              <span className="num shrink-0 text-ink-3">{gapLabel(r.seconds)}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )
