@@ -613,7 +613,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         if p is not None and p["cusip"] != h["cusip"]:
             h = h | {"prev_cusip": p["cusip"]}
         prn = h.get("shares_type") == "PRN"
-        r = ratio(h)
+        r = k = ratio(h)
         # Per filer: a prior position already reported in post-split shares (its value per share is at
         # today's level, not k times it; Amundi and 1832 on CRWD 2026Q2) is not multiplied again.
         if r != 1.0 and p is not None and not prn and p["value"] > 0 and amount(p) > 0 and h["value"] > 0 and amount(h) > 0:
@@ -646,10 +646,13 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         # Cross-filer check: this line or its prior priced over OFF_MEDIAN x off the CUSIP's median across
         # every filer that quarter (AllianceBernstein 2026Q2 KLAC at $1,472 a share, peers $301.71).
         if not prn and not h.get("put_call") and not h.get("suspect_units"):
-            def off(row, q):
+            def off(row, q, k=1.0):
                 m, n = consensus().get((q or "", row["cusip"])), amount(row)
-                return bool(m and n and row["value"] > 0 and not 1 / OFF_MEDIAN <= row["value"] / n / m <= OFF_MEDIAN)
-            if off(h, q_to) or (p is not None and off(p, q_from)):
+                # A prior already in post-split shares (Amundi CRWD 2026Q2 at ~$190 against a $763 median)
+                # sits at the median over the split ratio.
+                return bool(m and n and row["value"] > 0 and not any(
+                    1 / OFF_MEDIAN <= row["value"] / n / (m / s) <= OFF_MEDIAN for s in {1.0, k}))
+            if off(h, q_to) or (p is not None and off(p, q_from, k)):
                 h = h | {"suspect_units": True}
         rows.append(h | extra(p, change, delta, ds, r, prn))
     for p in sorted(before.values(), key=lambda x: x["value"], reverse=True):
