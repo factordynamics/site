@@ -177,9 +177,9 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
   // in by an emailed link or subscribes (then the link or checkout gives a full one). Only for an account made just now,
   // so typing someone else's address never signs anyone into an existing account.
   const { signToken } = await import('./tokens');
-  const { SESSION_TTL } = await import('./members');
+  const { PROVISIONAL_TTL } = await import('./members');
   // A cancelled member's address had an account: no session, only the email.
-  const session = cur ? null : { token: await signToken(env.SESSION_SECRET, 'session', m.customer, SESSION_TTL, { s: 'provisional' }), session: 'provisional' };
+  const session = cur ? null : { token: await signToken(env.SESSION_SECRET, 'session', m.customer, PROVISIONAL_TTL, { s: 'provisional' }), session: 'provisional' };
   return {
     status: 201,
     body: { ok: true, created: true, welcome: mail.state, sign_in_email: mail.state, sent_at: sentAt, ...(mail.send_at ? { send_at: mail.send_at } : {}), ...session, ...(r ?? {}) },
@@ -955,6 +955,8 @@ export async function carryFreeSignup(env: Env, m: Member): Promise<Member> {
     ...(free.utm && !m.utm ? { utm: free.utm } : {}),
     marketing_off: m.marketing_off ?? free.marketing_off,
     created_at: free.created_at,
+    // An address proven on the free record stays proven (its provisional sessions stay ended).
+    ...(free.verified ? { verified: true } : {}),
   };
 }
 

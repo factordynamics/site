@@ -139,9 +139,10 @@ async function authed(req: Request, env: Env): Promise<Member | null> {
   const m = p ? await getMember(env, p.c) : null;
   // Signed out everywhere (a Fund owner revoked the seat's sessions): sessions issued before then are refused.
   if (!m || (m.sessions_after && (p!.i ?? p!.x - SESSION_TTL) <= m.sessions_after)) return null;
-  // A signup's provisional session: until the member signs in by an emailed link or subscribes.
+  // A provisional session (the signup form, a new subscriber's checkout hand-off): until the member signs in by an
+  // emailed link, which proves the address. A trial started meanwhile keeps it, still limited (see the router).
   if (p!.s === 'provisional') {
-    if (m.verified || m.status !== 'free') return null;
+    if (m.verified) return null;
     PROVISIONAL.add(m);
   }
   return m;
@@ -1078,9 +1079,17 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       }
       const fresh = Date.now() / 1000 - Number(cs.created) < 24 * 3600;
       if (cs.status !== 'complete' || !cs.subscription || !fresh) return json({ ok: false, error: 'checkout not complete' }, 409, h);
+      // An address that already had an account before this checkout gets no session from it: anyone can type an
+      // address at checkout. They sign in with the emailed link (or keep the session they have on this device).
+      const email = String(cs.customer_details?.email ?? '').trim().toLowerCase();
+      const prior = email ? await memberByEmail(env, email) : null;
+      const existed = !!prior && (!prior.created_at || Date.parse(prior.created_at) < Number(cs.created) * 1000);
       const sub = await stripe(env, 'GET', `subscriptions/${cs.subscription}`);
       const m = await syncSubscription(env, sub, cs.customer_details?.email);
-      return json(await issueSession(env, m), 200, h);
+      if (existed) return json({ ok: true, code: 'existing_account', sign_in: 'email', member: null }, 200, h);
+      // A new subscriber: signed in on this device, provisionally (the address isn't proven yet), like the signup form.
+      const { PROVISIONAL_TTL } = await import('./members');
+      return json({ ok: true, token: await signToken(env.SESSION_SECRET, 'session', m.customer, PROVISIONAL_TTL, { s: 'provisional' }), session: 'provisional', member: publicView(m) }, 200, h);
     }
     return json({ ok: false, error: 'login or checkout_session required' }, 400, h);
   }
@@ -1132,10 +1141,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   // included); the browser that asked gets a fresh session. API keys are separate and stay until deleted.
   if (req.method === 'POST' && path === '/me/sessions/revoke') {
     const now = Math.floor(Date.now() / 1000);
-    // authed() refuses sessions issued at or before sessions_after; the fresh one below is issued this second.
-    const next = { ...m, sessions_after: now - 1 };
+    // authed() refuses sessions issued at or before sessions_after: every token from this second too (a copy made in
+    // the same second as the sign-out). The fresh one is dated a second later, so it alone gets through.
+    const next = { ...m, sessions_after: now };
     await putMember(env, next);
-    return json({ ok: true, revoked_at: new Date(now * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'), ...(await issueSession(env, next)) }, 200, h);
+    return json({ ok: true, revoked_at: new Date(now * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'), token: await signToken(env.SESSION_SECRET, 'session', next.customer, SESSION_TTL, {}, now + 1), member: publicView(next) }, 200, h);
   }
 
   // Short-lived sign-in token for carrying a session across origins in a URL (e.g. the old-host redirect).

@@ -12,6 +12,8 @@ export const LOGIN_TTL = 7 * 24 * 3600;
 /** A sign-in link the member asked for (POST /login): 15 minutes, once. */
 export const LOGIN_REQUEST_TTL = 15 * 60;
 export const SESSION_TTL = 30 * 24 * 3600;
+/** A provisional session (signup form, checkout hand-off; the address not yet proven): 72 hours, inside the welcome link's 7 days. */
+export const PROVISIONAL_TTL = 72 * 3600;
 
 /**
  * The member as last written in this location, for 60 s (the Cache API sees its own writes at once; a KV read can

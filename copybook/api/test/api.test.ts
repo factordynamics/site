@@ -247,6 +247,14 @@ function call(path: string, opts: { method?: string; body?: unknown; token?: str
   );
 }
 
+/** A subscriber back from checkout (a provisional session), then signed in by the welcome email's link: a full session. */
+async function fullCheckout(cs: string): Promise<Response> {
+  const r = await call('/session', { body: { checkout_session: cs } });
+  if (r.status !== 200) return r;
+  const o = stripeObjects as Record<string, { subscription?: string; customer?: string | { id: string } }>;
+  const sub = o[`subscriptions/${o[`checkout/sessions/${cs}`].subscription}`];
+  return call('/session', { body: { login: await signToken(env.SESSION_SECRET, 'login', typeof sub.customer === 'string' ? sub.customer : sub.customer!.id, 3600) } });
+}
 const privateHealth = () => handleRequest(new Request('https://api.test/health', { headers: { authorization: 'Bearer health_test_token' } }), env);
 
 function loginTokenFrom(text: string): string {
@@ -388,12 +396,34 @@ describe('copybook api', () => {
   it('exchanges a completed checkout session for a session token right after redirect', async () => {
     stripeObjects['checkout/sessions/cs_test_abc'] = { id: 'cs_test_abc', status: 'complete', created: now() - 30, subscription: 'sub_2', customer_details: { email: 'fast@example.com' } };
     stripeObjects['subscriptions/sub_2'] = sub('sub_2', 'cus_2', 'active');
+    stripeObjects['subscriptions/sub_2'] = sub('sub_2', 'cus_2', 'trialing');
     const r = await (await call('/session', { body: { checkout_session: 'cs_test_abc' } })).json();
     expect(r.member).toMatchObject({ email: 'fast@example.com', active: true, plan: 'copy', interval: 'monthly' });
+    // A new subscriber is signed in on this device provisionally (anyone can type an address at checkout): on an
+    // active trial it reads /me and follows; keys, channels and webhooks, billing, seats, a handoff and sign-out-
+    // everywhere (which would mint a full session) answer a provisional-specific 403 until the emailed link is used.
+    expect(r.session).toBe('provisional');
     expect((await call('/me', { token: r.token })).status).toBe(200);
+    expect((await call('/follows/investors/bill-ackman', { method: 'POST', token: r.token })).status).toBe(200);
+    for (const [method, path, body] of [['GET', '/keys'], ['POST', '/keys', { name: 'x' }], ['PUT', '/channels', { email: false }], ['POST', '/channels/test'], ['POST', '/portal'], ['GET', '/seats'], ['POST', '/handoff'], ['POST', '/me/sessions/revoke'], ['GET', '/history/warren-buffett']] as [string, string, unknown?][]) {
+      const res = await call(path, { method, body, token: r.token });
+      expect([path, res.status, (await res.json()).code]).toEqual([path, 403, 'verify_email']);
+    }
+    // The welcome's link proves the address: a full session, and the provisional one ends.
+    const welcome = sent.find((m) => m.to[0] === 'fast@example.com')!;
+    expect(welcome.text).toContain('Open this link to confirm your address: it turns on alert channels, API keys and billing, and signs you in on any other device');
+    const full = await (await call('/session', { body: { login: loginTokenFrom(welcome.text) } })).json();
+    expect([(await call('/channels', { token: full.token })).status, (await call('/me', { token: r.token })).status]).toEqual([200, 401]);
+    // A checkout that types the address of an account made before it never hands off a session to that account.
+    await putMember('cus_old', 'taken@example.com', 'active', []);
+    await env.DB.put('email:taken@example.com', 'cus_old');
+    stripeObjects['checkout/sessions/cs_test_taken'] = { id: 'cs_test_taken', status: 'complete', created: now() - 30, subscription: 'sub_tk', customer_details: { email: 'taken@example.com' } };
+    stripeObjects['subscriptions/sub_tk'] = sub('sub_tk', 'cus_tk', 'trialing');
+    const taken = await (await call('/session', { body: { checkout_session: 'cs_test_taken' } })).json();
+    expect([taken.ok, taken.code, taken.token]).toEqual([true, 'existing_account', undefined]);
 
     stripeObjects['checkout/sessions/cs_test_open'] = { id: 'cs_test_open', status: 'open', created: now(), subscription: null };
-    expect((await call('/session', { body: { checkout_session: 'cs_test_open' } })).status).toBe(409);
+    expect((await fullCheckout('cs_test_open')).status).toBe(409);
   });
 
   it('login emails only active members but always answers ok', async () => {
@@ -548,12 +578,12 @@ describe('copybook api', () => {
     expect([codes.slice(0, 120).every((c) => c === 200), codes[120]]).toEqual([true, 429]);
 
 
-    const token = (await (await call('/session', { body: { checkout_session: 'cs_test_q' } })).json()).token;
+    const token = (await (await fullCheckout('cs_test_q')).json()).token;
     expect(token).toBeUndefined(); // no session yet: /holdings must refuse
     expect((await call('/holdings/bill-ackman/2026Q2')).status).toBe(401);
     stripeObjects['checkout/sessions/cs_test_q'] = { id: 'cs_test_q', status: 'complete', created: now(), subscription: 'sub_q', customer_details: { email: 'q@example.com' } };
     stripeObjects['subscriptions/sub_q'] = sub('sub_q', 'cus_q', 'active');
-    const s = await (await call('/session', { body: { checkout_session: 'cs_test_q' } })).json();
+    const s = await (await fullCheckout('cs_test_q')).json();
     const res = await call('/holdings/bill-ackman/2026Q2', { token: s.token });
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('{"holdings":[]}');
@@ -565,7 +595,7 @@ describe('copybook api', () => {
   it('follows: seeds from alerts, validates, keeps owned on the watchlist, drives alert targets, and is members-only', async () => {
     stripeObjects['checkout/sessions/cs_test_f'] = { id: 'cs_test_f', status: 'complete', created: now(), subscription: 'sub_f', customer_details: { email: 'f@example.com' } };
     stripeObjects['subscriptions/sub_f'] = sub('sub_f', 'cus_f', 'active');
-    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_f' } })).json()).token;
+    const t = (await (await fullCheckout('cs_test_f')).json()).token;
     const put = (b: unknown) => handleRequest(new Request('https://api.test/follows', { method: 'PUT', body: JSON.stringify(b), headers: { origin: 'https://refcell.github.io', authorization: `Bearer ${t}` } }), env);
 
     expect((await call('/follows')).status).toBe(401);
@@ -1726,7 +1756,7 @@ describe('copybook api', () => {
     // The reader starts a trial: the paid member keeps the source, gets the three-step welcome; the funnel counts each step once.
     stripeObjects['checkout/sessions/cs_test_rd'] = { id: 'cs_test_rd', status: 'complete', created: now(), subscription: 'sub_rd', customer_details: { email: 'reader@reader.test' } };
     stripeObjects['subscriptions/sub_rd'] = { ...sub('sub_rd', 'cus_rd', 'trialing'), trial_end: now() + 14 * 86400 };
-    await call('/session', { body: { checkout_session: 'cs_test_rd' } });
+    await fullCheckout('cs_test_rd');
     await webhook({ type: 'customer.subscription.created', data: { object: stripeObjects['subscriptions/sub_rd'] } });
     expect(JSON.parse((await env.DB.get('cus:cus_rd'))!)).toMatchObject({ source: 'home', utm: { utm_campaign: 'q3' }, plan: 'copy' });
     // One account per email: the free browser's session opens the paid member, which kept the free names.
@@ -1776,7 +1806,7 @@ describe('copybook api', () => {
     index = { managers: [{ slug: 'warren-buffett', featured: true }] };
     stripeObjects['checkout/sessions/cs_test_pz'] = { id: 'cs_test_pz', status: 'complete', created: now(), subscription: 'sub_pz', customer_details: { email: 'pz@example.com' } };
     stripeObjects['subscriptions/sub_pz'] = sub('sub_pz', 'cus_pz', 'active');
-    const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_pz' } })).json()) as { token: string };
+    const { token } = (await (await fullCheckout('cs_test_pz')).json()) as { token: string };
     await call('/follows/owned/SIRI', { method: 'POST', token });
     // Email only ("Keep email"): the channel test sends a test email.
     sent = [];
@@ -2428,7 +2458,7 @@ describe('copybook api', () => {
     secFiles['Archives/edgar/data/1057352/000162828026052968/0001628280-26-052968.txt'] = form4Csgp;
     stripeObjects['checkout/sessions/cs_test_cg'] = { id: 'cs_test_cg', status: 'complete', created: now(), subscription: 'sub_cg', customer_details: { email: 'cg@example.com' } };
     stripeObjects['subscriptions/sub_cg'] = sub('sub_cg', 'cus_cg', 'active');
-    const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_cg' } })).json()) as { token: string };
+    const { token } = (await (await fullCheckout('cs_test_cg')).json()) as { token: string };
     const res = await call('/events?tickers=CSGP&limit=10', { token });
     const r = await res.json();
     expect([res.status, r.pending]).toEqual([200, []]);
@@ -2457,7 +2487,7 @@ describe('copybook api', () => {
       secFiles['Archives/edgar/data/1652044/000119312526292904/0001193125-26-292904.txt'] = form4Googl;
       stripeObjects['checkout/sessions/cs_test_gg'] = { id: 'cs_test_gg', status: 'complete', created: now(), subscription: 'sub_gg', customer_details: { email: 'gg@example.com' } };
       stripeObjects['subscriptions/sub_gg'] = sub('sub_gg', 'cus_gg', 'active');
-      const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_gg' } })).json()) as { token: string };
+      const { token } = (await (await fullCheckout('cs_test_gg')).json()) as { token: string };
       const all = (await (await call('/events?tickers=GOOGL', { token })).json()).tickers.GOOGL.events;
       // Eight S lines in his trust on Jun 29 (8,998 shares), then 8,998 and 1,624 shares gifted from direct into the same trust:
       // -8,998 of the 103,053 Class C shares held before is -8.73%, not the +30% the trust line alone shows.
@@ -2513,7 +2543,7 @@ describe('copybook api', () => {
     });
     stripeObjects['checkout/sessions/cs_test_ev'] = { id: 'cs_test_ev', status: 'complete', created: now(), subscription: 'sub_ev', customer_details: { email: 'ev@example.com' } };
     stripeObjects['subscriptions/sub_ev'] = sub('sub_ev', 'cus_ev', 'active');
-    const { token } = (await (await call('/session', { body: { checkout_session: 'cs_test_ev' } })).json()) as { token: string };
+    const { token } = (await (await fullCheckout('cs_test_ev')).json()) as { token: string };
     const r = await (await call('/events?tickers=brk.b,CVI,ZZZZ,SIRI,BRK.A', { token })).json();
     expect(r.tickers['BRK.A'].events.filter((e: { form: string }) => e.form.startsWith('SCHEDULE')).map((e: { shares_after: number; percent_of_class: number }) => [e.shares_after, e.percent_of_class])).toEqual([[188290, 38.2]]);
     // Buffett's Jul 14 Form 4: converted 12M Class A-equivalent shares to B, then gave all 12M away. A gift, not a conversion; no price filed, so no value.
@@ -2557,7 +2587,7 @@ describe('copybook api', () => {
     // Pro: /v1/events?tickers= serves the same issuer-side rows next to the filers' own, with the lookback each feed covers.
     stripeObjects['checkout/sessions/cs_test_pv'] = { id: 'cs_test_pv', status: 'complete', created: now(), subscription: 'sub_pv', customer_details: { email: 'pv@example.com' } };
     stripeObjects['subscriptions/sub_pv'] = sub('sub_pv', 'cus_pv', 'active', 'month', 'pro_monthly');
-    const pv = ((await (await call('/session', { body: { checkout_session: 'cs_test_pv' } })).json()) as { token: string }).token;
+    const pv = ((await (await fullCheckout('cs_test_pv')).json()) as { token: string }).token;
     const { key } = await (await call('/keys', { body: { name: 'q' }, token: pv })).json();
     const v1 = await (await handleRequest(new Request('https://api.test/v1/events?tickers=BRK.B,CVI&form=form4', { headers: { authorization: `Bearer ${key}` } }), env)).json();
     expect(v1.data.map((d: { accession: string }) => d.accession)).toEqual(['0001728451-26-000004', '0001193125-26-304843']);
@@ -2585,7 +2615,7 @@ describe('copybook api', () => {
   it('referrals: a code per paying member; checkout applies a month free server-side; the referrer is credited a month once, after the first paid invoice', async () => {
     stripeObjects['checkout/sessions/cs_test_rr'] = { id: 'cs_test_rr', status: 'complete', created: now(), subscription: 'sub_rr', customer_details: { email: 'rr@example.com' } };
     stripeObjects['subscriptions/sub_rr'] = sub('sub_rr', 'cus_rr', 'active');
-    const rr = ((await (await call('/session', { body: { checkout_session: 'cs_test_rr' } })).json()) as { token: string }).token;
+    const rr = ((await (await fullCheckout('cs_test_rr')).json()) as { token: string }).token;
     const ref = (await (await call('/me', { token: rr })).json()).member.referral;
     expect(ref).toMatchObject({ code: expect.stringMatching(/^[a-z2-9]{8}$/), url: `${SITE}pricing/?ref=${ref.code}`, signups: 0, paid: 0 });
     expect((await (await call('/me', { token: rr })).json()).member.referral.code).toBe(ref.code); // stable
@@ -2646,7 +2676,7 @@ describe('copybook api', () => {
       const s = sub(`sub_${c}`, `cus_${c}`, 'active', interval, lookup);
       s.items.data[0] = { ...s.items.data[0], id: `si_${c}` } as (typeof s.items.data)[0];
       stripeObjects[`subscriptions/sub_${c}`] = s;
-      return ((await (await call('/session', { body: { checkout_session: `cs_test_${c}` } })).json()) as { token: string }).token;
+      return ((await (await fullCheckout(`cs_test_${c}`)).json()) as { token: string }).token;
     };
     const copy = await session('cu', 'copy_yearly', 'year');
     const pro = await session('pu', 'pro_monthly');
@@ -2683,7 +2713,7 @@ describe('copybook api', () => {
     const session = async (c: string, lookup: string, interval = 'month') => {
       stripeObjects[`checkout/sessions/cs_test_${c}`] = { id: `cs_test_${c}`, status: 'complete', created: now(), subscription: `sub_${c}`, customer_details: { email: `${c}@example.com` } };
       stripeObjects[`subscriptions/sub_${c}`] = sub(`sub_${c}`, `cus_${c}`, 'active', interval, lookup);
-      return (await (await call('/session', { body: { checkout_session: `cs_test_${c}` } })).json()) as { token: string; member: { plan: string } };
+      return (await (await fullCheckout(`cs_test_${c}`)).json()) as { token: string; member: { plan: string } };
     };
     const copy = await session('copy1', 'copy_monthly');
     const pro = await session('pro1', 'pro_yearly', 'year');
@@ -2919,7 +2949,7 @@ describe('copybook api', () => {
   it('single-item follows: Follow clicks a second apart both land, a settings save never undoes them, owned implies watched', async () => {
     stripeObjects['checkout/sessions/cs_test_c'] = { id: 'cs_test_c', status: 'complete', created: now(), subscription: 'sub_c', customer_details: { email: 'c@example.com' } };
     stripeObjects['subscriptions/sub_c'] = sub('sub_c', 'cus_c', 'active');
-    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_c' } })).json()).token;
+    const t = (await (await fullCheckout('cs_test_c')).json()).token;
     filers.push({ cik: '0001798849', name: 'Durable Capital Partners LP', slug: 'durable-capital-partners-lp-8849', ok: true, quarter: '2026Q2' }, { cik: '0001541617', name: 'Altimeter Capital Management, LP', slug: 'altimeter-capital-management-lp-1617', ok: true, quarter: '2026Q2' });
     const req = (method: string, path: string, b?: unknown) => handleRequest(new Request(`https://api.test${path}`, { method, body: b ? JSON.stringify(b) : undefined, headers: { origin: 'https://refcell.github.io', authorization: `Bearer ${t}` } }), env);
     // Two clicks in flight together, plus a settings save that doesn't touch investors.
@@ -2997,13 +3027,15 @@ describe('copybook api', () => {
     ]);
     expect(s.status).toBe(200);
     expect(s.headers.get('access-control-allow-origin')).toBe('https://holdterm.pages.dev');
-    const { token, member } = await s.json();
-    expect(member).toMatchObject({ plan: 'holdterm', active: true });
+    const handed = await s.json();
+    expect([handed.session, handed.member]).toMatchObject(['provisional', { plan: 'holdterm', active: true }]);
     // The welcome comes from Holdterm, with a Holdterm sign-in link, and never names Copybook.
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ from: 'Holdterm <holdterm@factordynamics.com>', subject: 'Holdterm alerts are on' });
     expect(sent[0].text).toContain('https://holdterm.pages.dev/account?login=');
     expect(JSON.stringify(sent[0])).not.toMatch(/copybook/i);
+    // Signed in by the welcome's link: a full session.
+    const token = (await (await call('/session', { body: { login: decodeURIComponent(sent[0].text.match(/account\?login=([^\s]+)/)![1]) } })).json()).token as string;
     const ht = (method: string, path: string, b?: unknown) => handleRequest(new Request(`https://api.test${path}`, { method, body: b ? JSON.stringify(b) : undefined, headers: { origin: 'https://holdterm.pages.dev', authorization: `Bearer ${token}` } }), env);
     expect((await (await ht('GET', '/me')).json()).member).toMatchObject({ cancel_at_period_end: false, cancel_at: null });
     // A portal cancel shows on /me as a pending end, so the site can say "ends" instead of "renews".
@@ -3059,7 +3091,7 @@ describe('copybook api', () => {
     const session = async (id: string, plan?: string) => {
       stripeObjects[`checkout/sessions/cs_test_${id}`] = { id: `cs_test_${id}`, status: 'complete', created: now(), subscription: `sub_${id}`, customer_details: { email: `${id}@example.com` } };
       stripeObjects[`subscriptions/sub_${id}`] = plan ? sub(`sub_${id}`, `cus_${id}`, 'active', 'month', plan) : sub(`sub_${id}`, `cus_${id}`, 'active');
-      return (await (await call('/session', { body: { checkout_session: `cs_test_${id}` } })).json()).token as string;
+      return (await (await fullCheckout(`cs_test_${id}`)).json()).token as string;
     };
     const copy = await session('chan');
     const pro = await session('hook', 'pro_monthly');
@@ -3502,7 +3534,7 @@ describe('copybook api', () => {
     // A brand-new subscriber starts on followed funds (an empty list), not every fund.
     stripeObjects['checkout/sessions/cs_test_new'] = { id: 'cs_test_new', status: 'complete', created: now(), subscription: 'sub_new', customer_details: { email: 'new@example.com' } };
     stripeObjects['subscriptions/sub_new'] = sub('sub_new', 'cus_new', 'active');
-    const s = await (await call('/session', { body: { checkout_session: 'cs_test_new' } })).json();
+    const s = await (await fullCheckout('cs_test_new')).json();
     expect(s.member.alerts).toEqual([]);
   });
 
@@ -3539,7 +3571,7 @@ describe('copybook api', () => {
   it('Copy Fund seats: invites with their own sign-in, a shared book and peers, per-seat alert settings, billing stays with the owner', async () => {
     stripeObjects['checkout/sessions/cs_test_fund'] = { id: 'cs_test_fund', status: 'complete', created: now(), subscription: 'sub_fund', customer_details: { email: 'pm@fund.example' } };
     stripeObjects['subscriptions/sub_fund'] = sub('sub_fund', 'cus_fund', 'active', 'year', 'fund_yearly');
-    let owner = (await (await call('/session', { body: { checkout_session: 'cs_test_fund' } })).json()).token;
+    let owner = (await (await fullCheckout('cs_test_fund')).json()).token;
     await call('/follows/warren-buffett', { method: 'POST', token: owner });
     await call('/follows/owned/NVDA', { method: 'POST', token: owner });
     sent = [];
@@ -3626,6 +3658,9 @@ describe('copybook api', () => {
     const so = await (await call('/me/sessions/revoke', { method: 'POST', token: here })).json();
     expect(so).toMatchObject({ ok: true, member: { email: expect.any(String) } });
     expect([(await call('/me', { token: copied })).status, (await call('/me', { token: here })).status, (await call('/me', { token: so.token })).status]).toEqual([401, 401, 200]);
+    // A copy issued in the very second of the sign-out dies too (the PM's i=1794395761); only the fresh one lives.
+    const sameSecond = await signToken(env.SESSION_SECRET, 'session', 'cus_fund', 30 * 86400, {}, Date.parse(so.revoked_at) / 1000 + 0.5);
+    expect((await call('/me', { token: sameSecond })).status).toBe(401);
     // The site signs out only on invalid_session (revoked, forged, expired); a valid session this host can't place, or none, is not that.
     const code = async (token: string) => (await (await call('/me', { token })).json()).code;
     expect([await code(copied), await code(`${here}x`), await code(await signToken(env.SESSION_SECRET, 'session', 'cus_nobody', 600)), await code('')]).toEqual(['invalid_session', 'invalid_session', 'member_unavailable', 'no_session']);
@@ -3677,7 +3712,7 @@ describe('copybook api', () => {
     index = current;
     stripeObjects['checkout/sessions/cs_test_af'] = { id: 'cs_test_af', status: 'complete', created: now(), subscription: 'sub_af', customer_details: { email: 'af@example.com' } };
     stripeObjects['subscriptions/sub_af'] = sub('sub_af', 'cus_af', 'active', 'month', 'pro_monthly');
-    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_af' } })).json()).token;
+    const t = (await (await fullCheckout('cs_test_af')).json()).token;
     const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
     const v1 = async (path: string) => {
       const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
@@ -3891,7 +3926,7 @@ describe('copybook api', () => {
     await cron(17);
     stripeObjects['checkout/sessions/cs_test_pd'] = { id: 'cs_test_pd', status: 'complete', created: now(), subscription: 'sub_pd', customer_details: { email: 'pd@example.com' } };
     stripeObjects['subscriptions/sub_pd'] = sub('sub_pd', 'cus_pd', 'active');
-    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_pd' } })).json()).token;
+    const t = (await (await fullCheckout('cs_test_pd')).json()).token;
     expect((await call('/flow')).status).toBe(401);
 
     expect((await call('/flow', { token: t })).status).toBe(404);
@@ -3959,7 +3994,7 @@ describe('copybook api', () => {
   it('book import: pasted list, broker CSV, and a 13F filer by CIK that follows its newest quarter', async () => {
     stripeObjects['checkout/sessions/cs_test_bk'] = { id: 'cs_test_bk', status: 'complete', created: now(), subscription: 'sub_bk', customer_details: { email: 'bk@example.com' } };
     stripeObjects['subscriptions/sub_bk'] = sub('sub_bk', 'cus_bk', 'active');
-    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_bk' } })).json()).token;
+    const t = (await (await fullCheckout('cs_test_bk')).json()).token;
     const imp = async (b: unknown) => (await call('/book/import', { body: b, token: t })).json();
 
     let r = await imp({ text: '$aapl, BRK-B\nmsft  googl 12345' });
@@ -4021,7 +4056,7 @@ describe('copybook api', () => {
     await cron(17);
     stripeObjects['checkout/sessions/cs_test_ec'] = { id: 'cs_test_ec', status: 'complete', created: now(), subscription: 'sub_ec', customer_details: { email: 'ec@example.com' } };
     stripeObjects['subscriptions/sub_ec'] = sub('sub_ec', 'cus_ec', 'active', 'month', 'pro_monthly');
-    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_ec' } })).json()).token;
+    const t = (await (await fullCheckout('cs_test_ec')).json()).token;
     const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
     const v1 = async (path: string) => {
       const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
@@ -4263,7 +4298,7 @@ describe('copybook api', () => {
     // /v1/filers lists the precomputed non-curated rows after the curated ones, paged (default limit 500).
     stripeObjects['checkout/sessions/cs_test_cpu'] = { id: 'cs_test_cpu', status: 'complete', created: now(), subscription: 'sub_cpu', customer_details: { email: 'cpu@example.com' } };
     stripeObjects['subscriptions/sub_cpu'] = sub('sub_cpu', 'cus_cpu', 'active', 'month', 'pro_monthly');
-    const tk = (await (await call('/session', { body: { checkout_session: 'cs_test_cpu' } })).json()).token;
+    const tk = (await (await fullCheckout('cs_test_cpu')).json()).token;
     const key = (await (await call('/keys', { body: { name: 'k' }, token: tk })).json()).key;
     const v1 = async (path: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env)).json();
     const rest = [{ slug: 'whale-rock-7322', cik: '0001387322', curated: false }, { slug: 'x-1', cik: '0001423053', curated: false, type: 'bank', latest_quarter: '2026Q3', history_quarters: ['2026Q3'] }];
@@ -4332,7 +4367,7 @@ describe('copybook api', () => {
 
     stripeObjects['checkout/sessions/cs_test_ver'] = { id: 'cs_test_ver', status: 'complete', created: now(), subscription: 'sub_ver', customer_details: { email: 'ver@example.com' } };
     stripeObjects['subscriptions/sub_ver'] = sub('sub_ver', 'cus_ver', 'active', 'month', 'pro_monthly');
-    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_ver' } })).json()).token;
+    const t = (await (await fullCheckout('cs_test_ver')).json()).token;
     const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
     const v1 = async (path: string) => {
       const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
@@ -4387,7 +4422,7 @@ describe('copybook api', () => {
 
     stripeObjects['checkout/sessions/cs_test_mis'] = { id: 'cs_test_mis', status: 'complete', created: now(), subscription: 'sub_mis', customer_details: { email: 'mis@example.com' } };
     stripeObjects['subscriptions/sub_mis'] = sub('sub_mis', 'cus_mis', 'active', 'month', 'pro_monthly');
-    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_mis' } })).json()).token;
+    const t = (await (await fullCheckout('cs_test_mis')).json()).token;
     const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
     const filing = async (q: string) => (await (await handleRequest(new Request(`https://api.test/v1/filers/matthew-mclennan/holdings/${q}`, { headers: { authorization: `Bearer ${key}` } }), env)).json()).data.filing;
     const flags = (f: { accession: string; mislabeled_amendment: boolean; versions: { accession: string; status: string; mislabeled_amendment: boolean }[]; amendments: { accession: string; mislabeled_amendment: boolean }[] }) => ({
@@ -4413,7 +4448,7 @@ describe('copybook api', () => {
     secFiles[`${dir('0000950123-25-008361')}primary_doc.xml`] = '<isAmendment>true</isAmendment><amendmentNo>1</amendmentNo><amendmentType>NEW HOLDINGS</amendmentType><confDeniedExpired>true</confDeniedExpired>';
     stripeObjects['checkout/sessions/cs_test_v'] = { id: 'cs_test_v', status: 'complete', created: now(), subscription: 'sub_v', customer_details: { email: 'v@example.com' } };
     stripeObjects['subscriptions/sub_v'] = sub('sub_v', 'cus_v', 'active', 'month', 'pro_monthly');
-    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_v' } })).json()).token;
+    const t = (await (await fullCheckout('cs_test_v')).json()).token;
     const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
     const v1 = async (path: string) => {
       const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
