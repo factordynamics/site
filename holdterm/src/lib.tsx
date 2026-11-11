@@ -373,6 +373,15 @@ export function Grid<R>({
     })
   }, [rows, sort, cols])
   const visible = sorted.slice(0, shown)
+  // A row whose ticker already links to its page keeps one Tab stop: the name link (same page) stays clickable
+  // and readable but leaves the Tab order, so keyboard users don't pass every row twice.
+  useEffect(() => {
+    body.current?.querySelectorAll<HTMLAnchorElement>('a.rowlink').forEach((a) => {
+      const twin = [...(a.closest('tr')?.querySelectorAll<HTMLAnchorElement>('a:not(.rowlink)') ?? [])].some((o) => o.getAttribute('href') === a.getAttribute('href'))
+      if (twin) a.tabIndex = -1
+      else a.removeAttribute('tabindex')
+    })
+  })
 
   if (!rows.length) return typeof empty === 'string' ? <Empty title={empty} /> : <>{empty}</>
   return (
