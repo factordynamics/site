@@ -576,7 +576,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // Support fixes to a member's follows (e.g. restoring lost names), through the same serialized path
   // as the member's own changes. Operator token only.
-  const ops = path.match(/^\/ops\/follows\/(cus_\w+)$/);
+  const ops = path.match(/^\/ops\/follows\/(cus_\w+|free_[0-9a-f]{16})$/);
   if (req.method === 'POST' && ops) {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const m = await getMember(env, ops[1]);
