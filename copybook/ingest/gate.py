@@ -85,9 +85,11 @@ def holder_counts(data: Path, books: dict[str, dict]) -> list[str]:
     if not folder.exists():
         return []
     tracked: dict[str, set] = {}
+    links = (read_json(data / "cusip_links.json") or {}).get("links") or {}
     for b in books.values():
         for h in b.get("holdings") or []:
             c = h.get("cusip") or ""
+            c = (links.get(c) or {}).get("new") or c  # hl/ counts a reissued CUSIP's holders under the new one
             if len(c) >= 6 and not h.get("put_call") and h.get("shares_type", "SH") != "PRN" and h.get("shares") \
                     and not not_common(h.get("title")):
                 tracked.setdefault(c[:6], set()).add(b.get("cik"))
