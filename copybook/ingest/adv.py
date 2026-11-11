@@ -42,8 +42,10 @@ def latest_files() -> tuple[str, str]:
     page = get(PAGE).decode("utf-8", "replace")
     hrefs = re.findall(r'href="(/files/investment/data/other/information-about-registered-investment-advisers'
                        r'-exempt-reporting-advisers/[^"]+\.zip)"', page)
-    reg = next(h for h in hrefs if "exempt" not in h)
-    ex = next(h for h in hrefs if "exempt" in h)
+    # Judge by the file name: the folder itself is "...-exempt-reporting-advisers".
+    name = lambda h: h.rsplit("/", 1)[-1]
+    reg = next(h for h in hrefs if "exempt" not in name(h))
+    ex = next(h for h in hrefs if "exempt" in name(h))
     return "https://www.sec.gov" + reg, "https://www.sec.gov" + ex
 
 

@@ -51,3 +51,15 @@ class AdviserRuleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AdvFilesTest(unittest.TestCase):
+    def test_registered_and_exempt_files_are_told_apart_by_file_name(self):
+        # The SEC folder is ".../information-about-registered-investment-advisers-exempt-reporting-advisers/".
+        from unittest import mock
+        from ingest import adv
+        d = "/files/investment/data/other/information-about-registered-investment-advisers-exempt-reporting-advisers/"
+        page = f'<a href="{d}ia11022026-exempt.zip">x</a><a href="{d}ia110226-registered.zip">y</a>'.encode()
+        with mock.patch.object(adv, "get", return_value=page):
+            reg, ex = adv.latest_files()
+        self.assertEqual((reg.rsplit("/", 1)[-1], ex.rsplit("/", 1)[-1]), ("ia110226-registered.zip", "ia11022026-exempt.zip"))
