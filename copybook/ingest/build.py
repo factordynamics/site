@@ -836,7 +836,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         k = (h["cusip"], h["put_call"] or "")
         if k in dup:
             rows.append(h | {"row_type": "holding", "suspect_duplicate": True} | {f: None for f in CHANGE_FIELDS}
-                        | units(h, None, 1.0, 1.0, q_to, None))
+                        | {"value_delta": 0, "delta_pct_of_book": 0.0} | units(h, None, 1.0, 1.0, q_to, None))
             continue
         p = before.pop(k, None) or before.pop(renamed.get(k), None)
         if p is not None and p["cusip"] != h["cusip"]:
@@ -900,6 +900,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
 
 def moves(rows: list[dict], limit: int = MOVE_ROWS) -> dict | None:
     """Biggest new, exited, added and trimmed positions by dollar size of the trade."""
+    rows = [r for r in rows if not r.get("suspect_duplicate")]  # a stale old-code line beside the new code
     if not rows or rows[0].get("change") is None:
         return None
     keep = ("ticker", "display_name", "issuer", "cusip", "title", "put_call", "shares_type", "sector", "shares",

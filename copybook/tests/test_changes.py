@@ -221,6 +221,8 @@ class MoveMathTest(unittest.TestCase):
         self.assertEqual((got["M8769Q102"]["change"], got["M8769Q102"]["prev_cusip"], got["M8769Q102"]["share_change"]),
                          ("added", "881624209", 876))
         self.assertEqual((got["881624209"]["change"], got["881624209"]["suspect_duplicate"]), (None, True))
+        rows = build.with_changes(cur, prev)
+        self.assertEqual(build.moves(rows)["bought_usd"], round(got["M8769Q102"]["value_delta"]))  # fund-page moves
 
     def test_reissue_link_needs_the_sec_13f_list_and_never_joins_units(self):
         from ingest.moves import on_list
