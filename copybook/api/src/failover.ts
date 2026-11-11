@@ -373,6 +373,8 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
     out.poller = 'backup (cloudflare polls)';
     // 13Fs Cloudflare sent without moves: gene computes them from EDGAR and sends the follow-up.
     out.moves = await (await import('./alerts')).geneMoves(env, now).catch((e) => `error: ${e}`);
+    // Hourly: members re-read from Stripe (a missed webhook can't leave a stale record).
+    if (new Date(now).getUTCMinutes() === 23) out.reconcile = await (await import('./members')).reconcileMembers(env).catch((e) => `error: ${e}`);
     // While Cloudflare polls, gene's spare minute fills holder rows' EDGAR acceptance times.
     out.accepted = await (await import('./v1data')).fillAccepted(env).catch((e) => `error: ${e}`);
     return out;
@@ -382,6 +384,7 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
   await r2Put(env, GENE_POLLED, JSON.stringify({ last_run_at: iso(now) })).catch((e) => (out.gene_polled = `error: ${e}`));
   Object.assign(out, await run(env));
   out.moves = await (await import('./alerts')).geneMoves(env, now).catch((e) => `error: ${e}`);
+  if (new Date(now).getUTCMinutes() === 23) out.reconcile = await (await import('./members')).reconcileMembers(env).catch((e) => `error: ${e}`);
   await env.DB.put('host:poller', JSON.stringify({ host: 'gene', last_run_at: iso(now) } satisfies PollerLine));
   // What this minute wrote goes to Cloudflare now, not next minute.
   try {

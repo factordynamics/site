@@ -81,6 +81,8 @@ export interface Env {
 
 /** What we keep per Stripe customer. */
 export interface Member {
+  /** When the record last took Stripe's subscription (webhook or reconciliation). */
+  synced_at?: string;
   /** The subscription has a card (or other payment method) to charge when its trial ends. */
   has_payment_method?: boolean;
   customer: string;
@@ -161,6 +163,21 @@ export function linkBase(env: Env, req: Request, url: URL): string {
  * Operator output never carries a real member's data (agent sessions are logged): an email shows as a***@domain,
  * lists as counts, destinations not at all. Test members (gate and critic inboxes, `test`) show as they are.
  */
+/**
+ * The per-member access log: every operator read of a member's records (book, follows, channels, account), with
+ * who (the x-copybook-operator header naming the session or script, else \"operator token\"), when, the route and the
+ * member's row ID. Kept per member (access:{customer}, last 500) so a member can be told whether any session read
+ * their book. Members' own requests are not logged.
+ */
+export async function logAccess(env: Env, req: Request | null, route: string, customers: (string | null | undefined)[], note?: string, who?: string, at = new Date().toISOString()): Promise<void> {
+  const by = who ?? req?.headers.get('x-copybook-operator')?.slice(0, 120) ?? 'operator token';
+  for (const c of new Set(customers.filter((x): x is string => !!x))) {
+    const k = `access:${c}`;
+    const log = JSON.parse((await env.DB.get(k)) ?? '[]') as unknown[];
+    await env.DB.put(k, JSON.stringify([...log, { at, who: by, route, customer: c, ...(note ? { note } : {}) }].slice(-500)));
+  }
+}
+
 export const testAddress = (e: string) => /^copybook-(test|gate)-/.test(e) || e.endsWith('@fldubai.com');
 export const maskEmail = (e: string) => (testAddress(e) ? e : e.replace(/^(.)[^@]*(@.*)$/, '$1***$2'));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

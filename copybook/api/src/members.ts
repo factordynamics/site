@@ -171,6 +171,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
       console.log(`cancel: scheduled pause not cleared for ${customer}: ${e}`);
     }
   }
+  m.synced_at = new Date().toISOString();
   await maybeCancelMail(env, prev, m);
   await maybeResumeMail(env, prev, m);
   await maybeWinback(env, prev, m);
@@ -184,6 +185,32 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
 export function publicView(m: Member) {
   // A Fund seat: billing belongs to the owner, so the site hides the portal for seats.
   return { email: m.email, status: m.status, active: isActive(m), plan: m.plan, interval: m.interval, trial_end: m.trial_end ?? null, has_payment_method: m.has_payment_method ?? null, period_end: m.period_end, cancel_at_period_end: m.cancel_at_period_end ?? false, cancel_at: m.cancel_at ?? null, paused_until: isPaused(m) ? m.paused_until : null, pause_after_trial: pauseScheduled(m) ? { from: m.paused_from, until: m.paused_until } : null, alerts: m.alerts, seat: Boolean(m.seat_of) };
+}
+
+/**
+ * Re-reads members' subscriptions from Stripe and applies them as a webhook would, so a missed or failed delivery
+ * can't leave a stale record (a cancel undone in the portal still showing "Cancelled"). Emails follow the same
+ * transition rules as the webhook, so state already mailed is not mailed again. Hourly on gene, and from /me when a
+ * record is over an hour old.
+ */
+export async function reconcileMembers(env: Env, only?: Member[], budgetMs = 40_000): Promise<{ checked: number; fixed: number; errors: number }> {
+  const t0 = Date.now();
+  const r = { checked: 0, fixed: 0, errors: 0 };
+  for (const m of only ?? (await listMembers(env))) {
+    if (Date.now() - t0 > budgetMs) break;
+    if (!m.subscription?.startsWith('sub_') || m.seat_of) continue;
+    r.checked++;
+    try {
+      const sub = await stripe(env, 'GET', `subscriptions/${m.subscription}`);
+      if (!isOurSubscription(sub)) continue;
+      const before = JSON.stringify([m.status, m.cancel_at_period_end, m.cancel_at ?? null, m.paused_until ?? null, m.plan, m.interval, m.trial_end ?? null, m.period_end]);
+      const next = await syncSubscription(env, sub);
+      if (JSON.stringify([next.status, next.cancel_at_period_end, next.cancel_at ?? null, next.paused_until ?? null, next.plan, next.interval, next.trial_end ?? null, next.period_end]) !== before) r.fixed++;
+    } catch {
+      r.errors++;
+    }
+  }
+  return r;
 }
 
 export async function listMembers(env: Env): Promise<Member[]> {

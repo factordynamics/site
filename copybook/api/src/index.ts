@@ -8,7 +8,7 @@ import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
-import { ACTIVE, apiBase, followCounts, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
+import { ACTIVE, apiBase, followCounts, logAccess, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
 import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
@@ -454,6 +454,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const m = await getMember(env, ops[1]);
     if (!m) return json({ ok: false, error: 'no such member' }, 404, h);
     const r = await changeFollows(env, m, (await body(req)) as unknown as FollowOp);
+    await logAccess(env, req, 'POST /ops/follows/{customer}', [m.customer], 'follows changed and returned');
     return json(r.ok ? { ok: true, customer: m.customer, follows: m.test || testAddress(m.email) ? r.follows : followCounts(r.follows) } : r, r.ok ? 200 : 400, h);
   }
 
@@ -479,6 +480,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const email = String((await body(req)).email ?? '').trim().toLowerCase();
     if (!email) return json({ ok: false, error: 'email' }, 400, h);
     const r = await eraseMember(env, email);
+    await logAccess(env, req, 'POST /ops/erase-member', r.customers, 'erased');
     console.log(`operator: erased member ${r.customers.join(',')} (${r.deleted} keys)`);
     return json({ ok: true, ...r }, 200, h);
   }
@@ -487,7 +489,9 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'POST' && path === '/ops/merge-free') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const { mergeFreeSignup } = await import('./free');
-    return json(await mergeFreeSignup(env, String((await body(req)).email ?? '').trim().toLowerCase()), 200, h);
+    const email = String((await body(req)).email ?? '').trim().toLowerCase();
+    await logAccess(env, req, 'POST /ops/merge-free', [await env.DB.get(`email:${email}`)], 'free and paid records merged');
+    return json(await mergeFreeSignup(env, email), 200, h);
   }
 
   // Operator: this week's free email for one free member, now (Friday's issue, previewed).
@@ -515,6 +519,21 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, funnel: await funnel(env, Date.now(), days), track }, 200, h);
   }
 
+  // Operator: one member's access log (for telling a member whether any session read their book), or an entry for a
+  // read made outside the API (a script on gene minting a session).
+  if ((req.method === 'GET' || req.method === 'POST') && path === '/ops/access-log') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    if (req.method === 'POST') {
+      const b = await body(req);
+      const c = typeof b.customer === 'string' && /^(cus_\w+|free_\w+)$/.test(b.customer) ? b.customer : null;
+      if (!c || typeof b.route !== 'string') return json({ ok: false, error: 'customer (row ID) and route' }, 400, h);
+      await logAccess(env, req, b.route.slice(0, 120), [c], typeof b.note === 'string' ? b.note.slice(0, 300) : undefined, typeof b.who === 'string' ? b.who.slice(0, 120) : undefined, typeof b.at === 'string' && !Number.isNaN(Date.parse(b.at)) ? new Date(b.at).toISOString() : undefined);
+      return json({ ok: true }, 200, h);
+    }
+    const c = url.searchParams.get('customer') ?? '';
+    return json({ ok: true, customer: c, entries: JSON.parse((await env.DB.get(`access:${c}`)) ?? '[]') }, 200, h);
+  }
+
   // Operator: member counts by status, plan and test flag (counts only; agent sessions are logged).
   if (req.method === 'GET' && path === '/ops/member-counts') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
@@ -530,6 +549,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const { previewWeekly } = await import('./free');
     const b = await body(req);
+    await logAccess(env, req, 'POST /ops/weekly-preview', [await env.DB.get(`email:${String(b.email ?? '').trim().toLowerCase()}`)], 'owned names read for the preview');
     return json(await previewWeekly(env, String(b.email ?? '').trim().toLowerCase(), Date.now(), b.dry === true), 200, h);
   }
 
@@ -538,6 +558,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'POST' && dedupe) {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
     const owner = await getMember(env, dedupe[1]);
+    await logAccess(env, req, 'POST /ops/team-dedupe/{customer}', [owner?.customer], 'team channels read');
     return owner ? json({ ok: true, cleared: await clearSeatDuplicates(env, owner) }, 200, h) : json({ ok: false, error: 'no such member' }, 404, h);
   }
 
@@ -551,6 +572,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const cus = await env.DB.get(`email:${String(b.email ?? '').trim().toLowerCase()}`);
     const keys = cus ? (await listKeys(env, cus)).filter((k) => k.name === b.name) : [];
     for (const k of keys) await revokeKey(env, cus!, k.id);
+    await logAccess(env, req, 'POST /ops/revoke-key', [cus], 'API keys listed');
     return json({ ok: true, revoked: keys.length }, 200, h);
   }
 
@@ -582,6 +604,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const all: any[] = [...(JSON.parse((await env.DB.get('v1:events')) ?? '[]') as unknown[]), ...(pre ? (((await new Response(pre.body).json()) as { events: unknown[] }).events ?? []) : [])];
     const ev = all.find((e) => e.id === b.accession) as AlertEvent | undefined;
     if (!ev) return json({ ok: false, error: 'no such event in the store' }, 404, h);
+    await logAccess(env, req, 'POST /ops/deliver', b.customers, `follows read to deliver ${ev.id}`);
     const replays = JSON.parse((await env.DB.get('alerts:replays')) ?? '[]') as string[];
     if (!replays.includes(ev.id)) await env.DB.put('alerts:replays', JSON.stringify([...replays, ev.id].slice(-200)));
     const at = new Date().toISOString();
@@ -742,7 +765,15 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return csvResponse(env, dlSlug, h);
   }
 
-  const m = await authed(req, env);
+  let m = await authed(req, env);
+  // A paid record not synced from Stripe in the last hour is re-read first (at most 2 s), so a missed webhook
+  // can't show a stale plan ("Cancelled" after the member renewed in the portal).
+  if (m && req.method === 'GET' && path === '/me' && m.subscription?.startsWith('sub_') && !m.seat_of && (!m.synced_at || Date.now() - Date.parse(m.synced_at) > 3600_000)) {
+    const { reconcileMembers } = await import('./members');
+    const cur = m;
+    await Promise.race([reconcileMembers(env, [cur], 2000).catch(() => null), new Promise((r) => setTimeout(r, 2000))]);
+    m = (await getMember(env, cur.customer)) ?? cur;
+  }
   if (!m) return json({ ok: false, error: 'sign in required' }, 401, h);
 
   // Short-lived sign-in token for carrying a session across origins in a URL (e.g. the old-host redirect).

@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { FOOTER, sendMail, type Mail } from './email';
-import { apiBase, isActive, isPaused, pauseScheduled, type Env, type Member } from './env';
+import { apiBase, isActive, isPaused, pauseScheduled, testAddress, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
 import { getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
 import { DEADLINES, deadlineLabel, deadlineMs, inFilingWeek, lastDeadline, nextDeadline, pauseResumesAt } from './seasons';
@@ -23,6 +23,8 @@ const PRICES: Record<string, { name: string; month: number; year: number }> = {
 const billable = (m: Member) => lifecycle(m) && !m.test;
 /** Gets lifecycle email (trial, cancel, resume, pause, dunning): test members too, so a gate run sees what a member sees. */
 const lifecycle = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !m.comped && !!PRICES[m.plan];
+/** Cancel and undo-cancel confirmations: as lifecycle, plus comped test members (critics run the member's path end to end). */
+const confirms = (m: Member) => lifecycle(m) || (m.plan !== 'holdterm' && !m.seat_of && !!PRICES[m.plan] && (!!m.test || testAddress(m.email ?? '')));
 const day = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' });
 /** A trial or period end with its time (Stripe shows the UTC date, so a 7:46 pm ET end reads as the next day there): "November 24, 7:46 pm ET". */
 export const endAt = (unix: number) => `${day(unix)}, ${new Date(unix * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).replace(' AM', ' am').replace(' PM', ' pm')} ET`;
@@ -310,7 +312,7 @@ export async function cancelMail(env: Env, m: Member): Promise<Mail> {
 /** A cancellation undone before it took effect (the resume link, or Renew in the billing portal): one confirmation. */
 export async function maybeResumeMail(env: Env, prev: Member | null, m: Member): Promise<void> {
   if (!prev || prev.subscription !== m.subscription || !prev.cancel_at_period_end || m.cancel_at_period_end || !isActive(m) || isPaused(m)) return;
-  if (!lifecycle(m) || !m.email) return;
+  if (!confirms(m) || !m.email) return;
   // A later cancel asks again.
   if ((await sendMail(env, [resumedMail(env, m)])) === '200') m.why_sent = undefined;
 }
@@ -327,7 +329,7 @@ function resumedMail(env: Env, m: Member): Mail {
 
 /** Sent once per subscription when a member cancels (now or at period end). */
 export async function maybeCancelMail(env: Env, prev: Member | null, m: Member): Promise<void> {
-  if (!lifecycle(m) || !m.email || m.why_sent === m.subscription) return;
+  if (!confirms(m) || !m.email || m.why_sent === m.subscription) return;
   const cancelling = (m.cancel_at_period_end && !prev?.cancel_at_period_end) || (m.status === 'canceled' && !!prev && isActive(prev) && !prev.cancel_at_period_end);
   if (!cancelling) return;
   if ((await sendMail(env, [await cancelMail(env, m)])) === '200') m.why_sent = m.subscription;

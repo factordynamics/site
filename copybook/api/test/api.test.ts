@@ -916,6 +916,34 @@ describe('copybook api', () => {
     expect(Object.entries(mod).filter(([k, v]) => k !== 'default' && typeof v !== 'function').map(([k]) => k)).toEqual([]);
   });
 
+  it('portal cancel and renew on a comped test member: record and both emails; a missed renew is fixed by reconciliation, mailed once', async () => {
+    const base = { ...sub('sub_rt', 'cus_rt', 'active'), metadata: { test_member: 'true' } };
+    stripeObjects['customers/cus_rt'] = { id: 'cus_rt', email: 'copybook-test-rt@fldubai.com' };
+    stripeObjects['subscriptions/sub_rt'] = base;
+    await webhook({ type: 'customer.subscription.created', data: { object: base } });
+    sent = [];
+    // Portal cancel (Nov 11, 01:01:39): cancel_at_period_end and cancel_at.
+    const cancelled = { ...base, cancel_at_period_end: true, cancel_at: now() + 27 * 86400, canceled_at: now() };
+    await webhook({ type: 'customer.subscription.updated', data: { object: cancelled, previous_attributes: { cancel_at_period_end: false } } });
+    expect(JSON.parse((await env.DB.get('cus:cus_rt'))!).cancel_at_period_end).toBe(true);
+    expect(sent.map((m) => m.subject)).toEqual([expect.stringMatching(/^Your Copy plan ends /)]);
+    // Portal renew (01:12:09): the record is active again and the member is told.
+    sent = [];
+    await webhook({ type: 'customer.subscription.updated', data: { object: base, previous_attributes: { cancel_at_period_end: true } } });
+    expect(JSON.parse((await env.DB.get('cus:cus_rt'))!).cancel_at_period_end).toBe(false);
+    expect(sent.map((m) => m.subject)).toEqual(["You've resumed Copy"]);
+    // The renew webhook missed: the record still says cancelled until reconciliation re-reads Stripe, which mails once.
+    await webhook({ type: 'customer.subscription.updated', data: { object: cancelled } });
+    sent = [];
+    const { reconcileMembers } = await import('../src/members');
+    expect(await reconcileMembers(env)).toMatchObject({ fixed: 1, errors: 0 });
+    expect(JSON.parse((await env.DB.get('cus:cus_rt'))!).cancel_at_period_end).toBe(false);
+    expect(sent.map((m) => m.subject)).toEqual(["You've resumed Copy"]);
+    sent = [];
+    expect(await reconcileMembers(env)).toMatchObject({ fixed: 0 });
+    expect(sent).toHaveLength(0);
+  });
+
   it('latency rows from before the moves tag are re-timed once from the day stores', async () => {
     const day = new Date(Date.now() - 5 * 3600_000).toISOString().slice(0, 10);
     const at = (s: number) => new Date(Date.parse(`${day}T15:00:00Z`) + s * 1000).toISOString();
@@ -1346,6 +1374,16 @@ describe('copybook api', () => {
     const masked = await (await op('/ops/follows/cus_real', { add: { list: 'stocks', ticker: 'MSFT' } })).text();
     expect(JSON.parse(masked)).toMatchObject({ ok: true, customer: 'cus_real', follows: { owned: 2, investors: 0 } });
     expect(masked).not.toMatch(/AAPL|NVDA|MSFT|real@/);
+    // Every operator read of a member is in that member's access log: who, when, route, row ID.
+    await handleRequest(new Request('https://api.test/ops/follows/cus_real', { method: 'POST', body: JSON.stringify({ get: true }), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}`, 'x-copybook-operator': 'T-check' } }), env);
+    expect((await op('/ops/access-log', { customer: 'cus_real', route: 'POST /session (verify.mjs)', who: 'gene verify.mjs', at: '2026-11-09T07:00:00Z', note: 'plan read' })).status).toBe(200);
+    const log = await (await handleRequest(new Request('https://api.test/ops/access-log?customer=cus_real', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env)).json();
+    expect(log.entries.map((e: { who: string; route: string; customer: string }) => [e.who, e.route, e.customer])).toEqual([
+      ['operator token', 'POST /ops/follows/{customer}', 'cus_real'],
+      ['T-check', 'POST /ops/follows/{customer}', 'cus_real'],
+      ['gene verify.mjs', 'POST /session (verify.mjs)', 'cus_real'],
+    ]);
+    expect((await handleRequest(new Request('https://api.test/ops/access-log?customer=cus_real'), env)).status).toBe(404);
     await putMember('cus_tester', 'copybook-test-x@fldubai.com', 'active', []);
     await putFollows('cus_tester', { owned: ['AAPL'] });
     expect((await (await op('/ops/follows/cus_tester', { get: true })).json()).follows.owned).toEqual(['AAPL']);
