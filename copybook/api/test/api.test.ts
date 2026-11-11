@@ -1581,9 +1581,11 @@ describe('copybook api', () => {
     expect(compareToBuild(new Map([['30233Q108|', xomRow]]) as never, xomBuild('trimmed', -10000) as never)).toEqual([]);
     // Ingest's ratios, any size: NVRI linked at 1/3 leaves HELD; RBKB's 1.3978 (above 1) scales the prior up. A null
     // entry is skipped, and a file that fails to parse leaves the maps as they were.
-    vi.stubGlobal('fetch', fileWith({ '415864107': { new: '29390K102', ticker: 'NVRI', basis: 'sec_13f_list', ratio: 1 / 3, units_basis: 'split_confirmed' }, '75689M101': { new: '75689M200', ticker: 'RBKB', basis: 'sec_13f_list', ratio: 1.3978, units_basis: 'split_confirmed' }, '00000A101': null }));
+    vi.stubGlobal('fetch', fileWith({ '415864107': { new: '29390K102', ticker: 'NVRI', basis: 'sec_13f_list', ratio: 1 / 3, units_basis: 'split_confirmed', quarter: '2026Q3', units_check: { to_quarter: '2026Q2' } }, '26614N102': { new: '26614N201', ticker: 'DD', basis: 'sec_13f_list', ratio: 0.333333, units_basis: 'split_confirmed', quarter: '2026Q3', units_check: { to_quarter: '2026Q2' } }, '75689M101': { new: '75689M200', ticker: 'RBKB', basis: 'sec_13f_list', ratio: 1.3978, units_basis: 'split_confirmed' }, '00000A101': null }));
     await ed.loadReissues(env, t1 + 8_000_000);
     expect([ed.HELD['415864107'], ed.REISSUED['415864107']?.ratio, ed.REISSUED['75689M101']?.ratio, !!ed.HELD['438516106']]).toEqual([undefined, 1 / 3, 1.3978, true]);
+    // A link's quarter is the first filed under the new CUSIP (the units check's to_quarter), not the list's (DD filed 26614N201 from Q2).
+    expect([ed.REISSUED['415864107']?.quarter, ed.REISSUED['26614N102']?.quarter, ed.REISSUED['75689M101']?.quarter]).toEqual(['2026Q2', '2026Q2', undefined]);
     expect(computeMoves([{ cusip: '75689M200', put_call: null, issuer: 'RBKB', shares: 1398, value: 13980 }] as never, [{ cusip: '75689M101', put_call: null, issuer: 'RBKB', shares: 1000, value: 10000 }] as never).changed).toEqual([]);
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).endsWith('cusip_links.json') ? new Response('{"links": {"x": ') : real1(u, init)));
     await ed.loadReissues(env, t1 + 12_000_000);
@@ -4169,7 +4171,7 @@ describe('copybook api', () => {
     expect((await v1('/v1/stocks/NVDA/holders')).status).toBe(404);
     await env.DB.put('filing:A2', JSON.stringify({ accession: 'A2', accepted_at: '2026-08-14T20:05:04.000Z' }));
     await hist.put('hl/67066G.json', JSON.stringify({
-      issuer: '67066G', tickers: ['NVDA'], counts: { holders: 4, by_period: { '2026Q3': 1, '2026Q2': 3 } }, rows_total: 4,
+      issuer: '67066G', tickers: ['NVDA'], counts: { holders: 4, by_period: { '2026Q3': 1, '2026Q2': 3 }, net: 10800, net_quarter: '2026Q3', net_by_period: { '2026Q3': 10800, '2026Q2': 12345 } }, rows_total: 4,
       columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call'],
       // Not in size order: the API sorts largest first.
       rows: [
@@ -4191,6 +4193,11 @@ describe('copybook api', () => {
     // exits come in their own lists (CVI's 38 exited zero-share rows were in count before).
     expect(h).toMatchObject({ count: 4, filers: 4, next_offset: null, options_count: { calls: { rows: 0, filers: 0 }, puts: { rows: 1, filers: 1 } }, exited_count: 1, data: { issuer: '67066G', ticker: 'NVDA', counts: { holders: 4, holders_all: 5, not_current: 1 }, truncated: false } });
     // Counts follow current_only: Old Filer LP (last 13F 2025Q3) is in holders_all and not_current only; current_only=false counts it.
+    // Ingest's net, net_quarter and net_by_period are served as they are (canonical), and its quarter's net must equal that
+    // quarter's /v1/changes?ticker= sum: Situational Awareness +60 sh x $180 (the put is an option, not in net).
+    expect([h.data.counts.net, h.data.counts.net_quarter, h.data.counts.net_by_period]).toEqual([10800, '2026Q3', { '2026Q3': 10800, '2026Q2': 12345 }]);
+    const nch = (await v1('/v1/changes/2026Q3?ticker=NVDA')).body.data.filter((r: { put_call: string | null }) => !r.put_call);
+    expect(nch.reduce((a: number, r: { value_delta_usd: number }) => a + r.value_delta_usd, 0)).toBe(h.data.counts.net);
     expect(h.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0002045724', '0000102909', '0001067983', '0001387322']);
     expect(h.data.options.map((x: { filer: { cik: string; type: string } }) => [x.filer.cik, x.filer.type])).toEqual([['0001423053', 'hedge_fund']]);
     expect(h.data.exited).toEqual([expect.objectContaining({ kind: 'calls', put_call: 'CALL', shares: 0, weight: null, change: 'exited' })]); // as EDGAR writes it

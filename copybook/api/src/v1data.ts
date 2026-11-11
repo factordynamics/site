@@ -850,8 +850,11 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   // net is the shares traded at each filing's value per share, never the value difference (a price move is no trade),
   // for one quarter: the latest any filer reports (the sum of /v1/changes for it). By quarter in net_by_period.
   if (d.counts && obj) {
-    const nbp = netByPeriod(raw);
-    const q = Object.keys(nbp).sort().at(-1) ?? d.period ?? null;
+    // Ingest's net, net_quarter and net_by_period are canonical (the lead): served as they are. Computed here only for an
+    // index without them, or one merged at read time (ingest's figures then cover the new code alone).
+    const ing = !d.counts.merged_from && typeof d.counts.net === 'number' && typeof d.counts.net_quarter === 'string' && d.counts.net_by_period && typeof d.counts.net_by_period === 'object';
+    const nbp: Record<string, number> = ing ? d.counts.net_by_period : netByPeriod(raw);
+    const q: string | null = ing ? d.counts.net_quarter : (Object.keys(nbp).sort().at(-1) ?? d.period ?? null);
     // One definition whichever index the rows came from: holders are share positions (options apart), over the whole
     // index; not_current of them have a latest 13F older than the two current quarters, which holders[] leaves out while
     // current_only=true (the quant: TEVA's 626 against 617 rows were 7 filers last on 2026Q1 and 2 on 2025Q4).
@@ -860,7 +863,8 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
     const cq = currentQuarters(Date.now());
     const all = countsOf(raw);
     const not_current = raw.filter((r) => !(r.put_call || (r.kind && r.kind !== 'equity')) && r.change !== 'exited' && !!r.period && !cq.includes(r.period)).length;
-    d.counts = { ...d.counts, ...all, holders_all: (all as Record<string, unknown>).holders, not_current, net: q ? (nbp[q] ?? 0) : 0, net_quarter: q, net_by_period: nbp };
+    const { net: _all, ...shares } = all;
+    d.counts = { ...d.counts, ...shares, holders_all: (all as Record<string, unknown>).holders, not_current, net: ing ? d.counts.net : q ? (nbp[q] ?? 0) : 0, net_quarter: q, net_by_period: nbp };
     const { net: _n, ...cur } = countsOf(raw.filter((r) => !r.period || cq.includes(r.period)));
     countsCurrent = cur;
   }
@@ -912,6 +916,10 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
         (reissueFrom && (h.merged || ((h.cusip ?? reissueTo) === reissueTo && linkQ && period === linkQ && Number(h.prev_shares) > 0)) ? reissueFrom : null),
       issuer: h.issuer ?? d.display_name ?? (pcName || null),
       ...(h.suspect_duplicate ? { suspect_duplicate: h.suspect_duplicate } : {}),
+      // Ingest's row flags, passed through when its index carries them (hl/ columns after original_accession).
+      ...(typeof h.price_outlier === 'boolean' ? { price_outlier: h.price_outlier } : {}),
+      ...(h.value_basis === 'filed' || h.value_basis === 'filed_price_outlier' ? { value_basis: h.value_basis } : {}),
+      ...(h.suspect_reason === 'reissue_ratio_not_applied' ? { suspect_reason: h.suspect_reason } : {}),
     };
   };
   const rows = raw.map(toRow);
