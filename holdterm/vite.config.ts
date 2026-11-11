@@ -34,7 +34,13 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 
 /** index.html with a page's own title, description, canonical, og tags and (optionally) its own social card;
  * null meta makes the 404 page. */
-function page(html: string, path: string, meta: [string, string] | null, image?: string) {
+/** Per-page extras: a different canonical URL (a share class or old ticker points at the company's main page),
+ * noindex (a stock page none of the investors holds, which only says so), and JSON-LD structured data. */
+type Extra = { canonical?: string; noindex?: boolean; ld?: object[] }
+const ldTag = (o: object) => `    <script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', ...o }).replace(/</g, '\\u003c')}</script>\n`
+const crumbs = (items: [string, string][]) => ({ '@type': 'BreadcrumbList', itemListElement: items.map(([name, path], i) => ({ '@type': 'ListItem', position: i + 1, name, item: `${SITE}${path}` })) })
+
+function page(html: string, path: string, meta: [string, string] | null, image?: string, extra: Extra = {}) {
   const [t, d] = meta ?? ['Not found', 'No such page.']
   const title = esc(`${t} · Holdterm`)
   let out = html
@@ -43,7 +49,12 @@ function page(html: string, path: string, meta: [string, string] | null, image?:
     .replace(/(<meta name="description" content=")[^"]*/, (_, p1) => p1 + `${esc(d)}`)
     .replace(/(<meta property="og:title" content=")[^"]*/, (_, p1) => p1 + `${title}`)
     .replace(/(<meta property="og:description" content=")[^"]*/, (_, p1) => p1 + `${esc(d)}`)
-  if (meta) return out.replace(/(<link rel="canonical" href=")[^"]*/, (_, p1) => p1 + `${SITE}${esc(path)}`).replace(/(<meta property="og:url" content=")[^"]*/, (_, p1) => p1 + `${SITE}${esc(path)}`)
+  if (meta) {
+    const canon = extra.canonical ?? path
+    out = out.replace(/(<link rel="canonical" href=")[^"]*/, (_, p1) => p1 + `${SITE}${esc(canon)}`).replace(/(<meta property="og:url" content=")[^"]*/, (_, p1) => p1 + `${SITE}${esc(canon)}`)
+    const head = [extra.noindex ? '    <meta name="robots" content="noindex" />\n' : '', ...(extra.ld ?? []).map(ldTag)].join('')
+    return head ? out.replace('</head>', `${head}  </head>`) : out
+  }
   // A 404 points nowhere and asks not to be indexed.
   return out.replace(/\s*<link rel="canonical"[^>]*>/, '').replace(/\s*<meta property="og:url"[^>]*>/, '').replace('</head>', '    <meta name="robots" content="noindex" />\n  </head>')
 }
@@ -180,9 +191,17 @@ const pages = (): Plugin => ({
     const dist = fileURLToPath(new URL('./dist', import.meta.url))
     const html = readFileSync(join(dist, 'index.html'), 'utf8')
     const files = new Map<string, string>()
-    const add = (path: string, meta: [string, string], image?: string) => files.set(path, page(html, path, meta, image))
+    const add = (path: string, meta: [string, string], image?: string, extra?: Extra) => files.set(path, page(html, path, meta, image, extra))
     for (const [p, m] of Object.entries(SECTIONS)) if (p !== '/') add(p, m)
-    writeFileSync(join(dist, 'index.html'), page(html, '/', SECTIONS['/']))
+    writeFileSync(
+      join(dist, 'index.html'),
+      page(html, '/', SECTIONS['/'], undefined, {
+        ld: [
+          { '@type': 'WebSite', name: 'Holdterm', url: `${SITE}/`, description: SECTIONS['/'][1] },
+          { '@type': 'Organization', name: 'Holdterm', url: `${SITE}/`, logo: `${SITE}/icons/icon-512.png`, parentOrganization: { '@type': 'Organization', name: 'Factor Dynamics' } },
+        ],
+      }),
+    )
 
     const funds = roster.funds as { slug: string; firm: string }[]
     writeFileSync(join(dist, 'og.png'), png(siteCard(funds.length)))
@@ -196,12 +215,12 @@ const pages = (): Plugin => ({
       const b = books.get(f.slug)
       const card = b && fundFacts(b)
       if (!card) {
-        add(fundPath(f.slug), [`${firm} 13F portfolio`, `${firm}: latest 13F holdings, quarterly buys and sells, and 13D/G and Form 4 filings, from SEC EDGAR.`])
+        add(fundPath(f.slug), [`${firm} 13F portfolio`, `${firm}: latest 13F holdings, quarterly buys and sells, and 13D/G and Form 4 filings, from SEC EDGAR.`], undefined, { ld: [crumbs([['Investors', '/funds'], [firm, fundPath(f.slug)]])] })
         continue
       }
       const img = `/og/m/${fundPath(f.slug).slice(3)}.png`
       writeFileSync(join(dist, img), png(fundCard({ ...card.card, firm })))
-      add(fundPath(f.slug), [`${firm} 13F portfolio`, `${firm}’s ${card.card.quarter} 13F: ${card.card.value} in ${card.card.positions} US-listed stocks. ${card.lead} See every holding, what it bought and sold, and its 13D, 13G and Form 4 filings.`], img)
+      add(fundPath(f.slug), [`${firm} 13F portfolio`, `${firm}’s ${card.card.quarter} 13F: ${card.card.value} in ${card.card.positions} US-listed stocks. ${card.lead} See every holding, what it bought and sold, and its 13D, 13G and Form 4 filings.`], img, { ld: [crumbs([['Investors', '/funds'], [firm, fundPath(f.slug)]])] })
     }
     console.log(`holdterm-pages: ${books.size} of ${funds.length} fund cards`)
 
@@ -239,13 +258,24 @@ const pages = (): Plugin => ({
     if (!r.ok) throw new Error(`stocks.json: HTTP ${r.status}`)
     const { stocks } = (await r.json()) as { stocks: { t: string; n: string; a?: string[] }[] }
     if (stocks.length < 1000) throw new Error(`stocks.json has only ${stocks.length} stocks`)
-    const stock = (t: string, n: string) => {
+    // A held company's share classes and old tickers all show its one page, so they name its main ticker as their
+    // canonical URL, and only that one goes in the sitemap. A stock none of the investors holds says only that, so
+    // its page asks not to be indexed.
+    const mainTickers = new Set<string>()
+    const stock = (t: string, n: string, main = t) => {
       if (!/^[A-Z0-9][A-Z0-9.-]{0,11}$/.test(t)) return
       const label = n && n !== t ? `${n} (${t})` : t
-      const f = facts(t, label)
-      add(`/s/${t}`, [`${label}: who owns it`, f ? f[0] : `Which long-term investors own ${label}, what they bought and sold last quarter, and their 5% stakes and insider trades, from SEC EDGAR filings.`], f?.[1])
+      const f = facts(t, label) ?? (main !== t ? facts(main, label) : null)
+      const a = held.get(t) ?? held.get(main)
+      const canon = a?.ticker ?? main
+      if (a?.ticker) mainTickers.add(a.ticker)
+      add(`/s/${t}`, [`${label}: who owns it`, f ? f[0] : `Which long-term investors own ${label}, what they bought and sold last quarter, and their 5% stakes and insider trades, from SEC EDGAR filings.`], f?.[1], {
+        canonical: `/s/${canon}`,
+        noindex: !a,
+        ld: a ? [crumbs([['Most owned stocks', '/consensus'], [a.name, `/s/${canon}`]])] : [],
+      })
     }
-    for (const s of stocks) for (const t of [s.t, ...(s.a ?? [])]) stock(t, s.n)
+    for (const s of stocks) for (const t of [s.t, ...(s.a ?? [])]) stock(t, s.n, s.t)
     for (const o of Object.values(TICKERS as unknown as Record<string, { ticker?: string; listed?: boolean }>)) if (o?.listed && o.ticker && !files.has(`/s/${o.ticker}`)) stock(o.ticker, o.ticker)
 
     // /about -> dist/about.html, which Pages serves at /about (no trailing slash).
@@ -266,7 +296,7 @@ const pages = (): Plugin => ({
     writeFileSync(join(dist, '_redirects'), redirects.join('\n') + '\n')
 
     const day = new Date().toISOString().slice(0, 10)
-    const urls = ['/', ...Object.keys(SECTIONS).filter((p) => p !== '/' && p !== '/account'), ...funds.map((f) => fundPath(f.slug))]
+    const urls = ['/', ...Object.keys(SECTIONS).filter((p) => p !== '/' && p !== '/account'), ...funds.map((f) => fundPath(f.slug)), ...[...mainTickers].sort().map((t) => `/s/${t}`)]
     writeFileSync(join(dist, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((p) => `  <url><loc>${SITE}${p}</loc><lastmod>${day}</lastmod></url>`).join('\n')}\n</urlset>\n`)
     console.log(`holdterm-pages: ${held.size} stocks with numbers, ${cards} stock cards`)
     console.log(`holdterm-pages: ${files.size + 1} pages, 404.html, ${redirects.length} redirects`)
