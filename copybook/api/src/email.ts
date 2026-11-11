@@ -55,7 +55,8 @@ export type MailKinds = { real: number; test: number; account: number; preview: 
  */
 export function kindsView(used: number, k: MailKinds | null | undefined) {
   const real = k?.real ?? 0, test = k?.test ?? 0, account = k?.account ?? 0;
-  const before = k ? (k.used_at_since ?? 0) : used;
+  // Counters started without the day's count then (an older build): everything not tallied counts as before them.
+  const before = k ? (k.used_at_since ?? Math.max(0, used - real - test - account)) : used;
   return { real, test, account, preview: k?.preview ?? 0, before_since: before, other: Math.max(0, used - before - real - test - account), since: k?.since ?? null };
 }
 /** Previews, replays and samples to test inboxes: at most this many a day; past it they wait for the reset. */
@@ -149,7 +150,7 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
   if (opts.preview) mails = mails.map((m) => ({ ...m, preview: true }));
   // `since`: the first send counted today (Resend's `used` counts the whole UTC day, account-wide; these count from here).
   // Kinds an older build started without `since` (so they couldn't be read against `used`) start over here.
-  if (mailQuota.kinds && !mailQuota.kinds.since) mailQuota.kinds = undefined;
+  if (mailQuota.kinds && (!mailQuota.kinds.since || mailQuota.kinds.used_at_since === undefined)) mailQuota.kinds = undefined;
   const kinds = (mailQuota.kinds ??= { real: 0, test: 0, account: 0, preview: 0, since: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), used_at_since: mailQuota.used });
   const tally = (m: Mail) => {
     if (m.preview) kinds.preview++;
