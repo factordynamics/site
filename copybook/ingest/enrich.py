@@ -24,7 +24,7 @@ from ingest.securities import UNCLASSIFIED
 
 WEB = Path(os.environ.get("COPYBOOK_WEB_DIR") or (ROOT / "web"))
 DATA = WEB / "data"
-SKIP = {"universe.json", "filers.json", "alerts.json", "cusip_map.json", "securities.json", "issuers.json", "amendments.json", "notices.json", "status.json"}
+SKIP = {"books.json", "universe.json", "filers.json", "alerts.json", "cusip_map.json", "securities.json", "issuers.json", "amendments.json", "notices.json", "status.json"}
 FIELDS = ("ticker", "display_name", "sector")
 
 
