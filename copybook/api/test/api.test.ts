@@ -1952,7 +1952,10 @@ describe('copybook api', () => {
     const accepted = new Date(now - 3600_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
     await putMember('cus_j', 'copybook-test-j@fldubai.com', 'active', ['jensen']);
     await putFollows('cus_j', { investors: ['jensen'] });
-    // MSFT's emailed $512.88 a share is 1.28x the $400 other filers report: the after-send check marks it.
+    // MSFT's emailed $512.88 a share is 1.28x the $400 other filers report: the after-send check marks it. Two hours on,
+    // so other filers' prices are read again (an earlier test cached them for the hour).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + 2 * 3600_000);
     consensusQ = { '2026Q3': { '032095101': 84.3, '594918104': 400 }, '2026Q2': { '032095101': 176.32 } };
     const ACC = '0001171200-26-000023';
     const base = { slug: 'jensen', slugs: ['jensen'], manager: 'Jensen', name: 'Jensen Investment Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: accepted.slice(0, 10), accession: ACC, sec_url: 'https://www.sec.gov/Archives/edgar/data/1171200/x-index.html', accepted, tickers: [] };
@@ -2032,6 +2035,7 @@ describe('copybook api', () => {
     expect((dry.alerts as { as_sent: { failed: { ticker: string | null; cusip: string; class: string }[] } }[])[0].as_sent.failed.map((f) => [f.ticker ?? f.cusip, f.class])).toEqual([['BOND', 'wrong'], ['APH', 'wrong'], ['total:bought', 'disclosed']]);
     expect(sent).toHaveLength(0);
     expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, matched: 0, disclosed: 0, explained: 0, wrong: 1, filer_value_rows: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', class: 'wrong', failed_rows: 3, filer_value_rows: 1, corrections_sent: 1 }] });
+    vi.useRealTimers();
   });
 
   it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {

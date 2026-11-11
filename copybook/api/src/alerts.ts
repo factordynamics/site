@@ -1562,9 +1562,9 @@ const alertClass = (failed: { class?: RowClass; why?: string }[], rows = 1, acce
 /** Alerts accepted from here get correction emails; earlier ones are checked and logged only. */
 export const RECONCILE_MAIL_FROM = '2026-11-11T05:00:00Z';
 const MISMATCH = 0.1;
-/** The reconciliation log (v4: classes include totals and no_rows; v3 compared rows only). */
-const RECONCILED = 'alerts:reconciled:v4';
-const RECONCILED_PREV = 'alerts:reconciled:v3';
+/** The reconciliation log (v5: classes follow /status/ disclosures, totals to 1% or $1M, after-send cross-filer check; v4 had no disclosure rule). */
+const RECONCILED = 'alerts:reconciled:v5';
+const RECONCILED_PREV = 'alerts:reconciled:v4';
 
 /**
  * gene, every 5 minutes: each 13F alert with moves, once ingest's build serves its filing, row by row against the build
