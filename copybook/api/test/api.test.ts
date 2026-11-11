@@ -1557,6 +1557,9 @@ describe('copybook api', () => {
     expect(sent[0].text).not.toMatch(/Copy emails|pricing\/|speed\//);
     sent = [];
     await env.DB.delete('weekly:last');
+    // A second run the same week is refused (no double sends after a partial failure); the test sends again on purpose.
+    expect(await runWeekly(env, sat)).toMatchObject({ status: 'already tried' });
+    await env.DB.delete('weekly:tried');
     Object.assign(env, { POSTAL_ADDRESS: '1 Example Way, Suite 2, Austin, TX 78701' });
     await cron(42, sat);
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);

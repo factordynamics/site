@@ -863,6 +863,8 @@ export async function runEmail2(env: Env, now: number, preview?: string[], dry =
 export async function runWeekly(env: Env, now: number): Promise<Record<string, unknown>> {
   const week = etDay(now);
   if ((await env.DB.get('weekly:last')) === week) return { status: 'already sent', week };
+  // The scheduler retries a missed Saturday run; a run that got as far as sending is never repeated (no double sends).
+  if ((await env.DB.get('weekly:tried')) === week) return { status: 'already tried', week };
   const members: Member[] = [];
   const follows = new Map<string, Follows>();
   for (const m of await listMembers(env)) {
@@ -880,6 +882,7 @@ export async function runWeekly(env: Env, now: number): Promise<Record<string, u
   const followedMoves = (f: Follows | undefined) => moves.all.filter((x) => (f?.investors.includes(x.slug) && !/^13F/.test(x.form)) || (x.featured && f?.stocks.includes(x.ticker))).sort((a, b) => Math.abs(b.usd) - Math.abs(a.usd)).slice(0, 8);
   const weekOf = weekWindow(now);
   const mails = await Promise.all(members.map(async (m) => weeklyMail(env, m.email, moves, weekOf, await unsubscribeUrl(env, m.customer), await inYourNames(env, follows.get(m.customer)!.owned.slice(0, FREE_NAMES), moves, now), followedMoves(follows.get(m.customer)), await followsSection(env, follows.get(m.customer)!, now, ctx))));
+  await env.DB.put('weekly:tried', week, { expirationTtl: 8 * 86400 });
   const status = await sendMail(env, mails, { tier: 'low' });
   if (status === 'none' || status.split(',').every((s) => s === '200')) await env.DB.put('weekly:last', week);
   return { status, sent: mails.length, buys: moves.buys.length, sells: moves.sells.length };

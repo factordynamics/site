@@ -683,6 +683,7 @@ export async function runDigest(env: Env, now: number): Promise<{ emails: number
 export async function runWeeklyNames(env: Env, now: number, only?: string[]): Promise<{ emails: number; status: string }> {
   const week = etDay(now);
   if (!only && (await env.DB.get('names-weekly:last')) === week) return { emails: 0, status: 'already sent' };
+  if (!only && (await env.DB.get('names-weekly:tried')) === week) return { emails: 0, status: 'already tried' };
   const days = (await Promise.all(Array.from({ length: 7 }, (_, d) => env.DB.get(`digest:${etDay(now - d * 86_400_000)}`)))).flatMap((r) => (r ? [JSON.parse(r) as DigestDay] : []));
   // Each filing and event once, in its last stored version (a 13F's moves follow-up, a Form 4's details).
   const last = <T>(xs: T[], id: (x: T) => string) => [...new Map(xs.map((x) => [id(x), x])).values()];
@@ -701,6 +702,7 @@ export async function runWeeklyNames(env: Env, now: number, only?: string[]): Pr
     mails.push({ ...weeklyNamesMail(env, raw.email, weekOf, mine.filings, mine.events, f, isPaused(raw, now) ? raw.paused_until! : null), test: !!raw.test || testAddress(raw.email) });
   }
   // An operator's preview goes now; the real send is low priority (the weekend budget).
+  if (!only) await env.DB.put('names-weekly:tried', week, { expirationTtl: 8 * 86400 });
   const status = await sendMail(env, mails, only ? { preview: true } : { tier: 'low' });
   if (!only && (status === 'none' || status.split(',').every((s) => s === '200'))) {
     await env.DB.put('names-weekly:last', week);
@@ -2458,9 +2460,11 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   // The account's daily request budget, hourly: a warning at 70%.
   if (m === 23) due.push({ name: 'quota', at: scheduledTime });
   // The free weekly: Saturday 02:00 UTC (9pm ET Friday), so it has Friday's after-close filers and their pages.
-  if (m === 0 && h === 2 && t.getUTCDay() === 6) due.push({ name: 'weekly', at: scheduledTime });
+  // Retried every 15 minutes to 05:45 UTC (Sat 12:45 am ET) if that minute's run was missed (host down); each job
+  // records its week once sent, so a retry after a send does nothing.
+  if (m % 15 === 0 && h >= 2 && h <= 5 && t.getUTCDay() === 6) due.push({ name: 'weekly', at: scheduledTime });
   // Members' "Your names this week": Saturday 02:15 UTC, after the free weekly.
-  if (m === 15 && h === 2 && t.getUTCDay() === 6) due.push({ name: 'namesWeekly', at: scheduledTime });
+  if (m % 15 === 0 && (h > 2 || m >= 15) && h >= 2 && h <= 5 && t.getUTCDay() === 6) due.push({ name: 'namesWeekly', at: scheduledTime });
   // Email 2, once: 13F deadline night, Mon Nov 16 9:30pm ET (Tue 02:30 UTC). runEmail2 records it done, sent or skipped.
   if (m === 30 && h === 2 && t.toISOString().slice(0, 10) === '2026-11-17') due.push({ name: 'email2', at: scheduledTime });
   // Owned and watched names' insider and 13D/G events: every 10 minutes (each name hourly, 10 minutes in filing week).
