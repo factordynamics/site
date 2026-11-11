@@ -2,6 +2,20 @@
  "about": "Copybook data changelog: methodology changes, restatements and corrections, newest first. Append-only: entries are added, never edited away. Published as data/changelog.json by build.py.",
  "entries": [
   {
+   "id": "2026-11-11-filer-types-without-adv",
+   "date": "2026-11-11",
+   "kind": "incident",
+   "title": "Hedge-fund counts fell for two hours: filer types published without SEC Form ADV data",
+   "body": "From 03:45 to about 05:45 UTC on Nov 11, the published filer types came from two full data runs that could not read the SEC Form ADV adviser files (the download link was misread), so only the 88 hand-checked filers kept the hedge_fund type and the rest became long_only. Hedge-fund counts on stock pages and in the hedge-fund lenses fell; SpaceX (SPCX) read 37 hedge funds instead of 164. The types published before (1,243 hedge funds) were restored at 05:44 UTC, the ADV link is fixed, and full runs no longer publish new types when the ADV files can't be read. The Form ADV hedge-fund reclass itself stays unpublished until it is accepted."
+  },
+  {
+   "id": "2026-11-11-wealth-shape-published",
+   "date": "2026-11-11",
+   "kind": "methodology",
+   "title": "Small diversified and ETF-heavy books count as wealth managers, not long-only",
+   "body": "A filer whose 13F book is small and diversified, or mostly ETFs, is typed wealth (advisers running client accounts) rather than long_only. The rule dates from Nov 9; the Nov 11 01:22 UTC full run was the first to publish it, so the hedge funds plus long-only count fell on stock pages, for example SpaceX (SPCX) from 616 to 440. Hedge-fund counts are unaffected."
+  },
+  {
    "id": "2026-11-11-earlier-quarter-changes",
    "date": "2026-11-11",
    "kind": "correction",
