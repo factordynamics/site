@@ -43,7 +43,9 @@ fi
 
 # Public pointer the front ends read at load: {"api": "<base>", "at": "<iso>"} in R2 copybook-public (r2.dev URL).
 prev=$(cat "$ROOT/state.api-published" 2>/dev/null)
-if [ "$prev" != "$want" ]; then
+# ops/failover-a.sh to-worker pins api.json to the Cloudflare Worker; leave it alone until failover-a.sh back.
+if [ -f "$ROOT/state.api-pinned" ]; then log "api.json pinned to $(cat "$ROOT/state.api-pinned"); tunnel base $want not published"
+elif [ "$prev" != "$want" ]; then
   body=$(printf '{"api":"%s","at":"%s"}' "$want" "$(date -u +%FT%TZ)")
   if curl -sf -m 30 -X PUT -H "Authorization: Bearer $CF_API_TOKEN" -H 'content-type: application/json' --data-binary "$body" \
       "https://api.cloudflare.com/client/v4/accounts/967e13dd88bb23b24662e62cbb6fd84f/r2/buckets/copybook-public/objects/api.json" -o /dev/null; then

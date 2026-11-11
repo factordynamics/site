@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=%h/copybook-api/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:11435
+ExecStart=%h/copybook-api/bin/cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:20241 --url http://127.0.0.1:11435
 Restart=always
 RestartSec=5
 

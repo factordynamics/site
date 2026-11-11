@@ -13,6 +13,9 @@ Hourly local backups (`update.sh`) and nightly R2 backups (`backup.sh`) are both
 Cloudflare's copy already has every secret, and its KV is kept current by the sync through R2 (HOSTING.md), so members,
 sessions and follows are there up to about a minute before gene went down. Limit: the free plan's 100k requests/day.
 
+0. One command does step 1 (and pins it so the tunnel watcher leaves it): `failover-a.sh to-worker`; undo with
+   `failover-a.sh back`. Use it also when the quick tunnel nears its 200 in-flight limit (`inflight-sampler.sh` emails
+   hello@ at 100).
 1. Publish `{"api":"https://copybook-api.factordynamics.workers.dev","at":"<iso>"}` to R2 copybook-public `api.json`
    (Cloudflare REST, `CLOUDFLARE_API_TOKEN`). The front ends read it at load. The Worker then serves requests itself
    instead of redirecting (loop guard, 754c32a), within about 60 s. **Never delete `MOVED_TO`:** it is also what makes
