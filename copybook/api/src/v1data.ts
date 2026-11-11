@@ -337,6 +337,52 @@ async function versionsFor(env: Env, cik: string, reportDate: string, served: st
 /** The build each served book was read from (see stampOf), kept beside the book rather than in it. */
 const STAMP = new WeakMap<object, Stamp>();
 
+/**
+ * GET /v1/filers/{filer}/holdings/{quarter|latest}?as_of=T (draft 2, section 2): the book at the latest epoch at or before
+ * T, across the filer's CIK lineage. The current epoch is the existing book; earlier ones are ingest's pit/ books. The body
+ * is the book as stored (lots[] always present); the echo is in headers (Copybook-As-Of, Copybook-Epoch). Nothing accepted
+ * after T may be served (invariant 3): 500 rather than leak.
+ */
+async function asOfBook(env: Env, id: string, qp: string, t: string): Promise<Response> {
+  const pit = await import('./pit');
+  if (qp !== 'latest' && !QUARTER.test(qp)) return v1error('bad_request', 400, 'quarter must look like 2025Q1, or be latest.');
+  const f = await resolveAny(env, id);
+  if (!f) return v1error('not_found', 404, 'No such filer (use a slug from /v1/filers or a CIK).');
+  const { T, echo, future } = pit.asOfTime(t);
+  // The slug's CIKs (pit/lineage.json, ingest's slug -> CIKs map; Appaloosa 1006438 then 1656456), else its own CIK.
+  const lineageMap: Record<string, string[]> = await env.HIST.get('pit/lineage.json').then((o) => (o ? (new Response(o.body).json() as Promise<Record<string, string[]>>) : {})).catch(() => ({}));
+  const ciks = [...new Set([...(lineageMap[f.row.slug] ?? []), f.row.cik].map((c) => c.padStart(10, '0')))];
+  const lineage: { cik: string; index: import('./pit').PitIndex }[] = [];
+  for (const cik of ciks) {
+    const o = await env.HIST.get(`pit/${cik}/index.json`);
+    if (o) lineage.push({ cik, index: (await new Response(o.body).json()) as import('./pit').PitIndex });
+  }
+  if (!lineage.length) return v1error('not_yet_available', 501, `as_of for ${f.row.slug} is served once its point-in-time index is published (curated filers by Nov 20, 2026; others later). as_of ${t} is read as ${echo} (UTC).`);
+  const at = qp === 'latest' ? pit.latestAt(lineage, T) : pit.quarterAt(lineage, qp, T);
+  if (!at) return v1error('not_yet_filed', 404, `No ${qp === 'latest' ? '' : `${qp} `}13F from ${f.row.slug} was accepted by EDGAR at or before ${echo}.`);
+  let book: Record<string, unknown> | null;
+  if (at.current) book = await bookFor(env, f, at.quarter);
+  else {
+    const o = await env.HIST.get(pit.epochKey(at.cik, at.quarter, at.epoch));
+    book = o ? ((await new Response(o.body).json()) as Record<string, unknown>) : null;
+  }
+  if (!book) return v1error('server_error', 503, `The ${at.quarter} book at ${at.epoch} is not readable right now; retry shortly.`);
+  const out = pit.withLots(book as { holdings?: unknown[]; exited?: unknown[] });
+  const leaks = pit.leaksAfter(out as never, T);
+  if (leaks.length) {
+    console.log(`as_of leak guard: ${f.row.slug} ${at.quarter} T=${echo} epoch=${at.epoch}: ${leaks.join(',')}`);
+    return v1error('server_error', 500, 'This point-in-time book failed its consistency check and was not served; it has been logged.');
+  }
+  const stamp = STAMP.get(book) ?? {};
+  const built = Date.parse((stamp as { data_built_at?: string }).data_built_at ?? '');
+  return v1json({ ...stamp, data: out }, 200, {
+    'copybook-as-of': echo,
+    'copybook-epoch': at.epoch,
+    'access-control-expose-headers': 'copybook-as-of, copybook-epoch',
+    ...(future || !(T < built) ? { 'cache-control': 'no-store' } : { 'cache-control': 'private, max-age=300' }),
+  });
+}
+
 async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<string, unknown> | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q: any;
@@ -1119,9 +1165,7 @@ ROUTES.push(
       if (!ok) return v1error('bad_request', 400, 'as_of must be an ISO 8601 date (2025-06-01, meaning 23:59:59Z) or a datetime with Z or a UTC offset (2025-06-01T20:07:00Z, 2025-06-01T16:07:00-04:00), which is normalised to UTC.');
       // version picks one filing, as_of the book publicly known at a time: together they'd contradict (draft 2).
       if (url.searchParams.has('version')) return v1error('bad_request', 400, "as_of and version can't be combined: version picks one filing, as_of the book as publicly known at a time. Pass one.");
-      // A UTC offset is accepted and normalised (2025-06-01T16:07:00-04:00 is 2025-06-01T20:07:00Z), and the reply says so.
-      const utc = new Date(Date.parse(/T/.test(t) ? t : `${t}T23:59:59Z`)).toISOString().replace('.000Z', 'Z');
-      return v1error('not_yet_available', 501, `as_of (point-in-time reconstruction) is coming; this endpoint currently returns the book as now known, with amendments merged. as_of ${t} is read as ${utc} (UTC).`);
+      return asOfBook(env, id, qp, t);
     }
     if (qp !== 'latest' && !QUARTER.test(qp)) return v1error('bad_request', 400, 'quarter must look like 2025Q1, or be latest.');
     const f = await resolveAny(env, id);

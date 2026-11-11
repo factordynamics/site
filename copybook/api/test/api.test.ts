@@ -5602,7 +5602,7 @@ describe('copybook api', () => {
     expect(flags(await filing('2026Q1'))).toEqual({ filing: [Q1, false], versions: [[Q1, 'current', false], [Q1A, 'merged', false]], amendments: [[Q1A, false]] });
   });
 
-  it('/v1 filers and holdings: by slug or CIK, every field the OpenAPI schema requires, as_of not served yet', async () => {
+  it('/v1 filers and holdings: by slug or CIK, every field the OpenAPI schema requires, as_of from the pit/ index', async () => {
     index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'warren-buffett', cik: '0001067983', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc', featured: true, status: 'current', form: '13F-HR', accession: 'A2', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-14', total_value: 2000, position_count: 1, history_quarters: ['2026Q2', '2025Q1'] }] };
     await cron(17);
     hist.m.set('h/warren-buffett/2025Q1.json', new TextEncoder().encode(JSON.stringify({
@@ -5693,6 +5693,28 @@ describe('copybook api', () => {
     expect((await v1('/v1/filers/warren-buffett/holdings/Q1')).body.error.code).toBe('bad_request');
     expect((await v1('/v1/filers/nobody/holdings/2025Q1')).status).toBe(404);
     for (const p of ['/v1/me', '/v1/filers', '/v1/filers/{filer}/holdings/{quarter}']) expect(spec.paths[p].get.responses['200'].content).toBeDefined();
+
+    // as_of once ingest's pit/ index exists (draft 2): the latest epoch at or before T. The original's epoch is its stored
+    // book (lots[] rebuilt for a one-lot row); the amendment's epoch is the current book; before any version, not_yet_filed.
+    const asof = async (path: string) => {
+      const r = await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env);
+      return { status: r.status, h: r.headers, body: await r.json() };
+    };
+    hist.m.set('pit/0001067983/index.json', new TextEncoder().encode(JSON.stringify({ quarters: { '2025Q1': ['2025-05-15T20:05:12Z', '2025-08-14T20:10:02Z'] } })));
+    const epochBook = { quarter: '2025Q1', accession: '0000950123-25-005701', filing: { versions: [{ accession: '0000950123-25-005701', accepted_at: '2025-05-15T20:05:12Z' }] }, holdings: [{ cusip: '670346105', ticker: 'NUE', shares: 10, value_usd: 1000, value_as_filed: 1, value_scale: 1000, source_accession: '0000950123-25-005701', first_disclosed_at: '2025-05-15T20:05:12Z' }], exited: [] };
+    hist.m.set('pit/0001067983/2025Q1/20250515T200512Z.json', new TextEncoder().encode(JSON.stringify(epochBook)));
+    const may = await asof('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20');
+    expect([may.status, may.h.get('copybook-as-of'), may.h.get('copybook-epoch'), may.body.data.holdings[0].lots]).toEqual([200, '2025-05-20T23:59:59Z', '2025-05-15T20:05:12Z', [{ accession: '0000950123-25-005701', accepted_at: '2025-05-15T20:05:12Z', superseded_at: null, kind: 'original', shares: 10, value_as_filed: 1, value_scale: 1000, value_usd: 1000 }]]);
+    const sep = await asof('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-09-01T00:00:00Z');
+    // The current epoch is the current book, unchanged (no as_of = as_of now).
+    expect([sep.status, sep.h.get('copybook-epoch'), sep.body.data]).toEqual([200, '2025-08-14T20:10:02Z', (await v1('/v1/filers/warren-buffett/holdings/2025Q1')).body.data]);
+    const early = await asof('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-01');
+    const latest = await asof('/v1/filers/warren-buffett/holdings/latest?as_of=2025-05-20');
+    expect([early.status, early.body.error.code, latest.status, latest.h.get('copybook-epoch')]).toEqual([404, 'not_yet_filed', 200, '2025-05-15T20:05:12Z']);
+    // Invariant 3: an epoch book naming a filing accepted after T is never served.
+    hist.m.set('pit/0001067983/2025Q1/20250515T200512Z.json', new TextEncoder().encode(JSON.stringify({ ...epochBook, holdings: [{ ...epochBook.holdings[0], lots: [{ accession: '0000950123-25-008361', accepted_at: '2025-08-14T20:10:02Z' }] }] })));
+    const leak = await asof('/v1/filers/warren-buffett/holdings/2025Q1?as_of=2025-05-20');
+    expect([leak.status, leak.body.error.code, JSON.stringify(leak.body).includes('0000950123-25-008361')]).toEqual([500, 'server_error', false]);
   });
 
   it('EDGAR Eastern timestamps convert to UTC on both sides of the DST switches', async () => {

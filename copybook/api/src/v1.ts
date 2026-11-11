@@ -395,6 +395,7 @@ export const ERRORS = {
   not_found: 'No such resource.',
   bad_request: 'A parameter is missing or invalid.',
   not_yet_available: 'This option is documented but not served yet.',
+  not_yet_filed: 'No version of this quarter was accepted by EDGAR at or before as_of.',
   as_of_not_supported: 'as_of is not supported on this endpoint yet; it would be ignored, so the request is refused.',
   server_error: 'Something went wrong on our side.',
   busy: 'The API is busy; retry after the Retry-After seconds.',

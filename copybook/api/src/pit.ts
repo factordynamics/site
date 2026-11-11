@@ -157,3 +157,31 @@ export function asOfTime(asOf: string, now = Date.now()): { T: number; echo: str
   const T = Math.min(t, now);
   return { T, echo: new Date(T).toISOString().replace('.000Z', 'Z'), future: t > now };
 }
+
+/** An epoch's stored book: pit/{cik10}/{quarter}/{yyyymmddThhmmssZ}.json. */
+export const epochKey = (cik: string, quarter: string, epoch: string) => `pit/${cik.padStart(10, '0')}/${quarter}/${epoch.replace(/[-:]/g, '').replace(/\.\d+/, '')}.json`;
+
+/**
+ * Responses always carry lots[] (Q3): stored books omit it on rows with one `original` lot, rebuilt here from the row's
+ * source_accession, first_disclosed_at and filed figures. Rows already carrying lots[] are left as they are.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function withLots<B extends { holdings?: any[]; exited?: any[] }>(book: B): B {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fill = (r: any) =>
+    Array.isArray(r.lots) || !r.source_accession
+      ? r
+      : { ...r, lots: [{ accession: r.source_accession, accepted_at: r.first_disclosed_at, superseded_at: null, kind: 'original', shares: r.shares, value_as_filed: r.value_as_filed ?? null, value_scale: r.value_scale ?? 1, value_usd: r.value_usd ?? null }] };
+  return { ...book, ...(book.holdings ? { holdings: book.holdings.map(fill) } : {}), ...(book.exited ? { exited: book.exited.map(fill) } : {}) };
+}
+
+/** The epoch to serve for one quarter across a lineage: the latest epoch at or before T over every CIK's index. */
+export function quarterAt(lineage: { cik: string; index: PitIndex }[], quarter: string, T: number): { quarter: string; cik: string; epoch: string; current: boolean } | null {
+  let best: { quarter: string; cik: string; epoch: string; current: boolean } | null = null;
+  for (const { cik, index } of lineage) {
+    const epoch = epochAt(index, quarter, T);
+    const all = index.quarters[quarter] ?? [];
+    if (epoch && (!best || ms(epoch) > ms(best.epoch))) best = { quarter, cik, epoch, current: epoch === all[all.length - 1] };
+  }
+  return best;
+}
