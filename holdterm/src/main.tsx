@@ -160,7 +160,8 @@ function whyNot(c: NotFollowed, period: string) {
 let notFollowedP: Promise<NotFollowedFile> | undefined
 const loadNotFollowed = () => (notFollowedP ??= import('./not-followed.json').then((m) => m.default as NotFollowedFile))
 
-function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => void }) {
+/** `initial`: what the box opens with (a page that wasn't found passes the ticker or name it was given). */
+function Search({ open, setOpen, initial = '' }: { open: boolean; setOpen: (b: boolean) => void; initial?: string }) {
   const [q, setQ] = useState('')
   const [cur, setCur] = useState(0)
   const [stocks, setStocks] = useState<StockIndexRow[]>([])
@@ -177,7 +178,7 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   useEffect(() => {
     if (!open) return
     back.current = document.activeElement as HTMLElement | null
-    setQ('')
+    setQ(initial)
     setCur(0)
     input.current?.focus()
     if (!stocks.length) loadStockIndex().then((d) => setStocks(d.stocks)).catch(() => {})
@@ -431,20 +432,23 @@ function App() {
   const path = usePath()
   const said = useRouteAnnouncer(path)
   const [search, setSearch] = useState(false)
+  const [q0, setQ0] = useState('')
   const [theme, toggleTheme] = useTheme()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
+        setQ0('')
         setSearch(true)
         return
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if ((e.target as HTMLElement).closest('input,textarea,select')) return
       if (e.key === 'Escape') return void setSearch(false)
-      if (e.key === '/') return void (e.preventDefault(), setSearch(true))
+      if (e.key === '/') return void (e.preventDefault(), setQ0(''), setSearch(true))
     }
-    const open = () => setSearch(true)
+    // A page can open the search with a query, as the event's detail (NotFound's search box does).
+    const open = (e: Event) => (setQ0(typeof (e as CustomEvent).detail === 'string' ? (e as CustomEvent<string>).detail : ''), setSearch(true))
     window.addEventListener('keydown', onKey)
     window.addEventListener('holdterm:search', open)
     return () => (window.removeEventListener('keydown', onKey), window.removeEventListener('holdterm:search', open))
@@ -477,7 +481,7 @@ function App() {
             ))}
           </nav>
           <div className="top-right">
-            <button className="search-btn" onClick={() => setSearch(true)} aria-label="Search stocks or investors">
+            <button className="search-btn" onClick={() => (setQ0(''), setSearch(true))} aria-label="Search stocks or investors">
               <Glass />
               <span className="label">Search stocks or investors</span>
             </button>
@@ -540,7 +544,7 @@ function App() {
           </nav>
         </div>
       </footer>
-      <Search open={search} setOpen={setSearch} />
+      <Search open={search} setOpen={setSearch} initial={q0} />
     </>
   )
 }
