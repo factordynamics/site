@@ -2767,6 +2767,10 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   // Last winter's events for members' names: gene, every 5 minutes, except from 3 days before a 13F deadline to the day
   // after, when the SEC budget is the alerts'.
   if (m % 5 === 4 && !fo.isCloudflare(env) && !DEADLINES.some((d) => scheduledTime >= deadlineMs(d.date) - 3 * 86_400_000 && scheduledTime <= deadlineMs(d.date) + 86_400_000)) due.push({ name: 'winter', at: scheduledTime });
+  // Newly followed names' winter (the lead, Nov 11): every minute after alert polling, busy or not, with what the minute's
+  // SEC budget left; not in the deadline windows, when the budget is the alerts'.
+  const quietSeason = !DEADLINES.some((d) => scheduledTime >= deadlineMs(d.date) - 3 * 86_400_000 && scheduledTime <= deadlineMs(d.date) + 86_400_000);
+  if (!fo.isCloudflare(env) && quietSeason && secBudget.left > 8) await step('winter_follow', () => import('./stockevents').then((x) => x.fillWinterFollowed(env)));
   const rawQueue = await env.DB.get('jobs:due');
   const queue = [...(JSON.parse(rawQueue ?? '[]') as Job[]), ...due].filter((j, i, all) => all.findIndex((x) => x.name === j.name) === i);
   if (!busy && queue.length) {

@@ -3201,6 +3201,25 @@ describe('copybook api', () => {
     expect(d12.text).toMatch(/Your 2 names had 1 insider buy and 0 13D\/G filings last winter, e\.g\. CSGP (director|.+) bought \$2\.5M on Jan 13\./);
     const me = await (await call('/me?include=winter', { token })).json();
     expect(me.member.winter_preview === null || typeof me.member.winter_preview?.names === 'number').toBe(true);
+    // A name followed now is read on follow (the lead, Nov 11), not by the 5-minute job filing week starves: queued, then
+    // filled each minute after alert polling, at most 3 SEC requests a run, until done.
+    {
+      const sx = await import('../src/stockevents');
+      const { secBudget } = await import('../src/edgar');
+      await env.DB.delete('winter:done');
+      hist.m.delete('winter/2025-26/CSGP.json');
+      await env.DB.put('issuers:tickers', '[]');
+      expect((await call('/follows/stocks/CSGP', { method: 'POST', token })).status).toBe(200);
+      expect(JSON.parse((await env.DB.get('winter:queue'))!)).toContain('CSGP');
+      const spent: number[] = [];
+      for (let i = 0; i < 6 && JSON.parse((await env.DB.get('winter:queue'))!).length; i++) {
+        secBudget.left = 100;
+        await sx.fillWinterFollowed(env);
+        spent.push(100 - secBudget.left);
+      }
+      const fp = (await sx.winterPreview(env, ['CSGP']))!;
+      expect([spent, JSON.parse((await env.DB.get('winter:queue'))!), fp.pending, fp.insider_buys]).toEqual([[3, 2], [], [], 1]);
+    }
     // A followed investor's own 13D/G last winter (Icahn's, Pzena's) comes from the published winter list, by manager.
     const orig = globalThis.fetch;
     const pub = (env as unknown as { PUBLIC_URL?: string }).PUBLIC_URL;

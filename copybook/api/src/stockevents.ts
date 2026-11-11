@@ -456,7 +456,34 @@ export async function fillWinter(env: Env, budget: number): Promise<Record<strin
   return { names: last.names, done: last.done, read: out.filter((r) => r.ticker).map((r) => r.ticker) };
 }
 
-async function fillWinterOne(env: Env, budget: number): Promise<Record<string, unknown>> {
+/** Names a member just followed or owns whose winter isn't read yet: gene fills them each minute (fillWinterFollowed). */
+export async function queueWinter(env: Env, tickers: string[]): Promise<void> {
+  const done = new Set(JSON.parse((await env.DB.get('winter:done')) ?? '[]') as string[]);
+  const q = JSON.parse((await env.DB.get('winter:queue')) ?? '[]') as string[];
+  const add = [...new Set(tickers.map((t) => t.toUpperCase()))].filter((t) => !done.has(t) && !q.includes(t));
+  if (add.length) await env.DB.put('winter:queue', JSON.stringify([...q, ...add].slice(-300)));
+}
+
+/**
+ * Gene, every minute after alert polling (outside the deadline windows): newly followed names' winter, at most `perName`
+ * SEC requests each and `names` names a minute, oldest first, so a follow reads within minutes, not after filing week.
+ */
+export async function fillWinterFollowed(env: Env, perName = 3, names = 3): Promise<Record<string, unknown>> {
+  const done = new Set(JSON.parse((await env.DB.get('winter:done')) ?? '[]') as string[]);
+  const q = (JSON.parse((await env.DB.get('winter:queue')) ?? '[]') as string[]).filter((t) => !done.has(t));
+  const read: string[] = [];
+  for (const t of q.slice(0, names)) {
+    if (secBudget.left <= perName + 1) break;
+    await fillWinterOne(env, perName, t);
+    read.push(t);
+  }
+  const after = new Set(JSON.parse((await env.DB.get('winter:done')) ?? '[]') as string[]);
+  const left = q.filter((t) => !after.has(t));
+  await env.DB.put('winter:queue', JSON.stringify(left));
+  return { read, queued: left.length };
+}
+
+async function fillWinterOne(env: Env, budget: number, only?: string): Promise<Record<string, unknown>> {
   // Members' names first, then the 100 stocks the superinvestors hold most (the trader, Nov 11: this week's trialists
   // shouldn't see "pending"). For those, the published list already has every qualifying buy by the same rule, so only
   // their 13D/Gs are read here.
@@ -464,8 +491,8 @@ async function fillWinterOne(env: Env, budget: number): Promise<Record<string, u
   const own = JSON.parse((await env.DB.get('issuers:tickers')) ?? '[]') as string[];
   const list = [...new Set([...own, ...(pub?.top ?? [])])];
   const done = new Set(JSON.parse((await env.DB.get('winter:done')) ?? '[]') as string[]);
-  const t = list.find((x) => !done.has(x));
-  if (!t || budget < 4) return { names: list.length, done: done.size };
+  const t = only ? (done.has(only) ? undefined : only) : list.find((x) => !done.has(x));
+  if (!t || budget < (only ? 1 : 4)) return { names: list.length, done: done.size };
   let spent = 0;
   const can = () => spent < budget && secBudget.left > 1;
   const obj = await env.HIST.get(WINTER.key(t));

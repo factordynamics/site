@@ -389,6 +389,14 @@ export interface FollowsNamespace {
  * through to KV for the alert jobs.
  */
 export async function changeFollows(env: Env, m: Member, op: FollowOp): Promise<{ ok: true; follows: Follows; member: Member } | { ok: false; error: string }> {
+  const r = await applyFollows(env, m, op);
+  // A newly followed or owned name gets last winter read on follow, not by the 5-minute job filing week starves (the lead,
+  // Nov 11): queued for gene's per-minute fill right after alert polling.
+  if (r.ok && !('get' in op)) await (await import('./stockevents')).queueWinter(env, [...r.follows.stocks, ...r.follows.owned]).catch(() => null);
+  return r;
+}
+
+async function applyFollows(env: Env, m: Member, op: FollowOp): Promise<{ ok: true; follows: Follows; member: Member } | { ok: false; error: string }> {
   if (!m.seat_of) return viaObject(env, m, op);
   // A Fund seat: list changes go to the owner's object (shared by the team), settings to the seat's own.
   const owner = await getMember(env, m.seat_of);
