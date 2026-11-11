@@ -425,7 +425,8 @@ export type ApiHolder = {
 export const loadHolders = (t: string, type: string | null, offset: number) =>
   call<{ count: number; filers?: number; truncated: boolean; holders: ApiHolder[]; next_offset: number | null }>(`/stocks/${encodeURIComponent(t)}/holders?cohort=all&limit=1000&offset=${offset}${type ? `&type=${type}` : ''}`, { auth: true })
 /** One ticker's issuer feed; `window` is where it is complete back to (the quarter start, e.g. Jul 1), null when it isn't. */
-export type IssuerFeed = IssuerEvent[] & { window?: string | null }
+/** stale_as_of: set when the API served its last good answer while slow (Worker 8ea0875); show it, never as fresh. */
+export type IssuerFeed = IssuerEvent[] & { window?: string | null; stale_as_of?: string | null }
 /** GET /events, one request per 50 tickers. A cold call lists what it couldn't load yet in `pending`; those are
  *  asked for once more, 2 seconds later (each request counts against the API's daily quota). */
 export async function loadEvents(tickers: string[], timeout = 30_000) {
@@ -435,7 +436,7 @@ export async function loadEvents(tickers: string[], timeout = 30_000) {
   const get = async (b: string[]) => {
     for (let k = 0; ; k++) {
       try {
-        return await call<{ tickers: Record<string, { events: IssuerEvent[]; window?: string | null }>; pending?: string[] }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&window=quarter`, { auth: true, timeout })
+        return await call<{ tickers: Record<string, { events: IssuerEvent[]; window?: string | null }>; pending?: string[]; stale?: boolean; stale_as_of?: string }>(`/events?tickers=${b.map(encodeURIComponent).join(',')}&window=quarter`, { auth: true, timeout })
       } catch (e) {
         if (k >= 2 || (e instanceof ApiError && e.status < 500 && e.status !== 429)) throw e
         await new Promise((r) => setTimeout(r, k ? 6000 : 2000))
@@ -447,12 +448,12 @@ export async function loadEvents(tickers: string[], timeout = 30_000) {
     const batches = Array.from({ length: Math.ceil(todo.length / 50) }, (_, j) => todo.slice(j * 50, j * 50 + 50))
     const res = await Promise.all(batches.map(get))
     const pending = new Set(res.flatMap((r) => r.pending ?? []))
-    for (const r of res) for (const [t, v] of Object.entries(r.tickers ?? {})) if (!pending.has(t) || v.events.length) out.set(t, Object.assign(v.events, { window: v.window ?? null }))
+    for (const r of res) for (const [t, v] of Object.entries(r.tickers ?? {})) if (!pending.has(t) || v.events.length) out.set(t, Object.assign(v.events, { window: v.window ?? null, stale_as_of: r.stale ? (r.stale_as_of ?? null) : null }))
     todo = todo.filter((t) => pending.has(t))
   }
   try {
     const c = readEvCache()
-    for (const [t, v] of out) c[t] = { events: [...v], window: v.window ?? null }
+    for (const [t, v] of out) c[t] = { events: [...v], window: v.window ?? null, stale_as_of: v.stale_as_of ?? null }
     localStorage.setItem(EV_LAST, JSON.stringify({ token: getToken(), tickers: c }))
   } catch {
     // Storage blocked or full: no cache.
@@ -461,9 +462,9 @@ export async function loadEvents(tickers: string[], timeout = 30_000) {
 }
 // The last /events answer per ticker for this session: My book renders from it at once and refreshes.
 const EV_LAST = 'copybook-events-last'
-function readEvCache(): Record<string, { events: IssuerEvent[]; window: string | null }> {
+function readEvCache(): Record<string, { events: IssuerEvent[]; window: string | null; stale_as_of?: string | null }> {
   try {
-    const c = JSON.parse(localStorage.getItem(EV_LAST) ?? 'null') as { token: string; tickers: Record<string, { events: IssuerEvent[]; window: string | null }> } | null
+    const c = JSON.parse(localStorage.getItem(EV_LAST) ?? 'null') as { token: string; tickers: Record<string, { events: IssuerEvent[]; window: string | null; stale_as_of?: string | null }> } | null
     return c && c.token === getToken() ? c.tickers : {}
   } catch {
     return {}
@@ -472,7 +473,7 @@ function readEvCache(): Record<string, { events: IssuerEvent[]; window: string |
 /** The cached feeds for whichever of these tickers have one. */
 export function lastEvents(tickers: string[]): Map<string, IssuerFeed> {
   const c = readEvCache()
-  return new Map(tickers.filter((t) => c[t]).map((t) => [t, Object.assign([...c[t].events], { window: c[t].window })]))
+  return new Map(tickers.filter((t) => c[t]).map((t) => [t, Object.assign([...c[t].events], { window: c[t].window, stale_as_of: c[t].stale_as_of ?? null })]))
 }
 
 export const setAlerts = (alerts: Member['alerts']) => call<{ member: Member }>('/alerts', { body: { alerts }, auth: true }).then((r) => r.member)

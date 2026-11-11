@@ -7,6 +7,7 @@ import { FreeNames } from '../components/FreeNames'
 import { Paused } from '../components/Paused'
 import { TRIAL_DAYS } from '../config'
 import { useSearch } from '../components/Search'
+import { Stale } from '../components/Stale'
 import { Arrow, Badge, Button, edgeFade, LoadFailed, Lock, Panel, Skeleton, Stat } from '../components/ui'
 import { ApiStatus, Updating } from '../components/ApiStatus'
 import { ApiError, apiDown, getToken, lastMe, needsVerify, pendingEmail, needsReauth, isFree, isPro, lastEvents, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
@@ -437,6 +438,7 @@ export function Book() {
                 ))}
               </div>
             </header>
+            <Stale asOf={events.staleAsOf} onRetry={events.retry} className="px-5 pt-3 md:px-6" />
             <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Your names">
               <table className="w-full min-w-[960px] text-[13.5px]">
                 <thead>
@@ -690,6 +692,7 @@ function LiteBook({ member }: { member: Member }) {
                 </Link>
               </div>
             </div>
+            <Stale asOf={events.staleAsOf} onRetry={events.retry} className="px-5 pt-3 md:px-6" />
             <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Your names">
               <table className="w-full min-w-[860px] text-[13.5px]">
                 <thead>
@@ -830,7 +833,9 @@ function useEvents(names: string[], on: boolean) {
     let live = true
     const cached = lastEvents(names)
     const prev = st
-    const ask = tick && prev.failed.size ? names.filter((t) => prev.failed.has(t)) : names
+    // Again: the names that failed or were answered from the API's stale copy; none of those, every name.
+    const redo = names.filter((t) => prev.failed.has(t) || prev.data.get(t)?.stale_as_of)
+    const ask = tick && redo.length ? redo : names
     // A name with a cached feed shows it while asking; only a name with nothing to show waits or fails.
     setSt({ data: tick ? prev.data : cached, loading: new Set(ask.filter((t) => !cached.has(t))), failed: new Set() })
     let next = 0
@@ -856,7 +861,9 @@ function useEvents(names: string[], on: boolean) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [on, key, tick])
-  return { ...st, retry: () => setTick((x) => x + 1) }
+  // The oldest stale_as_of among the feeds shown: the API served its last good answer while slow.
+  const staleAsOf = useMemo(() => [...st.data.values()].map((f) => f.stale_as_of).filter((x): x is string => Boolean(x)).sort()[0] ?? null, [st.data])
+  return { ...st, staleAsOf, retry: () => setTick((x) => x + 1) }
 }
 
 type StockEv = NonNullable<Stock['since']>[number]

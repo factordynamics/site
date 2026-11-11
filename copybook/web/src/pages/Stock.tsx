@@ -9,6 +9,7 @@ import { Share } from '../components/Share'
 import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { downloadFile, getToken, isPro, lastMe, loadEvents, loadHolders, needsVerify, pendingEmail, useMember, type ApiHolder } from '../lib/account'
 import { ResendLink } from '../components/ConfirmEmail'
+import { Stale } from '../components/Stale'
 import { FridayBox } from '../components/FridayBox'
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, LoadFailed, Lock, Monogram, NotCounted, Panel, Skeleton, Stat } from '../components/ui'
@@ -375,6 +376,7 @@ export function StockPage() {
       )}
       {paid && d && feed && (
         <Panel className="mt-4" title="Company insiders" sub={`Open-market Form 4 trades from $100K${from ? ` since ${new Date(Date.parse(`${from}T12:00:00Z`) - 86_400_000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` : ' in recent filings'}, largest first`}>
+          <Stale asOf={feed.stale_as_of} onRetry={ev.retry} className="mb-2" />
           {insiders.length ? (
             <ul className="divide-y divide-line">
               {insiders.map((l) => (

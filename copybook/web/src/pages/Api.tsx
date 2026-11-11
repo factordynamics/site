@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Panel, Skeleton } from '../components/ui'
 import { ApiStatus } from '../components/ApiStatus'
+import { Stale } from '../components/Stale'
 import { probe } from '../lib/account'
 import { useAsync, useTitle } from '../lib/data'
 import { HISTORY_EXACT, loadCoverage } from '../lib/stocks'
@@ -25,7 +26,7 @@ const SAMPLE = `${import.meta.env.BASE_URL}api/sample-holdings.json`
 // GET /v1/changelog, newest first; the build's copy (scripts/cards.mjs) when the API isn't answering.
 type Change = { id?: string | null; date: string; status: string; breaking: boolean; changes: string[] }
 const loadChangelog = () =>
-  probe<{ data: Change[] }>('/v1/changelog').catch(() => fetch(`${import.meta.env.BASE_URL}api/changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ data: Change[] }>) : Promise.reject(new Error(String(r.status))))))
+  probe<{ data: Change[]; stale?: boolean; stale_as_of?: string }>('/v1/changelog').catch(() => fetch(`${import.meta.env.BASE_URL}api/changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ data: Change[]; stale?: boolean; stale_as_of?: string }>) : Promise.reject(new Error(String(r.status))))))
 
 const TERM = /`([a-z_]+)`\s*\(([^)]*)\)/g
 // One definition for the fields the spec defines in several places, and query parameters the glossary isn't for.
@@ -391,6 +392,7 @@ export function ApiDocs() {
         </section>
         <section id="changelog" className="scroll-mt-24">
           <Panel title="API changelog" sub="Newest first">
+            <Stale asOf={log.data?.stale ? log.data.stale_as_of : null} onRetry={log.retry} className="mb-3" />
             {log.data ? (
               <ol className="divide-y divide-line text-[14px]">
                 {log.data.data.map((c, i) => (
