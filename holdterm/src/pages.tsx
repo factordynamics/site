@@ -608,7 +608,9 @@ function HomeBody() {
                   if (!h) return <span className="dim">{b ? 'No trades' : '…'}</span>
                   return (
                     <span className="move">
-                      <StockCell t={h.ticker} name={h.display_name || h.issuer} former={h.former} label={h.label} /> <span className={`tag ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(h)}</span> <span className={`num move-amt ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{signedUsd(h.value_delta)}</span>
+                      <StockCell t={h.ticker} name={h.display_name || h.issuer} former={h.former} label={h.label} />
+                      <span className={`tag ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(h)}</span>
+                      <span className={`num move-amt ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{signedUsd(h.value_delta)}</span>
                     </span>
                   )
                 },
