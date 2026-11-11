@@ -252,6 +252,12 @@ export function ForFunds() {
                 Status and incidents
               </Link>
             </li>
+            <li>
+              Every data run passes publish gates before it goes live, and lines we can’t read with confidence are held out of totals.{' '}
+              <Link to="/data-quality/" className="font-medium text-accent hover:text-accent-2">
+                Data quality
+              </Link>
+            </li>
             <li>Breaches affecting member data are notified within 72 hours.</li>
             <li>Remove names, keys and seats yourself at any time, or ask us to delete everything.</li>
             <li>
@@ -342,10 +348,16 @@ export function ForQuants() {
       <div className="mt-6 grid gap-4 md:grid-cols-3 [&>*]:h-full">
         <Panel title="Coverage">
           <ul className="space-y-2 text-[14px] leading-relaxed text-ink-2">
-            <li>Live: at least the latest 13F for {filers} filers (the /v1/filers count), 8 quarters (2024Q3–2026Q2) for 341 of the 355 managers we track closely and 3–7 for the other 14, holders by stock, quarter-range history, Form 4 and 13D/G events, and bulk CSV files.</li>
-            <li>Coming: hedge-fund and long-only new, exited and net trades in My book by Nov 20; the as_of parameter with per-row amendment lots by Nov 30; history back to 2013Q2 by Dec 31; Parquet bulk files, no date yet. Each appears in the changelog when it returns data.{' '}
+            <li>Live: at least the latest 13F for {filers} filers (the /v1/filers count), 8 quarters (2024Q3–2026Q2) for 341 of the 355 managers we track closely and 3–7 for the other 14, holders by stock, quarter-range history, Form 4 and 13D/G events, and bulk CSV and Parquet files.</li>
+            <li>Coming: hedge-fund and long-only new, exited and net trades in My book by Nov 20; the as_of parameter with per-row amendment lots by Nov 30; history back to 2013Q2 by Dec 31. Each appears in the changelog when it returns data.{' '}
               <Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">
                 Coverage
+              </Link>
+            </li>
+            <li>
+              Publish gates, held lines by reason and the live build per store:{' '}
+              <Link to="/data-quality/" className="font-medium text-accent hover:text-accent-2">
+                Data quality
               </Link>
             </li>
           </ul>

@@ -424,6 +424,10 @@ export function ApiDocs() {
         <Link to="/methodology/" className="font-medium text-accent hover:text-accent-2">
           methodology page
         </Link>
+        ; the gates every publish passes, and the lines they hold, are on{' '}
+        <Link to="/data-quality/" className="font-medium text-accent hover:text-accent-2">
+          data quality
+        </Link>
         .
       </p>
     </div>

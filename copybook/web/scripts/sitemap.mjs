@@ -23,6 +23,7 @@ const urls = [
   ['methodology/'],
   ['winter-2025-26/'],
   ['speed/'],
+  ['data-quality/'],
   ['api/'],
   ['contact/'],
   ['terms/'],

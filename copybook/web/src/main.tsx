@@ -35,6 +35,7 @@ const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m
 const FilingCard = lazy(() => import('./pages/Filing').then((m) => ({ default: m.FilingCard })))
 const Upgrade = lazy(() => import('./pages/Upgrade').then((m) => ({ default: m.Upgrade })))
 const Speed = lazy(() => import('./pages/Speed').then((m) => ({ default: m.Speed })))
+const DataQuality = lazy(() => import('./pages/DataQuality').then((m) => ({ default: m.DataQuality })))
 const Resume = lazy(() => import('./pages/Resume').then((m) => ({ default: m.Resume })))
 const Unsubscribe = lazy(() => import('./pages/Unsubscribe').then((m) => ({ default: m.Unsubscribe })))
 const Status = lazy(() => import('./pages/Status').then((m) => ({ default: m.Status })))
@@ -104,6 +105,7 @@ Promise.all([handoff, fontsReady]).then(() =>
             <Route path="winter-2025-26" element={<Winter />} />
             <Route path="f/:accession" element={<FilingCard />} />
             <Route path="speed" element={<Speed />} />
+            <Route path="data-quality" element={<DataQuality />} />
             <Route path="latency" element={<Navigate to="/speed/" replace />} />
             <Route path="api" element={<ApiDocs />} />
             <Route path="contact" element={<Contact />} />
