@@ -674,7 +674,7 @@ def older_changes(shards: list[dict], curated: dict, per_quarter: dict[str, list
     return n
 
 
-def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) -> int:
+def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict, quarter_dir: Path | None = None) -> int:
     """hl/{issuer6}.json: every 13F filer holding the stock in its latest full book (never the top-500
     public shard), with the period of that book and its change against the filer's prior quarter.
     Public (Pages): hl/{issuer6}.json with counts over all holders and the HOLDERS_TOP largest rows, for
@@ -733,9 +733,11 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 tick.setdefault(c[:6], {})[t] = tick.setdefault(c[:6], {}).get(t, 0) + (r.get("value") or 0)
         book[cik] = EQUITY.get(cik) or sum(by_issuer.values())  # the SH book, as on stock pages
         top10[cik] = {k for k, v in sorted(by_issuer.items(), key=lambda kv: -kv[1])[:10] if v > 0}
-    out, full = DATA / "hl", DATA / "hlf"
-    out.mkdir(exist_ok=True)
-    full.mkdir(exist_ok=True)
+    # quarter_dir (write_by_quarter): one report quarter's every-filer rows, paid only (no hl/, no site files)
+    out, full = (None, quarter_dir) if quarter_dir else (DATA / "hl", DATA / "hlf")
+    if out is not None:
+        out.mkdir(exist_ok=True)
+    full.mkdir(parents=True, exist_ok=True)
     index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
             "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
@@ -813,23 +815,91 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         body = {"issuer": code, "tickers": tickers, "counts": counts, **lenses, "columns": cols, "rows_total": len(rows)}
         written.add(name)
         write(full / name, {**body, "rows": rows})
-        if tickers:
+        if tickers and out is not None:
             keep.add(name)
             write(out / name, {**body, "rows": rows[:HOLDERS_TOP]})
             top = {r[0] for r in [r for r in rows if r[6] > 0][:SITE_TOP]}
             site[code] = [[r[0], r[5], r[6], r[8], r[11], r[10], deltas[r[0]], int(code in top10.get(r[0], ()))]
                           for r in rows if r[0] in top or r[3] in LENSES["smart"]]
-    for p in out.glob("*.json"):
-        if p.name not in keep and p.name != "index.json":
-            p.unlink()
     for p in full.glob("*.json"):
         if p.name not in written:
+            p.unlink()
+    if out is None:
+        write(full / "index.json", {
+            "quarter": full.name, "schema": HL_SCHEMA, "types_sig": signature(types),
+            "note": "ticker -> issuer code; one file per issuer: every 13F filer's row for this report quarter",
+            "tickers": dict(sorted(index.items())), "issuers": len(written)})
+        return len(written)
+    for p in out.glob("*.json"):
+        if p.name not in keep and p.name != "index.json":
             p.unlink()
     write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
                                "schema": HL_SCHEMA,
                                "types_sig": signature(types), "tickers": dict(sorted(index.items()))})
     write_site_holders(site, signature(types))
     return len(keep)
+
+
+BY_QUARTER_FROM = "2025Q1"  # hq/: the first report quarter with every filer's full book in fb/ (2024Q4 is prior-only)
+HQ_KEYS = ("cusip", "ticker", "issuer", "title", "put_call", "shares_type", "shares", "prev_shares", "value", "prev_value",
+           "change", "value_delta", "value_delta_basis", "unreliable", "suspect_units", "suspect_reason", "price_outlier",
+           "option_held", "value_rescale", "prev_cusip", "suspect_duplicate")
+
+
+def by_quarter_books(q: str, curated: dict) -> tuple[dict, dict, dict, dict]:
+    """Every filer's rows for report quarter q, as write_holders reads them: fq/{q}/{cik}.json (each non-curated
+    filer's book with change columns, written this full run for latest and older quarters alike) and h/{slug}/{q}.json
+    for curated filers. Share rows only (write_holders skips options and notes), with the fields it reads."""
+    rows, filing_of, equity, names = {}, {}, {}, {}
+    keep = lambda r: not r.get("put_call") and (r.get("shares_type") or "SH") != "PRN"
+    for p in sorted((DATA / "fq" / q).glob("*.json")):
+        if p.stem in curated:
+            continue
+        b = read(p)
+        if not b or not b.get("rows"):
+            continue
+        cols = b["columns"]
+        rows[p.stem] = [{k: r.get(k) for k in HQ_KEYS} for r in (dict(zip(cols, x)) for x in b["rows"]) if keep(r)]
+        filing_of[p.stem], names[p.stem] = filing(b), b.get("name")
+        if b.get("equity_value_counted"):
+            equity[p.stem] = round(b["equity_value_counted"])
+    for cik, m in curated.items():
+        b = read(DATA / "h" / m["slug"] / f"{q}.json")
+        if not b:
+            continue
+        rows[cik] = [{k: h.get(k) for k in HQ_KEYS} | {"shares_type": h.get("shares_type") or "SH"}
+                     for h in (b.get("holdings") or []) + (b.get("exited") or []) if keep(h)]
+        filing_of[cik], names[cik] = filing(b), b.get("manager") or m.get("name")
+        if b.get("equity_value_counted") or b.get("equity_value"):
+            equity[cik] = round(b.get("equity_value_counted") or b["equity_value"])
+    return rows, filing_of, equity, names
+
+
+def write_by_quarter(types: dict, curated: dict, filers: dict) -> dict[str, int]:
+    """hq/{quarter}/{issuer6}.json (paid, R2 hq/): /v1/changes?ticker= and holders?quarter= for every report quarter
+    from BY_QUARTER_FROM, complete: every 13F filer's row for that quarter, whatever it has filed since, built by
+    write_holders with the same per-filer aggregation, held marking (unreliable, held_reason) and value_delta_basis
+    as hl/. Full runs only (older quarters' fq/ books are written there). The latest quarter's counts.net equals hl/'s
+    net for that quarter (logged as by-quarter parity)."""
+    global LATEST, PERIOD, FILING, LINES, BASIS, REPRICED, NETS, EQUITY
+    saved = (LATEST, PERIOD, FILING, LINES, BASIS, REPRICED, NETS, EQUITY)
+    hl_nets, out = dict(NETS), {}
+    try:
+        for folder in sorted(p for p in (DATA / "fq").glob("*Q?") if p.is_dir() and p.name >= BY_QUARTER_FROM):
+            q = folder.name
+            rows, filing_of, equity, names = by_quarter_books(q, curated)
+            LATEST, FILING, EQUITY = rows, filing_of, equity
+            PERIOD, LINES, BASIS, REPRICED, NETS = {c: q for c in rows}, {}, {}, {}, {}
+            shards = [{"cik": c, "name": names.get(c), "quarter": q} for c in rows]
+            out[q] = write_holders(shards, types, curated, filers, quarter_dir=DATA / "hq" / q)
+            same = [c for c, (nq, net) in hl_nets.items() if nq == q and c in NETS]
+            off = [(c, hl_nets[c][1], NETS[c][1]) for c in same if abs(hl_nets[c][1] - NETS[c][1]) > 1]
+            print(f"moves: by-quarter {q}: {len(rows)} filers, {out[q]} issuers"
+                  + (f"; parity with hl/ {len(same) - len(off)} of {len(same)} issuers equal" if same else "")
+                  + (f", off: {off[:10]}" if off else ""), flush=True)
+    finally:
+        LATEST, PERIOD, FILING, LINES, BASIS, REPRICED, NETS, EQUITY = saved
+    return out
 
 
 def write_quality(shards: list[dict], curated: dict, filers: dict) -> dict:
@@ -1058,6 +1128,8 @@ def main() -> int:
           + "; ".join(f"{o}->{v['new']} {v.get('ticker')} {v.get('filers')} filers" for o, v in build.cusip_links().items()),
           flush=True)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
+    if os.environ.get("COPYBOOK_BY_QUARTER") == "1" and os.environ.get("SCOPE", "full") == "full":
+        write_by_quarter(types, curated, filers)
     net_parity(per_quarter)
     qy = write_quality(shards, curated, filers)
     print(f"moves: quality.json: {qy['held']['rows']} lines held across {qy['held']['filers']} filers: "

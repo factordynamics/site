@@ -9,6 +9,8 @@
 - changes/{quarter}.json: every filer's moves per report period (moves.py)
 - v/{cik}/{accession}.json: superseded 13F books, as that one filing reported them (build.py)
 - hl/{issuer}.json: every 13F filer holding an issuer in its latest full book (moves.py hlf/)
+- hq/{quarter}/{issuer}.json and hq/{quarter}/index.json: every 13F filer's row in an issuer for one report quarter
+  (moves.py write_by_quarter, COPYBOOK_BY_QUARTER=1 full runs)
 
 Auth is the GitHub Actions OIDC token (audience copybook-api); no stored secret.
 The API base is read from API_JSON (field `api`) at the start of each run, because the self-hosted
@@ -56,10 +58,11 @@ MANIFEST = Path(os.environ.get("COPYBOOK_H_MANIFEST") or (HIST.parent / ".h-mani
 BUILD = json.loads((HIST.parent / "build.json").read_text()) if (HIST.parent / "build.json").exists() else {}  # names R2 objects
 KEY = re.compile(r"^h/[a-z0-9][a-z0-9-]*/(\d{4}Q[1-4](\.json|\.csv|\.v1\.json)|index\.json)$"
                  r"|^fb/\d{4}Q[1-4]/\d{10}\.json$|^s/[0-9A-Z]{6}\.json$|^bulk/\d{4}Q[1-4](\.part\d+)?\.csv\.gz$"
-                 r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$")
+                 r"|^changes/\d{4}Q[1-4]\.json$|^v/\d{10}/\d{10}-\d{2}-\d{6}\.json$|^hl/[0-9A-Z]{6}\.json$"
+                 r"|^hq/\d{4}Q[1-4]/([0-9A-Z]{6}|index)\.json$")
 # Keys the Worker may not accept yet: a failure warns instead of failing the run,
 # and the rest of that kind are skipped until the next run.
-OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/")
+OPTIONAL = re.compile(r"/index\.json$|\.v1\.json$|^fb/|^s/|^bulk/|^changes/|^v/|^hl/|^hq/")
 # Small writes, one bundle at a time: gene's disk is shared with other software, and on Nov 11 one 100-file bundle
 # held the API for 60 s (the API allows up to 100 entries or 20 MB per bundle).
 BUNDLE_ENTRIES = 20
@@ -187,7 +190,7 @@ def main() -> int:
     root = HIST.parent
     sources: dict[str, Path] = {}
     for pattern in ("h/*/*.json", "h/*/*.csv", "v/*/*.json", "changes/*.json", "fb/*/*.json", "s/*.json",
-                    "bulk/*.csv.gz"):
+                    "bulk/*.csv.gz", "hq/*/*.json"):
         for p in sorted(root.glob(pattern)):
             sources[p.relative_to(root).as_posix()] = p
     # Change rows (fq/, moves.py) replace the plain book for the same quarter. Curated runs restore fb/ read-only
