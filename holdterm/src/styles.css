@@ -3655,6 +3655,23 @@ p a,
   font-size: 13.5px;
   line-height: 1.45;
 }
+/* Date headings over a list's rows, on phones only (Grid's groupSm; desktop has a Filed column). */
+.grid tr.group-sm th {
+  padding: 12px 0 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg2);
+  text-align: left;
+  height: auto;
+}
+.grid tbody tr.group-sm:first-child th {
+  padding-top: 4px;
+}
+/* Under a date heading, the row's own "Filed Nov 6" would repeat it. */
+.grid.grouped .filed-sub {
+  display: none;
+}
 /* The filings table's key to its tags: one line until opened. */
 .tag-key {
   margin: 0 0 12px;

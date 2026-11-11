@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode, type ToggleEvent } from 'react'
+import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode, type ToggleEvent } from 'react'
 import { booksProgress, type Unreliable } from './data'
 
 // ---------- formatting ----------
@@ -512,6 +512,7 @@ export function Grid<R>({
   rowClass,
   empty = 'Nothing to show yet.',
   rank = false,
+  groupSm,
 }: {
   cols: Col<R>[]
   rows: R[]
@@ -521,8 +522,19 @@ export function Grid<R>({
   rowClass?: (r: R) => string
   empty?: ReactNode
   rank?: boolean
+  /** Phones only: while rows keep their given order, a heading row starts each run with a new key (a date, say). */
+  groupSm?: (r: R) => string
 }) {
   const heading = useContext(PanelHeading)
+  // Group headings are rendered on phones only, so a desktop table's first row is always a real row.
+  const [sm, setSm] = useState(() => typeof matchMedia !== 'undefined' && matchMedia('(max-width: 640px)').matches)
+  useEffect(() => {
+    if (!groupSm) return
+    const mq = matchMedia('(max-width: 640px)')
+    const on = () => setSm(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [groupSm])
   const [sort, setSort] = useState<[string, 'asc' | 'desc'] | undefined>(initial)
   const [shown, setShown] = useState(limit ?? Infinity)
   const body = useRef<HTMLTableSectionElement>(null)
@@ -565,7 +577,7 @@ export function Grid<R>({
   return (
     <div className={`grid-outer ${cue ? 'cue' : ''}`}>
     <div className="grid-wrap" ref={wrap}>
-      <table className="grid" aria-labelledby={heading}>
+      <table className={`grid${groupSm && sm && sort === initial ? ' grouped' : ''}`} aria-labelledby={heading}>
         <thead>
           <tr>
             {rank && <th className="num rank">#</th>}
@@ -593,7 +605,16 @@ export function Grid<R>({
         <tbody ref={body}>
           {visible.map((r, i) => {
             const to = href?.(r)
+            const g = groupSm && sm && sort === initial ? groupSm(r) : undefined
             return (
+              <Fragment key={i}>
+              {g && (i === 0 || g !== groupSm!(visible[i - 1])) && (
+                <tr className="group-sm">
+                  <th colSpan={cols.length + (rank ? 1 : 0)} scope="colgroup">
+                    {g}
+                  </th>
+                </tr>
+              )}
               <tr
                 key={i}
                 className={`${to ? 'link' : ''} ${rowClass?.(r) ?? ''}`}
@@ -615,6 +636,7 @@ export function Grid<R>({
                   </td>
                 ))}
               </tr>
+              </Fragment>
             )
           })}
         </tbody>
