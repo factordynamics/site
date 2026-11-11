@@ -19,6 +19,7 @@ export const CHANGELOG: { id: string; date: string; shipped_at?: string; schema_
     status: 'shipped',
     changes: [
       'GET /v1/stocks/{stock}/holders and /v1/changes rows: `value_delta_basis` (`trade`: shares traded x this filing\'s value per share; `filed_value`: the change in reported value), as the data run publishes it, so a trade and a filed-value change are no longer mixed unlabelled. Null on rows from earlier builds. Webhook 13F alert rows carry the same field.',
+      'GET /v1/stocks/{stock}/holders `counts.value_delta_source`: `hl` when the rows carry the data run\'s per-line value_delta (they sum to `net`), `implied` when the holder index was published without it (rows fall back to shares traded x price and do not sum to `net`). `trade_usd_implied` is null on a flagged or withheld line (`unreliable`, `price_outlier`, `suspect_units`).',
       'Option lines a filer reported in contracts carry `shares_basis: "contracts"`: the data run multiplied their shares by 100 and they count normally. Option lines from non-standard filers are `unreliable: "both"`: value_delta_usd null, held, not in net.',
     ],
   },
