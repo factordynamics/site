@@ -7,7 +7,7 @@
  */
 import { FOOTER, sendMail } from './email';
 import { checkoutNote, FOUNDING_UNTIL } from './revenue';
-import { isActive, type Env, type Member } from './env';
+import { isActive, testAddress, type Env, type Member } from './env';
 import { claim, getMember, memberByEmail } from './members';
 import { stripe } from './stripe';
 
@@ -80,7 +80,7 @@ async function couponFor(env: Env, plan: string): Promise<string> {
 type Reply = { status: number; body: Record<string, unknown> };
 
 /**
- * POST /checkout {plan, interval, ref?, email?, source?}: a Checkout Session for a new subscription
+ * POST /checkout {plan, interval, ref?, email?, source?, utm_source?, utm_content?, landing?, test?}: a Checkout Session for a new subscription
  * (14-day trial, card up front), with the referral month applied when `ref` is a member's live code.
  * Without `ref` it is the same checkout the site's Payment Links start, plus the source it carries.
  */
@@ -107,7 +107,14 @@ export async function createCheckout(env: Env, b: Record<string, unknown>): Prom
   const promo = promoCode ? (await stripe(env, 'GET', 'promotion_codes', { code: promoCode, active: true, limit: 1 })).data?.[0] : null;
   if (promoCode && !promo) return { status: 400, body: { ok: false, error: 'That code is not valid', code: 'invalid_promo' } };
   const gate = promo?.metadata?.copybook === 'gatecheck';
+  // Our own checks are tagged (the lead): `test: true`, a copybook-test- or gate address, or a source starting "test".
+  // The visitor's first touch and landing page ride on the session, so funnel pulls split real from test by post.
+  const tag = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+  const isTest = b.test === true || (!!email && testAddress(email)) || /^test/i.test(source ?? '') || gate;
+  const touch = { utm_source: tag(b.utm_source, 60), utm_content: tag(b.utm_content, 60), landing: tag(b.landing, 120) };
   const cs = await stripe(env, 'POST', 'checkout/sessions', {
+    ...(isTest ? { 'metadata[test]': 'true' } : {}),
+    ...Object.fromEntries(Object.entries(touch).filter(([, v]) => v).map(([k, v]) => [`metadata[${k}]`, v!])),
     mode: 'subscription',
     'line_items[0][price]': price.id,
     'line_items[0][quantity]': 1,

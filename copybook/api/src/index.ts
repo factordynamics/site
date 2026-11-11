@@ -752,7 +752,28 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const t = await env.DB.get(`trackh:${day}`);
       if (t) track_hourly[day] = JSON.parse(t);
     }
-    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm, track_hourly }, 200, h);
+    // Checkout sessions in the window from Stripe: open, complete or expired, our own (test) apart from real, by post.
+    // Test: metadata.test, a client_reference_id starting "test", or a copybook-test- or gate address.
+    const checkouts: Record<string, Record<string, Record<string, number>>> = {};
+    try {
+      const { stripe } = await import('./stripe');
+      let after: string | undefined;
+      for (let page = 0; page < 5; page++) {
+        const r = await stripe(env, 'GET', 'checkout/sessions', { 'created[gte]': Math.floor(Date.now() / 1000) - days * 86400, limit: 100, ...(after ? { starting_after: after } : {}) });
+        for (const cs of (r.data ?? []) as { id: string; status: string; client_reference_id?: string | null; metadata?: Record<string, string>; customer_details?: { email?: string } | null }[]) {
+          const email = cs.customer_details?.email ?? '';
+          const test = cs.metadata?.test === 'true' || /^test/i.test(cs.client_reference_id ?? '') || testAddress(email) || /^copybook-gate-/.test(email);
+          const utm = cs.metadata?.utm_source ? `${cs.metadata.utm_source}|${cs.metadata.utm_content ?? '-'}` : (cs.client_reference_id ?? 'direct');
+          const g = ((checkouts[test ? 'test' : 'real'] ??= {})[cs.status] ??= {});
+          g[utm] = (g[utm] ?? 0) + 1;
+        }
+        if (!r.has_more || !r.data?.length) break;
+        after = r.data.at(-1).id;
+      }
+    } catch (e) {
+      checkouts.error = { [String(e).slice(0, 120)]: { n: 1 } };
+    }
+    return json({ ok: true, funnel: await funnel(env, Date.now(), days), track, track_by_utm, track_hourly, checkouts }, 200, h);
   }
 
   // Operator: one member's access log (for telling a member whether any session read their book), or an entry for a

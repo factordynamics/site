@@ -3069,6 +3069,13 @@ describe('copybook api', () => {
     expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'monthly', ref: ref.code, email: 'rr@example.com' } })).json()).referral).toEqual({ applied: false });
     expect(calls.find((c) => c.path === 'checkout/sessions')!.body).not.toContain('discounts');
     expect((await call('/checkout', { body: { plan: 'gold', interval: 'monthly' } })).status).toBe(400);
+    // The visitor's first touch and landing page ride on the session; our own checks are tagged test (the lead).
+    calls.length = 0;
+    await call('/checkout', { body: { plan: 'copy', interval: 'monthly', utm_source: 'x', utm_content: 'seed-season', landing: '/season/' } });
+    await call('/checkout', { body: { plan: 'copy', interval: 'monthly', email: 'copybook-test-sweep@example.com' } });
+    await call('/checkout', { body: { plan: 'fund', interval: 'yearly', test: true } });
+    const bodies = calls.filter((c) => c.path === 'checkout/sessions').map((c) => c.body);
+    expect([bodies[0].includes('metadata[utm_content]=seed-season'), bodies[0].includes('metadata[landing]=/season/'), bodies[0].includes('metadata[test]'), bodies[1].includes('metadata[test]=true'), bodies[2].includes('metadata[test]=true')]).toEqual([true, true, false, true, true]);
 
     // The referred subscription arrives: counted as a signup for the referrer, no credit yet.
     stripeObjects['customers/cus_nw'] = { id: 'cus_nw', email: 'new@example.com' };
