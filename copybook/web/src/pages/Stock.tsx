@@ -10,8 +10,9 @@ import { PositionLine, rollUp, type Position } from '../components/FundNotes'
 import { downloadFile, isPro, loadEvents, loadHolders, useMember, type ApiHolder } from '../lib/account'
 import { issuerLatest, whenLabel } from '../lib/insiders'
 import { Arrow, Badge, Button, edgeFade, Lock, Monogram, Panel, Skeleton, Stat } from '../components/ui'
-import { dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle } from '../lib/data'
+import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle } from '../lib/data'
 import { dueLead, stockTitle } from '../lib/titles.mjs'
+import { possessive } from '../lib/names.mjs'
 import { loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, stockPath, type StockHolder } from '../lib/stocks'
 
 const CHANGE: Record<string, { label: string; tone: 'up' | 'down' | 'neutral' }> = {
@@ -209,6 +210,8 @@ export function StockPage() {
           <Share text={`Who owns $${d?.ticker ?? ticker.toUpperCase()}: the superinvestors and funds holding ${d?.name ?? 'it'}, from 13F filings`} />
         </div>
       </header>
+
+      {d && <Reissued tickers={d.classes.map((c) => c.ticker)} name={d.name} />}
 
       {due && (
         <Link to="/season/#expected" className="mt-6 flex items-center gap-2 rounded-xl bg-accent-soft px-4 py-2.5 text-[14px] font-medium text-accent-2 hover:bg-[#dfe4fb]">
@@ -541,5 +544,32 @@ function ChangeCell({ h }: { h: StockHolder }) {
       {r > 0 ? '+' : '−'}
       {pct(Math.abs(r), 0)}
     </span>
+  )
+}
+
+// A reissued CUSIP (ingest's data/cusip_links.json, keyed by the old CUSIP): said once under the name, so a reader
+// doesn't take the switch for funds selling. Nothing shows until the file is served.
+type CusipLink = { new: string; ticker: string | null; name: string | null; quarter: string }
+// These two moved from ADS/ADR to ordinary shares, which is how their holders know the change.
+const ADS = new Set(['ASND', 'TEVA'])
+function Reissued({ tickers, name }: { tickers: string[]; name: string }) {
+  const f = useAsync(() => getJSON<{ links: Record<string, CusipLink> }>(`${DATA}cusip_links.json`).catch(() => null), [])
+  const links = Object.entries(f.data?.links ?? {}).filter(([, l]) => l.ticker && tickers.includes(l.ticker))
+  if (!links.length) return null
+  return (
+    <div className="mt-6 space-y-1.5 rounded-xl bg-ink/[0.04] px-4 py-3 text-[14px] leading-relaxed text-ink-2">
+      {links.map(([old, l]) => {
+        const who = possessive(l.name ?? name)
+        return (
+          <p key={old}>
+            {ADS.has(l.ticker!) ? `${who} ADS converted to ordinary shares in ${quarterLabel(l.quarter)}, and its CUSIP changed from ${old} to ${l.new}` : `${who} CUSIP changed from ${old} to ${l.new} in ${quarterLabel(l.quarter)}`}
+            ; holders reporting either are counted here, and keeping the shares isn’t a sale.{' '}
+            <Link to="/methodology/#reissued-cusip" className="font-medium text-accent hover:text-accent-2">
+              How we handle it
+            </Link>
+          </p>
+        )
+      })}
+    </div>
   )
 }
