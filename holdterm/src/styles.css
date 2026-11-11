@@ -532,23 +532,59 @@ main:focus {
 }
 /* Loading: placeholder rows in the shape of a table, no spinner. */
 .loading {
+  padding: 2px 0 6px;
+}
+.skel-head,
+.skel-row {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 0;
+  align-items: center;
+  gap: 4%;
+}
+.skel-head {
+  height: var(--th);
+}
+.skel-row {
+  height: var(--tr);
+  border-top: 1px solid var(--row);
 }
 .skel {
-  height: 14px;
+  display: block;
+  height: 12px;
   border-radius: 6px;
   background: linear-gradient(90deg, var(--raise) 0%, var(--line) 50%, var(--raise) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
 }
-.skel:nth-child(3n + 2) {
-  width: 86%;
+.skel-head .skel {
+  height: 9px;
+  opacity: 0.7;
 }
-.skel:nth-child(3n) {
-  width: 72%;
+.skel.num {
+  margin-left: auto;
+}
+.skel-row .skel.num + .skel.num {
+  margin-left: 0;
+}
+.skel-title {
+  height: 28px;
+  width: 38%;
+  margin: 4px 0 14px;
+}
+.skel-line {
+  width: 70%;
+  margin-top: 10px;
+}
+.skel-line.short {
+  width: 48%;
+}
+.skel-label {
+  width: 40%;
+  height: 10px;
+}
+.skel-value {
+  width: 60%;
+  height: 22px;
+  margin-top: 12px;
 }
 @keyframes shimmer {
   0% {
@@ -565,17 +601,49 @@ main:focus {
 }
 .failed {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  padding: 16px 18px;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 24px;
   border: 1px solid var(--line);
-  border-radius: var(--r);
+  border-radius: 14px;
   background: var(--panel);
+  box-shadow: var(--shadow);
+  max-width: 640px;
+}
+.failed-icon {
+  flex: none;
+  color: var(--acc);
+  margin-top: 1px;
+}
+.failed h2 {
+  font-size: 18px;
+  margin: 0 0 6px;
 }
 .failed p {
   margin: 0;
-  flex: 1 1 320px;
+  color: var(--fg2);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.failed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.failed details {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.failed summary {
+  cursor: pointer;
+}
+.failed code {
+  display: block;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
 }
 .notice {
   padding: 12px 16px;

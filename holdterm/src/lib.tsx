@@ -92,26 +92,89 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): { data?: T; e
   }, deps)
   return s
 }
-export function Loading({ what = 'Loading', rows = 6 }: { what?: string; rows?: number }) {
+// Column widths for placeholder rows: a name column, then shorter figures, like the real tables.
+const SKEL_COLS = [[30, 22, 14, 12], [26, 18, 16, 10], [34, 20, 12, 14], [22, 24, 14, 11]]
+/** A placeholder shaped like a table (head plus `rows` rows at real row height), so nothing jumps when the
+ * data arrives. `what` is announced to screen readers. */
+export function Loading({ what = 'Loading', rows = 8, quiet = false }: { what?: string; rows?: number; quiet?: boolean }) {
   return (
-    <div className="loading" role="status">
-      <span className="sr">{what}</span>
+    <div className="loading" role={quiet ? undefined : 'status'} aria-live={quiet ? undefined : 'polite'}>
+      {!quiet && <span className="sr">{what}…</span>}
+      <div className="skel-head" aria-hidden>
+        {SKEL_COLS[0].map((w, j) => (
+          <span key={j} className="skel" style={{ width: `${w * 0.6}%` }} />
+        ))}
+      </div>
       {Array.from({ length: rows }, (_, i) => (
-        <span key={i} className="skel" aria-hidden />
+        <div key={i} className="skel-row" aria-hidden>
+          {SKEL_COLS[i % SKEL_COLS.length].map((w, j) => (
+            <span key={j} className={`skel${j ? ' num' : ''}`} style={{ width: `${w}%` }} />
+          ))}
+        </div>
       ))}
     </div>
   )
 }
-/** A load that failed: plain words and a retry, with the technical reason in small print. */
-export function Failed({ error, what = 'this data' }: { error: string; what?: string }) {
+/** A whole page while its data loads: title, summary, stat cards and a table, in the page's own layout. */
+export function PageLoading({ what = 'Loading', stats = 4, rows = 12 }: { what?: string; stats?: number; rows?: number }) {
+  return (
+    <div className="page page-loading" role="status" aria-live="polite">
+      <span className="sr">{what}…</span>
+      <div aria-hidden>
+        <span className="skel skel-title" />
+        <span className="skel skel-line" />
+        <span className="skel skel-line short" />
+      </div>
+      {stats > 0 && (
+        <div className="stats" aria-hidden>
+          {Array.from({ length: stats }, (_, i) => (
+            <div key={i} className="stat">
+              <span className="skel skel-label" />
+              <span className="skel skel-value" />
+            </div>
+          ))}
+        </div>
+      )}
+      <section className="panel" aria-hidden>
+        <header>
+          <span className="skel skel-label" />
+        </header>
+        <div className="body">
+          <Loading rows={rows} quiet />
+        </div>
+      </section>
+    </div>
+  )
+}
+/** A load that failed: what happened in plain words, a retry, and a way on; the technical reason is tucked away. */
+export function Failed({ error, what = 'this page' }: { error: string; what?: string }) {
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false
   return (
     <div className="failed" role="alert">
-      <p>
-        <strong>Couldn’t load {what}.</strong> <span className="dim">The filings are served from a static mirror, so this is usually a brief network problem.</span> <span className="dim small">({error})</span>
-      </p>
-      <button className="btn ghost" onClick={() => location.reload()}>
-        Try again
-      </button>
+      <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden className="failed-icon">
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M12 7v6M12 16.5v.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <div className="failed-text">
+        <h2>We couldn’t load {what}</h2>
+        <p>
+          {offline
+            ? 'You seem to be offline. Check your connection, then try again.'
+            : 'The SEC filing data didn’t arrive. This is usually a brief network hiccup, and trying again normally fixes it.'}
+        </p>
+        <div className="failed-actions">
+          <button className="btn" onClick={() => location.reload()}>
+            Try again
+          </button>
+          <A to="/" className="btn ghost">
+            Go to the overview
+          </A>
+        </div>
+        <details>
+          <summary>Technical details</summary>
+          <code>{error}</code>
+        </details>
+      </div>
     </div>
   )
 }

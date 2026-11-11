@@ -33,7 +33,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, Bar, ChangeTag, date, day, Failed, Grid, Loading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
+import { A, Bar, ChangeTag, date, day, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -56,6 +56,8 @@ const title = (t: string, missing = false) => {
   document.querySelector('meta[property="og:url"]')?.setAttribute('content', url)
   document.querySelector('meta[property="og:title"]')?.setAttribute('content', `${t} · Holdterm`)
 }
+/** The data host answered "no such file" (or the data checks hold the fund back), unlike a failed request. */
+const missing = (e: string) => /^(404|403|held:)/.test(e)
 export const REPO = 'https://github.com/factordynamics/site'
 export const ISSUES = `${REPO}/issues/new?labels=holdterm&title=Holdterm%3A+`
 export const CONTACT = 'hello@factordynamics.com'
@@ -362,8 +364,8 @@ function HomeBody() {
   const filers = useMemo(() => [...ms].sort((a, b) => b.filing_date.localeCompare(a.filing_date) || b.total_value - a.total_value).slice(0, 30), [ms])
   const need = useMemo(() => [...new Set([...filers, ...ms.filter((m) => m.quarter === lead)].map((m) => m.slug))], [filers, ms, lead])
   const books = useLoad(() => (need.length ? loadQuarterBooks(need) : Promise.resolve([] as Book[])), [need.join()])
-  if (ix.error) return <Failed error={ix.error} />
-  if (!ix.data) return <Loading what="loading filings" />
+  if (ix.error) return <Failed error={ix.error} what="the latest filings" />
+  if (!ix.data) return <Loading what="Loading the latest filings" rows={15} />
   const bySlug = new Map((books.data ?? []).map((b) => [b.slug, b]))
   // One trade per company per fund: share classes (GOOGL and GOOG) are combined.
   const trades = (b: Book) => {
@@ -495,7 +497,7 @@ function HomeBody() {
                 ]}
               />
             ) : (
-              <Loading what="reading the books" />
+              <Loading what="Loading the largest trades" rows={15} />
             )}
           </Panel>
           <Panel className="reserve-10" title="Stakes and insider trades, last 30 days" right={<A to="/filings">All filings →</A>}>
@@ -512,7 +514,7 @@ function HomeBody() {
                 empty="No filings in the last 30 days."
               />
             ) : (
-              <Loading />
+              <Loading what="Loading recent filings" rows={10} />
             )}
           </Panel>
           <Panel title="Biggest single bets" right={<span className="dim">Largest share of one investor’s portfolio</span>}>
@@ -549,8 +551,8 @@ export function Funds() {
   title('Investors')
   const ix = useLoad(loadIndex, [])
   const books = useLoad(loadBooks, [])
-  if (ix.error) return <Failed error={ix.error} />
-  if (!ix.data) return <Loading />
+  if (ix.error) return <Failed error={ix.error} what="the investors" />
+  if (!ix.data) return <PageLoading what="Loading the investors" stats={0} rows={20} />
   const ms = funds(ix.data)
   const all = ix.data.managers.filter((m) => m.ok)
   const metric = new Map(roster.funds.map((f) => [f.slug, f]))
@@ -639,8 +641,9 @@ export function Fund({ slug }: { slug: string }) {
   }, [slug])
   const firms = useFirms()
   const [tab, setTab] = useState<ITab>('holdings')
-  if (b.error) return <NotFound what={`no 13F book for "${slug}"`} />
-  if (!b.data) return <Loading what={`loading ${slug}`} />
+  // A missing or held-back book is a real "not found"; anything else (offline, a mirror hiccup) can be retried.
+  if (b.error) return missing(b.error) ? <NotFound what={`no 13F book for "${slug}"`} /> : <Failed error={b.error} what="this portfolio" />
+  if (!b.data) return <PageLoading what="Loading this portfolio" stats={6} rows={15} />
   const book = b.data
   title(`${book.firm} 13F portfolio`)
   const filer = meta && meta.filer_slug !== slug ? ix.data?.managers.find((m) => m.slug === meta.filer_slug) : null
@@ -896,8 +899,8 @@ export function Flows() {
   const quarters = useMemo(() => [...new Set((books.data ?? []).map((b) => b.quarter))].sort().reverse(), [books.data])
   // Flows are stock picks: ETFs, index and T-bill funds are left out.
   const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q), books.data).rows.filter((r) => !r.fund) : []), [books.data, q])
-  if (books.error) return <Failed error={books.error} />
-  if (!books.data) return <Loading what="reading every book" />
+  if (books.error) return <Failed error={books.error} what="this quarter’s trades" />
+  if (!books.data) return <PageLoading what="Loading this quarter’s trades" stats={0} rows={20} />
   const fundsN = q === 'latest' ? books.data.length : books.data.filter((b) => b.quarter === q).length
   // In "latest" mode the books span quarters: say how many of each, and tag the newest quarter's funds.
   const mix = quarters.map((x) => [x, books.data!.filter((b) => b.quarter === x).length] as const)
@@ -1045,8 +1048,8 @@ export function Consensus() {
   const [tab, setTab] = useState<GTab>('owners')
   const [sector, setSector] = useState<string | null>(null)
   const agg = useMemo(() => (books.data ? aggregate(books.data) : null), [books.data])
-  if (books.error) return <Failed error={books.error} />
-  if (!agg || !books.data) return <Loading what="combining the books" />
+  if (books.error) return <Failed error={books.error} what="the most owned stocks" />
+  if (!agg || !books.data) return <PageLoading what="Loading the most owned stocks" stats={0} rows={20} />
   const n = books.data.length
   const base = sector ? agg.rows.filter((r) => r.sector === sector) : agg.rows
   const list = [...base].sort(tab === 'owners' ? (a, b) => b.holders.length - a.holders.length || b.value - a.value : tab === 'value' ? (a, b) => b.value - a.value : (a, b) => b.maxWeight - a.maxWeight)
@@ -1117,8 +1120,8 @@ export function Filings() {
   const firms = useFirms()
   const [tab, setTab] = useState<ETab>('all')
   const [own, setOwn] = useState(false)
-  if (ev.error) return <Failed error={ev.error} />
-  if (!ev.data) return <Loading />
+  if (ev.error) return <Failed error={ev.error} what="the latest filings" />
+  if (!ev.data) return <PageLoading what="Loading the latest filings" stats={0} rows={20} />
   const scoped = ev.data.events.filter((e) => inRoster(e.slug) && (own || !ownVehicle(e)))
   let list = scoped
   if (tab === '13dg') list = list.filter((e) => e.kind !== 'form4')
@@ -1215,8 +1218,8 @@ export function Stock({ ticker }: { ticker: string }) {
   const firms = useFirms()
   const [tab, setTab] = useState<STab>('holders')
   title(s.data ? `${issuerName(s.data.name)} (${ticker}): who owns it` : `${ticker}: who owns it`)
-  if (s.error) return <NotFound what={`no tracked fund reports ${ticker} in its latest 13F`} />
-  if (!s.data) return <Loading what={`loading ${ticker}`} />
+  if (s.error) return missing(s.error) ? <NotFound what={`no tracked fund reports ${ticker} in its latest 13F`} /> : <Failed error={s.error} what={ticker} />
+  if (!s.data) return <PageLoading what={`Loading ${ticker}`} stats={4} rows={12} />
   const d = s.data
   // A successor filer's stock line compares against its own standalone prior 13F; the fund's book
   // (which combines the predecessor filer) carries the real quarter-on-quarter change.
@@ -1464,7 +1467,7 @@ export function Alerts() {
             </li>
           </ul>
         </div>
-        {s ? <EmailPreview s={s} /> : r.error ? <Failed error={r.error} what="the sample alert" /> : <Loading what="building the sample email" />}
+        {s ? <EmailPreview s={s} /> : r.error ? <Failed error={r.error} what="the sample alert" /> : <Loading what="Building the sample email" />}
       </section>
 
       <section className="ap-section ap-split reverse">
@@ -1472,7 +1475,7 @@ export function Alerts() {
           <h2>Or straight into your chat</h2>
           <p className="dim">The same alerts, formatted for each app, so a team or an investing club sees every filing together.</p>
         </div>
-        {s ? <ChatPreviews s={s} /> : <Loading what="building the previews" rows={4} />}
+        {s ? <ChatPreviews s={s} /> : <Loading what="Building the previews" rows={6} />}
       </section>
 
       <section className="ap-section ap-cta">
