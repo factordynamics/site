@@ -3,6 +3,7 @@ import { FOOTER, sendMail, type Mail } from './email';
 import { apiBase, isActive, isPaused, pauseScheduled, testAddress, type Env, type Member } from './env';
 import { unsubscribeUrl } from './free';
 import { getFollows, getMember, listMembers, putMember, syncSubscription } from './members';
+import { SEAT_LIMIT } from './seats';
 import { DEADLINES, deadlineLabel, deadlineMs, inFilingWeek, lastDeadline, nextDeadline, pauseResumesAt } from './seasons';
 import { stripe } from './stripe';
 import { signToken, verifyToken } from './tokens';
@@ -142,6 +143,44 @@ export async function funnel(env: Env, now: number, days: number) {
 const secs = (n: number) => (n < 120 ? `${n} seconds` : `${Math.round(n / 60)} minutes`);
 const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const FOUNDING: Record<string, string> = { pro: 'Your founding price stays at $39/month or $390/year for as long as you stay subscribed.', fund: 'Your founding price stays at $1,990/year for as long as you stay subscribed.' };
+
+/**
+ * The Fund order terms: seats, the founding price lock, renewal, cancellation and /terms/. Every Fund customer's
+ * invoices carry them in the footer (Stripe's customer default), and a net-30 invoice also in its memo.
+ */
+export const fundTerms = (env: Env) =>
+  `Order terms: Copy Fund, ${SEAT_LIMIT} seats (add and remove them on ${env.SITE_URL}account/). Founding price $1,990 a year, locked for as long as this subscription stays active. ` +
+  `Renews each year at that price until cancelled. Cancel any time from Manage billing; access runs to the end of the paid year, and partial years aren't refunded. ` +
+  `Invoices are payable within 30 days. Terms: ${env.SITE_URL}terms/`;
+
+/** A Fund customer's invoice footer: the order terms, set once (a Fund checkout or net-30 order). */
+export async function ensureFundTerms(env: Env, customer: string): Promise<'set' | 'already'> {
+  const c = await stripe(env, 'GET', `customers/${customer}`);
+  if (c.invoice_settings?.footer === fundTerms(env)) return 'already';
+  await stripe(env, 'POST', `customers/${customer}`, { 'invoice_settings[footer]': fundTerms(env) });
+  return 'set';
+}
+
+/**
+ * Operator: a team that buys Copy Fund by invoice. A yearly Fund subscription billed net 30 (the webhook makes the
+ * member as for a checkout); its first invoice carries the order terms as memo and footer and is emailed now.
+ */
+export async function fundInvoice(env: Env, email: string, name?: string) {
+  const found = (await stripe(env, 'GET', 'customers', { email, limit: 1 })).data?.[0];
+  const customer: string = found?.id ?? (await stripe(env, 'POST', 'customers', { email, name, 'invoice_settings[footer]': fundTerms(env) })).id;
+  if (found) await ensureFundTerms(env, customer);
+  const price = (await stripe(env, 'GET', 'prices', { 'lookup_keys[]': 'fund_yearly', active: true })).data?.[0];
+  if (!price) throw new Error('no active fund_yearly price');
+  const sub = await stripe(env, 'POST', 'subscriptions', { customer, 'items[0][price]': price.id, collection_method: 'send_invoice', days_until_due: 30, description: fundTerms(env), 'metadata[copybook]': 'fund' });
+  let inv = await stripe(env, 'GET', `invoices/${sub.latest_invoice}`);
+  // A draft takes the terms as its memo too (a finalized one already has them in the footer); then it goes out now.
+  if (inv.status === 'draft') {
+    await stripe(env, 'POST', `invoices/${inv.id}`, { description: fundTerms(env) });
+    inv = await stripe(env, 'POST', `invoices/${inv.id}/finalize`);
+  }
+  inv = await stripe(env, 'POST', `invoices/${inv.id}/send`);
+  return { customer, subscription: sub.id as string, invoice: inv.id as string, number: inv.number ?? null, due_date: inv.due_date ? new Date(inv.due_date * 1000).toISOString().slice(0, 10) : null, hosted_invoice_url: inv.hosted_invoice_url ?? null };
+}
 
 /** Day 11 of 14: the member's own numbers this trial, what ends with it, and one button to keep it (yearly preselected). */
 export function trialEndingMail(env: Env, m: Member, s: MemberStats, funds: number, owned: number, keep: string, unsub: string, daysLeft = 3): Mail {

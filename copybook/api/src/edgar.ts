@@ -99,6 +99,9 @@ export interface MoveRow {
   pct_of_book?: number | null;
   /** The prior quarter's value, when known (guards the size). */
   prev_value?: number | null;
+  /** A stock split between the two quarters: prev_shares is multiplied by it; prev_shares_as_filed keeps the filed count. */
+  split?: number;
+  prev_shares_as_filed?: number;
   /** Ingest's flag for a unit mismatch between quarters. */
   suspect_units?: boolean;
   /** A real but unusually large move: shown with "Unusual size · check the filing". */
@@ -272,7 +275,7 @@ export function perShareSuspects(cur: Position[], prev: Position[]): string[] {
 export const UNUSUAL = 'Unusual size · check the filing';
 
 /** Applies checkMove to rows: drops unit errors, tags and resizes the rest (`unusual: true`). */
-export function guardRows<T extends MoveRow>(rows: T[], book: number | null, prevValue: (r: T) => number | null | undefined, splits?: Set<string>, medians?: Map<string, PerShare>): T[] {
+export function guardRows<T extends MoveRow>(rows: T[], book: number | null, prevValue: (r: T) => number | null | undefined, splits?: Set<string> | Map<string, number>, medians?: Map<string, PerShare>): T[] {
   const out: T[] = [];
   for (const r of rows) {
     const c = checkMove({ ...r, prev_value: prevValue(r) ?? r.prev_value ?? null }, book, !!splits && (splits.has(r.cusip) || (!!r.ticker && splits.has(r.ticker))), r.put_call ? {} : (medians?.get(r.cusip) ?? {}));
@@ -292,7 +295,7 @@ export function displayCase(name: string): string {
  * New, exited, added and trimmed positions against the prior quarter, sized by the trade at this
  * filing's own value per share (a price move alone is no trade), as the data run computes them.
  */
-export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROWS, splits?: Set<string>, medians?: Map<string, PerShare>): { moves: Moves; changed: MoveRow[] } {
+export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROWS, splits?: Set<string> | Map<string, number>, medians?: Map<string, PerShare>): { moves: Moves; changed: MoveRow[] } {
   const prevTotal = prev.reduce((s, p) => s + p.value, 0);
   let total = cur.reduce((s, p) => s + p.value, 0);
   // A filer that reports in thousands by mistake: scale to dollars like the data run's unit fix.
@@ -302,7 +305,10 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
   const book = Math.max(total, prevTotal);
   const before = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p]));
   const rows: MoveRow[] = [];
-  const row = (p: Position, change: string, shares: number, prev_shares: number, value: number, delta: number) => ({
+  // A split on file (the data run's splits.json, by CUSIP): the prior shares in today's units, as the data run does.
+  const ratio = (cusip: string) => (splits instanceof Map ? (splits.get(cusip) ?? 1) : 1);
+  const adj = (p: Position) => (ratio(p.cusip) === 1 ? {} : { split: ratio(p.cusip), prev_shares_as_filed: p.shares });
+  const row = (p: Position, change: string, shares: number, prev_shares: number, value: number, delta: number, extra = {}) => ({
     change,
     ticker: p.ticker ?? null,
     display_name: p.display_name ?? null,
@@ -314,6 +320,7 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     value,
     value_delta: Math.round(delta),
     delta_pct_of_book: book ? delta / book : null,
+    ...extra,
   });
   for (const c of cur) {
     const value = c.value * scale;
@@ -321,10 +328,14 @@ export function computeMoves(cur: Position[], prev: Position[], limit = MOVE_ROW
     const p = before.get(k);
     before.delete(k);
     const named = { ...c, ticker: p?.ticker ?? c.ticker, display_name: p?.display_name ?? c.display_name };
-    if (!p) rows.push(row(named, 'new', c.shares, 0, value, value));
-    else if (c.shares !== p.shares) rows.push(row(named, c.shares > p.shares ? 'added' : 'trimmed', c.shares, p.shares, value, c.shares ? ((c.shares - p.shares) * value) / c.shares : 0));
+    if (!p) {
+      rows.push(row(named, 'new', c.shares, 0, value, value));
+      continue;
+    }
+    const ps = Math.round(p.shares * ratio(p.cusip));
+    if (c.shares !== ps) rows.push(row(named, c.shares > ps ? 'added' : 'trimmed', c.shares, ps, value, c.shares ? ((c.shares - ps) * value) / c.shares : 0, adj(p)));
   }
-  for (const p of before.values()) rows.push(row(p, 'exited', 0, p.shares, 0, -p.value));
+  for (const p of before.values()) rows.push(row(p, 'exited', 0, Math.round(p.shares * ratio(p.cusip)), 0, -p.value, adj(p)));
   // Unit errors are left out; unusually large moves are tagged. The larger book is the yardstick.
   const prior = new Map(prev.map((p) => [`${p.cusip}|${p.put_call ?? ''}`, p.value]));
   rows.splice(0, rows.length, ...guardRows(rows, book, (r) => prior.get(`${r.cusip}|${r.put_call ?? ''}`), splits, medians));

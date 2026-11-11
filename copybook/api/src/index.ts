@@ -9,7 +9,7 @@ import { handleV1, v1error } from './v1';
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, sendMail } from './email';
 import { ACTIVE, apiBase, followCounts, logAccess, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
-import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
+import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, planOf, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
 import { businessSummary, handleKeepResume, handleWhy } from './revenue';
@@ -151,6 +151,13 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
   const obj = event.data?.object ?? {};
   // Only Copybook and Holdterm prices make or change members: the account's other subscriptions (the Substack-era
   // newsletter, Creo) are logged and acknowledged, so Stripe doesn't retry, with no member, plan change or email.
+  // A new Fund subscription: its invoices carry the order terms (footer), from the next one on. Never fails the hook.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fundTerms = async (sub: any) => {
+    if (planOf(sub) !== 'fund' || typeof sub.customer !== 'string') return;
+    const { ensureFundTerms } = await import('./revenue');
+    console.log(`fund terms: ${await ensureFundTerms(env, sub.customer).catch((e) => `failed ${String(e).slice(0, 120)}`)}`);
+  };
   const ignore = (what: string) => (console.log(`webhook: ${event.type} ${obj.id ?? ''} ignored (${what} not a Copybook price)`), json({ ok: true, ignored: true }, 200, {}));
   switch (event.type) {
     case 'checkout.session.completed':
@@ -158,6 +165,7 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
         const sub = await stripe(env, 'GET', `subscriptions/${obj.subscription}`);
         if (!isOurSubscription(sub)) return ignore('subscription');
         await syncSubscription(env, sub, obj.customer_details?.email);
+        await fundTerms(sub);
       }
       break;
     case 'customer.subscription.created':
@@ -165,6 +173,7 @@ async function handleWebhook(req: Request, env: Env): Promise<Response> {
     case 'customer.subscription.deleted':
       if (!isOurSubscription(obj)) return ignore('subscription');
       await syncSubscription(env, obj);
+      if (event.type === 'customer.subscription.created') await fundTerms(obj);
       break;
     case 'invoice.paid':
     case 'invoice.payment_failed':
@@ -370,7 +379,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (url.searchParams.get('probe') === '1') {
       const { pollerStatus } = await import('./failover');
       const p = await pollerStatus(env, Date.now());
-      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null }, 200, { 'cache-control': 'no-store' });
+      const { total, last_7d } = await (await import('./alerts')).dupesBlocked(env);
+      return json({ ok: true, api_host: p.api_host, api_up_since: p.api_up_since, api_build: env.BUILD_SHA?.slice(0, 12) ?? null, dupes_blocked: { total, last_7d } }, 200, { 'cache-control': 'no-store' });
     }
     // Seconds from EDGAR acceptance to handing the alert to the mailer, for the latest alerted filings.
     // Live alerts only (test replays excluded); ?latency=all returns every stored one instead of the latest 10.
@@ -385,8 +395,10 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const business = priv ? { business: { ...(await businessSummary(env, Date.now())), fund_requests: leads } } : {};
     // Filings the missed-filing detector found unsent 10+ minutes after acceptance and put back in front of the polls.
     const missed_recovered = { count: Number((await env.DB.get('missed:count')) ?? 0), recent: (JSON.parse((await env.DB.get('missed:log')) ?? '[]') as unknown[]).slice(0, 10) };
+    // Alerts the per-member sent record stopped from reaching a member twice: total, the last 7 UTC days, per day.
+    const dupes_blocked = await (await import('./alerts')).dupesBlocked(env);
     const { pollerStatus } = await import('./failover');
-    return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: { ...(JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? (await import('./email')).mailQuota), daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15 }, moves_queue: { pending: ((JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).map((p) => p.accession)), last: JSON.parse((await env.DB.get('host:moves-last')) ?? 'null') }, ...business }, 200, h);
+    return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, dupes_blocked, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: { ...(JSON.parse((await env.DB.get('host:mail-meter')) ?? 'null') ?? (await import('./email')).mailQuota), daily_cap: 100, monthly_cap: 3000, reserve_for_account_mail: 15 }, moves_queue: { pending: ((JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).map((p) => p.accession)), last: JSON.parse((await env.DB.get('host:moves-last')) ?? 'null') }, ...business }, 200, h);
   }
 
   // The site's page counts: visits, signup form views and trial clicks per page, utm_source and post (utm_source|utm_content). Counts only (no
@@ -584,6 +596,16 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const b = await body(req);
     await logAccess(env, req, 'POST /ops/weekly-preview', [await env.DB.get(`email:${String(b.email ?? '').trim().toLowerCase()}`)], 'owned names read for the preview');
     return json(await previewWeekly(env, String(b.email ?? '').trim().toLowerCase(), Date.now(), b.dry === true), 200, h);
+  }
+
+  // Operator: a net-30 Copy Fund order (yearly, founding price); the invoice carries the order terms and is emailed.
+  if (req.method === 'POST' && path === '/ops/fund-invoice') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = await body(req);
+    const email = String(b.email ?? '').trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ ok: false, error: 'email required', code: 'bad_request' }, 400, h);
+    const { fundInvoice } = await import('./revenue');
+    return json({ ok: true, ...(await fundInvoice(env, email, b.name ? String(b.name).slice(0, 120) : undefined)) }, 200, h);
   }
 
   // Operator: Email 2's preview, to our inbox and test inboxes only (other addresses are dropped).

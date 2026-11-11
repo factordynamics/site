@@ -279,8 +279,23 @@ async function unmailed(env: Env, customer: string, filings: Alert13F[], events:
     for (const x of [...out.filings, ...out.events]) log[mailId(x)] = Math.floor(now / 1000);
     await env.DB.put(k, JSON.stringify(log), { expirationTtl: 8 * 86400 });
   }
-  if (dupes) await env.DB.put('alerts:dupes-blocked', String(Number((await env.DB.get('alerts:dupes-blocked')) ?? 0) + dupes));
+  if (dupes) {
+    const d = await dupesBlocked(env, now);
+    const day = new Date(now).toISOString().slice(0, 10);
+    d.days[day] = (d.days[day] ?? 0) + dupes;
+    await env.DB.put('alerts:dupes-blocked', JSON.stringify({ total: d.total + dupes, days: d.days }));
+  }
   return out;
+}
+
+/** Alerts the per-member mailed: record stopped from going to a member twice, counted since it went live (1719066). */
+export async function dupesBlocked(env: Env, now = Date.now()) {
+  const raw = await env.DB.get('alerts:dupes-blocked');
+  // The first copy stored a bare running total.
+  const v = (raw?.startsWith('{') ? JSON.parse(raw) : { total: Number(raw ?? 0), days: {} }) as { total: number; days: Record<string, number> };
+  const cut = new Date(now - 6 * 86400_000).toISOString().slice(0, 10);
+  const days = Object.fromEntries(Object.entries(v.days ?? {}).filter(([d]) => d >= cut));
+  return { total: v.total, last_7d: Object.values(days).reduce((a, b) => a + b, 0), days, since: '2026-11-11T02:29:00Z' };
 }
 
 /** Every minute: held alerts whose window has ended go out as one email per member, timed by that send. */
@@ -807,17 +822,19 @@ export async function perShareMedians(env: Env, cusips: string[], quarter: strin
 }
 
 /** Stock splits in the data run's splits.json that took effect in this quarter, by CUSIP and ticker (a share-count change that's no unit error). */
-let SPLITS: { at: number; list: { cusip: string; ticker?: string; to_quarter: string }[] } | null = null;
-export async function splitsFor(env: Env, quarter: string): Promise<Set<string>> {
+let SPLITS: { at: number; list: { cusip: string; ticker?: string; to_quarter: string; ratio?: number }[] } | null = null;
+export async function splitsFor(env: Env, quarter: string): Promise<Map<string, number>> {
   if (!SPLITS || Date.now() - SPLITS.at > 3600_000) {
     try {
       const r = await fetch(`${env.DATA_URL}splits.json`);
-      SPLITS = { at: Date.now(), list: r.ok ? (((await r.json()) as { splits?: { cusip: string; ticker?: string; to_quarter: string }[] }).splits ?? []) : [] };
+      SPLITS = { at: Date.now(), list: r.ok ? (((await r.json()) as { splits?: { cusip: string; ticker?: string; to_quarter: string; ratio?: number }[] }).splits ?? []) : [] };
     } catch {
       SPLITS = { at: Date.now(), list: [] };
     }
   }
-  return new Set(SPLITS.list.filter((x) => x.to_quarter === quarter).flatMap((x) => [x.cusip, ...(x.ticker ? [x.ticker] : [])]));
+  // By CUSIP: the ratio the prior quarter's shares are multiplied by. By ticker too, only to keep the row from the unit check.
+  const on = SPLITS.list.filter((x) => x.to_quarter === quarter);
+  return new Map([...on.flatMap((x) => (x.ticker ? [[x.ticker, 1] as [string, number]] : [])), ...on.map((x) => [x.cusip, Number(x.ratio) > 0 ? Number(x.ratio) : 1] as [string, number])]);
 }
 
 async function priorBook(env: Env, slug: string, reportDate: string, maxBytes = 2_000_000): Promise<Position[] | null> {

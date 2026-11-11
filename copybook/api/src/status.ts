@@ -1,3 +1,4 @@
+import { dupesBlocked } from './alerts';
 import type { Env } from './env';
 
 /**
@@ -16,6 +17,8 @@ interface ProbeState {
   /** Per UTC hour (YYYY-MM-DDTHH): [ok, checks], 8 days kept. */
   hours: Record<string, [number, number]>;
   last?: { at: string; ok: boolean; ms: number; up_since: string | null; build: string | null };
+  /** The members' API's count of alerts its sent record kept from going out twice (from /health?probe=1). */
+  api_dupes?: { total: number; last_7d: number } | null;
   /** The first failed check of the current outage. */
   fail_since?: string | null;
   restarts: Restart[];
@@ -51,21 +54,23 @@ async function membersApi(env: Env, now: number): Promise<string | null> {
 }
 
 /** One check of the members' API from Cloudflare: GET {api}/health?probe=1 within 10 s. */
-export async function probeOnce(env: Env, now: number): Promise<{ ok: boolean; ms: number; up_since: string | null; build: string | null }> {
+type Probe = { ok: boolean; ms: number; up_since: string | null; build: string | null; dupes?: { total: number; last_7d: number } | null };
+export async function probeOnce(env: Env, now: number): Promise<Probe> {
   const base = await membersApi(env, now);
   const t0 = Date.now();
   if (!base) return { ok: false, ms: 0, up_since: null, build: null };
   try {
     const r = await fetch(`${base}/health?probe=1`, { signal: AbortSignal.timeout(PROBE_MS), headers: { 'user-agent': 'copybook-status-probe' } });
-    const b = r.ok ? ((await r.json()) as { ok?: boolean; api_up_since?: string; api_build?: string | null }) : null;
-    return { ok: !!b?.ok, ms: Date.now() - t0, up_since: b?.api_up_since ?? null, build: b?.api_build ?? null };
+    const b = r.ok ? ((await r.json()) as { ok?: boolean; api_up_since?: string; api_build?: string | null; dupes_blocked?: { total: number; last_7d: number } }) : null;
+    return { ok: !!b?.ok, ms: Date.now() - t0, up_since: b?.api_up_since ?? null, build: b?.api_build ?? null, dupes: b?.dupes_blocked ?? null };
   } catch {
     return { ok: false, ms: Date.now() - t0, up_since: null, build: null };
   }
 }
 
 /** Adds one check to the state: the hour's counts, the outage start, and a restart when the boot time moved. */
-export function recordProbe(s: ProbeState, now: number, p: { ok: boolean; ms: number; up_since: string | null; build: string | null }): ProbeState {
+export function recordProbe(s: ProbeState, now: number, p: Probe): ProbeState {
+  if (p.dupes) s.api_dupes = p.dupes;
   const h = (s.hours[hourKey(now)] ??= [0, 0]);
   h[0] += p.ok ? 1 : 0;
   h[1] += 1;
@@ -124,12 +129,15 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
   // Written by Cloudflare's cron at the end of its run, which runs this only while it is the poller.
   const poller = { host: 'cloudflare', last_run_at: iso(Date.now()) };
   const health = await alertHealth(env, now);
+  const dupes = await dupesBlocked(env, now);
   const fallback = JSON.parse((await env.DB.get('host:moves-sent-last')) ?? 'null') as { at: string; accession: string } | null;
   return {
     ok: true,
     generated_at: iso(Math.floor(now / 60_000) * 60_000),
     alerts_13f: health,
     // gene's fallback for 13Fs sent without their moves (tables too big for the Worker, or no prior book on Cloudflare).
+    // Alerts each host's per-member sent record kept from going out twice: the members' API (gene) and Cloudflare.
+    dupes_blocked: { since: dupes.since, api: s.api_dupes ?? null, cloudflare: { total: dupes.total, last_7d: dupes.last_7d } },
     moves_queue: { pending: health.pending_moves, oldest_wait_seconds: health.oldest_pending_seconds, last_fallback_send_at: fallback?.at ?? null },
     probe: {
       target: 'members API /health, from Cloudflare cron',

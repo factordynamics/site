@@ -939,7 +939,9 @@ describe('copybook api', () => {
     sent = [];
     await at('F6', 26);
     expect(got()).toEqual([]);
-    expect(await env.DB.get('alerts:dupes-blocked')).toBe('1');
+    // Counted for the quant's audit: /health and the status probe carry it.
+    expect((await (await handleRequest(new Request('https://api.test/health'), env)).json()).dupes_blocked).toMatchObject({ total: 1, last_7d: 1 });
+    expect((await (await handleRequest(new Request('https://api.test/health?probe=1'), env)).json()).dupes_blocked).toEqual({ total: 1, last_7d: 1 });
     // A 13G or 13G/A never goes to a test member by email (feed only), and doesn't use up its 5.
     await env.DB.put(`mailn:t:${today}`, '0');
     for (const c of ['r', 't']) await putFollows(c, { investors: ['warren-buffett'], include_13g: true });
@@ -1169,6 +1171,38 @@ describe('copybook api', () => {
     expect(await runEmail2(env, now)).toEqual({ status: 'already done' });
     Object.assign(env, { POSTAL_ADDRESS: undefined, MAILGUN_API_KEY: undefined });
     vi.stubGlobal('fetch', realFetch);
+  });
+
+  it('net-30 Fund order: a yearly Fund subscription billed by invoice, the order terms as memo and footer, emailed at once', async () => {
+    const calls: { method: string; path: string; body: URLSearchParams }[] = [];
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      const url = String(u);
+      if (!url.startsWith('https://api.stripe.com/v1/')) return orig(u, init);
+      const path = url.slice('https://api.stripe.com/v1/'.length).split('?')[0];
+      calls.push({ method: init?.method ?? 'GET', path, body: new URLSearchParams(String(init?.body ?? '')) });
+      if (path === 'customers' && init?.method !== 'POST') return Response.json({ data: [] });
+      if (path === 'customers') return Response.json({ id: 'cus_fund' });
+      if (path === 'prices') return Response.json({ data: [{ id: 'price_fund_yearly' }] });
+      if (path === 'subscriptions') return Response.json({ id: 'sub_fund', latest_invoice: 'in_fund' });
+      if (path === 'invoices/in_fund' && init?.method !== 'POST') return Response.json({ id: 'in_fund', status: 'draft' });
+      if (path === 'invoices/in_fund/send') return Response.json({ id: 'in_fund', status: 'open', number: 'CB-0001', due_date: 1765497600, hosted_invoice_url: 'https://invoice.stripe.com/i/x' });
+      return Response.json({ id: 'in_fund', status: 'open' });
+    });
+    const go = (b: unknown, token = env.HEALTH_TOKEN) => handleRequest(new Request('https://api.test/ops/fund-invoice', { method: 'POST', body: JSON.stringify(b), headers: { authorization: `Bearer ${token}` } }), env);
+    expect((await go({ email: 'pm@fund.test' }, 'wrong')).status).toBe(404);
+    expect((await go({ email: 'nope' })).status).toBe(400);
+    const r = await (await go({ email: 'PM@fund.test', name: 'Example Capital' })).json();
+    expect(r).toMatchObject({ ok: true, customer: 'cus_fund', subscription: 'sub_fund', invoice: 'in_fund', number: 'CB-0001', due_date: '2025-12-12', hosted_invoice_url: 'https://invoice.stripe.com/i/x' });
+    const posted = (p: string) => calls.find((c) => c.method === 'POST' && c.path === p)!.body;
+    const footer = posted('customers').get('invoice_settings[footer]')!;
+    // The order terms: the seats, the locked founding price, renewal and cancellation, net 30, and /terms/.
+    for (const s of ['Copy Fund, 10 seats', 'Founding price $1,990 a year, locked for as long as this subscription stays active', 'Renews each year at that price until cancelled', 'Cancel any time from Manage billing', 'payable within 30 days', `${SITE}terms/`]) expect(footer).toContain(s);
+    expect(posted('customers').get('email')).toBe('pm@fund.test');
+    expect(Object.fromEntries(['customer', 'items[0][price]', 'collection_method', 'days_until_due', 'metadata[copybook]'].map((k) => [k, posted('subscriptions').get(k)]))).toEqual({ customer: 'cus_fund', 'items[0][price]': 'price_fund_yearly', collection_method: 'send_invoice', days_until_due: '30', 'metadata[copybook]': 'fund' });
+    expect(posted('invoices/in_fund').get('description')).toBe(footer);
+    expect(calls.map((c) => `${c.method} ${c.path}`).slice(-3)).toEqual(['POST invoices/in_fund', 'POST invoices/in_fund/finalize', 'POST invoices/in_fund/send']);
+    vi.stubGlobal('fetch', orig);
   });
 
   it("a CUSIP change nets into one share-based move (Fisher's Q3 XOM: +$75.7M, not +$894.9M)", async () => {
@@ -1711,6 +1745,17 @@ describe('copybook api', () => {
     const sq3 = [pos('SPLT', '000000007', 12000, 60_000_000), pos('REST', '000000009', 1, 1e9)];
     expect(all(computeMoves(sq3, sq2).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['SPLT', true]]); // 10x off: tagged
     expect(all(computeMoves(sq3, sq2, undefined, new Set(['000000007'])).moves).map((r) => [r.ticker, !!r.unusual])).toEqual([['SPLT', false]]);
+    // With its ratio (splits.json), the prior is in today's units: 1,000 x 10 = 10,000 to 12,000 is +2,000 sh (+$10M), not +11,000.
+    const adj = all(computeMoves(sq3, sq2, undefined, new Map([['000000007', 10]])).moves);
+    expect(adj.map((r) => [r.ticker, r.change, r.prev_shares, r.prev_shares_as_filed, r.split, r.value_delta])).toEqual([['SPLT', 'added', 10_000, 1000, 10, 10_000_000]]);
+    // Jensen's Q3 APH (2-for-1): 614,660 to 1,047,486 sh as filed is a trim of 181,834 sh (about -$15.3M at $84.30), not an add of +$36.5M.
+    const jq2 = [pos('APH', '032095101', 614_660, 47_000_000), pos('REST', '000000009', 1, 1e9)];
+    const jq3 = [pos('APH', '032095101', 1_047_486, 88_303_070), pos('REST', '000000009', 1, 1e9)];
+    const aph = all(computeMoves(jq3, jq2, undefined, new Map([['APH', 1], ['032095101', 2]])).moves)[0];
+    expect([aph.change, aph.prev_shares, aph.shares - aph.prev_shares]).toEqual(['trimmed', 1_229_320, -181_834]);
+    expect(aph.value_delta).toBeCloseTo(-15_328_606, -2);
+    // Equal after the split: no move at all.
+    expect(all(computeMoves([pos('APH', '032095101', 1_229_320, 1e8), jq3[1]], jq2, undefined, new Map([['032095101', 2]])).moves)).toEqual([]);
   });
 
   it('quota check: one warning a day past 70% of the daily Workers requests, Workers and Pages Functions together', async () => {

@@ -83,7 +83,7 @@ export async function isOurInvoice(env: Env, inv: any): Promise<boolean> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function planOf(sub: any): Member['plan'] {
+export function planOf(sub: any): Member['plan'] {
   const p = priceOf(sub);
   const tier = String(p?.metadata?.copybook ?? String(p?.lookup_key ?? '').split('_')[0]);
   return tier === 'pro' || tier === 'fund' || tier === 'holdterm' ? tier : 'copy';
