@@ -230,13 +230,23 @@ def consensus_prices(quarters) -> dict[tuple[str, str], float]:
     return out
 
 
+RESCALE_BAND = 1.5  # a x1000 (or /1000) rescale must land within this of the peers' median, or it isn't one
+
+
 def consensus_factor(price: float, consensus: float | None) -> float:
-    """1000 or 0.001 when a line is priced ~1000x off what other filers report; else 1."""
+    """1000 or 0.001 when a line is priced ~1000x off what other filers report and the rescaled price lands near
+    theirs; else 1. Mizuho Securities USA 2026Q3 MCHP (18,615,337 sh, $3,256,537 filed, $0.17 a share) would be
+    $175 x1000, 2.25x the $77.77 median: neither reconciles, so it is not rescaled (rescale_rejected)."""
     if not consensus or price <= 0:
         return 1.0
     ratio = price / consensus
-    if 300 <= ratio <= 3000:
-        return 0.001
-    if 1 / 3000 <= ratio <= 1 / 300:
-        return 1000.0
-    return 1.0
+    f = 0.001 if 300 <= ratio <= 3000 else 1000.0 if 1 / 3000 <= ratio <= 1 / 300 else 1.0
+    return f if f != 1.0 and 1 / RESCALE_BAND <= ratio * f <= RESCALE_BAND else 1.0
+
+
+def rescale_rejected(price: float, consensus: float | None) -> bool:
+    """Priced ~1000x off the peers, but x1000 (or /1000) doesn't land near them either: neither side reconciles."""
+    if not consensus or price <= 0:
+        return False
+    ratio = price / consensus
+    return (300 <= ratio <= 3000 or 1 / 3000 <= ratio <= 1 / 300) and consensus_factor(price, consensus) == 1.0

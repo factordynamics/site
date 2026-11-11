@@ -62,6 +62,7 @@ def filing(b: dict) -> dict:
             "accepted_at": b.get("accepted_at") or ACCEPTED.get(acc or ""), "original_accession": original(b) or acc}
 # Count blocks next to `counts` in hl/: smart = hedge funds and long-only managers, hedge_fund alone.
 LENSES = {"smart": {"hedge_fund", "long_only", "active"}, "hedge_fund": {"hedge_fund"}}
+HL_SCHEMA = 3  # bump when hl/ rows change shape: a curated run then rebuilds hl/ (--schema-stale)
 HOLDERS_TOP = 25  # public rows per stock in hl/; the full list (hlf/, R2 hl/) is paid
 SITE_TOP = 500  # hlr/: rows per stock for the site's d/h pages (as before, now from full books), plus every
 SITE_PARTS = 4  # hedge-fund and long-only holder, so the lens lists and counts are complete
@@ -673,7 +674,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             c = linked(r.get("cusip"))
             if r.get("suspect_duplicate"):  # the filer is counted once, on the new code; its row says so
                 if len(c) >= 6:
-                    per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False, None])[8] = True
+                    per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False, None, None])[8] = True
                 continue
             if len(c) < 6 or c.startswith("000000") or r.get("put_call") or r.get("shares_type") == "PRN" \
                     or not_common(r.get("title")):
@@ -688,10 +689,12 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             bad_value = side == "value"
             if bad_value:
                 r = r | {"value": 0, "prev_value": 0}
-            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False, None])
+            a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False, None, None])
             a[9] = a[9] or bad_value
             if side:
                 a[10] = side if a[10] in (None, side) else "both"
+                # why it is held, named on the row (Aware Super XOM 2026Q3 at $1,854 a share: cross_filer)
+                a[11] = a[11] or r.get("suspect_reason") or r.get("option_held") or ("value_rescale_rejected" if r.get("value_rescale") else None) or ("price_outlier" if r.get("price_outlier") else "units")
             a[7] = a[7] or r.get("prev_cusip")
             # A held reissue (units unconfirmed) whose codes share an issuer prefix (BYND 08862E109 -> 08862E307):
             # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
@@ -719,19 +722,29 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
             "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
-            "price_outlier", "value_basis", "unreliable", "value_delta", "value_delta_basis"]
+            "price_outlier", "value_basis", "unreliable", "value_delta", "value_delta_basis", "held_reason"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0, "unknown": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {}, "by_period": {}}
         rows, counts, deltas = [], blank(), {}
         lenses = {name: blank() for name in LENSES}
-        for cik, (sh, ps, v, pv, known, delta, unsure, prev_cusip, dup, bad_value, side) in hs.items():
+        for cik, (sh, ps, v, pv, known, delta, unsure, prev_cusip, dup, bad_value, side, reason) in hs.items():
             change = None
             if known and not unsure:
                 change = ("exited" if sh <= 0 else "new" if ps <= 0 else "added" if sh > ps + 0.5
                           else "trimmed" if sh < ps - 0.5 else "unchanged")
+                if sh <= 0 and v > 0:  # value with no shares (Prairie Wealth 2026Q3 XOM, $1.76M): not an exit
+                    change, side, reason = "unknown", side or "shares", reason or "zero_shares"
                 if side in ("shares", "both") and change not in ("new", "exited"):
                     change = "unknown"  # a flagged share count: never trimmed or added
+            # A filer with several lines in the issuer (an unlinked exit of one code beside a new line of another,
+            # Ferguson Wellman XOM): its row is one position, so its trade is the net share change at the position's
+            # filed price, value / shares (as a one-line row), not the sum of line trades priced at different prices.
+            if change == "unchanged":
+                delta = 0  # no shares traded: a price move is never a trade (Philadelphia Investment Partners XOM)
+            elif change in ("added", "trimmed") and not side and sh > 0 \
+                    and LINES.get((code, cik), [1])[0] > 1 and "filed_value" not in BASIS.get((code, cik), ()):
+                delta = (sh - ps) * v / sh
             q = PERIOD.get(cik) or meta[cik].get("quarter")
             kind = (types.get(cik) or {}).get("type")
             weight = v / book[cik] if book.get(cik) else None
@@ -742,10 +755,10 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                     c["top10"] += code in top10.get(cik, ())
                     c["over5pct"] += bool(weight and weight > 0.05)
                 c[change or ("unknown" if known else "no_prior")] += 1
-                if change not in (None, "unknown"):
+                if change not in (None, "unknown") and not side:
                     c["net_by_period"][q] = c["net_by_period"].get(q, 0) + round(delta)
             deltas[cik] = round(delta) if change not in (None, "unknown") and not side else None
-            counted = round(delta) if change not in (None, "unknown") else None  # exactly what net sums (0 if held)
+            counted = round(delta) if change not in (None, "unknown") and not side else None  # exactly what net sums
             # /v1 used to price each row from its own fields ((shares - prev_shares) x value / shares); value_delta
             # is ingest's per-line figure, the one net sums. Where they differ, log the row and why.
             if counted is not None:
@@ -765,7 +778,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          fl["accession"], fl["filing_date"], fl["accepted_at"],
                          fl.get("original_accession") or fl["accession"], prev_cusip, dup,
                          bad_value, "filed_price_outlier" if bad_value else "filed", side, counted,
-                         None if counted is None else "filed_value" if "filed_value" in BASIS.get((code, cik), ()) else "trade"])
+                         None if counted is None else "filed_value" if "filed_value" in BASIS.get((code, cik), ()) else "trade",
+                         reason if side else None])
         if not counts["holders"]:
             continue
         # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period
@@ -795,6 +809,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         if p.name not in written:
             p.unlink()
     write(out / "index.json", {"note": "ticker -> issuer code (first 6 of the CUSIP); one file per issuer in hl/",
+                               "schema": HL_SCHEMA,
                                "types_sig": signature(types), "tickers": dict(sorted(index.items()))})
     write_site_holders(site, signature(types))
     return len(keep)
@@ -928,6 +943,9 @@ def write_combined_shards() -> int:
 
 
 def main() -> int:
+    if "--schema-stale" in sys.argv:  # 1 when the published hl/ was written by an older row shape
+        print(int((read(DATA / "hl" / "index.json") or {}).get("schema") != HL_SCHEMA))
+        return 0
     build.SPLITS.clear()
     build.SPLITS.update(sp.table())
     SECS.update(read(DATA / "securities.json") or {})

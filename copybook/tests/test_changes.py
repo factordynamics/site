@@ -426,6 +426,70 @@ class MoveMathTest(unittest.TestCase):
         finally:
             build.CONSENSUS.clear()
 
+    def test_rescale_only_when_it_reconciles(self):
+        from ingest.parse import consensus_factor, rescale_rejected
+        # Mizuho Securities USA 2026Q3 (0001062993-26-005832) MCHP: 18,615,337 sh, $3,256,537 filed ($0.17 a share);
+        # x1000 is $175, 2.25x the $77.77 median: neither reconciles, so no rescale and the line is held.
+        self.assertEqual(consensus_factor(3256537 / 18615337, 77.77), 1.0)
+        self.assertTrue(rescale_rejected(3256537 / 18615337, 77.77))
+        self.assertEqual(consensus_factor(0.0781, 77.77), 1000.0)  # a line filed in thousands lands on the median
+        self.assertFalse(rescale_rejected(0.0781, 77.77))
+        m = {"slug": "mz", "history": [{"quarter": "2026Q3", "unit_fix": 1.0, "holdings": [
+            self.row("595017104", "MCHP", 18615337, 3256537000) | {"value_as_filed": 3256537}]}]}
+        others = [{"slug": f"o{i}", "history": [{"quarter": "2026Q3", "total_value": 7777, "holdings": [self.row("595017104", "MCHP", 100, 7777)]}]}
+                  for i in range(3)]
+        build.fix_with_consensus([m] + others)  # an earlier build's x1000 is judged again from the filed value
+        h = m["history"][0]["holdings"][0]
+        self.assertEqual((h["value"], h.get("price_outlier"), h.get("value_rescale")), (3256537, True, "rejected"))
+        r = build.with_changes(m["history"][0] | {"holdings": [h]}, {"quarter": "2026Q2", "holdings": []})[0]
+        self.assertEqual((r["change"], r["unreliable"], r["value_delta"], r["value_delta_basis"]), ("new", "both", 0, None))
+
+    def test_split_applies_by_its_date_not_the_cusip_change(self):
+        # Bowen Hanes DD: 2026Q2 7,000 x 26614N102 at $45.80 (pre-split, after the 1-for-3 of that quarter); 2026Q3
+        # 2,731 x 26614N102 at $129.89. The prior is 2,333 post-split shares: added ~+398, not trimmed -4,269.
+        build._LINKS = {"26614N102": {"old": "26614N102", "new": "26614N201", "ratio": 0.333333, "units_basis": "split",
+                                      "basis": "sec_13f_list"}}
+        build.SPLITS["26614N201"] = {"2026Q2": 1 / 3}
+        try:
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("26614N102", "DD", 2731, 354_729)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("26614N102", "DD", 7000, 320_600)]})[0]
+            self.assertEqual((r["change"], round(r["share_change"]), r["split"]["ratio"]), ("added", 398, 1 / 3))
+            self.assertAlmostEqual(r["value_delta"], (2731 - 7000 / 3) * 354_729 / 2731, delta=1)
+            # A filer already in post-split units both quarters is left alone.
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("26614N102", "DD", 2731, 354_729)]},
+                                   {"quarter": "2026Q2", "holdings": [self.row("26614N102", "DD", 2333, 320_600)]})[0]
+            self.assertEqual((r["change"], r["share_change"], r.get("split")), ("added", 398, None))
+        finally:
+            build.SPLITS.pop("26614N201", None)
+
+    def test_prior_note_line_priced_like_the_stock_counts_as_shares(self):
+        build.CONSENSUS.update({("2026Q2", "30231G102"): 150.0})
+        try:
+            # Sprott XOM: 2026Q2 157,390 of 30231G102 filed PRN at $136.6 a unit, 2026Q3 266,599 SH: added +109,209.
+            prn = self.row("30231G102", "XOM", 0, 21_500_000) | {"shares_type": "PRN", "principal_amount": 157390}
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("30231G102", "XOM", 266599, 43_389_065)]},
+                                   {"quarter": "2026Q2", "holdings": [prn]})
+            self.assertEqual([(x["change"], x["prev_shares"], x["share_change"]) for x in r], [("added", 157390, 109209)])
+            # A note priced like a note (par $100 against a $150 stock... at $1 a unit) is a different security:
+            # the share line is new and the note exited, consistently.
+            note = prn | {"value": 157_390}
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("30231G102", "XOM", 266599, 43_389_065)]},
+                                   {"quarter": "2026Q2", "holdings": [note]})
+            self.assertEqual(sorted((x["change"], x["prev_shares"]) for x in r), [("exited", 0), ("new", 0)])
+        finally:
+            build.CONSENSUS.clear()
+
+    def test_held_line_names_its_reason(self):
+        # Aware Super XOM 2026Q3 (0002012816-26-000017): new 42,807 sh for $79,377,569 ($1,854, 11.4x the median).
+        build.CONSENSUS.update({("2026Q3", "30233Q108"): 162.75})
+        try:
+            r = build.with_changes({"quarter": "2026Q3", "holdings": [self.row("30233Q108", "XOM", 42807, 79_377_569)]},
+                                   {"quarter": "2026Q2", "holdings": []})[0]
+            self.assertEqual((r["change"], r["suspect_reason"], r["unreliable"], r["value_delta"], r["value_delta_basis"]),
+                             ("new", "cross_filer", "both", 0, None))
+        finally:
+            build.CONSENSUS.clear()
+
     def test_lines_are_price_checked_before_they_are_summed(self):
         build.SPLITS["09857L108"] = {"2026Q2": 25.0}
         build.CONSENSUS.update({("2026Q1", "79466L302"): 186.67, ("2026Q2", "79466L302"): 156.66,

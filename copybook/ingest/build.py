@@ -39,6 +39,7 @@ from ingest.parse import (
     parse_info_table,
     scale_if_thousands,
     consensus_factor,
+    rescale_rejected,
     consensus_prices,
     row_overstated,
     unit_fix,
@@ -415,8 +416,20 @@ def fix_cached(q: dict) -> dict:
 
 
 def fix_with_consensus(managers: list[dict]) -> int:
-    """Rescale single lines filed ~1000x off the price other filers report that quarter."""
+    """Rescale single lines filed ~1000x off the price other filers report that quarter, when the rescaled price lands
+    near theirs. A line whose rescale wouldn't (Mizuho Securities USA 2026Q3 MCHP, ON, AKAM) keeps its filed value
+    and is price_outlier with value_rescale "rejected": held, not counted. Lines an earlier build rescaled x1000 are
+    re-judged from their filed value."""
     quarters = [q for m in managers for q in m["history"]]
+    for q in quarters:
+        for h in q["holdings"]:
+            if h.pop("value_rescale", None):
+                h.pop("price_outlier", None)
+            filed = h.get("value_as_filed")
+            if filed and not q.get("values_in_thousands") and (q.get("unit_fix") or 1.0) == 1.0 \
+                    and abs(h["value"] - filed * 1000) < 1:
+                h["value"] = float(filed)  # an earlier consensus x1000: judged again below
+                q["_rejudged"] = True
     cons = consensus_prices(
         (q["quarter"], [(h["cusip"], h["value"], h["shares"], h["put_call"]) for h in q["holdings"]])
         for q in quarters
@@ -427,12 +440,15 @@ def fix_with_consensus(managers: list[dict]) -> int:
         for h in q["holdings"]:
             if not is_equity(h) or h["shares"] <= 0:
                 continue
-            f = consensus_factor(h["value"] / h["shares"], cons.get((q["quarter"], h["cusip"])))
+            m = cons.get((q["quarter"], h["cusip"]))
+            f = consensus_factor(h["value"] / h["shares"], m)
             if f != 1.0:
                 h["value"] *= f
                 changed = True
                 n += 1
-        if changed:
+            elif rescale_rejected(h["value"] / h["shares"], m):
+                h["price_outlier"], h["value_rescale"] = True, "rejected"
+        if changed or q.pop("_rejudged", None):
             q["holdings"].sort(key=lambda h: h["value"], reverse=True)
             apply_weights(q)
     for m in managers:
@@ -782,6 +798,33 @@ def check_lines(parts: list, cusip: str, quarter: str | None) -> dict:
             "value": sum(v for _, v in clean) + sum(v for s, v in parts if not (s > 0 and v > 0))}
 
 
+def mixed_lines(h: dict | None, quarter: str | None) -> bool:
+    """A position whose held lines (check_lines) sit a split ratio off the clean ones: units mixed (Allianz 2026Q1
+    BKNG, 45,219 post-split shares at $168 beside 15,736 pre-split at $4,210). Judged here, where SPLITS is loaded;
+    check_lines runs while filings load, before it is."""
+    m = consensus().get((quarter or "", (h or {}).get("cusip") or ""))
+    if not (h and m and h.get("held_lines")):
+        return False
+    ks = {k for c in split_partners(h["cusip"]) for k in (SPLITS.get(c) or {}).values() if k and k != 1}
+    return any(abs(math.log(x["implied_price"] / m / k)) < math.log(1.5) or abs(math.log(x["implied_price"] / m * k)) < math.log(1.5)
+               for x in h["held_lines"] if x.get("implied_price") for k in ks)
+
+
+def split_partners(cusip: str) -> set[str]:
+    """The CUSIP and its reissue partners (cusip_links), whose splits apply to it: DD 26614N102 -> 26614N201."""
+    links = cusip_links()
+    return {cusip} | ({links[cusip]["new"]} if cusip in links else set()) | {o for o, v in links.items() if v["new"] == cusip}
+
+
+def recent_splits(cusip: str, q_from: str | None, q_to: str | None) -> list[float]:
+    """Split ratios on the CUSIP or a partner effective from the quarter before q_from through q_to."""
+    from ingest.datasets import prev_quarter
+    if not (q_from and q_to):
+        return []
+    lo = prev_quarter(q_from)
+    return [k for c in split_partners(cusip) for q, k in (SPLITS.get(c) or {}).items() if lo <= q <= q_to and k and k != 1]
+
+
 def needs_line_check(q: dict) -> bool:
     """A stored quarter summed before the per-line check, with a multi-line share position priced off its peers."""
     if q.get("lines_checked"):
@@ -956,7 +999,8 @@ def unreliable_side(r: dict, quarter: str | None) -> str | None:
     not flagged."""
     if not (r.get("suspect_units") or r.get("price_outlier")) or r.get("shares_type") == "PRN":
         return None
-    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale") or r.get("put_call"):
+    if r.get("suspect_reason") in ("reissue_ratio_not_applied", "mixed_scale") or r.get("put_call") \
+            or r.get("value_rescale") == "rejected":  # Mizuho Securities MCHP: neither as filed nor x1000 reconciles
         return "both"  # an option line held by classify_options: neither its shares nor its value is reliable
     sh, ps, v, pv = (r.get(k) or 0 for k in ("shares", "prev_shares", "value", "prev_value"))
     ks = {k for k in (SPLITS.get(r.get("cusip") or "") or {}).values() if k and k != 1}
@@ -1087,6 +1131,18 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                         | {"value_delta": 0, "delta_pct_of_book": 0.0} | units(h, None, 1.0, 1.0, q_to, None))
             continue
         p = before.pop(k, None) or before.pop(renamed.get(k), None)
+        if p is not None and (p.get("shares_type") == "PRN") != (h.get("shares_type") == "PRN"):
+            # A note line and a share line under one CUSIP (Sprott 2026Q2 XOM: 157,390 of 30231G102 filed PRN at
+            # $136.6 a unit, then 266,599 SH). A prior PRN priced like the common counts as shares (added +109,209);
+            # anything else is two different securities: this line new, the prior exited, consistently.
+            px, m = (p["value"] / amount(p) if amount(p) and p["value"] > 0 else None), consensus().get((q_from or "", p["cusip"]))
+            now_px = h["value"] / h["shares"] if h.get("shares") and h["value"] > 0 else None
+            if p.get("shares_type") == "PRN" and px and ((m and 1 / OFF_MEDIAN <= px / m <= OFF_MEDIAN)
+                                                         or (not m and now_px and 1 / 1.5 <= px / now_px <= 1.5)):
+                p = p | {"shares_type": "SH", "shares": amount(p), "principal_amount": None}
+            else:
+                before[(p["cusip"], p["put_call"] or "")] = p
+                p = None
         if p is not None and p["cusip"] != h["cusip"]:
             h = h | {"prev_cusip": p["cusip"]}
         prn = h.get("shares_type") == "PRN"
@@ -1097,6 +1153,15 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
             was, now_px = p["value"] / amount(p), h["value"] / amount(h)
             if abs(math.log(was / now_px)) < abs(math.log(was / (now_px * r))):
                 r = 1.0
+        # A split effective by this quarter whose prior line is still in pre-split units though no split falls between
+        # the two quarters (Bowen Hanes DD: 7,000 sh at $45.80 in 2026Q2 after the 1-for-3 of that quarter, 2,731 at
+        # $129.89 in 2026Q3): the prior is adjusted by the ratio its price shows, whether or not the CUSIP changed.
+        elif r == 1.0 and p is not None and not prn and p["value"] > 0 and amount(p) > 0 and h["value"] > 0 and amount(h) > 0:
+            was, now_px = p["value"] / amount(p), h["value"] / amount(h)
+            for kk in recent_splits(h["cusip"], q_from, q_to):
+                if abs(math.log(was / kk / now_px)) < min(math.log(1.5), abs(math.log(was / now_px))):
+                    r = k = kk
+                    break
         if h.get("late_disclosure"):
             rows.append(h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, "disclosed_later", 0, None, r, prn, None))
             continue
@@ -1122,7 +1187,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 elif abs(delta) > 1.5 * max(h["value"], p["value"]):  # no trade is worth more than that
                     delta, basis = h["value"] - p["value"], "filed_value"
         row = h | {"row_type": "holding"} | units(h, p, r, k, q_to, q_from) | extra(p, change, delta, ds, r, prn, basis)
-        if h.get("mixed_scale") or (p or {}).get("mixed_scale"):  # Allianz 2026Q1 BKNG: no scaling of the sum is right
+        if h.get("mixed_scale") or (p or {}).get("mixed_scale") or mixed_lines(h, q_to) or mixed_lines(p, q_from):  # Allianz 2026Q1 BKNG: no scaling of the sum is right
             row |= {"suspect_units": True, "suspect_units_basis": "filers", "suspect_reason": "mixed_scale"}
         # A linked reissue with a share ratio (HON 1-for-2) whose filer still reports the pre-split count under the new
         # CUSIP (Newport Trust 6,432,598 -> 12,865,197): not a purchase. Flagged, change unknown, out of net and alerts.
@@ -1565,7 +1630,7 @@ def shares_out(x):
 
 V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display_name", "late_disclosure", "parts",
             "value_delta_basis", "unreliable", "value_change", "price_outlier", "suspect_units", "suspect_reason",
-            "shares_basis", "shares_as_filed", "option_held", "held_lines", "mixed_scale",
+            "shares_basis", "shares_as_filed", "option_held", "held_lines", "mixed_scale", "value_rescale",
             "split", "prev_shares_as_filed", "suspect_duplicate", "prev_reason", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
 
 

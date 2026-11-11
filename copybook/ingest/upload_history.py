@@ -195,8 +195,16 @@ def main() -> int:
         sources = {k: v for k, v in sources.items() if not k.startswith("fb/")}
     for p in sorted(root.glob("fq/*/*.json")):
         sources["fb/" + p.relative_to(root / "fq").as_posix()] = p
+    refused = 0
     for p in sorted(root.glob("hlf/*.json")):  # every holder per issuer; Pages keeps counts and the top rows
+        # A holder index without value_delta can't reproduce its net (gene 15:51-16:39 Nov 11: AAPL, MSFT, JPM...
+        # fell back to implied trades): never sent.
+        if "value_delta" not in ((json.loads(p.read_text()) or {}).get("columns") or []):
+            refused += 1
+            continue
         sources["hl/" + p.name] = p
+    if refused:
+        print(f"::warning::upload: {refused} hl/ files without a value_delta column refused", flush=True)
     files = list(sources.values())
     todo = []
     for key, path in sorted(sources.items()):
