@@ -395,7 +395,7 @@ export function Pricing() {
               ],
               [
                 'How does the free trial work?',
-                `Every paid plan is free for ${TRIAL_DAYS} days. Copy’s trial needs no card: add one in your account to keep Copy afterwards, or the trial simply ends. Pro takes a card at signup so it continues without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then.`,
+                `Every paid plan is free for ${TRIAL_DAYS} days. Copy needs no card: add one before day ${TRIAL_DAYS + 1} to keep it, or the trial simply ends and nothing is charged. Pro and Fund take a card at signup so they continue without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then (a fund can start by invoice instead, below).`,
               ],
               ['Can a fund try Copy Fund without a card?', 'Yes. Start a 14-day trial, pay by invoice: no card. On day 14 we email an invoice for $1,990 (the founding price, a year), due in 30 days, payable online by card or US bank account (ACH); cancel before then and nothing is owed. One trial per company. Card trial? Switch to invoice in your account. Monthly Fund is paid by card.'],
               ['What does the founding price mean?', 'Subscribe to Pro or Fund, or start a trial, by December 31 and your price stays for as long as you stay subscribed, even if list prices rise: $39/mo or $390/yr for Pro, $199/mo or $1,990/yr for Fund. A trial started by December 31 keeps the founding price even if it converts in January.'],

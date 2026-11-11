@@ -83,7 +83,7 @@ export const plans: Record<PlanId, { name: string; monthly: number; yearly: numb
 const planOf = (id?: string) => plans[(id as PlanId) in plans ? (id as PlanId) : 'copy']
 export const trialTerms = (id?: string) =>
   planOf(id) === plans.copy
-    ? `Free for 14 days. With a card on file, Copy continues at $${plans.copy.monthly}/month or $${plans.copy.yearly}/year until you cancel; without one, the trial simply ends.`
+    ? `Free for 14 days. Add a card before day 15 to keep Copy at $${plans.copy.monthly}/month or $${plans.copy.yearly}/year; without one the trial simply ends and nothing is charged.`
     : `Free for 14 days, then $${planOf(id).monthly.toLocaleString('en-US')}/month or $${planOf(id).yearly.toLocaleString('en-US')}/year until you cancel. Cancel any time from Manage billing before the trial ends and you won’t be charged.`
 export const renewalTerms = (id?: string) =>
   `${planOf(id).name} renews automatically at $${planOf(id).monthly.toLocaleString('en-US')}/month or $${planOf(id).yearly.toLocaleString('en-US')}/year until you cancel. Cancel any time from Manage billing; you keep access until the end of the period you paid for.`
@@ -92,7 +92,7 @@ export const checkoutEnabled = () => Boolean(checkout.monthly || checkout.yearly
 
 export const TRIAL_DAYS = 14
 /** Under every Copy trial button (Copy trials take no card since Nov 11; Pro and Fund still do). */
-export const TRIAL_LINE = `No card needed for the trial. Then $${prices.monthly}/month or $${prices.yearly}/year. Cancel anytime.`
+export const TRIAL_LINE = `No card needed. Then $${prices.monthly}/month or $${prices.yearly}/year if you add one. Cancel anytime.`
 export const TRIAL_TERMS = trialTerms('copy')
 // A referral takes one month of the monthly price off the first charge after the trial, on either
 // interval (the API's coupon: amount_off = a month, duration once). Monthly: that month is free.
