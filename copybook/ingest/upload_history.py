@@ -66,7 +66,7 @@ BUNDLE_ENTRIES = 20
 BUNDLE_BYTES = 1_000_000  # plain tars only
 BUNDLE_RAW_BYTES = 2_000_000  # uncompressed; about 0.5 MB gzipped on the wire
 GZIP = [os.environ.get("COPYBOOK_UPLOAD_GZIP", "1") != "0"]  # cleared when the API refuses a gzipped bundle
-ORDER = ("h/", "hl/", "fb/")  # sent first, in this order
+ORDER = ("h/", "bulk/", "hl/", "fb/")  # sent first, in this order (bulk early: few, large files)
 PROBE_MAX_S = 1.0  # gene's /health?probe=1 (ms when idle) slower than this: members are waiting, so the backlog backs off
 FRESH_MAX = 60  # files per run in EDGAR hours: a few new filings' h/ books, never the backlog
 QUIET_LEAD_S = 90  # no bundle starts this close to a COPYBOOK_UPLOAD_QUIET window (one bundle takes 3-30 s)
