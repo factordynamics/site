@@ -58,13 +58,6 @@ async function probe(): Promise<Probe> {
 
 const ago = (s: number) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : s < 90 * 60 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`)
 const utc = (t: string) => new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' }) + ' UTC'
-const host = (u: string) => {
-  try {
-    return new URL(u).host
-  } catch {
-    return u
-  }
-}
 /** A reconciliation class, linked to the Data entries below that disclose it. */
 const DataLink = ({ children }: { children: ReactNode }) => (
   <a href="#data" className="font-medium text-accent hover:text-accent-2">
@@ -196,10 +189,12 @@ export function Status() {
           ) : (
             <>
               <Row name="Member API" tone={apiTone} state={h ? `Up · answered in ${pr!.ms} ms` : 'Not answering'}>
-                {/* No tunnel hostname here: it changes, and /status/ is linked from replies. */}
-                A personal machine, via a temporary tunnel; the documented API address is {host(import.meta.env.VITE_API_DOCS_BASE as string)}
-                {pr!.at ? ` · current tunnel since ${utc(pr!.at)}` : ''}
-                {h?.api_up_since ? ` · running since ${utc(h.api_up_since)}` : ''}
+                {/* No host or tunnel names here: /status/ is linked from replies. API users find the address on /api/. */}
+                A personal machine{h?.api_up_since ? `, running since ${utc(h.api_up_since)}` : ''}. API users: the documented address is on{' '}
+                <Link to="/api/" className="font-medium text-accent hover:text-accent-2">
+                  /api/
+                </Link>
+                .
               </Row>
               <Row
                 name="Filing alerts"

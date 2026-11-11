@@ -213,8 +213,8 @@ export function ForQuants() {
       Start {TRIAL_DAYS}-day free trial <Arrow />
     </Button>
   )
-  const base = import.meta.env.VITE_API_DOCS_BASE as string
-  const curl = `curl ${base}/v1/filers/warren-buffett/holdings/latest \\
+  // The base URL lives on /api/ only (the Space, Nov 11): this marketing page names no host.
+  const curl = `curl "$COPYBOOK_API/v1/filers/warren-buffett/holdings/latest" \\
   -H "Authorization: Bearer cbk_live_..." \\
   -H "User-Agent: my-research/1.0"`
   return (
@@ -234,7 +234,13 @@ export function ForQuants() {
           <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-night p-4 font-mono text-[12.5px] leading-relaxed text-white/90 sm:whitespace-pre sm:break-normal">
             <code>{curl}</code>
           </pre>
-          <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. {HOST_MOVE}</p>
+          <p className="mt-2 text-[12.5px] text-ink-3">
+            <code className="font-mono">$COPYBOOK_API</code> is the base URL on the{' '}
+            <Link to="/api/" className="font-medium text-accent hover:text-accent-2">
+              API docs
+            </Link>
+            . {HOST_MOVE}
+          </p>
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[14px]">
             <Link to="/api/" className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
               API docs <Arrow className="size-3" />
