@@ -8,6 +8,13 @@ account_id = "967e13dd88bb23b24662e62cbb6fd84f"
 binding = "DB"
 id = "830e2b3035554fa2865bc523dfcbf2fb"
 
+# KV namespace copybook-api-OPS: gene's operational keys (src/hot.ts OPS: /track counts, rate limits, sync and poller
+# state, check caches). gene gives it its own local file and skips its fsyncs; members, follows and billing stay in DB.
+# Unused on Cloudflare (hotEnv is gene-only).
+[[kv_namespaces]]
+binding = "OPS_KV"
+id = "a9a369ac93f5485c92700685cfb5a58e"
+
 # Private paid history (h/{slug}/{quarter}.json|csv), uploaded by the data workflow via PUT /ingest/.
 [[r2_buckets]]
 binding = "HIST"

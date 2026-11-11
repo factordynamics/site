@@ -3167,13 +3167,28 @@ describe('copybook api', () => {
     expect(await stored()).toBe(1);
     const f = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), genv)).json();
     expect([await stored(), f.track[day.slice(6)].visit.source.hottest]).toEqual([3, 3]);
-    // With OPS_KV bound (gene's own file, off the members' fsyncs) counts go there, carrying on from the day's DB copy.
+    // With OPS_KV bound (gene's own file, whose fsyncs it skips) operational keys go there, carrying on from DB's copy;
+    // member keys stay in DB, and sync's full listing (prefix '') sees both stores.
     const sm = new Map<string, string>();
-    const senv = { ...genv, OPS_KV: { get: async (k: string) => sm.get(k) ?? null, put: async (k: string, v: string) => void sm.set(k, v) } } as unknown as Env;
+    const ops = { get: async (k: string) => sm.get(k) ?? null, put: async (k: string, v: string) => void sm.set(k, v), delete: async (k: string) => void sm.delete(k), list: async () => ({ keys: [...sm.keys()].sort().map((name) => ({ name })), list_complete: true }) };
+    const { hotEnv } = await import('../src/hot');
+    const senv = hotEnv({ ...genv, OPS_KV: ops } as unknown as Env);
     await handleRequest(new Request('https://api.test/track', { method: 'POST', body: JSON.stringify({ kind: 'visit', page: '/hot/', utm_source: 'hottest' }), headers: { 'cf-connecting-ip': '198.51.100.9' } }), senv);
     await flushTrack(senv);
+    await senv.DB.put('host:poller', '{"host":"gene"}');
+    await senv.DB.put('cus:cus_OPSTEST', '{}');
     const f2 = await (await handleRequest(new Request('https://api.test/ops/funnel?days=1', { headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), senv)).json();
     expect([await stored(), JSON.parse(sm.get(day)!).visit.source.hottest, f2.track[day.slice(6)].visit.source.hottest]).toEqual([3, 4, 4]);
+    expect([sm.has('host:poller'), await env.DB.get('host:poller'), sm.has('cus:cus_OPSTEST'), await env.DB.get('cus:cus_OPSTEST')]).toEqual([true, null, false, '{}']);
+    const names: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await senv.DB.list({ prefix: '', cursor });
+      names.push(...page.keys.map((k) => k.name));
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    expect([names.includes('host:poller'), names.includes('cus:cus_OPSTEST'), names.includes(day)]).toEqual([true, true, true]);
+    expect((await senv.DB.list({ prefix: 'cus:' })).keys.some((k) => k.name === 'host:poller')).toBe(false);
   });
 
   it('a retired copy (MOVED_TO) sends every request to the same path on the live host', async () => {

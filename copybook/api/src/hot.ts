@@ -4,13 +4,9 @@
  * Member, follow and billing writes stay durable: only these. On when MEMORY_CACHE is "on" (wrangler.toml), never on
  * Cloudflare's copy (MOVED_TO), whose isolates come and go.
  */
-import type { Env, R2, R2Object } from './env';
+import type { Env, KV, R2, R2Object } from './env';
 
 export const memoryOn = (env: Env) => env.MEMORY_CACHE === 'on' && !env.MOVED_TO;
-/** Where /track counts and its rate limit live: OPS_KV when bound (gene), else DB. */
-const scratch = (env: Env) => env.OPS_KV ?? env.DB;
-/** A /track key: OPS_KV's copy, else the one written to DB before OPS_KV was bound (that day's earlier counts). */
-export const readTrack = async (env: Env, key: string) => (await scratch(env).get(key)) ?? (env.OPS_KV ? await env.DB.get(key) : null);
 
 const HOT = /^(hl\/|changes\/|h\/|fb\/|meta\/builds\.json$)/;
 /** A copy is read again after a minute; a write through this host drops it at once. */
@@ -78,8 +74,40 @@ export function hotHist(r2: R2): R2 {
   });
 }
 
-/** The env a request or cron run uses: hot reads on gene, else as given. */
-export const hotEnv = (env: Env): Env => (memoryOn(env) ? { ...env, HIST: hotHist(env.HIST) } : env);
+/**
+ * gene's operational keys (the runner, Nov 11): high-churn bookkeeping whose loss (gene skips OPS_KV's fsyncs, so up to
+ * ~30 s on a power cut) can't send anything twice or bill wrongly: /track counts, rate limits, sync and poller state,
+ * per-host check caches. Alert-sent records, dedupe, the mail meter, the job queue, members, follows and billing stay in DB.
+ */
+const OPS = ['track', 'rl:', 'sync:', 'host:', 'issuers:checked', 'alerts:recheck-at', 'status:fresh', 'idx:etag', 'index:contract', 'types:guard', 'bulk:check'];
+const isOps = (k: string) => OPS.some((p) => k.startsWith(p));
+
+/**
+ * DB with the operational keys on `ops`. A read falls back to DB's copy, written before OPS_KV was bound (today's counts,
+ * sync's cursor), so nothing restarts. A list that can hold both (sync's prefix '') pages DB, then ops.
+ */
+export function opsDb(db: KV, ops: KV): KV {
+  return {
+    get: async (k) => (isOps(k) ? ((await ops.get(k)) ?? (await db.get(k))) : db.get(k)),
+    put: (k, v, o) => (isOps(k) ? ops.put(k, v, o) : db.put(k, v, o)),
+    delete: async (k) => {
+      if (isOps(k)) await ops.delete(k);
+      await db.delete(k);
+    },
+    list: async ({ prefix, cursor }) => {
+      if (!OPS.some((p) => p.startsWith(prefix) || prefix.startsWith(p))) return db.list({ prefix, cursor });
+      if (!cursor?.startsWith('ops|')) {
+        const page = await db.list({ prefix, cursor });
+        return page.list_complete ? { keys: page.keys, list_complete: false, cursor: 'ops|' } : page;
+      }
+      const page = await ops.list({ prefix, cursor: cursor.slice(4) || undefined });
+      return page.list_complete ? page : { ...page, cursor: `ops|${page.cursor}` };
+    },
+  };
+}
+
+/** The env a request or cron run uses on gene: hot reads, and operational keys on OPS_KV when bound; else as given. */
+export const hotEnv = (env: Env): Env => (memoryOn(env) ? { ...env, HIST: hotHist(env.HIST), ...(env.OPS_KV ? { DB: opsDb(env.DB, env.OPS_KV) } : {}) } : env);
 
 // ---------------------------------------------------------------------------------------------------
 // /track: counted in memory and written every few seconds (and before /ops/funnel reads them).
@@ -104,9 +132,9 @@ export async function trackAllowed(env: Env, ip: string): Promise<boolean> {
     return true;
   }
   const k = `rl:track:${ip}`;
-  const n = Number((await scratch(env).get(k)) ?? 0);
+  const n = Number((await env.DB.get(k)) ?? 0);
   if (n >= 120) return false;
-  await scratch(env).put(k, String(n + 1), { expirationTtl: 3600 });
+  await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
   return true;
 }
 
@@ -125,9 +153,9 @@ export async function flushTrack(env: Env): Promise<void> {
   flushedAt = Date.now();
   flushing = (async () => {
     const write = async (key: string, ttl: number, fns: ((d: Record<string, Record<string, Record<string, number>>>) => void)[]) => {
-      const d = JSON.parse((await readTrack(env, key)) ?? '{}');
+      const d = JSON.parse((await env.DB.get(key)) ?? '{}');
       for (const f of fns) f(d);
-      await scratch(env).put(key, JSON.stringify(d), { expirationTtl: ttl });
+      await env.DB.put(key, JSON.stringify(d), { expirationTtl: ttl });
     };
     const group = (k: (h: TrackHit) => string, f: (h: TrackHit) => TrackHit['apply']) => {
       const m = new Map<string, TrackHit['apply'][]>();

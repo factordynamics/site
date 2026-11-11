@@ -769,7 +769,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const track: Record<string, unknown> = {};
     for (let d = 0; d < days; d++) {
       const day = new Date(Date.now() - 5 * 3600_000 - d * 86_400_000).toISOString().slice(0, 10);
-      const t = await (await import('./hot')).readTrack(env, `track:${day}`);
+      const t = await env.DB.get(`track:${day}`);
       if (t) track[day] = JSON.parse(t);
     }
     // Totals over the window by post ("utm_source|utm_content"): page counts from /track, signups and the rest from the funnel.
@@ -787,7 +787,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const track_hourly: Record<string, unknown> = {};
     for (let d = 0; d < days; d++) {
       const day = new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10);
-      const t = await (await import('./hot')).readTrack(env, `trackh:${day}`);
+      const t = await env.DB.get(`trackh:${day}`);
       if (t) track_hourly[day] = JSON.parse(t);
     }
     // Checkout sessions in the window from Stripe: open, complete or expired, our own (test) apart from real, by post.
@@ -2054,7 +2054,7 @@ export default {
     const rp = new URL(req.url).pathname;
     if (res.ok && (req.method === 'DELETE' || /\/revoke$|^\/ops\/(revoke-key|erase-member|erase-leads)$/.test(rp)) && /^\/(seats|keys|me|ops)(\/|$)/.test(rp)) {
       const fo = await import('./failover');
-      if (fo.syncOn(env)) await fo.geneSync(env, Date.now()).catch((e) => console.log(`revocation publish: ${e}`));
+      if (fo.syncOn(env)) await fo.geneSync((await import('./hot')).hotEnv(env), Date.now()).catch((e) => console.log(`revocation publish: ${e}`));
     }
     return res;
   },
