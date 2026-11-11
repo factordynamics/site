@@ -379,11 +379,11 @@ export function Status() {
             <h3 className="mt-6 text-[15px] font-semibold">Restarts, last 7 days</h3>
             <p className="mt-1 text-[13.5px] font-medium text-ink-2">{RESTART_POLICY}</p>
             <p className="mt-1 text-[13.5px] text-ink-3">
-              {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'}{rs.planned_7d ? ` · ${rs.planned_7d} planned` : ''} · {rs.unplanned_7d} unplanned{rs.short_unconfirmed_7d ? ` · ${rs.short_unconfirmed_7d} brief ${rs.short_unconfirmed_7d === 1 ? 'restart' : 'restarts'} we couldn’t attribute` : ''}. A deploy is a new build back up in under 60 seconds.
+              {rs.deploys_7d} {rs.deploys_7d === 1 ? 'deploy' : 'deploys'} · {rs.planned_7d ?? 0} planned · {rs.unplanned_7d} unplanned{rs.short_unconfirmed_7d ? ` · ${rs.short_unconfirmed_7d} brief ${rs.short_unconfirmed_7d === 1 ? 'restart' : 'restarts'} we couldn’t attribute` : ''}; {downTotal(rs.rows)} down in all. A deploy is a new build back up in under 60 seconds. A planned event is one we start on purpose, such as a failover test, and can take longer; it’s listed with its note.
             </p>
             {rs.rows?.length ? (
               <ol className="mt-2 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
-                {rs.rows.map((r) => (
+                {[...rs.rows].sort((a, b) => b.at.localeCompare(a.at)).map((r) => (
                   <li key={r.at} className="grid gap-x-4 py-2.5 text-[13.5px] sm:grid-cols-[9.5rem_minmax(0,1fr)_auto]">
                     <span className="num text-ink-3">{utc(r.at)}</span>
                     <span className="min-w-0 text-ink-2">
@@ -482,4 +482,10 @@ export function Status() {
       </section>
     </div>
   )
+}
+
+/** Total seconds down across the listed restarts, as \"2 min\" or \"40 s\". */
+function downTotal(rows?: { down_seconds: number }[]) {
+  const t = (rows ?? []).reduce((a, r) => a + (r.down_seconds || 0), 0)
+  return t >= 90 ? `${Math.round(t / 60)} min` : `${t} s`
 }

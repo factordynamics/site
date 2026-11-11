@@ -23,7 +23,8 @@ const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string]
     ['November 11, 2026', 'What else runs on it: the API runs on a personal machine, under an account shared with other software that can technically read its data files.'],
     ['November 11, 2026', 'Who can see member data: Copybook is maintained by AI coding agents on Amp; the MDR terms and their exceptions are quoted, and agent requests that run through the founder’s personal Claude and Grok subscriptions go under those providers’ consumer terms.'],
     ['November 11, 2026', 'Hosting: the API is reached through a temporary Cloudflare quick tunnel until it has its own hostname. Hourly local snapshots are now encrypted. Sign-in and Fund invite link lifetimes added.'],
-    ['November 11, 2026', 'Recovery: the rebuild from encrypted backups was rehearsed (about 7 minutes to restore, 30–60 minutes end to end); the standby move is not yet rehearsed.'],
+    ['November 11, 2026', 'Failover: member access now moves to the Cloudflare backup automatically (within 2–3 minutes after two failed checks a minute apart, back after 3 healthy minutes, capped at 95% of the backup’s daily quota). Tested Nov 11, 08:53 UTC: moved in 1 min 54 s, with about 2 minutes of member errors first.'],
+    ['November 11, 2026', 'Recovery: the rebuild from encrypted backups was rehearsed (about 7 minutes to restore, 30–60 minutes end to end); the automatic failover was tested later the same day (see Failover above).'],
     ['November 9, 2026', 'Where the API runs, encryption at rest, access, backups, physical risk and deletion described.'],
   ],
   privacy: [

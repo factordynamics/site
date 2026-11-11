@@ -140,16 +140,20 @@ export function useApiBase() {
   return b
 }
 
-/** fetch against the current API base. A network-level failure (a rotated tunnel URL) re-reads api.json
- *  once, and the request is retried if the base moved. */
+/** fetch against the current API base. A failed call (network error, or a gateway 5xx from a host that's down)
+ *  re-reads api.json, and the request is retried once if the base moved: a page open across a failover follows
+ *  member access to the backup without a reload. */
 async function apiFetch(path: string, init?: RequestInit) {
   await apiReady
+  let res: Response
   try {
-    return await fetch(`${api}${path}`, init)
+    res = await fetch(`${api}${path}`, init)
   } catch (e) {
-    if (e instanceof TypeError && (await rereadApi())) return fetch(`${api}${path}`, init)
+    if (await rereadApi()) return fetch(`${api}${path}`, init)
     throw e
   }
+  if ([502, 503, 504, 521, 522, 523, 524, 530].includes(res.status) && (await rereadApi())) return fetch(`${api}${path}`, init)
+  return res
 }
 
 /** A public GET that should also drive the status banner (the /api/ page's changelog). */

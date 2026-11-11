@@ -46,11 +46,12 @@ const readBase = (init?: RequestInit) =>
     .catch(() => api)
 /** Resolves with the current API base: api.json's within 2.5 s, else the last known or build value. */
 export const apiReady: Promise<string> = apiOverride ? Promise.resolve(api) : readBase()
-let reread = false
-/** After a network-level failure: read api.json once more, bypassing caches. True when the base changed. */
+let rereadAt = 0
+/** After a failed API call: read api.json again, bypassing caches, at most every 20 s (so a page left open
+ *  across a failover follows the move). True when the base changed. */
 export async function rereadApi(): Promise<boolean> {
-  if (apiOverride || reread) return false
-  reread = true
+  if (apiOverride || Date.now() - rereadAt < 20_000) return false
+  rereadAt = Date.now()
   const before = api
   return (await readBase({ cache: 'no-store' })) !== before
 }
