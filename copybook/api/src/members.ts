@@ -1,4 +1,4 @@
-import { holdtermLoginMail, loginMail, sendMail } from './email';
+import { backMail, holdtermLoginMail, loginMail, sendMail } from './email';
 import { isActive, isPaused, pauseScheduled, type Env, type Member } from './env';
 import { stripe } from './stripe';
 import { carryFreeSignup, carryPriorMember } from './free';
@@ -173,11 +173,24 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
   m.yearly_perks = ['copy', 'pro', 'fund'].includes(m.plan) && m.interval === 'yearly' && live;
   // A stale event (older subscription) must not overwrite a newer active one.
   if (prev && prev.subscription !== m.subscription && isActive(prev) && !isActive(m)) return prev;
-  // A free signup subscribing: the paid member keeps where they came from.
+  // An address welcomed to a paid plan before this subscription began (the trader: two welcomes, 20:17 and 20:52, under
+  // two Stripe customers; or a rejoin after a cancel): its new subscription gets "You're signed back in" with the link,
+  // once per subscription, never a second welcome.
+  const key = m.email ? `welcomed:${m.email.toLowerCase()}` : '';
+  const since = key ? Date.parse((await env.DB.get(key)) ?? '') : NaN;
+  const priorWelcomed = !prev && !!m.email && (await (async () => { const o = await memberByEmail(env, m.email); return !!o && o.customer !== customer && !!o.welcomed && o.status !== 'free'; })());
+  // A free signup subscribing (or a second checkout): the paid member keeps where they came from.
   if (!prev) Object.assign(m, await carryPriorMember(env, await carryFreeSignup(env, m)), { created_at: m.created_at ?? new Date().toISOString() });
+  const newSub = !prev || prev.subscription !== m.subscription;
+  const back = m.plan !== 'holdterm' && newSub && (since < Number(sub.created ?? 0) * 1000 || priorWelcomed);
+  if (back && isActive(m) && (await claim(env, customer, `back:${m.subscription}`, true))) {
+    const token = await signToken(env.SESSION_SECRET, 'login', customer, LOGIN_TTL);
+    if (['200', 'sunk'].includes(await sendMail(env, [backMail(env, m.email, token, m)]))) m.welcomed = true;
+    else await claim(env, customer, `back:${m.subscription}`, false);
+  }
   // Checkout fires several events at once (session completed, subscription created, the return to
   // /session); only the one that claims the welcome sends it.
-  if (isActive(m) && !m.welcomed && m.email && (await claim(env, customer, 'welcome', true))) {
+  if (!back && isActive(m) && !m.welcomed && m.email && (await claim(env, customer, 'welcome', true))) {
     const token = await signToken(env.SESSION_SECRET, 'login', customer, LOGIN_TTL);
     // Only a delivered welcome counts; otherwise the claim is released and the next event retries it.
     // Holdterm's welcome comes from Holdterm, never Copybook.
@@ -185,6 +198,7 @@ export async function syncSubscription(env: Env, sub: any, emailHint?: string | 
     // A test address's welcome goes to the test inbox (sunk): delivered there, so not sent again on every event.
     m.welcomed = ['200', 'sunk'].includes(await sendMail(env, [welcome]));
     if (!m.welcomed) await claim(env, customer, 'welcome', false);
+    else if (key && m.plan !== 'holdterm') await env.DB.put(key, new Date().toISOString());
   }
   // A cancel replaces a pause scheduled for the trial's end: Stripe's pause goes too, so a later resume is a plain
   // trial (the member can choose the pause again).
@@ -297,6 +311,13 @@ export const FOLLOW_DEFAULTS = { include_13g: false, digest: false, insider_buys
 /** What a Fund team shares: the seats read and write the owner's lists; alert settings stay per seat. */
 const SHARED = ['investors', 'stocks', 'owned', 'owned_manual', 'peers', 'book', 'onboarded'] as const;
 const sharedOf = (f: Follows) => Object.fromEntries(SHARED.map((k) => [k, f[k]])) as Pick<Follows, (typeof SHARED)[number]>;
+
+/** An unconfirmed member (email_pending) whose follows wait for the confirmation link to start alerts. */
+export async function followsWaiting(env: Env, m: Member): Promise<boolean> {
+  if (!m.email_pending) return false;
+  const f = await getFollows(env, m);
+  return f.investors.length + f.stocks.length + f.owned.length > 0;
+}
 
 export async function getFollows(env: Env, m: Member): Promise<Follows> {
   if (m.seat_of) return { ...(await ownFollows(env, m)), ...sharedOf(await ownFollows(env, { ...m, customer: m.seat_of, seat_of: undefined, alerts: [] })) };

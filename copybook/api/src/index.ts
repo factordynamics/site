@@ -9,7 +9,7 @@ import { handleV1, v1error } from './v1';
 export { KeyMeter } from './keys';
 import { holdtermLoginMail, leadAckMail, leadNoticeMail, loginMail, previewInbox, sendMail } from './email';
 import { ACTIVE, followCounts, stableBase, logAccess, isActive, isCopy, isPaused, isPro, linkBase, testAddress, type Env, type Member } from './env';
-import { changeFollows, type FollowList, type FollowOp, type Follows, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, planOf, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
+import { changeFollows, type FollowList, type FollowOp, type Follows, followsWaiting, getFollows, getMember, isOurInvoice, isOurSubscription, listMembers, planOf, LOGIN_REQUEST_TTL, MAX_FOLLOWS, memberByEmail, publicView, putMember, SESSION_TTL, syncSubscription } from './members';
 export { MemberFollows } from './members';
 import { importBook } from './book';
 import { businessSummary, handleKeepResume, handleWhy } from './revenue';
@@ -1212,7 +1212,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       const token = await signToken(env.SESSION_SECRET, 'login', m.customer, LOGIN_REQUEST_TTL);
       // A Holdterm member only ever hears from Holdterm; a sign-in started on Holdterm gets a Holdterm link.
       const holdterm = m.plan === 'holdterm' || b.brand === 'holdterm' || /holdterm/.test(origin ?? '');
-      const mail = holdterm ? holdtermLoginMail(env, m.email, token, false) : loginMail(env, m.email, token, false);
+      const mail = holdterm ? holdtermLoginMail(env, m.email, token, false) : loginMail(env, m.email, token, false, m, await followsWaiting(env, m));
       // A seat on a test team: its sign-in link goes to the sink too.
       const testTeam = m.seat_of ? testAddress((await getMember(env, m.seat_of))?.email ?? '') : false;
       await sendMail(env, [{ ...mail, ...(testTeam ? { test: true } : {}) }]);
@@ -1309,11 +1309,11 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: false, error: 'sign in required', code }, 401, h);
   }
 
-  // A provisional session reads /me and saves follows, channels and its alert scope (delivery waits for the emailed link:
+  // A provisional session reads /me and saves follows (a pasted or CSV book too; linking a 13F waits), channels and its alert scope (delivery waits for the emailed link:
   // email_pending), and adds a card (POST /portal/card); API keys, channel tests, the full billing portal, seats, a
   // cross-origin handoff and "sign out everywhere" (which mints a full session) wait for the link. Starting the trial
   // needs no session (POST /checkout).
-  const setup = (req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/') || (req.method === 'POST' && (path === '/portal/card' || path === '/yearly')) || (!!m.email_pending && ((path === '/channels' && (req.method === 'GET' || req.method === 'PUT')) || (req.method === 'POST' && path === '/alerts')));
+  const setup = (req.method === 'GET' && path === '/me') || path === '/follows' || path.startsWith('/follows/') || (req.method === 'POST' && (path === '/portal/card' || path === '/yearly' || path === '/book/import')) || (!!m.email_pending && ((path === '/channels' && (req.method === 'GET' || req.method === 'PUT')) || (req.method === 'POST' && path === '/alerts')));
   if (PROVISIONAL.has(m) && !setup) {
     return json({ ok: false, error: 'Open the sign-in link we emailed you to do this.', code: 'verify_email', delivery: 'pending_email_confirmation' }, 403, h);
   }
@@ -1648,6 +1648,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (req.method === 'POST' && path === '/book/import') {
     const b = await body(req);
     // Linking a 13F filer's book is Pro and Fund; a pasted list or CSV is open to every Copy member.
+    if (b.cik !== undefined && b.cik !== null && PROVISIONAL.has(m)) return json({ ok: false, error: 'Open the sign-in link we emailed you to do this.', code: 'verify_email', delivery: 'pending_email_confirmation' }, 403, h);
     if (b.cik !== undefined && b.cik !== null && !isPro(m)) return json({ ok: false, error: 'Linking a 13F as your book is part of Copy Pro and Copy Fund', code: 'pro_required' }, 403, h);
     const r = await importBook(env, m, b);
     return r.ok ? json(r, 200, h) : json(r, r.status, h);

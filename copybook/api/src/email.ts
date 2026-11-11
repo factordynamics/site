@@ -454,8 +454,21 @@ export function channelFailMail(env: Env, to: string, label: string, reason: str
   };
 }
 
-export function loginMail(env: Env, to: string, token: string, welcome: boolean, m?: Member): Mail {
+/** A repeat checkout by an address already welcomed: the sign-in link and what carried over, not a second welcome. */
+export function backMail(env: Env, to: string, token: string, m: Member): Mail {
   const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
+  const name = m.plan === 'pro' ? 'Copy Pro' : m.plan === 'fund' ? 'Copy Fund' : 'Copy';
+  const trial = m.trial_end ? ` Your trial runs until ${new Date(m.trial_end * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'America/New_York' })}.` : '';
+  const text = `You're signed back in to ${name}.${trial} Your follows, alert channels and settings are as you left them.\n\nSign in on any device (this link works once, for 7 days):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}`;
+  return { to, subject: `You're signed back in to ${name}`, text };
+}
+
+export function loginMail(env: Env, to: string, token: string, welcome: boolean, m?: Member, waiting = false): Mail {
+  const link = `${env.SITE_URL}account/?login=${encodeURIComponent(token)}`;
+  // An unconfirmed member with follows waiting (the trader, Nov 11): the link is the confirmation, so say so first.
+  if (!welcome && waiting) {
+    return { to, subject: 'Confirm your email to start alerts', text: `Your Copybook alerts start once you open this link: it confirms your email and signs you in.\n\nConfirm (this link works once, for 15 minutes):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}` };
+  }
   if (!welcome) {
     return { to, subject: 'Your Copybook sign-in link', text: `Here is your Copybook sign-in link.\n\nSign in (this link works once, for 15 minutes):\n${link}\n\nManage or cancel billing any time from ${env.SITE_URL}account/.${FOOTER}` };
   }

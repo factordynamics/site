@@ -139,9 +139,9 @@ export async function handleSignup(env: Env, b: Json, ip: string, signedIn?: str
       if (!last) {
         await env.DB.put(k, new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'), { expirationTtl: 15 * 60 });
         const { loginMail, holdtermLoginMail } = await import('./email');
-        const { LOGIN_REQUEST_TTL } = await import('./members');
+        const { LOGIN_REQUEST_TTL, followsWaiting } = await import('./members');
         const token = await signToken(env.SESSION_SECRET, 'login', cur.customer, LOGIN_REQUEST_TTL);
-        await sendMail(env, [cur.plan === 'holdterm' ? holdtermLoginMail(env, cur.email, token, false) : loginMail(env, cur.email, token, false)]);
+        await sendMail(env, [cur.plan === 'holdterm' ? holdtermLoginMail(env, cur.email, token, false) : loginMail(env, cur.email, token, false, cur, await followsWaiting(env, cur))]);
       }
       return { status: 200, body: { ok: true, sign_in_email: 'sent_if_member', ...(follow ? { following: false, follow: 'sign_in' } : {}) } };
     }
@@ -1038,7 +1038,7 @@ export async function eraseMember(env: Env, email: string): Promise<{ customers:
     cur = page.list_complete ? undefined : page.cursor;
   } while (cur);
   const ids = [...new Set([await env.DB.get(`email:${e}`), await freeId(e), ...all].filter((x): x is string => !!x))];
-  const keys = new Set<string>([`email:${e}`]);
+  const keys = new Set<string>([`email:${e}`, `welcomed:${e}`]);
   for (const c of ids) {
     const ch = JSON.parse((await env.DB.get(`channels:${c}`)) ?? '{}') as { feed_token?: string };
     if (ch.feed_token) keys.add(`feedtok:${ch.feed_token}`);

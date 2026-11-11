@@ -455,7 +455,12 @@ export async function fillWinter(env: Env, budget: number): Promise<Record<strin
 }
 
 async function fillWinterOne(env: Env, budget: number): Promise<Record<string, unknown>> {
-  const list = JSON.parse((await env.DB.get('issuers:tickers')) ?? '[]') as string[];
+  // Members' names first, then the 100 stocks the superinvestors hold most (the trader, Nov 11: this week's trialists
+  // shouldn't see "pending"). For those, the published list already has every qualifying buy by the same rule, so only
+  // their 13D/Gs are read here.
+  const pub = await publishedWinter(env).catch(() => null);
+  const own = JSON.parse((await env.DB.get('issuers:tickers')) ?? '[]') as string[];
+  const list = [...new Set([...own, ...(pub?.top ?? [])])];
   const done = new Set(JSON.parse((await env.DB.get('winter:done')) ?? '[]') as string[]);
   const t = list.find((x) => !done.has(x));
   if (!t || budget < 4) return { names: list.length, done: done.size };
@@ -483,7 +488,14 @@ async function fillWinterOne(env: Env, budget: number): Promise<Record<string, u
       const s13 = await pages('SCHEDULE 13', 40);
       c.entries = [...f4.filter((e) => /^4(\/A)?$/.test(e.form)), ...s13].filter(inWinter);
     }
+    const known = pub?.top.includes(t) ? pub.buys.get(t) ?? [] : null;
     for (const e of c.entries.filter((x) => !(x.accession in c.seen))) {
+      // A top-100 stock's Form 4: the published list's verdict, no request.
+      if (known && e.form.startsWith('4')) {
+        const k = known.find((x) => x.accession === e.accession);
+        c.seen[e.accession] = k ? { ...k, url: `https://www.sec.gov/Archives/edgar/data/${Number(c.cik)}/${k.accession.replace(/-/g, '')}/` } : 0;
+        continue;
+      }
       if (!can()) break;
       spent++;
       const r = await winterEvent(t, c.cik!, e, ids[t].tickers).catch(() => null);
@@ -498,32 +510,52 @@ async function fillWinterOne(env: Env, budget: number): Promise<Record<string, u
 
 /** A member's names last winter, from the cache: counts, the events with dollars and dates, and names not read yet. */
 export type WinterPreview = { window: [string, string]; names: number; insider_buys: number; schedule_13dg: number; events: WinterEvent[]; pending: string[] };
-/**
- * Followed investors' own 13D/G filings last winter (Icahn's, Pzena's), from the published winter list
- * (PUBLIC_URL winter-2025-26.json, the one /pricing/'s "19" links), its managers matched to slugs by the data run's
- * index.json. Kept per isolate for an hour.
- */
-let winterList: { at: number; rows: { slug: string; e: WinterEvent }[] } | null = null;
-async function investorWinter(env: Env, investors: string[]): Promise<WinterEvent[]> {
-  if (!investors.length || !env.PUBLIC_URL) return [];
-  if (!winterList || Date.now() - winterList.at > 3600_000) {
-    const [w, idx] = await Promise.all([
-      fetch(`${env.PUBLIC_URL}winter-2025-26.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<{ schedule_13dg?: { filings?: { manager: string; form: string; filed: string; accession: string; subject_company: string; subject_cik: string; filer: string }[] } } | null>,
-      fetch(`${env.DATA_URL}index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<{ managers?: { slug: string; manager?: string }[] } | null>,
-    ]);
-    if (!w?.schedule_13dg?.filings || !idx?.managers) return [];
-    const slugOf = new Map(idx.managers.filter((x) => x.manager).map((x) => [x.manager!.toLowerCase(), x.slug]));
-    winterList = {
-      at: Date.now(),
-      rows: w.schedule_13dg.filings.flatMap((f) => {
-        const slug = slugOf.get(f.manager.toLowerCase());
-        const e: WinterEvent = { ticker: f.subject_company, kind: 'schedule_13dg', form: f.form, filed: f.filed, date: null, who: f.manager, role: null, value_usd: null, action: /\/A$/.test(f.form) ? 'stake_update' : 'new_stake', accession: f.accession, url: `https://www.sec.gov/Archives/edgar/data/${Number(f.subject_cik)}/${f.accession.replace(/-/g, '')}/` };
-        return slug ? [{ slug, e }] : [];
-      }),
-    };
+interface PublishedWinter {
+  at: number;
+  /** Followed funds' 13D/Gs, by manager slug. */
+  rows: { slug: string; e: WinterEvent }[];
+  /** The 100 stocks the superinvestors hold most by value, and their qualifying insider buys (the same rule as here). */
+  top: string[];
+  buys: Map<string, WinterEvent[]>;
+}
+let winterList: PublishedWinter | null = null;
+/** The published winter list (PUBLIC_URL winter-2025-26.json, the one /pricing/'s numbers link), kept for an hour. */
+async function publishedWinter(env: Env): Promise<PublishedWinter | null> {
+  if (winterList && Date.now() - winterList.at < 3600_000) return winterList;
+  if (!env.PUBLIC_URL) return null;
+  type Pub = {
+    insider_buys?: { stocks?: string[]; filings?: { ticker: string; form: string; filed: string; transaction_date: string; accession: string; owner: string; roles?: string[]; officer_title?: string | null; value_usd: number }[] };
+    schedule_13dg?: { filings?: { manager: string; form: string; filed: string; accession: string; subject_company: string; subject_cik: string; filer: string }[] };
+  };
+  const [w, idx] = await Promise.all([
+    fetch(`${env.PUBLIC_URL}winter-2025-26.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<Pub | null>,
+    fetch(`${env.DATA_URL}index.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null) as Promise<{ managers?: { slug: string; manager?: string }[] } | null>,
+  ]);
+  if (!w) return null;
+  const slugOf = new Map((idx?.managers ?? []).filter((x) => x.manager).map((x) => [x.manager!.toLowerCase(), x.slug]));
+  const buys = new Map<string, WinterEvent[]>();
+  for (const f of w.insider_buys?.filings ?? []) {
+    const e: WinterEvent = { ticker: f.ticker, kind: 'insider_buy', form: f.form, filed: f.filed, date: f.transaction_date, who: f.owner, role: f.roles?.includes('director') ? 'director' : f.officer_title || 'officer', value_usd: f.value_usd, action: null, accession: f.accession, url: '' }; // set from the issuer's CIK when used
+    buys.set(f.ticker, [...(buys.get(f.ticker) ?? []), e]);
   }
+  winterList = {
+    at: Date.now(),
+    top: (w.insider_buys?.stocks ?? []).map((t) => t.toUpperCase()),
+    buys,
+    rows: (w.schedule_13dg?.filings ?? []).flatMap((f) => {
+      const slug = slugOf.get(f.manager.toLowerCase());
+      const e: WinterEvent = { ticker: f.subject_company, kind: 'schedule_13dg', form: f.form, filed: f.filed, date: null, who: f.manager, role: null, value_usd: null, action: /\/A$/.test(f.form) ? 'stake_update' : 'new_stake', accession: f.accession, url: `https://www.sec.gov/Archives/edgar/data/${Number(f.subject_cik)}/${f.accession.replace(/-/g, '')}/` };
+      return slug ? [{ slug, e }] : [];
+    }),
+  };
+  return winterList;
+}
+
+/** Followed investors' own 13D/G filings last winter (Icahn's 5, Pzena's 6), from the published list. */
+async function investorWinter(env: Env, investors: string[]): Promise<WinterEvent[]> {
+  if (!investors.length) return [];
   const want = new Set(investors);
-  return winterList.rows.filter((r) => want.has(r.slug)).map((r) => r.e);
+  return ((await publishedWinter(env))?.rows ?? []).filter((r) => want.has(r.slug)).map((r) => r.e);
 }
 
 export async function winterPreview(env: Env, tickers: string[], investors: string[] = []): Promise<WinterPreview | null> {

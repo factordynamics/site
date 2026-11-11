@@ -428,6 +428,10 @@ describe('copybook api', () => {
     const ch = await call('/channels', { method: 'PUT', body: { email: false }, token: r.token });
     const me0 = await (await call('/me', { token: r.token })).json();
     const card = await (await call('/portal/card', { method: 'POST', token: r.token })).json();
+    // A pasted book saves too (the trader, Nov 11); linking a 13F filer waits for the link.
+    const bk = await call('/book/import', { method: 'POST', body: { text: 'CRM, MU' }, token: r.token });
+    const bkc = await call('/book/import', { method: 'POST', body: { cik: '0001067983' }, token: r.token });
+    expect([bk.status, (await bkc.json()).code]).toEqual([200, 'verify_email']);
     // A Copy subscription from before Feb 1, 2027 holds the founding price; a monthly one has no yearly perks.
     expect([me0.member.founding_price, me0.member.yearly_perks]).toEqual([true, false]);
     expect([r.delivery, fo.ok, fo.delivery, ch.status, (await ch.json()).delivery, me0.member?.delivery ?? me0.delivery, /^https:\/\/billing\.stripe\.com\//.test(card.url)]).toEqual(['pending_email_confirmation', true, 'pending_email_confirmation', 200, 'pending_email_confirmation', 'pending_email_confirmation', true]);
@@ -468,7 +472,15 @@ describe('copybook api', () => {
     await webhook({ type: 'customer.subscription.created', data: { object: sub('sub_tm2', 'cus_tm2', 'trialing') } });
     const { getMember: gm } = await import('../src/members');
     expect([(await gm(env, 'cus_tm2'))?.status, JSON.parse((await env.DB.get('follows:cus_tm2'))!).investors, (await gm(env, 'cus_tm1'))?.customer, await env.DB.get('email:copybook-test-merge@example.com')]).toEqual(['trialing', ['irving-kahn'], 'cus_tm2', 'cus_tm2']);
-    // A free signup that then subscribes (the paid record's created_at is the conversion, not the signup), with the
+    // A repeat checkout by a welcomed address (the trader, 20:17 and 20:52): one welcome, then "You're signed back in"
+    // with a sign-in link for the new subscription, once however many events arrive.
+    stripeObjects['customers/cus_bk1'] = { id: 'cus_bk1', email: 'back@example.com' };
+    stripeObjects['customers/cus_bk2'] = { id: 'cus_bk2', email: 'back@example.com' };
+    await webhook({ type: 'customer.subscription.created', data: { object: { ...sub('sub_bk1', 'cus_bk1', 'active'), created: now() - 60 } } });
+    for (let i = 0; i < 2; i++) await webhook({ type: 'customer.subscription.updated', data: { object: { ...sub('sub_bk2', 'cus_bk2', 'active'), created: now() } } });
+    expect(sent.filter((x) => x.to.includes('back@example.com')).map((x) => x.subject)).toEqual(['Welcome to Copy: three steps to your first alert', "You're signed back in to Copy"]);
+    expect(sent.at(-1)!.text).toMatch(/account\/\?login=/);
+
     // subscription's webhook arriving before the return: still that account, so no hand-off (gene, 11:31: one was given).
     expect((await call('/signup', { body: { email: 'conv@example.com' } })).status).toBe(201);
     stripeObjects['checkout/sessions/cs_test_conv'] = { id: 'cs_test_conv', status: 'complete', created: now() + 5, subscription: 'sub_cv', customer: 'cus_cv', customer_details: { email: 'conv@example.com' } };
@@ -519,7 +531,17 @@ describe('copybook api', () => {
     expect((await call('/login', { body: { email: 'nobody@example.com' } })).status).toBe(200);
     expect(sent).toHaveLength(0);
     expect((await call('/login', { body: { email: 'A@example.com' } })).status).toBe(200);
-    expect(sent.map((m) => m.to[0])).toEqual(['a@example.com']);
+    expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['a@example.com', 'Your Copybook sign-in link']]);
+    // Unconfirmed with follows waiting: the link is titled and opened as the confirmation; without follows, plain.
+    await env.DB.put('cus:cus_up', JSON.stringify({ customer: 'cus_up', email: 'up@example.com', status: 'trialing', plan: 'copy', interval: 'monthly', period_end: 0, subscription: 'sub_up', alerts: [], welcomed: true, email_pending: true }));
+    await env.DB.put('email:up@example.com', 'cus_up');
+    sent = [];
+    await call('/login', { body: { email: 'up@example.com' } });
+    await env.DB.delete('rl:up@example.com');
+    await putFollows('cus_up', { stocks: ['CRM'] });
+    await call('/login', { body: { email: 'up@example.com' } });
+    expect(sent.map((m) => m.subject)).toEqual(['Your Copybook sign-in link', 'Confirm your email to start alerts']);
+    expect(sent[1].text).toMatch(/^Your Copybook alerts start once you open this link/);
   });
 
   it('cron alerts once per new reporting period, never on amendments, notices, stale or first-seen filings', async () => {
@@ -3157,13 +3179,23 @@ describe('copybook api', () => {
     index = { managers: [{ slug: 'warren-buffett', manager: 'Warren Buffett', name: 'Berkshire Hathaway Inc' }] };
     vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
       String(u) === 'https://pub.test/winter-2025-26.json'
-        ? Response.json({ schedule_13dg: { filings: [{ manager: 'Warren Buffett', form: 'SCHEDULE 13G/A', filed: '2025-12-15', accession: '0000950170-25-000001', subject_company: 'SIRIUS XM HOLDINGS INC.', subject_cik: '0000908937', filer: 'BERKSHIRE HATHAWAY INC' }, { manager: 'Nobody Followed', form: 'SCHEDULE 13D', filed: '2025-12-16', accession: 'x', subject_company: 'X', subject_cik: '1', filer: 'X' }] } })
+        ? Response.json({ insider_buys: { stocks: ['CSGP'], filings: [{ ticker: 'CSGP', form: '4', filed: '2026-01-14', transaction_date: '2026-01-13', accession: '0001628280-26-052968', owner: 'FLORANCE ANDREW C', roles: ['director'], officer_title: 'CEO', value_usd: 2_000_001 }] }, schedule_13dg: { filings: [{ manager: 'Warren Buffett', form: 'SCHEDULE 13G/A', filed: '2025-12-15', accession: '0000950170-25-000001', subject_company: 'SIRIUS XM HOLDINGS INC.', subject_cik: '0000908937', filer: 'BERKSHIRE HATHAWAY INC' }, { manager: 'Nobody Followed', form: 'SCHEDULE 13D', filed: '2025-12-16', accession: 'x', subject_company: 'X', subject_cik: '1', filer: 'X' }] } })
         : orig(u, init));
     try {
       const pi = (await winterPreview(env, ['CSGP'], ['warren-buffett']))!;
       expect([pi.insider_buys, pi.schedule_13dg, pi.events.map((e) => [e.kind, e.who, e.ticker, e.action])]).toEqual([1, 1, [['insider_buy', expect.any(String), 'CSGP', null], ['schedule_13dg', 'Warren Buffett', 'SIRIUS XM HOLDINGS INC.', 'stake_update']]]);
       // An investor alone, no names saved, still has a preview.
-      expect((await winterPreview(env, [], ['warren-buffett']))?.schedule_13dg).toBe(1);
+      const alone = (await winterPreview(env, [], ['warren-buffett']))!;
+      expect([alone.names, alone.insider_buys, alone.schedule_13dg]).toEqual([0, 0, 1]);
+      // A top-100 stock not yet read takes its Form 4 verdicts from the published list (no Form 4 is fetched): its buy
+      // carries the list's figures, the other filings read 0.
+      await env.DB.delete('winter:done');
+      hist.m.delete('winter/2025-26/CSGP.json');
+      delete secFiles['Archives/edgar/data/1057352/000162828026052968/0001628280-26-052968.txt'];
+      await env.DB.put('issuers:tickers', '[]');
+      for (let i = 0; i < 2; i++) await fillWinter(env, 20);
+      const top = (await winterPreview(env, ['CSGP']))!;
+      expect([top.pending, top.events.map((e) => [e.ticker, e.value_usd, e.date, e.url.includes('/1057352/')])]).toEqual([[], [['CSGP', 2_000_001, '2026-01-13', true]]]);
     } finally {
       vi.stubGlobal('fetch', orig);
       (env as unknown as { PUBLIC_URL?: string }).PUBLIC_URL = pub;
