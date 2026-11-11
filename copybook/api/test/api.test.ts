@@ -3530,7 +3530,7 @@ describe('copybook api', () => {
     // The data run serves the restatement and merged nothing; a later NEW HOLDINGS amendment isn't in it.
     hist.m.set('h/warren-buffett/2026Q2.json', new TextEncoder().encode(JSON.stringify({
       quarter: '2026Q2', report_date: '2026-06-30', accession: REST, form: '13F-HR/A', filing_date: '2026-09-02', sec_url: 'https://www.sec.gov/Archives/edgar/data/1067983/x-index.html', amendments: [], prev_quarter: '2026Q1', total_value: 3000, position_count: 1,
-      holdings: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', title: 'COM', put_call: null, shares: 15, value: 3000, value_as_filed: 3, value_adjusted: true, weight: 1, change: 'added', prev_shares: 10, share_change: 5, value_delta: 1000 }],
+      holdings: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', title: 'COM', put_call: null, shares: 15, value: 3000, value_as_filed: 3, value_adjusted: true, weight: 1, change: 'added', prev_shares: 10, share_change: 5, value_delta: 1000, split: { ratio: 2, from_quarter: '2026Q1', to_quarter: '2026Q2' }, prev_shares_as_filed: 5 }],
       filings: [{ accession: ORIG, role: 'superseded' }, { accession: REST, role: 'base' }, { accession: NEWH, role: 'ignored', mislabeled_amendment: true }],
     })));
     secFiles['submissions/CIK0001067983.json'] = JSON.stringify({ filings: { recent: {
@@ -3567,7 +3567,7 @@ describe('copybook api', () => {
     expect(cur.filing.amendments.map((a: { accession: string; amendment_type: string }) => [a.accession, a.amendment_type])).toEqual([[REST, 'RESTATEMENT'], [NEWH, 'NEW HOLDINGS']]);
     // Ingest's filing trail marks a mislabeled amendment; a rescaled row carries its unit fix.
     expect([cur.filing.mislabeled_amendment, ...cur.filing.versions.map((v: { mislabeled_amendment: boolean }) => v.mislabeled_amendment), ...cur.filing.amendments.map((v: { mislabeled_amendment: boolean }) => v.mislabeled_amendment)]).toEqual([false, false, false, true, false, true]);
-    expect(cur.holdings[0]).toMatchObject({ value_usd: 3000, value_as_filed: 3, value_adjusted: true, value_scale: 1000 });
+    expect(cur.holdings[0]).toMatchObject({ value_usd: 3000, value_as_filed: 3, value_adjusted: true, value_scale: 1000, prev_shares: 10, prev_shares_as_filed: 5, split: { ratio: 2, from_quarter: '2026Q1', to_quarter: '2026Q2' } });
 
     const orig = await v1('/v1/filers/warren-buffett/holdings/2026Q2?version=original');
     expect(orig.status).toBe(200);

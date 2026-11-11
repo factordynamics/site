@@ -30,7 +30,7 @@ const BUILD = { schema_version: SCHEMA_VERSION, data_built_at: '2026-11-08T21:29
 const POSITION_EXAMPLE = {
   cusip: '02079K305', ticker: 'GOOGL', issuer: 'ALPHABET INC', title_of_class: 'CAP STK CL A', put_call: null, sector: 'Communication Services',
   shares: 54000000, shares_type: 'SH', value_usd: 9512640000, weight: 0.0367, weight_incl_options: 0.0367, weight_equity: 0.0367, value_scale: null, value_as_filed: null, value_adjusted: null, zero_value: false,
-  change: 'added', prev_shares: 4200000, share_change: 49800000, value_delta_usd: 8770349040, source_accession: null, first_disclosed_at: null, suspect_units: null,
+  change: 'added', prev_shares: 4200000, share_change: 49800000, value_delta_usd: 8770349040, source_accession: null, first_disclosed_at: null, suspect_units: null, split: null, prev_shares_as_filed: null,
 };
 
 /** OpenAPI 3.1 description of /v1, served at /v1/openapi.json. */
@@ -136,7 +136,7 @@ export function openapi() {
         Position: {
           type: 'object',
           description: 'One position: info-table rows summed per (CUSIP, put/call).',
-          required: ['cusip', 'ticker', 'issuer', 'title_of_class', 'put_call', 'sector', 'shares', 'shares_type', 'value_usd', 'weight', 'weight_incl_options', 'weight_equity', 'value_scale', 'value_as_filed', 'value_adjusted', 'zero_value', 'change', 'prev_shares', 'share_change', 'value_delta_usd', 'source_accession', 'first_disclosed_at', 'suspect_units'],
+          required: ['cusip', 'ticker', 'issuer', 'title_of_class', 'put_call', 'sector', 'shares', 'shares_type', 'value_usd', 'weight', 'weight_incl_options', 'weight_equity', 'value_scale', 'value_as_filed', 'value_adjusted', 'zero_value', 'change', 'prev_shares', 'share_change', 'value_delta_usd', 'source_accession', 'first_disclosed_at', 'suspect_units', 'split', 'prev_shares_as_filed'],
           properties: {
             cusip: { type: 'string', pattern: '^[0-9A-Z]{9}$' },
             ticker: { type: ['string', 'null'], description: 'Mapped from CUSIP; null when unknown' },
@@ -155,7 +155,14 @@ export function openapi() {
             value_adjusted: { type: ['boolean', 'null'], description: 'True when value_usd differs from value_as_filed x 1 (a unit fix was applied). Null until announced in /v1/changelog.' },
             zero_value: { type: 'boolean', description: 'True for a held row filed with value 0 (not an exit); weight is 0 for it.' },
             change: { type: ['string', 'null'], enum: ['new', 'added', 'trimmed', 'unchanged', 'exited', 'disclosed_later', null], description: 'vs prev_quarter; null when there is no prior quarter. disclosed_later: a position the filer first disclosed in a later NEW HOLDINGS amendment for this period (typically confidential treatment that expired, such as Berkshire 2025Q1 NUE, LEN and DHI), so it was not public when the original 13F was filed and its change is not comparable to the other rows.' },
-            prev_shares: { type: ['number', 'null'], description: 'Shares in prev_quarter (0 for new)' },
+            prev_shares: { type: ['number', 'null'], description: 'Shares in prev_quarter (0 for new), adjusted for a split between the two quarters (see split)' },
+            split: {
+              type: ['object', 'null'],
+              description: 'The stock split applied to prev_shares between prev_quarter and this quarter, as in the CSV\'s split_ratio. Null when none applied.',
+              required: ['ratio', 'from_quarter', 'to_quarter'],
+              properties: { ratio: { type: 'number', description: 'New shares per old share (25 for a 25-for-1 split; 0.1 for a 1-for-10 reverse split)' }, from_quarter: { type: 'string' }, to_quarter: { type: 'string' } },
+            },
+            prev_shares_as_filed: { type: ['number', 'null'], description: 'prev_quarter\'s share count exactly as filed, before the split adjustment. Null when no split applied (prev_shares is then as filed), as in the CSV.' },
             share_change: { type: ['number', 'null'], description: 'shares - prev_shares' },
             value_delta_usd: { type: ['integer', 'null'], description: 'Trade size in whole USD at this filing\'s own value per share: +value for new, -prior value for exited, share_change x value/shares otherwise. A price move alone is 0.' },
             source_accession: { type: ['string', 'null'], description: 'Point-in-time: the accession (original 13F-HR or amendment) this row was disclosed in. Null until point-in-time data is published.' },

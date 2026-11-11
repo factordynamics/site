@@ -82,6 +82,9 @@ function position(h: any, equityTotal: number, allTotal: number) {
     zero_value: h.zero_value ?? (h.change !== 'exited' && h.value === 0),
     change: h.change ?? null,
     prev_shares: h.prev_shares ?? null,
+    // As in the CSV (split_ratio, prev_shares_as_filed): set only when a split adjusted prev_shares.
+    split: h.split?.ratio ? { ratio: h.split.ratio, from_quarter: h.split.from_quarter ?? null, to_quarter: h.split.to_quarter ?? null } : null,
+    prev_shares_as_filed: h.split?.ratio ? (h.prev_shares_as_filed ?? null) : null,
     share_change: h.share_change ?? null,
     value_delta_usd: h.value_delta ?? null,
     // Point-in-time provenance: filled once the data run publishes it per row.
