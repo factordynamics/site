@@ -125,6 +125,8 @@ export interface Moves {
   trimmed: MoveRow[];
   /** Held reissues (a CUSIP exchanged, units not 1:1): one line each, no dollar move, outside bought, sold and net. */
   exchanged?: MoveRow[];
+  /** Marked rows (unreliable) past the lists' top rows: named in a \"Not counted:\" line, so none is left out silently. */
+  not_counted?: MoveRow[];
 }
 
 const TAGS = new Map<string, RegExp>();
@@ -699,8 +701,13 @@ export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
     added: top('added'),
     trimmed: top('trimmed'),
     ...(rows.some((r) => r.change === 'exchanged') ? { exchanged: rows.filter((r) => r.change === 'exchanged') } : {}),
+    ...notCounted(rows, ['new', 'exited', 'added', 'trimmed'].flatMap(top)),
   };
 }
+const notCounted = (rows: MoveRow[], shown: MoveRow[]) => {
+  const out = rows.filter((r) => r.unreliable && r.change !== 'exchanged' && !shown.includes(r));
+  return out.length ? { not_counted: out } : {};
+};
 /** "HON: CUSIP exchanged (438516106 → 438516205), not a trade" */
 export const exchangeLine = (r: MoveRow) => `${r.ticker || r.display_name || r.issuer || r.cusip}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''}: CUSIP exchanged (${(r as { prev_cusip?: string }).prev_cusip} → ${r.cusip}), not a trade`;
 

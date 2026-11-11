@@ -1715,7 +1715,7 @@ describe('copybook api', () => {
     expect([body.match(/CRWD \+\$[\d.]+[MB]/)?.[0], body.match(/XOM \+\$[\d.]+[MB]/)?.[0], /GTES/.test(body), /EXIT|G39108108|\$8\.5B|\$23\.8B/.test(body)]).toEqual(['CRWD +$2.3B', 'XOM +$1.3B', true, false]);
     expect(note).toMatch(/CRWD was added/);
     const mi = (JSON.parse((await env.DB.get('feed:cus_fd'))!) as { title: string; text: string }[])[1];
-    expect([/13\.3B|194\.7%|96% of the position/.test(mi.title + mi.text), /SPY calls was trimmed -\$58\.0M/.test(mi.text)]).toEqual([false, true]);
+    expect([/13\.3B|194\.7%|96% of the position/.test(mi.title + mi.text), /Corrected 2026-11-11: SPY calls not counted \(share counts don't reconcile\)$/.test(mi.text)]).toEqual([false, true]);
     // The stored new "Call"/"Put" and exited "CALL"/"PUT" lines are one position each, trimmed by the filed values'
     // change and marked (not a NEW plus an EXIT); the title leads with the largest real move.
     const [miBody] = mi.text.split(/\n\s*Corrected /);
@@ -1739,8 +1739,17 @@ describe('copybook api', () => {
     expect((await restateFeeds(env, tR)).feeds).toBe(1);
     const mh = (JSON.parse((await env.DB.get('feed:cus_fd'))!) as { title: string; text: string }[])[1];
     const [mhBody, mhNote] = mh.text.split(/\n\s*Corrected /);
-    expect([/SPY/.test(mh.title), /SPY calls -\$|SPY puts -\$/.test(mhBody), /SPY calls: share counts don't reconcile in this filing, change not computed/.test(mhBody), /MRVL \+\$476\.1M/.test(mhBody), /58\.0M/.test(mhNote), /SPY calls: share counts don't reconcile in this filing, so no change is computed \(not sold out -\$610\.5M\)/.test(mhNote)]).toEqual([false, false, true, true, false, true]);
+    expect([/SPY/.test(mh.title), /SPY calls -\$|SPY puts -\$/.test(mhBody), /Not counted: SPY calls, SPY puts \(share counts don't reconcile\)\./.test(mhBody), /MRVL \+\$476\.1M/.test(mhBody), /58\.0M/.test(mhNote), /^2026-11-11: SPY calls not counted \(share counts don't reconcile\)$/.test(mhNote)]).toEqual([false, false, true, true, false, true]);
     expect((await restateFeeds(env, tR)).feeds).toBe(0);
+  });
+
+  it('a marked line past the lists\' top rows is named: "Not counted: SPY calls (share counts don\'t reconcile)."', async () => {
+    const { alertMail } = await import('../src/email');
+    const { movesOf } = await import('../src/edgar');
+    const t = (tk: string, v: number, extra = {}) => ({ change: 'trimmed', ticker: tk, display_name: null, issuer: tk, cusip: tk.padEnd(9, '0'), put_call: null, shares: 1, prev_shares: 2, value: 1, value_delta: v, delta_pct_of_book: null, ...extra });
+    const mv = movesOf([t('AA', -9e7), t('BB', -8e7), t('CC', -7e7), t('DD', -6.5e7), t('EE', -6.2e7), t('EF', -6.1e7), t('SPY', -5.8e7, { put_call: 'Call', unreliable: 'shares' })] as never, 5);
+    const m = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'w', slugs: ['w'], manager: 'W', name: 'W', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000008', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: mv, tickers: [] }], [], { investors: ['w'], stocks: [], owned: [] } as never);
+    expect([mv.trimmed.some((r) => r.ticker === 'SPY'), m.text.includes("Not counted: SPY calls (share counts don't reconcile)."), mv.sold_usd]).toEqual([false, true, 4.28e8]);
   });
 
   it('a row with only pct_of_book (the position weight) prints no % of book', async () => {
@@ -2528,7 +2537,7 @@ describe('copybook api', () => {
     expect(gvMail.text).toMatch(/TEVA \+159,272 sh \(.*\) · value unavailable \(filed at ≈\$4,005\/sh\), not in totals/);
     expect(/TEVA/.test(gvMail.subject)).toBe(false);
     const gmail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'guardcap', slugs: ['guardcap'], manager: 'GuardCap Asset Management', name: 'GuardCap Asset Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0001732008-26-000006', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] }, held: [{ cusip: '09857L108', ticker: 'BKNG', issuer: 'BKNG', display_name: null, put_call: null, change: 'trimmed', reason: 'unreliable_shares' }], tickers: ['BKNG'] }], [], { investors: ['guardcap'], stocks: [], owned: [] } as never);
-    expect([gmail.text.includes('BKNG: pre-split count, change not computed.'), /pending check|3\.3B|3,3/.test(`${gmail.subject} ${gmail.text}`)]).toEqual([true, false]);
+    expect([gmail.text.includes('Not counted: BKNG (pre-split count).'), /pending check|3\.3B|3,3/.test(`${gmail.subject} ${gmail.text}`)]).toEqual([true, false]);
     // A real 2x price move with the shares unchanged is not held, nor a 20% buy at a price filers agree on.
     const up = [pos('APH', '032095101', 614_660, 216_753_702), jq2[1]];
     expect(gateMoves(computeMoves(up, jq2, undefined, new Map()), jq2, new Map(), new Map()).held).toEqual([]);

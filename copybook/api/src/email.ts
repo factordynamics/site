@@ -1,5 +1,5 @@
 import type { Alert13F, AlertEvent } from './alerts';
-import { cleanItem4, exchangeLine, filingId, FILER_VALUE, UNUSUAL, type MoveRow, type Moves } from './edgar';
+import { cleanItem4, exchangeLine, filingId, FILER_VALUE, posKey, UNUSUAL, type MoveRow, type Moves } from './edgar';
 import { testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
 import { firmName } from '../../../holdterm/src/names';
@@ -613,14 +613,32 @@ function yourMoves(a: Alert13F, f: Follows): MoveRow[] {
 const verb = (r: MoveRow) => (!r.prev_shares ? 'new' : !r.shares ? 'exited' : r.shares > r.prev_shares ? 'added' : 'trimmed');
 
 /** Rows the publish gate held back, named without figures. */
+const posName = (h: { ticker: string | null; display_name: string | null; issuer: string; put_call: string | null }) => `${h.ticker || h.display_name || h.issuer}${h.put_call ? ` ${h.put_call.toLowerCase()}s` : ''}`;
 function heldLine(a: Alert13F): string {
-  const name = (h: NonNullable<Alert13F['held']>[number]) => `${h.ticker || h.display_name || h.issuer}${h.put_call ? ` ${h.put_call.toLowerCase()}s` : ''}`;
-  const out = (a.held ?? []).filter((h) => h.reason === 'unreliable_shares');
   const wait = (a.held ?? []).filter((h) => h.reason !== 'unreliable_shares');
   return [
-    wait.length ? `${wait.map((h) => `${name(h)}${h.change ? ` (${h.change})` : ''}: move pending check`).join('; ')}. Figures failed a price check and are left out of this email and its totals; they follow once the full build of the filing confirms them, or within 24 hours marked if the filer's own figures look wrong.` : '',
-    out.length ? `${out.map((h) => `${name(h)}: ${h.put_call ? "share counts don't reconcile in this filing" : 'pre-split count'}, change not computed`).join('; ')}.` : '',
+    wait.length ? `${wait.map((h) => `${posName(h)}${h.change ? ` (${h.change})` : ''}: move pending check`).join('; ')}. Figures failed a price check and are left out of this email and its totals; they follow once the full build of the filing confirms them, or within 24 hours marked if the filer's own figures look wrong.` : '',
+    notCountedLine(a),
   ].filter(Boolean).join(' ');
+}
+/** Why a line isn't counted, in a few words. */
+const notCountedWhy = (x: { unreliable?: string; put_call: string | null; reason?: string }) =>
+  x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'shares' || x.put_call ? "share counts don't reconcile" : 'pre-split count';
+/** "Not counted: SPY calls, SPY puts (share counts don't reconcile).": lines held out, or marked and past the lists. */
+function notCountedLine(a: Alert13F): string {
+  const items = [...(a.held ?? []).filter((h) => h.reason === 'unreliable_shares'), ...(a.moves?.not_counted ?? [])];
+  if (!items.length) return '';
+  const by = new Map<string, string[]>();
+  for (const x of items) by.set(notCountedWhy(x), [...(by.get(notCountedWhy(x)) ?? []), posName(x)]);
+  return `Not counted: ${[...by].map(([why, names]) => `${[...new Set(names)].join(', ')} (${why})`).join('; ')}.`;
+}
+/** The Corrected note, one line: lines now not counted are named as such; any other row says what it was and is. */
+function correctedNote(a: Alert13F): string {
+  const c = a.corrected!;
+  const out = new Set([...(a.held ?? []).filter((h) => h.reason === 'unreliable_shares'), ...[...(a.moves?.new ?? []), ...(a.moves?.added ?? []), ...(a.moves?.trimmed ?? []), ...(a.moves?.exited ?? []), ...(a.moves?.not_counted ?? [])].filter((r) => r.unreliable)].map((x) => posKey(x)));
+  const gone = c.rows.filter((r) => r.v1.change === 'held' || out.has(posKey(r)));
+  const rest = c.rows.filter((r) => !gone.includes(r));
+  return `Corrected ${c.at.slice(0, 10)}: ${[gone.length ? `${[...new Set(gone.map((r) => posName({ ...r, display_name: null, issuer: r.name })))].join(', ')} not counted (${notCountedWhy(gone[0])})` : '', ...rest.map(corrLine)].filter(Boolean).join('; ')}`;
 }
 
 /** What the alert said, or what the build has, for one row of a correction. */
@@ -676,7 +694,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
       lines.push(`  ${label}: ${parts.join(', ')}`);
     }
     for (const r of mv.exchanged ?? []) lines.push(`  ${exchangeLine(r)}`);
-    if (a.held?.length) lines.push(`  ${heldLine(a)}`);
+    if (a.held?.length || a.moves?.not_counted?.length) lines.push(`  ${heldLine(a)}`);
     const mine = yourMoves(a, f);
     if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
   } else if (a.top?.length) {
@@ -906,7 +924,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     const rows = MOVE_LABELS.flatMap(([label, k]) => mv[k].map((r) => [esc(label), `<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}${r.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}${r.filer_value ? `<br><span style="color:#b45309;font-size:12px">${esc(FILER_VALUE)}</span>` : ''}${unreliableNote(r) ? `<br><span style="color:#b45309;font-size:12px">${esc(unreliableNote(r))}</span>` : ''}`, amount(r), `<span style="white-space:nowrap">${esc(positionChange(label, r))}</span>`, r.unreliable === 'value' ? '' : bookPct(r)]));
     out.push(table(['Move', 'Stock', 'Value change', 'Position', 'Trade, % of book'], rows, [2, 4]));
     for (const r of mv.exchanged ?? []) out.push(`<p style="margin:6px 0 2px">${esc(exchangeLine(r))}</p>`);
-    if (a.held?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);
+    if (a.held?.length || a.moves?.not_counted?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);
     const mine = yourMoves(a, f);
     if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${esc(shareTrade(r))}` : ''} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
   } else if (a.top?.length) {
@@ -1066,7 +1084,7 @@ export function feedItems(env: Env, filings: Alert13F[], events: AlertEvent[], n
   // EDGAR's acceptance, else its filing day, so readers don't show it as new.
   const sentAt = (x: { sent_at?: string; accepted?: string; filing_date: string }) => x.sent_at ?? (seeded ? (x.accepted ?? `${x.filing_date}T21:00:00Z`) : new Date(now).toISOString());
   return [
-    ...filings.map((a) => ({ id: `${filingId(a)}`, title: `${a.corrected ? 'Corrected · ' : ''}${filingHeadline(a)}`, text: `${filingBlock(env, a, none)}${a.corrected ? `\n  Corrected ${a.corrected.at.slice(0, 10)}: ${a.corrected.rows.map(corrLine).join(' ')}` : ''}`, url: filingUrl(env, a), published: a.accepted ?? sentAt(a), sent: sentAt(a) })),
+    ...filings.map((a) => ({ id: `${filingId(a)}`, title: `${a.corrected ? 'Corrected · ' : ''}${filingHeadline(a)}`, text: `${filingBlock(env, a, none)}${a.corrected ? `\n  ${correctedNote(a)}` : ''}`, url: filingUrl(env, a), published: a.accepted ?? sentAt(a), sent: sentAt(a) })),
     ...events.map((e) => ({ id: `${e.id}${e.followup ? ':details' : ''}`, title: eventHeadline(e), text: eventLine(env, e, none), url: e.slug ? `${env.SITE_URL}investors/${e.slug}` : e.url, published: e.accepted ?? sentAt(e), sent: sentAt(e) })),
   ];
 }
