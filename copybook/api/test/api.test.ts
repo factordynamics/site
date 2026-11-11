@@ -2670,6 +2670,20 @@ describe('copybook api', () => {
     vi.stubGlobal('fetch', orig);
     expect(sent.map((m) => [m.to[0], m.subject])).toEqual([['hello@factordynamics.com', "Copybook: 126% of today's Workers requests used (126,102 of 100,000)"]]);
     expect(sent[0].text).toContain('Pages Functions 79,189');
+    // Past 85% (here 126%) the Worker sheds non-member paths: the page counts and anonymous probes get 503 'shed' at
+    // once; a member's request, a /health?probe=1 and the webhook are served (here: proxied to gene, unreachable).
+    const cfq = { ...env, MOVED_TO: 'https://gene.test/copybook/' } as Env;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
+      String(u) === 'https://api.cloudflare.com/client/v4/graphql' ? Response.json({ data: { viewer: { accounts: [{ w: [{ sum: { requests: 88_000 } }], p: [] }] } } }) : orig(u, init));
+    expect(await runQuotaCheck(cfq, Date.now())).toMatchObject({ shed: 1 });
+    vi.stubGlobal('fetch', async () => { throw new Error('gene down'); });
+    // Two minutes back, so the isolate's cached level has lapsed for the tests after this one.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() - 120_000 });
+    const code = async (path: string, init?: RequestInit) => { const r = await worker.fetch(new Request(`https://copybook-api.factordynamics.workers.dev${path}`, init), cfq); return [r.status, ((await r.json()) as { code?: string }).code ?? null]; };
+    expect([await code('/track', { method: 'POST', body: '{"kind":"visit"}' }), await code('/health'), await code('/events?tickers=AAPL'), await code('/health?probe=1'), await code('/me', { headers: { authorization: 'Bearer x' } })].map(([st, c]) => `${st} ${c}`)).toEqual(['503 shed', '503 shed', expect.not.stringMatching(/shed/), expect.not.stringMatching(/shed/), expect.not.stringMatching(/shed/)]);
+    vi.useRealTimers();
+    await cfq.HIST.put('quota/shed.json', JSON.stringify({ day: '2000-01-01', level: 0 }));
+    vi.stubGlobal('fetch', orig);
     Object.assign(env, { CF_API_TOKEN: undefined, CF_ACCOUNT_ID: undefined });
   });
 

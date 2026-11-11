@@ -1818,7 +1818,7 @@ async function proxyFeed(req: Request, to: string): Promise<Response> {
 }
 
 export default {
-  fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env): Promise<Response> {
     // A retired copy (MOVED_TO set as a secret on Cloudflare's fallback): every request, including links in emails
     // already sent (resume, unsubscribe, why, keep), goes to the same path on the live host. 307 keeps method and body (temporary: the live host moves); private feeds are proxied, not redirected.
     // It follows the API's current public base (the runner's api.json, read at most once a minute), else MOVED_TO,
@@ -1827,6 +1827,14 @@ export default {
     // copy keeps its identity (Cloudflare, the primary poller) through a failover and back.
     if (env.MOVED_TO) {
       const u = new URL(req.url);
+      // Past 85% of the day's requests, non-member paths are answered here at once (shedLevel): no gene round trip,
+      // and the page is told to stop counting until 00:00 UTC (each answer is still one request on the quota).
+      const shed = shedPath(req, u);
+      if (shed && (await shedLevel(env)) >= shed) {
+        const d = new Date();
+        const left = Math.ceil((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - d.getTime()) / 1000);
+        return json({ ok: false, code: 'shed', error: 'Busy day: this is paused until 00:00 UTC.' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), 'retry-after': String(left), 'access-control-expose-headers': 'retry-after' });
+      }
       // Unsubscribe (the List-Unsubscribe one-click POST and its page) is answered here, so it works with gene down.
       if (u.pathname === '/unsubscribe') return import('./failover').then((fo) => fo.writeThrough(env, (e) => serve(req, e)));
       // Failed over to this copy: every request reads and writes the synced store (writeThrough), so what members change
@@ -1871,6 +1879,36 @@ async function serve(req: Request, env: Env): Promise<Response> {
   const busy = () => (path === '/v1' || path.startsWith('/v1/') ? v1error('busy', 503, undefined, retry) : json({ ok: false, error: 'busy: try again in a few seconds', code: 'busy' }, 503, { ...cors(allowedOrigin(req.headers.get('origin'), env)), ...retry }));
   const late = new Promise<Response>((r) => (timer = setTimeout(() => r(busy()), REQUEST_MS)));
   return Promise.race([handled, late]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * The shed level at which a request is dropped (0: never). Level 1 (85% of the day's requests): the site's page counts
+ * and anonymous probes. Level 2 (95%): also anonymous stock events. Members (a bearer), sign-in, checkout, the Stripe
+ * webhook, unsubscribe, feeds and /v1 are never shed.
+ */
+export function shedPath(req: Request, u: URL): number {
+  if (req.method === 'POST' && u.pathname === '/track') return 1;
+  if (req.method !== 'GET' || req.headers.get('authorization')) return 0;
+  // A probe (/health?probe=1: the runner's watcher, failover-a.sh) is never shed.
+  if ((u.pathname === '/health' && !u.searchParams.has('probe')) || u.pathname === '/latency') return 1;
+  if (u.pathname === '/events') return 2;
+  return 0;
+}
+
+/** Today's shed level (runQuotaCheck writes it), read at most once a minute per isolate. */
+let shedAt: { at: number; level: number } | null = null;
+async function shedLevel(env: Env): Promise<number> {
+  if (shedAt && Date.now() - shedAt.at < 60_000) return shedAt.level;
+  let level = 0;
+  try {
+    const o = await env.HIST.get((await import('./revenue')).SHED_KEY);
+    const v = o ? (JSON.parse(await new Response(o.body).text()) as { day: string; level: number }) : null;
+    if (v && v.day === new Date().toISOString().slice(0, 10)) level = v.level;
+  } catch {
+    // unreadable: serve
+  }
+  shedAt = { at: Date.now(), level };
+  return level;
 }
 
 const MOVED_TTL_MS = 5_000;

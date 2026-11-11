@@ -2695,8 +2695,8 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   if (m === 12 && h === 15) due.push({ name: 'revenue', at: scheduledTime });
   if (m === 12 && h === 16) due.push({ name: 'seasonal', at: scheduledTime });
   if (m === 12 && h === 13) due.push({ name: 'ops', at: scheduledTime });
-  // The account's daily request budget, hourly: a warning at 70%.
-  if (m === 23) due.push({ name: 'quota', at: scheduledTime });
+  // The account's daily request budget, every 10 minutes: a warning at 70%, shedding non-member paths from 85%.
+  if (m % 10 === 3) due.push({ name: 'quota', at: scheduledTime });
   // The free weekly: Saturday 02:00 UTC (9pm ET Friday), so it has Friday's after-close filers and their pages.
   // Retried every 15 minutes to 05:45 UTC (Sat 12:45 am ET) if that minute's run was missed (host down); each job
   // records its week once sent, so a retry after a send does nothing.

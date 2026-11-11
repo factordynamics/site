@@ -94,7 +94,7 @@ interface Index {
 const api = (env: Env, key: string) => `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/r2/buckets/${BUCKET}/objects/${encodeURIComponent(key)}`;
 
 /** R2 through the binding on Cloudflare, through Cloudflare's API on gene (its HIST is its own local store). */
-async function r2Get(env: Env, key: string): Promise<string | null> {
+export async function r2Get(env: Env, key: string): Promise<string | null> {
   if (isCloudflare(env)) {
     const o = await env.HIST.get(key);
     return o ? new Response(o.body).text() : null;
@@ -105,7 +105,7 @@ async function r2Get(env: Env, key: string): Promise<string | null> {
   return res.text();
 }
 
-async function r2Put(env: Env, key: string, body: string): Promise<void> {
+export async function r2Put(env: Env, key: string, body: string): Promise<void> {
   if (isCloudflare(env)) {
     await env.HIST.put(key, body);
     return;

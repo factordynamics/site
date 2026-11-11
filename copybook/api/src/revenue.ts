@@ -1040,17 +1040,31 @@ export async function requestsToday(env: Env, now: number): Promise<{ workers: n
  * Hourly: one email to the team, once per UTC day, when the account passes 70% of the plan's daily Workers
  * requests, so a burst (a bulk upload, a busy Pages function) is caught before the API starts answering 429.
  */
+/** Past these shares of the day's requests the Worker sheds non-member paths (shedLevel): 1 at 85%, 2 at 95%. */
+const SHED_AT = [0.85, 0.95];
+/** The day's shed level, in R2 (both hosts read and write it; it resets with the UTC day). */
+export const SHED_KEY = 'quota/shed.json';
+
 export async function runQuotaCheck(env: Env, now: number, to = 'hello@factordynamics.com'): Promise<Record<string, unknown>> {
   const used = await requestsToday(env, now);
   if (!used) return { status: 'no analytics token' };
   const share = used.total / DAILY_REQUESTS;
+  // Shedding: members, sign-in, checkout, the webhook and unsubscribe are always served; the site's page counts and
+  // anonymous probes go first. Raised only (usage only grows within a UTC day), so one write per level a day.
+  const level = SHED_AT.filter((x) => share >= x).length;
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (level) {
+    const fo = await import('./failover');
+    const cur = JSON.parse((await fo.r2Get(env, SHED_KEY).catch(() => null)) ?? 'null') as { day: string; level: number } | null;
+    if (!cur || cur.day !== day || cur.level < level) await fo.r2Put(env, SHED_KEY, JSON.stringify({ day, level, used: used.total, at: new Date(now).toISOString() })).catch((e) => console.log(`shed: ${e}`));
+  }
   if (share < WARN_AT) return { status: 'ok', ...used, share: Math.round(share * 1000) / 10 };
   const key = `quota:warned:${new Date(now).toISOString().slice(0, 10)}`;
-  if (await env.DB.get(key)) return { status: 'already warned', ...used };
+  if (await env.DB.get(key)) return { status: 'already warned', ...used, shed: level };
   const pct = Math.round(share * 100);
-  const status = await sendMail(env, [{ to, subject: `Copybook: ${pct}% of today's Workers requests used (${used.total.toLocaleString('en-US')} of ${DAILY_REQUESTS.toLocaleString('en-US')})`, text: `Since 00:00 UTC the Cloudflare account has used ${used.total.toLocaleString('en-US')} of the free plan's ${DAILY_REQUESTS.toLocaleString('en-US')} Workers requests a day: copybook-api and other Workers ${used.workers.toLocaleString('en-US')}, Pages Functions ${used.pages.toLocaleString('en-US')}.\n\nAt 100% every API request (sign-in, accounts, checkout, /v1) returns 429 until 00:00 UTC. Workers Paid ($5/mo) removes the daily cap: dash.cloudflare.com, Workers & Pages, Plans.${FOOTER}` }]);
+  const status = await sendMail(env, [{ to, subject: `Copybook: ${pct}% of today's Workers requests used (${used.total.toLocaleString('en-US')} of ${DAILY_REQUESTS.toLocaleString('en-US')})`, text: `Since 00:00 UTC the Cloudflare account has used ${used.total.toLocaleString('en-US')} of the free plan's ${DAILY_REQUESTS.toLocaleString('en-US')} Workers requests a day: copybook-api and other Workers ${used.workers.toLocaleString('en-US')}, Pages Functions ${used.pages.toLocaleString('en-US')}.\n\nAt 85% the Worker stops answering the site's page counts (/track), anonymous /health and /latency; at 95% also anonymous /events. Members, sign-in, checkout, the Stripe webhook and unsubscribe are always served. At 100% every API request (sign-in, accounts, checkout, /v1) returns 429 until 00:00 UTC. Workers Paid ($5/mo) removes the daily cap: dash.cloudflare.com, Workers & Pages, Plans.${FOOTER}` }]);
   if (status === '200') await env.DB.put(key, '1', { expirationTtl: 3 * 86400 });
-  return { status, ...used };
+  return { status, ...used, shed: level };
 }
 
 export async function runOpsDigest(env: Env, now: number, to = 'hello@factordynamics.com'): Promise<Record<string, unknown>> {
