@@ -1840,6 +1840,12 @@ a.hb-row:hover {
     min-width: 100%;
     max-width: none;
   }
+  /* A stock's investor tables on phones: no # column (rows are already in order), so a name like "Berkshire
+     Hathaway" or "Cincinnati Financial" fits on one line. Desktop keeps the #. */
+  .grid:has(.holder) th.rank,
+  .grid:has(.holder) td.rank {
+    display: none;
+  }
   /* A stock's investors: the name takes the room the hidden columns leave (still at most two lines). */
   .holder .firm {
     max-width: none;
