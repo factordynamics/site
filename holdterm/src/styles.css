@@ -1834,7 +1834,7 @@ a.hb-row:hover {
     text-overflow: ellipsis;
     max-width: 230px;
   }
-  /* A stock's company name never widens its column: it fills whatever the column gets and ends in an ellipsis. */
+  /* A stock's company name never widens its column: it fills whatever the column gets (and wraps, below). */
   .row-sub.stock-sub {
     width: 0;
     min-width: 100%;
@@ -1864,21 +1864,40 @@ a.hb-row:hover {
   .home-filings th:nth-child(3) {
     width: 45%;
   }
-  /* Fund tables have no room to widen the ticker column, so the company name under it wraps to a second line. */
-  .fund-table .row-sub.stock-sub {
+  /* The company name under a ticker wraps rather than ending in an ellipsis: "Apollo Commercial Real Estate Finance"
+     reads in full where "Apollo Com…" didn't. Those columns fit a whole word ("International"), so names take at
+     most two lines; a longer word is hyphenated. */
+  .row-sub.stock-sub {
     white-space: normal;
+    overflow: visible;
+    hyphens: auto;
+    overflow-wrap: break-word;
+    line-height: 1.3;
+  }
+  /* Fund tables' ticker column is narrower than one long word, so their names keep two lines and an ellipsis. */
+  .fund-table .row-sub.stock-sub {
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
-    line-height: 1.3;
+    overflow: hidden;
+    overflow-wrap: normal;
   }
   /* …and the number columns in those tables shrink to their content, so the name column gets the spare width. */
   .grid:has(.stock-sub) th.num {
     width: 1%;
     white-space: nowrap;
   }
+  /* A company with no ticker shows its name in the ticker's place: it wraps too, up to three lines. */
   .noticker {
     max-width: 84px;
+    white-space: normal;
+    overflow: visible;
+    hyphens: auto;
+    overflow-wrap: break-word;
+    line-height: 1.3;
+  }
+  .iss .noticker {
+    max-width: none;
   }
   /* Phones: slightly smaller pills and column heads, so four-column tables fit 360px. */
   .tag {
