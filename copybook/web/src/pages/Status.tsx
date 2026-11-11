@@ -29,10 +29,10 @@ type Window = { uptime: number | null; checks: number; failed: number }
 type StatusFile = {
   generated_at?: string
   alerts_13f?: { state: 'ok' | 'amber'; reasons?: string[]; pending_moves?: number; oldest_pending_seconds?: number | null; reset_queue?: number }
-  probe?: { target?: string; interval_seconds?: number; '24h'?: Window; '7d'?: Window; daily?: (Window & { day: string })[] }
+  probe?: { target?: string; interval_seconds?: number; last_at?: string; last_ok?: boolean; down_since?: string | null; '24h'?: Window; '7d'?: Window; daily?: (Window & { day: string })[] }
   /** 13F alerts waiting on the API machine's moves fallback; the wait counts from EDGAR acceptance. */
   moves_queue?: { pending: number; oldest_wait_seconds: number | null; last_fallback_send_at?: string | null } | null
-  freshness?: { last_13f?: { manager: string; accepted_at: string } | null; backup_takeover?: { at?: string; cloudflare_last_run_at?: string; seconds?: number | null } | null }
+  freshness?: { data_built_at?: string; last_13f?: { manager: string; accepted_at: string } | null; backup_takeover?: { at?: string; cloudflare_last_run_at?: string; seconds?: number | null } | null }
   /** Payments' check that the index.json fields alert routing reads are present and hold known values. */
   index_contract?: { ok: boolean; build?: string | null; problems?: string[]; checked_at?: string }
   /** Payments' plain sending policy for account and alert email under the daily cap. */
@@ -186,7 +186,8 @@ export function Status() {
   const log = useAsync(() => fetch(`${DATA}changelog.json`).then((r) => (r.ok ? (r.json() as Promise<{ entries: { id: string; date: string; kind: string; title: string }[] }>) : null)), [])
   // Ingest's quality file (data/quality.json): 13F rows held out of trades and totals as unreliable. Hidden until it's published.
   const quality = useAsync(() => fetch(`${DATA}quality.json?m=${Math.floor(Date.now() / 600_000)}`).then((r) => (r.ok ? (r.json() as Promise<Quality>) : null)).catch(() => null), [])
-  const builtAt = fresh.data?.generated_at ? Date.parse(fresh.data.generated_at) : null
+  // The newer of this site build's data stamp and payments' read of the latest data build (status.json).
+  const builtAt = Math.max(fresh.data?.generated_at ? Date.parse(fresh.data.generated_at) : 0, st.data?.freshness?.data_built_at ? Date.parse(st.data.freshness.data_built_at) : 0) || null
   const lagS = builtAt ? (Date.now() - builtAt) / 1000 : null
   const filingDay = isEdgarDay(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }))
   const dataTone: Tone = lagS == null ? (fresh.loading ? 'wait' : 'warn') : filingDay && lagS > 2 * 3600 ? 'warn' : 'up'
@@ -321,6 +322,7 @@ export function Status() {
                   /api/
                 </Link>
                 .
+                {st.data?.probe?.down_since ? ` Cloudflare’s minute check has failed since ${utc(st.data.probe.down_since)}.` : ''}
               </Row>
               <Row
                 name="Filing alerts"
@@ -459,7 +461,7 @@ export function Status() {
               <span className="text-ink-2">
                 <span className="font-medium text-ink">{e.title}.</span>
                 {e.note ? ` ${e.note.replace(/\.?$/, '.')}` : ''}
-                {e.fix ? ` Fixed in ${e.fix}.` : ''}
+                {e.fix ? (/fixed/i.test(e.note ?? '') ? ` Fix: ${e.fix}.` : ` Fixed in ${e.fix}.`) : ''}
               </span>
             </li>
           ))}
