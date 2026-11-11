@@ -860,13 +860,21 @@ export function Funds() {
               label: 'Biggest holdings',
               hideSm: true,
               hide: 'md',
-              render: (m) => (
-                <span className="tks">
-                  {byCompany(m.top.filter((h) => isStockLine(h) && !isFundLike(h))).slice(0, 5).map(({ h, label }) => (
-                    <StockCell key={h.cusip} t={label?.split('+')[0] ?? h.ticker} former={h.former} label={label} name={issuerName(h.display_name || h.issuer).split(' ').slice(0, 2).join(' ')} />
-                  ))}
-                </span>
-              ),
+              width: '28%',
+              // Company names, not a row of tickers: as many whole names as fit on one line (the rest wrap out of
+              // sight), with the top five and their weights in the tooltip. The row itself links to the fund.
+              render: (m) => {
+                const top = byCompany(m.top.filter((h) => isStockLine(h) && !isFundLike(h))).slice(0, 5)
+                const co = (h: Holding) => issuerName(h.display_name || h.issuer).replace(/\s+(class|cl\.?|series|ser)\s+[a-z]\b.*$/i, '')
+                const weight = (h: Holding) => m.top.filter((x) => issuerKey(x) === issuerKey(h) && isStockLine(x)).reduce((t, x) => t + x.weight, 0)
+                return (
+                  <span className="top-names" title={top.map(({ h }) => `${co(h)} ${pct(weight(h), 1)}`).join(', ')}>
+                    {top.map(({ h }) => (
+                      <span key={h.cusip}>{co(h)}</span>
+                    ))}
+                  </span>
+                )
+              },
             },
             {
               key: 'q',

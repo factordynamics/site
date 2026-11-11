@@ -887,6 +887,31 @@ table.grid {
   gap: 4px 12px;
   align-items: center;
 }
+/* An investor's biggest holdings by name, on one line: names that don't fit wrap onto a second line that is
+   clipped, so only whole names show, separated by dots. */
+.top-names {
+  display: flex;
+  flex-wrap: wrap;
+  /* The column's width is set (Col width), never taken from the names, so a long name can't widen the table. */
+  width: 0;
+  min-width: 100%;
+  max-height: 1.45em;
+  line-height: 1.45;
+  overflow: hidden;
+  column-gap: 6px;
+}
+.top-names > span {
+  white-space: nowrap;
+  /* A first name longer than the column ends in an ellipsis rather than widening the table. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.top-names > span + span::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--dim);
+}
 /* Activity pills: Added +14.6%, Trimmed, Sold out, New. */
 .tag {
   display: inline-block;
