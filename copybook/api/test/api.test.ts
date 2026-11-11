@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// The site's display-name overrides: empty for the fixture tests (their slugs, like warren-buffett, stand for any filer);
+// the display-names test loads the real shared file.
+const names = vi.hoisted(() => ({ map: {} as Record<string, string> }));
+vi.mock('../src/names', () => ({
+  siteName: (slug: string | null | undefined) => (slug ? (names.map[slug] ?? null) : null),
+  siteFirm: (slug: string | null | undefined) => (slug && names.map[slug] ? names.map[slug].replace(/\s*\([^)]*\)$/, '') : null),
+}));
 import worker, { handleRequest } from '../src/index';
 import { isActive, isPaused, type Env, type KV, type R2 } from '../src/env';
 import { MeterLogic } from '../src/keys';
@@ -1755,6 +1762,27 @@ describe('copybook api', () => {
     const mv = movesOf([t('AA', -9e7), t('BB', -8e7), t('CC', -7e7), t('DD', -6.5e7), t('EE', -6.2e7), t('EF', -6.1e7), t('SPY', -5.8e7, { put_call: 'Call', unreliable: 'shares' })] as never, 5);
     const m = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'w', slugs: ['w'], manager: 'W', name: 'W', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000008', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: mv, tickers: [] }], [], { investors: ['w'], stocks: [], owned: [] } as never);
     expect([mv.trimmed.some((r) => r.ticker === 'SPY'), m.text.includes("Not counted: SPY calls (share counts don't reconcile)."), mv.sold_usd]).toEqual([false, true, 4.28e8]);
+  });
+
+  it("display names: the site's shared overrides name the firm in alert subjects, headers, the Friday email and possessives", async () => {
+    const real = (await import('../../web/src/lib/display-names.json')).default as Record<string, string>;
+    names.map = real;
+    try {
+      const { weeklyMail } = await import('../src/free');
+      const base = { quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-12', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-12T21:00:00Z', tickers: [], moves: null } as const;
+      const kahn = { ...base, slug: 'irving-kahn', slugs: ['irving-kahn'], manager: 'Irving Kahn', name: 'KAHN BROTHERS GROUP INC', accession: '0001039565-26-000001' };
+      const brk = { ...base, slug: 'warren-buffett', slugs: ['warren-buffett'], manager: 'Warren Buffett', name: 'BERKSHIRE HATHAWAY INC', accession: '0000950123-26-000002' };
+      const m = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [kahn, brk] as never, [], { investors: ['irving-kahn', 'warren-buffett'], stocks: [], owned: [] } as never);
+      const one = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [kahn] as never, [], { investors: ['irving-kahn'], stocks: [], owned: [] } as never);
+      expect([one.subject === 'Kahn Brothers filed its Q3 13F', /Irving Kahn/.test(m.subject + m.text), m.text.includes('Berkshire Hathaway (Warren Buffett): Q3 2026 13F'), /BERKSHIRE HATHAWAY INC/.test(m.text)]).toEqual([true, false, true, false]);
+      const mv = (slug: string, manager: string) => ({ manager, slug, ticker: 'AAPL', what: 'sold', usd: -1e9, form: '13F', url: 'https://x' });
+      const w = weeklyMail({ ...env, SITE_URL: 'https://site.test/' } as Env, 'r@r.test', { buys: [], sells: [mv('ray-dalio', 'Ray Dalio') as never] }, 'November 13', 'https://u.test');
+      expect([w.text.includes('Bridgewater (Ray Dalio): sold AAPL'), w.subject.includes('Bridgewater (Ray Dalio) sold AAPL')]).toEqual([true, true]);
+      // A founder still running the firm keeps the name: no override, EDGAR's name as before.
+      expect(alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ ...base, slug: 'bill-ackman', slugs: ['bill-ackman'], manager: 'Bill Ackman', name: 'Pershing Square Capital Management, L.P.', accession: '0001336528-26-000003' } as never], [], { investors: ['bill-ackman'], stocks: [], owned: [] } as never).subject).toBe('Ackman filed its Q3 13F');
+    } finally {
+      names.map = {};
+    }
   });
 
   it('a row with only pct_of_book (the position weight) prints no % of book', async () => {

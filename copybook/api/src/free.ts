@@ -5,6 +5,7 @@
  * that every marketing and lifecycle email carries.
  */
 import type { Alert13F } from './alerts';
+import { siteFirm, siteName } from './names';
 import { FOOTER, followFiling, previewInbox, sendMail, type Mail } from './email';
 import { deadlineLabel, nextDeadline } from './seasons';
 import { firmName } from '../../../holdterm/src/names';
@@ -481,7 +482,7 @@ const slugName = (s: string) => s.replace(/-\d{4}$/, '').split('-').map((w) => w
 function followLine(ctx: FollowContext, slug: string, now: number) {
   const a = ctx.filed.get(slug);
   const ex = ctx.expected.get(slug);
-  const name = a?.manager ?? ex?.manager ?? slugName(slug);
+  const name = siteName(slug) ?? a?.manager ?? ex?.manager ?? slugName(slug);
   const q = ctx.quarter ?? a?.quarter ?? '';
   const thisQuarter = !!a && (!ctx.quarter || a.quarter === ctx.quarter);
   const thisWeek = !!a && thisQuarter && Date.parse(a.accepted ?? `${a.filing_date}T21:00:00Z`) >= now - 7 * 86400_000;
@@ -521,7 +522,7 @@ const FACT: Record<WeeklyMove['what'], (x: WeeklyMove) => string> = {
   sold: (x) => `sold ${money(x.usd)} of ${x.ticker}`,
 };
 const stakeFact = (x: WeeklyStake) =>
-  x.prev != null && x.pct != null ? `${x.manager}'s stake in ${x.ticker} went ${x.prev}% → ${x.pct}%` : `${x.manager} reported ${x.pct != null ? `a ${x.pct}%` : 'a'} stake in ${x.ticker} (${x.form.replace(/^SCHEDULE /, '')})`;
+  x.prev != null && x.pct != null ? `${siteFirm(x.slug) ?? x.manager}'s stake in ${x.ticker} went ${x.prev}% → ${x.pct}%` : `${siteName(x.slug) ?? x.manager} reported ${x.pct != null ? `a ${x.pct}%` : 'a'} stake in ${x.ticker} (${x.form.replace(/^SCHEDULE /, '')})`;
 
 export interface InYourNames {
   names: number;
@@ -574,7 +575,7 @@ export async function inYourNames(env: Env, names: string[], week: Week, now: nu
   const locked: Item[] = [];
   for (const t of names) {
     const cands = [
-      ...week.all.filter((x) => x.ticker === t).map((x) => ({ key: `${x.accession}|${x.ticker}|${x.what}`, featured: x.featured, unusual: !!x.unusual, size: Math.abs(x.usd), text: `${x.manager} ${FACT[x.what](x)}`, url: x.url })),
+      ...week.all.filter((x) => x.ticker === t).map((x) => ({ key: `${x.accession}|${x.ticker}|${x.what}`, featured: x.featured, unusual: !!x.unusual, size: Math.abs(x.usd), text: `${siteName(x.slug) ?? x.manager} ${FACT[x.what](x)}`, url: x.url })),
       ...week.stakes.filter((x) => x.ticker === t).map((x) => ({ key: x.accession, featured: x.featured, unusual: false, size: 0, text: stakeFact(x), url: x.url })),
     ].sort((a, b) => Number(b.featured) - Number(a.featured) || Number(a.unusual) - Number(b.unusual) || b.size - a.size);
     const top = cands.find((c) => c.featured);
@@ -641,7 +642,7 @@ const LABEL: Record<WeeklyMove['what'], string> = { new: 'new position', added: 
 export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; sells: WeeklyMove[] }, weekOf: string, unsub: string, yours?: InYourNames, followed: WeeklyMove[] = [], follows?: { text: string; html: string } | null): Mail {
   // The mailing address marketing email must carry: without it, no Copy ask (a plain newsletter).
   const postal = env.POSTAL_ADDRESS?.trim() || null;
-  const line = (x: WeeklyMove) => `${x.manager}: ${LABEL[x.what]} ${x.ticker}, ${x.usd > 0 ? '+' : '−'}${money(x.usd)} (${x.form})${x.unusual ? ` · ${UNUSUAL}` : ''}`;
+  const line = (x: WeeklyMove) => `${siteName(x.slug) ?? x.manager}: ${LABEL[x.what]} ${x.ticker}, ${x.usd > 0 ? '+' : '−'}${money(x.usd)} (${x.form})${x.unusual ? ` · ${UNUSUAL}` : ''}`;
   // The subject's fallback: the week's biggest superinvestor move, buy or sell.
   const top = [moves.buys[0], moves.sells[0]].filter((x): x is WeeklyMove => !!x).sort((a, b) => Number(b.featured) - Number(a.featured) || Math.abs(b.usd) - Math.abs(a.usd))[0];
   const utm = (content: string) => `utm_source=weekly&utm_medium=email&utm_campaign=${WEEKLY_CAMPAIGN}&utm_content=${content}`;
@@ -671,7 +672,7 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
       : `<div style="background:#f3f4f6;border-radius:10px;padding:12px 14px"><h3 style="font-size:15px;margin:0 0 6px">In your names</h3>${yours.facts.map((f) => `<p style="margin:4px 0"><a href="${f.url}" style="color:#111;text-decoration:none">${esc(f.text)}.</a></p>`).join('') || `<p style="margin:4px 0">None of your ${n(yours.names, 'name')} moved in superinvestor filings this week.</p>`}${locked ? `<p style="margin:8px 0 4px;color:#6b7280">🔒 ${esc(locked)}</p><p style="margin:8px 0 0"><a href="${pricing}" style="display:inline-block;background:#111;color:#fff;padding:8px 16px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px">${trial}</a></p>` : ''}</div>`;
   const lead = yours?.facts[0];
   const row = (x: WeeklyMove) =>
-    `<tr><td style="padding:4px 8px 4px 0">${esc(x.manager)}</td><td style="padding:4px 8px;white-space:nowrap"><b>${esc(x.ticker)}</b> ${LABEL[x.what]}</td><td style="padding:4px 8px;text-align:right;white-space:nowrap;color:${x.usd > 0 ? '#047857' : '#b91c1c'}">${x.usd > 0 ? '+' : '−'}${money(x.usd)}</td><td style="padding:4px 0 4px 8px"><a href="${x.url}" style="color:#1d4ed8">${esc(x.form)}</a>${x.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}</td></tr>`;
+    `<tr><td style="padding:4px 8px 4px 0">${esc(siteName(x.slug) ?? x.manager)}</td><td style="padding:4px 8px;white-space:nowrap"><b>${esc(x.ticker)}</b> ${LABEL[x.what]}</td><td style="padding:4px 8px;text-align:right;white-space:nowrap;color:${x.usd > 0 ? '#047857' : '#b91c1c'}">${x.usd > 0 ? '+' : '−'}${money(x.usd)}</td><td style="padding:4px 0 4px 8px"><a href="${x.url}" style="color:#1d4ed8">${esc(x.form)}</a>${x.unusual ? `<br><span style="color:#b45309;font-size:12px">${UNUSUAL}</span>` : ''}</td></tr>`;
   const table = (title: string, xs: WeeklyMove[]) => (xs.length ? `<h3 style="font-size:15px;margin:18px 0 6px">${title}</h3><table style="border-collapse:collapse;font-size:14px">${xs.map(row).join('')}</table>` : '');
   // Every site link is tagged, so a trial started from a card or follow counts as the weekly's (not direct_site).
   const site = env.SITE_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -679,7 +680,7 @@ export function weeklyMail(env: Env, to: string, moves: { buys: WeeklyMove[]; se
   const tag = (s: string) => s.replace(new RegExp(`(${site}(f|investors)/[\\w-]+/|${site}(my-book)/)(?![?\\w])`, 'g'), (u: string, _a: string, k1?: string, k2?: string) => `${u}?${utm(KIND[(k1 ?? k2)!])}`);
   return tagged({
     to,
-    subject: lead ? `In your names: ${lead.text.replace(/, which you own( \(.*\))?$/, '')}` : `The week in superinvestor filings: ${top ? `${top.manager} ${LABEL[top.what]} ${top.ticker}` : 'the biggest moves'}`,
+    subject: lead ? `In your names: ${lead.text.replace(/, which you own( \(.*\))?$/, '')}` : `The week in superinvestor filings: ${top ? `${siteName(top.slug) ?? top.manager} ${LABEL[top.what]} ${top.ticker}` : 'the biggest moves'}`,
     text: `Superinvestor filings, ${weekOf}.\n\n${follows?.text ?? ''}${followedText}${yoursText}Biggest buys:\n${moves.buys.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}\n\nBiggest sells:\n${moves.sells.map((x) => `  ${line(x)}\n    ${x.url}`).join('\n') || '  none this week'}${postal ? `\n\nThis email comes once a week. Copy emails each 13F from the funds you follow as it's filed, ${COPY_SPEED} (live figures: ${speed}), with ${COPY_HISTORY}. 14 days free · card required: ${pricing}` : ''}\n\nYou get this because you signed up for the free Copybook weekly. Unsubscribe: ${unsub}${FOOTER}${postal ? `\n${postal}` : ''}`,
     html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:600px"><p>Superinvestor filings, ${esc(weekOf)}.</p>${follows?.html ?? ''}${followedHtml}${yoursHtml}${table('Biggest buys', moves.buys)}${table('Biggest sells', moves.sells)}${postal ? `<p style="margin-top:20px">This email comes once a week. <a href="${pricing}" style="color:#1d4ed8"><b>Copy</b></a> emails each 13F from the funds you follow as it's filed, ${COPY_SPEED} (<a href="${speed}" style="color:#1d4ed8">live figures</a>), with ${COPY_HISTORY}. <a href="${pricing}" style="color:#1d4ed8">14 days free · card required</a>.</p>` : ''}<p style="color:#6b7280;font-size:12px;margin-top:24px">You get this because you signed up for the free Copybook weekly. Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics.${postal ? ` ${esc(postal)}.` : ''} <a href="${unsub}" style="color:#6b7280">Unsubscribe</a></p></div>`,
     unsubscribe: unsub,
@@ -857,6 +858,7 @@ export async function runEmail2(env: Env, now: number, preview?: string[], dry =
   const funds = new Map((idx?.managers ?? []).map((x) => [x.slug, x]));
   const firmOf = (slug: string, fallback = '') => (funds.get(slug)?.name ? shortFirm(slug, funds.get(slug)!.name!) : fallback);
   const whoOf = (slug: string, manager: string, name = '') => {
+    if (siteName(slug)) return siteName(slug)!;
     const person = plainName(manager);
     const firm = firmOf(slug, name ? shortFirm(slug, name) : '');
     return firm && !person.toLowerCase().includes(firm.toLowerCase()) ? `${person} (${firm})` : person;
@@ -873,10 +875,10 @@ export async function runEmail2(env: Env, now: number, preview?: string[], dry =
   }
   const biggest: E2Move[] = picked.map((b) => {
     const total = funds.get(b.slug)?.total_value;
-    return { slug: b.slug, who: whoOf(b.slug, b.manager), firm: firmOf(b.slug, plainName(b.manager)), usd: b.delta_value, change: b.change, what: subjectName(b.name, b.ticker), text: `${VERB[b.change]} ${subjectName(b.name, b.ticker)} ${b.delta_value > 0 ? '+' : '−'}${money(b.delta_value)}${pctOf(total ? b.delta_value / total : null)}` };
+    return { slug: b.slug, who: whoOf(b.slug, b.manager), firm: siteFirm(b.slug) ?? firmOf(b.slug, plainName(b.manager)), usd: b.delta_value, change: b.change, what: subjectName(b.name, b.ticker), text: `${VERB[b.change]} ${subjectName(b.name, b.ticker)} ${b.delta_value > 0 ? '+' : '−'}${money(b.delta_value)}${pctOf(total ? b.delta_value / total : null)}` };
   });
   // Still due, for the preheader when a member's follows have all filed: the superinvestors still to file.
-  const seasonDue = [...ctx.expected.values()].map((x) => plainName(x.manager)).slice(0, 2);
+  const seasonDue = [...ctx.expected].map(([s, x]) => siteName(s) ?? plainName(x.manager)).slice(0, 2);
   // "In your names" for members who saved names: this week's cached facts and Copy's hook (no SEC reads here).
   let week: Week | null = null;
   const mails = await Promise.all(members.map(async (m) => {
@@ -886,7 +888,7 @@ export async function runEmail2(env: Env, now: number, preview?: string[], dry =
       .map((s) => {
         const a = ctx.filed.get(s);
         const filed = a && a.quarter === season ? a : null;
-        return { who: filed ? whoOf(s, filed.manager, filed.name) : plainName(ctx.expected.get(s)?.manager ?? a?.manager ?? funds.get(s)?.manager ?? slugName(s)), a: filed, expected: filed ? null : (ctx.expected.get(s)?.date ?? null) };
+        return { who: filed ? whoOf(s, filed.manager, filed.name) : siteName(s) ?? plainName(ctx.expected.get(s)?.manager ?? a?.manager ?? funds.get(s)?.manager ?? slugName(s)), a: filed, expected: filed ? null : (ctx.expected.get(s)?.date ?? null) };
       })
       .sort((x, y) => Number(!!y.a) - Number(!!x.a) || (y.a ? Date.parse(y.a.accepted ?? `${y.a.filing_date}T21:00:00Z`) - Date.parse(x.a!.accepted ?? `${x.a!.filing_date}T21:00:00Z`) : 0))
       .slice(0, 6);

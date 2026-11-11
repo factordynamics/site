@@ -1,4 +1,5 @@
 import type { Alert13F, AlertEvent } from './alerts';
+import { siteFirm, siteName } from './names';
 import { cleanItem4, exchangeLine, filingId, FILER_VALUE, posKey, UNUSUAL, type MoveRow, type Moves } from './edgar';
 import { testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
@@ -673,7 +674,7 @@ export interface CorrectionRow {
 
 /** "Correction: Jensen (Jensen Investment Management) APH was trimmed -$15.3M, not added +$36.5M". */
 export function correctionMail(env: Env, to: string, a: Alert13F, rows: CorrectionRow[]): Mail {
-  const who = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}`;
+  const who = `${filerLabel(a)}`;
   const first = rows[0];
   const subject = `Correction: ${who} ${first.ticker || first.name}${first.put_call ? ` ${first.put_call.toLowerCase()}s` : ''} was ${said(first.v1)}, not ${said(first.emailed)}${rows.length > 1 ? ` (+${rows.length - 1} more)` : ''}`;
   const intro = `Our alert for ${who}'s ${quarterLabel(a.quarter)} 13F (accession ${a.accession}) had ${rows.length === 1 ? 'a wrong figure' : `${rows.length} wrong figures`}. Copybook checks every emailed move against the full build of the filing, which is what fund pages, the CSV and /v1 serve. ${rows.length === 1 ? 'This one' : 'These'} didn't match:`;
@@ -684,11 +685,11 @@ export function correctionMail(env: Env, to: string, a: Alert13F, rows: Correcti
 }
 
 function filingBlock(env: Env, a: Alert13F, f: Follows): string {
-  const head = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}: ${quarterLabel(a.quarter)} 13F, filed ${a.filing_date}${a.checked ? ' (checked position changes)' : a.followup ? ' (position changes)' : ''}`;
+  const head = `${filerLabel(a)}: ${quarterLabel(a.quarter)} 13F, filed ${a.filing_date}${a.checked ? ' (checked position changes)' : a.followup ? ' (position changes)' : ''}`;
   const lines = [head];
   const mv = a.moves;
   if (a.reveal) {
-    lines[0] = `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}: ${quarterLabel(a.quarter)} 13F amendment${a.reveal.amendment_no ? ` no. ${a.reveal.amendment_no}` : ''} (new holdings)`;
+    lines[0] = `${filerLabel(a)}: ${quarterLabel(a.quarter)} 13F amendment${a.reveal.amendment_no ? ` no. ${a.reveal.amendment_no}` : ''} (new holdings)`;
     lines.push(a.reveal.confidential ? `  Positions held at ${a.report_date} that were kept confidential until now:` : `  Positions added to the ${a.report_date} book:`);
     lines.push(`  ${a.reveal.rows.map((r) => `${rowName(r)} ${r.shares.toLocaleString('en-US')} sh, ${usd(r.value, false)}${bookPct(r) ? ` (${bookPct(r)} of book)` : ''}${flag(r.ticker, f)}`).join(', ')}`);
   } else if (mv) {
@@ -774,7 +775,7 @@ function eventLine(env: Env, e: AlertEvent, f: Follows): string {
     return lines.join('\n');
   }
   const form = `${FORM_LABEL[e.kind]}${/\/A$/.test(e.form) ? '/A' : ''}${e.amendment_no ? ` (amendment ${e.amendment_no})` : ''}`;
-  const who = e.insider ? `${titleName(e.insider.name)} (${e.insider.roles.join(', ')} of ${e.issuer ?? what})` : e.manager || 'A filer';
+  const who = e.insider ? `${titleName(e.insider.name)} (${e.insider.roles.join(', ')} of ${e.issuer ?? what})` : siteName(e.slug) ?? (e.manager || 'A filer');
   const lines: string[] = [];
   if (e.details_pending) {
     lines.push(`${form}: ${who}${e.issuer || e.ticker ? `, ${what}` : ''}. Details follow once the filing is processed.`);
@@ -820,10 +821,14 @@ function body(env: Env, intro: string, filings: Alert13F[], events: AlertEvent[]
   return `${parts.join('\n\n')}\n\nChoose whom you follow and how you get alerts at ${env.SITE_URL}account/.${FOOTER}`;
 }
 
+/** A filing's header name: the site's display name, else EDGAR's manager with its filer name when they differ. */
+const filerLabel = (a: Alert13F) => siteName(a.slug) ?? `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}`;
+
 /** One alert as a subject line: "Buffett Q3: NEW DHI · EXIT STZ · GOOGL +$8.8B". */
 function filingHeadline(a: Alert13F, firm = false): string {
   const q = /^\d{4}Q[1-4]$/.test(a.quarter) ? `Q${a.quarter[5]}` : a.quarter;
-  const who = firm ? a.manager : shortName(a.manager);
+  // The site's name when it has one (\"Kahn Brothers\", \"Berkshire Hathaway (Warren Buffett)\"; firm-first: \"Berkshire Hathaway\").
+  const who = (firm ? siteFirm(a.slug) : siteName(a.slug)) ?? (firm ? a.manager : shortName(a.manager));
   if (a.reveal) {
     const r = a.reveal.rows[0];
     const what = `${rowName(r)} (${[usd(r.value, false), bookPct(r) && `${bookPct(r)} of book`].filter(Boolean).join(', ')})${a.reveal.rows.length > 1 ? ` + ${a.reveal.rows.length - 1} more` : ''}`;
@@ -839,7 +844,7 @@ function filingHeadline(a: Alert13F, firm = false): string {
 
 /** "Icahn CVI 13D/A: 70.8% → 64.1% (diluted, no shares sold)"; "Buffett LEN Form 4: bought $192.6M". */
 export function eventHeadline(e: AlertEvent, firm = false): string {
-  const who = firm ? e.manager || 'A filer' : shortName(e.manager || 'A filer');
+  const who = (firm ? siteFirm(e.slug) : siteName(e.slug)) ?? (firm ? e.manager || 'A filer' : shortName(e.manager || 'A filer'));
   const what = e.ticker || e.display_name || e.issuer || '';
   const form = e.kind === 'form4' ? 'Form 4' : `${e.kind === '13d' ? '13D' : '13G'}${/\/A$/.test(e.form) ? '/A' : ''}`;
   const head = `${who}${what ? ` ${what}` : ''} ${form}`;
@@ -886,7 +891,7 @@ export function weeklyNamesMail(env: Env, to: string, weekOf: string, filings: A
       .slice(0, 3)
       .map(({ label, r }) => `${label.toLowerCase()} ${rowName(r)} ${usd(r.value_delta)}`)
       .join(', ');
-  const fl = filings.map((a) => ({ head: `${a.manager}${a.name && a.name !== a.manager ? ` (${a.name})` : ''}, ${quarterLabel(a.quarter)} 13F`, moves: a.moves ? top3(a) : '', url: filingUrl(env, a) }));
+  const fl = filings.map((a) => ({ head: `${filerLabel(a)}, ${quarterLabel(a.quarter)} 13F`, moves: a.moves ? top3(a) : '', url: filingUrl(env, a) }));
   const ev = events.map((e) => ({ head: eventHeadline(e, true), url: e.url }));
   const n = [fl.length && `${fl.length} 13F${fl.length === 1 ? '' : 's'}`, ev.length && `${ev.length} Form 4/13D/G`].filter(Boolean).join(', ');
   const paused = pausedUntil ? `Your plan is paused; alerts resume ${new Date(pausedUntil * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })}. This weekly summary keeps coming meanwhile.` : '';
@@ -925,7 +930,7 @@ const meta = (page: string | null, accession: string, accepted: string | undefin
   `<p style="margin:4px 0 18px;font-size:12px;color:#6b7280">Accession ${esc(accession)}${accepted ? `, accepted by EDGAR ${esc(acceptedUtc(accepted))}` : ''} · ${page ? `${link(page, label)} · ` : ''}${link(sec, 'SEC filing')}</p>`;
 
 function filingHtml(env: Env, a: Alert13F, f: Follows): string {
-  const out = [`<h3 style="margin:16px 0 2px;font-size:16px">${esc(a.manager)}${a.name && a.name !== a.manager ? ` <span style="color:#6b7280;font-weight:400">(${esc(a.name)})</span>` : ''}: ${esc(quarterLabel(a.quarter))} 13F${a.reveal ? ' amendment (new holdings)' : a.followup ? ' position changes' : ''}</h3>`];
+  const out = [`<h3 style="margin:16px 0 2px;font-size:16px">${esc(siteName(a.slug) ?? a.manager)}${!siteName(a.slug) && a.name && a.name !== a.manager ? ` <span style="color:#6b7280;font-weight:400">(${esc(a.name)})</span>` : ''}: ${esc(quarterLabel(a.quarter))} 13F${a.reveal ? ' amendment (new holdings)' : a.followup ? ' position changes' : ''}</h3>`];
   const mv = a.moves;
   if (a.reveal) {
     out.push(`<p style="margin:2px 0">${a.reveal.confidential ? `Positions held at ${esc(a.report_date)} that were kept confidential until now:` : `Positions added to the ${esc(a.report_date)} book:`}</p>`);
