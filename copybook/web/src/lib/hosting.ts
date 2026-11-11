@@ -75,7 +75,9 @@ export const DATA_ALERTS: Record<string, string> = {
   '2026-11-08-share-class-comparisons': 'None: the Lennar filings predate alerts.',
 }
 /** Data errors outside ingest's changelog (API bugs), written by hand for /status/'s Data list. */
-export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'incident'; title: string; body: string; affected: string }[] = [
+/** Hand-written Data entries. `filings` names each affected alert's filing (accession: filer); /status/ anchors
+ *  each one, and the Alerts reconciled line links its classes to them. */
+export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'incident'; title: string; body: string; affected: string; filings?: Record<string, string> }[] = [
   {
     id: 'alert-long-only-stock-match',
     date: '2026-11-11',
@@ -91,6 +93,7 @@ export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'inci
     title: 'Advent’s 13F alert sized bond lines from zero',
     body: 'Two 13F alerts showed wrong figures; this is the first. Advent Capital Management’s Q3 13F (0001140361-26-042650, Nov 10): five convertible-bond rows were sized as if bought from zero, because the prior quarter stores bonds by principal with a share count of 0. A bond shown as “added +$141.2M” was really +$1.1M, and one shown as “added +$119.7M” was really a trim of −$15.0M. Fixed Nov 11: a bond’s prior count is now its principal, and alerts from then on are checked against the published data within 15 minutes.',
     affected: 'Yes: this one alert, sent before Nov 11 05:00 UTC, so no correction email; this entry is the notice. Every recipient was a test or internal inbox.',
+    filings: { '0001140361-26-042650': 'Advent Capital Management' },
   },
   {
     id: 'alert-option-case',
@@ -99,6 +102,7 @@ export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'inci
     title: 'Mizuho Markets Americas’ SPY options read as exits',
     body: 'Two 13F alerts showed wrong figures; this is the second. Mizuho Markets Americas’ Q3 13F (0001062993-26-005826, Nov 9): the SPY call and put lines said “exited” (−$610.5M and −$63.2M), but both were trimmed (−$58.0M and −$5.9M). EDGAR writes “Call” and the stored prior wrote “CALL”, so the lines didn’t match. Separately, the filer’s own Q2 13F lists the same share count on its stock, call and put SPY lines, so the prior on those lines is the filer’s error. Fixed Nov 11: put and call are matched regardless of case, and alerts from then on are checked against the published data within 15 minutes.',
     affected: 'Yes: this one alert, sent before Nov 11 05:00 UTC, so no correction email; this entry is the notice. Every recipient was a test or internal inbox.',
+    filings: { '0001062993-26-005826': 'Mizuho Markets Americas' },
   },
   {
     id: 'alert-split-factors',
@@ -108,6 +112,17 @@ export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'inci
     body: 'Until Nov 11, the 13F alert email compared a filer’s shares with the prior quarter’s shares as filed. It ignored the split factors that fund pages and /v1 apply, so a name that split in Q3 and was held in both quarters read as a buy, or as a smaller sell. Example: Jensen’s APH (2-for-1) read “added +$36.5M”; it was a trim of 181,834 shares, about −$15.3M. Fixed Nov 11 at 03:33 UTC: alerts now use ingest’s split factors, the same as fund pages and /v1 (data/splits.json).',
     affected:
       'Yes: 9 of the 23 13F alerts sent this season used an unadjusted prior quarter. In 4 the wrong row was in the email: ICICI Prudential (Nov 6) APH +$5.0M, should be +$4.1M, with CRWD in the totals; Mizuho Securities USA (Nov 9) CRWD +$14.6M, should be about +$0.8M, totals off about $24M; FMR (Nov 10) CRWD +$8.55B, should be about +$2.32B, with 11 more split names off the totals by about $13.8B; Jensen (Nov 10) APH “added +$36.5M”, a trim of about −$15.3M. In the other 5 only the bought and sold totals were off, estimated from the corrected books: Acadian (Nov 9) about $203M, Boston Partners (Nov 10) about $24M, Baillie Gifford (Nov 9) about $5M, Comgest (Nov 9) about $2M, Mizuho Markets Americas (Nov 9) about $0.4M. Also test replays (Fisher twice, FMR once). Recipients: 5 test or internal inboxes; ICICI’s recipients aren’t recorded. No one was emailed a correction; this entry is the notice.',
+    filings: {
+      '0001697850-26-000004': 'ICICI Prudential',
+      '0001062993-26-005832': 'Mizuho Securities USA',
+      '0000315066-26-002964': 'FMR',
+      '0001171200-26-000023': 'Jensen',
+      '0001140361-26-042753': 'Acadian',
+      '0001386060-26-000054': 'Boston Partners',
+      '0001088875-26-000074': 'Baillie Gifford',
+      '0001172661-26-004909': 'Comgest',
+      '0001062993-26-005826': 'Mizuho Markets Americas',
+    },
   },
 ]
 /** The API's restart policy, shown above /status/'s restart list. */

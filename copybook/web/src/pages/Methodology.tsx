@@ -288,7 +288,7 @@ export function Methodology() {
           <section id="alert-checks" className="scroll-mt-24">
             <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Alert accuracy checks</h2>
             <p className="mt-2 text-[15.5px] leading-relaxed text-ink-2">
-              <span className="font-medium text-ink">Before a 13F alert’s moves go out,</span> every move row is checked. The units, split-basis and own-prior checks run before every send. A row is held, and the alert says “Moves pending check”, if any of these is true:
+              <span className="font-medium text-ink">Before a 13F alert’s moves go out,</span> every move row gets the units, split-basis and own-prior checks; the cross-filer price check runs before send on our main server only (below), and every alert is checked again against the published data within about 15 minutes of sending. A row is held, and the alert says “Moves pending check”, if any of these is true:
             </p>
             <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15.5px] leading-relaxed text-ink-2">
               <li>
@@ -304,25 +304,34 @@ export function Methodology() {
                 <span className="font-medium text-ink">Own prior.</span> On lines of $50K or more, the implied price moved by about a whole number k ≥ 2 and the share count moved by about the same k the other way (a split nobody has listed yet). Bond lines are checked only for a 100× jump against their own prior, because their value per dollar of principal isn’t a share price.
               </li>
             </ul>
-            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">A held row is left out of the totals. Held rows go out once the check clears, usually within 30 minutes and at most 24 hours later. A row whose figures still look wrong after 24 hours is shown as filed and marked “Filer’s reported value looks wrong; shown as filed”.</p>
+            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">A held row is left out of the totals. Held rows go out once the check clears, usually within 30 minutes and at most 24 hours later. A row whose figures still look wrong after 24 hours is shown as filed and marked “Filer’s reported value looks wrong; shown as filed”. An own-prior row still held after 24 hours goes out unmarked: by then the data agrees and no split is listed, so it is most likely a real trade.</p>
             <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">
-              <span className="font-medium text-ink">After sending,</span> every alert is checked against the published data (what /v1 serves) within about 15 minutes: every emailed row and both totals. A row fails if it is more than 10% off in value or has the wrong sign or direction. Each failure is classed:
+              <span className="font-medium text-ink">After sending,</span> every alert is checked against the published data (what /v1 serves) within about 15 minutes: every emailed row and both totals. Each alert’s first check is its verdict and is never rewritten; if a later build (after an amendment, say) gives a different answer, that re-check is logged separately. Each checked alert is counted once:
             </p>
             <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[15.5px] leading-relaxed text-ink-2">
               <li>
-                <span className="font-medium text-ink">Disclosed:</span> a split row on an alert already listed on the{' '}
-                <Link to="/status/#data" className="font-medium text-accent hover:text-accent-2">
-                  status page
-                </Link>
-                .
+                <span className="font-medium text-ink">Matched:</span> every row agrees within 10%, and both totals within 1% (or $1M).
               </li>
               <li>
-                <span className="font-medium text-ink">Explained:</span> a CUSIP change shown as a new position plus an exit of the same ticker, or a difference under $1,000.
+                <span className="font-medium text-ink">Explained:</span> rows differ only because of a CUSIP change (shown as a new position plus an exit of the same ticker) or by under $1,000.
               </li>
               <li>
-                <span className="font-medium text-ink">Wrong:</span> a real error not yet disclosed. Only these get a correction email (“Correction: [fund] [ticker] was [X], not [Y]”), and their feed and archive copies are marked corrected.
+                <span className="font-medium text-ink">With wrong figures:</span> at least one row is more than 10% off in value, or has the wrong sign or direction.
+              </li>
+              <li>
+                <span className="font-medium text-ink">With only the totals off:</span> every row agrees, but the emailed bought or sold total differs from the corrected total by more than 1% of it or $1M, whichever is larger.
+              </li>
+              <li>
+                <span className="font-medium text-ink">No move rows:</span> the alert had none to check.
               </li>
             </ul>
+            <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">
+              An alert with wrong figures or totals is <span className="font-medium text-ink">disclosed</span> once a{' '}
+              <Link to="/status/#data" className="font-medium text-accent hover:text-accent-2">
+                status page Data entry
+              </Link>{' '}
+              names its filing, whatever the cause; until then it is <span className="font-medium text-ink">undisclosed</span>. For alerts accepted from Nov 11, 05:00 UTC, the recipients of an undisclosed alert get a correction email (“Correction: [fund] [ticker] was [X], not [Y]”), and its feed and archive copies are marked corrected.
+            </p>
             <p className="mt-3 text-[15.5px] leading-relaxed text-ink-2">The running count is on the status page.</p>
           </section>
 

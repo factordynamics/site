@@ -128,6 +128,11 @@ async function fromFact(from: string | null): Promise<string | null> {
   return stake ? `${stake.manager} report ${/^(8|1[18](\.|$))/.test(pc) ? 'an' : 'a'} ${pc}% stake in ${what(stake)} between 13Fs` : null
 }
 
+/** One welcome line per email that links here (?from=<code>, set by the API's email templates). */
+const EMAIL_FROM: Record<string, string> = {
+  e2: `From the deadline email: start Copy free for ${TRIAL_DAYS} days (card required).`,
+}
+
 export function Pricing() {
   const [cycle, setCycle] = useState<'yearly' | 'monthly'>('yearly')
   const live = checkoutEnabled()
@@ -146,7 +151,7 @@ export function Pricing() {
   const refOk = useAsync(() => checkRef(refCode()), []).data === true
   const referred = Boolean(refOk && !mine && live)
   const [params] = useSearchParams()
-  const hook = useAsync(() => fromFact(params.get('from')), [params.get('from')])
+  const hook = useAsync(() => (EMAIL_FROM[params.get('from') ?? ''] ? Promise.resolve(null) : fromFact(params.get('from'))), [params.get('from')])
   const copy = plans.copy
   const monthsFree = Math.round(12 - copy.yearly / copy.monthly)
   return (
@@ -154,10 +159,14 @@ export function Pricing() {
       <header className="mx-auto max-w-2xl text-center">
         <p className="text-[13px] font-medium text-accent">Pricing</p>
         <h1 className="mt-3 text-[32px] font-semibold leading-[1.08] tracking-[-0.04em] sm:text-[38px] md:text-h1">See what they bought between 13Fs, the day they file.</h1>
-        {hook.data && (
-          <p className="mx-auto mt-4 max-w-xl rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">
-            You just saw {hook.data}. Copy emails moves like this, checked on EDGAR every minute.
-          </p>
+        {EMAIL_FROM[params.get('from') ?? ''] ? (
+          <p className="mx-auto mt-4 max-w-xl rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">{EMAIL_FROM[params.get('from')!]}</p>
+        ) : (
+          hook.data && (
+            <p className="mx-auto mt-4 max-w-xl rounded-xl bg-accent-soft px-4 py-2.5 text-[15px] leading-snug text-accent-2">
+              You just saw {hook.data}. Copy emails moves like this, checked on EDGAR every minute.
+            </p>
+          )
         )}
         <p className="mt-4 text-[16px] leading-relaxed text-ink-2 sm:text-[17px]">
           Reading a portfolio is free. Copy follows the investors and stocks you care about. Every paid plan starts with {TRIAL_DAYS} days free.

@@ -40,8 +40,8 @@ export function Unsubscribe() {
         <>
           <p className="mt-3 text-[17px] leading-relaxed text-ink-2">
             {s.paying
-              ? `${s.email} won’t get tips or plan reminders any more. Your alerts and billing emails keep coming; change alerts on `
-              : `${s.email} won’t get the Friday weekly or one-off emails from Copybook any more.`}
+              ? `${s.email} won’t get tips or season notes any more. Your filing alerts stay on. We’ll still email you before any charge. Change alerts on `
+              : `${s.email} won’t get the Friday weekly or other Copybook emails any more.`}
             {s.paying && (
               <>
                 <Link to="/account/" className="font-medium text-accent hover:text-accent-2">
@@ -58,6 +58,7 @@ export function Unsubscribe() {
       ) : (
         <>
           <p className="mt-3 text-[17px] leading-relaxed text-ink-2">Unsubscribe from Copybook’s weekly email and tips?</p>
+          <p className="mt-2 text-[15px] leading-relaxed text-ink-3">On a paid plan: your filing alerts stay on. We’ll still email you before any charge.</p>
           <button
             type="button"
             onClick={send}

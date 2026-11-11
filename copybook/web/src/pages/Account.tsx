@@ -846,13 +846,16 @@ function FreeFollows() {
       <ul className="mt-3 divide-y divide-line">
         {follows.investors.map((slug) => {
           const e = soon.data?.expected.find((x) => x.slug === slug)
+          // Filed this quarter already (index.json's latest book): say so, never "expected".
+          const mgr = idx.data?.managers.find((m) => m.slug === slug)
+          const filed = soon.data && mgr?.quarter === soon.data.quarter ? mgr.filing_date : null
           return (
             <li key={slug} className="py-2.5 text-[14px]">
               <Link to={`/investors/${slug}/`} className="font-medium hover:text-accent">
                 {name(slug)}
               </Link>
               <span className="block text-[13px] text-ink-3">
-                {e?.expected_date ? `${q} expected ${shortDay(e.expected_date)} · ` : ''}moves in Friday’s email
+                {filed ? `${q} filed ${shortDay(filed)} · ` : e?.expected_date ? `${q} expected ${shortDay(e.expected_date)} · ` : ''}moves in Friday’s email
               </span>
             </li>
           )

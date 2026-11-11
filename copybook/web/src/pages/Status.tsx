@@ -5,7 +5,7 @@ import { apiReady } from '../config'
 import { loadLatency, type Latency } from '../lib/account'
 import { useAsync, useTick, useTitle } from '../lib/data'
 import { DATA_ALERTS, DATA_ALERTS_NOTE, DATA_MANUAL, DEPLOY_FREEZE, DEPLOY_POLICY, RESTART_POLICY, HOST_MOVE, HOSTING, INCIDENT_RULE, INCIDENTS } from '../lib/hosting'
-import { DATA, displayName } from '../lib/data'
+import { DATA, displayName, loadIndex } from '../lib/data'
 import { loadExpected } from '../lib/stocks'
 import { isEdgarDay } from '../lib/calendar.mjs'
 
@@ -112,6 +112,7 @@ export function Status() {
     : fresh.data?.latest_13f
       ? { manager: fresh.data.latest_13f.manager, at: fresh.data.latest_13f.accepted_at ? `accepted ${utc(fresh.data.latest_13f.accepted_at)}` : `filed ${new Date(`${fresh.data.latest_13f.filing_date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}` }
       : null
+  const idx = useAsync(loadIndex, [])
   const dataIssues: { id: string; date: string; kind: string; title: string; body?: string; affected?: string }[] = [...DATA_MANUAL, ...(log.data?.entries ?? []).filter((e) => e.kind === 'correction' || e.kind === 'incident' || e.id in DATA_ALERTS)].sort((a, b) => b.date.localeCompare(a.date))
   const l = lat.data as Latency | null | undefined
   const h = pr?.health ?? null
@@ -138,10 +139,51 @@ export function Status() {
   // Payments' after-send check of each 13F alert against the published build (latency.json reconciliation).
   // Shown only with payments' breakdown (matched, disclosed, explained, wrong); the bare pass/fail count
   // mostly counted bugs in the check itself.
-  type Rec = { checked: number; matched?: number; disclosed?: number; explained?: number; wrong?: number; disclosed_totals?: number; wrong_totals?: number; no_rows?: number }
+  type Rec = { checked: number; matched?: number; disclosed?: number; explained?: number; wrong?: number; disclosed_totals?: number; wrong_totals?: number; no_rows?: number; recent?: { accession: string; anchor?: string; slug: string; class?: string; figures?: string; disclosed?: boolean | null }[]; rechecks?: unknown[]; wrong_undisclosed?: number; totals_undisclosed?: number }
   const rawRec = (l as { reconciliation?: Rec } | null | undefined)?.reconciliation
   const rec = rawRec && typeof rawRec.checked === 'number' && [rawRec.matched, rawRec.disclosed, rawRec.explained, rawRec.wrong].every((n) => typeof n === 'number') ? (rawRec as Required<Pick<Rec, 'checked' | 'matched' | 'disclosed' | 'explained' | 'wrong'>> & Rec) : null
   const full24 = (pr24?.checks ?? 0) >= 1296
+  // Which Data entry first names each filing (newest first), for the accession anchors and the class links.
+  const filingEntry = new Map<string, string>()
+  const filingName = new Map<string, string>()
+  for (const e of dataIssues) for (const [acc, nm] of Object.entries((e as { filings?: Record<string, string> }).filings ?? {})) {
+    if (!filingEntry.has(acc)) filingEntry.set(acc, e.id)
+    filingName.set(acc, nm)
+  }
+  // Classes from each checked alert (recent[]): wrong figures and their disclosure are counted separately, so the
+  // line can never say "0 wrong" while the Data list names a wrong alert.
+  const recRows = rec?.recent ?? []
+  // Payments' per-alert `figures` (right, wrong_rows, wrong_totals, explained, no_rows) and `disclosed`; older logs
+  // only carry `class`, mapped onto the same groups.
+  const FIG: Record<string, string> = { matched: 'right', disclosed: 'wrong_rows', wrong: 'wrong_rows', disclosed_totals: 'wrong_totals', wrong_totals: 'wrong_totals', explained: 'explained', no_rows: 'no_rows' }
+  const fig = (r: (typeof recRows)[number]) => r.figures ?? FIG[r.class ?? ''] ?? ''
+  const byClass = (...c: string[]) => recRows.filter((r) => c.includes(fig(r)))
+  const isDisclosed = (r: (typeof recRows)[number]) => r.disclosed ?? (filingEntry.has(r.anchor ?? r.accession) || Boolean(r.class?.startsWith('disclosed')))
+  const wrongRows = byClass('wrong_rows')
+  // Totals-only alerts named in a Data entry are within tolerance (1% or $1M per side, payments); one outside it is undisclosed.
+  const totalsRows = byClass('wrong_totals').filter((r) => isDisclosed(r))
+  const undisclosed = [...wrongRows, ...byClass('wrong_totals')].filter((r) => !isDisclosed(r))
+  const rechecks = rec?.rechecks?.length ?? 0
+  const recName = (r: { accession: string; anchor?: string; slug: string }) => filingName.get(r.anchor ?? r.accession) ?? displayName(idx.data?.managers.find((m) => m.slug === r.slug)?.manager ?? r.slug)
+  const recLinks = (rows: { accession: string; anchor?: string; slug: string }[]) =>
+    rows.length ? (
+      <>
+        {' ('}
+        {rows.map((r, i) => (
+          <span key={r.accession}>
+            {i ? ', ' : ''}
+            {filingEntry.has(r.anchor ?? r.accession) ? (
+              <a href={`#f-${r.anchor ?? r.accession}`} className="font-medium text-accent hover:text-accent-2">
+                {recName(r)}
+              </a>
+            ) : (
+              recName(r)
+            )}
+          </span>
+        ))}
+        {')'}
+      </>
+    ) : null
 
   const apiTone: Tone = checking ? 'wait' : h ? 'up' : 'down'
   const degraded = (h?.degraded ?? []).map((d) => (typeof d === 'string' ? d : [d.route ?? d.path, d.note ?? d.status].filter(Boolean).join(': ')))
@@ -218,22 +260,45 @@ export function Status() {
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
               </Row>
               {rec && (
-                <Row name="Alert accuracy" tone={rec.wrong + (rec.wrong_totals ?? 0) ? 'warn' : 'up'} state={rec.checked ? `Alerts reconciled: ${rec.checked} checked` : 'Alerts reconciled: not checked yet'}>
-                  {rec.checked > 0 && [
-                    <span key="m">{rec.matched} matched</span>,
-                    rec.disclosed > 0 && <DataLink key="d">{rec.disclosed} disclosed</DataLink>,
-                    (rec.disclosed_totals ?? 0) > 0 && <DataLink key="t">{rec.disclosed_totals} disclosed (totals)</DataLink>,
-                    rec.explained > 0 && <DataLink key="e">{rec.explained} explained</DataLink>,
-                    rec.wrong + (rec.wrong_totals ?? 0) > 0 && <DataLink key="w">{rec.wrong + (rec.wrong_totals ?? 0)} wrong, under review</DataLink>,
-                    (rec.no_rows ?? 0) > 0 && <span key="n">{rec.no_rows} no rows to check</span>,
-                  ]
-                    .filter(Boolean)
-                    .map((x, i, a) => (
-                      <span key={i}>
-                        {x}
-                        {i < a.length - 1 ? ' · ' : '. '}
-                      </span>
-                    ))}
+                <Row name="Alert accuracy" tone={(typeof rec.wrong_undisclosed === 'number' ? rec.wrong_undisclosed + (rec.totals_undisclosed ?? 0) : recRows.length ? undisclosed.length : rec.wrong + (rec.wrong_totals ?? 0)) ? 'warn' : 'up'} state={rec.checked ? `Alerts reconciled: ${rec.checked} checked` : 'Alerts reconciled: not checked yet'}>
+                  {rec.checked > 0 &&
+                    (recRows.length
+                      ? [
+                          <span key="m">{byClass('right').length} matched</span>,
+                          byClass('explained').length > 0 && <span key="e">{byClass('explained').length} explained{recLinks(byClass('explained'))}</span>,
+                          byClass('no_rows').length > 0 && <span key="n">{byClass('no_rows').length} no rows to check</span>,
+                          wrongRows.length > 0 && (
+                            <span key="w">
+                              {wrongRows.length} wrong, {wrongRows.every(isDisclosed) ? 'all disclosed' : `${wrongRows.filter(isDisclosed).length} disclosed`}
+                              {recLinks(wrongRows)}
+                            </span>
+                          ),
+                          <span key="u" className={undisclosed.length ? 'font-medium text-ink' : undefined}>
+                            {undisclosed.length} undisclosed{undisclosed.length ? ', under review' : ''}
+                          </span>,
+                          totalsRows.length > 0 && (
+                            <span key="t">
+                              {totalsRows.length} with totals within 1% (or $1M) of the corrected totals, disclosed{recLinks(totalsRows)}
+                            </span>
+                          ),
+                        ]
+                      : [
+                          <span key="m">{rec.matched} matched</span>,
+                          rec.disclosed > 0 && <DataLink key="d">{rec.disclosed} disclosed</DataLink>,
+                          (rec.disclosed_totals ?? 0) > 0 && <DataLink key="t">{rec.disclosed_totals} disclosed (totals)</DataLink>,
+                          rec.explained > 0 && <span key="e">{rec.explained} explained</span>,
+                          rec.wrong + (rec.wrong_totals ?? 0) > 0 && <DataLink key="w">{rec.wrong + (rec.wrong_totals ?? 0)} wrong, under review</DataLink>,
+                          (rec.no_rows ?? 0) > 0 && <span key="n">{rec.no_rows} no rows to check</span>,
+                        ]
+                    )
+                      .filter(Boolean)
+                      .map((x, i, arr) => (
+                        <span key={i}>
+                          {x}
+                          {i < arr.length - 1 ? ' · ' : '. '}
+                        </span>
+                      ))}
+                  {rechecks > 0 && `${rechecks} later ${rechecks === 1 ? 're-check' : 're-checks'} after amendments gave a different answer; each alert keeps its first verdict. `}
                   Each 13F alert’s moves, compared row by row with the published data.{' '}
                   <Link to="/methodology/#alert-checks" className="font-medium text-accent hover:text-accent-2">
                     How
@@ -391,6 +456,17 @@ export function Status() {
                   <Link to={`/methodology/#${e.id}`} className="text-ink-2 hover:text-accent">
                     {e.title}
                   </Link>
+                )}
+                {(e as { filings?: Record<string, string> }).filings && (
+                  <span className="mt-0.5 block text-[12.5px] text-ink-3">
+                    Filings:{' '}
+                    {Object.entries((e as { filings?: Record<string, string> }).filings!).map(([acc, nm], i) => (
+                      <span key={acc} id={filingEntry.get(acc) === e.id ? `f-${acc}` : undefined} className="scroll-mt-24">
+                        {i ? ' · ' : ''}
+                        {nm} <span className="num">{acc}</span>
+                      </span>
+                    ))}
+                  </span>
                 )}
                 {(e.affected ?? DATA_ALERTS[e.id]) && (
                   <span className="mt-0.5 block text-[13px] text-ink-3">
