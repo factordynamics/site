@@ -1,8 +1,10 @@
 // Holdterm alert messages, one renderer for every channel: email (HTML and text), Discord, Slack,
-// Telegram, browser push and the private feed. Copybook's alerts API imports this file to send Holdterm
-// members their alerts, and Holdterm's /alerts page previews these exact outputs, so what the page shows
-// is what members get. No imports: it runs in the browser and in the Worker. Firm names come in already
+// Telegram, browser push and the private feed. Copybook's alerts API is to import this file to send Holdterm
+// members their alerts, and Holdterm's /alerts page previews these outputs. It runs in the browser and in
+// the Worker, so its only import is names.ts, which the Worker already bundles. Firm names come in already
 // shortened (firmName) by the caller.
+
+import { publicSlug } from './names'
 
 export interface HtRow {
   ticker: string | null
@@ -84,7 +86,8 @@ const day = (iso: string) => {
 const tidy = (s: string) => (s === s.toUpperCase() ? s.toLowerCase().replace(/(^|[\s\-/&(.])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase()) : s)
 const company = (r: { display_name: string | null; issuer: string | null; ticker?: string | null }) => (r.display_name || (r.issuer ? tidy(r.issuer) : '') || r.ticker || 'a company')
 const symbol = (r: HtRow) => (r.ticker || company(r)) + (r.put_call ? ` ${r.put_call.toLowerCase()}s` : '')
-const fundUrl = (site: string, slug: string) => `${site}m/${slug}`
+// Links go to the fund's canonical URL (/m/sanders-capital), not Copybook's data slug, so emails skip a redirect.
+const fundUrl = (site: string, slug: string) => `${site}m/${publicSlug(slug)}`
 const stockUrl = (site: string, t: string) => `${site}s/${t}`
 
 type Move = { kind: 'new' | 'added' | 'trimmed' | 'exited'; r: HtRow }
