@@ -16,7 +16,13 @@ const DEPLOY_GAP_S = 60;
 interface ProbeState {
   /** Per UTC hour (YYYY-MM-DDTHH): [ok, checks], 8 days kept. */
   hours: Record<string, [number, number]>;
-  last?: { at: string; ok: boolean; ms: number; up_since: string | null; build: string | null };
+  last?: { at: string; ok: boolean; ms: number; up_since: string | null; build: string | null; host?: string | null };
+  /** Each host's boot time and build when access last moved away from it (gene and the Worker's failover copy). */
+  hosts?: Record<string, { up_since: string | null; build: string | null }>;
+  /** The last outage the probe saw end: first failed check to the first answer (from either host). */
+  gap?: { from: string; to: string } | null;
+  /** The last 50 failed checks, newest first: when, how long it waited, and the base it probed. */
+  failures?: { at: string; ms: number; host: string | null }[];
   /** The members' API's count of alerts its sent record kept from going out twice (from /health?probe=1). */
   api_dupes?: { total: number; last_7d: number } | null;
   api_mail?: Kinds | null;
@@ -42,13 +48,25 @@ export interface Restart {
 
 const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
 /** Restarts we caused on purpose: a restart booting in the window is `planned`, with the note, and not counted unplanned. */
-const PLANNED: { from: string; to: string; note: string }[] = [
-  // The runner stopped gene's API to test automatic failover A: api.json went to the Worker at 08:55:13 and back at 08:58:13.
-  { from: '2026-11-11T08:53:00Z', to: '2026-11-11T08:59:00Z', note: 'Planned failover test, about 2 min, members moved to the backup automatically' },
+const PLANNED: { from: string; to: string; row: Restart }[] = [
+  // The runner stopped gene's API at 08:53:19 to test automatic failover A: api.json went to the Worker at 08:55:13, gene
+  // booted again at 08:56:00, and access moved back at 08:58:13. The probe logged the Worker's isolates as restarts
+  // (fixed since: a host switch isn't one); the window's rows are this one row.
+  {
+    from: '2026-11-11T08:53:00Z',
+    to: '2026-11-11T08:59:00Z',
+    row: { at: '2026-11-11T08:56:00Z', prev_up_since: '2026-11-11T08:40:00Z', down_seconds: 114, kind: 'planned', build: 'caad4f5b6df5', prev_build: 'caad4f5b6df5', note: 'Planned failover test, 08:53–08:58 UTC. Member pages and the API returned errors for about 2 minutes until access moved to the backup automatically (1 min 54 s). Pages already open kept failing until reloaded. Alerts were not affected.' },
+  },
 ];
-const planned = (r: Restart): Restart => {
-  const p = PLANNED.find((x) => r.at >= x.from && r.at < x.to);
-  return p ? { ...r, kind: 'planned', note: p.note } : r;
+/** The restart log as shown: a planned window's rows as its one row, newest first. */
+const shownRestarts = (rows: Restart[]): Restart[] => {
+  const out: Restart[] = [];
+  for (const r of rows) {
+    const p = PLANNED.find((x) => r.at >= x.from && r.at < x.to);
+    if (!p) out.push(r);
+    else if (!out.includes(p.row)) out.push(p.row);
+  }
+  return out.sort((a, b) => b.at.localeCompare(a.at));
 };
 const hourKey = (t: number) => new Date(t).toISOString().slice(0, 13);
 
@@ -65,15 +83,15 @@ export async function membersApi(env: Env, now: number): Promise<string | null> 
 
 /** One check of the members' API from Cloudflare: GET {api}/health?probe=1 within 10 s. */
 type Kinds = { day: string; used?: number; real: number; test: number; account: number; preview: number; since?: string; used_at_since?: number };
-type Probe = { ok: boolean; ms: number; up_since: string | null; build: string | null; dupes?: { total: number; last_7d: number } | null; mail?: Kinds | null };
+type Probe = { ok: boolean; ms: number; up_since: string | null; build: string | null; host?: string | null; dupes?: { total: number; last_7d: number } | null; mail?: Kinds | null };
 export async function probeOnce(env: Env, now: number): Promise<Probe> {
   const base = await membersApi(env, now);
   const t0 = Date.now();
   if (!base) return { ok: false, ms: 0, up_since: null, build: null };
   try {
     const r = await fetch(`${base}/health?probe=1`, { signal: AbortSignal.timeout(PROBE_MS), headers: { 'user-agent': 'copybook-status-probe' } });
-    const b = r.ok ? ((await r.json()) as { ok?: boolean; api_up_since?: string; api_build?: string | null; dupes_blocked?: { total: number; last_7d: number }; mail_kinds?: Kinds | null }) : null;
-    return { ok: !!b?.ok, ms: Date.now() - t0, up_since: b?.api_up_since ?? null, build: b?.api_build ?? null, dupes: b?.dupes_blocked ?? null, mail: b?.mail_kinds ?? null };
+    const b = r.ok ? ((await r.json()) as { ok?: boolean; api_host?: string; api_up_since?: string; api_build?: string | null; dupes_blocked?: { total: number; last_7d: number }; mail_kinds?: Kinds | null }) : null;
+    return { ok: !!b?.ok, ms: Date.now() - t0, up_since: b?.api_up_since ?? null, build: b?.api_build ?? null, host: b?.api_host ?? null, dupes: b?.dupes_blocked ?? null, mail: b?.mail_kinds ?? null };
   } catch {
     return { ok: false, ms: Date.now() - t0, up_since: null, build: null };
   }
@@ -88,20 +106,33 @@ export function recordProbe(s: ProbeState, now: number, p: Probe): ProbeState {
   h[1] += 1;
   const keep = hourKey(now - 8 * 86400_000);
   for (const k of Object.keys(s.hours)) if (k < keep) delete s.hours[k];
-  if (!p.ok) s.fail_since ??= iso(now);
-  else {
-    const prev = s.last?.up_since;
-    if (prev && p.up_since && p.up_since !== prev) {
-      // The gap: from the first failed check (if any) to the new boot, at least the boot-to-check time is not counted.
-      const down = s.fail_since ? Math.max(0, Math.round((Date.parse(p.up_since) - Date.parse(s.fail_since)) / 1000)) : 0;
-      const newBuild = !!p.build && !!s.last?.build && p.build !== s.last.build;
-      const sameBuild = !!p.build && !!s.last?.build && p.build === s.last.build;
+  if (!p.ok) {
+    s.fail_since ??= iso(now);
+    s.failures = [{ at: iso(now), ms: p.ms, host: s.last?.host ?? null }, ...(s.failures ?? [])].slice(0, 50);
+  } else {
+    if (s.fail_since) s.gap = { from: s.fail_since, to: iso(now) };
+    // Access moved to the other host (failover, or back): not a restart. Compare with that host's own last boot.
+    let prev = s.last?.up_since ?? null;
+    let prevBuild = s.last?.build ?? null;
+    const switched = !!p.host && !!s.last?.host && p.host !== s.last.host;
+    if (switched) {
+      (s.hosts ??= {})[s.last!.host!] = { up_since: s.last!.up_since, build: s.last!.build };
+      prev = s.hosts[p.host!]?.up_since ?? null;
+      prevBuild = s.hosts[p.host!]?.build ?? null;
+    }
+    // The Worker's "boot" is an isolate's, recycled at will: only the API host's own boots are restarts.
+    if (prev && p.up_since && p.up_since !== prev && p.host !== 'cloudflare') {
+      // The gap: from the first failed check (if any) to the new boot; after a failover, the members' outage (first
+      // failed check to the backup's first answer).
+      const down = switched ? (s.gap && s.gap.from >= prev ? Math.round((Date.parse(s.gap.to) - Date.parse(s.gap.from)) / 1000) : 0) : s.fail_since ? Math.max(0, Math.round((Date.parse(p.up_since) - Date.parse(s.fail_since)) / 1000)) : 0;
+      const newBuild = !!p.build && !!prevBuild && p.build !== prevBuild;
+      const sameBuild = !!p.build && !!prevBuild && p.build === prevBuild;
       const kind: Restart['kind'] = down >= DEPLOY_GAP_S || sameBuild ? 'unplanned' : newBuild ? 'deploy' : 'short_unconfirmed';
-      s.restarts = [{ at: p.up_since, prev_up_since: prev, down_seconds: down, kind, build: p.build, prev_build: s.last?.build ?? null }, ...s.restarts].slice(0, 100);
+      s.restarts = [{ at: p.up_since, prev_up_since: prev, down_seconds: down, kind, build: p.build, prev_build: prevBuild }, ...s.restarts].slice(0, 100);
     }
     s.fail_since = null;
   }
-  s.last = { at: iso(now), ok: p.ok, ms: p.ms, up_since: p.up_since ?? s.last?.up_since ?? null, build: p.build ?? s.last?.build ?? null };
+  s.last = { at: iso(now), ok: p.ok, ms: p.ms, up_since: p.up_since ?? s.last?.up_since ?? null, build: p.build ?? s.last?.build ?? null, host: p.host ?? s.last?.host ?? null };
   return s;
 }
 
@@ -152,7 +183,7 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
     return { day, uptime: n ? Math.round((ok / n) * 1e5) / 1e5 : null, checks: n, failed: n - ok };
   });
   const week = now - 7 * 86400_000;
-  const recent = s.restarts.filter((r) => Date.parse(r.at) >= week).map(planned);
+  const recent = shownRestarts(s.restarts).filter((r) => Date.parse(r.at) >= week);
   const fresh = JSON.parse((await env.DB.get('status:fresh')) ?? 'null') as { data_built_at: string | null; build_id: string | null; last_13f: { slug: string; manager: string; accession: string; accepted_at: string } | null } | null;
   // Written by Cloudflare's cron at the end of its run, which runs this only while it is the poller.
   const poller = { host: 'cloudflare', last_run_at: iso(Date.now()) };
@@ -201,8 +232,11 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
       deploys_7d: recent.filter((r) => r.kind === 'deploy').length,
       short_unconfirmed_7d: recent.filter((r) => r.kind === 'short_unconfirmed').length,
       planned_7d: recent.filter((r) => r.kind === 'planned').length,
-      api_up_since: s.last?.up_since ?? null,
-      rows: s.restarts.slice(0, 30).map(planned),
+      // The API host's own boot (while the Worker serves a failover, the host's last one, not an isolate's).
+      api_up_since: (s.last?.host === 'cloudflare' ? s.hosts?.gene?.up_since : s.last?.up_since) ?? null,
+      rows: shownRestarts(s.restarts).slice(0, 30),
+      // The last failed checks (newest first), so each one in probe.24h can be told apart.
+      failed_checks: (s.failures ?? []).filter((f) => Date.parse(f.at) >= now - 86400_000),
     },
   };
 }

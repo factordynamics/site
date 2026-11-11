@@ -1073,6 +1073,18 @@ describe('copybook api', () => {
     s = recordProbe(s, min(6), down);
     s = recordProbe(s, min(7), up('2026-11-11T10:07:30Z', 'ccc'));
     s = recordProbe(s, min(8), up('2026-11-11T10:07:50Z', null));
+    // A failover: gene stops, the Worker answers (not a restart), gene comes back on a new boot (one restart, against
+    // gene's own previous boot, down for the members' outage), and access moves back.
+    let f = { hours: {}, restarts: [] } as Parameters<typeof recordProbe>[0];
+    const on = (host: string, since: string, build: string) => ({ ...up(since, build), host });
+    f = recordProbe(f, min(0), on('gene', '2026-11-11T08:40:00Z', 'g1'));
+    f = recordProbe(f, min(1), down);
+    f = recordProbe(f, min(2), down);
+    f = recordProbe(f, min(3), on('cloudflare', '2026-11-11T10:02:50Z', 'w1'));
+    f = recordProbe(f, min(4), on('cloudflare', '2026-11-11T10:04:10Z', 'w1'));
+    f = recordProbe(f, min(5), on('gene', '2026-11-11T10:03:30Z', 'g1'));
+    expect(f.restarts).toEqual([{ at: '2026-11-11T10:03:30Z', prev_up_since: '2026-11-11T08:40:00Z', down_seconds: 120, kind: 'unplanned', build: 'g1', prev_build: 'g1' }]);
+    expect(f.failures?.map((x) => x.at)).toEqual([new Date(min(2)).toISOString().replace(/\.\d{3}Z$/, 'Z'), new Date(min(1)).toISOString().replace(/\.\d{3}Z$/, 'Z')]);
     expect(s.restarts.map((r) => [r.at, r.kind, r.down_seconds])).toEqual([
       ['2026-11-11T10:07:50Z', 'short_unconfirmed', 0],
       ['2026-11-11T10:07:30Z', 'unplanned', 90],
