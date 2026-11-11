@@ -34,7 +34,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, Bar, BooksProgress, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, Tabs, Tick, usd, useLoad, type Col } from './lib'
+import { A, Bar, BooksProgress, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, Tick, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -176,7 +176,7 @@ function SectorRows({ items }: { items: { sector?: string | null; value: number 
   const max = mix[0]?.weight ?? 1
   return (
     <table className="grid sector-rows">
-      <caption className="sr">sector mix</caption>
+      <caption className="sr">Share of the portfolio by sector</caption>
       <tbody>
         {mix.map((m) => (
           <tr key={m.sector}>
@@ -517,7 +517,7 @@ function HomeBody() {
     books.data && x && x[k] > 0 ? `${issuerName(x.h.display_name || x.h.issuer)}, ${k === 'buy' ? 'bought' : 'sold'} by ${x[k]} of the ${leadBooks.length} who have filed` : 'Across the investors who have filed'
   return (
     <div className="page home">
-      <div className="stats home-stats" aria-label={`${quarterLabel(lead)} so far`}>
+      <div className="stats home-stats" role="list" aria-label={`${quarterLabel(lead)} so far`}>
         <Stat label={`${quarterLabel(s.q)} 13Fs filed`} value={`${seasonFiled.length} of ${ms.length}`} sub={<>Due {day(s.due)}{daysLeft > 0 ? `, ${daysLeft} days left` : ''}<Bar value={seasonFiled.length} max={ms.length} /></>} />
         <Stat label={`Most bought in ${quarterLabel(lead)}`} value={crowd(mostBought, 'buy')} tone={books.data && mostBought?.buy ? 'pos' : undefined} sub={crowdSub(mostBought, 'buy')} />
         <Stat label={`Most sold in ${quarterLabel(lead)}`} value={crowd(mostSold, 'sell')} tone={books.data && mostSold?.sell ? 'neg' : undefined} sub={crowdSub(mostSold, 'sell')} />
@@ -894,7 +894,7 @@ export function Fund({ slug }: { slug: string }) {
         <Follow kind="investors" id={slug} />
       </div>
       <FundSummary book={book} live={live} buys={buys} sells={sells} top10={top10} />
-      <div className="stats fund-stats">
+      <div className="stats fund-stats" role="list" aria-label="Portfolio at a glance">
         <Stat
           label="portfolio value"
           value={usd(book.long_value)}
@@ -907,7 +907,7 @@ export function Fund({ slug }: { slug: string }) {
           }
         />
         <Stat label="stocks held" value={live.length} sub={`${stock.filter((x) => x.change === 'new').length} new, ${stock.filter((x) => x.change === 'exited').length} sold out`} />
-        <Stat label="in the top 10 holdings" value={pct(top10, 1)} sub={<Bar value={top10} max={1} />} />
+        <Stat label="top 10 holdings" value={pct(top10, 1)} sub={<Bar value={top10} max={1} />} />
         <Stat label="bought" value={usd(bought)} tone="pos" sub={`Across ${plural(buys.length, 'position')}`} />
         <Stat label="sold" value={usd(-sold)} tone="neg" sub={`Across ${plural(sells.length, 'position')}`} />
       </div>
@@ -925,6 +925,7 @@ export function Fund({ slug }: { slug: string }) {
         ]}
         label={`${book.firm} portfolio`}
       />
+      <TabPanel tab={tab}>
       {tab === 'filings' && valuePanel}
       <Panel className="fund-table" title={FUND_TAB[tab]} right={tab === 'holdings' ? <span className="dim hide-sm">Prices come from the filing itself, not the market</span> : tab === 'options' ? <span className="dim hide-sm">Value of the underlying shares; not counted in the portfolio</span> : tab === 'notes' ? <span className="dim hide-sm">As filed; not counted in the stock portfolio</span> : undefined}>
         {tab === 'holdings' && <HoldingsGrid rows={live} own={(x) => ownHolding(book, x)} />}
@@ -1003,6 +1004,7 @@ export function Fund({ slug }: { slug: string }) {
           />
         )}
       </Panel>
+      </TabPanel>
       <div className={tab === 'filings' ? '' : 'duo wide'}>
         {tab !== 'filings' && valuePanel}
         <Panel title="Sectors">
@@ -1192,6 +1194,7 @@ export function Flows() {
         ]}
         label="Ways to rank the quarter's trades"
       />
+      <TabPanel tab={tab}>
       <Panel title={`${num(list.length)} stocks`}>
         <ColKey
           items={[
@@ -1233,6 +1236,7 @@ export function Flows() {
           ]}
         />
       </Panel>
+      </TabPanel>
     </div>
   )
 }
@@ -1342,6 +1346,7 @@ export function Consensus() {
         ]}
         label="Ways to rank the stocks"
       />
+      <TabPanel tab={tab}>
       <Panel title={`${num(list.length)} stocks`}>
         <ColKey
           items={[
@@ -1370,6 +1375,7 @@ export function Consensus() {
           ]}
         />
       </Panel>
+      </TabPanel>
     </div>
   )
 }
@@ -1411,6 +1417,7 @@ export function Filings() {
         ]}
         label="Kinds of filing"
       />
+      <TabPanel tab={tab}>
       {tab !== 'market' || !market ? (
         <>
           <div className="filters" role="group" aria-label="filters">
@@ -1456,6 +1463,7 @@ export function Filings() {
           />
         </Panel>
       )}
+      </TabPanel>
     </div>
   )
 }
@@ -1558,7 +1566,7 @@ export function Stock({ ticker }: { ticker: string }) {
           <>None of the investors Holdterm follows reports {issuerName(d.name)} in its latest 13F.</>
         )}
       </p>
-      <div className="stats">
+      <div className="stats" role="list" aria-label="Ownership at a glance">
         <Stat label="Investors that own it" value={holders.length} sub={holders.length === prevHolders ? `Same as last quarter` : `${holders.length > prevHolders ? 'Up' : 'Down'} from ${prevHolders} last quarter`} />
         <Stat label="Value they hold" value={usd(value)} sub="In their latest 13Fs" />
         <Stat label="Bought more" value={plural(nNew + cnt('added'), 'investor')} tone={nNew + cnt('added') > 0 ? 'pos' : undefined} sub={`${num(nNew)} new, ${num(cnt('added'))} added`} />
@@ -1580,6 +1588,7 @@ export function Stock({ ticker }: { ticker: string }) {
         ]}
         label={`${issuerName(d.name)} ownership`}
       />
+      <TabPanel tab={tab}>
       <Panel title={STOCK_TAB[tab]}>
         {tab === 'holders' && <Grid rank rows={holders} initial={['w', 'desc']} href={fundHref} cols={holderCols} empty={<Empty title="None of the investors Holdterm follows owns it" hint={`Holdterm follows ${roster.funds.length} concentrated, long-term investors. A stock shows up here once one of them reports it in a 13F.`} action={['See the stocks they own most', '/consensus']} />} />}
         {tab === 'activity' && (
@@ -1598,6 +1607,7 @@ export function Stock({ ticker }: { ticker: string }) {
         )}
         {tab === 'filings' && <Grid rows={events} cols={eventCols(firms)} empty={<Empty title="No stake or insider filings in the last 30 days" hint="None of these investors filed a 13D, 13G or Form 4 on this company in that time." action={['See every recent filing', '/filings']} />} />}
       </Panel>
+      </TabPanel>
     </div>
   )
 }

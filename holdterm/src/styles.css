@@ -1546,6 +1546,17 @@ a.hb-row:hover {
   .stat .value {
     font-size: 21px;
   }
+  /* Label, value and second line share rows across the cards, so a label that wraps ("Top 10 holdings" at
+     721px) doesn't drop its value below its neighbours'. */
+  .stats:not(.home-stats) {
+    row-gap: 0;
+  }
+  .stats:not(.home-stats) .stat {
+    grid-row: span 3;
+    display: grid;
+    grid-template-rows: subgrid;
+    align-content: start;
+  }
 }
 /* …except the home page's cards, whose second lines are sentences: two rows of two below 880px. */
 @media (min-width: 721px) and (max-width: 880px) {
@@ -3391,4 +3402,12 @@ p a,
 }
 .page > p.quarter-note {
   margin: -6px 0 0;
+}
+
+/* A tab's content sits in one tab panel; its panels keep the page's spacing. */
+.page > [role='tabpanel'] {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  min-width: 0;
 }

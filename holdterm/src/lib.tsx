@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { booksProgress } from './data'
 
 // ---------- formatting ----------
@@ -231,20 +231,26 @@ export function Failed({ error, what = 'this page' }: { error: string; what?: st
 // ---------- layout ----------
 /** Sentence case for labels written in lower case ("holdings" -> "Holdings"; "% of book" is left alone). */
 export const cap = <T,>(x: T): T => (typeof x === 'string' ? ((x.charAt(0).toUpperCase() + x.slice(1)) as T) : x)
+// A table in a panel takes the panel's heading as its name, so a screen reader says "What it owns, table"
+// rather than just "table".
+const PanelHeading = createContext<string | undefined>(undefined)
 export function Panel({ title, right, children, className = '' }: { title: ReactNode; right?: ReactNode; children: ReactNode; className?: string }) {
+  const id = useId()
   return (
     <section className={`panel ${className}`}>
       <header>
-        <h2>{cap(title)}</h2>
+        <h2 id={id}>{cap(title)}</h2>
         <span className="right">{right}</span>
       </header>
-      <div className="body">{children}</div>
+      <PanelHeading.Provider value={id}>
+        <div className="body">{children}</div>
+      </PanelHeading.Provider>
     </section>
   )
 }
 export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'pos' | 'neg' }) {
   return (
-    <div className="stat">
+    <div className="stat" role="listitem">
       <div className="label">{cap(label)}</div>
       <div className={`value ${tone ?? ''}`}>{value}</div>
       {sub != null && <div className="sub">{sub}</div>}
@@ -286,12 +292,21 @@ export function Tabs<T extends string>({ value, options, onChange, label }: { va
         // "holdings 14" shows its count as a badge.
         const m = text.match(/^(.*\S)\s+(\d[\d,]*)$/)
         return (
-          <button key={k} role="tab" aria-selected={value === k} tabIndex={value === k ? 0 : -1} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
+          <button key={k} id={`tab-${k}`} role="tab" aria-selected={value === k} aria-controls={value === k ? 'tabpanel' : undefined} tabIndex={value === k ? 0 : -1} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
             {cap(m ? m[1] : text)}
             {m && <span className="count">{m[2]}</span>}
           </button>
         )
       })}
+    </div>
+  )
+}
+
+/** What the selected tab shows, so a screen reader names it ("Bought 8, tab panel") and ties it to its tab. */
+export function TabPanel({ tab, children }: { tab: string; children: ReactNode }) {
+  return (
+    <div role="tabpanel" id="tabpanel" aria-labelledby={`tab-${tab}`}>
+      {children}
     </div>
   )
 }
@@ -345,6 +360,7 @@ export function Grid<R>({
   empty?: ReactNode
   rank?: boolean
 }) {
+  const heading = useContext(PanelHeading)
   const [sort, setSort] = useState<[string, 'asc' | 'desc'] | undefined>(initial)
   const [shown, setShown] = useState(limit ?? Infinity)
   const body = useRef<HTMLTableSectionElement>(null)
@@ -387,7 +403,7 @@ export function Grid<R>({
   return (
     <div className={`grid-outer ${cue ? 'cue' : ''}`}>
     <div className="grid-wrap" ref={wrap}>
-      <table className="grid">
+      <table className="grid" aria-labelledby={heading}>
         <thead>
           <tr>
             {rank && <th className="num rank">#</th>}
