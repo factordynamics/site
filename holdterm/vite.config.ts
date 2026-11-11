@@ -3,13 +3,13 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
-import { FUNDS, dataSlug, firmName, fundPath, publicSlug } from './src/names'
+import { FUNDS, dataSlug, firmName, fundPath, publicSlug, shortFirm } from './src/names'
 import roster from './src/roster.json'
 import TICKERS from './src/tickers.json'
-import { type Book, isStockLine, issuerKey, loadBook, quarterLabel } from './src/data'
+import { aggregate, type Agg, type Book, isStockLine, issuerKey, loadBook, quarterLabel } from './src/data'
 import { issuerName } from './src/names'
 import { usd } from './src/lib'
-import { fundCard, png, siteCard } from './scripts/og'
+import { fundCard, png, siteCard, stockCard } from './scripts/og'
 
 const SITE = 'https://holdterm.factordynamics.com'
 const DERIVED = 'https://copybook.factordynamics.com/d/'
@@ -110,14 +110,46 @@ const pages = (): Plugin => ({
     }
     console.log(`holdterm-pages: ${books.size} of ${funds.length} fund cards`)
 
+    // A stock the investors hold gets a description with its numbers, from the same aggregate as Most owned and
+    // search (share classes combined, each investor's latest 13F); one held by 3 or more also gets its own card.
+    const held = new Map<string, Agg>()
+    for (const a of aggregate([...books.values()]).rows) if (!a.fund && a.holders.length) for (const t of a.classes ?? [a.ticker]) if (t) held.set(t, a)
+    mkdirSync(join(dist, 'og', 's'), { recursive: true })
+    let cards = 0
+    const drawn = new Map<string, string>()
+    const facts = (t: string, label: string): [string, string | undefined] | null => {
+      const a = held.get(t)
+      if (!a) return null
+      const name = a.name
+      const bets = [...a.holders].sort((x, y) => y.weight - x.weight).slice(0, 3).map((b) => ({ ...b, manager: shortFirm(b.manager) }))
+      const list = (xs: string[]) => xs.join(', ').replace(/, ([^,]*)$/, ' and $1')
+      const bought = a.buyers.length
+      const sold = a.sellers.length
+      const d = `${label} is held by ${a.holders.length} of the ${funds.length} long-term investors Holdterm follows, ${usd(a.value)} in all. Biggest bets on it: ${list(bets.map((b) => `${b.manager} (${(b.weight * 100).toFixed(1)}%)`))}. In their latest 13Fs, ${bought} bought more and ${sold} sold some or all.`
+      if (a.holders.length < 3) return [d, undefined]
+      // One card per company, shared by its share classes.
+      let img = drawn.get(a.key)
+      if (!img) {
+        img = `/og/s/${a.ticker}.png`
+        writeFileSync(join(dist, img), png(stockCard({ name, ticker: a.label?.replace('+', ' · ') ?? t, holders: a.holders.length, of: funds.length, value: usd(a.value), bought, sold, top: bets.map((b) => ({ name: b.manager, weight: b.weight })) })))
+        drawn.set(a.key, img)
+        cards++
+      }
+      return [d, img]
+    }
+
     // Stocks: every ticker in Copybook's derived stock index, its other share classes, and the tickers
     // Holdterm resolves itself from a CUSIP (src/tickers.json).
     const r = await fetch(`${DERIVED}stocks.json`)
     if (!r.ok) throw new Error(`stocks.json: HTTP ${r.status}`)
     const { stocks } = (await r.json()) as { stocks: { t: string; n: string; a?: string[] }[] }
     if (stocks.length < 1000) throw new Error(`stocks.json has only ${stocks.length} stocks`)
-    const stock = (t: string, n: string) =>
-      /^[A-Z0-9][A-Z0-9.-]{0,11}$/.test(t) && add(`/s/${t}`, [n && n !== t ? `${n} (${t}): who owns it` : `${t}: who owns it`, `Which long-term investors own ${n && n !== t ? `${n} (${t})` : t}, what they bought and sold last quarter, and their 5% stakes and insider trades, from SEC EDGAR filings.`])
+    const stock = (t: string, n: string) => {
+      if (!/^[A-Z0-9][A-Z0-9.-]{0,11}$/.test(t)) return
+      const label = n && n !== t ? `${n} (${t})` : t
+      const f = facts(t, label)
+      add(`/s/${t}`, [`${label}: who owns it`, f ? f[0] : `Which long-term investors own ${label}, what they bought and sold last quarter, and their 5% stakes and insider trades, from SEC EDGAR filings.`], f?.[1])
+    }
     for (const s of stocks) for (const t of [s.t, ...(s.a ?? [])]) stock(t, s.n)
     for (const o of Object.values(TICKERS as unknown as Record<string, { ticker?: string; listed?: boolean }>)) if (o?.listed && o.ticker && !files.has(`/s/${o.ticker}`)) stock(o.ticker, o.ticker)
 
@@ -139,6 +171,7 @@ const pages = (): Plugin => ({
     const day = new Date().toISOString().slice(0, 10)
     const urls = ['/', ...Object.keys(SECTIONS).filter((p) => p !== '/' && p !== '/account'), ...funds.map((f) => fundPath(f.slug))]
     writeFileSync(join(dist, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((p) => `  <url><loc>${SITE}${p}</loc><lastmod>${day}</lastmod></url>`).join('\n')}\n</urlset>\n`)
+    console.log(`holdterm-pages: ${held.size} stocks with numbers, ${cards} stock cards`)
     console.log(`holdterm-pages: ${files.size + 1} pages, 404.html, ${redirects.length} redirects`)
   },
 })
