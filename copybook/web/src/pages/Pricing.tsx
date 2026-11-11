@@ -69,7 +69,7 @@ const tiers = (filers: string, curated: number): Tier[] => [
       { t: `${FUND_SEATS} seats`, d: 'Invite your team by email; each seat signs in on its own and keeps its own alerts and channels.' },
       { t: 'Shared book and peer lists', d: 'One set of follows, watchlist, owned book and peers the whole team works from.' },
       { t: 'One team channel', d: 'Each alert posts once to your team’s Slack channel, whoever follows it.' },
-      { t: 'Seat admin', d: 'Add and remove seats from your account page, and sign a departing colleague out everywhere at once (API keys keep working; Remove a seat to cut all access).' },
+      { t: 'Seat admin', d: 'Add and remove seats from your account page, sign a departing colleague out everywhere at once and delete their API keys; Remove the seat to end access.' },
       { t: 'Annual invoice', d: 'Invoiced yearly, net 30. W-9 on request.' },
     ],
     why: FUND_WHY,

@@ -76,7 +76,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
       <>
         <p>Calls and puts are shown at their filed value, which is the notional value of the underlying shares, not the price of the options. They’re listed apart from shares and never added to share totals or holder counts.</p>
         <p>Notes and other debt, identified by their title, are left out of stock holder counts. Rows reported as a principal amount (<code>PRN</code>, such as convertible notes) keep their filed value but are never counted as shares; the API marks them with <code>shares_type</code> (<code>SH</code> or <code>PRN</code>).</p>
-        <p>Lines filed with a value of zero are kept as filed. About 56 such lines are still missing from the published books; a fix is in progress.</p>
+        <p>Lines filed with a value of zero are kept as filed.</p>
       </>
     ),
   },

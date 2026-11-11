@@ -54,7 +54,7 @@ export function Team() {
   }
 
   const signOut = async (who: string) => {
-    if (!confirm(`Sign ${who} out everywhere? Every session they have ends now; they can sign in again by email while they keep a seat. API keys keep working; use Remove to cut all access.`)) return
+    if (!confirm(`Sign ${who} out everywhere? Signs them out everywhere and deletes their API keys. They can sign in again and make new keys while they keep a seat. Remove the seat to end access.`)) return
     setMsg(null)
     try {
       setS(await call<Seats>(`/seats/${encodeURIComponent(who)}/revoke`, { method: 'POST', auth: true }))
