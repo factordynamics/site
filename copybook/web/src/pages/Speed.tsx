@@ -167,9 +167,15 @@ export function Speed() {
                       <Link to={`/investors/${a.slug}/`} className="font-medium hover:text-accent">
                         {displayName(a.manager)}
                       </Link>
-                      {a.quarter && <span className="ml-1.5 whitespace-nowrap text-[11.5px] text-ink-3">{quarterLabel(a.quarter)}</span>}
+                      {a.quarter && (
+                        <>
+                          {' '}
+                          <span className="ml-0.5 whitespace-nowrap text-[11.5px] text-ink-3">{quarterLabel(a.quarter)}</span>
+                        </>
+                      )}
+                      {lateIds.has(a.accession) && ' '}
                       {lateIds.has(a.accession) && (
-                        <a href="#before-fix" className="ml-1.5 whitespace-nowrap rounded-full bg-[#fbecd3] px-2 py-0.5 text-[11.5px] font-medium text-[#7a4b00] hover:underline">
+                        <a href="#before-fix" className="ml-0.5 inline-block whitespace-nowrap rounded-full bg-[#fbecd3] px-2 py-0.5 text-[11.5px] font-medium text-[#7a4b00] hover:underline">
                           moves late, fixed Nov 11
                         </a>
                       )}
