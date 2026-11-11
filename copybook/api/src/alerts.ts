@@ -989,6 +989,8 @@ export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promi
       failed.push(`${p.accession}: ${e}`);
     }
   }
+  // Shown on /health (accessions and errors only): gene's minute logs aren't visible elsewhere.
+  if (failed.length) await env.DB.put('host:moves-last', JSON.stringify({ at: new Date(now).toISOString(), failed }));
   if (!ready.length) return { pending: pending.length, failed };
   // Take the sent ones off the list as it is now (Cloudflare may have added filings meanwhile).
   const done = new Set(ready.map((r) => r.accession));
