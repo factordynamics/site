@@ -531,7 +531,8 @@ function HomeBody() {
             rows={filers}
             href={(m) => fundPath(m.slug)}
             cols={[
-              { key: 'f', label: 'Filed', render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
+              // Phones show the date under the investor, so the biggest trade has room for its label.
+              { key: 'f', label: 'Filed', hideSm: true, render: (m) => <span className="dim num">{date(m.filing_date)}</span>, width: '84px' },
               {
                 key: 'm',
                 label: 'Investor',
@@ -541,6 +542,7 @@ function HomeBody() {
                   <>
                     <Firm name={m.firm} strong />
                     {m.quarter !== s.q && <span className="tag late">For {quarterLabel(m.quarter)}</span>}
+                    <span className="row-sub show-sm">Filed {date(m.filing_date)}</span>
                   </>
                 ),
               },
@@ -568,7 +570,7 @@ function HomeBody() {
                   if (!h) return <span className="dim">{b ? 'No trades' : '…'}</span>
                   return (
                     <span className="move">
-                      <StockCell t={h.ticker} name={h.display_name || h.issuer} former={h.former} label={h.label} /> <span className={`tag ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(h)}</span> <span className={`num ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{signedUsd(h.value_delta)}</span>
+                      <StockCell t={h.ticker} name={h.display_name || h.issuer} former={h.former} label={h.label} /> <span className={`tag ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{moveLabel(h)}</span> <span className={`num move-amt ${h.value_delta! > 0 ? 'pos' : 'neg'}`}>{signedUsd(h.value_delta)}</span>
                     </span>
                   )
                 },
@@ -577,7 +579,12 @@ function HomeBody() {
             empty={`No ${quarterLabel(lead)} 13Fs yet.`}
           />
           {due.length > 0 && (
-            <div className="due small">
+            <div className="due small show-sm">
+              {plural(due.length, 'investor')} still to file for {quarterLabel(s.q)}, due {day(s.due)}. <A to="/funds">See all investors →</A>
+            </div>
+          )}
+          {due.length > 0 && (
+            <div className="due small hide-sm">
               <span className="dim">Still to file ({due.length}):</span>{' '}
               {due
                 .sort((a, b) => b.total_value - a.total_value)
