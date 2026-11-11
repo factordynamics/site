@@ -5,10 +5,10 @@ import { Button, Check } from '../components/ui'
 import { attributed, checkRef, referredCheckout, refCode, utmTags } from '../lib/attribution'
 import { gapLabel, loadLatency, useMember } from '../lib/account'
 import { thirteenFStats } from '../lib/latencyStats.mjs'
-import { money, useAsync, useTitle } from '../lib/data'
+import { displayName, money, useAsync, useTitle } from '../lib/data'
 import { HISTORY_EXACT, loadCoverage, loadStock, trackedPhrase } from '../lib/stocks'
-import { loadEvents } from '../components/FundNotes'
-import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, trialTerms, type PlanId } from '../config'
+import { loadEvents, rollUp } from '../components/FundNotes'
+import { BOOK_PRO, checkoutEnabled, FUND_SEATS, FUND_WHY, DATA_TERMS, plans, referredDeal, referredTerms, TRIAL_DAYS, TRIAL_LINE, trialTerms, type PlanId } from '../config'
 
 type Feature = { t: string; d?: string }
 type Tier = { id: 'free' | PlanId; who: string; lead?: string; now: Feature[]; soon?: Feature[]; proof?: boolean; why?: string }
@@ -116,9 +116,21 @@ const compare = (filers: string): [string, ...(boolean | string)[]][] => [
 type Move = { manager: string; ticker?: string | null; display_name?: string | null; issuer: string; kind: string; action: string; value_usd?: number | null; percent_of_class?: number | null }
 async function fromFact(from: string | null): Promise<string | null> {
   if (!from || !/^[A-Za-z0-9.-]{1,60}$/.test(from)) return null
-  const moves: Move[] = /^[A-Z0-9.-]{1,10}$/.test(from)
+  const stock = /^[A-Z0-9.-]{1,10}$/.test(from)
+  const evs = stock ? [] : ((await loadEvents(from).catch(() => null))?.events ?? []).filter((e) => !('skip' in e))
+  // An investor page: its largest Form 4 position rolled up the way that page's "Since the latest 13F" shows it
+  // (Berkshire Hathaway's LEN buys, $586.4M across four Form 4s), not its single largest filing.
+  const pos = rollUp(evs)
+    .filter((p) => p.boughtUsd || p.soldUsd)
+    .sort((a, b) => Math.abs(b.boughtUsd - b.soldUsd) - Math.abs(a.boughtUsd - a.soldUsd))[0]
+  const who = displayName((evs[0] as { manager?: string } | undefined)?.manager ?? '')
+  // A class-split position has no ticker of its own: the events' ticker for the same issuer (LEN, not "Lennar Class A").
+  const k = pos?.key.split('|')[0]
+  const tick = pos && (pos.ticker || (evs.find((e) => e.ticker && (e.cusip?.slice(0, 6) === k || e.cusip === k || e.ticker === k || e.issuer === k))?.ticker ?? null))
+  if (pos && who) return `${who} ${pos.boughtUsd >= pos.soldUsd ? 'buy' : 'sell'} ${money(Math.abs(pos.boughtUsd - pos.soldUsd))} of ${tick || pos.name} on Form 4 between 13Fs`
+  const moves: Move[] = stock
     ? ((await loadStock(from).catch(() => null))?.since ?? [])
-    : (((await loadEvents(from).catch(() => null))?.events ?? []).filter((e) => !('skip' in e)) as unknown as Move[]).map((e) => ({ ...e, manager: (e as { manager?: string }).manager ?? '' }))
+    : (evs as unknown as Move[]).map((e) => ({ ...e, manager: displayName((e as { manager?: string }).manager ?? '') }))
   const trades = moves.filter((m) => m.kind === 'form4' && (m.action === 'buy' || m.action === 'sell') && (m.value_usd ?? 0) > 0)
   const top = trades.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0))[0]
   const what = (m: Move) => m.ticker || m.display_name || m.issuer
@@ -294,7 +306,7 @@ export function Pricing() {
                   ) : plan ? (
                     // Said plainly under every paid button: Copy's trial takes no card (Nov 11); Pro's still does.
                     <>
-                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>{tier.id === 'copy' ? `${TRIAL_DAYS} days free, no card needed. Then $${plans.copy.monthly}/month or $${plans.copy.yearly}/year.` : `Card required · charged on day ${TRIAL_DAYS + 1} unless you cancel`}</span>
+                      <span className={`block text-[12.5px] font-medium ${dark ? 'text-white/80' : 'text-ink-2'}`}>{tier.id === 'copy' ? TRIAL_LINE : `Card required · charged on day ${TRIAL_DAYS + 1} unless you cancel`}</span>
                       {referred ? referredTerms(tier.id, cycle) : trialTerms(tier.id)}
                     </>
                   ) : (
@@ -339,7 +351,7 @@ export function Pricing() {
       </div>
 
       {/* Between seasons (marketing's plan rev 69): what Copy does from the November deadline to February's 13Fs.
-          Last winter's Form 4 and 13D/G counts join this once payments sends them. */}
+          Last winter's counts are payments' (EDGAR full index): "filings", as 15 of the 19 are amendments. */}
       <section className="mx-auto mt-10 max-w-[1240px] rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)] md:p-8" aria-labelledby="between">
         <div className="grid gap-6 md:grid-cols-[1fr_1.15fr] md:gap-12">
           <div>
@@ -348,8 +360,9 @@ export function Pricing() {
               {Date.now() < Date.parse('2026-11-17T05:00:00Z') ? 'After Monday, Copy keeps working.' : 'Between 13F seasons, Copy keeps working.'}
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Copy emails you when they do.</p>
+            <p className="mt-3 text-[14px] leading-relaxed text-ink-3">Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow, and 13 open-market insider buys in the 100 stocks they hold most.</p>
             <p className="mt-4 text-[14px] font-medium leading-relaxed">
-              ${plans.copy.yearly}/year (about 3 months free) or ${plans.copy.monthly}/month. Cancel anytime. {TRIAL_DAYS} days free, no card needed.
+              ${plans.copy.yearly}/year (about 3 months free) or ${plans.copy.monthly}/month. Monthly? Pause between seasons and it resumes for February’s 13Fs. {TRIAL_DAYS} days free, no card needed.
             </p>
           </div>
           <FeatureList
@@ -445,7 +458,7 @@ export function Pricing() {
               ],
               ['Do you show live prices or returns?', 'No. Values are what the fund reported at quarter end. We don’t re-price holdings or estimate performance.'],
               ['How are options shown?', 'Calls and puts are listed apart from shares. A 13F reports options at the value of the underlying shares, so we label them as notional and leave them out of portfolio weights and holder counts.'],
-              ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for. Monthly plans can also pause between seasons instead.'],
+              ['Can I cancel?', 'Yes, any time from Manage billing on your account page. After a paid period starts, you keep access until the end of the period you paid for. Monthly plans with a card can also pause between seasons instead.'],
               ['Is this investment advice?', 'No. Copybook shows public filings. 13F omits short positions, most non-US holdings and cash, so a portfolio here is never the whole picture.'],
             ] as [string, ReactNode][]
           ).map(([q, a]) => (

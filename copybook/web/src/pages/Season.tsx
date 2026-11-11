@@ -9,7 +9,8 @@ import { FAMOUS, FridayBox } from '../components/FridayBox'
 import { FollowButton } from '../components/FollowButton'
 import { HedgeFlow } from '../components/HedgeFlow'
 import { EdgarClosed } from '../components/EdgarClosed'
-import { TRIAL_DAYS, TRIAL_LINE } from '../config'
+import { checkoutEnabled, plans, TRIAL_DAYS, TRIAL_LINE } from '../config'
+import { attributed, referredCheckout } from '../lib/attribution'
 import { dateFmt, dateLabel, displayName, loadIndex, money, NUM, pricingTo, quarterLabel, useAsync, useTick, useTitle } from '../lib/data'
 import { seasonTitle } from '../lib/titles.mjs'
 import { thirteenFStats } from '../lib/latencyStats.mjs'
@@ -40,8 +41,16 @@ const dueLabel = (iso: string) =>
   new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short' })
 
 
+// /season/'s trial buttons open Copy monthly's Payment Link directly, skipping /pricing/ (trader, Nov 11), with the
+// visitor's utm and client_reference_id (…-from-season); /pricing/ only if checkout isn't configured.
+const seasonCheckout = () => (checkoutEnabled() && plans.copy.links.monthly ? attributed(plans.copy.links.monthly, 'season') : undefined)
+const trialProps = () => {
+  const href = seasonCheckout()
+  return href ? { href, onClick: referredCheckout('copy', 'monthly', href) } : { to: pricingTo(), onClick: () => track('trial_click') }
+}
+
 const TrialButton = () => (
-  <Button to={pricingTo()} onClick={() => track('trial_click')} className="shrink-0">
+  <Button {...trialProps()} className="shrink-0">
     Start {TRIAL_DAYS}-day free trial
   </Button>
 )
@@ -117,6 +126,7 @@ export function Season() {
               others), then the trial. Post A: 151 views of the follow-first form, 0 signups. */}
           {!getToken() && (
             <FridayBox
+              checkout={seasonCheckout()}
               className="mt-4"
               top={!passed && next ? <p className="mb-2 text-[13.5px] text-ink-2">Next up: {next}.</p> : undefined}
               title="Every Friday: the week’s biggest superinvestor buys and sells. Free."
@@ -226,9 +236,9 @@ export function Season() {
                 <Lock /> {rows.length - FREE} more names, and an email each time a fund you follow files, with Copy
               </p>
               <span className="flex flex-col items-start gap-1">
-                <Link to="/pricing/" className="inline-flex h-8 items-center rounded-full bg-accent px-3.5 text-[13px] font-medium text-white hover:bg-accent-2">
+                <Button {...trialProps()} size="sm">
                   Start {TRIAL_DAYS}-day free trial
-                </Link>
+                </Button>
                 <span className="text-[12px] text-accent-2/80">{TRIAL_LINE}</span>
               </span>
             </div>
@@ -278,7 +288,7 @@ export function Season() {
 
       <HedgeFlow id="hedge-funds" quarter={d?.quarter} typesAsOf={idx.data?.typesAsOf} rows={10} className="mt-6" />
 
-      <Signup source="season" className="mt-6" />
+      <Signup source="season" checkout={seasonCheckout()} className="mt-6" />
 
       <p className="mt-6 text-[13px] leading-relaxed text-ink-3">
         From Form 13F-HR filings as accepted by SEC EDGAR. Each fund is compared with its own previous 13F; changes are valued at quarter-end prices as filed. Filer counts include every 13F-HR with parsed holdings. Not investment advice.{' '}

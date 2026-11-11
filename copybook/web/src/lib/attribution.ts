@@ -47,8 +47,10 @@ export function utmTags() {
   }
 }
 
-/** A Stripe Payment Link with the visitor's attribution attached. */
-export function attributed(link: string) {
+/** A Stripe Payment Link with the visitor's attribution attached, and the page the trial came from (`from`: the
+ *  ?from= that /pricing/ was opened with, or the page itself, as on /season/), so a trial started from Buffett's
+ *  page records it: client_reference_id direct_site-from-warren-buffett, or x_season-from-warren-buffett. */
+export function attributed(link: string, from = new URLSearchParams(location.search).get('from')) {
   let t: Touch | null = null
   try {
     t = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Touch | null
@@ -65,7 +67,8 @@ export function attributed(link: string) {
   } catch {
     /* storage blocked */
   }
-  u.searchParams.set('client_reference_id', t ? `${clean(t.source)}_${clean(t.content || 'none')}` : 'direct_site')
+  const via = from && /^[A-Za-z0-9.-]{1,60}$/.test(from) ? `-from-${clean(from)}` : ''
+  u.searchParams.set('client_reference_id', `${t ? `${clean(t.source)}_${clean(t.content || 'none')}` : 'direct_site'}${via}`)
   if (t) {
     u.searchParams.set('utm_source', t.source)
     if (t.content) u.searchParams.set('utm_content', t.content)

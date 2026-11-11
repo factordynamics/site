@@ -110,7 +110,7 @@ export function StockPage() {
   // value-only flag with no share change (GLD, Rochon: 3.9K → 3.9K) is no move: it stays in the holders table only.
   const heldRows = useMemo(() => [...tracked, ...exited, ...notCounted].filter((h) => h.flag || h.held_note), [tracked, exited, notCounted])
   const flaggedRows = useMemo(() => heldRows.filter((h) => h.held_note || !(h.flag === 'value' && h.shares === h.prev_shares && h.change !== 'new' && h.change !== 'exited')).sort((a, b) => Math.max(b.value, b.prev_value) - Math.max(a.value, a.prev_value)), [heldRows])
-  const flagged = heldRows.reduce((n, h) => n + (h.flag ? 1 : 0) + (h.held_lines?.length ?? 0), 0)
+  const flagged = flaggedRows.reduce((n, h) => n + (h.flag ? 1 : 0) + (h.held_lines?.length ?? 0), 0)
   const options = useMemo(() => (d?.options ?? []).filter((o) => scope === 'all' || o.featured), [d, scope])
   const [allMoves, setAllMoves] = useState(false)
   const moves = useMemo(
@@ -190,9 +190,8 @@ export function StockPage() {
   const heldBy = first ? [first, ...supHolders.filter((h) => h !== first).slice(0, 2)].map((h) => h.manager) : []
   const today = dayET()
   const dueBy = new Map((exp.data?.expected ?? []).filter((x) => x.expected_date && x.expected_date >= today).map((x) => [x.slug, x]))
-  const nextHolder = supHolders
-    .flatMap((h) => (dueBy.has(h.slug) ? [{ h, x: dueBy.get(h.slug)! }] : []))
-    .sort((a, b) => a.x.expected_date!.localeCompare(b.x.expected_date!) || a.x.time_et - b.x.time_et)[0]
+  // The largest holder still due, by value (retail: Berkshire Hathaway's Monday filing on AAPL, not Kahn Brothers' $895K).
+  const nextHolder = supHolders.flatMap((h) => (dueBy.has(h.slug) ? [{ h, x: dueBy.get(h.slug)! }] : []))[0]
   const due = d && supHolders.length && !supHolders.some((h) => h.quarter === sq) && !(d.since ?? []).length ? dueLead({ quarter: sq, deadline: seasonNow().deadline, names: supHolders.map((h) => h.manager) }) : null
   const countLabel = (f: { cur: number; older: number }) => `${num(f.cur)}${f.older ? ` (+${num(f.older)} older)` : ''}`
   return (
@@ -251,7 +250,7 @@ export function StockPage() {
           people={[{ slug: d.ticker, name: d.ticker }]}
           trial={
             nextHolder
-              ? `Next ${d.ticker} holder to file: ${shortName(nextHolder.h.manager)}, ${shortDay(nextHolder.x.expected_date!)} ${aboutET(nextHolder.x.time_et)}. Copy alerts you then; the free email lands ${shortDay(fridayAfter(nextHolder.x.expected_date!).day)}.`
+              ? `Largest ${d.ticker} holder still to file: ${shortName(nextHolder.h.manager)}, ${shortDay(nextHolder.x.expected_date!)} ${aboutET(nextHolder.x.time_et)}. Copy alerts you then; the free email lands ${shortDay(fridayAfter(nextHolder.x.expected_date!).day)}.`
               : supHolders.length
                 ? `Copy: an alert when ${supHolders.length === 1 ? 'it files' : 'one of them files'} a 13F, Form 4 or 13D that moves ${d.ticker}, checked on EDGAR every minute.`
                 : `Want the moves in ${d.ticker} as they’re filed? Copy emails each 13F as it’s filed, checked on EDGAR every minute.`}

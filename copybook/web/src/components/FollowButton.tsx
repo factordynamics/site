@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { pricingTo } from '../lib/data'
-import { ApiError, getToken } from '../lib/account'
+import { ApiError, getToken, provisionalEmail } from '../lib/account'
+import { ConfirmEmail } from './ConfirmEmail'
 import { isCap, isPaywall, setFollow, useFollows } from '../lib/follows'
 import { track } from '../lib/track'
 import { CAP_MSG, FollowSignup } from './FollowSignup'
@@ -45,7 +46,11 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
       setCapped(isCap(e))
       if (isCap(e) || isPaywall(e)) setOpen(true)
     })
-  const click = () => (status !== 'ready' ? setOpen((o) => !o) : save(!on))
+  // A provisional session (fresh from checkout): the follow waits for the emailed link, so the tap says so and
+  // flips nothing, rather than a toggle that turns on and silently reverts (trader, Nov 11).
+  const prov = provisionalEmail()
+  const [confirm, setConfirm] = useState(false)
+  const click = () => (prov && !on ? setConfirm(true) : status !== 'ready' ? setOpen((o) => !o) : save(!on))
 
   // A signed-in reader who still hits the paywall is on the free Friday email (or lapsed).
   const signedIn = Boolean(getToken())
@@ -102,6 +107,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
         {saving ? <Spinner /> : on ? <CheckIcon /> : <PlusIcon />}
         {saving ? (p.want ? 'Saving…' : 'Removing…') : on ? (owned ? 'You own this' : 'Following') : 'Follow'}
       </button>
+      {confirm && prov && <ConfirmEmail email={prov} kind="follow" className="absolute right-0 top-full z-10 mt-1.5 w-[300px] shadow-[0_6px_16px_-6px_rgb(12_14_19/0.2)] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:z-50 max-sm:w-auto" />}
       {p?.state === 'error' && (
         <span role="alert" className={`absolute right-0 top-full z-10 mt-1.5 flex items-center gap-1.5 ${p.note ? 'w-[280px] whitespace-normal max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:z-50 max-sm:w-auto max-sm:px-3.5 max-sm:py-3' : 'whitespace-nowrap'} rounded-lg bg-card px-2.5 py-1.5 text-[12.5px] text-down shadow-[0_0_0_1px_var(--color-line),0_6px_16px_-6px_rgb(12_14_19/0.2)]`}>
           {p.note ?? (p.want ? 'Follow didn’t save.' : 'Unfollow didn’t save.')}

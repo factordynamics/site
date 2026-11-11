@@ -92,7 +92,7 @@ export const checkoutEnabled = () => Boolean(checkout.monthly || checkout.yearly
 
 export const TRIAL_DAYS = 14
 /** Under every Copy trial button (Copy trials take no card since Nov 11; Pro and Fund still do). */
-export const TRIAL_LINE = `${TRIAL_DAYS} days free, no card needed. Then $${prices.monthly}/month or $${prices.yearly}/year.`
+export const TRIAL_LINE = `${TRIAL_DAYS} days free, no card needed. Keep it for $${prices.monthly}/month or $${prices.yearly}/year.`
 export const TRIAL_TERMS = trialTerms('copy')
 // A referral takes one month of the monthly price off the first charge after the trial, on either
 // interval (the API's coupon: amount_off = a month, duration once). Monthly: that month is free.

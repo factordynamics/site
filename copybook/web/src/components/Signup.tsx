@@ -1,3 +1,4 @@
+import { referredCheckout } from '../lib/attribution'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { pricingTo } from '../lib/data'
@@ -11,7 +12,7 @@ import { Arrow, Button, Check } from './ui'
 // Free weekly email (POST {api}/signup): a free account that gets the week's top moves every Friday,
 // never real-time alerts. Shown to signed-out readers only; each placement passes its own source.
 // The Copy trial stays the primary action; the free email is the quieter second path.
-export function Signup({ source, className = '' }: { source: string; className?: string }) {
+export function Signup({ source, checkout, className = '' }: { source: string; checkout?: string; className?: string }) {
   const [email, setEmail] = useState('')
   const [website, setWebsite] = useState('')
   const [state, setState] = useState<{ s: 'idle' | 'sending' | 'done' | 'member' | 'error'; msg?: string; note?: string | null }>({ s: 'idle' })
@@ -36,7 +37,8 @@ export function Signup({ source, className = '' }: { source: string; className?:
             </Link>
             . Or start Copy for each 13F as it’s filed.
           </p>
-          <Button to={pricingTo()} variant="outline" className="mt-4">
+          {/* `checkout`: a Payment Link to open directly (/season/), skipping /pricing/. */}
+          <Button {...(checkout ? { href: checkout, onClick: referredCheckout('copy', 'monthly', checkout) } : { to: pricingTo() })} variant="outline" className="mt-4">
             Start {TRIAL_DAYS}-day free trial <Arrow />
           </Button>
           <p className="mt-1.5 text-[12.5px] text-ink-3">{TRIAL_LINE}</p>

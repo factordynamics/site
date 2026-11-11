@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { call, getToken, sharedGet } from '../lib/account'
+import { call, getToken, provisionalEmail, requestLogin, sharedGet } from '../lib/account'
 import { useFollows } from '../lib/follows'
 import { testLine, testResult } from './Channels'
 import { Button, Check } from './ui'
@@ -32,7 +32,12 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
   const [tested, setTested] = useState(() => localStorage.getItem(TESTED) === '1')
   const [test, setTest] = useState<{ busy?: boolean; msg?: string; ok?: boolean }>({})
 
+  // Fresh from checkout, the session is provisional: channels, tests and alerts wait for the emailed link, so
+  // /channels isn't called (it would 403) and step 0 says what to do (retail, Nov 11).
+  const prov = provisionalEmail()
+  const [resent, setResent] = useState<'idle' | 'busy' | 'sent' | 'error'>('idle')
   const load = useCallback(() => {
+    if (provisionalEmail()) return
     sharedGet<{ channels: Ch }>('/channels').then(
       (r) => {
         setCh(r.channels)
@@ -77,7 +82,28 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
   type Act = { label: string; to?: string; href?: string; onClick?: () => void; disabled?: boolean }
   const n = follows.investors.length
   const names = follows.owned.length + follows.stocks.filter((t) => !follows.owned.includes(t)).length
+  const waits = 'After you confirm your email (step 1).'
   const steps: { done: boolean; title: string; body: ReactNode; act: Act; alt?: Act }[] = [
+    ...(prov
+      ? [
+          {
+            done: false,
+            title: 'Confirm your email',
+            body: resent === 'error' ? 'That didn’t send. Please try again in a minute.' : `Open the link we sent to ${prov} to turn on alerts, channels and tests.`,
+            act: {
+              label: resent === 'busy' ? 'Sending…' : resent === 'sent' ? 'Sent again' : 'Resend link',
+              disabled: resent === 'busy' || resent === 'sent',
+              onClick: () => {
+                setResent('busy')
+                requestLogin(prov).then(
+                  () => setResent('sent'),
+                  () => setResent('error'),
+                )
+              },
+            },
+          },
+        ]
+      : []),
     {
       done: n >= FUNDS,
       title: `Follow ${FUNDS} funds`,
@@ -94,10 +120,10 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
       done: connected || keepEmail,
       title: 'Connect a channel (or keep email)',
       // A working chat or webhook replaces alert email unless keep_email is on (payments, Nov 11).
-      body: chat ? (ch?.keep_email ? 'Alerts reach your chat and your inbox.' : 'Alerts go to your chat instead of email. Tick “Also email me alerts” below for both.') : connected ? 'Alerts reach your feed and your inbox.' : keepEmail ? 'Email only. You can add Slack, Discord, Telegram or a feed any time below.' : 'Add Telegram or Slack so alerts never wait on email limits.',
-      act: { label: connected ? 'Channels' : 'Connect', href: '#channels' },
+      body: prov ? waits : chat ? (ch?.keep_email ? 'Alerts reach your chat and your inbox.' : 'Alerts go to your chat instead of email. Tick “Also email me alerts” below for both.') : connected ? 'Alerts reach your feed and your inbox.' : keepEmail ? 'Email only. You can add Slack, Discord, Telegram or a feed any time below.' : 'Add Telegram or Slack so alerts never wait on email limits.',
+      act: prov ? { label: 'Connect', disabled: true } : { label: connected ? 'Channels' : 'Connect', href: '#channels' },
       alt:
-        connected || keepEmail
+        prov || connected || keepEmail
           ? undefined
           : {
               label: 'Keep email',
@@ -110,13 +136,13 @@ export function CopySetup({ welcome }: { welcome?: boolean }) {
     {
       done: testDone,
       title: 'Send a test',
-      body: test.msg ? test.msg : testDone ? 'Tested earlier. Send another test any time; each channel reports its own result.' : connected ? 'One short message to each place you connected, to check it works.' : keepEmail ? 'One test email to your inbox. Alerts come from copybook@factordynamics.com; add it to your contacts so they never land in spam.' : 'Connect a channel or keep email first, then check it here.',
-      act: { label: test.busy ? 'Sending…' : 'Send a test', onClick: sendTest, disabled: !(connected || keepEmail) || test.busy },
+      body: prov ? waits : test.msg ? test.msg : testDone ? 'Tested earlier. Send another test any time; each channel reports its own result.' : connected ? 'One short message to each place you connected, to check it works.' : keepEmail ? 'One test email to your inbox. Alerts come from copybook@factordynamics.com; add it to your contacts so they never land in spam.' : 'Connect a channel or keep email first, then check it here.',
+      act: { label: test.busy ? 'Sending…' : 'Send a test', onClick: sendTest, disabled: Boolean(prov) || !(connected || keepEmail) || test.busy },
     },
   ]
   const left = steps.filter((s) => !s.done).length
   const next = steps.findIndex((s) => !s.done)
-  if (status !== 'ready' || hidden || (!left && !welcome)) return null
+  if (status !== 'ready' || (hidden && !prov) || (!left && !welcome)) return null
 
   return (
     <section className="mt-10 rounded-[18px] bg-card p-5 shadow-[var(--shadow-card)] md:p-8" aria-labelledby="copy-setup-title">

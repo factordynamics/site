@@ -19,7 +19,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
 import { ApiStatus, Updating } from '../components/ApiStatus'
-import { ApiError, call, errText, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { ConfirmEmail } from '../components/ConfirmEmail'
+import { ApiError, call, errText, provisionalEmail, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
@@ -205,6 +206,9 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
         </p>
       )}
 
+      {/* Step 0 for a provisional session: Copy's setup list carries it; other plans get it here. */}
+      {provisionalEmail() && !(member.active && member.plan === 'copy' && !member.seat) && <ConfirmEmail email={provisionalEmail()!} className="mt-6" />}
+
       {member.active && <FailingBanner initial={member.channels_failing} onAccount />}
 
       {member.active && member.plan === 'fund' && <FundSetup member={member} welcome={welcome} />}
@@ -371,7 +375,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
       {member.active && member.plan === 'copy' && !member.seat && !member.cancel_at_period_end && <UpgradePro member={member} className="mt-5" />}
       {member.active && member.referral && member.plan !== 'fund' && <Referral r={member.referral} />}
       {member.active && member.plan === 'fund' && !member.seat && <Team />}
-      {member.active && PLAN_NAME[member.plan ?? 'copy'] && <Channels />}
+      {member.active && PLAN_NAME[member.plan ?? 'copy'] && !provisionalEmail() && <Channels />}
       {member.active && <ApiKeys member={member} focus={focus} />}
 
       {(member.active || paused) && status === 'ready' && follows.onboarded && !editing && (
@@ -894,12 +898,11 @@ function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => 
   const offer = member.pause_after_trial ? null : member.pause_offer
   // Trialing monthly members: the pause starts when the trial ends, so nothing is charged until it's over.
   const afterTrial = Boolean(offer?.starts && Date.parse(String(offer.starts)) > Date.now())
-  // A pause is already scheduled for the trial's end (undo is on the plan line): only cancelling is left here.
-  const scheduled = Boolean(member.pause_after_trial)
   if (!open)
     return (
       <button type="button" onClick={() => setOpen(true)} className="mt-3 min-h-9 text-[13px] text-ink-3 underline underline-offset-2 hover:text-ink-2">
-        {offer && !scheduled ? 'Pause or cancel' : 'Cancel plan'}
+        {/* Pause only where the API offers it (monthly with a card, confirmed by payments Nov 11); a trial ends now. */}
+        {offer && !member.pause_after_trial ? 'Pause or cancel' : member.status === 'trialing' ? 'End trial now' : 'Cancel'}
       </button>
     )
   return (

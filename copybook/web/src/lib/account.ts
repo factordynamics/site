@@ -55,9 +55,26 @@ export function getToken(): string | null {
     return null
   }
 }
-const setToken = (token: string) => {
-  localStorage.setItem(KEY, JSON.stringify({ token, exp: Date.now() + 30 * DAY }))
+// `prov`: a provisional session's address (a checkout or signup hand-off, not yet proven by the emailed link). Any
+// other session, or signing out, clears it.
+const setToken = (token: string, prov: string | null = null) => {
+  localStorage.setItem(KEY, JSON.stringify({ token, exp: Date.now() + 30 * DAY, ...(prov ? { prov } : {}) }))
   sessionStorage.removeItem(REAUTH)
+}
+/** A session from before `prov` was kept answered 403 verify_email: it's provisional, for the member's address. */
+function markProvisional() {
+  const token = getToken()
+  const email = lastMe()?.email
+  if (token && email && !provisionalEmail()) setToken(token, email)
+}
+/** The address the sign-in link went to while this device's session is provisional: alerts, channels, tests and
+ *  keys wait for that link (the API's 403 verify_email). Null for a full session or none. */
+export function provisionalEmail(): string | null {
+  try {
+    return getToken() ? ((JSON.parse(localStorage.getItem(KEY) ?? 'null') as { prov?: string } | null)?.prov ?? null) : null
+  } catch {
+    return null
+  }
 }
 // Set when the API confirms a stored session is invalid (401), such as a session from before the server move: the
 // account page and My book then ask the member to sign in again instead of treating them as a visitor.
@@ -137,7 +154,10 @@ export class ApiError extends Error {
     this.sentAt = body?.sign_in_sent_at ?? body?.sent_at
     this.alreadyMember = body?.already_member === true
     // A provisional session (signup or checkout hand-off) refused a control: every page shows the reason once.
-    if (body?.code === 'verify_email' && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('copybook:verify', { detail: body.error ?? VERIFY_MSG }))
+    if (body?.code === 'verify_email' && typeof window !== 'undefined') {
+      markProvisional()
+      window.dispatchEvent(new CustomEvent('copybook:verify', { detail: body.error ?? VERIFY_MSG }))
+    }
   }
 }
 
@@ -278,9 +298,9 @@ export function adoptSession(token: string) {
 /** Null when the checkout's address already had an account (code existing_account): no token comes back, so
  *  the browser keeps the session it has, and the member signs in with the emailed link. */
 export async function startSession(body: { checkout_session: string } | { login: string }) {
-  const r = await call<{ token?: string; member: Member | null; code?: string }>('/session', { body })
+  const r = await call<{ token?: string; member: Member | null; code?: string; session?: string }>('/session', { body })
   if (!r.token) return null
-  setToken(r.token)
+  setToken(r.token, r.session === 'provisional' ? (r.member?.email ?? null) : null)
   return r.member
 }
 
