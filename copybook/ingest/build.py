@@ -38,6 +38,7 @@ from ingest.parse import (
     looks_like_thousands,
     parse_info_table,
     scale_if_thousands,
+    debt_cusip,
     in_dollars,
     unit_verdict,
     consensus_prices,
@@ -655,7 +656,7 @@ def mark_refiled(trail: list[dict], refiled: list[dict]) -> list[dict]:
 CHANGE_FIELDS = ("prev_shares", "prev_value", "prev_weight", "change", "share_change", "value_delta", "delta_pct_of_book",
                  "value_delta_basis")
 # Set by with_changes only when they apply; a row read back from an earlier build must not keep them.
-STALE = ("split", "prev_shares_as_filed", "unreliable", "cusip_mismatch", "class_switch", "cusip_as_filed", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
+STALE = ("split", "prev_shares_as_filed", "unreliable", "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed", "value_change", "suspect_units", "suspect_units_basis", "suspect_reason", "row_type", "prev_cusip", "suspect_duplicate",
          "prev_principal_amount")
 MOVE_ROWS = 10  # per bucket in {slug}.json `moves`; alerts carry the top 5
 CHANGE_KINDS = ("new", "added", "trimmed", "exited", "unchanged", "disclosed_later")
@@ -1147,6 +1148,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
     # (GOOG/GOOGL): exit plus new kept, both class_switch, so alerts don't headline them.
     mismatch: dict[tuple, dict] = {}
     switch: set[tuple] = set()
+    different: set[tuple] = set()  # a debt CUSIP's exit and a share line's new under one prefix: not compared
     fresh = [k for k, h in ((line_key(h), h) for h in latest["holdings"]) if k not in before and k not in renamed and k not in dup
              and h.get("shares_type") != "PRN"]
     left = [pk for pk, x in gone.items() if pk not in renamed.values() and pk not in dup and x.get("shares_type") != "PRN"]
@@ -1155,6 +1157,11 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         if len(cands) != 1 or sum(1 for f in fresh if f[0][:6] == k[0][:6] and f[1] == k[1]) != 1:
             continue
         pk = cands[0]
+        if debt_cusip(k[0]) != debt_cusip(pk[0]):
+            # A note beside common under one prefix (Mizuho Securities WEC 92939UAP1 -> 92939U106, ON 682189AU9 ->
+            # 682189105) is a different security: never paired, the two rows say so (cusip_pair).
+            different |= {k, pk}
+            continue
         h_, p_ = next(x for x in latest["holdings"] if line_key(x) == k), gone[pk]
         typo_new, typo_old = mistyped(h_, q_to, pk[0]), mistyped(p_, q_from, k[0])
         if typo_new or typo_old:
@@ -1194,6 +1201,8 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         k = (h["cusip"], h["put_call"] or "")
         if k in switch:
             h = h | {"class_switch": True}
+        if k in different:
+            h = h | {"cusip_pair": "different_security"}
         if k in dup:
             rows.append(h | {"row_type": "holding", "suspect_duplicate": True} | {f: None for f in CHANGE_FIELDS}
                         | {"value_delta": 0, "delta_pct_of_book": 0.0} | units(h, None, 1.0, 1.0, q_to, None))
@@ -1297,6 +1306,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
                 **{k: p[k] for k in ("display_name", "sector", "shares_type") if k in p},
                 **extra(p, "exited", -p["value"], -amount(p) * r, r, prn),
                 **({"class_switch": True} if (p["cusip"], p["put_call"] or "") in switch else {}),
+                **({"cusip_pair": "different_security"} if (p["cusip"], p["put_call"] or "") in different else {}),
             }
         )
     return [hold(r, q_to) for r in rows]
@@ -1712,7 +1722,7 @@ def shares_out(x):
 V1_EXTRA = ("pct_of_book", "notional_pct_of_book", "delta_pct_of_book", "display_name", "late_disclosure", "parts",
             "value_delta_basis", "unreliable", "value_change", "price_outlier", "suspect_units", "suspect_reason",
             "shares_basis", "shares_as_filed", "option_held", "held_lines", "mixed_scale", "value_rescale",
-            "cusip_mismatch", "class_switch", "cusip_as_filed",
+            "cusip_mismatch", "class_switch", "cusip_pair", "cusip_as_filed",
             "split", "prev_shares_as_filed", "suspect_duplicate", "prev_reason", "discretion", "other_managers", "vote_sole", "vote_shared", "vote_none")
 
 

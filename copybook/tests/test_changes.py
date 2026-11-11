@@ -813,3 +813,20 @@ class ShareClassHoldersTest(unittest.TestCase):
                 for g, v in zip((moves.LATEST, moves.PERIOD, moves.FILING), saved[1:]):
                     g.clear()
                     g.update(v)
+
+
+class DebtPairTest(unittest.TestCase):
+    def test_note_beside_common_is_not_a_cusip_change(self):
+        from ingest import build
+        build.CONSENSUS.update({("2026Q2", "92939UAP1"): 1.02, ("2026Q3", "92939U106"): 95.0})
+        try:
+            r = lambda c, t, sh, v: {"issuer": "WEC", "title": t, "cusip": c, "ticker": None, "value": v, "shares": sh,
+                                     "put_call": None, "shares_type": "SH", "weight": 0}
+            # Mizuho Securities WEC: Q2 a note 92939UAP1 (25,501 units), Q3 common 92939U106: new common, note exited.
+            rows = build.with_changes({"quarter": "2026Q3", "holdings": [r("92939U106", "COM", 3523607, 334742665)]},
+                                      {"quarter": "2026Q2", "holdings": [r("92939UAP1", "NOTE", 25501, 26011)]})
+            got = {x["cusip"]: (x["change"], x.get("cusip_pair"), x.get("cusip_mismatch")) for x in rows}
+            self.assertEqual(got, {"92939U106": ("new", "different_security", None),
+                                   "92939UAP1": ("exited", "different_security", None)})
+        finally:
+            build.CONSENSUS.clear()

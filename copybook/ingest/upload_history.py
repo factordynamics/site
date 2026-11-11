@@ -216,7 +216,14 @@ def main() -> int:
                 todo.append((key, path, digest))
     pair = link_files(root)
     first = {k for k, _, _ in fresh_only(todo)}
-    rank = lambda key: -4 if key in first else pair[key] - 2 if key in pair else \
+    # Each curated fund's latest quarter (h/{slug}/{q}.json, .v1.json, .csv) right after the holder index: /history/
+    # reads it from R2 and must agree with the fund page on Pages (Mizuho Securities 2026Q3 read GOOG +$135.9M there).
+    newest: dict[str, str] = {}
+    for key, _, _ in todo:
+        if (m := re.match(r"^h/([^/]+)/(\d{4}Q[1-4])\.", key)):
+            newest[m[1]] = max(newest.get(m[1], ""), m[2])
+    latest = lambda key: bool(m := re.match(r"^h/([^/]+)/(\d{4}Q[1-4])\.", key)) and newest.get(m[1]) == m[2]
+    rank = lambda key: -4 if key in first else pair[key] - 2 if key in pair else 0.5 if latest(key) else \
         next((i for i, p in enumerate(ORDER) if key.startswith(p)), len(ORDER))
     todo.sort(key=lambda t: (rank(t[0]), t[0]))
     if edgar_hours(datetime.now(timezone.utc)) and os.environ.get("COPYBOOK_UPLOAD_ANYTIME") != "1":
