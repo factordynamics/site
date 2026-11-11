@@ -1114,9 +1114,9 @@ export function Fund({ slug }: { slug: string }) {
               { key: 'n', label: 'Company', render: (r) => (r.ticker ? <StockCell t={r.ticker} name={r.display_name || r.issuer} /> : <span className="trunc">{issuerName(r.display_name || r.issuer)}</span>), sort: (r) => r.display_name || r.issuer },
               { key: 'k', label: 'Security', render: (r) => <span className="trunc dim">{noteLabel(r)}</span>, sort: (r) => r.title },
               { key: 'a', label: 'Amount', num: true, hideSm: true, render: noteAmount, sort: (r) => r.principal_amount ?? r.shares },
-              { key: 'c', label: 'This quarter', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} />, sort: (r) => r.share_change ?? 0 },
+              { key: 'c', label: 'Change', title: 'Compared with this investor’s previous 13F', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} />, sort: (r) => r.share_change ?? 0 },
               { key: 'v', label: 'Value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
-              { key: 'pv', label: 'Last quarter', num: true, hideSm: true, render: (r) => <span className="dim">{usd(r.prev_value)}</span>, sort: (r) => r.prev_value ?? 0 },
+              { key: 'pv', label: 'Previous 13F', num: true, hideSm: true, render: (r) => <span className="dim">{usd(r.prev_value)}</span>, sort: (r) => r.prev_value ?? 0 },
             ]}
           />
         )}
@@ -1270,10 +1270,10 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
           sort: (r) => r.weight,
           title: 'Share of the portfolio',
         },
-        { key: 'ws', label: 'Last quarter vs now', hideSm: true, hide: 'lg', render: (r) => (badValue(r.unreliable) ? null : <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />), title: 'Share of the portfolio last quarter (grey) and now' },
-        { key: 'c', label: 'This quarter', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} />, sort: (r) => r.share_change ?? 0 },
+        { key: 'ws', label: 'Weight change', hideSm: true, hide: 'lg', render: (r) => (badValue(r.unreliable) ? null : <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />), title: 'Share of the portfolio in the previous 13F (grey) and now' },
+        { key: 'c', label: 'Change', title: 'Compared with this investor’s previous 13F', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} />, sort: (r) => r.share_change ?? 0 },
         { key: 'sh', label: 'Shares', num: true, hideSm: true, hide: 'md', render: (r) => <Filed held={r.unreliable} fig="shares">{num(r.shares)}</Filed>, sort: (r) => r.shares },
-        { key: 'p', label: 'Price in filing', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? r.unreliable ? <AsFiled why={r.unreliable}>{price(r.value / r.shares)}</AsFiled> : price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
+        { key: 'p', label: 'Quarter-end price', title: 'Value ÷ shares as filed: about the price at the end of the quarter', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? r.unreliable ? <AsFiled why={r.unreliable}>{price(r.value / r.shares)}</AsFiled> : price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
         { key: 'v', label: 'Value', num: true, render: (r) => <Filed held={r.unreliable} fig="value">{usd(r.value)}</Filed>, sort: (r) => r.value },
       ]}
     />
@@ -1370,7 +1370,7 @@ export function Flows() {
             <TabsSkel labels={['Most buyers', 'Most money in', 'New positions', 'Most sellers', 'Sold out']} />
           </>
         }
-        cols={AGG_SKEL(['Investors buying', 'Who bought', 'Bought', 'Sold', 'Net money in'], [0, 4])}
+        cols={AGG_SKEL(['Investors buying', 'Who bought', 'Bought', 'Sold', 'Net bought'], [0, 4])}
       />
     )
   const fundsN = q === 'latest' ? books.data.length : books.data.filter((b) => b.quarter === q).length
@@ -1433,7 +1433,7 @@ export function Flows() {
           items={[
             [isBuy ? (tab === 'new' ? 'New positions' : 'Investors buying') : tab === 'exits' ? 'Sold all' : 'Investors selling', isBuy ? (tab === 'new' ? 'How many investors bought it for the first time.' : 'How many investors added shares, including new positions.') : tab === 'exits' ? 'How many investors sold every share.' : 'How many investors cut shares, including those who sold out.'],
             ['Bought, Sold', 'The dollar value of shares added and cut, at the price in each 13F. A price move alone isn’t a trade.', 'md'],
-            ['Net money in', 'Bought minus sold. Negative means more money came out than went in.'],
+            ['Net bought', 'Bought minus sold. Negative means they sold more than they bought.'],
           ]}
         />
         <Grid
@@ -1453,7 +1453,7 @@ export function Flows() {
             { key: 'sv', label: 'Sold', num: true, hideSm: true, hide: 'md', title: 'Value of shares cut, at each filing’s price', render: (r) => <span className="neg">{r.sell ? usd(-r.sell) : '—'}</span>, sort: (r) => -r.sell },
             {
               key: 'nv',
-              label: sm('Net money in', 'Net'),
+              label: sm('Net bought', 'Net'),
               num: true,
               title: 'Bought minus sold',
               render: (r) => (
@@ -1637,7 +1637,7 @@ export function Consensus() {
             <TabsSkel labels={['Most investors', 'Most money', 'Biggest single bets']} />
           </>
         }
-        cols={AGG_SKEL(['Owners', 'Of all investors', 'Value held', 'Of all money', 'Biggest bet', 'Average bet', 'Biggest holders'], [0, 2])}
+        cols={AGG_SKEL(['Owners', 'Of all investors', 'Value held', 'Of total value', 'Biggest bet', 'Average bet', 'Biggest holders'], [0, 2])}
       />
     )
   const n = books.data.length
@@ -1688,7 +1688,7 @@ export function Consensus() {
         <ColKey
           items={[
             ['Of all investors', `How many of the ${n} investors own it.`, 'md'],
-            ['Of all money', 'Its share of everything the investors hold combined.', 'lg'],
+            ['Of total value', 'Its share of the combined value of everything the investors hold.', 'lg'],
             ['Biggest bet', 'The largest share of any one investor’s portfolio it takes up.'],
             ['Average bet', 'Its average share of the portfolios that own it.', 'lg'],
           ]}
@@ -1705,7 +1705,7 @@ export function Consensus() {
             { key: 'h', label: 'Owners', num: true, render: (r) => r.holders.length, sort: (r) => r.holders.length, title: 'How many of the investors own it' },
             { key: 'hp', label: 'Of all investors', num: true, hideSm: true, hide: 'md', render: (r) => <span className="wcell">{pct(r.holders.length / n, 0)}<Bar value={r.holders.length} max={n} /></span>, sort: (r) => r.holders.length },
             { key: 'v', label: 'Value held', num: true, hideSm: tab === 'conviction', render: (r) => usd(r.value), sort: (r) => r.value },
-            { key: 'gw', label: 'Of all money', num: true, hideSm: true, hide: 'lg', render: (r) => pct(r.value / agg.total), sort: (r) => r.value, title: 'Share of everything the investors hold combined' },
+            { key: 'gw', label: 'Of total value', num: true, hideSm: true, hide: 'lg', render: (r) => pct(r.value / agg.total), sort: (r) => r.value, title: 'Share of the combined value of everything the investors hold' },
             { key: 'mw', label: 'Biggest bet', num: true, hideSm: tab !== 'conviction', render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'Largest share of any one investor’s portfolio' },
             { key: 'aw', label: 'Average bet', num: true, hideSm: true, hide: 'lg', title: 'Average share of the portfolios that own it', render: (r) => pct(avgBet(r), 2), sort: avgBet },
             { key: 'who', label: 'Biggest holders', hideSm: true, hide: 'lg', render: (r) => <Who list={r.holders.filter((h) => h.value > 0).sort((a, b) => b.value - a.value)} max={2} /> },
