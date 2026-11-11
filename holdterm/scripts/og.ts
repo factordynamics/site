@@ -85,3 +85,35 @@ ${f.change ? `<text x="${88 + width(`in ${f.positions} US-listed stocks`, 26, fa
 <text x="770" y="168" font-family="Inter" font-weight="600" font-size="22" fill="${C.dim}">LARGEST HOLDINGS</text>
 ${bars}`)
 }
+
+export type StockCard = { name: string; ticker: string; holders: number; of: number; value: string; bought: number; sold: number; top: { name: string; weight: number }[] }
+
+/** One stock: how many of the investors own it, what they hold, and the biggest bets on it as bars. */
+export function stockCard(f: StockCard) {
+  const name = fit(f.name, 640, [64, 56, 48, 42], 2)
+  const y0 = 236
+  const nameRows = name.rows.map((r, i) => `<text x="88" y="${y0 + i * name.size * 1.12}" font-family="Inter" font-weight="700" font-size="${name.size}" fill="${C.ink}" letter-spacing="-1">${esc(r)}</text>`).join('\n')
+  const yb = y0 + (name.rows.length - 1) * name.size * 1.12
+  const owners = `${f.holders} of ${f.of} investors`
+  const trades = [f.bought && `${f.bought} bought more`, f.sold && `${f.sold} sold some or all`].filter(Boolean).join(' · ') || 'No trades last quarter'
+  const max = Math.max(...f.top.map((t) => t.weight), 0.01)
+  const bars = f.top
+    .map((t, i) => {
+      const y = 214 + i * 92
+      const label = fit(t.name, 252, [24, 22], 1)
+      return `<text x="770" y="${y}" font-family="Inter" font-weight="600" font-size="${label.size}" fill="${C.ink}">${esc(label.rows[0])}</text>
+<text x="1112" y="${y}" text-anchor="end" font-family="Inter" font-weight="600" font-size="24" fill="${C.ink2}">${(t.weight * 100).toFixed(1)}%</text>
+<rect x="770" y="${y + 16}" width="342" height="14" rx="7" fill="${C.accSoft}"/>
+<rect x="770" y="${y + 16}" width="${Math.max(14, (t.weight / max) * 342).toFixed(1)}" height="14" rx="7" fill="${C.acc}"/>`
+    })
+    .join('\n')
+  return frame(`
+<text x="88" y="164" font-family="Inter" font-weight="600" font-size="24" fill="${C.acc}">${esc(f.ticker)} · Who owns it</text>
+${nameRows}
+<text x="88" y="${yb + 52}" font-family="Inter" font-size="24" fill="${C.dim}">${esc(fit(trades, 640, [24, 21], 1).rows[0])}</text>
+<text x="88" y="${yb + 136}" font-family="Inter" font-weight="700" font-size="72" fill="${C.ink}" letter-spacing="-1.5">${esc(f.value)}</text>
+<text x="88" y="${yb + 180}" font-family="Inter" font-size="26" fill="${C.ink2}">held by ${esc(owners)}</text>
+<line x1="730" y1="150" x2="730" y2="470" stroke="${C.line}" stroke-width="2"/>
+<text x="770" y="168" font-family="Inter" font-weight="600" font-size="22" fill="${C.dim}">BIGGEST BETS ON IT</text>
+${bars}`)
+}
