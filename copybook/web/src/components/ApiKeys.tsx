@@ -78,7 +78,7 @@ export function ApiKeys({ member, focus = false }: { member: Member; focus?: boo
         <div>
           <h2 className="text-[15px] font-semibold">API keys</h2>
           <p className="mt-1 text-[14px] text-ink-2">
-            For the <Link to="/api/" className="font-medium text-accent hover:text-accent-2">Copybook API</Link>. Each key allows 60 requests a minute and 20,000 a day.
+            For the <Link to="/api/" className="font-medium text-accent hover:text-accent-2">Copybook API</Link>. 60 requests a minute and 20,000 a day per account, across all its keys. Each Fund seat has its own limit. Bulk file downloads aren’t metered.
           </p>
         </div>
         {pro && keys && <span className="text-[13px] text-ink-3">{keys.length} of {max} keys</span>}

@@ -14,7 +14,7 @@ const RANK: Record<string, number> = { copy: 1, pro: 2, fund: 3 }
 const ADDS: Record<'pro' | 'fund', [string, string][]> = {
   pro: [
     [BOOK_PRO.t, BOOK_PRO.d],
-    ['API keys and signed webhooks', 'Holdings for every filer, Form 4 and 13D/G as JSON, 60 requests a minute per key.'],
+    ['API keys and signed webhooks', 'Holdings for every filer, Form 4 and 13D/G as JSON, 60 requests a minute per account.'],
     ['Peer overlap', 'Compare your book with the funds you benchmark against, quarter by quarter.'],
   ],
   fund: [

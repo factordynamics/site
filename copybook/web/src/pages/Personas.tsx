@@ -353,7 +353,7 @@ export function ForQuants() {
         <Panel title="Limits">
           <ul className="space-y-2 text-[14px] leading-relaxed text-ink-2">
             <li>Up to 10 keys, with usage on your account page.</li>
-            <li>60 requests a minute and 20,000 a day per key.</li>
+            <li>60 requests a minute and 20,000 a day per account, across all its keys. Each Fund seat has its own limit. Bulk file downloads aren’t metered.</li>
             <li>Signed webhooks for every alert, retried for 12 hours.</li>
             <li>{API_TIMING}</li>
             <li>{API_UNIVERSE}</li>

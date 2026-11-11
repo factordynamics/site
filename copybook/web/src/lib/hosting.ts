@@ -79,7 +79,7 @@ export const OUTAGES: [string, string][] = [
 /** Where the API host is going (no date until the DNS move). */
 /** Payments' statements (index.ts REQUEST_MS, keys.ts LIMITS), checked live Nov 11 12:50 UTC. */
 export const API_TIMING = 'Most /v1 reads answer within 3 s; past that they return 503 busy with Retry-After: 5. Whole books, bulk files, CSVs and feeds are never cut off at 3 s: most whole books return in 1–3 s, and the largest can take up to about 15 s the first time. If the server hasn’t started answering within 30 s, you get 503 with Retry-After: 30; retry.'
-export const API_LIMITS = 'Limits are per API key: 60 requests a minute and 20,000 a day, stated in the RateLimit-Policy, RateLimit-* and X-RateLimit-* headers. A 429 has code rate_limited and Retry-After.'
+export const API_LIMITS = '60 requests a minute and 20,000 a day per account, across all its keys. Each Fund seat has its own limit. Bulk file downloads aren’t metered. The limits are stated in the RateLimit-Policy, RateLimit-* and X-RateLimit-* headers. A 429 has code rate_limited and Retry-After.'
 export const API_UNIVERSE = 'For the whole universe, use the bulk files: one gzip CSV per quarter (2026Q3 is 57.8 MB), with its sha256 in GET /v1/bulk. Book by book it is about 8,970 requests, roughly 2.5 hours at 60 a minute.'
 export const HOST_MOVE = 'Moving to api.factordynamics.com, planned Dec 5, with 7 days’ notice: key holders get email and a changelog entry before the old host stops working.'
 /** /api/: what an API client sees while the API host is down (payments' wording, Nov 11). */

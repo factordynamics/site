@@ -38,7 +38,7 @@ export function UpgradePro({ member, className = '' }: { member: Member; classNa
             {(
               [
                 [BOOK_PRO.t, BOOK_PRO.d],
-                ['API keys and signed webhooks', 'Holdings for every filer, Form 4 and 13D/G as JSON, 60 requests a minute per key.'],
+                ['API keys and signed webhooks', 'Holdings for every filer, Form 4 and 13D/G as JSON, 60 requests a minute per account.'],
               ] as const
             ).map(([t, d]) => (
               <li key={t}>
