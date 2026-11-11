@@ -933,6 +933,12 @@ describe('copybook api', () => {
     expect(JSON.parse((await cfStore.get('cus:n'))!).email).toBe('member@example.com');
     await run(cf, min(2));
     expect(await run(gene, min(2))).toMatchObject({ poller: 'backup (cloudflare polls)' });
+    // An operator's hold (the poller drill): Cloudflare neither polls nor beats until it lapses.
+    const alive0 = text('sync/alive-cloudflare.json');
+    r2.m.set('sync/hold-cloudflare.json', new TextEncoder().encode(JSON.stringify({ until: new Date(min(2) + 30_000).toISOString() })));
+    expect(await run(cf, min(2))).toMatchObject({ poller: `held until ${new Date(min(2) + 30_000).toISOString()}` });
+    expect(text('sync/alive-cloudflare.json')).toBe(alive0);
+    r2.m.delete('sync/hold-cloudflare.json');
     expect((await (await handleRequest(new Request('https://api.test/health'), gene)).json())).toMatchObject({ poller_host: 'cloudflare', poller_last_run: new Date(min(2)).toISOString().replace('.000', ''), api_host: 'gene', poller_builds: { cloudflare: 'cccccccccccc', server: 'aaaaaaaaaaaa' } });
 
     // A member follows Ackman on gene: Cloudflare's cron has it a minute later.

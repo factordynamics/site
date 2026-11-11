@@ -21,6 +21,7 @@ export const BOOT = Date.now();
 /** The R2 bucket HIST binds on Cloudflare (wrangler.toml), reached over Cloudflare's API from gene. */
 const BUCKET = 'copybook-history';
 const ALIVE = 'sync/alive-cloudflare.json';
+const HOLD = 'sync/hold-cloudflare.json';
 /** gene polls when Cloudflare's cron hasn't run for this long. */
 export const BACKUP_AFTER_MS = 10 * 60_000;
 /** Cloudflare's own gap after which it applies gene's changes for a minute before polling again. */
@@ -410,6 +411,13 @@ export async function syncedMinute(env: Env, now: number, run: (env: Env) => Pro
     env = { ...env, DB: r2kv(env.HIST, env.DB) };
     const mine = await readIndex(env, 'cloudflare');
     out.sync_applied = await apply(env, mine);
+    // An operator's hold (R2 sync/hold-cloudflare.json {until}, for the poller drill): no poll and no heartbeat, so gene
+    // sees Cloudflare silent and takes over after BACKUP_AFTER_MS; past `until` this side resumes as after any gap.
+    const hold = JSON.parse((await r2Get(env, HOLD).catch(() => null)) ?? 'null') as { until?: string } | null;
+    if (hold?.until && Date.parse(hold.until) > now) {
+      out.poller = `held until ${hold.until}`;
+      return out;
+    }
     const raw = await r2Get(env, ALIVE);
     const last = raw ? Date.parse((JSON.parse(raw) as { last_run_at: string }).last_run_at) : 0;
     await r2Put(env, ALIVE, JSON.stringify({ last_run_at: iso(now), build: env.BUILD_SHA?.slice(0, 12) ?? null }));
