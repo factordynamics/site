@@ -731,14 +731,19 @@ _UNDERLYING: dict = {"n": -1, "px": {}}
 
 
 def underlying_median(quarter: str | None, cusip: str) -> float | None:
-    """The common-line median price (consensus) of an option line's issuer that quarter: the CUSIP with the same
-    first 6 characters and no option code (90x/95x) in the 7th-9th."""
+    """The common-line median price (consensus) of an option line's underlying that quarter: its own CUSIP when the
+    line is filed under the common's (most are), else the one common CUSIP sharing its first 6 characters (SPY calls
+    78462F903). None when that prefix has several (an ETF trust's series: VanEck 92189F, iShares 464287)."""
     if _UNDERLYING["n"] != len(consensus()):  # rebuilt when the medians change (each run; tests)
         _UNDERLYING["n"], _UNDERLYING["px"] = len(consensus()), {}
-        for (qq, c), px in sorted(consensus().items()):
+        for (qq, c), px in consensus().items():
             if len(c) == 9 and c[6] != "9":
-                _UNDERLYING["px"].setdefault((qq, c[:6]), px)
-    return _UNDERLYING["px"].get((quarter or "", (cusip or "")[:6]))
+                _UNDERLYING["px"].setdefault((qq, c[:6]), []).append(px)
+    exact = consensus().get((quarter or "", cusip or ""))
+    if exact:
+        return exact
+    one = _UNDERLYING["px"].get((quarter or "", (cusip or "")[:6])) or []
+    return one[0] if len(one) == 1 else None
 
 
 def units(h: dict, p: dict | None, r: float, k: float, q: str | None, q_prev: str | None) -> dict:
@@ -798,6 +803,11 @@ def unreliable_side(r: dict, quarter: str | None) -> str | None:
     if r.get("suspect_reason") == "reissue_ratio_not_applied":
         return "both"
     sh, ps, v, pv = (r.get(k) or 0 for k in ("shares", "prev_shares", "value", "prev_value"))
+    if r.get("put_call"):
+        # An option line off its underlying's price: the notional (value) is filed as such far more often than the
+        # count (contracts instead of shares, ~100x: CTC, Belvedere), unless only the value moved off its prior.
+        s_ok, v_ok = 0.5 <= sh / ps <= 2 if sh > 0 and ps > 0 else None, 0.5 <= v / pv <= 2 if v > 0 and pv > 0 else None
+        return "value" if s_ok and v_ok is False else "shares"
     if sh > 0 and ps > 0:
         # Mizuho Markets SPY calls 2026Q3: 479,831 -> 19,152 sh while $610.5M -> $552.5M: the shares are off.
         s_ok, v_ok = 0.5 <= sh / ps <= 2, v > 0 and pv > 0 and 0.5 <= v / pv <= 2
