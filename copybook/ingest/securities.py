@@ -129,6 +129,20 @@ ABBREV = {
 }
 
 
+# 13F nameOfIssuer is often cut short ("CRINETICS PHARMACEUTICALS IN"): a long name's last word that is only the
+# start of a legal suffix is a fragment, not part of the name.
+CUT_SUFFIX = ("INCORPORATED", "CORPORATION", "HOLDINGS", "LIMITED")
+
+
+def uncut(raw: str) -> str:
+    words = (raw or "").strip().split(" ")
+    last = words[-1].upper().strip(".,")
+    if len(raw.strip()) >= 24 and len(words) > 2 and last and any(
+            x.startswith(last) and x != last for x in CUT_SUFFIX) and last not in ("INC", "CORP", "LTD", "LIMITED"):
+        return " ".join(words[:-1])
+    return raw
+
+
 def clean_name(raw: str, expand: bool = False) -> str:
     """'BANK OF AMERICA CORP /DE/' -> 'Bank of America'. Mixed-case names keep their casing."""
     s = STATE.sub("", (raw or "").strip())
@@ -309,7 +323,7 @@ def build(data_dir: Path, budget_s: float | None = None) -> dict[str, dict]:
         if base and not r["sector"]:
             r["sector"] = base["sector"]
         if not r["name"]:
-            r["name"] = clean_name(raws.get(c, ("", ""))[0], expand=True)
+            r["name"] = clean_name(uncut(raws.get(c, ("", ""))[0]), expand=True)
         if not r["sector"]:
             r["sector"] = UNCLASSIFIED
     # One name per ticker: a name shared by several tickers is a trust or family name, so each

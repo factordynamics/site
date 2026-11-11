@@ -140,6 +140,11 @@
    "ticker": "TEVA",
    "name": "Teva Pharmaceutical Industries",
    "sector": "Health Care"
+  },
+  "22663K107": {
+   "ticker": "CRNX",
+   "name": "Crinetics Pharmaceuticals",
+   "sector": "Health Care"
   }
  },
  "by_ticker": {
