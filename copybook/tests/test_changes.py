@@ -117,6 +117,15 @@ class ChangesTest(unittest.TestCase):
         self.assertIsNone(baseline(gap, 0))
         self.assertEqual(baseline({"cik": "1", "history": [q("2026Q1"), q("2025Q4")]}, 0)["quarter"], "2025Q4")
 
+    def test_prior_disclosed_only_after_this_filing_is_no_prior(self):
+        # Norges Bank 2025Q2 (accepted 2025-08-13) against 2025Q1, disclosed by amendment on 2026-05-11.
+        r = row("H", 1, 1)
+        late = {"quarter": "2025Q1", "status": "filed", "total_value": 1, "holdings": [r | {"first_disclosed_at": "2026-05-11"}]}
+        cur = {"quarter": "2025Q2", "status": "filed", "total_value": 1, "accepted_at": "2025-08-13", "holdings": [r]}
+        self.assertIsNone(baseline({"cik": "1", "history": [cur, late]}, 0))
+        on_time = late | {"holdings": [r | {"first_disclosed_at": "2025-05-13"}]}
+        self.assertEqual(baseline({"cik": "1", "history": [cur, on_time]}, 0)["quarter"], "2025Q1")
+
     def test_no_prior_filing_is_unknown_not_new(self):
         self.assertEqual({r["change"] for r in with_changes({"holdings": [row("A", 1, 1)]}, None)}, {None})
 

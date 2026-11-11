@@ -506,7 +506,7 @@ def load_period(cik: str, group: list, cache: dict) -> dict | None:
         UPGRADE[0] -= 1
     if key in cache and not stale:
         q = fix_cached(cache[key])
-        return q | {"filings": mark_refiled(trail, q.get("refiled") or [])}
+        return original_disclosure(cik, q, base, group, cache) | {"filings": mark_refiled(trail, q.get("refiled") or [])}
     loaded = load_filing(cik, base)
     while loaded is None and additions:
         # A placeholder base (Norges Bank's Q1/Q3 13F-HRs omit the table under confidential treatment): the first
@@ -540,7 +540,32 @@ def load_period(cik: str, group: list, cache: dict) -> dict | None:
         extras.append(x)
     q = merge_quarter(loaded, extras) | {"filing_key": key, "format": CACHE_FORMAT, "refiled": refiled}
     q["cover_total"] = sum(b.get("cover_total") or 0 for b in [loaded, *extras]) or None
-    return q | {"filings": mark_refiled(trail, refiled)}
+    return original_disclosure(cik, q, base, group, cache) | {"filings": mark_refiled(trail, refiled)}
+
+
+def original_disclosure(cik: str, q: dict, base, group: list, cache: dict) -> dict:
+    """A RESTATEMENT book's positions that the original 13F-HR already listed were public from the original's
+    acceptance: they keep its source_accession and first_disclosed_at. Otherwise every row reads as disclosed on the
+    restatement's date, and the next quarter's point-in-time diff sees no prior at all (FMR 2025Q1, restated
+    2026-11-05, made all 5,316 lines of 2025Q2 'new'). Checked once per book (disclosure_from_original)."""
+    if base.form == "13F-HR" or "disclosure_from_original" in q:
+        return q
+    orig = min((m for m in group if m.form == "13F-HR" and m.filing_date <= base.filing_date),
+               key=lambda m: (m.filing_date, m.accession), default=None)
+    if orig is None:
+        return q | {"disclosure_from_original": None}
+    try:
+        o = cache.get(orig.accession) or load_filing(cik, orig)
+    except Exception as exc:  # noqa: BLE001 - the next run tries again
+        print(f"  original {orig.accession}: {exc}", flush=True)
+        return q
+    was = {(h["cusip"], h.get("put_call") or ""): h for h in (o or {}).get("holdings") or []}
+    at = orig.accepted_at or (o or {}).get("accepted_at")
+    for h in q["holdings"]:
+        k = was.get((h["cusip"], h.get("put_call") or ""))
+        if k and at and at < (h.get("first_disclosed_at") or "~"):
+            h["source_accession"], h["first_disclosed_at"] = orig.accession, k.get("first_disclosed_at") or at
+    return q | {"disclosure_from_original": orig.accession}
 
 
 def is_refiled_book(base: dict, extras: list[dict], x: dict) -> bool:
@@ -1092,6 +1117,12 @@ def baseline(m: dict, i: int) -> dict | None:
     # Mizuho Bank's positions as MFG's exits. (Pershing Square Inc. reporting in 2026Q2 against the 2026Q1 book it
     # was combined into passes.)
     if prev_quarter(cur["quarter"]) != prev["quarter"] or book_filer(m, cur) not in book_sources(m, prev):
+        return None
+    # Point in time: a prior book none of whose lines was public when this quarter was filed (Norges Bank's Q1
+    # disclosed a year late by amendment; Allianz's 2024Q3 filed after its 2024Q4) is no prior: changes unknown,
+    # not every line "new".
+    known_by = cur.get("accepted_at")
+    if known_by and prev.get("holdings") and all((h.get("first_disclosed_at") or "") > known_by for h in prev["holdings"]):
         return None
     return prev  # quarters two filers both filed are already combined (ingest, share_reporter_books)
 

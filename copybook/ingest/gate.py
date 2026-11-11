@@ -313,6 +313,10 @@ def bad_baselines(data: Path) -> list[str]:
             prev = books.get(pq) or {}
             if pq != prev_q(name) or filer(fund, q) not in sources(fund, prev):
                 bad.append(f"{folder.name} {name} vs {pq}")
+                continue
+            shares = [h for h in q.get("holdings") or [] if not h.get("put_call") and h.get("shares_type") != "PRN"]
+            if len(shares) >= 5 and not q.get("exited") and all(h.get("change") == "new" for h in shares):
+                bad.append(f"{folder.name} {name} vs {pq}: every line new, no exits")
     return bad
 
 
