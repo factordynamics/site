@@ -73,6 +73,22 @@ export const DATA_ALERTS: Record<string, string> = {
 /** Data errors outside ingest's changelog (API bugs), written by hand for /status/'s Data list. */
 export const DATA_MANUAL: { id: string; date: string; kind: 'correction' | 'incident'; title: string; body: string; affected: string }[] = [
   {
+    id: 'alert-bond-priors',
+    date: '2026-11-11',
+    kind: 'correction',
+    title: 'Advent’s 13F alert sized bond lines from zero',
+    body: 'Two 13F alerts showed wrong figures; this is the first. Advent Capital Management’s Q3 13F (0001140361-26-042650, Nov 10): five convertible-bond rows were sized as if bought from zero, because the prior quarter stores bonds by principal with a share count of 0. A bond shown as “added +$141.2M” was really +$1.1M, and one shown as “added +$119.7M” was really a trim of −$15.0M. Fixed Nov 11: a bond’s prior count is now its principal, and alerts from then on are checked against the published data within 15 minutes.',
+    affected: 'Yes: this one alert, sent before Nov 11 05:00 UTC, so no correction email; this entry is the notice. Every recipient was a test or internal inbox.',
+  },
+  {
+    id: 'alert-option-case',
+    date: '2026-11-11',
+    kind: 'correction',
+    title: 'Mizuho Markets Americas’ SPY options read as exits',
+    body: 'Two 13F alerts showed wrong figures; this is the second. Mizuho Markets Americas’ Q3 13F (0001062993-26-005826, Nov 9): the SPY call and put lines said “exited” (−$610.5M and −$63.2M), but both were trimmed (−$58.0M and −$5.9M). EDGAR writes “Call” and the stored prior wrote “CALL”, so the lines didn’t match. Separately, the filer’s own Q2 13F lists the same share count on its stock, call and put SPY lines, so the prior on those lines is the filer’s error. Fixed Nov 11: put and call are matched regardless of case, and alerts from then on are checked against the published data within 15 minutes.',
+    affected: 'Yes: this one alert, sent before Nov 11 05:00 UTC, so no correction email; this entry is the notice. Every recipient was a test or internal inbox.',
+  },
+  {
     id: 'alert-split-factors',
     date: '2026-11-11',
     kind: 'correction',
