@@ -869,7 +869,15 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
     const all = countsOf(raw);
     const not_current = raw.filter((r) => !(r.put_call || (r.kind && r.kind !== 'equity')) && r.change !== 'exited' && !!r.period && !cq.includes(r.period)).length;
     const { net: _all, ...shares } = all;
-    d.counts = { ...d.counts, ...shares, holders_all: (all as Record<string, unknown>).holders, not_current, net: ing ? d.counts.net : q ? (nbp[q] ?? 0) : 0, net_quarter: q, net_by_period: nbp };
+    // Where net comes from (the quant): hl (ingest's figure, as published) or computed here; net_build is that index's
+    // build, and changes_build the build /v1/changes?ticker= serves for this issuer, which reads this same index.
+    const build = (stampOf(obj as Parameters<typeof stampOf>[0])?.build_id ?? d.build_id ?? null) as string | null;
+    // A quarter ticker views refuse (any but the latest a holder reports: the index has each filer's latest book only)
+    // is null, listed in net_by_period_incomplete: XOM's 2026Q2 -$6.07B covered only filers last on 2026Q2.
+    const latestQ = latestPeriod(raw);
+    const incompleteQ = Object.keys(nbp).filter((k) => k !== latestQ).sort();
+    const nbpOut = Object.fromEntries(Object.entries(nbp).map(([k, v]) => [k, incompleteQ.includes(k) ? null : v]));
+    d.counts = { ...d.counts, ...shares, holders_all: (all as Record<string, unknown>).holders, not_current, net: ing ? d.counts.net : q ? (nbp[q] ?? 0) : 0, net_quarter: q, net_by_period: nbpOut, net_by_period_incomplete: incompleteQ, net_source: ing ? 'hl' : 'computed', net_build: build, changes_build: build };
     const { net: _n, ...cur } = countsOf(raw.filter((r) => !r.period || cq.includes(r.period)));
     countsCurrent = cur;
   }

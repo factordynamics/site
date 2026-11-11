@@ -1448,6 +1448,17 @@ describe('copybook api', () => {
     expect([free.status, (await free.json()).code]).toEqual([400, 'freemail']);
     const miss = await (await go({ email: 'coo@acme-cap.test', billing_address: { line1: '1 Main St' } }, '7.7.7.3')).json();
     expect([miss.code, miss.fields]).toEqual(['bad_request', ['fund', 'billing_address.city', 'billing_address.postal_code', 'billing_address.country']]);
+    // A bad value: the field as a bare path (the form highlights it), the hint in error.
+    const bad = await (await go({ email: 'coo@acme-cap.test', fund: 'Acme Capital', billing_address: { ...address, country: 'USA' } }, '7.7.7.4')).json();
+    expect([bad.code, bad.fields, bad.error.includes('2 letters, e.g. US')]).toEqual(['bad_request', ['billing_address.country'], true]);
+    // A string "true" is refused, never a plain lead past the freemail check (the PM: it became one).
+    const str = await go({ email: 'coo@gmail.com', fund: 'Acme Capital', billing_address: address, invoice_trial: 'true' }, '7.7.7.5');
+    expect([str.status, (await str.json()).fields]).toEqual([400, ['invoice_trial']]);
+    // A disposable domain (mail.tm's fldubai.com passed), and a subdomain of one.
+    for (const e of ['coo@fldubai.com', 'coo@x.mailinator.com']) {
+      const d = await go({ email: e, fund: 'Acme Capital', billing_address: address }, '7.7.7.6');
+      expect([e, d.status, (await d.json()).code]).toEqual([e, 400, 'disposable']);
+    }
     expect(calls).toEqual([]);
     // Started: no card, trial 14 days, send_invoice Net 30; the owner is a member at once and gets the sign-in link.
     const before = sent.length;
@@ -4220,7 +4231,9 @@ describe('copybook api', () => {
     // Counts follow current_only: Old Filer LP (last 13F 2025Q3) is in holders_all and not_current only; current_only=false counts it.
     // Ingest's net, net_quarter and net_by_period are served as they are (canonical), and its quarter's net must equal that
     // quarter's /v1/changes?ticker= sum: Situational Awareness +60 sh x $180 (the put is an option, not in net).
-    expect([h.data.counts.net, h.data.counts.net_quarter, h.data.counts.net_by_period]).toEqual([10800, '2026Q3', { '2026Q3': 10800, '2026Q2': 12345 }]);
+    expect([h.data.counts.net, h.data.counts.net_quarter, h.data.counts.net_by_period, h.data.counts.net_by_period_incomplete]).toEqual([10800, '2026Q3', { '2026Q3': 10800, '2026Q2': null }, ['2026Q2']]);
+    // Where net comes from: ingest's index as published, and the build both it and /v1/changes?ticker= read (the quant).
+    expect([h.data.counts.net_source, h.data.counts.net_build, h.data.counts.changes_build]).toEqual(['hl', 'gust-3a8c773b', 'gust-3a8c773b']);
     const nch = (await v1('/v1/changes/2026Q3?ticker=NVDA')).body.data.filter((r: { put_call: string | null }) => !r.put_call);
     expect(nch.reduce((a: number, r: { value_delta_usd: number }) => a + r.value_delta_usd, 0)).toBe(h.data.counts.net);
     expect(h.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0002045724', '0000102909', '0001067983', '0001387322']);
@@ -4447,7 +4460,9 @@ describe('copybook api', () => {
     // Holders' net covers one quarter, the latest (the quant: XOM's mixed Q2 and Q3 to -$3.15B where Q3's changes sum to
     // +$3.13B), and equals that quarter's /v1/changes sum: FMR -156.1M, Norges +34.0M, Barclays' exit -25.0M, IFP +0.13M.
     // BlackRock's Q2 add (+30.9M) is Q2's.
-    expect([teva.data.counts.net, teva.data.counts.net_quarter, teva.data.counts.net_by_period]).toEqual([-156138665 + 34000000 - 25000000 + 134699, '2026Q3', { '2026Q3': -156138665 + 34000000 - 25000000 + 134699, '2026Q2': 30857143 }]);
+    expect([teva.data.counts.net, teva.data.counts.net_quarter, teva.data.counts.net_by_period]).toEqual([-156138665 + 34000000 - 25000000 + 134699, '2026Q3', { '2026Q3': -156138665 + 34000000 - 25000000 + 134699, '2026Q2': null }]);
+    // Merged at read time, so net is computed here (not ingest's figure).
+    expect([teva.data.counts.net_source, teva.data.counts.net_by_period_incomplete]).toEqual(['computed', ['2026Q2']]);
     expect(tch.data.reduce((a: number, r: { value_delta_usd: number }) => a + r.value_delta_usd, 0)).toBe(teva.data.counts.net);
     expect((await v1('/v1/stocks/TEVA/holders?quarter=2026Q3&current_only=false')).body.data.counts).toMatchObject({ net: teva.data.counts.net, net_quarter: '2026Q3' });
     expect((await v1('/v1/stocks/TEVA/holders?quarter=2026Q2')).status).toBe(400);

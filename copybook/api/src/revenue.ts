@@ -246,6 +246,14 @@ const FREEMAIL = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail
 export const domainOf = (email: string) => email.trim().toLowerCase().split('@')[1] ?? '';
 export const isFreemail = (d: string) => [...FREEMAIL].some((f) => d === f || d.endsWith(`.${f}`)) || /^(yahoo|hotmail|outlook|live)\./.test(d);
 
+let DISPOSABLE_SET: Set<string> | null = null;
+/** A disposable (throwaway) email domain, or a subdomain of one (src/disposable.ts, CC0 list). */
+export async function isDisposable(d: string): Promise<boolean> {
+  DISPOSABLE_SET ??= new Set((await import('./disposable')).DISPOSABLE.split('\n'));
+  const parts = d.toLowerCase().split('.');
+  return parts.some((_, i) => i < parts.length - 1 && DISPOSABLE_SET!.has(parts.slice(i).join('.')));
+}
+
 export interface InvoiceTrialForm {
   email: string;
   company: string;

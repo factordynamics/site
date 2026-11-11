@@ -673,6 +673,30 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, ...r }, 200, h);
   }
 
+  // Operator: test contact requests (reviewers' probes) out of the store, by time prefix of their id (lead:{ISO time}-…).
+  // Only ones marked test, unless all is true; a real one also comes off leads:count. Emails come back masked.
+  if (req.method === 'POST' && path === '/ops/erase-leads') {
+    if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
+    const b = await body(req);
+    const prefix = String(b.prefix ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}/.test(prefix)) return json({ ok: false, error: 'prefix: an ISO time prefix to the hour, e.g. 2026-11-11T14:5' }, 400, h);
+    const erased: { id: string; email: string; test: boolean; invoice_trial: string | null }[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await env.DB.list({ prefix: `lead:${prefix}`, cursor });
+      for (const k of page.keys) {
+        const l = JSON.parse((await env.DB.get(k.name)) ?? 'null') as { email?: string; test?: boolean; invoice_trial?: string } | null;
+        if (!l || (!l.test && b.all !== true)) continue;
+        await env.DB.delete(k.name);
+        if (!l.test) await env.DB.put('leads:count', String(Math.max(0, Number((await env.DB.get('leads:count')) ?? 0) - 1)));
+        erased.push({ id: k.name.slice(5), email: (l.email ?? '').replace(/^(.{3}).*@/, '$1…@'), test: !!l.test, invoice_trial: l.invoice_trial ?? null });
+      }
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor);
+    await logAccess(env, req, 'POST /ops/erase-leads', [], `test contact requests erased (${prefix})`);
+    return json({ ok: true, erased }, 200, h);
+  }
+
   // Operator: one account per email for a free signup and paid member split before the merge shipped.
   if (req.method === 'POST' && path === '/ops/merge-free') {
     if (!(await isOperator(env, req))) return json({ ok: false, error: 'not found' }, 404, h);
@@ -946,17 +970,22 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!EMAIL.test(email)) return json({ ok: false, error: 'invalid email', code: 'bad_request' }, 400, h);
     if (seats !== null && !(Number.isInteger(seats) && seats >= 1 && seats <= 1000)) return json({ ok: false, error: 'seats must be a whole number from 1 to 1000', code: 'bad_request' }, 400, h);
     if (b.invoice !== undefined && typeof b.invoice !== 'boolean') return json({ ok: false, error: 'invoice must be true or false', code: 'bad_request' }, 400, h);
+    // A wiring slip ("true" as a string) would otherwise turn every trial request into a plain lead, past the checks.
+    if (b.invoice_trial !== undefined && typeof b.invoice_trial !== 'boolean') return json({ ok: false, error: 'invoice_trial must be true or false (a JSON boolean)', code: 'bad_request', fields: ['invoice_trial'] }, 400, h);
     // A Fund trial billed by invoice (no card): company, billing address and a work email; PO and AP email optional.
     const trial = topic === 'fund' && b.invoice_trial === true;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const addr = (b.billing_address && typeof b.billing_address === 'object' ? b.billing_address : {}) as Record<string, any>;
     if (trial) {
       const missing = [!str(b.fund ?? b.company, 200) && 'fund', ...['line1', 'city', 'postal_code', 'country'].filter((k) => !str(addr[k], 200)).map((k) => `billing_address.${k}`)].filter(Boolean) as string[];
-      if (str(addr.country, 10) && !/^[A-Za-z]{2}$/.test(String(addr.country).trim())) missing.push('billing_address.country (2 letters, e.g. US)');
-      if (b.ap_email !== undefined && b.ap_email !== null && b.ap_email !== '' && !EMAIL.test(String(b.ap_email).trim().toLowerCase())) missing.push('ap_email');
-      if (missing.length) return json({ ok: false, error: `missing or invalid: ${missing.join(', ')}`, code: 'bad_request', fields: missing }, 400, h);
-      const { domainOf, isFreemail } = await import('./revenue');
+      // fields are bare paths (the form highlights them); hints go in error.
+      const hints: string[] = [];
+      if (str(addr.country, 10) && !/^[A-Za-z]{2}$/.test(String(addr.country).trim())) (missing.push('billing_address.country'), hints.push('billing_address.country: 2 letters, e.g. US'));
+      if (b.ap_email !== undefined && b.ap_email !== null && b.ap_email !== '' && !EMAIL.test(String(b.ap_email).trim().toLowerCase())) (missing.push('ap_email'), hints.push('ap_email: an email address'));
+      if (missing.length) return json({ ok: false, error: `missing or invalid: ${missing.join(', ')}${hints.length ? ` (${hints.join('; ')})` : ''}`, code: 'bad_request', fields: missing }, 400, h);
+      const { domainOf, isFreemail, isDisposable } = await import('./revenue');
       if (isFreemail(domainOf(email))) return json({ ok: false, error: 'Use your work email: an invoice trial goes to a company address.', code: 'freemail' }, 400, h);
+      if (await isDisposable(domainOf(email))) return json({ ok: false, error: 'Use your work email: an invoice trial goes to a company address.', code: 'disposable' }, 400, h);
     }
     if (str(b.website, 200)) return json({ ok: true }, 200, h);
     // At most 5 requests an hour per IP and 3 per email address.
