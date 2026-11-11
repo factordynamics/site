@@ -1634,13 +1634,6 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
 }
 
 export async function runBackstop(env: Env, now: number): Promise<Record<string, unknown>> {
-  // The re-filed-amendments fix reaches /v1 when the data run re-uploads the books to R2: First Eagle's
-  // 2026Q2 book drops from $120.67B to $60.75B. Checked hourly until it has (the changelog entry turns shipped).
-  if (!(await env.DB.get('v1:fixed:refiled-amendments'))) {
-    const fe = await env.HIST.get('h/matthew-mclennan/2026Q2.json');
-    const total = fe ? ((await new Response(fe.body).json()) as { total_value?: number }).total_value : undefined;
-    if (total && total < 1e11) await env.DB.put('v1:fixed:refiled-amendments', new Date(now).toISOString());
-  }
   // index.json (900 KB) only changes with a data build: when it hasn't, skip parsing it and go
   // straight to the follow-ups. Its derived KV (CIK map, /v1 filers, periods) is unchanged too.
   // Without /status/'s freshness record yet, read the index once even if unchanged, so it's filled.

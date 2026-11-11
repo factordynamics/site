@@ -267,8 +267,12 @@ async function s3(env: Env, method: 'PUT' | 'GET', key: string, body = '', extra
   for (const part of ['auto', 's3', 'aws4_request']) k = await hmac(k, part);
   const sig = hex(await hmac(k, ['AWS4-HMAC-SHA256', amz, scope, await sha256(canonical)].join('\n')));
   const { host: _, ...send } = headers;
-  return fetch(`https://${hostname}${path}`, { method, body: method === 'PUT' ? body : undefined, headers: { ...send, authorization: `AWS4-HMAC-SHA256 Credential=${tokenId}/${scope}, SignedHeaders=${names.join(';')}, Signature=${sig}` }, signal: AbortSignal.timeout(10_000) });
+  return fetch(`https://${hostname}${path}`, { method, body: method === 'PUT' ? body : undefined, headers: { ...send, authorization: `AWS4-HMAC-SHA256 Credential=${tokenId}/${scope}, SignedHeaders=${names.join(';')}, Signature=${sig}` }, signal: AbortSignal.timeout(body.length > 1e6 ? 60_000 : 10_000) });
 }
+
+/** One object PUT on the account's R2 endpoint (the service's own token): what toR2 hands out presigned. */
+export const putObject = (env: Env, key: string, body: string, headers: Record<string, string> = {}) =>
+  env.CF_API_TOKEN && env.CF_ACCOUNT_ID ? s3(env, 'PUT', key, body, headers) : Promise.resolve(null);
 
 /**
  * A presigned GET for one copybook-history object on the account's R2 endpoint, valid `ttl` seconds (R2 answers

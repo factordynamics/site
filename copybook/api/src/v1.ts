@@ -93,9 +93,9 @@ export const CHANGELOG: { id: string; date: string; schema_version: string; brea
     date: '2026-11-09',
     schema_version: SCHEMA_VERSION,
     breaking: false,
-    status: 'announced',
+    status: 'shipped',
     changes: [
-      'Re-filed 13F amendments no longer double a fund\'s book. A 13F-HR/A marked NEW HOLDINGS that re-files the whole book (more than half its positions, or a total within 20% with at least half its positions) replaces the book: it gets role base with mislabeled_amendment: true, and the original becomes superseded (its book in versions[]). Corrected, against each filing\'s cover-page total: First Eagle (Matthew McLennan) 2026Q2 $120.67B to $60.75B; Mizuho Securities USA 2026Q2 $10.44B to $6.20B; JPMorgan Chase 2025Q3 $3,338B to $1,669B; HSBC 2025Q4 $372.1B to $196.2B; T. Rowe Price Investment Management 2025Q4 $252.8B to $158.4B; Mason Morfit 2024Q3 $8.31B to $4.37B; also Brookfield 2024Q4 and 2025Q1, Check Capital 2026Q2, Heard Capital 2025Q3, Lingotto 2025Q3 and UC Regents 2025Q2 to 2025Q4. The public site has the fixed books; /v1 holdings, changes and bulk switch when the data run\'s upload of the fixed books to the API lands, and this entry turns shipped then.',
+      'Re-filed 13F amendments no longer double a fund\'s book. A 13F-HR/A marked NEW HOLDINGS that re-files the whole book (more than half its positions, or a total within 20% with at least half its positions) replaces the book: it gets role base with mislabeled_amendment: true, and the original becomes superseded (its book in versions[]). Corrected, against each filing\'s cover-page total: First Eagle (Matthew McLennan) 2026Q2 $120.67B to $60.75B; Mizuho Securities USA 2026Q2 $10.44B to $6.20B; JPMorgan Chase 2025Q3 $3,338B to $1,669B; HSBC 2025Q4 $372.1B to $196.2B; T. Rowe Price Investment Management 2025Q4 $252.8B to $158.4B; Mason Morfit 2024Q3 $8.31B to $4.37B; also Brookfield 2024Q4 and 2025Q1, Check Capital 2026Q2, Heard Capital 2025Q3, Lingotto 2025Q3 and UC Regents 2025Q2 to 2025Q4. /v1 holdings, changes and bulk serve the fixed books.',
     ],
   },
   {
@@ -253,9 +253,7 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     build.data_built_at = noMs(build.data_built_at);
   }
   if (path === '/v1/changelog') {
-    // Entries that ship when a data upload lands (the backstop sets v1:fixed:{id} once /v1 serves it).
-    const fixed = await env.DB.get('v1:fixed:refiled-amendments');
-    const data = CHANGELOG.map((c) => (c.id === '2026-11-09-refiled-amendments' && fixed ? { ...c, status: 'shipped' as const } : c));
+    const data = CHANGELOG;
     // ?id= returns one entry (the Deprecation Link points at it).
     const id = url.searchParams.get('id');
     const one = id ? data.filter((c) => c.id === id) : data;
@@ -267,29 +265,29 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
   // The cron sets a per-run SEC budget on this module; a request after it in the same isolate
   // must not inherit a spent one (filing lookups would fail).
   secBudget.left = Math.max(secBudget.left, 30);
-  // A download redirected from the Funnel name: its single-use token stands for the key (already metered there).
   const dl = await import('./download');
-  const redirected = url.searchParams.has('dlt');
-  const auth: KeyAuth = redirected
-    ? ((await dl.redeem<KeyAuth>(env, url)) ?? { ok: false, status: 401, code: 'unauthorized', message: 'This download link is expired or was already used. Request the file again.' })
-    : await authKey(env, req.headers.get('authorization'));
+  const auth: KeyAuth = await authKey(env, req.headers.get('authorization'));
   if (!auth.ok) return v1error(auth.code as ErrorCode, auth.status, auth.message);
-  const r: MeterResult | null = redirected ? null : await meter(env, auth.key.id).hit();
+  const r: MeterResult | null = await meter(env, auth.key.id).hit();
   const limits = r ? limitHeaders(r) : {};
   if (r && !r.allowed) return v1error('rate_limited', 429, undefined, limits);
-  // On the Funnel name a generated response over 1 MB answers 302 to the tunnel (served here if it's down).
+  // On the Funnel name a generated response over 1 MB answers 302 to presigned R2 (served here if R2 can't take it).
   // Bulk files redirect to presigned R2 on every host (their route).
-  const funnel = !redirected && req.method === 'GET' && dl.viaFunnel(env, req, url);
+  const funnel = req.method === 'GET' && dl.viaFunnel(env, req, url);
   for (const [method, re, handler] of ROUTES) {
     const m = path.match(re);
     if (!m) continue;
     if (req.method !== method) return v1error('bad_request', 405, `Use ${method}.`, limits);
     let res = await handler({ env, req, url, key: auth.key }, m.slice(1));
-    if (funnel && res.ok && res.body) {
-      const buf = await res.arrayBuffer();
-      const go = buf.byteLength > dl.LARGE_BYTES ? await dl.toTunnel(env, url, auth) : null;
-      if (go) return go;
-      res = new Response(buf, res);
+    // Text only: a gzip bulk file served here (R2 signing unset) must stay bytes.
+    if (funnel && res.ok && res.body && /json|csv|text/.test(res.headers.get('content-type') ?? '')) {
+      const body = await res.text();
+      const go = body.length > dl.LARGE_BYTES ? await dl.toR2(env, body, res) : null;
+      if (go) {
+        for (const [k, v] of Object.entries(limits)) go.headers.set(k, v);
+        return go;
+      }
+      res = new Response(body, res);
     }
     for (const [k, v] of Object.entries(limits)) res.headers.set(k, v);
     // `weight` in positions turns equity-only on Feb 8, 2027 (RFC 9745 Deprecation, RFC 8594 Sunset).

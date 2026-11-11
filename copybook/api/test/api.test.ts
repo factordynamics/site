@@ -343,21 +343,11 @@ describe('copybook api', () => {
     await env.DB.put('feedtok:feedtoken-proxied-0123456789', 'cus_feedself');
     const feed = await (await handleRequest(new Request('http://127.0.0.1:8787/feed/feedtoken-proxied-0123456789.json'), { ...env, API_URL: 'https://host.test/copybook/' })).json();
     expect(feed.feed_url).toBe('https://host.test/copybook/feed/feedtoken-proxied-0123456789.json');
-    // On the Funnel name a CSV link goes to the quick tunnel as it is (its own single-use token), unspent.
+    // On the Funnel name a small CSV is served from here (only one over 1 MB goes to presigned R2).
     {
-      const TUN = 'https://quick-tunnel-y.trycloudflare.com/copybook';
-      const orig = globalThis.fetch;
-      vi.stubGlobal('fetch', async (u: string, init?: RequestInit) =>
-        String(u) === 'https://pub.test/api.json' ? Response.json({ api: `${TUN}/` }) : String(u) === `${TUN}/health?probe=1` ? new Response('{}') : orig(u, init),
-      );
-      vi.useFakeTimers({ toFake: ['Date'] });
-      vi.setSystemTime(Date.now() + 11 * 60_000); // past any cached api.json
       const fp = ((await (await call('/csv-link/warren-buffett', { method: 'POST', token: session.token })).json()).url as string).slice('https://api.test'.length);
-      const r = await handleRequest(new Request(`https://api.test${fp}`, { headers: { 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), { ...env, PUBLIC_URL: 'https://pub.test/' });
-      expect([r.status, r.headers.get('location')]).toEqual([302, `${TUN}${fp}`]);
-      expect(await (await call(fp)).text()).toBe(csv);
-      vi.useRealTimers();
-      vi.stubGlobal('fetch', orig);
+      const r = await handleRequest(new Request(`https://api.test${fp}`, { headers: { 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), env);
+      expect([r.status, await r.text()]).toEqual([200, csv]);
     }
     const dlPath = link.slice('https://api.test'.length);
     expect((await call(dlPath.replace('/warren-buffett.csv', '/bill-ackman.csv'))).status).toBe(401);
@@ -3381,40 +3371,12 @@ describe('copybook api', () => {
     const got = new Uint8Array(await gz.arrayBuffer());
     expect([got.length, ...got.slice(0, 4)]).toEqual([1_200_000, 31, 139, 8, 0]);
 
-    // On the Funnel name a bulk file answers 302 to the quick tunnel with a single-use, 5-minute link that needs no
-    // Authorization (clients drop it across hosts); reused or expired gets 401; with the tunnel down, it's served here.
-    const TUN = 'https://quick-tunnel-x.trycloudflare.com/copybook';
-    let tunnelOk = true;
+    // On the Funnel name, without R2 signing, a bulk file comes straight from here, bytes intact.
     const orig = globalThis.fetch;
-    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
-      if (String(u) === 'https://pub.test/api.json') return Response.json({ api: `${TUN}/` });
-      if (String(u) === `${TUN}/health?probe=1`) return new Response('{}', { status: tunnelOk ? 200 : 502 });
-      return orig(u, init);
-    });
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(Date.now() + 30 * 60_000); // past the cached api.json (an earlier test cached another tunnel)
-    const envF = Object.assign(env, { PUBLIC_URL: 'https://pub.test/' });
+    const envF = env;
     const viaF = (path: string) => handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}`, 'x-copybook-public-base': 'https://gene.tail70ba3.ts.net/copybook' } }), envF);
-    const r302 = await viaF('/v1/bulk/2026Q2.csv.gz');
-    const loc = new URL(r302.headers.get('location')!);
-    expect([r302.status, `${loc.origin}${loc.pathname}`]).toEqual([302, `${TUN}/v1/bulk/2026Q2.csv.gz`]);
-    // The tunnel request: the token alone (gene sees the path without /copybook).
-    const follow = () => handleRequest(new Request(`https://api.test${loc.pathname.replace('/copybook', '')}${loc.search}`), envF);
-    const fetched = await follow();
-    expect([fetched.status, (await fetched.arrayBuffer()).byteLength]).toEqual([200, 1_200_000]);
-    expect((await follow()).status).toBe(401); // single use
-    const late = new URL((await viaF('/v1/bulk/2026Q2.csv.gz')).headers.get('location')!);
-    vi.setSystemTime(Date.now() + 301_000);
-    expect((await handleRequest(new Request(`https://api.test${late.pathname.replace('/copybook', '')}${late.search}`), envF)).status).toBe(401); // expired
-    // A token for one file doesn't open another.
-    const other = new URL((await viaF('/v1/bulk/2026Q2.csv.gz')).headers.get('location')!);
-    expect((await handleRequest(new Request(`https://api.test/v1/bulk/2025Q1.csv.gz${other.search}`), envF)).status).toBe(401);
-    // Small responses stay on the Funnel name; the tunnel down means the file comes straight from here.
-    expect((await viaF('/v1/bulk')).status).toBe(200);
-    tunnelOk = false;
-    vi.setSystemTime(Date.now() + 61_000);
     const direct = await viaF('/v1/bulk/2026Q2.csv.gz');
-    expect([direct.status, (await direct.arrayBuffer()).byteLength]).toEqual([200, 1_200_000]);
+    expect([direct.status, ...new Uint8Array(await direct.arrayBuffer()).slice(0, 2)]).toEqual([200, 31, 139]);
     // With the service's R2 signing configured, a bulk file answers 302 on every host to a 5-minute presigned URL on
     // the account's R2 endpoint (R2 itself answers 403 once it expires); a stub stays 501.
     Object.assign(envF, { CF_API_TOKEN: 'cf-token', CF_ACCOUNT_ID: 'acct' });
@@ -3426,6 +3388,24 @@ describe('copybook api', () => {
         .toEqual([302, 'https://acct.r2.cloudflarestorage.com/copybook-history/bulk/2026Q2.csv.gz', '300', 'host', true, 'attachment; filename="copybook-13f-2026Q2.csv.gz"']);
     }
     expect((await plain('/v1/bulk/2025Q1.csv.gz')).status).toBe(501);
+    // A generated response over 1 MB on the Funnel name: written once under dl/ on R2, then a 302 to it presigned for
+    // 5 minutes with its own type and filename; R2 refusing the write leaves it to be served here.
+    const { toR2 } = await import('../src/download');
+    const puts: string[] = [];
+    let putOk = true;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u).endsWith('/user/tokens/verify')) return Response.json({ result: { id: 'tokid' } });
+      if (init?.method === 'PUT') return puts.push(`${u} ${(init.headers as Record<string, string>)['content-type']} ${String(init.body).length}`), new Response(null, { status: putOk ? 200 : 500 });
+      return orig(u, init);
+    });
+    const big = new Response(null, { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="x.csv"' } });
+    const r2 = await toR2(envF, 'a,b\n'.repeat(300_000), big);
+    const u2 = new URL(r2!.headers.get('location')!);
+    expect([r2!.status, u2.host, u2.searchParams.get('X-Amz-Expires'), u2.searchParams.get('response-content-disposition'), u2.searchParams.get('response-content-type')]).toEqual([302, 'acct.r2.cloudflarestorage.com', '300', 'attachment; filename="x.csv"', 'text/csv; charset=utf-8']);
+    expect(puts).toEqual([`https://acct.r2.cloudflarestorage.com${u2.pathname} text/csv; charset=utf-8 1200000`]);
+    expect(u2.pathname).toMatch(/^\/copybook-history\/dl\/[0-9a-f-]{36}$/);
+    putOk = false;
+    expect(await toR2(envF, 'x', big)).toBeNull();
     Object.assign(envF, { CF_API_TOKEN: undefined, CF_ACCOUNT_ID: undefined });
     vi.useRealTimers();
     vi.stubGlobal('fetch', orig);

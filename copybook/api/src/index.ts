@@ -892,19 +892,18 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
   const dl = url.searchParams.get('dl');
   const dlSlug = path.match(/^\/csv\/([a-z0-9-]+)\.csv$/)?.[1];
   if (req.method === 'GET' && dl && dlSlug) {
-    // On the Funnel name a CSV goes to the tunnel with its own single-use link (served here if the tunnel is down).
-    const fwd = await import('./download');
-    if (fwd.viaFunnel(env, req, url)) {
-      const go = await fwd.toTunnel(env, url, null, true);
-      if (go) return go;
-    }
     const p = await verifyToken(env.SESSION_SECRET, dl, 'download');
     const unused = p?.n && p.s === dlSlug && (await env.DB.get(`dl:${p.n}`));
     if (!p || !unused) return json({ ok: false, error: 'download link expired or already used' }, 401, h);
     await env.DB.delete(`dl:${p.n}`);
     const owner = await getMember(env, p.c);
     if (!isCopy(owner)) return json({ ok: false, error: 'Copy subscription required' }, 402, h);
-    return csvResponse(env, dlSlug, h);
+    const res = await csvResponse(env, dlSlug, h);
+    // On the Funnel name a CSV over 1 MB goes to presigned R2 (served here if R2 can't take it).
+    const fwd = await import('./download');
+    if (!res.ok || !fwd.viaFunnel(env, req, url)) return res;
+    const body = await res.text();
+    return (body.length > fwd.LARGE_BYTES && (await fwd.toR2(env, body, res))) || new Response(body, res);
   }
 
   let m = await authed(req, env);
