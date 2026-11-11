@@ -1383,7 +1383,7 @@ def main() -> int:
                 g[2].append((abs(r0.get("value_delta") or 0), curated[cik].get("slug"), r0.get("cusip"), r0.get("change")))
     print(f"moves: curated lines held in hl/ but counted on their fund page: {sum(g[0] for g in gap.values())}; by reason: "
           + "; ".join(f"{k} {g[0]} lines |$| {g[1]:,.0f} (largest: " + ", ".join(
-              f"{sl} {c} {ch} {v:,.0f}" for v, sl, c, ch in sorted(g[2], reverse=True)[:5]) + ")"
+              f"{sl} {c} {ch} {v:,.0f}" for v, sl, c, ch in sorted(g[2], key=lambda x: -x[0])[:5]) + ")"
               for k, g in sorted(gap.items(), key=lambda kv: -kv[1][1])), flush=True)
     off = parity_gate(per_quarter)
     print(f"moves: parity gate: {len(NETQ) - len(off)}/{len(NETQ)} issuers' hl/ net = the sum of their counted "
