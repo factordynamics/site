@@ -254,9 +254,9 @@ export function Pricing() {
                     Start {TRIAL_DAYS}-day free trial
                   </Button>
                 ) : tier.id === 'fund' ? (
-                  // Funds mostly buy by invoice; the card trial stays as a quiet second path.
-                  <Button to="/contact/?topic=fund" variant="dark" className="w-full">
-                    Request Fund access
+                  // Yearly: funds mostly buy by invoice, so the no-card invoice trial leads; the card trial stays as a quiet second path.
+                  <Button to="/contact/?topic=fund&trial=invoice" variant="dark" className="w-full">
+                    Start a trial, pay by invoice
                   </Button>
                 ) : live ? (
                   <Button href={attributed(link)} onClick={referredCheckout(tier.id as 'copy' | 'pro', cycle, attributed(link))} variant={dark ? 'primary' : 'dark'} className="w-full">
@@ -280,9 +280,12 @@ export function Pricing() {
                         </Link>
                       ) : (
                         live && (
-                          <a href={attributed(link)} onClick={referredCheckout('fund', cycle, attributed(link))} className="underline underline-offset-2 hover:text-ink">
-                            Or start a {TRIAL_DAYS}-day trial by card
-                          </a>
+                          <>
+                            <a href={attributed(link)} onClick={referredCheckout('fund', cycle, attributed(link))} className="underline underline-offset-2 hover:text-ink">
+                              Or start a {TRIAL_DAYS}-day trial by card
+                            </a>
+                            . Card trial? Switch to invoice in your account.
+                          </>
                         )
                       )}
                     </>
@@ -394,6 +397,7 @@ export function Pricing() {
                 'How does the free trial work?',
                 `Every paid plan is free for ${TRIAL_DAYS} days. Stripe takes a card at signup so the plan continues without a gap; you’re charged on day ${TRIAL_DAYS + 1} unless you cancel from Manage billing before then.`,
               ],
+              ['Can a fund try Copy Fund without a card?', 'Yes. Start a 14-day trial, pay by invoice: no card. On day 14 we email an invoice for $1,990 (the founding price, a year), due in 30 days, payable by card, ACH or bank transfer; cancel before then and nothing is owed. One trial per company. Card trial? Switch to invoice in your account. Monthly Fund is paid by card.'],
               ['What does the founding price mean?', 'Subscribe to Pro or Fund, or start a trial, by December 31 and your price stays for as long as you stay subscribed, even if list prices rise: $39/mo or $390/yr for Pro, $199/mo or $1,990/yr for Fund. A trial started by December 31 keeps the founding price even if it converts in January.'],
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [

@@ -12,17 +12,28 @@ const TOPICS: [Topic, string][] = [
   ['delete', 'Delete my data'],
 ]
 
-const field = 'h-11 w-full rounded-xl bg-paper px-3.5 text-[15px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)]'
+const field = 'h-11 w-full rounded-xl bg-paper px-3.5 text-[15px] shadow-[0_0_0_1px_var(--color-line-2)] outline-none placeholder:text-ink-3 focus:shadow-[0_0_0_2px_var(--color-accent)] aria-[invalid=true]:shadow-[0_0_0_2px_var(--color-down)]'
+
+// The no-card Fund trial (invoice_trial on /fund-request): the API's field names for what it says is missing.
+const ADDRESS = { line1: 'Street address', line2: 'Suite, floor (optional)', city: 'City', state: 'State or region', postal_code: 'Postal code', country: 'Country (2 letters)' } as const
+type Started = { trial_end: string; invoice_on: string; due_on: string; sign_in_email?: string }
+const day = (iso: string) => new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: iso.length === 10 ? 'UTC' : undefined })
 
 export function Contact() {
   useTitle('Contact · Copybook')
   const [params] = useSearchParams()
   const [topic, setTopic] = useState<Topic>((TOPICS.find(([k]) => k === params.get('topic'))?.[0] as Topic) ?? 'fund')
-  const [form, setForm] = useState({ name: '', email: '', fund: '', seats: String(FUND_SEATS), invoice: true, message: '', website: '' })
+  const [form, setForm] = useState({ name: '', email: '', fund: '', seats: String(FUND_SEATS), invoice: true, message: '', website: '', line1: '', line2: '', city: '', state: '', postal_code: '', country: 'US', po: '', ap_email: '' })
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
-  const [err, setErr] = useState('')
+  const [err, setErr] = useState<React.ReactNode>('')
+  // Fund only: start the 14-day trial now and pay by invoice (no card), or just ask us.
+  const [trial, setTrial] = useState(params.get('trial') === 'invoice')
+  const [bad, setBad] = useState<string[]>([])
+  const [started, setStarted] = useState<Started | null>(null)
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const fund = topic === 'fund'
+  const invoiceTrial = fund && trial
+  const invalid = (k: string) => bad.some((f) => f === k || f.startsWith(`${k} `) || f === `billing_address.${k}` || f.startsWith(`billing_address.${k} `))
 
   const submit = async () => {
     setState('sending')
@@ -35,13 +46,48 @@ export function Contact() {
         message: [fund && form.seats === 'more' ? `Team size: more than ${FUND_SEATS}.` : '', form.message.trim()].filter(Boolean).join('\n') || undefined,
         page: '/contact/',
         website: form.website || undefined,
-        ...(fund ? { fund: form.fund.trim(), seats: Number(form.seats) || undefined, invoice: form.invoice, plan_interval: 'yearly' } : {}),
+        ...(fund ? { fund: form.fund.trim(), seats: Number(form.seats) || undefined, invoice: invoiceTrial || form.invoice, plan_interval: 'yearly' } : {}),
+        ...(invoiceTrial
+          ? {
+              invoice_trial: true,
+              billing_address: { line1: form.line1.trim(), line2: form.line2.trim() || undefined, city: form.city.trim(), state: form.state.trim() || undefined, postal_code: form.postal_code.trim(), country: form.country.trim().toUpperCase() },
+              po: form.po.trim() || undefined,
+              ap_email: form.ap_email.trim() || undefined,
+            }
+          : {}),
       }
+      setBad([])
       await apiReady
       const r = await fetch(`${api}/fund-request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      if (r.ok) return setState('sent')
-      const j = (await r.json().catch(() => null)) as { error?: string; code?: string } | null
-      setErr(r.status === 429 || j?.code === 'rate_limited' ? 'Too many requests from here in the last hour. Please try again later.' : j?.code === 'bad_request' && j.error ? `Please check the form: ${j.error}` : '')
+      const j = (await r.json().catch(() => null)) as ({ error?: string; code?: string; fields?: string[]; trial?: string } & Partial<Started>) | null
+      if (r.ok) {
+        if (invoiceTrial && j?.trial === 'started' && j.trial_end && j.invoice_on && j.due_on) setStarted({ trial_end: j.trial_end, invoice_on: j.invoice_on, due_on: j.due_on, sign_in_email: j.sign_in_email })
+        return setState('sent')
+      }
+      setBad(j?.code === 'freemail' ? ['email'] : (j?.fields ?? []))
+      setErr(
+        r.status === 429 || j?.code === 'rate_limited' ? (
+          'Too many requests from here in the last hour. Please try again later.'
+        ) : j?.code === 'freemail' ? (
+          'Use your work email: an invoice trial goes to a company address.'
+        ) : j?.code === 'trial_used' ? (
+          'Your company has already had a Copy Fund trial. We have your request and will email you to set up an invoice.'
+        ) : j?.code === 'already_member' ? (
+          <>
+            This address already has a Copybook subscription.{' '}
+            <Link to="/account/" className="font-medium underline underline-offset-2">
+              Sign in
+            </Link>
+            , or switch to invoice billing in your account.
+          </>
+        ) : r.status >= 500 && invoiceTrial ? (
+          'We couldn’t start the trial just now. We’ve got your request and will email you today.'
+        ) : j?.code === 'bad_request' ? (
+          j.fields?.length ? 'Please fill in or fix the highlighted fields.' : `Please check the form${j.error ? `: ${j.error}` : '.'}`
+        ) : (
+          ''
+        ),
+      )
       setState('error')
     } catch {
       setErr('')
@@ -94,8 +140,30 @@ export function Contact() {
               <span className="inline-flex size-11 items-center justify-center rounded-full bg-up text-white">
                 <Check />
               </span>
-              <h2 className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">Thanks, it’s sent.</h2>
-              <p className="mt-2 text-[15px] text-ink-2">{fund ? 'We’ll reply within one business day with your invoice and team access.' : 'We’ll reply by email, usually within one business day.'}</p>
+              {started ? (
+                <>
+                  <h2 className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">Your 14-day trial has started.</h2>
+                  <p className="mx-auto mt-2 max-w-md text-[15px] leading-relaxed text-ink-2">
+                    {started.sign_in_email === 'not_sent' ? (
+                      <>
+                        We couldn’t send your sign-in email just now; we’ll retry. You can also sign in from{' '}
+                        <Link to="/account/" className="font-medium text-accent hover:text-accent-2">
+                          /account/
+                        </Link>{' '}
+                        with this address.
+                      </>
+                    ) : (
+                      'Check your inbox to sign in.'
+                    )}{' '}
+                    The invoice for $1,990 (the founding price, a year) comes on {day(started.invoice_on)}, due {day(started.due_on)}; nothing is charged before then. It’s payable by card, ACH or bank transfer. Cancel before {day(started.invoice_on)} in your account and nothing is owed.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">Thanks, it’s sent.</h2>
+                  <p className="mt-2 text-[15px] text-ink-2">{fund ? 'We’ll reply within one business day with your invoice and team access.' : 'We’ll reply by email, usually within one business day.'}</p>
+                </>
+              )}
             </div>
           ) : (
             <form
@@ -116,6 +184,23 @@ export function Contact() {
                   ))}
                 </div>
               </fieldset>
+              {fund && (
+                <fieldset>
+                  <legend className="text-[13px] font-medium text-ink-2">How do you want to start?</legend>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {([
+                      [true, 'Start a 14-day trial now', 'Pay by invoice, no card. Net 30 after the trial.'],
+                      [false, 'Talk to us first', 'We reply within one business day.'],
+                    ] as const).map(([v, t, d]) => (
+                      <label key={t} className={`cursor-pointer rounded-xl px-3.5 py-2.5 text-[14px] ${trial === v ? 'bg-ink/[0.04] shadow-[0_0_0_2px_var(--color-ink)]' : 'shadow-[0_0_0_1px_var(--color-line-2)] hover:bg-ink/[0.03]'}`}>
+                        <input type="radio" name="start" checked={trial === v} onChange={() => setTrial(v)} className="sr-only" />
+                        <span className="block font-medium text-ink">{t}</span>
+                        <span className="block text-[12.5px] text-ink-3">{d}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block text-[13px] font-medium text-ink-2">
                   Name
@@ -123,14 +208,14 @@ export function Contact() {
                 </label>
                 <label className="block text-[13px] font-medium text-ink-2">
                   {fund ? 'Work email' : 'Email'}
-                  <input required type="email" value={form.email} onChange={set('email')} autoComplete="email" className={`${field} mt-1.5`} />
+                  <input required type="email" value={form.email} onChange={set('email')} autoComplete="email" aria-invalid={invalid('email')} className={`${field} mt-1.5`} />
                 </label>
               </div>
               {fund && (
                 <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_14rem]">
                   <label className="block text-[13px] font-medium text-ink-2">
                     Fund or firm
-                    <input required value={form.fund} onChange={set('fund')} autoComplete="organization" className={`${field} mt-1.5`} />
+                    <input required value={form.fund} onChange={set('fund')} autoComplete="organization" aria-invalid={invalid('fund')} className={`${field} mt-1.5`} />
                   </label>
                   <label className="block text-[13px] font-medium text-ink-2">
                     Team size (flat price, up to {FUND_SEATS})
@@ -145,7 +230,39 @@ export function Contact() {
                   </label>
                 </div>
               )}
-              {fund && (
+              {invoiceTrial && (
+                <fieldset className="space-y-4">
+                  <legend className="text-[13px] font-medium text-ink-2">Billing address, for the invoice</legend>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {(Object.keys(ADDRESS) as (keyof typeof ADDRESS)[]).map((k) => (
+                      <label key={k} className="block text-[13px] font-medium text-ink-2">
+                        {ADDRESS[k]}
+                        <input
+                          required={k !== 'line2' && k !== 'state'}
+                          value={form[k]}
+                          onChange={set(k)}
+                          maxLength={k === 'country' ? 2 : undefined}
+                          autoComplete={{ line1: 'address-line1', line2: 'address-line2', city: 'address-level2', state: 'address-level1', postal_code: 'postal-code', country: 'country' }[k]}
+                          aria-invalid={invalid(k)}
+                          className={`${field} mt-1.5`}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block text-[13px] font-medium text-ink-2">
+                      PO number (optional)
+                      <input value={form.po} onChange={set('po')} className={`${field} mt-1.5`} />
+                    </label>
+                    <label className="block text-[13px] font-medium text-ink-2">
+                      Accounts payable email (optional)
+                      <input type="email" value={form.ap_email} onChange={set('ap_email')} aria-invalid={invalid('ap_email')} className={`${field} mt-1.5`} />
+                    </label>
+                  </div>
+                  <p className="text-[12.5px] leading-relaxed text-ink-3">Both print on the invoice. $1,990 a year at the founding price, invoiced on day 14, Net 30. Prices exclude applicable taxes. Copybook does not currently collect sales tax.</p>
+                </fieldset>
+              )}
+              {fund && !invoiceTrial && (
                 <label className="flex cursor-pointer items-center gap-3 text-[14px]">
                   <input type="checkbox" checked={form.invoice} onChange={(e) => setForm((f) => ({ ...f, invoice: e.target.checked }))} className="size-4 accent-[var(--color-accent)]" />
                   Pay by invoice (yearly)
@@ -159,9 +276,9 @@ export function Contact() {
               </label>
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <Button type="submit" disabled={state === 'sending'}>
-                  {state === 'sending' ? 'Sending…' : fund ? 'Request Fund access' : topic === 'delete' ? 'Request deletion' : 'Send'}
+                  {state === 'sending' ? 'Sending…' : invoiceTrial ? 'Start the 14-day trial' : fund ? 'Request Fund access' : topic === 'delete' ? 'Request deletion' : 'Send'}
                 </Button>
-                {fund && state !== 'error' && <p className="text-[13px] text-ink-3">We reply within one business day.</p>}
+                {fund && state !== 'error' && <p className="text-[13px] text-ink-3">{invoiceTrial ? 'Starts at once; your sign-in link comes by email.' : 'We reply within one business day.'}</p>}
                 {state === 'error' && (
                   <p role="alert" className="text-[13.5px] text-down">
                     {err || 'That didn’t send. Please try again in a moment.'}

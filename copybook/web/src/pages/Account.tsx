@@ -19,7 +19,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Arrow, Badge, Button, Check, Monogram, Skeleton } from '../components/ui'
 import { api, checkout, DATA_TERMS, plans, renewalTerms, trialTerms, TRIAL_DAYS } from '../config'
 import { ApiStatus, Updating } from '../components/ApiStatus'
-import { ApiError, errText, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
+import { ApiError, call, errText, needsVerify, signOutEverywhere, apiDown, cachedFresh, downloadFile, fetchMe, getToken, lastMe, needsReauth, readMe, isFree, openPortal, pausePlan, resumePlan, PLAN_NAME, requestLogin, sendCancelReason, setAlerts, signOut, startSession, type CancelReason, type Member } from '../lib/account'
 
 type State = { kind: 'loading' } | { kind: 'in'; member: Member; welcome: boolean; focus?: boolean; upgraded?: string; kept?: string; resumed?: boolean; stale?: boolean } | { kind: 'out'; error?: string } | { kind: 'off' } | { kind: 'down' }
 
@@ -285,6 +285,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
             {cancelling ? 'Resume in the billing portal to keep your plan, follows and alerts without a gap.' : member.pause_after_trial ? `Nothing is charged until ${dayLabel(member.pause_after_trial.until)}. Real-time alerts stop when the trial ends and resume then; your follows and settings stay.` : trial ? trialTerms(member.plan) : renewalTerms(member.plan)}
           </p>
           {!cancelling && member.interval === 'monthly' && !trial && <p className="mt-2 text-[12.5px] leading-relaxed text-ink-3">Monthly plans can pause between seasons{member.digest_live ? '; your names digest keeps coming' : ''}.</p>}
+          {!cancelling && member.plan === 'fund' && member.interval === 'yearly' && member.collection !== 'send_invoice' && <InvoiceSwitch onChange={onChange} />}
           {!cancelling && <Leave member={member} onChange={onChange} />}
             </>
           )}
@@ -757,6 +758,41 @@ const REASONS: [CancelReason, string][] = [
 ]
 
 /** Leaving: one question, then Pause until the next season (monthly members) ahead of cancelling in the portal. */
+/** A Fund owner on yearly billing moves the card subscription or trial to an invoice, Net 30 (POST /account/invoice). */
+function InvoiceSwitch({ onChange }: { onChange: (m: Member) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [done, setDone] = useState(false)
+  if (done) return <p className="mt-3 text-[13px] text-up">Switched: we email each invoice, due in 30 days, payable by card, ACH or bank transfer.</p>
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13.5px]">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true)
+          setErr('')
+          call<{ member?: Member }>('/account/invoice', { method: 'POST', body: {}, auth: true })
+            .then((r) => {
+              setDone(true)
+              if (r.member) onChange(r.member)
+            })
+            .catch((e) => setErr(errText(e, e instanceof ApiError && e.detail ? e.detail : 'That didn’t go through. Please try again, or email us.')))
+            .finally(() => setBusy(false))
+        }}
+        className="font-medium text-accent hover:text-accent-2"
+      >
+        {busy ? 'Switching…' : 'Pay by invoice instead (Net 30)'}
+      </button>
+      {err && (
+        <span role="alert" className="text-[12.5px] text-down">
+          {err}
+        </span>
+      )}
+    </p>
+  )
+}
+
 function Leave({ member, onChange }: { member: Member; onChange: (m: Member) => void }) {
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState<CancelReason | null>(null)
