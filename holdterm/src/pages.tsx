@@ -5,6 +5,7 @@ import {
   aggregate,
   classOrder,
   funds,
+  badValue,
   inRoster,
   isStale,
   loadBook,
@@ -35,7 +36,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, AsFiled, Bar, BooksProgress, cap, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, TabsSkel, Tick, type SkelCol, usd, useLoad, type Col } from './lib'
+import { A, AsFiled, Bar, Filed, BooksProgress, cap, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, TabsSkel, Tick, type SkelCol, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -1038,7 +1039,7 @@ export function Fund({ slug }: { slug: string }) {
               { key: 'n', label: 'Company', render: (r) => (r.ticker ? <StockCell t={r.ticker} name={r.display_name || r.issuer} /> : <span className="trunc">{issuerName(r.display_name || r.issuer)}</span>), sort: (r) => r.display_name || r.issuer },
               { key: 'k', label: 'Security', render: (r) => <span className="trunc dim">{noteLabel(r)}</span>, sort: (r) => r.title },
               { key: 'a', label: 'Amount', num: true, hideSm: true, render: noteAmount, sort: (r) => r.principal_amount ?? r.shares },
-              { key: 'c', label: 'This quarter', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} unclear={r.suspect_units} />, sort: (r) => r.share_change ?? 0 },
+              { key: 'c', label: 'This quarter', hideSm: true, render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} />, sort: (r) => r.share_change ?? 0 },
               { key: 'v', label: 'Value', num: true, render: (r) => usd(r.value), sort: (r) => r.value },
               { key: 'pv', label: 'Last quarter', num: true, hideSm: true, render: (r) => <span className="dim">{usd(r.prev_value)}</span>, sort: (r) => r.prev_value ?? 0 },
             ]}
@@ -1177,12 +1178,12 @@ function HoldingsGrid({ rows, own }: { rows: Holding[]; own?: (h: Holding) => bo
         { key: 't', label: 'Ticker', render: holdingTicker, sort: (r) => r.ticker ?? '', width: '80px' },
         { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}{r.put_call ? <span className="badge">{r.put_call}</span> : null}{own?.(r) ? <span className="badge">own fund</span> : null}</span>, sort: (r) => r.display_name ?? '' },
         { key: 's', label: 'Sector', hideSm: true, hide: 'lg', render: (r) => <Sector s={r.sector} />, sort: (r) => r.sector ?? '' },
-        { key: 'w', label: 'Weight', num: true, render: (r) => (r.suspect_units ? <AsFiled>{pct(r.weight)}</AsFiled> : pct(r.weight)), sort: (r) => r.weight, title: 'Share of the portfolio' },
-        { key: 'ws', label: 'Last quarter vs now', hideSm: true, hide: 'lg', render: (r) => <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />, title: 'Share of the portfolio last quarter (grey) and now' },
-        { key: 'c', label: 'This quarter', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} unclear={r.suspect_units} />, sort: (r) => r.share_change ?? 0 },
-        { key: 'sh', label: 'Shares', num: true, hideSm: true, hide: 'md', render: (r) => (r.suspect_units ? <AsFiled>{num(r.shares)}</AsFiled> : num(r.shares)), sort: (r) => r.shares },
-        { key: 'p', label: 'Price in filing', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? (r.suspect_units ? <AsFiled>{price(r.value / r.shares)}</AsFiled> : price(r.value / r.shares)) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
-        { key: 'v', label: 'Value', num: true, render: (r) => (r.suspect_units ? <AsFiled>{usd(r.value)}</AsFiled> : usd(r.value)), sort: (r) => r.value },
+        { key: 'w', label: 'Weight', num: true, render: (r) => (badValue(r.unreliable) ? <AsFiled why={r.unreliable!} /> : pct(r.weight)), sort: (r) => r.weight, title: 'Share of the portfolio' },
+        { key: 'ws', label: 'Last quarter vs now', hideSm: true, hide: 'lg', render: (r) => (badValue(r.unreliable) ? null : <WeightShift prev={r.prev_weight ?? 0} now={r.weight} max={max} />), title: 'Share of the portfolio last quarter (grey) and now' },
+        { key: 'c', label: 'This quarter', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} />, sort: (r) => r.share_change ?? 0 },
+        { key: 'sh', label: 'Shares', num: true, hideSm: true, hide: 'md', render: (r) => <Filed held={r.unreliable} fig="shares">{num(r.shares)}</Filed>, sort: (r) => r.shares },
+        { key: 'p', label: 'Price in filing', num: true, hideSm: true, hide: 'lg', render: (r) => (r.shares && !r.put_call ? r.unreliable ? <AsFiled why={r.unreliable}>{price(r.value / r.shares)}</AsFiled> : price(r.value / r.shares) : '—'), sort: (r) => (r.shares ? r.value / r.shares : 0) },
+        { key: 'v', label: 'Value', num: true, render: (r) => <Filed held={r.unreliable} fig="value">{usd(r.value)}</Filed>, sort: (r) => r.value },
       ]}
     />
   )
@@ -1204,7 +1205,7 @@ function MovesGrid({ rows, empty }: { rows: Holding[]; empty?: ReactNode }) {
       cols={[
         { key: 't', label: 'Ticker', render: holdingTicker, width: '80px' },
         { key: 'n', label: 'Company', link: true, hideSm: true, render: (r) => <span className="trunc">{r.display_name}</span> },
-        { key: 'c', label: 'What changed', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} unclear={r.suspect_units} /> },
+        { key: 'c', label: 'What changed', render: (r) => <ChangeTag change={r.change} share_change={r.share_change} prev_shares={r.prev_shares} held={r.unreliable} /> },
         { key: 'sc', label: 'Shares changed', num: true, hideSm: true, hide: 'md', render: (r) => <span className={(r.share_change ?? 0) > 0 ? 'pos' : 'neg'}>{(r.share_change ?? 0) > 0 ? '+' : ''}{num(r.share_change)}</span>, sort: (r) => r.share_change ?? 0 },
         { key: 'd', label: 'Trade size', num: true, render: (r) => <span className={(r.value_delta ?? 0) > 0 ? 'pos' : 'neg'}>{signedUsd(r.value_delta)}</span>, sort: (r) => r.value_delta ?? 0 },
         { key: 'pb', label: <><span className="hide-sm">Trade, % of portfolio</span><span className="show-sm">Trade %</span></>, num: true, render: (r) => <span className={(r.trade_pct ?? 0) > 0 ? 'pos' : 'neg'}>{(r.trade_pct ?? 0) > 0 ? '+' : ''}{pct(r.trade_pct)}</span>, sort: (r) => r.trade_pct ?? 0, title: ((r) => `Trade value ÷ this 13F’s total${r ? `, ${usd(r.value_delta! / r.trade_pct!)}` : ''}`)(rows.find((r) => r.value_delta && r.trade_pct)) },
@@ -1473,6 +1474,11 @@ function FilingsStats({ list, firms, days }: { list: Event[]; firms: Map<string,
 
 // ---------- consensus ----------
 type GTab = 'owners' | 'value' | 'conviction'
+/** The average share of the portfolios that own it, over the owners whose value is real (badValue). */
+const avgBet = (r: Agg) => {
+  const real = r.holders.filter((h) => h.value > 0)
+  return real.reduce((s, h) => s + h.weight, 0) / Math.max(1, real.length)
+}
 export function Consensus() {
   title('Most owned stocks')
   const books = useLoad(loadBooks, [])
@@ -1586,8 +1592,8 @@ export function Consensus() {
             { key: 'v', label: 'Value held', num: true, hideSm: tab === 'conviction', render: (r) => usd(r.value), sort: (r) => r.value },
             { key: 'gw', label: 'Of all money', num: true, hideSm: true, hide: 'lg', render: (r) => pct(r.value / agg.total), sort: (r) => r.value, title: 'Share of everything the investors hold combined' },
             { key: 'mw', label: 'Biggest bet', num: true, hideSm: tab !== 'conviction', render: (r) => pct(r.maxWeight, 1), sort: (r) => r.maxWeight, title: 'Largest share of any one investor’s portfolio' },
-            { key: 'aw', label: 'Average bet', num: true, hideSm: true, hide: 'lg', title: 'Average share of the portfolios that own it', render: (r) => pct(r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length), 2), sort: (r) => r.holders.reduce((s, h) => s + h.weight, 0) / Math.max(1, r.holders.length) },
-            { key: 'who', label: 'Biggest holders', hideSm: true, hide: 'lg', render: (r) => <Who list={[...r.holders].sort((a, b) => b.value - a.value)} max={2} /> },
+            { key: 'aw', label: 'Average bet', num: true, hideSm: true, hide: 'lg', title: 'Average share of the portfolios that own it', render: (r) => pct(avgBet(r), 2), sort: avgBet },
+            { key: 'who', label: 'Biggest holders', hideSm: true, hide: 'lg', render: (r) => <Who list={r.holders.filter((h) => h.value > 0).sort((a, b) => b.value - a.value)} max={2} /> },
           ]}
         />
       </Panel>
@@ -1744,8 +1750,10 @@ export function Stock({ ticker }: { ticker: string }) {
   const cnt = (c: string) => holders.filter((h) => h.change === c).length
   const nNew = cnt('new')
   const prevHolders = holders.length - nNew + exited.length
-  const value = holders.reduce((x, h) => x + h.value, 0)
-  const bigHolder = [...holders].sort((a, b) => b.value - a.value)[0]
+  // A held line whose value isn't real still owns it, but stays out of the value and the rankings (badValue).
+  const valued = holders.filter((h) => !badValue(h.unreliable))
+  const value = valued.reduce((x, h) => x + h.value, 0)
+  const bigHolder = [...valued].sort((a, b) => b.value - a.value)[0]
   const movers = [...holders, ...exited].filter((h) => h.change && h.change !== 'unchanged').sort((a, b) => Math.abs(b.delta_value ?? 0) - Math.abs(a.delta_value ?? 0))
   const buyer = movers.find((h) => (h.delta_value ?? 0) > 0)
   const seller = movers.find((h) => (h.delta_value ?? 0) < 0)
@@ -1769,17 +1777,18 @@ export function Stock({ ticker }: { ticker: string }) {
       ),
       sort: (h) => name(h),
     },
-    // A held row (share counts that don't fit) shows its numbers as filed, greyed, so they aren't read as real.
-    { key: 'w', label: 'Weight', num: true, render: (h) => (h.unclear ? <AsFiled>{pct(h.weight)}</AsFiled> : pct(h.weight)), sort: (h) => h.weight, title: 'Share of the investor’s portfolio' },
+    // A held row shows the numbers its class says aren't real (unreliableOf) as filed, greyed, so they aren't read
+    // as real; a wrong value has no weight, so its weight is a dash.
+    { key: 'w', label: 'Weight', num: true, render: (h) => (badValue(h.unreliable) ? <AsFiled why={h.unreliable!} /> : pct(h.weight)), sort: (h) => h.weight, title: 'Share of the investor’s portfolio' },
     // Rows can come from different quarters' 13Fs, so the column says what it compares rather than "This quarter".
-    { key: 'c', label: 'Change', title: 'Compared with the investor’s previous 13F', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} unclear={h.unclear} />, sort: (h) => h.delta_value ?? 0 },
-    { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (h) => (h.unclear ? <AsFiled>{num(h.shares)}</AsFiled> : num(h.shares)), sort: (h) => h.shares },
-    { key: 'v', label: 'Value', num: true, hideSm: true, render: (h) => (h.unclear ? <AsFiled>{usd(h.value)}</AsFiled> : usd(h.value)), sort: (h) => h.value },
+    { key: 'c', label: 'Change', title: 'Compared with the investor’s previous 13F', render: (h) => <ChangeTag change={h.change} share_change={h.prev_shares != null ? h.shares - h.prev_shares : null} prev_shares={h.prev_shares} held={h.unreliable} />, sort: (h) => h.delta_value ?? 0 },
+    { key: 'sh', label: 'Shares', num: true, hideSm: true, render: (h) => <Filed held={h.unreliable} fig="shares">{num(h.shares)}</Filed>, sort: (h) => h.shares },
+    { key: 'v', label: 'Value', num: true, hideSm: true, render: (h) => <Filed held={h.unreliable} fig="value">{usd(h.value)}</Filed>, sort: (h) => h.value },
     { key: 'q', label: 'As of', num: true, hideSm: true, render: (h) => (h.quarter === freshQ ? <span className="qtag">{quarterLabel(h.quarter)}</span> : <span className="dim">{quarterLabel(h.quarter)}</span>), sort: (h) => h.quarter, title: 'The quarter of the 13F each row comes from; the newest are highlighted' },
   ]
   const fundHref = (h: StockHolder) => (inRoster(h.slug) ? fundPath(fundSlug(h.slug)) : null)
-  // Holders whose line is held (share counts that don't fit): left out of the trades, and the trades tab says so.
-  const heldNames = holders.filter((h) => h.unclear).map((h) => shortFirm(name(h)))
+  // Holders whose line is held (unreliableOf): left out of the trades, and the trades tab says so.
+  const heldNames = holders.filter((h) => h.unreliable).map((h) => shortFirm(name(h)))
   const held = holders.length > 0 || exited.length > 0 || pick(d.options).length > 0
   return (
     <div className="page">
@@ -1847,7 +1856,7 @@ export function Stock({ ticker }: { ticker: string }) {
       </div>
       {holders.length > 0 && (
         <Panel title="Biggest bets on it" right={<span className="dim hide-sm">Share of each investor’s portfolio</span>}>
-          <HBars title="Investors with the most of their portfolio in it" fmt={(v) => pct(v, 1)} labelWidth={200} rows={[...holders].filter((h) => !h.unclear).sort((a, b) => b.weight - a.weight).slice(0, 6).map((h) => ({ key: h.slug, href: fundHref(h), label: <span title={name(h)}>{shortFirm(name(h))}</span>, value: h.weight }))} />
+          <HBars title="Investors with the most of their portfolio in it" fmt={(v) => pct(v, 1)} labelWidth={200} rows={[...valued].sort((a, b) => b.weight - a.weight).slice(0, 6).map((h) => ({ key: h.slug, href: fundHref(h), label: <span title={name(h)}>{shortFirm(name(h))}</span>, value: h.weight }))} />
         </Panel>
       )}
       <Tabs<STab>
@@ -1874,7 +1883,7 @@ export function Stock({ ticker }: { ticker: string }) {
           />
           {heldNames.length > 0 && (
             <p className="dim small held-note">
-              Not counted here: {heldNames.join(', ').replace(/, ([^,]*)$/, ' and $1')}. {heldNames.length === 1 ? 'Its share counts don’t' : 'Their share counts don’t'} fit {heldNames.length === 1 ? 'its' : 'their'} previous 13F, so no trade is counted.
+              Not counted here: {heldNames.join(', ').replace(/, ([^,]*)$/, ' and $1')}. {heldNames.length === 1 ? 'Its 13F figures don’t' : 'Their 13F figures don’t'} fit together, so no trade is counted.
             </p>
           )}
           </>
@@ -2461,7 +2470,8 @@ const PILLS: [ReactNode, string][] = [
   [<span className="tag pos">Added +14.6%</span>, 'It owns 14.6% more shares than last quarter. For very large additions the multiple is shown instead, such as “Added ×19”.'],
   [<span className="tag neg">Trimmed −25.2%</span>, 'It owns 25.2% fewer shares, but still holds some.'],
   [<span className="tag neg">Sold out</span>, 'It owned shares last quarter and reports none now.'],
-  [<ChangeTag change={null} unclear />, 'The share counts in this 13F and the one before don’t fit together, often a stock split the filer didn’t adjust for. No trade is counted, the line stays out of the buy and sell totals, and its shares and value are shown greyed, as filed.'],
+  [<ChangeTag change={null} held="shares" />, 'The share count in this 13F doesn’t fit the one before, often a stock split the filer didn’t adjust for. The value and weight are real and counted; the shares are greyed, as filed, and no trade is counted.'],
+  [<ChangeTag change={null} held="value" />, 'The value doesn’t fit the share count, often a figure filed in the wrong units. It is greyed, as filed, and left out of totals and rankings. The fund still counts as an owner, and no trade is counted. “Figures don’t match” means both are off.'],
   [<span className="tag pos">New 5%+ stake</span>, 'A 13D or 13G: the fund crossed 5% of a company, usually reported within days.'],
   [<span className="tag pos">Bought</span>, 'A Form 4: an insider (here, a fund owning 10% or more) bought on the open market.'],
 ]

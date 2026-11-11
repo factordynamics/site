@@ -30,6 +30,8 @@ export type Holding = {
   share_change: number | null
   value_delta: number | null
   suspect_units?: boolean
+  /** Copybook's class for a line whose numbers it can't vouch for (see unreliableOf). */
+  unreliable?: Unreliable | null
   /** Holdterm's: the trade (value_delta, after the corrections and checks below) as a share of the 13F's total
    * value, the same base as weight. Copybook's own pct_of_book is the weight, not the trade. */
   trade_pct?: number | null
@@ -115,8 +117,9 @@ export type StockHolder = {
   delta_value?: number | null
   change: Change
   put_call?: string
-  /** The share counts don't fit across filings (the book's suspect_units), so no trade is counted. */
-  unclear?: boolean
+  suspect_units?: boolean
+  /** Which of the row's numbers aren't real (unreliableOf); no trade is counted. */
+  unreliable?: Unreliable | null
 }
 export type StockFile = {
   ticker: string
@@ -233,19 +236,30 @@ function name(m: Manager) {
 const SECTOR_BY_TICKER = SECTOR_FIX as unknown as Record<string, string>
 /** Sector override by ticker (src/sectors.json), else the data's own. */
 export const sectorOf = (ticker: string | null | undefined, s: string | null | undefined, cusip?: string | null) => (ticker && SECTOR_BY_TICKER[ticker]) || (cusip && SECTOR_BY_TICKER[cusip]) || s || null
+/** Copybook's class for a line whose numbers it can't vouch for: `shares` (only the share count is wrong; the value
+ * and weight are real and counted), `value` (the value and weight are wrong) or `both`. A line flagged before ingest
+ * wrote the class (suspect_units alone) counts as `both`. Every class keeps its owner and counts no trade. */
+export type Unreliable = 'shares' | 'value' | 'both'
+export const unreliableOf = (h: { unreliable?: string | null; suspect_units?: boolean | null }): Unreliable | null =>
+  h.unreliable === 'shares' || h.unreliable === 'value' || h.unreliable === 'both' ? h.unreliable : h.suspect_units ? 'both' : null
+/** The line's value and weight aren't real: it stays out of value totals and rankings. */
+export const badValue = (u: Unreliable | null | undefined) => u === 'value' || u === 'both'
 /** True when a line's trade is bigger than its position could allow: share counts that break between
  * filings (an unadjusted split, a misfiled count) make share change × price many times the position. */
 export const tradeBreak = (delta: number, value: number, prevValue: number) => Math.abs(delta) > 1.5 * Math.max(value, prevValue)
 function normalise(hs: Holding[]) {
   const by = new Map<string, { sector: string; value: number }>()
   for (const h of hs) {
-    // Copybook flags a line whose share counts don't fit across filings (suspect_units: Guardcap's BKNG, 646,216 then
-    // 1,304 shares). There is no reliable trade, so every page counts none: no trade value, not a buyer or seller,
-    // and the row says the shares don't match rather than "No change". Stock pages apply it too (loadStock).
-    if (h.suspect_units && !h.put_call) {
+    // Copybook flags a line whose numbers don't fit across filings (Guardcap's BKNG, 646,216 then 1,304 shares) and
+    // says which (unreliableOf). There is no reliable trade, so every page counts none: no trade value, not a buyer or
+    // seller, and the row says what doesn't match rather than "No change". A wrong value has no weight either, so it
+    // drops out of rankings by weight. Stock pages apply the same (loadStock).
+    h.unreliable = unreliableOf(h)
+    if (h.unreliable && !h.put_call) {
       h.value_delta = 0
       h.share_change = null
       h.change = 'unchanged'
+      if (badValue(h.unreliable)) h.weight = 0
     }
     // Such a trade is shown as the change in reported value, which is bounded by the two positions.
     if (h.value_delta != null && !h.put_call && tradeBreak(h.value_delta, h.value, h.prev_value ?? 0)) {
@@ -338,7 +352,7 @@ function correct(b: Book) {
 /** 13F value includes put and call notional and notes; the book is the long stock lines only. */
 function longBook(b: Book) {
   const longs = b.holdings.filter(isStockLine)
-  b.long_value = longs.reduce((t, h) => t + h.value, 0)
+  b.long_value = longs.reduce((t, h) => t + (badValue(h.unreliable) ? 0 : h.value), 0)
   b.long_count = longs.filter((h) => h.value > 0).length
   b.notes_value = b.holdings.filter(isNoteOrPref).reduce((t, h) => t + h.value, 0)
   b.options_value = b.holdings.filter((h) => h.put_call).reduce((t, h) => t + h.value, 0)
@@ -403,10 +417,10 @@ const LOCAL = new Map<string, { cusip: string; ticker: string }[]>()
 /** A stock-page holder row from a fund's own book lines, as /consensus counts them. */
 const bookRow = (b: Book, ls: Holding[]): StockHolder => {
   const shares = ls.reduce((x, h) => x + h.shares, 0)
-  const unclear = ls.some((h) => h.suspect_units)
-  const prev = unclear || ls.some((h) => h.shares_break) ? null : ls.some((h) => h.prev_shares != null) ? ls.reduce((x, h) => x + (h.prev_shares ?? 0), 0) : null
-  const change = unclear ? 'unchanged' : ls.length === 1 ? ls[0].change : changeOf(shares, prev)
-  return { slug: b.slug, manager: b.firm, firm: b.firm, quarter: b.quarter, filing_date: b.filing_date, featured: false, shares, value: ls.reduce((x, h) => x + h.value, 0), weight: ls.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: ls.reduce((x, h) => x + (h.value_delta ?? 0), 0), change, put_call: ls[0].put_call ?? undefined, unclear }
+  const unreliable = ls.map((h) => h.unreliable).find(Boolean) ?? null
+  const prev = unreliable || ls.some((h) => h.shares_break) ? null : ls.some((h) => h.prev_shares != null) ? ls.reduce((x, h) => x + (h.prev_shares ?? 0), 0) : null
+  const change = unreliable ? 'unchanged' : ls.length === 1 ? ls[0].change : changeOf(shares, prev)
+  return { slug: b.slug, manager: b.firm, firm: b.firm, quarter: b.quarter, filing_date: b.filing_date, featured: false, shares, value: ls.reduce((x, h) => x + h.value, 0), weight: ls.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: ls.reduce((x, h) => x + (h.value_delta ?? 0), 0), change, put_call: ls[0].put_call ?? undefined, unreliable }
 }
 const changeOf = (shares: number, prev: number | null): Change => (prev == null ? 'new' : shares > prev ? (prev ? 'added' : 'new') : shares < prev ? (shares ? 'trimmed' : 'exited') : 'unchanged')
 /** A stock's holders: Copybook's stock file, plus roster lines whose ticker Holdterm resolves from the CUSIP
@@ -453,8 +467,10 @@ const root = (t: string) => t.replace(/(\.[A-Z]|[A-Z])$/, '') || t
 const holderSum = (rows: StockHolder[]): StockHolder => {
   if (rows.length === 1) return rows[0]
   const shares = rows.reduce((x, h) => x + h.shares, 0)
-  const prev = rows.some((h) => h.prev_shares != null) ? rows.reduce((x, h) => x + (h.prev_shares ?? 0), 0) : null
-  return { ...rows[0], shares, value: rows.reduce((x, h) => x + h.value, 0), weight: rows.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: rows.reduce((x, h) => x + (h.delta_value ?? 0), 0), change: changeOf(shares, prev) }
+  // A class whose numbers don't fit (unreliableOf) makes the whole position count no trade.
+  const unreliable = rows.map(unreliableOf).find(Boolean) ?? null
+  const prev = !unreliable && rows.some((h) => h.prev_shares != null) ? rows.reduce((x, h) => x + (h.prev_shares ?? 0), 0) : null
+  return { ...rows[0], shares, value: rows.reduce((x, h) => x + h.value, 0), weight: rows.reduce((x, h) => x + h.weight, 0), prev_shares: prev, delta_value: unreliable ? 0 : rows.reduce((x, h) => x + (h.delta_value ?? 0), 0), change: unreliable ? 'unchanged' : changeOf(shares, prev), unreliable }
 }
 const median = (xs: number[]) => {
   const v = [...xs].sort((a, b) => a - b)
@@ -467,8 +483,14 @@ export async function loadStock(t: string): Promise<StockFile> {
   // counts it, until Copybook's stock file includes it.
   const misfiled = Object.entries(OVERRIDE).filter(([, o]) => typeof o === 'object' && o.filers && tickers.has(o.ticker))
   const cus = new Set([...d.classes.map((c) => c.cusip), ...misfiled.map(([c]) => c)])
-  let holders = [...d.holders]
-  let exited = [...d.exited]
+  // Copybook's stock file carries the books' class (unreliableOf): such a row counts no trade, as on every other page,
+  // and a wrong value has no weight.
+  const own = (h: StockHolder): StockHolder => {
+    const u = unreliableOf(h)
+    return u ? { ...h, unreliable: u, change: 'unchanged', delta_value: 0, prev_shares: null, weight: badValue(u) ? 0 : h.weight } : h
+  }
+  let holders = d.holders.map(own)
+  let exited = d.exited.map(own)
   for (const [c, o] of misfiled)
     for (const slug of o.filers!) {
       const b = await loadBook(slug).catch(() => null)
@@ -481,8 +503,7 @@ export async function loadStock(t: string): Promise<StockFile> {
       const all = same ? holderSum([same, row]) : row
       ;(all.value > 0 ? holders : exited).push(all)
     }
-  // Copybook's per-holder Δ is share change × price, and its stock file doesn't carry the books' suspect_units flag.
-  // A row whose price (value ÷ shares), now or last quarter, is more than twice off the median of the same
+  // Copybook's per-holder Δ is share change × price. A row whose price (value ÷ shares), now or last quarter, is more than twice off the median of the same
   // quarter's filers, or whose Δ is bigger than the position allows, is checked against the fund's own book: a
   // suspect line counts no trade (as on every other page), and a broken share count takes the book's bounded figure.
   const price = (v: number | null | undefined, s: number | null | undefined) => (v && s && v > 0 && s > 0 ? v / s : null)
@@ -504,7 +525,7 @@ export async function loadStock(t: string): Promise<StockFile> {
       if (!check(h)) return h
       const b = await loadBook(h.slug).catch(() => null)
       const ls = b?.holdings.filter((x) => cus.has(x.cusip) && !x.put_call)
-      if (!b || !ls?.length || !ls.some((l) => l.suspect_units || l.shares_break)) return h
+      if (!b || !ls?.length || !ls.some((l) => l.unreliable || l.shares_break)) return h
       return { ...h, ...bookRow(b, ls), featured: h.featured, manager: h.manager, firm: h.firm }
     }),
   )
@@ -665,12 +686,15 @@ export function aggregate(books: Book[], rank: Book[] = books): { rows: Agg[]; t
       }
       for (const l of ls) if (l.ticker) a.classes!.add(l.ticker)
       if (a.sector === 'Unclassified' && h.sector) a.sector = h.sector
-      const value = ls.reduce((x, l) => x + l.value, 0)
+      // A line whose value isn't real (badValue) still makes the fund an owner, but adds no value or weight, so it
+      // stays out of the totals and every ranking.
+      const filed = ls.reduce((x, l) => x + l.value, 0)
+      const value = ls.reduce((x, l) => x + (badValue(l.unreliable) ? 0 : l.value), 0)
       const weight = ls.reduce((x, l) => x + l.weight, 0)
       const d = ls.reduce((x, l) => x + (l.value_delta ?? 0), 0)
-      const change: Change = value <= 0 ? 'exited' : ls.every((l) => l.change === 'new') ? 'new' : d > 0 ? 'added' : d < 0 ? 'trimmed' : 'unchanged'
+      const change: Change = filed <= 0 ? 'exited' : ls.every((l) => l.change === 'new') ? 'new' : d > 0 ? 'added' : d < 0 ? 'trimmed' : 'unchanged'
       const who: Who = { slug: b.slug, manager: b.firm, weight, value, change, delta: d, quarter: b.quarter }
-      if (value > 0) {
+      if (filed > 0) {
         a.value += value
         total += value
         a.holders.push(who)
