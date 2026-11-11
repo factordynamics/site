@@ -886,6 +886,9 @@ export function Fund({ slug }: { slug: string }) {
   const hist = [...(h.data?.history ?? [])].filter((r) => r.total_value > 0).reverse()
   const events = ev.data ?? []
   const stale = ix.data ? isStale(book, ix.data.managers.filter((m) => m.ok)) : false
+  const sea = season()
+  const left = Math.ceil((Date.parse(sea.due) - Date.now()) / 86_400_000)
+  const due = inRoster(slug) && book.quarter < sea.q && left >= 0 ? { ...sea, left } : null
   const valuePanel = (
     <Panel title="Portfolio value by quarter" right={<span className="dim hide-sm">Value of US-listed stocks in each 13F</span>}>
       {book.options_value > 0 && hist.some((r) => r.equity_value == null && r.long_value == null) && <div className="dim small">Older quarters as filed, including options.</div>}
@@ -910,6 +913,13 @@ export function Fund({ slug }: { slug: string }) {
               View the filing on SEC EDGAR ↗
             </a>
             {filer && firmName(filer.slug, filer.name) !== book.firm && <span>Filed by {firmName(filer.slug, filer.name)}</span>}
+            {/* During filing season, a fund still on last quarter's 13F says when the new one is due, so its page doesn't read as out of date. */}
+            {due && (
+              <span className="due-next">
+                {quarterLabel(due.q)} 13F due {day(due.due)}
+                {due.left > 1 ? `, in ${due.left} days` : due.left === 1 ? ', tomorrow' : ', today'}
+              </span>
+            )}
           </div>
         </div>
         <Follow kind="investors" id={slug} />
