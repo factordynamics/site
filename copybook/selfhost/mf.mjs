@@ -1,6 +1,6 @@
 // Miniflare instance for the copybook-api Worker, configured from wrangler.toml, shared by server.mjs and import.mjs.
 import { Miniflare, Log, LogLevel, convertV4MiniflareOptions } from 'miniflare';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { parse } from 'smol-toml';
 
 export function makeMiniflare() {
@@ -9,6 +9,9 @@ export function makeMiniflare() {
   const SECRETS = ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'SESSION_SECRET', 'RESEND_API_KEY', 'HEALTH_TOKEN', 'GITHUB_DISPATCH_TOKEN', 'SEC_BUDGET', 'CF_API_TOKEN'];
   const bindings = { ...toml.vars, API_URL: env.PUBLIC_API_URL };
   for (const k of SECRETS) if (env[k]) bindings[k] = env[k];
+  // The commit the bundle was built from (update.sh writes BUILD_DIR/BUILD_SHA): /health's api_build.
+  const sha = env.BUILD_SHA || (existsSync(`${env.BUILD_DIR}/BUILD_SHA`) ? readFileSync(`${env.BUILD_DIR}/BUILD_SHA`, 'utf8').trim() : '');
+  if (/^[0-9a-f]{7,40}$/.test(sha)) bindings.BUILD_SHA = sha;
 
   return new Miniflare(convertV4MiniflareOptions({
     name: toml.name,

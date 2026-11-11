@@ -75,6 +75,9 @@ ok=0
 for i in $(seq 1 30); do sleep 1; curl -sf -m 3 -o /dev/null http://127.0.0.1:8791/health && { ok=1; break; }; done
 kill -TERM $spid 2>/dev/null; wait $spid 2>/dev/null; rm -rf "$smoke"
 if [ $ok != 1 ]; then echo "new bundle failed to boot in workerd at $new; keeping the running version (see $ROOT/last-smoke.log)"; echo "$new" > "$ROOT/state.last-failed"; exit 0; fi
+# The bundle carries the commit it was built from (BUILD_SHA -> /health api_build), so a rollback to build.prev or a
+# restart after a docs-only commit still names the right build.
+echo "$new" > "$ROOT/build.new/BUILD_SHA"
 rm -rf "$ROOT/build.prev"; mv "$ROOT/build" "$ROOT/build.prev"; mv "$ROOT/build.new" "$ROOT/build"
 systemctl --user restart copybook-api.service
 echo "$new" > "$ROOT/state.deployed-sha"
