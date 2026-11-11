@@ -255,6 +255,7 @@ export const ERRORS = {
   not_yet_available: 'This option is documented but not served yet.',
   server_error: 'Something went wrong on our side.',
   busy: 'The API is busy; retry after the Retry-After seconds.',
+  fund_owner_only: "Team access is the Copy Fund owner's (a seat or another plan can't read it).",
   quarter_incomplete_by_ticker: "Past quarters by ticker aren't complete yet; use /v1/bulk/{quarter} or per-filer /v1/changes. Full coverage is due Nov 23, 2026.",
 } as const;
 export type ErrorCode = keyof typeof ERRORS;
@@ -340,6 +341,17 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
     return v1json({ error: { code: 'rate_limited', message: `Rate limit reached for this ${scope}: ${r[w].limit} requests a ${w}, across all its API keys. Retry after ${secs} s.`, scope, window: w, limit: r[w].limit, retry_after_seconds: secs, retry_at: new Date(Date.now() + secs * 1000).toISOString().replace(/\.\d+Z$/, 'Z') } }, 429, { ...limits, 'Retry-After': String(secs) });
   }
   if (metered) await meter(env, auth.key.id).count?.();
+  // Key use, counted per hour for the access log (bulk downloads apart from the rest of the API).
+  const al = await import('./accesslog');
+  await al.noteUse(env, auth.member.customer, { via: 'key', key: { id: auth.key.id, name: auth.key.name }, cls: metered ? 'api' : 'bulk' }, req);
+  // The access log by API key: the member's own, and a Fund owner's team (?seat=, ?format=csv, ?part=events).
+  if (req.method === 'GET' && path === '/v1/me/access') return v1json({ data: await al.meAccess(env, auth.member) }, 200, limits);
+  if (req.method === 'GET' && path === '/v1/team/access') {
+    if (!al.teamOwner(auth.member)) return v1error('fund_owner_only', 403, undefined, limits);
+    const t = await al.teamAccess(env, auth.member, url.searchParams.get('seat'));
+    if (url.searchParams.get('format') === 'csv') return new Response(al.teamCsv(t, url.searchParams.get('part') === 'events' ? 'events' : 'use'), { headers: { ...limits, 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="copybook-team-access.csv"' } });
+    return v1json({ data: t }, 200, limits);
+  }
   // JSON is always served inline (gzip for clients that ask; Python's urllib forwards Authorization on a redirect and R2
   // then answers 400). On the Funnel name a generated CSV over 1 MB answers 302 to presigned R2 (served here if R2
   // can't take it); bulk files redirect to presigned R2 on every host (their route).

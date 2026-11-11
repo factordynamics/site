@@ -4,7 +4,7 @@ import { filers as curatedFilers, filerBook, filingMeta, resolveAny, rowsOf } fr
 import { verifyGithubOidc } from './oidc';
 import { type ChannelDelivery, channelScope, channelsView, failView, clearSeatDuplicates, getChannels, getFailures, rotateFeed, seedFeed, serveFeed, testChannels, updateChannels } from './channels';
 import { createKey, listKeys, MAX_KEYS, meter, revokeKey } from './keys';
-import { logEvent, meAccess, teamAccess, teamCsv, teamOwner } from './accesslog';
+import { logEvent, meAccess, noteUse, teamAccess, teamCsv, teamOwner } from './accesslog';
 import { handleV1, v1error } from './v1';
 
 export { KeyMeter } from './keys';
@@ -1012,7 +1012,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
 
   // A member's private alert feed: the token in the path is the only credential, and revocable.
   const feed = path.match(/^\/feed\/([\w-]+)\.(json|rss)$/);
-  if (req.method === 'GET' && feed) return serveFeed(env, feed[1], feed[2] as 'json' | 'rss', `${stableBase(env, url)}${url.pathname}`);
+  if (req.method === 'GET' && feed) return serveFeed(env, feed[1], feed[2] as 'json' | 'rss', `${stableBase(env, url)}${url.pathname}`, req);
 
   // The data workflow reads which non-curated filers members follow (CIKs only), to back-fill a prior quarter.
   if (req.method === 'GET' && path === '/ingest/followed.json') {
@@ -1185,6 +1185,8 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const code = !token ? 'no_session' : !p ? 'invalid_session' : (await getMember(env, p.c)) ? 'invalid_session' : 'member_unavailable';
     return json({ ok: false, error: 'sign in required', code }, 401, h);
   }
+  // Session use, counted per hour for the access log (account class: the site and its panels).
+  await noteUse(env, m.customer, { via: 'session', cls: 'account' }, req);
 
   // A provisional session reads /me and changes follows, nothing else: API keys, channels, the billing portal, seats,
   // a cross-origin handoff and "sign out everywhere" (which mints a full session) wait for the emailed link. Starting

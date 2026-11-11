@@ -498,6 +498,23 @@ export function openapi() {
           responses: { '200': { description: 'The file, streamed from the API host when no verified R2 copy exists (Content-Length and Repr-Digest set)', content: { 'application/gzip': {}, 'application/vnd.apache.parquet': {} } }, '302': { description: 'Redirect to a presigned R2 link, valid 5 minutes; fetch it without Authorization', headers: { Location: { schema: { type: 'string', format: 'uri' } } } }, '501': { description: 'not_yet_available: not published yet', content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }, ...errResponses },
         },
       },
+      '/v1/me/access': {
+        get: {
+          summary: 'Your access log: sign-ins, API key and session use per hour (key or session, IP /24, class: bulk, api, feed or account), keys with last use, changes and downloads, and every operator access with its reason. 90 days shown, kept a year.',
+          responses: {
+            '200': { description: 'Access log', content: json(envelope({ type: 'object', required: ['shown_days', 'keys', 'use', 'events', 'operator'], properties: { shown_days: { type: 'integer' }, last_sign_in: { type: ['string', 'null'], format: 'date-time' }, last_api_use: { type: ['string', 'null'], format: 'date-time' }, keys: { type: 'array', items: { type: 'object' } }, use: { type: 'array', items: { type: 'object', required: ['hour', 'via', 'key', 'ip24', 'class', 'count'], properties: { hour: { type: 'string', format: 'date-time' }, via: { type: 'string', enum: ['key', 'session', 'feed'] }, key: { type: ['object', 'null'] }, ip24: { type: ['string', 'null'], description: 'The caller network\'s /24 (IPv6 /48); never the IP.' }, class: { type: 'string', enum: ['bulk', 'api', 'feed', 'account'] }, count: { type: 'integer' } } } }, events: { type: 'array', items: { type: 'object' } }, operator: { type: 'array', items: { type: 'object' } } } }), { data: { shown_days: 90, last_sign_in: '2026-11-11T09:12:03Z', last_api_use: '2026-11-11T14:00:00Z', keys: [{ id: 'key_0123456789abcdef', name: 'research', prefix: 'cbk_live_AbCd', created: '2026-11-01T10:00:00Z', last_used_at: '2026-11-11T14:02:11Z' }], use: [{ hour: '2026-11-11T14:00:00Z', via: 'key', key: { id: 'key_0123456789abcdef', name: 'research' }, ip24: '203.0.113.0/24', class: 'api', count: 42 }], events: [{ at: '2026-11-11T09:12:03Z', kind: 'sign_in', by: 'self', country: 'US', ip24: '203.0.113.0/24', detail: 'email link' }], operator: [] } }) },
+          },
+        },
+      },
+      '/v1/team/access': {
+        get: {
+          summary: "A Copy Fund owner's team access: every seat (status, last sign-in, last API use, keys) and their use per hour by key or session, IP /24 and class, with the team's events. ?seat= one seat; ?format=csv (use rows, or ?part=events). 403 fund_owner_only for a seat or another plan.",
+          parameters: [{ name: 'seat', in: 'query', required: false, schema: { type: 'string', format: 'email' } }, { name: 'format', in: 'query', required: false, schema: { type: 'string', enum: ['json', 'csv'] } }, { name: 'part', in: 'query', required: false, schema: { type: 'string', enum: ['use', 'events'] } }],
+          responses: {
+            '200': { description: 'Team access', content: json(envelope({ type: 'object', required: ['shown_days', 'seats', 'use', 'events'], properties: { shown_days: { type: 'integer' }, seats: { type: 'array', items: { type: 'object' } }, use: { type: 'array', items: { type: 'object' } }, events: { type: 'array', items: { type: 'object' } } } }), { data: { shown_days: 90, seats: [{ email: 'analyst@fund.example', role: 'seat', status: 'active', invited_at: '2026-11-02T08:00:00Z', removed_at: null, last_sign_in: '2026-11-11T09:12:03Z', last_api_use: '2026-11-11T14:00:00Z', key_count: 1, keys: [] }], use: [{ seat: 'analyst@fund.example', hour: '2026-11-11T14:00:00Z', via: 'key', key: { id: 'key_0123456789abcdef', name: 'research' }, ip24: '203.0.113.0/24', class: 'bulk', count: 3 }], events: [] } }) },
+          },
+        },
+      },
       '/v1/changelog': {
         get: {
           summary: 'Changes to /v1, newest first. No API key needed.',

@@ -610,9 +610,10 @@ const itemHtml = (text: string) =>
     .join('');
 
 /** GET /feed/{token}.json (JSON Feed 1.1) or .rss (RSS 2.0). The token is the only credential. */
-export async function serveFeed(env: Env, token: string, format: 'json' | 'rss', selfUrl: string): Promise<Response> {
+export async function serveFeed(env: Env, token: string, format: 'json' | 'rss', selfUrl: string, req?: Request): Promise<Response> {
   const customer = /^[\w-]{20,64}$/.test(token) ? await env.DB.get(`feedtok:${token}`) : null;
   if (!customer) return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
+  await (await import('./accesslog')).noteUse(env, customer, { via: 'feed', cls: 'feed' }, req);
   const items = JSON.parse((await env.DB.get(`feed:${customer}`)) ?? '[]') as FeedItem[];
   // Never cached: a revoked token must stop working for both formats at once.
   const headers = { 'cache-control': 'no-store', 'access-control-allow-origin': '*', 'referrer-policy': 'no-referrer' };

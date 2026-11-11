@@ -4013,13 +4013,25 @@ describe('copybook api', () => {
     ]);
     expect(ta.seats.map((r: { email: string; role: string; status: string; key_count: number; last_sign_in: string | null }) => [r.email, r.role, r.status, r.key_count, !!r.last_sign_in])).toEqual([['pm@fund.example', 'owner', 'owner', 0, true], ['analyst@fund.example', 'seat', 'active', 1, true]]);
     expect([(await call('/team/access', { token: seat })).status, (await call('/me/access', { token: seat })).status]).toEqual([403, 200]);
-    const csv = await (await call('/team/access?seat=analyst%40fund.example&format=csv', { token: owner })).text();
-    expect([csv.split('\n')[0], csv.split('\n').length - 2, csv.includes(',sign_in,self,DE,')]).toEqual(['at,seat,kind,by,country,detail,key_id,key_name,reason', 6, true]);
+    const csv = await (await call('/team/access?seat=analyst%40fund.example&format=csv&part=events', { token: owner })).text();
+    expect([csv.split('\n')[0], csv.split('\n').length - 2, csv.includes(',sign_in,self,DE,')]).toEqual(['at,seat,kind,by,country,ip24,detail,key_id,key_name,reason', 6, true]);
     const teamSeatKey = ta.seats[1].keys[0].id as string;
     expect((await call(`/team/keys/${teamSeatKey}`, { method: 'DELETE', token: owner })).status).toBe(200);
     const own = await (await call('/me/access', { token: seat })).json();
     expect([own.keys, own.events[0]]).toEqual([[], expect.objectContaining({ kind: 'key_deleted', by: 'owner', key: { id: teamSeatKey, name: 'seat key' } })]);
-    expect((await call('/keys', { body: { name: 'seat key' }, token: seat })).status).toBe(201);
+    const seatApiKey = (await (await call('/keys', { body: { name: 'seat key' }, token: seat })).json()).key as string;
+    // Use per hour, by key or session, IP /24 (never the IP) and endpoint class: who on the team used the API and when.
+    for (const ip of ['203.0.113.77', '203.0.113.9']) await handleRequest(new Request('https://api.test/v1/filers?limit=1', { headers: { authorization: `Bearer ${seatApiKey}`, 'cf-connecting-ip': ip } }), env);
+    const ownerApiKey = (await (await call('/keys', { body: { name: 'pm key' }, token: owner })).json()).key as string;
+    const tv = await handleRequest(new Request('https://api.test/v1/team/access?seat=analyst%40fund.example', { headers: { authorization: `Bearer ${ownerApiKey}` } }), env);
+    const tvb = (await tv.json()).data;
+    expect([tv.status, tvb.use.filter((u: { via: string }) => u.via === 'key').map((u: { seat: string; key: { name: string }; ip24: string; class: string; count: number }) => [u.seat, u.key.name, u.ip24, u.class, u.count])]).toEqual([200, [['analyst@fund.example', 'seat key', '203.0.113.0/24', 'api', 2]]]);
+    expect(tvb.use.some((u: { via: string; class: string }) => u.via === 'session' && u.class === 'account')).toBe(true);
+    expect(JSON.stringify(tvb)).not.toContain('203.0.113.77');
+    const useCsv = await (await handleRequest(new Request('https://api.test/v1/team/access?format=csv', { headers: { authorization: `Bearer ${ownerApiKey}` } }), env)).text();
+    expect([useCsv.split('\n')[0], useCsv.includes(',analyst@fund.example,key,')]).toEqual(['hour,seat,via,key_id,key_name,ip24,class,count', true]);
+    const sv = await handleRequest(new Request('https://api.test/v1/team/access', { headers: { authorization: `Bearer ${seatApiKey}` } }), env);
+    expect([sv.status, (await sv.json()).error.code, (await handleRequest(new Request('https://api.test/v1/me/access', { headers: { authorization: `Bearer ${seatApiKey}` } }), env)).status]).toEqual([403, 'fund_owner_only', 200]);
     await handleRequest(new Request('https://api.test/ops/access-log', { method: 'POST', body: JSON.stringify({ customer: 'cus_fund', route: 'GET /ops/book', note: 'support: invoice question' }), headers: { authorization: `Bearer ${env.HEALTH_TOKEN}` } }), env);
     expect((await (await call('/me/access', { token: owner })).json()).operator).toEqual([expect.objectContaining({ kind: 'operator', by: 'operator', detail: 'GET /ops/book', reason: 'support: invoice question' })]);
 
