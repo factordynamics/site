@@ -12,7 +12,7 @@ import { dayLabel, Paused, timeLabel } from '../components/Paused'
 import { CsvButton } from '../components/CsvButton'
 import { resetFollows, saveFollows, useFollows } from '../lib/follows'
 import { loadExpected, seasonStatus, stockPath } from '../lib/stocks'
-import { refreshFollows, setFollow } from '../lib/follows'
+import { isReadOnly, refreshFollows, setFollow } from '../lib/follows'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Signup } from '../components/Signup'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -332,7 +332,7 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
                   ['include_13g', 'Also Schedule 13G filings', 'Passive 5% stakes. Big asset managers file many of these.'],
                   ['digest', 'One daily digest', 'A single email after EDGAR closes, about 10:30 pm ET, instead of one per filing.'],
                   // Shown once the weekly email has gone to a real member (/me digest_live).
-                  ...(member.digest_live ? ([['weekly_digest', 'Weekly “Your names this week” email', 'Saturdays, about 9 pm ET Friday: what the superinvestors did in your names that week.']] as const) : []),
+                  ...(member.digest_live ? ([['weekly_digest', 'Weekly “Your names this week” email', 'Fridays, about 9:15 pm ET: what the superinvestors did in your names that week.']] as const) : []),
                 ] as const
               ).map(([k, l, d]) => (
                 <label key={k} className="flex cursor-pointer items-start gap-3">
@@ -871,7 +871,7 @@ function FreeFollows() {
                 disabled={removing}
                 onClick={() => {
                   setErr(null)
-                  setFollow('investors', slug, false).catch((e) => setErr(`Couldn’t remove ${name(slug)}${e instanceof ApiError && e.detail ? `: ${e.detail}` : ''}. Please try again.`))
+                  setFollow('investors', slug, false).catch((e) => setErr(isReadOnly(e) ? `Couldn’t remove ${name(slug)}: follows can’t be changed while we’re on the backup. Try again in a few minutes.` : `Couldn’t remove ${name(slug)}${e instanceof ApiError && e.detail ? `: ${e.detail}` : ''}. Please try again.`))
                 }}
                 aria-label={`Stop following ${name(slug)}`}
                 className="shrink-0 rounded-full px-3 py-1 text-[13px] font-medium text-ink-2 shadow-[0_0_0_1px_var(--color-line-2)] hover:text-ink hover:shadow-[0_0_0_1px_var(--color-ink-3)] disabled:opacity-60"

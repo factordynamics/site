@@ -24,6 +24,8 @@ const preload = (): Plugin => ({
   transformIndexHtml(html, ctx) {
     const fonts = Object.keys(ctx.bundle ?? {}).filter((f) => /\/(geist-latin-wght-normal|newsreader-latin-wght-italic)-[^/]+\.woff2$/.test(f))
     const tags = [
+      // The deployed commit, readable without running the bundle (curl the page, grep copybook-build).
+      { tag: 'meta', attrs: { name: 'copybook-build', content: process.env.VITE_BUILD! }, injectTo: 'head' as const },
       { tag: 'link', attrs: { rel: 'preconnect', href: new URL(process.env.VITE_DATA_BASE!).origin, crossorigin: '' }, injectTo: 'head' as const },
       ...fonts.map((f) => ({ tag: 'link', attrs: { rel: 'preload', as: 'font', type: 'font/woff2', href: `${process.env.COPYBOOK_BASE || '/'}${f}`, crossorigin: '' }, injectTo: 'head' as const })),
     ]

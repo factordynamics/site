@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { dayET, edgarClosed, shortDay, loadCoverage, loadExpected, loadSeason, nextUp, seasonNow, timeLeft } from '../lib/stocks'
 import { EdgarClosed } from '../components/EdgarClosed'
 import { loadLatency } from '../lib/account'
-import { firstAlertMedian } from '../lib/latencyStats.mjs'
+import { thirteenFStats } from '../lib/latencyStats.mjs'
 import { TRIAL_DAYS } from '../config'
 import { track } from '../lib/track'
 import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/charts'
@@ -89,12 +89,14 @@ function Hero({ managers }: { managers?: Manager[] }) {
 
 // The season hero: how fast this season's 13F alerts went out (latency.json, never a fixed figure), who
 // files next (d/expected.json) and the trial.
-const secondsLabel = (s: number) => (s < 120 ? `${Math.round(s)} seconds` : `${Math.round(s / 60)} minutes`)
+// "within 2 minutes" while the 13F median (the same figure /speed/'s 13F row shows) is under 120 s, else the
+// median rounded up to whole minutes; "within minutes" when latency.json can't load.
+const withinLabel = (s?: number | null) => (s == null ? 'within minutes' : s < 120 ? 'within 2 minutes' : `within ${Math.ceil(s / 60)} minutes`)
 function SeasonLead() {
   const sn = seasonNow()
   const lat = useAsync(() => loadLatency().catch(() => null), [])
   const soon = useAsync(loadExpected, [])
-  const med = lat.data ? firstAlertMedian(lat.data) : null
+  const med = lat.data ? thirteenFStats(lat.data) : null
   const next = soon.data ? nextUp(soon.data.expected, dayET()).text : ''
   const closed = edgarClosed()
   return (
@@ -107,21 +109,13 @@ function SeasonLead() {
       <div className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-2 md:text-[18px]">
         {lat.loading ? (
           <Skeleton className="h-[1.2em] w-4/5" />
-        ) : med?.median_seconds != null ? (
-          <>
-            Copy emails each superinvestor’s 13F, with what they bought and sold.{' '}
-            <Link to="/speed/" className="font-medium text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink">
-              Median {secondsLabel(med.median_seconds)} from EDGAR to first alert this season
-            </Link>
-            .
-          </>
         ) : (
           <>
-            Copy emails each superinvestor’s 13F, with what they bought and sold,{' '}
+            Copy emails each superinvestor’s 13F, with what they bought and sold. Most 13F alerts reach members {withinLabel(med?.median_seconds)} of the SEC filing. Every alert is timed on the{' '}
             <Link to="/speed/" className="font-medium text-ink underline decoration-line-2 underline-offset-4 hover:decoration-ink">
-              within minutes of EDGAR
+              speed page
             </Link>
-            .
+            , slow ones included.
           </>
         )}
         {next && <p className="mt-2 text-[15.5px] text-ink">Next up: {next}.</p>}
@@ -546,7 +540,7 @@ function SeasonPill() {
       {/* Superinvestors first, the same count /season/ leads with; on a phone the line wraps rather than cutting off. */}
       <span className="min-w-0 py-0.5 text-left leading-snug">
         {quarterLabel(sn.quarter)} 13F season
-        {d.data ? `: ${d.data.featured.filed} of ${d.data.featured.total} superinvestors · ${d.data.curated.filed} of ${d.data.curated.total} funds filed` : ''}
+        {d.data ? `: ${d.data.featured.filed} of ${d.data.featured.total} superinvestors still filing · ${d.data.curated.filed} of ${d.data.curated.total} funds filed` : ''}
         {left ? ` · ${left} left` : ''}
       </span>
       <Arrow />

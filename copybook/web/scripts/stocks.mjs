@@ -491,8 +491,13 @@ writeFileSync(join(out, 'd', 'flow.json'), JSON.stringify(flow))
     not_filing: notFiling,
     deadline: due.toISOString(),
     curated: { filed: active.filter((m) => qn(m.quarter) === q).length, total: index.counts?.tracked ?? active.length },
-    // Every superinvestor on the expected list, so filed + still to file always equals the total.
-    featured: { filed: expected.filter((x) => x.filed).length, total: expected.length },
+    // Every superinvestor on the expected list, plus the featured ones that stopped filing (index.json inactive),
+    // named on /season/ so a count that drops (40 to 39 when Olstein's registration ended) says why.
+    featured: {
+      filed: expected.filter((x) => x.filed).length,
+      total: expected.length,
+      stopped: index.managers.filter((x) => x.featured && x.status === 'inactive').map((x) => ({ slug: x.slug, manager: x.manager, note: x.status_note ?? null })),
+    },
     filers: { filed: filedAll.length, total: fl.filter((f) => qn(f.quarter) >= q - 1).length },
     by_day: Object.entries(days).sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count })),
     latest: books

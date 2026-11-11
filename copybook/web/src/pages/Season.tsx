@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { REF_NOTE, Share, shareUrl, useRefCode } from '../components/Share'
 import { Signup } from '../components/Signup'
@@ -141,7 +141,12 @@ export function Season() {
       </header>
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Progress label="Superinvestors" sub={d ? `updated ${ago(now - Date.parse(d.generated_at))}` : 'legendary investors we feature'} v={d?.featured} />
+        <Progress
+          label="Superinvestors still filing"
+          sub={d ? `updated ${ago(now - Date.parse(d.generated_at))}` : 'legendary investors we feature'}
+          v={d?.featured}
+          note={d?.featured.stopped?.length ? <StoppedFiling list={d.featured.stopped} /> : null}
+        />
         <Progress label="Funds we track closely" sub="with alerts, moves and history" v={d?.curated} />
         {/* Narrower than the 8,968 filers with any 13F on file (pricing, /v1/filers): only those that filed last quarter or this. */}
         <Progress label="13F filers active last quarter" sub={d ? `those that filed for ${quarterLabel(prevQuarter(d.quarter))} or ${quarterLabel(d.quarter)}` : 'those that filed last quarter or this'} v={d?.filers} />
@@ -376,7 +381,25 @@ const ago = (ms: number) => {
 
 const prevQuarter = (q: string) => (q.endsWith('Q1') ? `${Number(q.slice(0, 4)) - 1}Q4` : `${q.slice(0, 5)}${Number(q.slice(5)) - 1}`)
 
-function Progress({ label, sub, v }: { label: string; sub: string; v?: { filed: number; total: number } }) {
+// The featured superinvestors left out of the count because they stopped filing, each with the reason on hover.
+function StoppedFiling({ list }: { list: { slug: string; manager: string; note: string | null }[] }) {
+  return (
+    <p className="mt-1 text-[12.5px] text-ink-3">
+      Not counted, stopped filing:{' '}
+      {list.map((x, i) => (
+        <span key={x.slug}>
+          {i ? ', ' : ''}
+          <Link to={`/investors/${x.slug}/`} title={x.note ?? undefined} className="underline decoration-line-2 underline-offset-2 hover:text-ink">
+            {x.manager}
+          </Link>
+        </span>
+      ))}
+      .
+    </p>
+  )
+}
+
+function Progress({ label, sub, v, note }: { label: string; sub: string; v?: { filed: number; total: number }; note?: ReactNode }) {
   const p = v && v.total ? v.filed / v.total : 0
   return (
     <div className="rounded-[var(--radius-card)] bg-card p-5 shadow-[var(--shadow-card)]">
@@ -391,6 +414,7 @@ function Progress({ label, sub, v }: { label: string; sub: string; v?: { filed: 
       <p className="mt-2 text-[12.5px] text-ink-3">
         {Math.round(p * 100)}% · {sub}
       </p>
+      {note}
     </div>
   )
 }

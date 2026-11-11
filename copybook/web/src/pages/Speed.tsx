@@ -492,7 +492,7 @@ function AlertLog({ rows: all }: { rows: Row[] }) {
                   <tr className="border-b border-line last:border-0">
                     <td colSpan={5} className="py-2 pl-4 pr-4 text-[13px] text-ink-2 sm:px-5">
                       <span className="font-medium text-ink">Missed for stock watchers: {watchers.length}</span>
-                      {watchers.length ? ` (their followers were alerted; watchers get them in ${coveredAt ? `${new Date(coveredAt).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' })}’s` : 'the weekly'} email)` : ''}
+                      {watchers.length ? ` (their followers were alerted; watchers get them in ${coveredAt ? `${new Date(coveredAt).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'America/New_York' })}’s` : 'Friday’s'} email)` : ''}
                       {missed.length > watchers.length ? ` · ${missed.length - watchers.length} other missed` : ''}. Not in the figures above.
                     </td>
                   </tr>
@@ -580,7 +580,22 @@ function AlertLog({ rows: all }: { rows: Row[] }) {
                           </span>
                         )}
                         <span className="num block text-[11.5px] text-ink-3 lg:hidden">
-                          <span className="font-medium text-ink-2">accepted</span> {time(a.accepted_at)} · <span className="font-medium text-ink-2">emailed</span> {a.never ? 'never' : a.email_accepted_at || a.sent_at ? time((a.email_accepted_at ?? a.sent_at)!) : 'not recorded'} · {a.host ? POLLER[a.host] ?? a.host : 'poller not recorded'}
+                          <span className="font-medium text-ink-2">accepted</span> {time(a.accepted_at)}
+                          {/* Detected and Team channel on phones only for rows that hold them (payments records both from Nov 11). */}
+                          {a.detected_at ? (
+                            <>
+                              {' · '}
+                              <span className="font-medium text-ink-2">detected</span> {time(a.detected_at)}
+                            </>
+                          ) : null}{' '}
+                          · <span className="font-medium text-ink-2">emailed</span> {a.never ? 'never' : a.email_accepted_at || a.sent_at ? time((a.email_accepted_at ?? a.sent_at)!) : 'not recorded'}
+                          {a.team_delivered_at ? (
+                            <>
+                              {' · '}
+                              <span className="font-medium text-ink-2">team channel</span> {time(a.team_delivered_at)}
+                            </>
+                          ) : null}{' '}
+                          · {a.host ? POLLER[a.host] ?? a.host : 'poller not recorded'}
                         </span>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 align-top text-ink-2">{formLabel(a.form)}</td>

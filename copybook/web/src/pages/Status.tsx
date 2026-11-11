@@ -35,7 +35,7 @@ type StatusFile = {
   freshness?: { last_13f?: { manager: string; accepted_at: string } | null }
   /** Payments' check that the index.json fields alert routing reads are present and hold known values. */
   index_contract?: { ok: boolean; build?: string | null; problems?: string[]; checked_at?: string }
-  restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; planned_7d?: number; rows?: { at: string; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed' | 'planned'; build?: string | null; prev_build?: string | null; note?: string }[] }
+  restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; planned_7d?: number; rows?: { at: string; started_at?: string | null; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed' | 'planned'; build?: string | null; prev_build?: string | null; note?: string }[] }
 }
 const KIND = { deploy: 'Deploy', unplanned: 'Unplanned restart', short_unconfirmed: 'Brief restart we couldn’t attribute', planned: 'Planned' } as const
 const STATUS_URL = String(import.meta.env.VITE_LATENCY_URL).replace(/latency\.json$/, 'status.json')
@@ -383,9 +383,10 @@ export function Status() {
             </p>
             {rs.rows?.length ? (
               <ol className="mt-2 divide-y divide-line rounded-[var(--radius-card)] bg-card px-5 shadow-[var(--shadow-card)]">
-                {[...rs.rows].sort((a, b) => b.at.localeCompare(a.at)).map((r) => (
+                {[...rs.rows].sort((a, b) => (b.started_at ?? b.at).localeCompare(a.started_at ?? a.at)).map((r) => (
                   <li key={r.at} className="grid gap-x-4 py-2.5 text-[13.5px] sm:grid-cols-[9.5rem_minmax(0,1fr)_auto]">
-                    <span className="num text-ink-3">{utc(r.at)}</span>
+                    {/* A window (a planned failover test) is stamped when it started, once payments records started_at. */}
+                    <span className="num text-ink-3">{utc(r.started_at ?? r.at)}</span>
                     <span className="min-w-0 text-ink-2">
                       {r.note ? (r.kind === 'planned' ? r.note : `${KIND[r.kind] ?? r.kind}: ${r.note}`) : (KIND[r.kind] ?? r.kind)}
                       {r.build ? (

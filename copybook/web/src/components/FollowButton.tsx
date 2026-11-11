@@ -59,6 +59,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
           type="button"
           disabled={busy}
           aria-pressed={owned}
+          aria-label={busy ? undefined : `Add ${name} to my names`}
           onClick={() =>
             setFollow('owned', id, !owned).then(
               () => setFreeMsg(null),
@@ -93,6 +94,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
         disabled={saving || status === 'loading'}
         aria-pressed={status === 'ready' ? on : undefined}
         aria-expanded={status !== 'ready' ? open : undefined}
+        aria-label={saving ? undefined : `Follow ${name}`}
         className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-medium transition-[background,box-shadow,color] duration-150 active:scale-[0.98] disabled:opacity-60 ${h} ${
           on ? 'bg-accent-soft text-accent-2 shadow-[0_0_0_1px_rgb(43_68_214/0.25)] hover:bg-[#dfe4fb]' : 'bg-accent text-white hover:bg-accent-2'
         }`}
@@ -102,7 +104,7 @@ export function FollowButton({ kind, id, name, size = 'sm', className = '' }: Pr
       </button>
       {p?.state === 'error' && (
         <span role="alert" className="absolute right-0 top-full z-10 mt-1.5 flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-card px-2.5 py-1.5 text-[12.5px] text-down shadow-[0_0_0_1px_var(--color-line),0_6px_16px_-6px_rgb(12_14_19/0.2)]">
-          {p.want ? 'Follow didn’t save.' : 'Unfollow didn’t save.'}
+          {p.note ?? (p.want ? 'Follow didn’t save.' : 'Unfollow didn’t save.')}
           <button type="button" onClick={() => save(p.want)} className="font-medium text-accent underline underline-offset-2 hover:text-accent-2">
             Retry
           </button>

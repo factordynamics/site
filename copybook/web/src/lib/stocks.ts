@@ -148,7 +148,8 @@ export type Season = {
   quarter: string
   deadline: string
   curated: { filed: number; total: number }
-  featured: { filed: number; total: number }
+  /** `stopped`: featured superinvestors no longer filing (index.json inactive), left out of `total`. */
+  featured: { filed: number; total: number; stopped?: { slug: string; manager: string; note: string | null }[] }
   filers: { filed: number; total: number }
   by_day: { date: string; count: number }[]
   latest: { slug: string; manager: string; firm: string; filing_date?: string; accession?: string; featured: boolean; total_value?: number; changes: Record<string, number> | null }[]

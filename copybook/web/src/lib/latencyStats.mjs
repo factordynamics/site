@@ -44,13 +44,11 @@ export function gapStats(values) {
   return { count: n, median_seconds: n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2, p90_seconds: v[Math.ceil(0.9 * n) - 1] }
 }
 
-// Home's season figure: the median seconds from EDGAR acceptance to each 13F's first alert this season,
-// counted the way /speed/ counts them (speedRows): replays, tests and missed filings left out.
-// Null below five such alerts, so the hero never quotes a median of one or two.
-export function firstAlertMedian(l) {
+// Home's speed line: the 13F row of /speed/'s table (speedRows' counted 13F rows, by their `seconds`, through
+// gapStats), so home and /speed/ always quote the same median. Null below five such alerts.
+export function thirteenFStats(l) {
   const s = speedRows(l)
     .filter((r) => r.counted && r.form?.startsWith('13F'))
-    .map((r) => (r.first_alert_at ? (Date.parse(r.first_alert_at) - Date.parse(r.accepted_at)) / 1000 : r.gap_seconds))
-    .filter((x) => Number.isFinite(x) && x >= 0)
+    .map((r) => r.seconds)
   return s.length >= 5 ? gapStats(s) : null
 }

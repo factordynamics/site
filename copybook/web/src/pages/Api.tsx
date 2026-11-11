@@ -1,4 +1,4 @@
-import { HOST_MOVE } from '../lib/hosting'
+import { API_OUTAGE, HOST_MOVE } from '../lib/hosting'
 import { Link } from 'react-router-dom'
 import { Badge, Button, Panel, Skeleton } from '../components/ui'
 import { ApiStatus } from '../components/ApiStatus'
@@ -81,7 +81,7 @@ export function ApiDocs() {
           <pre className="overflow-x-auto rounded-xl bg-night p-4 font-mono text-[13px] leading-relaxed text-white/90">
             <code>{`curl ${base}/v1/me \\\n  -H "Authorization: Bearer cbk_live_..."`}</code>
           </pre>
-          <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. {HOST_MOVE} Live API status: <Link to="/status/" className="text-accent hover:text-accent-2">/status/</Link>.</p>
+          <p className="mt-2 text-[12.5px] text-ink-3">Base URL: <code className="font-mono">{base}</code>. {HOST_MOVE} {API_OUTAGE} Live API status: <Link to="/status/" className="text-accent hover:text-accent-2">/status/</Link>.</p>
           <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-[13.5px] leading-relaxed text-accent-2">
             <strong className="font-medium">Send a descriptive User-Agent</strong> that names your app, such as <code className="font-mono text-[12.5px]">my-research/1.0</code>. Full books for the largest filers (T. Rowe Price, Millennium) can take 15–25 s; use the bulk files for whole-universe pulls.
           </p>

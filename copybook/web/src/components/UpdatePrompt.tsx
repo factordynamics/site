@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { BASE } from '../lib/data'
 
-// A tab left open for days keeps running the bundle it loaded. Every 30 minutes, and when the tab
-// comes back into view, compare the entry script in the live index.html with ours. The entry file's
+// A tab left open for days keeps running the bundle it loaded. Shortly after load, every 30 minutes, and
+// when the tab comes back into view, compare the entry script in the live index.html with ours. The entry file's
 // name carries a content hash, so data-only rebuilds don't count as a new version.
 const entry = (html: string) => html.match(/<script[^>]+src="([^"]*\/assets\/index-[^"]+\.js)"/)?.[1] ?? null
 const mine = () => (document.querySelector('script[type="module"][src*="/assets/index-"]') as HTMLScriptElement | null)?.getAttribute('src') ?? null
@@ -22,12 +22,16 @@ export function UpdatePrompt() {
         // Offline: try again next time.
       }
     }
+    // Once just after load too: a browser can serve a cached index.html (Pages sends max-age=600) that still
+    // points at the previous deploy's bundle for up to 10 minutes after a deploy.
+    const first = setTimeout(check, 4_000)
     const t = setInterval(check, 30 * 60_000)
     // On return to the tab, at most once every 5 minutes.
     const back = () => document.visibilityState === 'visible' && Date.now() - last > 5 * 60_000 && check()
     document.addEventListener('visibilitychange', back)
     window.addEventListener('focus', back)
     return () => {
+      clearTimeout(first)
       clearInterval(t)
       document.removeEventListener('visibilitychange', back)
       window.removeEventListener('focus', back)

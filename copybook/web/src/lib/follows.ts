@@ -29,7 +29,8 @@ export type Follows = {
 }
 export type LinkedBook = { cik: string; name: string; quarter: string; tickers: string[] }
 /** A follow or unfollow in flight, or one the read-back didn't confirm (key "investors:slug" or "stocks:TICKER"). */
-export type Pending = Record<string, { want: boolean; state: 'saving' | 'error' }>
+/** `note`: the server's reason, shown instead of the generic retry line (the backup's read-only answer). */
+export type Pending = Record<string, { want: boolean; state: 'saving' | 'error'; note?: string }>
 type State = { status: 'idle' | 'loading' | 'ready' | 'guest'; follows: Follows; pending: Pending }
 
 const EMPTY: Follows = { investors: [], stocks: [], owned: [], peers: [], onboarded: false, include_13g: false, digest: false, insider_buys: true, insider_min_usd: 100000, cluster_buys: true, any_13d: true }
@@ -146,7 +147,8 @@ export function setFollow(kind: 'investors' | 'stocks' | 'peers' | 'owned', id: 
       set({ status: 'ready', follows: f, pending: ok ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error' } } })
       if (!ok) throw new Error('not_confirmed')
     } catch (e) {
-      set({ ...state, pending: isPaywall(e) || isCap(e) ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error' } } })
+      const note = isReadOnly(e) ? 'Follows can’t be changed while we’re on the backup. Try again in a few minutes.' : undefined
+      set({ ...state, pending: isPaywall(e) || isCap(e) ? withoutKey(key) : { ...state.pending, [key]: { want, state: 'error', note } } })
       throw e
     }
   })
@@ -156,6 +158,8 @@ export const toggle = (list: string[], v: string) => (list.includes(v) ? list.fi
 
 /** The free follow cap (402 with code cap_reached): not a paywall, the member can remove one. */
 export const isCap = (e: unknown) => e instanceof ApiError && e.code === 'cap_reached'
+/** Running on the backup, where follows are read-only (503 read_only, Retry-After 300): not the cap, not a paywall. */
+export const isReadOnly = (e: unknown) => e instanceof ApiError && e.code === 'read_only'
 /** Copy required (401, or a 402 that isn't the free cap). */
 export const isPaywall = (e: unknown) => e instanceof ApiError && (e.status === 401 || e.status === 402) && !isCap(e)
 

@@ -4,4 +4,4 @@ export type SpeedRow<T = Record<string, unknown>> = T & { form: string; accessio
 export declare function speedRows<T = Record<string, unknown>>(l: unknown): SpeedRow<T>[]
 export declare function seasonGaps(l: unknown): GapRow[]
 export declare function gapStats(values: number[]): GapStats
-export declare function firstAlertMedian(l: unknown): GapStats | null
+export declare function thirteenFStats(l: unknown): GapStats | null
