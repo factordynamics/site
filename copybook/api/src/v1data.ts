@@ -93,6 +93,11 @@ function position(h: any, equityTotal: number, allTotal: number) {
     // Ingest's unit-error flag, passed through when the data carries it.
     // Null until ingest's cross-filer check has run on the row: false would claim a check that never happened.
     suspect_units: typeof h.suspect_units === 'boolean' ? h.suspect_units : null,
+    // `exited`: the position was sold out (shares and value 0; the old position in prev_shares, prev_value).
+    row_type: h.row_type === 'holding' || h.row_type === 'exited' ? h.row_type : null,
+    // What the unit check compared against, and why a row was flagged (enums declared in the spec; null until set).
+    suspect_units_basis: ['filers', 'own_prior', 'none'].includes(h.suspect_units_basis) ? h.suspect_units_basis : null,
+    suspect_reason: ['cross_filer', 'cross_filer_prior', 'own_prior'].includes(h.suspect_reason) ? h.suspect_reason : null,
   };
 }
 
