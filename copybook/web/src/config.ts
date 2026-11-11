@@ -102,7 +102,7 @@ export const DATA_TERMS = 'SEC EDGAR 13F filings as filed. Not investment advice
 // My book by plan. One wording on pricing, /account/ and the My book upgrade panel.
 export const BOOK_LITE = { t: 'My book lite', d: 'Who among the superinvestors holds your names, their season moves, and the latest Form 4 or 13D.' }
 /** Why a team buys Fund rather than several Pro seats (shown under Fund on /pricing/ and /for-funds/). */
-export const FUND_WHY = 'Why not separate Pro seats? Pro seats don’t share a book, peers or watchlist, so each analyst rebuilds the same list, alerts arrive once per seat in Slack instead of once, and Pro can’t be invoiced.'
+export const FUND_WHY = 'Why not separate Pro seats? Pro seats don’t share a book, peers or watchlist, so each analyst rebuilds the same list, and alerts arrive once per seat in Slack instead of once. Net-30 invoicing is for Fund; Pro is paid by card, with a full invoice.'
 /** Copy Fund's seat cap (the API's /seats max wins when it answers). */
 export const FUND_SEATS = 10
 /** Measured alert-speed figures outside /speed/ (marketing pages). Off until the lead clears speed claims after Nov 16. */

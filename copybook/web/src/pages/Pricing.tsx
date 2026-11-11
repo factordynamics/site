@@ -3,7 +3,8 @@ import { Fragment, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button, Check } from '../components/ui'
 import { attributed, checkRef, referredCheckout, refCode, utmTags } from '../lib/attribution'
-import { useMember } from '../lib/account'
+import { gapLabel, loadLatency, useMember } from '../lib/account'
+import { thirteenFStats } from '../lib/latencyStats.mjs'
 import { money, useAsync, useTitle } from '../lib/data'
 import { loadCoverage, loadStock, trackedPhrase } from '../lib/stocks'
 import { loadEvents } from '../components/FundNotes'
@@ -50,12 +51,12 @@ const tiers = (filers: string, curated: string): Tier[] => [
       { t: 'Filing acceptance times', d: 'The EDGAR acceptance time of each filing, to the second.' },
       { t: 'Signed webhooks', d: 'A signed JSON POST to your endpoint for every alert, retried for 12 hours if it fails.' },
       { t: 'Holders, history and events endpoints', d: 'Every filer holding a stock, a filer’s books across a range of quarters, and Form 4 and 13D/G events, as JSON.' },
-      { t: 'Bulk CSV exports', d: 'One gzip CSV per quarter of every filer’s 13F book (2026Q1–Q3 so far), built from original filings: no restatements, amendments or point-in-time columns yet, so a re-filed book shows its original.' },
+      { t: 'Bulk CSV exports', d: 'One gzip CSV per quarter of every filer’s 13F book, covering 2026Q1–Q3. Each file is the filer’s current version, with per-row accepted_at, source_accession, first_disclosed_at and change.' },
       BOOK_PRO,
       { t: 'Peer overlap', d: 'Up to 12 funds you benchmark against: how much their books overlap, the names they share, and what they did in yours.' },
     ],
     soon: [
-      { t: 'Point-in-time history', d: 'An as_of parameter with per-row amendment lots, so a backtest sees only what was public. By Nov 30.' },
+      { t: 'Point-in-time history', d: 'Per-row filing timestamps now; as_of point-in-time queries from Nov 30, so a backtest sees only what was public.' },
       { t: 'History back to 2013Q2', d: 'By Dec 31, 2026. Today: the last 8 quarters (most from 2024Q3) for the managers we track closely, at least the latest quarter for every other filer.' },
       { t: 'Parquet bulk files', d: 'Next to the CSVs. No date yet.' },
     ],
@@ -76,8 +77,8 @@ const tiers = (filers: string, curated: string): Tier[] => [
 ]
 
 const FOUNDING: Partial<Record<PlanId, string>> = {
-  pro: 'Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay subscribed.',
-  fund: 'Founding price: subscribe before Dec 31 and keep $199/mo or $1,990/yr for as long as you stay subscribed.',
+  pro: 'Founding price: subscribe before Dec 31 and keep $39/mo ($390/yr) for as long as you stay subscribed. Start a trial by Dec 31 and the founding price stays, even if it converts in January.',
+  fund: 'Founding price: subscribe before Dec 31 and keep $199/mo or $1,990/yr for as long as you stay subscribed. Start a trial by Dec 31 and the founding price stays, even if it converts in January.',
 }
 
 // What each plan includes. true = included, false = not, 'soon' = coming (no date), 'by …' = coming by that date, string = shown as is.
@@ -134,6 +135,9 @@ const EMAIL_FROM: Record<string, string> = {
 }
 
 export function Pricing() {
+  // The FAQ's timing line: the same 13F computation as the home hero and /speed/'s 13F row.
+  const lat = useAsync(() => loadLatency().catch(() => null), [])
+  const speed = lat.data ? thirteenFStats(lat.data) : null
   // Readers from X (utm_source=x, this visit or the session's landing) open on monthly; everyone else on yearly.
   const [cycle, setCycle] = useState<'yearly' | 'monthly'>(() => (new URLSearchParams(location.search).get('utm_source') === 'x' || utmTags().utm_source === 'x' ? 'monthly' : 'yearly'))
   const live = checkoutEnabled()
@@ -369,11 +373,11 @@ export function Pricing() {
             [
               [
                 'Which plan is right for me?',
-                'Copy is for individuals who want to know what the best funds bought, the moment they file. Pro is for anyone who needs the data in their own tools: the API, point-in-time history and exports. Fund adds seats and shared lists for a team.',
+                'Copy is for individuals who want to know what the best funds bought, the moment they file. Pro is for anyone who needs the data in their own tools: the API, per-row filing timestamps (as_of point-in-time queries from Nov 30) and exports. Fund adds seats and shared lists for a team.',
               ],
               [
                 'What’s live in Pro and Fund today?',
-                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (as originally filed), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for all filers in My book by Nov 20, point-in-time history (as_of) by Nov 30, history back to 2013Q2 by Dec 31 (today: the last 8 quarters, most from 2024Q3, for the managers we track closely, and at least the latest quarter for every other filer), and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30.`,
+                `Pro: everything in Copy, API keys, the filer, holdings, holders, history and events endpoints, bulk CSV files (each filer’s current version, with per-row filing timestamps), filing acceptance times, signed webhooks, the full My book (every 13F filer, crowding, 13F linking and CSV) and peer overlap. Copy includes My book lite: who among the superinvestors holds your names and what they did this season. Coming, at no extra cost: new, exited and net trades for all filers in My book by Nov 20, as_of point-in-time queries from Nov 30 (per-row filing timestamps are live now), history back to 2013Q2 by Dec 31 (today: the last 8 quarters, most from 2024Q3, for the managers we track closely, and at least the latest quarter for every other filer), and Parquet files with no date yet; each turns on in the API changelog when it returns data. Fund adds up to ${FUND_SEATS} seats, a shared book and peer lists, all live, and can be paid by annual invoice, net 30. Net-30 invoicing is for Fund; Pro is paid by card, with a full invoice.`,
               ],
               [
                 'How does the free trial work?',
@@ -383,7 +387,7 @@ export function Pricing() {
               ['Can I switch plans?', 'Yes. Upgrade, downgrade or change between monthly and yearly from Manage billing on your account page. Stripe prorates the difference.'],
               [
                 'How fast are filing alerts?',
-                'We poll EDGAR every minute for 13F, Form 4 and 13D/G filings; measured timings appear on the speed page as alerts go out, and none have been timed yet this season. For the very largest books, the moves follow in a second email after our next data refresh, usually within a few hours. Funds have 45 days after quarter end to file a 13F, so the positions in it are always a few weeks old.',
+                `We poll EDGAR every minute for 13F, Form 4 and 13D/G filings, and every alert is timed on the speed page${speed ? `: ${speed.count} 13F alerts timed this season, median ${gapLabel(speed.median_seconds!)} from EDGAR acceptance` : ''}. For the very largest books, the moves follow in a second email after our next data refresh, usually within a few hours. Funds have 45 days after quarter end to file a 13F, so the positions in it are always a few weeks old.`,
               ],
               [
                 'What’s in an alert?',

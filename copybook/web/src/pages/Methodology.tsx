@@ -131,7 +131,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
         Each CSV row is one position: every line of the 13F with the same CUSIP and the same put/call is added together, because funds often split one holding across several lines (Berkshire’s Q2 2026 13F has 89 lines and 29 positions). Each row has the ticker, sector and the change since the fund’s previous filing, in shares and dollars, valued as above. Positions the fund exited are listed last. Values follow the unit rules on this page.
         <br />
         <br />
-        The API’s bulk files (<code>GET /v1/bulk</code>) are different for now: they’re built from each filer’s original 13F, without restatements or amendments, and without the point-in-time columns. They’ll match the pages once they share one builder, and the changelog will say so.
+        The API’s bulk files (<code>GET /v1/bulk</code>) cover 2026Q1–Q3. Each is the filer’s current version of its book, with per-row <code>accepted_at</code>, <code>source_accession</code>, <code>first_disclosed_at</code> and <code>change</code>.
       </p>
     ),
   },
