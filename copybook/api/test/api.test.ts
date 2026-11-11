@@ -4447,6 +4447,9 @@ describe('copybook api', () => {
     // net covers share rows (put_call null): the contract-filed call line is labelled but not in it.
     expect(xc.filter((r) => !(r as { put_call?: string | null }).put_call).reduce((a, r) => a + (r.value_delta_usd ?? 0), 0)).toBe(xh.counts.net);
     expect(xc.find((r) => r.filer.name === 'Two Lines LP')!.trade_usd_implied).toBe(1_200_000); // implied, not summed
+    // A flagged line's implied trade is null (its price is the bad part); counts say where the rows' figures come from:
+    // this index has the column ("hl"), NVDA's older one doesn't ("implied": its rows don't sum to net).
+    expect([xc.find((r) => r.filer.name === 'Units Off LP')!.trade_usd_implied, xh.counts.value_delta_source, h.data.counts.value_delta_source]).toEqual([null, 'hl', 'implied']);
     // The data run's labels pass through: what each value_delta measures, and a contract-filed option line.
     const lab = xc as unknown as { filer: { name: string }; value_delta_basis: string | null; shares_basis?: string }[];
     expect(['Two Lines LP', 'Capped LP', 'Units Off LP', 'Contracts LP'].map((n) => { const r = lab.find((x) => x.filer.name === n); return [r?.value_delta_basis, r?.shares_basis ?? null]; })).toEqual([['trade', null], ['filed_value', null], [null, null], ['trade', 'contracts']]);

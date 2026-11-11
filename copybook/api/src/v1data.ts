@@ -896,7 +896,10 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
     const latestQ = latestPeriod(raw);
     const incompleteQ = Object.keys(nbp).filter((k) => k !== latestQ).sort();
     const nbpOut = Object.fromEntries(Object.entries(nbp).map(([k, v]) => [k, incompleteQ.includes(k) ? null : v]));
-    d.counts = { ...d.counts, ...shares, holders_all: (all as Record<string, unknown>).holders, not_current, net: ing ? d.counts.net : q ? (nbp[q] ?? 0) : 0, net_quarter: q, net_by_period: nbpOut, net_by_period_incomplete: incompleteQ, net_source: ing ? 'hl' : 'computed', net_build: build, changes_build: build };
+    d.counts = { ...d.counts, ...shares, holders_all: (all as Record<string, unknown>).holders, not_current, net: ing ? d.counts.net : q ? (nbp[q] ?? 0) : 0, net_quarter: q, net_by_period: nbpOut, net_by_period_incomplete: incompleteQ, net_source: ing ? 'hl' : 'computed', net_build: build, changes_build: build,
+      // Where the rows' value_delta_usd comes from: the data run's per-line column (\"hl\": the rows sum to net), or, on an
+      // index uploaded without it, shares traded x price (\"implied\": the rows don't sum to net; AAPL, Nov 11).
+      value_delta_source: raw.some((r) => r.value_delta !== undefined) ? 'hl' : 'implied' };
     const { net: _n, ...cur } = countsOf(raw.filter((r) => !r.period || cq.includes(r.period)));
     countsCurrent = cur;
   }
@@ -937,7 +940,8 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       change: h.change ?? null,
       // The data run's per-line value_delta when its index has the column (net is their sum; null when unknown or flagged).
       value_delta_usd: unreliableOf(h) ? null : h.value_delta !== undefined ? (h.value_delta ?? null) : h.change && h.change !== 'unchanged' ? tradeUsd({ ...h, value_usd: h.value, prev_value_usd: h.prev_value }) : h.change === 'unchanged' ? 0 : null,
-      trade_usd_implied: h.change && h.change !== 'unchanged' ? tradeUsd({ ...h, value_usd: h.value, prev_value_usd: h.prev_value }) : h.change === 'unchanged' ? 0 : null,
+      // Null on a flagged or withheld line: its price is the bad part (Aware Super XOM at $1,854/sh read +$79.4M).
+      trade_usd_implied: unreliableOf(h) || h.price_outlier || h.suspect_units || (h.value_delta === null && (h.suspect_reason || h.value_basis)) ? null : h.change && h.change !== 'unchanged' ? tradeUsd({ ...h, value_usd: h.value, prev_value_usd: h.prev_value }) : h.change === 'unchanged' ? 0 : null,
       ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, value_change_usd: h.value_change ?? null } : {}),
       // The data run's labels, as published: what value_delta measures, and contract-filed option lines (shares x100).
       value_delta_basis: h.value_delta_basis === 'trade' || h.value_delta_basis === 'filed_value' ? h.value_delta_basis : null,
