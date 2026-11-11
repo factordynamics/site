@@ -97,6 +97,8 @@ function position(h: any, equityTotal: number, allTotal: number) {
     suspect_units: typeof h.suspect_units === 'boolean' ? h.suspect_units : null,
     // `exited`: the position was sold out (shares and value 0; the old position in prev_shares, prev_value).
     row_type: h.row_type === 'holding' || h.row_type === 'exited' ? h.row_type : null,
+    // A reissue's old CUSIP (ingest writes it on linked rows).
+    prev_cusip: typeof h.prev_cusip === 'string' && h.prev_cusip ? h.prev_cusip : null,
     // What the unit check compared against, and why a row was flagged (enums declared in the spec; null until set).
     suspect_units_basis: ['filers', 'own_prior', 'none'].includes(h.suspect_units_basis) ? h.suspect_units_basis : null,
     suspect_reason: ['cross_filer', 'cross_filer_prior', 'own_prior'].includes(h.suspect_reason) ? h.suspect_reason : null,
@@ -347,6 +349,8 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
     report_date: q.report_date ?? quarterEnd(quarter),
     filing: {
       accession: q.accession ?? null,
+      // filing is the original 13F-HR: the same accession, named the way HolderRow and BulkRow name it.
+      original_accession: q.accession ?? null,
       filer_cik: pad(q.filer_cik ?? cik),
       form: q.form ?? '13F-HR',
       filing_date: q.filing_date ?? null,
@@ -508,6 +512,8 @@ export interface HolderRow {
   /** The position's share of the filer's whole 13F book that period; null when that total isn't known. */
   weight: number | null;
   accession: string | null;
+  /** The original 13F-HR, the filing accepted_at times (null only until ingest's holder index carries it). */
+  original_accession: string | null;
   accepted_at: string | null;
 }
 
@@ -694,6 +700,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       change: h.change ?? null,
       weight: !h.shares && !h.value ? null : (h.weight ?? (total && h.value != null ? Math.round((h.value / total) * 1e6) / 1e6 : null)),
       accession: h.accession ?? (latest ? c.latest_accession : null) ?? null,
+      original_accession: h.original_accession || null,
       accepted_at: noMs(h.accepted_at) ?? null,
     };
   });

@@ -4,11 +4,27 @@ import { secBudget } from './edgar';
 
 /** Bumped on any breaking change to a /v1 response shape. Every response carries it. */
 export const SCHEMA_VERSION = '2026-11-09';
+/** info.version: the spec's own revision, bumped on any change to it (additive ones too); schema_version only on breaking ones. */
+export const SPEC_REVISION = '2026-11-11.2';
 /** Versions a client may pin with the Copybook-Schema-Version header (the current one, plus any in a notice window). */
 export const SCHEMA_VERSIONS = [SCHEMA_VERSION];
 
 /** Changes to /v1, newest first. Served at /v1/changelog and summarised in the spec. */
 export const CHANGELOG: { id: string; date: string; schema_version: string; breaking: boolean; status: 'shipped' | 'announced'; changes: string[] }[] = [
+  {
+    id: '2026-11-11-original-accession-reissues',
+    date: '2026-11-11',
+    schema_version: SCHEMA_VERSION,
+    breaking: false,
+    status: 'shipped',
+    changes: [
+      'Additive: `original_accession` on HolderRow (/v1/stocks/{stock}/holders), Holdings.filing and BulkRow: the filer\'s original 13F-HR for the period, the filing `accepted_at` times. It equals `accession` when there was no refile. `accepted_at` keeps its values; it is now defined as the original\'s acceptance, not `accession`\'s when they differ (First Eagle 2026Q2: accession -000033, the 13F-HR/A; accepted_at 2026-08-05T19:22:03Z, the original -000020). For when a row became public, use first_disclosed_at. Bulk appends the column after prev_cusip from ingest\'s full run 43012508141.',
+      'Additive: `prev_cusip` on Position and as a bulk column after suspect_reason: the old CUSIP on a position linked through a reissue the SEC\'s Official 13(f) List confirms (XOM 30231G102 -> 30233Q108, TEVA 881624209 -> M8769Q102). Null or empty otherwise.',
+      'Fix: a reissued security\'s ticker resolves to its current issuer on /v1/stocks/{stock}/holders, /v1/changes?ticker= and the CSV routes (XOM read the stale 30231G book: 447 exits, net -$9.24B). Asked for by the old issuer code or CUSIP, the response serves the current issuer with `superseded_by` (additive).',
+      'Wording: BulkRow `accession` is "the 13F-HR or 13F-HR/A whose book the row belongs to". The webhook payload\'s `accepted_at` is its own filing\'s acceptance (an amendment\'s, for a 13F-HR/A), and its `schema_version` now matches /v1\'s (it said 2026-11-08). info.version is the spec revision (2026-11-11.2); schema_version stays 2026-11-09, since none of these changes is breaking.',
+      'Earlier today, all additive and listed in the entries below: BulkRow, Position.`prev_value_usd`, and the exited wording (holdings[] current positions only, exited[] the sold-out ones, both with row_type).',
+    ],
+  },
   {
     id: '2026-11-11-bulk-row-schema',
     date: '2026-11-11',

@@ -1,6 +1,7 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { channelFailMail, chatText, feedItems, sendMail, teamDuplicateMail, type FeedItem } from './email';
 import { isPro, type Env, type Member } from './env';
+import { SCHEMA_VERSION } from './v1';
 import { getMember, type Follows } from './members';
 import { listSeats } from './seats';
 import { cleanItem4, filingId } from './edgar';
@@ -471,7 +472,7 @@ export function webhookPayloads(env: Env, filings: Alert13F[], events: AlertEven
       sec_url: e.url,
       copybook_url: page(e.slug),
     })),
-  ].map((p) => ({ id: p.id, body: JSON.stringify({ schema_version: '2026-11-08', ...p }) }));
+  ].map((p) => ({ id: p.id, body: JSON.stringify({ schema_version: SCHEMA_VERSION, ...p }) }));
 }
 
 interface Retry {
@@ -613,7 +614,7 @@ export async function testChannels(env: Env, m: Member, c: Channels): Promise<{ 
   if (c.webhook && isPro(m)) {
     // Shaped like an alert (type test), with its own delivery id so receivers that deduplicate keep every test.
     const id = `test:${crypto.randomUUID()}`;
-    const body = JSON.stringify({ schema_version: '2026-11-08', type: 'test', id, accession: null, form: 'TEST', accepted_at: null, detected_at: now, followup: false, filer: { slug: null, name: 'Copybook test' }, sec_url: 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent', copybook_url: env.SITE_URL });
+    const body = JSON.stringify({ schema_version: SCHEMA_VERSION, type: 'test', id, accession: null, form: 'TEST', accepted_at: null, detected_at: now, followup: false, filer: { slug: null, name: 'Copybook test' }, sec_url: 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent', copybook_url: env.SITE_URL });
     out.webhook = await post(c.webhook.url, body, { 'copybook-signature': await signature(c.webhook.secret, body), 'copybook-delivery': id });
     await after('webhook', out.webhook);
   }

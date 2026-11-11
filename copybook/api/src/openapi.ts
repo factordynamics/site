@@ -1,5 +1,5 @@
 import { LIMITS } from './keys';
-import { CHANGELOG, ERRORS, SCHEMA_VERSION } from './v1';
+import { CHANGELOG, ERRORS, SCHEMA_VERSION, SPEC_REVISION } from './v1';
 
 const META = {
   schema_version: { type: 'string', description: 'Response schema version (a date). See the versioning policy.' },
@@ -56,7 +56,7 @@ export function openapi() {
     openapi: '3.1.0',
     info: {
       title: 'Copybook API',
-      version: SCHEMA_VERSION,
+      version: SPEC_REVISION,
       description: `13F holdings, Form 4 and Schedule 13D/G data from SEC EDGAR, as filed. Copy Pro and Copy Fund. Units: money is whole US dollars (filings reported in thousands are rescaled); shares are as filed (principal amount for PRN rows); weights and fractions are 0-1; dates are ISO 8601, datetimes UTC. Authenticate with \`Authorization: Bearer cbk_live_...\` (create keys on your Copybook account page). Limits per key: ${LIMITS.minute} requests/minute and ${LIMITS.day} requests/day, reported in RateLimit-* and X-RateLimit-* headers; 429 responses carry Retry-After. Every response has \`schema_version\`, \`data_built_at\` and \`build_id\`. Error codes: ${Object.entries(ERRORS).map(([k, v]) => `\`${k}\` (${v})`).join('; ')}.
 
 **Coverage.** Every 13F filer (about 9,000). /v1/filers marks Copybook's curated filers with \`curated: true\`; they have quarterly history with changes. Other filers serve their latest 13F, from the full book when it is loaded and otherwise the top 500 positions by value (\`truncated: true\`), plus earlier quarters as full books are loaded.
@@ -129,8 +129,9 @@ export function openapi() {
             prev_value_usd: { type: ['integer', 'null'] },
             change: { type: ['string', 'null'], description: 'Versus the filer\'s prior quarter: new, added, trimmed, exited or unchanged; null when there is no prior quarter on file.' },
             weight: { type: ['number', 'null'], description: 'Share of the filer\'s whole 13F book that period, 6 decimals; null when that total isn\'t known.' },
-            accession: { type: ['string', 'null'] },
-            accepted_at: { type: ['string', 'null'], format: 'date-time', description: 'Filing-level, not per position: the EDGAR acceptance of the filer\'s original 13F-HR for that quarter. A position added later by an amendment carries the original\'s time, so it can look disclosed earlier than it was. Null until gene has fetched it.' },
+            accession: { type: ['string', 'null'], description: 'The filer\'s current version for the period: the 13F-HR or 13F-HR/A whose book the row belongs to.' },
+            original_accession: { type: ['string', 'null'], description: 'The filer\'s original 13F-HR for the period (the filing accepted_at times); equals accession when there was no refile. Null only on rows from before ingest\'s holder index carries it.' },
+            accepted_at: { type: ['string', 'null'], format: 'date-time', description: 'Filing-level, not per position: the EDGAR acceptance time of the filer\'s original 13F-HR for that quarter (`original_accession`), not of `accession` when they differ. A position added later by an amendment carries the original\'s time, so it can look disclosed earlier than it was. Null until gene has fetched it.' },
           },
         },
         Position: {
@@ -172,6 +173,7 @@ export function openapi() {
             row_type: { type: ['string', 'null'], enum: ['holding', 'exited', null], description: '`holding`, or `exited`: sold out this quarter, with `shares` and `value_usd` 0, the old share count in `prev_shares` and the old value as `-value_delta_usd`. Book totals exclude exited rows. Null on rows built before the field; non-null on every position by Nov 30, 2026.' },
             suspect_units_basis: { type: ['string', 'null'], enum: ['filers', 'own_prior', 'none', null], description: 'What the unit check compared the row against: other filers of the same CUSIP (`filers`), the filer\'s own prior quarter (`own_prior`), or nothing to compare (`none`). Null on rows built before the field.' },
             suspect_reason: { type: ['string', 'null'], enum: ['cross_filer', 'cross_filer_prior', 'own_prior', null], description: 'Why `suspect_units` is true: the price implied differs from other filers this quarter (`cross_filer`) or last quarter (`cross_filer_prior`), or from the filer\'s own prior quarter (`own_prior`). Null when not flagged.' },
+            prev_cusip: { type: ['string', 'null'], description: 'On a position linked through a CUSIP reissue the SEC\'s Official 13(f) List confirms, the old CUSIP its prior quarter was filed under (XOM: 30231G102 -> 30233Q108); prev_shares and prev_value_usd are that line\'s. Null otherwise, and on books built before the link.' },
           },
         },
         BulkRow: {
@@ -190,7 +192,7 @@ export function openapi() {
             filer_name: { type: 'string', description: 'Filer name as on EDGAR' },
             quarter: { type: 'string', pattern: '^\\d{4}Q[1-4]$', description: 'The period the file covers, e.g. 2026Q3' },
             report_date: { type: 'string', format: 'date', description: 'Period end, YYYY-MM-DD' },
-            accession: { type: 'string', description: 'The filer\'s current version for this period: the 13F-HR whose book the row belongs to (the same on every row of the filer). Compare source_accession, the filing that first disclosed this row.' },
+            accession: { type: 'string', description: 'The filer\'s current version for this period: the 13F-HR or 13F-HR/A whose book the row belongs to (the same on every row of the filer). Compare source_accession, the filing that first disclosed this row.' },
             filing_date: { type: 'string', format: 'date', description: 'EDGAR\'s filing date for `accession`, a US Eastern date (YYYY-MM-DD)' },
             cusip: { type: 'string', pattern: '^[0-9A-Z]{9}$', description: '9 characters. Load as a string.' },
             ticker: { type: ['string', 'null'], description: 'Mapped from CUSIP; empty when unknown' },
@@ -200,7 +202,7 @@ export function openapi() {
             shares: { type: 'integer', description: 'sshPrnamt as filed: an integer count of shares (SH) or principal amount (PRN). 0 on exited rows.' },
             shares_type: { type: 'string', enum: ['SH', 'PRN'], description: 'sshPrnamtType as filed' },
             value: { type: 'integer', description: 'Reported value, integer whole US dollars (thousands rescaled; see value_scale). Position\'s value_usd. 0 on exited rows.' },
-            accepted_at: { type: ['string', 'null'], format: 'date-time', description: 'EDGAR acceptance of the filer\'s original 13F-HR for the period, UTC with a Z (YYYY-MM-DDTHH:MM:SSZ). Filing-level.' },
+            accepted_at: { type: ['string', 'null'], format: 'date-time', description: 'EDGAR acceptance time of the filer\'s original 13F-HR for this quarter (`original_accession`), not of `accession` when they differ (a refile), UTC with a Z (YYYY-MM-DDTHH:MM:SSZ). Filing-level: the point-in-time anchor for the quarter. For when this row itself became public, use first_disclosed_at.' },
             source_accession: { type: ['string', 'null'], description: 'The filing (original or amendment) this row was first disclosed in. Equal to accession unless an amendment added the row.' },
             first_disclosed_at: { type: ['string', 'null'], format: 'date-time', description: 'EDGAR acceptance of source_accession, UTC with a Z: when this row became public.' },
             change: { type: ['string', 'null'], enum: ['new', 'added', 'trimmed', 'unchanged', 'exited', 'disclosed_later', null], description: 'Versus the filer\'s prior quarter, as Position\'s `change`; empty when there is no prior quarter on file.' },
@@ -214,6 +216,8 @@ export function openapi() {
             suspect_units: { type: ['boolean', 'null'], description: 'Appended. `true` when ingest flags the value as a likely unit error; empty until the check has run on the row.' },
             suspect_units_basis: { type: ['string', 'null'], enum: ['filers', 'own_prior', 'none', null], description: 'Appended. What the unit check compared against.' },
             suspect_reason: { type: ['string', 'null'], enum: ['cross_filer', 'cross_filer_prior', 'own_prior', null], description: 'Appended. Why suspect_units is true; empty when not flagged.' },
+            prev_cusip: { type: ['string', 'null'], pattern: '^[0-9A-Z]{9}$', description: 'Appended after suspect_reason (ingest\'s full run 43012508141 on). On a row linked through a CUSIP reissue the SEC\'s Official 13(f) List confirms, the old CUSIP the prior quarter was filed under (Pzena\'s XOM: 30231G102, now 30233Q108); prev_shares and prev_value are that line\'s. Empty otherwise.' },
+            original_accession: { type: 'string', description: 'Appended after prev_cusip (full run 43012508141 on). The filer\'s original 13F-HR for the period, whose acceptance accepted_at gives: the earliest 13F-HR among its filings, or the one a restatement superseded. Equals accession when there was no refile.' },
           },
         },
         Holdings: {
@@ -229,6 +233,7 @@ export function openapi() {
               required: ['accession', 'filer_cik', 'form', 'filing_date', 'accepted_at', 'sec_url', 'amendments'],
               properties: {
                 accession: { type: 'string', description: 'The original 13F-HR' },
+                original_accession: { type: 'string', description: 'The same as accession here (filing is always the original 13F-HR); given so every object with accepted_at names the filing it times.' },
                 filer_cik: { type: 'string', pattern: '^\\d{10}$', description: 'CIK of the entity that filed this 13F (may differ from the manager, e.g. Pershing Square Capital Management for Bill Ackman)' },
                 form: { type: 'string' },
                 filing_date: { type: 'string', format: 'date', description: 'EDGAR filing date (ET)' },
@@ -518,12 +523,12 @@ export function openapi() {
                   type: 'object',
                   required: ['schema_version', 'type', 'id', 'detected_at', 'filer', 'sec_url'],
                   properties: {
-                    schema_version: { type: 'string' },
+                    schema_version: { type: 'string', description: 'The same schema_version as /v1 responses: one version covers the API and webhook payloads.' },
                     type: { type: 'string', enum: ['13f', 'form4', '13d', '13g', 'insider_buy', 'insider_cluster', 'test'], description: 'test: sent by "Send a test" in /account/, with a unique id and Copybook-Delivery each time; no filing behind it.' },
                     id: { type: 'string', description: 'Accession, with :moves or :details on a follow-up; cluster ids start with cluster:.' },
                     accession: { type: ['string', 'null'] },
                     form: { type: 'string' },
-                    accepted_at: { type: ['string', 'null'], format: 'date-time', description: "EDGAR's acceptance time (UTC)." },
+                    accepted_at: { type: ['string', 'null'], format: 'date-time', description: "EDGAR's acceptance time (UTC) of this alert's own filing, `accession`: for a 13F-HR/A, the amendment's, not the original 13F-HR's (unlike /v1's filing-level accepted_at)." },
                     detected_at: { type: 'string', format: 'date-time', description: 'When Copybook read the filing.' },
                     followup: { type: 'boolean' },
                     filer: { type: 'object', properties: { slug: { type: ['string', 'null'] }, manager: { type: 'string' }, name: { type: 'string' } } },
