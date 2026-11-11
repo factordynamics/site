@@ -2016,7 +2016,7 @@ describe('copybook api', () => {
     // MSFT within 10%, the ORCL exit and the SPY call pass; APH and the bond (sized from a zero prior, as Advent's was) are
     // wrong; the emailed bought total ($46.6M against the build's $11.8M, still off with APH and the bond at its figures) is
     // off too, but this accession's totals are already disclosed on /status/ (the split alerts), so it isn't mailed again.
-    expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 5, failed: 3, mailed: 1 }], pending: 0 });
+    expect(r).toEqual({ checked: [{ accession: ACC, result: 'fail', rows: 5, failed: 3, mailed: 1 }], rechecked: [], pending: 0 });
     expect(sent[0]?.text).toContain('BOND');
     expect(sent[0]?.text).not.toContain('Total bought');
     expect(sent.map((m) => m.to[0])).toEqual(['copybook-test-j@fldubai.com']);
@@ -2028,13 +2028,27 @@ describe('copybook api', () => {
     // Checked once: the next run doesn't mail again; the log feeds latency.json's reconciliation.
     sent = [];
     expect((await reconcileAlerts(env, now)).checked).toEqual([]);
+    // The first verdict is frozen: an hour on, a later build that rebased APH (-$15.3M to -$9.0M) is logged as a
+    // re-check with both builds and the reason; the verdict, its class and the mail stay as they were.
+    const book = JSON.parse(new TextDecoder().decode(hist.m.get('h/jensen/2026Q3.json')));
+    book.build_id = 'build-2';
+    book.holdings[0].value_delta = -9_000_000;
+    hist.m.set('h/jensen/2026Q3.json', new TextEncoder().encode(JSON.stringify(book)));
+    expect(await reconcileAlerts(env, now + 3600_000)).toMatchObject({ checked: [], rechecked: [ACC] });
+    expect(sent).toHaveLength(0);
+    const rc = await reconciliation(env);
+    expect([rc.checked, (rc.recent as { anchor: string; class: string; figures: string; disclosed: boolean | null }[]).map((x) => [x.anchor, x.class, x.figures, x.disclosed])]).toEqual([1, [[ACC, 'wrong', 'wrong_rows', false]]]);
+    expect(rc.rechecks).toEqual([expect.objectContaining({ accession: ACC, verdict_build: null, build: 'build-2', reason: 'a later build (an amendment or re-base of the filing or its prior)', verdict_class: 'wrong', class_now: 'wrong', rows: [expect.objectContaining({ ticker: 'APH', verdict: { class: 'wrong', build: { change: 'trimmed', value_delta: -15_328_606 } }, now: { class: 'wrong', build: { change: 'trimmed', value_delta: -9_000_000 } } })] })]);
+    // Re-checking the same build again logs nothing new.
+    await reconcileAlerts(env, now + 2 * 3600_000);
+    expect(((await reconciliation(env)).rechecks as unknown[]).length).toBe(1);
     // The operator's dry run reads the same stores: the alert is wrong as sent (APH and the bond), and it sends nothing.
     const { reconcileDry } = await import('../src/alerts');
     const dry = await reconcileDry(env, now);
     expect([dry.total, dry.as_sent]).toEqual([1, { matched: 0, disclosed: 0, disclosed_totals: 0, explained: 0, wrong: 1, wrong_totals: 0, no_rows: 0, other: 0 }]);
     expect((dry.alerts as { as_sent: { failed: { ticker: string | null; cusip: string; class: string }[] } }[])[0].as_sent.failed.map((f) => [f.ticker ?? f.cusip, f.class])).toEqual([['BOND', 'wrong'], ['APH', 'wrong'], ['total:bought', 'disclosed']]);
     expect(sent).toHaveLength(0);
-    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, matched: 0, disclosed: 0, explained: 0, wrong: 1, filer_value_rows: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', class: 'wrong', failed_rows: 3, filer_value_rows: 1, corrections_sent: 1 }] });
+    expect(await reconciliation(env)).toMatchObject({ checked: 1, passed: 0, failed: 1, matched: 0, disclosed: 0, explained: 0, wrong: 1, wrong_disclosed: 0, wrong_undisclosed: 1, totals_disclosed: 0, totals_undisclosed: 0, filer_value_rows: 1, held_pending: 0, recent: [{ accession: ACC, result: 'fail', class: 'wrong', failed_rows: 3, filer_value_rows: 1, corrections_sent: 1 }] });
     vi.useRealTimers();
   });
 

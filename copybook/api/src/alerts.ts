@@ -1549,6 +1549,15 @@ function totalRows(a: Alert13F, sent: Moves[], failed: import('./email').Correct
  * One class per alert. A /status/ Data entry decides an alert it names: the split entry's alerts are `disclosed`
  * (a wrong row) or `disclosed_totals` (rows right, totals off by any amount, even under the tolerance).
  */
+const FIGURES: Record<AlertClass, { figures: string; disclosed: boolean | null }> = {
+  matched: { figures: 'right', disclosed: null },
+  explained: { figures: 'explained', disclosed: null },
+  no_rows: { figures: 'no_rows', disclosed: null },
+  disclosed: { figures: 'wrong_rows', disclosed: true },
+  wrong: { figures: 'wrong_rows', disclosed: false },
+  disclosed_totals: { figures: 'wrong_totals', disclosed: true },
+  wrong_totals: { figures: 'wrong_totals', disclosed: false },
+};
 const alertClass = (failed: { class?: RowClass; why?: string }[], rows = 1, accession = ''): AlertClass => {
   const has = (c: RowClass, totals: boolean) => failed.some((f) => f.class === c && (f.why === 'totals') === totals);
   if (!rows) return 'no_rows';
@@ -1562,9 +1571,16 @@ const alertClass = (failed: { class?: RowClass; why?: string }[], rows = 1, acce
 /** Alerts accepted from here get correction emails; earlier ones are checked and logged only. */
 export const RECONCILE_MAIL_FROM = '2026-11-11T05:00:00Z';
 const MISMATCH = 0.1;
-/** The reconciliation log (v5: classes follow /status/ disclosures, totals to 1% or $1M, after-send cross-filer check; v4 had no disclosure rule). */
-const RECONCILED = 'alerts:reconciled:v5';
+/**
+ * Each alert's verdict: its first reconciliation, frozen (never renamed or overwritten again; the earlier logs v1-v5
+ * were re-checked against later builds). Later re-checks go to RECHECKS, with the build and the reason.
+ */
+const RECONCILED = 'alerts:verdicts';
 const RECONCILED_PREV = 'alerts:reconciled:v4';
+const RECHECKS = 'alerts:rechecks';
+/** The verdict's per-row figures, to tell whether a re-check differs. */
+const sig = (failed: { cusip: string; put_call: string | null; class?: string; v1: { value_delta: number } }[]) =>
+  failed.map((f) => `${f.cusip}|${f.put_call ?? ''}|${f.class ?? ''}|${Math.round(f.v1.value_delta)}`).sort().join(';');
 
 /**
  * gene, every 5 minutes: each 13F alert with moves, once ingest's build serves its filing, row by row against the build
@@ -1576,13 +1592,16 @@ const RECONCILED_PREV = 'alerts:reconciled:v4';
 export async function reconcileAlerts(env: Env, now: number, only?: { accession: string; to?: string[] }): Promise<Record<string, unknown>> {
   const log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
   const done = new Set(log.map((x) => x.accession));
+  // Alerts with a verdict are re-checked against the build at most hourly; the verdict never changes.
+  const recheckDue = !only && now - Number((await env.DB.get('alerts:recheck-at')) ?? 0) >= 3600_000;
+  if (recheckDue) await env.DB.put('alerts:recheck-at', String(now));
   const found = new Map<string, { a: Alert13F; rows: Map<string, MoveRow>; days: string[]; sent: Moves[] }>();
   for (let d = 0; d < (only ? 31 : 4); d++) {
     const day = etDay(now - d * DAY);
     const raw = await env.DB.get(`digest:${day}`);
     if (!raw) continue;
     for (const a of (JSON.parse(raw) as DigestDay).filings) {
-      if (!a.moves || a.reveal || a.replay_to?.length || (only ? a.accession !== only.accession : done.has(a.accession))) continue;
+      if (!a.moves || a.reveal || a.replay_to?.length || (only ? a.accession !== only.accession : done.has(a.accession) && !recheckDue)) continue;
       const x = found.get(a.accession) ?? { a, rows: new Map<string, MoveRow>(), days: [], sent: [] };
       x.sent.push(a.moves);
       for (const [change, rows] of [['new', a.moves.new], ['added', a.moves.added], ['trimmed', a.moves.trimmed], ['exited', a.moves.exited]] as const) for (const r of rows) x.rows.set(rowKey(r), { ...r, change });
@@ -1591,8 +1610,10 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
     }
   }
   const out: Reconciled[] = [];
+  const rechecks: Record<string, unknown>[] = [];
   let pending = 0;
   for (const { a, rows, days, sent } of found.values()) {
+    const verdict = log.find((x) => x.accession === a.accession);
     const b = await buildRows(env, a);
     if (!b) {
       pending++;
@@ -1603,6 +1624,25 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
     // The 1.25x cross-filer price check on every emailed row (Cloudflare, the primary poller, sends without it): a row
     // whose own value per share is off other filers' is marked in the archive "shown as filed". No email: the figure is
     // what the filer reported, and it matches the published data.
+    // A re-check: logged with the build and the reason when it differs from the verdict; no email, no archive change.
+    if (verdict) {
+      if (sig(failed) !== sig(verdict.failed)) {
+        const was = new Map(verdict.failed.map((f) => [`${f.cusip}|${f.put_call ?? ''}`, f]));
+        const nowF = new Map(failed.map((f) => [`${f.cusip}|${f.put_call ?? ''}`, f]));
+        const keys = [...new Set([...was.keys(), ...nowF.keys()])].filter((k) => sig(was.has(k) ? [was.get(k)!] : []) !== sig(nowF.has(k) ? [nowF.get(k)!] : []));
+        rechecks.push({
+          accession: a.accession,
+          checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+          verdict_build: verdict.build,
+          build: b.build,
+          reason: only ? 'operator re-check' : b.build !== verdict.build ? 'a later build (an amendment or re-base of the filing or its prior)' : 'same build, check code changed',
+          verdict_class: verdict.class ?? null,
+          class_now: alertClass(failed, rows.size, a.accession),
+          rows: keys.map((k) => ({ cusip: k.split('|')[0], ticker: (nowF.get(k) ?? was.get(k))!.ticker, verdict: was.get(k) ? { class: was.get(k)!.class, build: was.get(k)!.v1 } : null, now: nowF.get(k) ? { class: nowF.get(k)!.class, build: nowF.get(k)!.v1 } : null })),
+        });
+      }
+      continue;
+    }
     const filerValue = await filerValueRows(env, a, rows);
     if (filerValue.length) {
       const keys = new Set(filerValue.map((r) => rowKey(r)));
@@ -1645,11 +1685,14 @@ export async function reconcileAlerts(env: Env, now: number, only?: { accession:
     }
     out.push({ accession: a.accession, slug: a.slug, quarter: a.quarter, accepted: a.accepted ?? null, checked_at: new Date(now).toISOString().replace(/\.\d{3}Z$/, 'Z'), build: b.build, result: failed.length ? 'fail' : 'pass', class: alertClass(failed, rows.size, a.accession), rows: rows.size, failed, ...(filerValue.length ? { filer_value: filerValue.map((r) => r.ticker ?? r.cusip) } : {}), recipients: rec.counts.members, mailed });
   }
-  if (out.length && !only?.to) {
-    const keep = log.filter((x) => !out.some((o) => o.accession === x.accession));
-    await env.DB.put(RECONCILED, JSON.stringify([...out, ...keep].slice(0, 500)));
+  if (out.length && !only?.to) await env.DB.put(RECONCILED, JSON.stringify([...out, ...log].slice(0, 500)));
+  if (rechecks.length) {
+    // One entry per accession and build: a re-check that finds the same difference again isn't logged twice.
+    const prev = JSON.parse((await env.DB.get(RECHECKS)) ?? '[]') as { accession: string; build: string | null }[];
+    const fresh = rechecks.filter((r) => !prev.some((p) => p.accession === r.accession && p.build === r.build));
+    if (fresh.length) await env.DB.put(RECHECKS, JSON.stringify([...fresh, ...prev].slice(0, 500)));
   }
-  return { checked: out.map((x) => ({ accession: x.accession, result: x.result, rows: x.rows, failed: x.failed.length, mailed: x.mailed })), pending };
+  return { checked: out.map((x) => ({ accession: x.accession, result: x.result, rows: x.rows, failed: x.failed.length, mailed: x.mailed })), rechecked: rechecks.map((r) => r.accession), pending };
 }
 
 /** Emailed stock rows over 1.25x off the median price other filers report for the CUSIP this quarter (gene only). */
@@ -1750,13 +1793,25 @@ export async function reconcileDry(env: Env, now: number, o: { offset?: number; 
 export async function reconciliation(env: Env): Promise<Record<string, unknown>> {
   // The two hosts load a new build up to an hour apart: until gene writes the new log, show the previous one.
   let log = JSON.parse((await env.DB.get(RECONCILED)) ?? '[]') as Reconciled[];
-  if (!log.length) log = JSON.parse((await env.DB.get(RECONCILED_PREV)) ?? '[]') as Reconciled[];
+  // The previous log predates the disclosure rule: its alerts named in a /status/ entry take that entry's class.
+  if (!log.length)
+    log = (JSON.parse((await env.DB.get(RECONCILED_PREV)) ?? '[]') as Reconciled[]).map((x) => ({
+      ...x,
+      class: x.class === 'wrong' && DISCLOSED_ENTRIES.has(x.accession) ? 'disclosed' : x.class === 'matched' && DISCLOSED_SPLITS.has(x.accession) ? 'disclosed_totals' : x.class,
+    }));
   return {
     checked: log.length,
     passed: log.filter((x) => x.result === 'pass').length,
     failed: log.filter((x) => x.result === 'fail').length,
     // What a reader needs: matched, already disclosed on /status/, explained (no wrong figure), and wrong.
     ...Object.fromEntries(ALERT_CLASSES.map((k) => [k, log.filter((x) => (x.class ?? (x.result === 'pass' ? 'matched' : 'wrong')) === k).length])),
+    // What the email got wrong, apart from whether /status/ discloses it.
+    wrong_disclosed: log.filter((x) => x.class === 'disclosed').length,
+    wrong_undisclosed: log.filter((x) => x.class === 'wrong').length,
+    totals_disclosed: log.filter((x) => x.class === 'disclosed_totals').length,
+    totals_undisclosed: log.filter((x) => x.class === 'wrong_totals').length,
+    // Re-checks against later builds that differ from a verdict (the verdict stands).
+    rechecks: JSON.parse((await env.DB.get(RECHECKS)) ?? '[]'),
     // Emailed rows the after-send cross-filer check marked "shown as filed".
     filer_value_rows: log.reduce((n, x) => n + (x.filer_value?.length ?? 0), 0),
     held_pending: (JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as unknown[]).length,
@@ -1766,7 +1821,9 @@ export async function reconciliation(env: Env): Promise<Record<string, unknown>>
       ...(JSON.parse((await env.DB.get('alerts:pending-check')) ?? '[]') as Alert13F[]).flatMap((a) => (a.held ?? []).map((h): HeldEnd => ({ accession: a.accession, ticker: h.ticker ?? null, cusip: h.cusip, rule: h.reason, held_at: a.accepted ?? a.filing_date, released_at: null, outcome: null }))),
       ...(JSON.parse((await env.DB.get(HELD_LOG)) ?? '[]') as HeldEnd[]),
     ],
-    recent: log.map((x) => ({ accession: x.accession, slug: x.slug, quarter: x.quarter, checked_at: x.checked_at, result: x.result, class: x.class ?? null, rows: x.rows, failed_rows: x.failed.length, filer_value_rows: x.filer_value?.length ?? 0, corrections_sent: x.mailed })),
+    // anchor: the accession, stable for links from /status/ Data entries. figures: what the email got wrong; disclosed:
+    // whether a /status/ entry covers it (null when nothing was wrong).
+    recent: log.map((x) => ({ anchor: x.accession, ...FIGURES[x.class ?? (x.result === 'pass' ? 'matched' : 'wrong')], accession: x.accession, slug: x.slug, quarter: x.quarter, checked_at: x.checked_at, result: x.result, class: x.class ?? null, rows: x.rows, failed_rows: x.failed.length, filer_value_rows: x.filer_value?.length ?? 0, corrections_sent: x.mailed })),
   };
 }
 
