@@ -10,6 +10,7 @@ import { getJson, pooled } from './getjson.mjs'
 import { ETF_NAMES } from './etfs.mjs'
 import { isEdgarDay } from '../src/lib/calendar.mjs'
 import { displayName } from '../src/lib/names.mjs'
+import { addLine, newPosition, positionFlags, positionMove } from '../src/lib/position.mjs'
 
 const out = process.argv[2] || 'dist'
 const base = process.argv[3] || process.env.VITE_DATA_BASE || 'https://refcell.github.io/gust/copybook/data/'
@@ -113,20 +114,13 @@ for (const b of books) {
       if (h.value > 0) s.options.push({ ...who, put_call: h.put_call, ticker: h.ticker, shares: h.shares, value: r0(h.value), weight: h.value / total })
       continue
     }
-    const p = per.get(k) ?? { shares: 0, value: 0, prev_shares: 0, prev_value: 0, delta_value: 0, had_prev: b.prev_quarter != null }
-    p.shares += h.shares
-    p.value += h.value
-    p.prev_shares += h.prev_shares ?? 0
-    p.prev_value += h.prev_value ?? 0
-    const price = h.shares ? h.value / h.shares : h.prev_shares ? (h.prev_value ?? 0) / h.prev_shares : 0
-    p.delta_value += b.prev_quarter != null ? (h.shares - (h.prev_shares ?? 0)) * price : 0
-    per.set(k, p)
+    per.set(k, addLine(per.get(k) ?? newPosition(b.prev_quarter != null), h))
   }
   // Rank of each position in this fund's share book (1 = largest), for "top 10" crowding counts.
   const rank = new Map([...per.entries()].filter(([, p]) => p.shares > 0).sort((a, z) => z[1].value - a[1].value).map(([k], i) => [k, i + 1]))
   for (const [k, p] of per) {
-    const change = !p.had_prev ? null : p.shares === 0 ? 'exited' : p.prev_shares === 0 ? 'new' : p.shares > p.prev_shares ? 'added' : p.shares < p.prev_shares ? 'trimmed' : 'unchanged'
-    stocks.get(k).holders.push({ ...who, rank: rank.get(k) ?? null, shares: p.shares, value: r0(p.value), weight: p.value / total, prev_shares: p.prev_shares, prev_value: r0(p.prev_value), delta_value: r0(p.delta_value), change })
+    const { change, delta_value } = positionMove(p)
+    stocks.get(k).holders.push({ ...who, rank: rank.get(k) ?? null, shares: p.shares, value: r0(p.value), weight: p.value / total, prev_shares: p.prev_shares, prev_value: r0(p.prev_value), delta_value, change, ...positionFlags(p) })
   }
 }
 
@@ -164,7 +158,7 @@ for (const st of stocks.values()) {
   }
   if (st.sector === 'Funds & ETFs') continue
   const byQ = new Map()
-  for (const h of st.holders) if (h.shares > 0 && h.prev_shares > 0 && h.value > 0 && h.prev_value > 0) (byQ.get(h.quarter) ?? byQ.set(h.quarter, []).get(h.quarter)).push({ s: h.shares / h.prev_shares, p: h.value / h.shares / (h.prev_value / h.prev_shares) })
+  for (const h of st.holders) if (h.change !== 'unknown' && h.shares > 0 && h.prev_shares > 0 && h.value > 0 && h.prev_value > 0) (byQ.get(h.quarter) ?? byQ.set(h.quarter, []).get(h.quarter)).push({ s: h.shares / h.prev_shares, p: h.value / h.shares / (h.prev_value / h.prev_shares) })
   for (const [q, r] of byQ) {
     if (r.length < 5 || st.splits?.[q] || [...cusips].some((c) => checked[`${c}:${q}`])) continue
     const ms = med(r.map((x) => x.s))
@@ -178,7 +172,7 @@ for (const st of stocks.values()) {
     const strong = r.length >= 10 && Math.abs(ms / k - 1) < 0.05 && Math.abs(mp * k - 1) < 0.1
     if (strong)
       for (const h of st.holders) {
-        if (h.quarter !== q || !h.change || !h.prev_shares) continue
+        if (h.quarter !== q || !h.change || h.change === 'unknown' || !h.prev_shares) continue
         h.prev_shares *= k
         const price = h.shares ? h.value / h.shares : h.prev_value / h.prev_shares
         h.delta_value = r0((h.shares - h.prev_shares) * price)
@@ -200,7 +194,8 @@ for (const s of stocks.values()) {
   const ticker = classes[0].ticker
   if (byTicker[ticker]) continue
   const holders = s.holders.filter((h) => h.shares > 0).sort((a, b) => b.value - a.value)
-  const exited = s.holders.filter((h) => h.change === 'exited').sort((a, b) => a.delta_value - b.delta_value)
+  // Sold-out positions, plus flagged ones gone from the book whose trade is unknown (they carry suspect_units).
+  const exited = s.holders.filter((h) => h.change === 'exited' || (h.change === 'unknown' && h.shares === 0)).sort((a, b) => (a.delta_value ?? 0) - (b.delta_value ?? 0))
   const count = (c) => s.holders.filter((h) => h.change === c).length
   const prevHolders = s.holders.filter((h) => h.prev_shares > 0).length
   if (!holders.length && !exited.length && !s.options.length) continue
@@ -213,7 +208,7 @@ for (const s of stocks.values()) {
     holders,
     exited,
     options: s.options.sort((a, b) => b.value - a.value),
-    counts: { holders: holders.length, prev_holders: prevHolders, new: count('new'), added: count('added'), trimmed: count('trimmed'), exited: count('exited') },
+    counts: { holders: holders.length, prev_holders: prevHolders, new: count('new'), added: count('added'), trimmed: count('trimmed'), exited: count('exited'), unknown: count('unknown') },
     quarters: [...new Set(holders.map((h) => h.quarter))].sort().reverse(),
     ...(s.splits ? { splits: s.splits } : {}),
     generated_at: index.generated_at,
@@ -302,7 +297,7 @@ function flowFor(scope, full = false, q = '') {
   for (const s of stocks.values()) {
     if (!s.classes.size || s.splits?.[q]?.adjusted === false) continue
     const ticker = [...s.classes.values()].sort((a, b) => b.value - a.value)[0].ticker
-    const moves = s.holders.filter((h) => slugs.has(h.slug) && h.change && h.change !== 'unchanged')
+    const moves = s.holders.filter((h) => slugs.has(h.slug) && h.change && h.change !== 'unchanged' && h.change !== 'unknown')
     if (!moves.length) continue
     const pick = ({ slug, manager, featured, change, delta_value, weight }) => ({ slug, manager, featured, change, delta_value, weight })
     const buyers = moves.filter((h) => h.change === 'new' || h.change === 'added').sort((a, b) => b.delta_value - a.delta_value)

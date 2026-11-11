@@ -178,7 +178,7 @@ def changes(shard: dict) -> tuple[dict, list[dict]] | None:
         if (r["cusip"], r.get("put_call") or "") in odd or abs(r.get("value_delta") or 0) > big:
             r["price_outlier"] = True
     moved = [r for r in rows if r["change"] not in ("unchanged", None) and not r.get("put_call")
-             and not r.get("price_outlier")]
+             and not r.get("price_outlier") and not r.get("suspect_units")]
     counts = {c: sum(1 for r in rows if r["change"] == c and not r.get("put_call"))
               for c in ("new", "added", "trimmed", "exited", "unchanged")}
     pick = lambda r: [r.get(k) if k not in ("shares", "prev_shares", "value", "value_delta") else int(round(r.get(k) or 0))
@@ -424,6 +424,8 @@ def write_hedge_flow(shards: list[dict], types: dict, curated: dict) -> tuple[in
             if r.get("suspect_units"):
                 r = r | {"value_delta": 0}
             a = agg.setdefault(q, {}).setdefault(code, {}).setdefault(cik, [0, 0, 0, 0, 0, r.get("change") is not None])
+            if r.get("suspect_units"):  # a holder, but neither a buyer nor a seller
+                a[5] = False
             a[0] += r.get("shares") or 0
             a[1] += r.get("prev_shares") or 0
             a[2] += r.get("value") or 0
@@ -670,6 +672,11 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 r = r | {"value": 0, "prev_value": 0, "value_delta": 0}
             a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False])
             a[9] = a[9] or bad_value  # its shares and change stand (BMO TEVA added +159,272); only its $ are out
+            # A suspect_units line (share count or value off scale: Guardcap BKNG 2026Q3, Crosslink CRM 2026Q2) has an
+            # unknown change, unless only its value is off: a price_outlier whose shares moved under 2x (BMO TEVA).
+            ps_ = r.get("prev_shares") or 0
+            if r.get("suspect_units") and not (bad_value and ps_ and 0.5 <= (r.get("shares") or 0) / ps_ <= 2):
+                a[6] = True
             a[7] = a[7] or r.get("prev_cusip")
             # A held reissue (units unconfirmed) whose codes share an issuer prefix (BYND 08862E109 -> 08862E307):
             # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
