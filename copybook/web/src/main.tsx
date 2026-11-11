@@ -33,6 +33,7 @@ const FilingCard = lazy(() => import('./pages/Filing').then((m) => ({ default: m
 const Upgrade = lazy(() => import('./pages/Upgrade').then((m) => ({ default: m.Upgrade })))
 const Speed = lazy(() => import('./pages/Speed').then((m) => ({ default: m.Speed })))
 const Resume = lazy(() => import('./pages/Resume').then((m) => ({ default: m.Resume })))
+const Unsubscribe = lazy(() => import('./pages/Unsubscribe').then((m) => ({ default: m.Unsubscribe })))
 const Status = lazy(() => import('./pages/Status').then((m) => ({ default: m.Status })))
 const Why = lazy(() => import('./pages/Why').then((m) => ({ default: m.Why })))
 
@@ -91,6 +92,7 @@ Promise.all([handoff, fontsReady]).then(() =>
             <Route path="my-book" element={<Book />} />
             <Route path="upgrade" element={<Upgrade />} />
             <Route path="resume" element={<Resume />} />
+            <Route path="unsubscribe" element={<Unsubscribe />} />
             <Route path="why" element={<Why />} />
             <Route path="status" element={<Status />} />
             <Route path="about" element={<About />} />

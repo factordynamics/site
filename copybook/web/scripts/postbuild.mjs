@@ -106,6 +106,7 @@ page('account/', 'Account · Copybook', 'Manage your Copy subscription.')
 }
 page('upgrade/', 'Upgrade · Copybook', 'Switch your Copy plan to Copy Pro or Copy Fund, prorated, on the same billing interval.')
 page('resume/', 'Keep your plan · Copybook', 'Resume a paused or cancelled Copybook plan.', '\n    <meta name="robots" content="noindex" />')
+page('unsubscribe/', 'Unsubscribe · Copybook', 'Unsubscribe from Copybook’s weekly email and tips.', '\n    <meta name="robots" content="noindex" />')
 page('status/', 'Status · Copybook', 'Live status of Copybook’s member API, EDGAR poller and filing pages, and the incident log.')
 page('why/', 'Why you cancelled · Copybook', 'Tell us why you cancelled Copybook.', '\n    <meta name="robots" content="noindex" />')
 {
