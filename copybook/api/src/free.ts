@@ -398,8 +398,9 @@ async function cardAlert(env: Env, f: import('./v1data').FilerRow): Promise<Aler
   const rows = (d?.moves ?? []).filter((r) => !r.put_call);
   const of = (c: string) => rows.filter((r) => r.change === c).map((r) => ({ ...r, issuer: r.name ?? '', display_name: r.name ?? null })) as unknown as import('./edgar').MoveRow[];
   return {
-    slug: f.slug, slugs: [f.slug], manager: f.manager, name: f.name, quarter: f.latest_quarter!, report_date: f.latest_report_date ?? '', filing_date: f.latest_filing_date ?? '',
-    accession: f.latest_accession!, sec_url: '', tickers: rows.map((r) => r.ticker).filter((t): t is string => !!t),
+    // EDGAR's all-caps names as people write them ("Davis Selected Advisers").
+    slug: f.slug, slugs: [f.slug], manager: f.manager && f.manager === f.manager.toUpperCase() ? displayCase(f.manager) : f.manager, name: f.name, quarter: f.latest_quarter!, report_date: f.latest_report_date ?? '', filing_date: f.latest_filing_date ?? '',
+    accession: f.latest_accession!, sec_url: `https://www.sec.gov/Archives/edgar/data/${Number(f.cik)}/${f.latest_accession!.replace(/-/g, '')}/${f.latest_accession}-index.html`, tickers: rows.map((r) => r.ticker).filter((t): t is string => !!t),
     moves: rows.length ? { bought_usd: d?.bought_usd ?? 0, sold_usd: d?.sold_usd ?? 0, new: of('new'), added: of('added'), trimmed: of('trimmed'), exited: of('exited') } : null,
   };
 }
