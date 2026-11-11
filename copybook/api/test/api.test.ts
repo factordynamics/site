@@ -3010,7 +3010,8 @@ describe('copybook api', () => {
     await cancel('yearly');
     expect(sent.map((m) => m.subject).slice(3)).toEqual([sent[0].subject]);
     const link = sent[0].text.match(/Too expensive: (\S+)/)![1];
-    expect(link).toMatch(/^https:\/\/copybook-api\.factordynamics\.workers\.dev\/why\?t=.+&r=price$/);
+    // The site's /why/ page asks first, then POSTs to the API.
+    expect(link).toMatch(new RegExp(`^${SITE.replace(/[./]/g, '\\$&')}why/\\?t=.+&r=price$`));
     const u = new URL(link);
     // Opening the link records nothing (mail scanners follow links); Send posts the reason and the note.
     const page = await handleRequest(new Request(`https://api.test/why${u.search}`), env);
@@ -3020,6 +3021,9 @@ describe('copybook api', () => {
     const thanks = await handleRequest(new Request('https://api.test/why', { method: 'POST', body: new URLSearchParams({ t: u.searchParams.get('t')!, r: 'price', note: 'Need options data' }) }), env);
     expect(await thanks.text()).toContain('“Too expensive” is noted');
     expect(JSON.parse((await env.DB.get('why:yearly'))!)).toMatchObject({ reason: 'price', note: 'Need options data' });
+    // The site's referral card asks whether ?ref= is a live code; it never says whose.
+    const refOf = async (c: string) => (await handleRequest(new Request(`https://api.test/ref/${c}`), env)).json();
+    expect(await refOf('zzzz-not-a-code')).toEqual({ ok: true, valid: false });
     // A reason already given in the app: the cancel email doesn't ask again.
     sent = [];
     await env.DB.put('why:told', JSON.stringify({ reason: 'seasonal', via: 'account', at: new Date().toISOString() }));

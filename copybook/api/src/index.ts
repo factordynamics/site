@@ -340,6 +340,20 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ ok: true, ...(await pollerStatus(env, Date.now())), alert_latency_summary: summary, missed_recovered, alert_latency: url.searchParams.get('latency') === 'all' ? live : live.slice(0, 10), replays_excluded: all.length - live.length, mail_quota: { ...(await import('./email')).mailQuota, cap: 100, reserve_for_account_mail: 15 }, moves_queue: { pending: ((JSON.parse((await env.DB.get('alerts:pending-moves')) ?? '[]') as Alert13F[]).map((p) => p.accession)), last: JSON.parse((await env.DB.get('host:moves-last')) ?? 'null') }, ...business }, 200, h);
   }
 
+  // The site's referral card: whether ?ref= is a live code. Says nothing about whose it is; rate-limited per IP.
+  const refCheck = path.match(/^\/ref\/([^/]{1,40})$/);
+  if (req.method === 'GET' && refCheck) {
+    const ip = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for') ?? 'unknown';
+    const k = `rl:ref:${ip}`;
+    const n = Number((await env.DB.get(k)) ?? 0);
+    if (n >= 60) return json({ ok: false, error: 'too many requests, try again in an hour', code: 'rate_limited' }, 429, { ...h, 'retry-after': '3600' });
+    await env.DB.put(k, String(n + 1), { expirationTtl: 3600 });
+    const { canRefer } = await import('./referrals');
+    const owner = await env.DB.get(`ref:${decodeURIComponent(refCheck[1]).trim().toLowerCase().slice(0, 20)}`);
+    const m = owner ? await getMember(env, owner) : null;
+    return json({ ok: true, valid: !!m && canRefer(m) }, 200, { ...h, 'cache-control': 'no-store' });
+  }
+
   // A new subscription's Checkout, with a referral month applied server-side (typed promo codes are off on this account).
   if (req.method === 'POST' && path === '/checkout') {
     const ip = req.headers.get('cf-connecting-ip') ?? 'unknown';

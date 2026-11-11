@@ -289,7 +289,8 @@ export const WHY: Record<string, string> = {
 
 export async function cancelMail(env: Env, m: Member): Promise<Mail> {
   const token = await signToken(env.SESSION_SECRET, 'why', m.customer, 60 * 86400);
-  const base = `${API(env)}why?t=${encodeURIComponent(token)}&r=`;
+  // The site's /why/ page asks, then POSTs to the API: opening the link (mail scanners) records nothing.
+  const base = `${env.SITE_URL}why/?t=${encodeURIComponent(token)}&r=`;
   const ends = m.status === 'canceled' ? null : (m.cancel_at ?? (m.status === 'trialing' ? m.trial_end : null) ?? m.period_end) || null;
   const name = PRICES[m.plan]?.name ?? 'Copybook';
   // The resume link opens the site's page, which changes nothing until its button posts (mail scanners follow links).
