@@ -31,9 +31,11 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
   const pad = { l: 62, r: 6, t: 22, b: 62 }
   const max = Math.max(...data.map((d) => d.value), 1)
   const step = niceStep(max / 4)
-  const top = Math.ceil(max / step) * step
   const iw = Math.max(0, W - pad.l - pad.r)
   const ih = H - pad.t - pad.b
+  // Leave room above the tallest column for its value label, so it never sits on the top gridline and its label.
+  let top = Math.ceil(max / step) * step
+  if ((1 - max / top) * ih < 18) top += step
   const bw = data.length ? iw / data.length : 0
   const ticks: number[] = []
   for (let v = 0; v <= top + 1e-9; v += step) ticks.push(v)
