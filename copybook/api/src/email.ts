@@ -683,7 +683,21 @@ function notCountedLine(a: Alert13F): string {
   if (!items.length) return '';
   // Lines named only (held by the gate) group by reason; a marked row adds its filed facts.
   const by = new Map<string, string[]>();
+  // A possible CUSIP change is one entry, both codes in it (the lead's ruling, Nov 11): an exit and a new line on one
+  // ticker read as a round trip otherwise, the misreading the hold exists to prevent. "ORCL 133K → 166K sh: possible CUSIP
+  // change (68389X105 → 68389X204)".
+  const pairs = new Map<string, MoveRow[]>();
+  for (const x of items) if (isMoveRow(x) && x.cusip_pair) pairs.set(posName(x), [...(pairs.get(posName(x)) ?? []), x]);
+  const merged = new Set<MoveRow>();
+  for (const [name, rows] of pairs) {
+    const gone = rows.find((r) => r.change === 'exited');
+    const now = rows.find((r) => r.change === 'new');
+    if (!gone || !now || gone.cusip === now.cusip) continue;
+    by.set(`${name} ${gone.prev_shares ? compact(gone.prev_shares) : '?'} → ${compact(now.shares)} sh: possible CUSIP change (${gone.cusip} → ${now.cusip})`, []);
+    merged.add(gone).add(now);
+  }
   for (const x of items) {
+    if (isMoveRow(x) && merged.has(x)) continue;
     const facts = isMoveRow(x) ? heldFacts(x) : '';
     const why = notCountedWhy(x);
     // \"EW puts new, 3.9M sh; filed value implausible (≈$7,758/sh vs ~$78)\" already says why.
