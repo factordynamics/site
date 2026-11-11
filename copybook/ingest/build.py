@@ -845,7 +845,7 @@ def with_changes(latest: dict, prev: dict | None) -> list[dict]:
         r = k = ratio(h)
         # Per filer: a prior position already reported in post-split shares (its value per share is at
         # today's level, not k times it; Amundi and 1832 on CRWD 2026Q2) is not multiplied again.
-        if r != 1.0 and (h["cusip"], q_to) not in FILED_SPLITS and p is not None and not prn and p["value"] > 0 and amount(p) > 0 and h["value"] > 0 and amount(h) > 0:
+        if r != 1.0 and not (FILED_SPLITS.get((h["cusip"], q_to)) or {}).get("value_paid_out") and p is not None and not prn and p["value"] > 0 and amount(p) > 0 and h["value"] > 0 and amount(h) > 0:
             was, now_px = p["value"] / amount(p), h["value"] / amount(h)
             if abs(math.log(was / now_px)) < abs(math.log(was / (now_px * r))):
                 r = 1.0

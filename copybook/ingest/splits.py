@@ -47,11 +47,51 @@ RATIOS = sorted({2, 3, 4, 5, 6, 8, 10, 15, 20, 25, 30, 40, 50, 100, 1.5, 2.5,
 EXACT = 0.003
 # Splits the issuer's own SEC filing states, applied whatever the holders show: (new cusip, to_quarter) -> ratio
 # (new shares per old) and the filing. HON's 1-for-2 came the day of the Honeywell Aerospace spin-off, so the price
-# per share looked unchanged and the holder rule couldn't confirm it; the per-filer price check is skipped for these.
+# per share looked unchanged and the holder rule couldn't confirm it. value_paid_out (a spin-off or cash paid with the
+# exchange): the per-filer price check, which spots a prior already in post-split shares, would misread it, so it's skipped.
 FILED = {
     ("438516205", "2026Q2"): {"ratio": 0.5, "ticker": "HON", "issuer": "Honeywell International",
-                              "evidence": "8-K 0000773840-26-000084 Ex. 99.1: 1-for-2 reverse stock split, effective "
-                                          "with the Honeywell Aerospace (HONA) spin-off; new CUSIP 438516205"},
+                      "evidence": '8-K 0000773840-26-000084 Ex. 99.1: 1-for-2 reverse stock split, effective with the Honeywell Aerospace (HONA) spin-off; new CUSIP 438516205',
+                      "value_paid_out": True},
+    ("29390K102", "2026Q2"): {"ratio": 0.333333, "ticker": "NVRI", "issuer": "Enviri",
+                      "evidence": '8-K 0001193125-26-251752 (June 1, 2026): each Enviri share became one CLEH share, then one New Enviri share per three CLEH shares; CLEH shares then became $15.00 cash each (Veolia). A separation, not a split: 1/3 share plus cash per old share',
+                      "value_paid_out": True},
+    ("08862E307", "2026Q3"): {"ratio": 0.033333, "ticker": "BYND", "issuer": "Beyond Meat",
+                      "evidence": '8-K 0001655210-26-000059: 1-for-30 reverse stock split, effective Aug 13, 2026',
+                      "value_paid_out": False},
+    ("38341P201", "2026Q3"): {"ratio": 0.0125, "ticker": "GOSS", "issuer": "Gossamer Bio",
+                      "evidence": '8-K 0001728117-26-000094: 1-for-80 reverse stock split, effective Sep 10, 2026',
+                      "value_paid_out": False},
+    ("14161W303", "2026Q2"): {"ratio": 0.1, "ticker": "CDLX", "issuer": "Cardlytics",
+                      "evidence": '8-K 0001628280-26-040351: 1-for-10 reverse stock split, effective June 5, 2026',
+                      "value_paid_out": False},
+    ("67623L505", "2026Q2"): {"ratio": 0.1, "ticker": "OPAD", "issuer": "Offerpad Solutions",
+                      "evidence": '8-K 0001193125-26-263723: 1-for-10 reverse stock split of Class A, effective June 8, 2026',
+                      "value_paid_out": False},
+    ("02462A203", "2026Q3"): {"ratio": 0.066667, "ticker": "ABTC", "issuer": "American Bitcoin",
+                      "evidence": '8-K 0001193125-26-296396: 1-for-15 reverse stock split, effective July 2, 2026',
+                      "value_paid_out": False},
+    ("68622E203", "2026Q2"): {"ratio": 0.05, "ticker": "BARK", "issuer": "BARK",
+                      "evidence": '8-K 0001628280-26-023158: 1-for-20 reverse stock split, effective Apr 1, 2026',
+                      "value_paid_out": False},
+    ("91544A208", "2026Q2"): {"ratio": 0.1, "ticker": "UPLD", "issuer": "Upland Software",
+                      "evidence": '8-K 0001505155-26-000039: 1-for-10 reverse stock split, effective June 17, 2026',
+                      "value_paid_out": False},
+    ("36254L407", "2026Q3"): {"ratio": 0.04, "ticker": "GTBP", "issuer": "GT Biopharma",
+                      "evidence": '8-K 0001493152-26-041333: 1-for-25 reverse stock split, effective Sep 8, 2026',
+                      "value_paid_out": False},
+    ("09077B203", "2026Q2"): {"ratio": 0.02, "ticker": "BCAB", "issuer": "BioAtla",
+                      "evidence": '8-K 0001193125-26-140053: every 50 shares converted into 1 in a subsidiary merger (share consolidation), effective Apr 6, 2026',
+                      "value_paid_out": False},
+    ("05601U204", "2026Q3"): {"ratio": 0.1, "ticker": "BRCC", "issuer": "BRC",
+                      "evidence": '8-K 0001891101-26-000043: 1-for-10 reverse stock split of Class A, effective Aug 21, 2026',
+                      "value_paid_out": False},
+    ("762093201", "2026Q3"): {"ratio": 1.3978, "ticker": "RBKB", "issuer": "Rhinebeck Bancorp",
+                      "evidence": '8-K 0001751783-26-000032 Ex. 99.1: second-step conversion, each public share exchanged for 1.3978 new shares, July 21, 2026 (offering purchases read as adds)',
+                      "value_paid_out": False},
+    ("197914104", "2026Q3"): {"ratio": 2.2, "ticker": "CLBK", "issuer": "Columbia Financial",
+                      "evidence": '8-K12B 0001193125-26-309602: second-step conversion, each share exchanged for 2.2000 new shares, July 20, 2026 (offering purchases and Northfield merger shares read as adds)',
+                      "value_paid_out": False},
 }
 
 
