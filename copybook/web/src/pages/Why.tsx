@@ -12,7 +12,7 @@ const REASONS: Record<string, string> = {
   feature: 'Missing a feature I need',
   alerts: 'Alerts too slow or too noisy',
   temporary: 'Only needed it for a while',
-  seasonal: 'Seasonal: nothing happens between filings',
+  seasonal: 'Only need it in filing season',
   other: 'Something else',
 }
 

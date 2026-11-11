@@ -2,33 +2,40 @@ import { getToken } from '../lib/account'
 import { track, useTrackVisit } from '../lib/track'
 import { possessive } from '../lib/names.mjs'
 import { FollowSignup } from '../components/FollowSignup'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { FollowButton } from '../components/FollowButton'
 import { Share } from '../components/Share'
 import { Signup } from '../components/Signup'
 import { Arrow, Badge, Button, Monogram, Panel, Skeleton } from '../components/ui'
-import { BASE, dateLabel, pricingTo, getJSON, loadManager, money, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
+import { buildCard, cardSvg, type FilingCard as FilingCardData } from '../lib/filingCard.mjs'
+import { BASE, DATA, dateLabel, pricingTo, getJSON, loadManager, money, quarterLabel, sharesFmt, useAsync, useTitle } from '../lib/data'
 import { useFollows } from '../lib/follows'
 import { loadStockIndex, stockPath, tickerText } from '../lib/stocks'
 
 // A public card for one 13F (scripts/cards.mjs): the top five moves, made to be shared. Free, no account.
-type Card = {
-  accession: string
-  slug: string
-  manager: string
-  firm: string
-  quarter: string
-  prev_quarter: string
-  filing_date: string
-  sec_url: string
-  total_value: number
-  position_count: number
-  changes?: { new: number; added: number; trimmed: number; exited: number }
-  bought_usd: number
-  sold_usd: number
-  moves_total: number
-  moves: { ticker: string | null; name: string; change: 'new' | 'added' | 'trimmed' | 'exited'; value_delta: number; shares: number; prev_shares: number }[]
+type Card = FilingCardData
+
+// A 13F newer than the last site build has no static card yet (a build takes 30–40 min after
+// acceptance; ingest publishes the fund's book in 15–25). 404.html then renders this page, and the card is
+// built here from gust's runtime index.json and {slug}.json with the same code as the build's.
+async function loadCard(accession: string): Promise<{ card: Card; live: boolean }> {
+  const card = await getJSON<Card>(`${BASE}d/f/${encodeURIComponent(accession)}.json`).catch(() => null)
+  if (card) return { card, live: false }
+  // Revalidate, so a reader who arrives minutes after the filing doesn't get the copy cached before it.
+  const fresh = async <T,>(url: string) => {
+    const r = await fetch(url, { cache: 'no-cache' })
+    if (!r.ok) throw new Error(`${r.status} ${url}`)
+    return (await r.json()) as T
+  }
+  const idx = await fresh<{ managers: { slug: string; accession?: string }[] }>(`${DATA}index.json`)
+  const m = idx.managers.find((m) => m.accession === accession)
+  if (!m) throw new Error(`no card for ${accession}`)
+  // index.json and {slug}.json ship in one deploy, but the CDN can serve the old book for a minute: retry once.
+  let built = buildCard(await fresh(`${DATA}${m.slug}.json`))
+  if (built?.accession !== accession) built = await new Promise((r) => setTimeout(r, 4000)).then(async () => buildCard(await fresh(`${DATA}${m.slug}.json?r=${Date.now()}`)))
+  if (!built || built.accession !== accession) throw new Error(`no card for ${accession}`)
+  return { card: built, live: true }
 }
 
 export const cardPath = (accession: string) => `/f/${accession}/`
@@ -37,8 +44,8 @@ export const cardUrl = (accession: string) => `${window.location.origin}${BASE}f
 export function FilingCard() {
   const { accession = '' } = useParams()
   useTrackVisit()
-  const c = useAsync(() => getJSON<Card>(`${BASE}d/f/${encodeURIComponent(accession)}.json`), [accession])
-  const d = c.data
+  const c = useAsync(() => loadCard(accession), [accession])
+  const d = c.data?.card
   // Signed-in members: tag the names they own or watch, and list their other names this 13F moved.
   // Client-side only; the static page and its share tags stay the same for everyone.
   const { follows } = useFollows()
@@ -64,6 +71,16 @@ export function FilingCard() {
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
   }, [book.data, d, tag])
   useTitle(d ? `${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F: top moves · Copybook` : undefined)
+  // A just-filed card is served by 404.html with the site's generic tags. Link crawlers don't run
+  // scripts, so this helps only readers and search engines; the build writes the real tags and image.
+  useEffect(() => {
+    if (!d || !c.data?.live) return
+    const title = `${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F: top moves · Copybook`
+    const desc = `${d.manager} filed a ${quarterLabel(d.quarter)} 13F on ${dateLabel(d.filing_date)}: bought ${money(d.bought_usd)}, sold ${money(d.sold_usd)}, from the SEC filing.`
+    const set = (sel: string, v: string) => document.head.querySelector(sel)?.setAttribute('content', v)
+    for (const sel of ['meta[property="og:title"]', 'meta[name="twitter:title"]']) set(sel, title)
+    for (const sel of ['meta[name="description"]', 'meta[property="og:description"]', 'meta[name="twitter:description"]']) set(sel, desc)
+  }, [d, c.data?.live])
 
   if (c.error)
     return (
@@ -87,7 +104,7 @@ export function FilingCard() {
         <span className="text-ink-2">{d ? `${d.manager}, ${quarterLabel(d.quarter)}` : accession}</span>
       </nav>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <article className="rounded-[var(--radius-card)] bg-card p-6 shadow-[var(--shadow-card)] md:p-8">
           {!d ? (
             <Skeleton className="h-[420px] w-full" />
@@ -204,7 +221,7 @@ export function FilingCard() {
         </article>
 
         <aside className="space-y-6">
-          {d && <ShareCard d={d} />}
+          {d && <ShareCard d={d} live={c.data!.live} />}
           {d && (
             <Panel title={getToken() ? `Get ${possessive(d.manager)} next 13F by email` : `Get ${possessive(d.manager)} moves in Friday’s free email`}>
               {getToken() ? (
@@ -234,7 +251,7 @@ export function FilingCard() {
   )
 }
 
-function ShareCard({ d }: { d: Card }) {
+function ShareCard({ d, live }: { d: Card; live: boolean }) {
   const url = cardUrl(d.accession)
   const top = d.moves
     .slice(0, 3)
@@ -242,8 +259,21 @@ function ShareCard({ d }: { d: Card }) {
     .join('\n')
   const text = `${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F is out:\n${top}`
   return (
-    <Panel title="Share this filing" sub="The card image is attached automatically on X, LinkedIn, Slack and iMessage">
-      <img src={`${BASE}og/f/${d.accession}.png`} alt={`${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F card: top moves`} width={1200} height={630} className="w-full rounded-xl shadow-[0_0_0_1px_var(--color-line)]" />
+    <Panel
+      title="Share this filing"
+      sub={live ? 'Just filed. X, LinkedIn and Slack show this image once the page is published, within about 40 minutes of the filing' : 'The card image is attached automatically on X, LinkedIn, Slack and iMessage'}
+    >
+      {live ? (
+        // Escaped by cardSvg; drawn with the page's own Geist faces until the build's PNG exists.
+        <div
+          role="img"
+          aria-label={`${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F card: top moves`}
+          className="overflow-hidden rounded-xl shadow-[0_0_0_1px_var(--color-line)] [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
+          dangerouslySetInnerHTML={{ __html: cardSvg(d, 'Geist Variable', 'Geist Mono Variable') }}
+        />
+      ) : (
+        <img src={`${BASE}og/f/${d.accession}.png`} alt={`${possessive(d.manager)} ${quarterLabel(d.quarter)} 13F card: top moves`} width={1200} height={630} className="w-full rounded-xl shadow-[0_0_0_1px_var(--color-line)]" />
+      )}
       <Share className="mt-4" url={url} text={text} linkedin />
     </Panel>
   )

@@ -100,7 +100,7 @@ const SECTIONS: { id: string; title: string; body: ReactNode }[] = [
     title: 'Moves and changes',
     body: (
       <>
-        <p>A quarter-over-quarter move is the change in shares between a fund’s two filings, valued at the newer filing’s own value per share. A price move alone is never counted as buying or selling, except in the one split case still being fixed (Amundi’s mixed pre- and post-split CRWD lines), which can show a split as a buy.</p>
+        <p>A quarter-over-quarter move is the change in shares between a fund’s two filings, valued at the newer filing’s own value per share. A price move alone is never counted as buying or selling. Splits are adjusted per filer: a fund whose previous filing already reported post-split shares (its value per share already at the post-split level) is not multiplied again. One limit remains. Lines with the same CUSIP are added together before the comparison, so a filing that mixes pre- and post-split lines of one stock is adjusted as a whole. Amundi’s 2026Q2 CRWD, six post-split lines plus one 67-share pre-split line, reads 1,280,592 prior shares where line-by-line adjustment gives 1,280,793, a 201-share difference. Line-level priors come with per-row lots.</p>
         <p>
           <strong className="font-medium text-ink">CUSIP changes.</strong> When an issuer’s CUSIP is reissued, as Exxon’s 30231G102 became 30233Q108 between Q2 and Q3 2026, a fund’s new row is compared with its previous row under the old CUSIP, so a position it kept reads as added, trimmed or unchanged rather than new. Those rows are labelled “CUSIP change” with both CUSIPs, and the API carries the old one as <code>prev_cusip</code>. Reissues are linked by the data pipeline, which lists every pair it links.
         </p>
