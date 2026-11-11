@@ -192,6 +192,17 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
     return (g[1][1][0]?.score ?? 0) > (g[0][1][0]?.score ?? 0) ? [g[1], g[0]] : g
   }, [q, named, mgrs, owned, held]) // eslint-disable-line react-hooks/exhaustive-deps
   const hits = groups.flatMap(([, h]) => h)
+  // Say how many results there are once typing pauses, so a screen reader user knows whether to arrow down.
+  const count = (kind: Hit['kind']) => {
+    const n = hits.filter((h) => h.kind === kind).length
+    return n ? `${n} ${n === 1 ? kind : kind + 's'}` : ''
+  }
+  const found = !q.trim() ? '' : hits.length ? `${[count('investor'), count('stock')].filter(Boolean).join(' and ')}. Use the arrow keys to choose.` : `Nothing matches “${q.trim()}”.`
+  const [said, setSaid] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setSaid(found), 500)
+    return () => clearTimeout(t)
+  }, [found])
   if (!open) return null
   const go = (h?: Hit) => {
     if (!h) return
@@ -228,6 +239,9 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
           <button type="button" className="palette-close" onClick={close}>
             Cancel
           </button>
+        </div>
+        <div className="sr" role="status">
+          {said}
         </div>
         <div className="results" id="search-results" role="listbox" aria-label="Search results">
           {groups

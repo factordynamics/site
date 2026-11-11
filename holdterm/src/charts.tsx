@@ -51,7 +51,7 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
   return (
     <div ref={ref} className="chart-box value-chart">
       {d0 && (
-        <p className="chart-readout" aria-live="polite">
+        <p className="chart-readout">
           <b>{d0.label.replace(/'(\d\d)$/, '20$1')}</b>: {usd(d0.value)}
           {p0 ? (
             <span className={d0.value >= p0 ? 'pos' : 'neg'}>
@@ -62,10 +62,11 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
         </p>
       )}
       {W > 0 && (
-        <svg width={W} height={H} role="img" aria-label={title}>
-          <title>{title}</title>
+        // A group, not one image: each column keeps its own label ("Q2 '26: $299.3B, up 13.7%"), which a screen
+        // reader hears when the column takes focus. The axes repeat those labels, so they are hidden from it.
+        <svg width={W} height={H} role="group" aria-label={title}>
           {!narrow && (
-            <text x={12} y={pad.t + ih / 2} textAnchor="middle" transform={`rotate(-90 12 ${pad.t + ih / 2})`} className="axis-title">
+            <text aria-hidden x={12} y={pad.t + ih / 2} textAnchor="middle" transform={`rotate(-90 12 ${pad.t + ih / 2})`} className="axis-title">
               Portfolio value
             </text>
           )}
@@ -74,7 +75,7 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
             return (
               <g key={v}>
                 <line x1={pad.l} x2={W - pad.r} y1={y} y2={y} className={v === 0 ? 'gridline strong' : 'gridline'} />
-                <text x={pad.l - 8} y={y + 4} textAnchor="end" className="axis">
+                <text aria-hidden x={pad.l - 8} y={y + 4} textAnchor="end" className="axis">
                   {usdAxis(v)}
                 </text>
               </g>
@@ -88,7 +89,7 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
             const delta = prev ? d.value / prev - 1 : null
             const on = i === sel
             return (
-              <g key={d.label} role="img" onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} tabIndex={0} onFocus={() => setHover(i)} onBlur={() => setHover(null)} aria-label={`${d.label}: ${usd(d.value)}${delta != null ? `, ${delta >= 0 ? 'up' : 'down'} ${Math.abs(delta * 100).toFixed(1)}%` : ''}`}>
+              <g key={d.label} role="img" onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} tabIndex={0} onFocus={() => setHover(i)} onBlur={() => setHover(null)} aria-label={`${d.label.replace(/'(\d\d)$/, '20$1')}: ${usd(d.value)}${delta != null ? `, ${delta >= 0 ? 'up' : 'down'} ${Math.abs(delta * 100).toFixed(1)}%` : ''}`}>
                 <rect x={pad.l + i * bw} y={pad.t} width={bw} height={ih} fill="transparent" />
                 <rect x={x} y={pad.t + ih - h} width={cw} height={h} rx={3} className={on ? 'col on' : 'col'} />
                 {(showLabels || on) && (
@@ -111,7 +112,7 @@ export function ValueHistory({ data, title }: { data: { label: string; value: nu
             )
           })}
           {!narrow && (
-            <text x={pad.l + iw / 2} y={H - 4} textAnchor="middle" className="axis-title">
+            <text aria-hidden x={pad.l + iw / 2} y={H - 4} textAnchor="middle" className="axis-title">
               Quarter, with the change from the quarter before
             </text>
           )}
