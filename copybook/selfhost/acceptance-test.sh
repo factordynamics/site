@@ -49,6 +49,7 @@ denied "service secrets"         cat "$D/secrets.env"
 # a payment). grep -q prints nothing even when it can read the file, so only the error decides.
 denied "session-signing secret (SESSION_SECRET)"        grep -q '^SESSION_SECRET=' "$D/secrets.env"
 denied "webhook-signing secret (STRIPE_WEBHOOK_SECRET)" grep -q '^STRIPE_WEBHOOK_SECRET=' "$D/secrets.env"
+denied "waitlist key, if added (WAITLIST_PRIVATE_KEY_B64)" grep -q '^WAITLIST_PRIVATE_KEY_B64=' "$D/secrets.env"
 pid=$(pgrep -u copybook -f 'node server.mjs' | head -1)
 denied "API process environment (secrets)" cat "/proc/${pid:-0}/environ"
 denied "API process memory"      head -c 1 "/proc/${pid:-0}/mem"

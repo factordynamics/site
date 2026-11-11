@@ -50,7 +50,8 @@ changes (api.json and the front ends follow within 2 minutes).
       and set the same value as the Worker's STRIPE_WEBHOOK_SECRET in the dashboard (it keeps a copy for failover; it
       has no endpoint of its own). Payments can send a test event afterwards to confirm gene takes the new secret.
    b. Amp Settings → Secrets: delete COPYBOOK_SESSION_SECRET, COPYBOOK_STRIPE_WEBHOOK_SECRET, COPYBOOK_BACKUP_AGE_KEY,
-      COPYBOOK_WAITLIST_PRIVATE_KEY (it decrypts the waitlist's emails; keep it offline if you still need it), and the
+      COPYBOOK_WAITLIST_PRIVATE_KEY (it decrypts the waitlist's emails; first save it as a file on the USB stick, for
+      step 4f; it never goes back into Amp), and the
       account passwords CLOUDFLARE_ACCOUNT_PASSWORD, STRIPE_ACCOUNT_PASSWORD and RESEND_ACCOUNT_PASSWORD (each signs in
       to a dashboard that shows member data). Change those three passwords, since agents have held them, and keep
       two-factor sign-in on. COPYBOOK_HEALTH_TOKEN stays: it is the agents' key to the masked /ops/ endpoints.
@@ -72,8 +73,18 @@ changes (api.json and the front ends follow within 2 minutes).
    d. Stripe dashboard → Developers → API keys: create a restricted key for agents with exactly the scopes payments
       listed (see "Payments' access" below), and replace the Amp secret STRIPE_SECRET_KEY with it. The service keeps
       the full key (it is already in its secrets file).
-   e. Restart the Amp runner so its environment drops the removed secrets: systemctl --user restart amp-runner
-      (ends agent shells in progress; other software on the machine runs as separate units and keeps running).
+   e. Restart the Amp runner so its environment drops the removed secrets. Other software on the machine depends on
+      it, so: when you start (step 1), the agent tells the thread that owns that software the planned restart time, at
+      least 30 minutes ahead, and waits for it to confirm it's safe. Restart only after the agent says "runner restart
+      cleared":
+        systemctl --user restart amp-runner
+      (ends agent shells in progress). Then tell the thread "runner restarted"; the agent tells that thread it's done.
+   f. Optional, only if payments reports real waitlist entries (skip it otherwise): give the waitlist key to the
+      service, not to agents. From the file you saved in 4b (PEM), as one base64 line:
+        sudo sh -c 'printf "WAITLIST_PRIVATE_KEY_B64=%s\n" "$(base64 -w0 /run/media/$SUDO_USER/<stick>/waitlist-key.pem)" >> /var/lib/copybook/copybook-api/secrets.env'
+        sudo systemctl --user --machine=copybook@ restart copybook-api
+      The service passes it to the API as WAITLIST_PRIVATE_KEY_B64; the API, not an agent, decrypts and sends to the
+      waitlist. (That sending code doesn't exist in the API yet; payments adds it before this step is worth doing.)
 
 5. Tell the thread "credentials done". The agent runs ~/copybook-api/ops/acceptance-test.sh from its own account:
    every read of member files, the members store, the secrets (SESSION_SECRET and STRIPE_WEBHOOK_SECRET by name) and
