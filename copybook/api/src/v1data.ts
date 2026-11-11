@@ -736,13 +736,15 @@ export function holderFilter(p: URLSearchParams, now = Date.now()): ((r: HolderR
 
 ROUTES.push(
   ['GET', /^\/v1\/filers$/, async ({ env, url }) => {
-    // Curated filers first (with their history), then every other filer the data run parsed; paged like the other
-    // list routes (limit 1-1000, default 500; offset).
+    // Curated filers first (with their history), then every other filer the data run parsed. Without `limit`, every
+    // filer in one response (clients load it once: a paged default silently cut them to 500, Nov 11). Paging is opt-in:
+    // limit 1-1000 plus offset, with next_offset.
     const p = url.searchParams;
     const want = p.get('curated');
-    const limit = Number(p.get('limit') ?? 500);
+    const paged = p.has('limit');
+    const limit = paged ? Number(p.get('limit')) : Infinity;
     const offset = Number(p.get('offset') ?? 0);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 1000) return v1error('bad_request', 400, `limit must be an integer from 1 to 1000 (got ${p.get('limit')}); page with offset.`);
+    if (paged && (!Number.isInteger(limit) || limit < 1 || limit > 1000)) return v1error('bad_request', 400, `limit must be an integer from 1 to 1000 (got ${p.get('limit')}); page with offset.`);
     if (!Number.isInteger(offset) || offset < 0) return v1error('bad_request', 400, `offset must be an integer from 0 (got ${p.get('offset')}).`);
     const curated = (await filers(env)).map(({ type, ...f }) => ({ ...f, curated: true, ...(type ? { type } : { type: null }) }));
     const seen = new Set(curated.map((f) => f.cik));
@@ -772,7 +774,7 @@ ROUTES.push(
       f.curated || !stored ? f : { ...f, history_quarters: [...new Set([...(stored.get(pad(f.cik)) ?? []), ...(f.latest_quarter ? [f.latest_quarter] : [])])].sort().reverse() };
     const typed = (f: { cik: string; type?: string | null }) => withQuarters(types.has(pad(f.cik)) ? { ...f, type: normType(types.get(pad(f.cik))!) } : f);
     const all = (want === 'false' ? rest : want === 'true' ? curated : [...curated, ...rest]).map(typed);
-    return v1json({ data: all.slice(offset, offset + limit), count: all.length, next_offset: offset + limit < all.length ? offset + limit : null });
+    return v1json({ data: all.slice(offset, offset + limit), count: all.length, ...(paged ? { next_offset: offset + limit < all.length ? offset + limit : null } : {}) });
   }],
   ['GET', /^\/v1\/filers\/([^/]+)\/holdings\/([^/]+)$/, async ({ env, url }, [id, qp]) => {
     if (url.searchParams.has('as_of')) {

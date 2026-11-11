@@ -302,10 +302,10 @@ export function openapi() {
       '/v1/filers': {
         get: {
           summary: 'Every filer Copybook covers, with its latest 13F and available quarters',
-          description: 'Every 13F filer: curated filers first, then all others. ?curated=true or false filters. Paged: `count` is the total, `next_offset` the next page (null on the last).',
+          description: 'Every 13F filer: curated filers first, then all others. ?curated=true or false filters. Without `limit`, every filer in one response (about 9,000; `count` is the total). Paging is opt-in: `limit` (1 to 1000) with `offset`; then `next_offset` gives the next page (null on the last). `next_offset` is absent when `limit` is not given.',
           parameters: [
             { name: 'curated', in: 'query', required: false, schema: { type: 'string', enum: ['true', 'false'] } },
-            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 1000, default: 500 } },
+            { name: 'limit', in: 'query', required: false, description: 'Opt-in paging: at most this many filers (1 to 1000). Omit for every filer.', schema: { type: 'integer', minimum: 1, maximum: 1000 } },
             { name: 'offset', in: 'query', required: false, schema: { type: 'integer', minimum: 0, default: 0 } },
           ],
           responses: {

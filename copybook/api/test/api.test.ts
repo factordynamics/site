@@ -4356,7 +4356,10 @@ describe('copybook api', () => {
     vi.useRealTimers();
     const page = await v1('/v1/filers?limit=2&offset=1');
     expect([page.count, page.next_offset, page.data.map((f: { slug: string }) => f.slug)]).toEqual([4, 3, ['dan-loeb', 'whale-rock-7322']]);
-    expect((await v1('/v1/filers?offset=3')).next_offset).toBeNull();
+    expect((await v1('/v1/filers?limit=2&offset=3')).next_offset).toBeNull();
+    // No limit: every filer in one response, no next_offset (a paged default silently cut clients to 500 on Nov 11).
+    const whole = await v1('/v1/filers');
+    expect([whole.data.length, whole.count, 'next_offset' in whole]).toEqual([4, 4, false]);
     expect((await v1('/v1/filers?limit=1001')).error.code).toBe('bad_request');
     // Dan Loeb was curated after the list was built (the header names only Buffett): listed once, as curated, wherever his row was.
     const stale = (rows: unknown[]) => hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`${rows.length} 0001067983\n${JSON.stringify(rows)}`));
