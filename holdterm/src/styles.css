@@ -572,6 +572,14 @@ main:focus {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* A card whose answer is a company name may take two lines ("Meta Platforms" in a phone's half-width card) rather
+   than be cut short; balanced, so the second line isn't a lone word. */
+.stat .value .stat-co {
+  display: block;
+  white-space: normal;
+  text-wrap: balance;
+  letter-spacing: -0.02em;
+}
 .stat .sub {
   font-size: 13px;
   color: var(--dim);
