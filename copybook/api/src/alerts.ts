@@ -1324,6 +1324,9 @@ export async function geneMoves(env: Env, now: number, budgetMs = 45_000): Promi
 /** Ingest's consensus.json (other filers' median value per share by quarter and CUSIP), read at most hourly. */
 let CONSENSUS: { at: number; quarters: Record<string, Record<string, number>> } | null = null;
 export async function consensusFor(env: Env, quarter: string, cusips: string[]): Promise<Map<string, Consensus>> {
+  // Parsing the 660 KB file takes about 8 ms of CPU, nearly all of Cloudflare's 10 ms a minute: there the gate checks
+  // the split basis only (which holds every split error), and gene's own moves, re-checks and reconciliation add prices.
+  if ((await import('./failover')).isCloudflare(env)) return new Map();
   if (!CONSENSUS || Date.now() - CONSENSUS.at > 3600_000) {
     try {
       const r = await fetch(`${env.DATA_URL}consensus.json`);
