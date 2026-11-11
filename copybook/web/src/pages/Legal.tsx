@@ -8,6 +8,7 @@ const UPDATED = 'November 9, 2026'
 // newest date is the page's "Last updated".
 const CHANGES: Partial<Record<'terms' | 'privacy' | 'security', [string, string][]>> = {
   security: [
+    ['November 11, 2026', 'How credentials are stored: API keys as SHA-256 hashes, sign-in links and sessions as signed tokens we don’t store, private feed links stored and rotatable.'],
     ['November 11, 2026', 'Host description shortened; the disclosure is unchanged.'],
     ['November 11, 2026', 'What else runs on it: the API runs on a personal machine, under an account shared with other software that can technically read its data files.'],
     ['November 11, 2026', 'Who can see member data: Copybook is maintained by AI coding agents on Amp; the MDR terms and their exceptions are quoted, and agent requests that run through the founder’s personal Claude and Grok subscriptions go under those providers’ consumer terms.'],
@@ -104,6 +105,7 @@ const PAGES: Record<'terms' | 'privacy' | 'security', { title: string; lead: str
       ['Sign-in', 'Sign-in is by emailed one-time links; there are no passwords to leak. A sign-in link you ask for works once, within 15 minutes; a Copy Fund invite link works once, within 7 days. Session tokens are never put in URLs. CSV downloads use single-use links that expire in 60 seconds.'],
       ['Your book is private', <>A list of holdings you upload or enter is private to you, or to your team on Copy Fund. It is never shared, except as described under <Link to="/security/#who-can-see-member-data" className="font-medium text-accent hover:text-accent-2">Who can see member data</Link>; it is never shown to other members, and never used in aggregates, rankings or anything we publish.</>],
       ['API keys', 'A key’s secret is shown once, when you create it. Revoke a key from your account page and requests with it fail immediately.'],
+      ['How credentials are stored', 'API keys are stored only as SHA-256 hashes and shown once; sign-in links and sessions are signed, expiring tokens we don’t store; private feed links are stored so your account page can show them, and you can rotate one anytime.'],
       ['Deleting data', <>Remove follows, owned stocks and keys yourself on your account page at any time, or ask us to delete everything through the {contact}. {HOSTING.deletion}</>],
       ['Breach notification', 'If a breach affects member data, we notify the affected members within 72 hours of finding it.'],
       ['Subprocessors', <>The companies that process data for Copybook are listed on the <Link to="/privacy/" className="font-medium text-accent hover:text-accent-2">privacy page</Link>.</>],

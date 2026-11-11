@@ -288,11 +288,14 @@ export const f13Ready = (d: Latency | null | undefined) => {
 // the Nov 11 moves fix. Computed from the rows with payments' method, so they match latency.json's figures.
 function ThirteenF({ d, loading }: { d: Latency | null | undefined; loading: boolean }) {
   const ready = f13Ready(d)
+  // Payments' split by acceptance time (by_form['13F'].season and .since_fix); computed from the rows the
+  // same way when an older latency.json lacks them.
+  const f = d?.by_form?.['13F'] as (LatencyStat & { season?: LatencyStat & { over_15m?: number }; since_fix?: LatencyStat }) | undefined
   const rows = seasonGaps(d).filter((a) => a.form.startsWith('13F'))
-  const all = gapStats(rows.map((a) => a.seconds))
-  const slow = rows.filter((a) => a.seconds > 900).length
+  const all = f?.season ?? gapStats(rows.map((a) => a.seconds))
+  const slow = f?.season?.over_15m ?? rows.filter((a) => a.seconds > 900).length
   const fixAt = (d as { moves_fix_at?: string } | null | undefined)?.moves_fix_at
-  const after = fixAt ? gapStats(rows.filter((a) => a.accepted_at >= fixAt).map((a) => a.seconds)) : null
+  const after = f?.since_fix ?? (fixAt ? gapStats(rows.filter((a) => a.accepted_at >= fixAt).map((a) => a.seconds)) : null)
   const day = fixAt ? new Date(fixAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : null
   const big = 'num mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em]'
   return (
