@@ -1021,6 +1021,61 @@ describe('copybook api', () => {
     expect((await buildStatus(env, min(8), s)).alerts_13f.state).toBe('ok');
   });
 
+  it("Friday email: 'Your follows' leads (a followed 13F in the alert's format, its 10 largest rows; else the expected date); the welcome names the follow; weekend budget", async () => {
+    const realFetch = globalThis.fetch;
+    const mg: string[] = [];
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      if (String(u) === `${SITE}d/expected.json`) return Response.json({ quarter: '2026Q3', expected: [{ slug: 'seth-klarman', manager: 'Seth Klarman', expected_date: '2026-11-13' }] });
+      if (String(u) === 'https://mg.test/v3/factordynamics.com/messages') {
+        mg.push(new URLSearchParams(String(init?.body)).get('to')!);
+        return Response.json({ id: 'x' });
+      }
+      return realFetch(u, init);
+    });
+    // Kahn's Q3 13F went out with 12 changed rows: the Friday email keeps the 10 largest (K2 to K11).
+    const row = (t: string, change: string, v: number) => ({ ticker: t, display_name: null, issuer: t, cusip: 'X', put_call: null, shares: 10, prev_shares: 5, value: Math.abs(v), value_delta: v, change });
+    const changed = Array.from({ length: 12 }, (_, i) => row(`K${i}`, i % 2 ? 'added' : 'trimmed', (i % 2 ? 1 : -1) * (i + 1) * 1e6));
+    const kahn = { slug: 'irving-kahn', slugs: ['irving-kahn'], manager: 'Irving Kahn', name: 'Kahn Brothers', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-12', accession: '0001039565-26-000005', sec_url: 'https://www.sec.gov/k', accepted: new Date(Date.now() - 86400_000).toISOString(), tickers: [], changed,
+      moves: { bought_usd: 36e6, sold_usd: 42e6, new: [], added: changed.filter((r) => r.change === 'added').slice(-5), trimmed: changed.filter((r) => r.change === 'trimmed').slice(-5), exited: [] } };
+    const { deliver } = await import('../src/alerts');
+    await deliver(env, [kahn as never], [], Date.now());
+    const { followsSection } = await import('../src/free');
+    const sec = (await followsSection(env, { investors: ['irving-kahn', 'seth-klarman', 'bill-ackman'], stocks: [], owned: [], watched: [] } as never, Date.now()))!;
+    expect(sec.text).toMatch(/^Your follows:\nIrving Kahn \(Kahn Brothers\): Q3 2026 13F, filed 2026-11-12\n/);
+    expect(['K2', 'K11'].every((t) => new RegExp(`\\b${t}\\b`).test(sec.text)) && !/\bK[01]\b/.test(sec.text)).toBe(true);
+    expect(sec.text).toContain('  Seth Klarman: not filed yet · expected Fri Nov 13\n');
+    expect(sec.text).toContain('  Bill Ackman: not filed yet\n');
+    expect(sec.html).toContain('<h3 style="font-size:16px;margin:0 0 4px">Your follows</h3>');
+    // The free welcome names what they followed and when it comes.
+    sent = [];
+    await handleRequest(new Request('https://api.test/signup', { method: 'POST', body: JSON.stringify({ email: 'copybook-test-follow@fldubai.com', follow: [{ kind: 'investor', id: 'seth-klarman' }] }), headers: { origin: 'https://refcell.github.io', 'cf-connecting-ip': '7.7.7.7' } }), env);
+    expect(sent[0].text).toMatch(/^You follow Seth Klarman: the Q3 13F is expected Fri Nov 13, and its moves come in Friday's email\.\n/);
+
+    // The budget for the Friday email (low priority), 200 of them. Weekday: Resend less 15 + 50 for alerts and account
+    // mail, never Mailgun. Saturday: each provider keeps 10 for account mail; the rest waits for Sunday's reset.
+    Object.assign(env, { MAILGUN_API_KEY: 'k', MAILGUN_BASE: 'https://mg.test' });
+    const email = await import('../src/email');
+    const batch = Array.from({ length: 200 }, (_, i) => ({ to: `reader${i}@example.com`, subject: 'The week', text: 'x' }));
+    const run = async (iso: string) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(iso));
+      email.mailQuota.day = '';
+      await env.DB.delete('host:mail-meter');
+      await env.DB.delete('host:mail-delayed');
+      sent = [];
+      mg.length = 0;
+      resendUsed = 0;
+      await email.sendMail(env, batch, { tier: 'low' });
+      const delayed = JSON.parse((await env.DB.get('host:mail-delayed')) ?? '[]').length;
+      vi.useRealTimers();
+      return [sent.filter((m) => m.to[0].startsWith('reader')).length, mg.length, delayed];
+    };
+    expect(await run('2026-11-11T15:00:00Z')).toEqual([35, 0, 165]); // Wednesday
+    expect(await run('2026-11-14T02:00:00Z')).toEqual([90, 90, 20]); // Saturday 02:00 UTC
+    Object.assign(env, { MAILGUN_API_KEY: undefined });
+    vi.stubGlobal('fetch', realFetch);
+  });
+
   it("a CUSIP change nets into one share-based move (Fisher's Q3 XOM: +$75.7M, not +$894.9M)", async () => {
     const { computeMoves, netRenamed } = await import('../src/edgar');
     const other = { cusip: '037833100', put_call: null, issuer: 'APPLE INC', ticker: 'AAPL', shares: 1e6, value: 2e8 };
@@ -1167,17 +1222,27 @@ describe('copybook api', () => {
       return realFetch(u, init);
     });
     await call('/follows/owned/SIRI', { method: 'POST', token: s.token }); // 5th name
+    Object.assign(env, { POSTAL_ADDRESS: '1 Example Way, Suite 2, Austin, TX 78701' });
     await cron(42, sat);
     expect(sent.map((m) => m.to[0])).toEqual(['reader@reader.test']);
     const w = sent[0];
     expect(w.subject).toBe('In your names: Warren Buffett added $8.8B of GOOGL');
-    expect(w.text).toMatch(/From investors you follow:\n(  .*\n    .*\n)*  Bill Ackman: bought HHH/); // and the superinvestor moves in followed stocks (GOOGL)
+    // "Your follows" leads: Ackman has no 13F on record this week and isn't on the expected list.
+    expect(w.text).toMatch(/^Superinvestor filings, week of .*\n\nYour follows:\n  Bill Ackman: not filed yet\n    https:\/\/\S+\/investors\/bill-ackman\/\n/);
+    expect(w.text).toMatch(/Also this week from your follows:\n(  .*\n    .*\n)*  Bill Ackman: bought HHH/); // and the superinvestor moves in followed stocks (GOOGL)
     // "In your names" first: one public fact per saved name (superinvestors only), then the biggest locked item, named.
     expect(w.text).toContain(
       `In your names:\n  Warren Buffett added $8.8B of GOOGL, which you own.\n    ${SITE}f/0000950123-26-011111/\n  Bill Ackman bought $50.0M of HHH, which you own.\n    ${SITE}investors/bill-ackman/\n  Warren Buffett bought $26.9M of SIRI, which you own.\n    ${SITE}investors/warren-buffett/\n  Nvidia's CEO sold $18.6M of NVDA, with Copy (+1 more in your names): ${SITE}pricing/?utm_source=weekly&utm_medium=email`,
     );
     expect(w.text.indexOf('In your names')).toBeLessThan(w.text.indexOf('Biggest buys'));
     expect(w.html).toContain('Try Copy free for 14 days');
+    // The footer says why they get it and carries the mailing address; without the address, the Copy ask is dropped.
+    expect(w.text).toContain('You get this because you signed up for the free Copybook weekly.');
+    expect(w.text).toContain('\n1 Example Way, Suite 2, Austin, TX 78701');
+    const { weeklyMail } = await import('../src/free');
+    Object.assign(env, { POSTAL_ADDRESS: '' });
+    const plain = weeklyMail(env, 'reader@reader.test', { buys: [], sells: [] }, 'November 7', 'https://u.test', { names: 1, facts: [], hook: 'X', more: 2 });
+    expect([plain.text, plain.html ?? ''].some((t) => /pricing\/|with Copy|Copy emails each/.test(t))).toBe(false);
     // Superinvestors first, 2 rows per fund at most; no ETFs or index flow; nothing older than the week; no options.
     const buys = w.text.slice(w.text.indexOf('Biggest buys'), w.text.indexOf('Biggest sells'));
     expect([...buys.matchAll(/^ {2}(\S[^:]*):/gm)].map((m) => m[1])).toEqual(['Warren Buffett', 'Warren Buffett', 'Bill Ackman', 'ICICI Prudential', 'ICICI Prudential']);
@@ -2600,10 +2665,11 @@ describe('copybook api', () => {
     const lat = await (await call('/latency')).json();
     expect(lat).toMatchObject({ count: 3, median_seconds: 60, p90_seconds: 100, p95_seconds: 100 });
     // Per form family and per channel (email: acceptance to the mailer; chat: to the first successful post), this season only.
-    expect(lat.by_form).toEqual({ '13F': { count: 2, median_seconds: 40, p90_seconds: 60 }, 'Form 4': { count: 1, median_seconds: 100, p90_seconds: 100 } });
+    // An even count's median is the mean of the middle two (40 and 60 -> 50), not the lower one.
+    expect(lat.by_form).toEqual({ '13F': { count: 2, median_seconds: 50, p90_seconds: 60 }, 'Form 4': { count: 1, median_seconds: 100, p90_seconds: 100 } });
     expect(lat.by_channel).toEqual({ email: { count: 3, median_seconds: 60, p90_seconds: 100 }, slack: { count: 3, median_seconds: 61, p90_seconds: 101 }, discord: { count: 1, median_seconds: 43, p90_seconds: 43 } });
     // Any filer's 13F is timed too (followed, peers, linked books), tagged apart; untagged rows are curated.
-    expect(lat.by_coverage).toEqual({ curated: { count: 2, median_seconds: 40, p90_seconds: 100 }, any_filer: { count: 1, median_seconds: 60, p90_seconds: 60 } });
+    expect(lat.by_coverage).toEqual({ curated: { count: 2, median_seconds: 70, p90_seconds: 100 }, any_filer: { count: 1, median_seconds: 60, p90_seconds: 60 } });
     expect(lat.recent.map((r: { accession: string }) => r.accession)).toEqual(['A1', 'A2', 'A3']);
     expect(lat.recent[1]).toEqual({ form: '4', manager: 'Warren Buffett', slug: 'warren-buffett', coverage: 'curated', accession: 'A2', accepted_at: expect.any(String), delivered_at: expect.any(String), seconds: 100, channel: 'email' });
     expect(lat.alerts.map((a: { accession: string }) => a.accession)).toEqual(['A1', 'A2', 'A3']);

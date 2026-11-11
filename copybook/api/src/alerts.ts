@@ -393,8 +393,29 @@ export async function deliver(env: Env, filings: Alert13F[], allEvents: AlertEve
   day.late = [...(day.late ?? []), ...late];
   // Kept a month: a new private feed is seeded from the last 30 days.
   await env.DB.put(key, JSON.stringify(day), { expirationTtl: 31 * 86400 });
+  await rememberFollowMoves(env, filings);
   if (!filings.length && !events.length) return { emails: 0, digest: 0, mail: 'none', late: late.length };
   return fanOut(env, filings, events, now, late);
+}
+
+/** Rows per investor in the Friday email's "Your follows". */
+export const FOLLOW_ROWS = 10;
+/**
+ * The Friday email's "Your follows": each investor's latest 13F with its moves, the FOLLOW_ROWS largest by value
+ * (KV wk13f:{slug}, 45 days). Small, so the weekly run reads one key per followed investor, not the day stores.
+ */
+async function rememberFollowMoves(env: Env, filings: Alert13F[]): Promise<void> {
+  for (const a of filings) {
+    if (!a.moves || a.reveal) continue;
+    const m = a.moves;
+    const rows = (a.changed?.length ? a.changed : [...m.new.map((r) => ({ ...r, change: 'new' })), ...m.added.map((r) => ({ ...r, change: 'added' })), ...m.trimmed.map((r) => ({ ...r, change: 'trimmed' })), ...m.exited.map((r) => ({ ...r, change: 'exited' }))])
+      .slice()
+      .sort((x, y) => Math.abs(y.value_delta) - Math.abs(x.value_delta))
+      .slice(0, FOLLOW_ROWS);
+    const of = (c: string) => rows.filter((r) => r.change === c);
+    const keep: Alert13F = { slug: a.slug, slugs: a.slugs, manager: a.manager, name: a.name, quarter: a.quarter, report_date: a.report_date, filing_date: a.filing_date, accession: a.accession, sec_url: a.sec_url, accepted: a.accepted, card: a.card, tickers: [], moves: { bought_usd: m.bought_usd, sold_usd: m.sold_usd, new: of('new'), added: of('added'), trimmed: of('trimmed'), exited: of('exited') } };
+    for (const s of new Set([a.slug, ...(a.slugs ?? [])])) await env.DB.put(`wk13f:${s}`, JSON.stringify(keep), { expirationTtl: 45 * 86400 });
+  }
 }
 
 /** Each member's share of these alerts: email (unless they take the digest), chat, webhook and feed. */
@@ -1116,7 +1137,9 @@ async function sendFollowups(env: Env, ready: Alert13F[], now: number): Promise<
   }
   if (!mine.length) return replays.length ? { replays } : {};
   const sent = await deliver(env, mine, [], now);
-  await logLatency(env, mine.map((f) => ({ ...f, kind: '13f', followup: true })), Date.now());
+  const at = Date.now();
+  await logLatency(env, mine.map((f) => ({ ...f, kind: '13f', followup: true })), at);
+  await env.DB.put('host:moves-sent-last', JSON.stringify({ at: new Date(at).toISOString().replace(/\.\d{3}Z$/, 'Z'), accession: mine[0].accession }));
   return { followups: { filings: mine.map((f) => f.slug), ...sent }, ...(replays.length ? { replays } : {}) };
 }
 

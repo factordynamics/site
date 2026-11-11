@@ -61,6 +61,8 @@ export interface Env {
   GITHUB_DISPATCH_TOKEN?: string;
   /** Set (as a secret) only on a retired copy of the API: every request is redirected to this base. */
   MOVED_TO?: string;
+  /** The mailing address marketing email must carry (the Friday email, Email 2). Empty: no Copy ask, and Email 2 isn't sent. */
+  POSTAL_ADDRESS?: string;
   /** The commit this copy runs (gene's deployer sets it from state.deployed-sha): /health's api_build, so /status/ tells a deploy from a crash. */
   BUILD_SHA?: string;
   /** "on": Cloudflare (poller) and gene (members) sync KV through R2 and share the poll (failover.ts). */

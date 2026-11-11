@@ -121,12 +121,16 @@ export async function buildStatus(env: Env, now: number, s: ProbeState) {
   const week = now - 7 * 86400_000;
   const recent = s.restarts.filter((r) => Date.parse(r.at) >= week);
   const fresh = JSON.parse((await env.DB.get('status:fresh')) ?? 'null') as { data_built_at: string | null; build_id: string | null; last_13f: { slug: string; manager: string; accession: string; accepted_at: string } | null } | null;
-  // Written by Cloudflare's cron, which runs this only while it is the poller.
-  const poller = { host: 'cloudflare', last_run_at: iso(Math.floor(now / 60_000) * 60_000) };
+  // Written by Cloudflare's cron at the end of its run, which runs this only while it is the poller.
+  const poller = { host: 'cloudflare', last_run_at: iso(Date.now()) };
+  const health = await alertHealth(env, now);
+  const fallback = JSON.parse((await env.DB.get('host:moves-sent-last')) ?? 'null') as { at: string; accession: string } | null;
   return {
     ok: true,
     generated_at: iso(Math.floor(now / 60_000) * 60_000),
-    alerts_13f: await alertHealth(env, now),
+    alerts_13f: health,
+    // gene's fallback for 13Fs sent without their moves (tables too big for the Worker, or no prior book on Cloudflare).
+    moves_queue: { pending: health.pending_moves, oldest_wait_seconds: health.oldest_pending_seconds, last_fallback_send_at: fallback?.at ?? null },
     probe: {
       target: 'members API /health, from Cloudflare cron',
       interval_seconds: 60,

@@ -225,8 +225,14 @@ function nearest(xs: number[], p: number): number | null {
   const sorted = [...xs].sort((a, b) => a - b);
   return sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null;
 }
+/** The median: the middle value, or the mean of the middle two for an even count (rounded to the second). */
+export function median(xs: number[]): number | null {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return !s.length ? null : s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+}
 function spread(xs: number[]) {
-  return { count: xs.length, median_seconds: nearest(xs, 0.5), p90_seconds: nearest(xs, 0.9) };
+  return { count: xs.length, median_seconds: median(xs), p90_seconds: nearest(xs, 0.9) };
 }
 
 /**
@@ -307,7 +313,8 @@ export async function publishLatency(env: Env, now: number): Promise<string> {
   // The poller line for /speed/ ("Poller last ran 40 s ago · Cloudflare"): the host running this minute wrote it. With
   // two hosts it changes every minute, so latency.json is rewritten every quiet minute.
   const fo = await import('./failover');
-  const poller = fo.syncOn(env) ? { poller_host: fo.isCloudflare(env) ? 'cloudflare' : 'gene', poller_last_run: new Date(Math.floor(now / 60_000) * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z') } : {};
+  // When this run finished (it publishes last), not the minute it started: "last ran 40 s ago" is then true.
+  const poller = fo.syncOn(env) ? { poller_host: fo.isCloudflare(env) ? 'cloudflare' : 'gene', poller_last_run: new Date().toISOString().replace(/\.\d{3}Z$/, 'Z') } : {};
   const body = JSON.stringify({ ...(await buildLatency(env, now)), ...poller, generated_at: new Date(Math.floor(now / 60_000) * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z') });
   const same = body.replace(/"generated_at":"[^"]*"/, '');
   if (same === publishedLatency && new Date(now).getUTCMinutes() % 30 !== 0) return 'unchanged';
@@ -359,7 +366,7 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
     const live = all.filter((l) => !l.replay);
     const sorted = live.map((l) => l.seconds).sort((a, b) => a - b);
     const q = (p: number) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] : null);
-    const summary = { count: sorted.length, p50: q(0.5), p90: q(0.9), max: sorted.length ? sorted[sorted.length - 1] : null };
+    const summary = { count: sorted.length, p50: median(sorted), p90: q(0.9), max: sorted.length ? sorted[sorted.length - 1] : null };
     const leads = Number((await env.DB.get('leads:count')) ?? 0);
     // Member and revenue counts only with the private token; the public view is operational.
     const priv = await isOperator(env, req);

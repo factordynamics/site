@@ -37,6 +37,9 @@ export const MAIL_DAILY_CAP = 100;
 export const MAIL_MONTHLY_CAP = 3000;
 export const MAIL_RESERVE = 15;
 const LOW_HOLD = 50;
+/** Weekends: what each provider keeps for account mail while the Friday email uses the rest. */
+export const WEEKEND_RESERVE = 10;
+export const isWeekend = (t: number) => [0, 6].includes(new Date(t).getUTCDay());
 const DELAY_MARK = '(delayed: email limit) ';
 /** Usage from Resend's x-resend-daily-quota and x-resend-monthly-quota headers (emails sent, account-wide). */
 export const mailQuota: { day: string; used: number; month: string; monthly: number; delayed: number; mailgun: number; refused?: string } = { day: '', used: 0, month: '', monthly: 0, delayed: 0, mailgun: 0 };
@@ -65,10 +68,10 @@ async function sendMailgun(env: Env, m: Mail): Promise<number> {
 }
 
 /** Overflow to Mailgun, one by one while it has room; returns what it couldn't send. */
-async function viaMailgun(env: Env, mails: Mail[], statuses: string[]): Promise<Mail[]> {
+async function viaMailgun(env: Env, mails: Mail[], statuses: string[], reserve = 0): Promise<Mail[]> {
   const left: Mail[] = [];
   for (const m of mails) {
-    if (!mailgunRoom(env)) {
+    if (mailgunRoom(env) <= reserve) {
       left.push(m);
       continue;
     }
@@ -136,12 +139,16 @@ export async function sendMail(env: Env, mails: Mail[], opts: { bulk?: boolean; 
     return done();
   }
   if (tier !== 'account') {
-    const room = Math.max(0, Math.min(MAIL_DAILY_CAP - MAIL_RESERVE - (tier === 'low' ? LOW_HOLD : 0) - mailQuota.used, MAIL_MONTHLY_CAP - MAIL_RESERVE - mailQuota.monthly));
+    // Saturday and Sunday (UTC) EDGAR accepts nothing: low-priority mail (the Friday email) may use both providers'
+    // day but WEEKEND_RESERVE each, kept for account mail. Weekdays keep LOW_HOLD of Resend for alerts, no Mailgun.
+    const wk = tier === 'low' && isWeekend(Date.now());
+    const hold = wk ? WEEKEND_RESERVE : MAIL_RESERVE + (tier === 'low' ? LOW_HOLD : 0);
+    const room = Math.max(0, Math.min(MAIL_DAILY_CAP - hold - mailQuota.used, MAIL_MONTHLY_CAP - MAIL_RESERVE - mailQuota.monthly));
     if (mails.length > room) {
       const order = [...mails.filter((m) => !m.test), ...mails.filter((m) => m.test)];
-      // Past Resend's share: Mailgun (when configured) for alerts, then the reset queue. Low-priority mail never uses Mailgun.
+      // Past Resend's share: Mailgun (when configured) for alerts and weekend low-priority mail, then the reset queue.
       const over = order.slice(room);
-      await delay(env, tier === 'alert' ? await viaMailgun(env, over, statuses) : over);
+      await delay(env, tier === 'alert' || wk ? await viaMailgun(env, over, statuses, wk ? WEEKEND_RESERVE : 0) : over);
       mails = order.slice(0, room);
       if (!mails.length) return done();
     }
@@ -415,6 +422,9 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
   lines.push(`  Copybook: ${filingUrl(env, a)}`, `  SEC: ${a.sec_url}`);
   return lines.join('\n');
 }
+
+/** One 13F in the Copy alert's format, for the Friday email's "Your follows". */
+export const followFiling = (env: Env, a: Alert13F, f: Follows) => ({ text: filingBlock(env, a, f), html: filingHtml(env, a, f) });
 
 const FORM_LABEL: Record<string, string> = { form4: 'Form 4', '13d': 'Schedule 13D', '13g': 'Schedule 13G' };
 
