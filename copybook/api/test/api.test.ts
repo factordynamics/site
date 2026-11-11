@@ -3979,6 +3979,33 @@ describe('copybook api', () => {
     vi.useRealTimers();
     vi.stubGlobal('fetch', orig);
     Object.assign(env, { PUBLIC_URL: undefined });
+    // TEVA (ADS 881624209 -> ordinary M8769Q102, SEC-confirmed): the new code's index has only Q3 filers; the old code's
+    // is merged at read time (the analyst: 311 Q3 holders, the 291 still on Q2 gone, FMR read new, Barclays' exit hidden).
+    const tcols = ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change'];
+    await hist.put('hl/M8769Q.json', JSON.stringify({ issuer: 'M8769Q', tickers: ['TEVA'], counts: { holders: 2, new: 2, by_period: { '2026Q3': 2 } }, columns: tcols, rows: [
+      ['0000315066', 'FMR LLC', 'fmr-llc', 'long_only', true, '2026Q3', 25784696, null, 900000000, null, 'new'],
+      ['0001364742', 'Norges Bank', null, 'sovereign', false, '2026Q3', 5000000, null, 170000000, null, 'new'],
+    ] }));
+    await hist.put('hl/881624.json', JSON.stringify({ issuer: '881624', tickers: ['TEVA'], columns: tcols, rows: [
+      // FMR's ADS line: exited in Q3 (the reissue). Norges' Q2 holding (its latest on this code). BlackRock still on Q2.
+      ['0000315066', 'FMR LLC', 'fmr-llc', 'long_only', true, '2026Q3', 0, 30258016, 0, 1025141579, 'exited'],
+      ['0001364742', 'Norges Bank', null, 'sovereign', false, '2026Q2', 4000000, 3900000, 120000000, 110000000, 'added'],
+      ['0001364743', 'BlackRock, Inc.', null, 'index', false, '2026Q2', 70000000, 69000000, 2160000000, 2000000000, 'added'],
+      // Barclays sold out for real: no ordinary line.
+      ['0000312069', 'Barclays PLC', null, 'bank', false, '2026Q3', 0, 800000, 0, 25000000, 'exited'],
+    ] }));
+    const codes0 = hist.m.get('pre/stock-codes.json');
+    hist.m.set('pre/stock-codes.json', new TextEncoder().encode('{"TEVA":"881624"}'));
+    const teva = (await v1('/v1/stocks/TEVA/holders')).body;
+    if (!teva.data) throw new Error(JSON.stringify(teva).slice(0, 300));
+    const by = Object.fromEntries([...teva.data.holders, ...teva.data.exited].map((r: { filer: { name: string }; change: string; share_change: number | null; period: string }) => [r.filer.name, [r.change, r.share_change, r.period]]));
+    expect(by).toEqual({ 'FMR LLC': ['trimmed', -4473320, '2026Q3'], 'Norges Bank': ['added', 1000000, '2026Q3'], 'BlackRock, Inc.': ['added', 1000000, '2026Q2'], 'Barclays PLC': ['exited', -800000, '2026Q3'] });
+    expect([teva.data.issuer, teva.filers, teva.exited_count, teva.data.counts.merged_from, teva.data.counts.new ?? 0]).toEqual(['M8769Q', 3, 1, '881624', 0]);
+    // The same view through /v1/changes?ticker=: no new TEVA for a filer that held the ADS.
+    const tch = (await v1('/v1/changes/2026Q3?ticker=TEVA')).body;
+    if (tch.data) expect((tch.data as { filer?: { name: string }; change: string }[]).filter((r) => r.change === 'new').map((r) => r.filer?.name)).not.toContain('FMR LLC');
+    if (codes0) hist.m.set('pre/stock-codes.json', codes0);
+    else hist.m.delete('pre/stock-codes.json');
   });
 
   it('Copy paid data: the full Flow from R2, a per-stock holder CSV, one CSV across followed funds', async () => {

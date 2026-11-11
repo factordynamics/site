@@ -657,6 +657,72 @@ export async function fillAccepted(env: Env, max = 300, budgetMs = 40_000): Prom
   }
 }
 
+/** One issuer code's holder index: R2 hl/ (all rows), else the older s/, else the public file's top 25 (truncated). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readHolderIndex(env: Env, code: string): Promise<{ d: any; obj: unknown; source: 'hl' | 's' | 'public' } | null> {
+  const hl = await env.HIST.get(`hl/${code}.json`);
+  const obj = hl ?? (await env.HIST.get(`s/${code}.json`));
+  if (obj) return { d: await new Response(obj.body).json(), obj, source: hl ? 'hl' : 's' };
+  const res = await fetch(`${env.DATA_URL}hl/${code}.json`, { cf: { cacheTtl: 900 } } as RequestInit).catch(() => null);
+  return res?.ok ? { d: await res.json(), obj: null, source: 'public' } : null;
+}
+
+/**
+ * The new issuer code's holder rows with the old code's (raw rows, by filer CIK and put/call): a filer whose new line has
+ * no prior takes it from the old line (the old CUSIP's exit in the same quarter: its prev_*; an earlier quarter's
+ * holding: its shares and value), and `change` is recomputed (FMR's TEVA: 30,258,016 ADS -> 25,784,696 ordinary is
+ * trimmed, not new). The old line is then dropped. Filers only on the old code stay as they are: holders still on the
+ * prior quarter, and real exits.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function mergeReissue(cur: any[], old: any[], period: string | null): any[] {
+  const key = (r: { cik: unknown; put_call?: string | null; kind?: string | null }) => `${Number(r.cik)}|${String(r.put_call ?? (r.kind && r.kind !== 'equity' ? r.kind : '')).toUpperCase()}`;
+  const byKey = new Map(cur.map((r) => [key(r), r]));
+  const out = cur.map((r) => ({ ...r }));
+  const outBy = new Map(out.map((r) => [key(r), r]));
+  const kept: unknown[] = [];
+  for (const o of old) {
+    const n = byKey.get(key(o)) ? outBy.get(key(o)) : null;
+    const np = n?.period ?? period, op = o.period ?? null;
+    if (!n) {
+      kept.push(o);
+      continue;
+    }
+    const noPrior = n.prev_shares == null || n.change === 'new' || (Number(n.prev_shares) === 0 && n.change !== 'exited');
+    const prior = op && np && op === np && o.change === 'exited' ? { shares: o.prev_shares, value: o.prev_value } : op && np && op < np && Number(o.shares) > 0 ? { shares: o.shares, value: o.value } : null;
+    if (noPrior && prior && prior.shares != null) {
+      n.prev_shares = Number(prior.shares);
+      n.prev_value = prior.value == null ? null : Number(prior.value);
+      const s = Number(n.shares) || 0;
+      n.change = n.prev_shares === 0 ? 'new' : s === 0 ? 'exited' : s > n.prev_shares ? 'added' : s < n.prev_shares ? 'trimmed' : 'unchanged';
+      continue;
+    }
+    // The old CUSIP's exit in the quarter the filer holds the new one: the reissue itself, not a sale.
+    if (o.change === 'exited' && op === np) continue;
+    kept.push(o);
+  }
+  return [...out, ...kept];
+}
+
+/** Counts over raw holder rows, as the holder index states them. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function countsOf(rows: any[]) {
+  const c: Record<string, number> = { holders: 0, new: 0, added: 0, trimmed: 0, exited: 0, unchanged: 0, no_prior: 0 };
+  const by: Record<string, number> = {};
+  let net = 0;
+  for (const r of rows) {
+    if (r.change === 'exited') c.exited++;
+    else {
+      c.holders++;
+      if (r.period) by[r.period] = (by[r.period] ?? 0) + 1;
+      if (r.change && r.change in c) c[r.change]++;
+      else if (r.prev_shares == null) c.no_prior++;
+    }
+    if (r.change && r.change !== 'unchanged') net += (Number(r.value) || 0) - (Number(r.prev_value) || 0);
+  }
+  return { ...c, net: Math.round(net), by_period: by };
+}
+
 /**
  * Every 13F filer holding one issuer in its latest full book: R2 hl/{issuer6}.json (all rows, uploaded by
  * the data run), else the older single-period s/{issuer6}.json. Largest first. Curated funds' rows carry
@@ -665,23 +731,29 @@ export async function fillAccepted(env: Env, max = 300, budgetMs = 40_000): Prom
 export async function holdersOf(env: Env, code: string, timing: string[] = []): Promise<{ issuer: string; tickers: string[]; display_name: string | null; period: string | null; prev_period: string | null; counts: Record<string, unknown> | null; rows: HolderRow[]; truncated: boolean; stamp?: Stamp; source: 'hl' | 's' | 'public' } | null> {
   let t = Date.now();
   const mark = (name: string) => (timing.push(`${name};dur=${Date.now() - t}`), (t = Date.now()));
-  const hl = await env.HIST.get(`hl/${code}.json`);
-  const obj = hl ?? (await env.HIST.get(`s/${code}.json`));
+  const read = await readHolderIndex(env, code);
+  if (!read) return null;
+  const { obj } = read;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let d: any;
-  if (obj) d = await new Response(obj.body).json();
-  else {
-    // Until the full list is in R2: the public file's top 25 holders, marked truncated.
-    const res = await fetch(`${env.DATA_URL}hl/${code}.json`, { cf: { cacheTtl: 900 } } as RequestInit);
-    if (!res.ok) return null;
-    d = await res.json();
+  const d: any = read.d;
+  let raw = rowsOf({ columns: d.columns, rows: d.rows ?? d.holders ?? [] });
+  // A reissue (SEC-confirmed) whose new issuer code ingest hasn't merged yet (its index covers one period only: TEVA's
+  // M8769Q, Nov 11): merged here with the old code's index at read time. Once ingest merges the pair, this is a no-op.
+  const { REISSUED_ISSUER } = await import('./edgar');
+  const old = Object.entries(REISSUED_ISSUER).find(([, to]) => to === code)?.[0];
+  if (old && Object.keys(d.counts?.by_period ?? {}).length <= 1 && new Set(raw.map((r) => r.period ?? d.period)).size <= 1) {
+    const prev = await readHolderIndex(env, old);
+    if (prev) {
+      raw = mergeReissue(raw, rowsOf({ columns: prev.d.columns, rows: prev.d.rows ?? prev.d.holders ?? [] }), d.period ?? null);
+      d.counts = { ...(d.counts ?? {}), ...countsOf(raw), merged_from: old };
+    }
   }
   mark('read');
   const cur = new Map((await filers(env)).map((f) => [f.cik, f]));
   mark('filers');
   const types = await filerTypes(env);
   mark('types');
-  const rows = rowsOf({ columns: d.columns, rows: d.rows ?? d.holders ?? [] }).map((h): HolderRow => {
+  const rows = raw.map((h): HolderRow => {
     const cik = pad(String(h.cik));
     const c = cur.get(cik);
     const period = h.period ?? d.period ?? null;
@@ -716,7 +788,7 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
   if (obj && rows.some((r) => r.accession && !r.accepted_at && !(dashed(r.accession) in known))) await queueAccepted(env, code).catch(() => undefined);
   mark('rows');
   rows.sort((a, b) => (b.value_usd ?? 0) - (a.value_usd ?? 0));
-  return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, rows, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj), source: obj ? (hl ? 'hl' : 's') : 'public' };
+  return { issuer: d.issuer ?? code, tickers: d.tickers ?? (d.ticker ? [d.ticker] : []), display_name: d.display_name ?? null, period: d.period ?? null, prev_period: d.prev_period ?? null, counts: d.counts ?? null, rows, truncated: !obj && (d.rows_total ?? rows.length) > rows.length, stamp: stampOf(obj as Parameters<typeof stampOf>[0]), source: read.source };
 }
 
 /**
