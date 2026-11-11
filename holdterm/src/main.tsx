@@ -259,8 +259,30 @@ function Search({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   )
 }
 
+/** After an in-app navigation, move focus to the new page and say its name, as a full page load would: without
+ * this, keyboard focus stays on the link that was used and a screen reader hears nothing. The title is read once
+ * the page sets it (pages that load data set it when the data arrives) and it has settled, or after 3 seconds. */
+function useRouteAnnouncer(path: string) {
+  const [said, setSaid] = useState('')
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) return void (first.current = false)
+    const was = document.title
+    document.querySelector<HTMLElement>('main')?.focus({ preventScroll: true })
+    const say = () => setSaid(document.title.replace(/ · Holdterm$/, ''))
+    // A page may set its title twice (a first guess, then the full name once data arrives): wait for it to settle.
+    let t = setTimeout(() => (mo.disconnect(), say()), document.title !== was ? 400 : 3000)
+    const mo = new MutationObserver(() => (clearTimeout(t), (t = setTimeout(() => (mo.disconnect(), say()), 400))))
+    const el = document.querySelector('title')
+    if (el) mo.observe(el, { childList: true, characterData: true, subtree: true })
+    return () => (mo.disconnect(), clearTimeout(t))
+  }, [path])
+  return said
+}
+
 function App() {
   const path = usePath()
+  const said = useRouteAnnouncer(path)
   const [search, setSearch] = useState(false)
   const [theme, toggleTheme] = useTheme()
   useEffect(() => {
@@ -342,6 +364,9 @@ function App() {
           </A>
         ))}
       </nav>
+      <div className="sr" role="status" aria-live="polite" aria-atomic="true">
+        {said}
+      </div>
       <main id="main" key={path} tabIndex={-1}>
         {route(path)}
       </main>
