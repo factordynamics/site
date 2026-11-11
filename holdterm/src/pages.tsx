@@ -296,17 +296,48 @@ const eventCols = (firms: Map<string, string>, withWho = true): Col<Event>[] => 
 ]
 
 // ---------- filing season ----------
-/** The 13F season in progress: the quarter that most recently ended, due 45 days later (next business day). */
+const iso = (d: Date) => d.toISOString().slice(0, 10)
+/** US federal holidays as observed (Saturday ones on the Friday, Sunday ones on the Monday): EDGAR's closed days. */
+function holidays(y: number) {
+  const nth = (m: number, wd: number, n: number) => {
+    const d = new Date(Date.UTC(y, m, 1))
+    d.setUTCDate(1 + ((wd - d.getUTCDay() + 7) % 7) + 7 * (n - 1))
+    return d
+  }
+  const last = (m: number, wd: number) => {
+    const d = new Date(Date.UTC(y, m + 1, 0))
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() - wd + 7) % 7))
+    return d
+  }
+  const fixed = [[0, 1], [5, 19], [6, 4], [10, 11], [11, 25]].map(([m, d]) => {
+    const x = new Date(Date.UTC(y, m, d))
+    x.setUTCDate(d + (x.getUTCDay() === 6 ? -1 : x.getUTCDay() === 0 ? 1 : 0))
+    return x
+  })
+  return new Set([...fixed, nth(0, 1, 3), nth(1, 1, 3), last(4, 1), nth(8, 1, 1), nth(9, 1, 2), nth(10, 4, 4)].map(iso))
+}
+/** A quarter's 13F deadline: 45 days after the quarter ends, moved to the next business day when that is a weekend
+ * or a federal holiday (Q4 2026: Feb 14, 2027 is a Sunday and Feb 15 is Presidents' Day, so Feb 16). */
+export function dueFor(q: string) {
+  const y = Number(q.slice(0, 4))
+  const end = new Date(Date.UTC(y, Number(q.slice(5)) * 3, 0))
+  const due = new Date(end.getTime() + 45 * 86_400_000)
+  while (due.getUTCDay() === 0 || due.getUTCDay() === 6 || holidays(due.getUTCFullYear()).has(iso(due))) due.setUTCDate(due.getUTCDate() + 1)
+  return { end: iso(end), due: iso(due) }
+}
+/** The 13F season in progress: the quarter that most recently ended, and its deadline. */
 function season(now = new Date()) {
   const y = now.getUTCFullYear()
   const m = now.getUTCMonth()
   const qEndMonth = Math.floor(m / 3) * 3 - 1 // last month of the previous quarter
   const end = new Date(Date.UTC(y, qEndMonth + 1, 0))
   const q = `${end.getUTCFullYear()}Q${Math.floor(end.getUTCMonth() / 3) + 1}`
-  const due = new Date(end.getTime() + 45 * 86_400_000)
-  while (due.getUTCDay() === 0 || due.getUTCDay() === 6) due.setUTCDate(due.getUTCDate() + 1)
-  return { q, end: end.toISOString().slice(0, 10), due: due.toISOString().slice(0, 10) }
+  return { q, ...dueFor(q) }
 }
+/** Days from today in New York, where the SEC's filing day runs, to a date: 0 on the day itself, negative after it. */
+const daysUntil = (d: string) => Math.round((Date.parse(d) - Date.parse(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date()))) / 86_400_000)
+/** The quarter after another: 2026Q4 -> 2027Q1. */
+const nextQ = (q: string) => (q.endsWith('4') ? `${Number(q.slice(0, 4)) + 1}Q1` : `${q.slice(0, 5)}${Number(q.slice(5)) + 1}`)
 
 // ---------- home ----------
 /** Each fund's latest book for the funds that filed in a given quarter. */
@@ -505,7 +536,7 @@ function HomeBody() {
   const mostBought = most('buy')
   const mostSold = most('sell')
   const due = ms.filter((m) => m.quarter !== s.q)
-  const daysLeft = Math.ceil((Date.parse(s.due) - Date.now()) / 86_400_000)
+  const daysLeft = daysUntil(s.due)
   const events = (ev.data?.events ?? []).filter((e) => inRoster(e.slug) && !ownVehicle(e))
   // Highest conviction from each fund's largest positions (index), share classes combined per fund.
   const conv = new Map<string, { key: string; ticker: string | null; label?: string; former?: string; name: string; slug: string; firm: string; weight: number }>()
@@ -886,9 +917,10 @@ export function Fund({ slug }: { slug: string }) {
   const hist = [...(h.data?.history ?? [])].filter((r) => r.total_value > 0).reverse()
   const events = ev.data ?? []
   const stale = ix.data ? isStale(book, ix.data.managers.filter((m) => m.ok)) : false
-  const sea = season()
-  const left = Math.ceil((Date.parse(sea.due) - Date.now()) / 86_400_000)
-  const due = inRoster(slug) && book.quarter < sea.q && left >= 0 ? { ...sea, left } : null
+  // The first 13F after this one: when it is due, or that it was due and hasn't arrived. A fund whose newer 13F was
+  // filed but can't be read, or that has stopped filing, already says so in its badge.
+  const want = nextQ(book.quarter)
+  const due = inRoster(slug) && want <= season().q && !['empty_latest', 'unreadable_latest', 'inactive'].includes(book.status) ? { q: want, due: dueFor(want).due, left: daysUntil(dueFor(want).due) } : null
   const valuePanel = (
     <Panel title="Portfolio value by quarter" right={<span className="dim hide-sm">Value of US-listed stocks in each 13F</span>}>
       {book.options_value > 0 && hist.some((r) => r.equity_value == null && r.long_value == null) && <div className="dim small">Older quarters as filed, including options.</div>}
@@ -916,8 +948,7 @@ export function Fund({ slug }: { slug: string }) {
             {/* During filing season, a fund still on last quarter's 13F says when the new one is due, so its page doesn't read as out of date. */}
             {due && (
               <span className="due-next">
-                {quarterLabel(due.q)} 13F due {day(due.due)}
-                {due.left > 1 ? `, in ${due.left} days` : due.left === 1 ? ', tomorrow' : ', today'}
+                {due.left < 0 ? `${quarterLabel(due.q)} 13F was due ${day(due.due)}, not filed yet` : `${quarterLabel(due.q)} 13F due ${day(due.due)}${due.left > 1 ? `, in ${due.left} days` : due.left === 1 ? ', tomorrow' : ', today'}`}
               </span>
             )}
           </div>
