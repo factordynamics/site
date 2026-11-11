@@ -117,6 +117,12 @@ jobs:
       - run: node scripts/freshgate.mjs dist
         env:
           FORCE_DATA: ${{ inputs.force_data && '1' || '' }}
+      # Browser smoke test on every deploy, P0 fixes and freeze builds included: current stable Chrome opens
+      # the built site, clicks home -> Season, Security, Pricing, a fund page, then Back, and a blank page or
+      # an uncaught page error fails the deploy (Nov 11: a link click blanked the site on Chrome 157).
+      - name: Install current stable Chrome
+        run: npx playwright install --with-deps --force chrome
+      - run: node scripts/smoke.mjs dist
       # Skip the deploy (without failing) until Pages is enabled in the repo settings.
       - id: pages
         env:
