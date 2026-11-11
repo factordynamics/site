@@ -1568,7 +1568,17 @@ a.hb-row:hover {
   }
   /* Long firm and company names truncate on phones instead of widening the table. */
   .trunc.wide-name {
-    max-width: 172px;
+    max-width: 230px;
+  }
+  .row-sub.show-sm {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 230px;
   }
   .noticker {
     max-width: 84px;
@@ -1993,6 +2003,32 @@ p a,
 }
 .tabs {
   scroll-margin-top: 76px;
+}
+/* Phones: one row of tabs that scrolls sideways instead of wrapping onto a second row. */
+@media (max-width: 720px) {
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 0;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .tabs button {
+    padding: 9px 11px;
+    flex: none;
+  }
+  .tabs.fade-right {
+    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  }
+  .tabs.fade-left {
+    mask-image: linear-gradient(to left, #000 calc(100% - 36px), transparent);
+  }
+  .tabs.fade-both {
+    mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  }
 }
 /* ---------- stock page header ---------- */
 .chips {

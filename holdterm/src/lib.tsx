@@ -241,8 +241,27 @@ export function Tabs<T extends string>({ value, options, onChange, label }: { va
     onChange(options[j][0])
     ;(e.currentTarget.children[j] as HTMLElement | undefined)?.focus()
   }
+  // Phones keep the tabs on one row that scrolls sideways: the active tab is scrolled into view, and a fade
+  // on either edge shows there are more tabs that way.
+  const row = useRef<HTMLDivElement>(null)
+  const [edge, setEdge] = useState('')
+  const measure = () => {
+    const el = row.current
+    if (!el) return
+    const l = el.scrollLeft > 2
+    const r = el.scrollLeft + el.clientWidth < el.scrollWidth - 2
+    setEdge(l && r ? 'fade-both' : l ? 'fade-left' : r ? 'fade-right' : '')
+  }
+  useEffect(() => {
+    const el = row.current
+    const on = el?.querySelector<HTMLElement>('[aria-selected="true"]')
+    if (el && on && el.scrollWidth > el.clientWidth) el.scrollLeft = Math.max(0, on.offsetLeft - el.offsetLeft - (el.clientWidth - on.offsetWidth) / 2)
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [value, options.length])
   return (
-    <div className="tabs" role="tablist" aria-label={label} onKeyDown={onKey}>
+    <div ref={row} className={`tabs ${edge}`} role="tablist" aria-label={label} onKeyDown={onKey} onScroll={measure}>
       {options.map(([k, text]) => {
         // "holdings 14" shows its count as a badge.
         const m = text.match(/^(.*\S)\s+(\d[\d,]*)$/)
