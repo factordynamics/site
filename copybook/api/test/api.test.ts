@@ -3280,6 +3280,18 @@ describe('copybook api', () => {
     vi.setSystemTime(Date.now() + 61_000);
     const direct = await viaF('/v1/bulk/2026Q2.csv.gz');
     expect([direct.status, (await direct.arrayBuffer()).byteLength]).toEqual([200, 1_200_000]);
+    // With the service's R2 signing configured, a bulk file answers 302 on every host to a 5-minute presigned URL on
+    // the account's R2 endpoint (R2 itself answers 403 once it expires); a stub stays 501.
+    Object.assign(envF, { CF_API_TOKEN: 'cf-token', CF_ACCOUNT_ID: 'acct' });
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => (String(u).endsWith('/user/tokens/verify') ? Response.json({ result: { id: 'tokid' } }) : orig(u, init)));
+    const plain = (path: string) => handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), envF);
+    for (const r of [await plain('/v1/bulk/2026Q2.csv.gz'), await viaF('/v1/bulk/2026Q2.csv.gz')]) {
+      const u = new URL(r.headers.get('location')!);
+      expect([r.status, `${u.origin}${u.pathname}`, u.searchParams.get('X-Amz-Expires'), u.searchParams.get('X-Amz-SignedHeaders'), !!u.searchParams.get('X-Amz-Signature'), u.searchParams.get('response-content-disposition')])
+        .toEqual([302, 'https://acct.r2.cloudflarestorage.com/copybook-history/bulk/2026Q2.csv.gz', '300', 'host', true, 'attachment; filename="copybook-13f-2026Q2.csv.gz"']);
+    }
+    expect((await plain('/v1/bulk/2025Q1.csv.gz')).status).toBe(501);
+    Object.assign(envF, { CF_API_TOKEN: undefined, CF_ACCOUNT_ID: undefined });
     vi.useRealTimers();
     vi.stubGlobal('fetch', orig);
     Object.assign(env, { PUBLIC_URL: undefined });
@@ -3744,6 +3756,42 @@ describe('copybook api', () => {
     expect((await v1(`/v1/filers/warren-buffett/holdings/2026Q2?version=${REST}`)).body.data).toMatchObject({ version: REST, total_value_usd: 3000 });
     expect((await v1('/v1/filers/warren-buffett/holdings/2026Q2?version=0000000000-26-000000')).status).toBe(404);
     expect((await v1('/v1/filers/warren-buffett/holdings/2026Q2?version=first')).status).toBe(400);
+  });
+
+  it('/v1 mislabeled_amendment: true on a NEW HOLDINGS refile the lineage serves in place of the original, false on a merged one', async () => {
+    index = { generated_at: '2026-11-08T21:29:01Z', managers: [{ ok: true, slug: 'matthew-mclennan', cik: '0001325447', manager: 'Matthew McLennan', name: 'First Eagle Investment Management LLC', featured: true, status: 'current', form: '13F-HR/A', accession: 'R', quarter: '2026Q2', report_date: '2026-06-30', filing_date: '2026-08-24', total_value: 3000, position_count: 1, history_quarters: ['2026Q1', '2026Q2'] }] };
+    await cron(17);
+    // McLennan 2026Q2: -000033 (NEW HOLDINGS) re-filed the whole book and is served; ingest's trail calls it an addition.
+    // 2026Q1: a small NEW HOLDINGS amendment the data run merged into the original (the Invesco and Blackstone shape).
+    const ORIG = '0001325447-26-000020', REFILE = '0001325447-26-000033', Q1 = '0001325447-26-000010', Q1A = '0001325447-26-000015';
+    const book = (quarter: string, accession: string, amendments: string[], filings: unknown[]) => new TextEncoder().encode(JSON.stringify({
+      quarter, report_date: quarter === '2026Q2' ? '2026-06-30' : '2026-03-31', accession, form: accession === Q1 ? '13F-HR' : '13F-HR/A', amendments, total_value: 3000, position_count: 1, filings,
+      holdings: [{ cusip: '037833100', ticker: 'AAPL', issuer: 'APPLE INC', title: 'COM', put_call: null, shares: 15, value: 3000, weight: 1, change: null }],
+    }));
+    hist.m.set('h/matthew-mclennan/2026Q2.json', book('2026Q2', REFILE, [], [{ accession: ORIG, form: '13F-HR', role: 'base' }, { accession: REFILE, form: '13F-HR/A', role: 'addition', amendment_type: 'NEW HOLDINGS' }]));
+    hist.m.set('h/matthew-mclennan/2026Q1.json', book('2026Q1', Q1, [Q1A], [{ accession: Q1, form: '13F-HR', role: 'base' }, { accession: Q1A, form: '13F-HR/A', role: 'addition', amendment_type: 'NEW HOLDINGS' }]));
+    secFiles['submissions/CIK0001325447.json'] = JSON.stringify({ filings: { recent: {
+      accessionNumber: [REFILE, ORIG, Q1A, Q1], form: ['13F-HR/A', '13F-HR', '13F-HR/A', '13F-HR'], reportDate: ['2026-06-30', '2026-06-30', '2026-03-31', '2026-03-31'],
+    } } });
+    const dir = (a: string) => `Archives/edgar/data/1325447/${a.replace(/-/g, '')}/`;
+    secFiles[`${dir(ORIG)}${ORIG}-index-headers.html`] = '<ACCEPTANCE-DATETIME>20260805152203\n<TYPE>13F-HR\n<FILING-DATE>20260805\n';
+    secFiles[`${dir(REFILE)}${REFILE}-index-headers.html`] = '<ACCEPTANCE-DATETIME>20260824160608\n<TYPE>13F-HR/A\n<FILING-DATE>20260824\n';
+    secFiles[`${dir(REFILE)}primary_doc.xml`] = '<isAmendment>true</isAmendment><amendmentNo>1</amendmentNo><amendmentType>NEW HOLDINGS</amendmentType>';
+    secFiles[`${dir(Q1)}${Q1}-index-headers.html`] = '<ACCEPTANCE-DATETIME>20260512120000\n<TYPE>13F-HR\n<FILING-DATE>20260512\n';
+    secFiles[`${dir(Q1A)}${Q1A}-index-headers.html`] = '<ACCEPTANCE-DATETIME>20260520120000\n<TYPE>13F-HR/A\n<FILING-DATE>20260520\n';
+    secFiles[`${dir(Q1A)}primary_doc.xml`] = '<isAmendment>true</isAmendment><amendmentNo>1</amendmentNo><amendmentType>NEW HOLDINGS</amendmentType>';
+
+    stripeObjects['checkout/sessions/cs_test_mis'] = { id: 'cs_test_mis', status: 'complete', created: now(), subscription: 'sub_mis', customer_details: { email: 'mis@example.com' } };
+    stripeObjects['subscriptions/sub_mis'] = sub('sub_mis', 'cus_mis', 'active', 'month', 'pro_monthly');
+    const t = (await (await call('/session', { body: { checkout_session: 'cs_test_mis' } })).json()).token;
+    const key = (await (await call('/keys', { body: { name: 'k' }, token: t })).json()).key;
+    const filing = async (q: string) => (await (await handleRequest(new Request(`https://api.test/v1/filers/matthew-mclennan/holdings/${q}`, { headers: { authorization: `Bearer ${key}` } }), env)).json()).data.filing;
+    const flags = (f: { accession: string; mislabeled_amendment: boolean; versions: { accession: string; status: string; mislabeled_amendment: boolean }[]; amendments: { accession: string; mislabeled_amendment: boolean }[] }) => ({
+      filing: [f.accession, f.mislabeled_amendment], versions: f.versions.map((v) => [v.accession, v.status, v.mislabeled_amendment]), amendments: f.amendments.map((a) => [a.accession, a.mislabeled_amendment]),
+    });
+
+    expect(flags(await filing('2026Q2'))).toEqual({ filing: [REFILE, true], versions: [[ORIG, 'superseded', false], [REFILE, 'current', true]], amendments: [[REFILE, true]] });
+    expect(flags(await filing('2026Q1'))).toEqual({ filing: [Q1, false], versions: [[Q1, 'current', false], [Q1A, 'merged', false]], amendments: [[Q1A, false]] });
   });
 
   it('/v1 filers and holdings: by slug or CIK, every field the OpenAPI schema requires, as_of not served yet', async () => {

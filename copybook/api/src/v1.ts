@@ -276,12 +276,9 @@ export async function handleV1(req: Request, env: Env, url: URL, path: string): 
   const r: MeterResult | null = redirected ? null : await meter(env, auth.key.id).hit();
   const limits = r ? limitHeaders(r) : {};
   if (r && !r.allowed) return v1error('rate_limited', 429, undefined, limits);
-  // On the Funnel name, bulk files and any response over 1 MB answer 302 to the tunnel (served here if it's down).
+  // On the Funnel name a generated response over 1 MB answers 302 to the tunnel (served here if it's down).
+  // Bulk files redirect to presigned R2 on every host (their route).
   const funnel = !redirected && req.method === 'GET' && dl.viaFunnel(env, req, url);
-  if (funnel && /^\/v1\/bulk\/./.test(path)) {
-    const go = await dl.toTunnel(env, url, auth);
-    if (go) return go;
-  }
   for (const [method, re, handler] of ROUTES) {
     const m = path.match(re);
     if (!m) continue;

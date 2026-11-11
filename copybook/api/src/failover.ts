@@ -270,6 +270,32 @@ async function s3(env: Env, method: 'PUT' | 'GET', key: string, body = '', extra
   return fetch(`https://${hostname}${path}`, { method, body: method === 'PUT' ? body : undefined, headers: { ...send, authorization: `AWS4-HMAC-SHA256 Credential=${tokenId}/${scope}, SignedHeaders=${names.join(';')}, Signature=${sig}` }, signal: AbortSignal.timeout(10_000) });
 }
 
+/**
+ * A presigned GET for one copybook-history object on the account's R2 endpoint, valid `ttl` seconds (R2 answers
+ * 403 after that). Signed with the service's own token; null when it isn't configured.
+ */
+export async function presignGet(env: Env, key: string, ttl: number, query: Record<string, string> = {}): Promise<string | null> {
+  if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID) return null;
+  if (!tokenId) {
+    const r = await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', { headers: { authorization: `Bearer ${env.CF_API_TOKEN}` }, signal: AbortSignal.timeout(10_000) });
+    tokenId = ((await r.json()) as { result?: { id?: string } }).result?.id ?? null;
+    if (!tokenId) return null;
+  }
+  const hostname = `${env.CF_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+  const amz = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '');
+  const day = amz.slice(0, 8);
+  const scope = `${day}/auto/s3/aws4_request`;
+  const path = `/${BUCKET}/${key.split('/').map(encodeURIComponent).join('/')}`;
+  const rfc3986 = (x: string) => encodeURIComponent(x).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const q: Record<string, string> = { ...query, 'X-Amz-Algorithm': 'AWS4-HMAC-SHA256', 'X-Amz-Credential': `${tokenId}/${scope}`, 'X-Amz-Date': amz, 'X-Amz-Expires': String(ttl), 'X-Amz-SignedHeaders': 'host' };
+  const qs = Object.keys(q).sort().map((k) => `${rfc3986(k)}=${rfc3986(q[k])}`).join('&');
+  const canonical = ['GET', path, qs, `host:${hostname}`, '', 'host', 'UNSIGNED-PAYLOAD'].join('\n');
+  let k = await hmac(`AWS4${await sha256(env.CF_API_TOKEN)}`, day);
+  for (const part of ['auto', 's3', 'aws4_request']) k = await hmac(k, part);
+  const sig = hex(await hmac(k, ['AWS4-HMAC-SHA256', amz, scope, await sha256(canonical)].join('\n')));
+  return `https://${hostname}${path}?${qs}&X-Amz-Signature=${sig}`;
+}
+
 /** Per invocation on Cloudflare: whether gene polled in the last 15 minutes (only then can both send). */
 let claimsFor: { at: number; on: boolean } | null = null;
 

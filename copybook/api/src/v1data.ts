@@ -310,10 +310,15 @@ async function bookFor(env: Env, f: Filer, quarter: string): Promise<Record<stri
   const allTotal = q.total_value ?? holdings.reduce((s: number, h: { value?: number }) => s + (h.value || 0), 0);
   const main = q.accession ? await filingMeta(env, cik, q.accession) : null;
   const merged = ((q.amendments ?? []) as unknown[]).map((a) => (typeof a === 'string' ? a : (a as { accession?: string })?.accession)).filter(Boolean) as string[];
-  // Ingest's filings[] marks a NEW HOLDINGS amendment that re-filed the whole book (mislabeled_amendment); null without it.
+  // A mislabeled amendment: a 13F-HR/A marked NEW HOLDINGS that re-files the whole book. The lineage's own rule
+  // decides it: when the served book is such an amendment, the original is superseded and the amendment is
+  // mislabeled. Ingest's filings[] can also mark one. Null when neither the lineage nor the trail can be read.
   const trail = Array.isArray(q.filings) ? (q.filings as { accession?: string; mislabeled_amendment?: boolean }[]) : null;
-  const mislabeled = (acc: string | null | undefined) => (trail ? trail.some((f) => f.accession === acc && f.mislabeled_amendment === true) : null);
-  const versions = (await versionsFor(env, cik, q.report_date ?? quarterEnd(quarter), q.accession ?? null, merged))?.map((v) => ({ ...v, mislabeled_amendment: mislabeled(v.accession) })) ?? null;
+  const lineage = await versionsFor(env, cik, q.report_date ?? quarterEnd(quarter), q.accession ?? null, merged);
+  const replaced = new Set((lineage ?? []).filter((v) => v.status === 'current' && v.form === '13F-HR/A' && v.amendment_type !== 'RESTATEMENT' && lineage!.some((o) => o.status === 'superseded')).map((v) => v.accession));
+  const mislabeled = (acc: string | null | undefined) =>
+    !lineage && !trail ? null : replaced.has(acc ?? '') || !!trail?.some((f) => f.accession === acc && f.mislabeled_amendment === true);
+  const versions = lineage?.map((v) => ({ ...v, mislabeled_amendment: mislabeled(v.accession) })) ?? null;
   // Amendments: every 13F-HR/A EDGAR has for the period, whatever its type and including a served
   // restatement (not only those the data run merged); versions[] adds the original.
   const amendments = versions ? versions.filter((v) => v.form.endsWith('/A')).map((v) => v.accession) : (q.amendments ?? []);
@@ -818,6 +823,14 @@ ROUTES.push(
     return v1json({ data: data.sort((a: { file: string }, b: { file: string }) => b.file.localeCompare(a.file)) });
   }],
   ['GET', /^\/v1\/bulk\/(\d{4}Q[1-4]\.(?:csv\.gz|parquet))$/, async ({ env }, [file]) => {
+    // A stored file answers 302 to a 5-minute presigned URL on the account's R2 endpoint (a stable, fast host to allowlist);
+    // streamed from here only when signing isn't configured.
+    const head = (await env.HIST.list({ prefix: `bulk/${file}` })).objects.find((o) => o.key === `bulk/${file}`);
+    if (head && head.size >= MIN_BULK_BYTES) {
+      const { presignGet } = await import('./failover');
+      const loc = await presignGet(env, `bulk/${file}`, 300, { 'response-content-disposition': `attachment; filename="copybook-13f-${file}"` }).catch(() => null);
+      if (loc) return new Response(null, { status: 302, headers: { location: loc, 'cache-control': 'no-store' } });
+    }
     const obj = await env.HIST.get(`bulk/${file}`);
     if (!obj || (obj.size ?? 0) < MIN_BULK_BYTES) return v1error('not_yet_available', 501, `Coming: bulk export ${file} is not published yet${obj ? ' (the uploaded file failed its size check and waits to be regenerated)' : ''}. Parquet is coming; csv.gz is live for the quarters GET /v1/bulk lists.`);
     return new Response(obj.body, {
