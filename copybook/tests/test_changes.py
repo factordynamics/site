@@ -389,12 +389,14 @@ class BulkExportTest(unittest.TestCase):
                 (data / folder / "2026Q3" / "0001281761.json").write_text(json.dumps(
                     {"ok": True, "cik": "0001281761", "accession": "0001281761-26-000010", "columns": cols, "rows": rows}))
             with mock.patch.object(export, "DATA", data):
-                got = [(r[6], r[13], r[17], r[18]) + tuple(r[21:]) for r in export.rows("2026Q3")]
+                got = [(r[6], r[13], r[17], r[18]) + tuple(r[21:28]) for r in export.rows("2026Q3")]
+                self.assertEqual({r[29] for r in export.rows("2026Q3")}, {"0001281761-26-000010"})
         self.assertEqual(got, [("78468R622", 1000, "added", "holding", 1000, 1, "true", "false", "false", "filers", ""),
                                ("111111111", 0, "exited", "exited", "", "", "", "false", "", "", "")])
         self.assertEqual(export.HEADER[17:], ("change", "row_type", "prev_shares", "prev_value", "value_scale",
                                               "value_as_filed", "value_adjusted", "zero_value", "suspect_units",
-                                              "suspect_units_basis", "suspect_reason"))
+                                              "suspect_units_basis", "suspect_reason", "prev_cusip",
+                                              "original_accession"))
 
     def test_exited_rows_are_typed_and_hold_the_old_position_in_prev(self):
         prev = {"quarter": "2026Q2", "holdings": [{"cusip": "111111111", "issuer": "A", "title": "COM", "ticker": "A",

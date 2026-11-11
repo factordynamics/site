@@ -33,7 +33,7 @@ PART_RAW = 450_000_000  # uncompressed CSV per part; about 80 MB gzipped (one up
 HEADER = ("cik", "filer_name", "quarter", "report_date", "accession", "filing_date", "cusip", "ticker", "issuer",
           "title", "put_call", "shares", "shares_type", "value", "accepted_at", "source_accession", "first_disclosed_at",
           "change", "row_type", "prev_shares", "prev_value", "value_scale", "value_as_filed", "value_adjusted", "zero_value",
-          "suspect_units", "suspect_units_basis", "suspect_reason")
+          "suspect_units", "suspect_units_basis", "suspect_reason", "prev_cusip", "original_accession")
 # row_type: holding, or exited (sold out: shares and value 0, the old position in prev_shares and prev_value). A sum of
 # shares or a count of holders reads the holding rows only.
 
@@ -72,6 +72,17 @@ def tail(h: dict) -> tuple:
             flag(h.get("suspect_units")), h.get("suspect_units_basis") or "", h.get("suspect_reason") or "")
 
 
+def original(b: dict) -> str:
+    """The quarter's original 13F-HR: the earliest 13F-HR among its filings, else the book's own accession."""
+    hr = sorted((f.get("filing_date") or "", f.get("accession")) for f in b.get("filings") or []
+                if f.get("form") == "13F-HR" and f.get("accession"))
+    if hr:
+        return hr[0][1]
+    if b.get("form") not in (None, "13F-HR") and b.get("superseded"):
+        return b["superseded"][0] if isinstance(b["superseded"][0], str) else b["superseded"][0].get("accession") or ""
+    return b.get("accession") or ""
+
+
 def num(v) -> int | str:
     """A whole number, or empty when there is no prior."""
     return "" if v is None else round(v)
@@ -86,13 +97,14 @@ def rows(quarter: str):
             b = curated[cik]
             head = (cik, b.get("manager") or "", quarter, b.get("report_date") or "", b.get("accession") or "",
                     b.get("filing_date") or "")
+            orig = original(b)
             for h in b.get("holdings") or []:
                 yield head + (h.get("cusip") or "", h.get("ticker") or "", h.get("issuer") or "", h.get("title") or "",
                               h.get("put_call") or "", h.get("shares") or h.get("principal_amount") or 0,
                               h.get("shares_type") or "SH", h.get("value") or 0, b.get("accepted_at") or "",
                               h.get("source_accession") or b.get("accession") or "",
                               h.get("first_disclosed_at") or b.get("accepted_at") or "", h.get("change") or "",
-                              row_type(h), num(h.get("prev_shares")), num(h.get("prev_value"))) + tail(h)
+                              row_type(h), num(h.get("prev_shares")), num(h.get("prev_value"))) + tail(h) + (h.get("prev_cusip") or "", orig)
             continue
         try:
             b = json.loads(paths[cik].read_text())
@@ -103,13 +115,14 @@ def rows(quarter: str):
         cols = b["columns"]
         head = (b.get("cik") or cik, b.get("name") or "", b.get("quarter") or quarter, b.get("report_date") or "",
                 b.get("accession") or "", b.get("filing_date") or "")
+        orig = original(b)
         for r in b.get("rows") or []:
             h = dict(zip(cols, r))
             yield head + (h.get("cusip") or "", h.get("ticker") or "", h.get("issuer") or "", h.get("title") or "",
                           h.get("put_call") or "", h.get("shares") or 0, h.get("shares_type") or "SH", h.get("value") or 0,
                           b.get("accepted_at") or "", h.get("source_accession") or b.get("accession") or "",
                           h.get("first_disclosed_at") or b.get("accepted_at") or "", h.get("change") or "",
-                          row_type(h), num(h.get("prev_shares")), num(h.get("prev_value"))) + tail(h)
+                          row_type(h), num(h.get("prev_shares")), num(h.get("prev_value"))) + tail(h) + (h.get("prev_cusip") or "", orig)
 
 
 def export(quarter: str) -> list[Path]:
