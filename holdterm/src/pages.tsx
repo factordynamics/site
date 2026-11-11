@@ -34,7 +34,7 @@ import {
   type Manager,
   type StockHolder,
 } from './data'
-import { A, Bar, BooksProgress, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, Tick, usd, useLoad, type Col } from './lib'
+import { A, Bar, BooksProgress, ChangeTag, date, day, daysAgo, Empty, Failed, Grid, Loading, PageLoading, num, Panel, pct, price, signedUsd, StackBar, Stat, TabPanel, Tabs, TabsSkel, Tick, type SkelCol, usd, useLoad, type Col } from './lib'
 import { HBars, ValueHistory } from './charts'
 import { firmName, fundPath, issuerName, shortFirm } from './names'
 import EXCLUSIONS from '../scripts/roster-exclusions.json'
@@ -1152,7 +1152,35 @@ export function Flows() {
   // Flows are stock picks: ETFs, index and T-bill funds are left out.
   const rows = useMemo(() => (books.data ? aggregate(q === 'latest' ? books.data : books.data.filter((b) => b.quarter === q), books.data).rows.filter((r) => !r.fund) : []), [books.data, q])
   if (books.error) return <Failed error={books.error} what="this quarter’s trades" />
-  if (!books.data) return <PageLoading what="Loading this quarter’s trades" stats={0} rows={20} progress={<BooksProgress what="Comparing each investor’s latest 13F with the quarter before" />} />
+  if (!books.data)
+    return (
+      <PageLoading
+        what="Loading this quarter’s trades"
+        stats={0}
+        rows={20}
+        slowAfter={30_000}
+        head={
+          <div className="head">
+            <div>
+              <h1>Buys and sells</h1>
+              <p className="lede">What the investors bought and sold, comparing each fund’s latest 13F with the one before.</p>
+            </div>
+          </div>
+        }
+        progress={<BooksProgress what="Comparing each investor’s latest 13F with the quarter before" />}
+        before={
+          <>
+            <div className="filters quarter-pick" aria-hidden>
+              <span className="skel skel-chip" />
+              <span className="skel skel-chip" />
+              <span className="skel skel-chip" />
+            </div>
+            <TabsSkel labels={['Most buyers', 'Most money in', 'New positions', 'Most sellers', 'Sold out']} />
+          </>
+        }
+        cols={AGG_SKEL(['Investors buying', 'Who bought', 'Bought', 'Sold', 'Net money in'], [0, 4])}
+      />
+    )
   const fundsN = q === 'latest' ? books.data.length : books.data.filter((b) => b.quarter === q).length
   // In "latest" mode the books span quarters: say how many of each, and tag the newest quarter's funds.
   const mix = quarters.map((x) => [x, books.data!.filter((b) => b.quarter === x).length] as const)
@@ -1321,7 +1349,44 @@ export function Consensus() {
   const [sector, setSector] = useState<string | null>(null)
   const agg = useMemo(() => (books.data ? aggregate(books.data) : null), [books.data])
   if (books.error) return <Failed error={books.error} what="the most owned stocks" />
-  if (!agg || !books.data) return <PageLoading what="Loading the most owned stocks" stats={0} rows={20} progress={<BooksProgress what="Adding up every investor’s latest 13F" />} />
+  if (!agg || !books.data)
+    return (
+      <PageLoading
+        what="Loading the most owned stocks"
+        stats={0}
+        rows={20}
+        slowAfter={30_000}
+        head={
+          <div className="head">
+            <div>
+              <h1>Most owned stocks</h1>
+              <p className="lede">Every stock and fund in the investors’ latest 13Fs, combined, with options and notes left out.</p>
+            </div>
+          </div>
+        }
+        progress={<BooksProgress what="Adding up every investor’s latest 13F" />}
+        before={
+          <>
+            <section className="panel" aria-hidden>
+              <header>
+                <h2>By sector</h2>
+              </header>
+              <div className="body">
+                <span className="skel" style={{ height: 10, width: '100%' }} />
+                <div className="filters">
+                  <span className="skel skel-chip" />
+                  <span className="skel skel-chip" />
+                  <span className="skel skel-chip" />
+                  <span className="skel skel-chip" />
+                </div>
+              </div>
+            </section>
+            <TabsSkel labels={['Most investors', 'Most money', 'Biggest single bets']} />
+          </>
+        }
+        cols={AGG_SKEL(['Owners', 'Of all investors', 'Value held', 'Of all money', 'Biggest bet', 'Average bet', 'Biggest holders'], [0, 2])}
+      />
+    )
   const n = books.data.length
   const base = sector ? agg.rows.filter((r) => r.sector === sector) : agg.rows
   const list = [...base].sort(tab === 'owners' ? (a, b) => b.holders.length - a.holders.length || b.value - a.value : tab === 'value' ? (a, b) => b.value - a.value : (a, b) => b.maxWeight - a.maxWeight)
@@ -1392,6 +1457,17 @@ export function Consensus() {
     </div>
   )
 }
+
+/** Skeleton columns for the stock tables on Buys & sells and Most owned, in the proportions they render at: rank,
+ * ticker, company and sector, then the page's own columns; on phones rank, ticker over name, and the page's columns
+ * listed in `phone`. */
+const AGG_SKEL = (rest: string[], phone: number[]): SkelCol[] => [
+  { w: 3, pw: 9, num: true },
+  { w: 11, pw: 56, two: true },
+  { w: 13, on: 'wide' },
+  { w: 13, on: 'wide' },
+  ...rest.map((l, i): SkelCol => ({ w: /^(Who|Biggest holders)/.test(l) ? 18 : 8, pw: i === phone[0] ? 14 : 21, num: !/^(Who|Biggest holders)/.test(l), on: phone.includes(i) ? undefined : 'wide' })),
+]
 
 // ---------- filings: 13D/G and Form 4 ----------
 type ETab = 'all' | '13dg' | 'f4' | 'market'

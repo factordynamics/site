@@ -3448,3 +3448,63 @@ p a,
   padding: 6px 12px;
   font-size: 14px;
 }
+
+/* Loading skeletons shaped like the final table (TableSkel): columns in its proportions, a ticker over a name on
+   phones, numbers right-aligned. */
+.skel-row.shaped,
+.skel-head.shaped {
+  gap: 12px;
+}
+.skel-row.shaped {
+  height: 51px;
+}
+.skel-cell {
+  flex: var(--w) 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skel-cell.num {
+  align-items: flex-end;
+}
+.skel-cell .skel {
+  max-width: 100%;
+}
+.skel-cell .skel-sub {
+  display: none;
+  height: 9px;
+  opacity: 0.7;
+}
+.skel-cell.only-phone {
+  display: none;
+}
+@media (max-width: 720px) {
+  .skel-cell {
+    flex-grow: var(--pw);
+  }
+  .skel-cell.only-wide {
+    display: none;
+  }
+  .skel-cell.only-phone {
+    display: flex;
+  }
+  .skel-row.shaped {
+    height: 56px;
+  }
+  .skel-cell .skel-sub {
+    display: block;
+  }
+}
+.books-progress-note {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fg2);
+}
+.skel-chip {
+  display: inline-block;
+  width: 86px;
+  height: 30px;
+  border-radius: 999px;
+}

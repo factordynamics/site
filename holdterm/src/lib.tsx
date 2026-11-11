@@ -131,16 +131,41 @@ export function BooksProgress({ what }: { what: string }) {
     window.addEventListener('holdterm:books', on)
     return () => window.removeEventListener('holdterm:books', on)
   }, [])
-  const { done, total } = booksProgress
+  // After 3 seconds, say why it takes a moment: this page adds up every investor's 13F, all in one download.
+  const [long, setLong] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setLong(true), 3000)
+    return () => clearTimeout(t)
+  }, [])
+  const { done, total, bytes } = booksProgress
+  const mb = (bytes / 1e6).toFixed(1)
   return (
-    <div className="books-progress" aria-hidden>
-      <div className="books-progress-text">
+    <div className="books-progress">
+      <div className="books-progress-text" aria-hidden>
         <span>{what}</span>
-        <span className="dim">{total ? `${done} of ${total} portfolios` : 'Downloading…'}</span>
+        <span className="dim">{total ? `${done} of ${total} portfolios` : bytes ? `${mb} MB received` : 'Downloading…'}</span>
       </div>
-      <div className={`books-progress-bar${total ? '' : ' busy'}`}>
+      <div className={`books-progress-bar${total ? '' : ' busy'}`} aria-hidden>
         <i style={total ? { width: `${(done / total) * 100}%` } : undefined} />
       </div>
+      {/* Rendered from the start but hidden until 3 seconds, so its space is kept and nothing below it moves. */}
+      {!total && (
+        <p className="books-progress-note" style={long ? undefined : { visibility: 'hidden' }}>
+          This page adds up every investor’s latest 13F, so it downloads all of them at once. On a slow connection that takes several seconds; the table appears as soon as they arrive.
+        </p>
+      )}
+    </div>
+  )
+}
+/** A page's tabs while it loads: their real names, not yet clickable. */
+export function TabsSkel({ labels }: { labels: string[] }) {
+  return (
+    <div className="tabs" aria-hidden inert>
+      {labels.map((l, i) => (
+        <button key={l} tabIndex={-1} className={i === 0 ? 'on' : ''}>
+          {l}
+        </button>
+      ))}
     </div>
   )
 }
@@ -155,11 +180,11 @@ const useOffline = () => {
   return off
 }
 /** After 8 seconds of loading, a plain note that it's slow, with a retry, so a page never just sits there. */
-function SlowNote() {
+function SlowNote({ after = 8000 }: { after?: number }) {
   const [slow, setSlow] = useState(false)
   const offline = useOffline()
   useEffect(() => {
-    const t = setTimeout(() => setSlow(true), 8000)
+    const t = setTimeout(() => setSlow(true), after)
     return () => clearTimeout(t)
   }, [])
   if (!slow && !offline) return null
@@ -174,17 +199,43 @@ function SlowNote() {
     </div>
   )
 }
-/** A whole page while its data loads: title, summary, stat cards and a table, in the page's own layout. */
-export function PageLoading({ what = 'Loading', stats = 4, rows = 12, progress }: { what?: string; stats?: number; rows?: number; progress?: ReactNode }) {
+/** One skeleton column: its share of the row (`w`, and `pw` on phones), whether it is a number (right-aligned),
+ * whether it holds a ticker over a name on phones (two lines), and whether it shows only on phones or wider screens. */
+export type SkelCol = { w: number; pw?: number; num?: boolean; two?: boolean; on?: 'wide' | 'phone' }
+/** Placeholder rows in the final table's columns, at its row height, so nothing moves when the data arrives. */
+function TableSkel({ cols, rows }: { cols: SkelCol[]; rows: number }) {
+  const row = (head: boolean, i: number) => (
+    <div key={i} className={head ? 'skel-head shaped' : 'skel-row shaped'}>
+      {cols.map((c, j) => (
+        <span key={j} className={`skel-cell${c.num ? ' num' : ''}${c.on ? ` only-${c.on}` : ''}`} style={{ ['--w' as string]: c.w, ['--pw' as string]: c.pw ?? c.w }}>
+          <span className="skel" style={{ width: head ? '60%' : c.num ? `${45 + ((i * 7 + j * 13) % 30)}%` : c.two ? '38%' : `${55 + ((i * 11 + j * 5) % 35)}%` }} />
+          {!head && c.two && <span className="skel skel-sub" style={{ width: `${50 + ((i * 13) % 35)}%` }} />}
+        </span>
+      ))}
+    </div>
+  )
+  return (
+    <div className="loading" aria-hidden>
+      {row(true, 0)}
+      {Array.from({ length: rows }, (_, i) => row(false, i + 1))}
+    </div>
+  )
+}
+/** A whole page while its data loads: title, summary, stat cards and a table, in the page's own layout. A page can
+ * pass its real heading (`head`), what sits above its table (`before`, such as its tabs), its table's columns
+ * (`cols`), and how long its load normally takes before the "taking longer than usual" note (`slowAfter`). */
+export function PageLoading({ what = 'Loading', stats = 4, rows = 12, progress, head, before, cols, slowAfter }: { what?: string; stats?: number; rows?: number; progress?: ReactNode; head?: ReactNode; before?: ReactNode; cols?: SkelCol[]; slowAfter?: number }) {
   return (
     <div className="page page-loading" role="status" aria-live="polite">
       <span className="sr">{what}…</span>
-      <SlowNote />
-      <div aria-hidden>
-        <span className="skel skel-title" />
-        <span className="skel skel-line" />
-        <span className="skel skel-line short" />
-      </div>
+      <SlowNote after={slowAfter} />
+      {head ?? (
+        <div aria-hidden>
+          <span className="skel skel-title" />
+          <span className="skel skel-line" />
+          <span className="skel skel-line short" />
+        </div>
+      )}
       {progress}
       {stats > 0 && (
         <div className="stats" aria-hidden>
@@ -196,13 +247,12 @@ export function PageLoading({ what = 'Loading', stats = 4, rows = 12, progress }
           ))}
         </div>
       )}
+      {before}
       <section className="panel" aria-hidden>
         <header>
           <span className="skel skel-label" />
         </header>
-        <div className="body">
-          <Loading rows={rows} quiet />
-        </div>
+        <div className="body">{cols ? <TableSkel cols={cols} rows={rows} /> : <Loading rows={rows} quiet />}</div>
       </section>
     </div>
   )

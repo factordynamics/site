@@ -137,7 +137,8 @@ export type Insider = {
 }
 
 const cache = new Map<string, Promise<unknown>>()
-function get<T>(url: string): Promise<T> {
+/** `onBytes`, when given, hears how many bytes of the (uncompressed) body have arrived so far. */
+function get<T>(url: string, onBytes?: (n: number) => void): Promise<T> {
   let p = cache.get(url) as Promise<T> | undefined
   if (!p) {
     // A host that never answers would leave the page loading for good: give up after 20 seconds without a
@@ -148,11 +149,27 @@ function get<T>(url: string): Promise<T> {
     p = fetch(url, { signal: ac.signal })
       .catch((e) => Promise.reject(ac.signal.aborted ? new Error(`timeout ${url}`) : e))
       .finally(() => clearTimeout(t))
-      .then((r) => (r.ok ? (r.json() as Promise<T>) : Promise.reject(new Error(`${r.status} ${url}`))))
+      .then((r) => (!r.ok ? Promise.reject(new Error(`${r.status} ${url}`)) : onBytes && r.body ? readCounting<T>(r.body, onBytes) : (r.json() as Promise<T>)))
     p.catch(() => cache.delete(url))
     cache.set(url, p)
   }
   return p
+}
+
+async function readCounting<T>(body: ReadableStream<Uint8Array>, onBytes: (n: number) => void): Promise<T> {
+  const reader = body.getReader()
+  const parts: Uint8Array[] = []
+  let n = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    parts.push(value)
+    onBytes((n += value.length))
+  }
+  const all = new Uint8Array(n)
+  let at = 0
+  for (const p of parts) all.set(p, (at += p.length) - p.length)
+  return JSON.parse(new TextDecoder().decode(all)) as T
 }
 
 const OVERRIDE = TICKERS as unknown as Record<string, { ticker: string; listed: boolean; name?: string; same_as?: string }>
@@ -461,14 +478,22 @@ export function funds(ix: Index): Manager[] {
 
 /** Every roster fund's latest full book. */
 /** How many of the investors' 13F books have arrived, for pages that need all of them (see BooksProgress). */
-export const booksProgress = { done: 0, total: 0 }
+export const booksProgress = { done: 0, total: 0, bytes: 0 }
 /** Every roster fund's {slug}.json in one file (Copybook ingest's data/books.json, written last in each data run).
  * Used only when it is at least as new as index.json; otherwise, or when it's missing, null and the per-fund
  * files load instead. */
 let combinedP: Promise<Record<string, Book> | null> | null = null
 // Fetched alongside index.json, not after it (both are preloaded by index.html on the pages that need them).
 const loadCombined = () =>
-  (combinedP ??= Promise.all([get<{ generated_at: string; books: Record<string, Book> }>(DATA + 'books.json'), loadIndex()])
+  (combinedP ??= Promise.all([
+    get<{ generated_at: string; books: Record<string, Book> }>(DATA + 'books.json', (n) => {
+      // At most every 100 KB, for the loading page's "2.4 MB received".
+      if (n - booksProgress.bytes < 1e5 || typeof window === 'undefined') return
+      booksProgress.bytes = n
+      window.dispatchEvent(new Event('holdterm:books'))
+    }),
+    loadIndex(),
+  ])
     .then(([c, ix]) => (seen(c.generated_at), c.generated_at >= ix.generated_at && c.books ? c.books : null))
     .catch(() => null))
 /** loadBooks for a page that already shows something from the index: the books start once it has arrived. */
