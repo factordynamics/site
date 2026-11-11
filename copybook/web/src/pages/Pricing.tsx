@@ -183,10 +183,16 @@ export function Pricing() {
             </h2>
             <p className="mt-3 text-[15px] leading-relaxed text-ink-2">13Fs come four times a year. Between them, the funds you follow and the stocks you own keep moving, and Copy emails you when they do.</p>
             <p className="mt-3 text-[14px] leading-relaxed text-ink-3">
-              Last winter (Dec 2025–Jan 2026): 19 Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and 18 open-market buys by directors and officers in the 100 stocks they hold most by value.{' '}
-              <a href="https://pub-c691ec38c5cd4db6acb8e6bfef337500.r2.dev/winter-2025-26.json" className="font-medium text-accent underline-offset-2 hover:underline">
-                See the filings
-              </a>
+              {/* Payments' accession list (definitions and every filing), served from our own domain: public/d/. */}
+              Last winter (Dec 2025–Jan 2026):{' '}
+              <a href={`${import.meta.env.BASE_URL}d/winter-2025-26.json`} className="font-medium text-accent underline underline-offset-2">
+                19
+              </a>{' '}
+              Schedule 13D/G filings by the superinvestors we follow (4 new stakes, 15 amendments), and{' '}
+              <a href={`${import.meta.env.BASE_URL}d/winter-2025-26.json`} className="font-medium text-accent underline underline-offset-2">
+                18
+              </a>{' '}
+              open-market buys by directors and officers in the 100 stocks they hold most by value.
             </p>
             <p className="mt-4 text-[14px] font-medium leading-relaxed">
               Yearly ${plans.copy.yearly}: less than 9 months of monthly. Monthly? Pause once a year, up to 3 months, and keep your founding price. {TRIAL_DAYS} days free, no card needed.

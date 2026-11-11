@@ -1,0 +1,477 @@
+{
+ "source": "SEC EDGAR full index and filings",
+ "window": [
+  "2025-12-01",
+  "2026-01-31"
+ ],
+ "generated_at": "2026-11-11T19:29:29Z",
+ "insider_buys": {
+  "definition": "Form 4 (and 4/A) filed Dec 1, 2025-Jan 31, 2026 whose issuer is the stock, with at least one non-derivative transaction coded P, by a director or officer, in the 100 stocks the 41 superinvestors hold most by value (their latest 13F stock lines). Filings where the stock's company is the reporting owner (Bank of America buying Nuveen funds, GE Pension Trust) are not counted.",
+  "stocks": [
+   "AAPL",
+   "AXP",
+   "GOOGL",
+   "KO",
+   "BAC",
+   "SPCX",
+   "GOOG",
+   "GE",
+   "MCO",
+   "V",
+   "CVX",
+   "AMZN",
+   "OXY",
+   "TSM",
+   "CB",
+   "META",
+   "BRK.B",
+   "KHC",
+   "SPGI",
+   "CNI",
+   "DAL",
+   "MSFT",
+   "CAT",
+   "DVA",
+   "LRCX",
+   "WM",
+   "AMAT",
+   "MU",
+   "CRM",
+   "COF",
+   "GEV",
+   "NVDA",
+   "ELV",
+   "IEP",
+   "CP",
+   "SCHW",
+   "SPY",
+   "UBER",
+   "SIRI",
+   "AVGO",
+   "BDX",
+   "KDP",
+   "WTW",
+   "ICE",
+   "DE",
+   "ABNB",
+   "LOAR",
+   "ASML",
+   "NFLX",
+   "MA",
+   "BN",
+   "C",
+   "ALLY",
+   "QSR",
+   "INTC",
+   "IQV",
+   "VRSN",
+   "IVV",
+   "CBRS",
+   "SE",
+   "FCNCA",
+   "KR",
+   "UNP",
+   "TRGP",
+   "ETN",
+   "WAT",
+   "ADP",
+   "WDAY",
+   "DIS",
+   "HHH",
+   "CVNA",
+   "HUT",
+   "WPM",
+   "CVI",
+   "CRBG",
+   "MGA",
+   "APP",
+   "GPN",
+   "SHW",
+   "WFC",
+   "NU",
+   "FISV",
+   "FMX",
+   "DG",
+   "ORCL",
+   "SPOT",
+   "RDDT",
+   "NEM",
+   "BAX",
+   "NTRA",
+   "HD",
+   "ACN",
+   "COP",
+   "MRK",
+   "STX",
+   "IMO",
+   "SUNB",
+   "HCA",
+   "AIG",
+   "IFF"
+  ],
+  "count": 18,
+  "count_any_insider": 18,
+  "filings": [
+   {
+    "ticker": "CRM",
+    "form": "4",
+    "filed": "2025-12-08",
+    "transaction_date": "2025-12-05",
+    "accession": "0001418812-25-000036",
+    "owner": "Morfit G Mason",
+    "roles": [
+     "director",
+     "other"
+    ],
+    "officer_title": null,
+    "value_usd": 25015680
+   },
+   {
+    "ticker": "MU",
+    "form": "4",
+    "filed": "2026-01-15",
+    "transaction_date": "2026-01-13",
+    "accession": "0002058769-26-000002",
+    "owner": "Liu Teyin M",
+    "roles": [
+     "director"
+    ],
+    "officer_title": "",
+    "value_usd": 7821723
+   },
+   {
+    "ticker": "DIS",
+    "form": "4",
+    "filed": "2025-12-15",
+    "transaction_date": "2025-12-12",
+    "accession": "0001628280-25-057069",
+    "owner": "GORMAN JAMES P",
+    "roles": [
+     "director"
+    ],
+    "officer_title": null,
+    "value_usd": 2013943
+   },
+   {
+    "ticker": "MSFT",
+    "form": "4",
+    "filed": "2025-12-12",
+    "transaction_date": "2025-04-23",
+    "accession": "0000789019-25-000120",
+    "owner": "SMITH BRADFORD L",
+    "roles": [
+     "officer"
+    ],
+    "officer_title": "Vice Chair and President",
+    "value_usd": 1450221
+   },
+   {
+    "ticker": "GPN",
+    "form": "4",
+    "filed": "2025-12-12",
+    "transaction_date": "2025-12-10",
+    "accession": "0001123360-25-000090",
+    "owner": "BALDWIN ROBERT H B JR",
+    "roles": [
+     "director"
+    ],
+    "officer_title": null,
+    "value_usd": 1086867
+   },
+   {
+    "ticker": "FISV",
+    "form": "4",
+    "filed": "2025-12-02",
+    "transaction_date": "2025-12-01",
+    "accession": "0001612508-25-000009",
+    "owner": "Todd Paul M",
+    "roles": [
+     "officer"
+    ],
+    "officer_title": "Chief Financial Officer",
+    "value_usd": 1060970
+   },
+   {
+    "ticker": "ALLY",
+    "form": "4",
+    "filed": "2026-01-23",
+    "transaction_date": "2026-01-23",
+    "accession": "0001235350-26-000001",
+    "owner": "RHODES MICHAEL GEORGE",
+    "roles": [
+     "director",
+     "officer"
+    ],
+    "officer_title": "Chief Executive Officer",
+    "value_usd": 991867
+   },
+   {
+    "ticker": "CRM",
+    "form": "4",
+    "filed": "2025-12-18",
+    "transaction_date": "2025-12-17",
+    "accession": "0001108524-25-000240",
+    "owner": "Kirk David Blair",
+    "roles": [
+     "director"
+    ],
+    "officer_title": null,
+    "value_usd": 500722
+   },
+   {
+    "ticker": "ALLY",
+    "form": "4",
+    "filed": "2026-01-28",
+    "transaction_date": "2026-01-27",
+    "accession": "0001983992-26-000001",
+    "owner": "Hutchinson Russell E.",
+    "roles": [
+     "officer"
+    ],
+    "officer_title": "Chief Financial Officer",
+    "value_usd": 499307
+   },
+   {
+    "ticker": "FISV",
+    "form": "4",
+    "filed": "2025-12-02",
+    "transaction_date": "2025-12-02",
+    "accession": "0001549373-25-000003",
+    "owner": "Rosman Adam L.",
+    "roles": [
+     "officer"
+    ],
+    "officer_title": "Chief Admin. and Legal Officer",
+    "value_usd": 499201
+   },
+   {
+    "ticker": "HHH",
+    "form": "4",
+    "filed": "2025-12-29",
+    "transaction_date": "2025-12-23",
+    "accession": "0001104659-25-124903",
+    "owner": "SELLERS R SCOT",
+    "roles": [
+     "director"
+    ],
+    "officer_title": "",
+    "value_usd": 389713
+   },
+   {
+    "ticker": "AVGO",
+    "form": "4",
+    "filed": "2025-12-22",
+    "transaction_date": "2025-12-18",
+    "accession": "0001432602-25-000006",
+    "owner": "You Harry L.",
+    "roles": [
+     "director"
+    ],
+    "officer_title": null,
+    "value_usd": 325129
+   },
+   {
+    "ticker": "INTC",
+    "form": "4",
+    "filed": "2026-01-27",
+    "transaction_date": "2026-01-26",
+    "accession": "0000050863-26-000032",
+    "owner": "Zinsner David",
+    "roles": [
+     "officer"
+    ],
+    "officer_title": "EVP, CFO",
+    "value_usd": 249985
+   },
+   {
+    "ticker": "FCNCA",
+    "form": "4",
+    "filed": "2025-12-01",
+    "transaction_date": "2025-11-26",
+    "accession": "0001193125-25-303990",
+    "owner": "HOLDING FRANK B JR",
+    "roles": [
+     "director",
+     "officer",
+     "10% owner"
+    ],
+    "officer_title": "Chairman and CEO",
+    "value_usd": 220006
+   },
+   {
+    "ticker": "IFF",
+    "form": "4",
+    "filed": "2025-12-12",
+    "transaction_date": "2025-12-12",
+    "accession": "0001225208-25-009913",
+    "owner": "Landsman Stephen N",
+    "roles": [
+     "officer"
+    ],
+    "officer_title": "EVP, General Counsel",
+    "value_usd": 196788
+   },
+   {
+    "ticker": "OXY",
+    "form": "4",
+    "filed": "2025-12-17",
+    "transaction_date": "2025-12-16",
+    "accession": "0001628280-25-057697",
+    "owner": "KLESSE WILLIAM R",
+    "roles": [
+     "director"
+    ],
+    "officer_title": "",
+    "value_usd": 194900
+   },
+   {
+    "ticker": "SPGI",
+    "form": "4",
+    "filed": "2026-01-15",
+    "transaction_date": "2025-09-10",
+    "accession": "0002082132-26-000004",
+    "owner": "Eager William W",
+    "roles": [
+     "officer"
+    ],
+    "officer_title": "President, S&P Global Mobility",
+    "value_usd": 11917
+   },
+   {
+    "ticker": "AIG",
+    "form": "4",
+    "filed": "2025-12-31",
+    "transaction_date": "2025-12-30",
+    "accession": "0001657175-25-000005",
+    "owner": "Inglis John C",
+    "roles": [
+     "director"
+    ],
+    "officer_title": null,
+    "value_usd": 1200
+   }
+  ]
+ },
+ "schedule_13dg": {
+  "definition": "Schedule 13D or 13G, and amendments, filed Dec 1, 2025-Jan 31, 2026 by the 41 superinvestors (EDGAR full index, by filer CIK)",
+  "count": 19,
+  "initial": 4,
+  "filings": [
+   {
+    "manager": "Mason Hawkins",
+    "form": "SCHEDULE 13G/A",
+    "filed": "2025-12-05",
+    "accession": "0001398344-25-022015"
+   },
+   {
+    "manager": "John Rogers",
+    "form": "SCHEDULE 13G/A",
+    "filed": "2025-12-05",
+    "accession": "0000936753-25-000091"
+   },
+   {
+    "manager": "Bill Ackman",
+    "form": "SCHEDULE 13D/A",
+    "filed": "2025-12-19",
+    "accession": "0001140361-25-046218"
+   },
+   {
+    "manager": "Nelson Peltz",
+    "form": "SCHEDULE 13D/A",
+    "filed": "2025-12-22",
+    "accession": "0000930413-25-003750"
+   },
+   {
+    "manager": "Carl Icahn",
+    "form": "SCHEDULE 13D/A",
+    "filed": "2025-12-29",
+    "accession": "0001539497-25-003355"
+   },
+   {
+    "manager": "Andreas Halvorsen",
+    "form": "SCHEDULE 13G",
+    "filed": "2025-12-30",
+    "accession": "0000905148-25-004508"
+   },
+   {
+    "manager": "Carl Icahn",
+    "form": "SCHEDULE 13D/A",
+    "filed": "2026-01-02",
+    "accession": "0001539497-26-000002"
+   },
+   {
+    "manager": "Richard Pzena",
+    "form": "SCHEDULE 13G/A",
+    "filed": "2026-01-06",
+    "accession": "0001027796-26-000001"
+   },
+   {
+    "manager": "Dan Loeb",
+    "form": "SCHEDULE 13D/A",
+    "filed": "2026-01-13",
+    "accession": "0000899140-26-000044"
+   },
+   {
+    "manager": "Andreas Halvorsen",
+    "form": "SCHEDULE 13G",
+    "filed": "2026-01-13",
+    "accession": "0000905148-26-000167"
+   },
+   {
+    "manager": "Richard Pzena",
+    "form": "SCHEDULE 13G/A",
+    "filed": "2026-01-16",
+    "accession": "0001027796-26-000003"
+   },
+   {
+    "manager": "Richard Pzena",
+    "form": "SCHEDULE 13G/A",
+    "filed": "2026-01-20",
+    "accession": "0001027796-26-000004"
+   },
+   {
+    "manager": "Richard Pzena",
+    "form": "SCHEDULE 13G/A",
+    "filed": "2026-01-21",
+    "accession": "0001027796-26-000005"
+   },
+   {
+    "manager": "Carl Icahn",
+    "form": "SCHEDULE 13D/A",
+    "filed": "2026-01-21",
+    "accession": "0001539497-26-000113"
+   },
+   {
+    "manager": "Stanley Druckenmiller",
+    "form": "SCHEDULE 13G",
+    "filed": "2026-01-28",
+    "accession": "0000899140-26-000076"
+   },
+   {
+    "manager": "Richard Pzena",
+    "form": "SCHEDULE 13G",
+    "filed": "2026-01-29",
+    "accession": "0001027796-26-000006"
+   },
+   {
+    "manager": "Carl Icahn",
+    "form": "SCHEDULE 13D/A",
+    "filed": "2026-01-29",
+    "accession": "0001539497-26-000218"
+   },
+   {
+    "manager": "Richard Pzena",
+    "form": "SCHEDULE 13G/A",
+    "filed": "2026-01-30",
+    "accession": "0001027796-26-000007"
+   },
+   {
+    "manager": "Carl Icahn",
+    "form": "SCHEDULE 13D/A",
+    "filed": "2026-01-30",
+    "accession": "0001193125-26-032170"
+   }
+  ]
+ },
+ "note": "Copybook winter counts behind /pricing/ and the trial emails: 19 Schedule 13D/G filings by the superinvestors (4 new stakes, 15 amendments) and 18 open-market buys by directors and officers in the 100 stocks they hold most by value. Counted by EDGAR filing date."
+}
