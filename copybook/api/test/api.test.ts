@@ -4319,13 +4319,30 @@ describe('copybook api', () => {
     expect(h.data.holders.map((x: { filer: { cik: string } }) => x.filer.cik)).toEqual(['0002045724', '0000102909', '0001067983', '0001387322']);
     expect(h.data.options.map((x: { filer: { cik: string; type: string } }) => [x.filer.cik, x.filer.type])).toEqual([['0001423053', 'hedge_fund']]);
     expect(h.data.exited).toEqual([expect.objectContaining({ kind: 'calls', put_call: 'CALL', shares: 0, weight: null, change: 'exited' })]); // as EDGAR writes it
+    // An index with the data run's value_delta column (run 43049731351 on): rows serve it as their dollar change and net
+    // is their sum, whatever shares x price implies (a filer's two lines, a capped line); a flagged row is null, marked.
+    await hist.put('hl/30233Q.json', JSON.stringify({
+      issuer: '30233Q', tickers: ['XOM'], counts: { holders: 3, net: 1_000_000 - 250_000, net_quarter: '2026Q3', net_by_period: { '2026Q3': 750_000 } },
+      columns: ['cik', 'name', 'slug', 'type', 'curated', 'period', 'shares', 'prev_shares', 'value', 'prev_value', 'change', 'put_call', 'unreliable', 'value_change', 'value_delta'],
+      rows: [
+        ['0000000101', 'Two Lines LP', null, 'hedge_fund', false, '2026Q3', 20_000, 10_000, 2_400_000, 1_000_000, 'added', null, null, null, 1_000_000],
+        ['0000000102', 'Capped LP', null, 'hedge_fund', false, '2026Q3', 5_000, 7_500, 600_000, 850_000, 'trimmed', null, null, null, -250_000],
+        ['0000000103', 'Units Off LP', null, 'hedge_fund', false, '2026Q3', 1_304, 646_216, 6_700_000, 121_600_000, 'trimmed', null, 'shares', -114_900_000, 0],
+      ],
+    }), { customMetadata: { build_id: 'gh-43049731351-1', built_at: '2026-11-11T16:20:00.000Z' } });
+    const xh = (await v1('/v1/stocks/30233Q/holders?current_only=false')).body.data;
+    const xc = (await v1('/v1/changes/2026Q3?cusip=30233Q&limit=100')).body.data as { value_delta_usd: number | null; trade_usd_implied: number; unreliable?: string; value_change_usd?: number; filer: { name: string } }[];
+    expect(xc.map((r) => [r.filer.name, r.value_delta_usd, r.unreliable ?? null])).toEqual(expect.arrayContaining([['Two Lines LP', 1_000_000, null], ['Capped LP', -250_000, null], ['Units Off LP', null, 'shares']]));
+    expect(xc.reduce((a, r) => a + (r.value_delta_usd ?? 0), 0)).toBe(xh.counts.net);
+    expect(xc.find((r) => r.filer.name === 'Two Lines LP')!.trade_usd_implied).toBe(1_200_000); // implied, not summed
+    expect(xc.find((r) => r.filer.name === 'Units Off LP')!.value_change_usd).toBe(-114_900_000);
     // current_only=false adds the filer whose latest 13F is a year old.
     const every = (await v1('/v1/stocks/NVDA/holders?current_only=false')).body;
     expect([every.count, every.filers, every.data.holders[4].filer.name, every.data.counts.holders, every.data.counts.holders_all]).toEqual([5, 5, 'Old Filer LP', 5, 5]);
     // include_options=true mixes calls and puts into the list.
     const mixed = (await v1('/v1/stocks/NVDA/holders?include_options=true')).body;
     expect([mixed.count, mixed.filers, mixed.data.holders[2].filer.name]).toEqual([5, 5, 'Citadel Advisors LLC']);
-    expect(h.data.holders[0]).toEqual({ filer: { cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', type: 'hedge_fund', curated: false }, period: '2026Q3', kind: 'equity', put_call: null, shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, prev_value_usd: 6000, change: 'added', weight: null, accession: null, original_accession: null, accepted_at: null, cusip: null, prev_cusip: null, issuer: null });
+    expect(h.data.holders[0]).toEqual({ filer: { cik: '0002045724', name: 'Situational Awareness LP', slug: 'situational-awareness-lp-5724', type: 'hedge_fund', curated: false }, period: '2026Q3', kind: 'equity', put_call: null, shares: 100, prev_shares: 40, share_change: 60, value_usd: 18000, value_delta_usd: 10800, trade_usd_implied: 10800, prev_value_usd: 6000, change: 'added', weight: null, accession: null, original_accession: null, accepted_at: null, cusip: null, prev_cusip: null, issuer: null });
     // A curated fund's row: its latest 13F, acceptance from the filing cache, weight of its $2,000 book.
     expect(h.data.holders[2]).toMatchObject({ filer: { slug: 'warren-buffett', curated: true }, accession: 'A2', accepted_at: '2026-08-14T20:05:04Z', weight: 0.9 });
     expect(h.data.holders[3]).toMatchObject({ prev_shares: null, share_change: null, change: 'new' });

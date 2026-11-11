@@ -515,6 +515,16 @@ export interface HolderRow {
   value_usd: number;
   prev_value_usd: number | null;
   change: string | null;
+  /**
+   * The row's dollar change: the data run's value_delta (what counts.net sums), null when unknown or the line is flagged
+   * (`unreliable`). From an index without that column: shares traded x this filing's value per share.
+   */
+  value_delta_usd: number | null;
+  /** Shares traded x this filing's value per share, for reference: not summed into net. */
+  trade_usd_implied: number | null;
+  /** Which side of a flagged line can't be trusted (value, shares or both); value_change_usd is the filed-value change. */
+  unreliable?: 'value' | 'shares' | 'both';
+  value_change_usd?: number | null;
   /** The position's share of the filer's whole 13F book that period; null when that total isn't known. */
   weight: number | null;
   accession: string | null;
@@ -744,6 +754,10 @@ export function tradeUsd(r: { change: string | null; shares: number | null; prev
   return Math.round((s - Number(r.prev_shares)) * (v / s));
 }
 
+/** A holder-index row's flag side: ingest's `unreliable` column (books, hl/ and d/stocks rows from run 43049731351). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const unreliableOf = (h: any): 'value' | 'shares' | 'both' | null => (h.unreliable === 'value' || h.unreliable === 'shares' || h.unreliable === 'both' ? h.unreliable : null);
+
 /** The latest quarter any holder row reports. */
 const latestPeriod = (rows: { period: string | null }[]): string | null => rows.reduce<string | null>((a, r) => (r.period && (!a || r.period > a) ? r.period : a), null);
 /** 400 for a past quarter by ticker (the holder index has each filer's latest book only). */
@@ -753,7 +767,8 @@ const incomplete = (q: string, latest: string) => v1error('quarter_incomplete_by
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function netByPeriod(rows: any[]): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const r of rows) if (r.period) out[r.period] = (out[r.period] ?? 0) + (r.change && r.change !== 'unchanged' ? (tradeUsd(r) ?? 0) : 0);
+  // The data run's per-line value_delta when the index carries it (null or flagged: nothing), else the implied trade.
+  for (const r of rows) if (r.period) out[r.period] = (out[r.period] ?? 0) + (unreliableOf(r) ? 0 : r.value_delta !== undefined ? (r.value_delta ?? 0) : r.change && r.change !== 'unchanged' ? (tradeUsd(r) ?? 0) : 0);
   for (const k of Object.keys(out)) out[k] = Math.round(out[k]);
   return out;
 }
@@ -916,6 +931,10 @@ export async function holdersOf(env: Env, code: string, timing: string[] = []): 
       value_usd: h.value,
       prev_value_usd: h.prev_value ?? null,
       change: h.change ?? null,
+      // The data run's per-line value_delta when its index has the column (net is their sum; null when unknown or flagged).
+      value_delta_usd: unreliableOf(h) ? null : h.value_delta !== undefined ? (h.value_delta ?? null) : h.change && h.change !== 'unchanged' ? tradeUsd({ ...h, value_usd: h.value, prev_value_usd: h.prev_value }) : h.change === 'unchanged' ? 0 : null,
+      trade_usd_implied: h.change && h.change !== 'unchanged' ? tradeUsd({ ...h, value_usd: h.value, prev_value_usd: h.prev_value }) : h.change === 'unchanged' ? 0 : null,
+      ...(unreliableOf(h) ? { unreliable: unreliableOf(h)!, value_change_usd: h.value_change ?? null } : {}),
       weight: !h.shares && !h.value ? null : (h.weight ?? (total && h.value != null ? Math.round((h.value / total) * 1e6) / 1e6 : null)),
       accession: h.accession ?? (latest ? c.latest_accession : null) ?? null,
       original_accession: h.original_accession || null,
@@ -1296,7 +1315,7 @@ ROUTES.push(
       stamp = h.stamp;
       // Sized like the per-filer path: a trade at this filing's own value per share, never the value difference (a
       // price move is no trade: AAPL's +$14.87B row was +$3.58B of shares).
-      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: r.cusip ?? null, prev_cusip: r.prev_cusip ?? null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: r.issuer ?? h.display_name, put_call: r.put_call, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: tradeUsd(r), change: r.change, accession: r.accession, original_accession: r.original_accession, accepted_at: r.accepted_at }));
+      rows = h.rows.filter((r) => r.period === quarter).map((r) => ({ filer: { cik: r.filer.cik, slug: r.filer.slug, name: r.filer.name, curated: r.filer.curated, type: r.filer.type }, cusip: r.cusip ?? null, prev_cusip: r.prev_cusip ?? null, ticker: is.ticker ?? h.tickers[0] ?? null, issuer: r.issuer ?? h.display_name, put_call: r.put_call, shares: r.shares, prev_shares: r.prev_shares, share_change: r.share_change, value_usd: r.value_usd, value_delta_usd: r.value_delta_usd, trade_usd_implied: r.trade_usd_implied, ...(r.unreliable ? { unreliable: r.unreliable, value_change_usd: r.value_change_usd ?? null } : {}), change: r.change, accession: r.accession, original_accession: r.original_accession, accepted_at: r.accepted_at }));
       source = 'stock';
     } else {
       // Across filers: the data run's per-quarter change file (largest moves first).
