@@ -27,6 +27,8 @@ export function ManagerPage() {
   const book = useBook(m.data?.holdings)
   const [q, setQ] = useState('')
   const [n, setN] = useState(25)
+  // "N lines … not counted" lists them: the holdings table filtered to its flagged and held rows (PM, Nov 11).
+  const [held, setHeld] = useState(false)
   const [color, setColor] = useState<'rank' | 'sector'>('rank')
   const [view, setView] = useState<'shares' | 'options'>('shares')
   const f = m.data
@@ -70,9 +72,9 @@ export function ManagerPage() {
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase()
-    const all = view === 'options' ? book.options : book.rows
+    const all = held ? book.rows.filter((h) => unreliable(h) || h.held_lines?.length) : view === 'options' ? book.options : book.rows
     return s ? all.filter((h) => `${h.ticker ?? ''} ${h.issuer} ${h.cusip}`.toLowerCase().includes(s)) : all
-  }, [book.rows, book.options, view, q])
+  }, [book.rows, book.options, view, q, held])
 
   if (m.error instanceof CuratedRedirect && m.error.slug !== slug) return <Navigate to={`/investors/${m.error.slug}/`} replace />
   if (m.error)
@@ -289,7 +291,18 @@ export function ManagerPage() {
           ) : (
             <LockedChanges top={book.rows.slice(0, 6).map((h) => h.ticker || shortName(h.issuer))} />
           )}
-          {f?.prev_quarter && <NotCounted n={(f.holdings || []).reduce((n, h) => n + (!h.put_call && unreliable(h) ? 1 : 0) + (h.held_lines?.length ?? 0), 0)} />}
+          {f?.prev_quarter && (
+            <NotCounted
+              n={(f.holdings || []).reduce((n, h) => n + (!h.put_call && unreliable(h) ? 1 : 0) + (h.held_lines?.length ?? 0), 0)}
+              onShow={() => {
+                setView('shares')
+                setQ('')
+                setHeld(true)
+                setN(100)
+                document.getElementById('holdings')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+            />
+          )}
           <p className="mt-5 border-t border-line pt-4 text-[13.5px]">
             <Link to={recapPath(seasonNow().quarter)} className="inline-flex items-center gap-1 font-medium text-accent hover:text-accent-2">
               <RecapLabel /> <Arrow className="size-3" />
@@ -302,12 +315,19 @@ export function ManagerPage() {
       {/* After the quarter's changes it continues, and below the fold its late arrival moves nothing on screen. */}
 
 
-      <section className="mt-6 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
+      <section id="holdings" className="mt-6 scroll-mt-24 overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
           <div>
-            <h2 className="text-[15px] font-semibold">All holdings</h2>
+            <h2 className="text-[15px] font-semibold">{held ? 'Not counted' : 'All holdings'}</h2>
             <p className="text-[13px] text-ink-3">
-              {view === 'options'
+              {held ? (
+                <>
+                  {rows.length.toLocaleString('en-US')} {rows.length === 1 ? 'line' : 'lines'} left out of the totals and moves, as filed, each with its reason ·{' '}
+                  <button type="button" onClick={() => setHeld(false)} className="font-medium text-accent hover:text-accent-2">
+                    Show all holdings
+                  </button>
+                </>
+              ) : view === 'options'
                 ? `${rows.length.toLocaleString('en-US')} option lines · value is the notional of the underlying shares, as filed`
                 : `${rows.length.toLocaleString('en-US')} of ${book.rows.length.toLocaleString('en-US')} share positions${f?.truncated ? ` · the largest of ${f.position_count?.toLocaleString('en-US')} lines in the filing` : ''}`}
             </p>
@@ -316,7 +336,7 @@ export function ManagerPage() {
           {book.options.length > 0 && (
             <div className="seg rounded-full bg-ink/[0.05] p-0.5 text-[12.5px]" role="tablist" aria-label="Holding type">
               {(['shares', 'options'] as const).map((v) => (
-                <button key={v} role="tab" aria-selected={view === v} onClick={() => { setView(v); setN(25) }} className={`rounded-full px-2.5 py-1 ${view === v ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
+                <button key={v} role="tab" aria-selected={!held && view === v} onClick={() => { setView(v); setHeld(false); setN(25) }} className={`rounded-full px-2.5 py-1 ${!held && view === v ? 'bg-card font-medium shadow-[var(--shadow-card)]' : 'text-ink-2'}`}>
                   {v === 'shares' ? 'Shares' : `Options (${book.options.length.toLocaleString('en-US')})`}
                 </button>
               ))}

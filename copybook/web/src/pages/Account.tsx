@@ -307,14 +307,16 @@ function SignedIn({ member, welcome, upgraded, kept, resumed = false, focus = fa
               Your plan ends {endLabel ?? 'at the end of this period'}. You keep everything until then and won’t be charged again.
             </p>
           )}
-          <Button
-            variant="dark"
-            className="mt-5"
-            disabled={busy}
-            onClick={portal}
-          >
-            {busy ? 'Opening…' : cancelling ? 'Resume plan' : 'Manage billing'} <Arrow />
-          </Button>
+          {/* A cardless trial's one primary action is the add-card button above; billing is a text link (retail, Nov 11). */}
+          {cardless && !cancelling ? (
+            <button type="button" disabled={busy} onClick={portal} className="mt-4 inline-flex items-center gap-1 text-[14px] font-medium text-accent hover:text-accent-2 disabled:opacity-60">
+              {busy ? 'Opening…' : 'Manage billing'} <Arrow className="size-3" />
+            </button>
+          ) : (
+            <Button variant="dark" className="mt-5" disabled={busy} onClick={portal}>
+              {busy ? 'Opening…' : cancelling ? 'Resume plan' : 'Manage billing'} <Arrow />
+            </Button>
+          )}
           {portalErr && (
             <p role="alert" className="mt-2 text-[13px] text-down">
               {portalErr}

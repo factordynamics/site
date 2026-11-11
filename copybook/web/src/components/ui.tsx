@@ -127,14 +127,29 @@ export function Stat({ label, value, sub }: { label: string; value: ReactNode; s
   )
 }
 
-/** Under a page's dollar totals: how many flagged lines (ingest's unreliable rows) were left out, and why. */
-export function NotCounted({ n, className = 'mt-3' }: { n: number; className?: string }) {
+/** Under a page's dollar totals: how many flagged lines (ingest's unreliable rows) were left out, and why. With
+ *  `onShow`, the count lists those lines on the page (a fund's holdings table) and a small "why" goes to the method. */
+export function NotCounted({ n, className = 'mt-3', onShow }: { n: number; className?: string; onShow?: () => void }) {
   if (!n) return null
+  const label = `${n.toLocaleString('en-US')} ${n === 1 ? 'line' : 'lines'} with unreliable filings not counted`
+  const link = 'underline decoration-line-2 underline-offset-2 hover:text-accent'
   return (
     <p className={`${className} text-[12.5px] leading-relaxed text-ink-3`}>
-      <Link to="/methodology/#unreliable" className="underline decoration-line-2 underline-offset-2 hover:text-accent">
-        {n.toLocaleString('en-US')} {n === 1 ? 'line' : 'lines'} with unreliable filings not counted
-      </Link>
+      {onShow ? (
+        <>
+          <button type="button" onClick={onShow} className={link}>
+            {label}
+          </button>
+          {' · '}
+          <Link to="/methodology/#unreliable" className={link}>
+            why
+          </Link>
+        </>
+      ) : (
+        <Link to="/methodology/#unreliable" className={link}>
+          {label}
+        </Link>
+      )}
     </p>
   )
 }

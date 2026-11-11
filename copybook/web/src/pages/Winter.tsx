@@ -77,8 +77,9 @@ export function Winter() {
                 </tr>
               </thead>
               <tbody>
+                {/* New stakes first, then amendments, each by date (retail, Nov 11). */}
                 {[...g.filings]
-                  .sort((x, y) => x.filed.localeCompare(y.filed))
+                  .sort((x, y) => Number(/\/A$/.test(x.form)) - Number(/\/A$/.test(y.form)) || x.filed.localeCompare(y.filed))
                   .map((f) => (
                     <tr key={f.accession} className="border-b border-line align-top last:border-0">
                       <td className="num whitespace-nowrap py-2.5 pr-3 text-ink-2">{dateLabel(f.filed)}</td>
