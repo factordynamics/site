@@ -699,7 +699,11 @@ ROUTES.push(
         .map((f) => ({ slug: f.slug, cik: f.cik, name: f.name, manager: null, featured: false, status: null, latest_quarter: f.quarter, latest_report_date: f.quarter ? quarterEnd(f.quarter) : null, latest_filing_date: f.filing_date, latest_accession: null, total_value_usd: null, position_count: f.position_count, history_quarters: f.quarter ? [f.quarter] : [], curated: false, type: normType(f.type) }));;
       }
     }
-    const all = want === 'false' ? rest : want === 'true' ? curated : [...curated, ...rest];
+    // Each filer's type from filer_types.json (as holders reads it), so hand-checked overrides and reclasses apply here
+    // too; the row's own type only where that file has none.
+    const types = await filerTypes(env);
+    const typed = (f: { cik: string; type?: string | null }) => (types.has(pad(f.cik)) ? { ...f, type: normType(types.get(pad(f.cik))!) } : f);
+    const all = (want === 'false' ? rest : want === 'true' ? curated : [...curated, ...rest]).map(typed);
     return v1json({ data: all.slice(offset, offset + limit), count: all.length, next_offset: offset + limit < all.length ? offset + limit : null });
   }],
   ['GET', /^\/v1\/filers\/([^/]+)\/holdings\/([^/]+)$/, async ({ env, url }, [id, qp]) => {
@@ -977,7 +981,8 @@ ROUTES.push(
       if (!obj) return v1error('not_yet_available', 501, `Coming: cross-filer changes for ${quarter} are not published yet; /v1/changelog logs the day this ships. Meanwhile pass filer=.`);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const c = (await new Response(obj.body).json()) as any;
-      rows = rowsOf(c).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: normType(h.type) }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ? String(h.put_call).toUpperCase() : null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
+      const types = await filerTypes(env);
+      rows = rowsOf(c).map((h) => ({ filer: { cik: pad(String(h.cik)), slug: h.slug ?? null, name: h.filer_name ?? null, curated: h.curated ?? null, type: normType(types.get(pad(String(h.cik))) ?? h.type) }, cusip: h.cusip, ticker: h.ticker ?? null, issuer: h.issuer ?? null, put_call: h.put_call ? String(h.put_call).toUpperCase() : null, shares: h.shares, prev_shares: h.prev_shares, share_change: h.share_change ?? (h.prev_shares == null ? null : h.shares - h.prev_shares), value_usd: h.value, value_delta_usd: h.value_delta, change: h.change, accession: h.accession ?? null, accepted_at: noMs(h.accepted_at) }));
       source = 'all';
     }
     const curatedCiks = cohort === 'curated' ? new Set((await filers(env)).map((f) => f.cik)) : null;

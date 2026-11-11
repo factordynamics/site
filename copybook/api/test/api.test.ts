@@ -4073,13 +4073,15 @@ describe('copybook api', () => {
     const tk = (await (await call('/session', { body: { checkout_session: 'cs_test_cpu' } })).json()).token;
     const key = (await (await call('/keys', { body: { name: 'k' }, token: tk })).json()).key;
     const v1 = async (path: string) => (await handleRequest(new Request(`https://api.test${path}`, { headers: { authorization: `Bearer ${key}` } }), env)).json();
-    const rest = [{ slug: 'whale-rock-7322', cik: '0001387322', curated: false }, { slug: 'x-1', cik: '0000000001', curated: false }];
+    const rest = [{ slug: 'whale-rock-7322', cik: '0001387322', curated: false }, { slug: 'x-1', cik: '0001423053', curated: false, type: 'bank' }];
     hist.m.set('pre/v1-filers-rest.txt', new TextEncoder().encode(`2 0001067983,0001040273\n${JSON.stringify(rest)}`));
     const all = await v1('/v1/filers');
     expect(all).toMatchObject({ schema_version: expect.any(String), count: 4 });
     expect(all.data.map((f: { slug: string }) => f.slug)).toEqual(['warren-buffett', 'dan-loeb', 'whale-rock-7322', 'x-1']);
     expect((await v1('/v1/filers?curated=false')).data.map((f: { slug: string }) => f.slug)).toEqual(['whale-rock-7322', 'x-1']);
     expect((await v1('/v1/filers?curated=true')).count).toBe(2);
+    // The type comes from filer_types.json (hand-checked overrides, reclasses), not the row's own copy.
+    expect(all.data.find((f: { slug: string }) => f.slug === 'x-1').type).toBe('hedge_fund');
     const page = await v1('/v1/filers?limit=2&offset=1');
     expect([page.count, page.next_offset, page.data.map((f: { slug: string }) => f.slug)]).toEqual([4, 3, ['dan-loeb', 'whale-rock-7322']]);
     expect((await v1('/v1/filers?offset=3')).next_offset).toBeNull();
