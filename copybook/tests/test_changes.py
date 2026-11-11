@@ -281,3 +281,38 @@ class HedgeFlowTest(unittest.TestCase):
         self.assertEqual((x["bought_usd"], x["sold_usd"], x["net_usd"], x["gross_usd"]), (1000, -300, 700, 1300))
         self.assertEqual(x["median_pct_of_book"], 0.35)  # A 1000/2000, B 200/1000
         self.assertIn("XYZ", q3["lists"]["holder_change_up"])
+
+
+class OlderQuarterChangesTest(unittest.TestCase):
+    def test_earlier_quarters_get_changes_and_the_oldest_uses_the_prior_store(self):
+        # LSV-like: books for 2026Q1 and 2026Q2 stored, latest 13F is 2026Q3; 2025Q4 only in the prior store.
+        import gzip, tempfile
+        from pathlib import Path
+        from unittest import mock
+        from ingest import moves
+        cols = ["ticker", "issuer", "title", "cusip", "put_call", "shares", "value", "shares_type"]
+        bk = lambda q, acc, rows: {"ok": True, "cik": "0000000001", "quarter": q, "accession": acc, "columns": cols,
+                                   "rows": [[None, c, "COM", c, None, sh, v, "SH"] for c, sh, v in rows]}
+        with tempfile.TemporaryDirectory() as d:
+            data = Path(d)
+            for q, acc, rows in (("2026Q1", "q1", [("624756102", 150, 1500), ("BBBBBB101", 10, 100)]),
+                                 ("2026Q2", "q2", [("624756102", 120, 1200)])):
+                (data / "fb" / q).mkdir(parents=True)
+                (data / "fb" / q / "0000000001.json").write_text(json.dumps(bk(q, acc, rows)))
+            (data / "fb" / "_prior").mkdir()
+            (data / "fb" / "_prior" / "2025Q4.json.gz").write_bytes(gzip.compress(json.dumps(
+                {"0000000001": bk("2025Q4", "q0", [("624756102", 100, 1000), ("CCCCCC101", 5, 50)])}).encode()))
+            per = {}
+            with mock.patch.multiple(moves, DATA=data, PRIOR=data / "fb" / "_prior", CONS={}, SECS={}, ACCEPTED={}):
+                n = moves.older_changes([{"cik": "0000000001", "quarter": "2026Q3"}], {}, per, lambda c, rec, r: r["change"])
+                q1 = json.loads((data / "fq" / "2026Q1" / "0000000001.json").read_text())
+                q2 = json.loads((data / "fq" / "2026Q2" / "0000000001.json").read_text())
+                self.assertFalse((data / "fq" / "2025Q4").exists())  # the prior is never a served book
+        rows = lambda b: {r[b["columns"].index("cusip")]: dict(zip(b["columns"], r)) for r in b["rows"]}
+        self.assertEqual(n, 2)
+        self.assertEqual((q1["prev_quarter"], q2["prev_quarter"]), ("2025Q4", "2026Q1"))
+        r1 = rows(q1)
+        self.assertEqual((r1["624756102"]["change"], r1["624756102"]["prev_shares"]), ("added", 100))
+        self.assertEqual((r1["BBBBBB101"]["change"], r1["CCCCCC101"]["change"]), ("new", "exited"))
+        self.assertEqual(rows(q2)["BBBBBB101"]["change"], "exited")  # Q2 against stored Q1, not the prior store
+        self.assertEqual(sorted(per), ["2026Q1", "2026Q2"])

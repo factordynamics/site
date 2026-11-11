@@ -287,7 +287,8 @@ def book(q: str, base: dict, extra: list[dict], books: dict, lines: dict) -> dic
         "source": "SEC Form 13F data set",
         "columns": list(BOOK_COLUMNS),
         "rows": [[None, r[0], r[1], r[2], r[3], round(r[4]), round(r[5]), r[6], r[7], r[8],
-                  float(f"{r[5] / r[8]:.6g}") if r[8] else None, abs(r[5] - r[8]) > 0.5] for r in rows],
+                  float(f"{r[5] / r[8]:.6g}") if r[8] else 1.0 if not r[5] else None, abs(r[5] - r[8]) > 0.5]
+                 for r in rows],
     }
 
 

@@ -352,6 +352,94 @@ def write_hedge_flow(shards: list[dict], types: dict, curated: dict) -> tuple[in
     return len(periods), len(recent)
 
 
+def write_full(base: dict, prev_q: str, rows: list[dict]) -> None:
+    """fq/{quarter}/{cik}.json: the full book with change columns, uploaded as R2 fb/{quarter}/{cik}.json in place
+    of the plain book (upload_history.py)."""
+    full = {k: v for k, v in base.items() if k not in ("rows", "columns", "truncated", "_fb_only")} | {
+        "accepted_at": base.get("accepted_at") or ACCEPTED.get(base.get("accession") or ""),
+        "prev_quarter": prev_q,
+        "equity_value": build.apply_weights({"holdings": [r for r in rows if r["change"] != "exited"]}).get("equity_value"),
+        "columns": list(FULL_COLUMNS),
+        "rows": [[(r.get("split") or {}).get("ratio") if k == "split_ratio" else
+                  round(r.get("principal_amount") or 0) if k == "shares" and r.get("shares_type") == "PRN" else
+                  round(r.get("prev_principal_amount") or 0) if k == "prev_shares" and r.get("shares_type") == "PRN" else
+                  (round(r[k]) if k in ("shares", "value", "prev_shares", "prev_value", "value_delta", "share_change",
+                                       "prev_shares_as_filed") and isinstance(r.get(k), float) else r.get(k))
+                  for k in FULL_COLUMNS] for r in rows],
+    }
+    write(DATA / "fq" / base["quarter"] / f"{base['cik']}.json", full)
+
+
+PRIOR = DATA / "fb" / "_prior"  # {quarter}.json.gz: the quarter before the oldest stored one (never uploaded)
+
+
+def prior_books(q: str) -> dict[str, dict]:
+    """Every filer's book for q, the quarter before the oldest one in fb/, from the SEC 13F data set. Read once
+    and kept in the fb/ cache as one gzipped file; it only supplies prior-quarter fields, never a served book."""
+    import gzip
+    path = PRIOR / f"{q}.json.gz"
+    if path.exists():
+        try:
+            return json.loads(gzip.decompress(path.read_bytes()))
+        except (OSError, ValueError):
+            pass
+    from ingest import datasets
+    urls = datasets.sets_for(q, datasets.windows())
+    if not urls:
+        return {}
+    books = {c: b for c, b in datasets.read_period(q, [datasets.fetch_set(u) for u in urls]).items() if b.get("ok")}
+    PRIOR.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(gzip.compress(json.dumps(books, separators=(",", ":")).encode(), 6, mtime=0))
+    return books
+
+
+def older_changes(shards: list[dict], curated: dict, per_quarter: dict[str, list[list]], row_of) -> int:
+    """Full runs only: change columns for every stored quarter that is not a filer's latest (its latest is done
+    above), against the quarter before: from fb/, or for the oldest stored quarter from prior_books. Curated
+    funds are served from h/ and skipped. Returns the books written."""
+    latest = {s["cik"]: s.get("quarter") for s in shards}
+    folders = sorted(p for p in (DATA / "fb").glob("*Q?") if p.is_dir())
+    if not folders:
+        return 0
+    oldest = folders[0].name
+    prior: dict[str, dict] | None = None
+    n = 0
+    for folder in folders:
+        q, pq = folder.name, prev_quarter(folder.name)
+        for p in sorted(folder.glob("*.json")):
+            cik = p.stem
+            if cik in curated or latest.get(cik) == q:
+                continue
+            rec = read(p)
+            cur = book(rec)
+            if cur is None:
+                continue
+            prev_rec = read(DATA / "fb" / pq / f"{cik}.json")
+            if prev_rec is None and q == oldest:
+                if prior is None:
+                    try:
+                        prior = prior_books(pq)
+                    except Exception as e:  # noqa: BLE001 - the next full run tries again
+                        print(f"::warning::moves: prior quarter {pq} from the SEC data set failed: {e}", flush=True)
+                        prior = {}
+                prev_rec = prior.get(cik)
+            prev = book(prev_rec)
+            if prev is None:
+                continue
+            rows = build.with_changes(cur, prev)
+            for r in rows:
+                if not r.get("source_accession") or r.get("change") == "exited":
+                    r["source_accession"] = rec.get("accession")
+                if not r.get("first_disclosed_at") or r.get("change") == "exited":
+                    r["first_disclosed_at"] = ACCEPTED.get(r["source_accession"] or "") or rec.get("accepted_at")
+                if r["change"] in ("new", "added", "trimmed", "exited") and r.get("shares_type") != "PRN" \
+                        and not r.get("price_outlier") and not r.get("suspect_units"):
+                    per_quarter.setdefault(q, []).append(row_of(cik, rec, r))
+            write_full(rec | {"cik": cik, "quarter": q}, pq, rows)
+            n += 1
+    return n
+
+
 def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) -> int:
     """hl/{issuer6}.json: every 13F filer holding the stock in its latest full book (never the top-500
     public shard), with the period of that book and its change against the filer's prior quarter.
@@ -503,6 +591,15 @@ def main() -> int:
     from ingest.filer_types import load as load_types
     types = load_types()
     per_quarter: dict[str, list[list]] = {}
+
+    def row_of(cik: str, rec: dict, r: dict) -> list:
+        meta = curated.get(cik) or filers.get(cik) or {}
+        return [cik, meta.get("slug"), rec.get("name") or meta.get("name"), cik in curated, (types.get(cik) or {}).get("type"),
+                r["cusip"], r.get("ticker"), r.get("issuer"), r.get("put_call"), r["change"], int(round(r.get("shares") or 0)),
+                int(round(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
+                int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), rec.get("accession"),
+                rec.get("accepted_at") or ACCEPTED.get(rec.get("accession") or "")]
+
     for shard in shards:
         path = DATA / "f" / f"{shard['cik']}.json"
         n += 1
@@ -526,32 +623,16 @@ def main() -> int:
                 r["first_disclosed_at"] = ACCEPTED.get(r["source_accession"] or "") or shard.get("accepted_at") \
                     or ACCEPTED.get(acc_book or "")
         cik = shard["cik"]
-        meta = curated.get(cik) or filers.get(cik) or {}
         for r in rows:
             if r["change"] in ("new", "added", "trimmed", "exited") and r.get("shares_type") != "PRN" \
                     and not r.get("price_outlier") and not r.get("suspect_units"):
-                per_quarter.setdefault(shard["quarter"], []).append([
-                    cik, meta.get("slug"), shard.get("name"), cik in curated, (types.get(cik) or {}).get("type"), r["cusip"],
-                    r.get("ticker"), r.get("issuer"), r.get("put_call"), r["change"], int(round(r.get("shares") or 0)),
-                    int(round(r.get("prev_shares") or 0)), int(round(r.get("share_change") or 0)),
-                    int(round(r.get("value") or 0)), int(round(r.get("value_delta") or 0)), shard.get("accession"),
-                    shard.get("accepted_at") or ACCEPTED.get(shard.get("accession") or "")])
+                per_quarter.setdefault(shard["quarter"], []).append(row_of(cik, shard, r))
         if not shard.get("_fb_only"):
             write(path, base | summary)
-        full = {k: v for k, v in base.items() if k not in ("rows", "columns", "truncated")} | {
-            "accepted_at": base.get("accepted_at") or ACCEPTED.get(base.get("accession") or ""),
-            "prev_quarter": summary["prev_quarter"],
-            "equity_value": build.apply_weights({"holdings": [r for r in rows if r["change"] != "exited"]}).get("equity_value"),
-            "columns": list(FULL_COLUMNS),
-            "rows": [[(r.get("split") or {}).get("ratio") if k == "split_ratio" else
-                      round(r.get("principal_amount") or 0) if k == "shares" and r.get("shares_type") == "PRN" else
-                      round(r.get("prev_principal_amount") or 0) if k == "prev_shares" and r.get("shares_type") == "PRN" else
-                      (round(r[k]) if k in ("shares", "value", "prev_shares", "prev_value", "value_delta", "share_change",
-                                           "prev_shares_as_filed") and isinstance(r.get(k), float) else r.get(k))
-                      for k in FULL_COLUMNS] for r in rows],
-        }
-        # Uploaded as R2 fb/{quarter}/{cik}.json in place of the plain book (upload_history.py).
-        write(DATA / "fq" / shard["quarter"] / f"{shard['cik']}.json", full)
+        write_full(base, summary["prev_quarter"], rows)
+    if os.environ.get("SCOPE", "full") == "full":  # curated runs must stay quick on filing days
+        print(f"moves: changes for {older_changes(shards, curated, per_quarter, row_of)} books of earlier quarters",
+              flush=True)
     write_changes(per_quarter)
     # A curated fund's own book ({slug}.json, full and point-in-time) is its latest when at least as new.
     for cik, m in curated.items():

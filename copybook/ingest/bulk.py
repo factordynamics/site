@@ -74,7 +74,7 @@ def slim(rec: dict, max_rows: int | None = MAX_ROWS, columns: tuple = COLUMNS) -
                     return None
                 if k == "value_adjusted":
                     return abs(v - filed) > 0.5
-                return float(f"{v / filed:.6g}") if filed else None
+                return float(f"{v / filed:.6g}") if filed else 1.0 if not v else None
             return int(h.get(k) or 0) if k in ("value", "shares") else h.get(k)
 
         out["rows"] = [[cell(h, k) for k in columns] for h in rows[:max_rows]]
@@ -105,12 +105,10 @@ def has_full_book(rec: dict) -> bool:
         return True
     path = full_path(rec)
     if path.exists():
-        if rec.get("values_in_thousands") or (rec.get("unit_fix") or 1.0) != 1.0:
-            try:  # a rescaled book needs its unit fields; one written before them is fetched again
-                return "value_as_filed" in (json.loads(path.read_text()).get("columns") or [])
-            except ValueError:
-                return False
-        return True
+        try:  # every row needs its unit fields (1 and false when unscaled): a book written before them is fetched again
+            return "value_as_filed" in (json.loads(path.read_text()).get("columns") or [])
+        except ValueError:
+            return False
     if rec.get("truncated"):
         return False
     write_json(path, rec | {"source": "SEC EDGAR"})

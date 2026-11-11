@@ -404,7 +404,7 @@ def stamp_units(managers: list[dict]) -> int:
                 if filed is None:
                     h.pop("value_scale", None), h.pop("value_adjusted", None)
                     continue
-                h["value_scale"] = float(f"{h['value'] / filed:.6g}") if filed else None
+                h["value_scale"] = float(f"{h['value'] / filed:.6g}") if filed else 1.0 if not h["value"] else None
                 h["value_adjusted"] = abs(h["value"] - filed) > 0.5
                 n += h["value_adjusted"]
     return n

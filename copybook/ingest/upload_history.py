@@ -147,7 +147,12 @@ def main() -> int:
                     "bulk/*.csv.gz"):
         for p in sorted(root.glob(pattern)):
             sources[p.relative_to(root).as_posix()] = p
-    for p in sorted(root.glob("fq/*/*.json")):  # change rows replace the plain book for the same quarter
+    # Change rows (fq/, moves.py) replace the plain book for the same quarter. Curated runs restore fb/ read-only
+    # and usually skip moves.py: their plain books would overwrite the change books a full run sent, so only full
+    # runs send plain fb/ books.
+    if os.environ.get("SCOPE", "full") != "full":
+        sources = {k: v for k, v in sources.items() if not k.startswith("fb/")}
+    for p in sorted(root.glob("fq/*/*.json")):
         sources["fb/" + p.relative_to(root / "fq").as_posix()] = p
     for p in sorted(root.glob("hlf/*.json")):  # every holder per issuer; Pages keeps counts and the top rows
         sources["hl/" + p.name] = p
