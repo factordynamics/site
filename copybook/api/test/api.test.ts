@@ -2220,7 +2220,7 @@ describe('copybook api', () => {
     const until = new Date(r.at * 1000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
     expect(until).toBe(new Date((r.at - 5 * 3600) * 1000).toISOString().slice(0, 10));
     // The offer on /me: when it would end, and the deadline it ends before.
-    expect((await (await call('/me', { token })).json()).member.pause_offer).toMatchObject({ until, quarter: r.quarter, deadline: r.deadline, note: 'Monthly plans can pause until 2 weeks before the next 13F deadline.' });
+    expect((await (await call('/me', { token })).json()).member.pause_offer).toMatchObject({ until, quarter: r.quarter, deadline: r.deadline, note: 'Monthly plans can pause once a year, for up to 3 months: until 2 weeks before the next 13F deadline.' });
     // A comped monthly member (the critics) can pause too; a yearly one can't, and /me and /pause agree.
     await env.DB.put('cus:cus_comp', JSON.stringify({ customer: 'cus_comp', email: 'comp@example.com', status: 'active', plan: 'copy', interval: 'monthly', comped: true, subscription: 'sub_comp', alerts: [] }));
     await env.DB.put('cus:cus_yr', JSON.stringify({ customer: 'cus_yr', email: 'yr@example.com', status: 'active', plan: 'copy', interval: 'yearly', subscription: 'sub_yr', alerts: [] }));
@@ -2319,8 +2319,13 @@ describe('copybook api', () => {
     expect(go.headers.get('location')!.startsWith(`${SITE}account/?resumed=1&login=`)).toBe(true);
     expect((await call('/session', { body: { login } })).status).toBe(200);
     expect(posted.at(-1)).toBe('pause_collection=');
-    // Back early from /account/: same subscription, no second one.
-    await call('/pause', { body: {}, token });
+    // Once per 12 months (the lead, Nov 11): a second pause after resuming is refused with when the next one opens.
+    const again = await call('/pause', { body: {}, token });
+    expect([again.status, (await again.json()).code]).toEqual([409, 'pause_used']);
+    // A year on, it can pause again. Back early from /account/: same subscription, no second one.
+    const rec = JSON.parse((await env.DB.get('cus:cus_pz'))!);
+    await env.DB.put('cus:cus_pz', JSON.stringify({ ...rec, paused_at: rec.paused_at - 366 * 86400 }));
+    expect((await call('/pause', { body: {}, token })).status).toBe(200);
     sent = [];
     const back = await call('/pause', { method: 'DELETE', token });
     expect(back.status).toBe(200);
@@ -2333,6 +2338,8 @@ describe('copybook api', () => {
     expect(posted.at(-1)).toBe('pause_collection=');
     // Nov 10: alerts used Resend's 100 a day, so the pause receipt was refused and lost. It's now sent again
     // by the minute cron once Resend accepts mail, and bulk mail stops 15 short of the cap to leave room for it.
+    const rec2 = JSON.parse((await env.DB.get('cus:cus_pz'))!);
+    await env.DB.put('cus:cus_pz', JSON.stringify({ ...rec2, paused_at: null }));
     resendUsed = 100;
     sent = [];
     expect((await call('/pause', { body: {}, token })).status).toBe(200);
@@ -3237,7 +3244,7 @@ describe('copybook api', () => {
     });
     const co = await (await call('/checkout', { body: { plan: 'pro', interval: 'yearly', ref: ref.code.toUpperCase(), email: 'new@example.com' } })).json();
     // Pro yearly: one month of Pro ($39) off the first year, charged after the trial.
-    expect(co).toEqual({ ok: true, url: 'https://checkout.stripe.com/c/pay/cs_ref', referral: { applied: true, months_free: 1, interval: 'yearly', list_usd: 349, discount_usd: 39, first_charge_usd: 310, charged_after_trial_days: 14 } });
+    expect(co).toEqual({ ok: true, url: 'https://checkout.stripe.com/c/pay/cs_ref', trial_days: 14, referral: { applied: true, months_free: 1, interval: 'yearly', list_usd: 349, discount_usd: 39, first_charge_usd: 310, charged_after_trial_days: 14 } });
     // Copy: the whole first month on monthly; $9 off the first year ($70) on yearly.
     expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'monthly', ref: ref.code, email: 'new2@example.com' } })).json()).referral.first_charge_usd).toBe(0);
     expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'yearly', ref: ref.code, email: 'new3@example.com' } })).json()).referral.first_charge_usd).toBe(70);
@@ -3258,7 +3265,9 @@ describe('copybook api', () => {
     // A paying member's address (here the referrer's own) gets no referral month.
     calls.length = 0;
     expect((await (await call('/checkout', { body: { plan: 'copy', interval: 'monthly', ref: ref.code, email: 'rr@example.com' } })).json()).referral).toEqual({ applied: false });
-    expect(calls.find((c) => c.path === 'checkout/sessions')!.body).not.toContain('discounts');
+    // One free trial per person (the lead, Nov 11): an address that has had a subscription gets plain checkout.
+    const rb = calls.find((c) => c.path === 'checkout/sessions')!.body;
+    expect([rb.includes('discounts'), rb.includes('trial_period_days'), rb.includes('payment_method_collection=if_required'), rb.includes('metadata[returning]=true')]).toEqual([false, false, false, true]);
     expect((await call('/checkout', { body: { plan: 'gold', interval: 'monthly' } })).status).toBe(400);
     // The visitor's first touch and landing page ride on the session; our own checks are tagged test (the lead).
     calls.length = 0;
@@ -5022,7 +5031,7 @@ describe('copybook api', () => {
     expect(sent[0].text).toContain('1 name you own moved in them: DHI.');
     expect(sent[0].text).toContain('Your fastest alert reached you 48 seconds after EDGAR accepted the filing (Warren Buffett 13F).');
     expect(sent[0].text).toContain('alerts for the 2 funds you follow and the 2 names you own');
-    const keep = sent[0].text.match(/Keep Copy yearly: \$79\/year, about 3 months free: (\S+)/)![1];
+    const keep = sent[0].text.match(/Keep Copy yearly: \$79\/year, less than 9 months of monthly, price locked: (\S+)/)![1];
     expect(sent[0].text).toContain('Or stay monthly at $9/month');
     expect(sent[0].html).toContain(`href="${keep}"`);
     expect(sent[0].text).not.toContain('founding'); // Copy has no founding price
@@ -5053,13 +5062,13 @@ describe('copybook api', () => {
     await env.DB.put('alerts:latency', JSON.stringify([{ seconds: 50, sent: '2026-11-14T21:00:00Z' }, { seconds: 70, sent: '2026-11-14T21:01:00Z' }, { seconds: 90, sent: '2026-11-14T21:02:00Z' }, { seconds: 4000, sent: '2026-11-14T21:03:00Z', replay: true }]));
     await cron(12, Date.UTC(2026, 10, 18, 15, 12));
     expect(sent.map((m) => m.to[0])).toEqual(['promo@example.com']);
-    expect(sent[0].subject).toBe('Your Q3 2026 filing season on Copybook, and about 2 months free with yearly'); // the pricing page's words, no dollar figure
+    expect(sent[0].subject).toBe('Your Q3 2026 filing season on Copybook, and yearly for the price of 10 months of monthly'); // the pricing page's words, no dollar figure
     expect(sent[0].text).toContain('Copybook sent you 41 alerts. Our median time from EDGAR acceptance to your inbox this season was 70 seconds.');
     expect(sent[0].text).toContain('Copy Pro monthly: $468 a year. Yearly is $390');
     // One button to the same portal confirm page as the trial's day 11, with the founding price.
-    expect(sent[0].text).toMatch(/Switch to yearly: \$390\/year, about 2 months free \(you see the amount and confirm on the next page\): https:\/\/\S+\/keep\?t=/);
+    expect(sent[0].text).toMatch(/Switch to yearly: \$390\/year, the price of 10 months of monthly, price locked \(you see the amount and confirm on the next page\): https:\/\/\S+\/keep\?t=/);
     expect(sent[0].text).toContain('Your founding price stays at $39/month or $390/year');
-    expect(sent[0].html).toContain('Switch to yearly: $390/year, about 2 months free</a>');
+    expect(sent[0].html).toContain('Switch to yearly: $390/year, the price of 10 months of monthly, price locked</a>');
     sent = [];
     await cron(12, Date.UTC(2026, 10, 19, 15, 12));
     expect(sent).toHaveLength(0);

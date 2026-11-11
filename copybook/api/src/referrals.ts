@@ -90,6 +90,20 @@ type Reply = { status: number; body: Record<string, unknown> };
 /** Fund checkout's submit note, as on the Fund Payment Links: the Terms, and the invoice route. */
 const FUND_SUBMIT = "Copybook is made by Factor Dynamics. By subscribing you agree to Copybook's Terms (copybook.factordynamics.com/terms/). To pay by invoice instead, use copybook.factordynamics.com/contact/?topic=fund.";
 
+/** Whether this address has had a Copybook subscription: its member record, else any Stripe customer with that email. */
+async function hadSubscription(env: Env, email: string, existing: Member | null): Promise<boolean> {
+  if (existing?.subscription?.startsWith('sub_') || existing?.trial_end) return true;
+  try {
+    for (const c of ((await stripe(env, 'GET', 'customers', { email, limit: 5 })).data ?? []) as { id: string }[]) {
+      const subs = ((await stripe(env, 'GET', 'subscriptions', { customer: c.id, status: 'all', limit: 5 })).data ?? []) as unknown[];
+      if (subs.length) return true;
+    }
+  } catch {
+    // Stripe unreachable: the trial stands rather than blocking checkout.
+  }
+  return false;
+}
+
 export async function createCheckout(env: Env, b: Record<string, unknown>, client?: 'bot' | 'browser' | 'unknown'): Promise<Reply> {
   const plan = String(b.plan ?? '');
   const interval = String(b.interval ?? '');
@@ -114,6 +128,9 @@ export async function createCheckout(env: Env, b: Record<string, unknown>, clien
   // The visitor's first touch and landing page ride on the session, so funnel pulls split real from test by post.
   const tag = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
   const isTest = b.test === true || (!!email && testAddress(email)) || /^test/i.test(source ?? '') || gate;
+  // One free trial per person (the lead, Nov 11): an address that has had a Copybook subscription before (any plan, a
+  // trial included) gets plain checkout, so lapsing and re-trialling each season isn't free. Test addresses are exempt.
+  const trial = !(email && !isTest && (await hadSubscription(env, email, existing)));
   const touch = { utm_source: tag(b.utm_source, 60), utm_content: tag(b.utm_content, 60), landing: tag(b.landing, 120) };
   const cs = await stripe(env, 'POST', 'checkout/sessions', {
     ...(isTest ? { 'metadata[test]': 'true' } : {}),
@@ -123,12 +140,12 @@ export async function createCheckout(env: Env, b: Record<string, unknown>, clien
     mode: 'subscription',
     'line_items[0][price]': price.id,
     'line_items[0][quantity]': 1,
-    'subscription_data[trial_period_days]': TRIAL_DAYS,
+    ...(trial ? { 'subscription_data[trial_period_days]': TRIAL_DAYS } : { 'metadata[returning]': 'true' }),
     ...(promo ? { 'discounts[0][promotion_code]': promo.id } : ref ? { 'discounts[0][coupon]': await couponFor(env, plan), 'subscription_data[metadata][ref]': ref } : {}),
     ...(gate ? { payment_method_collection: 'if_required', 'subscription_data[metadata][test]': 'gatecheck' } : {}),
     // Copy's 14-day trial needs no card (the lead, Nov 11): one is asked for near the end (trialEndingMail), and a trial
     // that ends without one is cancelled, never invoiced. Pro and Fund keep the card at Checkout.
-    ...(plan === 'copy' && !gate ? { payment_method_collection: 'if_required', 'subscription_data[trial_settings][end_behavior][missing_payment_method]': 'cancel' } : {}),
+    ...(plan === 'copy' && !gate && trial ? { payment_method_collection: 'if_required', 'subscription_data[trial_settings][end_behavior][missing_payment_method]': 'cancel' } : {}),
     ...(source ? { 'subscription_data[metadata][source]': source } : {}),
     ...(email ? { customer_email: email } : {}),
     success_url: `${env.SITE_URL}account/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
@@ -136,7 +153,7 @@ export async function createCheckout(env: Env, b: Record<string, unknown>, clien
     'metadata[copybook]': ref ? 'referral' : 'checkout',
     // The seller on the card statement is the account's name: say whose product it is.
     // Copy: what the cardless trial means, on the main panel by the button (the trader and retail, Nov 11).
-    'custom_text[submit][message]': plan === 'fund' ? FUND_SUBMIT : plan === 'copy' && !gate ? copySubmit(Date.now()) : 'Copybook is made by Factor Dynamics.',
+    'custom_text[submit][message]': plan === 'fund' ? FUND_SUBMIT : plan === 'copy' && !gate && trial ? copySubmit(Date.now()) : 'Copybook is made by Factor Dynamics.',
     // Pro and Fund: the founding price (amount and deadline) and the tax line. Copy: neither.
     ...(checkoutNote(plan, price.unit_amount, price.recurring?.interval) ? { 'custom_text[after_submit][message]': checkoutNote(plan, price.unit_amount, price.recurring?.interval)! } : {}),
     ...(plan !== 'copy' && Date.now() < FOUNDING_UNTIL ? { 'subscription_data[metadata][founding]': 'true' } : {}),
@@ -146,7 +163,7 @@ export async function createCheckout(env: Env, b: Record<string, unknown>, clien
   // The first charge, after the trial, with the referral month off: what the pricing page shows next to the button.
   const list = Number(price.unit_amount ?? 0);
   const first = { interval, list_usd: list / 100, discount_usd: MONTH[plan] / 100, first_charge_usd: Math.max(0, list - MONTH[plan]) / 100, charged_after_trial_days: TRIAL_DAYS };
-  return { status: 200, body: { ok: true, url: cs.url, referral: ref ? { applied: true, months_free: 1, ...(list ? first : {}) } : code ? { applied: false } : null } };
+  return { status: 200, body: { ok: true, url: cs.url, trial_days: trial ? TRIAL_DAYS : 0, referral: ref ? { applied: true, months_free: 1, ...(list ? first : {}) } : code ? { applied: false } : null } };
 }
 
 /** Records a referred subscription under its referrer, once. */

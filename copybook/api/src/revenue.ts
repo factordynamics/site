@@ -30,8 +30,9 @@ const day = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-US', 
 /** A trial or period end with its time (Stripe shows the UTC date, so a 7:46 pm ET end reads as the next day there): "November 24, 7:46 pm ET". */
 export const endAt = (unix: number) => `${day(unix)}, ${new Date(unix * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).replace(' AM', ' am').replace(' PM', ' pm')} ET`;
 const money = (n: number) => `$${n.toLocaleString('en-US')}`;
-/** Yearly's saving as the pricing page words it (about 3 months free on Copy, 2 on Pro and Fund): no other figure. */
-const monthsFree = (p: { month: number; year: number }) => `about ${Math.round(12 - p.year / p.month)} months free`;
+/** Yearly as marketing words it (plan rev 75): \"less than 9 months of monthly, price locked\"; never \"months free\" or a %. */
+const monthsOf = (p: { month: number; year: number }) => (Number.isInteger(p.year / p.month) ? `the price of ${p.year / p.month} months of monthly` : `less than ${Math.ceil(p.year / p.month)} months of monthly`);
+const monthsFree = (p: { month: number; year: number }) => `${monthsOf(p)}, price locked`;
 
 /** What one member got (email, digest or chat), for the trial and season emails: KV stats:{customer}. */
 export interface MemberStats {
@@ -563,7 +564,7 @@ export function seasonRecapMail(m: Member, st: MemberStats, sent: number, funds:
   const founding = FOUNDING[m.plan] ?? '';
   return {
     to: m.email,
-    subject: `Your ${season} filing season on Copybook, and ${monthsFree(p)} with yearly`,
+    subject: `Your ${season} filing season on Copybook, and yearly for ${monthsOf(p)}`,
     text: `The ${season} 13F filing season is in. Copybook sent you ${sent} alert${sent === 1 ? '' : 's'}.${median != null ? ` Our median time from EDGAR acceptance to your inbox this season was ${secs(median)}.` : ''}\n\nYour season:\n${got.map((g) => `  - ${g}`).join('\n')}\n\nYou're on ${p.name} monthly: ${money(p.month * 12)} a year. Yearly is ${money(p.year)}: ${monthsFree(p)}.${founding ? ` ${founding}` : ''}\n\n${cta} (you see the amount and confirm on the next page): ${keep}\n\nUnsubscribe from tips and newsletters: ${unsub}${FOOTER}`,
     html: `<div style="font:15px/1.5 system-ui,sans-serif;color:#111;max-width:560px"><p>The ${esc(season)} 13F filing season is in.</p><p style="margin-bottom:4px"><b>Your season</b></p><ul style="margin-top:0;padding-left:20px">${got.map((g) => `<li>${esc(g)}</li>`).join('')}</ul><p>You're on ${esc(p.name)} monthly: ${money(p.month * 12)} a year. Yearly is <b>${money(p.year)}</b>: ${monthsFree(p)}.</p><p style="margin:22px 0 8px"><a href="${keep}" style="display:inline-block;background:#111;color:#fff;padding:11px 20px;border-radius:999px;text-decoration:none;font-weight:600">${esc(cta)}</a></p>${founding ? `<p style="font-size:13px;color:#374151;margin:0 0 6px">${esc(founding)}</p>` : ''}<p style="font-size:13px;color:#374151;margin:0">You see the amount and confirm on the next page.</p><p style="color:#6b7280;font-size:12px;margin-top:24px">Source: SEC EDGAR filings, as filed. Not investment advice. Copybook by Factor Dynamics. <a href="${unsub}" style="color:#6b7280">Unsubscribe from tips and newsletters</a></p></div>`,
     unsubscribe: unsub,
@@ -789,16 +790,30 @@ const isoDay = (unix: number) => new Date(unix * 1000).toLocaleDateString('en-CA
 const pausable = (m: Member) => m.plan !== 'holdterm' && !m.seat_of && !!PRICES[m.plan] && !!m.subscription && m.interval === 'monthly';
 
 
-export const PAUSE_NOTE = 'Monthly plans can pause until 2 weeks before the next 13F deadline.';
-export const PAUSE_AFTER_TRIAL_NOTE = 'Pause after your trial: no charge until 2 weeks before the next 13F deadline, when real-time alerts resume.';
+export const PAUSE_NOTE = 'Monthly plans can pause once a year, for up to 3 months: until 2 weeks before the next 13F deadline.';
+export const PAUSE_AFTER_TRIAL_NOTE = 'Pause after your trial, once a year for up to 3 months: no charge until 2 weeks before the next 13F deadline, when real-time alerts resume.';
+/**
+ * One pause per rolling 12 months, of at most 3 months (the lead, Nov 11): 9 paid months x $9 = $81, so $79 a year stays
+ * the better deal. When the next one can start (ms), or null when one can now.
+ */
+export const PAUSE_EVERY_MS = 365 * 86_400_000;
+export const pauseNextAt = (m: Member, now = Date.now()) => (m.paused_at && m.paused_at * 1000 + PAUSE_EVERY_MS > now ? m.paused_at * 1000 + PAUSE_EVERY_MS : null);
+/** Resumes 2 weeks before the next deadline, and never more than 3 calendar months after the pause starts. */
+const pauseEnd = (from: number) => {
+  const r = pauseResumesAt(from);
+  const cap = new Date(from);
+  cap.setUTCMonth(cap.getUTCMonth() + 3);
+  return { ...r, at: Math.min(r.at, Math.floor(cap.getTime() / 1000)) };
+};
 
 /** When a pause chosen now starts: today, or for a monthly trial, the trial's end (the trial keeps everything). */
 const pauseStart = (m: Member, now: number) => (m.status === 'trialing' && m.trial_end && m.trial_end * 1000 > now ? m.trial_end * 1000 : now);
 
 export function pauseOffer(m: Member, now = Date.now()): { until: string; quarter: string; deadline: string; deadline_label: string; note: string; starts: string } | null {
-  if (!pausable(m) || (m.status !== 'active' && m.status !== 'trialing') || isPaused(m, now) || pauseScheduled(m, now)) return null;
+  // Never a trial without a card (it just ends), and once per 12 months.
+  if (!pausable(m) || (m.status !== 'active' && m.status !== 'trialing') || (m.status === 'trialing' && m.has_payment_method === false) || pauseNextAt(m, now) || isPaused(m, now) || pauseScheduled(m, now)) return null;
   const from = pauseStart(m, now);
-  const r = pauseResumesAt(from);
+  const r = pauseEnd(from);
   return { until: isoDay(r.at), quarter: r.quarter, deadline: r.deadline, deadline_label: deadlineLabel(r.deadline), note: from > now ? PAUSE_AFTER_TRIAL_NOTE : PAUSE_NOTE, starts: isoDay(Math.floor(from / 1000)) };
 }
 
@@ -819,11 +834,17 @@ export async function noteReason(env: Env, customer: string, reason: string, via
  */
 export async function pauseMember(env: Env, m: Member, reason: string | null, now = Date.now(), note?: string): Promise<{ status: number; body: Record<string, unknown> }> {
   const offer = pauseOffer(m, now);
+  const nextAt = pausable(m) ? pauseNextAt(m, now) : null;
+  if (!offer && nextAt && !isPaused(m, now) && !pauseScheduled(m, now)) return { status: 409, body: { ok: false, error: `Monthly plans can pause once a year; your next pause is available from ${isoDay(Math.floor(nextAt / 1000))}`, code: 'pause_used', next_pause: isoDay(Math.floor(nextAt / 1000)) } };
+  if (!offer && m.status === 'trialing' && m.has_payment_method === false) return { status: 409, body: { ok: false, error: 'Add a card to keep Copy; a trial without one just ends, so there is nothing to pause', code: 'no_card' } };
   if (!offer) return { status: 409, body: { ok: false, error: isPaused(m, now) ? 'Already paused' : m.status === 'trialing' ? 'Monthly plans can pause after the trial; cancel in Manage billing instead' : 'Monthly plans can pause; yearly, seat and Holdterm plans cancel in Manage billing instead', code: 'pause_unavailable' } };
   if (reason && !(await noteReason(env, m.customer, reason, 'pause', note))) return { status: 400, body: { ok: false, error: `reason: ${Object.keys(WHY).join(', ')}`, code: 'bad_request' } };
-  const at = pauseResumesAt(pauseStart(m, now)).at;
+  const start = pauseStart(m, now);
+  const at = pauseEnd(start).at;
   const sub = await stripe(env, 'POST', `subscriptions/${m.subscription}`, { 'pause_collection[behavior]': 'void', 'pause_collection[resumes_at]': at, cancel_at_period_end: 'false' });
-  const next = await syncSubscription(env, sub);
+  // The pause counts from when it starts (a trial's end), resumed early or not.
+  const next = { ...(await syncSubscription(env, sub)), paused_at: Math.floor(start / 1000) };
+  await putMember(env, next);
   if (billable(next)) await bump(env, 'pauses', next, `${m.subscription}:${at}`, now);
   await sendMail(env, [pauseReceiptMail(env, next, at, await resumeUrl(env, next))]);
   return { status: 200, body: { ok: true, paused_until: isoDay(at), starts: offer.starts, deadline: offer.deadline, member: { paused_until: next.paused_until, pause_after_trial: pauseScheduled(next, now) ? { from: next.paused_from, until: next.paused_until } : null } } };

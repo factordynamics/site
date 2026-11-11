@@ -158,6 +158,8 @@ export interface Member {
   paused_until?: number | null;
   /** A pause chosen during a monthly trial starts when the trial ends (unix); the trial keeps everything until then. */
   paused_from?: number | null;
+  /** When the member's last pause started (unix): monthly plans pause once per rolling 12 months (the lead, Nov 11). */
+  paused_at?: number | null;
   /** The 3-days-before reminder, sent for this paused_until. */
   pause_reminded?: number | null;
   /** The pre-season win-back, sent for this season (the quarter whose 13Fs are due next). */
