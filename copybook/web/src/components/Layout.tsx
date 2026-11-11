@@ -34,7 +34,11 @@ export function Layout() {
     setMenu(false)
     // A link to a section (/security/#who-can-see-member-data) scrolls to it once the lazy page renders.
     const id = hash.slice(1)
-    if (!id || id.includes('=')) return window.scrollTo(0, 0)
+    // Current Chrome returns a Promise from scrollTo; an effect must return nothing or a cleanup function.
+    if (!id || id.includes('=')) {
+      window.scrollTo(0, 0)
+      return
+    }
     let n = 0
     const t = setInterval(() => {
       const el = document.getElementById(decodeURIComponent(id))
