@@ -44,6 +44,7 @@ FULL_COLUMNS = ("row_type", "ticker", "issuer", "title", "cusip", "put_call", "s
 SECS: dict[str, dict] = {}
 NO_PRIOR: dict[str, dict] = {}  # cik -> latest full book with no prior quarter (served with its unit check, no changes)
 PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
+NETS: dict[str, tuple] = {}  # issuer6 -> (net_quarter, hl/ counts.net), for the parity check against changes/
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
 EQUITY: dict[str, float] = {}  # cik -> value of its share positions (SH, no options, no PRN): the weight denominator
 FILING: dict[str, dict] = {}  # cik -> the filing behind its LATEST book (accession, filing_date, accepted_at)
@@ -199,6 +200,24 @@ CHANGE_COLUMNS = ("cik", "slug", "filer_name", "curated", "type", "cusip", "tick
 CHANGES_MAX = 20_000  # largest |value_delta| per quarter; the Worker parses the whole file
 
 
+def net_parity(per_quarter: dict[str, list[list]]) -> None:
+    """hl/ counts.net (canonical) against the sum of the same quarter's changes/ rows per issuer (no options), so the
+    two can't drift unseen. Logs the gap and its largest issuers; changes/ rows carry no title, so a preferred's
+    trades count there and not in hl/."""
+    sums: dict[str, float] = {}
+    for q in {nq for nq, _ in NETS.values() if nq}:
+        for r in per_quarter.get(q, []):
+            c = linked(r[5])
+            if not r[8] and len(c) >= 6 and NETS.get(c[:6], (None,))[0] == q:
+                sums[c[:6]] = sums.get(c[:6], 0) + (r[14] or 0)
+    off = sorted(((code, net, round(sums.get(code, 0))) for code, (nq, net) in NETS.items()
+                  if abs(net - sums.get(code, 0)) > max(1e6, 0.001 * abs(net))), key=lambda x: -abs(x[1] - x[2]))
+    print(f"moves: net parity: {len(NETS) - len(off)}/{len(NETS)} issuers' hl/ net equal their changes/ sum; "
+          f"largest gaps (issuer, hl net, changes sum): {off[:8]}; " + "; ".join(
+              f"{c} {NETS[c][1]} vs {round(sums.get(c, 0))}" for c in ("037833", "30233Q", "438516", "M8769Q") if c in NETS),
+          flush=True)
+
+
 def write_changes(per_quarter: dict[str, list[list]]) -> None:
     """changes/{quarter}.json: every filer's moves in a report period (paid; R2 for /v1/changes)."""
     for q, rows in per_quarter.items():
@@ -351,15 +370,18 @@ def write_links(quarter: str | None) -> list[str]:
     from datetime import datetime, timezone
     write(DATA / "cusip_links.json", {
         "generated": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "note": "Reissued CUSIPs, old -> new. Found in 13F filings (filers = how many showed it this run) and confirmed "
+        "note": "Reissued CUSIPs, old -> new. quarter is the first quarter filers report the new CUSIP (the quarter "
+                "whose changes compare it with the old one); list_quarter is the SEC list's. Found in 13F filings "
+                "(filers = how many showed it this run) and confirmed "
                 "by the SEC's Official List of Section 13(f) Securities, which deletes the old CUSIP in the list that "
                 "adds the new one (list_quarter, list_url); units, rights and warrants never link. Each link's share "
                 "units are checked on the holders that reported the old CUSIP one quarter and the new one the next "
                 "(units_check): ratio is the prior shares' multiplier. units_basis split_confirmed: the issuer's own "
                 "SEC filing states the ratio (units_check.evidence names it; HON 2026Q2 1-for-2, 8-K "
                 "0000773840-26-000084; a 1:1 re-domicile such as TGLS counts too), or a split found on the pair and "
-                "confirmed by SEC XBRL shares outstanding. units_basis holders_1to1: at least 5 holders and at least "
-                "10% of them at exactly 1:1, more than at any other ratio, with the median ratio within 1% of 1:1 "
+                "confirmed by SEC XBRL shares outstanding. units_basis holders_1to1: at least 5 holders at exactly 1:1, "
+                "and at least 10% of all holders at exactly 1:1, more than at any other ratio, and the median ratio "
+                "within 1% of 1:1 "
                 "(holders trade through a reissue, so the median carries the evidence: XOM 514 of 2,333 at exactly "
                 "1:1, median 1.00). Otherwise the pair is held. A filer that kept its pre-split count under the new "
                 "CUSIP is flagged suspect_units (reissue_ratio_not_applied), with no change. "
@@ -642,13 +664,12 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             if r.get("suspect_units"):
                 r = r | {"value_delta": 0}
             # A mis-valued line (BMO 2026Q3 TEVA at ~$4,005 a share, 101x every other filer): its shares still make
-            # it a holder, but its value stays out of weights and $ and its change is unknown.
+            # it a holder with its share change, but its value stays out of weights and $.
             bad_value = bool(r.get("price_outlier"))
             if bad_value:
                 r = r | {"value": 0, "prev_value": 0, "value_delta": 0}
             a = per.setdefault(c[:6], {}).setdefault(cik, [0, 0, 0, 0, False, 0, False, None, False, False])
-            a[6] = a[6] or bad_value
-            a[9] = a[9] or bad_value
+            a[9] = a[9] or bad_value  # its shares and change stand (BMO TEVA added +159,272); only its $ are out
             a[7] = a[7] or r.get("prev_cusip")
             # A held reissue (units unconfirmed) whose codes share an issuer prefix (BYND 08862E109 -> 08862E307):
             # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
@@ -712,6 +733,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
         nq = max((PERIOD.get(cik) or meta[cik].get("quarter") or "" for cik in hs), default=None)
         for c in [counts] + list(lenses.values()):
             c["net_quarter"], c["net"] = nq, c["net_by_period"].get(nq, 0)
+        NETS[code] = (nq, counts["net"])
         rows.sort(key=lambda r: -(r[8] or r[9] or 0))
         tickers = sorted(tick.get(code, {}), key=lambda t: -tick[code][t])
         for t in tickers:
@@ -882,6 +904,7 @@ def main() -> int:
           + "; ".join(f"{o}->{v['new']} {v.get('ticker')} {v.get('filers')} filers" for o, v in build.cusip_links().items()),
           flush=True)
     print(f"moves: holder index for {write_holders(shards, types, curated, filers)} issuers", flush=True)
+    net_parity(per_quarter)
     print("moves: hedge_flow.json %d periods, recent_filings.json %d filings" % write_hedge_flow(shards, types, curated),
           flush=True)
     print(f"moves: {write_combined_shards()} shards in fall/ for the site build", flush=True)

@@ -222,8 +222,8 @@ MIN_EXACT_1TO1, MIN_SHARE_1TO1, MEDIAN_1TO1 = 5, 0.10, 0.01
 def link_check(pairs: list[tuple[dict, dict]], old: str, new: str, split: float | None, filed: dict | None = None) -> dict | None:
     """Whether a reissue's share units match: holders of old last quarter and new this one. units_ok when the issuer's
     filing states the ratio (FILED, 1:1 included: TGLS's re-domicile), a split was found on the linked pair, or at
-    least MIN_EXACT_1TO1 holders and MIN_SHARE_1TO1 of them sit at exactly 1:1, outnumbering any other ratio, with the
-    median within MEDIAN_1TO1 of 1:1.
+    least MIN_EXACT_1TO1 holders at exactly 1:1, and at least MIN_SHARE_1TO1 of all holders at exactly 1:1,
+    outnumbering any other ratio, and the median within MEDIAN_1TO1 of 1:1.
     Otherwise the link would net mismatched units or rest on too little evidence (DMRA: 2 of 16), and is held."""
     rs = [b[new][0] / a[old][0] for a, b in pairs if a.get(old, (0, 0))[0] > 0 and b.get(new, (0, 0))[0] > 0]
     if not rs:

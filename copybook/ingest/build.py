@@ -668,6 +668,7 @@ def cusip_links() -> dict[str, dict]:
                 HELD_LINKS[o] = v | {"units_reason": "units unchecked: no filer has reported the old CUSIP one "
                                                      "quarter and the new one the next"}
                 continue
+            v["quarter"] = c.get("to_quarter") or v.get("quarter")  # the first quarter filed under the new CUSIP
             v["units_check"] = {k: c.get(k) for k in ("to_quarter", "holders", "exact_at_1", "exact_at_ratio",
                                                      "median_ratio", "split_ratio", "evidence")} | {
                 k: c[k] for k in ("cash_per_old_share", "note") if c.get(k) is not None}
