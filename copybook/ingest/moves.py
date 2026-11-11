@@ -45,6 +45,8 @@ SECS: dict[str, dict] = {}
 NO_PRIOR: dict[str, dict] = {}  # cik -> latest full book with no prior quarter (served with its unit check, no changes)
 PERIOD: dict[str, str] = {}  # cik -> quarter of the book in LATEST when it is not the shard's own
 NETS: dict[str, tuple] = {}  # issuer6 -> (net_quarter, hl/ counts.net), for the parity check against changes/
+LINES: dict[tuple, list] = {}  # (issuer6, cik) -> [lines, value_delta of lines priced by the value difference]
+REPRICED: dict[str, list] = {}  # issuer6 -> rows whose trade from the row's own fields differs from value_delta
 LATEST: dict[str, list[dict]] = {}  # cik -> rows of its latest full book (with changes when the prior is on file)
 EQUITY: dict[str, float] = {}  # cik -> value of its share positions (SH, no options, no PRN): the weight denominator
 FILING: dict[str, dict] = {}  # cik -> the filing behind its LATEST book (accession, filing_date, accepted_at)
@@ -217,6 +219,12 @@ def net_parity(per_quarter: dict[str, list[list]]) -> None:
           f"largest gaps (issuer, hl net, changes sum): {off[:8]}; " + "; ".join(
               f"{c} {NETS[c][1]} vs {round(sums.get(c, 0))}" for c in ("037833", "30233Q", "438516", "M8769Q") if c in NETS),
           flush=True)
+    for c in ("037833", "30233Q", "26614N", "438516", "M8769Q"):
+        nq = NETS.get(c, (None,))[0]
+        rs = sorted((r for r in REPRICED.get(c, []) if r[2] == nq), key=lambda r: -abs(r[5] - r[4]))
+        print(f"moves: net parity {c} {nq}: {len(rs)} rows where (shares - prev_shares) x value/shares != value_delta, "
+              f"sum {sum(r[5] - r[4] for r in rs):+,}; " + "; ".join(
+                  f"{r[0]} {r[1]} {r[3]} value_delta {r[4]:+,} row-priced {r[5]:+,} ({r[6]})" for r in rs[:12]), flush=True)
 
 
 def write_changes(per_quarter: dict[str, list[list]]) -> None:
@@ -683,6 +691,8 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
             # its exit and new line would net to a false trim at mismatched units, so the change is unknown.
             if r.get("change") in ("new", "exited") and (r.get("cusip") or "").upper() in held_codes:
                 a[6] = True
+            ln = LINES.setdefault((c[:6], cik), [0, 0])
+            ln[0] += 1
             a[0] += r.get("shares") or 0
             a[1] += r.get("prev_shares") or 0
             a[2] += r.get("value") or 0
@@ -701,7 +711,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
     index, keep, written, site = {}, set(), set(), {}
     cols = ["cik", "name", "slug", "type", "curated", "period", "shares", "prev_shares", "value", "prev_value", "change",
             "weight", "accession", "filing_date", "accepted_at", "original_accession", "prev_cusip", "suspect_duplicate",
-            "price_outlier", "value_basis", "unreliable"]
+            "price_outlier", "value_basis", "unreliable", "value_delta"]
     for code, hs in per.items():
         blank = lambda: {"holders": 0, "new": 0, "added": 0, "trimmed": 0, "exited": 0, "unchanged": 0, "unknown": 0,
                          "no_prior": 0, "top10": 0, "over5pct": 0, "net": 0, "net_by_period": {}, "by_period": {}}
@@ -727,6 +737,17 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                 if change not in (None, "unknown"):
                     c["net_by_period"][q] = c["net_by_period"].get(q, 0) + round(delta)
             deltas[cik] = round(delta) if change not in (None, "unknown") and not side else None
+            counted = round(delta) if change not in (None, "unknown") else None  # exactly what net sums (0 if held)
+            # /v1 used to price each row from its own fields ((shares - prev_shares) x value / shares); value_delta
+            # is ingest's per-line figure, the one net sums. Where they differ, log the row and why.
+            if counted is not None:
+                tu = (round(v) if change == "new" else -round(pv) if change == "exited" else 0 if change == "unchanged"
+                      else round((sh - ps) * (v / sh)) if sh else None)
+                if tu is not None and abs(tu - counted) > 1000:
+                    n_lines = LINES.get((code, cik), [1])[0]
+                    why = ("held_flag" if side else "several_lines" if n_lines > 1
+                           else "value_difference" if abs(counted - round(v - pv)) <= 1 else "other")
+                    REPRICED.setdefault(code, []).append((cik, meta[cik].get("name"), q, change, counted, tu, why))
             m = curated.get(cik) or filers.get(cik) or {}
             fl = FILING.get(cik) or filing(meta[cik])
             rows.append([cik, meta[cik].get("name"), m.get("slug"), kind, cik in curated,
@@ -735,7 +756,7 @@ def write_holders(shards: list[dict], types: dict, curated: dict, filers: dict) 
                          round(weight, 6) if weight is not None else None,
                          fl["accession"], fl["filing_date"], fl["accepted_at"],
                          fl.get("original_accession") or fl["accession"], prev_cusip, dup,
-                         bad_value, "filed_price_outlier" if bad_value else "filed", side])
+                         bad_value, "filed_price_outlier" if bad_value else "filed", side, counted])
         if not counts["holders"]:
             continue
         # net is one quarter's trades, as /v1: the latest quarter any holder reports (net_quarter); net_by_period
