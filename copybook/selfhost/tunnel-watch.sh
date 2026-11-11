@@ -44,6 +44,9 @@ else
     echo "$since 1" > "$DOWN_SINCE"
     alert "Copybook API tunnel down for 2+ minutes" "The quick tunnel (${url:-no URL}) has failed health checks since $(date -u -d @$since +%FT%TZ). Members now fall back to Funnel ($FUNNEL), which is slow. On gene: systemctl --user status copybook-tunnel; journalctl --user -u copybook-tunnel -n 50."
   fi
+  # Funnel goes through the same API (and uplink): publish it only when it answers. Otherwise leave api.json alone;
+  # Cloudflare's cron moves members to the Worker when both front doors are down (copybook/api/src/autofailover.ts).
+  if ! curl -sf -m 15 -o /dev/null "$FUNNEL/health"; then log "Funnel down too; api.json left to Cloudflare's auto-failover"; exit 0; fi
   want=$FUNNEL
 fi
 

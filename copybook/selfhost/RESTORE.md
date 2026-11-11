@@ -12,6 +12,11 @@ weekly without the key by `backup-verify.sh` and monthly with it by `restore-che
 
 ## Option A: fail members over to the Cloudflare Worker (minutes)
 
+Automatic since Nov 11: Cloudflare's minute cron does steps 0–1 itself when both of gene's front doors (api.json's base
+and Funnel) fail /health on 2 checks in a row, and moves members back after 3 healthy minutes
+(`copybook/api/src/autofailover.ts`, state in R2 `status/auto-failover.json`, an email to hello@ on each move). It never
+undoes a manual pin. The steps below are for doing it by hand.
+
 Cloudflare's copy already has every secret, and its KV is kept current by the sync through R2 (HOSTING.md), so members,
 sessions and follows are there up to about a minute before gene went down. Limit: the free plan's 100k requests/day.
 

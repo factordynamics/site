@@ -2113,6 +2113,73 @@ describe('copybook api', () => {
     Object.assign(env, { CF_API_TOKEN: undefined, CF_ACCOUNT_ID: undefined });
   });
 
+  it("Cloudflare's cron moves members to the Worker when both of gene's front doors are down, and back", async () => {
+    const { runAutoFailover } = await import('../src/autofailover');
+    const W = 'https://copybook-api.factordynamics.workers.dev';
+    const TUN = 'https://abc-def.trycloudflare.com/copybook';
+    const FUN = 'https://gene.tail70ba3.ts.net/copybook';
+    const cf = { ...env, MOVED_TO: `${FUN}/`, PUBLIC_URL: 'https://pub.test/', API_URL: `${W}/`, CF_API_TOKEN: 'cf', CF_ACCOUNT_ID: 'acct', PUBLIC_BUCKET: 'copybook-public' } as Env;
+    let api = TUN;
+    const up = new Set<string>();
+    const writes: string[] = [];
+    const orig = globalThis.fetch;
+    vi.stubGlobal('fetch', async (u: string, init?: RequestInit) => {
+      const url = String(u);
+      if (url.startsWith('https://pub.test/api.json')) return Response.json({ api });
+      if (url.endsWith('/objects/api.json') && init?.method === 'PUT') {
+        api = JSON.parse(String(init.body)).api;
+        writes.push(api);
+        return Response.json({ success: true });
+      }
+      if (url.endsWith('/health')) return up.has(url.slice(0, -7)) ? Response.json({ ok: true }) : new Response('error code: 1033', { status: 530 });
+      if (url.includes('/graphql')) return new Response('no', { status: 500 });
+      return orig(u, init);
+    });
+    const tick = (i: number, probeOk = false) => runAutoFailover(cf, Date.parse('2026-11-12T15:00:00Z') + i * 60_000, probeOk);
+    try {
+      // The tunnel is down but Funnel answers: gene's own watcher handles that, the Worker does nothing.
+      up.add(FUN);
+      for (let i = 0; i < 3; i++) await tick(i);
+      expect(writes).toEqual([]);
+      // Both down: one failed minute isn't enough, the second moves members to the Worker and emails us.
+      up.clear();
+      expect(await tick(3)).toContain('(1/2)');
+      expect(writes).toEqual([]);
+      expect(await tick(4)).toBe(`failed over: api.json -> ${W}`);
+      expect(writes).toEqual([W]);
+      expect(sent.at(-1)?.subject).toContain('members moved to the Cloudflare Worker');
+      // Back after three healthy minutes of the base it replaced; a failed minute in between starts the count again.
+      up.add(TUN);
+      await tick(5);
+      await tick(6);
+      up.clear();
+      await tick(7);
+      up.add(TUN);
+      await tick(8);
+      await tick(9);
+      expect(writes).toEqual([W]);
+      expect(await tick(10)).toBe(`failed back: api.json -> ${TUN}`);
+      expect(writes).toEqual([W, TUN]);
+      // A manual pin (failover-a.sh to-worker) is never undone, however healthy gene is.
+      api = W;
+      for (let i = 11; i < 16; i++) await tick(i);
+      expect(writes).toEqual([W, TUN]);
+      // During an automatic failover, a base someone else publishes (a new tunnel URL from gene's watcher) wins.
+      api = TUN;
+      up.clear();
+      await tick(16);
+      await tick(17);
+      expect(api).toBe(W);
+      api = 'https://new-url.trycloudflare.com/copybook';
+      expect(await tick(18)).toContain('failover ended');
+      up.add(TUN);
+      for (let i = 19; i < 23; i++) await tick(i, true);
+      expect(api).toBe('https://new-url.trycloudflare.com/copybook');
+    } finally {
+      vi.stubGlobal('fetch', orig);
+    }
+  });
+
   it('a retired copy (MOVED_TO) sends every request to the same path on the live host', async () => {
     // It follows the runner's api.json (the current tunnel), so emailed links on this hostname survive a tunnel move.
     const orig = globalThis.fetch;

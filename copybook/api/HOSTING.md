@@ -69,6 +69,6 @@ outbound-only front doors reach it; no inbound port is open.
 | gene reboots, sleeps or loses power | Unaffected. | Down until gene is back. The service starts at boot without a login (linger). Stripe retries webhooks for 3 days. |
 | cloudflared restarts (new tunnel URL) | Unaffected. | The watcher publishes the new URL to `api.json` within about a minute; open pages pick it up on reload. |
 | The quick tunnel fails or nears 200 in flight | Unaffected. | After 2 minutes down the watcher falls back to Funnel (slow). Near the limit, `failover-a.sh to-worker` moves members to the Worker (100k requests/day). |
-| gene loses its network | Unaffected. | Unreachable until the link is back, unless members are failed over to the Worker (`failover-a.sh to-worker`, copybook/selfhost/RESTORE.md). |
+| gene loses its network | Unaffected. | Automatic: when both front doors fail /health on 2 minute checks in a row (about 90 s), Cloudflare's cron points `api.json` at the Worker, and back after 3 healthy minutes (`src/autofailover.ts`; it emails hello@ on each move). No one acts by hand. |
 | Cloudflare's cron stops | gene starts polling 10 minutes after Cloudflare's last run, and stops within a minute of Cloudflare's return. Alerts are about 10 minutes late, never sent twice. A filing in those minutes still goes out: the poll reads 3 days back, and an old one goes in the digest as an earlier filing. | Unaffected. |
 | Both down | Nothing is sent. Filings found later go out marked late, or in the digest's "Earlier filings you may have missed". | Down. |

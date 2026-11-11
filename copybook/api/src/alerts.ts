@@ -2486,6 +2486,8 @@ async function runMinute(env: Env, scheduledTime: number): Promise<Record<string
   // The public latency.json, on every quiet minute (a busy one has spent its CPU on alerts; the next one catches up).
   if (!busy) await step('latency_json', () => import('./index').then((x) => x.publishLatency(env, scheduledTime)));
   if (st && probe) await step('status', () => st.runStatus(env, scheduledTime, probe, !busy));
+  // Failover A without anyone: both of gene's front doors down 2 minutes -> api.json to this Worker, and back (autofailover.ts).
+  if (st && probe) await step('auto_failover', async () => (await import('./autofailover')).runAutoFailover(env, scheduledTime, (await probe).ok));
   const next = JSON.stringify(queue);
   if (next !== (rawQueue ?? '[]')) await env.DB.put('jobs:due', next);
   // Chat and webhook retries get a slot every minute, so a deadline afternoon of back-to-back filings
