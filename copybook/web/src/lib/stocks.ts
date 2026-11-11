@@ -25,6 +25,8 @@ export type StockHolder = {
    *  move and counts toward no dollar total; NEW and EXITED keep their labels. */
   flag?: Flag
   note?: string | null
+  /** Filed value − prior filed value, from ingest on "shares" rows. */
+  value_change?: number | null
 }
 export type StockOption = { slug: string; manager: string; firm: string; quarter: string; featured: boolean; put_call: string; ticker: string | null; shares: number; value: number; weight: number }
 export type Stock = {

@@ -594,7 +594,7 @@ function flagMove(h: StockHolder) {
     return `${r > 0 ? '+' : r < 0 ? '−' : ''}${pct(Math.abs(r), 0)} shares`
   }
   if (h.flag === 'shares' && (h.value || h.prev_value)) {
-    const v = h.value - h.prev_value
+    const v = h.value_change ?? h.value - h.prev_value
     return `${v > 0 ? '+' : v < 0 ? '−' : ''}${money(Math.abs(v))} filed value`
   }
   return 'not counted'
