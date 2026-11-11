@@ -180,6 +180,24 @@ class MoveMathTest(unittest.TestCase):
         self.assertNotIn("split", rows[0])
         self.assertEqual((rows[0]["prev_shares"], rows[0]["change"]), (100, "added"))
 
+    def test_gate_refuses_a_parent_book_merged_in(self):
+        import tempfile
+        from pathlib import Path as P
+        from ingest import gate
+        with tempfile.TemporaryDirectory() as d:
+            def put(slug, q, body):
+                (P(d) / slug).mkdir(exist_ok=True)
+                (P(d) / slug / f"{q}.json").write_text(json.dumps(body))
+            # Amundi files its own 13F; Credit Agricole (named on a 2021 notice) files its own too.
+            put("amundi", "2026Q2", {"cik": "0001330387", "combined_with": {"cik": "0001191672", "accession": "0001172661-26-003711"}})
+            put("amundi", "2026Q3", {"cik": "0001330387"})
+            # Pershing Square Capital stopped filing; Pershing Square Inc. reports for it (a succession).
+            put("psi", "2025Q4", {"cik": "0002021365", "combined_with": {"cik": "0001336528", "accession": "x"}})
+            put("ackman", "2026Q1", {"cik": "0001336528", "status": "successor", "reported_by": {"cik": "0002021365"}})
+            bad = gate.foreign_merges(P(d))
+            self.assertEqual(len(bad), 1)
+            self.assertIn("amundi 2026Q2", bad[0])
+
     def test_gate_refuses_unapplied_split(self):
         import tempfile
         from pathlib import Path as P

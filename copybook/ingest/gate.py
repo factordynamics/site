@@ -147,6 +147,41 @@ def blank_accepted(data: Path) -> tuple[int, int, list[str]]:
     return blank, total, sorted(set(curated_blank))
 
 
+def foreign_merges(hist: Path) -> list[str]:
+    """Books holding another filer's 13F outside a 13F-NT succession. combined_with is allowed only between
+    a fund and the manager its notices name as reporting for it (Pershing Square Capital and Pershing Square
+    Inc.) once the fund has stopped filing for itself; a parent that files its own book beside the fund
+    (Amundi 2026Q2 with Credit Agricole's 0001172661-26-003711) is never merged in. Rows whose
+    source_accession is none of the quarter's own filings fail too."""
+    books: dict[str, dict[str, dict]] = {}
+    for folder in sorted(hist.glob("*")) if hist.exists() else []:
+        for p in folder.glob("*Q?.json"):
+            try:
+                books.setdefault(folder.name, {})[p.stem] = json.loads(p.read_text())
+            except ValueError:
+                continue
+    cik_of = {slug: next((q.get("cik") for q in qs.values() if q.get("cik")), None) for slug, qs in books.items()}
+    succession = set()  # {fund cik, reporter cik} pairs, from quarters the fund took from its reporter
+    for slug, qs in books.items():
+        for q in qs.values():
+            rep = (q.get("reported_by") or {}).get("cik")
+            if rep and q.get("status") in ("notice", "successor"):
+                succession.add(frozenset((cik_of[slug], rep)))
+    bad = []
+    for slug, qs in books.items():
+        for name, q in qs.items():
+            other = q.get("combined_with") or {}
+            if other and frozenset((cik_of[slug], other.get("cik"))) not in succession:
+                bad.append(f"{slug} {name} has {other.get('name')} {other.get('accession')} merged in")
+                continue
+            allowed = {f.get("accession") for f in (q.get("filings") or []) + (q.get("parts") or [])}
+            allowed |= {q.get("accession"), other.get("accession")}
+            stray = {h.get("source_accession") for h in q.get("holdings") or []} - allowed - {None}
+            if stray and q.get("filings") and not other:
+                bad.append(f"{slug} {name} rows from {', '.join(sorted(stray)[:3])}")
+    return bad
+
+
 def book_totals(hist: Path) -> list[str]:
     """Quarters merged from more than one filing of the same filer that look double-counted.
 
@@ -249,6 +284,10 @@ def main() -> int:
         failed = True
     elif blank:  # other filers: accepted.py backfills under a time budget and continues next run
         print(f"::warning::accepted_at missing on {blank} of {total} holder rows; accepted.py fills them next run")
+    merged = foreign_merges(data / "h")
+    if merged:
+        print(f"::error::Another filer's 13F merged into a book: {'; '.join(merged[:20])}; not publishing.")
+        failed = True
     doubled = book_totals(data / "h")
     if doubled:
         print(f"::error::Books larger than their filings: {'; '.join(doubled[:20])}; not publishing.")

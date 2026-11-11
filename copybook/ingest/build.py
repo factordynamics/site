@@ -232,9 +232,12 @@ def notice_periods(cik: str, metas: list, notices: list, cache: dict) -> tuple[l
                 loaded.append(q | {"status": "successor", "reported_by": base["reported_by"],
                                    "notice_accession": nt.accession, "notice_note": base["notice_note"]})
     # The reporter's own books for quarters the fund also filed itself (Pershing Square Inc. filed
-    # beside Pershing Square Capital before reporting for it): the fund's book there is both.
+    # beside Pershing Square Capital before reporting for it): the fund's book there is both. Only for a
+    # succession, where the fund's newest notice is later than its last own 13F-HR. A parent named on an
+    # old notice while the fund still files its own book (Amundi's 2020-21 notices naming Credit Agricole,
+    # which files its own 13F too) is a separate filer, and its book is never merged in.
     extra: dict[str, dict] = {}
-    if reporter_groups and own:
+    if reporter_groups and own and newest and newest[0].report_date > max(own):
         rep, groups = reporter_groups[min(reporter_groups)]
         for d in sorted(own):
             if not groups.get(d):
