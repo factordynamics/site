@@ -30,6 +30,8 @@ type StatusFile = {
   generated_at?: string
   alerts_13f?: { state: 'ok' | 'amber'; reasons?: string[]; pending_moves?: number; oldest_pending_seconds?: number | null; reset_queue?: number }
   probe?: { target?: string; interval_seconds?: number; '24h'?: Window; '7d'?: Window; daily?: (Window & { day: string })[] }
+  /** Moves still to send for filed 13Fs (payments; field names read loosely until its shape is fixed). */
+  moves_queue?: { pending?: number; count?: number; oldest_wait_seconds?: number | null; oldest_seconds?: number | null; oldest_pending_seconds?: number | null } | null
   freshness?: { last_13f?: { manager: string; accepted_at: string } | null }
   restarts?: { unplanned_7d: number; deploys_7d: number; short_unconfirmed_7d: number; rows?: { at: string; down_seconds: number; kind: 'deploy' | 'unplanned' | 'short_unconfirmed'; build?: string | null; prev_build?: string | null; note?: string }[] }
 }
@@ -122,7 +124,11 @@ export function Status() {
   const pollerTone: Tone = pollerAge == null ? (lat.loading && checking ? 'wait' : 'warn') : pollerAge < POLLER_LATE_S ? 'up' : 'down'
   // Payments' 13F health signal: amber while a 13F waits over 10 minutes for its moves or alert email is held.
   const a13 = st.data?.alerts_13f
-  const alertsTone: Tone = pollerTone === 'up' && a13?.state === 'amber' ? 'warn' : pollerTone
+  const mq = st.data?.moves_queue
+  const pending = mq ? (mq.pending ?? mq.count ?? 0) : (a13?.pending_moves ?? 0)
+  const oldest = mq ? (mq.oldest_wait_seconds ?? mq.oldest_seconds ?? mq.oldest_pending_seconds ?? null) : (a13?.oldest_pending_seconds ?? null)
+  const late = a13?.state === 'amber' || (pending > 0 && (oldest ?? 0) > 600)
+  const alertsTone: Tone = pollerTone === 'up' && late ? 'warn' : pollerTone
   const pr24 = st.data?.probe?.['24h']
   const pr7 = st.data?.probe?.['7d']
   const days = st.data?.probe?.daily ?? []
@@ -183,18 +189,20 @@ export function Status() {
               <Row
                 name="Filing alerts"
                 tone={alertsTone}
-                state={pollerAge == null ? 'No recent poller run on record' : `${alertsTone === 'warn' ? '13F alerts delayed · ' : ''}EDGAR poller last ran ${ago(pollerAge)} ago · ${pollerHost === 'cloudflare' ? 'Cloudflare' : 'backup'}`}
+                state={pollerAge == null ? 'No recent poller run on record' : `${alertsTone === 'warn' ? '13F alerts delayed · ' : ''}EDGAR poller ${pollerAge < 120 ? 'ran within the last 2 min' : `last ran ${ago(pollerAge)} ago`} · ${pollerHost === 'cloudflare' ? 'Cloudflare' : 'backup'}`}
               >
-                {a13 && (
+                {(a13 || mq) && (
                   <span className="block">
-                    13F alert health: {a13.state === 'amber' ? 'delayed' : 'normal'} · 13F moves pending: {a13.pending_moves ?? 0}.{' '}
-                    {a13.pending_moves === 1
-                      ? `One 13F alert is waiting for its moves${a13.oldest_pending_seconds ? ` (${ago(a13.oldest_pending_seconds)} so far)` : ''}. `
-                      : a13.pending_moves
-                        ? `${a13.pending_moves} 13F alerts are waiting for their moves${a13.oldest_pending_seconds ? `, the oldest for ${ago(a13.oldest_pending_seconds)}` : ''}. `
-                        : ''}
-                    {a13.reset_queue ? `${a13.reset_queue} alert ${a13.reset_queue === 1 ? 'email is' : 'emails are'} held until the daily sending limit resets. ` : ''}
-                    {!a13.pending_moves && !a13.reset_queue && a13.reasons?.length ? `${a13.reasons.join('; ')}. ` : ''}
+                    13F alert health: {late ? 'delayed' : 'normal'} · 13F moves pending: {pending}.{' '}
+                    {!late
+                      ? ''
+                      : pending === 1
+                        ? `One 13F alert is waiting for its moves${oldest ? ` (${ago(oldest)} so far)` : ''}. `
+                        : pending
+                          ? `${pending} 13F alerts are waiting for their moves${oldest ? `, the oldest for ${ago(oldest)}` : ''}. `
+                          : ''}
+                    {a13?.reset_queue ? `${a13.reset_queue} alert ${a13.reset_queue === 1 ? 'email is' : 'emails are'} held until the daily sending limit resets. ` : ''}
+                    {late && !pending && !a13?.reset_queue && a13?.reasons?.length ? `${a13.reasons.join('; ')}. ` : ''}
                   </span>
                 )}
                 {pollerHost === 'cloudflare' || pollerHost == null ? 'Checks EDGAR every minute from Cloudflare, with the API machine as backup.' : 'Cloudflare’s checks paused; the API machine is polling EDGAR as backup.'}
