@@ -421,6 +421,15 @@ describe('copybook api', () => {
     stripeObjects['subscriptions/sub_tk'] = sub('sub_tk', 'cus_tk', 'trialing');
     const taken = await (await call('/session', { body: { checkout_session: 'cs_test_taken' } })).json();
     expect([taken.ok, taken.code, taken.token]).toEqual([true, 'existing_account', undefined]);
+    // A free signup that then subscribes (the paid record's created_at is the conversion, not the signup), with the
+    // subscription's webhook arriving before the return: still that account, so no hand-off (gene, 11:31: one was given).
+    expect((await call('/signup', { body: { email: 'conv@example.com' } })).status).toBe(201);
+    stripeObjects['checkout/sessions/cs_test_conv'] = { id: 'cs_test_conv', status: 'complete', created: now() + 5, subscription: 'sub_cv', customer: 'cus_cv', customer_details: { email: 'conv@example.com' } };
+    stripeObjects['subscriptions/sub_cv'] = sub('sub_cv', 'cus_cv', 'trialing');
+    stripeObjects['customers/cus_cv'] = { id: 'cus_cv', email: 'conv@example.com' };
+    await webhook({ type: 'customer.subscription.created', data: { object: stripeObjects['subscriptions/sub_cv'] } });
+    const conv = await (await call('/session', { body: { checkout_session: 'cs_test_conv' } })).json();
+    expect([conv.ok, conv.code, conv.token]).toEqual([true, 'existing_account', undefined]);
 
     stripeObjects['checkout/sessions/cs_test_open'] = { id: 'cs_test_open', status: 'open', created: now(), subscription: null };
     expect((await fullCheckout('cs_test_open')).status).toBe(409);

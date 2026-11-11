@@ -1082,8 +1082,13 @@ export async function handleRequest(req: Request, env: Env): Promise<Response> {
       // An address that already had an account before this checkout gets no session from it: anyone can type an
       // address at checkout. They sign in with the emailed link (or keep the session they have on this device).
       const email = String(cs.customer_details?.email ?? '').trim().toLowerCase();
+      // An account made before the checkout started: a free signup's record (it keeps its own created_at after it converts;
+      // the paid record's is the conversion time), or another customer's account under this address.
+      const startedAt = Number(cs.created) * 1000;
       const prior = email ? await memberByEmail(env, email) : null;
-      const existed = !!prior && (!prior.created_at || Date.parse(prior.created_at) < Number(cs.created) * 1000);
+      const freeRec = email ? (JSON.parse((await env.DB.get(`cus:${await (await import('./free')).freeId(email)}`)) ?? 'null') as Member | null) : null;
+      const before = (r: Member | null) => !!r && (!r.created_at || Date.parse(r.created_at) < startedAt);
+      const existed = before(freeRec) || (!!prior && prior.customer !== cs.customer && before(prior));
       const sub = await stripe(env, 'GET', `subscriptions/${cs.subscription}`);
       const m = await syncSubscription(env, sub, cs.customer_details?.email);
       if (existed) return json({ ok: true, code: 'existing_account', sign_in: 'email', member: null }, 200, h);
