@@ -10,7 +10,7 @@ import { FOOTER, followFiling, previewInbox, sendMail, type Mail } from './email
 import { deadlineLabel, nextDeadline } from './seasons';
 import { firmName } from '../../../holdterm/src/names';
 import { followCounts, testAddress, WORKER_URL, type Env, type Member } from './env';
-import { checkMove, displayCase, type MoveRow, netRenamed, reissuedTicker, UNUSUAL } from './edgar';
+import { checkMove, countedMoves, displayCase, type MoveRow, netRenamed, reissuedTicker, UNUSUAL } from './edgar';
 import { changeFollows, type Follows, getFollows, getMember, listMembers, LOGIN_TTL, memberByEmail, putMember } from './members';
 import { bump } from './revenue';
 import { signToken, verifyToken } from './tokens';
@@ -354,7 +354,8 @@ export async function weeklyMoves(env: Env, now: number, days = 7, followed: Set
     const byTicker = new Map<string, Row & { change?: string; value?: number | null }>();
     // A reissued CUSIP's rows (XOM's Q3 30231G102 -> 30233Q108) take its ticker, so the exit and the new row net.
     for (const raw of (Array.isArray(d.moves) ? d.moves : []).map((x) => ({ ...x, ticker: x.ticker ?? reissuedTicker(x.cusip) }))) {
-      if (!raw.ticker || raw.put_call || !['new', 'added', 'trimmed', 'exited'].includes(raw.change ?? '')) continue;
+      // A line the data run marked (unreliable) is no trade, so it is never sized here.
+      if (!raw.ticker || raw.put_call || (raw as { unreliable?: unknown }).unreliable || !['new', 'added', 'trimmed', 'exited'].includes(raw.change ?? '')) continue;
       const value = raw.weight != null && total ? raw.weight * total : null;
       // New and exited rows carry both values; an add or trim that looks too big reads the prior book.
       let prev_value: number | null = raw.change === 'new' ? 0 : raw.change === 'exited' ? -raw.value_delta : null;
@@ -435,6 +436,7 @@ async function followContext(env: Env, slugs: string[], now = Date.now()): Promi
     const raw = await env.DB.get(`wk13f:${s}`);
     if (!raw) continue;
     const a = JSON.parse(raw) as Alert13F;
+    if (a.moves) a.moves = countedMoves(a.moves); // marked rows stored in the lists: never sized as trades
     // Moves stored before reissued CUSIPs were linked (Boston Partners' Q3 "exited XOM" plus "new XOM"): netted here.
     if (a.moves) {
       const m = a.moves;
@@ -749,7 +751,9 @@ export function email2Mail(env: Env, to: string, o: E2Input): Mail {
   const intro = deadlineNight ? `13F deadline night, ${dayName}.` : `${dayName}. ${qLabel(dl.quarter)} 13Fs are due ${deadlineLabel(dl.date)}.`;
   const sorted = (a: Alert13F) => {
     const m = a.moves!;
+    // A marked row (unreliable) is no trade: never a $ size here.
     return [...m.new.map((r) => ['new', r] as const), ...m.added.map((r) => ['added', r] as const), ...m.trimmed.map((r) => ['trimmed', r] as const), ...m.exited.map((r) => ['exited', r] as const)]
+      .filter(([, r]) => !r.unreliable)
       .sort((x, y) => Math.abs(y[1].value_delta) - Math.abs(x[1].value_delta));
   };
   const three = (a: Alert13F) => sorted(a).slice(0, 3).map(([c, r]) => `${VERB[c]} ${r.ticker || r.display_name || r.issuer}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} ${r.value_delta > 0 ? '+' : '−'}${money(r.value_delta)}${pctOf(r.delta_pct_of_book)}`).join('; ');

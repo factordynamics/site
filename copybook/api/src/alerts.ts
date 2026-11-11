@@ -477,7 +477,7 @@ async function rememberFollowMoves(env: Env, filings: Alert13F[]): Promise<void>
     if (!a.moves || a.reveal) continue;
     const m = a.moves;
     const rows = (a.changed?.length ? a.changed : [...m.new.map((r) => ({ ...r, change: 'new' })), ...m.added.map((r) => ({ ...r, change: 'added' })), ...m.trimmed.map((r) => ({ ...r, change: 'trimmed' })), ...m.exited.map((r) => ({ ...r, change: 'exited' }))])
-      .slice()
+      .filter((r) => !r.unreliable) // a marked row is no trade: the Friday email never sizes one
       .sort((x, y) => Math.abs(y.value_delta) - Math.abs(x.value_delta))
       .slice(0, FOLLOW_ROWS);
     const of = (c: string) => rows.filter((r) => r.change === c);

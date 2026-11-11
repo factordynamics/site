@@ -1,6 +1,6 @@
 import type { Alert13F, AlertEvent } from './alerts';
 import { siteFirm, siteName } from './names';
-import { cleanItem4, exchangeLine, filingId, FILER_VALUE, posKey, UNUSUAL, type MoveRow, type Moves } from './edgar';
+import { cleanItem4, countedMoves, exchangeLine, filingId, FILER_VALUE, posKey, UNUSUAL, type MoveRow, type Moves } from './edgar';
 import { testAddress, WORKER_URL, type Env, type Member } from './env';
 import type { Follows } from './members';
 import { firmName } from '../../../holdterm/src/names';
@@ -633,14 +633,33 @@ function heldLine(a: Alert13F): string {
 }
 /** Why a line isn't counted, in a few words. */
 const notCountedWhy = (x: { unreliable?: string; put_call: string | null; reason?: string }) =>
-  x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'shares' || x.put_call ? "share counts don't reconcile" : 'pre-split count';
+  x.unreliable === 'value' ? 'value unavailable' : x.unreliable === 'both' && x.put_call ? "filed figures don't reconcile" : x.unreliable === 'shares' || x.put_call ? "share counts don't reconcile" : 'pre-split count';
+/**
+ * A marked row's filed facts, never a computed trade in $: "value as filed fell from $121.6M to $6.7M" (shares side),
+ * "+159,272 sh" (value side), "new, 3.9M sh, value as filed $30.2B", "sold all 646K sh, value as filed was $121.6M".
+ */
+function heldFacts(r: MoveRow): string {
+  if (r.change === 'new') return `new, ${compact(r.shares)} sh${r.value ? `, value as filed ${usd(r.value, false)}` : ''}`;
+  if (r.change === 'exited') return `sold all${r.prev_shares ? ` ${compact(r.prev_shares)} sh` : ''}${r.prev_value ? `, value as filed was ${usd(r.prev_value, false)}` : ''}`;
+  if (r.unreliable === 'shares') return filedFacts(r);
+  const d = r.shares - (r.prev_shares ?? 0);
+  const ps = r.filed_per_share;
+  return r.unreliable === 'value' && d ? `${d >= 0 ? '+' : '-'}${Math.abs(d).toLocaleString('en-US')} sh${ps ? `, filed at ≈$${ps >= 100 ? Math.round(ps).toLocaleString('en-US') : ps.toFixed(2)}/sh` : ''}` : '';
+}
+const isMoveRow = (x: unknown): x is MoveRow => typeof (x as MoveRow)?.value_delta === 'number';
 /** "Not counted: SPY calls, SPY puts (share counts don't reconcile).": lines held out, or marked and past the lists. */
 function notCountedLine(a: Alert13F): string {
-  const items = [...(a.held ?? []).filter((h) => h.reason === 'unreliable_shares'), ...(a.moves?.not_counted ?? [])];
+  const items = [...(a.held ?? []).filter((h) => h.reason === 'unreliable_shares'), ...(a.moves ? countedMoves(a.moves).not_counted ?? [] : [])];
   if (!items.length) return '';
+  // Lines named only (held by the gate) group by reason; a marked row adds its filed facts.
   const by = new Map<string, string[]>();
-  for (const x of items) by.set(notCountedWhy(x), [...(by.get(notCountedWhy(x)) ?? []), posName(x)]);
-  return `Not counted: ${[...by].map(([why, names]) => `${[...new Set(names)].join(', ')} (${why})`).join('; ')}.`;
+  for (const x of items) {
+    const facts = isMoveRow(x) ? heldFacts(x) : '';
+    const why = notCountedWhy(x);
+    if (facts) by.set(`${posName(x)} ${facts} (${why})`, []);
+    else by.set(why, [...(by.get(why) ?? []), posName(x)]);
+  }
+  return `Not counted: ${[...by].map(([k, names]) => (names.length ? `${[...new Set(names)].join(', ')} (${k})` : k)).join('; ')}.`;
 }
 /** The Corrected note, one line: lines now not counted are named as such; any other row says what it was and is. */
 function correctedNote(a: Alert13F): string {
@@ -684,7 +703,11 @@ export function correctionMail(env: Env, to: string, a: Alert13F, rows: Correcti
   return { to, subject, text, html };
 }
 
-function filingBlock(env: Env, a: Alert13F, f: Follows): string {
+/** An alert as rendered: marked rows out of the move lists (countedMoves), whenever the alert was stored. */
+const withCounted = (a: Alert13F): Alert13F => (a.moves ? { ...a, moves: countedMoves(a.moves) } : a);
+
+function filingBlock(env: Env, a0: Alert13F, f: Follows): string {
+  const a = withCounted(a0);
   const head = `${filerLabel(a)}: ${quarterLabel(a.quarter)} 13F, filed ${a.filing_date}${a.checked ? ' (checked position changes)' : a.followup ? ' (position changes)' : ''}`;
   const lines = [head];
   const mv = a.moves;
@@ -708,7 +731,7 @@ function filingBlock(env: Env, a: Alert13F, f: Follows): string {
     for (const r of mv.exchanged ?? []) lines.push(`  ${exchangeLine(r)}`);
     if (a.held?.length || a.moves?.not_counted?.length) lines.push(`  ${heldLine(a)}`);
     const mine = yourMoves(a, f);
-    if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${sharesOnly(r) ? `${filedFacts(r)}, ${NOT_COUNTED_SHARES}` : `${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''}`} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
+    if (mine.length) lines.push(`  In your names: ${mine.map((r) => `${rowName(r)} ${r.unreliable ? `${heldFacts(r) ? `${heldFacts(r)}, ` : ''}not counted (${notCountedWhy(r)})` : `${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${shareTrade(r)}` : ''}`} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}`);
   } else if (a.top?.length) {
     lines.push('  No earlier quarter on file for this filer, so no changes yet. Largest holdings:');
     lines.push(`  ${a.top.map((r) => `${r.ticker || r.display_name || r.issuer}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''} ${usd(r.value, false)}${flag(r.ticker, f)}`).join(', ')}`);
@@ -929,7 +952,8 @@ function table(head: string[], rows: string[][], right: number[] = []): string {
 const meta = (page: string | null, accession: string, accepted: string | undefined, sec: string, label = 'Copybook page') =>
   `<p style="margin:4px 0 18px;font-size:12px;color:#6b7280">Accession ${esc(accession)}${accepted ? `, accepted by EDGAR ${esc(acceptedUtc(accepted))}` : ''} · ${page ? `${link(page, label)} · ` : ''}${link(sec, 'SEC filing')}</p>`;
 
-function filingHtml(env: Env, a: Alert13F, f: Follows): string {
+function filingHtml(env: Env, a0: Alert13F, f: Follows): string {
+  const a = withCounted(a0);
   const out = [`<h3 style="margin:16px 0 2px;font-size:16px">${esc(siteName(a.slug) ?? a.manager)}${!siteName(a.slug) && a.name && a.name !== a.manager ? ` <span style="color:#6b7280;font-weight:400">(${esc(a.name)})</span>` : ''}: ${esc(quarterLabel(a.quarter))} 13F${a.reveal ? ' amendment (new holdings)' : a.followup ? ' position changes' : ''}</h3>`];
   const mv = a.moves;
   if (a.reveal) {
@@ -942,7 +966,7 @@ function filingHtml(env: Env, a: Alert13F, f: Follows): string {
     for (const r of mv.exchanged ?? []) out.push(`<p style="margin:6px 0 2px">${esc(exchangeLine(r))}</p>`);
     if (a.held?.length || a.moves?.not_counted?.length) out.push(`<p style="margin:6px 0 2px;color:#b45309">${esc(heldLine(a))}</p>`);
     const mine = yourMoves(a, f);
-    if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${sharesOnly(r) ? esc(`${filedFacts(r)}, ${NOT_COUNTED_SHARES}`) : `${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${esc(shareTrade(r))}` : ''}`} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
+    if (mine.length) out.push(`<p style="margin:6px 0 2px"><b>In your names:</b> ${mine.map((r) => `${esc(rowName(r))} ${r.unreliable ? esc(`${heldFacts(r) ? `${heldFacts(r)}, ` : ''}not counted (${notCountedWhy(r)})`) : `${verb(r)} ${usd(r.value_delta)}${shareTrade(r) ? `, ${esc(shareTrade(r))}` : ''}`} (${f.owned.includes(r.ticker!) ? 'you own' : 'watchlist'})`).join('; ')}</p>`);
   } else if (a.top?.length) {
     out.push('<p style="margin:2px 0">No earlier quarter on file for this filer, so no changes yet. Largest holdings:</p>');
     out.push(table(['Stock', 'Value'], a.top.map((r) => [`<b>${esc(rowName(r))}</b>${esc(flag(r.ticker, f))}`, usd(r.value, false)]), [1]));
@@ -1023,7 +1047,8 @@ const pre = (text: string) =>
 const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length));
 const lpad = (s: string, n: number) => (s.length >= n ? s : ' '.repeat(n - s.length) + s);
 
-function holdtermFiling(env: Env, a: Alert13F): string {
+function holdtermFiling(env: Env, a0: Alert13F): string {
+  const a = withCounted(a0);
   const lines = [`${a.manager.toUpperCase()} · ${quarterLabel(a.quarter)} 13F-HR`, `filed ${a.filing_date}${a.accepted ? ` · accepted ${acceptedUtc(a.accepted)}` : ''}`];
   const mv = a.moves;
   if (mv) {

@@ -555,11 +555,13 @@ export const unreliableShares = (x: unknown): boolean => unreliableSide(x) !== n
  * `unreliable` when it carries one; until then price_outlier reads as value and the other flags as both.
  */
 export function unreliableSide(x: unknown): 'value' | 'shares' | 'both' | null {
-  const r = (x ?? {}) as { unreliable?: unknown; suspect_units?: unknown; price_outlier?: unknown; suspect_reason?: unknown; value_basis?: unknown; put_call?: unknown };
+  const r = (x ?? {}) as { unreliable?: unknown; suspect_units?: unknown; price_outlier?: unknown; suspect_reason?: unknown; value_basis?: unknown; put_call?: unknown; option_held?: unknown };
   if (r.unreliable === 'value' || r.unreliable === 'shares' || r.unreliable === 'both') return r.unreliable;
-  // Ingest's side when it gives one; else an option line off its price is contracts filed as shares (the count is
-  // wrong, the filed value stands: "shares"), and a stock line off its price has a wrong value ("value").
-  if (r.price_outlier === true || r.value_basis === 'filed_price_outlier') return r.put_call ? 'shares' : 'value';
+  // Ingest's options rule (aee5c2c): a held option line (non-standard filer, or isolated off its benchmark) has no
+  // reliable side. An option line off its price without ingest's verdict is the same, never "shares": Belvedere's EW
+  // puts (3.9M contracts at $7,758 each) is a value error, and "shares" would size a $30.2B trade from it.
+  if (typeof r.option_held === 'string' && r.option_held) return 'both';
+  if (r.price_outlier === true || r.value_basis === 'filed_price_outlier') return r.put_call ? 'both' : 'value';
   if (r.suspect_units === true || r.suspect_reason === 'reissue_ratio_not_applied') return 'both';
   return null;
 }
@@ -686,9 +688,11 @@ export function gateMoves(r: { moves: Moves; changed: MoveRow[] }, prev: Positio
 }
 
 export function movesOf(rows: MoveRow[], limit = MOVE_ROWS): Moves {
+  // A marked row (unreliable) is never listed as a trade: it goes under "Not counted" with its filed facts (the lead,
+  // Nov 11 17:12: no held row shows a $ size, and none is filed under Added or Trimmed by its value's direction).
   const top = (c: string) =>
     rows
-      .filter((r) => r.change === c)
+      .filter((r) => r.change === c && !r.unreliable)
       .sort((a, b) => Math.abs(b.value_delta) - Math.abs(a.value_delta))
       .slice(0, limit);
   // A marked row (unreliable) shows but never counts toward the totals.
@@ -708,6 +712,14 @@ const notCounted = (rows: MoveRow[], shown: MoveRow[]) => {
   const out = rows.filter((r) => r.unreliable && r.change !== 'exchanged' && !shown.includes(r));
   return out.length ? { not_counted: out } : {};
 };
+/** Moves stored before marked rows left the lists: each marked row moves from new/added/trimmed/exited to not_counted. */
+export function countedMoves(m: Moves): Moves {
+  const all = [m.new, m.added, m.trimmed, m.exited].flat();
+  if (!all.some((r) => r.unreliable)) return m;
+  const keep = (rows: MoveRow[]) => rows.filter((r) => !r.unreliable);
+  const out = [...(m.not_counted ?? []), ...all.filter((r) => r.unreliable)];
+  return { ...m, new: keep(m.new), added: keep(m.added), trimmed: keep(m.trimmed), exited: keep(m.exited), not_counted: [...new Map(out.map((r) => [posKey(r), r])).values()] };
+}
 /** "HON: CUSIP exchanged (438516106 → 438516205), not a trade" */
 export const exchangeLine = (r: MoveRow) => `${r.ticker || r.display_name || r.issuer || r.cusip}${r.put_call ? ` ${r.put_call.toLowerCase()}s` : ''}: CUSIP exchanged (${(r as { prev_cusip?: string }).prev_cusip} → ${r.cusip}), not a trade`;
 

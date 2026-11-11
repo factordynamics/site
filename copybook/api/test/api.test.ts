@@ -22,7 +22,7 @@ import sc13gSiri from './fixtures/sc13ga-siri-vanguard.xml?raw';
 import form4BuffettGift from './fixtures/form4-brk-buffett-gift.txt?raw';
 import sc13dBrkA from './fixtures/sc13da-brk-class-a.xml?raw';
 import { quarterStart } from '../src/seasons';
-import { computeMoves, displayCase, gateMoves, unreliableSide } from '../src/edgar';
+import { computeMoves, displayCase, gateMoves, movesOf, unreliableSide } from '../src/edgar';
 import { forMember } from '../src/alerts';
 import { runSeasonal } from '../src/revenue';
 import { signToken } from '../src/tokens';
@@ -1731,7 +1731,7 @@ describe('copybook api', () => {
     // The stored new "Call"/"Put" and exited "CALL"/"PUT" lines are one position each, trimmed by the filed values'
     // change and marked (not a NEW plus an EXIT); the title leads with the largest real move.
     const [miBody] = mi.text.split(/\n\s*Corrected /);
-    expect([/^Corrected · Mizuho Markets Americas Q3: MRVL \+\$476\.1M/.test(mi.title), /NEW SPY|EXIT SPY/.test(mi.title), /New:[^\n]*SPY|Exited:[^\n]*SPY/.test(miBody), miBody.match(/Trimmed: .*$/m)?.[0].includes("SPY calls value as filed fell from $610.5M to $552.5M; share counts don't reconcile, not counted"), /SPY calls -\$58\.0M|SPY puts -\$5\.9M/.test(miBody)]).toEqual([true, false, false, true, false]);
+    expect([/^Corrected · Mizuho Markets Americas Q3: MRVL \+\$476\.1M/.test(mi.title), /NEW SPY|EXIT SPY/.test(mi.title), /New:[^\n]*SPY|Exited:[^\n]*SPY/.test(miBody), (miBody.match(/Not counted: .*$/m)?.[0].includes("SPY calls value as filed fell from $610.5M to $552.5M (share counts don't reconcile)") && !/Trimmed:[^\n]*SPY/.test(miBody)), /SPY calls -\$58\.0M|SPY puts -\$5\.9M/.test(miBody)]).toEqual([true, false, false, true, false]);
     // Netted fresh from the filings (Q3 "Call" against Q2 "CALL", case-blind), the trade is the filed values' change,
     // marked: never 19,152 - 479,831 sh x $28,846 = -$13.3B, 194.7% of a $6.8B book.
     const pos = (put_call: string, shares: number, value: number) => ({ cusip: '78462F103', issuer: 'SPDR S&P 500 ETF T', ticker: 'SPY', display_name: null, put_call, shares, value, title: 'SPY' });
@@ -1761,7 +1761,7 @@ describe('copybook api', () => {
     const t = (tk: string, v: number, extra = {}) => ({ change: 'trimmed', ticker: tk, display_name: null, issuer: tk, cusip: tk.padEnd(9, '0'), put_call: null, shares: 1, prev_shares: 2, value: 1, value_delta: v, delta_pct_of_book: null, ...extra });
     const mv = movesOf([t('AA', -9e7), t('BB', -8e7), t('CC', -7e7), t('DD', -6.5e7), t('EE', -6.2e7), t('EF', -6.1e7), t('SPY', -5.8e7, { put_call: 'Call', unreliable: 'shares' })] as never, 5);
     const m = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'w', slugs: ['w'], manager: 'W', name: 'W', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000008', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: mv, tickers: [] }], [], { investors: ['w'], stocks: [], owned: [] } as never);
-    expect([mv.trimmed.some((r) => r.ticker === 'SPY'), m.text.includes("Not counted: SPY calls (share counts don't reconcile)."), mv.sold_usd]).toEqual([false, true, 4.28e8]);
+    expect([mv.trimmed.some((r) => r.ticker === 'SPY'), /Not counted: SPY calls value as filed fell from \$58\.0M to \$\S+ \(share counts don't reconcile\)\./.test(m.text), mv.sold_usd]).toEqual([false, true, 4.28e8]);
   });
 
   it("display names: the site's shared overrides name the firm in alert subjects, headers, the Friday email and possessives", async () => {
@@ -2447,7 +2447,7 @@ describe('copybook api', () => {
     const stocks = (total: number) => [pos('JD', '47215P106', 1, total * 0.6), pos('BABA', '01609W102', 1, total * 0.4)];
     const spy = pos('SPY', '78462F103', 2_000_000, 886_600_000, 'Put');
     const qqq = pos('QQQ', '46090E103', 2_000_000, 738_800_000, 'Put');
-    const all = (m: ReturnType<typeof computeMoves>['moves']) => [...m.new, ...m.added, ...m.trimmed, ...m.exited];
+    const all = (m: ReturnType<typeof computeMoves>['moves']) => [...m.new, ...m.added, ...m.trimmed, ...m.exited, ...(m.not_counted ?? [])];
     // Scion Q2 2023 (0000905148-23-000689): a $1.737B book, SPY puts $886.6M = 51.0% of it. Sent, tagged.
     const q1 = stocks(46_400_000);
     const q2 = [spy, qqq, ...stocks(111_600_000)];
@@ -2470,7 +2470,7 @@ describe('copybook api', () => {
     const med = new Map([['09857L108', { cur: 162, prev: 178 }]]);
     for (const m of [med, undefined]) {
       const gm = computeMoves(gq3, gq2, undefined, undefined, m);
-      expect(all(gm.moves).map((r) => [r.ticker, r.value_delta, r.unreliable ?? null])).toEqual([['BKNG', 6_676_571 - 121_636_487, 'shares'], ['ILMN', expect.any(Number), null]]);
+      expect(all(gm.moves).map((r) => [r.ticker, r.value_delta, r.unreliable ?? null])).toEqual([['ILMN', expect.any(Number), null], ['BKNG', 6_676_571 - 121_636_487, 'shares']]); // marked: under not_counted
       expect(gm.moves.sold_usd).toBe(-all(gm.moves).find((r) => r.ticker === 'ILMN')!.value_delta);
     }
     // A real 6x rally that other filers agree with: sent, tagged. 100x or more: a unit error, dropped either way.
@@ -2546,28 +2546,37 @@ describe('copybook api', () => {
     const gb = gateMoves(computeMoves(gbk3, both as never, undefined, new Map()), both as never, new Map(), new Map());
     expect([gb.changed, gb.moves.sold_usd, gb.held.map((h) => [h.ticker, h.reason])]).toEqual([[], 0, [['BKNG', 'unreliable_shares']]]);
     const gsMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'guardcap', slugs: ['guardcap'], manager: 'GuardCap Asset Management', name: 'GuardCap Asset Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0001732008-26-000006', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: gs.moves, tickers: ['BKNG'] }], [], { investors: ['guardcap'], stocks: [], owned: [] } as never);
-    expect([gsMail.text.includes("BKNG value as filed fell from $121.6M to $6.7M; share counts don't reconcile, not counted"), /3\.3B|BKNG/.test(gsMail.subject), /sold \$114|-\$114\.9M/.test(gsMail.text)]).toEqual([true, false, false]);
+    expect([gsMail.text.includes("Not counted: BKNG value as filed fell from $121.6M to $6.7M (share counts don't reconcile)."), /3\.3B|BKNG/.test(gsMail.subject), /sold \$114|-\$114\.9M/.test(gsMail.text)]).toEqual([true, false, false]);
     // An option line filed in contracts (price 100x its underlying's median: BNP's SPY puts, +$16.0B in a book far larger)
     // passes the size guard, so the 3x band against the underlying's median marks it: shown, never totalled or headlined.
     const bq2 = [pos('SPY', '78462F103', 100_000, 6_660_000_000, 'Put'), pos('REST', '000000009', 1, 500e9)];
     const bq3 = [pos('SPY', '78462F103', 340_000, 22_650_000_000, 'Put'), pos('REST', '000000009', 1, 500e9)];
     const gopt = gateMoves(computeMoves(bq3, bq2, undefined, new Map()), bq2, new Map(), new Map([['78462F103', { cur: 666, prev: 640 }]]));
-    expect([gopt.changed.map((r) => [r.ticker, r.put_call, r.change, r.value_delta, r.unreliable, r.value_delta_basis]), gopt.moves.bought_usd]).toEqual([[['SPY', 'Put', 'added', 15_990_000_000, 'shares', 'filed_value']], 0]);
+    // Without ingest's verdict an option outlier has no reliable side ("both", the lead, Nov 11): held, never sized.
+    expect([gopt.changed, gopt.moves.bought_usd, gopt.held.map((h) => [h.ticker, h.put_call, h.reason])]).toEqual([[], 0, [['SPY', 'Put', 'unreliable_shares']]]);
     // Ingest's contract filers (BNP: shares x100, shares_basis "contracts", no flag): EDGAR's raw line is still in contracts
     // here, so the band marks it and it never headlines before the x100 is applied.
     const gc = gateMoves(computeMoves(bq3, bq2, undefined, new Map()), bq2.map((p) => (p.put_call ? { ...p, shares_basis: 'contracts' } : p)) as never, new Map(), new Map([['78462F103', { cur: 666, prev: 640 }]]));
-    expect([gc.changed.map((r) => r.unreliable), gc.moves.bought_usd]).toEqual([['shares'], 0]);
-    const optMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'bnp', slugs: ['bnp'], manager: 'BNP Paribas', name: 'BNP PARIBAS', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000001', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: gopt.moves, tickers: [] }], [], { investors: ['bnp'], stocks: [], owned: [] } as never);
-    expect([/SPY|16\.0B/.test(optMail.subject), optMail.text.includes("SPY puts value as filed rose from $6.7B to $22.6B; share counts don't reconcile, not counted"), /\+\d+% shares/.test(optMail.text)]).toEqual([false, true, false]);
+    expect([gc.changed, gc.moves.bought_usd, gc.held.length]).toEqual([[], 0, 1]);
+    const optMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'bnp', slugs: ['bnp'], manager: 'BNP Paribas', name: 'BNP PARIBAS', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000001', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: gopt.moves, held: gopt.held, tickers: [] }], [], { investors: ['bnp'], stocks: [], owned: [] } as never);
+    expect([/SPY|16\.0B/.test(optMail.subject), optMail.text.includes("Not counted: SPY puts (share counts don't reconcile).") && !/16\.0B|22\.6B/.test(optMail.text), /\+\d+% shares/.test(optMail.text)]).toEqual([false, true, false]);
     // Ingest's own side wins when it gives one; without it, a stock line off its price is "value".
-    expect([unreliableSide({ put_call: 'Put', price_outlier: true, unreliable: 'value' }), unreliableSide({ put_call: 'Put', price_outlier: true }), unreliableSide({ put_call: null, price_outlier: true })]).toEqual(['value', 'shares', 'value']);
+    expect([unreliableSide({ put_call: 'Put', price_outlier: true, unreliable: 'value' }), unreliableSide({ put_call: 'Put', price_outlier: true }), unreliableSide({ put_call: null, price_outlier: true }), unreliableSide({ put_call: 'Put', option_held: 'isolated' })]).toEqual(['value', 'both', 'value', 'both']);
+    // Belvedere's EW puts (3.9M contracts at $7,758 each, a value error): a new held line prints no $ trade, is under
+    // "Not counted" (not New), and never headlines.
+    const ew = movesOf([{ change: 'new', ticker: 'EW', display_name: null, issuer: 'EDWARDS', cusip: '28176E108', put_call: 'Put', shares: 3_900_000, prev_shares: 0, value: 30_200_000_000, value_delta: 30_200_000_000, delta_pct_of_book: null, unreliable: 'both' }, { change: 'added', ticker: 'AAPL', display_name: null, issuer: 'APPLE', cusip: '037833100', put_call: null, shares: 20, prev_shares: 10, value: 4e6, value_delta: 2e6, delta_pct_of_book: null }] as never);
+    const ewMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'belvedere', slugs: ['belvedere'], manager: 'Belvedere', name: 'Belvedere', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000011', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: ew, tickers: [] }], [], { investors: ['belvedere'], stocks: [], owned: [] } as never);
+    expect([/\+\$30\.2B/.test(ewMail.text + ewMail.html + ewMail.subject), /New:/.test(ewMail.text), /EW/.test(ewMail.subject), ewMail.text.includes("Not counted: EW puts new, 3.9M sh, value as filed $30.2B (filed figures don't reconcile)."), ew.bought_usd]).toEqual([false, false, false, true, 2e6]);
+    // An alert stored before this change (marked rows inside the lists) renders the same way.
+    const old = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'belvedere', slugs: ['belvedere'], manager: 'Belvedere', name: 'Belvedere', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0000000000-26-000011', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: { ...ew, new: ew.not_counted!, not_counted: undefined }, tickers: [] }], [], { investors: ['belvedere'], stocks: [], owned: [] } as never);
+    expect([/\+\$30\.2B/.test(old.text + old.html), old.text.includes('Not counted: EW puts new')]).toEqual([false, true]);
     // - "value" (price_outlier: BMO's Q3 TEVA filed at about $4,005 a share): the share change, value unavailable.
     const tq2 = [pos('TEVA', '881624209', 971_583, 26_200_000), gbk2[1]];
     const tq3 = [{ ...pos('TEVA', '881624209', 1_130_855, 4_529_000_000), price_outlier: true }, gbk3[1]];
     const gv = gateMoves(computeMoves(tq3 as never, tq2, undefined, new Map()), tq2, new Map(), new Map());
     expect([gv.changed.map((r) => [r.ticker, r.unreliable, r.shares - r.prev_shares]), gv.moves.bought_usd, gv.held]).toEqual([[['TEVA', 'value', 159_272]], 0, []]);
     const gvMail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'bmo', slugs: ['bmo'], manager: 'Bank of Montreal', name: 'BANK OF MONTREAL', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-10', accession: 'b1', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-10T21:00:00Z', moves: gv.moves, tickers: ['TEVA'] }], [], { investors: ['bmo'], stocks: [], owned: [] } as never);
-    expect(gvMail.text).toMatch(/TEVA \+159,272 sh \(.*\) · value unavailable \(filed at ≈\$4,005\/sh\), not in totals/);
+    expect(gvMail.text).toMatch(/Not counted: TEVA \+159,272 sh, filed at ≈\$4,005\/sh \(value unavailable\)\./);
     expect(/TEVA/.test(gvMail.subject)).toBe(false);
     const gmail = alertMail({ SITE_URL: 'https://site.test/' } as Env, 'x@example.com', [{ slug: 'guardcap', slugs: ['guardcap'], manager: 'GuardCap Asset Management', name: 'GuardCap Asset Management', quarter: '2026Q3', report_date: '2026-09-30', filing_date: '2026-11-06', accession: '0001732008-26-000006', sec_url: 'https://www.sec.gov/x', accepted: '2026-11-06T21:00:00Z', moves: { bought_usd: 0, sold_usd: 0, new: [], added: [], trimmed: [], exited: [] }, held: [{ cusip: '09857L108', ticker: 'BKNG', issuer: 'BKNG', display_name: null, put_call: null, change: 'trimmed', reason: 'unreliable_shares' }], tickers: ['BKNG'] }], [], { investors: ['guardcap'], stocks: [], owned: [] } as never);
     expect([gmail.text.includes('Not counted: BKNG (pre-split count).'), /pending check|3\.3B|3,3/.test(`${gmail.subject} ${gmail.text}`)]).toEqual([true, false]);
