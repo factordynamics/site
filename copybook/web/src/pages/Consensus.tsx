@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Donut, foldSlices, Legend, WeightBars } from '../components/charts'
-import { AvatarStack, Monogram, Panel, Skeleton } from '../components/ui'
+import { AvatarStack, LoadFailed, Monogram, Panel, Skeleton } from '../components/ui'
 import { useTitle, shortName, loadIndex, loadSuperBook, money, pct, sectorMix, sectorOf, useAsync } from '../lib/data'
 
 type Sort = 'holders' | 'value' | 'conviction'
@@ -39,6 +39,9 @@ export function Consensus() {
         </p>
       </header>
 
+      {book.error && <LoadFailed what="the superinvestors’ latest filings" onRetry={book.retry} className="mt-10 max-w-2xl" />}
+      {!book.error && (
+      <>
       <div className="mt-10 grid gap-6 lg:grid-cols-2">
         <Panel title="Largest combined positions" sub="Share of the combined reported value">
           {book.data ? (
@@ -147,6 +150,8 @@ export function Consensus() {
         {book.data && rows.length === 0 && <p className="px-6 py-8 text-[14px] text-ink-2">None of the investors we follow hold “{q}” in their latest filing.</p>}
       </section>
       <p className="mt-6 text-[13px] text-ink-3">Combined from each investor’s latest Form 13F-HR. Values are as reported at quarter end; each class of shares and each option is its own line, as filed.</p>
+      </>
+      )}
     </div>
   )
 }

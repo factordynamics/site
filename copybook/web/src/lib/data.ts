@@ -159,13 +159,41 @@ export type Sectors = { sectors: string[]; map: Record<string, number> }
 
 const cache = new Map<string, Promise<unknown>>()
 
+/** A data file that didn't arrive: `status` is the HTTP status, 0 when the request itself failed (offline, blocked). */
+export class FetchError extends Error {
+  status: number
+  constructor(status: number, url: string) {
+    super(`${status || 'network'} ${url}`)
+    this.status = status
+  }
+}
+/** The file isn't there (an unknown ticker or fund): a real answer, unlike a failed load. */
+export const notFound = (e: unknown) => e instanceof FetchError && e.status === 404
+/** A page built from many per-fund or per-stock files may leave out at most this many that failed to load; more is a
+ *  failed load ("We couldn't load …"), never zeros (lead, Nov 11). Missing (404) files don't count as failures. */
+export const MAX_MISSING = 2
+export const FAILED = Symbol('failed load')
+/** The loaded items, null for missing (404) ones; throws when more than MAX_MISSING failed to load. */
+export function allowMissing<T>(xs: (T | null | typeof FAILED)[]): (T | null)[] {
+  const failed = xs.filter((x) => x === FAILED).length
+  if (failed > MAX_MISSING) throw new FetchError(0, `${failed} of ${xs.length} files`)
+  return xs.map((x) => (x === FAILED ? null : x))
+}
+/** For Promise.all over files: a 404 is null (missing), any other failure is FAILED (counted by allowMissing). */
+export const missingOrFailed = (e: unknown) => (notFound(e) ? null : FAILED)
+
 export function getJSON<T>(url: string): Promise<T> {
   let p = cache.get(url) as Promise<T> | undefined
   if (!p) {
-    p = fetch(url).then((r) => {
-      if (!r.ok) throw new Error(`${r.status} ${url}`)
-      return r.json() as Promise<T>
-    })
+    p = fetch(url).then(
+      (r) => {
+        if (!r.ok) throw new FetchError(r.status, url)
+        return r.json() as Promise<T>
+      },
+      () => {
+        throw new FetchError(0, url)
+      },
+    )
     p.catch(() => cache.delete(url))
     cache.set(url, p)
   }
@@ -339,7 +367,7 @@ export type BookRow = {
 }
 
 export async function loadSuperBook(featured: Manager[]) {
-  const files = await Promise.all(featured.map((m) => loadManager(m.slug).catch(() => null)))
+  const files = allowMissing(await Promise.all(featured.map((m) => loadManager(m.slug).catch(missingOrFailed))))
   const rows = new Map<string, BookRow>()
   let total = 0
   for (const f of files) {
@@ -419,6 +447,8 @@ export function useTick(ms: number, on: boolean) {
 
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [state, set] = useState<{ data?: T; error?: Error; loading: boolean }>({ loading: true })
+  // Try again after a failed load (getJSON drops failed requests from its cache, so this refetches).
+  const [tries, setTries] = useState(0)
   useEffect(() => {
     let live = true
     set((s) => ({ data: s.data, loading: true }))
@@ -430,8 +460,8 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
       live = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
-  return state
+  }, [...deps, tries])
+  return { ...state, retry: () => setTries((n) => n + 1) }
 }
 
 /* ---------- formatting ---------- */

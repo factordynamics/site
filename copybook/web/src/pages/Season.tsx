@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { REF_NOTE, Share, shareUrl, useRefCode } from '../components/Share'
 import { Signup } from '../components/Signup'
-import { Arrow, AvatarStack, Badge, Button, Lock, Monogram, Panel, Skeleton } from '../components/ui'
+import { Arrow, AvatarStack, Badge, Button, LoadFailed, Lock, Monogram, Panel, Skeleton } from '../components/ui'
 import { getToken, isPaying, loadLatency, useMember } from '../lib/account'
 import { track, useTrackVisit } from '../lib/track'
 import { FAMOUS, FridayBox } from '../components/FridayBox'
@@ -174,6 +174,8 @@ export function Season() {
         </div>
       </header>
 
+      {s.error && <LoadFailed what="this season’s filings" onRetry={s.retry} className="mt-6 max-w-2xl" />}
+      {!s.error && (
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
         <Progress
           label="Superinvestors still filing"
@@ -185,11 +187,15 @@ export function Season() {
         {/* Narrower than the 8,968 filers with any 13F on file (pricing, /v1/filers): only those that filed last quarter or this. */}
         <Progress label="13F filers active last quarter" sub={d ? `those that filed for ${quarterLabel(prevQuarter(d.quarter))} or ${quarterLabel(d.quarter)}` : 'those that filed last quarter or this'} v={d?.filers} />
       </div>
+      )}
 
+      {!s.error && (
       <Panel className="mt-5" title="13Fs accepted per business day" sub={d ? `All filers, ${Q}. Each bar is one EDGAR business day (weekends and federal holidays left out); dashed slots are the days left before the deadline.` : undefined}>
         {d ? <DayBars d={d} now={now} /> : <Skeleton className="h-44 w-full" />}
       </Panel>
+      )}
 
+      {!s.error && (
       <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <section className="overflow-hidden rounded-[var(--radius-card)] bg-card shadow-[var(--shadow-card)]">
           <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 md:px-6">
@@ -281,6 +287,7 @@ export function Season() {
           )}
         </Panel>
       </div>
+      )}
 
       {d?.expected && d.expected.length > 0 && <ExpectedPanel list={d.expected} cards={cards.data} now={now} />}
 
@@ -451,7 +458,8 @@ function Progress({ label, sub, v, note }: { label: string; sub: string; v?: { f
         <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(p ? 1.5 : 0, p * 100)}%` }} />
       </div>
       <p className="mt-2 text-[12.5px] text-ink-3">
-        {Math.round(p * 100)}% · {sub}
+        {v ? `${Math.round(p * 100)}% · ` : ''}
+        {sub}
       </p>
       {note}
     </div>

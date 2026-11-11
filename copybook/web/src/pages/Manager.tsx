@@ -5,7 +5,7 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { ClassLines, classLine, mixedLabel } from '../components/ShareClasses'
 import { ChangeBars, Donut, foldSlices, Legend, StackBar, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
-import { Arrow, Badge, Button, Lock, Monogram, NotCounted, Panel, Skeleton, Stat, Ticker } from '../components/ui'
+import { Arrow, Badge, Button, LoadFailed, Lock, Monogram, NotCounted, Panel, Skeleton, Stat, Ticker } from '../components/ui'
 import { getToken, isPaying, useMember } from '../lib/account'
 import { useTrackVisit } from '../lib/track'
 import { FridayBox } from '../components/FridayBox'
@@ -20,7 +20,7 @@ import { TRIAL_DAYS, TRIAL_LINE } from '../config'
 import { track } from '../lib/track'
 import { loadIndex } from '../lib/data'
 import { investorTitle, recapTitle } from '../lib/titles.mjs'
-import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, flagNote, flagOf, heldLinesNote, misfiledNote, type ManagerFile } from '../lib/data'
+import { CuratedRedirect, displayName, pricingTo, useTitle, shortName, dateLabel, loadManager, money, pct, quarterLabel, secFilerUrl, shareClass, sharesFmt, splitApplied, splitRatio, useAsync, unreliable, flagNote, flagOf, heldLinesNote, misfiledNote, notFound, type ManagerFile } from '../lib/data'
 
 export function ManagerPage() {
   const { slug = '' } = useParams()
@@ -80,6 +80,12 @@ export function ManagerPage() {
   }, [book.rows, book.options, view, q, held])
 
   if (m.error instanceof CuratedRedirect && m.error.slug !== slug) return <Navigate to={`/investors/${m.error.slug}/`} replace />
+  if (m.error && !notFound(m.error))
+    return (
+      <div className="container-x pt-20">
+        <LoadFailed what="this investor’s filings" onRetry={m.retry} className="max-w-xl" />
+      </div>
+    )
   if (m.error)
     return (
       <div className="container-x pt-20">

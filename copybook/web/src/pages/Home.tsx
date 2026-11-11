@@ -11,7 +11,7 @@ import { track } from '../lib/track'
 import { Donut, foldSlices, Legend, Treemap, WeightBars } from '../components/charts'
 import { mapPlan, treemapItems, useBook } from '../components/Portfolio'
 import { SearchBox } from '../components/Search'
-import { Arrow, AvatarStack, Button, Check, Monogram, Panel, Skeleton, Ticker } from '../components/ui'
+import { Arrow, AvatarStack, Button, Check, LoadFailed, Monogram, Panel, Skeleton, Ticker } from '../components/ui'
 import { pricingTo, useTitle, dateLabel, loadIndex, loadManager, loadSuperBook, money, pct, quarterLabel, sectorMix, useAsync, useTick, type Manager } from '../lib/data'
 
 const DEMO = ['warren-buffett', 'bill-ackman', 'stanley-druckenmiller', 'david-tepper']
@@ -23,7 +23,7 @@ export function Home() {
   const cov = useAsync(loadCoverage, [])
   return (
     <>
-      <Hero managers={idx.data?.managers} />
+      <Hero managers={idx.data?.managers} failed={idx.error ? idx.retry : undefined} />
       <ProofStrip total={idx.data?.totalValue} filers={cov.data?.filers} updated={idx.data?.generated_at} />
       <ConsensusSection featured={idx.data?.featured} />
       <FeaturedSection featured={idx.data?.featured} />
@@ -36,7 +36,7 @@ export function Home() {
   )
 }
 
-function Hero({ managers }: { managers?: Manager[] }) {
+function Hero({ managers, failed }: { managers?: Manager[]; failed?: () => void }) {
   const [slug, setSlug] = useState(DEMO[0])
   const demo = DEMO.map((s) => managers?.find((m) => m.slug === s)).filter(Boolean) as Manager[]
   // Through the filing deadline the hero sells the season: alerts as filings land, then the free tour.
@@ -78,7 +78,7 @@ function Hero({ managers }: { managers?: Manager[] }) {
             {!season && <FundLine />}
           </div>
         </div>
-        <LatestFilings managers={managers} />
+        <LatestFilings managers={managers} failed={failed} />
         </div>
 
         <div className="rise mt-12 md:mt-14" style={{ animationDelay: '120ms' }}>
@@ -160,7 +160,7 @@ function SeasonLead() {
   )
 }
 
-function LatestFilings({ managers }: { managers?: Manager[] }) {
+function LatestFilings({ managers, failed }: { managers?: Manager[]; failed?: () => void }) {
   const recent = (managers ?? [])
     .filter((m) => m.featured && m.filing_date)
     .sort((a, b) => (b.filing_date ?? '').localeCompare(a.filing_date ?? ''))
@@ -174,7 +174,8 @@ function LatestFilings({ managers }: { managers?: Manager[] }) {
         </span>
       </div>
       <ul className="mt-3 divide-y divide-line">
-        {recent.length === 0 && Array.from({ length: 5 }, (_, i) => <li key={i} className="py-2.5"><Skeleton className="h-8 w-full" /></li>)}
+        {failed && <li className="py-2.5"><LoadFailed what="the latest filings" onRetry={failed} /></li>}
+        {!failed && recent.length === 0 && Array.from({ length: 5 }, (_, i) => <li key={i} className="py-2.5"><Skeleton className="h-8 w-full" /></li>)}
         {recent.map((m) => (
           <li key={m.slug}>
             <Link to={`/investors/${m.slug}/`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-ink/[0.035]">
@@ -347,7 +348,9 @@ function ConsensusSection({ featured }: { featured?: Manager[] }) {
           </Button>
         </div>
         <Panel title="Most widely held" sub="Number of followed investors with a position, latest filings">
-          {!book.data ? (
+          {book.error ? (
+            <LoadFailed what="the superinvestors’ latest filings" onRetry={book.retry} />
+          ) : !book.data ? (
             <Skeleton className="h-[380px] w-full" />
           ) : (
             <ol className="divide-y divide-line">

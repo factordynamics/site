@@ -215,7 +215,7 @@ export function ApiDocs() {
           </Button>
         </div>
         <p className="mt-4 text-[14px] text-ink-3">
-          Coverage: {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers. History: {HISTORY_EXACT} (<Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">coverage</Link>). Bulk files: gzip CSV{parquet ? ' and Parquet' : ''}, one per quarter.{announced.length > 0 && <> {announced.length} announced changes are listed under <a href="#versioning" className="font-medium text-accent hover:text-accent-2">versioning</a>.</>} Use is covered by our{' '}
+          Coverage: {cov.data ? cov.data.filers.toLocaleString('en-US') : 'every'} filers, the same count as /v1/filers. History: {HISTORY_EXACT} (<Link to="/methodology/#coverage" className="font-medium text-accent hover:text-accent-2">coverage</Link>). Bulk files: a gzip CSV per quarter{parquet ? ', and Parquet with the same columns, built from each quarter’s CSV (sha256 in /v1/bulk)' : ''}.{announced.length > 0 && <> {announced.length} announced changes are listed under <a href="#versioning" className="font-medium text-accent hover:text-accent-2">versioning</a>.</>} Use is covered by our{' '}
           <Link to="/terms/" className="font-medium text-accent hover:text-accent-2">
             terms
           </Link>

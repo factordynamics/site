@@ -239,3 +239,15 @@ export function edgeFade(el: HTMLElement | null) {
   el.addEventListener('scroll', update, { passive: true })
   new ResizeObserver(update).observe(el)
 }
+
+/** A load that failed (blocked, offline, the data host down): said plainly with Try again, never shown as zeros or "None". */
+export function LoadFailed({ what, onRetry, className = '' }: { what: string; onRetry: () => void; className?: string }) {
+  return (
+    <p role="alert" className={`rounded-xl bg-ink/[0.04] px-4 py-3 text-[14px] leading-relaxed text-ink-2 ${className}`}>
+      We couldn’t load {what}.{' '}
+      <button type="button" onClick={onRetry} className="font-medium text-accent hover:text-accent-2">
+        Try again
+      </button>
+    </p>
+  )
+}

@@ -11,8 +11,8 @@ import { downloadFile, getToken, isPro, lastMe, loadEvents, loadHolders, needsVe
 import { ResendLink } from '../components/ConfirmEmail'
 import { FridayBox } from '../components/FridayBox'
 import { issuerLatest, whenLabel } from '../lib/insiders'
-import { Arrow, Badge, Button, edgeFade, Lock, Monogram, NotCounted, Panel, Skeleton, Stat } from '../components/ui'
-import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, heldLinesNote, NOT_COUNTED } from '../lib/data'
+import { Arrow, Badge, Button, edgeFade, LoadFailed, Lock, Monogram, NotCounted, Panel, Skeleton, Stat } from '../components/ui'
+import { DATA, getJSON, dateLabel, pricingTo, displayName, money, pct, quarterLabel, sharesFmt, loadIndex, typesAsOfLabel, useAsync, useTitle, flagNote, flagOf, heldLinesNote, notFound, NOT_COUNTED } from '../lib/data'
 import { dueLead, stockTitle } from '../lib/titles.mjs'
 import { MARQUEE, possessive, shortName } from '../lib/names.mjs'
 import { aboutET, dayET, fridayAfter, loadExpected, loadFilerHolders, loadStock, recapPath, resolveTicker, seasonNow, shortDay, stockPath, type StockHolder } from '../lib/stocks'
@@ -169,6 +169,13 @@ export function StockPage() {
     .slice(0, 5)
     .map(issuerLatest)
 
+  if (s.error && !notFound(s.error))
+    return (
+      <div className="container-x pt-20">
+        <h1 className="text-[32px] font-semibold tracking-[-0.03em]">{ticker.toUpperCase()}</h1>
+        <LoadFailed what={`who holds ${ticker.toUpperCase()}`} onRetry={s.retry} className="mt-4 max-w-xl" />
+      </div>
+    )
   if (s.error)
     return (
       <div className="container-x pt-20">

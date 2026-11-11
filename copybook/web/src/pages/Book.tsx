@@ -7,10 +7,10 @@ import { FreeNames } from '../components/FreeNames'
 import { Paused } from '../components/Paused'
 import { TRIAL_DAYS } from '../config'
 import { useSearch } from '../components/Search'
-import { Arrow, Badge, Button, edgeFade, Lock, Panel, Skeleton, Stat } from '../components/ui'
+import { Arrow, Badge, Button, edgeFade, LoadFailed, Lock, Panel, Skeleton, Stat } from '../components/ui'
 import { ApiStatus, Updating } from '../components/ApiStatus'
 import { ApiError, apiDown, getToken, lastMe, needsVerify, pendingEmail, needsReauth, isFree, isPro, lastEvents, loadEvents, useMember, type IssuerFeed, type Member } from '../lib/account'
-import { getJSON, live, quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle, type Manager } from '../lib/data'
+import { allowMissing, getJSON, live, missingOrFailed, quarterLabel, dateLabel, displayName, money, pct, sharesFmt, useAsync, useTitle, type Manager } from '../lib/data'
 import { addStocks, importBook, useFollows } from '../lib/follows'
 import { ConfirmEmail, ResendLink } from '../components/ConfirmEmail'
 import { accNo, cap, issuerLatest, pctChange, whenLabel, type Latest } from '../lib/insiders'
@@ -178,7 +178,8 @@ export function Book() {
   const pro = isPro(member)
   const { status, follows } = useFollows()
   const names = useMemo(() => [...new Set([...follows.owned, ...follows.stocks])], [follows.owned, follows.stocks])
-  const data = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadStock(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(',')])
+  // A name no tracked fund holds has no file (404, null); more than two that failed to load is a failed load, never zeros.
+  const data = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadStock(t).catch(missingOrFailed))).then(allowMissing) : Promise.resolve([])), [pro, names.join(',')])
   // Lens: hedge funds and active managers (default), every 13F filer, or the funds we track closely,
   // in the URL so a view can be shared.
   const [params, setParams] = useSearchParams()
@@ -190,8 +191,9 @@ export function Book() {
   // Copy members get My book lite, which loads its own events; this one is for Pro and Fund.
   const events = useEvents(names, pro)
   // The CSV keeps the all-filer figures whatever the lens, so d/h is loaded once for every lens.
-  const agg = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadFilerHolders(t).catch(() => null))) : Promise.resolve([])), [pro, names.join(',')])
+  const agg = useAsync(() => (pro && names.length ? Promise.all(names.map((t) => loadFilerHolders(t).catch(missingOrFailed))).then(allowMissing) : Promise.resolve([])), [pro, names.join(',')])
   const ready = Boolean(data.data && agg.data)
+  const failed = data.error || agg.error ? () => (data.error ? data.retry() : null, agg.error ? agg.retry() : null) : null
   // Names that came from a linked 13F, as opposed to ones added by hand.
   const linked = useMemo(() => {
     const manual = new Set(follows.owned_manual ?? [])
@@ -453,7 +455,15 @@ export function Book() {
                   </tr>
                 </thead>
                 <tbody>
+                  {failed && (
+                    <tr>
+                      <td colSpan={COLS.length} className="px-6 py-3">
+                        <LoadFailed what="the holders of your names" onRetry={failed} />
+                      </td>
+                    </tr>
+                  )}
                   {!ready &&
+                    !failed &&
                     names.slice(0, 6).map((t) => (
                       <tr key={t}>
                         <td colSpan={COLS.length} className="px-6 py-2.5">
@@ -534,7 +544,9 @@ export function Book() {
               title={season ? `What they did in your names, ${quarterLabel(season)}` : 'What they did in your names'}
               sub={lens === 'smart' || lens === 'hedge' ? `Largest moves this season by ${LENS_WHO[lens]} (each one’s ten largest buys and sells), valued at quarter-end` : lens === 'all' ? 'Largest moves by the funds we track closely that have filed this season, valued at quarter-end. Other filers’ moves appear once their prior quarter is on file.' : 'Largest moves by funds that have filed this season, valued at quarter-end'}
             >
-              {!data.data ? (
+              {data.error ? (
+                <LoadFailed what="your names’ moves" onRetry={data.retry} />
+              ) : !data.data ? (
                 <Skeleton className="h-48 w-full" />
               ) : moves.length ? (
                 <ul className="divide-y divide-line">
@@ -607,7 +619,7 @@ function LiteBook({ member }: { member: Member }) {
   }, [follows.book, follows.owned_manual])
   // Hand-added names only: a linked 13F book is a Pro feature.
   const names = useMemo(() => [...new Set([...follows.owned, ...follows.stocks])].filter((t) => !linkedOnly.has(t)), [follows.owned, follows.stocks, linkedOnly])
-  const data = useAsync(() => (names.length ? Promise.all(names.map((t) => loadStock(t).catch(() => null))) : Promise.resolve([])), [names.join(',')])
+  const data = useAsync(() => (names.length ? Promise.all(names.map((t) => loadStock(t).catch(missingOrFailed))).then(allowMissing) : Promise.resolve([])), [names.join(',')])
   const season = useMemo(() => (data.data ?? []).flatMap((x) => x?.quarters ?? []).sort().at(-1) ?? '', [data.data])
   const events = useEvents(names, true)
   const rows = useMemo(
@@ -690,7 +702,16 @@ function LiteBook({ member }: { member: Member }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {!data.data
+                  {data.error ? (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-3 md:px-6">
+                        <LoadFailed what="the holders of your names" onRetry={data.retry} />
+                      </td>
+                    </tr>
+                  ) : null}
+                  {data.error
+                    ? null
+                    : !data.data
                     ? Array.from({ length: Math.min(6, names.length || 4) }, (_, i) => (
                         <tr key={i} className="border-b border-line last:border-0">
                           <td colSpan={5} className="px-5 py-3 md:px-6">
@@ -759,7 +780,9 @@ function LiteBook({ member }: { member: Member }) {
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <Panel title={season ? `What the ${lensName} did in your names, ${quarterLabel(season)}` : `What the ${lensName} did in your names`} sub="Largest moves by the funds that have filed this season, valued at quarter-end">
-              {!data.data ? (
+              {data.error ? (
+                <LoadFailed what="your names’ moves" onRetry={data.retry} />
+              ) : !data.data ? (
                 <Skeleton className="h-48 w-full" />
               ) : moves.length ? (
                 <ul className="divide-y divide-line">
